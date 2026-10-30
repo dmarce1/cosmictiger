@@ -4,7 +4,6 @@
 
 #include <gtest/gtest.h>
 
-#include <cosmictiger/sph/monaghan/equations.hpp>
 #include <cosmictiger/sph/monaghan/viscosity.hpp>
 #include <cosmictiger/sph/sph_flops.hpp>
 
@@ -91,14 +90,7 @@ TEST(SphFlops, MonaghanExpressionsMatchExecutedArithmetic) {
             Real(0.1), Real(velocity), Real(0.4), Real(0.5), Real(0.01), Real(2), Real(1));
         EXPECT_EQ(Real::count(), sph_flops::kViscosityMu);
         Real::reset();
-        auto const viscosity =
-            monaghan::artificialViscosity(Real(1), Real(2), Real(3), Real(4), mu, Real(1), Real(2));
+        monaghan::artificialViscosity(Real(1), Real(2), Real(3), Real(4), mu, Real(1), Real(2));
         EXPECT_EQ(Real::count(), sph_flops::kArtificialViscosity);
-        Real::reset();
-        auto const pressure = monaghan::pressureCoefficient(Real(1), Real(2), Real(3), Real(4));
-        EXPECT_EQ(Real::count(), sph_flops::kPressureCoefficient);
-        Real::reset();
-        monaghan::pairEnergyRate(pressure, viscosity, Real(0.1), Real(0.2));
-        EXPECT_EQ(Real::count(), sph_flops::kPairEnergyRate);
     }
 }

@@ -237,41 +237,54 @@ def checkViscosityRestarts(executable, baseWorkdir):
             print(f"{name}: exact restart and viscosity compatibility passed")
 
 
-def checkPressureOperatorRestarts(executable, baseWorkdir):
-    """Restart each SPH pressure operator exactly and reject a restart with the other.
+def checkVariationalPressureRestart(executable, baseWorkdir):
+    """Restart variational SPH exactly and reject the retired pressure formulation.
 
     Grad-H corrections are not checkpointed; the first density pass after the restart
     rebuilds them, so the resumed run must reproduce the uninterrupted payload bit for bit.
     """
     configuration = Path(__file__).resolve().parents[1] / "configurations/hydro_wave.ini"
-    common = [str(executable), f"--configuration={configuration}", "--hpx:threads=2",
-              "--hpx:bind=none", "--initial.particlesPerDimension=8", "--compute.cuda=false",
-              "--run.endTime=0.00001", "--checkpoint.intervalSeconds=0",
-              "--output.directory=.", "--output.silo=false", "--analysis.views=false",
-              "--analysis.power=false", "--analysis.groups=false", "--lightcone.enabled=false"]
-    for operator, other in (("variational", "monaghan"), ("monaghan", "variational")):
-        name = f"pressure_operator_{operator}"
-        options = common + [f"--hydro.pressureOperator={operator}"]
-        reference = prepareCase(baseWorkdir, name)
-        runSimulation(options + ["--run.maxIterations=2"], reference, "run.log")
-        checkpoint = reference / "checkpoint.1"
-        if not checkpoint.is_dir():
-            raise RuntimeError(f"{name} did not save a completed first step")
-        resumed = prepareCase(baseWorkdir, name + "_restart", checkpoint)
-        output = runSimulation(options + ["--run.maxIterations=1", "--checkpoint.readIndex=1"],
-                               resumed, "restart.log")
-        if "Done reading checkpoint" not in output:
-            raise RuntimeError(f"{name} did not load the checkpoint")
-        if hydro_particle_payload(reference / "checkpoint.2", 512) != hydro_particle_payload(
-                resumed / "checkpoint.2", 512):
-            raise RuntimeError(f"{name} restart changed particles or stage fields")
-        directory = prepareCase(baseWorkdir, name + "_reject", checkpoint)
-        output = runSimulation(common + [f"--hydro.pressureOperator={other}",
-                                         "--run.maxIterations=0", "--checkpoint.readIndex=1"],
-                               directory, "restart.log", expectSuccess=False)
-        if "pressure operator" not in output:
-            raise RuntimeError(f"{name} restart with {other} lacked the operator diagnostic")
-        print(f"{name}: exact restart and operator compatibility passed")
+    options = [str(executable), f"--configuration={configuration}", "--hpx:threads=2",
+               "--hpx:bind=none", "--initial.particlesPerDimension=8", "--compute.cuda=false",
+               "--run.endTime=0.00001", "--checkpoint.intervalSeconds=0",
+               "--output.directory=.", "--output.silo=false", "--analysis.views=false",
+               "--analysis.power=false", "--analysis.groups=false", "--lightcone.enabled=false"]
+    name = "variational_pressure"
+    reference = prepareCase(baseWorkdir, name)
+    runSimulation(options + ["--run.maxIterations=2"], reference, "run.log")
+    checkpoint = reference / "checkpoint.1"
+    if not checkpoint.is_dir():
+        raise RuntimeError(f"{name} did not save a completed first step")
+    resumed = prepareCase(baseWorkdir, name + "_restart", checkpoint)
+    output = runSimulation(options + ["--run.maxIterations=1", "--checkpoint.readIndex=1"],
+                           resumed, "restart.log")
+    if "Done reading checkpoint" not in output:
+        raise RuntimeError(f"{name} did not load the checkpoint")
+    if hydro_particle_payload(reference / "checkpoint.2", 512) != hydro_particle_payload(
+            resumed / "checkpoint.2", 512):
+        raise RuntimeError(f"{name} restart changed particles or stage fields")
+
+    directory = prepareCase(baseWorkdir, name + "_reject_retired", checkpoint)
+    checkpoint_dir = directory / checkpoint.name
+    rank_file = checkpoint_dir / "checkpoint.0.dat"
+    payload = bytearray(rank_file.read_bytes())
+    checkpoint_position_bytes(payload)  # Validate the current native header before changing it.
+    physics_offset = struct.calcsize("@QII11dQi")
+    physics_code = struct.unpack_from("@I", payload, physics_offset)[0]
+    if physics_code & 0xff != 2:
+        raise RuntimeError("SPH checkpoint did not record the variational formulation")
+    struct.pack_into("@I", payload, physics_offset, (physics_code & ~0xff) | 1)
+    rank_file.write_bytes(payload)
+    # Keep integrity valid so rejection specifically tests the retired formulation.
+    manifest = checkpoint_dir / "checkpoint.meta"
+    lines = manifest.read_text().splitlines()
+    lines[1] = f"0 {len(payload)} {fnv1a64(payload):016x}"
+    manifest.write_text("\n".join(lines) + "\n")
+    output = runSimulation(options + ["--run.maxIterations=0", "--checkpoint.readIndex=1"],
+                           directory, "restart.log", expectSuccess=False)
+    if "Checkpoint SPH pressure operator (monaghan) is no longer supported" not in output:
+        raise RuntimeError("retired Monaghan checkpoint lacked the operator diagnostic")
+    print(f"{name}: exact restart and retired-operator rejection passed")
 
 
 def main():
@@ -291,7 +304,7 @@ def main():
 
     if args.viscosity_only:
         checkViscosityRestarts(executable, baseWorkdir)
-        checkPressureOperatorRestarts(executable, baseWorkdir)
+        checkVariationalPressureRestart(executable, baseWorkdir)
         return 0
 
     options = [str(executable), "--hpx:threads=2", "--hpx:bind=none",
@@ -439,7 +452,7 @@ def main():
           "scenario manifest v2, restart, corruption rejection, and labelled version 1 decoding passed")
     if not args.without_sph:
         checkViscosityRestarts(executable, baseWorkdir)
-        checkPressureOperatorRestarts(executable, baseWorkdir)
+        checkVariationalPressureRestart(executable, baseWorkdir)
     return 0
 
 

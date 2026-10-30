@@ -374,22 +374,20 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
             timer.reset();
             result = SphRunReturn();
         } while (needsNeighborRefresh);
-        if (runParameters.variationalPressure) {
-            // Free supports report their smallest Ω and largest constraint residual;
-            // held supports use ζ = 0. Counts include supports repeated by later passes.
-            bool const anyFree =
-                gradHDiagnostics.minimumGradHOmega < std::numeric_limits<float>::max();
-            terminal::detailPrint("SPH grad-H: Omega_min = %e residual_max = %e held = %i "
-                                  "ill-conditioned (Omega < %g) = %i\n",
-                anyFree ? gradHDiagnostics.minimumGradHOmega : 1.0f,
-                gradHDiagnostics.maximumSupportResidual, gradHDiagnostics.heldSupports,
-                sph_volume::kMinimumWellConditionedOmega, gradHDiagnostics.illConditionedSupports);
-            if (gradHDiagnostics.illConditionedSupports > 0) {
-                PRINT("Warning: %i free SPH supports have grad-H Omega below %g (minimum %e); "
-                      "their forces amplify the support-solve residual by 1/Omega\n",
-                    gradHDiagnostics.illConditionedSupports,
-                    sph_volume::kMinimumWellConditionedOmega, gradHDiagnostics.minimumGradHOmega);
-            }
+        // Free supports report their smallest Ω and largest constraint residual;
+        // held supports use ζ = 0. Counts include supports repeated by later passes.
+        bool const anyFree =
+            gradHDiagnostics.minimumGradHOmega < std::numeric_limits<float>::max();
+        terminal::detailPrint("SPH grad-H: Omega_min = %e residual_max = %e held = %i "
+                              "ill-conditioned (Omega < %g) = %i\n",
+            anyFree ? gradHDiagnostics.minimumGradHOmega : 1.0f,
+            gradHDiagnostics.maximumSupportResidual, gradHDiagnostics.heldSupports,
+            sph_volume::kMinimumWellConditionedOmega, gradHDiagnostics.illConditionedSupports);
+        if (gradHDiagnostics.illConditionedSupports > 0) {
+            PRINT("Warning: %i free SPH supports have grad-H Omega below %g (minimum %e); "
+                  "their forces amplify the support-solve residual by 1/Omega\n",
+                gradHDiagnostics.illConditionedSupports,
+                sph_volume::kMinimumWellConditionedOmega, gradHDiagnostics.minimumGradHOmega);
         }
 #if COSMICTIGER_ENABLE_STAR_FORMATION
         if (getOptions().starFormation.enabled) {

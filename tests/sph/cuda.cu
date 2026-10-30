@@ -130,6 +130,9 @@ public:
         data_.sourceInternalEnergy = allocate<float>(count);
         data_.sourceSupportRadius = allocate<float>(count);
         data_.sourceDensity = allocate<float>(count);
+        data_.sourceGradHCorrection = allocate<float>(count);
+        data_.sinkGradHCorrection =
+            separateSources ? allocate<float>(count) : data_.sourceGradHCorrection;
         data_.sinkDensity = separateSources ? allocate<float>(count) : data_.sourceDensity;
         data_.sourceBalsaraFactor = allocate<float>(count);
         data_.sinkBalsaraFactor =
@@ -170,7 +173,8 @@ public:
         params_.cullenDehnen = false;
         params_.priceEtAl = false;
         params_.minimumSupportRadius = 0.1f;
-        params_.maximumSupportRadius = 0.49f;
+        // The initial isolated support is held at the upper bound.
+        params_.maximumSupportRadius = 0.2f;
         for (int i = 0; i < count; i++) {
             data_.sinkParticleIndices[i] = i;
             data_.sourceRungs[i] = data_.sinkParticleRungs[i] = 1;
@@ -279,14 +283,6 @@ public:
         data_.sourceAdiabaticIndex = allocate<float>(count_);
     }
 
-    // hydro.pressureOperator=variational with an independent zeta source snapshot.
-    void enableVariationalPressure(bool separateSources) {
-        params_.variationalPressure = true;
-        data_.sourceGradHCorrection = allocate<float>(count_);
-        data_.sinkGradHCorrection =
-            separateSources ? allocate<float>(count_) : data_.sourceGradHCorrection;
-    }
-
     void enableHydroCoupling() {
         data_.sourceHydroCoupling = allocate<float>(count_);
         std::fill_n(data_.sourceHydroCoupling, count_, 1.0f);
@@ -368,15 +364,12 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
     std::vector<float> density(data.sinkDensity, data.sinkDensity + fixture.count_);
     std::vector<float> balsaraFactor(
         data.sinkBalsaraFactor, data.sinkBalsaraFactor + fixture.count_);
-    bool const variational = fixture.params_.variationalPressure;
     std::vector<float> gradHCorrection;
     std::vector<float> sourceGradHCorrection;
-    if (variational) {
-        gradHCorrection.assign(data.sinkGradHCorrection, data.sinkGradHCorrection + fixture.count_);
-        sourceGradHCorrection.assign(
-            data.sourceGradHCorrection, data.sourceGradHCorrection + fixture.count_);
-        cpuData.sinkGradHCorrection = gradHCorrection.data();
-    }
+    gradHCorrection.assign(data.sinkGradHCorrection, data.sinkGradHCorrection + fixture.count_);
+    sourceGradHCorrection.assign(
+        data.sourceGradHCorrection, data.sourceGradHCorrection + fixture.count_);
+    cpuData.sinkGradHCorrection = gradHCorrection.data();
     std::vector<float> energyRate(
         data.sinkInternalEnergyRate, data.sinkInternalEnergyRate + fixture.count_);
     std::vector<SphAcceleration> acceleration(
@@ -485,13 +478,11 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
     requireClose("CPU/CUDA support residual", cpuResult.maximumSupportResidual,
         cudaResult.maximumSupportResidual, 1.0e-6);
     for (int i = 0; i < fixture.count_; i++) {
-        if (variational) {
-            requireClose("CPU/CUDA grad-H correction", gradHCorrection[i] / data.gasMass,
-                data.sinkGradHCorrection[i] / data.gasMass, 5.0e-5);
-            require(std::bit_cast<uint32_t>(data.sourceGradHCorrection[i]) ==
-                    std::bit_cast<uint32_t>(sourceGradHCorrection[i]),
-                "CPU/CUDA phases preserve grad-H source snapshots");
-        }
+        requireClose("CPU/CUDA grad-H correction", gradHCorrection[i] / data.gasMass,
+            data.sinkGradHCorrection[i] / data.gasMass, 5.0e-5);
+        require(std::bit_cast<uint32_t>(data.sourceGradHCorrection[i]) ==
+                std::bit_cast<uint32_t>(sourceGradHCorrection[i]),
+            "CPU/CUDA phases preserve grad-H source snapshots");
         if (fixture.params_.variableViscosity) {
             auto const& cpu = viscosityStates[i];
             auto const& gpu = data.sinkViscosityStates[i];
@@ -544,16 +535,14 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
     }
 }
 
-void testCpuCudaParity(int viscosityMode = 0, bool variational = false) {
+void testCpuCudaParity(int viscosityMode = 0) {
     // Three unequal leaves and 19 neighbors exercise indirection and SIMD tails.
     Fixture fixture(19, 3, true);
     if (viscosityMode != 0) {
         fixture.enableVariableViscosity(viscosityMode == 2, viscosityMode == 3);
         fixture.params_.viscosityBeta = 3.5f;
     }
-    if (variational) {
-        fixture.enableVariationalPressure(true);
-    }
+
     fixture.params_.balsaraSwitch = true;
     auto& data = fixture.data_;
     std::vector<int> sinkIndices(fixture.count_);
@@ -635,9 +624,7 @@ void testCpuCudaParity(int viscosityMode = 0, bool variational = false) {
     for (int source = 0; source < fixture.count_; source++) {
         data.sourceDensity[source] = data.sinkDensity[sinkIndices[source]];
         data.sourceBalsaraFactor[source] = data.sinkBalsaraFactor[sinkIndices[source]];
-        if (variational) {
-            data.sourceGradHCorrection[source] = data.sinkGradHCorrection[sinkIndices[source]];
-        }
+        data.sourceGradHCorrection[source] = data.sinkGradHCorrection[sinkIndices[source]];
     }
     compareCpuCudaPhase(fixture, kSphRunHydro, 0);
     compareCpuCudaPhase(fixture, kSphRunHydro, 1);
@@ -660,22 +647,18 @@ void testCpuCudaParity(int viscosityMode = 0, bool variational = false) {
         0.025f;
     data.sourceDensity[excluded] = data.sourceInternalEnergy[excluded] = 0.0f;
     data.sinkDensity[excludedSink] = -9.0f;
-    if (variational) {
-        // An unbuilt correction on the excluded source must stay masked on both backends.
-        data.sinkGradHCorrection[excludedSink] = -9.0f;
-        data.sourceGradHCorrection[excluded] = std::numeric_limits<float>::quiet_NaN();
-    }
+    // An unbuilt correction on the excluded source must stay masked on both backends.
+    data.sinkGradHCorrection[excludedSink] = -9.0f;
+    data.sourceGradHCorrection[excluded] = std::numeric_limits<float>::quiet_NaN();
     compareCpuCudaPhase(fixture, kSphRunPrehydro2);
     require(!data.sinkSemiactive[excludedSink] && data.sinkDensity[excludedSink] == -9.0f,
         "distant inactive particle must leave density untouched");
-    require(!variational || data.sinkGradHCorrection[excludedSink] == -9.0f,
+    require(data.sinkGradHCorrection[excludedSink] == -9.0f,
         "distant inactive particle must leave its correction untouched");
     for (int source = 0; source < excluded; source++) {
         data.sourceDensity[source] = data.sinkDensity[sinkIndices[source]];
         data.sourceBalsaraFactor[source] = data.sinkBalsaraFactor[sinkIndices[source]];
-        if (variational) {
-            data.sourceGradHCorrection[source] = data.sinkGradHCorrection[sinkIndices[source]];
-        }
+        data.sourceGradHCorrection[source] = data.sinkGradHCorrection[sinkIndices[source]];
     }
     compareCpuCudaPhase(fixture, kSphRunHydro, 0);
     compareCpuCudaPhase(fixture, kSphRunHydro, 1);
@@ -1070,6 +1053,7 @@ void testVariableViscosityPairs() {
 
 void testCullenDehnenExcludedThermodynamics() {
     Fixture fixture(2, 2, true);
+    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.1f;
     fixture.enableVariableViscosity(true);
     fixture.params_.viscosityBeta = 4.0f;
     auto& data = fixture.data_;
@@ -1270,6 +1254,7 @@ void testUnequalSupports() {
 // table as an independent CPU path. Core tests also check the table mathematics.
 void testSelectedKernel() {
     Fixture fixture(2);
+    fixture.params_.maximumSupportRadius = 0.49f;
     auto& data = fixture.data_;
     data.sourcePositionX[0] = 0.40;
     data.sourcePositionX[1] = 0.58;
@@ -1283,8 +1268,7 @@ void testSelectedKernel() {
     fixture.params_.viscosityAlpha = fixture.params_.viscosityBeta = 0.0f;
     fixture.density();
     double const radius = std::abs(distance(data.sourcePositionX[0], data.sourcePositionX[1]));
-    double gradient = 0.0;
-    double pressurePair = 0.0;
+    double pressureForce = 0.0;
     double inverseCfl = 0.0;
     for (int i = 0; i < 2; i++) {
         double const support = data.sourceSupportRadius[i];
@@ -1292,9 +1276,13 @@ void testSelectedKernel() {
             data.gasMass * (kernelW(0.0) + kernelW(radius / support)) / std::pow(support, 3);
         requireClose(
             "selected kernel CPU/CUDA density", data.sourceDensity[i], expectedDensity, 3.0e-6);
-        gradient += 0.5 * dkernelWDq(radius / support) / std::pow(support, 4);
-        pressurePair +=
+        double const normalizedRadius = radius / support;
+        double const derivative = dkernelWDq(normalizedRadius);
+        double const omega =
+            -normalizedRadius * derivative / (3.0 * (kernelW(0.0) + kernelW(normalizedRadius)));
+        double const pressureFactor =
             (data.adiabaticIndex - 1.0f) * data.sourceInternalEnergy[i] / data.sourceDensity[i];
+        pressureForce += data.gasMass * pressureFactor / omega * derivative / std::pow(support, 4);
         double const sound = std::sqrt(
             data.adiabaticIndex * (data.adiabaticIndex - 1.0f) * data.sourceInternalEnergy[i]);
         inverseCfl = std::max(
@@ -1302,8 +1290,7 @@ void testSelectedKernel() {
     }
     fixture.hydro(1);
     requireClose("selected kernel CPU/CUDA pressure force",
-        data.sinkAccelerations[0].acceleration[kXDimension], data.gasMass * pressurePair * gradient,
-        8.0e-6);
+        data.sinkAccelerations[0].acceleration[kXDimension], pressureForce, 8.0e-6);
     requireClose("selected kernel effective-width CFL", fixture.reduction_->inverseSoundTimestep,
         inverseCfl, 3.0e-6);
     fixture.checkConservation();
@@ -1318,7 +1305,9 @@ void testSelectedKernel() {
 
 void testCompositionEos() {
     Fixture fixture(2);
+    fixture.params_.maximumSupportRadius = 0.49f;
     fixture.enableCompositionEos();
+
     auto& data = fixture.data_;
     data.sourcePositionX[0] = 0.40;
     data.sourcePositionX[1] = 0.58;
@@ -1326,33 +1315,62 @@ void testCompositionEos() {
     for (int i = 0; i < 2; ++i) {
         data.sourcePositionY[i] = data.sourcePositionZ[i] = 0.5;
         data.sinkSmoothingConverged[i] = true;
-        data.sourceSupportRadius[i] = data.sinkThermodynamicStates[i].supportRadius = 0.4f;
+        data.sourceSupportRadius[i] = data.sinkThermodynamicStates[i].supportRadius =
+            i == 0 ? 0.35f : 0.42f;
         data.sourceInternalEnergy[i] = i == 0 ? 0.7f : 1.2f;
         data.sourcePressureEnergyRatio[i] = i == 0 ? 0.4f : 0.3f;
         data.sourceAdiabaticIndex[i] = i == 0 ? 1.3f : 1.6f;
     }
     fixture.density();
     double const radius = std::abs(distance(data.sourcePositionX[0], data.sourcePositionX[1]));
-    double gradient = 0.0;
-    double pressurePair = 0.0;
     double inverseCfl = 0.0;
+    std::array<double, 2> directedGradient{};
     for (int i = 0; i < 2; ++i) {
         double const support = data.sourceSupportRadius[i];
-        gradient += 0.5 * dkernelWDq(radius / support) / std::pow(support, 4);
-        pressurePair += data.sourcePressureEnergyRatio[i] * data.sourceInternalEnergy[i] /
-            data.sourceDensity[i];
+        double const normalizedRadius = radius / support;
+        double const derivative = dkernelWDq(normalizedRadius);
+        double const radialGradient = derivative / std::pow(support, 4);
+        double const pressureFactor = data.sourcePressureEnergyRatio[i] *
+            data.sourceInternalEnergy[i] / data.sourceDensity[i];
+        // Equal masses: Omega = -sum(q w') / (3 sum(w)), zeta = m (1 - 1/Omega).
+        // These unequal supports give distinct, nonzero corrections and gradients.
+        double const omega =
+            -normalizedRadius * derivative / (3.0 * (kernelW(0.0) + kernelW(normalizedRadius)));
+        double const zeta = data.gasMass * (1.0 - 1.0 / omega);
+        require(std::abs(zeta) > 0.1 * data.gasMass,
+            "composition EOS exercises a nonzero grad-H correction");
+        requireClose(
+            "composition-dependent grad-H correction", data.sourceGradHCorrection[i], zeta, 8.0e-6);
+        directedGradient[i] = pressureFactor * (data.gasMass - zeta) * radialGradient;
         double const sound = std::sqrt(data.sourceAdiabaticIndex[i] *
             data.sourcePressureEnergyRatio[i] * data.sourceInternalEnergy[i]);
         inverseCfl = std::max(
             inverseCfl, sound * selectedHydroKernel().supportRadiusPerEffectiveRadius / support);
     }
+    double const pressureForce = directedGradient[0] + directedGradient[1];
     fixture.hydro(1);
-    requireClose("composition-dependent pressure force",
-        data.sinkAccelerations[0].acceleration[kXDimension], data.gasMass * pressurePair * gradient,
-        8.0e-6);
+    for (int i = 0; i < 2; ++i) {
+        requireClose("composition-dependent pressure force",
+            data.sinkAccelerations[i].acceleration[kXDimension],
+            i == 0 ? pressureForce : -pressureForce, 8.0e-6);
+    }
     requireClose("composition-dependent sound speed", fixture.reduction_->inverseSoundTimestep,
         inverseCfl, 3.0e-6);
     fixture.checkConservation();
+
+    data.sourceVelocityX[0] = 0.1f;
+    data.sourceVelocityX[1] = -0.07f;
+    double const velocityDifference = double(data.sourceVelocityX[0]) - data.sourceVelocityX[1];
+    fixture.hydro();
+    for (int i = 0; i < 2; ++i) {
+        double const expectedWork = -velocityDifference * directedGradient[i];
+        requireClose("composition-dependent pressure work", data.sinkInternalEnergyRate[i],
+            expectedWork, 8.0e-6);
+    }
+    fixture.checkConservation();
+    for (int i = 0; i < 2; ++i) {
+        data.sourceVelocityX[i] = 0.0f;
+    }
     fixture.params_.scaleFactor = 0.6f;
     fixture.params_.expansionRate = 0.09f;
     fixture.hydro();
@@ -1362,11 +1380,15 @@ void testCompositionEos() {
             data.sourceInternalEnergy[i];
         requireClose("composition-dependent cosmological work", data.sinkInternalEnergyRate[i],
             expected, 2.0e-6);
+        requireClose("composition-dependent cosmological pressure force",
+            data.sinkAccelerations[i].acceleration[kXDimension],
+            (i == 0 ? pressureForce : -pressureForce) / fixture.params_.scaleFactor, 8.0e-6);
     }
 }
 
 void testSelectedCentralGravity() {
     Fixture fixture(1);
+    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.2f;
     auto& data = fixture.data_;
     data.sourcePositionX[0] = 0.6;
     data.sourcePositionY[0] = data.sourcePositionZ[0] = 0.5;
@@ -1385,6 +1407,7 @@ void testSelectedCentralGravity() {
 
 void testFixedGravityTimestep() {
     Fixture fixture(1);
+    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.2f;
     auto& data = fixture.data_;
     data.sourcePositionX[0] = data.sourcePositionY[0] = data.sourcePositionZ[0] = 0.5;
     data.sinkSmoothingConverged[0] = true;
@@ -1403,6 +1426,7 @@ void testFixedGravityTimestep() {
     require(fixture.reduction_->maximumGravityRung == expectedGravityRung,
         "gas gravity timestep must use the shared fixed gravity radius");
     data.sourceSupportRadius[0] = data.sinkThermodynamicStates[0].supportRadius = 0.3f;
+    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.3f;
     fixture.density();
     fixture.hydro(1);
     require(fixture.reduction_->maximumGravityRung == expectedGravityRung,
@@ -1567,7 +1591,7 @@ void testDefaultThermalTimestep() {
 
 }    // namespace detail
 
-class MonaghanSphCuda : public detail::CudaTest {
+class SphCudaTest : public detail::CudaTest {
 protected:
     void SetUp() override {
         detail::CudaTest::SetUp();
@@ -1587,19 +1611,13 @@ protected:
     }
 };
 
-TEST_F(MonaghanSphCuda, VariableViscosityCpuParity) {
+TEST_F(SphCudaTest, VariableViscosityCpuParity) {
     detail::testCpuCudaParity(1);
     detail::testCpuCudaParity(2);
     detail::testCpuCudaParity(3);
 }
 
-TEST_F(MonaghanSphCuda, VariationalPressureCpuParity) {
-    detail::testCpuCudaParity(0, true);
-    detail::testCpuCudaParity(1, true);
-    detail::testCpuCudaParity(2, true);
-}
-
-TEST_F(MonaghanSphCuda, WindDecouplingPreservesDensityAndGravity) {
+TEST_F(SphCudaTest, WindDecouplingPreservesDensityAndGravity) {
     detail::Fixture fixture(2, 2);
     auto& data = fixture.data_;
     for (int index = 0; index < 2; ++index) {
@@ -1635,27 +1653,27 @@ TEST_F(MonaghanSphCuda, WindDecouplingPreservesDensityAndGravity) {
     EXPECT_GT(data.sinkInternalEnergyRate[0], 0.0f);
 }
 
-TEST_F(MonaghanSphCuda, CullenDehnenExcludedThermodynamics) {
+TEST_F(SphCudaTest, CullenDehnenExcludedThermodynamics) {
     detail::testCullenDehnenExcludedThermodynamics();
 }
 
-TEST_F(MonaghanSphCuda, MorrisMonaghanDensity) {
+TEST_F(SphCudaTest, MorrisMonaghanDensity) {
     detail::testMorrisMonaghanDensity();
 }
 
-TEST_F(MonaghanSphCuda, CullenDehnenDensity) {
+TEST_F(SphCudaTest, CullenDehnenDensity) {
     detail::testCullenDehnenDensity();
 }
 
-TEST_F(MonaghanSphCuda, PriceEtAlDensity) {
+TEST_F(SphCudaTest, PriceEtAlDensity) {
     detail::testPriceEtAlDensity();
 }
 
-TEST_F(MonaghanSphCuda, VariableViscosityPairs) {
+TEST_F(SphCudaTest, VariableViscosityPairs) {
     detail::testVariableViscosityPairs();
 }
 
-TEST_F(MonaghanSphCuda, BalsaraVelocityGradients) {
+TEST_F(SphCudaTest, BalsaraVelocityGradients) {
     detail::Fixture fixture(27, 3);
     fixture.params_.balsaraSwitch = true;
     auto& data = fixture.data_;
@@ -1698,7 +1716,7 @@ TEST_F(MonaghanSphCuda, BalsaraVelocityGradients) {
     }
 }
 
-TEST_F(MonaghanSphCuda, BalsaraSymmetricForceAndHeating) {
+TEST_F(SphCudaTest, BalsaraSymmetricForceAndHeating) {
     detail::Fixture fixture(2, 2);
     auto& data = fixture.data_;
     for (int i = 0; i < 2; ++i) {
@@ -1738,7 +1756,7 @@ TEST_F(MonaghanSphCuda, BalsaraSymmetricForceAndHeating) {
     }
 }
 
-TEST_F(MonaghanSphCuda, BlockReductionFlops) {
+TEST_F(SphCudaTest, BlockReductionFlops) {
     FlopCount* counts = nullptr;
     ASSERT_EQ(cudaMallocManaged(&counts, 2 * sizeof(FlopCount)), cudaSuccess);
     for (int blockSize : {64, 96, 160, 256}) {
@@ -1764,35 +1782,35 @@ TEST_F(MonaghanSphCuda, BlockReductionFlops) {
     EXPECT_EQ(cudaFree(counts), cudaSuccess);
 }
 
-TEST_F(MonaghanSphCuda, PeriodicSupport) {
+TEST_F(SphCudaTest, PeriodicSupport) {
     detail::testPeriodicSupport();
 }
 
-TEST_F(MonaghanSphCuda, Lattice) {
+TEST_F(SphCudaTest, Lattice) {
     detail::testLattice();
 }
 
-TEST_F(MonaghanSphCuda, UnequalSupports) {
+TEST_F(SphCudaTest, UnequalSupports) {
     detail::testUnequalSupports();
 }
 
-TEST_F(MonaghanSphCuda, ZPlaneAcceleration) {
+TEST_F(SphCudaTest, ZPlaneAcceleration) {
     detail::testZPlaneAcceleration();
 }
 
-TEST_F(MonaghanSphCuda, DefaultTimestepCalibration) {
+TEST_F(SphCudaTest, DefaultTimestepCalibration) {
     detail::testDefaultTimestepCalibration();
 }
 
-TEST_F(MonaghanSphCuda, DefaultThermalTimestep) {
+TEST_F(SphCudaTest, DefaultThermalTimestep) {
     detail::testDefaultThermalTimestep();
 }
 
-TEST_F(MonaghanSphCuda, CompositionEos) {
+TEST_F(SphCudaTest, CompositionEos) {
     detail::testCompositionEos();
 }
 
-TEST_F(MonaghanSphCuda, SelectedKernelsGravityTimestepsAndCpuParity) {
+TEST_F(SphCudaTest, SelectedKernelsGravityTimestepsAndCpuParity) {
     radial_kernel::KernelSpec const specifications[] = {
         {radial_kernel::Family::Spline, 2},
         {radial_kernel::Family::Spline, 3},
@@ -1822,6 +1840,6 @@ TEST_F(MonaghanSphCuda, SelectedKernelsGravityTimestepsAndCpuParity) {
     }
 }
 
-TEST_F(MonaghanSphCuda, GlobalRawTimestep) {
+TEST_F(SphCudaTest, GlobalRawTimestep) {
     detail::testGlobalRawTimestep<detail::Fixture>();
 }

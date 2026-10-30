@@ -114,6 +114,8 @@ public:
         data_.sourceInternalEnergy = allocate<float>(sourceSize);
         data_.sourceSupportRadius = allocate<float>(sourceSize);
         data_.sourceDensity = allocate<float>(sourceSize);
+        data_.sourceGradHCorrection = allocate<float>(sourceSize);
+        data_.sinkGradHCorrection = allocate<float>(sinkSize);
         data_.sourceBalsaraFactor = allocate<float>(sourceSize);
         data_.sourceRungs = allocate<char>(sourceSize);
         data_.sinkDensity = allocate<float>(sinkSize);
@@ -147,13 +149,13 @@ public:
         params_.viscosityAlpha = 1.0f;
         params_.viscosityBeta = 2.0f;
         params_.viscosityEpsilon = 0.01f;
-        // Existing analytic references exercise the original Monaghan viscosity.
         params_.balsaraSwitch = false;
         params_.variableViscosity = false;
         params_.cullenDehnen = false;
         params_.priceEtAl = false;
         params_.minimumSupportRadius = 0.1f;
-        params_.maximumSupportRadius = 0.49f;
+        // The initial isolated support is held at the upper bound.
+        params_.maximumSupportRadius = 0.2f;
         params_.uniformAccelerationY = 0.0f;
         params_.zPlaneAcceleration = 0.0f;
         params_.velocityDampingRate = 0.0f;
@@ -236,14 +238,6 @@ public:
 
     void densityPass() {
         run(kSphRunPrehydro2);
-    }
-
-    // hydro.pressureOperator=variational: the density pass writes zeta, which publishDensity
-    // stages with the density for the force pass.
-    void enableVariationalPressure() {
-        params_.variationalPressure = true;
-        data_.sourceGradHCorrection = allocate<float>(count_ + sourceOffset_ + 3);
-        data_.sinkGradHCorrection = allocate<float>(count_ + sinkOffset_ + 3);
     }
 
     void enableCompositionEos() {
@@ -744,6 +738,7 @@ void testVariableViscosityPairs() {
 
 void testCullenDehnenExcludedThermodynamics() {
     Fixture fixture(2, 2);
+    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.1f;
     fixture.enableVariableViscosity(true);
     fixture.params_.viscosityBeta = 4.0f;
     auto& data = fixture.data_;
@@ -944,6 +939,7 @@ void testUnequalSupports() {
 // table through scalar double arithmetic. Core tests also check the table mathematics.
 void testSelectedKernel() {
     Fixture fixture(2);
+    fixture.params_.maximumSupportRadius = 0.49f;
     auto& data = fixture.data_;
     data.sourcePositionX[0] = 0.98;
     data.sourcePositionX[1] = 0.16;
@@ -957,8 +953,7 @@ void testSelectedKernel() {
     fixture.params_.viscosityAlpha = fixture.params_.viscosityBeta = 0.0f;
     fixture.density();
     double const radius = std::abs(distance(data.sourcePositionX[0], data.sourcePositionX[1]));
-    double gradient = 0.0;
-    double pressurePair = 0.0;
+    double pressureForce = 0.0;
     double inverseCfl = 0.0;
     for (int i = 0; i < 2; i++) {
         double const support = data.sourceSupportRadius[i];
@@ -966,9 +961,13 @@ void testSelectedKernel() {
             data.gasMass * (kernelW(0.0) + kernelW(radius / support)) / std::pow(support, 3);
         requireClose(
             "selected kernel scalar/SIMD density", data.sourceDensity[i], expectedDensity, 3.0e-6);
-        gradient += 0.5 * dkernelWDq(radius / support) / std::pow(support, 4);
-        pressurePair +=
+        double const normalizedRadius = radius / support;
+        double const derivative = dkernelWDq(normalizedRadius);
+        double const omega =
+            -normalizedRadius * derivative / (3.0 * (kernelW(0.0) + kernelW(normalizedRadius)));
+        double const pressureFactor =
             (data.adiabaticIndex - 1.0f) * data.sourceInternalEnergy[i] / data.sourceDensity[i];
+        pressureForce += data.gasMass * pressureFactor / omega * derivative / std::pow(support, 4);
         double const sound = std::sqrt(
             data.adiabaticIndex * (data.adiabaticIndex - 1.0f) * data.sourceInternalEnergy[i]);
         inverseCfl = std::max(
@@ -976,8 +975,7 @@ void testSelectedKernel() {
     }
     fixture.hydro(1);
     requireClose("selected kernel scalar/SIMD pressure force",
-        data.sinkAccelerations[0].acceleration[kXDimension], data.gasMass * pressurePair * gradient,
-        8.0e-6);
+        data.sinkAccelerations[0].acceleration[kXDimension], pressureForce, 8.0e-6);
     requireClose("selected kernel effective-width CFL", fixture.reduction_->inverseSoundTimestep,
         inverseCfl, 3.0e-6);
     fixture.checkConservation();
@@ -992,7 +990,9 @@ void testSelectedKernel() {
 
 void testCompositionEos() {
     Fixture fixture(2);
+    fixture.params_.maximumSupportRadius = 0.49f;
     fixture.enableCompositionEos();
+
     auto& data = fixture.data_;
     data.sourcePositionX[0] = 0.40;
     data.sourcePositionX[1] = 0.58;
@@ -1000,33 +1000,62 @@ void testCompositionEos() {
     for (int i = 0; i < 2; ++i) {
         data.sourcePositionY[i] = data.sourcePositionZ[i] = 0.5;
         data.sinkSmoothingConverged[i] = true;
-        data.sourceSupportRadius[i] = data.sinkThermodynamicStates[i].supportRadius = 0.4f;
+        data.sourceSupportRadius[i] = data.sinkThermodynamicStates[i].supportRadius =
+            i == 0 ? 0.35f : 0.42f;
         data.sourceInternalEnergy[i] = i == 0 ? 0.7f : 1.2f;
         data.sourcePressureEnergyRatio[i] = i == 0 ? 0.4f : 0.3f;
         data.sourceAdiabaticIndex[i] = i == 0 ? 1.3f : 1.6f;
     }
     fixture.density();
     double const radius = std::abs(distance(data.sourcePositionX[0], data.sourcePositionX[1]));
-    double gradient = 0.0;
-    double pressurePair = 0.0;
     double inverseCfl = 0.0;
+    std::array<double, 2> directedGradient{};
     for (int i = 0; i < 2; ++i) {
         double const support = data.sourceSupportRadius[i];
-        gradient += 0.5 * dkernelWDq(radius / support) / std::pow(support, 4);
-        pressurePair += data.sourcePressureEnergyRatio[i] * data.sourceInternalEnergy[i] /
-            data.sourceDensity[i];
+        double const normalizedRadius = radius / support;
+        double const derivative = dkernelWDq(normalizedRadius);
+        double const radialGradient = derivative / std::pow(support, 4);
+        double const pressureFactor = data.sourcePressureEnergyRatio[i] *
+            data.sourceInternalEnergy[i] / data.sourceDensity[i];
+        // Equal masses: Omega = -sum(q w') / (3 sum(w)), zeta = m (1 - 1/Omega).
+        // These unequal supports give distinct, nonzero corrections and gradients.
+        double const omega =
+            -normalizedRadius * derivative / (3.0 * (kernelW(0.0) + kernelW(normalizedRadius)));
+        double const zeta = data.gasMass * (1.0 - 1.0 / omega);
+        require(std::abs(zeta) > 0.1 * data.gasMass,
+            "composition EOS exercises a nonzero grad-H correction");
+        requireClose(
+            "composition-dependent grad-H correction", data.sourceGradHCorrection[i], zeta, 8.0e-6);
+        directedGradient[i] = pressureFactor * (data.gasMass - zeta) * radialGradient;
         double const sound = std::sqrt(data.sourceAdiabaticIndex[i] *
             data.sourcePressureEnergyRatio[i] * data.sourceInternalEnergy[i]);
         inverseCfl = std::max(
             inverseCfl, sound * selectedHydroKernel().supportRadiusPerEffectiveRadius / support);
     }
+    double const pressureForce = directedGradient[0] + directedGradient[1];
     fixture.hydro(1);
-    requireClose("composition-dependent pressure force",
-        data.sinkAccelerations[0].acceleration[kXDimension], data.gasMass * pressurePair * gradient,
-        8.0e-6);
+    for (int i = 0; i < 2; ++i) {
+        requireClose("composition-dependent pressure force",
+            data.sinkAccelerations[i].acceleration[kXDimension],
+            i == 0 ? pressureForce : -pressureForce, 8.0e-6);
+    }
     requireClose("composition-dependent sound speed", fixture.reduction_->inverseSoundTimestep,
         inverseCfl, 3.0e-6);
     fixture.checkConservation();
+
+    data.sourceVelocityX[0] = 0.1f;
+    data.sourceVelocityX[1] = -0.07f;
+    double const velocityDifference = double(data.sourceVelocityX[0]) - data.sourceVelocityX[1];
+    fixture.hydro();
+    for (int i = 0; i < 2; ++i) {
+        double const expectedWork = -velocityDifference * directedGradient[i];
+        requireClose("composition-dependent pressure work", data.sinkInternalEnergyRate[i],
+            expectedWork, 8.0e-6);
+    }
+    fixture.checkConservation();
+    for (int i = 0; i < 2; ++i) {
+        data.sourceVelocityX[i] = 0.0f;
+    }
     fixture.params_.scaleFactor = 0.6f;
     fixture.params_.expansionRate = 0.09f;
     fixture.hydro();
@@ -1036,11 +1065,15 @@ void testCompositionEos() {
             data.sourceInternalEnergy[i];
         requireClose("composition-dependent cosmological work", data.sinkInternalEnergyRate[i],
             expected, 2.0e-6);
+        requireClose("composition-dependent cosmological pressure force",
+            data.sinkAccelerations[i].acceleration[kXDimension],
+            (i == 0 ? pressureForce : -pressureForce) / fixture.params_.scaleFactor, 8.0e-6);
     }
 }
 
 void testSelectedCentralGravity() {
     Fixture fixture(1);
+    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.2f;
     auto& data = fixture.data_;
     data.sourcePositionX[0] = 0.6;
     data.sourcePositionY[0] = data.sourcePositionZ[0] = 0.5;
@@ -1059,6 +1092,7 @@ void testSelectedCentralGravity() {
 
 void testFixedGravityTimestep() {
     Fixture fixture(1);
+    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.2f;
     auto& data = fixture.data_;
     data.sourcePositionX[0] = data.sourcePositionY[0] = data.sourcePositionZ[0] = 0.5;
     data.sinkSmoothingConverged[0] = true;
@@ -1077,6 +1111,7 @@ void testFixedGravityTimestep() {
     require(fixture.reduction_->maximumGravityRung == expectedGravityRung,
         "gas gravity timestep must use the shared fixed gravity radius");
     data.sourceSupportRadius[0] = data.sinkThermodynamicStates[0].supportRadius = 0.3f;
+    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.3f;
     fixture.density();
     fixture.hydro(1);
     require(fixture.reduction_->maximumGravityRung == expectedGravityRung,
@@ -1508,8 +1543,9 @@ void testRungPropagation() {
     }
 }
 
-// Variational pressure operator (cosmictiger/sph/volume.hpp). A double-precision periodic
-// reference evaluates the same equations at given supports; tests/sph/volume.cpp shows that
+// Variational pressure operator (cosmictiger/sph/variational/equations.hpp). A
+// double-precision periodic reference evaluates the same equations at given supports;
+// tests/sph/volume.cpp shows that
 // those equations are the exact gradient of the discrete thermal energy.
 struct VariationalReference {
     std::vector<double> density;
@@ -1698,7 +1734,6 @@ void perturbLattice(Fixture& fixture, int side, uint64_t seed) {
 void testVariationalAgainstReference() {
     constexpr int kSide = 6;
     Fixture fixture(kSide * kSide * kSide);
-    fixture.enableVariationalPressure();
     perturbLattice(fixture, kSide, 2026);
     fixture.params_.viscosityAlpha = 0.0f;
     fixture.params_.viscosityBeta = 0.0f;
@@ -1745,7 +1780,6 @@ void testVariationalAgainstReference() {
 void testVariationalIsolatedCluster() {
     constexpr int kSide = 4;
     Fixture fixture(kSide * kSide * kSide);
-    fixture.enableVariationalPressure();
     uint64_t state = 77;
     int i = 0;
     for (int ix = 0; ix < kSide; ix++) {
@@ -1849,13 +1883,10 @@ void testVariationalIsolatedCluster() {
     }
 }
 
-// Held supports: every lattice support at H_min, at H_max, and fixed. With equal fixed
-// supports the variational force is the Monaghan force; the work is split differently
-// between the pair members but has the same total.
+// Held supports: every lattice support at H_min, at H_max, and fixed.
 void testVariationalHeldSupports() {
     constexpr int kSide = 5;
     Fixture fixture(kSide * kSide * kSide);
-    fixture.enableVariationalPressure();
     initializeLattice(fixture, kSide);
     struct Bounds {
         float minimum;
@@ -1885,34 +1916,18 @@ void testVariationalHeldSupports() {
     fixture.density();
     fixture.hydro();
     fixture.checkConservation();
-    std::vector<Array<float, kDimensions>> variational(fixture.count_);
-    double variationalWork = 0.0;
-    for (int i = 0; i < fixture.count_; i++) {
-        variational[i] = fixture.data_.sinkAccelerations[fixture.sinkIndex(i)].acceleration;
-        variationalWork += fixture.data_.sinkInternalEnergyRate[fixture.sinkIndex(i)];
-    }
-    fixture.params_.variationalPressure = false;
+    std::vector<double> support(fixture.count_, fixture.params_.minimumSupportRadius);
+    fixture.params_.viscosityAlpha = fixture.params_.viscosityBeta = 0.0f;
     fixture.hydro();
-    double monaghanWork = 0.0;
-    double workScale = 0.0;
-    for (int i = 0; i < fixture.count_; i++) {
-        for (int dim = 0; dim < kDimensions; dim++) {
-            requireClose("fixed equal supports reproduce the Monaghan force", variational[i][dim],
-                fixture.data_.sinkAccelerations[fixture.sinkIndex(i)].acceleration[dim], 2.0e-5);
-        }
-        double const rate = fixture.data_.sinkInternalEnergyRate[fixture.sinkIndex(i)];
-        monaghanWork += rate;
-        workScale += std::abs(rate);
-    }
-    requireClose("fixed equal supports conserve the same total work", variationalWork, monaghanWork,
-        3.0e-5 * workScale);
+    auto const difference = compareRates(fixture, variationalReference(fixture, support));
+    require(difference.acceleration < 2.0e-5 && difference.energyRate < 2.0e-5,
+        "fixed supports reproduce the variational pressure force and directed work");
 }
 
 // A uniform free lattice has no pressure force or work; only the homogeneous source remains.
 void testVariationalUniformLattice() {
     constexpr int kSide = 5;
     Fixture fixture(kSide * kSide * kSide);
-    fixture.enableVariationalPressure();
     initializeLattice(fixture, kSide);
     for (float const gamma : {5.0f / 3.0f, 1.4f}) {
         fixture.data_.adiabaticIndex = gamma;
@@ -2131,14 +2146,11 @@ struct WaveRun {
     double profileError;    // L2 error of v_x after half a period, over the amplitude
 };
 
-WaveRun runSoundWave(bool variational, int steps) {
+WaveRun runSoundWave(int steps) {
     constexpr int kSide = 8;
     constexpr double kAmplitude = 0.05;
     double const gamma = 5.0 / 3.0;
     Fixture fixture(kSide * kSide * kSide);
-    if (variational) {
-        fixture.enableVariationalPressure();
-    }
     initializeSoundWave(fixture, kSide, kAmplitude, gamma);
     GlobalStepper stepper(fixture);
     std::vector<double> initialEntropy(fixture.count_);
@@ -2167,85 +2179,71 @@ WaveRun runSoundWave(bool variational, int steps) {
     return run;
 }
 
-// Kick-drift-kick energy error falls as dt^2 for both operators. The wave profile error is
+// Kick-drift-kick energy error falls as dt^2. The wave profile error is
 // the spatial error at eight particles per wavelength; the entropy error is limited by the
 // support-solve tolerance once the time error is small.
 void testSoundWaveTimestepRefinement() {
-    for (bool const variational : {false, true}) {
-        std::array<WaveRun, 3> runs{};
-        int const steps[] = {12, 24, 48};
-        for (int k = 0; k < 3; k++) {
-            runs[k] = runSoundWave(variational, steps[k]);
-            std::printf("%s sound wave, %d steps per half period: energy %.3e, entropy %.3e, "
-                        "profile %.3e\n",
-                variational ? "variational" : "monaghan", steps[k], runs[k].energyError,
-                runs[k].entropyError, runs[k].profileError);
-        }
-        for (int k = 1; k < 3; k++) {
-            require(runs[k].energyError < 0.35 * runs[k - 1].energyError,
-                "kick-drift-kick energy error converges at second order");
-        }
-        require(runs[2].energyError < 2.0e-3, "refined sound-wave energy error");
-        require(runs[2].profileError < 0.15, "sound wave propagates at the sound speed");
-        if (variational) {
-            // Each particle's work is its own adiabatic rate, so the entropy error is a
-            // time error; the Monaghan pair split leaves a resolution-limited floor.
-            require(
-                runs[2].entropyError < 0.5 * runs[1].entropyError && runs[2].entropyError < 2.0e-4,
-                "variational sound-wave entropy error converges with the timestep");
-        }
+    std::array<WaveRun, 3> runs{};
+    int const steps[] = {12, 24, 48};
+    for (int k = 0; k < 3; k++) {
+        runs[k] = runSoundWave(steps[k]);
+        std::printf("variational sound wave, %d steps per half period: energy %.3e, entropy %.3e, "
+                    "profile %.3e\n",
+            steps[k], runs[k].energyError, runs[k].entropyError, runs[k].profileError);
     }
+    for (int k = 1; k < 3; k++) {
+        require(runs[k].energyError < 0.35 * runs[k - 1].energyError,
+            "kick-drift-kick energy error converges at second order");
+    }
+    require(runs[2].energyError < 2.0e-3, "refined sound-wave energy error");
+    require(runs[2].profileError < 0.15, "sound wave propagates at the sound speed");
+    // Each particle's work is its own adiabatic rate, so the entropy error is a
+    // time error until the support-solve tolerance is reached.
+    require(runs[2].entropyError < 0.5 * runs[1].entropyError && runs[2].entropyError < 2.0e-4,
+        "variational sound-wave entropy error converges with the timestep");
 }
 
 // A large-amplitude smooth compression, stopped before a shock forms: without viscosity the
 // variational particle entropies change only through the time and support-solve errors.
 void testAdiabaticCompression() {
     constexpr int kSide = 8;
-    for (bool const variational : {false, true}) {
-        std::array<double, 2> entropyErrors{};
-        std::array<double, 2> energyErrors{};
-        int const steps[] = {20, 40};
-        for (int k = 0; k < 2; k++) {
-            Fixture fixture(kSide * kSide * kSide);
-            if (variational) {
-                fixture.enableVariationalPressure();
-            }
-            initializeSoundWave(fixture, kSide, 0.0, 1.4);
-            for (int i = 0; i < fixture.count_; i++) {
-                int const source = fixture.sourceIndex(i);
-                fixture.data_.sourceVelocityX[source] =
-                    -0.3 * std::sin(2.0 * kPi * fixture.data_.sourcePositionX[source].toDouble());
-            }
-            GlobalStepper stepper(fixture);
-            std::vector<double> initialEntropy(fixture.count_);
-            double maximumDensity = 0.0;
-            for (int i = 0; i < fixture.count_; i++) {
-                initialEntropy[i] = stepper.entropy(i);
-            }
-            double const initialEnergy = stepper.storedEnergy();
-            double const kinetic = stepper.kineticEnergy();
-            for (int step = 0; step < steps[k]; step++) {
-                stepper.step(0.2 / steps[k]);
-                energyErrors[k] = std::max(
-                    energyErrors[k], std::abs(stepper.storedEnergy() - initialEnergy) / kinetic);
-            }
-            for (int i = 0; i < fixture.count_; i++) {
-                entropyErrors[k] = std::max(
-                    entropyErrors[k], std::abs(stepper.entropy(i) / initialEntropy[i] - 1.0));
-                maximumDensity = std::max(
-                    maximumDensity, double(fixture.data_.sourceDensity[fixture.sourceIndex(i)]));
-            }
-            std::printf("%s compression, %d steps: maximum density %.3f, entropy %.3e, "
-                        "energy %.3e\n",
-                variational ? "variational" : "monaghan", steps[k], maximumDensity,
-                entropyErrors[k], energyErrors[k]);
-            require(maximumDensity > 1.2, "the compression is nonlinear");
+    std::array<double, 2> entropyErrors{};
+    std::array<double, 2> energyErrors{};
+    int const steps[] = {20, 40};
+    for (int k = 0; k < 2; k++) {
+        Fixture fixture(kSide * kSide * kSide);
+        initializeSoundWave(fixture, kSide, 0.0, 1.4);
+        for (int i = 0; i < fixture.count_; i++) {
+            int const source = fixture.sourceIndex(i);
+            fixture.data_.sourceVelocityX[source] =
+                -0.3 * std::sin(2.0 * kPi * fixture.data_.sourcePositionX[source].toDouble());
         }
-        require(energyErrors[1] < 0.35 * energyErrors[0], "compression energy error converges");
-        if (variational) {
-            require(entropyErrors[1] < 3.0e-3, "variational compression is adiabatic");
+        GlobalStepper stepper(fixture);
+        std::vector<double> initialEntropy(fixture.count_);
+        double maximumDensity = 0.0;
+        for (int i = 0; i < fixture.count_; i++) {
+            initialEntropy[i] = stepper.entropy(i);
         }
+        double const initialEnergy = stepper.storedEnergy();
+        double const kinetic = stepper.kineticEnergy();
+        for (int step = 0; step < steps[k]; step++) {
+            stepper.step(0.2 / steps[k]);
+            energyErrors[k] = std::max(
+                energyErrors[k], std::abs(stepper.storedEnergy() - initialEnergy) / kinetic);
+        }
+        for (int i = 0; i < fixture.count_; i++) {
+            entropyErrors[k] =
+                std::max(entropyErrors[k], std::abs(stepper.entropy(i) / initialEntropy[i] - 1.0));
+            maximumDensity = std::max(
+                maximumDensity, double(fixture.data_.sourceDensity[fixture.sourceIndex(i)]));
+        }
+        std::printf("variational compression, %d steps: maximum density %.3f, entropy %.3e, "
+                    "energy %.3e\n",
+            steps[k], maximumDensity, entropyErrors[k], energyErrors[k]);
+        require(maximumDensity > 1.2, "the compression is nonlinear");
     }
+    require(energyErrors[1] < 0.35 * energyErrors[0], "compression energy error converges");
+    require(entropyErrors[1] < 3.0e-3, "variational compression is adiabatic");
 }
 
 // Comoving sound waves in an Einstein-de Sitter background, a = (tau/tau0)^2, from a = 1 to
@@ -2262,7 +2260,6 @@ void testCosmologicalExpansion() {
         int const steps[] = {40, 80, 160};
         for (int k = 0; k < 3; k++) {
             Fixture fixture(kSide * kSide * kSide);
-            fixture.enableVariationalPressure();
             initializeSoundWave(fixture, kSide, 0.05, gamma);
             GlobalStepper stepper(fixture, true, 1.0);
             double const initialEnergy = stepper.storedEnergy();
@@ -2277,7 +2274,7 @@ void testCosmologicalExpansion() {
             residuals[k] /= std::max(kinetic, std::abs(stepper.expansionWork_));
             // A uniform lattice follows E proportional to a^(5 - 3 gamma).
             Fixture uniform(kSide * kSide * kSide);
-            uniform.enableVariationalPressure();
+
             initializeSoundWave(uniform, kSide, 0.0, gamma);
             GlobalStepper background(uniform, true, 1.0);
             double const initialInternal = background.energy_[0];
@@ -2309,7 +2306,7 @@ void testCosmologicalExpansion() {
 // interacting source stops the force pass.
 void testVariationalStaleCorrections() {
     Fixture fixture(3);
-    fixture.enableVariationalPressure();
+
     fixture.data_.targetNeighborCount = 1.5f;
     double const positions[3][3] = {{0.5, 0.5, 0.5}, {0.56, 0.5, 0.5}, {0.9, 0.1, 0.2}};
     for (int i = 0; i < 3; i++) {
@@ -2550,6 +2547,7 @@ TEST_F(SphCpuTest, EveryPhaseSubmitsItsArithmeticCount) {
 TEST_F(SphCpuTest, DensityAndRungsCountPaddedPackets) {
     int const width = SimdFloat::size();
     detail::Fixture fixture(width + 1);
+    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.2f;
     // Every neighbor passes all three dimensions of the first periodic image:
     // six fixed-point image conversions per source. Two SIMD packets execute
     // per sink, including the unused lanes of the final packet.
@@ -2559,8 +2557,10 @@ TEST_F(SphCpuTest, DensityAndRungsCountPaddedPackets) {
     // has six interpolation steps (18 operations), four weights, one scalar
     // width subtraction. Include distance/normalization, density accumulation,
     // four scalar setup operations and a width-1 additive reduction per sink.
+    // Grad-H adds both quadratic derivative spans, three sums per lane, two
+    // reductions, and eight scalar operations for its residual and correction.
     auto const density = fixture.run(kSphRunPrehydro2);
-    EXPECT_EQ(density.floatingPointOperations, double(fixture.count_) * (13 + 113 * width));
+    EXPECT_EQ(density.floatingPointOperations, double(fixture.count_) * (23 + 173 * width));
 }
 
 TEST_F(SphCpuTest, DisabledGravityTimestepDiagnosticsAreExcluded) {

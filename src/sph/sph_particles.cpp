@@ -54,9 +54,7 @@ struct SphDensityCacheEntry {
         if (getOptions().hydro.viscosityEvolution != "none") {
             archive & viscosityAlpha;
         }
-        if (getOptions().hydro.pressureOperator == "variational") {
-            archive & gradHCorrection;
-        }
+        archive & gradHCorrection;
     }
 };
 
@@ -279,9 +277,7 @@ void sphParticlesSwap(ParticleInteger i, ParticleInteger j) {
     if (sphParticlesBalsaraFactors != nullptr) {
         std::swap(sphParticlesBalsaraFactors[i], sphParticlesBalsaraFactors[j]);
     }
-    if (sphParticlesGradHCorrections != nullptr) {
-        std::swap(sphParticlesGradHCorrections[i], sphParticlesGradHCorrections[j]);
-    }
+    std::swap(sphParticlesGradHCorrections[i], sphParticlesGradHCorrections[j]);
     detail::visitSphCheckpointArrays(
         [i, j](auto* values, size_t) { std::swap(values[i], values[j]); });
 }
@@ -329,8 +325,6 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
     bool const initializeCullenDehnen = gradientSwitch && sphParticlesCullenDehnenStates == nullptr;
     bool const initializeViscosity =
         getOptions().hydro.viscosityEvolution != "none" && sphParticlesViscosityStates == nullptr;
-    bool const variational = getOptions().hydro.pressureOperator == "variational";
-    bool const initializeGradH = variational && sphParticlesGradHCorrections == nullptr;
     // Stale until a density pass rebuilds it; NaN makes any earlier force use visible.
     float const unbuiltGradHCorrection = std::numeric_limits<float>::quiet_NaN();
     if (particleCount > capacity) {
@@ -342,9 +336,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         if (getOptions().hydro.balsaraSwitch) {
             sphParticlesArrayResize(sphParticlesBalsaraFactors, newCapacity);
         }
-        if (variational) {
-            sphParticlesArrayResize(sphParticlesGradHCorrections, newCapacity);
-        }
+        sphParticlesArrayResize(sphParticlesGradHCorrections, newCapacity);
         if (getOptions().hydro.viscosityEvolution != "none") {
             sphParticlesArrayResize(sphParticlesViscosityStates, newCapacity);
         }
@@ -381,17 +373,6 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
     if (initializeBalsara) {
         for (ParticleInteger index = 0; index < size; ++index) {
             sphParticlesBalsaraFactors[index] = 0.0f;
-        }
-    }
-    if (!variational && sphParticlesGradHCorrections != nullptr) {
-        freeManagedMemory(sphParticlesGradHCorrections);
-        sphParticlesGradHCorrections = nullptr;
-    } else if (variational && sphParticlesGradHCorrections == nullptr && capacity > 0) {
-        sphParticlesArrayResize(sphParticlesGradHCorrections, capacity);
-    }
-    if (initializeGradH && sphParticlesGradHCorrections != nullptr) {
-        for (ParticleInteger index = 0; index < size; ++index) {
-            sphParticlesGradHCorrections[index] = unbuiltGradHCorrection;
         }
     }
     if (getOptions().hydro.viscosityEvolution == "none" && sphParticlesViscosityStates != nullptr) {
@@ -444,9 +425,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         if (getOptions().hydro.balsaraSwitch) {
             sphParticlesBalsaraFactors[slot] = 0.0f;
         }
-        if (variational) {
-            sphParticlesGradHCorrections[slot] = unbuiltGradHCorrection;
-        }
+        sphParticlesGradHCorrections[slot] = unbuiltGradHCorrection;
         if (getOptions().hydro.viscosityEvolution != "none") {
             float const alpha = gradientSwitch ? 0.0f : getOptions().hydro.viscosityAlphaMin;
             sphParticlesViscosityStates[slot] = {alpha, 0.0f, alpha};
@@ -803,7 +782,7 @@ static Vector<SphDensityCacheEntry> sphParticlesFetchDensityCacheLine(ParticleIn
             sphParticlesBalsaraFactors ? sphParticlesBalsaraFactors[i] : 1.0f,
             getOptions().hydro.viscosityEvolution != "none" ? sphParticlesViscosityStates[i].alpha :
                                                               0.0f,
-            sphParticlesGradHCorrections ? sphParticlesGradHCorrections[i] : 0.0f};
+            sphParticlesGradHCorrections[i]};
     }
     return line;
 }
@@ -1169,9 +1148,7 @@ void sphParticlesResetConverged() {
                 float const unbuiltGradHCorrection = std::numeric_limits<float>::quiet_NaN();
                 for (ParticleInteger i = b; i < e; i++) {
                     sphParticlesConverged(i) = false;
-                    if (sphParticlesGradHCorrections != nullptr) {
-                        sphParticlesGradHCorrections[i] = unbuiltGradHCorrection;
-                    }
+                    sphParticlesGradHCorrections[i] = unbuiltGradHCorrection;
                 }
             },
             "sph.particles.resetConverged")));

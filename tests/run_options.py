@@ -82,7 +82,7 @@ def main():
                 "initial.particlesPerDimension", "compute.cuda", "compute.bucketSize",
                 "compute.sphBucketSize", "compute.positionType",
                 "hydro.enabled", "hydro.viscosityAlpha", "hydro.viscosityBeta",
-                "hydro.viscosityEpsilon", "hydro.balsaraSwitch", "hydro.pressureOperator",
+                "hydro.viscosityEpsilon", "hydro.balsaraSwitch",
                 "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
                 "gravity.meshSize", "gravity.pmmmNearWidth", "gravity.pmmmMaxPrimeFactor",
@@ -112,7 +112,8 @@ def main():
                        "hydro.yReflect", "gravity.sphSmoothing", "cosmology.omegaK",
                        "initial.usePowerFile", "gravity.cloud", "gravity.method",
                        "gravity.pmmmNearMethod", "gravity.pmmmOrder", "gravity.fmmOrder",
-                       "run.hierarchicalGravity", "initial.createGlass", "initial.plummer"}
+                       "run.hierarchicalGravity", "initial.createGlass", "initial.plummer",
+                       "hydro.pressureOperator"}
     if removed_options & option_names:
         raise RuntimeError(f"removed options remain in help: {sorted(removed_options & option_names)}")
     for name in option_names - {"help", "configuration"}:
@@ -610,22 +611,24 @@ mapSize = 8
     if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_override, re.MULTILINE):
         raise RuntimeError("CLI hydro.balsaraSwitch did not override INI")
 
-    for key, expected_value in (("hydro.viscosityEvolution", "none"),):
-        if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected_value + r"\s*$",
-                         configured, re.MULTILINE):
-            raise RuntimeError(f"INI {key} was not applied")
-    for key, expected_value in (("hydro.viscosityEvolution", "morrisAndMonaghan"),
-                                ("hydro.pressureOperator", "monaghan")):
-        if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected_value + r"\s*$",
-                         balsara_default, re.MULTILINE):
-            raise RuntimeError(f"unexpected default for {key}")
-    operator_override = run("pressure_operator_cli_override", [
-        f"--configuration={config.resolve()}", "--hydro.pressureOperator=variational"])
-    if not re.search(r"^hydro\.pressureOperator\s*:\s*variational\s*$", operator_override,
-                     re.MULTILINE):
-        raise RuntimeError("CLI hydro.pressureOperator did not override INI")
+    for output, expected_value in ((configured, "none"), (balsara_default, "morrisAndMonaghan")):
+        if not re.search(r"^hydro\.viscosityEvolution\s*:\s*" + expected_value + r"\s*$",
+                         output, re.MULTILINE):
+            raise RuntimeError("unexpected hydro.viscosityEvolution setting")
+    # Pressure is always variational; neither old selector value is accepted.
+    for operator in ("monaghan", "variational"):
+        rejected = run("pressure_operator_removed_cli_" + operator,
+                       ["--hydro.pressureOperator=" + operator], success=False)
+        if "hydro.pressureOperator" not in rejected:
+            raise RuntimeError("removed pressure selector lacked a CLI diagnostic")
+        removed_config = args.workdir / f"pressure_operator_removed_{operator}.ini"
+        removed_config.write_text(f"[hydro]\npressureOperator = {operator}\n")
+        rejected = run("pressure_operator_removed_ini_" + operator,
+                       [f"--configuration={removed_config.resolve()}"], success=False)
+        if "pressureOperator" not in rejected:
+            raise RuntimeError("removed pressure selector lacked an INI diagnostic")
     for key in ("hydro.viscosityBetaMode", "hydro.viscosityBetaOverAlpha",
-                "initial.createGlass", "initial.plummer"):
+                "initial.createGlass", "initial.plummer", "hydro.pressureOperator"):
         if re.search(r"^" + re.escape(key) + r"\s*:", balsara_default, re.MULTILINE):
             raise RuntimeError(f"removed option {key} is still reported")
     viscosity_override = run("variable_viscosity_cli_override", [
@@ -741,6 +744,8 @@ mapSize = 8
                     raise RuntimeError("combined chemistry and star formation was not enabled")
             if not re.search(r"^chemistry\.network\s*:\s*" + network + r"\s*$", output, re.MULTILINE):
                 raise RuntimeError("combined star formation did not keep the selected network")
+            if "Checkpoint state and mode validation passed" not in output:
+                raise RuntimeError("combined star formation checkpoint state did not round-trip")
 
     chemistry_fields = ("initialTemperature", "hydrogenIonFraction",
                         "heliumIonFraction", "heliumDoubleIonFraction", "molecularFraction")
@@ -767,22 +772,22 @@ mapSize = 8
             assertNumericSetting(output, "hydro.zPlaneAcceleration", acceleration)
             if "Checkpoint state and mode validation passed" not in output:
                 raise RuntimeError("z-plane acceleration checkpoint state did not round-trip")
-        # The variational operator has its own checkpoint formulation code.
-        output = run("variational_checkpoint", hydro_metadata_options + [
-            f"--configuration={config.resolve()}", "--hydro.pressureOperator=variational"])
-        if "Checkpoint state and mode validation passed" not in output:
-            raise RuntimeError("variational pressure checkpoint state did not round-trip")
 
     if chemistryAvailable and args.time_integrator != "hierarchical":
         chemistry_options = [option for option in metadata_options
                              if not option.startswith("--hydro.enabled=")] + [
                                  "--hydro.enabled=true", "--chemistry.enabled=true",
                                  "--cosmology.startRedshift=49"]
-        # The variational operator supports only the constant-gamma ideal gas.
-        rejected = run("variational_chemistry", chemistry_options + [
-            "--hydro.pressureOperator=variational"], success=False)
-        if "constant-gamma ideal gas" not in rejected:
-            raise RuntimeError("variational pressure with chemistry lacked its diagnostic")
+        # Chemistry supplies its EOS while retaining the default pressure operator.
+        for network in ("atomic6", "molecular9"):
+            output = run("variational_chemistry_" + network,
+                         chemistry_options + [f"--chemistry.network={network}"])
+            for key, value in (("chemistry.enabled", "T"), ("chemistry.network", network)):
+                if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + value + r"\s*$",
+                                 output, re.MULTILINE):
+                    raise RuntimeError(f"variational chemistry did not retain {key}={value}")
+            if "Checkpoint state and mode validation passed" not in output:
+                raise RuntimeError("variational chemistry checkpoint state did not round-trip")
 
         def chemistrySettings(output):
             result = {}
@@ -1277,7 +1282,6 @@ mapSize = 8
         ("cfl_underflow", "--hydro.cfl=1e-100", "single precision"),
         ("support_underflow", "--hydro.minSupportRadius=1e-100", "single precision"),
         ("viscosity_evolution", "--hydro.viscosityEvolution=unknown", "hydro.viscosityEvolution"),
-        ("pressure_operator", "--hydro.pressureOperator=unknown", "hydro.pressureOperator"),
         ("viscosity_alpha_max", "--hydro.viscosityAlphaMax=0", "hydro.viscosityAlphaMax"),
         ("viscosity_decay_cd", "--hydro.viscosityDecayCD=0", "hydro.viscosityDecayCD"),
         ("viscosity_alpha_max_price", "--hydro.viscosityAlphaMaxPrice=0",

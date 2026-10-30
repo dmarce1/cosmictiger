@@ -297,7 +297,7 @@ __global__ void sphCudaPrehydro2(
                 float const w_ab = kernelW(q_ab);
                 ρ_a += m_b_over_H_a3 * w_ab;
                 flops += 12 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab);
-                if (parameters.variationalPressure && q_ab < 1.0f) {
+                if (q_ab < 1.0f) {
                     ΣW += w_ab;
                     Σqdw += q_ab * dkernelWDq(q_ab);
                     flops += 3 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
@@ -365,11 +365,9 @@ __global__ void sphCudaPrehydro2(
             }
             sharedReduceAdd<float, kPrehydro2BlockSize>(ρ_a);
             flops += detail::sphReductionFlops<kPrehydro2BlockSize>();
-            if (parameters.variationalPressure) {
-                sharedReduceAdd<float, kPrehydro2BlockSize>(ΣW);
-                sharedReduceAdd<float, kPrehydro2BlockSize>(Σqdw);
-                flops += 2 * detail::sphReductionFlops<kPrehydro2BlockSize>();
-            }
+            sharedReduceAdd<float, kPrehydro2BlockSize>(ΣW);
+            sharedReduceAdd<float, kPrehydro2BlockSize>(Σqdw);
+            flops += 2 * detail::sphReductionFlops<kPrehydro2BlockSize>();
             if (parameters.balsaraSwitch || parameters.variableViscosity) {
                 sharedReduceAdd<float, kPrehydro2BlockSize>(ρ_a_div_v_a);
                 for (int dim = 0; dim < kDimensions; ++dim) {
@@ -397,34 +395,31 @@ __global__ void sphCudaPrehydro2(
             if (threadIndex == 0) {
                 ALWAYS_ASSERT(H_a > 0.0f && ρ_a > 0.0f);
                 data.sinkDensity[sinkIndex] = ρ_a;
-                if (parameters.variationalPressure) {
-                    // NOLINTBEGIN(readability-identifier-naming)
-                    auto const gradH = sphGradHEvaluation(H_a, parameters.minimumSupportRadius,
-                        parameters.maximumSupportRadius, data.targetNeighborCount, data.gasMass, ΣW,
-                        Σqdw);
-                    flops += 8;    // Residual (2), and Ω, ζ, the weighted sums (6).
-                    if (gradH.constraint != sph_volume::SupportConstraint::Free) {
-                        atomicAdd(&reduction->heldSupports, 1);
-                    } else {
-                        // A held support uses ζ_a = 0. An unusable free correction stops the
-                        // run; a small positive Ω_a is counted.
-                        if (!sph_volume::isUsable(gradH.correction)) {
-                            PRINT("SPH grad-H correction is unusable: supportRadius=%e "
-                                  "density=%e ΣW=%e Σq dw/dq=%e Ω=%e ζ=%e residual=%e\n",
-                                H_a, ρ_a, ΣW, Σqdw, gradH.correction.omega, gradH.correction.zeta,
-                                gradH.relativeResidual);
-                            __trap();
-                        }
-                        atomicMin(&reduction->minimumGradHOmega, gradH.correction.omega);
-                        atomicMax(
-                            &reduction->maximumSupportResidual, fabsf(gradH.relativeResidual));
-                        if (!sph_volume::isWellConditioned(gradH.correction)) {
-                            atomicAdd(&reduction->illConditionedSupports, 1);
-                        }
+                // NOLINTBEGIN(readability-identifier-naming)
+                auto const gradH = sphGradHEvaluation(H_a, parameters.minimumSupportRadius,
+                    parameters.maximumSupportRadius, data.targetNeighborCount, data.gasMass, ΣW,
+                    Σqdw);
+                flops += 8;    // Residual (2), and Ω, ζ, the weighted sums (6).
+                if (gradH.constraint != sph_volume::SupportConstraint::Free) {
+                    atomicAdd(&reduction->heldSupports, 1);
+                } else {
+                    // A held support uses ζ_a = 0. An unusable free correction stops the
+                    // run; a small positive Ω_a is counted.
+                    if (!sph_volume::isUsable(gradH.correction)) {
+                        PRINT("SPH grad-H correction is unusable: supportRadius=%e "
+                              "density=%e ΣW=%e Σq dw/dq=%e Ω=%e ζ=%e residual=%e\n",
+                            H_a, ρ_a, ΣW, Σqdw, gradH.correction.omega, gradH.correction.zeta,
+                            gradH.relativeResidual);
+                        __trap();
                     }
-                    data.sinkGradHCorrection[sinkIndex] = gradH.correction.zeta;
-                    // NOLINTEND(readability-identifier-naming)
+                    atomicMin(&reduction->minimumGradHOmega, gradH.correction.omega);
+                    atomicMax(&reduction->maximumSupportResidual, fabsf(gradH.relativeResidual));
+                    if (!sph_volume::isWellConditioned(gradH.correction)) {
+                        atomicAdd(&reduction->illConditionedSupports, 1);
+                    }
                 }
+                data.sinkGradHCorrection[sinkIndex] = gradH.correction.zeta;
+                // NOLINTEND(readability-identifier-naming)
                 if (data.sinkBalsaraFactor) {
                     data.sinkBalsaraFactor[sinkIndex] = parameters.balsaraSwitch ?
                         balsara::balsaraFactor(ρ_a_div_v_a, ρ_a_curl_v_a.norm()) :

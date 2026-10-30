@@ -19,12 +19,14 @@
 
 #include <cosmictiger/math/radial_kernel.hpp>
 #include <cosmictiger/math/simd_math.hpp>
+#include <cosmictiger/sph/variational/equations.hpp>
 #include <cosmictiger/sph/volume.hpp>
 #include <tests/sph/test_helpers.hpp>
 
-// Double-precision references for cosmictiger/sph/volume.hpp. A small isolated particle
-// system with its own exact support solve supplies the discrete thermal energy whose
-// gradient the compatible density-energy force must be (docs/variational_sph.md).
+// Double-precision references for cosmictiger/sph/volume.hpp and
+// cosmictiger/sph/variational/equations.hpp. A small isolated particle system with its own
+// exact support solve supplies the discrete thermal energy whose gradient the compatible
+// density-energy force must be (docs/variational_sph.md).
 namespace detail {
 
 using Vector = std::array<double, 3>;
@@ -206,7 +208,7 @@ struct System {
         std::vector<double> zeta(size());
         for (int i = 0; i < size(); ++i) {
             factor[i] =
-                sph_volume::pressureVolumeFactor(pressure(i), weight[i], weightedDensity(i));
+                variational::pressureVolumeFactor(pressure(i), weight[i], weightedDensity(i));
             zeta[i] = sph_volume::gradHCorrection(sums(i), constraint[i]).zeta;
         }
         Rates result{std::vector<Vector>(size(), Vector{}), std::vector<double>(size(), 0.0)};
@@ -220,15 +222,15 @@ struct System {
                 double const gradientI = gradientFactor(radius, support[i]);
                 double const gradientJ = gradientFactor(radius, support[j]);
                 double const coefficientIJ =
-                    sph_volume::directedCoefficient(factor[i], weight[j], zeta[i]);
+                    variational::directedCoefficient(factor[i], weight[j], zeta[i]);
                 double const coefficientJI =
-                    sph_volume::directedCoefficient(factor[j], weight[i], zeta[j]);
-                double const pairForce =
-                    sph_volume::pairForceFactor(coefficientIJ, coefficientJI, gradientI, gradientJ);
+                    variational::directedCoefficient(factor[j], weight[i], zeta[j]);
+                double const pairForce = variational::pairForceFactor(
+                    coefficientIJ, coefficientJI, gradientI, gradientJ);
                 for (int dim = 0; dim < 3; ++dim) {
                     result.force[i][dim] -= pairForce * separation[dim];
                 }
-                result.work[i] += sph_volume::pairWork(coefficientIJ, gradientI,
+                result.work[i] += variational::pairWork(coefficientIJ, gradientI,
                     dot(difference(velocity[i], velocity[j]), separation));
             }
         }
@@ -746,11 +748,11 @@ TEST(SphVolume, SimdPacksMatchScalarAlgebra) {
         1.0e-13 * std::abs(scalarSums.weightedMoment));
     Pack const pressure([](auto lane) { return 1.0 + 0.25 * double(lane); });
     Pack const density([](auto lane) { return 2.0 - 0.125 * double(lane); });
-    Pack const coefficient = sph_volume::directedCoefficient(
-        sph_volume::pressureVolumeFactor(pressure, Pack(0.3), density), Pack(0.2), Pack(0.05));
+    Pack const coefficient = variational::directedCoefficient(
+        variational::pressureVolumeFactor(pressure, Pack(0.3), density), Pack(0.2), Pack(0.05));
     for (int lane = 0; lane < 4; ++lane) {
-        double const scalar = sph_volume::directedCoefficient(
-            sph_volume::pressureVolumeFactor(1.0 + 0.25 * lane, 0.3, 2.0 - 0.125 * lane), 0.2,
+        double const scalar = variational::directedCoefficient(
+            variational::pressureVolumeFactor(1.0 + 0.25 * lane, 0.3, 2.0 - 0.125 * lane), 0.2,
             0.05);
         EXPECT_NEAR(coefficient[lane], scalar, 1.0e-15);
     }

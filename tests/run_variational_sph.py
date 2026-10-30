@@ -4,15 +4,14 @@
 # Distributed under the Boost Software License, Version 1.0.
 # See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 
-"""Validate hydro.pressureOperator=variational in the application.
+"""Validate variational SPH in the application.
 
-The driver runs the Sod, Sedov blast, and hydroWave scenarios with both SPH
-pressure operators and every hydro-capable integrator, a CFL-halving check, small
-SPH cosmologies for two adiabatic indices, the chemistry rejection, and, when
-requested, two-locality and CUDA comparisons. Every run uses a fresh directory
-under workdir. One line is printed per run and per check; the exit status is
-nonzero when a check fails. A KNOWN status marks a failure of the Monaghan
-baseline itself, which says nothing about the variational operator.
+The driver runs Sod, Sedov blast, and hydroWave with every hydro-capable integrator,
+a CFL-halving check, and small SPH cosmologies for two adiabatic indices. Optional
+runs compare two localities and CUDA against CPU. Every run uses a fresh directory
+under workdir, and any failed run or accuracy check produces a nonzero exit status.
+Chemistry and star-formation evolution and restart coverage lives in
+run_primordial_integration.py and run_star_formation.py.
 """
 
 import argparse
@@ -33,7 +32,6 @@ from application_selection import application_arguments, application_options, co
 
 kRoot = Path(__file__).resolve().parents[1]
 kConfigurations = kRoot / "configurations"
-kOperators = ("monaghan", "variational")
 kHydroIntegrators = ("traditional", "global")
 kRunTimeout = 300
 kCosmologyTimeout = 240
@@ -47,27 +45,24 @@ kCommonOptions = {
     "lightcone.enabled": "false",
     "checkpoint.intervalSeconds": "1000000000",
 }
-kRejectionMessage = "constant-gamma ideal gas"
 
 
 class RunSpec:
-    """One application process: a scenario, backend, operator, integrator, and size."""
+    """One application process: a scenario, backend, integrator, and size."""
 
     def __init__(self, name, stem, executable, *, backend="cpu", localities=1,
-                 operator="monaghan", integrator="traditional", resolution=16,
-                 overrides=None, kind="fixed", expectSuccess=True, rawCommand=None,
+                 integrator="traditional", resolution=16,
+                 overrides=None, kind="fixed", rawCommand=None,
                  timeout=kRunTimeout):
         self.name = name
         self.stem = stem
         self.executable = executable
         self.backend = backend
         self.localities = localities
-        self.operator = operator
         self.integrator = integrator
         self.resolution = resolution
         self.overrides = dict(overrides or {})
         self.kind = kind
-        self.expectSuccess = expectSuccess
         self.rawCommand = rawCommand
         self.timeout = timeout
 
@@ -141,7 +136,6 @@ def buildCommand(spec, mpiExec):
         options.update({
             "compute.cuda": "true" if spec.backend == "cuda" else "false",
             "initial.particlesPerDimension": str(spec.resolution),
-            "hydro.pressureOperator": spec.operator,
         })
         options.update(spec.overrides)
         command += [f"--{key}={value}" for key, value in options.items()]
@@ -223,17 +217,12 @@ def lastStep(directory):
 
 def analyzeRun(spec, directory, returnCode, timedOut, wall, output):
     result = {"name": spec.name, "stem": spec.stem, "backend": spec.backend,
-              "localities": spec.localities, "operator": spec.operator,
+              "localities": spec.localities,
               "integrator": spec.integrator, "resolution": spec.resolution,
               "overrides": spec.overrides, "kind": spec.kind, "wall": wall,
               "returnCode": returnCode, "directory": str(directory)}
     if timedOut:
         result.update(status="timeout", message=f"exceeded {spec.timeout} s")
-        return result
-    if spec.kind == "reject":
-        rejected = returnCode != 0 and kRejectionMessage in output
-        result.update(status="rejected" if rejected else "accepted",
-                      message=failureExcerpt(directory, output) if returnCode else "exited 0")
         return result
     if returnCode != 0:
         result.update(status="abort", message=failureExcerpt(directory, output),
@@ -246,8 +235,7 @@ def analyzeRun(spec, directory, returnCode, timedOut, wall, output):
             result.update(status="ok", message=re.search(
                 r"SPH gravity regression passed[^\n]*", output)[0])
             return result
-        expected = {"hydro.pressureOperator": spec.operator,
-                    "run.timeIntegrator": spec.integrator,
+        expected = {"run.timeIntegrator": spec.integrator,
                     "compute.cuda": "T" if spec.backend == "cuda" else "F"}
         for key, value in expected.items():
             if setting(output, key) != value:
@@ -307,7 +295,7 @@ def formatNumber(value, digits=3):
 
 def runLine(result):
     fields = [f"RUN {result['name']:<40}", f"{result['backend']:<4}",
-              f"loc={result['localities']}", f"op={result['operator']:<11}",
+              f"loc={result['localities']}",
               f"int={result['integrator']:<11}", f"n={result['resolution']:<2}",
               f"status={result['status']:<10}", f"wall={result['wall']:6.1f}s"]
     if result.get("steps") is not None:
@@ -381,49 +369,26 @@ def describe(result):
 
 
 def checkSod(validation, results, key, label):
-    monaghan, variational = results.get(key + ("monaghan",)), results.get(key + ("variational",))
-    if not ok(monaghan) or not ok(variational):
-        validation.add(label, "FAIL", f"monaghan {describe(monaghan)}; "
-                                      f"variational {describe(variational)}")
+    result = results.get(key)
+    if not ok(result):
+        validation.add(label, "FAIL", describe(result))
         return
-    ratio = variational["l1"] / monaghan["l1"]
-    passed = ratio < 1.3 and variational["l1"] < 0.25
+    passed = result["l1"] < 0.25
     validation.add(label, "PASS" if passed else "FAIL",
-                   f"L1 var={variational['l1']:.4e} mon={monaghan['l1']:.4e} "
-                   f"ratio={ratio:.3f} (<1.3, var<0.25); dE_final var="
-                   f"{variational['finalEnergyError']:.3e} mon={monaghan['finalEnergyError']:.3e}")
+                   f"L1={result['l1']:.4e} (<0.25); "
+                   f"dE_final={result['finalEnergyError']:.3e}")
 
 
 def checkEnergy(validation, results, key, label, limit=1.e-2):
-    """Require the variational run to complete with a bounded energy error.
-
-    When the Monaghan baseline itself aborts, a variational abort is KNOWN; when the
-    baseline exceeds the absolute limit, the limit becomes 1.5 times the baseline.
-    """
-    monaghan, variational = results.get(key + ("monaghan",)), results.get(key + ("variational",))
-    if not ok(monaghan):
-        if ok(variational):
-            passed = variational["maxEnergyError"] < limit
-            validation.add(label, "PASS" if passed else "FAIL",
-                           f"monaghan baseline {describe(monaghan)}; variational completed, "
-                           f"max|dE|={variational['maxEnergyError']:.3e} (<{limit:g}), "
-                           f"rho_max={variational['maxDensity']:.4g}")
-        else:
-            validation.add(label, "KNOWN",
-                           f"both operators fail: monaghan {describe(monaghan)}; "
-                           f"variational {describe(variational)}")
+    """Require the run to complete with a bounded energy error."""
+    result = results.get(key)
+    if not ok(result):
+        validation.add(label, "FAIL", describe(result))
         return
-    if not ok(variational):
-        validation.add(label, "FAIL", f"monaghan completed (max|dE|="
-                                      f"{monaghan['maxEnergyError']:.3e}); variational "
-                                      f"{describe(variational)}")
-        return
-    threshold = limit if monaghan["maxEnergyError"] <= limit else 1.5 * monaghan["maxEnergyError"]
-    passed = variational["maxEnergyError"] < threshold
+    passed = result["maxEnergyError"] < limit
     validation.add(label, "PASS" if passed else "FAIL",
-                   f"max|dE| var={variational['maxEnergyError']:.3e} "
-                   f"mon={monaghan['maxEnergyError']:.3e} (<{threshold:.3g}); rho_max "
-                   f"var={variational['maxDensity']:.4g} mon={monaghan['maxDensity']:.4g}")
+                   f"max|dE|={result['maxEnergyError']:.3e} (<{limit:g}); "
+                   f"rho_max={result['maxDensity']:.4g}")
 
 
 def gpuBusyWithOurJobs():
@@ -484,18 +449,17 @@ def main():
         keys[name] = key
 
     for integrator in matrixIntegrators:
-        for operator in kOperators:
-            addCpu(f"sod_n{sodSize}_{integrator}_{operator}", "sod",
-                   ("sod", "cpu", sodSize, integrator, operator),
-                   operator=operator, integrator=integrator, resolution=sodSize)
-            for size in blastSizes:
-                addCpu(f"blast_n{size}_{integrator}_{operator}", "blast",
-                       ("blast", "cpu", size, integrator, operator),
-                       operator=operator, integrator=integrator, resolution=size)
-            for size in waveSizes:
-                addCpu(f"hydroWave_n{size}_{integrator}_{operator}", "hydro_wave",
-                       ("hydroWave", "cpu", size, integrator, operator),
-                       operator=operator, integrator=integrator, resolution=size)
+        addCpu(f"sod_n{sodSize}_{integrator}", "sod",
+               ("sod", "cpu", sodSize, integrator),
+               integrator=integrator, resolution=sodSize)
+        for size in blastSizes:
+            addCpu(f"blast_n{size}_{integrator}", "blast",
+                   ("blast", "cpu", size, integrator),
+                   integrator=integrator, resolution=size)
+        for size in waveSizes:
+            addCpu(f"hydroWave_n{size}_{integrator}", "hydro_wave",
+                   ("hydroWave", "cpu", size, integrator),
+                   integrator=integrator, resolution=size)
     # One coarse interval lets the Courant limit, not the coarse cadence, set every
     # global step, so halving hydro.cfl halves the actual timestep.
     refinementStems = [("sod", "sod", sodSize)]
@@ -503,43 +467,37 @@ def main():
         refinementStems.append(("hydroWave", "hydro_wave", 16))
     if "global" in integrators:
         for label, stem, size in refinementStems:
-            for operator in (kOperators if not args.quick else ("variational",)):
-                for factor, tag in ((1.0, "cfl1"), (0.5, "cfl0.5")):
-                    addCpu(f"refine_{label}_n{size}_{operator}_{tag}", stem,
-                           ("refine", label, size, operator, tag), operator=operator,
-                           integrator="global", resolution=size,
-                           overrides={"run.numberOfSteps": "1",
-                                      "hydro.cfl": repr(defaultCfl * factor)})
-    cosmologyCases = [("variational", "5/3")] if args.quick else [
-        (operator, gamma) for gamma in ("5/3", "7/5") for operator in kOperators]
+            for factor, tag in ((1.0, "cfl1"), (0.5, "cfl0.5")):
+                addCpu(f"refine_{label}_n{size}_{tag}", stem,
+                       ("refine", label, size, tag),
+                       integrator="global", resolution=size,
+                       overrides={"run.numberOfSteps": "1",
+                                  "hydro.cfl": repr(defaultCfl * factor)})
+    cosmologyCases = ["5/3"] if args.quick else ["5/3", "7/5"]
     gammas = {"5/3": repr(5.0 / 3.0), "7/5": repr(7.0 / 5.0)}
-    for operator, gamma in cosmologyCases:
+    for gamma in cosmologyCases:
         # Many short coarse intervals put a diagnostic row on every iteration.
-        addCpu(f"cosmology_n8_gamma{gamma.replace('/', '_')}_{operator}", "cosmology",
-               ("cosmology", gamma, operator), operator=operator, integrator=integrators[0],
+        addCpu(f"cosmology_n8_gamma{gamma.replace('/', '_')}", "cosmology",
+               ("cosmology", gamma), integrator=integrators[0],
                resolution=8, kind="cosmology", timeout=kCosmologyTimeout,
                overrides={"chemistry.enabled": "false", "starFormation.enabled": "false",
                           "hydro.gamma": gammas[gamma], "run.numberOfSteps": "2048",
                           "run.maxIterations": "5"})
-    addCpu("reject_chemistry_variational", "cosmology", ("reject",), operator="variational",
-           integrator=integrators[0], resolution=8, kind="reject", expectSuccess=False,
-           overrides={"chemistry.enabled": "true", "run.maxIterations": "0"})
 
     mpiSpecs = []
     waveIntegrator = "traditional" if "traditional" in integrators else integrators[0]
     if args.mpi_exec:
-        mpiSpecs.append(RunSpec(f"mpi_hydroWave_n8_{waveIntegrator}_variational", "hydro_wave",
-                                executable, localities=2, operator="variational",
+        mpiSpecs.append(RunSpec(f"mpi_hydroWave_n8_{waveIntegrator}", "hydro_wave",
+                                executable, localities=2,
                                 integrator=waveIntegrator, resolution=8))
-        keys[mpiSpecs[-1].name] = ("hydroWave", "mpi", 8, waveIntegrator, "variational")
-        # Mirrors the sph_migration_mpi CTest command, with the variational operator.
+        keys[mpiSpecs[-1].name] = ("hydroWave", "mpi", 8, waveIntegrator)
+        # Mirrors the sph_migration_mpi CTest command.
         migration = [str(executable), "--run.test=sphGravity",
                      "--initial.particlesPerDimension=8", "--hydro.enabled=true",
                      "--compute.cuda=false", "--hpx:threads=2", "--hpx:bind=none"]
         migration += application_arguments(executable, far="fmm", hydro=True)
-        migration += ["--hydro.pressureOperator=variational"]
-        mpiSpecs.append(RunSpec("mpi_sph_migration_variational", None, executable,
-                                localities=2, operator="variational",
+        mpiSpecs.append(RunSpec("mpi_sph_migration", None, executable,
+                                localities=2,
                                 integrator=application_options(
                                     executable, far="fmm", hydro=True)["run.timeIntegrator"],
                                 resolution=8, kind="migration", rawCommand=migration))
@@ -552,20 +510,19 @@ def main():
         cudaIntegrators = [value for value in matrixIntegrators
                            if value in compiled_algorithms(str(cudaExecutable))["integrator"]]
         if cudaSkip is None:
-            for operator in kOperators:
-                if "traditional" in cudaIntegrators:
-                    name = f"cuda_sod_n{sodSize}_traditional_{operator}"
-                    cudaSpecs.append(RunSpec(name, "sod", cudaExecutable, backend="cuda",
-                                             operator=operator, integrator="traditional",
-                                             resolution=sodSize))
-                    keys[name] = ("sod", "cuda", sodSize, "traditional", operator)
-                for integrator in cudaIntegrators:
-                    for size in waveSizes:
-                        name = f"cuda_hydroWave_n{size}_{integrator}_{operator}"
-                        cudaSpecs.append(RunSpec(name, "hydro_wave", cudaExecutable,
-                                                 backend="cuda", operator=operator,
-                                                 integrator=integrator, resolution=size))
-                        keys[name] = ("hydroWave", "cuda", size, integrator, operator)
+            if "traditional" in cudaIntegrators:
+                name = f"cuda_sod_n{sodSize}_traditional"
+                cudaSpecs.append(RunSpec(name, "sod", cudaExecutable, backend="cuda",
+                                         integrator="traditional",
+                                         resolution=sodSize))
+                keys[name] = ("sod", "cuda", sodSize, "traditional")
+            for integrator in cudaIntegrators:
+                for size in waveSizes:
+                    name = f"cuda_hydroWave_n{size}_{integrator}"
+                    cudaSpecs.append(RunSpec(name, "hydro_wave", cudaExecutable,
+                                             backend="cuda",
+                                             integrator=integrator, resolution=size))
+                    keys[name] = ("hydroWave", "cuda", size, integrator)
 
     print(f"variational SPH validation: {len(cpuSpecs)} CPU, {len(mpiSpecs)} MPI, "
           f"{len(cudaSpecs)} CUDA runs; integrators {matrixIntegrators}; default cfl "
@@ -601,11 +558,10 @@ def main():
     for integrator in matrixIntegrators:
         checkSod(validation, results, ("sod", "cpu", sodSize, integrator),
                  f"sod n{sodSize} {integrator} cpu L1")
-        for operator in kOperators:
-            result = results.get(("sod", "cpu", sodSize, integrator, operator))
-            if ok(result) and abs(result["maxEnergyError"]) >= 1.e-2:
-                validation.add(f"sod n{sodSize} {integrator} {operator} energy", "FAIL",
-                               f"max|dE|={result['maxEnergyError']:.3e} (>=1e-2)")
+        result = results.get(("sod", "cpu", sodSize, integrator))
+        if ok(result) and abs(result["maxEnergyError"]) >= 1.e-2:
+            validation.add(f"sod n{sodSize} {integrator} energy", "FAIL",
+                           f"max|dE|={result['maxEnergyError']:.3e} (>=1e-2)")
         for size in blastSizes:
             checkEnergy(validation, results, ("blast", "cpu", size, integrator),
                         f"blast n{size} {integrator} cpu energy")
@@ -615,33 +571,32 @@ def main():
 
     if "global" in integrators:
         for label, _, size in refinementStems:
-            for operator in (kOperators if not args.quick else ("variational",)):
-                coarse = results.get(("refine", label, size, operator, "cfl1"))
-                fine = results.get(("refine", label, size, operator, "cfl0.5"))
-                name = f"cfl refinement {label} n{size} global {operator}"
-                if not ok(coarse) or not ok(fine):
-                    validation.add(name, "FAIL", f"cfl {describe(coarse)}; "
-                                                 f"cfl/2 {describe(fine)}")
-                    continue
-                ratio = (abs(fine["finalEnergyError"]) / abs(coarse["finalEnergyError"])
-                         if coarse["finalEnergyError"] != 0.0 else math.inf)
-                spatial = (f"; L1 cfl={coarse['l1']:.4e} cfl/2={fine['l1']:.4e}"
-                           if "l1" in coarse else "")
-                # The requirement applies to the variational Sod case; the others inform.
-                required = operator == "variational" and label == "sod"
-                status = ("PASS" if ratio <= 1.5 else "FAIL") if required else "INFO"
-                validation.add(name, status,
-                               f"steps {coarse['steps']}->{fine['steps']}; dE_final "
-                               f"{coarse['finalEnergyError']:.3e}->{fine['finalEnergyError']:.3e} "
-                               f"(ratio {ratio:.3f}{', <=1.5' if required else ''}); max|dE| "
-                               f"{coarse['maxEnergyError']:.3e}->{fine['maxEnergyError']:.3e}"
-                               + spatial)
+            coarse = results.get(("refine", label, size, "cfl1"))
+            fine = results.get(("refine", label, size, "cfl0.5"))
+            name = f"cfl refinement {label} n{size} global"
+            if not ok(coarse) or not ok(fine):
+                validation.add(name, "FAIL", f"cfl {describe(coarse)}; "
+                                             f"cfl/2 {describe(fine)}")
+                continue
+            ratio = (abs(fine["finalEnergyError"]) / abs(coarse["finalEnergyError"])
+                     if coarse["finalEnergyError"] != 0.0 else math.inf)
+            spatial = (f"; L1 cfl={coarse['l1']:.4e} cfl/2={fine['l1']:.4e}"
+                       if "l1" in coarse else "")
+            # The requirement applies to the variational Sod case; the others inform.
+            required = label == "sod"
+            status = ("PASS" if ratio <= 1.5 else "FAIL") if required else "INFO"
+            validation.add(name, status,
+                           f"steps {coarse['steps']}->{fine['steps']}; dE_final "
+                           f"{coarse['finalEnergyError']:.3e}->{fine['finalEnergyError']:.3e} "
+                           f"(ratio {ratio:.3f}{', <=1.5' if required else ''}); max|dE| "
+                           f"{coarse['maxEnergyError']:.3e}->{fine['maxEnergyError']:.3e}"
+                           + spatial)
     else:
         validation.add("cfl refinement", "SKIP", "global integrator not compiled")
 
-    for operator, gamma in cosmologyCases:
-        result = results.get(("cosmology", gamma, operator))
-        name = f"cosmology n8 gamma={gamma} {operator}"
+    for gamma in cosmologyCases:
+        result = results.get(("cosmology", gamma))
+        name = f"cosmology n8 gamma={gamma}"
         if ok(result) and result["energyRows"] >= 2:
             validation.add(name, "PASS", f"{result['steps']} steps, {result['energyRows']} "
                                          f"energy rows, a={result['finalScale']:.5g}, "
@@ -651,15 +606,9 @@ def main():
                 f"only {result['energyRows']} energy rows")
             validation.add(name, "FAIL", detail)
 
-    rejection = results.get(("reject",))
-    validation.add("reject variational with chemistry",
-                   "PASS" if rejection and rejection["status"] == "rejected" else "FAIL",
-                   describe(rejection) if rejection and rejection["status"] != "rejected"
-                   else f"exit {rejection['returnCode']}: {rejection['message']}")
-
     if args.mpi_exec:
-        single = results.get(("hydroWave", "cpu", 8, waveIntegrator, "variational"))
-        double = results.get(("hydroWave", "mpi", 8, waveIntegrator, "variational"))
+        single = results.get(("hydroWave", "cpu", 8, waveIntegrator))
+        double = results.get(("hydroWave", "mpi", 8, waveIntegrator))
         name = f"mpi hydroWave n8 {waveIntegrator} variational"
         if not ok(single) or not ok(double):
             validation.add(name, "FAIL", f"1 locality {describe(single)}; "
@@ -682,10 +631,10 @@ def main():
         if cudaSkip is not None and not any(spec.name in resultsByName for spec in cudaSpecs):
             validation.add("cuda", "SKIP", cudaSkip)
         for spec in cudaSpecs:
-            stem, _, size, integrator, operator = keys[spec.name]
-            gpu = results.get((stem, "cuda", size, integrator, operator))
-            cpu = results.get((stem, "cpu", size, integrator, operator))
-            name = f"cuda {stem} n{size} {integrator} {operator}"
+            stem, _, size, integrator = keys[spec.name]
+            gpu = results.get((stem, "cuda", size, integrator))
+            cpu = results.get((stem, "cpu", size, integrator))
+            name = f"cuda {stem} n{size} {integrator}"
             if gpu is None:
                 validation.add(name, "SKIP", cudaSkip or "not run")
                 continue
@@ -700,14 +649,13 @@ def main():
                            f"all-row max |diff|/(K+U)={rowMaximum:.2e}; max|dE| cuda="
                            f"{gpu['maxEnergyError']:.3e} cpu={cpu['maxEnergyError']:.3e}; "
                            f"wall cuda={gpu['wall']:.1f}s cpu={cpu['wall']:.1f}s" + l1)
-        for operator in kOperators:
-            key = ("sod", "cuda", sodSize, "traditional", operator)
-            if key in results and ok(results[key]):
-                result = results[key]
-                if result["l1"] >= 0.25 or result["maxEnergyError"] >= 1.e-2:
-                    validation.add(f"cuda sod n{sodSize} traditional {operator} accuracy",
-                                   "FAIL", f"L1={result['l1']:.4e} "
-                                           f"max|dE|={result['maxEnergyError']:.3e}")
+        key = ("sod", "cuda", sodSize, "traditional")
+        if key in results and ok(results[key]):
+            result = results[key]
+            if result["l1"] >= 0.25 or result["maxEnergyError"] >= 1.e-2:
+                validation.add(f"cuda sod n{sodSize} traditional accuracy",
+                               "FAIL", f"L1={result['l1']:.4e} "
+                                       f"max|dE|={result['maxEnergyError']:.3e}")
         checkSod(validation, results, ("sod", "cuda", sodSize, "traditional"),
                  f"sod n{sodSize} traditional cuda L1")
     else:

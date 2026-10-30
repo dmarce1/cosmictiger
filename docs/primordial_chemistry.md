@@ -51,6 +51,8 @@ Particle chemistry requires both `COSMICTIGER_ENABLE_SPH=ON` and
 `-DCOSMICTIGER_ENABLE_CHEMISTRY=OFF` to build SPH without particle chemistry.
 With SPH disabled, the chemistry setting is inactive. Homogeneous cosmological
 recombination remains available regardless of these settings.
+The variational pressure operator uses the composition-dependent pressure and
+acoustic index supplied by particle chemistry.
 
 For example, with an existing configured build:
 

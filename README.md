@@ -253,10 +253,11 @@ The conversion utilities use the same grouping style:
 
 ## SPH
 
-The gas solver uses Monaghan's 1992 density/internal-energy SPH: the cubic spline,
-symmetric pressure forces and thermal work, and constant alpha/beta artificial
-viscosity. It is integrated with FMM or PMMM gravity and particle storage. See
-[the formulation and paper references](docs/monaghan_sph.md) for the equations,
+The gas solver evolves density and internal energy, using the
+[variational pressure operator](docs/variational_sph.md) with grad-H corrections
+for all SPH runs. It uses Monaghan artificial viscosity, FMM or PMMM gravity, and
+shared particle storage. See
+[the kernel, viscosity, and paper references](docs/monaghan_sph.md) for the equations,
 cosmological conversions, and deliberate implementation choices. SPH support is
 built by default; `-DCOSMICTIGER_ENABLE_SPH=OFF` excludes it. Enable gas
 explicitly with `--hydro.enabled=true`. SPH supports traditional block timesteps
@@ -284,6 +285,7 @@ specified in the INI configuration file. Primordial chemistry is configured unde
 `chemistry.*`. The cosmological INIs enable both chemistry and SH03 star
 formation, requiring `COSMICTIGER_ENABLE_SPH=ON`,
 `COSMICTIGER_ENABLE_CHEMISTRY=ON`, and `COSMICTIGER_ENABLE_STARS=ON`.
+The variational pressure operator supports both chemistry and star formation.
 The `starFormation.*` controls select the equilibrium multiphase model;
 ordinary gas uses the selected chemistry network (`atomic6` or `molecular9`), and converted stars retain gravitational
 interactions. See [the star-formation documentation](docs/star_formation.md)
@@ -605,7 +607,7 @@ Common gravity and SPH machinery lives directly in each subsystem directory.
 The same layout is used beneath `cosmictiger/` for headers and `src/` for
 implementations. Gravity solver code is in `gravity/dehnen/` for global adaptive
 FMM and `gravity/nitadori/` for PMMM. SPH numerical modules are in
-`sph/monaghan/`, `sph/morris_and_monaghan/`, `sph/cullen_and_dehnen/`,
+`sph/variational/`, `sph/monaghan/`, `sph/morris_and_monaghan/`, `sph/cullen_and_dehnen/`,
 `sph/price_etal/`, and `sph/balsara/`.
  Owned particle storage stays in `particles/`; PMMM owns its
 separate ghost arena in `gravity/nitadori/`.

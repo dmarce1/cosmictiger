@@ -34,9 +34,9 @@ arithmetic count. Kernel degree and span count come from the selected table.
 | `solveSphSupportRadius` (CUDA) | Each iteration counts support checks and reciprocal, 10 per visited neighbor, another 4 plus density/derivative costs inside support, both block sums, residual/tolerance and the selected update. |
 | `sphCpuHasActiveNeighbor` / CUDA semiactive scan | Distance, dot product and squared support tests for the packets/pairs actually visited. |
 | `sphCpuPrehydro1`, `sphCudaPrehydro1` | Neighbor construction and every support-radius solve, including unsuccessful solves requiring a larger neighbor box. |
-| `sphCpuPrehydro2`, `sphCudaPrehydro2` | Activity scan, support solve, mass/support normalization, every density-kernel evaluation and density reduction. |
-| `sphCpuHydro` | Scalar sink setup; `9W+1` per candidate packet; 70 per lane of interacting packets plus both derivative kernels; EOS fallback; four numerical sums; external accelerations, damping and cosmological thermal work; timestep/rung selection. Padded lanes count when executed. |
-| `sphCudaHydro` | Sink setup per executing thread; 8 per candidate, another 2 for nonzero separation; 70 per accepted pair plus both derivative kernels; actual block sums; external accelerations, damping, thermal work and timestep/rung selection. |
+| `sphCpuPrehydro2`, `sphCudaPrehydro2` | Activity scan, support solve, mass/support normalization, every density-kernel evaluation and density reduction; grad-H sums, derivative kernels, reductions and correction evaluation. |
+| `sphCpuHydro` | Scalar sink setup, including 5 for its directed pressure coefficient; `9W+1` per candidate packet; 79 per lane of interacting packets plus both derivative kernels and enabled viscosity switches; EOS fallback; four numerical sums; external accelerations, damping and cosmological thermal work; timestep/rung selection. Padded lanes count when executed. |
+| `sphCudaHydro` | Sink setup per executing thread, including 5 for its directed pressure coefficient; 8 per candidate, another 2 for nonzero separation; 79 per accepted pair plus both derivative kernels and enabled viscosity switches; actual block sums; external accelerations, damping, thermal work and timestep/rung selection. |
 | Hydro timestep selection | 25 per active phase-1 sink plus 13 when self-gravity constrains the rung; another 3 when the thermal limiter executes. Signal-speed reporting and gravity-only diagnostic calculations with self-gravity disabled are excluded. |
 | `sphCpuRungs`, `sphCudaRungs` | Support squares, actual distance/dot products and neighbor geometry; integer rung propagation costs zero. |
 | `sphParticlesApplyUpdates` | Two per visited particle for its half-step; active predictor/opening kick adds 8, corrector adds 13. |
@@ -44,9 +44,15 @@ arithmetic count. Kernel degree and span count come from the selected table.
 | `sphTreeNeighbor` | Actual search intersections and refreshed support boxes. Self-box validation checks are excluded. |
 | `SphRunWorkspace::run` | Gravity effective-radius division; staging/copies and dispatch have no arithmetic count. |
 
-The reusable Monaghan helper costs are 9 (`viscosityMu`), 10
-(`artificialViscosity`), 5 (`pressureCoefficient`) and 4 (`pairEnergyRate`). A scalar
-density/derivative evaluation costs `5+B(degree-derivative)` inside support and
+The reusable Monaghan viscosity helper costs are 9 (`viscosityMu`) and 10
+(`artificialViscosity`). The variational pressure helpers cost 3
+(`pressureVolumeFactor`), 2 (`directedCoefficient`), 3 (`pairForceFactor`) and 2
+(`pairWork`). The hydro loops submit `39 + 9 + 10 + 21 = 79` per interacting lane
+or pair before derivative kernels and viscosity switches. The 21-operation term
+includes the neighbor's directed pressure coefficient, pressure force, reversible
+work, viscous force and heating factors. Variable alpha adds 3, beta following
+alpha adds 1, and the Balsara limiter adds 3 per interacting lane or pair.
+A scalar density/derivative evaluation costs `5+B(degree-derivative)` inside support and
 zero outside. SIMD evaluates every polynomial span, costing
 `pieceCount * (1 + W*(4+B(degree-derivative)))` per call, including the scalar
 span-width subtraction. CPU and CUDA totals therefore need not agree even when

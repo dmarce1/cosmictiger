@@ -35,8 +35,7 @@ code.
 
 The SPH computation code that transcribes Monaghan (1992), ARA&A 30, 543 names its
 local variables with the paper's symbols instead of camelCase:
-`cosmictiger/sph/monaghan/equations.hpp`, `cosmictiger/sph/monaghan/viscosity.hpp`,
-and `cosmictiger/sph/kernels.hpp`, plus the pair, density, and support-radius loops
+`cosmictiger/sph/monaghan/viscosity.hpp` and `cosmictiger/sph/kernels.hpp`, plus the pair, density, and support-radius loops
 in `src/sph/sph_hydro_cpu.cpp`,
 `src/sph/sph_hydro.cu`, `src/sph/sph_prehydro_cpu.cpp`, `src/sph/sph_prehydro.cu`, and
 `cosmictiger/sph/sph_cuda.hpp`. Those regions use the Unicode letters the compilers accept

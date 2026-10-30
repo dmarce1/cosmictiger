@@ -1,6 +1,7 @@
-# Monaghan (1992) SPH baseline
+# SPH kernels and Monaghan artificial viscosity
 
-This implementation follows the nonrelativistic SPH equations in J. J. Monaghan,
+The kernels and artificial viscosity follow the nonrelativistic SPH treatment in
+J. J. Monaghan,
 *Smoothed Particle Hydrodynamics*, **Annual Review of Astronomy and Astrophysics**
 30 (1992), 543–574,
 [doi:10.1146/annurev.aa.30.090192.002551](https://doi.org/10.1146/annurev.aa.30.090192.002551),
@@ -8,16 +9,17 @@ ADS bibcode `1992ARA&A..30..543M`
 ([open-access scan](https://articles.adsabs.harvard.edu/pdf/1992ARA%26A..30..543M)).
 Equation and printed-page references below were checked against that scan.
 
-The active fluid model uses density and specific internal energy with an ideal-gas
-equation of state. Stellar particles, star formation, chemistry, thermal conduction,
-and species diffusion have been removed, along with their particle storage and
-solver branches. Their former options are no longer accepted. Ordinary particle
-advection is used; the optional XSPH variant in equation 3.19 is not enabled.
+The active fluid model uses density and specific internal energy with the
+[variational pressure operator](variational_sph.md), including grad-H corrections.
+It supports an ideal gas, primordial chemistry, and the SH03 star-formation
+closure. Ordinary particle advection is used; the optional XSPH variant in
+equation 3.19 is not enabled.
 
 ## Notation in the code
 
-The computation code transcribes the paper. `cosmictiger/sph/monaghan/equations.hpp` and `viscosity.hpp` hold the
-per-pair formulae, and the pair, density, and support-radius loops in
+The computation code transcribes the paper's kernel and viscosity formulas.
+`cosmictiger/sph/monaghan/viscosity.hpp` holds the per-pair viscosity formulas,
+and the pair, density, and support-radius loops in
 `src/sph/sph_hydro_cpu.cpp`, `src/sph/sph_hydro.cu`, `src/sph/sph_prehydro_cpu.cpp`,
 `src/sph/sph_prehydro.cu`, and `cosmictiger/sph/sph_cuda.hpp` apply them to the staged particle
 arrays. Inside those regions the local variables carry the paper's symbols and each
@@ -41,7 +43,6 @@ types.
 | \(\Pi_{ab}, \mu_{ab}\) | `Π_ab`, `μ_ab` | artificial viscosity and its velocity measure |
 | \(\alpha, \beta, \eta^2/h^2\) | `α`, `β`, `ε` | viscosity constants |
 | \(\bar c_{ab}, \bar\rho_{ab}\) | `c̄_ab`, `ρ̄_ab` | pair averages |
-| \(P_b/\rho_b^2+P_a/\rho_a^2\) | `P_over_ρ2_ab` | symmetric pressure term |
 | \(\max_b\mu_{ab}\) | `μ_max` | compression magnitude \(\max_b(-\mu_{ab})\) |
 | \(\delta t_{\rm cv}, \delta t_{\rm f}\) | `one_over_δt_cv`, `one_over_δt_f` | reciprocals of the section 10.3 limits |
 | \(f_a^{\rm AV}, (f_a^{\rm AV}+f_b^{\rm AV})/2\) | `f_a_AV`, `f_ab_AV` | GADGET-4 equation (72) shear factors |
@@ -146,19 +147,17 @@ Let \(\mathbf r_{ij}=\mathbf r_i-\mathbf r_j\),
 This is one of the two choices explicitly offered on p.554. A pair participates
 when it lies inside either support radius. The zero-separation gradient is zero.
 
-Equations 6.4–6.5 give the physical-coordinate pair rates
+The artificial-viscosity contributions to the physical-coordinate pair rates are
 
 \[
  \frac{d\mathbf v_i}{dt}
- =-\sum_j m_j C_{ij}\nabla_i\widetilde W_{ij},\qquad
+ =-\sum_j m_j \Pi_{ij}\nabla_i\widetilde W_{ij},\qquad
  \frac{du_i}{dt}
- =\frac12\sum_jm_j C_{ij}\mathbf v_{ij}\cdot\nabla_i\widetilde W_{ij},
+ =\frac12\sum_jm_j \Pi_{ij}\mathbf v_{ij}\cdot\nabla_i\widetilde W_{ij}.
 \]
 
-\[
- C_{ij}=\frac{P_i}{\rho_i^2}+\frac{P_j}{\rho_j^2}+\Pi_{ij},\qquad
- P_i=(\gamma-1)\rho_i u_i,\qquad c_i^2=\gamma(\gamma-1)u_i.
-\]
+The [variational operator](variational_sph.md#constraint-and-equations) supplies
+the pressure force and reversible thermal work separately.
 
 The artificial viscosity follows equation 4.1, the unnumbered definition of
 \(\Pi_{ij}\) that follows it, and equation 4.2, pp.550–551:
@@ -202,12 +201,7 @@ after restart and migration and is not stored in checkpoints. Checkpoint metadat
 records whether the limiter is enabled and rejects a restart with a different setting.
 Use `--hydro.balsaraSwitch=false` to disable this shear correction.
 
-This default `hydro.pressureOperator=monaghan` formulation has no pressure-entropy
-weighting or grad-h factors. `hydro.pressureOperator=variational` replaces only its
-pressure force and reversible work with the compatible density-energy operator with
-grad-H terms; see [variational SPH](variational_sph.md). In the Monaghan operator the
-same symmetric pressure and viscosity factors enter force and thermal work.
-Their simultaneous pair rates conserve linear
+The variational pressure terms and symmetric artificial viscosity conserve linear
 and angular momentum and balance kinetic with internal energy. This algebraic
 identity does not imply exact conservation by a finite-step asynchronous integrator.
 
@@ -443,7 +437,7 @@ hydrodynamic controls are:
 
 | Option | Default | Meaning |
 | --- | ---: | --- |
-| `hydro.enabled` | `false` | Enable the Monaghan gas solver |
+| `hydro.enabled` | `false` | Enable the SPH gas solver |
 | `hydro.kernelFamily` | `spline` | Density family: `spline`, `wendland`, or `ferrers` |
 | `hydro.kernelDegree` | `3` | Density polynomial degree; valid values depend on family |
 | `hydro.gamma` | `5/3` | Ideal-gas adiabatic index |
@@ -458,7 +452,6 @@ hydrodynamic controls are:
 | `hydro.viscosityDecayPrice` | `0.1` | Price et al. decay coefficient \(\sigma_{\rm decay}\) |
 | `hydro.viscosityEpsilon` | `0.01` | Denominator coefficient multiplying \(\bar\ell^2\) |
 | `hydro.balsaraSwitch` | `true` | Apply the Balsara shear limiter to artificial viscosity |
-| `hydro.pressureOperator` | `monaghan` | Pressure force and work: `monaghan` (equations 6.4–6.5), or `variational` ([compatible density-energy with grad-H](variational_sph.md); ideal gas without chemistry or star formation) |
 | `hydro.neighborNumber` | `42` | Kernel-weighted support-sphere count |
 | `compute.sphBucketSize` | `0` (automatic) | SPH tree leaf limit; automatic sizing uses `floor(8/pi * hydro.neighborNumber)`, giving `106` at the default neighbor target |
 | `hydro.minEffectiveRadius` | unset | Alternative minimum effective radius \(h=2\sigma\), in initial interparticle spacings |
@@ -490,10 +483,9 @@ kernel and variable smoothing radii. See
 [gravitational softening](kernels.md#fixed-comoving-gravitational-softening) for
 the gravity radius options and their independence from SPH smoothing.
 
-Checkpoints use version 3, and the low byte of `reserved` identifies the SPH pressure
-operator: 1 for this Monaghan discretization, 2 for the
-[variational operator](variational_sph.md); a restart with the other operator is
-rejected. The next two bytes encode independent gravity and hydro kernel
+Checkpoints use version 3, and the low byte of `reserved` is 2 for the
+[variational operator](variational_sph.md). Legacy Monaghan checkpoints (code 1)
+are rejected. The next two bytes encode independent gravity and hydro kernel
 selections. Bit 24 identifies the compact gas layout after removal of stellar,
 chemistry, and obsolete solver fields. Older SPH checkpoints lack this bit and
 are rejected before particle data are loaded; the gas payload also has its own
@@ -517,7 +509,8 @@ The independent `sph_kernels` and `monaghan_sph` CTest targets retain the refere
 float and double kernel normalization, spline joins, analytic versus
 finite-difference derivatives, the paper's \(H=2h_M\) convention, viscosity signs
 and coefficients, regularization, and invariance under length-unit changes and
-velocity boosts. Pair tests use unequal pressures,
+velocity boosts. Pair tests combine variational pressure with Monaghan viscosity
+and use unequal pressures,
 densities, masses, and supports to check net force, torque, and total energy rate,
 including a pair inside only one support. They also check separation, uniform
 translation, and the distinction between peculiar and physical thermal work.
@@ -558,9 +551,10 @@ or evidence of long-time accuracy. No performance claim follows from them.
 
 Common particle storage, source staging, neighbor traversal, CPU/CUDA execution,
 and timestep scheduling stay directly in `cosmictiger/sph/` and `src/sph/`.
-The numerical components live in author-named directories:
+The numerical components live in separate formulation and author directories:
 
-- `monaghan/`: pair pressure work and the baseline artificial-viscosity formula.
+- `variational/equations.hpp`: compatible pressure force and thermal work with grad-H corrections; the shared volume and support algebra stays in `volume.hpp`.
+- `monaghan/`: the baseline artificial-viscosity formula.
 - `morris_and_monaghan/`: compression/decay rate and predictor/corrector updates of alpha.
 - `cullen_and_dehnen/`: gradient reconstruction, shock detection, alpha updates, and model diagnostics.
 - `price_etal/`: the Phantom shock detector and backward Euler alpha update, reusing the CD gradient reconstruction and state.

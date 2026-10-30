@@ -20,7 +20,7 @@
 #include <cosmictiger/sph/price_etal/viscosity.hpp>
 #include <cosmictiger/sph/sph_cpu.hpp>
 
-// Monaghan (1992), ARA&A 30, 543; cosmictiger/sph/monaghan/equations.hpp gives the full citation
+// Monaghan (1992), ARA&A 30, 543; cosmictiger/sph/monaghan/viscosity.hpp gives the full citation
 // and the notation. Particle a is the sink and particle b a pack of staged neighbors.
 // NOLINTBEGIN(readability-identifier-naming)
 namespace detail {
@@ -261,14 +261,12 @@ SphRunReturn sphCpuPrehydro2(
                 detail::sphCpuValidLanes(neighbors, first), m_b_over_H_a3 * w_ab, SimdFloat(0.0f));
             flops +=
                 12 * SimdFloat::size() + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab);
-            if (parameters.variationalPressure) {
-                auto const inside =
-                    detail::sphCpuValidLanes(neighbors, first) && q_ab < SimdFloat(1.0f);
-                ΣW_pack += simdSelect(inside, w_ab, SimdFloat(0.0f));
-                Σqdw_pack += simdSelect(inside, q_ab * dkernelWDq(q_ab), SimdFloat(0.0f));
-                flops += 3 * SimdFloat::size() +
-                    sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
-            }
+            auto const inside =
+                detail::sphCpuValidLanes(neighbors, first) && q_ab < SimdFloat(1.0f);
+            ΣW_pack += simdSelect(inside, w_ab, SimdFloat(0.0f));
+            Σqdw_pack += simdSelect(inside, q_ab * dkernelWDq(q_ab), SimdFloat(0.0f));
+            flops += 3 * SimdFloat::size() +
+                sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
             if (parameters.balsaraSwitch || parameters.variableViscosity) {
                 // GADGET-4 equation (72): accumulate ρ_a div(v)_a and ρ_a curl(v)_a
                 // as −Σ_b m_b v_ab·gradW_ab and Σ_b m_b v_ab×gradW_ab.
@@ -356,16 +354,14 @@ SphRunReturn sphCpuPrehydro2(
         flops += SimdFloat::size() - 1;
         ALWAYS_ASSERT(H_a > 0.0f && ρ_a > 0.0f);
         data.sinkDensity[sinkIndex] = ρ_a;
-        if (parameters.variationalPressure) {
-            float const ΣW = simdSum(ΣW_pack);
-            float const Σqdw = simdSum(Σqdw_pack);
-            auto const gradH = sphGradHEvaluation(H_a, parameters.minimumSupportRadius,
-                parameters.maximumSupportRadius, data.targetNeighborCount, data.gasMass, ΣW, Σqdw);
-            // Reductions, residual (2), and Ω, ζ, the weighted sums (6).
-            flops += 2 * (SimdFloat::size() - 1) + 8;
-            detail::recordSphCpuGradH(gradH, H_a, ρ_a, ΣW, Σqdw, result);
-            data.sinkGradHCorrection[sinkIndex] = gradH.correction.zeta;
-        }
+        float const ΣW = simdSum(ΣW_pack);
+        float const Σqdw = simdSum(Σqdw_pack);
+        auto const gradH = sphGradHEvaluation(H_a, parameters.minimumSupportRadius,
+            parameters.maximumSupportRadius, data.targetNeighborCount, data.gasMass, ΣW, Σqdw);
+        // Reductions, residual (2), and Ω, ζ, the weighted sums (6).
+        flops += 2 * (SimdFloat::size() - 1) + 8;
+        detail::recordSphCpuGradH(gradH, H_a, ρ_a, ΣW, Σqdw, result);
+        data.sinkGradHCorrection[sinkIndex] = gradH.correction.zeta;
         if (parameters.balsaraSwitch) {
             Vector3<float> const ρ_a_curl_v_a(simdSum(ρ_a_curl_v_a_pack[kXDimension]),
                 simdSum(ρ_a_curl_v_a_pack[kYDimension]), simdSum(ρ_a_curl_v_a_pack[kZDimension]));

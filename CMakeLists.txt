@@ -324,11 +324,11 @@ set(cosmictiger_header_files
     cosmictiger/sph/cullen_and_dehnen/state.hpp
     cosmictiger/sph/cullen_and_dehnen/viscosity.hpp
     cosmictiger/sph/kernels.hpp
-    cosmictiger/sph/monaghan/equations.hpp
     cosmictiger/sph/monaghan/viscosity.hpp
     cosmictiger/sph/morris_and_monaghan/viscosity.hpp
     cosmictiger/sph/price_etal/viscosity.hpp
     cosmictiger/sph/sph_flops.hpp
+    cosmictiger/sph/variational/equations.hpp
     cosmictiger/sph/viscosity_state.hpp
     cosmictiger/sph/volume.hpp
 )

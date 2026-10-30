@@ -11,8 +11,10 @@ Compile with `COSMICTIGER_ENABLE_SPH=ON`, `COSMICTIGER_ENABLE_CHEMISTRY=ON`, and
 `COSMICTIGER_ENABLE_STARS=ON`; the latter defaults to `OFF`. The former
 `COSMICTIGER_ENABLE_STAR_FORMATION` name initializes an unmigrated cache;
 afterward `STARS` controls both names, including when explicitly set `OFF`.
-At runtime set `hydro.enabled=true`, `starFormation.enabled=true`, and
-`chemistry.enabled=true`. The traditional and global time integrators are
+At runtime set `hydro.enabled=true`, `starFormation.enabled=true`,
+`chemistry.enabled=true`. The variational pressure operator uses the effective
+pressure and acoustic index supplied by the
+closure. The traditional and global time integrators are
 supported. The gas adiabatic index must be \(\gamma=5/3\). Stars require
 chemistry at configure time and runtime, with either `chemistry.network`.
 Both networks cover 10–10⁸ K, so the hot gas released from this closure stays

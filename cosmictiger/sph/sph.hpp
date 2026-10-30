@@ -148,9 +148,6 @@ struct SphRunParameters {
     float maximumTimestep = 1e30f;
     bool globalTimestep = false;
     bool refreshConvergedDensity = false;    // Recompute diagnostics with fixed, converged supports.
-    // hydro.pressureOperator=variational: compatible density-energy pressure with grad-H
-    // (cosmictiger/sph/volume.hpp); otherwise the Monaghan (1992) pressure terms.
-    bool variationalPressure = false;
     float viscosityAlpha;
     float viscosityBeta;
     float viscosityEpsilon;
@@ -171,7 +168,6 @@ struct SphRunParameters {
         minimumSupportRadius = opts.hydro.minSupportRadius;
         maximumSupportRadius = opts.hydro.maxSupportRadius;
         velocityDampingRate = opts.hydro.damping;
-        variationalPressure = opts.hydro.pressureOperator == "variational";
         uniformAccelerationY = opts.hydro.yAcceleration;
         zPlaneAcceleration = opts.hydro.zPlaneAcceleration;
         viscosityAlpha = opts.hydro.viscosityAlpha;
@@ -221,7 +217,6 @@ struct SphRunParameters {
         arc & maximumTimestep;
         arc & globalTimestep;
         arc & refreshConvergedDensity;
-        arc & variationalPressure;
         arc & uniformAccelerationY;
         arc & baseTimestep;
         arc & phase;

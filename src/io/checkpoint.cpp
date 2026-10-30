@@ -126,7 +126,8 @@ constexpr uint32_t kCheckpointVersion = 3;
 constexpr uint32_t kCheckpointManifestVersion = 1;
 constexpr uint32_t kScenarioManifestVersion = 2;
 // The low byte of the physics code identifies the SPH pressure operator.
-constexpr uint32_t kMonaghanSph = 1;
+// Retained only to identify and reject retired Monaghan pressure checkpoints.
+constexpr uint32_t kRetiredMonaghanSph = 1;
 constexpr uint32_t kVariationalSph = 2;
 constexpr uint32_t kSphFormationMask = 0xffU;
 constexpr uint32_t kCompactSphLayout = 1U << 24;
@@ -498,9 +499,7 @@ uint32_t checkpointPhysicsCode(Options const& opts) {
     uint32_t const hydroCode =
         checkpointKernelCode(opts.hydro.kernelFamily, opts.hydro.kernelDegree) ^
         checkpointKernelCode("spline", 3);
-    uint32_t const formulation =
-        opts.hydro.pressureOperator == "variational" ? kVariationalSph : kMonaghanSph;
-    return (opts.hydro.enabled ? formulation | kCompactSphLayout : 0U) | (gravityCode << 8) |
+    return (opts.hydro.enabled ? kVariationalSph | kCompactSphLayout : 0U) | (gravityCode << 8) |
         (hydroCode << 16);
 }
 
@@ -539,7 +538,7 @@ bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
         header.nominalSteps == opts.run.numberOfSteps;
 }
 
-// Stored only for Monaghan SPH checkpoints; the dark-matter layout is unchanged.
+// Stored only for SPH checkpoints; the dark-matter layout is unchanged.
 std::array<double, 13> sphCheckpointParameters(Options const& opts) {
     return {opts.hydro.viscosityAlpha, opts.hydro.viscosityBeta, opts.hydro.viscosityEpsilon,
         opts.hydro.neighborNumber, opts.hydro.minSupportRadius, opts.hydro.maxSupportRadius,
@@ -745,12 +744,9 @@ DriverParameters readDriverState(FILE* fp) {
             (header.reserved & kSphFormationMask) !=
                 (checkpointPhysicsCode(getOptions()) & kSphFormationMask)) {
             uint32_t const saved = header.reserved & kSphFormationMask;
-            THROW_ERROR("Checkpoint SPH pressure operator (%s) differs from "
-                        "hydro.pressureOperator=%s; a checkpoint is never reinterpreted with "
-                        "another operator\n",
-                saved == kMonaghanSph ? "monaghan" :
-                                        (saved == kVariationalSph ? "variational" : "unknown"),
-                getOptions().hydro.pressureOperator.c_str());
+            THROW_ERROR("Checkpoint SPH pressure operator (%s) is no longer supported; "
+                        "SPH requires the variational pressure operator\n",
+                saved == kRetiredMonaghanSph ? "monaghan" : "unknown");
         }
         if (!checkpointCompatible(header, getOptions())) {
             THROW_ERROR("Checkpoint physics, particle layout or integrator differs from the "
@@ -1158,9 +1154,8 @@ void checkpointStateTest() {
     defaultKernelOptions.gravity.kernelDegree = 8;
     defaultKernelOptions.hydro.kernelFamily = "spline";
     defaultKernelOptions.hydro.kernelDegree = 3;
-    defaultKernelOptions.hydro.pressureOperator = "monaghan";
     ALWAYS_ASSERT(detail::checkpointHeader(defaultKernelOptions).reserved ==
-        (defaultKernelOptions.hydro.enabled ? detail::kMonaghanSph | detail::kCompactSphLayout :
+        (defaultKernelOptions.hydro.enabled ? detail::kVariationalSph | detail::kCompactSphLayout :
                                               0U));
     auto legacyKernelOptions = defaultKernelOptions;
     legacyKernelOptions.hydro.enabled = false;
@@ -1239,21 +1234,17 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(detail::checkpointCompatible(unlimitedHeader, balsaraOptions));
     balsaraOptions.hydro.balsaraSwitch = true;
     ALWAYS_ASSERT(!detail::checkpointCompatible(unlimitedHeader, balsaraOptions));
-    // Each SPH pressure operator rejects the other's checkpoints; Monaghan keeps code 1.
+    // Variational checkpoints round-trip; retired Monaghan pressure is never reinterpreted.
     auto operatorOptions = getOptions();
     operatorOptions.hydro.enabled = true;
-    operatorOptions.hydro.pressureOperator = "monaghan";
-    auto const monaghanHeader = detail::checkpointHeader(operatorOptions);
-    ALWAYS_ASSERT((monaghanHeader.reserved & detail::kSphFormationMask) == detail::kMonaghanSph);
-    operatorOptions.hydro.pressureOperator = "variational";
     auto const variationalHeader = detail::checkpointHeader(operatorOptions);
     ALWAYS_ASSERT(
         (variationalHeader.reserved & detail::kSphFormationMask) == detail::kVariationalSph);
     ALWAYS_ASSERT(detail::checkpointCompatible(variationalHeader, operatorOptions));
-    ALWAYS_ASSERT(!detail::checkpointCompatible(monaghanHeader, operatorOptions));
-    operatorOptions.hydro.pressureOperator = "monaghan";
-    ALWAYS_ASSERT(detail::checkpointCompatible(monaghanHeader, operatorOptions));
-    ALWAYS_ASSERT(!detail::checkpointCompatible(variationalHeader, operatorOptions));
+    auto retiredHeader = variationalHeader;
+    retiredHeader.reserved =
+        (retiredHeader.reserved & ~detail::kSphFormationMask) | detail::kRetiredMonaghanSph;
+    ALWAYS_ASSERT(!detail::checkpointCompatible(retiredHeader, operatorOptions));
     auto viscosityOptions = getOptions();
     viscosityOptions.hydro.enabled = true;
     viscosityOptions.hydro.viscosityEvolution = "morrisAndMonaghan";

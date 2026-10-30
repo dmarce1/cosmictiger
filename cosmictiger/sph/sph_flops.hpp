@@ -8,12 +8,10 @@
 
 namespace sph_flops {
 
-// Costs of the expressions in monaghan/{equations,viscosity}.hpp. Selection and unary signs
+// Costs of the expressions in monaghan/viscosity.hpp. Selection and unary signs
 // are free; both expressions passed to simdSelect are evaluated.
 constexpr FlopCount kViscosityMu = 9;
 constexpr FlopCount kArtificialViscosity = 10;
-constexpr FlopCount kPressureCoefficient = 5;
-constexpr FlopCount kPairEnergyRate = 4;
 
 CUDA_EXPORT inline FlopCount bernsteinFlops(int degree) {
     return FlopCount(3) * degree * (degree + 1) / 2;

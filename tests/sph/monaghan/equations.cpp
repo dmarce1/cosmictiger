@@ -20,8 +20,8 @@
 
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/sph/kernels.hpp>
-#include <cosmictiger/sph/monaghan/equations.hpp>
 #include <cosmictiger/sph/monaghan/viscosity.hpp>
+#include <cosmictiger/sph/variational/equations.hpp>
 
 #include <tests/sph/test_helpers.hpp>
 
@@ -152,12 +152,25 @@ Rates pairRates(Particle const& sink, Particle const& source, double alpha, doub
         radiusSquared, dot(relativeVelocity, displacement), sink.support, source.support, 0.01);
     double const viscosity = monaghan::artificialViscosity(
         sink.rho, source.rho, sink.sound, source.sound, mu, alpha, beta);
-    double const pressure =
-        monaghan::pressureCoefficient(sink.rho, source.rho, sink.pressure, source.pressure);
-    result.acceleration = scaled(gradient, -source.mass * (pressure + viscosity));
-    double const work = dot(relativeVelocity, gradient);
-    result.energy = source.mass * monaghan::pairEnergyRate(pressure, viscosity, work, work);
-    result.viscousHeating = source.mass * monaghan::pairEnergyRate(0.0, viscosity, work, work);
+    // Fixed supports use zeta = 0; each particle contributes its own pressure gradient.
+    double const coefficientI = variational::directedCoefficient(
+        variational::pressureVolumeFactor(sink.pressure, sink.mass, sink.rho), source.mass, 0.0);
+    double const coefficientJ = variational::directedCoefficient(
+        variational::pressureVolumeFactor(source.pressure, source.mass, source.rho), sink.mass,
+        0.0);
+    double const gradientI =
+        sph_kernels::kernelDerivative(radius / sink.support) / (std::pow(sink.support, 4) * radius);
+    double const gradientJ = sph_kernels::kernelDerivative(radius / source.support) /
+        (std::pow(source.support, 4) * radius);
+    double const pressureForce =
+        variational::pairForceFactor(coefficientI, coefficientJ, gradientI, gradientJ) / sink.mass;
+    result.acceleration =
+        scaled(displacement, -pressureForce - source.mass * viscosity * gradientScale);
+    result.viscousHeating = 0.5 * source.mass * viscosity * dot(relativeVelocity, gradient);
+    result.energy =
+        variational::pairWork(coefficientI, gradientI, dot(relativeVelocity, displacement)) /
+            sink.mass +
+        result.viscousHeating;
     return result;
 }
 
@@ -228,24 +241,6 @@ void testPairConservation() {
         "coincident pair has zero finite gradient");
 }
 
-void testPhysicalVelocitySplit() {
-    // Homogeneous expansion has no peculiar pressure work and no artificial viscosity.
-    double const expandingMu = monaghan::viscosityMu(0.25, 0.2, 1.0, 1.2, 0.01);
-    double const expandingViscosity =
-        monaghan::artificialViscosity(1.0, 2.0, 1.2, 0.8, expandingMu, 1.0, 2.0);
-    require(monaghan::pairEnergyRate(3.0, expandingViscosity, 0.0, -0.4) == 0.0,
-        "homogeneous expansion leaves pair thermal source zero");
-
-    // A contracting background can dissipate even with zero peculiar pressure work.
-    double const contractingMu = monaghan::viscosityMu(0.25, -0.2, 1.0, 1.2, 0.01);
-    double const contractingViscosity =
-        monaghan::artificialViscosity(1.0, 2.0, 1.2, 0.8, contractingMu, 1.0, 2.0);
-    double const heat = monaghan::pairEnergyRate(3.0, contractingViscosity, 0.0, 0.4);
-    require(heat > 0.0, "physical contraction gives positive viscosity heating");
-    requireClose("pressure excludes homogeneous expansion term", heat,
-        monaghan::pairEnergyRate(30.0, contractingViscosity, 0.0, 0.4), 1.0e-14);
-}
-
 void testVector3() {
     Vector3<double> const u(1.0, -2.0, 3.0);
     Vector3<double> const v(-0.5, 4.0, 2.0);
@@ -284,12 +279,8 @@ TEST(MonaghanSph, ViscosityFloat) {
     detail::testViscosity<float>();
 }
 
-TEST(MonaghanSph, PairConservation) {
+TEST(VariationalSph, PairConservation) {
     detail::testPairConservation();
-}
-
-TEST(MonaghanSph, PhysicalVelocitySplit) {
-    detail::testPhysicalVelocitySplit();
 }
 
 TEST(MonaghanSph, Vector3) {

@@ -7,16 +7,14 @@
  */
 
 /*
- * Support-radius, weighted-volume and compatible pressure algebra for SPH with
- * grad-H terms, after
+ * Support-radius, weighted-volume and grad-H correction algebra for SPH, after
  *
  *   P. F. Hopkins, "A general class of Lagrangian smoothed particle hydrodynamics
  *   methods and implications for fluid mixing problems", MNRAS 428 (2013), 2840,
- *   arXiv:1206.5006, equations 8-14 (y_i, its derivatives, the equation of motion 12
- *   and f_ij of equation 13, with the constraint scalar x~ = 1), and
+ *   arXiv:1206.5006, equations 8-11 (y_i and its derivatives) and equation 13
+ *   (f_ij, with the constraint scalar x~ = 1), and
  *   D. J. Price, "Smoothed particle hydrodynamics and magnetohydrodynamics",
- *   J. Comput. Phys. 231 (2012), 759, arXiv:1012.1885, equations 27, 30 and 35
- *   (Omega_a, the grad-h equation of motion and the compatible thermal energy).
+ *   J. Comput. Phys. 231 (2012), 759, arXiv:1012.1885, equation 27 (Omega_a).
  *
  * The length here is the stored compact support radius H, with the selected kernel
  * W(r, H) = H^-3 w(q) and q = r/H. It is not the papers' smoothing length h, whose
@@ -30,17 +28,13 @@
  * x_i = m_i, y_i is the ordinary mass-summed density. For free supports
  *
  *   Omega_i = 1 + H_i/(3 n_i) dn_i/dH_i,
- *   zeta_i  = H_i/(3 n_i Omega_i) dy_i/dH_i,
- *   Q_ij    = (P_i x_i / y_i^2) (x_j - zeta_i),
+ *   zeta_i  = H_i/(3 n_i Omega_i) dy_i/dH_i.
  *
- * and with g_i = grad_i W_ij(H_i), g_j = grad_i W_ij(H_j) the inviscid rates are
- *
- *   m_i dv_i/dt = -sum_j [Q_ij g_i + Q_ji g_j],   m_i du_i/dt = sum_j Q_ij v_ij . g_i.
- *
- * The Hopkins factor f_ij = 1 - zeta_i/x_j multiplies x_j in Q_ij; for equal-mass
- * density SPH it reduces to 1/Omega_i. A support held at a constant bound has
- * dH_i/dr = 0, so zeta_i = 0 there. docs/variational_sph.md derives these and the
- * cosmological scale factors. Sums are taken in units of H, using
+ * The Hopkins factor f_ij = 1 - zeta_i/x_j reduces to 1/Omega_i for equal-mass
+ * density SPH. A support held at a constant bound has dH_i/dr = 0, so zeta_i = 0
+ * there. The pressure force and thermal work that use these corrections are in
+ * cosmictiger/sph/variational/equations.hpp. docs/variational_sph.md derives the
+ * equations and cosmological scale factors. Sums are taken in units of H, using
  * H^4 dW/dH = -3 w - q w', so that no power of H multiplies a correction.
  */
 #pragma once
@@ -223,33 +217,6 @@ CUDA_EXPORT inline bool isUsable(GradHCorrection<float> const& correction) {
 
 CUDA_EXPORT inline bool isWellConditioned(GradHCorrection<float> const& correction) {
     return isUsable(correction) && correction.omega >= kMinimumWellConditionedOmega;
-}
-
-// P_i x_i / y_i^2.
-template <typename Real>
-CUDA_EXPORT inline Real pressureVolumeFactor(
-    Real pressure, Real weight, Real weightedDensityValue) {
-    return pressure * weight / (weightedDensityValue * weightedDensityValue);
-}
-
-// Q_ij = (P_i x_i / y_i^2)(x_j - zeta_i).
-template <typename Real>
-CUDA_EXPORT inline Real directedCoefficient(Real pressureVolumeFactorI, Real weightJ, Real zetaI) {
-    return pressureVolumeFactorI * (weightJ - zetaI);
-}
-
-// With g_i = F_i r_ij and g_j = F_j r_ij, m_i dv_i/dt gains -(this) r_ij from pair ij.
-template <typename Real>
-CUDA_EXPORT inline Real pairForceFactor(
-    Real coefficientIJ, Real coefficientJI, Real gradientFactorI, Real gradientFactorJ) {
-    return coefficientIJ * gradientFactorI + coefficientJI * gradientFactorJ;
-}
-
-// m_i du_i/dt gains Q_ij v_ij . g_i = Q_ij F_i (v_ij . r_ij) from pair ij.
-template <typename Real>
-CUDA_EXPORT inline Real pairWork(
-    Real coefficientIJ, Real gradientFactorI, Real velocityDotSeparation) {
-    return coefficientIJ * gradientFactorI * velocityDotSeparation;
 }
 
 }    // namespace sph_volume

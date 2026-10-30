@@ -463,9 +463,7 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     }
     if (params.runType == kSphRunHydro) {
         hostDensity.resize(particleStorageSize);
-        if (params.variationalPressure) {
-            hostGradHCorrection.resize(particleStorageSize);
-        }
+        hostGradHCorrection.resize(particleStorageSize);
         if (getOptions().starFormation.enabled) {
             hostHydroCoupling.resize(particleStorageSize);
         }
@@ -527,7 +525,7 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
                             hostDensity.data(), offset,
                             params.balsaraSwitch ? hostBalsaraFactor.data() : nullptr,
                             params.variableViscosity ? hostViscosityAlpha.data() : nullptr,
-                            params.variationalPressure ? hostGradHCorrection.data() : nullptr);
+                            hostGradHCorrection.data());
                     }
                     if (params.runType == kSphRunPrehydro2 && params.gradientSwitch()) {
                         sphParticlesGlobalReadViscosityDiagnostics(node.globalParticleRange(),

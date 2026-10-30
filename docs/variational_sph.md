@@ -1,12 +1,11 @@
 # Variational density-energy SPH with grad-H terms
 
-`hydro.pressureOperator=variational` replaces the Monaghan (1992) pressure force and
-reversible thermal work of [the Monaghan baseline](monaghan_sph.md) with the
-compatible density-energy operator derived from the discrete SPH Lagrangian with
-variable supports ("grad-h" or "grad-H" terms). The default,
-`hydro.pressureOperator=monaghan`, is unchanged and remains the regression baseline.
-Artificial viscosity, its switches, the support solve, the timestep criteria,
-neighbor propagation and the external forces are shared by both operators.
+All SPH runs use the compatible density-energy pressure operator derived from
+the discrete SPH Lagrangian with variable supports ("grad-h" or "grad-H" terms).
+It supplies pressure forces and reversible thermal work, together with
+[Monaghan artificial viscosity](monaghan_sph.md), the support solve, the timestep
+criteria, neighbor propagation, and external forces. The legacy Monaghan pressure
+operator has been removed.
 
 References:
 
@@ -19,21 +18,18 @@ References:
   J. Comput. Phys. 231 (2012) 759, [arXiv:1012.1885](https://arxiv.org/abs/1012.1885):
   equations 27 (\(\Omega_a\)), 30 (equation of motion) and 35 (thermal energy).
 
-## Selection and supported physics
+## Supported physics
 
-| Option | Values | Default |
-| --- | --- | --- |
-| `hydro.pressureOperator` | `monaghan`, `variational` | `monaghan` |
+Remove the obsolete `hydro.pressureOperator` key from older INI files and command
+lines; pressure no longer has a runtime selector.
 
-The variational operator is implemented for the constant-\(\gamma\) ideal gas,
-\(P=(\gamma-1)\rho u\), on CPU and CUDA, with every viscosity model
+The variational operator supports the constant-\(\gamma\) ideal gas,
+primordial chemistry (`atomic6` and `molecular9`), and the SH03 effective
+equation of state on CPU and CUDA, with every viscosity model
 (`hydro.viscosityEvolution`) and the Balsara limiter, with or without self-gravity,
 in isolated scenarios and in comoving cosmology, with the traditional and global
-time integrators. It is rejected, with a diagnostic, together with
-`chemistry.enabled=true` or `starFormation.enabled=true`; those keep the Monaghan
-operator until a composition-dependent equation of state is carried through the
-variational volume. No entropy variable is stored: the operator evolves the stored
-internal energy, as the Monaghan operator does.
+time integrators. No entropy variable is stored: the operator evolves the stored
+internal energy.
 
 ## Notation
 
@@ -51,7 +47,8 @@ volume weight \(x_i\); \(r_{ij}=r_i-r_j\) and \(v_{ij}=v_i-v_j\).
 | \(\rho^*_i=m_iy_i/x_i\) | density implied by \(V_i\) | `sph_volume::volumeDensity` |
 | \(\Omega_i\) | grad-H factor of the constraint | `sph_volume::omega`, `Ω_a` |
 | \(\zeta_i\) | weighted grad-H correction, in units of \(x\) | `sph_volume::zeta`, `ζ_a` |
-| \(Q_{ij}\) | directed pressure coefficient | `sph_volume::directedCoefficient` |
+| \(P_i x_i/y_i^2\) | pressure-volume prefactor | `variational::pressureVolumeFactor` |
+| \(Q_{ij}\) | directed pressure coefficient | `variational::directedCoefficient` |
 | \(g_i=\nabla_iW_{ij}(H_i)\), \(g_j=\nabla_iW_{ij}(H_j)\) | separate kernel gradients | `F_a r_ab`, `F_b r_ab` |
 
 \(\partial W/\partial H=H^{-4}[-3w(q)-qw'(q)]\) (`sph_volume::kernelSupportDerivative`).
@@ -59,6 +56,11 @@ This stage uses \(x_i=m_i\), so \(y_i\) is the ordinary mass-summed density, and
 production gas particles have one mass. The shared algebra in
 `cosmictiger/sph/volume.hpp` keeps \(n\) and \(y\) distinct and accepts unequal
 weights and masses; the algebra tests use both.
+The pressure formulation is separate, in
+[`cosmictiger/sph/variational/equations.hpp`](../cosmictiger/sph/variational/equations.hpp):
+`variational::pressureVolumeFactor` and `variational::directedCoefficient` form the
+directed pressure coefficient, while `variational::pairForceFactor` and
+`variational::pairWork` evaluate the compatible force and thermal work.
 
 ## Constraint and equations
 
@@ -94,8 +96,7 @@ work use the same \(Q_{ij}\). For equal-mass density SPH, \(\zeta_i=m(1-1/\Omega
 \frac{dv_i}{dt}=-\sum_jm_j\Bigl[\frac{P_i}{\Omega_i\rho_i^2}g_i+\frac{P_j}{\Omega_j\rho_j^2}g_j\Bigr],\qquad
 \frac{du_i}{dt}=\frac{P_i}{\Omega_i\rho_i^2}\sum_jm_jv_{ij}\cdot g_i .
 \]
-Unlike the Monaghan operator, which averages the two gradients and gives each pair
-member half of the symmetric pressure work, each particle's work here is its own
+Each particle's pressure work is its own
 adiabatic rate \(P_ix_i/y_i^2\,dy_i/dt\): the discrete entropy of each particle is
 unchanged by the reversible terms. The pair rates conserve linear and angular
 momentum (each pair force is along \(r_{ij}\)) and exchange kinetic and internal
@@ -106,6 +107,24 @@ In code, with \(x=m\) for every gas particle,
 \(Q_{ab}/m_a=(P_a/\rho_a^2)(m-\zeta_a)\) and
 \(Q_{ba}/m_a=(P_b/\rho_b^2)(m-\zeta_b)\); see `src/sph/sph_hydro_cpu.cpp` and
 `src/sph/sph_hydro.cu`.
+
+## Composition-dependent equations of state
+
+The reversible work uses the first law at fixed composition,
+\(du=P\,d\rho/\rho^2\) (Price 2012, equations 24–25); it does not require a
+constant \(\gamma\). Production uses the fixed volume weight \(x=m\), so chemistry
+does not enter the density sum or its grad-H correction. Both hydro backends use
+the staged ratio \(\chi_i=P_i/(\rho_i u_i)\) to form \(P_i\) in the same directed
+coefficient for force and work. The separately staged acoustic index
+\(\Gamma_{1,i}\) gives \(c_i^2=\Gamma_{1,i}\chi_i u_i\); it need not equal
+\(1+\chi_i\).
+
+Chemistry and SH03 source updates refresh these EOS arrays and rerun the hydro
+force with unchanged geometry. Gas-to-star conversions rebuild the tree,
+densities and corrections before the next force evaluation. Cooling, chemical
+reactions, SH03 equilibrium projection, conversion and wind feedback retain their
+existing source treatment; entropy conservation of reversible frozen-composition
+hydro does not imply entropy conservation through those source operations.
 
 ## Supports at bounds
 
@@ -125,9 +144,10 @@ the stored \(H\):
 | `UpperBound` | \(H_i\ge H_{\max}\) and residual \(<-10^{-4}\) | 0 |
 | `Free` | otherwise, including a bound met within tolerance | formula above |
 
-At \(H_{\min}=H_{\max}\) with equal supports, \(g_i=g_j\) and the variational force equals
-the Monaghan pressure force; the work is split between the pair members differently,
-with the same total (`SphCpuTest.VariationalHeldSupports`).
+At \(H_{\min}=H_{\max}\) with equal supports, the gradients coincide, \(g_i=g_j\).
+`SphCpuTest.VariationalHeldSupports` checks zero corrections for held supports and
+compares the fixed-support pressure force and directed work with the independent
+variational reference.
 
 ## Conditioning and diagnostics
 
@@ -157,22 +177,22 @@ double-precision tests in `tests/sph/volume.cpp` solve supports to roundoff.
 
 The artificial viscosity is the Monaghan \(\Pi_{ij}\) with the symmetric gradient
 \(\tfrac12(g_i+g_j)\), its pair-symmetric force and its heating
-\(\tfrac12\sum_j m_j\Pi_{ij}v^{\rm phys}_{ij}\cdot\tfrac12(g_i+g_j)\), as in the
-Monaghan operator; `hydro.viscosityEvolution` and `hydro.balsaraSwitch` act on it
-unchanged. Only the reversible pressure terms change.
+\(\tfrac12\sum_j m_j\Pi_{ij}v^{\rm phys}_{ij}\cdot\tfrac12(g_i+g_j)\).
+`hydro.viscosityEvolution` and `hydro.balsaraSwitch` select its coefficient
+evolution and shear limiter independently of the reversible pressure terms.
 
 ## Cosmological variables
 
 Positions and density are comoving, conformal time obeys \(d\tau=dt/a\), the stored
 velocity is \(w=av_{\rm pec}\) and the stored energy \(E=a^2u\)
-([Monaghan baseline](monaghan_sph.md#time-integration-and-cosmological-variables)).
+([SPH cosmological variables](monaghan_sph.md#time-integration-and-cosmological-variables)).
 \(\zeta\) is a ratio of sums in \(q\) and does not depend on \(a\). With
-\(P_c=(\gamma-1)\rho_cE=a^5P\), \(y_c=a^3y\) and \(g_c=a^4g\), the physical
+\(P_c=\chi_i\rho_cE=a^5P\), \(y_c=a^3y\) and \(g_c=a^4g\), the physical
 \(Q_{ij}=aQ^c_{ij}\) and
 \[
 \frac{dw_i}{d\tau}=-\frac1{a\,m_i}\sum_j\bigl[Q^c_{ij}g^c_i+Q^c_{ji}g^c_j\bigr],\qquad
 \frac{dE_i}{d\tau}=\frac1{a\,m_i}\sum_jQ^c_{ij}\,w_{ij}\cdot g^c_i
-+(5-3\gamma)\frac{da/d\tau}{a}E_i ,
++(2-3\chi_i)\frac{da/d\tau}{a}E_i ,
 \]
 the same \(m/a\) prefactor as the Monaghan pair terms. The pair work uses the stored
 (peculiar) velocity difference. This is exact, not a continuum approximation: in
@@ -185,7 +205,8 @@ pair work is also exactly \(-3(\dot a/a)P_iV_i\), because
 \(\sum_j(x_j-\zeta_i)\,r_{ij}\cdot g_i=-3y_i\) identically; adding the Hubble flow to
 the pair work would therefore count it twice. A held support has no such identity,
 which is why the analytic term, not physical pair velocities, is used.
-For \(\gamma=5/3\) the expansion term vanishes and these variables evolve as a static
+For a constant-\(\gamma\) ideal gas, \(\chi_i=\gamma-1\) recovers the
+\(5-3\gamma\) coefficient. For \(\gamma=5/3\) the expansion term vanishes and these variables evolve as a static
 gas in \(ds=d\tau/a\): the stored \(\sum_im_i(w_i^2/2+E_i)\) is conserved by the pair rates.
 
 ## Implementation and data lifecycle
@@ -194,38 +215,51 @@ gas in \(ds=d\tau/a\): the stored \(\sum_im_i(w_i^2/2+E_i)\) is conserved by the
   `src/sph/sph_prehydro.cu`): for every semiactive particle, after its support has
   converged, the loop also accumulates \(\sum_jw\) and \(\sum_jqw'\);
   `sphGradHEvaluation` (`cosmictiger/sph/sph_kernel.hpp`) classifies the support and
-  forms \(\zeta\), which is written beside the density.
-- **Storage**: `sphParticlesGradHCorrections`, one float per gas particle, exists
-  only when the operator is variational. It is swapped with the particle arrays,
+  calls `sph_volume::gradHCorrection` in `volume.hpp`. For free supports that helper
+  calls `sph_volume::omega` and `sph_volume::zeta` to form \(\Omega\) and \(\zeta\).
+  Held supports use \(\Omega=1\) and \(\zeta=0\) without calling either function.
+  The correction \(\zeta\) is written beside the density; \(\Omega\) is used for
+  conditioning checks and diagnostics.
+- **Storage**: `sphParticlesGradHCorrections` holds one float per gas particle.
+  It is swapped with the particle arrays,
   initialized to NaN for new slots and set to NaN for every particle by
   `sphParticlesResetConverged`, which starts each density preparation. It is neither
   checkpointed nor migrated.
 - **Staging**: the force pass stages \(\zeta\) with the density through
   `sphParticlesGlobalReadDensity`; remote sources share the density cache line, which
   every `sphRun` clears. Source snapshots stay immutable during each pass.
+- **Pressure force and work**: `src/sph/sph_hydro_cpu.cpp` and
+  `src/sph/sph_hydro.cu` call `variational::directedCoefficient` with the staged
+  \(\zeta\), then `variational::pairForceFactor` and `variational::pairWork` with
+  the separate gradients at each particle's support. These pressure equations live
+  in `cosmictiger/sph/variational/equations.hpp`.
 - **Freshness**: every source that interacts with an active sink in the force pass
   is semiactive, and every semiactive particle's density and \(\zeta\) are rebuilt in
   the same step's density pass. A correction left from an earlier step, a migrated
   slot or a restart is NaN, is masked in non-interacting SIMD lanes, and stops the
   force pass if it reaches an interacting pair (the rates are tested for finiteness).
   The star-formation conversion path rebuilds densities before its next force use;
-  the chemistry and star-formation reruns of the force pass are excluded with this
-  operator. Restart and migration therefore need no stored correction; an exact
+  chemistry and star-formation reruns refresh the EOS while retaining corrections
+  for the unchanged geometry. Restart and migration therefore need no stored correction; an exact
   restart reproduces the uninterrupted run bit for bit.
 - **CUDA** stages \(\zeta_b\) in each `HydroNeighbor`; the CPU and CUDA paths share
-  `sphGradHEvaluation` and the `sph_volume` helpers.
+  `sphGradHEvaluation`, the `sph_volume` support helpers, and the `variational`
+  pressure equations.
 
 ## Checkpoint compatibility
 
-The low byte of the checkpoint physics code identifies the pressure operator:
-1 for Monaghan (the historical value) and 2 for variational. A restart with the
-other operator is rejected with
-`Checkpoint SPH pressure operator (...) differs from hydro.pressureOperator=...`;
-a checkpoint is never reinterpreted with another operator, and every older SPH
-checkpoint remains a Monaghan checkpoint. The gas payload and its version are
-unchanged because \(\zeta\) is not stored.
+The low byte of the checkpoint physics code is 2 for variational pressure.
+Legacy Monaghan checkpoints (code 1) are rejected; their saved state is never
+reinterpreted as variational SPH. Existing variational checkpoints remain
+compatible. The gas payload and its version are unchanged because \(\zeta\) is
+not stored.
 
 ## Validation
+
+The results below were recorded before removal of the legacy pressure operator.
+Monaghan comparisons are historical measurements; that operator is no longer
+available to rerun. Test coverage described here records those earlier runs and
+does not by itself validate the removal.
 
 Recorded October 30, 2026 (CPU Release build with chemistry and stars compiled in;
 CUDA 13.1 build for sm_86, executed on the GPU). Spatial (operator) and temporal
@@ -301,7 +335,6 @@ lattice follows \(E\propto a^{5-3\gamma}\) to \(1.2\times10^{-5}\) at 160 steps.
 | hydroWave 8³ on two localities vs one | — | final kinetic energy differs by \(3.8\times10^{-6}\) |
 | `sph_migration_mpi` regression with the variational operator | — | passes |
 | CUDA application runs (Sod 16³, hydroWave 8³ and 16³) vs CPU | matches | matches; final kinetic energy within \(5.5\times10^{-5}\) |
-| Chemistry with the variational operator | — | rejected with the documented diagnostic |
 
 Sod L1 values use the 1000 sampled particles of `sod.txt`; repeated runs vary by about
 7 %. The Sedov blast aborts with the Monaghan operator also with a binary built before
@@ -311,10 +344,10 @@ the existing fractional-energy timestep bound on viscously heated cold particles
 (\(\delta t\) falls by \(4\times10^4\), beyond `kMaxRung`), not an energy error: the same
 case with the global integrator recovers and conserves energy to \(6\times10^{-7}\).
 
-**Restart, checkpoints and parity**: exact restarts of each operator from a
-staggered-rung checkpoint reproduce the uninterrupted gas payload bit for bit, and
-a restart with the other operator is rejected (`checkpoint_integrity`); the
-checkpoint self-test checks both formulation codes. CPU/CUDA kernel parity
+**Historical restart, checkpoints and parity**: exact restarts of each operator
+from a staggered-rung checkpoint reproduced the uninterrupted gas payload bit for
+bit, and a restart with the other operator was rejected (`checkpoint_integrity`);
+the checkpoint self-test checked both formulation codes. CPU/CUDA kernel parity
 (`monaghan_sph_cuda`, `VariationalPressureCpuParity`) holds for densities,
 corrections, rates, rungs and diagnostics with three viscosity models, including a
 NaN correction on an excluded source; it ran on the GPU.

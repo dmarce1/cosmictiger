@@ -44,7 +44,7 @@ struct SphRunData {
     // Local sink arrays indexed by the SPH particle index.
     float* sinkInternalEnergyRate;
     float* sinkDensity;
-    float* sinkGradHCorrection;    // Written with the density when the operator is variational.
+    float* sinkGradHCorrection;    // Rebuilt with the density on every preparation pass.
     float* sinkBalsaraFactor;
     SphViscosityState* sinkViscosityStates;
     SphCullenDehnenState* sinkCullenDehnenStates;

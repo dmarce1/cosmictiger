@@ -13,17 +13,18 @@
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
-#include <cosmictiger/sph/monaghan/equations.hpp>
 #include <cosmictiger/sph/monaghan/viscosity.hpp>
 #include <cosmictiger/sph/sph_cpu.hpp>
+#include <cosmictiger/sph/variational/equations.hpp>
+#include <cosmictiger/sph/volume.hpp>
 
-// Monaghan (1992), ARA&A 30, 543; cosmictiger/sph/monaghan/equations.hpp gives the full citation
-// and the notation. The pair loop implements equations 6.4-6.5 with the artificial
-// viscosity of equations 4.1-4.2 and the symmetric kernel of p. 554; the time step
-// follows section 10.3, p. 563. Particle a is the sink and particle b a pack of staged
-// neighbors, and the computation uses the paper's symbols. Positions and density are
-// comoving; the stored velocities and internal energies carry the factors a and a² of
-// docs/monaghan_sph.md, so every pair term is multiplied by m_b/a.
+// Variational pressure force and compatible work use the equations documented in
+// cosmictiger/sph/variational/equations.hpp. Artificial viscosity uses Monaghan (1992),
+// equations 4.1-4.2 and the symmetric kernel of p. 554; its heating follows equation
+// 6.5 and its time step section 10.3, p. 563. The viscosity header gives the full
+// citation. Particle a is the sink and particle b a staged neighbor; the computation
+// uses the papers' symbols. Positions and density are comoving, and stored velocities
+// and internal energies carry the factors a and a² of docs/variational_sph.md.
 // NOLINTBEGIN(readability-identifier-naming)
 SphRunReturn sphCpuHydro(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
@@ -83,21 +84,18 @@ SphRunReturn sphCpuHydro(
         SimdFloat α_max_pack(α_a);
         float const one_over_H_a = 1.0f / H_a;
         flops += 8 + int(data.sourcePressureEnergyRatio == nullptr);
-        // Variational operator (cosmictiger/sph/volume.hpp, docs/variational_sph.md): every
+        // Variational operator (cosmictiger/sph/variational/equations.hpp): every
         // gas particle has the mass m and the volume weight x = m, so y = ρ and
         // Q_ab/m_a = (P_a/ρ_a²)(m − ζ_a). Comoving Q and kernel gradients give the rates
         // dv_a/dτ = −(1/a) Σ_b (Q_ab g_a + Q_ba g_b)/m_a and
         // du_a/dτ = (1/a) Σ_b Q_ab v_ab·g_a/m_a.
-        float const ζ_a =
-            parameters.variationalPressure ? data.sourceGradHCorrection[particleIndex] : 0.0f;
-        float const Q_ab_over_m_a = parameters.variationalPressure ?
-            sph_volume::directedCoefficient(
-                sph_volume::pressureVolumeFactor(P_a, 1.0f, ρ_a), m_b, ζ_a) :
-            0.0f;
-        flops += parameters.variationalPressure ? 5 : 0;
+        float const ζ_a = data.sourceGradHCorrection[particleIndex];
+        float const Q_ab_over_m_a = variational::directedCoefficient(
+            variational::pressureVolumeFactor(P_a, 1.0f, ρ_a), m_b, ζ_a);
+        flops += 5;
         float const one_over_H_a4 = sqr(sqr(one_over_H_a));    // 1/H_a⁴
-        Vector3<SimdFloat> dv_a_dt_pack(zero);                 // lane partial sums of equation 6.4
-        SimdFloat du_a_dt_pack(zero);                          // lane partial sums of equation 6.5
+        Vector3<SimdFloat> dv_a_dt_pack(zero);                 // lane partial sums of acceleration
+        SimdFloat du_a_dt_pack(zero);                          // lane partial sums of thermal work
         SimdFloat μ_max_pack(zero);                            // lane maxima of −μ_ab for δt_cv
         for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
             // Particle b: one SIMD pack of staged neighbors. Lanes beyond the list, outside
@@ -149,7 +147,6 @@ SphRunReturn sphCpuHydro(
             flops += sph_flops::densityKernelFlops(selectedHydroKernel(), q_a, true) +
                 sph_flops::densityKernelFlops(selectedHydroKernel(), q_b, true);
             SimdFloat const F_ab = simdSelect(interacts, half * (F_a + F_b), zero);
-            Vector3<SimdFloat> const gradW̃_ab = F_ab * r_ab;    // ∇_a W̃_ab
             // v_ab = v_a − v_b from the stored peculiar velocities. The physical relative
             // velocity adds the Hubble flow (a da/dt) r_ab and enters only the viscosity.
             Vector3<SimdFloat> const v_ab = simdSelect(interacts,
@@ -189,47 +186,32 @@ SphRunReturn sphCpuHydro(
                 Π_ab *= f_ab_AV;
                 flops += 3 * SimdFloat::size();
             }
-            if (parameters.variationalPressure) {
-                // Hopkins (2013) equation 12 with Price (2012) equation 35: separate gradients
-                // g_a = F_a r_ab and g_b = F_b r_ab, the directed Q_ab and Q_ba, and the same
-                // Q_ab in the reversible work. The pressure work takes the peculiar velocity;
-                // the analytic expansion term below supplies the Hubble-flow part exactly.
-                // The viscosity keeps the symmetric gradient and heating of equation 6.5.
-                SimdFloat const ζ_b = simdSelect(interacts,
-                    detail::sphCpuLoad(data.sourceGradHCorrection, neighbors, first, 0.0f), zero);
-                SimdFloat const Q_ba_over_m_a = sph_volume::directedCoefficient(
-                    sph_volume::pressureVolumeFactor(P_b, one, ρ_b), SimdFloat(m_b), ζ_b);
-                SimdFloat const g_a = simdSelect(interacts, F_a, zero);
-                SimdFloat const g_b = simdSelect(interacts, F_b, zero);
-                SimdFloat const pressureForce = SimdFloat(inverseScaleFactor) *
-                    sph_volume::pairForceFactor(SimdFloat(Q_ab_over_m_a), Q_ba_over_m_a, g_a, g_b);
-                dv_a_dt_pack -= (pressureForce + m_b_over_a * Π_ab * F_ab) * r_ab;
-                du_a_dt_pack += SimdFloat(inverseScaleFactor) *
-                        sph_volume::pairWork(SimdFloat(Q_ab_over_m_a), g_a, v_ab_dot_r_ab) +
-                    m_b_over_a * half * Π_ab * F_ab * v_ab_dot_r_ab_physical;
-                // P_b/ρ_b² (3), Q_ba (2), pressure force factor (4), viscous factor (3),
-                // and the pressure work and viscous heating (9).
-                flops += 21 * SimdFloat::size();
-            } else {
-                SimdFloat const P_over_ρ2_ab = monaghan::pressureCoefficient(
-                    SimdFloat(ρ_a), ρ_b, SimdFloat(P_a), P_b);    // P_b/ρ_b² + P_a/ρ_a²
-                // Equation 6.4: dv_a/dt = −Σ_b m_b (P_b/ρ_b² + P_a/ρ_a² + Π_ab) ∇_a W̃_ab.
-                dv_a_dt_pack -= (m_b_over_a * (P_over_ρ2_ab + Π_ab)) * gradW̃_ab;
-                // Equation 6.5: du_a/dt = ½ Σ_b m_b (P_b/ρ_b² + P_a/ρ_a² + Π_ab) v_ab·∇_a W̃_ab,
-                // with v_ab·∇_a W̃_ab = F_ab v_ab·r_ab. The pressure work takes the peculiar
-                // velocity and the viscous heating the physical one.
-                du_a_dt_pack += m_b_over_a *
-                    monaghan::pairEnergyRate(
-                        P_over_ρ2_ab, Π_ab, v_ab_dot_r_ab * F_ab, v_ab_dot_r_ab_physical * F_ab);
-                flops += SimdFloat::size() *
-                    (sph_flops::kPressureCoefficient + sph_flops::kPairEnergyRate);
-            }
+            // Hopkins (2013) equation 12 with Price (2012) equation 35: separate gradients
+            // g_a = F_a r_ab and g_b = F_b r_ab, the directed Q_ab and Q_ba, and the same
+            // Q_ab in the reversible work. The pressure work takes the peculiar velocity;
+            // the analytic expansion term below supplies the Hubble-flow part exactly.
+            // The viscosity keeps the symmetric gradient and heating of equation 6.5.
+            SimdFloat const ζ_b = simdSelect(interacts,
+                detail::sphCpuLoad(data.sourceGradHCorrection, neighbors, first, 0.0f), zero);
+            SimdFloat const Q_ba_over_m_a = variational::directedCoefficient(
+                variational::pressureVolumeFactor(P_b, one, ρ_b), SimdFloat(m_b), ζ_b);
+            SimdFloat const g_a = simdSelect(interacts, F_a, zero);
+            SimdFloat const g_b = simdSelect(interacts, F_b, zero);
+            SimdFloat const pressureForce = SimdFloat(inverseScaleFactor) *
+                variational::pairForceFactor(SimdFloat(Q_ab_over_m_a), Q_ba_over_m_a, g_a, g_b);
+            dv_a_dt_pack -= (pressureForce + m_b_over_a * Π_ab * F_ab) * r_ab;
+            du_a_dt_pack += SimdFloat(inverseScaleFactor) *
+                    variational::pairWork(SimdFloat(Q_ab_over_m_a), g_a, v_ab_dot_r_ab) +
+                m_b_over_a * half * Π_ab * F_ab * v_ab_dot_r_ab_physical;
+            // P_b/ρ_b² (3), Q_ba (2), pressure force factor (4), viscous factor (3),
+            // and the pressure work and viscous heating (9).
+            flops += 21 * SimdFloat::size();
             μ_max_pack = simdMax(μ_max_pack, -μ_ab);
-            // EOS/radius (6), inverse H (1), gradients (13), velocity products (10),
-            // Monaghan helpers (28), and momentum/thermal accumulation (12). The pressure
-            // terms of either operator are counted in their branch above.
+            // EOS/radius (6), inverse H (1), gradients (10), velocity products (10),
+            // viscosity helpers, and momentum/thermal accumulation (12). The pressure
+            // terms are counted above.
             flops += SimdFloat::size() *
-                    (42 + sph_flops::kViscosityMu + sph_flops::kArtificialViscosity) +
+                    (39 + sph_flops::kViscosityMu + sph_flops::kArtificialViscosity) +
                 int(data.sourcePressureEnergyRatio == nullptr);
         }
         Vector3<float> dv_a_dt(simdSum(dv_a_dt_pack[kXDimension]),
@@ -239,8 +221,7 @@ SphRunReturn sphCpuHydro(
             4 * (SimdFloat::size() - 1);    // Four additive reductions; maxima are comparisons.
         // Corrections are derived, never checkpointed or migrated; slots that the density
         // pass has not rebuilt hold NaN, so a stale source cannot pass silently.
-        if (parameters.variationalPressure &&
-            !(sph_volume::isFiniteValue(dv_a_dt.dot(dv_a_dt)) &&
+        if (!(sph_volume::isFiniteValue(dv_a_dt.dot(dv_a_dt)) &&
                 sph_volume::isFiniteValue(du_a_dt))) {
             PRINT("SPH variational rates are not finite: supportRadius=%e density=%e ζ=%e\n", H_a,
                 ρ_a, ζ_a);
