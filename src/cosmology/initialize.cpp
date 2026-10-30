@@ -32,6 +32,7 @@
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/cosmology/initialize.hpp>
 #include <cosmictiger/cosmology/linear_power.hpp>
+#include <cosmictiger/cosmology/lpt.hpp>
 #include <cosmictiger/cosmology/native_recombination.hpp>
 #include <cosmictiger/cosmology/zero_order.hpp>
 #include <cosmictiger/io/output.hpp>
@@ -469,12 +470,10 @@ void twolptGenerate(int dim1, int dim2, bool velocity = false) {
     Array<int64_t, kDimensions> iValue;
     constexpr int kRandInitIters = 8;
     Vector<hpx::future<void>> futs2;
-    //	const auto filter = get_options().use_glass || get_options().close_pack;
-    bool const filter = (dim1 != kDimensions || dim2 != kDimensions);
     for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
         futs2.push_back(hpx::async(
             hpx::annotated_function(
-                [n, box, boxSize, &yValue, dim1, dim2, factor, filter, velocity](
+                [n, box, boxSize, &yValue, dim1, dim2, factor, velocity](
                     Array<int64_t, kDimensions> iValue2) {
                     int const i = (iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n);
                     float const kx = 2.f * std::numbers::pi_v<float> / boxSize * float(i);
@@ -512,11 +511,13 @@ void twolptGenerate(int dim1, int dim2, bool velocity = false) {
                                 } else {
                                     yValue[index] = ComplexFloat(0.f, 0.f);
                                 }
-                                if (filter) {
-                                    yValue[index] *= cloudFilter(kx * boxSize / n);
-                                    yValue[index] *= cloudFilter(ky * boxSize / n);
-                                    yValue[index] *= cloudFilter(kz * boxSize / n);
-                                }
+                                yValue[index] = lpt::interpolationCorrectedDerivative(
+                                    yValue[index], dim1, dim2, [=](ComplexFloat value) {
+                                        value *= cloudFilter(kx * boxSize / n);
+                                        value *= cloudFilter(ky * boxSize / n);
+                                        value *= cloudFilter(kz * boxSize / n);
+                                        return value;
+                                    });
                             }
                         }
                         gsl_rng_free(rndgen);
@@ -563,11 +564,13 @@ void twolptGenerate(int dim1, int dim2, bool velocity = false) {
                         } else {
                             yValue[index] = ComplexFloat(0.f, 0.f);
                         }
-                        if (filter) {
-                            yValue[index] *= cloudFilter(kx * boxSize / n);
-                            yValue[index] *= cloudFilter(ky * boxSize / n);
-                            yValue[index] *= cloudFilter(kz * boxSize / n);
-                        }
+                        yValue[index] = lpt::interpolationCorrectedDerivative(
+                            yValue[index], dim1, dim2, [=](ComplexFloat value) {
+                                value *= cloudFilter(kx * boxSize / n);
+                                value *= cloudFilter(ky * boxSize / n);
+                                value *= cloudFilter(kz * boxSize / n);
+                                return value;
+                            });
                         gsl_rng_free(rndgen);
                     }
                 },
@@ -608,20 +611,9 @@ void twolptPhase(int phase) {
     }
     auto const box = fft3dRealRange();
     auto const vol = box.volume();
-    if (phase > 2 * kDimensions) {
-        auto thisDelta2Part = fft3dReadReal(box);
-        for (int i = 0; i < vol; i++) {
-            delta2[i] -= thisDelta2Part[i] * thisDelta2Part[i];
-        }
-    } else {
-        if (phase % 2 == 0) {
-            delta2Part = fft3dReadReal(box);
-        } else {
-            auto delta2ThisPart = fft3dReadReal(box);
-            for (int i = 0; i < vol; i++) {
-                delta2[i] += delta2Part[i] * delta2ThisPart[i];
-            }
-        }
+    auto const thisDelta2Part = fft3dReadReal(box);
+    for (int i = 0; i < vol; i++) {
+        lpt::accumulateSecondOrderSource(phase, thisDelta2Part[i], delta2Part[i], delta2[i]);
     }
 
     hpx::wait_all(futs.begin(), futs.end());
@@ -634,6 +626,7 @@ void twolptInit() {
     }
     auto const box = fft3dRealRange();
     delta2.resize(box.volume(), 0.0);
+    delta2Part.resize(box.volume(), 0.0);
     hpx::wait_all(futs.begin(), futs.end());
 }
 

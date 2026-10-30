@@ -39,6 +39,7 @@ struct SphReduction {
     float minimumTimestep;
     int nextNodeIndex;
     int pendingChanges;
+    int timestepFailureReported;
     float minimumSupportRadius;
     float maximumSupportRadius;
     float maximumSignalSpeed;

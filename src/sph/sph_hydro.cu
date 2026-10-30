@@ -404,6 +404,30 @@ __global__ void sphCudaHydro(
                     if (parameters.globalTimestep) {
                         nextRung = 0;
                     }
+                    if (nextRung >= kMaxRung &&
+                        atomicCAS(&reduction->timestepFailureReported, 0, 1) == 0) {
+                        PRINT("SPH timestep exceeds rung range: particle=%lli rung=%i hydroRung=%i "
+                              "previousRung=%i minimumRung=%i baseDt=%e selectedDt=%e capDt=%e "
+                              "courantDt=%e accelerationDt=%e thermalDt=%e H=%e rho=%e u=%e "
+                              "duDt=%e acceleration=%e soundSpeed=%e compression=%e alpha=%e "
+                              "omegaFromZeta=%e scaleFactor=%e\n",
+                            static_cast<long long>(data.sinkParticleIndices[sinkIndex]), nextRung,
+                            hydroRung, previousRung, parameters.minimumRung,
+                            parameters.baseTimestep, δt, parameters.maximumTimestep,
+                            parameters.courantFactor * parameters.scaleFactor /
+                                fmaxf(one_over_δt_cv, 1.0e-30f),
+                            parameters.courantFactor * parameters.scaleFactor /
+                                fmaxf(one_over_δt_f, 1.0e-30f),
+                            du_a_dt != 0.0f ? parameters.courantFactor / kViscosityWidthScale *
+                                    u_a / fabsf(du_a_dt) :
+                                              parameters.maximumTimestep,
+                            H_a, ρ_a, u_a, du_a_dt, f_a, c_a, μ_max, α_max, m_b / (m_b - ζ_a),
+                            parameters.scaleFactor);
+#if COSMICTIGER_WITH_GRAVITY
+                        PRINT("SPH gravity timestep: enabled=%i gravityRung=%i gravityDt=%e\n",
+                            int(data.selfGravityEnabled), gravityRung, gravityTimestep);
+#endif
+                    }
                     ALWAYS_ASSERT(nextRung < kMaxRung);
                     data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] = nextRung;
                     maximumHydroRung = max(maximumHydroRung, hydroRung);

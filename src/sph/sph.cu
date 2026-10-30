@@ -28,6 +28,7 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
         reduction, releaseReduction);
     reduction->minimumTimestep = std::numeric_limits<float>::max();
     reduction->nextNodeIndex = reduction->pendingChanges = 0;
+    reduction->timestepFailureReported = 0;
     reduction->minimumSupportRadius = std::numeric_limits<float>::max();
     reduction->maximumSupportRadius = 0.0f;
     reduction->floatingPointOperations = 0;

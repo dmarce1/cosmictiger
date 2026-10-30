@@ -210,6 +210,7 @@ set(cosmictiger_header_files
     cosmictiger/cosmology/cosmology.hpp
     cosmictiger/cosmology/fft.hpp
     cosmictiger/cosmology/initialize.hpp
+    cosmictiger/cosmology/lpt.hpp
     cosmictiger/cosmology/recombination_thermal.hpp
     cosmictiger/cosmology/native_recombination.hpp
     cosmictiger/cosmology/zero_order.hpp
@@ -1111,6 +1112,10 @@ if(BUILD_TESTING)
     target_compile_options(linear_power_test PRIVATE -ffast-math)
     cosmictiger_add_gtest(NAME linear_power TARGET linear_power_test
         PROPERTIES TIMEOUT 30)
+    add_executable(lpt_test tests/lpt.cpp)
+    target_include_directories(lpt_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_options(lpt_test PRIVATE -fno-fast-math -ffp-contract=off)
+    cosmictiger_add_gtest(NAME lpt TARGET lpt_test PROPERTIES TIMEOUT 30)
     foreach(boltzmann_target IN ITEMS boltzmann_test boltzmann_reference)
         if(boltzmann_target STREQUAL "boltzmann_test")
             set(boltzmann_test_source tests/boltzmann.cpp)

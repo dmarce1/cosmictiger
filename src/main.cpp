@@ -148,7 +148,8 @@ int hpx_main(int argc, char* argv[]) {
                                     if (l > 1 && !(l == 2 && n == 0 && m == 0)) {
                                         continue;
                                     }
-                                    fprintf(fp, "%e ", double(d(n, m, l)[0]));
+                                    // Const access reconstructs the unstored D(0,0,2).
+                                    fprintf(fp, "%e ", double(std::as_const(d)(n, m, l)[0]));
                                 }
                             }
                         }
