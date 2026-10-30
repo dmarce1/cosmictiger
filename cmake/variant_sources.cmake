@@ -19,6 +19,7 @@ function(cosmictiger_feature_sources output)
         src/core/options.cpp
         src/cosmology/boltzmann.cpp
         src/cosmology/background.cpp
+        src/cosmology/background_plot.cpp
         src/cosmology/evolution.cpp
         src/cosmology/friedmann.cpp
         src/cosmology/cosmology.cpp

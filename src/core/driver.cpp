@@ -30,6 +30,7 @@
 #include <cosmictiger/core/time.hpp>
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/cosmology/background.hpp>
+#include <cosmictiger/cosmology/background_plot.hpp>
 #include <cosmictiger/cosmology/cosmology.hpp>
 #include <cosmictiger/cosmology/evolution.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
@@ -1408,6 +1409,10 @@ void driver() {
         }
 #endif
         outputTimeFile(params);
+    }
+    if (getOptions().run.scenario == "cosmology") {
+        cosmology::writeBackgroundPlot(params.tauMax);
+        profile::checkForInterrupt();
     }
     terminal::detailPrint("tau_max = %e\n", params.tauMax);
     auto& years = params.years;

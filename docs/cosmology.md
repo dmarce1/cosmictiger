@@ -97,6 +97,22 @@ restart whose saved background does not match that history is rejected.
 Group ages, Silo timestamps, and `time.txt` use integrated physical time, which
 keeps increasing while the scale factor decreases.
 
+After initialization, the cosmology scenario writes `cosmology.txt` and
+`cosmology.png` in `output.directory`. The text file contains 1025 uniformly
+spaced samples over the entire configured run, including both endpoints, with
+columns `tau a adot`. Here `tau` is elapsed conformal time from the initial
+epoch in code time units, `a` is dimensionless, and `adot = da/dt` is the signed
+physical-time derivative in inverse code time units. The 1200 by 900 PNG has
+two panels sharing the conformal-time axis. These outputs use the resolved
+initial redshift and units, including overrides from a Gadget input. Restarts
+regenerate the complete original history, even when the checkpoint is already
+at the endpoint; the plotted time axis does not restart from the checkpoint.
+PNG rendering uses the Python interpreter selected at build configuration and
+requires Matplotlib in that interpreter's runtime environment. It uses the
+headless Agg backend, so no display is required. If rendering is unavailable,
+the program reports `Unable to render cosmology.png`, retains `cosmology.txt`,
+and continues the simulation. Other scenarios do not produce these diagnostics.
+
 Halo density conventions also remain defined at turnaround. Closed models,
 negative Λ, and curved backgrounds with Λ use explicitly labelled mean-matter
 thresholds: 200 for the main halo and 200/500/2500 for the secondary mass fields.
@@ -183,7 +199,12 @@ an unreachable endpoint. Collisionless builds use `--collisionless-only` and
 include hierarchical integration. The checks require one final energy row and
 no duplicate on a completed restart. The script compares saved background state
 with independent analytic solutions and checks monotonic clocks. The
-hierarchical `fmmWalk` fixture also checks closing kicks and final energies
+initialization-output checks compare all 1025 samples with the closed-dust
+cycloid, including the signed physical derivative, and verify unchanged full
+histories on contracting and completed restarts. When Matplotlib is available,
+they also validate the PNG dimensions, chunk checksums, and decompressed
+scanlines after fresh initialization and regeneration over stale restart files.
+The hierarchical `fmmWalk` fixture also checks closing kicks and final energies
 against independent periodic forces with nonzero velocities and mixed particle
 rungs. The `rockstar_cpu` regression
 checks actual lightcone halo metadata during contraction; invalid observer

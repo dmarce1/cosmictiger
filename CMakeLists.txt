@@ -204,6 +204,7 @@ set(cosmictiger_header_files
     cosmictiger/core/unordered_set_ts.hpp
     cosmictiger/cosmology/boltzmann.hpp
     cosmictiger/cosmology/background.hpp
+    cosmictiger/cosmology/background_plot.hpp
     cosmictiger/cosmology/evolution.hpp
     cosmictiger/cosmology/friedmann.hpp
     cosmictiger/cosmology/cosmology.hpp
@@ -428,6 +429,16 @@ set(COSMICTIGER_GENERATED_FMM_FILES
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical_ewald_kernels.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/operation_counts.json)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+# Embed the renderer so copied executables do not depend on the source tree.
+# Matplotlib is needed on the execution host only; missing runtime support
+# produces a warning while preserving the background samples and simulation.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    ${PROJECT_SOURCE_DIR}/scripts/plot_cosmology.py)
+file(READ ${PROJECT_SOURCE_DIR}/scripts/plot_cosmology.py cosmictiger_background_plot_script)
+configure_file(cmake/background_plot_script.hpp.in
+    ${PROJECT_BINARY_DIR}/generated/cosmictiger/background_plot_script.hpp @ONLY)
+set_source_files_properties(src/cosmology/background_plot.cpp PROPERTIES
+    INCLUDE_DIRECTORIES "${PROJECT_BINARY_DIR}/generated")
 # Do not declare source headers as OUTPUT/BYPRODUCTS or mark them GENERATED:
 # build-system clean targets must never delete these version-controlled files.
 add_custom_target(generate_fmm_kernels

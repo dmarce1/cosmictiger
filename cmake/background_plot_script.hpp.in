@@ -1,0 +1,8 @@
+#pragma once
+
+namespace cosmology::detail {
+
+inline constexpr char kPlotPython[] = R"ct_python(@Python3_EXECUTABLE@)ct_python";
+inline constexpr char kBackgroundPlotScript[] = R"ct_script(@cosmictiger_background_plot_script@)ct_script";
+
+}    // namespace cosmology::detail

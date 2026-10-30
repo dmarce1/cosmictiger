@@ -5,6 +5,7 @@
 """Exercise cosmological turnaround, signed restart state, and stopping clocks."""
 
 import argparse
+import importlib.util
 import math
 import os
 from pathlib import Path
@@ -13,6 +14,7 @@ import shutil
 import signal
 import struct
 import subprocess
+import zlib
 
 from application_selection import application_arguments
 import sys
@@ -65,7 +67,11 @@ def checkpoint_state(path, end_time):
             f"expected a dark-matter checkpoint without chemistry in {path}")
     # These are the leading fields of DriverParameters. Optional hydro and
     # chemistry blocks are absent in this explicitly dark-matter-only fixture.
-    scale, derivative, _, time, end = struct.unpack_from("=5d", payload, header_format.size)
+    # Capability builds append five uint64 runtime-algorithm fields before
+    # DriverParameters (kRuntimeAlgorithms in checkpoint.cpp).
+    driver_offset = header_format.size + (40 if flags & (1 << 18) else 0)
+    require(len(payload) >= driver_offset + 40, f"truncated driver state in {path}")
+    scale, derivative, _, time, end = struct.unpack_from("=5d", payload, driver_offset)
     gravitational_mass, omega_matter, omega_radiation, omega_lambda = header[7:11]
     particles = header[14]
     hubble = math.sqrt(gravitational_mass * 8.0 * math.pi * particles / (3.0 * omega_matter))
@@ -177,6 +183,83 @@ def check_closed_time_table(directory, steps):
                       f"time-table physical age at step {index}")
 
 
+def check_cosmology_png(directory):
+    """Validate the PNG chunks, checksums, and complete decoded scanline stream."""
+    path = directory / "cosmology.png"
+    require(path.is_file(), f"missing initialization plot in {directory}")
+    data = path.read_bytes()
+    require(data.startswith(b"\x89PNG\r\n\x1a\n"), f"invalid PNG signature in {path}")
+    offset = 8
+    chunks = []
+    compressed = bytearray()
+    header = None
+    while offset < len(data):
+        require(offset + 12 <= len(data), f"truncated PNG chunk in {path}")
+        length = struct.unpack_from(">I", data, offset)[0]
+        kind = data[offset + 4:offset + 8]
+        end = offset + 8 + length
+        require(end + 4 <= len(data), f"truncated PNG payload in {path}")
+        payload = data[offset + 8:end]
+        checksum = struct.unpack_from(">I", data, end)[0]
+        require(zlib.crc32(kind + payload) == checksum, f"invalid PNG checksum in {path}")
+        chunks.append(kind)
+        if kind == b"IHDR":
+            require(header is None and length == 13, f"invalid PNG image header in {path}")
+            header = struct.unpack(">IIBBBBB", payload)
+        elif kind == b"IDAT":
+            compressed.extend(payload)
+        elif kind == b"IEND":
+            require(length == 0 and end + 4 == len(data), f"invalid PNG ending in {path}")
+        offset = end + 4
+    require(chunks and chunks[0] == b"IHDR" and chunks[-1] == b"IEND" and compressed,
+            f"incomplete PNG image in {path}")
+    width, height, depth, color, compression, filtering, interlace = header
+    require((width, height) == (1200, 900), f"unexpected plot dimensions in {path}")
+    require(depth == 8 and color in (2, 6) and
+            (compression, filtering, interlace) == (0, 0, 0),
+            f"unsupported plot encoding in {path}")
+    decoder = zlib.decompressobj()
+    pixels = decoder.decompress(compressed) + decoder.flush()
+    require(decoder.eof and not decoder.unused_data, f"incomplete PNG compression stream in {path}")
+    stride = width * (3 if color == 2 else 4) + 1
+    require(len(pixels) == height * stride, f"incomplete PNG scanlines in {path}")
+    require(all(pixels[row * stride] <= 4 for row in range(height)),
+            f"invalid PNG scanline filter in {path}")
+
+
+def check_cosmology_output(directory, duration, image_available):
+    path = directory / "cosmology.txt"
+    require(path.is_file(), f"missing initialization background samples in {directory}")
+    lines = path.read_text().splitlines()
+    require(lines and lines[0] == "# tau a adot", f"invalid background sample header in {path}")
+    rows = [[float(value) for value in line.split()] for line in lines[1:] if line.strip()]
+    require(len(rows) == 1025 and all(len(row) == 3 for row in rows),
+            f"background plot must contain 1025 complete samples in {path}")
+    require(all(math.isfinite(value) for row in rows for value in row),
+            f"nonfinite background plot samples in {path}")
+    require(all(row[1] > 0.0 for row in rows), f"nonpositive plot scale factor in {path}")
+    for index, (tau, _, _) in enumerate(rows):
+        require_close(tau, duration * index / 1024, f"plot conformal time at sample {index}",
+                      relative=2.e-13, absolute=0.0)
+    if image_available:
+        check_cosmology_png(directory)
+    else:
+        require("Unable to render cosmology.png" in (directory / "run.log").read_text(),
+                "missing renderer did not report its nonfatal diagnostic")
+    return rows
+
+
+def check_closed_cosmology_output(directory, duration, hubble, image_available):
+    rows = check_cosmology_output(directory, duration, image_available)
+    require(rows[0][2] > 0.0 and rows[-1][2] < 0.0,
+            "background plot lost the signed expansion/contraction derivative")
+    for index, (tau, scale, derivative) in enumerate(rows):
+        expected_scale, expected_rate = closed_matter_state(hubble * tau)
+        require_close(scale, expected_scale, f"plot cycloid scale at sample {index}")
+        require_close(derivative / hubble, expected_rate,
+                      f"plot physical derivative at sample {index}")
+
+
 def negative_lambda_interval(intervals):
     # Omega_m=2, Omega_Lambda=-1 has a=(sqrt(2)*sin(theta))^(2/3)
     # and d(H0*t)/dtheta=2/3. Integrate d(H0*eta)=d(H0*t)/a
@@ -202,6 +285,7 @@ def main():
                         help="omit the gas case for builds without a supported SPH integrator")
     parser.add_argument("--position-type", choices=("fixed32", "fixed64"), default="fixed32")
     args = parser.parse_args()
+    image_available = importlib.util.find_spec("matplotlib") is not None
     executable = args.executable.resolve()
     base = args.workdir.resolve()
     base.mkdir(parents=True, exist_ok=True)
@@ -253,6 +337,10 @@ def main():
         directory = prepare(name)
         if checkpoint is not None:
             shutil.copytree(checkpoint, directory / checkpoint.name)
+            # A restart must replace stale diagnostics with the original full history.
+            (directory / "cosmology.txt").write_text("stale background samples\n")
+            if image_available:
+                (directory / "cosmology.png").write_bytes(b"stale background plot\n")
         if energy_source is not None:
             shutil.copyfile(energy_source, directory / "energy.txt")
         resolved = dict(options, **overrides)
@@ -263,6 +351,7 @@ def main():
     # The saved physical mass and particle count determine H0 in code units.
     # Calibrate from a tiny actual run instead of duplicating unit constants.
     calibration, _ = exercise("calibration", {"run.endTime": "1", "run.maxIterations": "0"})
+    check_cosmology_output(calibration, 1.0, image_available)
     initial = checkpoint_states(calibration, 1.0)[-1]
     position_bytes = 8 if args.position_type == "fixed64" else 4
     require(checkpoint_position_bytes((initial["path"] / "checkpoint.0.dat").read_bytes()) ==
@@ -308,6 +397,7 @@ def main():
         require(any(row[4] < 0.0 and row[13] > 0.0 for row in closed_rows),
                 "contracting closed model did not execute CUDA gravity interactions")
     check_closed_time_table(closed, 32)
+    check_closed_cosmology_output(closed, duration, hubble, image_available)
     print("closed matter: expansion, turnaround, contraction, both time coordinates, and endpoint passed")
 
     # At this contracting epoch the closest schedule entry is z=-0.4,
@@ -332,6 +422,10 @@ def main():
     for name in ("a", "adot", "tau", "end"):
         require_close(scheduled_final[name], states[-1][name], f"opening schedule restarted {name}",
                       relative=2.e-12, absolute=2.e-14 * (hubble if name == "adot" else 1.0))
+    check_closed_cosmology_output(scheduled_restart, duration, hubble, image_available)
+    require((scheduled_restart / "cosmology.txt").read_bytes() ==
+            (closed / "cosmology.txt").read_bytes(),
+            "contracting restart changed the full background plot history")
     print("global FMM: scheduled opening angles, reverse crossings, and contracting restart passed")
 
     dimensionless_interval = negative_lambda_interval(8192)
@@ -349,6 +443,7 @@ def main():
     check_completion(final, duration)
     check_finite_progress(negative)
     check_complete_energy(negative, 32, final["a"])
+    check_cosmology_output(negative, duration, image_available)
 
     candidates = [state for state in states[:-1] if state["adot"] < -0.1 * hubble]
     require(candidates, "no intermediate contracting checkpoint was published")
@@ -386,6 +481,10 @@ def main():
             "completed restart produced an extra evolution row")
     require((completed / "energy.txt").read_bytes() == (negative / "energy.txt").read_bytes(),
             "completed restart changed energy output or appended a duplicate endpoint")
+    check_cosmology_output(completed, duration, image_available)
+    require((completed / "cosmology.txt").read_bytes() ==
+            (negative / "cosmology.txt").read_bytes(),
+            "completed restart changed the full background plot history")
     print("completed restart: endpoint state, iteration, and energy output remain unchanged")
 
     # An iteration limit can stop after the last fine step of a coarse
