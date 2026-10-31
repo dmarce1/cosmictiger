@@ -196,8 +196,11 @@ def main():
         print(f"{network}: pristine native initialization passed")
     cases = (("atomic6", "atomic6", []),
              ("molecular9_cold", "molecular9", []),
+             # Molecule-rich gas needs many source substeps; use 64 particles to
+             # bound runtime while retaining the production solver tolerances.
              ("molecular9", "molecular9",
-              ["--chemistry.initialization=manual", "--chemistry.molecularFraction=0.2"]),
+              ["--chemistry.initialization=manual", "--chemistry.molecularFraction=0.2",
+               "--initial.particlesPerDimension=4"]),
              # Hot molecular gas above the former 6000 K ceiling: molecules are
              # retained, dissociate and recombine within the nine-species network.
              # Cooling, recombining gas costs the first-order source solver a few

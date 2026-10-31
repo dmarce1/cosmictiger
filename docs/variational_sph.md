@@ -261,6 +261,30 @@ Monaghan comparisons are historical measurements; that operator is no longer
 available to rerun. Test coverage described here records those earlier runs and
 does not by itself validate the removal.
 
+**Composition EOS support (October 30, 2026):** the CPU SPH and volume suites
+pass all 45 tests, including `SphCpuTest.VariationalCompositionEos`. That test
+checks unequal nonzero grad-H corrections, per-particle pressure and acoustic
+indices, directed thermal work, pair conservation and cosmological expansion.
+The matching CUDA test target compiles; this extension has not been executed on
+the GPU. The rebuilt CUDA-enabled `release/cosmictiger`, running with
+`compute.cuda=false`, also completes a one-iteration, 8³ cosmological smoke run
+with `molecular9`, SH03 and variational pressure.
+
+CPU chemistry cases pass with traditional and global stepping: native
+initialization for both networks, atomic6 and cold molecular9 at 8³, and
+molecule-rich and hot molecular9 at 4³. Production evolution, Silo output, exact
+gas restart, changed-radiation/network rejection and invalid-domain rejection
+are checked. These cases were run in subsets: the original 8³ molecule-rich
+fixture reached its 240-second timeout after checkpoint 1, so it now uses 4³
+without changing solver tolerances or assertions. The full SH03 application
+suite also passes its source/conversion fixtures and traditional/global atomic6
+and traditional molecular9 cosmology/restart cases. The ideal-gas quick suite
+passes five checks across nine runs, retaining its known Monaghan blast failure.
+
+The four new chemistry/SH03 option cases retain variational checkpoint metadata
+and pass. The broader `grouped_options` CTest reached its 600-second timeout
+while checking supplied INIs; this run does not certify that entire suite.
+
 Recorded October 30, 2026 (CPU Release build with chemistry and stars compiled in;
 CUDA 13.1 build for sm_86, executed on the GPU). Spatial (operator) and temporal
 (integrator) errors are reported separately: exact pair-rate identities do not make
