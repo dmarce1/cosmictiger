@@ -309,7 +309,7 @@ solved to roundoff in a 48-particle isolated cloud):
 - Pair rates conserve momentum, angular momentum and kinetic plus internal energy to
   \(10^{-13}\); each particle's work equals its own adiabatic rate (zero entropy rate)
   for free and held supports; the free-support Hubble identity holds to \(10^{-12}\).
-- A copy of `volume.hpp` that drops \(\zeta\) fails four of these tests.
+- A pressure-coefficient mutation that drops \(\zeta\) fails four of these tests.
 
 **Production kernels, float** (`sph_cpu` CTest, `SphCpuTest.Variational*`):
 

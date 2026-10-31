@@ -188,6 +188,9 @@ kernel in these configurations. SPH has independently selected kernels and
 variable smoothing radii; the examples use cubic splines and 42 weighted
 neighbors. All SPH runs use the [variational pressure
 operator](../docs/variational_sph.md), including chemistry and star-formation
-examples and `default.ini`. Set gravity radius through `gravity.effectiveRadius`,
+examples and `default.ini`.
+Every project INI lists all current application
+options, with mutually exclusive alternatives and manual chemistry initialization
+inputs commented where appropriate. Set gravity radius through `gravity.effectiveRadius`,
 `gravity.supportRadius`, or the legacy `gravity.softening` alias. Alternative
 radius representations remain commented to avoid conflicting inputs.

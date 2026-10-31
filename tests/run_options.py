@@ -1140,41 +1140,39 @@ mapSize = 8
                      "hydro.centralEffectiveRadius", "hydro.centralSupportRadius",
                      "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius",
                      *(f"chemistry.{field}" for field in chemistry_fields)}
-    # The retired rung request is accepted only as an ignored compatibility
-    # input; examples must not advertise it as an active chemistry control.
-    # Star-formation defaults have focused tests; complete examples may opt in
-    # without duplicating every optional feedback parameter.
-    public_keys = {key for key in option_names
-                   if not key.startswith("starFormation.")} - {"help", "configuration", "chemistry.synchronizedRung"}
+    # Retired compatibility inputs are not required defaults. Local presets may
+    # retain them, but maintained examples must not advertise them as controls.
+    compatibility_keys = {"chemistry.synchronizedRung"}
+    public_keys = set(option_names) - {"help", "configuration"} - compatibility_keys
     preset_curvatures = {"closed_no_dark_energy.ini": -1.000092093902909,
                          "omega_k_negative.ini": -0.1, "omega_k_positive.ini": 0.1,
                          "critical.ini": 0.0,
                          "subcritical_no_dark_energy.ini": 0.6864420835574896}
     checked_presets = set()
-    for path in [root / "default.ini", *sorted((root / "configurations").glob("*.ini"))]:
-        if path.name == "lcdm_present.ini":
-            continue  # Local, untracked preset; not part of repository validation.
+    local_presets = {root / "lcdm.ini", root / "configurations/lcdm_present.ini"}
+    preset_paths = [root / "default.ini", *sorted((root / "configurations").rglob("*.ini"))]
+    if (root / "lcdm.ini").is_file():
+        preset_paths.append(root / "lcdm.ini")
+    for path in preset_paths:
+        relative_path = path.relative_to(root)
+        case_name = "_".join(relative_path.with_suffix("").parts)
         ini = configparser.ConfigParser(interpolation=None, inline_comment_prefixes=("#",))
         ini.optionxform = str
         with path.open() as stream:
             ini.read_file(stream)
         preset_optional_keys = optional_keys | ({"gravity.method.far"}
             if "method.far" not in ini["gravity"] else set())
-        expected_keys = public_keys - preset_optional_keys
         actual_keys = {f"{section}.{key}" for section in ini.sections() for key in ini[section]}
-        star_keys = {key for key in actual_keys if key.startswith("starFormation.")}
-        if not star_keys <= set(option_names):
-            raise RuntimeError(f"{path.name} has unknown star-formation settings: "
-                               f"{sorted(star_keys - set(option_names))}")
-        actual_keys -= star_keys
-        active_chemistry_keys = actual_keys & {f"chemistry.{field}" for field in chemistry_fields}
-        expected_keys |= active_chemistry_keys
+        if path in local_presets:
+            actual_keys -= compatibility_keys
+        active_optional_keys = actual_keys & preset_optional_keys
+        expected_keys = (public_keys - preset_optional_keys) | active_optional_keys
         if actual_keys != expected_keys:
-            raise RuntimeError(f"{path.name} option coverage differs: {sorted(actual_keys ^ expected_keys)}")
-        # Position width and radius alternatives remain commented. Curved
+            raise RuntimeError(f"{relative_path} option coverage differs: {sorted(actual_keys ^ expected_keys)}")
+        # Position width and radius alternatives may remain commented. Curved
         # cosmologies use explicit manual chemistry initial values because
         # the recombination initializer requires a flat background.
-        documented_alternatives = set(active_chemistry_keys)
+        documented_alternatives = set(active_optional_keys)
         section = None
         for line in path.read_text().splitlines():
             section_match = re.fullmatch(r"\s*\[([^]]+)\]\s*", line)
@@ -1185,12 +1183,20 @@ mapSize = 8
             if section and alternative_match:
                 documented_alternatives.add(f"{section}.{alternative_match.group(1)}")
         if not preset_optional_keys <= documented_alternatives:
-            raise RuntimeError(f"{path.name} is missing commented optional settings: "
+            raise RuntimeError(f"{relative_path} is missing optional settings: "
                                f"{sorted(preset_optional_keys - documented_alternatives)}")
-        if ini["output"]["units"] != "code" or ini["output"]["frame"] != "comoving":
-            raise RuntimeError(f"{path.name} must preserve native output defaults")
+        if (path not in local_presets and
+                (ini["output"]["units"] != "code" or ini["output"]["frame"] != "comoving")):
+            raise RuntimeError(f"{relative_path} must preserve native output defaults")
+        metadata_directory = args.workdir.resolve() / "output" / "options_presets" / case_name
+        runtime_overrides = [f"--output.directory={metadata_directory}",
+                             f"--lightcone.directory={metadata_directory / 'lightcone'}"]
+        if args.gravity_method == "pmmm":
+            # The metadata fixture selects the compiled solver independently of
+            # a local preset's FMM-specific opening schedule.
+            runtime_overrides.append("--gravity.openingSchedule=")
         preset_options = [f"--configuration={path}", "--chemistry.enabled=false",
-                          "--starFormation.enabled=false"]
+                          "--starFormation.enabled=false"] + runtime_overrides
         if args.time_integrator == "hierarchical":
             # This is option/serialization coverage, with hydro disabled by
             # metadata_options; keep hierarchical integration eligible even
@@ -1200,19 +1206,22 @@ mapSize = 8
             # Keep validating every example's option coverage and syntax when its
             # physical scenario is unavailable in the compiled executable.
             preset_options.append("--run.scenario=cosmology")
-        output = run(f"complete_{path.stem}", metadata_options + preset_options)
+        output = run(f"complete_{case_name}", metadata_options + preset_options)
         if "Checkpoint state and mode validation passed" not in output:
-            raise RuntimeError(f"{path.name} did not finish metadata validation")
+            raise RuntimeError(f"{relative_path} did not finish metadata validation")
         if (ini["run"]["scenario"] == "cosmology" and chemistryAvailable and
                 starFormationAvailable and args.time_integrator != "hierarchical"):
             enabled_options = [option for option in metadata_options
                                if not option.startswith("--hydro.enabled=")]
-            enabled = run(f"enabled_physics_{path.stem}", enabled_options +
-                          [f"--configuration={path}"])
-            for key in ("hydro.enabled", "chemistry.enabled", "starFormation.enabled"):
-                if not re.search(r"^" + re.escape(key) + r"\s*:\s*T\s*$", enabled, re.MULTILINE):
-                    raise RuntimeError(f"{path.name} did not enable {key}")
-        if path.name in preset_curvatures:
+            enabled = run(f"enabled_physics_{case_name}", enabled_options +
+                          [f"--configuration={path}"] + runtime_overrides)
+            for section in ("hydro", "chemistry", "starFormation"):
+                key = section + ".enabled"
+                expected = "T" if ini.getboolean(section, "enabled") else "F"
+                if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected + r"\s*$",
+                                 enabled, re.MULTILINE):
+                    raise RuntimeError(f"{relative_path} did not preserve {key}")
+        if path.parent == root / "configurations" and path.name in preset_curvatures:
             assertNumericSetting(output, "cosmology.omegaK", preset_curvatures[path.name])
             if path.name in {"closed_no_dark_energy.ini", "critical.ini",
                              "subcritical_no_dark_energy.ini"}:
