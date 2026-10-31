@@ -296,9 +296,16 @@ manual species fractions, Anninos controls and wind options are not accepted.
 Diffusion and conduction remain unsupported. Their former options, the obsolete `hydro.chemistry` switch,
 `hydro.yReflect`, and `gravity.sphSmoothing` are no longer accepted, including
 false entries in older INI files. Gas smoothing lengths remain adaptive;
-FMM gravity uses one fixed comoving radius for gas and dark matter. The legacy
-equal-mass lightcone and halo finders, and dark-matter-only Gadget/Plummer/glass
-loaders, reject SPH runs.
+FMM gravity uses one fixed comoving radius for gas and dark matter. With SPH on,
+the FOF/ROCKSTAR halo finder and the lightcone halo catalogue link dark matter
+only, each particle counted at the total-matter mass of its lattice site (the
+ROCKSTAR `RESCALE_PARTICLE_MASSES` convention); gas and stars enter the power
+spectrum and the lightcone HEALPix maps weighted by their mass. Option metadata
+records `analysis.haloParticles=darkMatter`; the catalogue `.format` sidecars
+record `halo_particles dark_matter` and `particle_mass total_matter_rescaled`.
+Fixed-time SPH scenarios (Sod, blast, discs, waves) have no dark matter and
+reject halo groups and lightcones; the dark-matter-only Gadget/Plummer/glass
+loaders still reject SPH runs.
 
 Gas state, including fields used by staggered timesteps, follows particles during
 domain redistribution and is retained in versioned checkpoints. Restart using

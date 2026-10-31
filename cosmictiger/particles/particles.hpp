@@ -22,6 +22,7 @@
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/range.hpp>
+#include <cosmictiger/particles/particle_types.hpp>
 #include <cosmictiger/particles/star_formation_state.hpp>
 
 static
@@ -32,10 +33,6 @@ static
         1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0 / (1 << 7), 1.0 / (1 << 8),
         1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13),
         1.0 / (1 << 14), 1.0 / (1 << 15)};
-
-inline constexpr int kDarkMatterType = 0;
-inline constexpr int kSphType = 1;
-inline constexpr int kStarType = 2;
 
 #ifdef LONG_LONG_PART_INT
 using ParticleInteger = long long;
@@ -218,7 +215,9 @@ void particlesPopRungs();
 void particlesPushRungs();
 void particlesDisplace(double dx, double dy, double dz);
 void particlesDestroy();
-void particlesSortBySph(Pair<ParticleInteger> rng);
+// Moves the dark-matter particles of a range to its front and returns the end
+// of that run. Halo finding reads only the dark-matter run (DM-only linking).
+ParticleInteger particlesPartitionDarkMatter(Pair<ParticleInteger> rng);
 void particlesGlobalReadPos(
     ParticleGlobalRange, Position* x, Position* y, Position* z, char* type, ParticleInteger offset);
 inline void particlesGlobalReadPos(

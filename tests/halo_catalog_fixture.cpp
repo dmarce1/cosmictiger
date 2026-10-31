@@ -125,7 +125,8 @@ void writeFixture(fs::path const& directory) {
             "format_version 2\nfloat16 ieee754_binary16\nrecord_size " +
                 std::to_string(sizeof(RockstarRecord)) + "\nrecord_count " +
                 std::to_string(records.size()) + "\nbyte_order " +
-                (std::endian::native == std::endian::little ? "little" : "big") + "\n");
+                (std::endian::native == std::endian::little ? "little" : "big") +
+                "\nhalo_particles dark_matter\nparticle_mass total_matter_rescaled\n");
         writeText(directory / ("rockstar_hosts." + std::to_string(rank) + ".dat"), hosts);
     }
     writeText(directory / "rockstar_descendants.dat", "");

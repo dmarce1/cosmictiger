@@ -29,8 +29,8 @@ __managed__ ListType* listPtr;
 
 __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __restrict__ const y,
     Position* __restrict__ const z, Array<float, kDimensions>* const vels, char const* const rungs,
-    ParticleInteger count, int rung, double a, double dt, double tau0, double tau1, double tauMax,
-    bool doLc, int nside, double drag) {
+    char const* const types, ParticleInteger count, int rung, double a, double dt, double tau0,
+    double tau1, double tauMax, bool doLc, int nside, double drag) {
     auto const& tid = threadIdx.x;
     auto const& bid = blockIdx.x;
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
@@ -134,6 +134,8 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                                     entry.vx = vel[kXDimension];
                                     entry.vy = vel[kYDimension];
                                     entry.vz = vel[kZDimension];
+                                    entry.type =
+                                        types != nullptr ? types[i] : char(kDarkMatterType);
                                     test = true;
                                 }
                             }
@@ -207,10 +209,13 @@ void cudaDrift(int rung, double a, double dt, double tau0, double tau1, double t
     Position* z = &particlesPos(kZDimension, rng.first);
     auto* vels = particlesVelData() + rng.first;
     auto const* rungs = &particlesRung(rng.first);
+    // particlesTy is managed memory; particlesType() returns a shared static when hydro is off.
+    char const* const types = getOptions().hydro.enabled ? particlesTy + rng.first : nullptr;
     drag = getOptions().run.scenario == "glass" ? std::numbers::pi : 0.0;
     CudaStream stream(cudaGetDevice());
     cudaDriftKernel<<<numberOfBlocks, kDriftBlockSize, 0, stream.nativeHandle()>>>(x, y, z, vels,
-        rungs, cnt, rung, a, dt, tau0, tau1, tauMax, doLc, getOptions().lightcone.mapSize, drag);
+        rungs, types, cnt, rung, a, dt, tau0, tau1, tauMax, doLc, getOptions().lightcone.mapSize,
+        drag);
     stream.checkLaunch();
     stream.wait();
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY

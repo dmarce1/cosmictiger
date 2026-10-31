@@ -110,6 +110,10 @@ static int lcNextFileNumber() {
 
 namespace detail {
 
+// The lightcone halo finder links dark matter only, as ROCKSTAR does with
+// RESCALE_PARTICLE_MASSES (Behroozi, Wechsler & Wu 2013), so only dark-matter
+// entries join the particle buffer. Every species reaches the HEALPix map,
+// weighted by its mass; with hydro off the dark-matter mass is one.
 template <class EntryLists>
 size_t lcAddParticleEntries(EntryLists const& entries) {
     int const start = particleBuffer.size();
@@ -117,7 +121,9 @@ size_t lcAddParticleEntries(EntryLists const& entries) {
     size_t count = 0;
     for (int i = 0; i < entries.size(); i++) {
         counts[i] = count;
-        count += entries[i].size();
+        for (size_t j = 0; j < entries[i].size(); j++) {
+            count += entries[i][j].type == kDarkMatterType;
+        }
     }
     counts.back() = count;
     particleBuffer.resize(start + count);
@@ -135,12 +141,13 @@ size_t lcAddParticleEntries(EntryLists const& entries) {
                         int k = index++;
                         while (k < entries.size()) {
                             auto const& entry = entries[k];
-                            int const b = start + counts[k];
-                            int const e = start + counts[k + 1];
-                            for (int i = b; i < e; i++) {
-                                int const j = i - b;
-                                auto& pi = particleBuffer[i];
+                            int i = start + counts[k];
+                            for (size_t j = 0; j < entry.size(); j++) {
                                 auto const& pj = entry[j];
+                                if (pj.type != kDarkMatterType) {
+                                    continue;
+                                }
+                                auto& pi = particleBuffer[i++];
                                 pi.pos[kXDimension] = pj.x;
                                 pi.pos[kYDimension] = pj.y;
                                 pi.pos[kZDimension] = pj.z;
@@ -153,6 +160,7 @@ size_t lcAddParticleEntries(EntryLists const& entries) {
                                 pi.vel[kYDimension] = pj.vy / a;
                                 pi.vel[kZDimension] = pj.vz / a;
                             }
+                            ALWAYS_ASSERT(i == start + counts[k + 1]);
                             k = index++;
                         }
                     },
@@ -166,17 +174,20 @@ size_t lcAddParticleEntries(EntryLists const& entries) {
         for (auto& future : futs) {
             future.get();
         }
-        // Different entry lists can contribute to the same pixel. Accumulate
-        // after the workers finish so both CPU and CUDA lists avoid shared writes.
-        for (size_t listIndex = 0; listIndex < entries.size(); listIndex++) {
-            auto const& entryList = entries[listIndex];
-            for (size_t entryIndex = 0; entryIndex < entryList.size(); entryIndex++) {
-                auto const& entry = entryList[entryIndex];
-                double const radius =
-                    sqrtf(sqr(entry.x.toDouble(), entry.y.toDouble(), entry.z.toDouble()));
-                ALWAYS_ASSERT(entry.pix >= 0 && size_t(entry.pix) < npix);
-                epochMap.add(entry.pix, 1.0 / sqr(radius), getOptions().lightcone.mapSize);
-            }
+    }
+    // Different entry lists can contribute to the same pixel. Accumulate
+    // after the workers finish so both CPU and CUDA lists avoid shared writes.
+    double const darkMatterMass = getOptions().initial.darkMatterMass;
+    double const gasMass = getOptions().initial.gasMass;
+    for (size_t listIndex = 0; listIndex < entries.size(); listIndex++) {
+        auto const& entryList = entries[listIndex];
+        for (size_t entryIndex = 0; entryIndex < entryList.size(); entryIndex++) {
+            auto const& entry = entryList[entryIndex];
+            double const radius =
+                sqrtf(sqr(entry.x.toDouble(), entry.y.toDouble(), entry.z.toDouble()));
+            ALWAYS_ASSERT(entry.pix >= 0 && size_t(entry.pix) < npix);
+            double const mass = entry.type == kDarkMatterType ? darkMatterMass : gasMass;
+            epochMap.add(entry.pix, mass / sqr(radius), getOptions().lightcone.mapSize);
         }
     }
     return 0;

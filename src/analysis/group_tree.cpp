@@ -152,8 +152,18 @@ GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> processRange,
         allocatorMtx--;
     }
     if (localRoot) {
+        // Halo finding links dark matter only, as ROCKSTAR does with
+        // RESCALE_PARTICLE_MASSES (Behroozi, Wechsler & Wu 2013): gas and
+        // stars stay outside the tree, so they are never tagged.
         particleRange.first = 0;
-        particleRange.second = particlesSize();
+        particleRange.second = particlesPartitionDarkMatter({0, particlesSize()});
+#if COSMICTIGER_WITH_SPH
+        // The partition moved gas particles; repair their reverse links now
+        // rather than relying on the next domain exchange to do it.
+        if (getOptions().hydro.enabled) {
+            particlesResolveWithSphParticles();
+        }
+#endif
         treeCacheEpoch = 0;
     }
     if (!allocator.ready_) {

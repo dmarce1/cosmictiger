@@ -15,13 +15,17 @@
 
 #include <cosmictiger/cosmology/background.hpp>
 #include <cosmictiger/math/fixed.hpp>
+#include <cosmictiger/particles/particle_types.hpp>
 
 using LightconeReal = Fixed<int, 31>;
 
+// Every species crosses the lightcone: the HEALPix maps weight entries by
+// species mass, while the lightcone halo finder keeps dark matter only.
 struct LightconeEntry {
     LightconeReal x, y, z;
     float vx, vy, vz;
     int pix;
+    char type = kDarkMatterType;
 };
 
 size_t lcAddParticles(

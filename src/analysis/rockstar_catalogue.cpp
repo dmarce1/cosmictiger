@@ -78,7 +78,12 @@ void rockstarWriteCatalogue(
            << "byte_order " << (std::endian::native == std::endian::little ? "little" : "big")
            << '\n'
            << "virial_density " << rockstar::virialDensityLabel(convention) << '\n'
-           << "so_density_reference " << rockstar::soDensityReferenceLabel(convention) << '\n';
+           << "so_density_reference " << rockstar::soDensityReferenceLabel(convention)
+           << '\n'
+           // Dark matter only, each particle at the total-matter mass per lattice
+           // site (ROCKSTAR RESCALE_PARTICLE_MASSES); 'rescaled' is the only value.
+           << "halo_particles dark_matter\n"
+           << "particle_mass total_matter_rescaled\n";
     format.close();
     if (!format) {
         throw std::runtime_error("Cannot write ROCKSTAR format metadata: " + temporaryPath);

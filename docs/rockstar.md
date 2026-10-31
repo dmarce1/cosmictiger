@@ -92,7 +92,14 @@ record_count <number of records>
 byte_order little
 virial_density bryan_norman_flat
 so_density_reference critical
+halo_particles dark_matter
+particle_mass total_matter_rescaled
 ```
+
+`halo_particles` and `particle_mass` state that only dark-matter particles were
+linked and that each one carries the total-matter mass of its lattice site
+(`Ω_m/Ω_c × m_dm`, equal to the dark-matter-only particle mass), so catalogue
+masses from SPH and dark-matter-only runs share one convention.
 
 The writer records the actual native record size and byte order (`little` or
 `big`). The sidecar is published only after the data file closes successfully,
@@ -170,8 +177,14 @@ drift reference epoch.
 
 ## Physical and numerical boundaries
 
-Halo and lightcone analysis currently require equal-mass dark matter particles;
-hydrodynamic runs are rejected by option validation. An SO search can only recover
+Halo and lightcone analysis link the dark-matter particles only. In SPH runs the
+group tree partitions each rank's particles so gas and stars never enter the FOF,
+the 6D linking or the unbinding, following the original ROCKSTAR default
+(`GADGET_SKIP_NON_HALO_PARTICLES=1`, `RESCALE_PARTICLE_MASSES=1`) and the
+dark-matter-only linking that Mondal et al. (2025, MNRAS 543, 1339) found to
+recover dark-matter-only halo statistics in hydrodynamical runs. Every count-based
+quantity therefore reports total matter under the assumption that baryons trace the
+dark matter; gas and stellar aperture masses are not yet recorded. An SO search can only recover
 mass represented in the outer FOF candidate list. The virial fit is calibrated for
 flat matter–Lambda or open matter-only cosmologies; using the actual matter
 fraction with radiation or other curvature/Lambda combinations is an extrapolation.

@@ -196,8 +196,10 @@ void checkRockstarCatalogueRoundtrip(
     std::string const virialDefinition = flatFit ? "bryan_norman_flat" :
         openFit                                  ? "bryan_norman_open" :
                                                    "200_mean_matter";
-    requireRockstar(metadata.size() == 7 && metadata["format_version"] == "2" &&
+    requireRockstar(metadata.size() == 9 && metadata["format_version"] == "2" &&
             metadata["float16"] == "ieee754_binary16" &&
+            metadata["halo_particles"] == "dark_matter" &&
+            metadata["particle_mass"] == "total_matter_rescaled" &&
             metadata["record_size"] == std::to_string(sizeof(RockstarRecord)) &&
             metadata["record_count"] == std::to_string(count) &&
             metadata["virial_density"] == virialDefinition &&

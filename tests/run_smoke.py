@@ -41,7 +41,7 @@ def run_simulation(command, workdir, log_name):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("sod", "dm_cpu", "dm_cuda", "sph", "sph_mpi"))
+    parser.add_argument("mode", choices=("sod", "dm_cpu", "dm_cuda", "sph", "sph_analysis", "sph_mpi"))
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--mpi-exec", default="mpiexec")
@@ -65,11 +65,14 @@ def main():
             checkpoint_dir.unlink()
         elif checkpoint_dir.is_dir() and re.fullmatch(r"checkpoint\.[0-9]+(?:\.incomplete)?", checkpoint_dir.name):
             shutil.rmtree(checkpoint_dir)
+    # sph_analysis runs the dark-matter-only halo finder and the lightcone with gas present.
+    analysis = str(args.mode == "sph_analysis").lower()
     command = [str(args.executable), "--hpx:threads=2", "--hpx:bind=none",
                "--initial.particlesPerDimension=8", "--analysis.views=false",
-               "--lightcone.enabled=false", "--analysis.power=false", "--analysis.groups=false"]
+               f"--lightcone.enabled={analysis}", "--analysis.power=false",
+               f"--analysis.groups={analysis}"]
     selector_arguments = application_arguments(args.executable.resolve(), far="fmm",
-        hydro=args.mode in ("sod", "sph", "sph_mpi"))
+        hydro=args.mode in ("sod", "sph", "sph_analysis", "sph_mpi"))
     command += [argument for argument in selector_arguments if not any(
         option.split("=", 1)[0] == argument.split("=", 1)[0] for option in args.extra_option)]
     if args.mode == "sod":
@@ -80,7 +83,7 @@ def main():
                                  "siloInterval = 7\ndirectory = silo snapshots\n")
         command += ["--run.scenario=sod", "--hydro.enabled=true", "--compute.cuda=true",
                     f"--configuration={output_config.resolve()}"]
-    elif args.mode == "sph":
+    elif args.mode in ("sph", "sph_analysis"):
         command += ["--hydro.enabled=true", "--compute.cuda=true",
                     "--run.maxIterations=2", "--checkpoint.intervalSeconds=0"]
     elif args.mode == "sph_mpi":
@@ -166,6 +169,18 @@ def main():
         if not energies or any(len(row) != 10 for row in energies) or any(not math.isfinite(value) for row in energies for value in row):
             raise RuntimeError(f"{args.mode} energy output is empty or nonfinite")
         print(f"{args.mode}: {len(rows)} completed steps with finite physical diagnostics")
+        if args.mode == "sph_analysis":
+            if "Doing groups" not in output_log:
+                raise RuntimeError("sph_analysis did not run the halo finder")
+            sidecars = sorted(args.workdir.glob("groups.*/rockstar.0.dat.format"))
+            if not sidecars:
+                raise RuntimeError("sph_analysis produced no ROCKSTAR catalogue sidecar")
+            metadata = dict(line.split() for line in sidecars[0].read_text().splitlines() if line.strip())
+            if metadata.get("halo_particles") != "dark_matter":
+                raise RuntimeError("ROCKSTAR sidecar does not record dark-matter-only halo finding")
+            if not re.search(r"^analysis.haloParticles\s*:\s*darkMatter\s*$", output_log, re.MULTILINE):
+                raise RuntimeError("option metadata does not record dark-matter-only halo finding")
+            print("sph_analysis: dark-matter-only halo finding and lightcone ran with SPH enabled")
         if args.mode == "sph":
             expected = rows[-1]
             checkpoints = list(args.workdir.glob("checkpoint.[0-9]*/checkpoint.0.dat"))

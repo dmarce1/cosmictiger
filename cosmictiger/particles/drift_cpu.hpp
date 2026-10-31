@@ -28,6 +28,7 @@ struct DriftParameters {
 
 // Arrays describe one disjoint particle range. Lightcone entries are appended
 // before wrapping positions, using the same periodic images as CUDA drift.
+// A null types array means every particle is dark matter.
 void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensions>* velocities,
-    char const* rungs, size_t count, DriftParameters const& parameters,
+    char const* rungs, char const* types, size_t count, DriftParameters const& parameters,
     std::vector<LightconeEntry>* entries = nullptr);

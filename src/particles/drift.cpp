@@ -47,9 +47,11 @@ void cpuDrift(int rung, double a, double dt, double tau0, double tau1, double ta
     auto const run = [&](size_t worker) {
         size_t const begin = size_t(range.first) + worker * count / workers;
         size_t const end = size_t(range.first) + (worker + 1) * count / workers;
+        // particlesType() returns a shared static when hydro is off; pass the array only then.
+        char const* const types = getOptions().hydro.enabled ? particlesTy + begin : nullptr;
         cpuDriftKernel(&particlesPos(kXDimension, begin), &particlesPos(kYDimension, begin),
             &particlesPos(kZDimension, begin), particlesVelData() + begin, &particlesRung(begin),
-            end - begin, parameters, parameters.lightcone ? &entries[worker] : nullptr);
+            types, end - begin, parameters, parameters.lightcone ? &entries[worker] : nullptr);
     };
     if (workers == 1) {
         run(0);

@@ -366,6 +366,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"output.zMax", options.output.zMax},
         {"analysis.power", options.analysis.power},
         {"analysis.groups", options.analysis.groups},
+        {"analysis.haloParticles", std::string("darkMatter")},
         {"analysis.tracers", options.analysis.tracers},
         {"analysis.tracerCount", options.analysis.tracerCount},
         {"analysis.slice", options.analysis.slice},
@@ -942,6 +943,11 @@ bool processOptions(int argc, char* argv[]) {
         if (scenario.fixedTime && !opts.hydro.enabled) {
             THROW_ERROR("run.scenario=%s requires hydro.enabled=true\n", scenario.name);
         }
+        if (scenario.fixedTime && (opts.analysis.groups || opts.lightcone.enabled)) {
+            THROW_ERROR("run.scenario=%s has no dark matter; halo groups and lightcones need a "
+                        "cosmological scenario\n",
+                scenario.name);
+        }
         if (!opts.gravity.enabled && !opts.hydro.enabled) {
             THROW_ERROR("A scenario requires gravity.enabled and/or hydro.enabled\n");
         }
@@ -1361,10 +1367,8 @@ bool processOptions(int argc, char* argv[]) {
             !opts.initial.gadget4Restart.empty()) {
             THROW_ERROR("SPH cannot use the dark-matter-only glass, Plummer or Gadget loaders\n");
         }
-        if (opts.lightcone.enabled || opts.analysis.groups) {
-            THROW_ERROR(
-                "The lightcone and halo finders require equal-mass dark matter particles\n");
-        }
+        // Halo and lightcone finders link the equal-mass dark matter only
+        // (analysis.haloParticles metadata); maps and spectra weight all species.
     }
     if (!detail::isPositiveFloatOption(opts.hydro.centralSupportRadius)) {
         THROW_ERROR(
@@ -1680,6 +1684,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("compute.cudaKickListReserve", compute.cudaKickListReserve);
     SHOW("lightcone.enabled", lightcone.enabled);
     SHOW("analysis.groups", analysis.groups);
+    show("analysis.haloParticles", std::string("darkMatter"));
     SHOW("analysis.power", analysis.power);
     SHOW("analysis.slice", analysis.slice);
     SHOW("analysis.tracers", analysis.tracers);

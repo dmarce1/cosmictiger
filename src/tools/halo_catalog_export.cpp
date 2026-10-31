@@ -152,12 +152,22 @@ CatalogueFormat readFormat(fs::path const& path) {
     std::string const byteOrder = std::endian::native == std::endian::little ? "little" : "big";
     bool const hasConvention =
         metadata.count("virial_density") == 1 && metadata.count("so_density_reference") == 1;
-    if (metadata.size() != (hasConvention ? 7 : 5) || metadata["format_version"] != "2" ||
+    // Sidecars written with SPH support also name the linked species and the
+    // particle-mass convention; legacy sidecars carry neither key.
+    bool const hasSpecies =
+        metadata.count("halo_particles") == 1 && metadata.count("particle_mass") == 1;
+    size_t const expectedKeys = 5 + (hasConvention ? 2 : 0) + (hasSpecies ? 2 : 0);
+    if (metadata.size() != expectedKeys || metadata["format_version"] != "2" ||
         metadata["float16"] != "ieee754_binary16" || metadata["byte_order"] != byteOrder ||
         metadata["record_size"] != std::to_string(sizeof(RockstarRecord)) ||
         metadata.count("record_count") != 1) {
         fail(formatPath,
             "requires format_version 2, IEEE binary16, matching native ABI and byte order");
+    }
+    if (hasSpecies &&
+        (metadata.at("halo_particles") != "dark_matter" ||
+            metadata.at("particle_mass") != "total_matter_rescaled")) {
+        fail(formatPath, "supports only dark_matter catalogues at the total_matter_rescaled mass");
     }
     std::uint64_t const count = unsignedInteger(metadata.at("record_count"), formatPath);
     if (count > std::numeric_limits<size_t>::max() / sizeof(RockstarRecord) ||

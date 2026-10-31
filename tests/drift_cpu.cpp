@@ -80,10 +80,11 @@ struct Fixture {
     }
 
     void run(size_t offset, size_t count, DriftParameters const& parameters,
-        std::vector<LightconeEntry>* entries = nullptr) {
+        std::vector<LightconeEntry>* entries = nullptr, char const* types = nullptr) {
         cpuDriftKernel(positions[kXDimension].data() + offset,
             positions[kYDimension].data() + offset, positions[kZDimension].data() + offset,
-            velocities.data() + offset, rungs.data() + offset, count, parameters, entries);
+            velocities.data() + offset, rungs.data() + offset,
+            types != nullptr ? types + offset : nullptr, count, parameters, entries);
     }
 };
 
@@ -178,12 +179,12 @@ void testPositionsAndActivity() {
 
 void testEmpty() {
     DriftParameters parameters;
-    cpuDriftKernel(nullptr, nullptr, nullptr, nullptr, nullptr, 0, parameters);
+    cpuDriftKernel(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, parameters);
     parameters.lightcone = true;
     parameters.tau1 = 0.25;
     parameters.tauMax = 1.0;
     std::vector<LightconeEntry> entries;
-    cpuDriftKernel(nullptr, nullptr, nullptr, nullptr, nullptr, 0, parameters, &entries);
+    cpuDriftKernel(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, parameters, &entries);
     require(entries.empty(), "empty drift produces no lightcone entries");
 }
 
@@ -314,6 +315,42 @@ void testLightconeGates() {
         "lightcone supports an omitted output buffer");
 }
 
+// Each stationary central particle crosses its eight images in sequence, so
+// entry i belongs to particle i / 8 of the drifted range.
+void testLightconeTypes() {
+    constexpr size_t kCount = 4;
+    constexpr size_t kOffset = 1;
+    constexpr size_t kImages = 8;
+    Fixture fixture(kCount);
+    for (size_t i = 0; i < kCount; ++i) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            fixture.positions[dim][i] = 0.5;
+            fixture.velocities[i][dim] = 0.0f;
+        }
+    }
+    std::vector<char> const types = {kStarType, kSphType, kDarkMatterType, kStarType};
+    DriftParameters parameters;
+    parameters.lightcone = true;
+    parameters.timestep = 0.25;
+    parameters.tau1 = 0.25;
+    parameters.tauMax = 1.0;
+    std::vector<LightconeEntry> entries;
+    fixture.run(kOffset, kCount - kOffset, parameters, &entries, types.data());
+    require(entries.size() == kImages * (kCount - kOffset),
+        "every drifted particle crosses its eight images");
+    for (size_t i = 0; i < entries.size(); ++i) {
+        require(entries[i].type == types[kOffset + i / kImages],
+            "lightcone entry carries the species of its source particle");
+    }
+    entries.clear();
+    fixture.run(kOffset, kCount - kOffset, parameters, &entries);
+    require(entries.size() == kImages * (kCount - kOffset),
+        "lightcone without a species array still emits every crossing");
+    for (LightconeEntry const& entry : entries) {
+        require(entry.type == kDarkMatterType, "lightcone without a species array is dark matter");
+    }
+}
+
 void testMovingLightcone() {
     for (double drag : {0.0, 2.0}) {
         Fixture fixture = stationaryParticle(0.25);
@@ -376,6 +413,10 @@ TEST(DriftCpu, LightconeImages) {
 
 TEST(DriftCpu, LightconeGates) {
     detail::testLightconeGates();
+}
+
+TEST(DriftCpu, LightconeTypes) {
+    detail::testLightconeTypes();
 }
 
 TEST(DriftCpu, MovingLightcone) {

@@ -492,7 +492,9 @@ void groupsAddParticles(int wave, double scale) {
                 ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
                 for (ParticleInteger i = begin; i < end; i++) {
                     auto const grp = (GroupInteger) particlesGroup(i);
-                    if (grp != kNoParticleGroup) {
+                    // The group tree excludes gas and stars; keep the catalogue
+                    // dark-matter-only even for tags set outside the tree.
+                    if (grp != kNoParticleGroup && particlesType(i) == kDarkMatterType) {
                         int const home = particlesGroupHome(grp);
                         if (grp % kGroupWaves == wave) {
                             if (localGroups[home].find(grp) == localGroups[home].end()) {

@@ -40,7 +40,7 @@ HALO CATALOGUES (analysis.groups=true; synchronized cosmology/glass/plummer step
 groups.N/groups.dat | snapshot header | box length,time,number,scale; binary overwrite | src/analysis/groups.cpp (groupsSave)
 groups.N/groups.N.R.dat | per-rank FOF catalogue | group records and particle overlap/parent data; binary overwrite | src/analysis/groups.cpp (groupsSave)
 groups.N/rockstar.R.dat | per-rank ROCKSTAR catalogue | native-layout halo records; binary overwrite | src/analysis/groups.cpp (groupsSave); src/analysis/rockstar_catalogue.cpp (rockstarWriteCatalogue)
-groups.N/rockstar.R.dat.format | successful ROCKSTAR write | encoding version,half-float representation,record size/count,byte order; atomic rename | src/analysis/rockstar_catalogue.cpp (rockstarWriteCatalogue)
+groups.N/rockstar.R.dat.format | successful ROCKSTAR write | encoding version,half-float representation,record size/count,byte order,density conventions,halo_particles dark_matter,particle_mass total_matter_rescaled; atomic rename | src/analysis/rockstar_catalogue.cpp (rockstarWriteCatalogue)
 groups.N/rockstar_hosts.R.dat | per-rank ROCKSTAR host history | halo-to-host IDs; text overwrite | src/analysis/groups.cpp (groupsSave)
 groups.N/rockstar_descendants.dat | all ranks finish | previous halo ID,descendant ID,overlap count; text overwrite | src/analysis/groups.cpp (groupsSave)
 groups.N/rockstar_hosts.complete | complete distributed catalogue publication | version,rank count,group count; atomic rename | src/analysis/groups.cpp (groupsSave)
@@ -48,8 +48,8 @@ groups.N/rockstar.R.dat.format.tmp | temporary during format publication | renam
 groups.N/rockstar_hosts.complete.tmp | temporary during completion publication | renamed to .complete on success; can remain after interruption | src/analysis/groups.cpp (groupsSave)
 
 LIGHTCONE PRODUCTS (under lightcone.directory, lightcone.enabled=true)
-lc.healpix.E.R | lightcone epoch flush, including final forced flush | binary int nside,minPix,maxPix then maxPix-minPix+1 floats; inclusive interval; empty epoch uses 0,-1; weights sum all drift batches in double before output | src/analysis/lightcone.cpp (lcParts2groups)
-lc.groups.E.R | flushed lightcone groups | native-layout ROCKSTAR halo catalogue; binary overwrite | src/analysis/lightcone.cpp (lcParts2groups)
+lc.healpix.E.R | lightcone epoch flush, including final forced flush | binary int nside,minPix,maxPix then maxPix-minPix+1 floats; inclusive interval; empty epoch uses 0,-1; each crossing adds species mass/r^2 (dark matter 1 without SPH, else omegaC/omegaM and omegaB/omegaM), summed over all drift batches in double before output | src/analysis/lightcone.cpp (lcParts2groups)
+lc.groups.E.R | flushed lightcone groups | native-layout ROCKSTAR halo catalogue over dark-matter crossings only; binary overwrite | src/analysis/lightcone.cpp (lcParts2groups)
 lc.groups.E.R.format | successful catalogue write | same format sidecar as snapshot ROCKSTAR | src/analysis/rockstar_catalogue.cpp (rockstarWriteCatalogue)
 lc.groups.E.R.format.tmp | temporary during sidecar publication | renamed to .format; can remain after interruption | src/analysis/rockstar_catalogue.cpp (rockstarWriteCatalogue)
 

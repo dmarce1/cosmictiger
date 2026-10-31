@@ -93,6 +93,12 @@ them retain Bryan-Norman/critical-density labels; their flat/open distinction
 is unknown. The viewer upgrades existing version-1 SQLite databases in place
 to store these conventions, preserving their catalogs and halo records.
 
+Sidecars from SPH-capable builds also carry `halo_particles dark_matter` and
+`particle_mass total_matter_rescaled`: only dark-matter particles were linked and
+each counts at the total-matter mass of its lattice site. The reader accepts these
+two keys together, rejects any other values, and treats sidecars without them as
+the same dark-matter convention.
+
 Record row `i` corresponds to host-sidecar row `i` within the same rank, as
 guaranteed by the current writer. The reader checks this correspondence against
 the FOF/local `pid` host index, rejects duplicate IDs, missing hosts, cycles,

@@ -1136,6 +1136,14 @@ if(BUILD_TESTING)
                 ${PROJECT_BINARY_DIR}/tests/analysis_cpu_runtime
                 --guard $<TARGET_FILE:no_cuda_runtime>)
             set_tests_properties(analysis_cpu_runtime PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
+            if(COSMICTIGER_WITH_SPH)
+                # Gas joins the maps and spectra; the lightcone finder keeps dark matter.
+                add_test(NAME analysis_cpu_hydro_runtime COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/run_analysis_cpu.py $<TARGET_FILE:cosmictiger>
+                    ${PROJECT_BINARY_DIR}/tests/analysis_cpu_hydro_runtime
+                    --guard $<TARGET_FILE:no_cuda_runtime> --hydro)
+                set_tests_properties(analysis_cpu_hydro_runtime PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
+            endif()
             if(cosmictiger_mpi_tests)
                 set(analysis_mpi_launcher_args --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG})
                 foreach(flag IN LISTS MPIEXEC_PREFLAGS)
@@ -2476,7 +2484,7 @@ if(BUILD_TESTING)
                 set_tests_properties(smoke_sph_cpu_mpi PROPERTIES RUN_SERIAL TRUE TIMEOUT 260)
             endif()
         endif()
-        foreach(smoke_mode IN ITEMS sod sph)
+        foreach(smoke_mode IN ITEMS sod sph sph_analysis)
             if(NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
                 continue()
             endif()

@@ -354,13 +354,26 @@ static T const* readParticleCacheLine(LineIdType lineId,
     return future->get().data();
 }
 
-/*void particles_sort_by_sph(pair<part_int> rng) {
- particle_iterator b;
- particle_iterator e;
- b.index = rng.first;
- e.index = rng.second;
- std::sort(b, e);
- }*/
+ParticleInteger particlesPartitionDarkMatter(Pair<ParticleInteger> rng) {
+    if (!getOptions().hydro.enabled) {
+        return rng.second;
+    }
+    ParticleInteger lo = rng.first;
+    ParticleInteger hi = rng.second;
+    while (lo < hi) {
+        if (particlesType(lo) != kDarkMatterType) {
+            while (lo != hi) {
+                hi--;
+                if (particlesType(hi) == kDarkMatterType) {
+                    particlesSwap(hi, lo);
+                    break;
+                }
+            }
+        }
+        lo++;
+    }
+    return hi;
+}
 
 Vector<OutputParticle> particlesGetSample(Range<double> const& box) {
     Vector<hpx::future<Vector<OutputParticle>>> futs;
@@ -567,11 +580,21 @@ void particlesMemadviseGpu() {
         count * sizeof(Array<float, kDimensions>), cudaMemAdviseSetAccessedBy, deviceid));
     CUDA_WARN(cudaAdviseMemory(
         &particlesRung(0) + begin, count * sizeof(char), cudaMemAdviseSetAccessedBy, deviceid));
-    undoLastMemadvise = [begin, count, deviceid]() {
+    // The CUDA drift reads species for lightcone crossings when hydro is on.
+    bool const types = getOptions().hydro.enabled;
+    if (types) {
+        CUDA_WARN(cudaAdviseMemory(
+            particlesTy + begin, count * sizeof(char), cudaMemAdviseSetAccessedBy, deviceid));
+    }
+    undoLastMemadvise = [begin, count, deviceid, types]() {
         CUDA_WARN(cudaAdviseMemory(particlesVelData() + begin,
             count * sizeof(Array<float, kDimensions>), cudaMemAdviseUnsetAccessedBy, deviceid));
         CUDA_WARN(cudaAdviseMemory(&particlesRung(0) + begin, count * sizeof(char),
             cudaMemAdviseUnsetAccessedBy, deviceid));
+        if (types) {
+            CUDA_WARN(cudaAdviseMemory(
+                particlesTy + begin, count * sizeof(char), cudaMemAdviseUnsetAccessedBy, deviceid));
+        }
     };
 #endif
 }
@@ -594,12 +617,21 @@ void particlesMemadviseCpu() {
             cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
     CUDA_WARN(cudaAdviseMemory(&particlesRung(0) + begin, count * sizeof(char),
         cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
-    undoLastMemadvise = [begin, count]() {
+    bool const types = getOptions().hydro.enabled;
+    if (types) {
+        CUDA_WARN(cudaAdviseMemory(particlesTy + begin, count * sizeof(char),
+            cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
+    }
+    undoLastMemadvise = [begin, count, types]() {
         CUDA_CHECK(
             cudaAdviseMemory(particlesVelData() + begin, count * sizeof(Array<float, kDimensions>),
                 cudaMemAdviseUnsetPreferredLocation, cudaCpuDeviceId));
         CUDA_WARN(cudaAdviseMemory(&particlesRung(0) + begin, count * sizeof(char),
             cudaMemAdviseUnsetPreferredLocation, cudaCpuDeviceId));
+        if (types) {
+            CUDA_WARN(cudaAdviseMemory(particlesTy + begin, count * sizeof(char),
+                cudaMemAdviseUnsetPreferredLocation, cudaCpuDeviceId));
+        }
     };
     CudaStream stream(deviceid);
     for (int dim = 0; dim < kDimensions; dim++) {
@@ -608,6 +640,9 @@ void particlesMemadviseCpu() {
     stream.prefetchAsync(&particlesVel(kXDimension, begin),
         count * sizeof(Array<float, kDimensions>), cudaCpuDeviceId);
     stream.prefetchAsync(&particlesRung(begin), count * sizeof(char), cudaCpuDeviceId);
+    if (types) {
+        stream.prefetchAsync(particlesTy + begin, count * sizeof(char), cudaCpuDeviceId);
+    }
     stream.wait();
 #endif
 }

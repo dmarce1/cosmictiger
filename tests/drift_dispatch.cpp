@@ -24,6 +24,7 @@
 Array<Position*, kDimensions> particlesX;
 Array<float, kDimensions>* particlesV = nullptr;
 char* particlesR = nullptr;
+char* particlesTy = nullptr;
 
 namespace detail {
 

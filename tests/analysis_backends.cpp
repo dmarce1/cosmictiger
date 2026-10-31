@@ -126,25 +126,44 @@ Vector<LightconeParticle> analysisLightconeFixture(int nside) {
 
 }    // namespace detail
 
+// With hydro the fixture mirrors the cosmological lattice: one gas particle per
+// dark-matter site, offset by half a spacing, carrying the complementary mass.
 void analysisPowerSetup(bool perturb) {
+    bool const hydro = getOptions().hydro.enabled;
     int const side = getOptions().initial.particlesPerDimension;
     int const count = side * side * side;
     int const begin = hpxRank() * count / hpxSize();
     int const end = (hpxRank() + 1) * count / hpxSize();
-    particlesResize(end - begin);
+    int const species = hydro ? 2 : 1;
+    particlesResize(species * (end - begin));
     for (int global = begin; global < end; ++global) {
-        int const local = global - begin;
-        double const x = (global / (side * side) + 0.5) / side;
-        particlesPos(kXDimension, local) =
-            x + (perturb ? 0.03 * std::sin(2.0 * std::numbers::pi * x) : 0.0);
-        particlesPos(kYDimension, local) = ((global / side) % side + 0.5) / side;
-        particlesPos(kZDimension, local) = (global % side + 0.5) / side;
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            particlesVel(dim, local) = 0.0f;
+        for (int kind = 0; kind < species; ++kind) {
+            int const local = species * (global - begin) + kind;
+            double const offset = kind == 0 ? 0.0 : 0.5 / side;
+            double const x = (global / (side * side) + 0.5) / side + offset;
+            particlesPos(kXDimension, local) =
+                x + (perturb ? 0.03 * std::sin(2.0 * std::numbers::pi * x) : 0.0);
+            particlesPos(kYDimension, local) = ((global / side) % side + 0.5) / side + offset;
+            particlesPos(kZDimension, local) = (global % side + 0.5) / side + offset;
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                particlesVel(dim, local) = 0.0f;
+            }
+            if (hydro) {
+                particlesType(local) = kind == 0 ? kDarkMatterType : kSphType;
+            }
         }
     }
 }
 HPX_PLAIN_ACTION(analysisPowerSetup, AnalysisPowerSetupAction);
+
+double analysisParticleMass() {
+    double mass = 0.0;
+    for (ParticleInteger i = 0; i < particlesSize(); ++i) {
+        mass += particlesMass(i);
+    }
+    return mass;
+}
+HPX_PLAIN_ACTION(analysisParticleMass, AnalysisParticleMassAction);
 
 double analysisDensityMass(int fold) {
     int const side = getOptions().initial.fourierSize;
@@ -256,24 +275,88 @@ void analysisWriteLightconeCatalogue(int epoch, double tau) {
     lcInit(tau, 1.0);
 }
 
+double analysisMapTotal(int epoch) {
+    double total = 0.0;
+    for (int rank = 0; rank < hpxSize(); ++rank) {
+        auto const path = std::filesystem::path(getOptions().lightcone.directory) /
+            ("lc.healpix." + std::to_string(epoch) + "." + std::to_string(rank));
+        auto const closeFile = [](FILE* stream) { std::fclose(stream); };
+        std::unique_ptr<FILE, decltype(closeFile)> file(std::fopen(path.c_str(), "rb"), closeFile);
+        requireAnalysis(file != nullptr, "Lightcone epoch did not write its HEALPix map");
+        int header[3];
+        requireAnalysis(std::fread(header, sizeof(int), 3, file.get()) == 3,
+            "Cannot read lightcone map header");
+        for (int pixel = header[1]; pixel <= header[2]; ++pixel) {
+            float value;
+            requireAnalysis(
+                std::fread(&value, sizeof(value), 1, file.get()) == 1, "Truncated lightcone map");
+            total += value;
+        }
+    }
+    return total;
+}
+
+// Only dark matter reaches the lightcone halo-finder buffer, while every
+// species reaches the HEALPix map weighted by its mass.
+void analysisCheckSpeciesLightcone(int epoch) {
+    T_Healpix_Base<int> pixels(getOptions().lightcone.mapSize, NEST, SET_NSIDE);
+    std::vector<std::vector<LightconeEntry>> entries(1);
+    double expectedWeight = 0.0;
+    constexpr int kDarkMatterCount = 3;
+    for (int i = 0; i < kDarkMatterCount + 2; ++i) {
+        bool const darkMatter = i < kDarkMatterCount;
+        double const radius = 0.5 + 0.02 * i;
+        double const angle = 0.3 * i;
+        LightconeEntry entry{};
+        entry.x = radius * std::cos(angle);
+        entry.y = radius * std::sin(angle);
+        entry.z = 0.0;
+        entry.vx = 20.0f + i;
+        vec3 direction;
+        direction.x = entry.x.toDouble();
+        direction.y = entry.y.toDouble();
+        direction.z = 0.0;
+        entry.pix = pixels.vec2pix(direction);
+        entry.type = darkMatter ? kDarkMatterType : kSphType;
+        double const mass =
+            darkMatter ? getOptions().initial.darkMatterMass : getOptions().initial.gasMass;
+        expectedWeight += mass / (radius * radius);
+        entries[0].push_back(entry);
+    }
+    lcAddParticles(entries, 1.0, 0.0);
+    requireAnalysis(analysisGatherLightcone().size() == kDarkMatterCount,
+        "Gas entries reached the lightcone halo-finder buffer");
+    analysisFindLightconeGroups(1.0);
+    analysisWriteLightconeCatalogue(epoch, 1.0);
+    double const total = analysisMapTotal(epoch);
+    requireAnalysis(std::abs(total - expectedWeight) <= 1.0e-5 * expectedWeight,
+        "Lightcone HEALPix map did not weight every species by its mass");
+}
+
 }    // namespace detail
 
 void analysisBackendsTest() {
     using detail::requireAnalysis;
-    requireAnalysis(!cudaEnabled() && !getOptions().hydro.enabled,
-        "analysisBackends requires compute.cuda=false and hydro.enabled=false");
+    requireAnalysis(!cudaEnabled(), "analysisBackends requires compute.cuda=false");
     requireAnalysis(getOptions().initial.particlesPerDimension == 8 &&
             !getOptions().initial.closePack && hpxSize() <= 2,
         "analysisBackends requires an 8-cubed lattice and at most two localities");
     for (auto const& locality : hpxLocalities()) {
         hpx::async<AnalysisPowerSetupAction>(locality, false).get();
     }
+    double expectedMass = 0.0;
+    for (auto const& locality : hpxLocalities()) {
+        expectedMass += hpx::async<AnalysisParticleMassAction>(locality).get();
+    }
+    // Species masses are complementary, so the total matches the DMO lattice.
+    requireAnalysis(std::abs(expectedMass - 512.0) < 1.0e-3,
+        "Fixture species masses do not sum to one per lattice site");
     for (int fold : {1, 2, 3}) {
         double mass = 0.0;
         for (auto const& locality : hpxLocalities()) {
             mass += hpx::async<AnalysisDensityMassAction>(locality, fold).get();
         }
-        requireAnalysis(std::abs(mass - 512.0) < 0.01,
+        requireAnalysis(std::abs(mass - expectedMass) < 0.01,
             "CPU density assignment did not conserve deposited particle mass");
     }
     auto const uniformPower = powerSpectrumCompute(1);
@@ -346,5 +429,8 @@ void analysisBackendsTest() {
     requireAnalysis(detail::analysisGatherLightcone().empty(),
         "Empty lightcone flush retained stale particles");
     detail::analysisWriteLightconeCatalogue(2, 1.0);
+    if (getOptions().hydro.enabled) {
+        detail::analysisCheckSpeciesLightcone(3);
+    }
     PRINT("CPU analysis backend integration regression passed (%i localities)\n", hpxSize());
 }

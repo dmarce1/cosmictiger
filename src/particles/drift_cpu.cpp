@@ -16,8 +16,8 @@ namespace detail {
 
 void appendDriftLightconeEntries(Array<double, kDimensions> const& before,
     Array<double, kDimensions> const& after, Array<float, kDimensions> const& velocity,
-    Array<float, kDimensions> const& outputVelocity,
-    DriftParameters const& parameters, std::vector<LightconeEntry>& entries) {
+    Array<float, kDimensions> const& outputVelocity, char type, DriftParameters const& parameters,
+    std::vector<LightconeEntry>& entries) {
     double const inverseScale = 1.0 / parameters.scale;
     double const inverseTauMax = 1.0 / parameters.tauMax;
     // CUDA uses float physical velocities for the crossing interpolation.
@@ -63,6 +63,7 @@ void appendDriftLightconeEntries(Array<double, kDimensions> const& before,
                     entry.vy = outputVelocity[kYDimension];
                     entry.vz = outputVelocity[kZDimension];
                     entry.pix = pixel;
+                    entry.type = type;
                     entries.push_back(entry);
                 }
             }
@@ -73,7 +74,7 @@ void appendDriftLightconeEntries(Array<double, kDimensions> const& before,
 }    // namespace detail
 
 void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensions>* velocities,
-    char const* rungs, size_t count, DriftParameters const& parameters,
+    char const* rungs, char const* types, size_t count, DriftParameters const& parameters,
     std::vector<LightconeEntry>* entries) {
     if (count == 0) {
         return;
@@ -134,8 +135,9 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensi
             }
         }
         if (lightcone) {
+            char const type = types != nullptr ? types[index] : char(kDarkMatterType);
             detail::appendDriftLightconeEntries(
-                before, after, driftVelocity, velocities[index], parameters, *entries);
+                before, after, driftVelocity, velocities[index], type, parameters, *entries);
         }
         for (int dim = 0; dim < kDimensions; ++dim) {
             if constexpr (kPositionBits == 64) {
