@@ -1080,12 +1080,14 @@ Vector<float> outputView(int number, double time) {
         if (fp == NULL) {
             THROW_ERROR("unable to open %s for writing\n", filename.c_str());
         }
-        fwrite(&nside, sizeof(int), 1, fp);
-        fwrite(&npix, sizeof(int), 1, fp);
-        fwrite(results.data(), sizeof(float), npix, fp);
-        fwrite(&number, sizeof(int), 1, fp);
-        fwrite(&time, sizeof(double), 1, fp);
-        fclose(fp);
+        bool const writeSucceeded = fwrite(&nside, sizeof(int), 1, fp) == 1 &&
+            fwrite(&npix, sizeof(int), 1, fp) == 1 &&
+            fwrite(results.data(), sizeof(float), npix, fp) == size_t(npix) &&
+            fwrite(&number, sizeof(int), 1, fp) == 1 && fwrite(&time, sizeof(double), 1, fp) == 1;
+        int const closeStatus = fclose(fp);
+        if (!writeSucceeded || closeStatus != 0) {
+            THROW_ERROR("Unable to complete HEALPix view output %s\n", filename.c_str());
+        }
     }
     return results;
 }

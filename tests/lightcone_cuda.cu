@@ -45,7 +45,7 @@ CUDA_EXPORT void cudaRelease(void* pointer) {
 #endif
 }
 
-CUDA_EXPORT void copyCudaMemory(void* destination, void* source, int bytes) {
+CUDA_EXPORT void copyCudaMemory(void* destination, void const* source, size_t bytes) {
     if (bytes != 0) {
         memcpy(destination, source, bytes);
     }

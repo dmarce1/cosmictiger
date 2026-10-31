@@ -13,6 +13,7 @@
 #include <cosmictiger/cuda/cuda_reduce.hpp>
 
 constexpr int kLightconeBlockSize = 32;
+static_assert(kLightconeBlockSize == kWarpSize);
 
 __global__ void cudaLightconeKernel(LightconeParticleMapType* particleMapPtr,
     LightconeTreeMapType* treeMapPtr, int* rcPtr, LightconeTreeId const* leaves, int n,
@@ -46,7 +47,7 @@ __global__ void cudaLightconeKernel(LightconeParticleMapType* particleMapPtr,
                     auto const& other = treeMap[ni.pix][ni.index];
                     auto const& otherParticles = particleMap[other.pix];
                     for (int pi = other.particleRange.first; pi < other.particleRange.second;
-                         pi++) {
+                        pi++) {
                         auto const bValue = otherParticles.group[pi];
                         Array<double, kDimensions> b;
                         b[kXDimension] = otherParticles.pos[kXDimension][pi].toDouble();
@@ -117,7 +118,9 @@ __global__ void cudaLightconeKernel(LightconeParticleMapType* particleMapPtr,
                         minGroup = min(minGroup, thisMinGroup);
                     }
                     sharedReduceAdd(thisFoundLink);
-                    if (thisFoundLink && (a > minGroup || a == kLightconeNoGroup)) {
+                    LightconeGroup const currentGroup = __shfl_sync(0xFFFFFFFF, a, 0);
+                    if (thisFoundLink &&
+                        (currentGroup > minGroup || currentGroup == kLightconeNoGroup)) {
                         foundLink = true;
                         foundAnyLink = true;
                         if (tid == 0) {
@@ -128,6 +131,7 @@ __global__ void cudaLightconeKernel(LightconeParticleMapType* particleMapPtr,
                             __threadfence();
                         }
                     }
+                    __syncwarp();
                 }
             } while (foundLink);
             sharedReduceAdd(foundAnyLink);

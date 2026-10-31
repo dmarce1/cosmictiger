@@ -26,8 +26,8 @@ CUDA_EXPORT inline T sqr(T const& a, T const& b, T const& c) {
     return a * a + b * b + c * c;
 }
 
-inline float rand1() {
-    return ((float) rand() + 0.5) / (float) RAND_MAX;
+inline double rand1() {
+    return (double(rand()) + 0.5) / (double(RAND_MAX) + 1.0);
 }
 
 inline float randNormal() {

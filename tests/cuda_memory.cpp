@@ -24,6 +24,7 @@
 #include <sys/mman.h>
 
 #include <cosmictiger/cuda/cuda_memory.hpp>
+#include <cosmictiger/cuda/device_vector.hpp>
 
 // Compile the production implementation and class declaration, with only its
 // CUDA/dependency interfaces replaced through the target's include path.
@@ -45,6 +46,7 @@ namespace detail {
     size_t failAllocationCall = 0;
     size_t releaseCalls = 0;
     bool invalidRelease = false;
+    bool backendEnabled = true;
 
     void require(bool condition, char const* message) {
         if (!condition) {
@@ -54,7 +56,7 @@ namespace detail {
 
     size_t allocationBin(void const* pointer) {
         size_t bin = 0;
-        std::memcpy(&bin, static_cast<char const*>(pointer) - sizeof(size_t), sizeof(bin));
+        std::memcpy(&bin, static_cast<char const*>(pointer) - kCudaPoolHeaderSize, sizeof(bin));
         return bin;
     }
 
@@ -177,7 +179,7 @@ namespace detail {
     };
 
     void headerBeforePublication() {
-        CudaMemory pool(64 + sizeof(size_t));
+        CudaMemory pool(64 + kCudaPoolHeaderSize);
         HeaderObserver observer(pool);
         // A fresh block may be returned directly, or published with a complete
         // header. Publishing first and writing the header later is caught by
@@ -192,8 +194,8 @@ namespace detail {
     }
 
     void exactFitAndFailedReservation() {
-        CudaMemory pool(80);
-        require(pool.allocate(128) == nullptr, "oversized reservation must fail");
+        CudaMemory pool(10 * kCudaPoolAlignment);
+        require(pool.allocate(256) == nullptr, "oversized reservation must fail");
         std::vector<void*> pointers;
         for (int i = 0; i < 5; ++i) {
             void* pointer = pool.allocate(8);
@@ -216,7 +218,7 @@ namespace detail {
         size_t const largestBlock = size_t{1} << 31;
         // mmap reserves virtual address space without committing 2 GiB of
         // physical memory. The allocator only writes the small header.
-        CudaMemory pool(largestBlock + sizeof(size_t));
+        CudaMemory pool(largestBlock + kCudaPoolHeaderSize);
         require(pool.allocate(largestBlock + 1) == nullptr, "unsupported bin was accepted");
         require(pool.allocate(std::numeric_limits<size_t>::max()) == nullptr,
             "maximum size_t request was accepted");
@@ -229,11 +231,11 @@ namespace detail {
     }
 
     void concurrentFailedReservation() {
-        CudaMemory pool(80);
+        CudaMemory pool(10 * kCudaPoolAlignment);
         void* first = nullptr;
         PausedThread worker(AtomicOperation::CompareExchange, [&] { first = pool.allocate(8); });
         worker.wait();
-        require(pool.allocate(64) == nullptr, "non-fitting concurrent reservation was accepted");
+        require(pool.allocate(128) == nullptr, "non-fitting concurrent reservation was accepted");
         std::vector<void*> others;
         for (int i = 0; i < 4; ++i) {
             void* pointer = pool.allocate(8);
@@ -249,7 +251,7 @@ namespace detail {
     }
 
     void delayedProducerAndQueueWrap() {
-        CudaMemory pool(2 * (8 + sizeof(size_t)));
+        CudaMemory pool(4 * kCudaPoolAlignment);
         void* first = pool.allocate(8);
         void* second = pool.allocate(8);
         require(first != nullptr && second != nullptr, "test heap could not hold two blocks");
@@ -269,7 +271,7 @@ namespace detail {
     void headersAndConcurrentReuse() {
         constexpr int kThreads = 4;
         constexpr int kIterations = 1000;
-        CudaMemory pool(kThreads * (64 + sizeof(size_t)));
+        CudaMemory pool(kThreads * (64 + kCudaPoolHeaderSize));
         std::mutex mutex;
         std::unordered_set<void*> active;
         std::exception_ptr exception;
@@ -445,7 +447,7 @@ char const* cudaGetErrorString(cudaError_t error) {
 }
 
 bool cudaEnabled() {
-    return true;
+    return cuda_memory_test::detail::backendEnabled;
 }
 
 void* allocateManagedMemory(size_t bytes) {
@@ -489,4 +491,93 @@ TEST(CudaMemory, InitializedHeadersAndConcurrentReuse) {
 TEST(CudaMemory, InitializationFailures) {
     cuda_memory_test::detail::initializationFailures();
     EXPECT_TRUE(cuda_memory_test::detail::allocations.empty());
+}
+
+TEST(CudaMemory, NestedVectorOwnershipRecyclesEveryAllocation) {
+    using namespace cuda_memory_test::detail;
+    PublishedPoolCleanup cleanup;
+    cudaMemoryInitialize(32768);
+    for (int repeat = 0; repeat < 100; ++repeat) {
+        DeviceVector<DeviceVector<int>> values(3);
+        for (int i = 0; i < values.size(); ++i) {
+            values[i].pushBack(10 + i);
+        }
+        auto copy = values;
+        EXPECT_NE(copy[0].data(), values[0].data());
+        copy[0][0] = 99;
+        EXPECT_EQ(values[0][0], 10);
+        copy.popBack();
+        copy = std::move(values);
+        EXPECT_TRUE(values.empty());
+        EXPECT_EQ(copy.size(), 3);
+        EXPECT_EQ(copy[2][0], 12);
+        // Force relocation of nontrivial elements and move-assignment cleanup.
+        copy.reserve(65);
+        DeviceVector<DeviceVector<int>> destination(1);
+        destination[0].pushBack(-1);
+        destination = std::move(copy);
+        EXPECT_TRUE(copy.empty());
+        EXPECT_EQ(destination[2][0], 12);
+        destination = std::move(destination);
+        EXPECT_EQ(destination.size(), 3);
+    }
+}
+
+TEST(CudaMemory, GlobalAllocationFailureIsCheckedAndNullReleaseIsSafe) {
+    using namespace cuda_memory_test::detail;
+    PublishedPoolCleanup cleanup;
+    cudaMemoryInitialize(80);
+    EXPECT_THROW(cudaAllocate(128), std::bad_alloc);
+    EXPECT_THROW(cudaAllocate((size_t{1} << 31) + 1), std::bad_alloc);
+    EXPECT_NO_THROW(cudaRelease(nullptr));
+}
+
+TEST(CudaMemory, AlignmentAndReleaseTrackTheAllocatingBackend) {
+    using namespace cuda_memory_test::detail;
+    PublishedPoolCleanup cleanup;
+    cudaMemoryInitialize(1024);
+    auto* first = cudaAllocate(8);
+    auto* second = cudaAllocate(16);
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(first) % kCudaPoolAlignment, 0);
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(second) % kCudaPoolAlignment, 0);
+    backendEnabled = false;
+    // Pool storage survives a switch to the host allocation backend.
+    cudaRelease(first);
+    cudaRelease(second);
+    auto* host = cudaAllocate(24);
+    EXPECT_FALSE(memory->owns(host));
+    backendEnabled = true;
+    // Host storage survives a switch back to the pool backend.
+    cudaRelease(host);
+    EXPECT_EQ(cudaAllocate(8), first);
+    EXPECT_EQ(cudaAllocate(16), second);
+    cudaRelease(first);
+    cudaRelease(second);
+}
+
+TEST(CudaMemory, CudaCheckEvaluatesOnceAndFailsImmediately) {
+    int calls = 0;
+    if (true) {
+        CUDA_CHECK((++calls, cudaSuccess));
+    } else {
+        FAIL() << "CUDA_CHECK changed its enclosing branch";
+    }
+    EXPECT_EQ(calls, 1);
+    EXPECT_DEATH(
+        {
+            int failures = 0;
+            CUDA_CHECK(++failures == 1 ? cudaErrorMemoryAllocation : cudaSuccess);
+        },
+        "injected allocation failure");
+}
+
+TEST(CudaMemory, DuplicateReleaseIsRejectedBeforeQueuePublication) {
+    EXPECT_DEATH(
+        {
+            CudaMemory pool(128);
+            auto* pointer = pool.allocate(8);
+            pool.free(pointer);
+            pool.free(pointer);
+        },
+        "bin >= 3");
 }

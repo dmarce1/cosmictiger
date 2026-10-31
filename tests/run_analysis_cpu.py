@@ -17,6 +17,10 @@ def main():
     parser.add_argument("--guard", type=Path)
     parser.add_argument("--ranks", type=int, choices=(1, 2), default=1)
     parser.add_argument("--mpi-exec", default="mpiexec")
+    parser.add_argument("--mpi-numproc-flag", default="-n")
+    parser.add_argument("--mpi-preflag", action="append", default=[])
+    parser.add_argument("--mpi-postflag", action="append", default=[])
+    parser.add_argument("--hpx-option", action="append", default=[])
     parser.add_argument("--threads", type=int, choices=(1, 2), default=2)
     args = parser.parse_args()
     workdir = args.workdir.resolve()
@@ -31,6 +35,8 @@ def main():
     environment["OMP_NUM_THREADS"] = "1"
     environment["OPENBLAS_NUM_THREADS"] = "1"
     if args.guard is not None:
+        if not args.guard.is_file():
+            raise RuntimeError(f"CUDA runtime guard was not built: {args.guard}")
         environment["LD_PRELOAD"] = str(args.guard.resolve())
     command = [str(args.executable.resolve()), "--run.test=analysisBackends",
                "--compute.cuda=false", "--hydro.enabled=false",
@@ -43,8 +49,10 @@ def main():
     if "--gravity.method.far=pmmm" in command:
         command.append("--gravity.meshSize=8")
     if args.ranks > 1:
-        command = [args.mpi_exec, "-n", str(args.ranks)] + command
-        command += [f"--hpx:localities={args.ranks}"]
+        command = [args.mpi_exec, args.mpi_numproc_flag, str(args.ranks), *args.mpi_preflag,
+                   command[0], *args.mpi_postflag, *command[1:]]
+        command += [f"--hpx:localities={args.ranks}",
+                    *(args.hpx_option or ["--hpx:ini=hpx.parcel.mpi.enable=1"])]
     log_path = workdir / "analysis_backends.log"
     with log_path.open("w") as log:
         with subprocess.Popen(command, cwd=workdir, env=environment, text=True,

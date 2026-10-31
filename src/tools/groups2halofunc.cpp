@@ -1,130 +1,185 @@
-/*
- CosmicTiger - A cosmological N-Body code
- Copyright (C) 2021  Dominic C. Marcello
+/* CosmicTiger - distinct-halo mass function; BSL-1.0. */
 
- Distributed under the Boost Software License, Version 1.0.
- See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
- */
-
+#include <algorithm>
+#include <bit>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <limits>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 #include <boost/program_options.hpp>
 
 #include <cosmictiger/analysis/group_entry.hpp>
 
-class GroupFiles {
-    FILE* fp_;
-    int innum_;
-    int currentNum_;
-    bool eof_;
-    void openNext() {
-        std::string const filename = "./groups." + std::to_string(innum_) + "/groups." +
-            std::to_string(innum_) + "." + std::to_string(currentNum_) + ".dat";
-        if (currentNum_ > 0) {
-            fclose(fp_);
-        }
-        fp_ = fopen(filename.c_str(), "rb");
-        if (fp_ == NULL) {
-            eof_ = true;
-            if (currentNum_ == 0) {
-                printf("Unable to open %s\n", filename.c_str());
-                abort();
-            }
-        }
-    }
+namespace detail {
 
-public:
-    GroupFiles(int innumArg) {
-        innum_ = innumArg;
-        currentNum_ = 0;
-        eof_ = false;
-        openNext();
-    }
-    bool getNextEntry(GroupEntry& entry) {
-        while (!entry.read(fp_)) {
-            currentNum_++;
-            openNext();
-            if (eof_) {
-                return false;
-            }
-        }
-        return true;
-    }
-    ~GroupFiles() {
-        if (!eof_) {
-            fclose(fp_);
-        }
-    }
-};
+bool positiveFinite(double value) {
+    return value > 0.0 &&
+        (std::bit_cast<uint64_t>(value) & 0x7ff0000000000000ULL) != 0x7ff0000000000000ULL;
+}
 
-struct HaloT {
-    double mass;
-    double radius;
-    double x;
-    double y;
-    double z;
-    double vx;
-    double vy;
-    double vz;
-};
+using InputFile = std::unique_ptr<FILE, decltype(&fclose)>;
 
-int main(int argc, char* argv[]) {
-    std::string outfile;
-    int innum;
+InputFile openInput(std::filesystem::path const& path) {
+    InputFile input(fopen(path.c_str(), "rb"), &fclose);
+    if (!input) {
+        throw std::runtime_error("Cannot open " + path.string());
+    }
+    return input;
+}
+
+int haloFunction(int argc, char* argv[]) {
+    int snapshot;
     int numberOfBins;
-    float boxSize;
-
+    double boxSize = 0.0;
     namespace po = boost::program_options;
-    po::options_description commandOpts("options");
-
-    commandOpts.add_options()                                                               //
-        ("help", "produce help message")                                                    //
-        ("input.groupNumber", po::value<int>(&innum)->default_value(-1), "input number")    //
-        ("analysis.boxSize", po::value<float>(&boxSize)->default_value(684.0),
-            "box size in Mpc")    //
-        ("analysis.numberOfBins", po::value<int>(&numberOfBins)->default_value(1000),
-            "number of log bins")    //
-        ;
-    boost::program_options::variables_map vm;
-    po::store(po::parse_command_line(argc, argv, commandOpts), vm);
-    po::notify(vm);
-    if (vm.count("help")) {
-        std::cout << commandOpts << "\n";
+    po::options_description options("options");
+    options.add_options()("help", "produce help message")("input.groupNumber",
+        po::value<int>(&snapshot)->default_value(-1),
+        "input number")("analysis.boxSize", po::value<double>(&boxSize),
+        "override catalogue box length in Mpc")("analysis.numberOfBins",
+        po::value<int>(&numberOfBins)->default_value(1000), "number of logarithmic mass bins");
+    po::variables_map variables;
+    po::store(po::parse_command_line(argc, argv, options), variables);
+    po::notify(variables);
+    if (variables.count("help")) {
+        std::cout << options << '\n';
         return 0;
     }
-
-    if (innum == -1) {
-        printf("Input number not specified. Use --input.groupNumber=\n");
-        return -1;
+    if (snapshot < 0 || numberOfBins <= 0) {
+        throw std::invalid_argument(
+            "A nonnegative input.groupNumber and positive analysis.numberOfBins are required");
     }
-
-    GroupFiles file(innum);
-    GroupEntry entry;
-    Vector<float> masses;
-    float massMin = std::numeric_limits<float>::max();
-    float massMax = 0.0f;
-    while (file.getNextEntry(entry)) {
-        HaloT halo;
-        masses.push_back(entry.mass);
-        massMin = std::min(massMin, entry.mass);
-        if (entry.mass > massMax) {
-            massMax = entry.mass;
-            PRINT("%i %i\n", (int) (massMin / 1.481962e+09 + 0.5),
-                (int) (massMax / 1.481962e+09 + 0.5));
+    auto const directory = std::filesystem::path("groups." + std::to_string(snapshot));
+    auto headerFile = openInput(directory / "groups.dat");
+    GroupHeader header{};
+    if (fread(&header, sizeof(header), 1, headerFile.get()) != 1 || header.number != snapshot ||
+        std::filesystem::file_size(directory / "groups.dat") != sizeof(header)) {
+        throw std::runtime_error("Invalid native group catalogue header");
+    }
+    if (!variables.count("analysis.boxSize")) {
+        boxSize = header.boxLength;
+    }
+    if (!positiveFinite(boxSize)) {
+        throw std::invalid_argument("Catalogue box length must be finite and positive");
+    }
+    int version;
+    int ranks;
+    size_t expectedCount;
+    std::ifstream manifest(directory / "rockstar_hosts.complete");
+    if (!(manifest >> version >> ranks >> expectedCount) || version != 1 || ranks <= 0) {
+        throw std::runtime_error("Missing or invalid ROCKSTAR completion manifest");
+    }
+    std::string extra;
+    if (manifest >> extra) {
+        throw std::runtime_error("Unexpected ROCKSTAR completion manifest fields");
+    }
+    std::vector<double> masses;
+    size_t totalCount = 0;
+    for (int rank = 0; rank < ranks; ++rank) {
+        auto const hostPath = directory / ("rockstar_hosts." + std::to_string(rank) + ".dat");
+        std::ifstream hosts(hostPath);
+        if (!hosts) {
+            throw std::runtime_error("Cannot open " + hostPath.string());
+        }
+        std::unordered_map<GroupInteger, GroupInteger> hostById;
+        GroupInteger id;
+        GroupInteger host;
+        while (hosts >> id) {
+            if (!(hosts >> host) || id < 0 || host < 0 || !hostById.emplace(id, host).second) {
+                throw std::runtime_error("Malformed ROCKSTAR host catalogue: " + hostPath.string());
+            }
+        }
+        if (!hosts.eof()) {
+            throw std::runtime_error("Unable to read " + hostPath.string());
+        }
+        auto input = openInput(directory /
+            ("groups." + std::to_string(snapshot) + "." + std::to_string(rank) + ".dat"));
+        for (;;) {
+            int const firstByte = fgetc(input.get());
+            if (firstByte == EOF) {
+                if (ferror(input.get())) {
+                    throw std::runtime_error("Group catalogue read failure");
+                }
+                break;
+            }
+            ungetc(firstByte, input.get());
+            GroupEntry entry;
+            if (!entry.read(input.get())) {
+                throw std::runtime_error("Truncated group catalogue identifier");
+            }
+            auto const found = hostById.find(entry.id);
+            if (found == hostById.end()) {
+                throw std::runtime_error("Group catalogue and ROCKSTAR host identifiers disagree");
+            }
+            // GroupEntry masses are M_sun (unlike native records' M_sun/h).
+            // Joining persistent host IDs retains physical mass/volume units.
+            if (found->second == std::numeric_limits<GroupInteger>::max()) {
+                if (!positiveFinite(entry.mass)) {
+                    throw std::runtime_error("Distinct halo has a nonpositive or nonfinite mass");
+                }
+                masses.push_back(entry.mass);
+            }
+            hostById.erase(found);
+            ++totalCount;
+        }
+        if (!hostById.empty()) {
+            throw std::runtime_error(
+                "Group catalogue is missing entries named by its host catalogue");
         }
     }
-    float const logmax = log10(massMax);
-    float const logmin = log10(massMin);
-    float const dlog = (logmax - logmin) / numberOfBins;
-    std::vector<int> bins(numberOfBins, 0);
-    for (int i = 0; i < masses.size(); i++) {
-        int bin = std::min((int) ((log10(masses[i]) - logmin) / dlog), numberOfBins - 1);
-        bins[bin]++;
+    if (totalCount != expectedCount) {
+        throw std::runtime_error("Catalogue count does not match its completion manifest");
     }
-    for (int i = 0; i < numberOfBins; i++) {
-        float logmass = (i + 0.5) * dlog + logmin;
-        printf("%e %e\n", logmass, bins[i] / dlog / boxSize / boxSize / boxSize);
+    if (masses.empty()) {
+        std::cerr << "No distinct halos in catalogue\n";
+        return 0;
     }
-
+    auto const limits = std::minmax_element(masses.begin(), masses.end());
+    double logmin = std::log10(*limits.first);
+    double logmax = std::log10(*limits.second);
+    if (logmin == logmax) {
+        // A finite, explicitly one-dex bin for a single distinct mass.
+        numberOfBins = 1;
+        logmin -= 0.5;
+        logmax += 0.5;
+    }
+    double const dlog = (logmax - logmin) / numberOfBins;
+    std::vector<size_t> bins(numberOfBins, 0);
+    for (double mass : masses) {
+        int const bin = std::min(int((std::log10(mass) - logmin) / dlog), numberOfBins - 1);
+        ++bins[bin];
+    }
+    double const volume = boxSize * boxSize * boxSize;
+    if (!positiveFinite(volume)) {
+        throw std::invalid_argument("Box volume is outside the finite positive range");
+    }
+    std::cout << std::scientific << std::setprecision(12);
+    for (int i = 0; i < numberOfBins; ++i) {
+        std::cout << (i + 0.5) * dlog + logmin << ' ' << bins[i] / dlog / volume << '\n';
+    }
+    if (!std::cout) {
+        throw std::runtime_error("Unable to write halo mass function");
+    }
     return 0;
+}
+
+}    // namespace detail
+
+int main(int argc, char* argv[]) {
+    try {
+        return detail::haloFunction(argc, argv);
+    } catch (std::exception const& error) {
+        std::cerr << "groups2halofunc: " << error.what() << '\n';
+        return 1;
+    }
 }

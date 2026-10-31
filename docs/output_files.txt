@@ -48,7 +48,7 @@ groups.N/rockstar.R.dat.format.tmp | temporary during format publication | renam
 groups.N/rockstar_hosts.complete.tmp | temporary during completion publication | renamed to .complete on success; can remain after interruption | src/analysis/groups.cpp (groupsSave)
 
 LIGHTCONE PRODUCTS (under lightcone.directory, lightcone.enabled=true)
-lc.healpix.E.R | nonempty particle-crossing batch | binary HEALPix nside,pixel interval,weights; overwritten for that epoch/rank | src/analysis/lightcone.cpp (detail::lcAddParticleEntries)
+lc.healpix.E.R | lightcone epoch flush, including final forced flush | binary int nside,minPix,maxPix then maxPix-minPix+1 floats; inclusive interval; empty epoch uses 0,-1; weights sum all drift batches in double before output | src/analysis/lightcone.cpp (lcParts2groups)
 lc.groups.E.R | flushed lightcone groups | native-layout ROCKSTAR halo catalogue; binary overwrite | src/analysis/lightcone.cpp (lcParts2groups)
 lc.groups.E.R.format | successful catalogue write | same format sidecar as snapshot ROCKSTAR | src/analysis/rockstar_catalogue.cpp (rockstarWriteCatalogue)
 lc.groups.E.R.format.tmp | temporary during sidecar publication | renamed to .format; can remain after interruption | src/analysis/rockstar_catalogue.cpp (rockstarWriteCatalogue)
@@ -74,7 +74,9 @@ Caller-supplied glass filename | particlesSaveGlass helper; no caller found | le
 
 SHIPPED TOOLS / EXCLUSIONS
 - halo_catalog_export writes JSONL to stdout only (src/tools/halo_catalog_export.cpp (detail::exportSnapshot)); no fixed output filename. Shell redirection is caller-controlled.
-- groups2halofunc writes mass-function columns to stdout only (src/tools/groups2halofunc.cpp (main)); no fixed output filename.
+- groups2halofunc joins GroupEntry masses to the completed per-rank rockstar_hosts catalogues and counts distinct halos only. It writes log10(M/M_sun) and dN/dlog10(M)/Mpc^3 to stdout, using groups.dat's boxLength unless analysis.boxSize overrides it. Diagnostics go to stderr; empty catalogues produce no rows and equal-mass catalogues use one one-dex bin. No fixed output filename.
 - healpix2silo writes only Silo (excluded).
 - Anonymous tmpfile scratch storage is used in serialization/regression helpers (src/sph/sph_particles.cpp (sphCheckpointTest) src/io/checkpoint.cpp (checkpointStateTest) tests/compression.cpp). These are not named retained outputs.
 - Build outputs, generated headers, compiler logs, CTest files, Python analysis/campaign reports, browser viewer exports, external HPX/CUDA/MPI profiling requested by environment, core dumps, and shell-redirection filenames are outside simulation-owned runtime output. They depend on the invoked tool and user-specified paths; not implicitly created by a normal cosmictiger run.
+
+Lightcone checkpoints retain the sparse double HEALPix accumulator. Legacy checkpoints without this extension warn that pre-checkpoint map contributions cannot be recovered.

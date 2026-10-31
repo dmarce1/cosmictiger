@@ -12,6 +12,7 @@
 
 #include <cosmictiger/analysis/group_tree.hpp>
 #include <cosmictiger/analysis/groups_find.hpp>
+#include <cosmictiger/analysis/rockstar_core.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 
 HPX_PLAIN_ACTION(groupsFind, GroupsFindAction);
@@ -113,7 +114,7 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
         for (int ci = 0; ci < checklist.size(); ci++) {
             GroupTreeNode const* otherPtr = groupTreeGetNode(checklist[ci]);
             if (otherPtr->lastActive) {
-                if (selfBox.periodicIntersection(otherPtr->box).volume() > 0) {
+                if (rockstar::detail::periodicBoxesOverlap(selfBox, otherPtr->box, kDimensions)) {
                     if (otherPtr->children[kLeftChild].index == -1) {
                         leaflist.push_back(checklist[ci]);
                     } else {

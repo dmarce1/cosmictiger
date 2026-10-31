@@ -47,7 +47,7 @@ public:
 
     public:
         CUDA_EXPORT
-        T& operator*() {
+        Pair<int, T>& operator*() {
             return map_->buckets_[bucket_][index_];
         }
         CUDA_EXPORT
@@ -65,7 +65,7 @@ public:
         CUDA_EXPORT
         Iterator& operator++() {
             index_++;
-            if (index_ >= map_->buckets_[index_].size()) {
+            while (bucket_ < map_->buckets_.size() && index_ >= map_->buckets_[bucket_].size()) {
                 index_ = 0;
                 bucket_++;
             }
@@ -75,7 +75,7 @@ public:
         Iterator operator++(int) {
             auto old = *this;
             operator++();
-            return *this;
+            return old;
         }
         friend class CudaUnorderedMap<T>;
     };
@@ -104,6 +104,9 @@ public:
         i.bucket_ = 0;
         i.index_ = 0;
         i.map_ = this;
+        while (i.bucket_ < buckets_.size() && buckets_[i.bucket_].empty()) {
+            ++i.bucket_;
+        }
         return i;
     }
     CUDA_EXPORT
@@ -123,6 +126,7 @@ public:
         for (int i = 0; i < buckets_.size(); i++) {
             buckets_[i].resize(0);
         }
+        size_ = 0;
     }
     CUDA_EXPORT
     Iterator insert(Pair<int, T>&& entry) {
@@ -144,15 +148,20 @@ public:
     }
     CUDA_EXPORT
     void erase(int key) {
-        int bucketIndex = key % buckets_.size();
-        auto& bucket = buckets_[bucketIndex];
-        for (int i = 0; i < bucket.size(); i++) {
+        if (buckets_.empty()) {
+            return;
+        }
+        auto& bucket = buckets_[key % buckets_.size()];
+        for (int i = 0; i < bucket.size(); ++i) {
             if (bucket[i].first == key) {
-                bucket.back() = bucket[i];
+                if (i != bucket.size() - 1) {
+                    bucket[i] = std::move(bucket.back());
+                }
                 bucket.popBack();
+                --size_;
+                return;
             }
         }
-        size_--;
     }
     CUDA_EXPORT
     int size() const {

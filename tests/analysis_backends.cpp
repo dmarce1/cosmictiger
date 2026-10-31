@@ -19,6 +19,34 @@
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
+// Exercise the production deconvolution/binning stages using an analytic
+// Fourier fixture, independently of the particle deposition kernel.
+PowerSpectrumT powerSpectrumFromTransform();
+
+void analysisSetIndependentFourierModes() {
+    auto const box = fft3dComplexRange();
+    auto& values = fft3dComplexVector();
+    int const n = getOptions().initial.fourierSize;
+    double const filter = cloudFilter(2.0 * std::numbers::pi / n);
+    Array<int64_t, kDimensions> index;
+    for (index[0] = box.begin[0]; index[0] < box.end[0]; ++index[0]) {
+        for (index[1] = box.begin[1]; index[1] < box.end[1]; ++index[1]) {
+            for (index[2] = box.begin[2]; index[2] < box.end[2]; ++index[2]) {
+                double amplitude = 0.0;
+                if ((index[0] == 1 || index[0] == n - 1) && index[1] == 0 && index[2] == 0) {
+                    amplitude = 1.0;
+                } else if (index[0] == 0 && (index[1] == 1 || index[1] == n - 1) && index[2] == 0) {
+                    amplitude = 2.0;
+                } else if (index[0] == 0 && index[1] == 0 && index[2] == 1) {
+                    amplitude = 3.0;
+                }
+                values[box.index(index)] = ComplexFloat(amplitude / filter, 0.0f);
+            }
+        }
+    }
+}
+HPX_PLAIN_ACTION(analysisSetIndependentFourierModes, AnalysisSetIndependentFourierModesAction);
+
 namespace detail {
 
 void requireAnalysis(bool condition, char const* message) {
@@ -273,6 +301,17 @@ void analysisBackendsTest() {
         totalPower += perturbedPower.p[bin];
     }
     requireAnalysis(totalPower > 1.0e-3, "CPU power did not detect a perturbed density field");
+
+    fft3dInit(getOptions().initial.fourierSize);
+    for (auto const& locality : hpxLocalities()) {
+        hpx::async<AnalysisSetIndependentFourierModesAction>(locality).get();
+    }
+    auto const knownPower = powerSpectrumFromTransform();
+    requireAnalysis(std::abs(knownPower.p[0] - 14.0 / 3.0) < 2.e-6,
+        "Power mean did not count each conjugate pair once");
+    requireAnalysis(std::abs(knownPower.perr[0] - 7.0 / 3.0) < 2.e-6,
+        "Power error deconvolved twice or counted duplicate modes");
+    fft3dDestroy();
 
     lcInit(0.2, 1.0);
     detail::analysisDistributeLightcone(detail::analysisLightconeFixture(lcNside()));

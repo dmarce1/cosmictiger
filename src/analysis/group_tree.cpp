@@ -365,8 +365,9 @@ static Vector<GroupTreeNode> groupTreeFetchCacheLine(int index) {
     int const lineSize = getOptions().compute.treeCacheLineSize;
     Vector<GroupTreeNode> line;
     line.reserve(lineSize);
+    ALWAYS_ASSERT(index >= 0 && size_t(index) < nodes.size());
     int const begin = (index / lineSize) * lineSize;
-    int const end = begin + lineSize;
+    int const end = std::min(begin + lineSize, int(nodes.size()));
     for (int i = begin; i < end; i++) {
         line.push_back(nodes[i]);
     }
@@ -377,8 +378,9 @@ static Vector<unsigned> groupTreeRefreshCacheLine(int index) {
     int const lineSize = getOptions().compute.treeCacheLineSize;
     Vector<unsigned> line;
     line.reserve(lineSize);
+    ALWAYS_ASSERT(index >= 0 && size_t(index) < nodes.size());
     int const begin = (index / lineSize) * lineSize;
-    int const end = begin + lineSize;
+    int const end = std::min(begin + lineSize, int(nodes.size()));
     for (int i = begin; i < end; i++) {
         line.push_back(nodes[i].lastActive);
     }

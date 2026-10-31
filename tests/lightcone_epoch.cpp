@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include <cosmictiger/analysis/lightcone_entry.hpp>
+#include <cosmictiger/analysis/lightcone_map.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
 
@@ -134,4 +135,59 @@ TEST_F(LightconeEpoch, BoundsRejectInvalidQueriesAndClampBeforeTheRunStart) {
     EXPECT_THROW(background->sample(1.1), std::out_of_range);
     EXPECT_THROW(lightconeEmissionScale(*background, 1.0, -0.1), std::invalid_argument);
     EXPECT_THROW(background->sample(std::numeric_limits<double>::quiet_NaN()), std::out_of_range);
+}
+
+TEST(LightconeMap, AccumulatesBatchesAndRestoresCheckpoint) {
+    LightconeMap map;
+    map.add(4, 0.25, 1);
+    map.add(7, 2.0, 1);
+    map.add(4, 0.5, 1);
+    auto* checkpoint = std::tmpfile();
+    ASSERT_NE(checkpoint, nullptr);
+    map.save(checkpoint, 1);
+    std::rewind(checkpoint);
+    LightconeMap restored;
+    restored.load(checkpoint, 1);
+    std::fclose(checkpoint);
+    restored.add(7, 0.25, 1);
+    auto* output = std::tmpfile();
+    ASSERT_NE(output, nullptr);
+    restored.writeMap(output, 1);
+    EXPECT_EQ(std::ftell(output), 3 * long(sizeof(int)) + 4 * long(sizeof(float)));
+    std::rewind(output);
+    int header[3];
+    float pixels[4];
+    ASSERT_EQ(std::fread(header, sizeof(int), 3, output), 3);
+    ASSERT_EQ(std::fread(pixels, sizeof(float), 4, output), 4);
+    EXPECT_EQ(header[0], 1);
+    EXPECT_EQ(header[1], 4);
+    EXPECT_EQ(header[2], 7);
+    EXPECT_EQ(pixels[0], 0.75f);
+    EXPECT_EQ(pixels[1], 0.0f);
+    EXPECT_EQ(pixels[2], 0.0f);
+    EXPECT_EQ(pixels[3], 2.25f);
+    std::fclose(output);
+}
+
+TEST(LightconeMap, SinglePixelAndEmptyEpochHaveExactLengths) {
+    LightconeMap map;
+    map.add(11, 3.0, 1);
+    auto* output = std::tmpfile();
+    ASSERT_NE(output, nullptr);
+    map.writeMap(output, 1);
+    EXPECT_EQ(std::ftell(output), 3 * long(sizeof(int)) + long(sizeof(float)));
+    std::fclose(output);
+    map.clear();
+    output = std::tmpfile();
+    ASSERT_NE(output, nullptr);
+    map.writeMap(output, 1);
+    EXPECT_EQ(std::ftell(output), 3 * long(sizeof(int)));
+    std::rewind(output);
+    int header[3];
+    ASSERT_EQ(std::fread(header, sizeof(int), 3, output), 3);
+    EXPECT_EQ(header[1], 0);
+    EXPECT_EQ(header[2], -1);
+    std::fclose(output);
+    EXPECT_THROW(map.add(-1, 1.0, 1), std::out_of_range);
+    EXPECT_THROW(map.add(12, 1.0, 1), std::out_of_range);
 }

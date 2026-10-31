@@ -341,7 +341,7 @@ def main():
 
     # The saved physical mass and particle count determine H0 in code units.
     # Calibrate from a tiny actual run instead of duplicating unit constants.
-    calibration, _ = exercise("calibration", {"run.endTime": "1", "run.maxIterations": "0"})
+    calibration, _ = exercise("calibration", {"run.endTime": "1", "run.maxIterations": "1"})
     check_cosmology_output(calibration, 1.0, image_available)
     initial = checkpoint_states(calibration, 1.0)[-1]
     position_bytes = 8 if args.position_type == "fixed64" else 4
@@ -489,7 +489,7 @@ def main():
     boundary = boundaries[0]
     limited, output = exercise("coarse_boundary_stop", {
         "run.endTime": repr(duration), "cosmology.omegaLambda": "-1",
-        "run.maxIterations": str(boundary["iteration"] - 1),
+        "run.maxIterations": str(boundary["iteration"]),
     })
     require("iteration limit" in output, "coarse-boundary run did not stop at its iteration limit")
     limited_state = checkpoint_states(limited, duration)[-1]
@@ -517,9 +517,8 @@ def main():
         "run.endTime": repr(duration), "cosmology.omegaLambda": "-1",
         "checkpoint.readIndex": str(saved["iteration"]), "cosmology.startRedshift": "1",
     }, success=False, checkpoint=saved["path"])
-    require("checkpoint" in mismatch.lower() and
-            re.search(r"cosmolog|background|startRedshift|initial scale", mismatch, re.IGNORECASE),
-            "changed initial redshift failed without a checkpoint/background diagnostic")
+    require("Checkpoint cosmology/background does not match the requested" in mismatch,
+            "changed initial redshift failed without the checkpoint/background diagnostic")
     print("restart with changed background initial redshift: rejected")
 
     if not args.collisionless_only:

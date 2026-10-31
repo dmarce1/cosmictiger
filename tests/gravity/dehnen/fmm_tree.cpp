@@ -21,6 +21,7 @@
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/gravity/tree_build.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
@@ -137,6 +138,35 @@ void verifyTreeNodeArchive(TreeId id) {
     }
 }
 
+void verifyRemoteMultipoleStorage() {
+    // Grow past a remote chunk, then reserve fresh local allocator lines. A
+    // remote record must survive both operations without sharing local slots.
+    constexpr size_t kCount = 4101;
+    Array<Position, kDimensions> position{};
+    position[0] = 0.375;
+    MultipoleBuffer multipole;
+    multipole.zero();
+    std::vector<MultipolePosition*> remote;
+    remote.reserve(kCount);
+    for (size_t index = 0; index < kCount; ++index) {
+        multipole[0] = float(index + 1);
+        remote.push_back(treeAddMultipole(position, multipole));
+    }
+    TreeNode node{};
+    multipole.zero();
+    size_t const localCount = 2 * size_t(getOptions().compute.treeAllocLineSize) + kCount;
+    for (size_t index = 0; index < localCount; ++index) {
+        treeStoreNode(treeAllocateNode(), node, multipole);
+    }
+    for (size_t index = 0; index < kCount; ++index) {
+        treeReadMultipole(remote[index], multipole);
+        requireFmmTree(multipole[0] == float(index + 1),
+            "local arena growth overwrote a deserialized remote multipole");
+        requireFmmTree(remote[index]->pos[0] == position[0],
+            "remote multipole position did not survive chunk growth");
+    }
+}
+
 float verifyTreeGeometry(TreeId id, bool empty, float supportRadius, int distinctSupportRank = -1,
     float distinctSupportRadius = 0.0f) {
     TreeNode const* node = treeGetNode(id);
@@ -229,6 +259,7 @@ void fmmTreeTest() {
     auto const built = treeCreate(TreeCreateParameters(0, 0.5, options.gravity.supportRadius));
     detail::verifyTreeGeometry(built.id, false, float(options.gravity.supportRadius));
     detail::verifyTreeNodeArchive(built.id);
+    detail::verifyRemoteMultipoleStorage();
     detail::requireFmmTree(built.maxGravitySupportRadius == float(options.gravity.supportRadius),
         "clustered tree return has the wrong fixed gravity support");
     detail::requireFmmTree(built.multi[0] == float(options.initial.numberOfParticles),
@@ -290,6 +321,24 @@ void fmmTreeTest() {
             throw;
         }
         setOptions(options);
+    }
+
+    if (hpxSize() == 1) {
+        // More coincident particles than the bucket must terminate while the
+        // enclosing global cells still satisfy the ordinary Ewald criterion.
+        initialize(false);
+        for (ParticleInteger particle = 0; particle < particlesSize(); ++particle) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                particlesPos(dim, particle) = 0.375;
+            }
+        }
+        auto const coincident =
+            treeCreate(TreeCreateParameters(0, 0.5, options.gravity.supportRadius));
+        detail::verifyTreeGeometry(coincident.id, false, float(options.gravity.supportRadius));
+        detail::requireFmmTree(coincident.multi[0] == float(options.initial.numberOfParticles),
+            "coincident tree lost particle mass");
+        detail::requireFmmTree(coincident.radius == 0.0f, "coincident tree has a nonzero radius");
+        treeDestroy(true);
     }
 
     // Preserve the distributed domain tree while removing every active particle.

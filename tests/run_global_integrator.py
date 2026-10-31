@@ -2,6 +2,7 @@
 
 import argparse
 import math
+import re
 from pathlib import Path
 import struct
 import sys
@@ -83,6 +84,10 @@ def main():
     def read_state(directory, iteration, rank=0):
         return checkpoint_state(directory, iteration, rank, args.particle_integer_bytes)
 
+    def checkpoint_iterations(directory):
+        return sorted(int(path.name.split(".")[1]) for path in directory.glob("checkpoint.*")
+                      if path.is_dir() and re.fullmatch(r"checkpoint\.[0-9]+", path.name))
+
     for label, gravity, hydro, far, near in cases:
         selections = application_arguments(executable, far=far, near=near,
                                            integrator="global", hydro=hydro)
@@ -93,6 +98,8 @@ def main():
                                   "run.maxIterations": 2})
         baseline = prepareCase(root, label)
         run(baseline, options, selections)
+        if not (checkpoint_iterations(baseline) == [1, 2]):
+            raise RuntimeError(f'{label}: iteration limit was not exact')
         first, timestep, _ = read_state(baseline, 1)
         final, _, physical = read_state(baseline, 2)
         if not (0 < timestep < 0.5 and math.isclose(first.tau, timestep, rel_tol=1e-14)):
@@ -102,6 +109,8 @@ def main():
             raise RuntimeError(f'{label}: dyadic timestep {timestep}')
         resumed = prepareCase(root, label + "_restart", baseline / "checkpoint.1")
         run(resumed, dict(options, **{"run.maxIterations": 1}), selections, restart=1)
+        if not (checkpoint_iterations(resumed) == [1, 2]):
+            raise RuntimeError(f'{label}: restart ran an extra iteration')
         continued, next_timestep, continued_physical = read_state(resumed, 2)
         if not (continued.tau == final.tau and continued_physical == physical):
             raise RuntimeError(label)
@@ -114,8 +123,7 @@ def main():
         clipped = prepareCase(root, label + "_endpoint")
         run(clipped, dict(options, **{"run.endTime": endpoint,
                                      "run.maxIterations": 8}), selections)
-        checkpoints = sorted(int(path.name.split(".")[1]) for path in clipped.glob("checkpoint.*")
-                             if path.is_dir())
+        checkpoints = checkpoint_iterations(clipped)
         ended, last_dt, _ = read_state(clipped, checkpoints[-1])
         if not (ended.tau == endpoint and last_dt <= timestep * 1.01):
             raise RuntimeError(label)

@@ -7,7 +7,6 @@
  */
 
 #include <cmath>
-#include <functional>
 #include <numbers>
 #include <random>
 
@@ -19,34 +18,12 @@
 
 namespace scenarios {
 
-namespace detail {
-
-    double sampleDensityDistribution(std::function<double(double)> const& f, double target) {
-        double menc = 0.0;
-        double r = 0.0;
-        double dr = 0.001;
-        double iValue, i0;
-        iValue = 0.0;
-        while (menc < target) {
-            menc += 0.5 * iValue * dr;
-            i0 = 0.5 * iValue;
-            r += dr;
-            iValue = f(r) * 4.0 * std::numbers::pi * sqr(r);
-            i0 += 0.5 * iValue;
-            menc += 0.5 * iValue * dr;
-        }
-        double dr2 = (menc - target) / i0;
-        r -= dr2;
-        return r;
-    }
-}    // namespace detail
-
 void initializePlummerParticles() {
     auto const numberOfParticles = getOptions().initial.numberOfParticles;
     particlesResize(numberOfParticles);
     // Runtime and profiling libraries may reseed the process-global C RNG.
     // An owned generator keeps this initial realization reproducible.
-    std::mt19937 generator(1);
+    std::mt19937 generator(42);
     auto const sampleUniform = [&generator] {
         return (static_cast<double>(generator()) + 0.5) / 4294967296.0;
     };
@@ -55,11 +32,12 @@ void initializePlummerParticles() {
     double z0 = 0.5;
 
     for (ParticleInteger i = 0; i < numberOfParticles; i += 2) {
-        double r;
-        r = detail::sampleDensityDistribution(
-            [](double r) { return (3.0 / (4.0 * std::numbers::pi)) * pow(1.0 + sqr(r), -2.5); },
-            sampleUniform());
-        r *= getOptions().initial.plummerRadius;
+        // Invert M(<r)=r^3/(1+r^2)^(3/2), conditioned on staying inside
+        // the periodic box. This avoids a numerical integral's finite plateau.
+        double const scale = getOptions().initial.plummerRadius;
+        double const maximumMass = std::pow(1.0 + 4.0 * scale * scale, -1.5);
+        double const massFraction = sampleUniform() * maximumMass;
+        double const r = scale / std::sqrt(std::expm1(-2.0 / 3.0 * std::log(massFraction)));
         double nx, ny, nz, n2;
         do {
             nx = 2.0 * sampleUniform() - 1.0;
@@ -95,6 +73,10 @@ void initializePlummerParticles() {
         particlesVel(kXDimension, i) = vx;
         particlesVel(kYDimension, i) = vy;
         particlesVel(kZDimension, i) = vz;
+        particlesRung(i) = 0;
+        if (i + 1 == numberOfParticles) {
+            break;
+        }
         particlesPos(kXDimension, i + 1) = 2.0 * x0 - x;
         particlesPos(kYDimension, i + 1) = 2.0 * y0 - y;
         particlesPos(kZDimension, i + 1) = 2.0 * z0 - z;

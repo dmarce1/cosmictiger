@@ -333,7 +333,7 @@ void testMovingLightcone() {
         require(entries.size() == 1, "radially moving particle has one lightcone crossing");
 
         float const expectedVelocity = 0.125 / (1.0 + drag * parameters.timestep);
-        double const coordinateSpeed = expectedVelocity / parameters.scale;
+        double const coordinateSpeed = 0.125 / parameters.scale;
         double const crossingTime = (parameters.tauMax - parameters.tau0 - std::sqrt(3.0) * 0.25) /
             (1.0 + std::sqrt(3.0) * coordinateSpeed);
         double const expectedCoordinate = 0.25 + coordinateSpeed * crossingTime;

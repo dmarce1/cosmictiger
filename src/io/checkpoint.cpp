@@ -49,7 +49,7 @@ HPX_PLAIN_ACTION(readCheckpoint, ReadCheckpointAction);
 
 void validateCheckpointOutput() {
     auto const& options = getOptions();
-    if (hpxRank() != 0 || !options.run.test.empty() || options.checkpoint.readIndex >= 0) {
+    if (hpxRank() != 0 || !options.run.test.empty()) {
         return;
     }
     std::filesystem::path const directory(options.output.directory);
@@ -69,7 +69,11 @@ void validateCheckpointOutput() {
         if (index.empty() || index.find_first_not_of("0123456789") != std::string_view::npos) {
             continue;
         }
-        throw std::runtime_error("Cannot start a fresh run: output.directory contains an existing "
+        if (options.checkpoint.readIndex >= 0 && !name.ends_with(".incomplete") &&
+            std::stoll(std::string(index)) <= options.checkpoint.readIndex) {
+            continue;
+        }
+        throw std::runtime_error("Cannot start this run: output.directory contains a conflicting "
                                  "checkpoint path " +
             entry.path().string() +
             ". Choose a new --output.directory, or use --checkpoint.readIndex to restart from "
@@ -456,7 +460,7 @@ uint32_t checkpointFlags(Options const& opts) {
         (opts.hydro.enabled && opts.hydro.balsaraSwitch ? kBalsaraSwitch : 0U) |
         (opts.hydro.enabled && opts.hydro.viscosityEvolution != "none" ? kVariableViscosity : 0U) |
         (opts.compute.positionType == "fixed64" ? kFixed64Positions : 0U) |
-        (opts.gravity.method == "pmmm" ? kParticleMultipoleMesh : 0U) |
+        (opts.gravity.enabled && opts.gravity.method == "pmmm" ? kParticleMultipoleMesh : 0U) |
         (opts.starFormation.enabled ? kStarFormation : 0U);
 }
 
@@ -525,8 +529,12 @@ bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
         (opts.gravity.method == "fmm" && !opts.hydro.enabled &&
             opts.compute.positionType == "fixed32" &&
             header.version == kLegacyDarkMatterCheckpointVersion);
+    // Older hydro-only checkpoints retained unused PMMM metadata. The SPH
+    // parameter block independently verifies that self-gravity was disabled.
+    uint32_t const ignoredFlags = kRuntimeAlgorithms |
+        (opts.hydro.enabled && !opts.gravity.enabled ? kParticleMultipoleMesh : 0U);
     return supportedVersion && (header.flags & kRetiredParticleMesh) == 0U &&
-        (header.flags & ~kRuntimeAlgorithms) == (checkpointFlags(opts) & ~kRuntimeAlgorithms) &&
+        (header.flags & ~ignoredFlags) == (checkpointFlags(opts) & ~ignoredFlags) &&
         header.reserved == checkpointPhysicsCode(opts) &&
         header.darkMatterMass == opts.initial.darkMatterMass &&
         header.gasMass == opts.initial.gasMass && header.gamma == opts.hydro.gamma &&
@@ -623,11 +631,13 @@ bool pmmmCheckpointCompatible(std::array<uint64_t, 11> parameters, Options const
     return parameters == expected;
 }
 
-// Versioned selection metadata leaves all historical order values unchanged.
+// Active gravity retains its selected order; hydro-only files carry no solver.
 std::array<uint64_t, 5> checkpointAlgorithms(Options const& opts) {
-    return {1, opts.gravity.method == "pmmm" ? 2U : (opts.gravity.method == "fmm" ? 1U : 0U),
-        opts.gravity.method == "pmmm" ? (opts.gravity.pmmmNearMethod == "fmm" ? 2U : 1U) : 0U,
-        static_cast<uint64_t>(opts.gravity.fmmOrder),
+    bool const gravityEnabled = opts.gravity.enabled && opts.gravity.method != "none";
+    bool const mesh = gravityEnabled && opts.gravity.method == "pmmm";
+    return {1, mesh ? 2U : (gravityEnabled ? 1U : 0U),
+        mesh ? (opts.gravity.pmmmNearMethod == "fmm" ? 2U : 1U) : 0U,
+        static_cast<uint64_t>(gravityEnabled ? opts.gravity.fmmOrder : 0),
         usesGlobalIntegration(opts.run) ? 2U : (usesHierarchicalIntegration(opts.run) ? 1U : 0U)};
 }
 
@@ -741,19 +751,29 @@ DriverParameters readDriverState(FILE* fp) {
             THROW_ERROR("Checkpoint physics, particle layout or integrator differs from the "
                         "requested run\n");
         }
-        if ((header.flags & kRuntimeAlgorithms) != 0U &&
-            readCheckpointAlgorithms(fp) != checkpointAlgorithms(getOptions())) {
-            THROW_ERROR("Checkpoint gravity methods, expansion degree, or time integrator "
-                        "differs from the requested run\n");
+        if ((header.flags & kRuntimeAlgorithms) != 0U) {
+            auto algorithms = readCheckpointAlgorithms(fp);
+            if (getOptions().hydro.enabled && !getOptions().gravity.enabled) {
+                // Accept old inactive solver selections only after the SPH
+                // block below confirms the saved gravity-enabled flag is zero.
+                algorithms[1] = algorithms[2] = algorithms[3] = 0;
+            }
+            if (algorithms != checkpointAlgorithms(getOptions())) {
+                THROW_ERROR("Checkpoint gravity methods, expansion degree, or time integrator "
+                            "differs from the requested run\n");
+            }
         }
         if ((header.flags & kParticleMultipoleMesh) != 0U) {
             auto const meshParameters = readPmmmCheckpointParameters(fp);
-            if (meshParameters[0] < 4 && getOptions().gravity.pmmmMaxPrimeFactor != 0) {
+            bool const requireMeshMatch =
+                getOptions().gravity.enabled || !getOptions().hydro.enabled;
+            if (requireMeshMatch && meshParameters[0] < 4 &&
+                getOptions().gravity.pmmmMaxPrimeFactor != 0) {
                 THROW_ERROR("This PMMM checkpoint predates gravity.pmmmMaxPrimeFactor and used "
                             "unrestricted FFT mesh sizes. Restart with "
                             "--gravity.pmmmMaxPrimeFactor=infinity to preserve its mesh policy.\n");
             }
-            if (!pmmmCheckpointCompatible(meshParameters, getOptions())) {
+            if (requireMeshMatch && !pmmmCheckpointCompatible(meshParameters, getOptions())) {
                 THROW_ERROR(
                     "PMMM checkpoint version, mesh size, near/far expansion orders, opening "
                     "angle, neighbor width/method, gravity.pmmmMaxPrimeFactor, timestep parameters "
@@ -894,7 +914,19 @@ CheckpointSelection readCheckpointSelection(std::string const& outputDirectory, 
         THROW_ERROR("Unsupported checkpoint for algorithm selection\n");
     }
     if ((header.flags & detail::kRuntimeAlgorithms) != 0U) {
-        auto const algorithms = detail::readCheckpointAlgorithms(file.get());
+        auto algorithms = detail::readCheckpointAlgorithms(file.get());
+        if ((header.flags & 1U) != 0U) {
+            if ((header.flags & detail::kParticleMultipoleMesh) != 0U) {
+                detail::readPmmmCheckpointParameters(file.get());
+            }
+            std::array<double, 13> sphParameters{};
+            FREAD(sphParameters.data(), sizeof(double), sphParameters.size(), file.get());
+            if (sphParameters.back() == 0.0) {
+                // Pre-canonical hydro-only files can name an unavailable gravity
+                // solver or expansion order even though neither was used.
+                algorithms[1] = algorithms[2] = algorithms[3] = 0;
+            }
+        }
         return {algorithms[1] == 2 ? "pmmm" : (algorithms[1] == 1 ? "fmm" : "none"),
             algorithms[2] == 2 ? "fmm" : (algorithms[2] == 1 ? "pp" : "none"),
             algorithms[4] == 2 ? "global" : (algorithms[4] == 1 ? "hierarchical" : "traditional"),
@@ -966,7 +998,20 @@ void checkpointStateTest() {
     auto changed = getOptions();
     auto const header = detail::checkpointHeader(changed);
     changed.gravity.method = changed.gravity.method == "pmmm" ? "fmm" : "pmmm";
-    ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
+    ALWAYS_ASSERT(detail::checkpointCompatible(header, changed) == !changed.gravity.enabled);
+    auto hydroOnlyOptions = getOptions();
+    hydroOnlyOptions.gravity.enabled = false;
+    hydroOnlyOptions.hydro.enabled = true;
+    hydroOnlyOptions.gravity.fmmOrder = 9;
+    for (auto const* method : {"fmm", "pmmm", "none"}) {
+        hydroOnlyOptions.gravity.method = method;
+        auto const algorithms = detail::checkpointAlgorithms(hydroOnlyOptions);
+        ALWAYS_ASSERT(algorithms[1] == 0 && algorithms[2] == 0 && algorithms[3] == 0);
+        auto oldHydroOnlyHeader = detail::checkpointHeader(hydroOnlyOptions);
+        ALWAYS_ASSERT((oldHydroOnlyHeader.flags & detail::kParticleMultipoleMesh) == 0U);
+        oldHydroOnlyHeader.flags |= detail::kParticleMultipoleMesh;
+        ALWAYS_ASSERT(detail::checkpointCompatible(oldHydroOnlyHeader, hydroOnlyOptions));
+    }
     changed = getOptions();
     // Reject the old solver bit for either supported method rather than treating
     // its extension bytes as driver state after ordinary PM support is removed.

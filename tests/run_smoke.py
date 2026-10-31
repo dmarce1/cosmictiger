@@ -61,7 +61,9 @@ def main():
     if output_directory.exists():
         shutil.rmtree(output_directory)
     for checkpoint_dir in args.workdir.glob("checkpoint.*"):
-        if checkpoint_dir.is_dir() and re.fullmatch(r"checkpoint\.[0-9]+", checkpoint_dir.name):
+        if checkpoint_dir.is_symlink() and checkpoint_dir.name.startswith("checkpoint.z."):
+            checkpoint_dir.unlink()
+        elif checkpoint_dir.is_dir() and re.fullmatch(r"checkpoint\.[0-9]+(?:\.incomplete)?", checkpoint_dir.name):
             shutil.rmtree(checkpoint_dir)
     command = [str(args.executable), "--hpx:threads=2", "--hpx:bind=none",
                "--initial.particlesPerDimension=8", "--analysis.views=false",
@@ -80,13 +82,13 @@ def main():
                     f"--configuration={output_config.resolve()}"]
     elif args.mode == "sph":
         command += ["--hydro.enabled=true", "--compute.cuda=true",
-                    "--run.maxIterations=1", "--checkpoint.intervalSeconds=0"]
+                    "--run.maxIterations=2", "--checkpoint.intervalSeconds=0"]
     elif args.mode == "sph_mpi":
         command += ["--hydro.enabled=true", "--compute.cuda=true",
-                    "--run.maxIterations=1", "--hpx:localities=2"]
+                    "--run.maxIterations=2", "--hpx:localities=2"]
         command = [args.mpi_exec, "-n", "2"] + command
     else:
-        command += ["--hydro.enabled=false", "--run.maxIterations=1",
+        command += ["--hydro.enabled=false", "--run.maxIterations=2",
                     "--compute.cuda=" + str(args.mode == "dm_cuda").lower()]
     if args.mode != "sod":
         # Keep the established checkpoint/restart fixture layout explicit.
@@ -112,8 +114,11 @@ def main():
         print("Silo: cycles 0, 7, 14, 20 in the configured directory (including final snapshot)")
         rows = [[float(value) for value in line.split()]
                 for line in (output_directory / "sod.txt").read_text().splitlines()]
-        if len(rows) != 1000 or any(len(row) != 5 for row in rows):
-            raise RuntimeError("Sod output did not contain 1000 complete samples")
+        # The N8 fixture has 576 particles with the exact 8:1 density lattice.
+        # Small domains now emit each particle once instead of repeated draws.
+        expected_samples = 576
+        if len(rows) != expected_samples or any(len(row) != 5 for row in rows):
+            raise RuntimeError(f"Sod output did not contain {expected_samples} complete samples")
         if any(not math.isfinite(value) for row in rows for value in row):
             raise RuntimeError("Sod output contains nonfinite values")
         if any(min(row[1:]) <= 0 for row in rows):
@@ -123,7 +128,7 @@ def main():
         # it is not a convergence study or a tight accuracy target.
         if relative_l1 >= 1.0:
             raise RuntimeError(f"Sod density relative L1 error is {relative_l1:.6g}")
-        print(f"Sod: 1000 finite positive samples; density relative L1={relative_l1:.6g}")
+        print(f"Sod: {len(rows)} finite positive samples; density relative L1={relative_l1:.6g}")
     else:
         lines = (args.workdir / "progress.txt").read_text().splitlines()
         rows = []
@@ -180,7 +185,7 @@ def main():
                             restart_directory / f"checkpoint.{checkpoint}")
             restart_command = [arg for arg in command
                                if not arg.startswith(("--run.maxIterations=", "--checkpoint.intervalSeconds="))]
-            restart_command += [f"--checkpoint.readIndex={checkpoint}", "--run.maxIterations=0"]
+            restart_command += [f"--checkpoint.readIndex={checkpoint}", "--run.maxIterations=1"]
             run_simulation(restart_command, restart_directory, "restart.log")
             restarted = []
             for line in (restart_directory / "progress.txt").read_text().splitlines():

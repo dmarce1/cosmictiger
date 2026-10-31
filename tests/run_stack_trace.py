@@ -2,11 +2,14 @@
 """Check stack-trace output, fatal exit status, and signal-handler ownership."""
 
 import argparse
+import os
 from pathlib import Path
 import re
+import select
 import signal
 import socket
 import subprocess
+import time
 
 
 def require(condition, message):
@@ -50,6 +53,101 @@ def check_fatal(executable, workdir, signal_name, *, mode="fatal", output_path=N
     require("CosmicTiger stacktrace:" not in stdout,
             f"{workdir.name}: fatal diagnostic was sent to stdout")
     return pid, stderr
+
+
+def check_blocked_reporter(executable, workdir, *, recursive=False):
+    """Hold the first handler in FIFO write until the second fault is observed."""
+    workdir.mkdir(parents=True, exist_ok=True)
+    fifo_path = workdir / "report.fifo"
+    fifo_path.unlink(missing_ok=True)
+    os.mkfifo(fifo_path)
+    fifo = os.open(fifo_path, os.O_RDWR | os.O_NONBLOCK)
+    filler_size = 0
+    stderr = bytearray()
+    fifo_output = bytearray()
+    stdout = b""
+    waiting = b"Another thread received a fatal signal; waiting for the crash report.\n"
+    try:
+        # Keep a reader attached but fill the pipe completely. The handler's
+        # open succeeds, and its stderr header precedes its blocked FIFO write.
+        for chunk in (b"x" * 4096, b"x"):
+            while True:
+                try:
+                    filler_size += os.write(fifo, chunk)
+                except BlockingIOError:
+                    break
+        mode = "recursive" if recursive else "concurrent"
+        with subprocess.Popen([str(executable), mode, "SIGABRT", str(fifo_path)],
+                              cwd=workdir, stdin=subprocess.PIPE,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              bufsize=0) as process:
+            def await_stderr(marker):
+                deadline = time.monotonic() + 10.0
+                while marker not in stderr:
+                    remaining = deadline - time.monotonic()
+                    require(remaining > 0, f"{mode}: timed out waiting for {marker!r}")
+                    ready, _, _ = select.select([process.stderr], [], [], remaining)
+                    require(ready, f"{mode}: missing signal synchronization marker {marker!r}")
+                    chunk = os.read(process.stderr.fileno(), 4096)
+                    require(chunk, f"{mode}: terminated before {marker!r}: {stderr!r}")
+                    stderr.extend(chunk)
+
+            try:
+                await_stderr(b"locality=17\n")
+                process.stdin.write(b"2")
+                process.stdin.close()
+                process.stdin = None
+                if not recursive:
+                    # Observing this message proves the second thread entered
+                    # the production wait path before the first can finish.
+                    await_stderr(waiting)
+                    deadline = time.monotonic() + 20.0
+                    readers = [fifo, process.stderr.fileno()]
+                    while process.poll() is None:
+                        remaining = deadline - time.monotonic()
+                        require(remaining > 0, "concurrent reporters did not terminate")
+                        ready, _, _ = select.select(readers, [], [], min(remaining, 0.1))
+                        for descriptor in ready:
+                            chunk = os.read(descriptor, 65536)
+                            if descriptor == fifo:
+                                fifo_output.extend(chunk)
+                            elif chunk:
+                                stderr.extend(chunk)
+                            else:
+                                readers.remove(descriptor)
+                    while True:
+                        try:
+                            fifo_output.extend(os.read(fifo, 65536))
+                        except BlockingIOError:
+                            break
+                stdout, tail = process.communicate(timeout=10)
+                stderr.extend(tail)
+            except BaseException:
+                if process.poll() is None:
+                    process.kill()
+                stdout, tail = process.communicate(timeout=5)
+                stderr.extend(tail)
+                raise
+            finally:
+                (workdir / "stdout.log").write_bytes(stdout)
+                (workdir / "stderr.log").write_bytes(stderr)
+            expected_signal = signal.SIGSEGV if recursive else signal.SIGABRT
+            require(process.returncode == -expected_signal,
+                    f"{mode}: wrong fatal signal {process.returncode}: {stderr!r}")
+            if recursive:
+                require(waiting not in stderr, "reporter recursion incorrectly waited for itself")
+            else:
+                require(fifo_output[:filler_size] == b"x" * filler_size,
+                        "concurrent fixture lost its FIFO synchronization prefix")
+                report = fifo_output[filler_size:].decode(errors="replace")
+                (workdir / "report.txt").write_text(report)
+                check_trace(report, process.pid, "SIGABRT", "concurrent file")
+                require(stderr.replace(waiting, b"").decode(errors="replace") == report,
+                        "concurrent crash truncated or duplicated the reporter's trace")
+                require(not stdout, "concurrent fatal diagnostic was sent to stdout")
+    finally:
+        os.close(fifo)
+        fifo_path.unlink(missing_ok=True)
 
 
 def main():
@@ -96,6 +194,9 @@ def main():
     check_trace(report, pid, "SIGABRT", "worker file")
     require(report.endswith(stderr), "worker file omitted the current crash report")
 
+    check_blocked_reporter(executable, workdir / "concurrent")
+    check_blocked_reporter(executable, workdir / "recursive", recursive=True)
+
     unavailable_dir = workdir / "unavailable_output"
     unavailable_path = unavailable_dir / "missing_parent" / "trace.txt"
     check_fatal(executable, unavailable_dir, "SIGSEGV", output_path=unavailable_path)
@@ -108,7 +209,8 @@ def main():
             "SIGINT unexpectedly triggered a fatal diagnostic")
     require(not (interrupt_dir / "stack_trace.txt").exists(),
             "SIGINT unexpectedly wrote a crash report")
-    print("Stack trace passed: fatal signals, symbols, source lines, output paths, and ownership")
+    print("Stack trace passed: fatal signals, concurrent faults, recursion, symbols, source lines, "
+          "output paths, and ownership")
 
 
 if __name__ == "__main__":

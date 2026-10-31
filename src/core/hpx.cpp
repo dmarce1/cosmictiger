@@ -7,9 +7,11 @@
  */
 
 #include <cstdio>
-#include <set>
 #include <string>
 
+#if COSMICTIGER_WITH_GRAVITY
+#include <cosmictiger/analysis/lightcone.hpp>
+#endif
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/terminal.hpp>
@@ -20,6 +22,7 @@ static int numberOfRanks;
 static Vector<hpx::id_type> localities;
 static Vector<hpx::id_type> children;
 static int ppnode;
+static int localRank;
 static bool hyper;
 
 HPX_PLAIN_ACTION(hpxInit, HpxInitAction);
@@ -77,6 +80,9 @@ void hpxInit() {
 void hpxInitCuda() {
 #ifdef USE_CUDA
     cudaInit();
+#if COSMICTIGER_WITH_GRAVITY
+    healpixInit();
+#endif
 #endif
     Vector<hpx::future<void>> futures;
     for (auto const& child : hpxChildren()) {
@@ -90,6 +96,10 @@ void hpxInitCuda() {
 
 int hpxRank() {
     return rank;
+}
+
+int hpxLocalRank() {
+    return localRank;
 }
 
 int hpxSize() {
@@ -140,13 +150,17 @@ static void detectProcessesPerNode() {
         futs.push_back(hpx::async<GetHostnameAction>(localities[i]));
     }
 
-    std::set<std::string> names;
-    for (auto& f : futs) {
-        auto const name = f.get();
-        if (names.find(name) == names.end()) {
-            names.insert(name);
+    std::string const ownHostname = getHostname();
+    ppnode = 0;
+    localRank = 0;
+    for (int i = 0; i < futs.size(); ++i) {
+        if (futs[i].get() == ownHostname) {
+            ++ppnode;
+            if (i < rank) {
+                ++localRank;
+            }
         }
     }
-    ppnode = localities.size() / names.size();
+    ALWAYS_ASSERT(ppnode > 0);
     terminal::detailPrint("Detected %i processes per node\n", ppnode);
 }

@@ -11,6 +11,7 @@
 #include <stdexcept>
 
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/kelvin_helmholtz.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
@@ -47,6 +48,8 @@ ScenarioPlan initializeKelvinHelmholtz() {
     setOptions(opts);
     rho1 = numberOfLeftParticles * m / 0.5f;
     rho0 = numberOfRightParticles * m / 0.5f;
+    terminal::detailPrint("Kelvin-Helmholtz realized densities: left=%e right=%e ratio=%e\n", rho1,
+        rho0, rho0 / rho1);
     for (int ix = 0; ix < leftDim; ix++) {
         for (int iy = 0; iy < 2 * leftDim; iy++) {
             for (int iz = 0; iz < 2 * leftDim; iz++) {

@@ -1,3 +1,4 @@
+#include <cosmictiger/analysis/bh.hpp>
 #include <cosmictiger/analysis/lightcone.hpp>
 #include <cosmictiger/analysis/rockstar.hpp>
 #include <cosmictiger/analysis/rockstar_core.hpp>
@@ -6,7 +7,6 @@
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/cosmology/background.hpp>
 #include <cosmictiger/cuda/device_vector.hpp>
-#include <cosmictiger/analysis/bh.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/math.hpp>
@@ -43,7 +43,7 @@ void rockstarAssignLinkLen(DeviceVector<RockstarTree> const& trees,
         float const linkingLengthSquared = sqr(linkingLength);
         for (int li = 0; li < leaflist.size(); li++) {
             auto const leafi = leaflist[li];
-            auto const other = trees[leafi];
+            auto const& other = trees[leafi];
             for (int pi = other.particleBegin; pi < other.particleEnd; pi++) {
                 auto const& part = parts[pi];
                 if (rockstar::detail::boxContains(mybox, part.xValue, dimmax)) {
@@ -343,7 +343,7 @@ size_t rockstarFindSubgroups(DeviceVector<RockstarTree>& trees,
         for (int li = 0; li < leaflist.size(); li++) {
             if (selfId != leaflist[li]) {
                 auto const leafi = leaflist[li];
-                auto const other = trees[leafi];
+                auto const& other = trees[leafi];
                 for (int pi = other.particleBegin; pi < other.particleEnd; pi++) {
                     auto& part = parts[pi];
                     if (rockstar::detail::boxContains(mybox, part.xValue, 2 * kDimensions)) {
@@ -357,19 +357,10 @@ size_t rockstarFindSubgroups(DeviceVector<RockstarTree>& trees,
                             float const dvz = mypart.vz - part.vz;
                             float const r2 = sqr(dx, dy, dz) + sqr(dvx, dvy, dvz);
                             if (r2 <= linkingLengthSquared) {
-                                if (mypart.subgroup == kRockstarNoGroup) {
-                                    mypart.subgroup = nextId++;
-                                    foundAnyLink = true;
-                                }
-                                if (part.subgroup == kRockstarNoGroup) {
-                                    part.subgroup = nextId++;
-                                    foundAnyLink = true;
-                                }
+                                // Pull labels only. Changing a neighbour without
+                                // activating its leaf can strand a later link.
                                 if (mypart.subgroup > part.subgroup) {
                                     mypart.subgroup = part.subgroup;
-                                    foundAnyLink = true;
-                                } else if (mypart.subgroup < part.subgroup) {
-                                    part.subgroup = mypart.subgroup;
                                     foundAnyLink = true;
                                 }
                             }
@@ -453,6 +444,9 @@ void rockstarFindSubgroups(DeviceVector<RockstarTree>& trees, DeviceVector<Rocks
     } else
 #endif
     {
+        for (int i = 0; i < parts.size(); ++i) {
+            parts[i].subgroup = nextId++;
+        }
         do {
             double pctActive = 0.0;
             for (int i = 0; i < trees.size(); i++) {
@@ -627,8 +621,10 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
             for (int l = k + 1; l < subgroups.size(); l++) {
                 // Sec. III.3, Eq. (2): smaller seed's Poisson uncertainties;
                 // the squared merge threshold is (10*sqrt(2))^2 = 200.
-                float const sigmaXInv = sqrt(subgroups[k].parts.size() / subgroups[k].sigma2X);
-                float const sigmaVInv = sqrt(subgroups[k].parts.size() / subgroups[k].sigma2V);
+                double const sigmaXInv =
+                    sqrt(double(subgroups[k].parts.size()) / subgroups[k].sigma2X);
+                double const sigmaVInv =
+                    sqrt(double(subgroups[k].parts.size()) / subgroups[k].sigma2V);
                 float const dx = (subgroups[k].x - subgroups[l].x) * sigmaXInv;
                 float const dy = (subgroups[k].y - subgroups[l].y) * sigmaXInv;
                 float const dz = (subgroups[k].z - subgroups[l].z) * sigmaXInv;
@@ -656,22 +652,23 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
             }
         }
         for (int j = 0; j < parts.size(); j++) {
-            float minDist = std::numeric_limits<float>::max();
-            int minIndex = -1;
+            double minDist = std::numeric_limits<double>::max();
+            ALWAYS_ASSERT(!subgroups.empty());
+            int minIndex = 0;
             for (int i = 0; i < subgroups.size(); i++) {
                 assert(subgroups[i].parts.size());
-                // Sec. III.3, Eqs. (3)-(4): halo-particle assignment metric.
-                float const rdynInv = 1.0 / subgroups[i].rDyn;
-                float const sigmaVInv = 1.0 / sqrt(subgroups[i].sigma2V);
-                float const dx = (parts[j].x - subgroups[i].x) * rdynInv;
-                float const dy = (parts[j].y - subgroups[i].y) * rdynInv;
-                float const dz = (parts[j].z - subgroups[i].z) * rdynInv;
-                float const dvx = (parts[j].vx - subgroups[i].vxc) * sigmaVInv;
-                float const dvy = (parts[j].vy - subgroups[i].vyc) * sigmaVInv;
-                float const dvz = (parts[j].vz - subgroups[i].vzc) * sigmaVInv;
-                float const dist = sqrt(sqr(dx, dy, dz) + sqr(dvx, dvy, dvz));
-                // PRINT("dist = %e mindist = %e %e %e %e %e %e %e \n", dist, min_dist, dx, dy, dz,
-                // dvz, dvy, subgroups[i].sigma2_v);
+                // Sec. III.3, Eqs. (3)-(4): use double after rescaling tiny
+                // cold seeds, so a finite velocity cannot overflow the metric.
+                double const rdynInv = 1.0 / std::max(double(subgroups[i].rDyn), 1.e-30);
+                double const sigmaVInv =
+                    1.0 / std::sqrt(std::max(double(subgroups[i].sigma2V), 1.e-30));
+                double const dx = (double(parts[j].x) - subgroups[i].x) * rdynInv;
+                double const dy = (double(parts[j].y) - subgroups[i].y) * rdynInv;
+                double const dz = (double(parts[j].z) - subgroups[i].z) * rdynInv;
+                double const dvx = (double(parts[j].vx) - subgroups[i].vxc) * sigmaVInv;
+                double const dvy = (double(parts[j].vy) - subgroups[i].vyc) * sigmaVInv;
+                double const dvz = (double(parts[j].vz) - subgroups[i].vzc) * sigmaVInv;
+                double const dist = sqr(dx, dy, dz) + sqr(dvx, dvy, dvz);
                 if (dist < minDist) {
                     minDist = dist;
                     minIndex = i;
@@ -707,8 +704,8 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
         sg.vzc += avgVz;
         sg.rDyn *= sigmaX;
         sg.rVir *= sigmaX;
-        sg.sigma2V *= sigmaV * sigmaV;
-        sg.sigma2X *= sigmaX * sigmaX;
+        sg.sigma2V = std::max(double(sg.sigma2V) * sigmaV * sigmaV, 1.e-30);
+        sg.sigma2X = std::max(double(sg.sigma2X) * sigmaX * sigmaX, 1.e-30);
         // Sec. III.5.1: compare center errors in the same length units.
         sg.sigmaXMin *= sigmaX;
         sg.vcircMax *= sigmaV;
@@ -788,9 +785,13 @@ Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& input
     int nextId = 1;
     auto groups =
         rockstarSeeds(std::move(particles), nextId, 1.0f, 1.0f, scale, getOptions().compute.cuda);
-    for (size_t i = 0; i < groups.size(); ++i) {
+    size_t const haloCount = rockstarCatalogueSize(groups.size());
+    for (size_t i = 0; i < haloCount; ++i) {
         if (groups[i].massVir >= kRockstarMinGroup) {
             auto record = rockstarMakeRecord(groups, i, scale, origin);
+            if (groups[i].parent >= 0 && size_t(groups[i].parent) >= haloCount) {
+                record.pid = -1;
+            }
             double const radius = sqrt(
                 sqr(origin[0] + groups[i].x, origin[1] + groups[i].y, origin[2] + groups[i].z));
             double const haloScale = lightconeEmissionScale(*background, tauMax, radius);

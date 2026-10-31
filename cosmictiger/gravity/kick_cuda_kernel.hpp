@@ -713,7 +713,10 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     __syncwarp();
                     dchecks.pushTop();
                     echecks.pushTop();
-                    sparams.back().phase += 1;
+                    if (tid == 0) {
+                        sparams.back().phase += 1;
+                    }
+                    __syncwarp();
                     {
                         SearchParameters sparam;
                         sparam.phase = 0;
@@ -735,7 +738,10 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                 ancestors.popBack();
                 dchecks.popTop();
                 echecks.popTop();
-                sparams.back().phase += 1;
+                if (tid == 0) {
+                    sparams.back().phase += 1;
+                }
+                __syncwarp();
                 {
                     SearchParameters sparam;
                     sparam.phase = 0;

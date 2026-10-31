@@ -26,8 +26,10 @@
 
 #include <cosmictiger/core/assert.hpp>
 #include <cosmictiger/core/defs.hpp>
+#include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/cuda/cuda_export.hpp>
 #ifdef USE_CUDA
+#include <cosmictiger/cuda/cuda_check.hpp>
 #include <cosmictiger/cuda/cuda_stream.hpp>
 #endif
 
@@ -41,9 +43,6 @@ void freePinnedMemory(void* pointer) noexcept;
 #ifdef USE_CUDA
 
 #define CUDA_MALLOC(a, b) cudaMalloc2(a, b, __FILE__, __LINE__)
-#define CUDA_CHECK(a)     \
-    if (a != cudaSuccess) \
-    printf("CUDA error on line %i of %s : %s\n", __LINE__, __FILE__, cudaGetErrorString(a))
 
 /* error checker from https://forums.developer.nvidia.com/t/cufft-error-handling/29231 */
 static char const* cudaGetErrorEnum(cufftResult error) {

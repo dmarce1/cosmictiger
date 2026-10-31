@@ -454,7 +454,7 @@ __device__ FlopCount cudaGravityPcDirect(CudaKickData const& data, CudaKickContr
     bool const sharedForces = control.layout.forceOffset >= 0;
     CudaKickForceTile const arenaForce = detail::cudaArenaForces<order>(control);
     CudaKickForceTile const& backingForce = control.forces;
-    int const sinkFirst = self.particleRange.first + sinkBegin;
+    ParticleInteger const sinkFirst = self.particleRange.first + sinkBegin;
     auto const* sinkX = data.x + sinkFirst;
     auto const* sinkY = data.y + sinkFirst;
     auto const* sinkZ = data.z + sinkFirst;
@@ -527,7 +527,7 @@ __device__ FlopCount cudaGravityPpDirect(CudaKickData const& data, CudaKickContr
     bool const sharedForces = control.layout.forceOffset >= 0;
     CudaKickForceTile const arenaForce = detail::cudaArenaForces<order>(control);
     CudaKickForceTile const& backingForce = control.forces;
-    int const sinkFirst = self.particleRange.first + sinkBegin;
+    ParticleInteger const sinkFirst = self.particleRange.first + sinkBegin;
     auto const* sinkX = data.x + sinkFirst;
     auto const* sinkY = data.y + sinkFirst;
     auto const* sinkZ = data.z + sinkFirst;

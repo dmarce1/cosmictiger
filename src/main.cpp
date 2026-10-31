@@ -106,7 +106,6 @@ int hpx_main(int argc, char* argv[]) {
 #ifdef USE_CUDA
             if (getOptions().compute.cuda) {
                 hpxInitCuda();
-                healpixInit();
             }
 #endif
             profile::checkForInterrupt();
@@ -314,7 +313,12 @@ void validatePositionType(int argc, char* argv[]) {
         "compute.positionType", po::value<std::string>(), "position storage");
     po::variables_map values;
     po::store(
-        po::command_line_parser(argc, argv).options(selection).allow_unregistered().run(), values);
+        po::command_line_parser(argc, argv)
+            .options(selection)
+            .style(po::command_line_style::default_style & ~po::command_line_style::allow_guessing)
+            .allow_unregistered()
+            .run(),
+        values);
     if (!values.count("help") && values.count("configuration")) {
         auto const filename = values["configuration"].as<std::string>();
         if (!filename.empty()) {

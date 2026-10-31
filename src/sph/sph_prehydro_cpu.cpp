@@ -415,8 +415,8 @@ SphRunReturn sphCpuPrehydro2(
                     float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
                     0.9128709291752769f;
                 diagnostics = price_etal::diagnostics(sums, parameters.scaleFactor,
-                    parameters.expansionAcceleration, h_a, c_a_switch,
-                    parameters.viscosityAlphaMaxPrice, parameters.viscosityDecayPrice, flops);
+                    parameters.expansionRate, h_a, c_a_switch, parameters.viscosityAlphaMaxPrice,
+                    parameters.viscosityDecayPrice, flops);
                 flops += 2;
             }
             state.pendingDivergence = diagnostics.divergence;

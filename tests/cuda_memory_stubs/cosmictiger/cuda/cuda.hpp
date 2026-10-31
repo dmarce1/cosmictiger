@@ -1,15 +1,24 @@
 #pragma once
 
-#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <new>
 
+#include <cosmictiger/cuda/cuda_check.hpp>
+
 #define CUDA_EXPORT
 #define __managed__
-#define ALWAYS_ASSERT(condition) assert(condition)
+#define ALWAYS_ASSERT(condition)                                                        \
+    do {                                                                                \
+        if (!(condition)) {                                                             \
+            std::fprintf(stderr, "Condition \"%s\" failed in %s on line %d\n",            \
+                #condition, __FILE__, __LINE__);                                         \
+            std::abort();                                                               \
+        }                                                                               \
+    } while (false)
 #define PRINT(...) std::printf(__VA_ARGS__)
 
 enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorInvalidValue };
@@ -23,14 +32,12 @@ cudaError_t cudaMallocManaged(Value** pointer, size_t bytes) {
     return cudaMallocManaged(reinterpret_cast<void**>(pointer), bytes);
 }
 
-// Match the application's diagnostic-only macro: a test must not accidentally
-// supply the exception handling that cuda_memory.cu itself needs to perform.
-#define CUDA_CHECK(expression)                                                        \
-    do {                                                                              \
-        auto const cudaResult = (expression);                                         \
-        if (cudaResult != cudaSuccess) {                                              \
-            std::fprintf(stderr, "CUDA error: %s\n", cudaGetErrorString(cudaResult)); \
-        }                                                                             \
+// Share the production macros; allocator initialization still owns its explicit
+// recoverable error handling instead of relying on these fatal call checks.
+#define THROW_ERROR(...) \
+    do { \
+        std::fprintf(stderr, __VA_ARGS__); \
+        ALWAYS_ASSERT(false); \
     } while (false)
 
 bool cudaEnabled();

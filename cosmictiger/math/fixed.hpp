@@ -372,14 +372,7 @@ CUDA_EXPORT inline double unwrappedDoubleDistance(
 }
 
 CUDA_EXPORT inline float distance(double a, double b) {
-    double difference = a - b;
-    while (difference > 0.5) {
-        difference -= 1.0;
-    }
-    while (difference < -0.5) {
-        difference += 1.0;
-    }
-    return difference;
+    return remainder(a - b, 1.0);
 }
 
 template <class Integer, int fractionBits>

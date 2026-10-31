@@ -107,7 +107,7 @@ coldTemperature = 1000
 supernovaTemperature = 1e8
 criticalPhysicalDensity = 0
 criticalOverDensity = 57.7
-seed = 1
+seed = 42
 ```
 
 `starFormationTimeGyr` is a physical timescale in Gyr. It corresponds to

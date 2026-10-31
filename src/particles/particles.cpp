@@ -90,6 +90,7 @@ HPX_PLAIN_ACTION(particlesGroupsInit, ParticlesGroupsInitAction);
 HPX_PLAIN_ACTION(particlesGroupsDestroy, ParticlesGroupsDestroyAction);
 HPX_PLAIN_ACTION(particlesSetGlobalOffset, ParticlesSetGlobalOffsetAction);
 HPX_PLAIN_ACTION(particlesSetTracers, ParticlesSetTracersAction);
+HPX_PLAIN_ACTION(particlesSize, ParticlesTracerCountAction);
 HPX_PLAIN_ACTION(particlesGetTracers, ParticlesGetTracersAction);
 HPX_PLAIN_ACTION(particlesGetSample, ParticlesGetSampleAction);
 /*
@@ -413,16 +414,29 @@ Vector<OutputParticle> particlesGetTracers() {
     return std::move(output);
 }
 
-void particlesSetTracers(size_t count) {
+void particlesSetTracers(size_t count, size_t totalCount) {
+    if (hpxRank() == 0) {
+        Vector<hpx::future<ParticleInteger>> counts;
+        for (size_t rank = 1; rank < hpxLocalities().size(); ++rank) {
+            counts.push_back(hpx::async<ParticlesTracerCountAction>(hpxLocalities()[rank]));
+        }
+        totalCount = particlesSize();
+        hpx::wait_all(counts.begin(), counts.end());
+        for (auto& result : counts) {
+            size_t const localCount = result.get();
+            if (localCount > std::numeric_limits<size_t>::max() - totalCount) {
+                throw std::overflow_error("Tracer particle count overflow");
+            }
+            totalCount += localCount;
+        }
+    }
     hpx::future<void> fut;
     if (hpxRank() < hpxSize() - 1) {
         fut = hpx::async<ParticlesSetTracersAction>(
-            hpxLocalities()[hpxRank() + 1], count + particlesSize());
+            hpxLocalities()[hpxRank() + 1], count + particlesSize(), totalCount);
     }
 
     if (particlesSize() > 0) {
-        size_t const totalCount =
-            getOptions().initial.numberOfParticles * (getOptions().hydro.enabled ? 2 : 1);
         detail::setTracerFlags(&particlesTracer(0), particlesSize(), count, totalCount,
             getOptions().analysis.tracerCount);
     }
@@ -549,14 +563,14 @@ void particlesMemadviseGpu() {
     auto const rng = particlesCurrentRange();
     auto const begin = rng.first;
     auto const count = rng.second - begin;
-    CUDA_CHECK(cudaAdviseMemory(particlesVelData() + begin,
+    CUDA_WARN(cudaAdviseMemory(particlesVelData() + begin,
         count * sizeof(Array<float, kDimensions>), cudaMemAdviseSetAccessedBy, deviceid));
-    CUDA_CHECK(cudaAdviseMemory(
+    CUDA_WARN(cudaAdviseMemory(
         &particlesRung(0) + begin, count * sizeof(char), cudaMemAdviseSetAccessedBy, deviceid));
     undoLastMemadvise = [begin, count, deviceid]() {
-        CUDA_CHECK(cudaAdviseMemory(particlesVelData() + begin,
+        CUDA_WARN(cudaAdviseMemory(particlesVelData() + begin,
             count * sizeof(Array<float, kDimensions>), cudaMemAdviseUnsetAccessedBy, deviceid));
-        CUDA_CHECK(cudaAdviseMemory(&particlesRung(0) + begin, count * sizeof(char),
+        CUDA_WARN(cudaAdviseMemory(&particlesRung(0) + begin, count * sizeof(char),
             cudaMemAdviseUnsetAccessedBy, deviceid));
     };
 #endif
@@ -578,13 +592,13 @@ void particlesMemadviseCpu() {
     CUDA_CHECK(
         cudaAdviseMemory(particlesVelData() + begin, count * sizeof(Array<float, kDimensions>),
             cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
-    CUDA_CHECK(cudaAdviseMemory(&particlesRung(0) + begin, count * sizeof(char),
+    CUDA_WARN(cudaAdviseMemory(&particlesRung(0) + begin, count * sizeof(char),
         cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
     undoLastMemadvise = [begin, count]() {
         CUDA_CHECK(
             cudaAdviseMemory(particlesVelData() + begin, count * sizeof(Array<float, kDimensions>),
                 cudaMemAdviseUnsetPreferredLocation, cudaCpuDeviceId));
-        CUDA_CHECK(cudaAdviseMemory(&particlesRung(0) + begin, count * sizeof(char),
+        CUDA_WARN(cudaAdviseMemory(&particlesRung(0) + begin, count * sizeof(char),
             cudaMemAdviseUnsetPreferredLocation, cudaCpuDeviceId));
     };
     CudaStream stream(deviceid);
@@ -829,6 +843,7 @@ static ParticlesCacheEntry const* particlesCacheReadLine(LineIdType lineId) {
 }
 
 static Vector<ParticlesCacheEntry> particlesFetchCacheLine(ParticleInteger index) {
+    std::shared_lock<SharedMutexType> lock(sharedMutex);
     bool const sph = getOptions().hydro.enabled;
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     Vector<ParticlesCacheEntry> line(lineSize);
@@ -851,6 +866,7 @@ static Vector<ParticlesCacheEntry> particlesFetchCacheLine(ParticleInteger index
 }
 
 static Vector<GroupParticle> particlesGroupFetchCacheLine(ParticleInteger index) {
+    std::shared_lock<SharedMutexType> lock(sharedMutex);
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     Vector<GroupParticle> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
@@ -876,6 +892,7 @@ void particlesIncGroupCacheEpoch() {
 }
 
 static Vector<GroupInteger> particlesGroupRefreshCacheLine(ParticleInteger index) {
+    std::shared_lock<SharedMutexType> lock(sharedMutex);
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     Vector<GroupInteger> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
@@ -989,7 +1006,7 @@ static void particlesResizeStorage(ParticleInteger sz, bool lock) {
         particlesArrayResize(particlesR, newCapacity, true);
         if (getOptions().analysis.groups) {
             particlesArrayResize(particlesLgrp, newCapacity, false);
-            for (ParticleInteger i = capacity; i < newCapacity; i++) {
+            for (ParticleInteger i = size; i < newCapacity; i++) {
                 particlesLgrp[i] = kNoParticleGroup;
             }
         }
@@ -1029,8 +1046,16 @@ static void particlesResizeStorage(ParticleInteger sz, bool lock) {
     }
     particlesEnsureGravitySampleStorage();
     particlesEnsureStarFormationStorage();
-    int oldsz = size;
+    ParticleInteger const oldsz = size;
     size = sz;
+    if (sz > oldsz) {
+        if (getOptions().analysis.groups) {
+            std::fill(particlesLgrp + oldsz, particlesLgrp + sz, kNoParticleGroup);
+        }
+        if (getOptions().analysis.tracers) {
+            std::fill(particlesTr + oldsz, particlesTr + sz, char{0});
+        }
+    }
 #if !COSMICTIGER_WITH_GRAVITY
     particlesClearGravityDiagnostics(oldsz, sz);
 #endif
@@ -1045,7 +1070,7 @@ static void particlesResizeStorage(ParticleInteger sz, bool lock) {
             StarFormationState{});
     }
     if (getOptions().hydro.enabled) {
-        for (int i = oldsz; i < sz; i++) {
+        for (ParticleInteger i = oldsz; i < sz; i++) {
             particlesCatIndex(i) = kNoParticleIndex;
             particlesType(i) = kDarkMatterType;
         }
@@ -1855,6 +1880,41 @@ hpx::future<Vector<Position>> particlesGet(int rank, Vector<Pair<ParticleInteger
     return hpx::async<ParticlesGetLocalAction>(hpxLocalities()[rank], ranges);
 }
 
+namespace detail {
+GadgetIoHeader readGadgetHeader(FILE* fp, std::string const& filename) {
+    int marker = 0;
+    FREAD(&marker, sizeof(marker), 1, fp);
+    if (marker != sizeof(GadgetIoHeader)) {
+        THROW_ERROR(
+            "Unsupported Gadget header layout in %s (expected NTYPES=2)\n", filename.c_str());
+    }
+    GadgetIoHeader header{};
+    FREAD(&header, sizeof(header), 1, fp);
+    FREAD(&marker, sizeof(marker), 1, fp);
+    if (marker != sizeof(header) || header.npart[0] != 0 || header.npartTotal[0] != 0 ||
+        header.npart[1] < 0 || header.npartTotal[1] <= 0 ||
+        header.npart[1] > std::numeric_limits<ParticleInteger>::max() ||
+        header.npart[1] > header.npartTotal[1] || header.numFiles != hpxSize() ||
+        (header.numFiles == 1 && header.npart[1] != header.npartTotal[1]) ||
+        !std::isfinite(header.mass[1]) || header.mass[1] <= 0.0 || !std::isfinite(header.boxSize) ||
+        header.boxSize <= 0.0 || !std::isfinite(header.redshift) || header.redshift <= -1.0) {
+        THROW_ERROR("Unsupported Gadget snapshot in %s: require finite DM-only constant-mass "
+                    "data and one file per locality\n",
+            filename.c_str());
+    }
+    return header;
+}
+}    // namespace detail
+
+GadgetIoHeader particlesReadGadget4Header(std::string const& filenameBase) {
+    std::string const filename = filenameBase + (hpxSize() > 1 ? ".0" : "");
+    std::unique_ptr<FILE, decltype(&fclose)> file(fopen(filename.c_str(), "rb"), &fclose);
+    if (!file) {
+        THROW_ERROR("Unable to open %s for reading.\n", filename.c_str());
+    }
+    return detail::readGadgetHeader(file.get(), filename);
+}
+
 HPX_PLAIN_ACTION(particlesReadGadget4, ParticlesReadGadget4Action);
 
 GadgetIoHeader particlesReadGadget4(std::string fnameBase) {
@@ -1869,23 +1929,21 @@ GadgetIoHeader particlesReadGadget4(std::string fnameBase) {
     }
     FILE* fp = fopen(fname.c_str(), "rb");
     if (!fp) {
-        THROW_ERROR("Unable to open %s for writing.\n", fname.c_str());
+        THROW_ERROR("Unable to open %s for reading.\n", fname.c_str());
     }
     int size;
-    GadgetIoHeader header;
-
-    FREAD(&size, sizeof(int), 1, fp);
-    PRINT("%i\n", size);
-    FREAD(&header, sizeof(GadgetIoHeader), 1, fp);
-    FREAD(&size, sizeof(int), 1, fp);
-    PRINT("%i\n", size);
-
-    PRINT("Print nparts = %lli\n", header.npart[1]);
+    auto const header = detail::readGadgetHeader(fp, fname);
+    auto checkBlock = [&] {
+        FREAD(&size, sizeof(size), 1, fp);
+        uint64_t const bytes = uint64_t(header.npart[1]) * 3 * sizeof(float);
+        if (size < 0 || uint64_t(size) != bytes) {
+            THROW_ERROR("Invalid Gadget position/velocity block in %s\n", fname.c_str());
+        }
+    };
     auto const numberOfParticles = header.npart[1];
     particlesResize(numberOfParticles);
 
-    FREAD(&size, sizeof(int), 1, fp);
-    PRINT("%i\n", size);
+    checkBlock();
     for (ParticleInteger i = 0; i < numberOfParticles; i++) {
         for (int dim = 0; dim < kDimensions; dim++) {
             float pos;
@@ -1894,11 +1952,9 @@ GadgetIoHeader particlesReadGadget4(std::string fnameBase) {
             particlesPos(dim, i) = pos;
         }
     }
-    FREAD(&size, sizeof(int), 1, fp);
-    PRINT("%i\n", size);
+    checkBlock();
 
-    FREAD(&size, sizeof(int), 1, fp);
-    PRINT("%i\n", size);
+    checkBlock();
     for (ParticleInteger i = 0; i < numberOfParticles; i++) {
         for (int dim = 0; dim < kDimensions; dim++) {
             float vel;
@@ -1907,7 +1963,7 @@ GadgetIoHeader particlesReadGadget4(std::string fnameBase) {
         }
     }
     auto const a = 1.0 / (header.redshift + 1.0);
-    for (int i = 0; i < numberOfParticles; i++) {
+    for (ParticleInteger i = 0; i < numberOfParticles; i++) {
         //	PRINT( "%e %e %e\n", particles_pos(XDIM,i).to_double(),
         // particles_pos(YDIM,i).to_double(), particles_pos(ZDIM,i).to_double());
         for (int dim = 0; dim < kDimensions; dim++) {
@@ -1915,10 +1971,12 @@ GadgetIoHeader particlesReadGadget4(std::string fnameBase) {
                 sqrt(a) * a * 1e5 * getOptions().units.timeSeconds / getOptions().units.lengthCm;
         }
     }
-    FREAD(&size, sizeof(int), 1, fp);
-    PRINT("%i\n", size);
+    checkBlock();
 
     fclose(fp);
     hpx::wait_all(futs.begin(), futs.end());
+    for (auto& future : futs) {
+        future.get();
+    }
     return header;
 }

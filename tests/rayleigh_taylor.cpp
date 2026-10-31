@@ -157,9 +157,12 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
             density);
         requireClose("zero transverse x velocity", sphParticlesVelocity(kXDimension, i), 0.0);
         requireClose("zero transverse y velocity", sphParticlesVelocity(kYDimension, i), 0.0);
-        double const expectedVelocity = 0.025 *
-            (1.0 + std::cos(8.0 * kPi * (x - 0.5)) * (1.0 + std::cos(6.0 * kPi * (x - 0.5)))) *
-            std::sin(2.0 * kPi * z);
+        // Check the independent Fourier expansion of the documented legacy
+        // seed, rather than repeating its nested cosine expression.
+        double const phase = 2.0 * kPi * (x - 0.5);
+        double const transverseSeed =
+            1.0 + 0.5 * std::cos(phase) + std::cos(4.0 * phase) + 0.5 * std::cos(7.0 * phase);
+        double const expectedVelocity = 0.025 * transverseSeed * std::sin(2.0 * kPi * z);
         requireClose("normal velocity perturbation", sphParticlesVelocity(kZDimension, i),
             expectedVelocity, 2.0e-8);
         require(sphParticlesRung(i) == 0, "initial rung");
@@ -201,7 +204,7 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
 }
 
 void testUnresolvedLattice() {
-    for (int resolution : {1, 4}) {
+    for (int resolution : {1, 2}) {
         sphParticlesResize(0);
         options.initial.particlesPerDimension = resolution;
         bool rejected = false;
@@ -218,23 +221,35 @@ void testUnresolvedLattice() {
 }    // namespace detail
 
 TEST(RayleighTaylor, Resolution8) {
-    for (double acceleration : {0.0, 0.5, 1000.0}) {
-        detail::testInitialization(8, 96, acceleration);
+    for (double acceleration : {0.5, 1000.0}) {
+        detail::testInitialization(8, 768, acceleration);
     }
 }
 
 TEST(RayleighTaylor, Resolution16) {
-    for (double acceleration : {0.0, 0.5, 1000.0}) {
+    for (double acceleration : {0.5, 1000.0}) {
         detail::testInitialization(16, 2592, acceleration);
     }
 }
 
 TEST(RayleighTaylor, Resolution32) {
-    for (double acceleration : {0.0, 0.5, 1000.0}) {
-        detail::testInitialization(32, 20736, acceleration);
+    for (double acceleration : {0.5, 1000.0}) {
+        detail::testInitialization(32, 32928, acceleration);
     }
 }
 
 TEST(RayleighTaylor, UnresolvedLattice) {
     detail::testUnresolvedLattice();
+}
+
+TEST(RayleighTaylor, RequiresDrivingAcceleration) {
+    for (double acceleration : {0.0, -0.5}) {
+        sphParticlesResize(0);
+        Options configured{};
+        configured.initial.particlesPerDimension = 8;
+        configured.hydro.zPlaneAcceleration = acceleration;
+        setOptions(configured);
+        EXPECT_THROW(scenarios::initializeRayleighTaylor(), std::invalid_argument);
+        EXPECT_EQ(sphParticlesSize(), 0);
+    }
 }

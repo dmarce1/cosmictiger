@@ -22,6 +22,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/cosmology/background.hpp>
 #include <cosmictiger/cosmology/cosmology.hpp>
+#include <cosmictiger/cuda/cuda_unordered_map.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
@@ -973,6 +974,124 @@ void checkRockstarLightconeEpoch() {
 
 }    // namespace detail
 
+namespace detail {
+void checkOwningCudaMap() {
+    CudaUnorderedMap<DeviceVector<int>> map;
+    for (int i = 0; i < 100; ++i) {
+        map[i].pushBack(i * 7);
+    }
+    for (int i = 0; i < 100; ++i) {
+        requireRockstar(map[i][0] == i * 7, "Owning CUDA map lost an entry during rehash");
+    }
+    auto copied = map;
+    copied[0][0] = -1;
+    requireRockstar(map[0][0] == 0, "Owning CUDA map copy aliases nested storage");
+    map.erase(0);
+    map.erase(1000);
+    requireRockstar(map.size() == 99 && map.find(0) == map.end(),
+        "CUDA map erase removed the wrong colliding entry");
+    int count = 0;
+    for (auto iterator = map.begin(); iterator != map.end(); iterator++) {
+        requireRockstar(iterator->second[0] == iterator->first * 7,
+            "CUDA map iterator returned an invalid bucket entry");
+        ++count;
+    }
+    requireRockstar(count == 99, "CUDA map iterator skipped entries");
+    map.clear();
+    requireRockstar(map.size() == 0 && map.begin() == map.end(), "CUDA map clear retained size");
+    map[17].pushBack(23);
+    requireRockstar(map.size() == 1 && map[17][0] == 23, "CUDA map could not be reused");
+}
+
+void checkRockstarCpuActiveLeaves() {
+    std::mt19937 generator(710231);
+    std::uniform_real_distribution<float> coordinate(0.0f, 1.0f);
+    constexpr int kCount = 256;
+    constexpr float kLinkingLength = 0.07f;
+    for (int bucket : {2, 8, 64}) {
+        for (int trial = 0; trial < 20; ++trial) {
+            DeviceVector<RockstarParticle> particles;
+            for (int i = 0; i < kCount; ++i) {
+                particles.pushBack(
+                    rockstarTestParticle(coordinate(generator), coordinate(generator), 0, i));
+            }
+            std::sort(particles.begin(), particles.end(),
+                [](auto const& a, auto const& b) { return a.x < b.x; });
+            std::vector<int> parent(kCount);
+            for (int i = 0; i < kCount; ++i) {
+                parent[i] = i;
+            }
+            auto const root = [&parent](int index) {
+                while (index != parent[index]) {
+                    index = parent[index];
+                }
+                return index;
+            };
+            for (int i = 0; i < kCount; ++i) {
+                for (int j = 0; j < i; ++j) {
+                    float const dx = particles[i].x - particles[j].x;
+                    float const dy = particles[i].y - particles[j].y;
+                    if (dx * dx + dy * dy <= kLinkingLength * kLinkingLength) {
+                        parent[root(i)] = root(j);
+                    }
+                }
+            }
+            DeviceVector<RockstarTree> trees;
+            auto const build = [&](auto&& recurse, int begin, int end) -> int {
+                RockstarTree node;
+                node.particleBegin = begin;
+                node.particleEnd = end;
+                node.children[0] = node.children[1] = -1;
+                for (int dim = 0; dim < 6; ++dim) {
+                    node.box.begin[dim] = node.box.end[dim] = particles[begin].xValue[dim];
+                    for (int i = begin + 1; i < end; ++i) {
+                        node.box.begin[dim] =
+                            std::min(node.box.begin[dim], particles[i].xValue[dim]);
+                        node.box.end[dim] = std::max(node.box.end[dim], particles[i].xValue[dim]);
+                    }
+                }
+                if (end - begin > bucket) {
+                    int const middle = (begin + end) / 2;
+                    node.children[0] = recurse(recurse, begin, middle);
+                    node.children[1] = recurse(recurse, middle, end);
+                }
+                trees.pushBack(std::move(node));
+                return trees.size() - 1;
+            };
+            build(build, 0, kCount);
+            int nextId = 1;
+            rockstarFindSubgroups(trees, particles, kLinkingLength, nextId, false);
+            for (int i = 0; i < kCount; ++i) {
+                for (int j = 0; j < i; ++j) {
+                    requireRockstar(
+                        (root(i) == root(j)) == (particles[i].subgroup == particles[j].subgroup),
+                        "CPU active-leaf propagation disagrees with union-find components");
+                }
+            }
+        }
+    }
+}
+
+void checkRockstarPeriodicRecord() {
+    Vector<Subgroup> groups;
+    groups.push_back(rockstarTestGroup(32, 0.002f, 1));
+    rockstarUpdateStatistics(groups[0], 1.0f, 1.0f, 1.0f);
+    Array<double, kDimensions> origin;
+    origin[0] = 0.999;
+    origin[1] = -0.1;
+    origin[2] = 1.1;
+    auto const unwrapped = rockstarMakeRecord(groups, 0, 1.0f, origin);
+    auto const wrapped = rockstarMakeRecord(groups, 0, 1.0f, origin, true, true);
+    requireRockstar(unwrapped.x > 1.0 && unwrapped.y < 0.0 && unwrapped.z > 1.0,
+        "Periodic catalogue fixture did not cross the box boundary");
+    requireRockstarClose(wrapped.x, unwrapped.x - 1.0, 1.e-12, "Snapshot x did not wrap");
+    requireRockstarClose(wrapped.y, unwrapped.y + 1.0, 1.e-12, "Snapshot y did not wrap");
+    requireRockstarClose(wrapped.z, unwrapped.z - 1.0, 1.e-12, "Snapshot z did not wrap");
+    requireRockstar(rockstarCatalogueSize(32768) == 32768 && rockstarCatalogueSize(32769) == 32768,
+        "Native halo record capacity policy is inconsistent");
+}
+}    // namespace detail
+
 void rockstarTest() {
     auto const original = getOptions();
     auto options = original;
@@ -991,6 +1110,9 @@ void rockstarTest() {
     options.units.timeSeconds = options.units.lengthCm / 1.e5;
     setOptions(options);
     try {
+        detail::checkOwningCudaMap();
+        detail::checkRockstarCpuActiveLeaves();
+        detail::checkRockstarPeriodicRecord();
         detail::checkRockstarCatalogueHalfBoundaries();
         detail::checkRockstarCataloguePublication();
         detail::checkRockstarUnbindingOrder();

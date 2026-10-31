@@ -17,15 +17,17 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 
 void cosmictigerAssert(char const* condStr, bool cond, char const* filename, int line) {
     if (!cond) {
-        std::cout << "\nCondition \"" << condStr << "\" failed in " << filename << " on line "
+        std::cerr << "\nCondition \"" << condStr << "\" failed in " << filename << " on line "
                   << std::to_string(line) << " on rank " << hpxRank() << "\n";
         auto const trace = stackTrace();
-        std::cout << "\nStack trace:\n" << trace << "\n";
+        std::cerr << "\nStack trace:\n" << trace << "\n";
         std::ofstream fp(stackTraceOutputPath(), std::ios::app);
         fp << "\nCondition \"" << condStr << "\" failed in " << filename << " on line "
            << std::to_string(line) << " on rank " << hpxRank() << "\n";
         fp << "\nStack trace:\n" << trace << "\n";
         fp.close();
+        std::cout.flush();
+        std::fflush(stdout);
         abort();
     }
 }

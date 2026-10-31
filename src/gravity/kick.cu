@@ -97,29 +97,27 @@ __managed__ double idirect;
 __managed__ double numberOfProcessedSinkParticles;
 __managed__ bool useGravityCounters = false;
 
-void resetGravityCounters() {
+void resetGravityCountersLocal() {
     if (!cudaEnabled()) {
         return;
     }
     iclose = idirect = numberOfProcessedSinkParticles = 0;
 }
 
-void setGravityCounterUse(bool code) {
+void setGravityCounterUseLocal(bool code) {
     if (!cudaEnabled()) {
         return;
     }
     useGravityCounters = code;
 }
 
-void getGravityCounters(double& close, double& direct) {
+Array<double, 3> gravityCounterTotalsLocal() {
+    Array<double, 3> totals{};
     if (!cudaEnabled()) {
-        close = direct = 0.0;
-        return;
+        return totals;
     }
-    if (numberOfProcessedSinkParticles == 0.0) {
-        close = direct = 0.0;
-    } else {
-        close = iclose / numberOfProcessedSinkParticles;
-        direct = idirect / numberOfProcessedSinkParticles;
-    }
+    totals[0] = iclose;
+    totals[1] = idirect;
+    totals[2] = numberOfProcessedSinkParticles;
+    return totals;
 }

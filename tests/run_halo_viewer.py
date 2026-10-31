@@ -24,6 +24,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -127,6 +128,42 @@ class ExportNumberTests(unittest.TestCase):
             self.assertTrue(any(row["vzc"] == 0.0 and math.copysign(1.0, row["vzc"]) < 0
                                 for row in halos))
             self.assertTrue(any(row["rs"] == math.ldexp(1.0, -24) for row in halos))
+
+
+class FailedExportTests(unittest.TestCase):
+    def test_cursor_error_does_not_append_an_http_response_to_csv(self):
+        backend = loadBackend()
+
+        class Connection:
+            def execute(self, *args):
+                def rows():
+                    yield {field: 0 for field in backend.HALO_FIELDS}
+                    raise sqlite3.OperationalError("injected cursor failure")
+                return rows()
+
+            def close(self):
+                pass
+
+        class Handler(backend.ViewerHandler):
+            def api(self, connection, path, query):
+                self.export(connection, {"id": 1, "snapshot": 0}, {}, "halos h", "1", [], "h.row_id")
+
+        handler = object.__new__(Handler)
+        handler.headers = {"Host": "localhost"}
+        handler.path = "/api/export?catalog=1"
+        handler.command = "GET"
+        handler.request_version = "HTTP/1.1"
+        handler.requestline = "GET /api/export HTTP/1.1"
+        handler.server = mock.Mock(database="unused")
+        handler.wfile = io.BytesIO()
+        with mock.patch.object(backend, "open_database", return_value=Connection()):
+            handler.do_GET()
+        response = handler.wfile.getvalue()
+        self.assertEqual(response.count(b"HTTP/"), 1)
+        self.assertIn(b"200 OK", response)
+        self.assertIn(b"catalog_id,snapshot", response)
+        self.assertNotIn(b"Database query failed", response)
+        self.assertTrue(handler.close_connection)
 
 
 class DensityConventionTests(unittest.TestCase):

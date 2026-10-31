@@ -76,13 +76,14 @@ def main():
     selection("explicit", [f"--compute.positionType={selected}"])
     selection("spaced", ["--compute.positionType", selected])
     rejection("opposite", [f"--compute.positionType={opposite}"])
-    rejection("opposite_abbreviated", [f"--compute.positionT={opposite}"])
     rejection("opposite_spaced", ["--compute.positionType", opposite])
     config = workdir / "position.ini"
     config.write_text(f"[compute]\npositionType = {selected}\n")
     selection("ini", [f"--configuration={config}"])
-    # The main option parser rejects abbreviations after the early ABI check.
+    # The application requires exact option names. Its early position-ABI
+    # parser must use the same policy instead of accepting abbreviations.
     for name, option in (("abbreviated", f"--compute.positionT={selected}"),
+                         ("opposite_abbreviated", f"--compute.positionT={opposite}"),
                          ("abbreviated_config", f"--config={config}")):
         directory = prepareCase(workdir, name)
         output = runSimulation([str(executable), *common, option], directory,
@@ -119,6 +120,8 @@ def main():
         raise RuntimeError("configured position evolution did not publish a checkpoint")
     checkpoint = max(checkpoints, key=lambda path: int(path.name.split(".")[1]))
     iteration = int(checkpoint.name.split(".")[1])
+    if iteration != 1:
+        raise RuntimeError("run.maxIterations=1 did not stop after exactly one iteration")
     checkManifest(checkpoint, iteration, scenario="plummer", endTime=0.00001)
     payload = (checkpoint / "checkpoint.0.dat").read_bytes()
     if checkpoint_position_bytes(payload) != bits // 8:
@@ -129,6 +132,15 @@ def main():
                            directory, "run.log")
     if "Done reading checkpoint" not in output:
         raise RuntimeError("checkpoint was not loaded")
+    restarted_checkpoints = [path.name for path in directory.glob("checkpoint.*")
+                            if path.is_dir() and re.fullmatch(r"checkpoint\.[0-9]+", path.name)]
+    if restarted_checkpoints != [checkpoint.name]:
+        raise RuntimeError("run.maxIterations=0 advanced the restarted checkpoint")
+    if (directory / checkpoint.name / "checkpoint.0.dat").read_bytes() != payload:
+        raise RuntimeError("zero-iteration restart changed the saved particle state")
+    progress = directory / "progress.txt"
+    if progress.exists() and progress.read_text().strip():
+        raise RuntimeError("zero-iteration restart produced an evolution row")
     wrong_width = prepareCase(workdir, "restart_wrong_width", checkpoint)
     rank_file = wrong_width / checkpoint.name / "checkpoint.0.dat"
     payload = bytearray(rank_file.read_bytes())

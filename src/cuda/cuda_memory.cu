@@ -82,7 +82,8 @@ char* CudaMemory::pop(int bin) {
 
 CUDA_EXPORT
 char* CudaMemory::createNewAllocation(int bin) {
-    size_t const size = (size_t(1) << bin) + sizeof(size_t);
+    size_t const bytes = (size_t(1) << bin) + kCudaPoolHeaderSize;
+    size_t const size = (bytes + kCudaPoolAlignment - 1) / kCudaPoolAlignment * kCudaPoolAlignment;
     detail::CudaMemoryAtomic next(next_);
     auto offset = next.load(cuda::memory_order_relaxed);
     for (;;) {
@@ -94,7 +95,7 @@ char* CudaMemory::createNewAllocation(int bin) {
             *reinterpret_cast<size_t*>(ptr) = bin;
             // This allocation belongs directly to the caller. It only enters
             // the shared queue once free() publishes its initialized header.
-            return ptr + sizeof(size_t);
+            return ptr + kCudaPoolHeaderSize;
         }
     }
 }
@@ -112,18 +113,39 @@ void* CudaMemory::allocate(size_t sz) {
         bin++;
     }
     if (char* ptr = pop(bin)) {
+        auto& header = *reinterpret_cast<CudaMemoryInteger*>(ptr - kCudaPoolHeaderSize);
+        detail::CudaMemoryAtomic state(header);
+        ALWAYS_ASSERT(
+            state.load(cuda::memory_order_relaxed) == CudaMemoryInteger(bin + kCudaMemoryBinCount));
+        state.store(bin, cuda::memory_order_relaxed);
         return ptr;
     }
     return createNewAllocation(bin);
 }
 
 CUDA_EXPORT void CudaMemory::free(void* ptr) {
-    size_t* binptr = (size_t*) ((char*) ptr - sizeof(size_t));
-    if (*binptr >= kCudaMemoryBinCount) {
-        printf("Corrupt free! %li\n", *binptr);
-        ALWAYS_ASSERT(false);
+    if (ptr == nullptr) {
+        return;
     }
-    push(*binptr, (char*) ptr);
+    static_assert(sizeof(size_t) == sizeof(CudaMemoryInteger));
+    auto& header =
+        *reinterpret_cast<CudaMemoryInteger*>(static_cast<char*>(ptr) - kCudaPoolHeaderSize);
+    detail::CudaMemoryAtomic state(header);
+    auto bin = state.load(cuda::memory_order_relaxed);
+    for (;;) {
+        ALWAYS_ASSERT(bin >= 3 && bin < kCudaMemoryBinCount);
+        if (state.compare_exchange_weak(
+                bin, bin + kCudaMemoryBinCount, cuda::memory_order_relaxed)) {
+            break;
+        }
+    }
+    push(int(bin), static_cast<char*>(ptr));
+}
+
+CUDA_EXPORT bool CudaMemory::owns(void const* ptr) const {
+    auto const address = reinterpret_cast<uintptr_t>(ptr);
+    auto const beginning = reinterpret_cast<uintptr_t>(heapBegin_);
+    return address >= beginning && address - beginning < heapSize_;
 }
 
 CudaMemory::CudaMemory(size_t heapSize)
@@ -162,15 +184,36 @@ CUDA_EXPORT void* cudaAllocate(size_t sz) {
         return allocateManagedMemory(sz);
     }
 #endif
-    return memory->allocate(sz);
+#ifdef __CUDA_ARCH__
+    ALWAYS_ASSERT(memory != nullptr);
+#else
+    if (memory == nullptr) {
+        throw std::logic_error("CUDA memory pool must be initialized before allocation");
+    }
+#endif
+    void* const pointer = memory->allocate(sz);
+    if (pointer == nullptr) {
+#ifdef __CUDA_ARCH__
+        PRINT("CUDA pool allocation failed for %llu bytes\n", (unsigned long long) sz);
+        ALWAYS_ASSERT(false);
+#else
+        throw std::bad_alloc();
+#endif
+    }
+    return pointer;
 }
 
 CUDA_EXPORT void cudaRelease(void* ptr) {
+    if (ptr == nullptr) {
+        return;
+    }
 #ifndef __CUDA_ARCH__
-    if (!cudaEnabled()) {
+    if (memory == nullptr || !memory->owns(ptr)) {
         freeManagedMemory(ptr);
         return;
     }
+#else
+    ALWAYS_ASSERT(memory != nullptr && memory->owns(ptr));
 #endif
     memory->free(ptr);
 }
@@ -191,23 +234,24 @@ void cudaMemoryInitialize(size_t heapSize) {
 // Collective block copy. A plain strided copy needs no static shared barrier:
 // re-initializing one on every call raced with lagging waiters of the previous
 // phase (compute-sanitizer synccheck reported missing waits).
-void copyCudaMemory(void* dest, void* src, int size) {
+void copyCudaMemory(void* dest, void const* src, size_t size) {
 #ifdef __CUDA_ARCH__
-    int const tid = threadIdx.x;
-    int const stride = blockDim.x;
+    ALWAYS_ASSERT(blockDim.y == 1 && blockDim.z == 1);
+    size_t const tid = threadIdx.x;
+    size_t const stride = blockDim.x;
     syncthreads();
-    if (size % int(sizeof(int)) == 0 && (reinterpret_cast<size_t>(dest) % sizeof(int)) == 0 &&
+    if (size % sizeof(int) == 0 && (reinterpret_cast<size_t>(dest) % sizeof(int)) == 0 &&
         (reinterpret_cast<size_t>(src) % sizeof(int)) == 0) {
-        int const count = size / int(sizeof(int));
+        size_t const count = size / sizeof(int);
         auto* destination = static_cast<int*>(dest);
         auto const* source = static_cast<int const*>(src);
-        for (int i = tid; i < count; i += stride) {
+        for (size_t i = tid; i < count; i += stride) {
             destination[i] = source[i];
         }
     } else {
         auto* destination = static_cast<char*>(dest);
         auto const* source = static_cast<char const*>(src);
-        for (int i = tid; i < size; i += stride) {
+        for (size_t i = tid; i < size; i += stride) {
             destination[i] = source[i];
         }
     }

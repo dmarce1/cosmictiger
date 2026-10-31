@@ -22,7 +22,7 @@
 
 struct KickWorkspaceTreeIdHash {
     inline size_t operator()(TreeId id) const {
-        return id.index * hpxSize() + id.proc;
+        return size_t(id.index) * size_t(hpxSize()) + size_t(id.proc);
     }
 };
 

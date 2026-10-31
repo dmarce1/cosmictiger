@@ -305,14 +305,18 @@ void treePrepareCellForestLocal(size_t sourceParticleCount, size_t sourceRootCou
     for (size_t ranks = hpxSize(); ranks > 1; ranks = (ranks + 1) / 2) {
         ++levels;
     }
-    // Local kd nodes, sparse domain joins, allocator slack and cache allowance.
-    // No capacity term scales as mesh cells times ranks.
-    size_t capacity = treeNodeCapacity(sourceParticleCount);
-    capacity = add(capacity, multiply(4, sourceParticleCount));
+    // A nonempty bounded kd tree has at most 2*n-1 nodes. Sum the 2*n
+    // bound over owned and ghost cells, then allow sparse joins and allocator
+    // line holes. Remote deserialized moments use their own chunked pool.
+    size_t capacity = multiply(2, sourceParticleCount);
     capacity = add(capacity, multiply(sourceRootCount, levels + 2));
     capacity = add(capacity,
         multiply(size_t(getOptions().compute.treeAllocLineSize),
             4 * size_t(hpxHardwareConcurrency()) + 2));
+    if (capacity >
+        size_t(std::numeric_limits<int>::max() - getOptions().compute.treeAllocLineSize)) {
+        throw std::overflow_error("PMMM near-FMM cell forest exceeds the TreeId index range");
+    }
     treeAllocateNodesLocal(capacity);
 }
 

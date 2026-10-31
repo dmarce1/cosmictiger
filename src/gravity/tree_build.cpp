@@ -103,9 +103,11 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             if (boundedGeometry) {
                 flops += detail::treePositionConversionExtraFlops(xmid);
             }
-            if (boundedGeometry && (mid == particleRange.first || mid == particleRange.second)) {
-                // Empty midpoint branches needlessly consume depth and arena
-                // slots. Retain the same kd partition but tighten its split to
+            if ((boundedGeometry || !policy.extraSubdivision) && numberOfParticles > 1 &&
+                (mid == particleRange.first || mid == particleRange.second)) {
+                // Once a global cell meets its geometric/Ewald subdivision
+                // requirement, empty midpoint branches only consume depth and
+                // arena slots. Retain the same kd partition but tighten its split to
                 // the occupied raw-coordinate extent, including sub-double Q64
                 // separations. Coincident positions use an equality-plane tie.
                 Array<PositionInteger, kDimensions> lower;

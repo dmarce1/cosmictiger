@@ -95,8 +95,9 @@ SphRunReturn sphCpuHydro(
         flops += 5;
         float const one_over_H_a4 = sqr(sqr(one_over_H_a));    // 1/H_a⁴
         Vector3<SimdFloat> dv_a_dt_pack(zero);                 // lane partial sums of acceleration
-        SimdFloat du_a_dt_pack(zero);                          // lane partial sums of thermal work
-        SimdFloat μ_max_pack(zero);                            // lane maxima of −μ_ab for δt_cv
+        SimdFloat viscous_heating_pack(zero);
+        SimdFloat du_a_dt_pack(zero);    // lane partial sums of thermal work
+        SimdFloat μ_max_pack(zero);      // lane maxima of −μ_ab for δt_cv
         for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
             // Particle b: one SIMD pack of staged neighbors. Lanes beyond the list, outside
             // both supports, or at zero separation are excluded. Their inputs are replaced
@@ -197,8 +198,8 @@ SphRunReturn sphCpuHydro(
                 variational::pairForceFactor(SimdFloat(Q_ab_over_m_a), Q_ba_over_m_a, g_a, g_b);
             dv_a_dt_pack -= (pressureForce + m_b_over_a * Π_ab * F_ab) * r_ab;
             du_a_dt_pack += SimdFloat(inverseScaleFactor) *
-                    variational::pairWork(SimdFloat(Q_ab_over_m_a), g_a, v_ab_dot_r_ab) +
-                m_b_over_a * half * Π_ab * F_ab * v_ab_dot_r_ab_physical;
+                variational::pairWork(SimdFloat(Q_ab_over_m_a), g_a, v_ab_dot_r_ab);
+            viscous_heating_pack += m_b_over_a * half * Π_ab * F_ab * v_ab_dot_r_ab_physical;
             // P_b/ρ_b² (3), Q_ba (2), pressure force factor (4), viscous factor (3),
             // and the pressure work and viscous heating (9).
             flops += 21 * SimdFloat::size();
@@ -218,7 +219,8 @@ SphRunReturn sphCpuHydro(
         // Corrections are derived, never checkpointed or migrated; slots that the density
         // pass has not rebuilt hold NaN, so a stale source cannot pass silently.
         if (!(sph_volume::isFiniteValue(dv_a_dt.dot(dv_a_dt)) &&
-                sph_volume::isFiniteValue(du_a_dt))) {
+                sph_volume::isFiniteValue(du_a_dt) &&
+                sph_volume::isFiniteValue(simdSum(viscous_heating_pack)))) {
             PRINT("SPH variational rates are not finite: supportRadius=%e density=%e ζ=%e\n", H_a,
                 ρ_a, ζ_a);
             ALWAYS_ASSERT(false);
@@ -273,7 +275,8 @@ SphRunReturn sphCpuHydro(
             5.0f - 3.0f * adiabaticIndex;
         du_a_dt += expansionCoefficient * a_da_dt * inverseScaleFactor * u_a;
         flops += 12;    // Six damping operations and six cosmological energy operations.
-        data.sinkInternalEnergyRate[sinkIndex] = du_a_dt;
+        data.sinkInternalEnergyRate[sinkIndex] = du_a_dt + simdSum(viscous_heating_pack);
+        flops += SimdFloat::size();
         if (parameters.phase == 1) {
             // Section 10.3, p. 563:
             //   δt_f = min_a (h_a/|f_a|),   δt_cv = min_a h_a/(c_a + 0.6 (α c_a + β max_b μ_ab)),
@@ -294,7 +297,7 @@ SphRunReturn sphCpuHydro(
             float δt = std::fmin(parameters.maximumTimestep,
                 parameters.courantFactor * parameters.scaleFactor /
                     std::fmax(std::fmax(one_over_δt_cv, one_over_δt_f), 1.0e-30f));
-            // Bound the fractional thermal change in the existing explicit integrator.
+            // Bound reversible work; the approach-speed CFL term controls viscous heating.
             if (du_a_dt != 0.0f) {
                 δt = std::fmin(
                     δt, parameters.courantFactor / kViscosityWidthScale * u_a / std::fabs(du_a_dt));

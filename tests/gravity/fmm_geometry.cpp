@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include <cosmictiger/gravity/fmm_geometry.hpp>
+#include <cosmictiger/math/tensor.hpp>
 
 void cosmictigerAssert(char const*, bool condition, char const*, int) {
     if (!condition) {
@@ -279,4 +280,55 @@ TEST(FmmGeometry, BoxEndpointsKeepSubDoubleSeamDistances) {
         }
         detail::checkBoxes(geometry, boxes, sinks, sources);
     }
+}
+
+TEST(FmmGeometry, PeriodicBoxContainmentUsesTheWrappedInterval) {
+    for (double shift : {-1.0, 0.0, 1.0}) {
+        Fixed32Range box;
+        Array<Position, kDimensions> point;
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            box.begin[dim] = -0.125 + shift;
+            box.end[dim] = 0.125 + shift;
+            point[dim] = 0.9375;
+        }
+        EXPECT_EQ(boxDistanceSquared(box, point), 0.0f);
+        point[0] = 0.375;
+        EXPECT_EQ(boxDistanceSquared(box, point), 0.0625f);
+        Range<SimdDouble8> packedBox;
+        Array<SimdPosition, kDimensions> packedPoint;
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            packedBox.begin[dim] = simdBroadcast<SimdDouble8>(box.begin[dim].toDouble());
+            packedBox.end[dim] = simdBroadcast<SimdDouble8>(box.end[dim].toDouble());
+            packedPoint[dim] = simdBroadcast<SimdPosition>(point[dim].raw());
+        }
+        auto const distances = boxDistanceSquared(packedBox, packedPoint);
+        for (int lane = 0; lane < kSimdFloatSize; ++lane) {
+            EXPECT_EQ(distances[lane], 0.0625f);
+        }
+    }
+}
+
+TEST(FmmGeometry, DegenerateAndWideRangesChooseValidDimensions) {
+    Range<int> box;
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        box.begin[dim] = 0;
+        box.end[dim] = dim == 0 ? 4 : dim + 1;
+    }
+    EXPECT_EQ(box.shortestDim(), 1);
+    EXPECT_EQ(box.longestDim(), 0);
+    box.end = box.begin;
+    EXPECT_GE(box.longestDim(), 0);
+    EXPECT_LT(box.longestDim(), kDimensions);
+    auto const halves = box.split();
+    EXPECT_EQ(halves.first.end, box.end);
+    EXPECT_EQ(halves.second.begin, box.begin);
+}
+
+TEST(FmmGeometry, TensorSubtractionAndDependentComponentWrite) {
+    SymmetricTracelessTensor<double, 4> first, second;
+    first = 3.0;
+    second = 1.0;
+    auto const difference = first - second;
+    EXPECT_EQ(difference(1, 0, 0), 2.0);
+    EXPECT_THROW(first(1, 0, 2) = 0.0, std::runtime_error);
 }

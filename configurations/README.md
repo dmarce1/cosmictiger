@@ -117,18 +117,31 @@ bounds the adaptive evolution steps.
 The Plummer configuration initializes only collisionless dark matter and uses
 the gravity driver; it replaces the former legacy Plummer hydro test. Glass
 generation is a special single-locality relaxation and saves `glass.bin` under
-its output directory.
+its output directory. To use that glass for cosmological initial conditions,
+copy the file to `./glass.bin` and set `initial.useGlass=true`. The exchange
+format stores a native 32-bit side length followed by three `side^3` Q0.32 arrays,
+including in fixed64 builds; the reader rejects inconsistent sizes. Glass
+generation requires `initial.closePack=false`.
 
 Rayleigh–Taylor retains periodic boundaries and its prescribed downward
 acceleration, with self-gravity enabled. It is not a wall-bounded hydrostatic
-benchmark. The disc retains its prescribed central potential alongside
-self-gravity. Its initial specific internal energy is `1e-4` in code units,
+benchmark. Its inherited transverse velocity seed is
+`0.025 * [1 + cos(4 phi) + 0.5 cos(phi) + 0.5 cos(7 phi)] * sin(2 pi z)`,
+where `phi = 2 pi (x - 0.5)`. This is the multiharmonic profile retained from
+commit `d8e95728` and mirrored about the midplane in `5e926504`; the `0.1`
+amplitude parameter is a scale, with peak velocity `0.075`, and does not
+specify a nonnegative product envelope. The disc retains its prescribed central
+potential alongside self-gravity. Its initial specific internal energy is `1e-4` in code units,
 independent of resolution, replacing the legacy near-zero pressure. This keeps
 the fractional thermal-change timestep bound usable as viscous heating begins,
 while the thermal energy remains small compared with the orbital kinetic energy.
 The star uses a Lane–Emden polytrope of index 1.5: the first stage uses damping
 and zero artificial-viscosity alpha, while the second uses no damping and alpha
-0.05. The blast reference solution assumes gamma 5/3.
+0.05. These stages select constant viscosity, with beta equal to twice alpha.
+The star requires self-gravity. Its pressure profile has polytropic index 1.5,
+while its internal energy uses the configured `hydro.gamma`. The blast deposits
+unit total energy on the realized particle lattice and its reference solution
+uses the configured `hydro.gamma`.
 
 The cosmological configuration creates `N^3` gas and `N^3` dark-matter particles
 for `initial.particlesPerDimension=N`. Class masses are fixed within each

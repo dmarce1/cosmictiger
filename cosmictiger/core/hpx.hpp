@@ -55,6 +55,7 @@ using SharedMutexType = hpx::shared_mutex;
 #endif
 
 int hpxRank();
+int hpxLocalRank();
 int hpxSize();
 void hpxYield();
 int hpxHardwareConcurrency();

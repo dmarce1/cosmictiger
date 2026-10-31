@@ -19,6 +19,21 @@ CUDA_EXPORT bool boxesOverlap(Box const& a, Box const& b, int dimensions) {
     return true;
 }
 
+// Closed overlap in the unit periodic box, including point and planar leaves.
+template <class Box>
+CUDA_EXPORT bool periodicBoxesOverlap(Box const& a, Box const& b, int dimensions) {
+    for (int dim = 0; dim < dimensions; ++dim) {
+        bool overlap = false;
+        for (int shift = -1; shift <= 1; ++shift) {
+            overlap |= a.end[dim] + shift >= b.begin[dim] && b.end[dim] >= a.begin[dim] + shift;
+        }
+        if (!overlap) {
+            return false;
+        }
+    }
+    return true;
+}
+
 template <class Box, class Point>
 CUDA_EXPORT bool boxContains(Box const& box, Point const& point, int dimensions) {
     for (int dim = 0; dim < dimensions; dim++) {

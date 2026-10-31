@@ -3,9 +3,8 @@
 `tools/generate_fmm.py` generates `cosmictiger/gravity/fmm_kernels/spherical_kernels.hpp` for the same
 inclusive local-degree range as the Cartesian representations. FMM order `q`
 means source degree `q-2` and local degree `q-1`; the source headers contain
-orders 3–9, with source degrees 1–7 and local degrees 2–8. CMake's
-`COSMICTIGER_FMM_MIN_ORDER`/`COSMICTIGER_FMM_MAX_ORDER` select the compiled
-range, defaulting to 4–8. `FMM_MIN_ORDER`/`FMM_MAX_ORDER` preprocessor guards
+orders 3–9, with source degrees 1–7 and local degrees 2–8. CMake's `COSMICTIGER_EXPANSION_DEGREE` selects potential degrees, defaulting
+to 4–6 (orders 5–7); use `2-8` for all generated degrees. `FMM_MIN_ORDER`/`FMM_MAX_ORDER` preprocessor guards
 exclude other orders from compilation without removing them from the source.
 This adds a generated API, not a runtime gravity-method selection.
 
@@ -137,6 +136,6 @@ cases; the float test budget is `4e-5`, and the double/SIMD budget is `2e-10`.
 These are numerical and emitted-arithmetic checks, not runtime speed benchmarks.
 
 CMake splits this source with `GENERATED_SPHERICAL_TEST_DEGREE` to keep each
-compilation bounded. It creates `generated_spherical_order_<order>` CTest tests
-for each order in the selected build range. Defining
+compilation bounded. It creates `generated_spherical_degree_<degree>` CTest tests
+for each selected degree when PMMM support is enabled. Defining
 `GENERATED_SPHERICAL_SKIP_SIMD` is available for a scalar-only diagnostic build.

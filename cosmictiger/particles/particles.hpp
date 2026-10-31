@@ -43,7 +43,7 @@ using ParticleInteger = long long;
 using ParticleInteger = int;
 #endif
 
-inline constexpr ParticleInteger kNoParticleIndex = static_cast<ParticleInteger>(0xFFFFFFFFU);
+inline constexpr ParticleInteger kNoParticleIndex = ParticleInteger{-1};
 
 inline constexpr GroupInteger kNoParticleGroup = static_cast<GroupInteger>(0x7FFFFFFFFFFFFFFFLL);
 
@@ -230,6 +230,7 @@ void particlesGlobalReadPosAndGroup(ParticleGlobalRange range, Position* x, Posi
 ParticleInteger particlesSort(Pair<ParticleInteger> rng, double xm, int xdim);
 // Swap all attached fields without reading uninitialized saved-force values.
 void particlesSwap(ParticleInteger first, ParticleInteger second);
+GadgetIoHeader particlesReadGadget4Header(std::string const&);
 GadgetIoHeader particlesReadGadget4(std::string);
 #ifndef __CUDACC__
 hpx::future<Vector<Position>> particlesGet(int rank, Vector<Pair<ParticleInteger>> const& ranges);
@@ -249,7 +250,7 @@ int particlesGroupHome(GroupInteger);
 #ifndef __CUDACC__
 SharedMutexType& particlesSharedMutex();
 #endif
-void particlesSetTracers(size_t count = 0);
+void particlesSetTracers(size_t count = 0, size_t totalCount = 0);
 Vector<OutputParticle> particlesGetTracers();
 // Local operation. A zero count disables capture and releases the compact result buffer.
 void particlesGravitySamplesBegin(size_t sampleCount);

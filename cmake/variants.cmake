@@ -10,7 +10,7 @@ target_link_libraries(cosmictiger_platform INTERFACE
     MPI::MPI_CXX Threads::Threads
     ${SILO_LIBRARY} ${CHEALPIX_LIBRARY} ${HEALPIX_CXX_LIBRARY} dl quadmath)
 target_compile_options(cosmictiger_platform INTERFACE
-    $<$<COMPILE_LANGUAGE:CXX>:-Wno-attributes;-ffast-math>)
+    $<$<COMPILE_LANGUAGE:CXX>:-Wno-attributes;-ffast-math;-fno-finite-math-only>)
 if(COMPILER_SUPPORTS_MARCH_NATIVE)
     target_compile_options(cosmictiger_platform INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
 endif()

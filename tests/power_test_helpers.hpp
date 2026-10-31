@@ -90,7 +90,7 @@ inline std::vector<double> referenceDensity(
             weights[dimension].resize(gridSize, 0.0L);
             // Match the specified single-precision folding, including raw
             // Position values just below one that round to 1.0f before folding.
-            float const coordinate = float(fixture.positions[dimension][index].raw()) * 0x1p-32f;
+            float const coordinate = fixture.positions[dimension][index].toFloat();
             float const unfolded = float(fold) * coordinate;
             long double const folded = unfolded - std::floor(static_cast<long double>(unfolded));
             long double const gridCoordinate = folded * gridSize;

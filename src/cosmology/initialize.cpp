@@ -68,15 +68,15 @@ static std::pair<double, double> initialWavenumberRange() {
     return {fundamental, corner};
 }
 
-static void zeldovichBegin(int dim1, int dim2, bool velocity = false);
-static float zeldovichEnd(int dim, bool, float, float, bool velocityOnly = false);
+static void zeldovichBegin(int dim1, int dim2, bool velocity = false, int latticePhase = 0);
+static float zeldovichEnd(int dim, float, float, bool velocityOnly = false, int latticePhase = 0);
 static void twolptInit();
 static void twolptDestroy();
 static void twolpt(int, int);
 static void twolptPhase(int phase);
 static void twolptCorrection1();
 static void twolptF2delta2Inv();
-static void twolptCorrection2(int dim);
+static void twolptCorrection2(int dim, int latticePhase);
 
 HPX_PLAIN_ACTION(zeldovichBegin, ZeldovichBeginAction);
 HPX_PLAIN_ACTION(zeldovichEnd, ZeldovichEndAction);
@@ -276,24 +276,26 @@ void initialize(double z0) {
     terminal::detailPrint("D2 = %e\n", d2Value);
     terminal::detailPrint("Linear velocity factor = %e\n", linearVelocityFactor / a0);
     terminal::detailPrint("prefac2 = %e\n", prefac2 / a0);
+    int const latticePhases = getOptions().initial.useGlass ?
+        1 :
+        (getOptions().initial.closePack ? 2 : 1) * (getOptions().hydro.enabled ? 2 : 1);
     for (int dim = 0; dim < kDimensions; dim++) {
-        fft3dInit(n);
-        zeldovichBegin(dim, kDimensions);
-        // This also joins every rank's Einstein-Boltzmann transfer tasks before
-        // allowing an interrupt to unwind their background/output storage.
-        checkInitializationInterrupt();
-        //		fft3d_force_real();
-        fft3dInvExecute();
-        float const dxmax = zeldovichEnd(dim, dim == 0, 1.0f, 0.0f);
-        terminal::detailPrint("Initial %c displacement maximum: %e\n", 'x' + dim, dxmax);
-        fft3dDestroy();
-        checkInitializationInterrupt();
-        fft3dInit(n);
-        zeldovichBegin(dim, kDimensions, true);
-        fft3dInvExecute();
-        zeldovichEnd(dim, false, 1.0f, linearVelocityFactor, true);
-        fft3dDestroy();
-        checkInitializationInterrupt();
+        for (int phase = 0; phase < latticePhases; ++phase) {
+            fft3dInit(n);
+            zeldovichBegin(dim, kDimensions, false, phase);
+            checkInitializationInterrupt();
+            fft3dInvExecute();
+            float const dxmax = zeldovichEnd(dim, 1.0f, 0.0f, false, phase);
+            terminal::detailPrint("Initial %c displacement maximum: %e\n", 'x' + dim, dxmax);
+            fft3dDestroy();
+            checkInitializationInterrupt();
+            fft3dInit(n);
+            zeldovichBegin(dim, kDimensions, true, phase);
+            fft3dInvExecute();
+            zeldovichEnd(dim, 1.0f, linearVelocityFactor, true, phase);
+            fft3dDestroy();
+            checkInitializationInterrupt();
+        }
     }
     if (getOptions().initial.twoLpt) {
         twolptInit();
@@ -362,11 +364,13 @@ void initialize(double z0) {
         for (int dim = 0; dim < kDimensions; dim++) {
             terminal::detailPrint(
                 "Computing 2LPT correction to %c positions and velocities\n", 'x' + dim);
-            twolptCorrection2(dim);
-            float dxmax = zeldovichEnd(dim, false, -d2Value, prefac2);
-            fft3dDestroy();
-            checkInitializationInterrupt();
-            terminal::detailPrint("2LPT %c displacement maximum: %e\n", 'x' + dim, dxmax);
+            for (int phase = 0; phase < latticePhases; ++phase) {
+                twolptCorrection2(dim, phase);
+                float const dxmax = zeldovichEnd(dim, -d2Value, prefac2, false, phase);
+                fft3dDestroy();
+                checkInitializationInterrupt();
+                terminal::detailPrint("2LPT %c displacement maximum: %e\n", 'x' + dim, dxmax);
+            }
         }
         twolptDestroy();
     }
@@ -401,14 +405,14 @@ void twolptCorrection1() {
     }
 }
 
-void twolptCorrection2(int dim) {
+void twolptCorrection2(int dim, int latticePhase) {
     int const n = getOptions().initial.fourierSize;
     if (hpxRank() == 0) {
         fft3dInit(n);
     }
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
-        futs.push_back(hpx::async<TwolptCorrection2Action>(c, dim));
+        futs.push_back(hpx::async<TwolptCorrection2Action>(c, dim, latticePhase));
     }
     float const boxSize =
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
@@ -420,25 +424,34 @@ void twolptCorrection2(int dim) {
     for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
         futs2.push_back(hpx::async(
             hpx::annotated_function(
-                [n, box, boxSize, &yValue, dim, factor](Array<int64_t, kDimensions> iValue2) {
-                    int const i = (iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n);
+                [n, box, boxSize, &yValue, dim, factor, latticePhase](
+                    Array<int64_t, kDimensions> iValue2) {
+                    int const i = (iValue2[0] <= n / 2 ? iValue2[0] : iValue2[0] - n);
                     float const kx = 2.f * std::numbers::pi_v<float> / boxSize * float(i);
                     for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
-                        int const j = (iValue2[1] < n / 2 ? iValue2[1] : iValue2[1] - n);
+                        int const j = (iValue2[1] <= n / 2 ? iValue2[1] : iValue2[1] - n);
                         float const ky = 2.f * std::numbers::pi_v<float> / boxSize * float(j);
                         for (iValue2[2] = box.begin[2]; iValue2[2] != box.end[2]; iValue2[2]++) {
-                            int const k = (iValue2[2] < n / 2 ? iValue2[2] : iValue2[2] - n);
+                            int const k = (iValue2[2] <= n / 2 ? iValue2[2] : iValue2[2] - n);
                             int const i2 = sqr(i, j, k);
                             int64_t const index = box.index(iValue2);
-                            if (i2 > 0) {
+                            if (i2 > 0 && !lpt::isNyquist(iValue2[0], n) &&
+                                !lpt::isNyquist(iValue2[1], n) && !lpt::isNyquist(iValue2[2], n)) {
                                 float kz = 2.f * std::numbers::pi_v<float> / boxSize * float(k);
                                 float k2 = kx * kx + ky * ky + kz * kz;
                                 float const kValue[kDimensions] = {kx, ky, kz};
                                 yValue[index] =
                                     -ComplexFloat(0, 1) * kValue[dim] * yValue[index] / k2;
-                                yValue[index] *= cloudFilter(kx * boxSize / n);
-                                yValue[index] *= cloudFilter(ky * boxSize / n);
-                                yValue[index] *= cloudFilter(kz * boxSize / n);
+                                if (getOptions().initial.useGlass) {
+                                    yValue[index] *= cloudFilter(kx * boxSize / n);
+                                    yValue[index] *= cloudFilter(ky * boxSize / n);
+                                    yValue[index] *= cloudFilter(kz * boxSize / n);
+                                } else {
+                                    yValue[index] *=
+                                        lpt::latticeShift(iValue2[0], iValue2[1], iValue2[2], n,
+                                            lpt::latticeOffset(
+                                                latticePhase, getOptions().initial.closePack));
+                                }
                             } else {
                                 yValue[index] = ComplexFloat(0, 0);
                             }
@@ -459,126 +472,57 @@ void twolptCorrection2(int dim) {
     }
 }
 
-void twolptGenerate(int dim1, int dim2, bool velocity = false) {
+void twolptGenerate(int dim1, int dim2, bool velocity = false, int latticePhase = 0) {
     int64_t const n = getOptions().initial.fourierSize;
     float const boxSize =
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     float const factor = std::pow(boxSize, -1.5) * n * n * n;
-    Vector<ComplexFloat> yValue;
     static auto const power = computePowerSpectrum();
     auto const box = fft3dComplexRange();
-    yValue.resize(box.volume());
-    Array<int64_t, kDimensions> iValue;
-    constexpr int kRandInitIters = 8;
-    Vector<hpx::future<void>> futs2;
-    for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
-        futs2.push_back(hpx::async(
-            hpx::annotated_function(
-                [n, box, boxSize, &yValue, dim1, dim2, factor, velocity](
-                    Array<int64_t, kDimensions> iValue2) {
-                    int const i = (iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n);
-                    float const kx = 2.f * std::numbers::pi_v<float> / boxSize * float(i);
-                    for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
-                        int seed = (iValue2[0] * n + iValue2[1]) * 1234 + 42;
-                        gsl_rng* rndgen = gsl_rng_alloc(gsl_rng_taus);
-                        gsl_rng_set(rndgen, seed);
-                        for (int l = 0; l < kRandInitIters; l++) {
-                            gsl_rng_uniform_pos(rndgen);
+    Vector<ComplexFloat> yValue(box.volume());
+    Vector<hpx::future<void>> futures;
+    for (int64_t ix = box.begin[0]; ix < box.end[0]; ++ix) {
+        futures.push_back(hpx::async(hpx::annotated_function(
+            [=, &yValue]() {
+                for (int64_t iy = box.begin[1]; iy < box.end[1]; ++iy) {
+                    for (int64_t iz = box.begin[2]; iz < box.end[2]; ++iz) {
+                        auto const random = lpt::gaussianMode(ix, iy, iz, n);
+                        int64_t const index = box.index(ix, iy, iz);
+                        if (random == ComplexFloat{}) {
+                            yValue[index] = {};
+                            continue;
                         }
-                        int const j = (iValue2[1] < n / 2 ? iValue2[1] : iValue2[1] - n);
-                        float const ky = 2.f * std::numbers::pi_v<float> / boxSize * float(j);
-                        for (iValue2[2] = box.begin[2]; iValue2[2] != box.end[2]; iValue2[2]++) {
-                            int64_t const index = box.index(iValue2);
-                            if (iValue2[2] > 0) {
-                                int const k = (iValue2[2] < n / 2 ? iValue2[2] : iValue2[2] - n);
-                                int const i2 = sqr(i, j, k);
-                                float const kz =
-                                    2.f * std::numbers::pi_v<float> / boxSize * float(k);
-                                if (i2 > 0) {
-                                    float const kz =
-                                        2.f * std::numbers::pi_v<float> / boxSize * float(k);
-                                    float const k2 = kx * kx + ky * ky + kz * kz;
-                                    float const k0Value = sqrtf(kx * kx + ky * ky + kz * kz);
-                                    float const x = gsl_rng_uniform_pos(rndgen);
-                                    float const y = gsl_rng_uniform_pos(rndgen);
-                                    ComplexFloat const kValue[kDimensions + 1] = {
-                                        {0, -kx}, {0, -ky}, {0, -kz}, {1, 0}};
-                                    auto const randNormal = expc(ComplexFloat(0, 1) * 2.f *
-                                                                std::numbers::pi_v<float> * y) *
-                                        sqrtf(-logf(fabsf(x)));
-                                    float const amplitude = power.amplitude(k0Value, velocity);
-                                    yValue[index] = randNormal * amplitude * factor * kValue[dim1] *
-                                        kValue[dim2] / k2;
-                                } else {
-                                    yValue[index] = ComplexFloat(0.f, 0.f);
-                                }
-                                yValue[index] = lpt::interpolationCorrectedDerivative(
-                                    yValue[index], dim1, dim2, [=](ComplexFloat value) {
-                                        value *= cloudFilter(kx * boxSize / n);
-                                        value *= cloudFilter(ky * boxSize / n);
-                                        value *= cloudFilter(kz * boxSize / n);
-                                        return value;
-                                    });
-                            }
-                        }
-                        gsl_rng_free(rndgen);
-                        iValue2[2] = 0;
-                        int64_t const index = box.index(iValue2);
-                        int const j0 = iValue2[0] > n / 2 ? n - iValue2[0] : iValue2[0];
-                        int const j1Value = iValue2[1] > n / 2 ? n - iValue2[1] : iValue2[1];
-                        seed = (j0 * n + j1Value) * 1234 + 42;
-                        rndgen = gsl_rng_alloc(gsl_rng_taus);
-                        gsl_rng_set(rndgen, seed);
-                        for (int l = 0; l < kRandInitIters; l++) {
-                            gsl_rng_uniform_pos(rndgen);
-                        }
-                        int const k = (iValue2[2] < n / 2 ? iValue2[2] : iValue2[2] - n);
-                        int const i2 = sqr(i, j, k);
-                        float sgn = 1.0;
-                        if (dim1 != kDimensions) {
-                            sgn *= -1.0;
-                        }
-                        if (dim2 != kDimensions) {
-                            sgn *= -1.0;
-                        }
-                        float const kz = 2.f * std::numbers::pi_v<float> / boxSize * float(k);
-                        if (i2 > 0) {
-                            float const k2 = kx * kx + ky * ky + kz * kz;
-                            float const k0Value = sqrtf(kx * kx + ky * ky + kz * kz);
-                            float const x = gsl_rng_uniform_pos(rndgen);
-                            float const y = gsl_rng_uniform_pos(rndgen);
-                            ComplexFloat const kValue[kDimensions + 1] = {
-                                {0, -kx}, {0, -ky}, {0, -kz}, {1, 0}};
-                            auto const randNormal =
-                                expc(ComplexFloat(0, 1) * 2.f * std::numbers::pi_v<float> * y) *
-                                sqrtf(-logf(fabsf(x)));
-                            float const amplitude = power.amplitude(k0Value, velocity);
-                            yValue[index] =
-                                randNormal * amplitude * factor * kValue[dim1] * kValue[dim2] / k2;
-                            if (iValue2[0] > n / 2) {
-                                yValue[index] = std::conj(yValue[index]) * sgn;
-                            } else if (iValue2[0] == 0) {
-                                if (iValue2[1] > n / 2) {
-                                    yValue[index] = std::conj(yValue[index]) * sgn;
-                                }
-                            }
-                        } else {
-                            yValue[index] = ComplexFloat(0.f, 0.f);
-                        }
+                        auto const wave = [=](int64_t mode) {
+                            return 2.f * std::numbers::pi_v<float> / boxSize *
+                                float(mode <= n / 2 ? mode : mode - n);
+                        };
+                        float const kx = wave(ix), ky = wave(iy), kz = wave(iz);
+                        float const k2 = kx * kx + ky * ky + kz * kz;
+                        ComplexFloat const derivative[kDimensions + 1] = {
+                            {0, -kx}, {0, -ky}, {0, -kz}, {1, 0}};
+                        yValue[index] = random * float(power.amplitude(std::sqrt(k2), velocity)) *
+                            factor * derivative[dim1] * derivative[dim2] / k2;
                         yValue[index] = lpt::interpolationCorrectedDerivative(
                             yValue[index], dim1, dim2, [=](ComplexFloat value) {
-                                value *= cloudFilter(kx * boxSize / n);
-                                value *= cloudFilter(ky * boxSize / n);
-                                value *= cloudFilter(kz * boxSize / n);
-                                return value;
+                                if (getOptions().initial.useGlass) {
+                                    value *= cloudFilter(kx * boxSize / n);
+                                    value *= cloudFilter(ky * boxSize / n);
+                                    value *= cloudFilter(kz * boxSize / n);
+                                    return value;
+                                }
+                                return value *
+                                    lpt::latticeShift(ix, iy, iz, n,
+                                        lpt::latticeOffset(
+                                            latticePhase, getOptions().initial.closePack));
                             });
-                        gsl_rng_free(rndgen);
                     }
-                },
-                "cosmology.twolptGenerate"),
-            iValue));
+                }
+            },
+            "cosmology.twolptGenerate")));
     }
-    hpx::wait_all(futs2.begin(), futs2.end());
+    for (auto& future : futures) {
+        future.get();
+    }
     fft3dAccumulateComplex(box, yValue);
 }
 
@@ -613,7 +557,7 @@ void twolptPhase(int phase) {
     auto const box = fft3dRealRange();
     auto const vol = box.volume();
     auto const thisDelta2Part = fft3dReadReal(box);
-    for (int i = 0; i < vol; i++) {
+    for (int64_t i = 0; i < vol; i++) {
         lpt::accumulateSecondOrderSource(phase, thisDelta2Part[i], delta2Part[i], delta2[i]);
     }
 
@@ -642,12 +586,12 @@ void twolptDestroy() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
-static void zeldovichBegin(int dim1, int dim2, bool velocity) {
+static void zeldovichBegin(int dim1, int dim2, bool velocity, int latticePhase) {
     Vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
-        futs.push_back(hpx::async<ZeldovichBeginAction>(c, dim1, dim2, velocity));
+        futs.push_back(hpx::async<ZeldovichBeginAction>(c, dim1, dim2, velocity, latticePhase));
     }
-    twolptGenerate(dim1, dim2, velocity);
+    twolptGenerate(dim1, dim2, velocity, latticePhase);
     hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -681,10 +625,8 @@ static Range<int64_t> findMyBox() {
 
 static void clearX0() {
     Vector<hpx::future<void>> futures;
-    if (getOptions().hydro.enabled || getOptions().cosmology.sigma8 == 0.0) {
-        for (auto const& child : hpxChildren()) {
-            futures.push_back(hpx::async<ClearX0Action>(child));
-        }
+    for (auto const& child : hpxChildren()) {
+        futures.push_back(hpx::async<ClearX0Action>(child));
     }
     for (int dim = 0; dim < kDimensions; dim++) {
         x0Value[dim] = Vector<Position>();
@@ -696,10 +638,8 @@ static void clearX0() {
 
 static void initX0() {
     Vector<hpx::future<void>> remoteFutures;
-    if (getOptions().hydro.enabled || getOptions().cosmology.sigma8 == 0.0) {
-        for (auto const& child : hpxChildren()) {
-            remoteFutures.push_back(hpx::async<InitX0Action>(child));
-        }
+    for (auto const& child : hpxChildren()) {
+        remoteFutures.push_back(hpx::async<InitX0Action>(child));
     }
     Vector<hpx::future<void>> futs;
     double const ninv = 1.0 / getOptions().initial.particlesPerDimension;
@@ -745,8 +685,7 @@ static void initX0() {
                     if (closePack) {
                         for (int dim1 = 0; dim1 < kDimensions; dim1++) {
                             double x = iValue[dim1] * ninv;
-                            x0Value[dim1][index] =
-                                x + (getOptions().hydro.enabled ? 0.25 * ninv : 0.25);
+                            x0Value[dim1][index] = x + 0.25 * ninv;
                             x0Value[dim1][index + 1] = x + 0.75 * ninv;
                         }
                         index += 2;
@@ -773,17 +712,27 @@ static void initX0() {
             box.end[dim] = (double) ibox.end[dim] / particlesPerDimension;
         }
         FREAD(&glassParticlesPerDimension, sizeof(int), 1, fp);
-        if (particlesPerDimension % glassParticlesPerDimension != 0) {
+        if (glassParticlesPerDimension <= 0 ||
+            particlesPerDimension % glassParticlesPerDimension != 0) {
+            std::fclose(fp);
             THROW_ERROR("parts_dim (=%i) must be a multiple of the glass dim (%i)\n",
                 particlesPerDimension, glassParticlesPerDimension);
         }
         int nf = particlesPerDimension / glassParticlesPerDimension;
         terminal::detailPrint("glass factor = %i\n", nf);
-        size_t numberOfGlassParticles =
-            sqr(glassParticlesPerDimension) * glassParticlesPerDimension;
-        static Vector<Fixed32> x(numberOfGlassParticles);
-        static Vector<Fixed32> y(numberOfGlassParticles);
-        static Vector<Fixed32> z(numberOfGlassParticles);
+        uint64_t const numberOfGlassParticles = uint64_t(glassParticlesPerDimension) *
+            glassParticlesPerDimension * glassParticlesPerDimension;
+        uint64_t const expectedBytes = sizeof(int) + 3 * sizeof(Fixed32) * numberOfGlassParticles;
+        if (std::fseek(fp, 0, SEEK_END) != 0 || std::ftell(fp) < 0 ||
+            uint64_t(std::ftell(fp)) != expectedBytes ||
+            std::fseek(fp, sizeof(int), SEEK_SET) != 0) {
+            std::fclose(fp);
+            THROW_ERROR(
+                "Invalid glass.bin size: expected a side^3 Q0.32 coordinate array per axis\n");
+        }
+        Vector<Fixed32> x(numberOfGlassParticles);
+        Vector<Fixed32> y(numberOfGlassParticles);
+        Vector<Fixed32> z(numberOfGlassParticles);
         FREAD(x.data(), sizeof(Fixed32), numberOfGlassParticles, fp);
         FREAD(y.data(), sizeof(Fixed32), numberOfGlassParticles, fp);
         FREAD(z.data(), sizeof(Fixed32), numberOfGlassParticles, fp);
@@ -792,14 +741,15 @@ static void initX0() {
         int const jb = box.begin[kXDimension] * nf;
         int const lb = box.begin[kZDimension] * nf;
         int const kb = box.begin[kYDimension] * nf;
-        int const je = std::min((int) box.end[kXDimension] * nf, nf - 1) + 1;
-        int const ke = std::min((int) box.end[kYDimension] * nf, nf - 1) + 1;
-        int const le = std::min((int) box.end[kZDimension] * nf, nf - 1) + 1;
+        int const je = std::min(int(std::ceil(box.end[kXDimension] * nf)), nf);
+        int const ke = std::min(int(std::ceil(box.end[kYDimension] * nf)), nf);
+        int const le = std::min(int(std::ceil(box.end[kZDimension] * nf)), nf);
         MutexType mutex;
         Vector<ParticleInteger> counts(je - jb);
         for (int j = jb; j < je; j++) {
             futs.push_back(hpx::async(hpx::annotated_function(
-                [j, lb, le, jb, kb, ke, numberOfGlassParticles, &mutex, box, nf, &counts]() {
+                [j, lb, le, jb, kb, ke, numberOfGlassParticles, &mutex, box, nf, &counts, &x, &y,
+                    &z]() {
                     ParticleInteger thisCount = 0;
                     for (int k = kb; k < ke; k++) {
                         for (int l = lb; l < le; l++) {
@@ -844,7 +794,8 @@ static void initX0() {
         for (int j = jb; j < je; j++) {
             ParticleInteger const indexBegin = counts[j - jb];
             futs.push_back(hpx::async(hpx::annotated_function(
-                [j, lb, le, kb, ke, numberOfGlassParticles, &mutex, box, nf, indexBegin, &sourceIds, identify]() {
+                [j, lb, le, kb, ke, numberOfGlassParticles, &mutex, box, nf, indexBegin, &x, &y, &z,
+                    &sourceIds, identify]() {
                     ParticleInteger iii = indexBegin;
                     for (int k = kb; k < ke; k++) {
                         for (int l = lb; l < le; l++) {
@@ -880,6 +831,10 @@ static void initX0() {
                 },
                 "cosmology.initializeGlassParticles")));
         }
+        for (auto& future : futs) {
+            future.get();
+        }
+        futs.clear();
     }
     hpx::wait_all(futs.begin(), futs.end());
     particlesResize(x0Value[kXDimension].size());
@@ -954,7 +909,7 @@ static void initX0() {
 }
 
 static float zeldovichEnd(
-    int dim, bool initializeParticles, float d1Value, float prefac1, bool velocityOnly) {
+    int dim, float d1Value, float prefac1, bool velocityOnly, int latticePhase) {
     // PRINT( "enter zeldovich_end\n");
     float dxmax = 0.0;
     SpinlockType mutex;
@@ -963,24 +918,26 @@ static float zeldovichEnd(
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     auto box = findMyBox();
     bool const glass = getOptions().initial.useGlass;
-    for (int dim = 0; dim < kDimensions; dim++) {
-        box.end[dim] += kCloudMax + (getOptions().hydro.enabled ? 1 : 0);
-        box.begin[dim] += kCloudMin;
+    if (glass) {
+        for (int dim = 0; dim < kDimensions; dim++) {
+            box.end[dim] += kCloudMax + (getOptions().hydro.enabled ? 1 : 0);
+            box.begin[dim] += kCloudMin - 1;
+        }
     }
     Vector<hpx::future<float>> futs;
     for (auto c : hpxChildren()) {
-        futs.push_back(hpx::async<ZeldovichEndAction>(
-            c, dim, initializeParticles, d1Value, prefac1, velocityOnly));
+        futs.push_back(
+            hpx::async<ZeldovichEndAction>(c, dim, d1Value, prefac1, velocityOnly, latticePhase));
     }
-    static Vector<float> yValue;
-    yValue = fft3dReadReal(box);
+    auto const yValue = fft3dReadReal(box);
     Array<int64_t, kDimensions> iValue;
     float const ninv = 1.0 / n;
     int const numberOfThreads = hpxHardwareConcurrency();
     double const boxSizeInv = 1.0 / boxSize;
     for (ParticleInteger proc = 0; proc < numberOfThreads; proc++) {
         futs.push_back(hpx::async(hpx::annotated_function(
-            [proc, numberOfThreads, n, box, boxSizeInv, dim, d1Value, prefac1, velocityOnly]() {
+            [proc, numberOfThreads, n, box, boxSizeInv, dim, d1Value, prefac1, velocityOnly,
+                latticePhase, glass, &yValue]() {
                 size_t const b = (size_t) proc * particlesSize() / numberOfThreads;
                 size_t const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
                 double dxmax = 0.0;
@@ -988,31 +945,47 @@ static float zeldovichEnd(
                     double const x0 = x0Value[kXDimension][i].toDouble();
                     double const y0 = x0Value[kYDimension][i].toDouble();
                     double const z0 = x0Value[kZDimension][i].toDouble();
-                    int i1 = x0 * n;
-                    int j1 = y0 * n;
-                    int k1 = z0 * n;
-                    double t[kDimensions] = {x0 * n - i1, y0 * n - j1, z0 * n - k1};
-                    if (getOptions().hydro.enabled) {
-                        // A positive gas offset may wrap through the upper periodic boundary.
-                        if (i1 < box.begin[kXDimension] - kCloudMin) {
-                            i1 += n;
-                        }
-                        if (j1 < box.begin[kYDimension] - kCloudMin) {
-                            j1 += n;
-                        }
-                        if (k1 < box.begin[kZDimension] - kCloudMin) {
-                            k1 += n;
-                        }
-                    }
                     double dx = 0.0;
-                    for (int j = kCloudMin; j <= kCloudMax; j++) {
-                        double wtx = cloudWeight(-j + t[kXDimension]);
-                        for (int k = kCloudMin; k <= kCloudMax; k++) {
-                            double wty = cloudWeight(-k + t[kYDimension]);
-                            for (int l = kCloudMin; l <= kCloudMax; l++) {
-                                double wtz = cloudWeight(-l + t[kZDimension]);
-                                double wt = wtx * wty * wtz;
-                                dx += yValue[box.index(i1 + j, j1 + k, k1 + l)] * wt;
+                    if (!glass) {
+                        int const sublattices = getOptions().initial.closePack ? 2 : 1;
+                        size_t const speciesCount =
+                            particlesSize() / (getOptions().hydro.enabled ? 2 : 1);
+                        int const phase =
+                            int(i % sublattices) + (size_t(i) >= speciesCount ? sublattices : 0);
+                        if (phase != latticePhase) {
+                            continue;
+                        }
+                        double const offset =
+                            lpt::latticeOffset(phase, getOptions().initial.closePack);
+                        int64_t const ix = lpt::latticeNode(x0, n, offset);
+                        int64_t const iy = lpt::latticeNode(y0, n, offset);
+                        int64_t const iz = lpt::latticeNode(z0, n, offset);
+                        ALWAYS_ASSERT(ix >= box.begin[0] && ix < box.end[0] && iy >= box.begin[1] &&
+                            iy < box.end[1] && iz >= box.begin[2] && iz < box.end[2]);
+                        dx = yValue[box.index(ix, iy, iz)];
+                    } else {
+                        int64_t indices[kDimensions] = {
+                            int64_t(x0 * n), int64_t(y0 * n), int64_t(z0 * n)};
+                        double const t[kDimensions] = {
+                            x0 * n - indices[0], y0 * n - indices[1], z0 * n - indices[2]};
+                        for (int axis = 0; axis < kDimensions; ++axis) {
+                            // Only a gas offset that crosses the periodic upper edge wraps.
+                            if (indices[axis] + kCloudMin < box.begin[axis]) {
+                                indices[axis] += n;
+                            }
+                            ALWAYS_ASSERT(indices[axis] + kCloudMin >= box.begin[axis] &&
+                                indices[axis] + kCloudMax < box.end[axis]);
+                        }
+                        for (int j = kCloudMin; j <= kCloudMax; j++) {
+                            double const wtx = cloudWeight(-j + t[0]);
+                            for (int k = kCloudMin; k <= kCloudMax; k++) {
+                                double const wty = cloudWeight(-k + t[1]);
+                                for (int l = kCloudMin; l <= kCloudMax; l++) {
+                                    double const wtz = cloudWeight(-l + t[2]);
+                                    dx += yValue[box.index(
+                                              indices[0] + j, indices[1] + k, indices[2] + l)] *
+                                        wtx * wty * wtz;
+                                }
                             }
                         }
                     }

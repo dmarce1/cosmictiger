@@ -22,7 +22,8 @@ ScenarioPlan initializeRayleighTaylor() {
     double const requestedSide = opts.initial.particlesPerDimension;
     // Resolve each quarter of the box with whole cells. The heavy layers have
     // two equal-mass particles per cell; the light layer has one.
-    int const quarterDim = std::cbrt(requestedSide * requestedSide * requestedSide / 96.0);
+    int const quarterDim =
+        std::lround(std::cbrt(requestedSide * requestedSide * requestedSide / 96.0));
     if (quarterDim < 1) {
         throw std::runtime_error("The Rayleigh-Taylor scenario needs a resolved lattice; "
                                  "increase initial.particlesPerDimension");
@@ -35,6 +36,10 @@ ScenarioPlan initializeRayleighTaylor() {
     constexpr double kBoundaryPressure = 1.5;
     constexpr double kVelocityAmplitude = 0.1;
     double const acceleration = opts.hydro.zPlaneAcceleration;
+    if (!(acceleration > 0.0)) {
+        throw std::invalid_argument(
+            "The Rayleigh-Taylor scenario requires hydro.zPlaneAcceleration > 0");
+    }
     opts.initial.gasMass = 0.5 * kLightDensity / lightCount;
     setOptions(opts);
     double const mass = opts.initial.gasMass;
@@ -64,6 +69,10 @@ ScenarioPlan initializeRayleighTaylor() {
                                 kLightDensity * std::fmax(0.25 - distanceFromMiddle, 0.0));
                     double const internalEnergy = pressure / ((opts.hydro.gamma - 1.0) * density);
                     double const transverse = x.toDouble() - 0.5;
+                    // Retain the legacy multiharmonic seed (d8e95728), made
+                    // antisymmetric in z by 5e926504. The transverse Fourier
+                    // weights are 1 + cos(4 phi) + (cos(phi)+cos(7 phi))/2,
+                    // phi=2*pi*(x-0.5); kVelocityAmplitude is a scale, not its peak.
                     double const velocity = kVelocityAmplitude / 4.0 *
                         (1.0 +
                             std::cos(8.0 * std::numbers::pi * transverse) *

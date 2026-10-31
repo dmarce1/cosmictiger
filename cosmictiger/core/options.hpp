@@ -137,8 +137,9 @@ struct Gravity {
     int pmmmOrder{gravity::kBuildFmmOrder};    // Potential expansion degree + 1, shared by far and
                                                // near fields.
     std::string pmmmNearMethod{gravity::kBuildPmmmNearMethod};
-    int pmmmBatchParticles{4096};             // Target owned sink count per ready near-field batch.
-    int fmmOrder{gravity::kBuildFmmOrder};    // Potential expansion degree + 1; template/storage convention.
+    int pmmmBatchParticles{4096};    // Target owned sink count per ready near-field batch.
+    int fmmOrder{
+        gravity::kBuildFmmOrder};    // Potential expansion degree + 1; template/storage convention.
     std::string kernelFamily{"ferrers"};
     int kernelDegree{4};
     double openingAngle{};
@@ -251,7 +252,7 @@ struct StarFormation {
     // Hydrogen nuclei/cm^3; zero derives the threshold as in GADGET-4.
     double criticalPhysicalDensity{0.0};
     double criticalOverDensity{57.7};
-    std::uint64_t seed{1};
+    std::uint64_t seed{42};
 };
 
 struct Options {

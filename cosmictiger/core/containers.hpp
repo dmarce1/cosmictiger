@@ -17,15 +17,17 @@
 #include <cosmictiger/cuda/cuda.hpp>
 
 #ifdef __CUDA_ARCH__
-#define DO_BOUNDS_CHECK(i)                                                           \
-    if (i >= this->size()) {                                                         \
-        THROW_ERROR("Bounds error - %i is not between 0 and %i\n", i, this->size()); \
-        __trap();                                                                    \
+#define DO_BOUNDS_CHECK(i)                                                                        \
+    if (i >= this->size()) {                                                                      \
+        THROW_ERROR("Bounds error - %lld is not between 0 and %lld\n", static_cast<long long>(i), \
+            static_cast<long long>(this->size()));                                                \
+        __trap();                                                                                 \
     }
 #else
-#define DO_BOUNDS_CHECK(i)                                                           \
-    if (i >= this->size()) {                                                         \
-        THROW_ERROR("Bounds error - %i is not between 0 and %i\n", i, this->size()); \
+#define DO_BOUNDS_CHECK(i)                                                                        \
+    if (i >= this->size()) {                                                                      \
+        THROW_ERROR("Bounds error - %lld is not between 0 and %lld\n", static_cast<long long>(i), \
+            static_cast<long long>(this->size()));                                                \
     }
 #endif
 
@@ -38,11 +40,11 @@ public:
 #ifdef CHECK_BOUNDS
     inline T& operator[](size_t i) {
         DO_BOUNDS_CHECK(i);
-        return (*((std::vector<T>*) this))[i];
+        return BaseType::operator[](i);
     }
     inline T const& operator[](size_t i) const {
         DO_BOUNDS_CHECK(i);
-        return (*((std::vector<T>*) this))[i];
+        return BaseType::operator[](i);
     }
 #endif
 };
@@ -153,6 +155,8 @@ struct Pair {
     Pair() = default;
     Pair(Pair const&) = default;
     Pair& operator=(Pair const&) = default;
+    Pair(Pair&&) = default;
+    Pair& operator=(Pair&&) = default;
     Pair(T a, V b)
       : first(a)
       , second(b) {}

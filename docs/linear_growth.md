@@ -304,3 +304,20 @@ Run the bounded regression with `ctest --test-dir build/release -R
 `python3 tests/analyze_linear_growth.py --self-check`: EdS power laws, the
 regular Meszaros solution, and the Ferrers Fourier transform versus independent
 radial quadrature.
+
+## Production initial-condition sampling (October 31, 2026)
+
+The Gaussian Fourier stream is keyed by the full mode index. The `kz=0`
+Hermitian pair shares a canonical key; individual x/y reflections and the
+`kz=1` plane have independent draws. All component Nyquist planes are zeroed,
+including in the second-order displacement, so derivatives and shifted grids
+remain real. This correction changes seeded realizations relative to earlier
+versions.
+
+Regular lattice displacements and velocities are read directly at FFT nodes.
+For each offset sublattice (including gas and close-packed particles), the
+Fourier field is multiplied by `exp(i k dot delta)` before its inverse FFT.
+This preserves the resolved-mode amplitude without the aliased M6 transfer
+function at lattice nodes or half-cell offsets. Glass loads retain M6
+interpolation and its continuum deconvolution. These are initialization
+changes; existing checkpoint particle states are unaffected.

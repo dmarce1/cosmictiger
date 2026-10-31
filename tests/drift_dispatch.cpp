@@ -217,7 +217,7 @@ size_t lcAddParticles(
     return detail::capturedEntries.size();
 }
 
-void cudaDrift(int, float, float, float, float, float, double) {
+void cudaDrift(int, double, double, double, double, double, double) {
     throw std::runtime_error("CPU dispatch called the CUDA drift kernel");
 }
 

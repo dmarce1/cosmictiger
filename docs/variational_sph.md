@@ -366,9 +366,12 @@ Sod L1 values use the 1000 sampled particles of `sod.txt`; repeated runs vary by
 7 %. The Sedov blast aborts with the Monaghan operator also with a binary built before
 this operator existed; its cold background (\(u=10^{-20}\)) is driven negative by the
 neighbor-pressure half of the Monaghan work. The variational 16³ traditional failure is
-the existing fractional-energy timestep bound on viscously heated cold particles
+the former fractional-energy timestep bound on viscously heated cold particles
 (\(\delta t\) falls by \(4\times10^4\), beyond `kMaxRung`), not an energy error: the same
 case with the global integrator recovers and conserves energy to \(6\times10^{-7}\).
+The current bound excludes viscous heating and limits reversible work only;
+the approaching-pair CFL term controls shock heating. The table above records
+the historical validation snapshot and is not a rerun of the revised bound.
 
 **Historical restart, checkpoints and parity**: exact restarts of each operator
 from a staggered-rung checkpoint reproduced the uninterrupted gas payload bit for

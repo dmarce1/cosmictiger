@@ -920,7 +920,7 @@ void testPriceEtAlDensity() {
                 gradient[0][1] = 4.0 * a2;
             }
             for (int dim = 0; dim < kDimensions; ++dim) {
-                accelerationGradient[dim][dim] -= expansionAcceleration / scaleFactor;
+                accelerationGradient[dim][dim] -= expansion * expansion / scaleFactor;
             }
             for (int i = 0; i < fixture.count_; ++i) {
                 int const source = fixture.sourceIndex(i);

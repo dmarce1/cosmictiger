@@ -26,7 +26,7 @@ constexpr int kInventory = 96;
 constexpr int kRounds = 256;
 constexpr size_t kRequestBytes = 24;
 constexpr size_t kPayloadBytes = 32;
-constexpr size_t kBlockBytes = kPayloadBytes + sizeof(size_t);
+constexpr size_t kBlockBytes = kPayloadBytes + kCudaPoolHeaderSize;
 constexpr size_t kBin = 5;
 
 static_assert(CUDA_MEM_STACK_SIZE >= kInventory);
@@ -115,7 +115,7 @@ __global__ void exerciseBoundaries(CudaMemory* memory, AllocationResults* result
     // Large requests must neither overflow bin rounding nor consume a small
     // heap. The final small allocation exactly reaches the end of this heap.
     size_t const rejected[] = {
-        (size_t{1} << 30) + 1, size_t{1} << 31, (size_t{1} << 31) + 1, ~size_t{0}, 128};
+        (size_t{1} << 30) + 1, size_t{1} << 31, (size_t{1} << 31) + 1, ~size_t{0}, 256};
     for (size_t bytes : rejected) {
         if (memory->allocate(bytes) != nullptr) {
             results->failures++;
@@ -124,7 +124,8 @@ __global__ void exerciseBoundaries(CudaMemory* memory, AllocationResults* result
     for (int index = 0; index < 5; index++) {
         void* pointer = memory->allocate(8);
         results->pointers[index] = pointer;
-        if (pointer == nullptr || *(static_cast<size_t*>(pointer) - 1) != 3) {
+        if (pointer == nullptr ||
+            *reinterpret_cast<size_t*>(static_cast<char*>(pointer) - kCudaPoolHeaderSize) != 3) {
             results->failures++;
         }
     }
@@ -141,7 +142,7 @@ __global__ void allocateFresh(CudaMemory* memory, AllocationResults* results) {
         atomicAdd(&results->failures, 1);
         return;
     }
-    if (*(static_cast<size_t*>(pointer) - 1) != kBin) {
+    if (*reinterpret_cast<size_t*>(static_cast<char*>(pointer) - kCudaPoolHeaderSize) != kBin) {
         atomicAdd(&results->failures, 1);
     }
     setPayload(pointer, lane + 1);
@@ -171,7 +172,8 @@ __global__ void recycleConcurrently(CudaMemory* memory, RecycleState* state) {
             atomicAdd(&state->failures, 1);
             return;
         }
-        if (*(static_cast<size_t*>(pointer) - 1) != kBin || !validPayload(pointer)) {
+        if (*reinterpret_cast<size_t*>(static_cast<char*>(pointer) - kCudaPoolHeaderSize) != kBin ||
+            !validPayload(pointer)) {
             atomicAdd(&state->failures, 1);
         }
         setPayload(pointer, kInventory + 1 + lane * kRounds + round);
@@ -191,7 +193,7 @@ void finishKernel() {
 class CudaMemoryCuda : public detail::CudaTest {};
 
 TEST_F(CudaMemoryCuda, FailedRequestsPreserveCapacityAndAcceptExactFit) {
-    detail::CudaMemoryOwner owner(5 * (8 + sizeof(size_t)));
+    detail::CudaMemoryOwner owner(10 * kCudaPoolAlignment);
     detail::ManagedValue<detail::AllocationResults> results;
     detail::exerciseBoundaries<<<1, 1>>>(owner.get(), results.get());
     detail::finishKernel();

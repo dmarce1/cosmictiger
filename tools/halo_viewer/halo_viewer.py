@@ -420,12 +420,14 @@ class ViewerHandler(BaseHTTPRequestHandler):
                          "style-src 'self'; script-src 'self'; connect-src 'self'; "
                          "frame-ancestors 'none'; base-uri 'none'")
         super().end_headers()
+        self._responseStarted = True
 
     def log_message(self, format, *args):
         # No source paths or scientific selections in routine request logs.
         return
 
     def do_GET(self):
+        self._responseStarted = False
         try:
             host = self.headers.get("Host", "").split(":", 1)[0].lower()
             if host not in ("127.0.0.1", "localhost"):
@@ -444,13 +446,21 @@ class ViewerHandler(BaseHTTPRequestHandler):
             else:
                 self.asset(parts.path)
         except ApiError as error:
-            send_json(self, {"error": str(error)}, error.status)
+            self.report_error(str(error), error.status)
         except (ValueError, OverflowError) as error:
-            send_json(self, {"error": str(error)}, 400)
+            self.report_error(str(error), 400)
         except (BrokenPipeError, ConnectionResetError):
             pass
         except sqlite3.Error:
-            send_json(self, {"error": "Database query failed"}, 500)
+            self.report_error("Database query failed", 500)
+
+    def report_error(self, message, status):
+        if self._responseStarted:
+            # A streamed CSV may already contain rows. Never append a second
+            # HTTP response to that body after an iteration/connection failure.
+            self.close_connection = True
+            return
+        send_json(self, {"error": message}, status)
 
     def asset(self, path):
         files = {"/": ("index.html", "text/html"), "/index.html": ("index.html", "text/html"),

@@ -14,14 +14,14 @@ limit. `--min-order` and `--max-order` retain the
 existing generator convention: their arguments are **local degrees**, not the
 application FMM order.
 
-New CMake configurations compile orders 4 through 8 by default; the runtime
-default remains order 7. `COSMICTIGER_FMM_MIN_ORDER` and
-`COSMICTIGER_FMM_MAX_ORDER` set the `FMM_MIN_ORDER`/`FMM_MAX_ORDER` preprocessor
-guards and the per-order instantiations. Orders outside that selected range
-remain in the source headers but are excluded from compilation. Existing
-caches retain their configured range. Set
-`-DCOSMICTIGER_FMM_MIN_ORDER=3 -DCOSMICTIGER_FMM_MAX_ORDER=9` when reconfiguring
-to compile every available order.
+New CMake configurations compile potential degrees 4 through 6 by default
+(FMM orders 5 through 7); the runtime default is the highest compiled degree.
+`COSMICTIGER_EXPANSION_DEGREE` selects one degree or a range, and CMake derives
+`FMM_MIN_ORDER`/`FMM_MAX_ORDER` as degree plus one. Other orders remain in the
+source headers but are excluded from compilation. Use
+`-DCOSMICTIGER_EXPANSION_DEGREE=2-8` to compile every available degree.
+When reusing an older cache, remove the retired options with
+`-U COSMICTIGER_FMM_MIN_ORDER -U COSMICTIGER_FMM_MAX_ORDER`.
 
 The representations are generated and tested independently. The runtime
 walk, tree layout, checkpoint representation, and softening selection still use
@@ -35,8 +35,8 @@ structures and generated operators named `P2M`, `M2M`, `M2L`, `M2P`, `P2L`,
 `L2L`, and `L2P`. The derivative-contraction operator is `M2LDerivatives`.
 Cartesian `Multipole<Real, order>` and `Expansion<Real, order>` retain the
 application FMM order: their degrees are `order - 2` and `order - 1`, respectively.
-Spherical `Multipole<Real, degree>` and `Expansion<Real, degree>` retain explicit
-degrees. Generated operators in both namespaces also retain degree-based
+Spherical `Multipole<Real, order>` and `Expansion<Real, order>` use the same
+order convention and degrees. Generated operators in both namespaces also retain degree-based
 template arguments.
 Types use PascalCase, functions and variables camelCase, and namespaces and
 filenames snake_case, with the standard FMM operator abbreviations retained.
@@ -73,7 +73,8 @@ headers directly and do not regenerate or modify them. Regeneration requires
 Python 3 and clang-format.
 
 The numerical tests follow the selected build range: CMake creates
-`generated_spherical_order_<order>` for each selected order, and
+`generated_spherical_degree_<degree>` for each selected degree when PMMM
+support is enabled, and
 `generated_spherical_ewald`, `cartesian_kernels`, and corresponding Ewald/CUDA
 tests exercise that range. `generated_fmm_current` checks reproducibility of
 the complete source output. CTest's `generated_fmm_flops` passes the configured

@@ -10,7 +10,8 @@
 
 namespace sedov {
 
-void solution(double time, double r, double rmax, double& d, double& v, double& p, int ndim);
+void solution(double time, double r, double rmax, double& d, double& v, double& p, int ndim,
+    double gamma = 5.0 / 3.0);
 }
 
 #endif /* SEDOV_HPP_ */

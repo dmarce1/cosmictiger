@@ -2,10 +2,9 @@
 
 `tools/fmm/spherical_ewald.py` emits `cosmictiger/gravity/fmm_kernels/spherical_ewald_kernels.hpp` for the same
 local degrees as the Cartesian and spherical generators (2 through 8,
-FMM orders 3 through 9). The source retains every order; CMake's
-`COSMICTIGER_FMM_MIN_ORDER`/`COSMICTIGER_FMM_MAX_ORDER` select the compiled
-range, defaulting to 4 through 8, using `FMM_MIN_ORDER`/`FMM_MAX_ORDER`
-preprocessor guards. This adds generator APIs only; it does not select a
+FMM orders 3 through 9). The source retains every order; CMake's `COSMICTIGER_EXPANSION_DEGREE` selects potential degrees, defaulting
+to 4–6 (orders 5–7); use `2-8` for every generated degree. CMake derives
+the `FMM_MIN_ORDER`/`FMM_MAX_ORDER` preprocessor guards from those degrees. This adds generator APIs only; it does not select a
 new production gravity representation.
 
 The formulas independently implement [Nitadori, PMMM, Appendix B, equations

@@ -9,6 +9,12 @@
 #ifndef DEVICE_VECTOR_HPP_
 #define DEVICE_VECTOR_HPP_
 
+#include <algorithm>
+#include <climits>
+#include <memory>
+#include <type_traits>
+#include <utility>
+
 #include <cosmictiger/cuda/cuda_memory.hpp>
 
 struct ThreadIndex {
@@ -44,9 +50,12 @@ struct BlockSize {
 // Growable array whose storage normally comes from the cudaAllocate pool. A
 // vector may instead be attached to caller-provided storage (a region of a
 // per-launch slab); it then touches the pool only if it outgrows that region,
-// and never releases the attached storage.
+// and never releases the attached storage. On the device, mutations are
+// collective over a one-dimensional block and element types must be trivially
+// copyable. Owning nested element types are constructed/moved/destroyed on the host.
 template <class T>
 class DeviceVector {
+    static_assert(alignof(T) <= kCudaPoolAlignment);
     T* ptr_;
     T* newPtr_;
     int size_;
@@ -55,6 +64,11 @@ class DeviceVector {
 
     CUDA_EXPORT
     inline void construct(int a, int b) {
+#ifdef __CUDA_ARCH__
+        // Nontrivial owners may contain block-collective constructors. They
+        // are managed on the host; per-thread placement construction is unsafe.
+        ALWAYS_ASSERT(std::is_trivially_copyable_v<T>);
+#endif
         ThreadIndex tid;
         BlockSize bsz;
         syncthreads();
@@ -69,20 +83,30 @@ class DeviceVector {
         ThreadIndex tid;
         BlockSize bsz;
         syncthreads();
-        for (int i = a + tid; i < b; i += (int) bsz) {
-            (ptr_ + i)->~T();
+        if constexpr (!std::is_trivially_destructible_v<T>) {
+#ifdef __CUDA_ARCH__
+            ALWAYS_ASSERT(a >= b);
+#else
+            for (int i = a; i < b; ++i) {
+                (ptr_ + i)->~T();
+            }
+#endif
         }
         syncthreads();
     }
 
     CUDA_EXPORT
     inline void initialize() {
+#ifdef __CUDA_ARCH__
+        ALWAYS_ASSERT(blockDim.y == 1 && blockDim.z == 1);
+#endif
         ThreadIndex tid;
         syncthreads();
         if (tid == 0) {
             size_ = 0;
             capacity_ = 0;
             ptr_ = nullptr;
+            newPtr_ = nullptr;
             pooled_ = true;
         }
         syncthreads();
@@ -99,6 +123,25 @@ class DeviceVector {
         syncthreads();
     }
 
+    // Relocate live elements into uninitialized storage. Owning elements need
+    // real moves so their old lifetimes can end without aliasing pool buffers.
+    CUDA_EXPORT
+    inline void relocate(T* storage) {
+        if (size_ == 0) {
+            return;
+        }
+        if constexpr (std::is_trivially_copyable_v<T>) {
+            copyCudaMemory(storage, ptr_, sizeof(T) * size_t(size_));
+        } else {
+#ifdef __CUDA_ARCH__
+            ALWAYS_ASSERT(false);
+#else
+            std::uninitialized_move(begin(), end(), storage);
+            destruct(0, size_);
+#endif
+        }
+    }
+
 public:
     CUDA_EXPORT
     inline int capacity() const {
@@ -106,18 +149,23 @@ public:
     }
     CUDA_EXPORT
     inline void swap(DeviceVector& other) {
-        auto const previousData = other.ptr_;
-        auto const previousCapacity = other.capacity_;
-        auto const previousSize = other.size_;
-        auto const previousPooled = other.pooled_;
-        other.ptr_ = ptr_;
-        other.capacity_ = capacity_;
-        other.size_ = size_;
-        other.pooled_ = pooled_;
-        ptr_ = previousData;
-        capacity_ = previousCapacity;
-        size_ = previousSize;
-        pooled_ = previousPooled;
+        syncthreads();
+        ThreadIndex tid;
+        if (tid == 0) {
+            auto const previousData = other.ptr_;
+            auto const previousCapacity = other.capacity_;
+            auto const previousSize = other.size_;
+            auto const previousPooled = other.pooled_;
+            other.ptr_ = ptr_;
+            other.capacity_ = capacity_;
+            other.size_ = size_;
+            other.pooled_ = pooled_;
+            ptr_ = previousData;
+            capacity_ = previousCapacity;
+            size_ = previousSize;
+            pooled_ = previousPooled;
+        }
+        syncthreads();
     }
     CUDA_EXPORT
     inline T* begin() {
@@ -150,12 +198,29 @@ public:
     }
     CUDA_EXPORT
     inline DeviceVector& operator=(DeviceVector const& other) {
-        resize(other.size());
-        copyCudaMemory(ptr_, other.ptr_, size() * sizeof(T));
+        if (this == &other) {
+            return *this;
+        }
+        if constexpr (std::is_trivially_copyable_v<T>) {
+            resize(other.size());
+            copyCudaMemory(ptr_, other.ptr_, size_t(size()) * sizeof(T));
+        } else {
+#ifdef __CUDA_ARCH__
+            ALWAYS_ASSERT(false);
+#else
+            DeviceVector replacement(other.size());
+            std::copy(other.begin(), other.end(), replacement.begin());
+            swap(replacement);
+#endif
+        }
         return *this;
     }
     CUDA_EXPORT
     inline DeviceVector& operator=(DeviceVector&& other) {
+        if (this == &other) {
+            return *this;
+        }
+        destruct(0, size_);
         destroy();
         initialize();
         swap(other);
@@ -179,6 +244,7 @@ public:
     }
     CUDA_EXPORT
     inline ~DeviceVector() {
+        destruct(0, size_);
         destroy();
     }
     CUDA_EXPORT
@@ -202,9 +268,12 @@ public:
                 storageCapacity);
             ALWAYS_ASSERT(false);
         }
-        if (ptr_ && size_) {
-            copyCudaMemory(storage, ptr_, sizeof(T) * size_);
+        ALWAYS_ASSERT(storageCapacity >= 0);
+        if (storage == ptr_) {
+            ALWAYS_ASSERT(storageCapacity == capacity_);
+            return;
         }
+        relocate(storage);
         syncthreads();
         destroy();
         if (tid == 0) {
@@ -224,7 +293,12 @@ public:
         if (newCapacity < 1) {
             newCapacity = 1;
         }
+        ALWAYS_ASSERT(minimumCapacity >= size_ && minimumCapacity >= 0);
         while (newCapacity < minimumCapacity) {
+            if (newCapacity > INT_MAX / 2) {
+                newCapacity = minimumCapacity;
+                break;
+            }
             newCapacity *= 2;
         }
         if (tid == 0) {
@@ -235,9 +309,16 @@ public:
             }
         }
         syncthreads();
-        if (ptr_) {
-            copyCudaMemory(newPtr_, ptr_, sizeof(T) * size_);
+#ifndef __CUDA_ARCH__
+        try {
+            relocate(newPtr_);
+        } catch (...) {
+            cudaRelease(newPtr_);
+            throw;
         }
+#else
+        relocate(newPtr_);
+#endif
         syncthreads();
         destroy();
         if (tid == 0) {
@@ -257,6 +338,7 @@ public:
     }
     CUDA_EXPORT
     inline void resize(int newSize) {
+        ALWAYS_ASSERT(newSize >= 0);
         ThreadIndex tid;
         destruct(newSize, size_);
         auto const previousSize = size_;
@@ -280,6 +362,9 @@ public:
     }
     CUDA_EXPORT
     inline void popBack() {
+        syncthreads();
+        ALWAYS_ASSERT(size_ > 0);
+        destruct(size_ - 1, size_);
         ThreadIndex tid;
         if (tid == 0) {
             size_--;
@@ -289,6 +374,7 @@ public:
     CUDA_EXPORT
     inline void pushBack(T const& item) {
         ThreadIndex tid;
+        ALWAYS_ASSERT(size() < INT_MAX);
         resize(size() + 1);
         if (tid == 0) {
             back() = item;
@@ -298,6 +384,7 @@ public:
     CUDA_EXPORT
     inline void pushBack(T&& item) {
         ThreadIndex tid;
+        ALWAYS_ASSERT(size() < INT_MAX);
         resize(size() + 1);
         if (tid == 0) {
             back() = std::move(item);
@@ -311,7 +398,7 @@ public:
     CUDA_EXPORT
     inline T& operator[](int i) {
 #ifdef CHECK_BOUNDS
-        if (i >= size_) {
+        if (i < 0 || i >= size_) {
             PRINT("A) Bound exceeded in device_vector %i %i %i\n", i, size_, sizeof(T));
             ALWAYS_ASSERT(false);
         }
@@ -321,7 +408,7 @@ public:
     CUDA_EXPORT
     inline T const& operator[](int i) const {
 #ifdef CHECK_BOUNDS
-        if (i >= size_) {
+        if (i < 0 || i >= size_) {
             PRINT("B) Bound exceeded in device_vector %i %i %i\n", i, size_, sizeof(T));
             ALWAYS_ASSERT(false);
         }
@@ -338,7 +425,5 @@ public:
         }
     }
 };
-
-#include <cosmictiger/cuda/cuda_memory.hpp>
 
 #endif /* DEVICE_VECTOR_HPP_ */

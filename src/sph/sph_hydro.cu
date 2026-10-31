@@ -178,7 +178,8 @@ __global__ void sphCudaHydro(
                 variational::pressureVolumeFactor(P_a, 1.0f, ρ_a), m_b, ζ_a);
             flops += 5;
             Vector3<float> dv_a_dt(0.0f);    // this thread's acceleration sum
-            float du_a_dt = 0.0f;            // this thread's thermal work sum
+            float du_a_dt = 0.0f;
+            float viscous_heating = 0.0f;    // this thread's thermal work sum
             float const α_a = parameters.variableViscosity ?
                 data.sourceViscosityAlpha[particleIndex] :
                 parameters.viscosityAlpha;
@@ -249,8 +250,8 @@ __global__ void sphCudaHydro(
                     variational::pairForceFactor(Q_ab_over_m_a, Q_ba_over_m_a, F_a, F_b);
                 dv_a_dt -= (pressureForce + m_b_over_a * Π_ab * F_ab) * r_ab;
                 du_a_dt +=
-                    inverseScaleFactor * variational::pairWork(Q_ab_over_m_a, F_a, v_ab_dot_r_ab) +
-                    m_b_over_a * 0.5f * Π_ab * F_ab * v_ab_dot_r_ab_physical;
+                    inverseScaleFactor * variational::pairWork(Q_ab_over_m_a, F_a, v_ab_dot_r_ab);
+                viscous_heating += m_b_over_a * 0.5f * Π_ab * F_ab * v_ab_dot_r_ab_physical;
                 // P_b/ρ_b² (3), Q_ba (2), pressure force factor (4), viscous factor (3),
                 // and the pressure work and viscous heating (9).
                 flops += 21;
@@ -266,14 +267,16 @@ __global__ void sphCudaHydro(
             sharedReduceAdd<float, kHydroBlockSize>(dv_a_dt[kYDimension]);
             sharedReduceAdd<float, kHydroBlockSize>(dv_a_dt[kZDimension]);
             sharedReduceAdd<float, kHydroBlockSize>(du_a_dt);
+            sharedReduceAdd<float, kHydroBlockSize>(viscous_heating);
             sharedReduceMax<kHydroBlockSize>(μ_max);
             sharedReduceMax<kHydroBlockSize>(α_max);
-            flops += 4 * detail::sphReductionFlops<kHydroBlockSize>();
+            flops += 5 * detail::sphReductionFlops<kHydroBlockSize>();
             if (threadIndex == 0) {
                 // Corrections are derived, never checkpointed or migrated; slots that the
                 // density pass has not rebuilt hold NaN, so a stale source cannot pass silently.
                 if (!(sph_volume::isFiniteValue(dv_a_dt.dot(dv_a_dt)) &&
-                        sph_volume::isFiniteValue(du_a_dt))) {
+                        sph_volume::isFiniteValue(du_a_dt) &&
+                        sph_volume::isFiniteValue(viscous_heating))) {
                     PRINT("SPH variational rates are not finite: supportRadius=%e density=%e "
                           "ζ=%e\n",
                         H_a, ρ_a, ζ_a);
@@ -318,7 +321,8 @@ __global__ void sphCudaHydro(
                     5.0f - 3.0f * adiabaticIndex;
                 du_a_dt += expansionCoefficient * a_da_dt * inverseScaleFactor * u_a;
                 flops += 12;    // Damping and homogeneous thermal expansion.
-                data.sinkInternalEnergyRate[sinkIndex] = du_a_dt;
+                data.sinkInternalEnergyRate[sinkIndex] = du_a_dt + viscous_heating;
+                flops += 1;
                 if (parameters.phase == 1) {
                     // Section 10.3, p. 563:
                     //   δt_f = min_a (h_a/|f_a|),
@@ -343,7 +347,7 @@ __global__ void sphCudaHydro(
                     float δt = fminf(parameters.maximumTimestep,
                         parameters.courantFactor * parameters.scaleFactor /
                             fmaxf(fmaxf(one_over_δt_cv, one_over_δt_f), 1.0e-30f));
-                    // Bound fractional thermal change in the existing explicit integrator.
+                    // Bound reversible work; the approach-speed CFL term controls viscosity.
                     if (du_a_dt != 0.0f) {
                         flops += 3;
                         δt = fminf(δt,

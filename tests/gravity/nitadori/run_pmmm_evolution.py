@@ -96,7 +96,7 @@ def main():
     parser.add_argument("--order", type=int, choices=range(3, 10), required=True)
     parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"), required=True)
     parser.add_argument("--viscosity-evolution",
-                        choices=("none", "morrisAndMonaghan", "cullenAndDehnen"),
+                        choices=("none", "morrisAndMonaghan", "cullenAndDehnen", "priceEtAl"),
                         default="morrisAndMonaghan")
     parser.add_argument("--with-sph", action="store_true",
                         help="exercise mixed gas/dark-matter evolution in an SPH-enabled build")
@@ -153,7 +153,7 @@ def main():
             print(f"{label}: unavailable SPH rejected at startup")
             continue
         baseline = prepareCase(root, label + "_baseline")
-        log = run(baseline, dict(options, **{"run.maxIterations": 3}))
+        log = run(baseline, dict(options, **{"run.maxIterations": 4}))
         for key, expected in (("run.timeIntegrator", args.time_integrator),
                               ("gravity.method.far", "pmmm"),
                               ("gravity.method.near", args.near_method),
@@ -187,7 +187,7 @@ def main():
         source = baseline / "checkpoint.2"
         resumed = prepareCase(root, label + "_resumed", source)
         log = run(resumed, dict(options, **{"checkpoint.readIndex": 2,
-                                          "run.maxIterations": 1}))
+                                          "run.maxIterations": 2}))
         require("Done reading checkpoint" in log, "PMMM restart did not load its checkpoint")
         compare_restart(states[-1], read_checkpoint(
             resumed / "checkpoint.4", ranks, args.time_integrator))
@@ -199,7 +199,7 @@ def main():
         # reference must use the same policy, including every intermediate rung.
         unlimited_options = dict(options, **{"gravity.pmmmMaxPrimeFactor": "infinity"})
         unlimited = prepareCase(root, label + "_unlimited_baseline")
-        run(unlimited, dict(unlimited_options, **{"run.maxIterations": 3}))
+        run(unlimited, dict(unlimited_options, **{"run.maxIterations": 4}))
         unlimited_reference = read_checkpoint(unlimited / "checkpoint.4", ranks,
                                              args.time_integrator)
         unlimited_source = unlimited / "checkpoint.2"
@@ -214,7 +214,7 @@ def main():
             legacy = prepareCase(root, f"{label}_legacy_v{version}", unlimited_source)
             use_legacy_extension(legacy / unlimited_source.name, ranks, version)
             log = run(legacy, dict(unlimited_options, **{
-                "checkpoint.readIndex": 2, "run.maxIterations": 1}))
+                "checkpoint.readIndex": 2, "run.maxIterations": 2}))
             require("Done reading checkpoint" in log,
                     f"legacy v{version} checkpoint was not accepted with infinity")
             compare_restart(unlimited_reference, read_checkpoint(
@@ -224,7 +224,8 @@ def main():
             use_legacy_extension(rejected / unlimited_source.name, ranks, 1)
             log = run(rejected, dict(unlimited_options, **{
                 "checkpoint.readIndex": 2, "run.maxIterations": 0}), False)
-            require("PMMM checkpoint" in log, "legacy PP checkpoint accepted FMM near solver")
+            require("PMMM checkpoint version, mesh size, near/far expansion orders" in log,
+                    "legacy PP checkpoint accepted FMM near solver")
         changes = (("mesh", {"gravity.meshSize": 10}),
                    ("near_width", {"gravity.pmmmNearWidth": 1}),
                    ("prime_factor", {"gravity.pmmmMaxPrimeFactor": 3}),
@@ -233,7 +234,8 @@ def main():
             rejected = prepareCase(root, label + "_reject_" + name, source)
             log = run(rejected, dict(options, **change,
                                     **{"checkpoint.readIndex": 2, "run.maxIterations": 0}), False)
-            require("checkpoint" in log.lower(), f"{name} mismatch lacked a checkpoint diagnostic")
+            require("PMMM checkpoint version, mesh size, near/far expansion orders" in log,
+                    f"{name} mismatch lacked the PMMM parameter compatibility diagnostic")
         identities = (("order", {"order": 3 if args.order != 3 else 4}),
                       ("near_method", {"near_method": "fmm" if near_method == "pp" else "pp"}),
                       ("solver", {"fmm": True}),
@@ -244,7 +246,10 @@ def main():
             changeCompiledIdentity(rejected / source.name, ranks, **identity)
             log = run(rejected, dict(options, **{
                 "checkpoint.readIndex": 2, "run.maxIterations": 0}), False)
-            require("checkpoint" in log.lower(), f"{name} mismatch lacked a checkpoint diagnostic")
+            diagnostic = ("PMMM checkpoint version, mesh size, near/far expansion orders"
+                          if name in ("order", "near_method") else
+                          "Checkpoint physics, particle layout or integrator differs")
+            require(diagnostic in log, f"{name} mismatch lacked its compatibility diagnostic")
         print(f"{label}: {args.time_integrator} timesteps, scheduled single drifts, restart state, "
               "legacy unrestricted meshes, and PMMM mesh/prime-factor/order/near-width/method/"
               "solver/integrator mismatch rejection passed")

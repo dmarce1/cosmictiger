@@ -84,7 +84,7 @@ def checkFreshOutput(options, baseWorkdir, baseline):
         output = runSimulation(command + ["--run.maxIterations=0",
                                            "--checkpoint.intervalSeconds=1000000000"],
                                workdir, "fresh_start.log", expectSuccess=False)
-        if ("existing checkpoint" not in output.lower() or
+        if ("conflicting checkpoint path" not in output.lower() or
                 "--output.directory" not in output or "--checkpoint.readIndex" not in output):
             raise RuntimeError("fresh run lacked actionable checkpoint-output guidance")
         if snapshot(outputDirectory) != before:
@@ -204,8 +204,13 @@ def checkViscosityRestarts(executable, baseWorkdir):
                     output = runSimulation(changed_options + ["--run.maxIterations=0",
                                            "--checkpoint.readIndex=1", changed],
                                            directory, "restart.log", expectSuccess=False)
-                    if "checkpoint" not in output.lower():
-                        raise RuntimeError(f"{name}/{label} lacked a checkpoint diagnostic")
+                    diagnostics = (
+                        "Checkpoint physics, particle layout or integrator differs",
+                        "SPH checkpoint parameters differ",
+                        "SPH checkpoint variable-viscosity parameters differ",
+                    )
+                    if not any(diagnostic in output for diagnostic in diagnostics):
+                        raise RuntimeError(f"{name}/{label} lacked a viscosity compatibility diagnostic")
             print(f"{name}: exact restart and viscosity compatibility passed")
 
 
@@ -292,7 +297,7 @@ def main():
     # restart path, while the second step must produce a final checkpoint.
     (baseline / "checkpoint.txt").write_text("48.9\n")
     (baseline / "checkpoint.z.42.0").write_text("unrelated redshift alias name\n")
-    baselineOutput = runSimulation(options + ["--run.maxIterations=1",
+    baselineOutput = runSimulation(options + ["--run.maxIterations=2",
                                               "--checkpoint.intervalSeconds=1000000000"],
                                    baseline, "run.log")
     if "Checkpoint saved:" not in baselineOutput:
@@ -306,8 +311,8 @@ def main():
         raise RuntimeError("redshift-triggered checkpoint has no numbered restart path")
     checkpoint = max(checkpoints, key=lambda path: int(path.name.split(".")[1]))
     iteration = int(checkpoint.name.split(".")[1])
-    if iteration <= 1:
-        raise RuntimeError("normal exit did not publish a final checkpoint")
+    if iteration != 2:
+        raise RuntimeError("two-step run did not publish final checkpoint.2")
     if list(baseline.glob("checkpoint.*.incomplete")):
         raise RuntimeError("completed checkpoint left a staging directory")
     checkManifest(triggeredCheckpoint, 1)
@@ -419,7 +424,8 @@ def main():
 
     # Retain the current scenario sidecar while checking legacy payload decoding.
     # Unlabelled old checkpoints are explicitly rejected by missing_scenario.
-    restart("version_one", downgradeToVersionOne)
+    legacy_compatible = checkpoint_position_bytes((checkpoint / "checkpoint.0.dat").read_bytes()) == 4
+    restart("version_one", downgradeToVersionOne, expectSuccess=legacy_compatible)
     print(f"checkpoint {iteration}: redshift and final publication, payload version 3, "
           "scenario manifest v2, restart, corruption rejection, and labelled version 1 decoding passed")
     if not args.without_sph:

@@ -17,8 +17,9 @@
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/math.hpp>
-#include <cosmictiger/scenarios/sod.hpp>
+#include <cosmictiger/scenarios/diagnostics.hpp>
 #include <cosmictiger/scenarios/exact_sod.hpp>
+#include <cosmictiger/scenarios/sod.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
 
 namespace scenarios {
@@ -29,20 +30,17 @@ namespace detail {
     static SodInitT initialState{};
 
     static void finishSod(double time) {
-        if (sphParticlesSize() == 0) {
-            return;
-        }
         constexpr int kN = 1000;
         FILE* fp = fopen(outputPath("sod.txt").c_str(), "wt");
         double l1 = 0.0, l2 = 0.0, lmax = 0.0;
         double norm1 = 0.0, norm2 = 0.0;
-        for (int l = 0; l < kN; l++) {
-            int const i = rand() % sphParticlesSize();
-            int const j = sphParticlesParticleIndex(i);
-            float x = particlesPos(kXDimension, j).toDouble();
-            float const rho = sphParticlesDensity(i);
-            float const eint = sphParticlesInternalEnergy(i);
-            float const p = (getOptions().hydro.gamma - 1.0) * rho * eint;
+        if (fp == nullptr) {
+            throw std::runtime_error("Unable to open sod.txt for writing");
+        }
+        for (auto const& sample : diagnosticSamples(kN)) {
+            float const x = sample.position[kXDimension];
+            float const rho = sample.density;
+            float const p = sample.pressure;
             SodStateT state;
             float x0 = x;
             x0 -= 0.5;
@@ -53,10 +51,10 @@ namespace detail {
             }
             exactSod(&state, &initialState, x0, time, 0);
             double dif = fabs(rho - state.rho);
-            norm1 += state.rho;
-            norm2 += sqr(state.rho);
-            l1 += dif;
-            l2 += dif * dif;
+            norm1 += sample.weight * state.rho;
+            norm2 += sample.weight * sqr(state.rho);
+            l1 += sample.weight * dif;
+            l2 += sample.weight * dif * dif;
             lmax = std::max(lmax, dif);
             fprintf(fp, "%e %e %e %e %e\n", x, rho, state.rho, p, state.p);
         }
@@ -80,10 +78,9 @@ ScenarioPlan initializeSod() {
     double p0 = .1;
     double p1 = 1.0;
     auto& sod = detail::initialState;
-    ParticleInteger leftDim =
-        pow(0.25 * totalNumberOfParticles * rho1 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
-    ParticleInteger rightDim =
-        pow(0.25 * totalNumberOfParticles * rho0 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
+    ParticleInteger const rightDim =
+        std::max(1L, std::lround(std::cbrt(totalNumberOfParticles / 72.0)));
+    ParticleInteger const leftDim = 2 * rightDim;
     if (leftDim < 1 || rightDim < 1) {
         throw std::runtime_error("The Sod scenario needs a resolved lattice in both layers; "
                                  "increase initial.particlesPerDimension");
@@ -106,9 +103,8 @@ ScenarioPlan initializeSod() {
     sod.gamma = getOptions().hydro.gamma;
     constexpr float kEta = 0.0;
     double const ne = getOptions().hydro.neighborNumber;
-    terminal::detailPrint("Sod dimensions are %i and %i rho0 %e rho1 %e\n", 2 * rightDim,
-        2 * leftDim, rho0 / (m * ne) * (4.0 * std::numbers::pi / 3.0),
-        rho1 / (m * ne) * (4.0 * std::numbers::pi / 3.0));
+    terminal::detailPrint(
+        "Sod dimensions are %i and %i rho0 %e rho1 %e\n", 2 * rightDim, 2 * leftDim, rho0, rho1);
     for (int ix = 0; ix < leftDim; ix++) {
         for (int iy = 0; iy < 2 * leftDim; iy++) {
             for (int iz = 0; iz < 2 * leftDim; iz++) {

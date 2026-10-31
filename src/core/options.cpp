@@ -41,6 +41,7 @@
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/position.hpp>
+#include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/scenarios/scenario.hpp>
 #if !COSMICTIGER_WITH_GRAVITY && COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/sph_tree.hpp>
@@ -225,7 +226,8 @@ void setOptions(Options const& opts) {
 #endif
 #if !COSMICTIGER_WITH_SPH
     if (opts.hydro.enabled || opts.chemistry.enabled) {
-        throw std::invalid_argument("Hydrodynamics and chemistry require COSMICTIGER_ENABLE_SPH=ON");
+        throw std::invalid_argument(
+            "Hydrodynamics and chemistry require COSMICTIGER_ENABLE_SPH=ON");
     }
 #endif
 #if !COSMICTIGER_ENABLE_CHEMISTRY
@@ -514,7 +516,9 @@ bool processOptions(int argc, char* argv[]) {
         ("compute.cuda", po::value<bool>(&opts.compute.cuda)->default_value(false),
             "use CUDA (not enabled for this build)")
 #endif
-            ("compute.bucketSize", po::value<int>(&opts.compute.bucketSize)->default_value(128),
+            ("compute.bucketSize",
+                po::value<int>(&opts.compute.bucketSize)
+                    ->default_value(std::min(128, int(MAX_BUCKET_SIZE))),
                 "gravity tree leaf bucket size")("compute.sphBucketSize",
                 po::value<int>(&opts.compute.sphBucketSize)->default_value(0),
                 "SPH tree leaf bucket size; 0 uses floor(8/pi * hydro.neighborNumber)")(
@@ -632,10 +636,10 @@ bool processOptions(int argc, char* argv[]) {
     po::options_description gravityOpts("Gravity");
     gravityOpts.add_options()("gravity.method.far",
         po::value<std::string>(&opts.gravity.method)->default_value(""),
-        "far-field gravity: fmm or pmmm; required when both are compiled")(
-        "gravity.method.near", po::value<std::string>(&opts.gravity.pmmmNearMethod)->default_value(""),
-        "PMMM near field: pp or fmm; required when both are compiled")(
-        "gravity.expansionDegree", po::value<int>(&expansionDegree)->default_value(expansionDegree),
+        "far-field gravity: fmm or pmmm; required when both are compiled")("gravity.method.near",
+        po::value<std::string>(&opts.gravity.pmmmNearMethod)->default_value(""),
+        "PMMM near field: pp or fmm; required when both are compiled")("gravity.expansionDegree",
+        po::value<int>(&expansionDegree)->default_value(expansionDegree),
         "maximum degree of the potential expansion; must be in the compiled degree range")(
         "gravity.enabled",
         po::value<bool>(&opts.gravity.enabled)->default_value(gravity::kBuildHasGravity),
@@ -808,7 +812,7 @@ bool processOptions(int argc, char* argv[]) {
         "starFormation.criticalOverDensity",
         po::value<double>(&opts.starFormation.criticalOverDensity)->default_value(57.7),
         "comoving threshold relative to mean baryon density (CritOverDensity)")(
-        "starFormation.seed", po::value<std::string>(&starFormationSeedInput)->default_value("1"),
+        "starFormation.seed", po::value<std::string>(&starFormationSeedInput)->default_value("42"),
         "seed for particle-identity-based star conversion random streams");
 
     po::options_description commandOpts("CosmicTiger options");
@@ -838,12 +842,10 @@ bool processOptions(int argc, char* argv[]) {
                   << (integration::kBuildHasTraditional ? " traditional" : "")
                   << (integration::kBuildHasHierarchical ? " hierarchical" : "")
                   << (integration::kBuildHasGlobal ? " global" : "") << "\n"
-                  << "  Gravity solvers:"
-                  << (gravity::kBuildHasFmm ? " fmm" : "")
+                  << "  Gravity solvers:" << (gravity::kBuildHasFmm ? " fmm" : "")
                   << (gravity::kBuildHasPmmm ? " pmmm" : "")
                   << (gravity::kBuildHasGravity ? "" : " none") << "\n"
-                  << "  PMMM near solvers:"
-                  << (gravity::kBuildHasPmmmNearPp ? " pp" : "")
+                  << "  PMMM near solvers:" << (gravity::kBuildHasPmmmNearPp ? " pp" : "")
                   << (gravity::kBuildHasPmmmNearFmm ? " fmm" : "") << "\n";
         std::cout << "  Equilibrium cooling: "
                   << (COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY ? "enabled" : "disabled")
@@ -955,8 +957,8 @@ bool processOptions(int argc, char* argv[]) {
             (!isExplicit("gravity.method.far") || !isExplicit("gravity.expansionDegree") ||
                 (opts.gravity.method == "pmmm" && !isExplicit("gravity.method.near"))));
     if (opts.checkpoint.readIndex >= 0 && checkpointSelectionNeeded) {
-        checkpointSelection =
-            readCheckpointSelection(opts.output.directory, opts.checkpoint.readIndex);
+        checkpointSelection = readCheckpointSelection(
+            opts.run.test.empty() ? opts.output.directory : "", opts.checkpoint.readIndex);
         if (!isExplicit("gravity.method.far")) {
             opts.gravity.method = checkpointSelection.farMethod;
         }
@@ -1042,6 +1044,11 @@ bool processOptions(int argc, char* argv[]) {
     }
 #if COSMICTIGER_WITH_GRAVITY
     auto const openingSchedule = gravity::parseOpeningSchedule(opts.gravity.openingSchedule);
+    for (auto const& point : openingSchedule) {
+        if (point.theta > 1.0) {
+            THROW_ERROR("gravity.openingSchedule theta must be at most 1\n");
+        }
+    }
     if (!openingSchedule.empty() &&
         (usesMeshGravity(opts.gravity) || opts.run.scenario != "cosmology")) {
         THROW_ERROR("gravity.openingSchedule requires gravity.method.far=fmm and "
@@ -1159,6 +1166,11 @@ bool processOptions(int argc, char* argv[]) {
     }
     if (opts.initial.particlesPerDimension <= 0) {
         THROW_ERROR("initial.particlesPerDimension must be positive\n");
+    }
+    if (opts.run.minRung < 0 ||
+        (!usesGlobalIntegration(opts.run) && opts.run.minRung >= kMaxRung)) {
+        THROW_ERROR(
+            "run.minRung must be nonnegative and less than %i for rung integrators\n", kMaxRung);
     }
     if (opts.run.numberOfSteps <= 0) {
         THROW_ERROR("run.numberOfSteps must be positive\n");
@@ -1322,8 +1334,8 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("chemistry.enabled=true requires COSMICTIGER_ENABLE_CHEMISTRY=ON\n");
     }
 #endif
-    bool const hierarchicalEligible = integration::kBuildHasHierarchical &&
-        opts.gravity.enabled && !opts.hydro.enabled;
+    bool const hierarchicalEligible =
+        integration::kBuildHasHierarchical && opts.gravity.enabled && !opts.hydro.enabled;
     if (opts.run.timeIntegrator.empty()) {
         int const choices = int(integration::kBuildHasTraditional) + int(hierarchicalEligible) +
             int(integration::kBuildHasGlobal);
@@ -1331,7 +1343,8 @@ bool processOptions(int argc, char* argv[]) {
             THROW_ERROR("Select --run.timeIntegrator=traditional, hierarchical, or global from "
                         "the compiled integrators eligible for this physics\n");
         }
-        opts.run.timeIntegrator = integration::kBuildHasTraditional ? "traditional" :
+        opts.run.timeIntegrator = integration::kBuildHasTraditional ?
+            "traditional" :
             (hierarchicalEligible ? "hierarchical" : "global");
     }
     if (!((opts.run.timeIntegrator == "traditional" && integration::kBuildHasTraditional) ||
@@ -1361,12 +1374,36 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("gravity.timestepEta must remain finite and positive in single precision "
                     "after normalization\n");
     }
+    if (opts.initial.useGlass && opts.initial.closePack) {
+        THROW_ERROR("initial.useGlass cannot be combined with initial.closePack; "
+                    "glass files already define the particle lattice\n");
+    }
+    size_t const particlesPerDimension = size_t(opts.initial.particlesPerDimension);
+    size_t const latticeMultiplicity = opts.initial.closePack ? 2 : 1;
+    if (particlesPerDimension > std::numeric_limits<size_t>::max() / particlesPerDimension /
+            particlesPerDimension / latticeMultiplicity) {
+        THROW_ERROR("initial.particlesPerDimension exceeds the particle-count range\n");
+    }
     opts.initial.numberOfParticles =
-        sqr(opts.initial.particlesPerDimension) * opts.initial.particlesPerDimension;
+        particlesPerDimension * particlesPerDimension * particlesPerDimension;
     opts.initial.fourierSize = opts.initial.particlesPerDimension;
     if (opts.initial.closePack) {
         opts.initial.numberOfParticles *= 2;
         //		opts.Nfour *= 2;
+    }
+    if (!opts.initial.gadget4Restart.empty()) {
+        if (hasBoxLength) {
+            THROW_ERROR(
+                "initial.gadget4Restart supplies its own units; do not set units.boxLength\n");
+        }
+        auto const header = particlesReadGadget4Header(opts.initial.gadget4Restart);
+        opts.initial.numberOfParticles = size_t(header.npartTotal[1]);
+        opts.units.massG = header.mass[1] * 1.0e10 / opts.cosmology.hubble;
+        opts.cosmology.startRedshift = header.redshift;
+        // Particle count and FFT resolution are separate for external, non-lattice ICs.
+        opts.initial.fourierSize =
+            int(std::ceil(std::cbrt(double(opts.initial.numberOfParticles))));
+        opts.initial.fourierSize += opts.initial.fourierSize % 2;
     }
 #if COSMICTIGER_WITH_GRAVITY
     opts.compute.treeCacheLineSize = 65536 / sizeof(TreeNode);
@@ -1461,6 +1498,11 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.lightcone.mapSize < 0) {
         opts.lightcone.mapSize = nside;
     }
+    if (opts.lightcone.enabled &&
+        (opts.lightcone.mapSize < 1 || opts.lightcone.mapSize > 8192 ||
+            (opts.lightcone.mapSize & (opts.lightcone.mapSize - 1)) != 0)) {
+        THROW_ERROR("lightcone.mapSize must be a power of two in [1, 8192]\n");
+    }
     terminal::detailPrint("lc map size = %e\n", nside1);
 
     // The photon density depends only on T_CMB and H_0. Adding massless species
@@ -1500,7 +1542,11 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("initial.particlesPerDimension must be an even number\n");
     }
     opts.gravity.supportRadius *= pow(opts.initial.numberOfParticles, -1.0 / kDimensions);
-    if (opts.run.scenario == "plummer") {
+    bool const explicitGravityRadius =
+        (vm.count("gravity.effectiveRadius") && !vm["gravity.effectiveRadius"].defaulted()) ||
+        (vm.count("gravity.supportRadius") && !vm["gravity.supportRadius"].defaulted()) ||
+        (vm.count("gravity.softening") && !vm["gravity.softening"].defaulted());
+    if (opts.run.scenario == "plummer" && !explicitGravityRadius) {
         opts.gravity.supportRadius = gravityTable.supportRadiusPerEffectiveRadius *
             1.5015907655628273 *
             pow((4.0 / 3.0 * std::numbers::pi * pow(opts.initial.plummerRadius, 3.0)) /
@@ -1511,6 +1557,9 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("gravity.effectiveRadius / gravity.supportRadius (gravity.softening) must "
                     "remain finite and positive in single precision "
                     "after normalization when gravity.enabled is true\n");
+    }
+    if (opts.gravity.enabled && opts.gravity.supportRadius >= 0.5) {
+        THROW_ERROR("Periodic gravity requires normalized gravity.supportRadius below 0.5\n");
     }
     if (usesMeshGravity(opts.gravity) &&
         opts.gravity.supportRadius > double(opts.gravity.pmmmNearWidth) / effectiveMeshSize) {
@@ -1583,7 +1632,7 @@ bool processOptions(int argc, char* argv[]) {
             hydroTable.supportRadiusPerEffectiveRadius);
     SHOW("hydro.cfl", hydro.cfl);
     terminal::detailPrint("Simulation Options\n");
-    terminal::detailPrint("code_to_M_solar = %e\n", opts.units.massG / 1.98e33);
+    terminal::detailPrint("code_to_M_solar = %e\n", opts.units.massG / constants::kM0);
     terminal::detailPrint(
         "Box size = %e Mpc/h\n", opts.units.lengthCm / constants::kMpcToCm * opts.cosmology.hubble);
     if (opts.run.scenario == "plummer") {
@@ -1606,6 +1655,11 @@ bool processOptions(int argc, char* argv[]) {
             openingSchedule, opts.cosmology.startRedshift, opts.gravity.openingAngle);
     }
 #endif
+
+    if (!detail::isPositiveFloatOption(opts.gravity.openingAngle) ||
+        opts.gravity.openingAngle > 1.0) {
+        THROW_ERROR("gravity.openingAngle must be finite, normal, and in (0, 1]\n");
+    }
 
     SHOW("checkpoint.intervalSeconds", checkpoint.intervalSeconds);
     show("units.massSolar", opts.units.massG / constants::kM0);
@@ -1751,7 +1805,8 @@ bool processOptions(int argc, char* argv[]) {
                 PRINT("%-38s: periodic multipole mesh, %s particle timesteps\n", "PMMM gravity",
                     opts.run.timeIntegrator.c_str());
             }
-            show("gravity.expansionDegree", opts.gravity.fmmOrder > 0 ? opts.gravity.fmmOrder - 1 : 0);
+            show("gravity.expansionDegree",
+                opts.gravity.fmmOrder > 0 ? opts.gravity.fmmOrder - 1 : 0);
             SHOW("gravity.openingAngle", gravity.openingAngle);
             if (!opts.gravity.openingSchedule.empty()) {
                 SHOW("gravity.openingSchedule", gravity.openingSchedule);

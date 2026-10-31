@@ -1799,11 +1799,12 @@ two thirds of the shared-memory loads and brings the issue rate above the
 baseline's. The PP routine's share of the kernel's stall samples drops from
 58% (baseline, `cudaGravityPpDirect` as its own function) to 35%
 (`ncu_bucket512/baseline_sections.txt`, `arena/sections.txt`); the kernel
-body holds the other 60%, and by source line
-(`benchmarks/summarize_ncu_source.py` on the SASS-with-source export) the
-Ewald cell interactions (`ewald_kernels.hpp` and the `simd_math.hpp` and
-`cmath` functions they call) account for more than half of the attributed
-samples. That is the remaining low-occupancy bound.
+body holds the other 60%. The original source-line attribution from
+`benchmarks/summarize_ncu_source.py` counted repeated inlining frames, so its
+claim that Ewald cell interactions account for more than half the samples is
+withdrawn. The corrected script deduplicates SASS addresses; this report has
+not yet been re-attributed with that version. The kernel-level measurements
+above do not depend on those source-line totals.
 
 At small buckets the kernel does not regress (`kernel_small_buckets/`, same
 replay, second force-only kick):

@@ -13,6 +13,9 @@
 // kick_cuda_instances.hpp; the kernel itself is in kick_cuda_kernel.hpp.
 
 #include <algorithm>
+#include <cstdlib>
+#include <memory>
+#include <new>
 #include <stdexcept>
 #include <string>
 
@@ -23,6 +26,16 @@
 #endif
 
 namespace detail {
+
+inline char* kickAllocateLaunchStorage(size_t bytes) {
+    char* pointer = nullptr;
+    auto const status = cudaMalloc(&pointer, bytes);
+    if (status != cudaSuccess) {
+        throw std::runtime_error(
+            std::string("CUDA kick allocation failed: ") + cudaGetErrorString(status));
+    }
+    return pointer;
+}
 
 constexpr int kKickSharedAllocationGranularity = 128;
 constexpr int kKickArenaAlignment = 16;
@@ -79,7 +92,7 @@ inline int kickRoundDown(int value, int multiple) {
 inline int kickRegisterResidencyLimit(KickDeviceResources const& resources) {
     int const registersPerWarp =
         kickRoundUp(kickRoundUp(resources.numberOfRegisters, 8) * kWarpSize, 256);
-    int limit = resources.registersPerMultiprocessor / std::max(1, registersPerWarp);
+    int limit = 4 * ((resources.registersPerMultiprocessor / 4) / std::max(1, registersPerWarp));
     limit = std::min(limit, resources.maximumBlocksPerMultiprocessor);
     limit = std::min(limit, resources.maximumWarpsPerMultiprocessor);
     return std::max(1, limit);
@@ -286,7 +299,7 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     numberOfBlocks = std::min(numberOfBlocks, (int) workitems.size());
     static char* dataPtr = nullptr;
     static char* devDataPtr = nullptr;
-    static int dataSize = 0;
+    static size_t dataSize = 0;
     // Per-launch list slab: one region per launched block, kept across launches
     // (the layout is fixed per order and the launch never exceeds the residency).
     static char* devListSlab = nullptr;
@@ -297,27 +310,36 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
         dcount += workitems[i].dchecklist.size();
         ecount += workitems[i].echecklist.size();
     }
-    int const allocSize = sizeof(int) + sizeof(Parameters) * workitems.size() + sizeof(KickReturn) +
-        sizeof(int) * dcount + sizeof(int) * ecount;
+    size_t const allocSize = sizeof(int) + sizeof(Parameters) * workitems.size() +
+        sizeof(KickReturn) + sizeof(int) * dcount + sizeof(int) * ecount;
     if (dataSize < allocSize) {
-        if (dataPtr) {
-            CUDA_CHECK(cudaFree(devDataPtr));
-            free(dataPtr);
+        std::unique_ptr<char, decltype(&std::free)> replacement(
+            static_cast<char*>(std::malloc(allocSize)), &std::free);
+        if (!replacement) {
+            throw std::bad_alloc();
         }
+        // Keep the previous launch packet valid until both new allocations
+        // succeed. A failed device allocation frees only the temporary host buffer.
+        char* const deviceReplacement = detail::kickAllocateLaunchStorage(allocSize);
+        if (devDataPtr) {
+            CUDA_CHECK(cudaFree(devDataPtr));
+        }
+        std::free(dataPtr);
+        dataPtr = replacement.release();
+        devDataPtr = deviceReplacement;
         dataSize = allocSize;
-        dataPtr = (char*) malloc(allocSize);
-        CUDA_CHECK(cudaMalloc(&devDataPtr, allocSize));
     }
     size_t const slabSize =
         size_t(layout.listSlabBytes) * size_t(layout.residency) * size_t(cudaSmpCount());
     if (listSlabSize < slabSize) {
+        char* const replacement = detail::kickAllocateLaunchStorage(slabSize);
         if (devListSlab) {
             CUDA_CHECK(cudaFree(devListSlab));
         }
-        CUDA_CHECK(cudaMalloc(&devListSlab, slabSize));
+        devListSlab = replacement;
         listSlabSize = slabSize;
     }
-    int offset = 0;
+    size_t offset = 0;
     KickReturn* result = (KickReturn*) (dataPtr + offset);
     offset += sizeof(KickReturn);
     Parameters* ikickParams = (Parameters*) (dataPtr + offset);

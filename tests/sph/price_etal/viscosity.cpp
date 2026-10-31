@@ -81,10 +81,11 @@ void testPriceEtAlDiagnostics() {
         for (int i = 0; i < 3; ++i) {
             for (int j = 0; j < 3; ++j) {
                 sums.velocity[i][j] = i == j ? -scaleSquared : Real(0);
-                sums.acceleration[i][j] = i == j ? -Real(0.12) * scaleSquared : Real(0);
+                sums.acceleration[i][j] =
+                    i == j ? -Real(0.04) * scaleSquared * scaleFactor : Real(0);
             }
         }
-        result = price_etal::diagnostics(sums, scaleFactor, Real(0.12) * scaleSquared * scaleFactor,
+        result = price_etal::diagnostics(sums, scaleFactor, Real(0.2) * scaleSquared,
             Real(0.5) / scaleFactor, Real(2) * scaleFactor, Real(4), Real(0.1));
         requireClose("physical divergence independent of cosmological storage units",
             result.divergence, -3.0, tolerance);
@@ -93,6 +94,17 @@ void testPriceEtAlDiagnostics() {
         requireClose("decay rate transforms to conformal time", result.inverseDecayTime,
             0.4 * double(scaleFactor), tolerance);
     }
+    // Pure Hubble expansion has no peculiar acceleration and no shock trigger,
+    // even in a decelerating background and arbitrarily cold gas.
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            sums.velocity[i][j] = i == j ? Real(0.5) : Real(0);
+            sums.acceleration[i][j] = Real(0);
+        }
+    }
+    result = price_etal::diagnostics(
+        sums, Real(0.2), Real(0.5), Real(1), Real(1.e-5), Real(1), Real(0.1));
+    require(result.targetAlpha == Real(0), "homogeneous Hubble flow does not trigger viscosity");
     cullen_and_dehnen::GradientSums<Real> unresolved;
     auto const degenerate = price_etal::diagnostics(
         unresolved, Real(1), Real(0), Real(0.5), Real(2), Real(1), Real(0.1));

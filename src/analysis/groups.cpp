@@ -19,12 +19,12 @@
 
 #include <hpx/threading_base/annotated_function.hpp>
 
+#include <cosmictiger/analysis/bh.hpp>
 #include <cosmictiger/analysis/groups.hpp>
 #include <cosmictiger/analysis/rockstar.hpp>
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/analysis/bh.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/math.hpp>
@@ -393,15 +393,12 @@ void groupsReduce(double scaleFactor) {
                         }
                         if (particles.size() >= getOptions().analysis.minGroupSize) {
                             auto const halos = rockstarFindSubgroups(particles, scaleFactor);
-                            if (halos.size() > 32767) {
-                                throw std::runtime_error(
-                                    "ROCKSTAR record halo ID capacity exceeded");
-                            }
+                            size_t const haloCount = rockstarCatalogueSize(halos.size());
                             Array<double, kDimensions> origin;
                             for (int dim = 0; dim < kDimensions; ++dim) {
                                 origin[dim] = particles.front().x[dim].toDouble();
                             }
-                            for (int i = 0; i < halos.size(); ++i) {
+                            for (int i = 0; i < haloCount; ++i) {
                                 auto const& halo = halos[i];
                                 auto entry = rockstarMakeGroupEntry(halos, i, scaleFactor, origin);
                                 entry.id = halo.catalogueId;
@@ -410,13 +407,17 @@ void groupsReduce(double scaleFactor) {
                                     auto const& particle = halo.parts[particleIndex];
                                     tags[particle.rank][particle.index] = halo.catalogueId;
                                 }
-                                auto record = rockstarMakeRecord(halos, i, scaleFactor, origin);
+                                auto record =
+                                    rockstarMakeRecord(halos, i, scaleFactor, origin, true, true);
                                 record.id.fofId = candidate.first;
                                 record.id.haloId = i;
-                                record.pid = halo.parent;
-                                GroupInteger const host = halo.parent >= 0 ?
-                                    halos[halo.parent].catalogueId :
-                                    kNoParticleGroup;
+                                int const parent =
+                                    halo.parent >= 0 && size_t(halo.parent) < haloCount ?
+                                    halo.parent :
+                                    -1;
+                                record.pid = parent;
+                                GroupInteger const host =
+                                    parent >= 0 ? halos[halo.parent].catalogueId : kNoParticleGroup;
                                 std::lock_guard<SpinlockType> lock(mutex);
                                 groups.push_back(std::move(entry));
                                 rockstarRecords.push_back(record);

@@ -156,6 +156,18 @@ static bool hasActiveNeighbors(SphTreeNode const* self) {
     return rc;
 }
 
+void sphClearNeighborState();
+HPX_PLAIN_ACTION(sphClearNeighborState, SphClearNeighborStateAction);
+void sphClearNeighborState() {
+    Vector<hpx::future<void>> futures;
+    for (auto const& child : hpxChildren()) {
+        futures.push_back(hpx::async<SphClearNeighborStateAction>(child));
+    }
+    sphTreeFreeNeighborList();
+    sphTreeClearNeighborRanges();
+    hpx::wait_all(futures.begin(), futures.end());
+}
+
 hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     SphTreeNeighborParameters params, TreeId self, Vector<TreeId> checklist, int level) {
     if (level == 0 && hpxRank() == 0 && hpxSize() > 1) {
@@ -166,9 +178,8 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     FlopCounter<> flops =
         4 * kDimensions;    // Sentinel bound conversions in the return constructor.
     SphTreeNode const* selfPtr = sphTreeGetNode(self);
-    if (params.runType == kSphTreeNeighborNeighbors && selfPtr->localRoot) {
-        sphTreeFreeNeighborList();
-        sphTreeClearNeighborRanges();
+    if (params.runType == kSphTreeNeighborNeighbors && level == 0) {
+        sphClearNeighborState();
     }
     if (params.runType == kSphTreeNeighborNeighbors && checklist.size() == 0) {
         addCpuFlops(flops);
@@ -177,7 +188,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     ASSERT(self.proc == hpxRank());
     Vector<TreeId> nextlist;
     Vector<TreeId> leaflist;
-    if ((params.innerSelection | kSphInteractionsI) && selfPtr->numberOfActiveParticles) {
+    if ((params.innerSelection & kSphInteractionsI) && selfPtr->numberOfActiveParticles) {
         if (!rangeIntersect(selfPtr->outerBox, selfPtr->innerBox)) {
             for (int dim = 0; dim < kDimensions; dim++) {
                 PRINT("%e %e\n", selfPtr->outerBox.begin[dim].toDouble(),
@@ -188,7 +199,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
         }
     }
 
-    if ((params.innerSelection | kSphInteractionsJ) && selfPtr->numberOfActiveParticles) {
+    if ((params.innerSelection & kSphInteractionsJ) && selfPtr->numberOfActiveParticles) {
         ALWAYS_ASSERT(rangeIntersect(selfPtr->innerBox, selfPtr->outerBox));
     }
 
@@ -199,10 +210,10 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
                 auto const* other = sphTreeGetNode(checklist[ci]);
                 bool test2 = false;
                 bool test1 = false;
-                if (params.innerSelection | kSphInteractionsI) {
+                if (params.innerSelection & kSphInteractionsI) {
                     test1 = rangeIntersect(selfPtr->outerBox, other->innerBox, &flops);
                 }
-                if (params.innerSelection | kSphInteractionsJ) {
+                if (params.innerSelection & kSphInteractionsJ) {
                     test2 = rangeIntersect(selfPtr->innerBox, other->outerBox, &flops);
                 }
                 if (test1 || test2) {
@@ -535,6 +546,7 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
             },
             "sph.run.stageParticles")));
     }
+    hpx::wait_all(futs.begin(), futs.end());
     for (auto& future : futs) {
         future.get();
     }

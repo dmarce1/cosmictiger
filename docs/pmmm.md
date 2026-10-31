@@ -562,3 +562,11 @@ regression can be selected explicitly:
 
 Test definitions describe coverage; successful CPU, CUDA, and MPI execution
 must be established separately for the build being used.
+
+The near-FMM cell forest reserves at most two local node slots per owned or
+ghost source particle, plus domain joins and worker allocation-line slack. A
+node slot costs `sizeof(TreeNode) + fmmPositionedMultipoleStride(order)` bytes;
+the latter is the positioned multipole record padded to a 16-byte boundary.
+Remote deserialized moments use a separate managed-memory chunk pool and do
+not consume local node slots. The implementation checks the combined forest
+capacity against the signed `TreeId` index range before allocation.

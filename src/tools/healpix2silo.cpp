@@ -1,178 +1,155 @@
-/*
- CosmicTiger - A cosmological N-Body code
- Copyright (C) 2021  Dominic C. Marcello
+/* CosmicTiger - HEALPix view to Mollweide Silo conversion; BSL-1.0. */
 
- Distributed under the Boost Software License, Version 1.0.
- See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
- */
-
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
 #include <iostream>
+#include <memory>
 #include <numbers>
-#include <stdio.h>
-#include <stdlib.h>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 #include <boost/program_options.hpp>
 #include <chealpix.h>
 #include <silo.h>
 
-#include <cosmictiger/core/safe_io.hpp>
+namespace detail {
 
-void sphToCart(double psi, double lambda, double* x, double* y) {
-    double theta = psi;
-    double theta0;
-    int iters = 0;
-    do {
-        theta0 = theta;
-        theta -= (2.0 * theta + std::sin(2.0 * theta) - std::numbers::pi * std::sin(psi)) /
-            (2.0 + 2.0 * std::cos(2.0 * theta));
-        iters++;
-    } while (std::abs(theta0 - theta) > 1.0e-6);
-    *x = 2.0 * lambda * std::cos(theta) / (std::numbers::pi);
-    *y = std::sin(theta);
-}
-
-bool cartToSph(double x, double y, double* psi, double* lambda) {
-    auto const theta = std::asin(y);
-    auto const arg = (2.0 * theta + std::sin(2.0 * theta)) / std::numbers::pi;
-
-    *psi = std::asin(arg);
-    *lambda = std::numbers::pi * x / (2.0 * std::cos(theta));
-    if (*lambda < -std::numbers::pi || *lambda > std::numbers::pi) {
-        return false;
-    } else {
-        return true;
+template <class T>
+void readValues(FILE* input, T* values, size_t count) {
+    if (std::fread(values, sizeof(T), count, input) != count) {
+        throw std::runtime_error("Truncated HEALPix input");
     }
 }
 
-int main(int argc, char** argv) {
+void checkSilo(int status, char const* operation) {
+    if (status < 0) {
+        throw std::runtime_error(std::string("Silo conversion failed: ") + operation);
+    }
+}
+
+bool cartToSph(double x, double y, double& latitude, double& longitude) {
+    double const theta = std::asin(y);
+    double const argument = (2.0 * theta + std::sin(2.0 * theta)) / std::numbers::pi;
+    latitude = std::asin(std::clamp(argument, -1.0, 1.0));
+    longitude = std::numbers::pi * x / (2.0 * std::cos(theta));
+    return longitude >= -std::numbers::pi && longitude <= std::numbers::pi;
+}
+
+int convert(int argc, char** argv) {
     std::string infile, outfile;
-
     namespace po = boost::program_options;
-    po::options_description commandOpts("options");
-
-    commandOpts.add_options()                                                                  //
-        ("help", "produce help message")                                                       //
-        ("input.file", po::value<std::string>(&infile)->default_value(""), "input file")       //
-        ("output.file", po::value<std::string>(&outfile)->default_value(""), "output file")    //
-        ;
-
-    boost::program_options::variables_map vm;
-    po::store(po::parse_command_line(argc, argv, commandOpts), vm);
-    po::notify(vm);
-    if (vm.count("help")) {
-        std::cout << commandOpts << "\n";
+    po::options_description options("options");
+    options.add_options()("help", "produce help message")(
+        "input.file", po::value<std::string>(&infile), "input view.N.dat file")(
+        "output.file", po::value<std::string>(&outfile), "output Silo file");
+    po::variables_map variables;
+    po::store(po::parse_command_line(argc, argv, options), variables);
+    po::notify(variables);
+    if (variables.count("help")) {
+        std::cout << options << '\n';
         return 0;
     }
-
-    if (infile == "") {
-        printf("Input file not specified. Use --input.file=\n");
-        return -1;
+    if (infile.empty() || outfile.empty()) {
+        throw std::invalid_argument("Both input.file and output.file are required");
     }
-
-    if (outfile == "") {
-        printf("Output file not specified. Use --output.file=\n");
-        return -1;
+    std::unique_ptr<FILE, decltype(&fclose)> input(fopen(infile.c_str(), "rb"), &fclose);
+    if (!input) {
+        throw std::runtime_error("Cannot open " + infile);
     }
-
-    bool foundFile = true;
-    int rank = 0;
     int nside;
-    int npix;
-    int cycle;
-    double time;
-    std::vector<float> healpixData;
-    PRINT("Reading file\n");
-    int maxPix = 0;
-    int minPix = 1000000000;
-    std::string const fname = infile;
-    FILE* fp = fopen(fname.c_str(), "rb");
-    if (rank == 0 && fp == nullptr) {
-        printf("Unable to open %s\n", infile.c_str());
-        abort();
+    int size;
+    readValues(input.get(), &nside, 1);
+    readValues(input.get(), &size, 1);
+    if (nside <= 0 || nside > 8192 || size != 12 * nside * nside) {
+        throw std::runtime_error(
+            "Invalid HEALPix header: require 1<=nside<=8192 and size=12*nside^2");
     }
-    if (fp == nullptr) {
-        foundFile = false;
-    } else {
-        foundFile = true;
-        FREAD(&nside, sizeof(int), 1, fp);
-        if (rank == 0) {
-            PRINT("Nside = %i\n", nside);
-            npix = 12 * nside * nside;
-            healpixData.resize(npix, 0.0);
+    std::vector<float> healpixData(size);
+    readValues(input.get(), healpixData.data(), healpixData.size());
+    int cycle = 0;
+    double time = 0.0;
+    int const nextByte = fgetc(input.get());
+    if (nextByte != EOF) {
+        ungetc(nextByte, input.get());
+        readValues(input.get(), &cycle, 1);
+        readValues(input.get(), &time, 1);
+        if (fgetc(input.get()) != EOF) {
+            throw std::runtime_error("Unexpected data after HEALPix time metadata");
         }
-        int size;
-        FREAD(&size, sizeof(int), 1, fp);
-        for (int pix = 0; pix < size; pix++) {
-            float value;
-            FREAD(&value, sizeof(float), 1, fp);
-            healpixData[pix] += value;
-        }
-        if (fread(&cycle, sizeof(int), 1, fp) == 0) {
-            cycle = 0;
-            time = 0.0;
-        } else {
-            FREAD(&time, sizeof(double), 1, fp);
-        }
-        fclose(fp);
     }
-    PRINT("Done reading file\n");
-
-    int const res = (nside * std::sqrt(1.5) + 0.5);
-
-    int order = 3;
-    std::vector<float> mwData;
-    size_t iter = 0;
-    size_t maxIter = res * res * 8;
-    PRINT("Converting data\n");
-    for (int iy = -res; iy < res; iy++) {
-        for (int ix = -2 * res; ix < 2 * res; ix++) {
+    if (ferror(input.get())) {
+        throw std::runtime_error("Unable to read HEALPix input");
+    }
+    if (fclose(input.release()) != 0) {
+        throw std::runtime_error("Unable to close HEALPix input");
+    }
+    int const resolution = int(nside * std::sqrt(1.5) + 0.5);
+    constexpr int kOrder = 3;
+    std::vector<float> mollweide;
+    mollweide.reserve(size_t(resolution) * resolution * 8);
+    for (int iy = -resolution; iy < resolution; ++iy) {
+        for (int ix = -2 * resolution; ix < 2 * resolution; ++ix) {
             double value = 0.0;
-            for (int nx = 0; nx < order; nx++) {
-                for (int ny = 0; ny < order; ny++) {
-                    double const x = (ix + (nx + 0.5) / order) / double(res);
-                    double const y = (iy + (ny + 0.5) / order) / double(res);
-                    double psi, lambda;
-                    if (cartToSph(x, y, &psi, &lambda)) {
-                        long ipring;
-                        ang2pix_ring(nside, psi + std::numbers::pi / 2.0, lambda, &ipring);
-                        value += healpixData[ipring];
+            for (int nx = 0; nx < kOrder; ++nx) {
+                for (int ny = 0; ny < kOrder; ++ny) {
+                    double const x = (ix + (nx + 0.5) / kOrder) / resolution;
+                    double const y = (iy + (ny + 0.5) / kOrder) / resolution;
+                    double latitude, longitude;
+                    if (cartToSph(x, y, latitude, longitude)) {
+                        long pixel;
+                        ang2pix_ring(nside, std::numbers::pi / 2.0 - latitude, longitude, &pixel);
+                        value += healpixData[pixel];
                     }
                 }
             }
-            mwData.push_back(value);
-            if (iter % 1000 == 0) {
-                PRINT("%i%%\r", iter * 100 / maxIter);
-            }
-            iter++;
+            mollweide.push_back(value);
         }
     }
-
-    auto db = DBCreate(outfile.c_str(), DB_CLOBBER, DB_LOCAL, NULL, DB_PDB);
-    auto optlist = DBMakeOptlist(3);
+    std::unique_ptr<DBfile, decltype(&DBClose)> file(
+        DBCreate(outfile.c_str(), DB_CLOBBER, DB_LOCAL, nullptr, DB_PDB), &DBClose);
+    if (!file) {
+        throw std::runtime_error("Cannot create Silo output " + outfile);
+    }
+    std::unique_ptr<DBoptlist, decltype(&DBFreeOptlist)> attributes(
+        DBMakeOptlist(3), &DBFreeOptlist);
+    if (!attributes) {
+        throw std::runtime_error("Cannot allocate Silo options");
+    }
     float ftime = time;
-    DBAddOption(optlist, DBOPT_CYCLE, &cycle);
-    DBAddOption(optlist, DBOPT_TIME, &ftime);
-    DBAddOption(optlist, DBOPT_DTIME, &time);
+    checkSilo(DBAddOption(attributes.get(), DBOPT_CYCLE, &cycle), "cycle");
+    checkSilo(DBAddOption(attributes.get(), DBOPT_TIME, &ftime), "time");
+    checkSilo(DBAddOption(attributes.get(), DBOPT_DTIME, &time), "time");
     std::vector<float> x, y;
-    for (int ix = -2 * res; ix <= 2 * res; ix++) {
-        double const x0 = double(ix) / double(res);
-        x.push_back(x0);
+    for (int ix = -2 * resolution; ix <= 2 * resolution; ++ix) {
+        x.push_back(double(ix) / resolution);
     }
-    for (int iy = -res; iy <= res; iy++) {
-        double const y0 = double(iy) / double(res);
-        y.push_back(y0);
+    for (int iy = -resolution; iy <= resolution; ++iy) {
+        y.push_back(double(iy) / resolution);
     }
-
-    constexpr int kNdim = 2;
-    int const dims1[kNdim] = {4 * res + 1, 2 * res + 1};
-    int const dims2[kNdim] = {4 * res, 2 * res};
-    float const* coords[kNdim] = {x.data(), y.data()};
-    char const* coordNames[kNdim] = {"x", "y"};
-    DBPutQuadmesh(db, "mesh", coordNames, coords, dims1, kNdim, DB_FLOAT, DB_COLLINEAR, optlist);
-    DBPutQuadvar1(db, "intensity", "mesh", mwData.data(), dims2, kNdim, nullptr, 0, DB_FLOAT,
-        DB_ZONECENT, optlist);
-    DBFreeOptlist(optlist);
-    DBClose(db);
+    constexpr int kDimensions = 2;
+    int const meshDimensions[kDimensions] = {4 * resolution + 1, 2 * resolution + 1};
+    int const fieldDimensions[kDimensions] = {4 * resolution, 2 * resolution};
+    float const* coordinates[kDimensions] = {x.data(), y.data()};
+    char const* coordinateNames[kDimensions] = {"x", "y"};
+    checkSilo(DBPutQuadmesh(file.get(), "mesh", coordinateNames, coordinates, meshDimensions,
+                  kDimensions, DB_FLOAT, DB_COLLINEAR, attributes.get()),
+        "mesh");
+    checkSilo(DBPutQuadvar1(file.get(), "intensity", "mesh", mollweide.data(), fieldDimensions,
+                  kDimensions, nullptr, 0, DB_FLOAT, DB_ZONECENT, attributes.get()),
+        "intensity");
+    checkSilo(DBClose(file.release()), "close");
     return 0;
+}
+
+}    // namespace detail
+
+int main(int argc, char** argv) {
+    try {
+        return detail::convert(argc, argv);
+    } catch (std::exception const& error) {
+        std::cerr << "healpix2silo: " << error.what() << '\n';
+        return 1;
+    }
 }

@@ -55,16 +55,17 @@ defaultCudaArchitectures=
 readBuildDefaults() {
     local cacheFile=$1
     local cacheKey cacheValue
-    local cachedSourceDir= cachedArchitectures=
+    local cachedSourceDir= cachedArchitectures= cachedCuda=
     [[ -f $cacheFile ]] || return 0
     # Read cache data without evaluating it as shell code.
     while IFS='=' read -r cacheKey cacheValue; do
         case "$cacheKey" in
             CMAKE_HOME_DIRECTORY:*) cachedSourceDir=$cacheValue ;;
             CMAKE_CUDA_ARCHITECTURES:*) cachedArchitectures=$cacheValue ;;
+            COSMICTIGER_WITH_CUDA:*) cachedCuda=$cacheValue ;;
         esac
     done < "$cacheFile"
-    [[ $cachedSourceDir == "$rootDir" ]] || return 0
+    [[ $cachedSourceDir == "$rootDir" && $cachedCuda == ON ]] || return 0
     if [[ -z $defaultCudaArchitectures && -n $cachedArchitectures &&
         $cachedArchitectures != native ]]; then
         defaultCudaArchitectures=$cachedArchitectures

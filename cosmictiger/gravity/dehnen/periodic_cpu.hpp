@@ -163,8 +163,8 @@ FlopCount dehnenPeriodicImpl(KickParameters const& params, ExpansionBuffer& l, T
                 }
                 SimdFloat r2 = sqr(dx[kXDimension], dx[kYDimension], dx[kZDimension]);
                 r2 = simdMax(r2,
-                    simdMax(sqr(simdBroadcast<SimdFloat>(0.5) - (selfRadius + otherRadius)),
-                        simdBroadcast<SimdFloat>(0)));
+                    sqr(simdMax(simdBroadcast<SimdFloat>(0.5) - (selfRadius + otherRadius),
+                        simdBroadcast<SimdFloat>(0))));
                 SimdFloat const dcc = (selfRadius + otherRadius) * thetainv;
                 auto const cc = r2 > sqr(dcc);
                 flops += kSimdFloatSize * 14;

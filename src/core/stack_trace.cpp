@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cerrno>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
@@ -19,8 +20,13 @@
 #include <boost/stacktrace.hpp>
 #if !defined(_MSC_VER)
 #include <fcntl.h>
+#include <pthread.h>
 #include <signal.h>
+#include <time.h>
 #include <unistd.h>
+#if defined(__linux__)
+#include <sys/syscall.h>
+#endif
 #endif
 
 #include <cosmictiger/core/diagnostic_output.hpp>
@@ -39,7 +45,8 @@ std::vector<std::unique_ptr<std::string const>> stackTracePaths;
 #if !defined(_MSC_VER)
 constexpr std::array<int, 5> kFatalSignals{SIGABRT, SIGSEGV, SIGBUS, SIGFPE, SIGILL};
 std::atomic<bool> ownerActive{false};
-std::atomic_flag reporting = ATOMIC_FLAG_INIT;
+std::atomic<uintptr_t> reportingThread{0};
+static_assert(decltype(reportingThread)::is_always_lock_free);
 std::array<char, 384> processHeader{};
 size_t processHeaderSize = 0;
 
@@ -77,14 +84,66 @@ void writeDiagnostic(int descriptor, char const (&text)[length]) noexcept {
     sigset_t unblocked;
     sigemptyset(&unblocked);
     sigaddset(&unblocked, signal);
-    sigprocmask(SIG_UNBLOCK, &unblocked, nullptr);
+    pthread_sigmask(SIG_UNBLOCK, &unblocked, nullptr);
     raise(signal);
     std::_Exit(128 + signal);
 }
 
+uintptr_t currentSignalThread() noexcept {
+#if defined(__linux__)
+    return static_cast<uintptr_t>(::syscall(SYS_gettid));
+#else
+    // The address identifies a native thread without assuming pthread_t is an
+    // integer. Constant-initialized TLS needs no constructor or allocation.
+    static thread_local char threadMarker;
+    return reinterpret_cast<uintptr_t>(&threadMarker);
+#endif
+}
+
+[[noreturn]] void waitForReporter(int signal) noexcept {
+    // A second fault must not reset the process-wide disposition while the
+    // original thread is writing/symbolizing its report. Avoid repeated nested
+    // handlers on this waiting thread, but leave the reporter able to detect
+    // recursion if its own symbolizer faults.
+    sigset_t blocked;
+    sigemptyset(&blocked);
+    for (int const fatalSignal : kFatalSignals) {
+        sigaddset(&blocked, fatalSignal);
+    }
+    pthread_sigmask(SIG_BLOCK, &blocked, nullptr);
+    constexpr char kWaiting[] =
+        "Another thread received a fatal signal; waiting for the crash report.\n";
+    writeDescriptor(STDERR_FILENO, kWaiting, sizeof(kWaiting) - 1);
+    struct timespec start{};
+    if (clock_gettime(CLOCK_MONOTONIC, &start) == 0) {
+        constexpr time_t kMaximumWaitSeconds = 30;
+        for (;;) {
+            struct timespec now{};
+            if (clock_gettime(CLOCK_MONOTONIC, &now) != 0 ||
+                now.tv_sec - start.tv_sec > kMaximumWaitSeconds ||
+                (now.tv_sec - start.tv_sec == kMaximumWaitSeconds &&
+                    now.tv_nsec >= start.tv_nsec)) {
+                break;
+            }
+            struct timespec const delay{0, 100000000};
+            // EINTR is harmless: the monotonic deadline, not an interruptible
+            // sleep count, bounds the wait without a CPU-consuming spin.
+            nanosleep(&delay, nullptr);
+        }
+    }
+    // The reporter may be deadlocked in the best-effort symbolizer. Only this
+    // watchdog is allowed to terminate on behalf of a different faulting thread.
+    terminateWithSignal(signal);
+}
+
 void reportSignal(int signal) noexcept {
-    if (reporting.test_and_set()) {
-        terminateWithSignal(signal);
+    uintptr_t const thread = currentSignalThread();
+    uintptr_t expected = 0;
+    if (!reportingThread.compare_exchange_strong(expected, thread)) {
+        if (expected == thread) {
+            terminateWithSignal(signal);
+        }
+        waitForReporter(signal);
     }
     // Print the cached process identity even if stack unwinding/symbolization fails.
     // No HPX calls are made from the signal handler.
@@ -152,7 +211,7 @@ struct StackTraceHandler::State {
         if (detail::processHeaderSize >= detail::processHeader.size()) {
             detail::processHeaderSize = detail::processHeader.size() - 1;
         }
-        detail::reporting.clear();
+        detail::reportingThread.store(0);
     }
 
     void install() {

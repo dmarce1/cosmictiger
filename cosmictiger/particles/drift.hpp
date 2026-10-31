@@ -15,8 +15,8 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 void drift(double scale, double dt, double tau0, double tau1, double tauMax, int rung = -1,
     double drag = 0.0);
 
-void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax, double drag);
+void cudaDrift(int rung, double a, double dt, double tau0, double tau1, double tauMax, double drag);
 
-void cpuDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax, double drag);
+void cpuDrift(int rung, double a, double dt, double tau0, double tau1, double tauMax, double drag);
 
 #endif /* DRIFT_HPP_ */

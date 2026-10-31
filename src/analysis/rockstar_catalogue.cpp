@@ -14,11 +14,11 @@
 #include <unordered_map>
 #include <vector>
 
+#include <cosmictiger/analysis/bh.hpp>
 #include <cosmictiger/analysis/rockstar.hpp>
 #include <cosmictiger/analysis/rockstar_properties.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/cosmology/cosmology.hpp>
-#include <cosmictiger/analysis/bh.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
 
@@ -643,8 +643,18 @@ void rockstarPruneCatalogueGroups(Vector<Subgroup>& groups, float scale) {
     }
 }
 
+size_t rockstarCatalogueSize(size_t count) {
+    constexpr size_t kCapacity = 32768;
+    if (count > kCapacity) {
+        PRINT("ROCKSTAR catalogue capacity: omitting %zu of %zu halos from this FoF work unit; "
+              "the native 15-bit halo ID format supports 32768 records.\n",
+            count - kCapacity, count);
+    }
+    return std::min(count, kCapacity);
+}
+
 RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, float scale,
-    Array<double, kDimensions> const& origin, bool inclusive) {
+    Array<double, kDimensions> const& origin, bool inclusive, bool periodic) {
     Subgroup const& group = groups[index];
     auto candidates = inclusive ? rockstarGatherParticles(groups, index) : group.parts;
     auto const density = detail::haloOverdensity(scale);
@@ -747,9 +757,15 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
     record.id.haloId = index;
     record.id.sys = inclusive && !group.children.empty();
     record.pid = group.parent;
-    record.x = (origin[0] + group.x) * positionConversion;
-    record.y = (origin[1] + group.y) * positionConversion;
-    record.z = (origin[2] + group.z) * positionConversion;
+    auto const coordinate = [periodic, positionConversion](double value) {
+        if (periodic) {
+            value -= std::floor(value);
+        }
+        return value * positionConversion;
+    };
+    record.x = coordinate(origin[0] + group.x);
+    record.y = coordinate(origin[1] + group.y);
+    record.z = coordinate(origin[2] + group.z);
     record.mvir = mass * massConversion;
     record.m200 = so200.count * massConversion;
     record.m500 = so500.count * massConversion;

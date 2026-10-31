@@ -120,7 +120,9 @@ void rockstarFinalizeSubgroups(Vector<Subgroup>& groups, float scale);
 void rockstarPruneCatalogueGroups(Vector<Subgroup>& groups, float scale);
 DeviceVector<RockstarParticle> rockstarGatherParticles(Vector<Subgroup> const& groups, int index);
 RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, float scale,
-    Array<double, kDimensions> const& origin, bool inclusive = true);
+    Array<double, kDimensions> const& origin, bool inclusive = true, bool periodic = false);
+// The native record ABI has 15-bit halo IDs; warn and omit excess records.
+size_t rockstarCatalogueSize(size_t count);
 // Checked IEEE binary16 storage for finite physical catalogue properties.
 Float16 rockstarEncodeHalf(double value, char const* fieldName);
 // Catalogue scale radii are bounded by the radius of the profile that produced

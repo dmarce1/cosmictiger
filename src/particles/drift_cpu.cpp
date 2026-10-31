@@ -16,6 +16,7 @@ namespace detail {
 
 void appendDriftLightconeEntries(Array<double, kDimensions> const& before,
     Array<double, kDimensions> const& after, Array<float, kDimensions> const& velocity,
+    Array<float, kDimensions> const& outputVelocity,
     DriftParameters const& parameters, std::vector<LightconeEntry>& entries) {
     double const inverseScale = 1.0 / parameters.scale;
     double const inverseTauMax = 1.0 / parameters.tauMax;
@@ -58,9 +59,9 @@ void appendDriftLightconeEntries(Array<double, kDimensions> const& before,
                     entry.x = crossing[kXDimension];
                     entry.y = crossing[kYDimension];
                     entry.z = crossing[kZDimension];
-                    entry.vx = velocity[kXDimension];
-                    entry.vy = velocity[kYDimension];
-                    entry.vz = velocity[kZDimension];
+                    entry.vx = outputVelocity[kXDimension];
+                    entry.vy = outputVelocity[kYDimension];
+                    entry.vz = outputVelocity[kZDimension];
                     entry.pix = pixel;
                     entries.push_back(entry);
                 }
@@ -89,23 +90,14 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensi
     if (!lightcone) {
         using DriftPack = NativeSimdVector<double>;
         constexpr size_t kWidth = DriftPack::size();
-        DriftPack const factor(driftFactor);
-        DriftPack const zero(0.0);
-        DriftPack const one(1.0);
         for (; count - index >= kWidth; index += kWidth) {
             for (int dim = 0; dim < kDimensions; ++dim) {
-                DriftPack const position(
-                    [&](auto lane) { return positions[dim][index + lane].toDouble(); });
                 DriftPack const velocity([&](auto lane) {
                     size_t const particle = index + lane;
                     return parameters.rung < 0 || rungs[particle] == parameters.rung ?
                         double(velocities[particle][dim]) :
                         0.0;
                 });
-                DriftPack const displaced = simdFma(velocity, factor, position);
-                DriftPack const fraction = displaced - simdFloor(displaced);
-                // Very small negative displacements can round their fraction to one.
-                DriftPack const wrapped = simdSelect(fraction >= one, zero, fraction);
                 for (size_t lane = 0; lane < kWidth; ++lane) {
                     size_t const particle = index + lane;
                     if (parameters.rung < 0 || rungs[particle] == parameters.rung) {
@@ -114,7 +106,8 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensi
                             // position to double cannot discard its low bits.
                             positions[dim][particle] += Position(velocity[lane] * driftFactor);
                         } else {
-                            positions[dim][particle] = wrapped[lane];
+                            positions[dim][particle].raw() += static_cast<PositionInteger>(
+                                std::llrint(std::remainder(velocity[lane] * driftFactor, 1.0) * 0x1p32));
                         }
                         if (parameters.drag != 0.0) {
                             velocities[particle][dim] = velocity[lane] * damping;
@@ -131,6 +124,7 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensi
         Array<double, kDimensions> before;
         Array<double, kDimensions> after;
         Array<double, kDimensions> displacement;
+        auto const driftVelocity = velocities[index];
         for (int dim = 0; dim < kDimensions; ++dim) {
             before[dim] = positions[dim][index].toDouble();
             after[dim] = std::fma(double(velocities[index][dim]), driftFactor, before[dim]);
@@ -141,14 +135,14 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensi
         }
         if (lightcone) {
             detail::appendDriftLightconeEntries(
-                before, after, velocities[index], parameters, *entries);
+                before, after, driftVelocity, velocities[index], parameters, *entries);
         }
         for (int dim = 0; dim < kDimensions; ++dim) {
             if constexpr (kPositionBits == 64) {
                 positions[dim][index] += Position(displacement[dim]);
             } else {
-                double const fraction = after[dim] - std::floor(after[dim]);
-                positions[dim][index] = fraction >= 1.0 ? 0.0 : fraction;
+                positions[dim][index].raw() += static_cast<PositionInteger>(
+                    std::llrint(std::remainder(displacement[dim], 1.0) * 0x1p32));
             }
         }
     }

@@ -19,7 +19,7 @@
 
 HPX_PLAIN_ACTION(drift, DriftAction);
 
-void cpuDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax, double drag) {
+void cpuDrift(int rung, double a, double dt, double tau0, double tau1, double tauMax, double drag) {
     auto const range =
         rung < 0 ? Pair<ParticleInteger>(0, particlesSize()) : particlesCurrentRange();
     size_t const count = range.second - range.first;

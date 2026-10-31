@@ -7,6 +7,7 @@
 #include <string>
 #include <thread>
 
+#include <pthread.h>
 #include <sys/resource.h>
 
 #include <cosmictiger/core/diagnostic_output.hpp>
@@ -133,7 +134,9 @@ int main(int argc, char* argv[]) {
         std::raise(SIGINT);
         return 98;
     }
-    detail::require(mode == "fatal" || mode == "worker", "unknown test mode");
+    detail::require(
+        mode == "fatal" || mode == "worker" || mode == "concurrent" || mode == "recursive",
+        "unknown test mode");
     detail::require(argc == 3 || argc == 4, "fatal mode requires signal and optional output path");
     StackTraceHandler handler;
     handler.install(17);
@@ -143,7 +146,20 @@ int main(int argc, char* argv[]) {
         setStackTraceOutputPath(argv[3]);
     }
     auto const signalNumber = detail::signalFromName(argv[2]);
-    if (mode == "worker") {
+    if (mode == "concurrent" || mode == "recursive") {
+        std::thread reporter(stackTraceTestCrash, signalNumber);
+        // The Python parent fills a FIFO and waits for the reporter's stderr
+        // header. The reporter then cannot finish until that parent drains it.
+        detail::require(std::getchar() == '2', "missing secondary-signal command");
+        if (mode == "recursive") {
+            detail::require(pthread_kill(reporter.native_handle(), SIGSEGV) == 0,
+                "cannot signal the reporting thread");
+        } else {
+            std::thread second(stackTraceTestCrash, SIGSEGV);
+            second.join();
+        }
+        reporter.join();
+    } else if (mode == "worker") {
         std::thread worker(stackTraceTestCrash, signalNumber);
         worker.join();
     } else {

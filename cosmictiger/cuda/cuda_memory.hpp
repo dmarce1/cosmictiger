@@ -26,6 +26,8 @@ inline void syncthreads() {
 #define CUDA_MEM_STACK_SIZE (1024 * 1024)
 #endif
 inline constexpr int kCudaMemoryBinCount = 32;
+inline constexpr size_t kCudaPoolAlignment = alignof(std::max_align_t);
+inline constexpr size_t kCudaPoolHeaderSize = kCudaPoolAlignment;
 
 using CudaMemoryInteger = uint64_t;
 
@@ -55,6 +57,8 @@ public:
     void* allocate(size_t sz);
     CUDA_EXPORT
     void free(void* ptr);
+    CUDA_EXPORT
+    bool owns(void const* ptr) const;
     CudaMemory(size_t heapSize);
     ~CudaMemory();
     // All users of the pool must be quiescent before resetting or destroying it.
@@ -64,4 +68,4 @@ public:
 void cudaMemoryInitialize(size_t heapSize);
 CUDA_EXPORT void* cudaAllocate(size_t sz);
 CUDA_EXPORT void cudaRelease(void* ptr);
-CUDA_EXPORT void copyCudaMemory(void* d, void* s, int sz);
+CUDA_EXPORT void copyCudaMemory(void* d, void const* s, size_t sz);

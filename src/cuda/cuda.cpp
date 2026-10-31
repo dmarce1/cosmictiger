@@ -132,7 +132,7 @@ void cudaRelease(void* pointer) {
     freeManagedMemory(pointer);
 }
 
-void copyCudaMemory(void* destination, void* source, int size) {
+void copyCudaMemory(void* destination, void const* source, size_t size) {
     std::memcpy(destination, source, size);
 }
 #endif
@@ -156,14 +156,20 @@ void cudaAllocate(void** ptr, size_t size, char const* file, int line) {
 void cudaSetDevice() {
     int count;
     CUDA_CHECK(cudaGetDeviceCount(&count));
-    int const deviceNum = hpxRank() % count;
+    if (count == 0) {
+        THROW_ERROR("CUDA backend requested without a visible GPU\n");
+    }
+    int const deviceNum = hpxLocalRank() % count;
     CUDA_CHECK(cudaSetDevice(deviceNum));
 }
 
 int cudaGetDevice() {
     int count;
     CUDA_CHECK(cudaGetDeviceCount(&count));
-    int const deviceNum = hpxRank() % count;
+    if (count == 0) {
+        THROW_ERROR("CUDA backend requested without a visible GPU\n");
+    }
+    int const deviceNum = hpxLocalRank() % count;
     return deviceNum;
 }
 
@@ -194,6 +200,14 @@ void cudaInit() {
     cudaSetDevice();
     static std::once_flag initialized;
     std::call_once(initialized, [] {
+        int visibleDevices = 0;
+        CUDA_CHECK(cudaGetDeviceCount(&visibleDevices));
+        if (visibleDevices > 1) {
+            PRINT("CUDA: locality %i selects GPU %i using node-local rank %i. "
+                  "Bind each locality to one visible GPU with CUDA_VISIBLE_DEVICES "
+                  "to keep the HPX event pool from opening contexts on every GPU.\n",
+                hpxRank(), cudaGetDevice(), hpxLocalRank());
+        }
         if (detail::cudaStreamEventsInitialized()) {
             throw std::logic_error("CUDA initialization must precede HPX CUDA stream use");
         }

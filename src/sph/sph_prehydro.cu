@@ -464,7 +464,7 @@ __global__ void sphCudaPrehydro2(
                             float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
                             0.9128709291752769f;
                         diagnostics = price_etal::diagnostics(gradientSums, parameters.scaleFactor,
-                            parameters.expansionAcceleration, h_a, c_a_switch,
+                            parameters.expansionRate, h_a, c_a_switch,
                             parameters.viscosityAlphaMaxPrice, parameters.viscosityDecayPrice,
                             flops);
                         flops += 2;

@@ -275,3 +275,11 @@ compares tree potentials against direct pair sums. CUDA variants of the finder a
 potential tests are separate tests; passing CPU regressions does not establish
 CUDA or distributed runtime correctness. These synthetic regressions do not replace
 a cosmological mass-function or clustering comparison against reference ROCKSTAR.
+
+The native catalogue format admits 32768 halos per FoF work unit (indices
+0 through 32767). Both snapshot and lightcone writers warn and omit excess
+halos rather than stopping the simulation. A retained halo whose parent was
+omitted has `pid=-1`; snapshot particles in omitted halos receive no catalogue
+tag. Such an output is incomplete and the warning must be considered when
+using it. Snapshot record positions are wrapped into the periodic box;
+lightcone record positions retain their unwrapped observer coordinates.

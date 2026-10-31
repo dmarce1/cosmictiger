@@ -227,8 +227,8 @@ struct Range {
     }
 
     inline int longestDim() const {
-        int maxDim;
-        T maxSpan = T(-1);
+        int maxDim = 0;
+        T maxSpan = end[0] - begin[0];
         for (int dim = 0; dim < n; dim++) {
             T const span = end[dim] - begin[dim];
             if (span > maxSpan) {
@@ -240,8 +240,8 @@ struct Range {
     }
 
     inline int shortestDim() const {
-        int minDim;
-        T minSpan = T(1);
+        int minDim = 0;
+        T minSpan = end[0] - begin[0];
         for (int dim = 0; dim < n; dim++) {
             T const span = end[dim] - begin[dim];
             if (span <= minSpan) {
@@ -255,8 +255,8 @@ struct Range {
     inline std::pair<Range<T, n>, Range<T, n>> split() const {
         auto left = *this;
         auto right = *this;
-        int maxDim;
-        T maxSpan = 0;
+        int maxDim = 0;
+        T maxSpan = end[0] - begin[0];
         for (int dim = 0; dim < n; dim++) {
             T const span = end[dim] - begin[dim];
             if (span > maxSpan) {
@@ -485,24 +485,19 @@ CUDA_EXPORT inline float boxDistanceSquared(
     Fixed32Range const& box, Array<Position, kDimensions> const& x) {
     float d2 = 0.0f;
     for (int dim = 0; dim < kDimensions; dim++) {
-        float outside;
-        if constexpr (kPositionBits == 64) {
-            double const lower = box.begin[dim].toDouble();
-            double const upper = box.end[dim].toDouble();
-            // Q0.64 coordinates are in [0, 1); box endpoints can also lie
-            // outside that interval. Only compare raw values inside it.
-            bool const below =
-                lower >= 1.0 || (lower > 0.0 && x[dim].raw() < Position(box.begin[dim]).raw());
-            bool const above =
-                upper < 0.0 || (upper < 1.0 && x[dim].raw() > Position(box.end[dim]).raw());
-            outside = below + above;
-        } else {
-            double const coordinate = x[dim].toDouble();
-            outside =
-                (coordinate < box.begin[dim].toDouble()) + (coordinate > box.end[dim].toDouble());
+        if (box.end[dim].toDouble() - box.begin[dim].toDouble() >= 1.0) {
+            continue;
         }
-        float const delta = outside *
-            fminf(fabsf(distance(box.begin[dim], x[dim])), fabsf(distance(box.end[dim], x[dim])));
+        PositionInteger const lower = Position(box.begin[dim]).raw();
+        PositionInteger const length = Position(box.end[dim]).raw() - lower;
+        PositionInteger const offset = x[dim].raw() - lower;
+        PositionInteger ticks = 0;
+        if (offset > length) {
+            PositionInteger const fromUpper = offset - length;
+            PositionInteger const fromLower = PositionInteger{0} - offset;
+            ticks = fromUpper < fromLower ? fromUpper : fromLower;
+        }
+        float const delta = float(double(ticks) * Position::kToFloatFactor_);
         d2 = fmaf(delta, delta, d2);
     }
     return d2;
@@ -537,19 +532,15 @@ inline SimdFloat boxDistanceSquared(
             simdCast<SimdDouble8>(x[dim]) * simdBroadcast<SimdDouble8>(Position::kToFloatFactor_);
         // Positions are unsigned coordinates in [0, 1), not signed displacements.
         xValue = simdSelect(xValue < SimdDouble8(0.0), xValue + SimdDouble8(1.0), xValue);
-        // Match the scalar/device float rounding after exact coordinate subtraction.
-        SimdFloat beginDelta = simdCast<SimdFloat>(box.begin[dim] - xValue);
-        beginDelta =
-            simdSelect(beginDelta > SimdFloat(0.5f), beginDelta - SimdFloat(1.f), beginDelta);
-        beginDelta =
-            simdSelect(beginDelta < SimdFloat(-0.5f), beginDelta + SimdFloat(1.f), beginDelta);
-        SimdFloat endDelta = simdCast<SimdFloat>(box.end[dim] - xValue);
-        endDelta = simdSelect(endDelta > SimdFloat(0.5f), endDelta - SimdFloat(1.f), endDelta);
-        endDelta = simdSelect(endDelta < SimdFloat(-0.5f), endDelta + SimdFloat(1.f), endDelta);
-        auto const outside = (xValue < box.begin[dim]) | (xValue > box.end[dim]);
-        auto const nearestDelta = simdMin(simdAbs(beginDelta), simdAbs(endDelta));
-        SimdFloat const delta = simdCast<SimdFloat>(
-            simdSelect(outside, simdCast<SimdDouble8>(nearestDelta), SimdDouble8(0.0)));
+        // Q0.32 values and Q32.32 box endpoints are exact in double.
+        // Measure from the lower endpoint modulo one, then test containment
+        // in that same periodic interval before choosing the nearest endpoint.
+        SimdDouble8 offset = xValue - box.begin[dim];
+        offset -= simdFloor(offset);
+        SimdDouble8 const length = box.end[dim] - box.begin[dim];
+        auto const outside = (length < SimdDouble8(1.0)) & (offset > length);
+        SimdDouble8 const nearest = simdMin(offset - length, SimdDouble8(1.0) - offset);
+        SimdFloat const delta = simdCast<SimdFloat>(simdSelect(outside, nearest, SimdDouble8(0.0)));
         d2 = simdFma(delta, delta, d2);
     }
     return d2;

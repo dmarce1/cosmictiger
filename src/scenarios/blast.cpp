@@ -17,6 +17,7 @@
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/blast.hpp>
+#include <cosmictiger/scenarios/diagnostics.hpp>
 #include <cosmictiger/scenarios/sedov.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
 
@@ -27,31 +28,29 @@ namespace detail {
     constexpr double kDuration = 5e-3;
 
     static void finishBlast(double endTime) {
-        if (sphParticlesSize() == 0) {
-            return;
-        }
         FILE* fp = fopen(outputPath("blast.txt").c_str(), "wt");
         double l1 = 0.0, l2 = 0.0, lmax = 0.0;
         double norm1 = 0.0, norm2 = 0.0;
         constexpr int kN = 100000;
-        for (int l = 0; l < kN; l++) {
-            int const i = rand() % sphParticlesSize();
-            int const j = sphParticlesParticleIndex(i);
-            float x = particlesPos(kXDimension, j).toDouble() - 0.5;
-            float y = particlesPos(kYDimension, j).toDouble() - 0.5;
-            float z = particlesPos(kZDimension, j).toDouble() - 0.5;
-            float const rho = sphParticlesDensity(i);
+        if (fp == nullptr) {
+            throw std::runtime_error("Unable to open blast.txt for writing");
+        }
+        for (auto const& sample : diagnosticSamples(kN)) {
+            float const x = sample.position[kXDimension] - 0.5;
+            float const y = sample.position[kYDimension] - 0.5;
+            float const z = sample.position[kZDimension] - 0.5;
+            float const rho = sample.density;
             double time = endTime;
             double r = sqrt(sqr(x, y, z));
             double rmax = sqrt(1.5);
             double d, v, p;
             int ndim = 3;
-            sedov::solution(time, r, rmax, d, v, p, ndim);
+            sedov::solution(time, r, rmax, d, v, p, ndim, getOptions().hydro.gamma);
             double dif = fabs(rho - d);
-            norm1 += d;
-            norm2 += sqr(d);
-            l1 += dif;
-            l2 += dif * dif;
+            norm1 += sample.weight * d;
+            norm2 += sample.weight * sqr(d);
+            l1 += sample.weight * dif;
+            l2 += sample.weight * dif * dif;
             lmax = std::max(lmax, dif);
             fprintf(fp, "%e %e %e\n", r, rho, d);
         }
@@ -139,6 +138,16 @@ ScenarioPlan initializeBlast() {
     if (sphParticlesSize() == 0) {
         throw std::runtime_error("The blast scenario produced no gas particles; "
                                  "increase initial.particlesPerDimension");
+    }
+    double depositedEnergy = 0.0;
+    for (ParticleInteger particle = 0; particle < sphParticlesSize(); ++particle) {
+        depositedEnergy += m * sphParticlesInternalEnergy(particle);
+    }
+    if (!(depositedEnergy > 0.0)) {
+        throw std::runtime_error("The blast lattice has no deposited energy");
+    }
+    for (ParticleInteger particle = 0; particle < sphParticlesSize(); ++particle) {
+        sphParticlesThermodynamicState(particle).internalEnergy /= depositedEnergy;
     }
     return ScenarioPlan{{{detail::kDuration, 16}}, detail::finishBlast};
 }

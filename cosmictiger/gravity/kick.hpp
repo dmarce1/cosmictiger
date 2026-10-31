@@ -100,24 +100,24 @@ struct KickParameters {
     double previousTimestep = 0.0;
     bool htime;
     float sign;
-    int minLevel;
-    int minRung;
+    int minLevel{};
+    int minRung{};
     int fixedRung{};    // Optional fixed-rung override used by kick regressions.
-    float a;
-    float t0;
-    float theta;
-    float gravitySupportRadius;
-    float eta;
-    float gm;
+    float a = 1.0f;
+    float t0{};
+    float theta{};
+    float gravitySupportRadius{};
+    float eta{};
+    float gm{};
     bool velInit;
-    bool saveForce;
-    bool firstCall;
-    bool gpu;
-    float nodeLoad;
+    bool saveForce{};
+    bool firstCall{};
+    bool gpu{};
+    float nodeLoad{};
     float maxDt;
-    bool ascending;
-    bool descending;
-    bool top;
+    bool ascending{};
+    bool descending{};
+    bool top{};
     bool doPhi;
     // Opening rule, stamped by kick() from the options so that the CPU walk,
     // the remote kick action and the CUDA kernel apply the same rule.

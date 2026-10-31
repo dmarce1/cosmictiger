@@ -25,7 +25,9 @@
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <unordered_map>
+#include <map>
+#include <stdexcept>
+#include <tuple>
 #include <vector>
 
 #include <hpx/synchronization/spinlock.hpp>
@@ -1090,11 +1092,19 @@ using MutexType = hpx::spinlock;
 
 namespace sedov {
 
-void solution(double time, double r, double rmax, double& d, double& v, double& p, int ndim) {
+void solution(double time, double r, double rmax, double& d, double& v, double& p, int ndim,
+    double gasGamma) {
+    if (!(time > 0.0) || !(rmax > 0.0) || !(gasGamma > 1.0) || ndim < 1 || ndim > 3 ||
+        !(r >= 0.0 && r <= rmax)) {
+        throw std::invalid_argument("Invalid Sedov solution parameters or sample radius");
+    }
     int nstep = 10000;
     constexpr int kBw = 2;
     using FunctionType = std::function<void(double, double&, double&, double&)>;
-    using MapType = std::unordered_map<double, std::shared_ptr<FunctionType>>;
+    using Key = std::tuple<double, double, int, double>;
+    using MapType = std::map<Key, std::shared_ptr<FunctionType>>;
+    Key const key(time, rmax, ndim, gasGamma);
+    double const spacing = rmax / nstep;
 
     static MapType map;
     static MutexType mutex;
@@ -1104,7 +1114,7 @@ void solution(double time, double r, double rmax, double& d, double& v, double& 
     SedReal ener0 = 0.0;
     SedReal pres0 = 0.0;
     SedReal cs0 = 0.0;
-    SedReal gamma = 5.0 / 3.0;
+    SedReal gamma = gasGamma;
     SedReal omega = 0.0;
     SedReal eblast = 1.0;
     SedReal xgeom = SedReal(ndim);
@@ -1128,7 +1138,7 @@ void solution(double time, double r, double rmax, double& d, double& v, double& 
     nstep += kBw;
 
     std::unique_lock<MutexType> lock(mutex);
-    auto iter = map.find(time);
+    auto iter = map.find(key);
     if (iter == map.end()) {
         SedReal sedTime = time;
         printf("Computing sedov solution\n");
@@ -1163,9 +1173,9 @@ void solution(double time, double r, double rmax, double& d, double& v, double& 
         std::copy(pres.begin(), pres.end(), pres1.begin());
 #endif
 
-        FunctionType func = [nstep, rmax, den1, pres1, vel1, kBw](
+        FunctionType func = [spacing, den1, pres1, vel1, kBw](
                                 double r, double& d, double& v, double& p) {
-            double dr = rmax / (nstep);
+            double const dr = spacing;
             std::array<int, 4> i;
             i[1] = (r + (kBw - 0.5) * dr) / dr;
             i[0] = i[1] - 1;
@@ -1173,8 +1183,9 @@ void solution(double time, double r, double rmax, double& d, double& v, double& 
             i[3] = i[1] + 2;
             double r0 = (r - (i[1] - kBw + 0.5) * dr) / dr;
             //		printf( "%i %e\n", i[0], r, dr );
-            assert(i[0] >= 0);
-            assert(i[3] < int(vel1.size()));
+            if (i[0] < 0 || i[3] >= int(vel1.size())) {
+                throw std::out_of_range("Sedov interpolation radius is outside its table");
+            }
             auto const interp = [r0, i](std::vector<double> const& data) {
                 double sum = 0.0;
                 sum +=
@@ -1194,7 +1205,7 @@ void solution(double time, double r, double rmax, double& d, double& v, double& 
         };
 
         ptr = std::make_shared<FunctionType>(std::move(func));
-        map[time] = ptr;
+        map[key] = ptr;
         lock.unlock();
     } else {
         lock.unlock();

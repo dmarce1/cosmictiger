@@ -55,6 +55,8 @@ void showTimings();
 
 // CUDA operators are order-templated device functions in cosmictiger/gravity_cuda.hpp.
 
+// Distributed CUDA PP interaction totals, normalized by CUDA-processed sinks.
+// CPU walk work is not included. Invoke from the root between completed kicks.
 void resetGravityCounters();
 void getGravityCounters(double& close, double& direct);
 void setGravityCounterUse(bool code);

@@ -242,7 +242,8 @@ mapSize = 8
                                                "--cosmology.omegaC=0.25"]
     mpcToCm = 3.085678e24
     solarMassG = 1.989e33
-    matterDensity = 0.3 * 3.0 * (0.7 * 1.e7 / 3.086e24)**2 / (8.0 * math.pi * 6.67259e-8)
+    # Match kH0 = 1.e7 / kMpcToCm; a separately rounded Mpc changes rho by 2e-4.
+    matterDensity = 0.3 * 3.0 * (0.7 * 1.e7 / mpcToCm)**2 / (8.0 * math.pi * 6.67259e-8)
     boxLength = 100.0
     massSolar = matterDensity * (boxLength * mpcToCm / 0.7)**3 / (8**3 * solarMassG)
 
@@ -324,12 +325,17 @@ mapSize = 8
             f"--units.boxLength={value}"], success=False)
         if "units.boxLength produces out-of-range simulation units" not in rejected:
             raise RuntimeError("unrepresentable box normalization lacked its range diagnostic")
-    for name, option in (("glass", "--run.scenario=glass"),
-                         ("gadget", "--initial.gadget4Restart=missing.gadget")):
+    for name, option, diagnostic in (
+            ("glass", "--run.scenario=glass",
+             "units.boxLength cannot be used with glass generation or Gadget4 input, "
+             "which supply their own length scale"),
+            ("gadget", "--initial.gadget4Restart=missing.gadget",
+             "initial.gadget4Restart supplies its own units; do not set units.boxLength")):
         rejected = run(f"units_box_unsupported_{name}", normalizationOptions + [
             option, f"--units.boxLength={boxLength}"], success=False)
-        if "units.boxLength cannot be used" not in rejected or "own length scale" not in rejected:
-            raise RuntimeError(f"box normalization with {name} lacked its length-scale diagnostic")
+        # Gadget input rejects the unit conflict before attempting to read its header.
+        if diagnostic not in rejected:
+            raise RuntimeError(f"box normalization with {name} lacked its unit-conflict diagnostic")
 
     for source in ("cli", "ini", "box_cli", "mass_cli"):
         if source == "cli":
@@ -812,7 +818,7 @@ mapSize = 8
     for neff, temperature in ((0.0, 2.7255), (3.046, 2.7255), (6.0, 3.0)):
         output = run(f"radiation_{neff}_{temperature}", metadata_options + [
             f"--cosmology.nEff={neff}", f"--cosmology.thetaCmb={temperature / 2.73:.17g}"])
-        hubble = 0.6732 * 1.e7 / 3.086e24
+        hubble = 0.6732 * 1.e7 / mpcToCm
         criticalDensity = 3.0 * hubble**2 / (8.0 * math.pi * 6.67259e-8)
         photons = (4.0 * 5.67051e-5 / 2.99792458e10) * temperature**4 / (
             criticalDensity * 2.99792458e10**2)
@@ -1082,16 +1088,17 @@ mapSize = 8
     # are introduced. Loading each through the executable also verifies comments
     # and empty-string defaults without running its physical problem.
     root = Path(__file__).resolve().parents[1]
-    optional_keys = {"compute.positionType", "gravity.effectiveRadius", "gravity.supportRadius",
+    optional_keys = {"compute.positionType", "compute.bucketSize",
+                     "gravity.effectiveRadius", "gravity.supportRadius",
                      "gravity.method.near", "gravity.expansionDegree",
                      "units.boxLength",
                      "hydro.centralEffectiveRadius", "hydro.centralSupportRadius",
                      "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius"}
     public_keys = set(option_names) - {"help", "configuration"}
-    preset_curvatures = {"closed_no_dark_energy.ini": -1.000092093902909,
+    preset_curvatures = {"closed_no_dark_energy.ini": -1.0000920746853525,
                          "omega_k_negative.ini": -0.1, "omega_k_positive.ini": 0.1,
                          "critical.ini": 0.0,
-                         "subcritical_no_dark_energy.ini": 0.6864420835574896}
+                         "subcritical_no_dark_energy.ini": 0.6864421027750461}
     checked_presets = set()
     local_presets = {root / "lcdm.ini", root / "configurations/lcdm_present.ini"}
     preset_paths = [root / "default.ini", *sorted((root / "configurations").rglob("*.ini"))]
@@ -1111,8 +1118,8 @@ mapSize = 8
         expected_keys = (public_keys - preset_optional_keys) | active_optional_keys
         if actual_keys != expected_keys:
             raise RuntimeError(f"{relative_path} option coverage differs: {sorted(actual_keys ^ expected_keys)}")
-        # Position width and radius alternatives may remain commented.
-        # Cooling controls must be explicit.
+        # Build-selected position width/bucket size and radius alternatives may
+        # remain commented. All four cooling controls must be explicit.
         documented_alternatives = set(active_optional_keys)
         section = None
         for line in path.read_text().splitlines():

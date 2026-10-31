@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cstddef>
 #include <limits>
+#include <mutex>
 #include <stdexcept>
 #include <vector>
 
@@ -55,7 +56,16 @@ static Vector<Pair<ParticleInteger>> leafParticleRanges;
 static MutexType leafParticleRangeMutex;
 static std::atomic<int> treeThreadCount(0);
 static std::atomic<int> nextId;
-static std::atomic<int> nextMultId;
+// Remote deserialization must neither consume nor overlap local node slots.
+// Chunks remain stable and device accessible until the next tree epoch.
+struct RemoteMultipoleChunk {
+    char* data;
+    size_t used;
+};
+static std::vector<RemoteMultipoleChunk> remoteMultipoleChunks;
+static MutexType remoteMultipoleMutex;
+static MultipolePosition* emptyRemoteMultipole = nullptr;
+constexpr size_t kRemoteMultipoleChunkSize = 4096;
 static std::atomic<int> allocatorMtx(0);
 static size_t nodesSize;
 static std::atomic<uint64_t> remoteTreeFetchCount{0};
@@ -99,12 +109,33 @@ static void treeWriteMultipole(MultipolePosition* record, MultipoleBuffer const&
 
 MultipolePosition* treeAddMultipole(
     Array<Position, kDimensions> const& pos, MultipoleBuffer const& multipole) {
-    int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
-    size_t const index = nextMultId++ + treeAllocLineSize;
-    if (index >= nodesSize) {
-        THROW_ERROR("%s\n", "Tree multipole arena full");
+    bool empty = true;
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        empty = empty && pos[dim].raw() == 0;
     }
-    MultipolePosition* ptr = treeMultipoleRecord(index);
+    for (int coefficient = 0; coefficient < fmmMultipoleCoefficientCount(fmmOrder()); ++coefficient) {
+        empty = empty && multipole[coefficient] == 0.0f;
+    }
+    std::lock_guard<MutexType> lock(remoteMultipoleMutex);
+    if (empty && emptyRemoteMultipole != nullptr) {
+        return emptyRemoteMultipole;
+    }
+    if (remoteMultipoleChunks.empty() ||
+        remoteMultipoleChunks.back().used == kRemoteMultipoleChunkSize) {
+        char* data = static_cast<char*>(
+            allocateManagedMemory(kRemoteMultipoleChunkSize * multipoleStride));
+        try {
+            remoteMultipoleChunks.push_back({data, 0});
+        } catch (...) {
+            freeManagedMemory(data);
+            throw;
+        }
+    }
+    auto& chunk = remoteMultipoleChunks.back();
+    auto* ptr = reinterpret_cast<MultipolePosition*>(chunk.data + chunk.used++ * multipoleStride);
+    if (empty) {
+        emptyRemoteMultipole = ptr;
+    }
     ptr->pos = pos;
     treeWriteMultipole(ptr, multipole);
     return ptr;
@@ -121,7 +152,6 @@ void treeReadMultipole(MultipolePosition const* record, MultipoleBuffer& multipo
 void TreeAllocator::reset() {
     int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
     next_ = (nextId += treeAllocLineSize);
-    nextMultId += treeAllocLineSize;
     last_ = std::min(next_ + treeAllocLineSize, (int) nodesSize);
     if (next_ >= nodesSize) {
         THROW_ERROR("%s\n", "Tree arena full");
@@ -192,7 +222,7 @@ void tree2Cpu() {
 #ifdef USE_CUDA
         if (setGpu && cudaEnabled()) {
             cudaSetDevice();
-            CUDA_CHECK(cudaAdviseMemory(nodes, nodesSize * sizeof(TreeNode),
+            CUDA_WARN(cudaAdviseMemory(nodes, nodesSize * sizeof(TreeNode),
                 cudaMemAdviseUnsetReadMostly, cudaGetDevice()));
         }
 #endif
@@ -208,7 +238,7 @@ void tree2Gpu() {
     }
     if (!setGpu) {
         cudaSetDevice();
-        CUDA_CHECK(cudaAdviseMemory(
+        CUDA_WARN(cudaAdviseMemory(
             nodes, nodesSize * sizeof(TreeNode), cudaMemAdviseSetReadMostly, cudaGetDevice()));
         setGpu = true;
         setCpu = false;
@@ -256,9 +286,16 @@ void treeAllocateNodesLocal(size_t capacity) {
         multis = freshMultipoles;
         multipoleStride = stride;
     }
+    {
+        std::lock_guard<MutexType> lock(remoteMultipoleMutex);
+        for (auto const& chunk : remoteMultipoleChunks) {
+            freeManagedMemory(chunk.data);
+        }
+        remoteMultipoleChunks.clear();
+        emptyRemoteMultipole = nullptr;
+    }
     nodesSize = sz;
     nextId = -treeAllocLineSize;
-    nextMultId = -treeAllocLineSize;
     populatedNodes.swap(freshPopulation);
     while (allocatorMtx++ != 0) {
         allocatorMtx--;

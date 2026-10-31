@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <numeric>
 #include <stdexcept>
+#include <vector>
 
 #include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/flops.hpp>
@@ -33,6 +34,29 @@
 #endif
 
 namespace detail {
+double scenarioMaximumDensity();
+}
+HPX_PLAIN_ACTION(detail::scenarioMaximumDensity, ScenarioMaximumDensityAction);
+
+namespace detail {
+
+double scenarioMaximumDensity() {
+    std::vector<hpx::future<double>> futures;
+    for (auto const& child : hpxChildren()) {
+        futures.push_back(hpx::async<ScenarioMaximumDensityAction>(child));
+    }
+    double result = 0.0;
+#if COSMICTIGER_WITH_SPH
+    for (ParticleInteger i = 0; i < sphParticlesSize(); ++i) {
+        result = std::max(result, double(sphParticlesDensity(i)));
+    }
+#endif
+    hpx::wait_all(futures);
+    for (auto& future : futures) {
+        result = std::max(result, future.get());
+    }
+    return result;
+}
 
 void writeScenarioDiagnostics(DriverParameters const& state) {
     auto const& energy = state.energies;
@@ -46,12 +70,7 @@ void writeScenarioDiagnostics(DriverParameters const& state) {
     fprintf(file, "%e %e %e %e %e %e %e %e %e\n", state.tau, energy.xmom, energy.ymom, energy.zmom,
         energy.kin, energy.therm, total, energy.pot, (total - state.energy0) / normalization);
     fclose(file);
-    double maximumDensity = 0.0;
-#if COSMICTIGER_WITH_SPH
-    for (ParticleInteger i = 0; i < sphParticlesSize(); i++) {
-        maximumDensity = std::max(maximumDensity, double(sphParticlesDensity(i)));
-    }
-#endif
+    double const maximumDensity = scenarioMaximumDensity();
     file = fopen(outputPath("rho.dat").c_str(), "at");
     if (file == nullptr) {
         THROW_ERROR("Unable to write scenario density diagnostics\n");
@@ -143,20 +162,28 @@ void runFixedScenario() {
         checkpointTimer.reset();
         checkpointTimer.start();
     };
-    double stageStart = 0.0;
+    int stageEndStep = 0;
     bool interrupted = false;
+    double const coarseInterval = duration / baseOptions.run.numberOfSteps;
+    int lastOutputStep = driverOutputStep(state.tau, coarseInterval) -
+        (driverFinalOutputStep(state.tau, coarseInterval) ==
+            driverOutputStep(state.tau, coarseInterval));
     runtime.start();
     for (auto const& stage : plan.stages) {
-        double const stageEnd = stageStart + stage.duration;
+        stageEndStep += stage.numberOfSteps;
+        double const stageEnd = stageEndStep == baseOptions.run.numberOfSteps ?
+            duration :
+            duration * (double(stageEndStep) / baseOptions.run.numberOfSteps);
         double const tolerance = 1.0e-12 * duration;
         if (state.tau >= (global ? stageEnd : stageEnd - tolerance)) {
-            stageStart = stageEnd;
             continue;
         }
         auto stageOptions = baseOptions;
         stageOptions.hydro.damping = stage.damping;
         if (stage.viscosityAlpha >= 0.0) {
             stageOptions.hydro.viscosityAlpha = stage.viscosityAlpha;
+            stageOptions.hydro.viscosityBeta = 2.0 * stage.viscosityAlpha;
+            stageOptions.hydro.viscosityEvolution = "none";
         }
         setOptions(stageOptions);
         double const baseTimestep = duration / baseOptions.run.numberOfSteps;
@@ -170,16 +197,17 @@ void runFixedScenario() {
             stepTimer.start();
             int const minimumRung = global ? 0 : minRung(state.itime);
             bool const fullEvaluation = minimumRung == 0;
-            if (fullEvaluation) {
+            int const outputStep = driverOutputStep(state.tau, baseTimestep);
+            bool const outputDue = fullEvaluation && (!global || outputStep > lastOutputStep);
+            if (outputDue) {
+                lastOutputStep = outputStep;
                 section_timing::measure(section_timing::Section::snapshotOutput,
-                    [&]() { viewOutputViews(state.step, 1.0); });
+                    [&]() { viewOutputViews(outputStep, 1.0); });
             }
             resetFlops();
             int const errorInterval = baseOptions.gravity.errorInterval;
             int const gravityErrorStep =
-                state.itime == 0 && errorInterval > 0 && state.step % errorInterval == 0 ?
-                state.step :
-                -1;
+                outputDue && errorInterval > 0 && outputStep % errorInterval == 0 ? outputStep : -1;
             ForceStepResult result;
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
             if (hierarchicalMesh) {
@@ -200,7 +228,9 @@ void runFixedScenario() {
                 result = advanceForces(minimumRung, 1.0, 0.0, state.tau, baseTimestep,
                     baseOptions.gravity.openingAngle, state.iter == 0, fullEvaluation,
                     state.energies, gravityErrorStep, false, state.globalTimestep,
-                    global ? std::min(baseTimestep, stageEnd - state.tau) : 0.0);
+                    global ? std::min(stageEnd - state.tau,
+                                 (outputStep + 1) * baseTimestep - state.tau) :
+                             0.0);
             }
             double const flops = flopsPerSecond();
             state.maxRung =
@@ -211,14 +241,15 @@ void runFixedScenario() {
             if (state.iter == 0) {
                 state.energy0 = state.energies.kin + state.energies.therm + state.energies.pot;
             }
-            if (fullEvaluation) {
+            if (outputDue) {
                 section_timing::measure(section_timing::Section::analysis,
                     [&]() { detail::writeScenarioDiagnostics(state); });
             }
             double const timestep = global ?
                 std::min(result.minimumTimestep, stageEnd - state.tau) :
                 std::ldexp(baseTimestep, -state.maxRung);
-            if (!(timestep > 0.0) || state.tau + timestep == state.tau) {
+            if (!std::isfinite(timestep) || !(timestep > 0.0) ||
+                state.tau + timestep == state.tau) {
                 THROW_ERROR("Scenario timestep cannot advance time\n");
             }
             if (!hierarchicalMesh) {
@@ -279,29 +310,40 @@ void runFixedScenario() {
         }
         state.tau = stageEnd;
         state.itime = 0;
-        stageStart = stageEnd;
     }
     // Use the next cycle for a final partial coarse step, preserving earlier snapshots.
     section_timing::measure(section_timing::Section::snapshotOutput,
-        [&]() { viewOutputViews(state.step + (state.itime != 0), 1.0, true); });
+        [&]() { viewOutputViews(driverFinalOutputStep(state.tau, coarseInterval), 1.0, true); });
     setOptions(baseOptions);
     if (state.iter > 0 && state.iter != lastCheckpoint) {
         section_timing::measure(
             section_timing::Section::checkpointWrite, [&]() { writeCheckpoint(state); });
     }
-    bool const completed = global ? state.tau >= duration : state.tau >= duration * (1.0 - 1.0e-12);
-    if (global && completed && !interrupted && iterations > 0) {
+    bool const completed = state.tau >= duration * (1.0 - 1.0e-12);
+    if (completed && !interrupted && iterations > 0) {
         // Restart state remains at the completed drift with a pending closing
         // half-step. Only the final diagnostics consume the synchronized state.
         auto finalOptions = baseOptions;
         finalOptions.hydro.damping = plan.stages.back().damping;
         if (plan.stages.back().viscosityAlpha >= 0.0) {
             finalOptions.hydro.viscosityAlpha = plan.stages.back().viscosityAlpha;
+            finalOptions.hydro.viscosityBeta = 2.0 * plan.stages.back().viscosityAlpha;
+            finalOptions.hydro.viscosityEvolution = "none";
         }
         setOptions(finalOptions);
-        advanceForces(0, 1.0, 0.0, state.tau, duration / baseOptions.run.numberOfSteps,
-            baseOptions.gravity.openingAngle, false, true, state.energies, -1, true,
-            state.globalTimestep, duration / baseOptions.run.numberOfSteps);
+#if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
+        if (hierarchicalMesh) {
+            int activeRung = state.minrung0;
+            kickStepHierarchical(activeRung, state.maxRung, 1.0, 0.0, state.tau, coarseInterval,
+                baseOptions.gravity.openingAngle, &state.energies, state.minrung0, true, nullptr,
+                true, 0.0, -1, true);
+        } else
+#endif
+        {
+            advanceForces(0, 1.0, 0.0, state.tau, coarseInterval, baseOptions.gravity.openingAngle,
+                false, true, state.energies, -1, true, state.globalTimestep,
+                global ? coarseInterval : 0.0);
+        }
         detail::writeScenarioDiagnostics(state);
         setOptions(baseOptions);
     }

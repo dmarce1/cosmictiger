@@ -142,10 +142,10 @@ struct TreeCreateReturn {
 };
 
 struct TreeCreateParameters {
-    int minRung;
-    double theta;
-    ParticleInteger parallelParticleThreshold;
-    int minLevel;
+    int minRung{};
+    double theta{};
+    ParticleInteger parallelParticleThreshold{};
+    int minLevel{};
     bool leafPushed;
     bool doLeafSizes;
     TreeCreateParameters() {

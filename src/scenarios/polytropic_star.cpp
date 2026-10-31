@@ -16,9 +16,10 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/math/math.hpp>
+#include <cosmictiger/scenarios/diagnostics.hpp>
 #include <cosmictiger/scenarios/polytropic_star.hpp>
-#include <cosmictiger/sph/sph_particles.hpp>
 #include <cosmictiger/scenarios/sphere.hpp>
+#include <cosmictiger/sph/sph_particles.hpp>
 
 namespace scenarios {
 
@@ -41,7 +42,7 @@ namespace detail {
         if (r != 0.0) {
             return -(powN(y, n) + 2.0 * z / r);
         }
-        return -3.0;
+        return -1.0 / 3.0;
     }
 
     static inline double fm(double theta, double, double r, double n) {
@@ -125,25 +126,21 @@ namespace detail {
     }
 
     static void finishPolytropicStar(double) {
-        if (sphParticlesSize() == 0) {
-            return;
-        }
         int const nsample = 1000;
         double l2 = 0.0;
         double norm = 0.0;
-        for (int i = 0; i < nsample; i++) {
-            ParticleInteger const k = rand() % sphParticlesSize();
-            float const d0 = sphParticlesDensity(k);
-            float const x = sphParticlesPosition(kXDimension, k).toDouble();
-            float const y = sphParticlesPosition(kYDimension, k).toDouble();
-            float const z = sphParticlesPosition(kZDimension, k).toDouble();
+        for (auto const& sample : diagnosticSamples(nsample)) {
+            float const d0 = sample.density;
+            float const x = sample.position[kXDimension];
+            float const y = sample.position[kYDimension];
+            float const z = sample.position[kZDimension];
             float const r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
             float d1 = 0.0;
             if (r < kMaximumRadius) {
                 d1 = polytropicDensity(r * kRadiusScale);
             }
-            l2 += sqr(d1 - d0);
-            norm += d1 * d0;
+            l2 += sample.weight * sqr(d1 - d0);
+            norm += sample.weight * d1 * d0;
         }
         l2 /= norm;
         l2 = sqrt(l2);
@@ -157,6 +154,9 @@ ScenarioPlan initializePolytropicStar() {
     double const r0 = detail::kRadiusScale;
     int const nValue = totalNumberOfParticles;
     auto opts = getOptions();
+    if (!opts.gravity.enabled) {
+        throw std::invalid_argument("The polytropicStar scenario requires gravity.enabled=true");
+    }
     PRINT("  Initializing: polytropic star and particle shells\n");
     opts.initial.gasMass = 203. / nValue / (r0 * r0 * r0) / 5.99071;
     double const m = opts.initial.gasMass;
@@ -214,8 +214,7 @@ ScenarioPlan initializePolytropicStar() {
             sphParticlesPosition(kZDimension, k) = xValue[i][kZDimension][l] * radius[i] + 0.5;
             sphParticlesSupportRadius(k) = h;
             double const pValue = kValue * pow(d, 1.0 + 1.0 / npoly);
-            double const eValue = pValue * npoly;
-            double const eint = eValue / d;
+            double const eint = pValue / ((opts.hydro.gamma - 1.0) * d);
             sphParticlesThermodynamicState(k).internalEnergy = eint;
             sphParticlesVelocity(kXDimension, k) = 0;
             sphParticlesVelocity(kYDimension, k) = 0;

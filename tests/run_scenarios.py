@@ -165,11 +165,19 @@ def main():
                        if path.is_dir() and re.fullmatch(r"checkpoint\.[0-9]+", path.name)]
         if not checkpoints:
             raise RuntimeError(f"{scenario} did not publish a final checkpoint")
+        final_iteration = max(int(path.name.split(".")[1]) for path in checkpoints)
+        if final_iteration > int(options["run.maxIterations"]):
+            raise RuntimeError(f"{scenario} exceeded its requested iteration limit")
         for checkpoint in checkpoints:
             checkManifest(checkpoint, int(checkpoint.name.split(".")[1]),
                           scenario=scenario, endTime=float(options["run.endTime"]), gravity=gravity)
-        allowed = {"run.log", Path(relative_output or "output").parts[0]}
-        unexpected = {path.name for path in directory.iterdir()} - allowed
+        # Process profiling starts before options are parsed and deliberately
+        # writes these files in CWD; simulation products must still stay inside
+        # the selected output directory.
+        allowed = {"run.log", "apex_profiles.csv", "apex_tasktree.csv",
+                   Path(relative_output or "output").parts[0]}
+        unexpected = {path.name for path in directory.iterdir()
+                      if not re.fullmatch(r"cosmictiger\.profile\.[0-9]+\.txt", path.name)} - allowed
         if unexpected:
             raise RuntimeError(f"outputs escaped {destination}: {sorted(unexpected)}")
         print(f"{name or scenario}: solver selection, finite diagnostics, and output containment passed")
@@ -222,7 +230,8 @@ def main():
     rejected_options = dict(restart_options, **{"run.scenario": "kelvinHelmholtz"})
     rejected_log = run_process(command + [f"--{key}={value}" for key, value in rejected_options.items()],
                               rejected_directory, success=False)
-    if "scenario" not in rejected_log.lower() or "Done reading checkpoint" in rejected_log:
+    if ("Checkpoint scenario, run.endTime or gravity.enabled differs" not in rejected_log or
+            "Done reading checkpoint" in rejected_log):
         raise RuntimeError("cross-scenario restart was not rejected before loading particle state")
 
     # Two coarse intervals put one interval on each side of the stellar

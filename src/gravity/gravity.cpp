@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include <cosmictiger/core/flops.hpp>
+#include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
@@ -148,7 +149,59 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
     addCpuFlops(flops);
 }
 
-#ifndef USE_CUDA
+#ifdef USE_CUDA
+void resetGravityCountersLocal();
+void setGravityCounterUseLocal(bool);
+Array<double, 3> gravityCounterTotalsLocal();
+
+static Array<double, 3> gravityCounterTotals();
+HPX_PLAIN_ACTION(resetGravityCounters, ResetGravityCountersAction);
+HPX_PLAIN_ACTION(setGravityCounterUse, SetGravityCounterUseAction);
+HPX_PLAIN_ACTION(gravityCounterTotals, GravityCounterTotalsAction);
+
+void resetGravityCounters() {
+    Vector<hpx::future<void>> pending;
+    for (auto const& child : hpxChildren()) {
+        pending.push_back(hpx::async<ResetGravityCountersAction>(child));
+    }
+    resetGravityCountersLocal();
+    for (auto& future : pending) {
+        future.get();
+    }
+}
+
+void setGravityCounterUse(bool enabled) {
+    Vector<hpx::future<void>> pending;
+    for (auto const& child : hpxChildren()) {
+        pending.push_back(hpx::async<SetGravityCounterUseAction>(child, enabled));
+    }
+    setGravityCounterUseLocal(enabled);
+    for (auto& future : pending) {
+        future.get();
+    }
+}
+
+static Array<double, 3> gravityCounterTotals() {
+    Vector<hpx::future<Array<double, 3>>> pending;
+    for (auto const& child : hpxChildren()) {
+        pending.push_back(hpx::async<GravityCounterTotalsAction>(child));
+    }
+    auto totals = gravityCounterTotalsLocal();
+    for (auto& future : pending) {
+        auto const child = future.get();
+        for (int i = 0; i < 3; ++i) {
+            totals[i] += child[i];
+        }
+    }
+    return totals;
+}
+
+void getGravityCounters(double& close, double& direct) {
+    auto const totals = gravityCounterTotals();
+    close = totals[2] > 0.0 ? totals[0] / totals[2] : 0.0;
+    direct = totals[2] > 0.0 ? totals[1] / totals[2] : 0.0;
+}
+#else
 void resetGravityCounters() {}
 void setGravityCounterUse(bool) {}
 void getGravityCounters(double& close, double& direct) {

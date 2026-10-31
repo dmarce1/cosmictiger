@@ -35,16 +35,16 @@ float evolvedAlpha(float alpha, float targetAlpha, float inverseDecayTime, float
 // stored velocity w = a v_pec, the reconstructed velocity gradient is V' = a² ∇_r v_phys
 // and the acceleration gradient G = ∇_x F, so
 //
-//   a⁴ D(div v_phys)/Dt = a tr(G) + 3 a³ d²a/dt² − tr(V'²),
+//   a⁴ [D(div v_phys)/Dt - 3 dH/dt] = a tr(G) + 3 (a da/dt)² − tr(V'²),
 //
-// equation (53), and the ratio h² A/c_s² is invariant when h is comoving and c_s is a
-// stored (comoving) velocity. ξ of equation (47) uses |∇·v|² and |∇×v|² from the same
-// V', whose common a² scaling cancels. inverseDecayTime is the conformal-time rate
+// subtracting the homogeneous background from equation (53). The ratio h² A/c_s² is invariant when
+// h is comoving and c_s is a stored (comoving) velocity. ξ of equation (47) uses |∇·v|² and |∇×v|²
+// from the same V', whose common a² scaling cancels. inverseDecayTime is the conformal-time rate
 // σ_decay c_s/(a h) from the text following equation (45). The counter follows the
 // repository's source-operation convention and may be FlopCounter<>.
 template <typename Real, typename Counter>
 CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnostics(
-    cullen_and_dehnen::GradientSums<Real> const& sums, Real scaleFactor, Real expansionAcceleration,
+    cullen_and_dehnen::GradientSums<Real> const& sums, Real scaleFactor, Real expansionRate,
     Real viscosityLength, Real soundSpeed, Real alphaMaximum, Real decayCoefficient,
     Counter& floatingPointOperations) {
     Real const a = scaleFactor;
@@ -80,7 +80,7 @@ CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnostics(
     floatingPointOperations += 30;    // Two traces, tr(V²), and the squared curl.
     result.divergence = div_v_a / (a * a);
     // Equation (53) in the stored variables, then equations (47), (46), and (48).
-    Real const dot_div_v_a = a * div_F_a + Real(3) * expansionAcceleration - tr_V2;
+    Real const dot_div_v_a = a * div_F_a + Real(3) * expansionRate * expansionRate - tr_V2;
     Real const div_v_a2 = div_v_a * div_v_a;
     Real const ξ_denominator = div_v_a2 + curl_v_a2;
     Real const ξ_a = ξ_denominator > Real(0) ? div_v_a2 / ξ_denominator : Real(0);
@@ -95,17 +95,17 @@ CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnostics(
         α_loc_a = h2_A_a < α_max * c_s_a2 ? h2_A_a / c_s_a2 : α_max;
     }
     result.targetAlpha = α_loc_a;
-    floatingPointOperations += 13 + (ξ_denominator > Real(0) ? 1 : 0) + (h2_A_a > Real(0) ? 2 : 0);
+    floatingPointOperations += 14 + (ξ_denominator > Real(0) ? 1 : 0) + (h2_A_a > Real(0) ? 2 : 0);
     return result;
 }
 
 template <typename Real>
 CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnostics(
-    cullen_and_dehnen::GradientSums<Real> const& sums, Real scaleFactor, Real expansionAcceleration,
+    cullen_and_dehnen::GradientSums<Real> const& sums, Real scaleFactor, Real expansionRate,
     Real viscosityLength, Real soundSpeed, Real alphaMaximum, Real decayCoefficient) {
     unsigned long long floatingPointOperations = 0;
-    return diagnostics(sums, scaleFactor, expansionAcceleration, viscosityLength, soundSpeed,
-        alphaMaximum, decayCoefficient, floatingPointOperations);
+    return diagnostics(sums, scaleFactor, expansionRate, viscosityLength, soundSpeed, alphaMaximum,
+        decayCoefficient, floatingPointOperations);
 }
 
 // NOLINTEND(readability-identifier-naming)

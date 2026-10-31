@@ -44,7 +44,7 @@ if(NOT COSMICTIGER_WITH_MAX_BUCKET MATCHES "^(32|64|128|256|512|1024)$")
         "COSMICTIGER_WITH_MAX_BUCKET must be a power of two from 32 to 1024; got '${COSMICTIGER_WITH_MAX_BUCKET}'")
 endif()
 if(COSMICTIGER_WITH_CUDA)
-    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES AND "$ENV{CUDAARCHS}" STREQUAL "")
         set(CMAKE_CUDA_ARCHITECTURES native)
     endif()
     enable_language(CUDA)
@@ -475,11 +475,15 @@ endforeach()
 # Capture standalone test targets so they inherit the same capability definitions.
 get_property(cosmictiger_targets_before_tests DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
 
-# Register two-rank application regressions only when the launcher supports them.
+# Register distributed regressions only when the configured launcher can run them.
 set(cosmictiger_mpi_tests FALSE)
+set(cosmictiger_mpi_three_ranks FALSE)
 if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
     if(NOT DEFINED MPIEXEC_MAX_NUMPROCS OR MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 2)
         set(cosmictiger_mpi_tests TRUE)
+    endif()
+    if(NOT DEFINED MPIEXEC_MAX_NUMPROCS OR MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 3)
+        set(cosmictiger_mpi_three_ranks TRUE)
     endif()
 endif()
 
@@ -566,7 +570,7 @@ if(BUILD_TESTING)
             ${PROJECT_BINARY_DIR}/stack_trace_hpx_test_output)
         set_tests_properties(stack_trace_hpx PROPERTIES TIMEOUT 120 PROCESSORS 2
             LABELS "diagnostics;cpu;hpx")
-        if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+        if(cosmictiger_mpi_tests)
             set(stack_trace_mpi_args --mpi-exec=${MPIEXEC_EXECUTABLE}
                 --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG} --mpi-only)
             foreach(flag IN LISTS MPIEXEC_PREFLAGS)
@@ -678,7 +682,7 @@ if(BUILD_TESTING)
                     set_tests_properties(tau_interrupt_simulation_hydro PROPERTIES TIMEOUT 240
                         PROCESSORS 2 LABELS "profiler;apex;tau;cpu;hpx;interrupt")
                 endif()
-                if(COSMICTIGER_WITH_GRAVITY AND HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+                if(COSMICTIGER_WITH_GRAVITY AND cosmictiger_mpi_tests)
                     set(tau_mpi_args --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG})
                     foreach(flag IN LISTS MPIEXEC_PREFLAGS)
                         list(APPEND tau_mpi_args --mpi-preflag=${flag})
@@ -710,7 +714,7 @@ if(BUILD_TESTING)
     # and compiler variants as the standalone regression executables.
     function(cosmictiger_add_gtest)
         cmake_parse_arguments(PARSE_ARGV 0 test "HPX_MAIN" "NAME;TARGET;WORKING_DIRECTORY;ENVIRONMENT"
-            "ARGS;PROPERTIES")
+            "ARGS;PROPERTIES;LABELS")
         if(test_HPX_MAIN)
             target_link_libraries(${test_TARGET} PRIVATE GTest::gtest)
         else()
@@ -725,6 +729,15 @@ if(BUILD_TESTING)
             TEST_PREFIX "${test_NAME}." EXTRA_ARGS ${test_ARGS}
             WORKING_DIRECTORY "${test_WORKING_DIRECTORY}"
             PROPERTIES LABELS "${test_NAME}" ${test_PROPERTIES})
+        # Apply list-valued labels after discovery to retain every label.
+        string(REPLACE "\\;" ";" test_LABELS "${test_LABELS}")
+        set(labels_file "${PROJECT_BINARY_DIR}/${test_TARGET}_labels.cmake")
+        file(WRITE "${labels_file}"
+            "if(DEFINED ${test_TARGET}_TESTS)\n"
+            "    set_tests_properties(\${${test_TARGET}_TESTS} PROPERTIES\n"
+            "        LABELS [==[${test_NAME};${test_LABELS}]==])\n"
+            "endif()\n")
+        set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES "${labels_file}")
         # GoogleTest's discovery helper expands list-valued properties. Apply
         # environment lists after discovery so semicolons remain part of the value.
         if(DEFINED test_ENVIRONMENT)
@@ -840,7 +853,7 @@ if(BUILD_TESTING)
     cosmictiger_add_gtest(NAME flops TARGET flops_test HPX_MAIN
         ARGS --hpx:threads=2 --hpx:bind=none
         PROPERTIES TIMEOUT 30 PROCESSORS 6)
-    if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+    if(cosmictiger_mpi_three_ranks)
         add_test(NAME flops_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3
             ${MPIEXEC_PREFLAGS} $<TARGET_FILE:flops_test> ${MPIEXEC_POSTFLAGS}
             --hpx:threads=2 --hpx:bind=none --hpx:localities=3)
@@ -1093,7 +1106,7 @@ if(BUILD_TESTING)
             --position-type ${COSMICTIGER_POSITION_TYPE})
         set_tests_properties(mpi_thread_support PROPERTIES TIMEOUT 240 PROCESSORS 2
             LABELS "mpi;startup")
-        if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+        if(cosmictiger_mpi_tests)
             set(mpi_startup_launcher_args --mpi-exec=${MPIEXEC_EXECUTABLE}
                 --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG})
             foreach(flag IN LISTS MPIEXEC_PREFLAGS)
@@ -1123,11 +1136,22 @@ if(BUILD_TESTING)
                 ${PROJECT_BINARY_DIR}/tests/analysis_cpu_runtime
                 --guard $<TARGET_FILE:no_cuda_runtime>)
             set_tests_properties(analysis_cpu_runtime PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
-            if(MPIEXEC_EXECUTABLE)
+            if(cosmictiger_mpi_tests)
+                set(analysis_mpi_launcher_args --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG})
+                foreach(flag IN LISTS MPIEXEC_PREFLAGS)
+                    list(APPEND analysis_mpi_launcher_args --mpi-preflag=${flag})
+                endforeach()
+                foreach(flag IN LISTS MPIEXEC_POSTFLAGS)
+                    list(APPEND analysis_mpi_launcher_args --mpi-postflag=${flag})
+                endforeach()
+                foreach(flag IN LISTS cosmictiger_mpi_transport_args)
+                    list(APPEND analysis_mpi_launcher_args --hpx-option=${flag})
+                endforeach()
                 add_test(NAME analysis_cpu_mpi COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/run_analysis_cpu.py $<TARGET_FILE:cosmictiger>
                     ${PROJECT_BINARY_DIR}/tests/analysis_cpu_mpi
-                    --guard $<TARGET_FILE:no_cuda_runtime> --mpi-exec ${MPIEXEC_EXECUTABLE} --ranks 2)
+                    --guard $<TARGET_FILE:no_cuda_runtime> --mpi-exec ${MPIEXEC_EXECUTABLE}
+                    ${analysis_mpi_launcher_args} --ranks 2)
                 set_tests_properties(analysis_cpu_mpi PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE PROCESSORS 4)
             endif()
         endif()
@@ -1180,6 +1204,20 @@ if(BUILD_TESTING)
     target_include_directories(lpt_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_options(lpt_test PRIVATE -fno-fast-math -ffp-contract=off)
     cosmictiger_add_gtest(NAME lpt TARGET lpt_test PROPERTIES TIMEOUT 30)
+    if(COSMICTIGER_WITH_SPH)
+        add_executable(sedov_test tests/scenarios/sedov.cpp src/scenarios/sedov.cpp)
+        target_include_directories(sedov_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_link_libraries(sedov_test PRIVATE HPX::hpx quadmath)
+        target_compile_options(sedov_test PRIVATE -fno-fast-math -ffp-contract=off)
+        cosmictiger_add_gtest(NAME sedov TARGET sedov_test LABELS "scenarios;cpu" PROPERTIES TIMEOUT 30)
+    endif()
+    add_executable(analysis_tools_test tests/analysis_tools.cpp src/analysis/group_entry.cpp)
+    target_include_directories(analysis_tools_test PRIVATE ${PROJECT_SOURCE_DIR}
+        ${CHEALPIX_INCLUDE_DIR} ${SILO_INCLUDE_DIR})
+    target_link_libraries(analysis_tools_test PRIVATE Boost::program_options
+        ${CHEALPIX_LIBRARY} ${SILO_LIBRARY} dl)
+    cosmictiger_add_gtest(NAME analysis_tools TARGET analysis_tools_test
+        LABELS "analysis;cpu" PROPERTIES TIMEOUT 60)
     foreach(boltzmann_target IN ITEMS boltzmann_test boltzmann_reference)
         if(boltzmann_target STREQUAL "boltzmann_test")
             set(boltzmann_test_source tests/boltzmann.cpp)
@@ -1218,7 +1256,7 @@ if(BUILD_TESTING)
             set_tests_properties(${fft_mode}_cpu PROPERTIES TIMEOUT 120 PROCESSORS 2
                 WORKING_DIRECTORY "${fft_workdir}" LABELS "fft;cpu"
                 ENVIRONMENT "CUDA_VISIBLE_DEVICES=;OMP_NUM_THREADS=1")
-            if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+            if(cosmictiger_mpi_tests)
                 set(fft_mpi_workdir "${PROJECT_BINARY_DIR}/tests/${fft_mode}_mpi")
                 file(MAKE_DIRECTORY "${fft_mpi_workdir}")
                 add_test(NAME ${fft_mode}_mpi COMMAND ${MPIEXEC_EXECUTABLE}
@@ -1309,11 +1347,12 @@ if(BUILD_TESTING)
                     WORKING_DIRECTORY "${halo_workdir}" TIMEOUT 180 PROCESSORS 2)
             endforeach()
         endforeach()
-        if(MPIEXEC_EXECUTABLE)
+        if(cosmictiger_mpi_tests)
             set(halo_mpi_workdir "${PROJECT_BINARY_DIR}/tests/groupsCatalogue_mpi")
             file(MAKE_DIRECTORY "${halo_mpi_workdir}")
             add_test(NAME groupsCatalogue_mpi COMMAND ${MPIEXEC_EXECUTABLE}
                 ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger>
+                ${cosmictiger_mpi_transport_args}
                 --run.test=groupsCatalogueDistributed ${cosmictiger_test_gravity_args} --compute.cuda=false --hydro.enabled=false
                 --initial.particlesPerDimension=8 --analysis.groups=true
                 --hpx:threads=2 --hpx:bind=none --hpx:localities=2 ${MPIEXEC_POSTFLAGS}
@@ -1366,7 +1405,7 @@ if(BUILD_TESTING)
             set_tests_properties(${gravity_error_name} PROPERTIES TIMEOUT 300 PROCESSORS 2
                 RUN_SERIAL TRUE LABELS "gravity;accuracy;cuda")
         endif()
-        if(MPIEXEC_EXECUTABLE)
+        if(cosmictiger_mpi_tests)
             set(gravity_error_mpi_args --mpi-exec=${MPIEXEC_EXECUTABLE}
                 --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG})
             foreach(flag IN LISTS MPIEXEC_PREFLAGS)
@@ -1754,7 +1793,7 @@ if(BUILD_TESTING)
             set_tests_properties(${pm_test_name} PROPERTIES TIMEOUT 180 PROCESSORS 2
                 WORKING_DIRECTORY "${pm_test_workdir}" LABELS "particle_mesh;cpu")
         endforeach()
-        if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+        if(cosmictiger_mpi_tests)
             set(pm_launcher_args --mpi-exec=${MPIEXEC_EXECUTABLE}
                 --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG})
             if(HPX_WITH_PARCELPORT_TCP)
@@ -1825,7 +1864,7 @@ if(BUILD_TESTING)
                 RUN_SERIAL TRUE LABELS "particle_mesh;mpi")
             # This fixture uses arbitrary per-rank ownership and a global reduction.
             # The FMM near solver requires spatial ownership, covered by streamed tests.
-            if(COSMICTIGER_ENABLE_PMMM_PP)
+            if(COSMICTIGER_ENABLE_PMMM_PP AND cosmictiger_mpi_three_ranks)
                 set(pm_timestep_workdir "${PROJECT_BINARY_DIR}/tests/particle_mesh_timestep_mpi")
                 file(MAKE_DIRECTORY "${pm_timestep_workdir}")
                 add_test(NAME particle_mesh_timestep_mpi COMMAND ${MPIEXEC_EXECUTABLE}
@@ -2195,6 +2234,9 @@ if(BUILD_TESTING)
                     NOT test_name STREQUAL "checkpoint_state_dm")
                 continue()
             endif()
+            if(test_name STREQUAL "sph_gravity_cuda" AND NOT COSMICTIGER_WITH_CUDA)
+                continue()
+            endif()
             set(test_workdir "${PROJECT_BINARY_DIR}/tests/${test_name}")
             file(MAKE_DIRECTORY "${test_workdir}")
             if(test_name MATCHES "^sph_gravity")
@@ -2208,7 +2250,7 @@ if(BUILD_TESTING)
                     set(test_sph false)
                 endif()
             endif()
-            if(test_name STREQUAL "sph_gravity_cuda" OR test_name STREQUAL "checkpoint_state_sph")
+            if(COSMICTIGER_WITH_CUDA AND (test_name STREQUAL "sph_gravity_cuda" OR test_name STREQUAL "checkpoint_state_sph"))
                 set(test_cuda true)
             else()
                 set(test_cuda false)
@@ -2331,7 +2373,7 @@ if(BUILD_TESTING)
             RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 2 LABELS "sph;cpu;gravity_free"
             ENVIRONMENT "CUDA_VISIBLE_DEVICES=;OMP_NUM_THREADS=1")
 
-        if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+        if(cosmictiger_mpi_tests)
             set(sph_only_mpi_workdir "${PROJECT_BINARY_DIR}/tests/sph_only_mpi")
             set(sph_only_mpi_setup "${PROJECT_BINARY_DIR}/tests/prepare_sph_only_mpi.cmake")
             file(GENERATE OUTPUT "${sph_only_mpi_setup}" CONTENT
@@ -2363,7 +2405,7 @@ if(BUILD_TESTING)
     set_tests_properties(rejected_options PROPERTIES WORKING_DIRECTORY "${rejected_options_workdir}"
         RUN_SERIAL TRUE TIMEOUT 20 WILL_FAIL TRUE)
     if(COSMICTIGER_ENABLE_FMM)
-        if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+        if(cosmictiger_mpi_tests)
             set(fmm_tree_mpi_workdir "${PROJECT_BINARY_DIR}/tests/fmm_tree_mpi")
             if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
                 set(distributed_output_mpi_workdir "${PROJECT_BINARY_DIR}/tests/distributed_output_mpi")
@@ -2376,6 +2418,7 @@ if(BUILD_TESTING)
                 set_tests_properties(distributed_output_mpi PROPERTIES
                     WORKING_DIRECTORY "${distributed_output_mpi_workdir}" RUN_SERIAL TRUE TIMEOUT 180 PROCESSORS 4)
             endif()
+            if(cosmictiger_mpi_three_ranks)
             file(MAKE_DIRECTORY "${fmm_tree_mpi_workdir}")
             add_test(NAME fmm_tree_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3
                 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
@@ -2394,6 +2437,7 @@ if(BUILD_TESTING)
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
                 set_tests_properties(fmm_walk_mpi PROPERTIES
                     WORKING_DIRECTORY "${fmm_walk_mpi_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
+            endif()
             endif()
             if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
                 set(units_mpi_workdir "${PROJECT_BINARY_DIR}/tests/units_output_mpi")
@@ -2414,6 +2458,7 @@ if(BUILD_TESTING)
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
                 set_tests_properties(sph_migration_mpi PROPERTIES WORKING_DIRECTORY "${migration_workdir}"
                     RUN_SERIAL TRUE TIMEOUT 120)
+                if(COSMICTIGER_WITH_CUDA)
                 add_test(NAME smoke_sph_mpi COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/run_smoke.py sph_mpi
                     $<TARGET_FILE:cosmictiger>
@@ -2421,6 +2466,7 @@ if(BUILD_TESTING)
                 --extra-option=--run.timeIntegrator=${cosmictiger_default_integrator}
                 --extra-option=--gravity.method.far=fmm)
                 set_tests_properties(smoke_sph_mpi PROPERTIES RUN_SERIAL TRUE TIMEOUT 260)
+                endif()
                 add_test(NAME smoke_sph_cpu_mpi COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/run_smoke.py sph_mpi
                     $<TARGET_FILE:cosmictiger>
@@ -2475,6 +2521,9 @@ if(BUILD_TESTING)
             endforeach()
         endif()
         foreach(smoke_mode IN ITEMS sod dm_cpu dm_cuda sph)
+            if(NOT COSMICTIGER_WITH_CUDA AND NOT smoke_mode STREQUAL "dm_cpu")
+                continue()
+            endif()
             if((NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL) AND
                     NOT smoke_mode MATCHES "^dm_")
                 continue()

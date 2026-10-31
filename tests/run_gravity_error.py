@@ -101,6 +101,7 @@ def main():
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--gravity-method", choices=("fmm", "pmmm"), required=True)
+    parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"))
     parser.add_argument("--position-type", choices=("fixed32", "fixed64"), default="fixed32")
     parser.add_argument("--cuda", action="store_true")
     parser.add_argument("--mpi-exec")
@@ -124,7 +125,8 @@ def main():
               "analysis.tracers": "false", "analysis.views": "false", "analysis.power": "false",
               "lightcone.enabled": "false", "output.silo": "false", "output.directory": ".",
               "checkpoint.intervalSeconds": 0}
-    common.update(application_options(executable, far=args.gravity_method))
+    common.update(application_options(executable, far=args.gravity_method,
+                                      integrator=args.time_integrator))
     if args.gravity_method == "pmmm":
         common["gravity.meshSize"] = 8
         if args.cuda:
@@ -191,7 +193,7 @@ def main():
 
     capped = prepareCase(workdir, "capped")
     run(capped, {"gravity.errorInterval": 100, "gravity.errorSampleSize": 1000,
-                 "initial.particlesPerDimension": 4, "run.maxIterations": 0})
+                 "initial.particlesPerDimension": 4, "run.maxIterations": 1})
     readErrors(capped, [0], 64, duration)
     print(f"Gravity error sampling passed: cadence, 7/{particleCount} samples, restart, unchanged physics, "
           f"and count cap ({args.gravity_method}, {'CUDA' if args.cuda else 'CPU'}, "

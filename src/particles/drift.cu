@@ -34,7 +34,7 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
     auto const& tid = threadIdx.x;
     auto const& bid = blockIdx.x;
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
-    doLc = doLc && (tauMax - tau1 < 1.0f);
+    doLc = doLc && tauMax > 0.0 && (tauMax - tau1 < 1.0);
     auto* list = doLc ? &(*listPtr)[bid] : nullptr;
     double const c0 = doLc ? 1.0 / tauMax : 0.0;
     double const t0(tau0);
@@ -57,13 +57,18 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
         Array<double, kDimensions> x0Value;
         Array<double, kDimensions> x1Value;
-        float vx, vy, vz;
+        float vx = 0.0f, vy = 0.0f, vz = 0.0f;
 #endif
         float* vel;
         if (i < end) {
             thisRung = rungs[i];
             if ((rung < 0 || thisRung == rung)) {
                 vel = vels[i].data();
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+                vx = vel[kXDimension] * ainv;
+                vy = vel[kYDimension] * ainv;
+                vz = vel[kZDimension] * ainv;
+#endif
                 x0 = x[i].toDouble();
                 y0 = y[i].toDouble();
                 z0 = z[i].toDouble();
@@ -102,9 +107,6 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                             int const i0 = (double) (lightconeTau0 * c0);
                             int const i1 = (double) (lightconeTau1 * c0);
                             if (i0 != i1 && ((dist1 <= 1.0 || dist0 <= 1.0))) {
-                                vx = vel[kXDimension] * ainv;
-                                vy = vel[kYDimension] * ainv;
-                                vz = vel[kZDimension] * ainv;
                                 double const& x0 = x0Value[kXDimension];
                                 double const& y0 = x0Value[kYDimension];
                                 double const& z0 = x0Value[kZDimension];
@@ -158,21 +160,15 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                 y[i] += Position(displacementY);
                 z[i] += Position(displacementZ);
             } else {
-                x1 -= double(x1 >= 1.0);
-                y1 -= double(y1 >= 1.0);
-                z1 -= double(z1 >= 1.0);
-                x1 += double(x1 < 0.0);
-                y1 += double(y1 < 0.0);
-                z1 += double(z1 < 0.0);
-                x[i] = x1;
-                y[i] = y1;
-                z[i] = z1;
+                x[i].raw() += static_cast<PositionInteger>(llrint(remainder(displacementX, 1.0) * 0x1p32));
+                y[i].raw() += static_cast<PositionInteger>(llrint(remainder(displacementY, 1.0) * 0x1p32));
+                z[i].raw() += static_cast<PositionInteger>(llrint(remainder(displacementZ, 1.0) * 0x1p32));
             }
         }
     }
 }
 
-void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax, double drag) {
+void cudaDrift(int rung, double a, double dt, double tau0, double tau1, double tauMax, double drag) {
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
     static bool init = false;
 #endif
@@ -189,7 +185,7 @@ void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax
         return;
     }
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
-    bool const doLc = getOptions().lightcone.enabled && tauMax - tau1 < 1.0f;
+    bool const doLc = getOptions().lightcone.enabled && tauMax > 0.0 && tauMax - tau1 < 1.0;
 #else
     bool const doLc = false;
 #endif

@@ -9,6 +9,7 @@
 #include <atomic>
 #include <cmath>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <numbers>
 #include <shared_mutex>
@@ -20,9 +21,11 @@
 #include <hpx/threading_base/annotated_function.hpp>
 #include <silo.h>
 
+#include <cosmictiger/analysis/bh.hpp>
 #include <cosmictiger/analysis/compress.hpp>
 #include <cosmictiger/analysis/group_entry.hpp>
 #include <cosmictiger/analysis/lightcone.hpp>
+#include <cosmictiger/analysis/lightcone_map.hpp>
 #include <cosmictiger/analysis/rockstar.hpp>
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/hpx.hpp>
@@ -31,7 +34,6 @@
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/cosmology/background.hpp>
 #include <cosmictiger/cuda/device_vector.hpp>
-#include <cosmictiger/analysis/bh.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/fixed.hpp>
@@ -61,6 +63,7 @@ static DeviceVector<LightconeTreeId> leafNodes;
 static double tauMax;
 static int nsideValue;
 static int npixValue;
+static LightconeMap epochMap;
 
 static LightconeParticles lcGetParticles1(int pix);
 static Pair<Vector<long long>, Vector<char>> lcGetParticles2(int pix);
@@ -69,13 +72,14 @@ static void lcSendBufferParticles(Vector<LightconeParticle>);
 static int vec2pix(double x, double y, double z);
 static int pix2rank(int pix);
 static int computeNside(double tau);
+static void lcInitDecomposition(double tau, double requestedTauMax, int nside);
 static Vector<int> pixNeighbors(int pix);
 static int epoch = 0;
 void lcSiloOut(char const* filename, Vector<Subgroup> const& subgroups);
 
 HPX_PLAIN_ACTION(lcTimeToFlush, LcTimeToFlushAction);
 HPX_PLAIN_ACTION(lcParts2groups, LcParts2groupsAction);
-HPX_PLAIN_ACTION(lcInit, LcInitAction);
+HPX_PLAIN_ACTION(lcInitDecomposition, LcInitAction);
 HPX_PLAIN_ACTION(lcGetParticles1, LcGetParticles1Action);
 HPX_PLAIN_ACTION(lcGetParticles2, LcGetParticles2Action);
 HPX_PLAIN_ACTION(lcFormTrees, LcFormTreesAction);
@@ -121,9 +125,6 @@ size_t lcAddParticleEntries(EntryLists const& entries) {
     Vector<hpx::future<void>> futs;
     std::atomic<int> index(0);
     size_t const npix = sqr((size_t) getOptions().lightcone.mapSize) * 12;
-    Vector<float> pix(npix, 0.0);
-    int minPix = npix;
-    int maxPix = 0;
     if (counts.back()) {
         auto const background = cosmology::simulationBackground(tauMax);
         futs.reserve(numberOfThreads);
@@ -173,36 +174,21 @@ size_t lcAddParticleEntries(EntryLists const& entries) {
                 auto const& entry = entryList[entryIndex];
                 double const radius =
                     sqrtf(sqr(entry.x.toDouble(), entry.y.toDouble(), entry.z.toDouble()));
-                pix[entry.pix] += 1.0 / sqr(radius);
-                minPix = std::min(minPix, entry.pix);
-                maxPix = std::max(maxPix, entry.pix);
+                ALWAYS_ASSERT(entry.pix >= 0 && size_t(entry.pix) < npix);
+                epochMap.add(entry.pix, 1.0 / sqr(radius), getOptions().lightcone.mapSize);
             }
         }
-        std::string filename = getOptions().lightcone.directory + "/lc.healpix." +
-            std::to_string(epoch) + "." + std::to_string(hpxRank());
-        FILE* fp = fopen(filename.c_str(), "wb");
-        if (fp == nullptr) {
-            THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
-        }
-        int nside = getOptions().lightcone.mapSize;
-        FWRITE(&nside, sizeof(int), 1, fp);
-        FWRITE(&minPix, sizeof(int), 1, fp);
-        FWRITE(&maxPix, sizeof(int), 1, fp);
-        FWRITE(pix.data() + minPix, sizeof(float), maxPix - minPix, fp);
-        fclose(fp);
     }
     return 0;
 }
 
 }    // namespace detail
 
-size_t lcAddParticles(
-    DeviceVector<DeviceVector<LightconeEntry>> const& entries, double, double) {
+size_t lcAddParticles(DeviceVector<DeviceVector<LightconeEntry>> const& entries, double, double) {
     return detail::lcAddParticleEntries(entries);
 }
 
-size_t lcAddParticles(
-    std::vector<std::vector<LightconeEntry>> const& entries, double, double) {
+size_t lcAddParticles(std::vector<std::vector<LightconeEntry>> const& entries, double, double) {
     return detail::lcAddParticleEntries(entries);
 }
 
@@ -211,24 +197,31 @@ int lcNside() {
 }
 
 void lcSave(FILE* fp) {
-    int dummy;
-    size_t sz = particleBuffer.size();
-    fwrite(&sz, sizeof(size_t), 1, fp);
-    fwrite(particleBuffer.data(), sizeof(LightconeParticle), particleBuffer.size(), fp);
-    fwrite(&epoch, sizeof(int), 1, fp);
-    fwrite(&sz, sizeof(size_t), 1, fp);
-    fwrite(&groupIdCounter, sizeof(LightconeGroup), 1, fp);
+    size_t const sz = particleBuffer.size();
+    size_t const mapExtension = std::numeric_limits<size_t>::max();
+    FWRITE(&sz, sizeof(size_t), 1, fp);
+    FWRITE(particleBuffer.data(), sizeof(LightconeParticle), particleBuffer.size(), fp);
+    FWRITE(&epoch, sizeof(int), 1, fp);
+    FWRITE(&mapExtension, sizeof(size_t), 1, fp);
+    FWRITE(&groupIdCounter, sizeof(LightconeGroup), 1, fp);
+    epochMap.save(fp, getOptions().lightcone.mapSize);
 }
 
 void lcLoad(FILE* fp) {
     size_t sz;
-    int dummy;
     FREAD(&sz, sizeof(size_t), 1, fp);
     particleBuffer.resize(sz);
     FREAD(particleBuffer.data(), sizeof(LightconeParticle), particleBuffer.size(), fp);
     FREAD(&epoch, sizeof(int), 1, fp);
     FREAD(&sz, sizeof(size_t), 1, fp);
     FREAD(&groupIdCounter, sizeof(LightconeGroup), 1, fp);
+    epochMap.clear();
+    if (sz == std::numeric_limits<size_t>::max()) {
+        epochMap.load(fp, getOptions().lightcone.mapSize);
+    } else {
+        PRINT("Legacy lightcone checkpoint has no accumulated HEALPix map; "
+              "this epoch's pre-checkpoint contributions are unavailable.\n");
+    }
 }
 
 size_t lcTimeToFlush(double tau, double requestedTauMax) {
@@ -242,9 +235,6 @@ size_t lcTimeToFlush(double tau, double requestedTauMax) {
     }
     if (hpxRank() == 0) {
         tauMax = requestedTauMax;
-        int const nside = computeNside(tau);
-        int const npix = nside == 0 ? 1 : 12 * sqr(nside);
-        size_t const ranks = std::min(npix, hpxSize());
         size_t const particlesPerRank = getOptions().initial.numberOfParticles / hpxSize();
         /*		double factor = 1.0 / 8.0;
          double tm = tau / tau_max * 64;
@@ -342,6 +332,17 @@ void lcParts2groups(double a, double linkingLength, int ti) {
         future.get();
     }
     rockstarWriteCatalogue(filename, recs.data(), recs.size());
+    std::string const mapFilename = getOptions().lightcone.directory + "/lc.healpix." +
+        std::to_string(epoch) + "." + std::to_string(hpxRank());
+    std::unique_ptr<FILE, decltype(&fclose)> mapFile(fopen(mapFilename.c_str(), "wb"), &fclose);
+    if (!mapFile) {
+        THROW_ERROR("Unable to open %s for writing\n", mapFilename.c_str());
+    }
+    epochMap.writeMap(mapFile.get(), getOptions().lightcone.mapSize);
+    if (fclose(mapFile.release()) != 0) {
+        THROW_ERROR("Unable to close %s\n", mapFilename.c_str());
+    }
+    epochMap.clear();
     epoch++;
 }
 
@@ -359,7 +360,9 @@ static void lcSendParticles(Vector<LightconeParticle> parts) {
     for (auto const& part : parts) {
         int const pix = vec2pix(part.pos[kXDimension].toDouble(), part.pos[kYDimension].toDouble(),
             part.pos[kZDimension].toDouble());
-        std::unique_lock<SpinlockType> lock(*mutexMap[pix]);
+        auto const mutex = mutexMap.find(pix);
+        ALWAYS_ASSERT(mutex != mutexMap.end() && mutex->second);
+        std::unique_lock<SpinlockType> lock(*mutex->second);
         for (int dim = 0; dim < kDimensions; dim++) {
             particleMap[pix].pos[dim].pushBack(part.pos[dim]);
             particleMap[pix].vel[dim].pushBack(part.vel[dim]);
@@ -871,27 +874,33 @@ static Vector<int> pixNeighbors(int pix) {
 
 static int computeNside(double tau) {
     double nside = std::sqrt(8.0 * hpxHardwareConcurrency() * hpxSize() / 12.0);
-    double const w0 = std::max((tauMax - tau) / tauMax, 0.0);
+    // lcInit is repeated immediately before a flush, so this is the shell
+    // inner radius in the same box units as the linking length.
+    double const w0 = std::max(tauMax - tau, 0.0);
     nside = std::min(nside,
         (pow(getOptions().initial.numberOfParticles, 1.0 / kDimensions) * std::sqrt(3) /
             getOptions().lightcone.linkingLength / 2.0 * w0));
-    nsideValue = 1;
-    while (nsideValue < nside) {
-        nsideValue *= 2;
+    int result = 1;
+    while (result < nside) {
+        result *= 2;
     }
-    nsideValue /= 2;
-    //	PRINT("compute_nside = %i\n", Nside);
-    return nsideValue;
+    return result / 2;
 }
 
 void lcInit(double tau, double requestedTauMax) {
+    ALWAYS_ASSERT(hpxRank() == 0);
+    tauMax = requestedTauMax;
+    lcInitDecomposition(tau, requestedTauMax, computeNside(tau));
+}
+
+static void lcInitDecomposition(double tau, double requestedTauMax, int nside) {
     // Construct once on every locality, including after restart; repeated flushes
     // retain the same immutable dense trajectory.
     cosmology::simulationBackground(requestedTauMax);
     std::filesystem::create_directories(getOptions().lightcone.directory);
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
-        futs.push_back(hpx::async<LcInitAction>(c, tau, requestedTauMax));
+        futs.push_back(hpx::async<LcInitAction>(c, tau, requestedTauMax, nside));
     }
     if (particleMapPtr == nullptr) {
         particleMapPtr = static_cast<LightconeParticleMapType*>(
@@ -903,11 +912,13 @@ void lcInit(double tau, double requestedTauMax) {
     }
     auto& particleMap = *particleMapPtr;
     auto& treeMap = *treeMapPtr;
+    particleMap.clear();
+    treeMap.clear();
     mutexMap = decltype(mutexMap)();
     bndPix = decltype(bndPix)();
     leafNodes = decltype(leafNodes)();
     tauMax = requestedTauMax;
-    nsideValue = computeNside(tau);
+    nsideValue = nside;
     npixValue = nsideValue == 0 ? 1 : 12 * sqr(nsideValue);
     if (nsideValue > 0) {
         healpix = std::make_shared<HealpixType>(nsideValue, NEST, SET_NSIDE);

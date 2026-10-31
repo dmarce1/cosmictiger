@@ -56,8 +56,12 @@ def run_case(args, name, marker, blocker):
                 stop_process_group(process)
                 raise RuntimeError(f"{name}: collective dispatch hung; see {log_path}") from error
     output = log_path.read_text()
+    exception = ("Injected PMMM collective action failure" if marker == "asynchronous" else
+                 "Injected PMMM collective launch failure")
     required = [f"PMMM dispatch test entered collective on locality {blocker}\n",
                 f"PMMM dispatch test injected {marker} failure\n",
+                "Particle-mesh collective dispatch failure on participant 1:",
+                exception,
                 "Particle-mesh collective dispatch failed; aborting MPI job"]
     if returncode == 0 or any(item not in output for item in required):
         raise RuntimeError(f"{name}: expected fatal dispatch failure ({returncode}); see {log_path}")

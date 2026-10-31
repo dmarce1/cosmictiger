@@ -98,16 +98,16 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         s2 = simdFma(s2, ar2, simdBroadcast<T>(2.00000000000000011e-01));
         T const s1 = simdFma(twoAr2, s2, expAr2) * simdBroadcast<T>(3.33333333333333315e-01);
         T const s0 = simdFma(twoAr2, s1, expAr2) * simdBroadcast<T>(1.00000000000000000e+00);
-        T radialFactor = simdBroadcast<T>(2.256758334191025 * kScaleFactorInverse1);
-        T const d0 = radialFactor * s0;
-        radialFactor *= n8r;
-        T const d1 = radialFactor * s1;
-        radialFactor *= n8r;
-        T const d2 = radialFactor * s2;
-        T const dRinvPower0Order0 = d0 * rinv0;
-        T const dRinvPower1Order0 = d1 * rinv0;
-        T const dRinvPower1Order1 = d1 * rinv1;
-        T const dRinvPower2Order0 = d2 * rinv0;
+        T const n8rPower1 = n8r;
+        T const n8rPower2 = n8rPower1 * n8r;
+        T const radialCoefficient0 =
+            simdBroadcast<T>(2.25675833419102512e+00 * kScaleFactorInverse1);
+        T const radialCoefficient1 = simdBroadcast<T>(
+            -1.80540666735282009e+01 * kScaleFactorInverse1 * kScaleFactorInverse2);
+        T const dRinvPower0Order0 = radialCoefficient0 * s0;
+        T const dRinvPower1Order0 = radialCoefficient0 * (n8rPower1 * s1);
+        T const dRinvPower1Order1 = radialCoefficient1 * s1;
+        T const dRinvPower2Order0 = radialCoefficient0 * (n8rPower2 * s2);
         Array<T, kDimensions> dxrinv;
         dxrinv[0] = dx[0] * rinv;
         dxrinv[1] = dx[1] * rinv;
@@ -215,7 +215,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     d[3] = dreal[4];
     d = d + dfour;
     d[0] = simdBroadcast<T>(7.853981634e-01 * kScaleFactorInverse1) + d[0];
-    return 121 + 28 * foursz + 11 * realsz + 56 * acceptedRealImages;
+    return 119 + 28 * foursz + 11 * realsz + 56 * acceptedRealImages;
 }
 #endif
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 4) && \
@@ -306,20 +306,19 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         T const s2 = simdFma(twoAr2, s3, expAr2) * simdBroadcast<T>(2.00000000000000011e-01);
         T const s1 = simdFma(twoAr2, s2, expAr2) * simdBroadcast<T>(3.33333333333333315e-01);
         T const s0 = simdFma(twoAr2, s1, expAr2) * simdBroadcast<T>(1.00000000000000000e+00);
-        T radialFactor = simdBroadcast<T>(2.256758334191025 * kScaleFactorInverse1);
-        T const d0 = radialFactor * s0;
-        radialFactor *= n8r;
-        T const d1 = radialFactor * s1;
-        radialFactor *= n8r;
-        T const d2 = radialFactor * s2;
-        radialFactor *= n8r;
-        T const d3 = radialFactor * s3;
-        T const dRinvPower0Order0 = d0 * rinv0;
-        T const dRinvPower1Order0 = d1 * rinv0;
-        T const dRinvPower1Order1 = d1 * rinv1;
-        T const dRinvPower2Order0 = d2 * rinv0;
-        T const dRinvPower2Order1 = d2 * rinv1;
-        T const dRinvPower3Order0 = d3 * rinv0;
+        T const n8rPower1 = n8r;
+        T const n8rPower2 = n8rPower1 * n8r;
+        T const n8rPower3 = n8rPower2 * n8r;
+        T const radialCoefficient0 =
+            simdBroadcast<T>(2.25675833419102512e+00 * kScaleFactorInverse1);
+        T const radialCoefficient1 = simdBroadcast<T>(
+            -1.80540666735282009e+01 * kScaleFactorInverse1 * kScaleFactorInverse2);
+        T const dRinvPower0Order0 = radialCoefficient0 * s0;
+        T const dRinvPower1Order0 = radialCoefficient0 * (n8rPower1 * s1);
+        T const dRinvPower1Order1 = radialCoefficient1 * s1;
+        T const dRinvPower2Order0 = radialCoefficient0 * (n8rPower2 * s2);
+        T const dRinvPower2Order1 = radialCoefficient1 * (n8rPower1 * s2);
+        T const dRinvPower3Order0 = radialCoefficient0 * (n8rPower3 * s3);
         Array<T, kDimensions> dxrinv;
         dxrinv[0] = dx[0] * rinv;
         dxrinv[1] = dx[1] * rinv;
@@ -514,7 +513,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     d[6] = simdFma(simdBroadcast<T>(-6.000000000e-01), drealOrder3Trace1Index100, d[6]);
     d = d + dfour;
     d[0] = simdBroadcast<T>(7.853981634e-01 * kScaleFactorInverse1) + d[0];
-    return 204 + 42 * foursz + 11 * realsz + 113 * acceptedRealImages;
+    return 203 + 42 * foursz + 11 * realsz + 113 * acceptedRealImages;
 }
 #endif
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 5) && \
@@ -587,7 +586,6 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
             simdMax(r, simdBroadcast<T>(1.0e-20));
         T const rinv0 = simdBroadcast<T>(1);
         T const rinv1 = rinv;
-        T const rinv2 = rinv1 * rinv1;
         // Stable nearest-image radial terms: series followed by downward recurrence.
         T const ar2 = simdBroadcast<T>(4 * kScaleFactorInverse2) * r2;
         T const twoAr2 = ar2 + ar2;
@@ -616,25 +614,25 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         T const s2 = simdFma(twoAr2, s3, expAr2) * simdBroadcast<T>(2.00000000000000011e-01);
         T const s1 = simdFma(twoAr2, s2, expAr2) * simdBroadcast<T>(3.33333333333333315e-01);
         T const s0 = simdFma(twoAr2, s1, expAr2) * simdBroadcast<T>(1.00000000000000000e+00);
-        T radialFactor = simdBroadcast<T>(2.256758334191025 * kScaleFactorInverse1);
-        T const d0 = radialFactor * s0;
-        radialFactor *= n8r;
-        T const d1 = radialFactor * s1;
-        radialFactor *= n8r;
-        T const d2 = radialFactor * s2;
-        radialFactor *= n8r;
-        T const d3 = radialFactor * s3;
-        radialFactor *= n8r;
-        T const d4 = radialFactor * s4;
-        T const dRinvPower0Order0 = d0 * rinv0;
-        T const dRinvPower1Order0 = d1 * rinv0;
-        T const dRinvPower1Order1 = d1 * rinv1;
-        T const dRinvPower2Order0 = d2 * rinv0;
-        T const dRinvPower2Order1 = d2 * rinv1;
-        T const dRinvPower2Order2 = d2 * rinv2;
-        T const dRinvPower3Order0 = d3 * rinv0;
-        T const dRinvPower3Order1 = d3 * rinv1;
-        T const dRinvPower4Order0 = d4 * rinv0;
+        T const n8rPower1 = n8r;
+        T const n8rPower2 = n8rPower1 * n8r;
+        T const n8rPower3 = n8rPower2 * n8r;
+        T const n8rPower4 = n8rPower3 * n8r;
+        T const radialCoefficient0 =
+            simdBroadcast<T>(2.25675833419102512e+00 * kScaleFactorInverse1);
+        T const radialCoefficient1 = simdBroadcast<T>(
+            -1.80540666735282009e+01 * kScaleFactorInverse1 * kScaleFactorInverse2);
+        T const radialCoefficient2 = simdBroadcast<T>(1.44432533388225607e+02 *
+            kScaleFactorInverse1 * kScaleFactorInverse2 * kScaleFactorInverse2);
+        T const dRinvPower0Order0 = radialCoefficient0 * s0;
+        T const dRinvPower1Order0 = radialCoefficient0 * (n8rPower1 * s1);
+        T const dRinvPower1Order1 = radialCoefficient1 * s1;
+        T const dRinvPower2Order0 = radialCoefficient0 * (n8rPower2 * s2);
+        T const dRinvPower2Order1 = radialCoefficient1 * (n8rPower1 * s2);
+        T const dRinvPower2Order2 = radialCoefficient2 * s2;
+        T const dRinvPower3Order0 = radialCoefficient0 * (n8rPower3 * s3);
+        T const dRinvPower3Order1 = radialCoefficient1 * (n8rPower2 * s3);
+        T const dRinvPower4Order0 = radialCoefficient0 * (n8rPower4 * s4);
         Array<T, kDimensions> dxrinv;
         dxrinv[0] = dx[0] * rinv;
         dxrinv[1] = dx[1] * rinv;
@@ -1004,7 +1002,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     d[7] = simdFma(simdBroadcast<T>(-2.000000000e-01), drealOrder3Trace1Index010, d[7]);
     d = d + dfour;
     d[0] = simdBroadcast<T>(7.853981634e-01 * kScaleFactorInverse1) + d[0];
-    return 373 + 60 * foursz + 11 * realsz + 226 * acceptedRealImages;
+    return 372 + 60 * foursz + 11 * realsz + 226 * acceptedRealImages;
 }
 #endif
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 6) && \
@@ -1088,7 +1086,6 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
             simdMax(r, simdBroadcast<T>(1.0e-20));
         T const rinv0 = simdBroadcast<T>(1);
         T const rinv1 = rinv;
-        T const rinv2 = rinv1 * rinv1;
         // Stable nearest-image radial terms: series followed by downward recurrence.
         T const ar2 = simdBroadcast<T>(4 * kScaleFactorInverse2) * r2;
         T const twoAr2 = ar2 + ar2;
@@ -1118,30 +1115,29 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         T const s2 = simdFma(twoAr2, s3, expAr2) * simdBroadcast<T>(2.00000000000000011e-01);
         T const s1 = simdFma(twoAr2, s2, expAr2) * simdBroadcast<T>(3.33333333333333315e-01);
         T const s0 = simdFma(twoAr2, s1, expAr2) * simdBroadcast<T>(1.00000000000000000e+00);
-        T radialFactor = simdBroadcast<T>(2.256758334191025 * kScaleFactorInverse1);
-        T const d0 = radialFactor * s0;
-        radialFactor *= n8r;
-        T const d1 = radialFactor * s1;
-        radialFactor *= n8r;
-        T const d2 = radialFactor * s2;
-        radialFactor *= n8r;
-        T const d3 = radialFactor * s3;
-        radialFactor *= n8r;
-        T const d4 = radialFactor * s4;
-        radialFactor *= n8r;
-        T const d5 = radialFactor * s5;
-        T const dRinvPower0Order0 = d0 * rinv0;
-        T const dRinvPower1Order0 = d1 * rinv0;
-        T const dRinvPower1Order1 = d1 * rinv1;
-        T const dRinvPower2Order0 = d2 * rinv0;
-        T const dRinvPower2Order1 = d2 * rinv1;
-        T const dRinvPower2Order2 = d2 * rinv2;
-        T const dRinvPower3Order0 = d3 * rinv0;
-        T const dRinvPower3Order1 = d3 * rinv1;
-        T const dRinvPower3Order2 = d3 * rinv2;
-        T const dRinvPower4Order0 = d4 * rinv0;
-        T const dRinvPower4Order1 = d4 * rinv1;
-        T const dRinvPower5Order0 = d5 * rinv0;
+        T const n8rPower1 = n8r;
+        T const n8rPower2 = n8rPower1 * n8r;
+        T const n8rPower3 = n8rPower2 * n8r;
+        T const n8rPower4 = n8rPower3 * n8r;
+        T const n8rPower5 = n8rPower4 * n8r;
+        T const radialCoefficient0 =
+            simdBroadcast<T>(2.25675833419102512e+00 * kScaleFactorInverse1);
+        T const radialCoefficient1 = simdBroadcast<T>(
+            -1.80540666735282009e+01 * kScaleFactorInverse1 * kScaleFactorInverse2);
+        T const radialCoefficient2 = simdBroadcast<T>(1.44432533388225607e+02 *
+            kScaleFactorInverse1 * kScaleFactorInverse2 * kScaleFactorInverse2);
+        T const dRinvPower0Order0 = radialCoefficient0 * s0;
+        T const dRinvPower1Order0 = radialCoefficient0 * (n8rPower1 * s1);
+        T const dRinvPower1Order1 = radialCoefficient1 * s1;
+        T const dRinvPower2Order0 = radialCoefficient0 * (n8rPower2 * s2);
+        T const dRinvPower2Order1 = radialCoefficient1 * (n8rPower1 * s2);
+        T const dRinvPower2Order2 = radialCoefficient2 * s2;
+        T const dRinvPower3Order0 = radialCoefficient0 * (n8rPower3 * s3);
+        T const dRinvPower3Order1 = radialCoefficient1 * (n8rPower2 * s3);
+        T const dRinvPower3Order2 = radialCoefficient2 * (n8rPower1 * s3);
+        T const dRinvPower4Order0 = radialCoefficient0 * (n8rPower4 * s4);
+        T const dRinvPower4Order1 = radialCoefficient1 * (n8rPower3 * s4);
+        T const dRinvPower5Order0 = radialCoefficient0 * (n8rPower5 * s5);
         Array<T, kDimensions> dxrinv;
         dxrinv[0] = dx[0] * rinv;
         dxrinv[1] = dx[1] * rinv;
@@ -1838,7 +1834,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     d[15] = simdFma(simdBroadcast<T>(2.380952381e-01), drealOrder5Trace2Index100, d[15]);
     d = d + dfour;
     d[0] = simdBroadcast<T>(7.853981634e-01 * kScaleFactorInverse1) + d[0];
-    return 674 + 82 * foursz + 11 * realsz + 425 * acceptedRealImages;
+    return 675 + 82 * foursz + 11 * realsz + 425 * acceptedRealImages;
 }
 #endif
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 7) && \
@@ -1935,8 +1931,6 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
             simdMax(r, simdBroadcast<T>(1.0e-20));
         T const rinv0 = simdBroadcast<T>(1);
         T const rinv1 = rinv;
-        T const rinv2 = rinv1 * rinv1;
-        T const rinv3 = rinv1 * rinv2;
         // Stable nearest-image radial terms: series followed by downward recurrence.
         T const ar2 = simdBroadcast<T>(4 * kScaleFactorInverse2) * r2;
         T const twoAr2 = ar2 + ar2;
@@ -1967,36 +1961,37 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         T const s2 = simdFma(twoAr2, s3, expAr2) * simdBroadcast<T>(2.00000000000000011e-01);
         T const s1 = simdFma(twoAr2, s2, expAr2) * simdBroadcast<T>(3.33333333333333315e-01);
         T const s0 = simdFma(twoAr2, s1, expAr2) * simdBroadcast<T>(1.00000000000000000e+00);
-        T radialFactor = simdBroadcast<T>(2.256758334191025 * kScaleFactorInverse1);
-        T const d0 = radialFactor * s0;
-        radialFactor *= n8r;
-        T const d1 = radialFactor * s1;
-        radialFactor *= n8r;
-        T const d2 = radialFactor * s2;
-        radialFactor *= n8r;
-        T const d3 = radialFactor * s3;
-        radialFactor *= n8r;
-        T const d4 = radialFactor * s4;
-        radialFactor *= n8r;
-        T const d5 = radialFactor * s5;
-        radialFactor *= n8r;
-        T const d6 = radialFactor * s6;
-        T const dRinvPower0Order0 = d0 * rinv0;
-        T const dRinvPower1Order0 = d1 * rinv0;
-        T const dRinvPower1Order1 = d1 * rinv1;
-        T const dRinvPower2Order0 = d2 * rinv0;
-        T const dRinvPower2Order1 = d2 * rinv1;
-        T const dRinvPower2Order2 = d2 * rinv2;
-        T const dRinvPower3Order0 = d3 * rinv0;
-        T const dRinvPower3Order1 = d3 * rinv1;
-        T const dRinvPower3Order2 = d3 * rinv2;
-        T const dRinvPower3Order3 = d3 * rinv3;
-        T const dRinvPower4Order0 = d4 * rinv0;
-        T const dRinvPower4Order1 = d4 * rinv1;
-        T const dRinvPower4Order2 = d4 * rinv2;
-        T const dRinvPower5Order0 = d5 * rinv0;
-        T const dRinvPower5Order1 = d5 * rinv1;
-        T const dRinvPower6Order0 = d6 * rinv0;
+        T const n8rPower1 = n8r;
+        T const n8rPower2 = n8rPower1 * n8r;
+        T const n8rPower3 = n8rPower2 * n8r;
+        T const n8rPower4 = n8rPower3 * n8r;
+        T const n8rPower5 = n8rPower4 * n8r;
+        T const n8rPower6 = n8rPower5 * n8r;
+        T const radialCoefficient0 =
+            simdBroadcast<T>(2.25675833419102512e+00 * kScaleFactorInverse1);
+        T const radialCoefficient1 = simdBroadcast<T>(
+            -1.80540666735282009e+01 * kScaleFactorInverse1 * kScaleFactorInverse2);
+        T const radialCoefficient2 = simdBroadcast<T>(1.44432533388225607e+02 *
+            kScaleFactorInverse1 * kScaleFactorInverse2 * kScaleFactorInverse2);
+        T const radialCoefficient3 =
+            simdBroadcast<T>(-1.15546026710580486e+03 * kScaleFactorInverse1 *
+                kScaleFactorInverse2 * kScaleFactorInverse2 * kScaleFactorInverse2);
+        T const dRinvPower0Order0 = radialCoefficient0 * s0;
+        T const dRinvPower1Order0 = radialCoefficient0 * (n8rPower1 * s1);
+        T const dRinvPower1Order1 = radialCoefficient1 * s1;
+        T const dRinvPower2Order0 = radialCoefficient0 * (n8rPower2 * s2);
+        T const dRinvPower2Order1 = radialCoefficient1 * (n8rPower1 * s2);
+        T const dRinvPower2Order2 = radialCoefficient2 * s2;
+        T const dRinvPower3Order0 = radialCoefficient0 * (n8rPower3 * s3);
+        T const dRinvPower3Order1 = radialCoefficient1 * (n8rPower2 * s3);
+        T const dRinvPower3Order2 = radialCoefficient2 * (n8rPower1 * s3);
+        T const dRinvPower3Order3 = radialCoefficient3 * s3;
+        T const dRinvPower4Order0 = radialCoefficient0 * (n8rPower4 * s4);
+        T const dRinvPower4Order1 = radialCoefficient1 * (n8rPower3 * s4);
+        T const dRinvPower4Order2 = radialCoefficient2 * (n8rPower2 * s4);
+        T const dRinvPower5Order0 = radialCoefficient0 * (n8rPower5 * s5);
+        T const dRinvPower5Order1 = radialCoefficient1 * (n8rPower4 * s5);
+        T const dRinvPower6Order0 = radialCoefficient0 * (n8rPower6 * s6);
         Array<T, kDimensions> dxrinv;
         dxrinv[0] = dx[0] * rinv;
         dxrinv[1] = dx[1] * rinv;
@@ -3262,7 +3257,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     d[25] = simdFma(simdBroadcast<T>(-5.454545455e-01), drealOrder6Trace1Index220, d[25]);
     d = d + dfour;
     d[0] = simdBroadcast<T>(7.853981634e-01 * kScaleFactorInverse1) + d[0];
-    return 1203 + 108 * foursz + 11 * realsz + 772 * acceptedRealImages;
+    return 1205 + 108 * foursz + 11 * realsz + 772 * acceptedRealImages;
 }
 #endif
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 8) && \
@@ -3374,8 +3369,6 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
             simdMax(r, simdBroadcast<T>(1.0e-20));
         T const rinv0 = simdBroadcast<T>(1);
         T const rinv1 = rinv;
-        T const rinv2 = rinv1 * rinv1;
-        T const rinv3 = rinv1 * rinv2;
         // Stable nearest-image radial terms: series followed by downward recurrence.
         T const ar2 = simdBroadcast<T>(4 * kScaleFactorInverse2) * r2;
         T const twoAr2 = ar2 + ar2;
@@ -3407,42 +3400,42 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         T const s2 = simdFma(twoAr2, s3, expAr2) * simdBroadcast<T>(2.00000000000000011e-01);
         T const s1 = simdFma(twoAr2, s2, expAr2) * simdBroadcast<T>(3.33333333333333315e-01);
         T const s0 = simdFma(twoAr2, s1, expAr2) * simdBroadcast<T>(1.00000000000000000e+00);
-        T radialFactor = simdBroadcast<T>(2.256758334191025 * kScaleFactorInverse1);
-        T const d0 = radialFactor * s0;
-        radialFactor *= n8r;
-        T const d1 = radialFactor * s1;
-        radialFactor *= n8r;
-        T const d2 = radialFactor * s2;
-        radialFactor *= n8r;
-        T const d3 = radialFactor * s3;
-        radialFactor *= n8r;
-        T const d4 = radialFactor * s4;
-        radialFactor *= n8r;
-        T const d5 = radialFactor * s5;
-        radialFactor *= n8r;
-        T const d6 = radialFactor * s6;
-        radialFactor *= n8r;
-        T const d7 = radialFactor * s7;
-        T const dRinvPower0Order0 = d0 * rinv0;
-        T const dRinvPower1Order0 = d1 * rinv0;
-        T const dRinvPower1Order1 = d1 * rinv1;
-        T const dRinvPower2Order0 = d2 * rinv0;
-        T const dRinvPower2Order1 = d2 * rinv1;
-        T const dRinvPower2Order2 = d2 * rinv2;
-        T const dRinvPower3Order0 = d3 * rinv0;
-        T const dRinvPower3Order1 = d3 * rinv1;
-        T const dRinvPower3Order2 = d3 * rinv2;
-        T const dRinvPower3Order3 = d3 * rinv3;
-        T const dRinvPower4Order0 = d4 * rinv0;
-        T const dRinvPower4Order1 = d4 * rinv1;
-        T const dRinvPower4Order2 = d4 * rinv2;
-        T const dRinvPower4Order3 = d4 * rinv3;
-        T const dRinvPower5Order0 = d5 * rinv0;
-        T const dRinvPower5Order1 = d5 * rinv1;
-        T const dRinvPower5Order2 = d5 * rinv2;
-        T const dRinvPower6Order0 = d6 * rinv0;
-        T const dRinvPower6Order1 = d6 * rinv1;
-        T const dRinvPower7Order0 = d7 * rinv0;
+        T const n8rPower1 = n8r;
+        T const n8rPower2 = n8rPower1 * n8r;
+        T const n8rPower3 = n8rPower2 * n8r;
+        T const n8rPower4 = n8rPower3 * n8r;
+        T const n8rPower5 = n8rPower4 * n8r;
+        T const n8rPower6 = n8rPower5 * n8r;
+        T const n8rPower7 = n8rPower6 * n8r;
+        T const radialCoefficient0 =
+            simdBroadcast<T>(2.25675833419102512e+00 * kScaleFactorInverse1);
+        T const radialCoefficient1 = simdBroadcast<T>(
+            -1.80540666735282009e+01 * kScaleFactorInverse1 * kScaleFactorInverse2);
+        T const radialCoefficient2 = simdBroadcast<T>(1.44432533388225607e+02 *
+            kScaleFactorInverse1 * kScaleFactorInverse2 * kScaleFactorInverse2);
+        T const radialCoefficient3 =
+            simdBroadcast<T>(-1.15546026710580486e+03 * kScaleFactorInverse1 *
+                kScaleFactorInverse2 * kScaleFactorInverse2 * kScaleFactorInverse2);
+        T const dRinvPower0Order0 = radialCoefficient0 * s0;
+        T const dRinvPower1Order0 = radialCoefficient0 * (n8rPower1 * s1);
+        T const dRinvPower1Order1 = radialCoefficient1 * s1;
+        T const dRinvPower2Order0 = radialCoefficient0 * (n8rPower2 * s2);
+        T const dRinvPower2Order1 = radialCoefficient1 * (n8rPower1 * s2);
+        T const dRinvPower2Order2 = radialCoefficient2 * s2;
+        T const dRinvPower3Order0 = radialCoefficient0 * (n8rPower3 * s3);
+        T const dRinvPower3Order1 = radialCoefficient1 * (n8rPower2 * s3);
+        T const dRinvPower3Order2 = radialCoefficient2 * (n8rPower1 * s3);
+        T const dRinvPower3Order3 = radialCoefficient3 * s3;
+        T const dRinvPower4Order0 = radialCoefficient0 * (n8rPower4 * s4);
+        T const dRinvPower4Order1 = radialCoefficient1 * (n8rPower3 * s4);
+        T const dRinvPower4Order2 = radialCoefficient2 * (n8rPower2 * s4);
+        T const dRinvPower4Order3 = radialCoefficient3 * (n8rPower1 * s4);
+        T const dRinvPower5Order0 = radialCoefficient0 * (n8rPower5 * s5);
+        T const dRinvPower5Order1 = radialCoefficient1 * (n8rPower4 * s5);
+        T const dRinvPower5Order2 = radialCoefficient2 * (n8rPower3 * s5);
+        T const dRinvPower6Order0 = radialCoefficient0 * (n8rPower6 * s6);
+        T const dRinvPower6Order1 = radialCoefficient1 * (n8rPower5 * s6);
+        T const dRinvPower7Order0 = radialCoefficient0 * (n8rPower7 * s7);
         Array<T, kDimensions> dxrinv;
         dxrinv[0] = dx[0] * rinv;
         dxrinv[1] = dx[1] * rinv;
@@ -5689,7 +5682,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     d[28] = simdFma(simdBroadcast<T>(-8.158508159e-02), drealOrder7Trace3Index100, d[28]);
     d = d + dfour;
     d[0] = simdBroadcast<T>(7.853981634e-01 * kScaleFactorInverse1) + d[0];
-    return 2053 + 138 * foursz + 11 * realsz + 1326 * acceptedRealImages;
+    return 2058 + 138 * foursz + 11 * realsz + 1326 * acceptedRealImages;
 }
 #endif
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 9) && \
@@ -5818,9 +5811,6 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
             simdMax(r, simdBroadcast<T>(1.0e-20));
         T const rinv0 = simdBroadcast<T>(1);
         T const rinv1 = rinv;
-        T const rinv2 = rinv1 * rinv1;
-        T const rinv3 = rinv1 * rinv2;
-        T const rinv4 = rinv2 * rinv2;
         // Stable nearest-image radial terms: series followed by downward recurrence.
         T const ar2 = simdBroadcast<T>(4 * kScaleFactorInverse2) * r2;
         T const twoAr2 = ar2 + ar2;
@@ -5853,49 +5843,51 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         T const s2 = simdFma(twoAr2, s3, expAr2) * simdBroadcast<T>(2.00000000000000011e-01);
         T const s1 = simdFma(twoAr2, s2, expAr2) * simdBroadcast<T>(3.33333333333333315e-01);
         T const s0 = simdFma(twoAr2, s1, expAr2) * simdBroadcast<T>(1.00000000000000000e+00);
-        T radialFactor = simdBroadcast<T>(2.256758334191025 * kScaleFactorInverse1);
-        T const d0 = radialFactor * s0;
-        radialFactor *= n8r;
-        T const d1 = radialFactor * s1;
-        radialFactor *= n8r;
-        T const d2 = radialFactor * s2;
-        radialFactor *= n8r;
-        T const d3 = radialFactor * s3;
-        radialFactor *= n8r;
-        T const d4 = radialFactor * s4;
-        radialFactor *= n8r;
-        T const d5 = radialFactor * s5;
-        radialFactor *= n8r;
-        T const d6 = radialFactor * s6;
-        radialFactor *= n8r;
-        T const d7 = radialFactor * s7;
-        radialFactor *= n8r;
-        T const d8 = radialFactor * s8;
-        T const dRinvPower0Order0 = d0 * rinv0;
-        T const dRinvPower1Order0 = d1 * rinv0;
-        T const dRinvPower1Order1 = d1 * rinv1;
-        T const dRinvPower2Order0 = d2 * rinv0;
-        T const dRinvPower2Order1 = d2 * rinv1;
-        T const dRinvPower2Order2 = d2 * rinv2;
-        T const dRinvPower3Order0 = d3 * rinv0;
-        T const dRinvPower3Order1 = d3 * rinv1;
-        T const dRinvPower3Order2 = d3 * rinv2;
-        T const dRinvPower3Order3 = d3 * rinv3;
-        T const dRinvPower4Order0 = d4 * rinv0;
-        T const dRinvPower4Order1 = d4 * rinv1;
-        T const dRinvPower4Order2 = d4 * rinv2;
-        T const dRinvPower4Order3 = d4 * rinv3;
-        T const dRinvPower4Order4 = d4 * rinv4;
-        T const dRinvPower5Order0 = d5 * rinv0;
-        T const dRinvPower5Order1 = d5 * rinv1;
-        T const dRinvPower5Order2 = d5 * rinv2;
-        T const dRinvPower5Order3 = d5 * rinv3;
-        T const dRinvPower6Order0 = d6 * rinv0;
-        T const dRinvPower6Order1 = d6 * rinv1;
-        T const dRinvPower6Order2 = d6 * rinv2;
-        T const dRinvPower7Order0 = d7 * rinv0;
-        T const dRinvPower7Order1 = d7 * rinv1;
-        T const dRinvPower8Order0 = d8 * rinv0;
+        T const n8rPower1 = n8r;
+        T const n8rPower2 = n8rPower1 * n8r;
+        T const n8rPower3 = n8rPower2 * n8r;
+        T const n8rPower4 = n8rPower3 * n8r;
+        T const n8rPower5 = n8rPower4 * n8r;
+        T const n8rPower6 = n8rPower5 * n8r;
+        T const n8rPower7 = n8rPower6 * n8r;
+        T const n8rPower8 = n8rPower7 * n8r;
+        T const radialCoefficient0 =
+            simdBroadcast<T>(2.25675833419102512e+00 * kScaleFactorInverse1);
+        T const radialCoefficient1 = simdBroadcast<T>(
+            -1.80540666735282009e+01 * kScaleFactorInverse1 * kScaleFactorInverse2);
+        T const radialCoefficient2 = simdBroadcast<T>(1.44432533388225607e+02 *
+            kScaleFactorInverse1 * kScaleFactorInverse2 * kScaleFactorInverse2);
+        T const radialCoefficient3 =
+            simdBroadcast<T>(-1.15546026710580486e+03 * kScaleFactorInverse1 *
+                kScaleFactorInverse2 * kScaleFactorInverse2 * kScaleFactorInverse2);
+        T const radialCoefficient4 =
+            simdBroadcast<T>(9.24368213684643888e+03 * kScaleFactorInverse1 * kScaleFactorInverse2 *
+                kScaleFactorInverse2 * kScaleFactorInverse2 * kScaleFactorInverse2);
+        T const dRinvPower0Order0 = radialCoefficient0 * s0;
+        T const dRinvPower1Order0 = radialCoefficient0 * (n8rPower1 * s1);
+        T const dRinvPower1Order1 = radialCoefficient1 * s1;
+        T const dRinvPower2Order0 = radialCoefficient0 * (n8rPower2 * s2);
+        T const dRinvPower2Order1 = radialCoefficient1 * (n8rPower1 * s2);
+        T const dRinvPower2Order2 = radialCoefficient2 * s2;
+        T const dRinvPower3Order0 = radialCoefficient0 * (n8rPower3 * s3);
+        T const dRinvPower3Order1 = radialCoefficient1 * (n8rPower2 * s3);
+        T const dRinvPower3Order2 = radialCoefficient2 * (n8rPower1 * s3);
+        T const dRinvPower3Order3 = radialCoefficient3 * s3;
+        T const dRinvPower4Order0 = radialCoefficient0 * (n8rPower4 * s4);
+        T const dRinvPower4Order1 = radialCoefficient1 * (n8rPower3 * s4);
+        T const dRinvPower4Order2 = radialCoefficient2 * (n8rPower2 * s4);
+        T const dRinvPower4Order3 = radialCoefficient3 * (n8rPower1 * s4);
+        T const dRinvPower4Order4 = radialCoefficient4 * s4;
+        T const dRinvPower5Order0 = radialCoefficient0 * (n8rPower5 * s5);
+        T const dRinvPower5Order1 = radialCoefficient1 * (n8rPower4 * s5);
+        T const dRinvPower5Order2 = radialCoefficient2 * (n8rPower3 * s5);
+        T const dRinvPower5Order3 = radialCoefficient3 * (n8rPower2 * s5);
+        T const dRinvPower6Order0 = radialCoefficient0 * (n8rPower6 * s6);
+        T const dRinvPower6Order1 = radialCoefficient1 * (n8rPower5 * s6);
+        T const dRinvPower6Order2 = radialCoefficient2 * (n8rPower4 * s6);
+        T const dRinvPower7Order0 = radialCoefficient0 * (n8rPower7 * s7);
+        T const dRinvPower7Order1 = radialCoefficient1 * (n8rPower6 * s7);
+        T const dRinvPower8Order0 = radialCoefficient0 * (n8rPower8 * s8);
         Array<T, kDimensions> dxrinv;
         dxrinv[0] = dx[0] * rinv;
         dxrinv[1] = dx[1] * rinv;
@@ -9721,7 +9713,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     d[36] = simdFma(simdBroadcast<T>(5.439005439e-03), drealOrder8Trace4Index000, d[36]);
     d = d + dfour;
     d[0] = simdBroadcast<T>(7.853981634e-01 * kScaleFactorInverse1) + d[0];
-    return 3389 + 172 * foursz + 11 * realsz + 2194 * acceptedRealImages;
+    return 3396 + 172 * foursz + 11 * realsz + 2194 * acceptedRealImages;
 }
 #endif
 }    // namespace detail

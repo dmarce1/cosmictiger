@@ -102,3 +102,62 @@ TEST(Lpt, ParticleDisplacementRetainsInterpolationCorrection) {
         EXPECT_GT(corrected, derivative);
     }
 }
+
+TEST(Lpt, RandomBoundaryPlaneIsHermitianWithoutAxisFolding) {
+    constexpr int kSize = 64;
+    double crossPlane = 0.0, foldedAxis = 0.0, variance = 0.0;
+    for (int x = 1; x < kSize / 2; ++x) {
+        for (int y = 1; y < kSize / 2; ++y) {
+            auto const value = lpt::gaussianMode(x, y, 0, kSize);
+            EXPECT_EQ(value, std::conj(lpt::gaussianMode(kSize - x, kSize - y, 0, kSize)));
+            crossPlane += std::real(value * std::conj(lpt::gaussianMode(x, y, 1, kSize)));
+            foldedAxis += std::real(value * std::conj(lpt::gaussianMode(x, kSize - y, 0, kSize)));
+            variance += std::norm(value);
+        }
+    }
+    EXPECT_LT(std::abs(crossPlane / variance), 0.1);
+    EXPECT_LT(std::abs(foldedAxis / variance), 0.1);
+    EXPECT_EQ(lpt::gaussianMode(0, 0, 0, kSize), std::complex<float>{});
+    for (int index = 0; index < kSize; ++index) {
+        EXPECT_EQ(lpt::gaussianMode(kSize / 2, index, 1, kSize), std::complex<float>{});
+        EXPECT_EQ(lpt::gaussianMode(index, kSize / 2, 1, kSize), std::complex<float>{});
+        EXPECT_EQ(lpt::gaussianMode(index, 1, kSize / 2, kSize), std::complex<float>{});
+    }
+}
+
+TEST(Lpt, ShiftedInverseModeIsExactAtEachLatticeOffset) {
+    constexpr int kSize = 32;
+    // Check a near-Nyquist mode, where M6 interpolation/deconvolution produced
+    // opposing dark-matter and gas amplitude errors.
+    constexpr int kMode = 14;
+    for (double const offset : {0.0, 0.25, 0.5, 0.75, 1.0}) {
+        auto const shift = lpt::latticeShift(kMode, 0, 0, kSize, offset);
+        auto const partner = lpt::latticeShift(kSize - kMode, 0, 0, kSize, offset);
+        EXPECT_NEAR(std::abs(shift), 1.0, 1.0e-7);
+        EXPECT_EQ(shift, std::conj(partner));
+        for (int node = 0; node < kSize; ++node) {
+            double const angle = 2.0 * std::numbers::pi * kMode * node / kSize;
+            std::complex<double> const inverse(std::cos(angle), std::sin(angle));
+            double const actual = std::real(std::complex<double>(shift) * inverse);
+            double const expected =
+                std::cos(2.0 * std::numbers::pi * kMode * (node + offset) / kSize);
+            EXPECT_NEAR(actual, expected, 1.0e-7);
+        }
+    }
+}
+
+TEST(Lpt, TruncatedLatticeCoordinatesRecoverTheirOwnedNodes) {
+    for (int const size : {32, 768, 1536}) {
+        for (bool const closePack : {false, true}) {
+            for (int phase = 0; phase < (closePack ? 4 : 2); ++phase) {
+                double const offset = lpt::latticeOffset(phase, closePack);
+                for (int node = 0; node < size; ++node) {
+                    double position = (node + offset) / size;
+                    position -= std::floor(position);
+                    position = std::floor(position * 0x1p32) * 0x1p-32;
+                    EXPECT_EQ(lpt::latticeNode(position, size, offset), node);
+                }
+            }
+        }
+    }
+}

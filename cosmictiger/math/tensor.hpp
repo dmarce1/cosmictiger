@@ -66,10 +66,11 @@ public:
         return result;
     }
 
+    CUDA_EXPORT
     inline SymmetricTracelessTensor operator-(SymmetricTracelessTensor const& other) const {
         SymmetricTracelessTensor<T, pValue> result;
         for (int i = 0; i < kN_; i++) {
-            result[i] = other[i] - (*this)[i];
+            result[i] = (*this)[i] - other[i];
         }
         return result;
     }
@@ -82,7 +83,7 @@ public:
         ASSERT(n >= 0);
         ASSERT(l < pValue);
         ASSERT(m <= l);
-        ASSERT(n <= 1 || (n == 2 && l == 0 && m == 0));
+        ALWAYS_ASSERT(n <= 1 || (n == 2 && l == 0 && m == 0));
         return (*this)[l * (l + 1) / 2 + m + (pValue * (pValue + 1) / 2) * (n == 1) +
             (kN_ - 1) * (n == 2)];
     }

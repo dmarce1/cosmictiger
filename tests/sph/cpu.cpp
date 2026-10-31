@@ -609,7 +609,7 @@ void testPriceEtAlDensity() {
                 gradient[0][1] = 4.0 * a2;
             }
             for (int dim = 0; dim < kDimensions; ++dim) {
-                accelerationGradient[dim][dim] -= expansionAcceleration / scaleFactor;
+                accelerationGradient[dim][dim] -= expansion * expansion / scaleFactor;
             }
             for (int i = 0; i < fixture.count_; ++i) {
                 int const source = fixture.sourceIndex(i);
@@ -1272,6 +1272,30 @@ void testDefaultThermalTimestep() {
             int(std::ceil(std::log2(fixture.params_.baseTimestep / thermalStep)));
         require(data.sourceRungs[i] == expectedRung,
             "default fractional thermal bound must preserve the historical timestep rung");
+    }
+}
+
+void testColdShockTimestep() {
+    Fixture fixture(2);
+    auto& data = fixture.data_;
+    data.sourcePositionX[0] = 0.4;
+    data.sourcePositionX[1] = 0.6;
+    for (int i = 0; i < 2; ++i) {
+        data.sourcePositionY[i] = data.sourcePositionZ[i] = 0.5;
+        data.sinkSmoothingConverged[i] = true;
+        data.sourceSupportRadius[i] = data.sinkThermodynamicStates[i].supportRadius = 0.35f;
+        data.sourceInternalEnergy[i] = 1.0e-20f;
+        data.sourceVelocityX[i] = i == 0 ? 1.0f : -1.0f;
+    }
+    fixture.params_.viscosityAlpha = 1.0f;
+    fixture.params_.viscosityBeta = 2.0f;
+    fixture.density();
+    fixture.hydro(1);
+    require(fixture.reduction_->minimumTimestep > 1.0e-5,
+        "cold viscous shock must remain on a finite CFL timestep");
+    for (int i = 0; i < 2; ++i) {
+        require(data.sinkInternalEnergyRate[i] > 0.0f,
+            "excluding viscous heating from timestep selection must retain actual heating");
     }
 }
 
@@ -2656,4 +2680,39 @@ TEST_F(SphCpuTest, VariationalCosmologicalExpansion) {
 
 TEST_F(SphCpuTest, GlobalRawTimestep) {
     detail::testGlobalRawTimestep<detail::Fixture>();
+}
+
+TEST_F(SphCpuTest, ColdShockTimestep) {
+    detail::testColdShockTimestep();
+}
+
+TEST_F(SphCpuTest, ColdShockThermalTimestep) {
+    detail::Fixture fixture(2);
+    auto& data = fixture.data_;
+    data.sourcePositionX[0] = 0.4;
+    data.sourcePositionX[1] = 0.6;
+    for (int i = 0; i < 2; ++i) {
+        data.sourcePositionY[i] = data.sourcePositionZ[i] = 0.5;
+        data.sinkSmoothingConverged[i] = true;
+        data.sourceSupportRadius[i] = data.sinkThermodynamicStates[i].supportRadius = 0.35f;
+        data.sourceInternalEnergy[i] = 1.0e-20f;
+        data.sourceVelocityX[i] = i == 0 ? 1.0f : -1.0f;
+    }
+    fixture.params_.viscosityAlpha = 1.0f;
+    fixture.params_.viscosityBeta = 2.0f;
+    fixture.params_.globalTimestep = true;
+    fixture.params_.minimumRung = 0;
+    fixture.density();
+    fixture.hydro(1);
+    double const coldStep = fixture.reduction_->minimumTimestep;
+    ASSERT_GT(coldStep, 1.0e-5);
+    ASSERT_LE(coldStep, fixture.params_.maximumTimestep);
+    for (int i = 0; i < 2; ++i) {
+        EXPECT_GT(data.sinkInternalEnergyRate[i], 0.0f);
+        data.sourceInternalEnergy[i] = 1.0e-10f;
+    }
+    fixture.hydro(1);
+    double const warmStep = fixture.reduction_->minimumTimestep;
+    ASSERT_LE(warmStep, fixture.params_.maximumTimestep);
+    EXPECT_NEAR(warmStep, coldStep, 1.0e-3 * coldStep);
 }

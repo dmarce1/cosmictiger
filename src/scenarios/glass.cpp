@@ -14,6 +14,10 @@ void initializeGlass(DriverParameters& state) {
     if (hpxSize() != 1) {
         THROW_ERROR("Glass generation requires one HPX locality\n");
     }
+    if (getOptions().initial.closePack) {
+        THROW_ERROR("Glass generation does not support initial.closePack; the file stores side^3 "
+                    "particles\n");
+    }
     auto const count = getOptions().initial.numberOfParticles;
     particlesResize(count);
     for (ParticleInteger i = 0; i < count; i++) {
@@ -30,6 +34,9 @@ void initializeGlass(DriverParameters& state) {
 
 void saveGlass() {
     int const side = getOptions().initial.particlesPerDimension;
+    if (uint64_t(particlesSize()) != uint64_t(side) * side * side) {
+        THROW_ERROR("Glass particle count does not match its lattice dimensions\n");
+    }
     FILE* file = fopen(outputPath("glass.bin").c_str(), "wb");
     if (file == nullptr) {
         THROW_ERROR("Unable to write glass.bin\n");
@@ -40,7 +47,7 @@ void saveGlass() {
     }
     for (int dim = 0; dim < kDimensions; dim++) {
         for (ParticleInteger i = 0; i < particlesSize(); i++) {
-            auto const position = particlesPos(dim, i);
+            Fixed32 const position(particlesPos(dim, i));
             if (fwrite(&position, sizeof(position), 1, file) != 1) {
                 fclose(file);
                 THROW_ERROR("Unable to write glass particle\n");

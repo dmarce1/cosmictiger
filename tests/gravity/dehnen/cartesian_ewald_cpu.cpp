@@ -15,12 +15,15 @@
 #include <string>
 
 #include <gtest/gtest.h>
+#if defined(__SSE__)
+#include <xmmintrin.h>
+#endif
 
 #include <cosmictiger/core/assert.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/gravity/dehnen/ewald_indices.hpp>
-#include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_kernels.hpp>
+#include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/math/simd.hpp>
 
 // This standalone test exercises the actual CUDA-disabled initializer without
@@ -219,9 +222,10 @@ void checkPeriodicField() {
 // image's radial recurrence; the corner also checks the series at alpha^2 r^2 = 3.
 template <int order>
 void checkFloatDerivatives() {
-    constexpr std::array<Position, 10> kPositions{{{0., 0., 0.}, {.125, 0., 0.}, {.0625, .0625, 0.},
-        {.125, -.125, .125}, {.0625, .03, -.02}, {.01, .005, -.002}, {.25, .125, 0.},
-        {.4, -.3, .45}, {-.499, .497, -.11}, {.5, .5, .5}}};
+    constexpr std::array<Position, 13> kPositions{
+        {{0., 0., 0.}, {.125, 0., 0.}, {.0625, .0625, 0.}, {.125, -.125, .125}, {.0625, .03, -.02},
+            {.01, .005, -.002}, {.25, .125, 0.}, {.4, -.3, .45}, {-.499, .497, -.11}, {.5, .5, .5},
+            {1.e-8, 0., 0.}, {1.e-7, -2.e-8, 3.e-8}, {1.e-10, 1.e-10, 1.e-10}}};
     for (auto const& position : kPositions) {
         Array<double, kDimensions> separation;
         Array<SimdFloat, kDimensions> floatSeparation;
@@ -336,3 +340,24 @@ TEST(CartesianEwaldCpu, DefaultAndAllOrders) {
         }
     }
 }
+
+#if defined(__SSE__)
+TEST(CartesianEwaldCpu, FloatNearOriginWithFlushToZero) {
+    struct FlushToZeroGuard {
+        unsigned previous = _mm_getcsr();
+        FlushToZeroGuard() {
+            _mm_setcsr(previous | _MM_FLUSH_ZERO_ON);
+        }
+        ~FlushToZeroGuard() {
+            _mm_setcsr(previous);
+        }
+    } guard;
+    for (int order = kFmmMinOrder; order <= kFmmMaxOrder; ++order) {
+        setFmmOrder(order);
+        EwaldConst::init();
+        fmmDispatch(order, [](auto selectedOrder) {
+            detail::checkFloatDerivatives<decltype(selectedOrder)::value>();
+        });
+    }
+}
+#endif

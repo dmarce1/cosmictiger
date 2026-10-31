@@ -26,6 +26,9 @@ ScenarioPlan initializeDisc() {
     // thermal timestep bound. Specific energy is independent of resolution.
     double const internalEnergy = 1.0e-4;
     auto opts = getOptions();
+    if (!(opts.hydro.centralAcceleration > 0.0)) {
+        throw std::invalid_argument("The disc scenario requires hydro.centralAcceleration > 0");
+    }
     opts.initial.gasMass = 1.0;
     setOptions(opts);
     double const m = opts.initial.gasMass;
@@ -53,7 +56,7 @@ ScenarioPlan initializeDisc() {
                     sphParticlesPosition(kXDimension, i) = x;
                     sphParticlesPosition(kYDimension, i) = y;
                     sphParticlesPosition(kZDimension, i) = z;
-                    double const v = 1.00 * sqrt(1 / r);
+                    double const v = sqrt(opts.hydro.centralAcceleration / r);
                     double const vx = -(y - 0.5) / r * v;
                     double const vy = (x - 0.5) / r * v;
                     double const vz = 0.0;

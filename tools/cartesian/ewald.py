@@ -239,7 +239,7 @@ def radialDerivatives(code, order, origin):
     if not origin:
         # erfcexp argument/result pair, expfactor, and e0.
         flops += 6
-    for power in range(2, (order + 1) // 2):
+    for power in range(2, (order + 1) // 2 if not origin else 2):
         left = power // 2
         right = power - left
         code.append(f'T const rinv{power} = rinv{left} * rinv{right};')
@@ -260,7 +260,7 @@ def radialDerivatives(code, order, origin):
             'T const expAr2 = exp(-ar2);',
         ])
         # ar2, twoAr2, exp, Horner FMAs, downward recurrence, and radial powers.
-        flops += 3 + 2 * (seriesTerms - 1) + 3 * (order - 1) + order + (order - 1)
+        flops += 3 + 2 * (seriesTerms - 1) + 3 * (order - 1) + order - 2
         for term in range(seriesTerms - 1, -1, -1):
             coefficient = (-1.0 if term % 2 else 1.0) / (
                 factorial(term) * (2 * term + 2 * (order - 1) + 1))
@@ -272,11 +272,16 @@ def radialDerivatives(code, order, origin):
         for degree in range(order - 1, 0, -1):
             code.append(f'T const s{degree - 1} = simdFma(twoAr2, s{degree}, expAr2) '
                         f'* simdBroadcast<T>({1.0 / (2 * degree - 1):.17e});')
-        code.append('T radialFactor = simdBroadcast<T>(2.256758334191025*kScaleFactorInverse1);')
-        for degree in range(order):
-            code.append(f'T const d{degree} = radialFactor * s{degree};')
-            if degree != order - 1:
-                code.append('radialFactor *= n8r;')
+        code.append('T const n8rPower1 = n8r;')
+        for degree in range(2, order):
+            code.append(f'T const n8rPower{degree} = n8rPower{degree - 1} * n8r;')
+        # Cancel r^j/r^k analytically before evaluation. Forming d_j first
+        # can flush it to zero even when d_j/r^k is a normal float (j=k=4).
+        for traceCount in range((order + 1) // 2):
+            coefficient = 2.256758334191025 * (-8)**traceCount
+            scaling = 'kScaleFactorInverse1' + ' * kScaleFactorInverse2' * traceCount
+            code.append(f'T const radialCoefficient{traceCount} = '
+                        f'simdBroadcast<T>({coefficient:.17e} * {scaling});')
     else:
         flops += 1 + 3 * (order - 1) + (order - 2)
         code.append('T const d0 = -erfc0 * rinv;')
@@ -288,9 +293,16 @@ def radialDerivatives(code, order, origin):
     for degree in range(order):
         for traceCount in range(degree + 1):
             if degree + traceCount < order:
-                code.append(f'T const dRinvPower{degree}Order{traceCount} '
-                            f'= d{degree} * rinv{traceCount};')
-                flops += 1
+                if origin:
+                    power = degree - traceCount
+                    radial = f's{degree}' if power == 0 else f'(n8rPower{power} * s{degree})'
+                    code.append(f'T const dRinvPower{degree}Order{traceCount} '
+                                f'= radialCoefficient{traceCount} * {radial};')
+                    flops += 1 + int(power != 0)
+                else:
+                    code.append(f'T const dRinvPower{degree}Order{traceCount} '
+                                f'= d{degree} * rinv{traceCount};')
+                    flops += 1
     code.append('Array<T, kDimensions> dxrinv;')
     for axis in range(3):
         code.append(f'dxrinv[{axis}] = dx[{axis}] * rinv;')

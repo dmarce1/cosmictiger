@@ -129,7 +129,8 @@ def main():
         print(f"{name}: hydro evolution and zero self-gravity diagnostics passed")
         return directory, options
 
-    for scenario in ("sod", "blast", "rayleighTaylor", "disc", "polytropicStar"):
+    reject("polytrope_without_gravity", ["--run.scenario=polytropicStar"], "requires gravity.enabled=true")
+    for scenario in ("sod", "blast", "rayleighTaylor", "disc"):
         extra = ["--initial.particlesPerDimension=16"] if scenario == "disc" else []
         if scenario == "rayleighTaylor":
             extra.append("--hydro.zPlaneAcceleration=0.5")

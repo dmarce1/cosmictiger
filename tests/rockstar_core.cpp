@@ -129,3 +129,16 @@ TEST(RockstarCore, GeometryAndConnectivity) {
     }
     checkConnectivity(cloud, 1.2f);
 }
+
+TEST(RockstarCore, PeriodicOverlapKeepsDegenerateLeaves) {
+    Box sink{{-0.01f, 0.1f, 0.4f}, {0.01f, 0.2f, 0.6f}};
+    Box point{{0.995f, 0.15f, 0.5f}, {0.995f, 0.15f, 0.5f}};
+    EXPECT_TRUE(rockstar::detail::periodicBoxesOverlap(sink, point, 3));
+    EXPECT_TRUE(rockstar::detail::periodicBoxesOverlap(point, sink, 3));
+    point.begin[1] = point.end[1] = sink.end[1];
+    EXPECT_TRUE(rockstar::detail::periodicBoxesOverlap(sink, point, 3));
+    point.begin[1] = point.end[1] = 0.201f;
+    EXPECT_FALSE(rockstar::detail::periodicBoxesOverlap(sink, point, 3));
+    Box planar{{0.0f, 0.1f, 0.5f}, {0.5f, 0.2f, 0.5f}};
+    EXPECT_TRUE(rockstar::detail::periodicBoxesOverlap(sink, planar, 3));
+}

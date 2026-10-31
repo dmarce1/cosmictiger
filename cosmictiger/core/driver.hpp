@@ -8,7 +8,10 @@
 
 #pragma once
 
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
+#include <limits>
 #include <stddef.h>
 
 #include <cosmictiger/core/force_step.hpp>
@@ -21,6 +24,20 @@
 
 namespace section_timing {
 class ScopedSection;
+}
+
+// Output cadence follows the nominal coarse clock even with raw global steps.
+inline int driverOutputStep(double time, double coarseInterval) {
+    double const phase = time / coarseInterval;
+    double const tolerance = 32.0 * std::numeric_limits<double>::epsilon() * std::max(1.0, phase);
+    return int(std::floor(phase + tolerance));
+}
+
+inline int driverFinalOutputStep(double time, double coarseInterval) {
+    int const coarseStep = driverOutputStep(time, coarseInterval);
+    double const tolerance =
+        32.0 * std::numeric_limits<double>::epsilon() * std::max(coarseInterval, std::abs(time));
+    return coarseStep + (time > coarseStep * coarseInterval + tolerance);
 }
 
 struct DriverParameters {

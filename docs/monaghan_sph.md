@@ -388,15 +388,19 @@ to preserve the default cubic Courant-viscous limit. The hydro acceleration
 coefficient is `gravity.timestepEta` times the fixed reference calibration
 `0.7115965735877551`; the new default gravity eta is `0.20401599335954483`.
 This preserves the former default cubic/Ferrers F4 hydro acceleration limit.
-The additional fractional thermal-energy bound applies the fixed
-\(\sqrt{5/6}\) reference conversion to preserve its previous physical limit. The explicit integrator retains its cosmological expansion limits.
+The additional fractional thermal-energy bound uses reversible pressure work
+plus homogeneous expansion, with the fixed \(\sqrt{5/6}\) reference conversion.
+Viscous shock heating is controlled by the approach-speed term in the CFL
+criterion; including it in the fractional bound would force arbitrarily short
+steps when cold gas first enters a shock. The explicit integrator retains its
+cosmological expansion limits.
 The gravity acceleration criterion uses its own effective radius, independently of
 the selected hydro family. These reference conversions do not establish equal
 timestep accuracy for every kernel shape.
 
 The `star` test's constant-α schedule (zero during relaxation, 0.05 afterward)
-applies only with `hydro.viscosityEvolution=none`; evolving viscosity follows the
-selected switch. It relaxes its initial polytrope with a velocity damping term outside
+sets `hydro.viscosityEvolution=none` and `viscosityBeta=2*viscosityAlpha`
+for each stage, so the relaxation stage is inviscid. It relaxes its initial polytrope with a velocity damping term outside
 the paper, \(d\mathbf w/d\tau \mathrel{-}= \lambda_{\rm d}\mathbf w\), where
 \(\lambda_{\rm d}\) is the internal `hydro.damping` rate per code time unit. The
 timestep criteria above do not include it, so the explicit kick is stable only while

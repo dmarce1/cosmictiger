@@ -14,13 +14,17 @@ signature does not split a function).
 """
 import csv
 import io
+import os
+import shutil
 import subprocess
 import sys
 
-NCU = '/usr/local/cuda/bin/ncu'
+NCU = os.environ.get('NCU') or shutil.which('ncu')
 
 
 def attribute(report):
+    if not NCU:
+        raise RuntimeError('Nsight Compute was not found; put ncu on PATH or set NCU')
     text = subprocess.run([NCU, '--import', report, '--page', 'source', '--csv',
                            '--print-source', 'sass'], capture_output=True, text=True,
                           check=True).stdout

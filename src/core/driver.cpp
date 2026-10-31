@@ -367,8 +367,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         } while (needsNeighborRefresh);
         // Free supports report their smallest Ω and largest constraint residual;
         // held supports use ζ = 0. Counts include supports repeated by later passes.
-        bool const anyFree =
-            gradHDiagnostics.minimumGradHOmega < std::numeric_limits<float>::max();
+        bool const anyFree = gradHDiagnostics.minimumGradHOmega < std::numeric_limits<float>::max();
         terminal::detailPrint("SPH grad-H: Omega_min = %e residual_max = %e held = %i "
                               "ill-conditioned (Omega < %g) = %i\n",
             anyFree ? gradHDiagnostics.minimumGradHOmega : 1.0f,
@@ -377,8 +376,8 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         if (gradHDiagnostics.illConditionedSupports > 0) {
             PRINT("Warning: %i free SPH supports have grad-H Omega below %g (minimum %e); "
                   "their forces amplify the support-solve residual by 1/Omega\n",
-                gradHDiagnostics.illConditionedSupports,
-                sph_volume::kMinimumWellConditionedOmega, gradHDiagnostics.minimumGradHOmega);
+                gradHDiagnostics.illConditionedSupports, sph_volume::kMinimumWellConditionedOmega,
+                gradHDiagnostics.minimumGradHOmega);
         }
     };
     prepareDensities();
@@ -528,9 +527,17 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     sphParticlesResetSemiactive();
     //	PRINT( "%i\n", max_rung);
 
+    if (!std::isfinite(inverseSoundTimestep) || !std::isfinite(inverseViscosityTimestep) ||
+        !std::isfinite(inverseAccelerationTimestep)) {
+        THROW_ERROR("Nonfinite inverse SPH timestep: sound=%e viscosity=%e acceleration=%e\n",
+            inverseSoundTimestep, inverseViscosityTimestep, inverseAccelerationTimestep);
+    }
     float maximumInverseTimestep = std::max(inverseSoundTimestep, inverseViscosityTimestep);
     maximumInverseTimestep = std::max(maximumInverseTimestep, inverseAccelerationTimestep);
     FILE* fp = fopen(outputPath("timestep.txt").c_str(), "at");
+    if (fp == nullptr) {
+        THROW_ERROR("Unable to write timestep.txt\n");
+    }
     fprintf(fp, "%e %i %e %e %e ", tau, maxRung, inverseSoundTimestep, inverseViscosityTimestep,
         inverseAccelerationTimestep);
     if (maximumInverseTimestep == inverseSoundTimestep) {
@@ -775,19 +782,18 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
 }
 
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
-// Rung-restricted drift is deliberately locality-local. The PMMM stage entry
-// runs only on the root, so dispatch that completed stage to every locality.
-void particleMeshDriftRung(
+// Rung-restricted drift is locality-local; dispatch each completed stage
+// from the root to every locality for either gravity solver.
+void driftRungEverywhere(
     double scale, double dt, double tau0, double tau1, double tauMax, int rung, double drag);
-HPX_PLAIN_ACTION(particleMeshDriftRung, ParticleMeshDriftRungAction);
+HPX_PLAIN_ACTION(driftRungEverywhere, DriftRungEverywhereAction);
 
-void particleMeshDriftRung(
+void driftRungEverywhere(
     double scale, double dt, double tau0, double tau1, double tauMax, int rung, double drag) {
     Vector<hpx::future<void>> futures;
     try {
         for (auto const& child : hpxChildren()) {
-            futures.push_back(hpx::async<ParticleMeshDriftRungAction>(
+            futures.push_back(hpx::async<DriftRungEverywhereAction>(
                 child, scale, dt, tau0, tau1, tauMax, rung, drag));
         }
         drift(scale, dt, tau0, tau1, tauMax, rung, drag);
@@ -800,8 +806,6 @@ void particleMeshDriftRung(
         future.get();
     }
 }
-
-#endif
 
 ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, double adot,
     double tau, double t0, double theta, EnergiesT* energies, int minrung0, bool doPhi,
@@ -1031,31 +1035,21 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             }
             double a = scale;
             if (getOptions().run.scenario == "cosmology") {
-                a = 1.0 / cosmosAinv(adot, scale, dt);
+                double scaleWork = scale;
+                double adotWork = adot;
+                a = 1.0 / cosmosAinv(adotWork, scaleWork, dt);
             }
-            //			PRINT( "%e %e %e\n", a, a0, a1);
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
-            if (meshGravity) {
-                section_timing::measure(section_timing::Section::drift, [&]() {
-                    particleMeshDriftRung(a, dt, tau, tau + dt, getOptions().run.numberOfSteps * t0,
-                        levels[li], drag);
-                });
-            }
-#endif
-#if COSMICTIGER_ENABLE_FMM
-            if (!meshGravity) {
-                section_timing::measure(section_timing::Section::drift, [&]() {
-                    drift(a, dt, tau, tau + dt, getOptions().run.numberOfSteps * t0, levels[li],
-                        drag);
-                });
-            }
-#endif
+            section_timing::measure(section_timing::Section::drift, [&]() {
+                driftRungEverywhere(
+                    a, dt, tau, tau + dt, getOptions().run.numberOfSteps * t0, levels[li], drag);
+            });
             tm.stop();
             // PRINT("Drift took %e\n", tm.read());
         }
 #if COSMICTIGER_ENABLE_FMM
         if (!meshGravity) {
             treeReset();
+            particlesCacheFree();
         }
 #endif
         if (ascending && !top) {
@@ -1254,6 +1248,13 @@ void driver() {
             }
         }
         if (getOptions().run.scenario == "cosmology") {
+            if (getOptions().run.endTime == 0.0) {
+                double const requestedDuration = cosmology::configuredDuration(a0);
+                double const tolerance = 1.0e-10 * std::max(requestedDuration, params.tauMax);
+                if (std::abs(requestedDuration - params.tauMax) > tolerance) {
+                    THROW_ERROR("Checkpoint duration differs from cosmology.endRedshift\n");
+                }
+            }
             auto const expected =
                 cosmology::simulationBackground(params.tauMax)->sample(params.tau).state;
             double const hubble =
@@ -1281,7 +1282,14 @@ void driver() {
         } else
 #endif
         {
-            scenarios::initializeCosmology(params);
+            if (getOptions().initial.gadget4Restart.empty()) {
+                scenarios::initializeCosmology(params);
+            } else {
+                particlesReadGadget4(getOptions().initial.gadget4Restart);
+                params.a = a0;
+                params.adot = cosmosDadt(a0);
+                params.tauMax = cosmology::configuredDuration(a0);
+            }
         }
         profile::checkForInterrupt();
         if (getOptions().run.endTime > 0.0) {
@@ -1292,7 +1300,7 @@ void driver() {
         }
         params.step = 0;
         params.flops = 0;
-        params.bucketSize = 80;
+        params.bucketSize = getOptions().compute.bucketSize;
         terminal::detailPrint("TAU_MAX = %e\n", params.tauMax);
         params.tau = 0.0;
         params.maxRung = 0;
@@ -1307,33 +1315,6 @@ void driver() {
         auto tmp1 = particlesSumEnergies();
         params.energies.tckin = tmp1.kin;
         //		write_checkpoint(params);
-    }
-    auto const gadgetFile = getOptions().initial.gadget4Restart;
-    if (gadgetFile != "") {
-        auto header = particlesReadGadget4(gadgetFile);
-        auto const numberOfParticles = header.npartTotal[1];
-        auto opts = getOptions();
-        opts.units.massG = header.mass[1] * 1e10 / opts.cosmology.hubble;
-        opts.units.massG *= constants::kM0;
-        opts.units.lengthCm =
-            pow(opts.units.massG * (8.0 * std::numbers::pi) * numberOfParticles * constants::kG /
-                    (3.0 * opts.cosmology.omegaM * sqr(constants::kH0 * opts.cosmology.hubble)),
-                1.0 / 3.0);
-        opts.units.timeSeconds = opts.units.lengthCm / constants::kC;
-        double hValue = constants::kH0 * opts.units.timeSeconds;
-        opts.gravity.gm = opts.cosmology.omegaM * 3.0 * sqr(hValue * opts.cosmology.hubble) /
-            (8.0 * std::numbers::pi) / numberOfParticles;
-        opts.cosmology.startRedshift = header.redshift;
-        setOptions(opts);
-        params.a = 1.0 / (header.redshift + 1.0);
-        params.adot = cosmosDadt(params.a);
-        params.tauMax = cosmology::configuredDuration(params.a);
-        params.years = cosmosTime(1e-6 * params.a, params.a) * getOptions().units.timeSeconds /
-            constants::kSpyr;
-        terminal::detailPrint("box_size = %e Mpc\n", opts.units.lengthCm / constants::kMpcToCm);
-        terminal::detailPrint("code_to_g = %e\n", opts.units.massG);
-        terminal::detailPrint("code_to_cm = %e\n", opts.units.lengthCm);
-        terminal::detailPrint("code_to_s = %e\n", opts.units.timeSeconds);
     }
 #if COSMICTIGER_WITH_GRAVITY
     auto const openingSchedule =
@@ -1409,6 +1390,9 @@ void driver() {
             Timer tm;
             terminal::detailPrint("Flushing light cone\n");
             tm.start();
+            // Assign the buffered shell using its current inner radius, including
+            // the final flush where the remaining lightcone radius is zero.
+            lcInit(tau, tauMax);
             lcBuffer2homes();
             tm.stop();
             terminal::detailPrint(
@@ -1483,8 +1467,11 @@ void driver() {
     Timer evolutionTime;
     evolutionTime.start();
     totalTime.start();
+    double const coarseInterval = tauMax / getOptions().run.numberOfSteps;
+    int lastOutputStep = driverOutputStep(tau, coarseInterval) -
+        (driverFinalOutputStep(tau, coarseInterval) == driverOutputStep(tau, coarseInterval));
     for (;; step += global ? 0 : 1) {
-        if (cosmology::endTimeReached(tau, tauMax)) {
+        if (cosmology::endTimeReached(tau, tauMax) || thisIter >= getOptions().run.maxIterations) {
             break;
         }
         //		PRINT("STEP  = %i\n", step);
@@ -1520,9 +1507,14 @@ void driver() {
             tmr.start();
             int minrung = global ? 0 : minRung(itime);
             bool fullEval = minrung == 0;
-            if (fullEval) {
+            int const outputStep = driverOutputStep(tau, t0);
+            bool const outputDue = fullEval && (!global || outputStep > lastOutputStep);
+            double const globalStepCap =
+                global ? std::min(tauMax - tau, (outputStep + 1) * t0 - tau) : 0.0;
+            if (outputDue) {
+                lastOutputStep = outputStep;
                 section_timing::ScopedSection outputTimer(section_timing::Section::snapshotOutput);
-                int const number = step;
+                int const number = outputStep;
                 if (getOptions().analysis.tracers) {
                     outputTracers(number);
                 }
@@ -1530,7 +1522,7 @@ void driver() {
                     outputSlice(number, years);
                 }
                 if (fullEval) {
-                    viewOutputViews(global ? step : (tau + 1e-6 * t0) / t0, a, false, years);
+                    viewOutputViews(outputStep, a, false, years);
                 }
                 if (getOptions().analysis.views) {
                     Timer tm;
@@ -1562,21 +1554,10 @@ void driver() {
             // Global FMM schedules advance after drift; PMMM retains its angle
             // derived from the ghost width throughout evolution.
             double const theta = opts.gravity.openingAngle;
-            auto const ts = 100 * tau / t0 / getOptions().run.numberOfSteps;
-            if (ts <= 10.0) {
-                bucketSize = 112;
-            } else if (ts < 55.0) {
-                bucketSize = 112 + (ts - 10.0) / 45.0 * (184 - 112);
-            } else {
-                bucketSize = 184;
-            }
-            // bucket_size = 128;
-            opts.compute.bucketSize = bucketSize;
-            opts.gravity.openingAngle = theta;
-            setOptions(opts);
+            bucketSize = opts.compute.bucketSize;
             ForceStepResult tmp;
             bool nocrop = false;
-            if (int(tau / t0) % 8 == 0 && fullEval) {
+            if (step % 8 == 0 && fullEval) {
                 nocrop = true;
                 minrung0 = std::max(minrung0 - 1, getOptions().run.minRung);
             }
@@ -1584,15 +1565,15 @@ void driver() {
             int om = thisMinrung;
             //				PRINT("MINRUNG0 = %i\n", minrung0);
             //			PRINT( "Doing kick\n");
-            if (fullEval) {
+            if (outputDue) {
                 //				kick_workspace::clear_buffers();
                 //				tree_destroy(true);
                 if (getOptions().analysis.power) {
-                    doPowerSpectrum(step, a, adot);
+                    doPowerSpectrum(outputStep, a, adot);
                 }
 #if COSMICTIGER_WITH_GRAVITY && !defined(CHECK_MUTUAL_SORT)
                 if (getOptions().analysis.groups) {
-                    doGroups(step, a, years);
+                    doGroups(outputStep, a, years);
                 }
 #endif
             }
@@ -1602,11 +1583,10 @@ void driver() {
             resetFlops();
             int const errorInterval = getOptions().gravity.errorInterval;
             int const gravityErrorStep =
-                itime == 0 && errorInterval > 0 && step % errorInterval == 0 ? step : -1;
+                outputDue && errorInterval > 0 && outputStep % errorInterval == 0 ? outputStep : -1;
             if (!getOptions().run.hierarchicalGravity || !getOptions().gravity.enabled) {
                 tmp = advanceForces(minrung, a, a * adot, tau, t0, theta, tau == 0.0, fullEval,
-                    energies, gravityErrorStep, false, params.globalTimestep,
-                    global ? std::min(t0, tauMax - tau) : 0.0);
+                    energies, gravityErrorStep, false, params.globalTimestep, globalStepCap);
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
             } else {
                 tmp = kickStepHierarchical(om, maxRung, a, adot, tau, t0, theta, &energies,
@@ -1663,7 +1643,7 @@ void driver() {
                 (a - a0) *
                     ((getOptions().chemistry.enabled || getOptions().starFormation.enabled) ?
                             -energies.therm + 3.0 * synchronizedChemistryPressure :
-                            energies.therm);
+                            (3.0 * getOptions().hydro.gamma - 4.0) * energies.therm);
             double const dyears =
                 physicalInterval * getOptions().units.timeSeconds / constants::kSpyr;
             auto const z0 = 1.0 / a0 - 1.0;
@@ -1717,11 +1697,11 @@ void driver() {
             }
 #endif
             direct += close;
-            if (fullEval) {
+            if (outputDue) {
                 fprintf(textfp,
                     "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s\n",
                     "runtime", "i", "z", "a", "adot", "timestep", "years", "mnr", "mxr", "bs",
-                    "Tflops", "time", "close", "direct");
+                    "Tflops", "time", "GPU close", "GPU direct");
             }
             stepTm.stop();
             TimeType const nextIntegerTime = global ? 0 : inc(itime, maxRung);
@@ -1777,7 +1757,7 @@ void driver() {
             if (cosmology::endTimeReached(tau, tauMax)) {
                 PRINT("\n  Finished: reached the requested end time or redshift.\n");
                 break;
-            } else if (thisIter > getOptions().run.maxIterations) {
+            } else if (thisIter >= getOptions().run.maxIterations) {
                 PRINT("\n  Stopped at the iteration limit.\n");
                 break;
             }
@@ -1794,11 +1774,10 @@ void driver() {
 
         } while (itime != 0);
         if (interrupted || cosmology::endTimeReached(tau, tauMax) ||
-            thisIter > getOptions().run.maxIterations) {
+            thisIter >= getOptions().run.maxIterations) {
             break;
 #if COSMICTIGER_WITH_GRAVITY
         } else if (getOptions().run.scenario == "glass" && std::abs(glassError) < 1.0e-5) {
-            scenarios::saveGlass();
             break;
 #endif
         }
@@ -1808,7 +1787,7 @@ void driver() {
         PRINT("\n  Interrupted: saving the completed simulation state before shutdown.\n");
     }
     section_timing::measure(section_timing::Section::snapshotOutput,
-        [&]() { viewOutputViews(params.step + 1, a, true, years); });
+        [&]() { viewOutputViews(driverFinalOutputStep(tau, coarseInterval), a, true, years); });
 #if COSMICTIGER_WITH_GRAVITY
     if (getOptions().run.scenario == "glass") {
         scenarios::saveGlass();
