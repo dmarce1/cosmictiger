@@ -378,12 +378,6 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
             anyFree ? gradHDiagnostics.minimumGradHOmega : 1.0f,
             gradHDiagnostics.maximumSupportResidual, gradHDiagnostics.heldSupports,
             sph_volume::kMinimumWellConditionedOmega, gradHDiagnostics.illConditionedSupports);
-        if (gradHDiagnostics.illConditionedSupports > 0) {
-            PRINT("Warning: %i free SPH supports have grad-H Omega below %g (minimum %e); "
-                  "their forces amplify the support-solve residual by 1/Omega\n",
-                gradHDiagnostics.illConditionedSupports, sph_volume::kMinimumWellConditionedOmega,
-                gradHDiagnostics.minimumGradHOmega);
-        }
     };
     prepareDensities();
     Timer timer;

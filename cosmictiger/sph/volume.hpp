@@ -47,8 +47,9 @@
 
 namespace sph_volume {
 
-// Corrections with Omega below this are reported as ill-conditioned: the
-// support-solve residual and the summation error are amplified by 1/Omega.
+// Corrections with Omega below this are counted as ill-conditioned: Omega is the
+// normalized Jacobian of the constraint H^3 n = constant, so a relative residual
+// left by the support solve is worth about residual/Omega in density.
 inline constexpr float kMinimumWellConditionedOmega = 0.1f;
 
 // dW/dH = H^-4 [-3 w(q) - q w'(q)] for W(r, H) = H^-3 w(r/H).
