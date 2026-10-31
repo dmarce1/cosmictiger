@@ -360,15 +360,17 @@ void initializePmmmFixture(int fixture, int ownership) {
         for (int dim = 0; dim < kDimensions; ++dim) {
             double coordinate = 0.0;
             if (fixture == 8) {
-                // Centered, distinct sources eliminate multipole truncation
-                // from the stage test while retaining near and far pairs. The
-                // selected three of seven particles reduce the base side 8 to 7.
-                constexpr std::array<std::array<int, kDimensions>, 7> kStageCells{
-                    {{0, 1, 2}, {1, 1, 2}, {3, 1, 2}, {3, 2, 2}, {6, 1, 2}, {5, 6, 4}, {0, 6, 6}}};
-                coordinate = (kStageCells[id][dim] + 0.5) / 7.0;
+                // Centered, distinct sources on the side-16 stage mesh eliminate
+                // multipole truncation from the stage test while retaining near
+                // and far pairs at width 2; every nonempty stage of this
+                // seven-particle fixture selects the full side 16.
+                constexpr std::array<std::array<int, kDimensions>, 7> kStageCells{{{0, 2, 4},
+                    {1, 2, 4}, {6, 2, 4}, {6, 3, 4}, {15, 2, 4}, {10, 12, 8}, {0, 12, 12}}};
+                coordinate = (kStageCells[id][dim] + 0.5) / 16.0;
             } else if (fixture == 7) {
-                // Every rank owns a fragment of the same mesh cell. Distinct
-                // positions avoid softened pairs in the independent Ewald sum.
+                // Every particle shares one mesh cell, which coarse-aligned
+                // domains must keep on a single rank. Distinct positions avoid
+                // softened pairs in the independent Ewald sum.
                 int const multiplier = dim == kXDimension ? 1 : dim == kYDimension ? 3 : 5;
                 double const offset = 0.2 + 0.1 * ((id * multiplier) % 7);
                 coordinate = (1.0 + offset) / getOptions().gravity.meshSize;
@@ -1131,7 +1133,10 @@ void checkPmmmStreamedStages() {
     auto options = saved;
     // Exercise the hierarchical stage operator directly in either integrator
     // build, without changing the application's compiled evolution policy.
-    options.gravity.meshSize = 8;
+    // Three of seven active particles exceed one eighth of the population, so
+    // the stage selects the full side 16 rather than the coarse side 8.
+    options.gravity.meshSize = 16;
+    options.gravity.pmmmCoarseMeshSize = 8;
     options.gravity.pmmmNearWidth = 2;
     options.gravity.fmmOrder = fmmOrder();
     options.gravity.pmmmOrder = options.gravity.fmmOrder;
@@ -1184,9 +1189,9 @@ void checkPmmmStreamedStages() {
             pmmmKick(parameters);
             auto const after = gatherPmmmKickSamples();
             auto const diagnostics = pmmmDiagnostics();
-            requirePmmm(diagnostics.meshSize == 7 && diagnostics.activeParticles == 3 &&
+            requirePmmm(diagnostics.meshSize == 16 && diagnostics.activeParticles == 3 &&
                     diagnostics.totalParticles == 7,
-                "streamed stage did not scale the mesh using global active and owned counts");
+                "streamed stage did not select the full mesh from global active and owned counts");
             requirePmmm(diagnostics.storedAccelerationParticles == 0 &&
                     diagnostics.storedPotentialParticles == 0,
                 "streamed stage allocated retained full-particle result arrays");
@@ -1230,7 +1235,7 @@ void checkPmmmStreamedStages() {
             pmmmKick(parameters);
             auto const descending = gatherPmmmKickSamples();
             auto const descendingDiagnostics = pmmmDiagnostics();
-            requirePmmm(descendingDiagnostics.meshSize == 7 &&
+            requirePmmm(descendingDiagnostics.meshSize == 16 &&
                     descendingDiagnostics.activeParticles == 3 &&
                     descendingDiagnostics.totalParticles == 7 &&
                     descendingDiagnostics.planBuilds == diagnostics.planBuilds &&
@@ -1284,7 +1289,12 @@ void checkPmmmStreamedStages() {
 void checkPmmmStageMeshes() {
     auto const saved = getOptions();
     auto options = saved;
-    options.gravity.meshSize = 8;
+    // Stages select the smallest power of two between the coarse side 8 and
+    // the base side 16 whose volume covers the active fraction: side 8 needs
+    // at most one eighth of the population active, which this seven-particle
+    // fixture reaches only with no active particles.
+    options.gravity.meshSize = 16;
+    options.gravity.pmmmCoarseMeshSize = 8;
     options.gravity.pmmmNearWidth = 2;
     options.gravity.fmmOrder = fmmOrder();
     options.gravity.pmmmOrder = options.gravity.fmmOrder;
@@ -1304,7 +1314,7 @@ void checkPmmmStageMeshes() {
     auto const fullReference = gatherPmmmSamples();
     auto const initial = pmmmDiagnostics();
     requirePmmm(
-        initial.meshSize == 8 && initial.activeParticles == 7 && initial.totalParticles == 7,
+        initial.meshSize == 16 && initial.activeParticles == 7 && initial.totalParticles == 7,
         "all-particle solve did not retain the configured base mesh and actual owned count");
 
     KickParameters parameters{};
@@ -1334,8 +1344,9 @@ void checkPmmmStageMeshes() {
         requirePmmm(diagnostics.meshSize == expectedMesh &&
                 diagnostics.activeParticles == expectedActive && diagnostics.totalParticles == 7,
             "hierarchical mesh used a local or configured initial particle count");
-        requirePmmm(getOptions().gravity.meshSize == 8,
-            "hierarchical mesh selection changed the configured base mesh");
+        requirePmmm(
+            getOptions().gravity.meshSize == 16 && getOptions().gravity.pmmmCoarseMeshSize == 8,
+            "hierarchical mesh selection changed the configured base or coarse mesh");
         double selectedMass = 0.0;
         for (auto const& sample : before) {
             if (sample.rung >= minRung) {
@@ -1358,35 +1369,42 @@ void checkPmmmStageMeshes() {
         }
         return diagnostics;
     };
-    auto const full = stage(0, 7, 8);
+    auto const full = stage(0, 7, 16);
     requirePmmm(full.planBuilds == initial.planBuilds && full.greenBuilds == initial.greenBuilds,
         "full hierarchical stage rebuilt the existing all-particle mesh");
-    auto const partial = stage(3, 3, 7);
+    // Three and one of seven active particles both exceed one eighth of the
+    // population, so these partial stages reuse the full side-16 mesh.
+    auto const partial = stage(3, 3, 16);
+    requirePmmm(partial.planBuilds == full.planBuilds && partial.greenBuilds == full.greenBuilds,
+        "partial stage above the coarse fraction rebuilt the retained full mesh");
+    auto const sparse = stage(4, 1, 16);
     requirePmmm(
-        partial.planBuilds == full.planBuilds + 1 && partial.greenBuilds == full.greenBuilds + 1,
-        "first reduced mesh did not build exactly one FFT and Green cache");
-    auto const grown = stage(0, 7, 8);
-    requirePmmm(grown.planBuilds == partial.planBuilds && grown.greenBuilds == partial.greenBuilds,
+        sparse.planBuilds == partial.planBuilds && sparse.greenBuilds == partial.greenBuilds,
+        "single-particle stage above the coarse fraction rebuilt the retained full mesh");
+    auto const empty = stage(5, 0, 8);
+    requirePmmm(
+        empty.planBuilds == sparse.planBuilds + 1 && empty.greenBuilds == sparse.greenBuilds + 1,
+        "empty stage did not build exactly one coarse FFT and Green cache");
+    auto const emptyAgain = stage(5, 0, 8);
+    requirePmmm(
+        emptyAgain.planBuilds == empty.planBuilds && emptyAgain.greenBuilds == empty.greenBuilds,
+        "repeated empty stage rebuilt its retained coarse mesh");
+    auto const grown = stage(0, 7, 16);
+    requirePmmm(
+        grown.planBuilds == emptyAgain.planBuilds && grown.greenBuilds == emptyAgain.greenBuilds,
         "return to the base mesh rebuilt a retained FFT or Green cache");
-    auto const minimum = stage(4, 1, 5);
+    auto const coarseAgain = stage(5, 0, 8);
     requirePmmm(
-        minimum.planBuilds == grown.planBuilds + 1 && minimum.greenBuilds == grown.greenBuilds + 1,
-        "minimum-width mesh did not build exactly one FFT and Green cache");
-    auto const empty = stage(5, 0, 5);
-    requirePmmm(empty.planBuilds == minimum.planBuilds && empty.greenBuilds == minimum.greenBuilds,
-        "empty stage rebuilt its retained minimum-width mesh");
-    auto const reducedAgain = stage(3, 3, 7);
-    requirePmmm(reducedAgain.planBuilds == empty.planBuilds &&
-            reducedAgain.greenBuilds == empty.greenBuilds,
-        "return to a retained reduced mesh rebuilt the FFT or Green cache");
+        coarseAgain.planBuilds == grown.planBuilds && coarseAgain.greenBuilds == grown.greenBuilds,
+        "return to the retained coarse mesh rebuilt the FFT or Green cache");
 
     // The retained rung-selected range must not affect an ordinary force solve.
     pmmmSolve(true);
     comparePmmmSamples(fullReference, gatherPmmmSamples());
     auto const restored = pmmmDiagnostics();
-    requirePmmm(restored.meshSize == 8 && restored.activeParticles == 7 &&
-            restored.totalParticles == 7 && restored.planBuilds == reducedAgain.planBuilds &&
-            restored.greenBuilds == reducedAgain.greenBuilds,
+    requirePmmm(restored.meshSize == 16 && restored.activeParticles == 7 &&
+            restored.totalParticles == 7 && restored.planBuilds == coarseAgain.planBuilds &&
+            restored.greenBuilds == coarseAgain.greenBuilds,
         "ordinary force solve did not restore the cached full-particle mesh");
     particlesSortByRung(0);
     preparePmmmFixture(2);
@@ -1394,74 +1412,43 @@ void checkPmmmStageMeshes() {
     parameters.minRung = 0;
     pmmmKick(parameters);
     auto const noParticles = pmmmDiagnostics();
-    requirePmmm(noParticles.meshSize == 5 && noParticles.activeParticles == 0 &&
+    requirePmmm(noParticles.meshSize == 8 && noParticles.activeParticles == 0 &&
             noParticles.totalParticles == 0 && noParticles.sourceMass == 0.0 &&
-            noParticles.depositedMass == 0.0,
-        "empty population did not select the valid minimum-width mesh");
+            noParticles.depositedMass == 0.0 && noParticles.planBuilds == restored.planBuilds &&
+            noParticles.greenBuilds == restored.greenBuilds,
+        "empty population did not select the retained coarse mesh");
+    // The base mesh was inactive at destruction; neither it nor the active
+    // coarse mesh may survive in the pool.
     pmmmDestroy();
-
-    // Two particles on each rung produce four distinct meshes whose combined
-    // FFT workspaces exceed twice the base allocation, including slab padding.
-    options.gravity.meshSize = 12;
-    setOptions(options);
-    preparePmmmFixture(4);
-    distributePmmmFixture(4);
     pmmmSolve(true);
-    auto const evictionReference = gatherPmmmSamples();
-    auto const evictionInitial = pmmmDiagnostics();
-    double const byteBudget = 2 * pmmm::detail::cache.workspaceBytes;
-    double distinctWorkspaceBytes = pmmm::detail::cache.workspaceBytes;
-    constexpr std::array<int, 3> kReducedSizes{11, 10, 8};
-    for (int minRung = 2; minRung <= 4; ++minRung) {
-        particlesSortByRung(0);
-        particlesSortByRung(minRung);
-        parameters.minRung = minRung;
-        pmmmKick(parameters);
-        auto const current = pmmmDiagnostics();
-        requirePmmm(current.meshSize == kReducedSizes[minRung - 2] &&
-                current.activeParticles == uint64_t(2 * (5 - minRung)) &&
-                current.totalParticles == 8 &&
-                current.planBuilds == evictionInitial.planBuilds + minRung - 1 &&
-                current.greenBuilds == evictionInitial.greenBuilds + minRung - 1,
-            "cache-pressure stages did not build their distinct reduced meshes");
-        distinctWorkspaceBytes += pmmm::detail::cache.workspaceBytes;
-    }
-    requirePmmm(distinctWorkspaceBytes > byteBudget,
-        "cache-pressure fixture did not exceed the retained FFT workspace budget");
-    auto const pressured = pmmmDiagnostics();
-    pmmmKick(parameters);
-    auto const recent = pmmmDiagnostics();
-    requirePmmm(
-        recent.planBuilds == pressured.planBuilds && recent.greenBuilds == pressured.greenBuilds,
-        "cache pressure discarded the most recently used mesh");
-    pmmmSolve(true);
-    comparePmmmSamples(evictionReference, gatherPmmmSamples());
-    auto const rebuilt = pmmmDiagnostics();
-    requirePmmm(rebuilt.meshSize == 12 && rebuilt.activeParticles == 8 &&
-            rebuilt.totalParticles == 8 && rebuilt.planBuilds == recent.planBuilds + 1 &&
-            rebuilt.greenBuilds == recent.greenBuilds + 1,
-        "cache pressure did not evict and rebuild the least recently used base mesh");
-    pmmmDestroy();
-    // Size 8 was inactive at destruction; it must not survive in the pool.
-    particlesSortByRung(0);
-    particlesSortByRung(parameters.minRung);
-    pmmmKick(parameters);
     auto const afterDestroy = pmmmDiagnostics();
-    requirePmmm(afterDestroy.meshSize == 8 && afterDestroy.planBuilds == rebuilt.planBuilds + 1 &&
-            afterDestroy.greenBuilds == rebuilt.greenBuilds + 1,
+    requirePmmm(afterDestroy.meshSize == 16 && afterDestroy.activeParticles == 0 &&
+            afterDestroy.totalParticles == 0 &&
+            afterDestroy.planBuilds == noParticles.planBuilds + 1 &&
+            afterDestroy.greenBuilds == noParticles.greenBuilds + 1,
         "explicit destruction retained an inactive FFT or Green cache");
+    pmmmKick(parameters);
+    auto const coarseRebuilt = pmmmDiagnostics();
+    requirePmmm(coarseRebuilt.meshSize == 8 &&
+            coarseRebuilt.planBuilds == afterDestroy.planBuilds + 1 &&
+            coarseRebuilt.greenBuilds == afterDestroy.greenBuilds + 1,
+        "explicit destruction retained the active coarse FFT or Green cache");
     particlesSortByRung(0);
     pmmmDestroy();
     setOptions(saved);
-    PRINT("PMMM hierarchical mesh scaling, global counts, minimum/empty stages, and cache "
-          "reuse/eviction checks passed\n");
+    PRINT("PMMM hierarchical mesh selection, global counts, coarse/empty stages, and cache "
+          "reuse/destruction checks passed\n");
 }
 
-void checkPmmmPrimeFactorMeshes() {
+void checkPmmmCoarseMeshes() {
     auto const saved = getOptions();
     auto options = saved;
-    options.gravity.meshSize = 8;
-    options.gravity.pmmmMaxPrimeFactor = 0;
+    // The coarse mesh bounds every hierarchical stage from below. With the
+    // explicit coarse side 8 under the base side 16, an empty stage selects 8
+    // and every nonempty stage of this seven-particle fixture selects 16; with
+    // the coarse side equal to the base, every stage uses the one base mesh.
+    options.gravity.meshSize = 16;
+    options.gravity.pmmmCoarseMeshSize = 8;
     options.gravity.pmmmNearWidth = 2;
     options.gravity.fmmOrder = fmmOrder();
     options.gravity.pmmmOrder = options.gravity.fmmOrder;
@@ -1475,16 +1462,10 @@ void checkPmmmPrimeFactorMeshes() {
     distributePmmmFixture(8);
     pmmmSolve(true);
     auto const fullReference = gatherPmmmSamples();
-    pmmmDestroy();
-    options.gravity.meshSize = 7;
-    options.gravity.pmmmMaxPrimeFactor = 5;
-    setOptions(options);
-    pmmmSolve(true);
-    comparePmmmSamples(fullReference, gatherPmmmSamples());
     auto const initial = pmmmDiagnostics();
     requirePmmm(
-        initial.meshSize == 8 && initial.activeParticles == 7 && initial.totalParticles == 7,
-        "finite prime-factor limit did not round the full requested side 7 upward to 8");
+        initial.meshSize == 16 && initial.activeParticles == 7 && initial.totalParticles == 7,
+        "full solve under an explicit coarse mesh did not use the configured base mesh");
 
     KickParameters parameters{};
     parameters.htime = true;
@@ -1512,62 +1493,75 @@ void checkPmmmPrimeFactorMeshes() {
         auto const diagnostics = pmmmDiagnostics();
         requirePmmm(diagnostics.meshSize == expectedMesh &&
                 diagnostics.activeParticles == expectedActive && diagnostics.totalParticles == 7,
-            "hierarchical stage did not select the expected prime-limited FFT mesh");
+            "hierarchical stage did not select the expected coarse-bounded FFT mesh");
         requirePmmm(getOptions().gravity.meshSize == options.gravity.meshSize &&
-                getOptions().gravity.pmmmMaxPrimeFactor == options.gravity.pmmmMaxPrimeFactor,
-            "prime-limited mesh selection changed the configured mesh or prime-factor limit");
+                getOptions().gravity.pmmmCoarseMeshSize == options.gravity.pmmmCoarseMeshSize,
+            "coarse-bounded mesh selection changed the configured base or coarse mesh");
         return diagnostics;
     };
-    auto const partial = stage(3, 3, 6);
-    requirePmmm(partial.planBuilds == initial.planBuilds + 1 &&
-            partial.greenBuilds == initial.greenBuilds + 1,
-        "first prime-limited partial stage did not build exactly one reduced mesh cache");
-    auto const repeatedPartial = stage(3, 3, 6);
-    requirePmmm(repeatedPartial.planBuilds == partial.planBuilds &&
-            repeatedPartial.greenBuilds == partial.greenBuilds,
-        "repeated prime-limited partial stage rebuilt its effective mesh");
-    auto const minimum = stage(4, 1, 5);
-    requirePmmm(minimum.planBuilds == partial.planBuilds + 1 &&
-            minimum.greenBuilds == partial.greenBuilds + 1,
-        "first prime-limited reduced mesh did not build exactly one FFT and Green cache");
-    auto const empty = stage(5, 0, 5);
-    auto const restored = stage(0, 7, 8);
-    requirePmmm(empty.planBuilds == minimum.planBuilds &&
-            empty.greenBuilds == minimum.greenBuilds && restored.planBuilds == empty.planBuilds &&
-            restored.greenBuilds == empty.greenBuilds,
-        "prime-limited empty/full stages rebuilt retained effective meshes");
+    auto const full = stage(0, 7, 16);
+    requirePmmm(full.planBuilds == initial.planBuilds && full.greenBuilds == initial.greenBuilds,
+        "full stage under an explicit coarse mesh rebuilt the all-particle mesh");
+    // One of seven active particles exceeds one eighth of the population, so
+    // the sparse stage still selects the base side 16 and reuses its cache.
+    auto const sparse = stage(4, 1, 16);
+    requirePmmm(sparse.planBuilds == full.planBuilds && sparse.greenBuilds == full.greenBuilds,
+        "sparse stage above the coarse fraction rebuilt the retained base mesh");
+    auto const empty = stage(5, 0, 8);
+    requirePmmm(
+        empty.planBuilds == sparse.planBuilds + 1 && empty.greenBuilds == sparse.greenBuilds + 1,
+        "first coarse stage did not build exactly one FFT and Green cache");
+    auto const repeatedEmpty = stage(5, 0, 8);
+    auto const restored = stage(0, 7, 16);
+    requirePmmm(repeatedEmpty.planBuilds == empty.planBuilds &&
+            repeatedEmpty.greenBuilds == empty.greenBuilds &&
+            restored.planBuilds == empty.planBuilds && restored.greenBuilds == empty.greenBuilds,
+        "coarse/full stages rebuilt retained meshes");
     pmmmSolve(true);
     comparePmmmSamples(fullReference, gatherPmmmSamples());
+    requirePmmm(pmmmDiagnostics().meshSize == 16 &&
+            pmmmDiagnostics().planBuilds == restored.planBuilds &&
+            pmmmDiagnostics().greenBuilds == restored.greenBuilds,
+        "ordinary force solve after coarse stages did not reuse the base mesh");
+    // The coarse mesh is part of the cache identity; destroy before changing it.
     pmmmDestroy();
 
-    options.gravity.meshSize = 9;
-    options.gravity.pmmmMaxPrimeFactor = 3;
+    options.gravity.pmmmCoarseMeshSize = 16;
     setOptions(options);
-    stage(0, 7, 9);
-    auto const roundedMinimum = stage(5, 0, 6);
-    auto const sparse = stage(4, 1, 6);
-    requirePmmm(sparse.planBuilds == roundedMinimum.planBuilds &&
-            sparse.greenBuilds == roundedMinimum.greenBuilds,
-        "nonempty stage did not reuse the prime-rounded minimum mesh");
+    auto const singleFull = stage(0, 7, 16);
+    requirePmmm(singleFull.planBuilds == restored.planBuilds + 1 &&
+            singleFull.greenBuilds == restored.greenBuilds + 1,
+        "full stage after destruction did not rebuild exactly one base mesh cache");
+    auto const singleSparse = stage(4, 1, 16);
+    auto const singleEmpty = stage(5, 0, 16);
+    requirePmmm(singleSparse.planBuilds == singleFull.planBuilds &&
+            singleSparse.greenBuilds == singleFull.greenBuilds &&
+            singleEmpty.planBuilds == singleFull.planBuilds &&
+            singleEmpty.greenBuilds == singleFull.greenBuilds,
+        "coarse mesh equal to the base built a second FFT or Green cache");
+    pmmmSolve(true);
+    comparePmmmSamples(fullReference, gatherPmmmSamples());
+    requirePmmm(pmmmDiagnostics().planBuilds == singleFull.planBuilds &&
+            pmmmDiagnostics().greenBuilds == singleFull.greenBuilds,
+        "ordinary force solve with a base-sized coarse mesh rebuilt its cache");
     pmmmDestroy();
 
-    options.gravity.meshSize = 9;
-    options.gravity.pmmmMaxPrimeFactor = 2;
+    // The default coarse mesh (zero) resolves to one eighth of the base side,
+    // never below the smallest side for the near width: 8 for base 16, width 2.
+    options.gravity.pmmmCoarseMeshSize = 0;
     setOptions(options);
-    auto const powerOfTwoBase = stage(0, 7, 16);
-    auto const powerOfTwoPartial = stage(3, 3, 8);
-    requirePmmm(powerOfTwoPartial.planBuilds == powerOfTwoBase.planBuilds + 1 &&
-            powerOfTwoPartial.greenBuilds == powerOfTwoBase.greenBuilds + 1,
-        "power-of-two stage scaled the rounded full mesh instead of the requested base");
-    auto const powerOfTwoMinimum = stage(5, 0, 8);
-    requirePmmm(powerOfTwoMinimum.planBuilds == powerOfTwoPartial.planBuilds &&
-            powerOfTwoMinimum.greenBuilds == powerOfTwoPartial.greenBuilds,
-        "power-of-two minimum did not reuse the effective partial mesh");
+    auto const defaultEmpty = stage(5, 0, 8);
+    auto const defaultFull = stage(0, 7, 16);
+    requirePmmm(defaultFull.planBuilds == defaultEmpty.planBuilds + 1 &&
+            defaultFull.greenBuilds == defaultEmpty.greenBuilds + 1,
+        "default coarse mesh did not resolve to one eighth of the base side");
+    pmmmSolve(true);
+    comparePmmmSamples(fullReference, gatherPmmmSamples());
     particlesSortByRung(0);
     pmmmDestroy();
     setOptions(saved);
-    PRINT("PMMM prime-limited full/stage meshes, rounded near minimum, and cache reuse checks "
-          "passed\n");
+    PRINT("PMMM explicit/default coarse mesh bounds, base-sized coarse stages, and cache reuse "
+          "checks passed\n");
 }
 
 void checkPmmmCellOverlap() {
@@ -1663,7 +1657,7 @@ void checkPmmmFmmNear() {
             future.get();
         }
     }
-    for (int side : {3, 5, 8}) {
+    for (int side : {4, 8, 16}) {
         pmmmDestroy();
         options.compute.cuda = saved.compute.cuda;
         options.gravity.meshSize = side;
@@ -1684,13 +1678,19 @@ void checkPmmmFmmNear() {
         auto const cache = pmmmDiagnostics();
         requirePmmm(direct.size() == 320, "dense near fixture lost particles");
         if (hpxSize() > 1) {
-            bool splitCell = false;
-            for (auto const& first : direct) {
-                for (auto const& second : direct) {
-                    splitCell |= first.cellKey == second.cellKey && first.rank != second.rank;
-                }
+            // Coarse-aligned domains never split a mesh cell across localities,
+            // yet the dense cells must still land on more than one rank so the
+            // near field exchanges ghost sources below.
+            std::map<uint64_t, int> cellRanks;
+            std::map<int, size_t> rankPopulations;
+            for (auto const& sample : direct) {
+                auto const inserted = cellRanks.emplace(sample.cellKey, sample.rank);
+                requirePmmm(inserted.first->second == sample.rank,
+                    "coarse-aligned domains split a dense mesh cell across localities");
+                ++rankPopulations[sample.rank];
             }
-            requirePmmm(splitCell, "dense fixture did not split a cell across valid domains");
+            requirePmmm(rankPopulations.size() > 1,
+                "dense fixture did not distribute its occupied cells across localities");
         }
         // Clustered forces can strongly cancel. These angles test
         // a useful multipole approximation and convergence toward direct PP.
@@ -1768,9 +1768,9 @@ void checkPmmmFmmNear() {
 
 void pmmmTest() {
     auto options = getOptions();
-    // Legacy force oracles intentionally cover arbitrary odd and prime mesh
-    // lengths; prime-limited behavior has its own full/stage regression below.
-    options.gravity.pmmmMaxPrimeFactor = 0;
+    // Every PMMM mesh side is a power of two; the legacy force oracles cover
+    // sides 8 and 16 at every near width, and the default coarse mesh (zero).
+    options.gravity.pmmmCoarseMeshSize = 0;
     // Allocate type/category storage before the first fixture. Particle arrays
     // keep a shared capacity and cannot gain the optional hydro arrays after
     // allocation. This isolated force test performs no SPH evolution.
@@ -1795,8 +1795,10 @@ void pmmmTest() {
         detail::checkPmmmNearBatches();
     }
 #endif
+    // Each base side is at least the smallest side for its near width:
+    // 4 for width 1, 8 for widths 2 and 3, 16 for width 4.
     std::array<std::array<int, 2>, 5> const configurations{
-        {{5, 2}, {8, 1}, {8, 2}, {8, 3}, {10, 4}}};
+        {{8, 2}, {8, 1}, {16, 2}, {8, 3}, {16, 4}}};
     for (auto const configuration : configurations) {
         pmmmDestroy();
         options.gravity.meshSize = configuration[0];
@@ -1811,14 +1813,15 @@ void pmmmTest() {
             detail::requirePmmm(firstFlops > 0, "PMMM solve did not submit arithmetic counts");
             auto const baseline = detail::gatherPmmmSamples();
             if (fixture == 7 && hpxSize() > 1) {
-                bool splitCell = false;
+                // Domains cut only on coarse-mesh planes, so the one occupied
+                // cell of the Ewald fixture must stay whole on a single rank.
                 for (auto const& sample : baseline) {
                     detail::requirePmmm(sample.cellKey == baseline.front().cellKey,
-                        "split-cell Ewald fixture spans more than one mesh cell");
-                    splitCell |= sample.rank != baseline.front().rank;
+                        "single-cell Ewald fixture spans more than one mesh cell");
+                    detail::requirePmmm(sample.rank == baseline.front().rank,
+                        "coarse-aligned PMMM domains split the Ewald fixture's mesh cell across "
+                        "localities");
                 }
-                detail::requirePmmm(
-                    splitCell, "ordinary PMMM domains did not split the Ewald fixture's mesh cell");
             }
             double const error = detail::verifyPmmmReference(baseline);
             detail::distributePmmmFixture(fixture);
@@ -1885,7 +1888,7 @@ void pmmmTest() {
     detail::checkPmmmPpBatchTargets();
     detail::checkPmmmStreamedStages();
     detail::checkPmmmStageMeshes();
-    detail::checkPmmmPrimeFactorMeshes();
+    detail::checkPmmmCoarseMeshes();
     detail::checkPmmmCellOverlap();
     PRINT("PMMM periodic force, mass, self, ownership, and cache checks passed at order %i "
           "with %s near interactions\n",

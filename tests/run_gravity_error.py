@@ -131,9 +131,10 @@ def main():
         common["gravity.meshSize"] = 8
         if args.cuda:
             # The PP CUDA path requires enough candidate pairs to amortize a
-            # launch. A five-cell mesh and width two include the whole box,
-            # giving 512**2 pairs in one batch rather than falling back to CPU.
-            common.update({"initial.particlesPerDimension": 8, "gravity.meshSize": 5,
+            # launch. The eight-cell power-of-two mesh with width two gives each
+            # cell a 5**3 neighbor cube; 512 particles and a 4096-particle batch
+            # keep the candidate pairs on the GPU rather than falling back to CPU.
+            common.update({"initial.particlesPerDimension": 8, "gravity.meshSize": 8,
                            "gravity.pmmmNearWidth": 2, "gravity.pmmmBatchParticles": 4096})
     elif args.cuda:
         common["run.verbose"] = "true"

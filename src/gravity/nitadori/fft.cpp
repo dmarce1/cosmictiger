@@ -30,7 +30,7 @@ struct MeshCachePool {
     std::array<MeshCache, kMaxMeshCaches - 1> inactive;
     int requestedMeshSize = 0;
     int baseMeshSize = 0;
-    int maxPrimeFactor = 0;
+    int coarseMeshSize = 0;
     int order = 0;
     int nearWidth = 0;
     double byteBudget = 0;
@@ -91,19 +91,22 @@ static double fftWorkspaceBytes(ptrdiff_t sourceAllocation, ptrdiff_t localAlloc
 
 void initialize(int meshSize) {
     auto const& options = getOptions().gravity;
-    int const baseMeshSize = fftMeshSize(options.meshSize, options.pmmmMaxPrimeFactor);
-    if (options.meshSize < 3 || options.pmmmNearWidth < 1 || options.pmmmNearWidth > 4 ||
-        options.pmmmNearWidth > (options.meshSize - 1) / 2 || options.pmmmOrder < kFmmMinOrder ||
+    int const baseMeshSize = options.meshSize;
+    int const coarseMeshSize =
+        resolvedCoarseMeshSize(options.meshSize, options.pmmmCoarseMeshSize, options.pmmmNearWidth);
+    if (options.meshSize < 3 || !isPowerOfTwo(baseMeshSize) || options.pmmmNearWidth < 1 ||
+        options.pmmmNearWidth > 4 || options.pmmmNearWidth > (options.meshSize - 1) / 2 ||
+        coarseMeshSize < 2 * options.pmmmNearWidth + 1 || coarseMeshSize > baseMeshSize ||
+        !isPowerOfTwo(coarseMeshSize) || options.pmmmOrder < kFmmMinOrder ||
         options.pmmmOrder > kFmmMaxOrder || !(options.supportRadius > 0) ||
         options.supportRadius > double(options.pmmmNearWidth) / baseMeshSize ||
-        meshSize < 2 * options.pmmmNearWidth + 1 || meshSize > baseMeshSize ||
-        fftMeshSize(meshSize, options.pmmmMaxPrimeFactor) != meshSize) {
+        meshSize < coarseMeshSize || meshSize > baseMeshSize || !isPowerOfTwo(meshSize)) {
         throw std::runtime_error("Invalid PMMM mesh, order, near width or softening support");
     }
     if (meshCachePool.baseMeshSize != 0) {
         if (meshCachePool.requestedMeshSize != options.meshSize ||
             meshCachePool.baseMeshSize != baseMeshSize ||
-            meshCachePool.maxPrimeFactor != options.pmmmMaxPrimeFactor ||
+            meshCachePool.coarseMeshSize != coarseMeshSize ||
             meshCachePool.order != options.pmmmOrder ||
             meshCachePool.nearWidth != options.pmmmNearWidth) {
             throw std::runtime_error("PMMM configuration changed without destroying its plans");
@@ -111,7 +114,7 @@ void initialize(int meshSize) {
     } else {
         meshCachePool.requestedMeshSize = options.meshSize;
         meshCachePool.baseMeshSize = baseMeshSize;
-        meshCachePool.maxPrimeFactor = options.pmmmMaxPrimeFactor;
+        meshCachePool.coarseMeshSize = coarseMeshSize;
         meshCachePool.order = options.pmmmOrder;
         meshCachePool.nearWidth = options.pmmmNearWidth;
     }

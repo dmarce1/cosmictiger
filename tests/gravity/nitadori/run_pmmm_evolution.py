@@ -37,18 +37,20 @@ def rewriteCheckpoint(checkpoint, ranks, transform):
 
 
 def use_legacy_extension(checkpoint, ranks, version):
-    """Give a copied unrestricted checkpoint a historical PMMM extension."""
-    require(version in (1, 2, 3), "invalid historical PMMM version")
+    """Give a copied checkpoint a historical PMMM extension."""
+    require(version in (1, 2, 3, 4), "invalid historical PMMM version")
     def transform(data, offset):
         extension_version = struct.unpack_from("=Q", data, offset)[0]
-        require(extension_version == 4, "legacy fixture requires PMMM extension version four")
-        require(struct.unpack_from("=Q", data, offset + 80)[0] == 0,
-                "legacy fixture must originate from unrestricted FFT meshes")
+        require(extension_version == 5, "legacy fixture requires PMMM extension version five")
         extension_size = 11
-        legacy_size = {1: 7, 2: 8, 3: 10}[version]
-        return (data[:offset] + struct.pack("=Q", version)
-                + data[offset + 8:offset + 8 * legacy_size]
-                + data[offset + 8 * extension_size:])
+        legacy_size = {1: 7, 2: 8, 3: 10, 4: 11}[version]
+        legacy = bytearray(data[offset:offset + 8 * legacy_size])
+        struct.pack_into("=Q", legacy, 0, version)
+        if version == 4:
+            # Version four stored the retired maximum FFT prime factor (default
+            # five) where version five records the coarse mesh.
+            struct.pack_into("=Q", legacy, 80, 5)
+        return data[:offset] + bytes(legacy) + data[offset + 8 * extension_size:]
     rewriteCheckpoint(checkpoint, ranks, transform)
 
 
@@ -57,8 +59,8 @@ def changeCompiledIdentity(checkpoint, ranks, *, order=None, near_method=None, f
     """Present the executable with a validly checksummed incompatible variant."""
     def transform(data, offset):
         payload = bytearray(data)
-        require(struct.unpack_from("=Q", payload, offset)[0] == 4,
-                "identity fixture requires PMMM extension version four")
+        require(struct.unpack_from("=Q", payload, offset)[0] == 5,
+                "identity fixture requires PMMM extension version five")
         if order is not None:
             for word in (2, 8):
                 struct.pack_into("=Q", payload, offset + 8 * word, order)
@@ -109,8 +111,11 @@ def main():
     root = args.workdir.resolve()
     root.mkdir(parents=True, exist_ok=True)
     ranks = args.ranks if args.mpi_exec else 1
+    # A sixteen-cell mesh with width two resolves the default coarse mesh to
+    # eight, so a coarse mesh of sixteen is a valid mismatch below.
+    mesh_size = 16
     common = {"hpx:threads": 2, "hpx:bind": "none",
-              "gravity.meshSize": 8, "gravity.pmmmNearWidth": 2,
+              "gravity.meshSize": mesh_size, "gravity.pmmmNearWidth": 2,
               "gravity.method.far": "pmmm", "gravity.method.near": args.near_method,
               "gravity.expansionDegree": args.order - 1, "run.timeIntegrator": args.time_integrator,
               "gravity.enabled": "true", "compute.cuda": str(args.cuda).lower(),
@@ -179,8 +184,8 @@ def main():
             # Occupied cells span the PMMM forest; every checkpoint also checks
             # gas/particle reverse links after mesh and near-FMM sorting.
             gas = [row for row in states[-1][2] if row["type"] == 1]
-            cells = {tuple(min(7, int(coordinate * 8)) for coordinate in row["x"])
-                     for row in gas}
+            cells = {tuple(min(mesh_size - 1, int(coordinate * mesh_size))
+                           for coordinate in row["x"]) for row in gas}
             require(len(cells) > 8, "SPH fixture did not occupy multiple PMMM cells")
             require(any(any(row["gas"][index] != 0.0 for index in (11, 13, 15))
                         for row in gas), "PMMM did not deliver gravity acceleration to gas")
@@ -195,41 +200,29 @@ def main():
             print(f"{label}: four uniform steps across {len(cells)} gas cells, finite positive "
                   "gas state, particle mappings, gravity handoff, and restart state passed")
             continue
-        # Historical checkpoints used unrestricted mesh lengths. Their restart
-        # reference must use the same policy, including every intermediate rung.
-        unlimited_options = dict(options, **{"gravity.pmmmMaxPrimeFactor": "infinity"})
-        unlimited = prepareCase(root, label + "_unlimited_baseline")
-        run(unlimited, dict(unlimited_options, **{"run.maxIterations": 4}))
-        unlimited_reference = read_checkpoint(unlimited / "checkpoint.4", ranks,
-                                             args.time_integrator)
-        unlimited_source = unlimited / "checkpoint.2"
-        for version in ((1, 2, 3) if near_method == "pp" else (2, 3)):
-            rejected = prepareCase(root, f"{label}_legacy_v{version}_reject_cap", unlimited_source)
-            use_legacy_extension(rejected / unlimited_source.name, ranks, version)
-            read_checkpoint(rejected / unlimited_source.name, ranks, args.time_integrator)
-            log = run(rejected, dict(options, **{
-                "checkpoint.readIndex": 2, "run.maxIterations": 0}), False)
-            require("--gravity.pmmmMaxPrimeFactor=infinity" in log,
-                    f"legacy v{version} checkpoint lacked unrestricted-mesh restart guidance")
-            legacy = prepareCase(root, f"{label}_legacy_v{version}", unlimited_source)
-            use_legacy_extension(legacy / unlimited_source.name, ranks, version)
-            log = run(legacy, dict(unlimited_options, **{
+        # Historical extensions predate the coarse mesh (and version four's
+        # retired prime factor limit). A saved power-of-two mesh restarts under
+        # the requested coarse mesh and reproduces the current-version restart.
+        for version in ((1, 2, 3, 4) if near_method == "pp" else (2, 3, 4)):
+            legacy = prepareCase(root, f"{label}_legacy_v{version}", source)
+            use_legacy_extension(legacy / source.name, ranks, version)
+            read_checkpoint(legacy / source.name, ranks, args.time_integrator)
+            log = run(legacy, dict(options, **{
                 "checkpoint.readIndex": 2, "run.maxIterations": 2}))
             require("Done reading checkpoint" in log,
-                    f"legacy v{version} checkpoint was not accepted with infinity")
-            compare_restart(unlimited_reference, read_checkpoint(
+                    f"legacy v{version} checkpoint was not accepted")
+            compare_restart(states[-1], read_checkpoint(
                 legacy / "checkpoint.4", ranks, args.time_integrator))
         if near_method == "fmm":
-            rejected = prepareCase(root, label + "_legacy_reject_fmm", unlimited_source)
-            use_legacy_extension(rejected / unlimited_source.name, ranks, 1)
-            log = run(rejected, dict(unlimited_options, **{
+            rejected = prepareCase(root, label + "_legacy_reject_fmm", source)
+            use_legacy_extension(rejected / source.name, ranks, 1)
+            log = run(rejected, dict(options, **{
                 "checkpoint.readIndex": 2, "run.maxIterations": 0}), False)
             require("PMMM checkpoint version, mesh size, near/far expansion orders" in log,
                     "legacy PP checkpoint accepted FMM near solver")
-        changes = (("mesh", {"gravity.meshSize": 10}),
+        changes = (("mesh", {"gravity.meshSize": 2 * mesh_size}),
                    ("near_width", {"gravity.pmmmNearWidth": 1}),
-                   ("prime_factor", {"gravity.pmmmMaxPrimeFactor": 3}),
-                   ("unlimited", {"gravity.pmmmMaxPrimeFactor": "infinity"}))
+                   ("coarse_mesh", {"gravity.pmmmCoarseMeshSize": mesh_size}))
         for name, change in changes:
             rejected = prepareCase(root, label + "_reject_" + name, source)
             log = run(rejected, dict(options, **change,
@@ -251,7 +244,7 @@ def main():
                           "Checkpoint physics, particle layout or integrator differs")
             require(diagnostic in log, f"{name} mismatch lacked its compatibility diagnostic")
         print(f"{label}: {args.time_integrator} timesteps, scheduled single drifts, restart state, "
-              "legacy unrestricted meshes, and PMMM mesh/prime-factor/order/near-width/method/"
+              "legacy extension versions, and PMMM mesh/coarse-mesh/order/near-width/method/"
               "solver/integrator mismatch rejection passed")
     print(f"PMMM evolution passed ({ranks} rank(s), {'CUDA' if args.cuda else 'CPU'} drift, "
           f"{args.position_type}, {args.time_integrator})")

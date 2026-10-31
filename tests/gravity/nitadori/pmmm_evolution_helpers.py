@@ -48,9 +48,15 @@ def read_rank(path, expected_iteration, ranks, time_integrator):
         require(math.isfinite(theta) and math.isclose(
                     theta, math.sqrt(3.0) / (width + 1), rel_tol=1.0e-15, abs_tol=0.0),
                 f"{path}: PMMM opening angle differs from the near-width geometry")
-    if extension[0] >= 4:
+    if extension[0] == 4:
         require(extension[10] == 0 or 2 <= extension[10] <= 2 ** 31 - 1,
-                f"{path}: invalid PMMM maximum FFT prime factor")
+                f"{path}: invalid retired PMMM maximum FFT prime factor")
+    if extension[0] >= 5:
+        # The coarse mesh is a power of two between the near minimum and the mesh.
+        coarse = extension[10]
+        require(coarse > 0 and coarse & (coarse - 1) == 0 and
+                2 * extension[3] + 1 <= coarse <= extension[1],
+                f"{path}: invalid PMMM coarse mesh size")
     if decoded.viscosity:
         require(all(decoded.viscosity[index] > 0.0 for index in (0, 1, 3, 4, 5, 6)),
                 f"{path}: invalid variable-viscosity parameters")

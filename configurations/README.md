@@ -29,9 +29,12 @@ is enabled. Override those selections for a build containing different algorithm
 `gravity.expansionDegree` chooses a compiled degree and defaults to the largest.
 The implementation's historical order is one greater than potential degree.
 Global FMM retains `gravity.openingAngle` and `gravity.openingSchedule`.
-PMMM requires an explicit valid `gravity.meshSize`, at least
+PMMM requires an explicit valid `gravity.meshSize`: a power of two at least
 `2*gravity.pmmmNearWidth+1`; override the supplied zero with, for example,
 `--gravity.meshSize=32 --gravity.method.far=pmmm --gravity.method.near=pp`.
+`gravity.pmmmCoarseMeshSize` (default `meshSize/8`) is the coarsest hierarchical
+stage mesh and the granularity of PMMM particle-domain cuts; PMMM runs need a
+power-of-two locality count.
 
 Traditional and global integration support SPH. Hierarchical integration requires
 gravity without SPH. Global integration advances all particles using the smallest

@@ -111,8 +111,8 @@ def read_prefix(data):
                 "checkpoint algorithm and integrator flags disagree")
     if flags & (1 << 17):
         version = reader.take("Q")[0]
-        require(version in (1, 2, 3, 4), "unsupported PMMM checkpoint version")
-        result.pmmm = (version, *reader.take("Q", {1: 6, 2: 7, 3: 9, 4: 10}[version]))
+        require(version in (1, 2, 3, 4, 5), "unsupported PMMM checkpoint version")
+        result.pmmm = (version, *reader.take("Q", {1: 6, 2: 7, 3: 9, 4: 10, 5: 10}[version]))
     viscosity_offset = 0
     if hydro:
         result.sph_parameters = reader.take("d", 13)

@@ -75,22 +75,30 @@ resolved option output reports the runtime selections.
 
 `gravity.meshSize=n` requests `n` full-particle cells on each axis of the
 normalized unit box, independently of the initial-condition particle count.
-The default value zero is unset and is rejected for PMMM.
-`gravity.pmmmMaxPrimeFactor` sets the largest allowed prime factor of each FFT
-side length. Its default is `5`, allowing lengths of the form `2^a * 3^b * 5^c`
-for nonnegative integer exponents. Each requested length rounds up to the
-smallest allowed integer, and all three sides use that same length. For example,
-requested lengths 7, 17, and 49 become 8, 18, and 50. Finite limits must be
-integers at least two; the limit itself need not be prime. Set
-`--gravity.pmmmMaxPrimeFactor=infinity` to retain unrestricted integer lengths.
-The same key works in the `[gravity]` INI section. Resolved output reports both
-the requested `gravity.meshSize` and the full-particle `gravity.effectiveMeshSize`.
+The default value zero is unset and is rejected for PMMM. `n` must be a power
+of two; all three sides use that same length, and no rounding is applied.
+Power-of-two sides make every cell boundary an exact fixed-point plane that
+every coarser power-of-two mesh shares, which is what lets particle domains
+avoid splitting cells (below).
+
+`gravity.pmmmCoarseMeshSize=c` sets the coarsest mesh any hierarchical stage may
+use and the granularity of particle-domain cuts. It must be a power of two no
+smaller than the smallest power of two at least `2*w+1` (4, 8, 8, or 16 for
+near widths one through four) and no larger than `gravity.meshSize`. The
+default zero resolves to `n/8`, raised to that minimum when necessary, so a
+`256^3` full mesh uses a `32^3` coarse mesh. The same keys work in the
+`[gravity]` INI section. Resolved output reports `gravity.meshSize` and the
+resolved `gravity.pmmmCoarseMeshSize`.
+
+PMMM also requires a power-of-two locality count, and the coarse mesh must
+have at least `2^ceil(log2(localities)/3)` cells per axis so every locality
+receives whole coarse cells.
 
 `gravity.pmmmNearWidth=w` sets the ghost
 width and accepts integers from one through four, defaulting to two. The near
 region contains `(2*w+1)^3` cells (27, 125, 343, or 729, respectively),
 including the sink cell. The mesh must satisfy `n >= 2*w+1`, so periodic near
-cells are distinct. Odd mesh sizes are supported.
+cells are distinct.
 
 `gravity.method.near=pp|fmm` selects how those near cells are evaluated from the
 compiled capabilities. The `pp` method sums all primary particle pairs. The `fmm` method uses the
@@ -260,7 +268,7 @@ potential degree six, a normal solve performs 36 scalar-equivalent forward trans
 transforms belong to initialization. This describes work, not measured speed.
 
 Each mesh cache lasts until eviction, explicit PMMM destruction, or application
-shutdown. Changing the requested base mesh size, maximum prime factor, degree,
+shutdown. Changing the requested base mesh size, coarse mesh size, degree,
 or near width requires explicit PMMM destruction.
 The near opening angle is fixed by the near width.
 The runtime solver, near method, and degree remain fixed during an evolution.
@@ -272,14 +280,23 @@ parcel traffic, and require the application's existing `MPI_THREAD_MULTIPLE`
 startup guarantee. FFTW planner operations share the process-wide planner
 lock with other FFTW users.
 
-PMMM uses the same spatial particle-domain decomposition as global FMM. Each
-recursive cut balances the current particle count between two locality groups,
-without requiring the cut to follow a mesh-cell plane. A mesh cell can therefore
-have particle fragments on several localities, including when a dense cell
-needs to be split for balance. Particle migration and checkpoint reload preserve
-these continuous domains independently of the FFT mesh. Each solve sorts local
-particle arrays in place into cell-fragment ranges, using parallel CPU
-partitioning and preserving all attached particle fields.
+PMMM uses the recursive bisection of global FMM for its particle domains, but
+every cut lies on a coarse-mesh plane. The locality count is a power of two;
+depth `d` of the bisection halves the locality range and cuts axis `d mod 3`.
+Among the coarse planes that leave each child enough whole coarse cells for the
+cuts it still owes along that axis, the cut selects the plane whose particle
+count comes closest to the balanced target, not the plane nearest the exact
+balance coordinate. Ties prefer the plane nearest the middle of the parent.
+Because every stage mesh is a power of two at least as fine as the coarse mesh,
+no cell of any PMMM mesh ever has particles on two localities: each cell is
+owned, with all its particles, by exactly one locality. Balance is therefore
+only as fine as the coarse cells allow; a smaller coarse mesh (larger cells)
+trades balance for a coarser minimum stage mesh. Global FMM retains the
+unrestricted continuous cuts. Particle migration and checkpoint reload preserve
+the domains independently of the FFT slabs. Each solve sorts local particle
+arrays in place into cell ranges, using parallel CPU partitioning and preserving
+all attached particle fields. The cell-fragment paths below remain the general
+implementation and are exercised by tests with arbitrary particle ownership.
 The FFTW mesh retains its separate slab distribution, independent of particle
 counts and particle-domain boundaries. Each particle owner forms partial cell
 moments about the same mesh-cell center and sends them to that cell's FFTW slab
@@ -418,30 +435,30 @@ the selected compact kernel's effective radius and the complete near-plus-far
 acceleration.
 
 Each hierarchical stage scales the mesh volume with its active particle fraction.
-With requested `N0 = gravity.meshSize`, `w = gravity.pmmmNearWidth`, and global
-owned particle counts `active` and `total`, the effective side length is
+With `N0 = gravity.meshSize`, `C = gravity.pmmmCoarseMeshSize`, and global
+owned particle counts `active` and `total`, the stage side length is the
+smallest power of two `N` with
 
 ```text
-target = clamp(ceil(N0 * cbrt(active / total)), 2*w+1, N0)
-N = nextAllowedLength(target, gravity.pmmmMaxPrimeFactor)
+C <= N <= N0  and  N^3 * total >= N0^3 * active
 ```
 
-The count includes the entire stage-selected source-and-sink range, including
-faster rungs, and excludes ghosts. Exact integer volume comparisons implement
-the ceiling without floating-point ambiguity at cube boundaries. An empty
-selection rounds the minimum side up to an allowed length. Scaling always
-uses the requested base size, before prime-factor rounding. For example,
-`N0=7` with limit five gives a full-particle side of eight, while a stage with
-three sevenths of the particles uses side six. The base configuration remains
-unchanged. With `infinity`, prime-factor rounding is disabled and the sizing
-matches the unrestricted integer policy.
-All ranks use the same effective size for cell sorting, FFTs, ghost exchange,
-and near-field geometry. Plans and Green spectra are reused by effective mesh
-size, retaining at most eight meshes and twice the rounded base mesh's global FFT
-buffer allocation. Transient moments and FFTW's internal plan storage are
-separate from this buffer cap. Mesh switches occur only after the previous
-solve has completed. `PmmmDiagnostics` reports `meshSize`, `activeParticles`, and
-`totalParticles` for the most recent solve.
+so the mean number of active particles per cell stays near the full-step value
+while the side halves only when the active fraction drops below one eighth,
+one sixty-fourth, and so on. The count includes the entire stage-selected
+source-and-sink range, including faster rungs, and excludes ghosts. Exact
+integer volume comparisons decide cube boundaries without floating-point
+ambiguity. An empty selection uses the coarse mesh. The base configuration
+remains unchanged.
+All ranks use the same stage size for cell sorting, FFTs, ghost exchange,
+and near-field geometry. Plans and Green spectra are reused by stage mesh
+size, retaining at most eight meshes and twice the base mesh's global FFT
+buffer allocation; with power-of-two sides every smaller stage mesh together
+needs less than one seventh of the base workspace, so the byte cap is not
+reached by stage meshes alone. Transient moments and FFTW's internal plan
+storage are separate from this buffer cap. Mesh switches occur only after the
+previous solve has completed. `PmmmDiagnostics` reports `meshSize`,
+`activeParticles`, and `totalParticles` for the most recent solve.
 
 The hierarchical path calls `pmmmKick`: each completed cell's combined field is
 consumed immediately for the kick and rung decision, without retaining
@@ -499,7 +516,7 @@ wall time, including communication, staging, and scheduling overhead. See
 ## Restart and regression checks
 
 Checkpoints identify PMMM separately from FMM and record its requested mesh size,
-maximum prime factor, expansion degree (in the historical internal order
+coarse mesh size, expansion degree (in the historical internal order
 convention), near width, near method, and timestep compatibility parameters.
 Omitted runtime algorithm, degree, and integrator selectors inherit the saved
 selection on restart. Explicit incompatible selections are rejected, as are
@@ -508,11 +525,13 @@ algorithms or a larger degree range without invalidating a checkpoint.
 Historical ordinary PM checkpoints are unsupported. Checkpoints do not store
 FFTW plans or Green spectra: the first solve after restart reconstructs the
 cache, then reuses it for later steps.
-PMMM extension version four adds the maximum prime factor. Versions one through
-three used unrestricted lengths and require
-`--gravity.pmmmMaxPrimeFactor=infinity` on restart. The policy is checkpoint
-identity even when two limits give the same current full-particle mesh, because
-their hierarchical stage meshes can differ.
+PMMM extension version five stores the resolved coarse mesh size; it is
+checkpoint identity even when two coarse meshes give the same current
+full-particle mesh, because their hierarchical stage meshes differ. Version
+four stored the retired maximum FFT prime factor and versions one through three
+used unrestricted lengths; those checkpoints restart under the requested coarse
+mesh when their saved base mesh is a power of two, which the current option
+validation requires.
 PMMM extension version three appends the PMMM order and resolved opening angle
 to the version-two metadata, which added the near-method selection. Historical
 version-one and version-two extensions retain their legacy shared order
@@ -538,7 +557,7 @@ tree or particle fetches during the near walk. Repeated solves with each PP/FMM
 selection check owned counts, exact position bits, velocities, rungs, and saved
 field sentinels after ghost cleanup. The suite includes valid split cell ownership,
 empty localities, periodic seams, distinct coincident sources, exact cell-center containment near
-the fixed-point upper boundary, odd/even meshes, and CPU/CUDA agreement when
+the fixed-point upper boundary, power-of-two meshes, and CPU/CUDA agreement when
 CUDA is requested. Streamed-stage tests compare signed kicks against an
 independent Ewald sum over only the active sources, require unchanged inactive
 sinks and no retained full-field result arrays, and exercise single-cell and

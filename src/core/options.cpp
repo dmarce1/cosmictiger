@@ -54,23 +54,6 @@ namespace detail {
 static std::vector<std::string> commandLineArguments;
 static bool displayOptions = false;
 
-int parsePmmmMaxPrimeFactor(std::string const& input) {
-    if (input == "infinity" || input == "inf") {
-        return 0;
-    }
-    int value = 0;
-    auto const result = std::from_chars(input.data(), input.data() + input.size(), value);
-    if (result.ec != std::errc{} || result.ptr != input.data() + input.size() || value < 2) {
-        throw std::invalid_argument(
-            "gravity.pmmmMaxPrimeFactor must be an integer from 2 through 2147483647 or infinity");
-    }
-    return value;
-}
-
-std::string pmmmMaxPrimeFactorText(int value) {
-    return value == 0 ? "infinity" : std::to_string(value);
-}
-
 std::uint64_t parseStarFormationSeed(std::string const& input) {
     std::uint64_t value = 0;
     auto const result = std::from_chars(input.data(), input.data() + input.size(), value);
@@ -385,8 +368,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"gravity.errorSampleSize", options.gravity.errorSampleSize},
         {"gravity.method.far", options.gravity.method},
         {"gravity.meshSize", options.gravity.meshSize},
-        {"gravity.pmmmMaxPrimeFactor",
-            detail::pmmmMaxPrimeFactorText(options.gravity.pmmmMaxPrimeFactor)},
+        {"gravity.pmmmCoarseMeshSize", options.gravity.pmmmCoarseMeshSize},
         {"gravity.pmmmNearWidth", options.gravity.pmmmNearWidth},
         {"gravity.method.near", options.gravity.pmmmNearMethod},
         {"gravity.pmmmBatchParticles", options.gravity.pmmmBatchParticles},
@@ -473,7 +455,6 @@ bool processOptions(int argc, char* argv[]) {
     double centralEffectiveRadius;
     double boxLength = 0.0;
     std::string omegaLambdaInput;
-    std::string pmmmMaxPrimeFactorInput;
     std::string starFormationSeedInput;
     int expansionDegree = gravity::kBuildFmmOrder > 0 ? gravity::kBuildFmmOrder - 1 : 0;
     CheckpointSelection checkpointSelection;
@@ -651,11 +632,11 @@ bool processOptions(int argc, char* argv[]) {
         po::value<int>(&opts.gravity.errorSampleSize)->default_value(100),
         "number of evenly spaced particles for gravity error checks (capped at particle count)")(
         "gravity.meshSize", po::value<int>(&opts.gravity.meshSize)->default_value(0),
-        "Requested full-particle PMMM cells per axis; required when PMMM is selected")(
-        "gravity.pmmmMaxPrimeFactor",
-        po::value<std::string>(&pmmmMaxPrimeFactorInput)->default_value("5"),
-        "largest allowed FFT mesh prime factor; integer >=2 or infinity; mesh sizes round up")(
-        "gravity.pmmmBatchParticles",
+        "full-particle PMMM cells per axis, a power of two; required when PMMM is selected")(
+        "gravity.pmmmCoarseMeshSize",
+        po::value<int>(&opts.gravity.pmmmCoarseMeshSize)->default_value(0),
+        "coarsest PMMM stage mesh and particle-domain cut granularity, a power of two; "
+        "0 selects meshSize/8")("gravity.pmmmBatchParticles",
         po::value<int>(&opts.gravity.pmmmBatchParticles)->default_value(4096),
         "target sink particles per ready PMMM batch; oversized cells run alone")(
         "gravity.pmmmNearWidth", po::value<int>(&opts.gravity.pmmmNearWidth)->default_value(2),
@@ -900,9 +881,7 @@ bool processOptions(int argc, char* argv[]) {
     } else if (!detail::isFiniteOption(opts.units.massG) || opts.units.massG <= 0.0) {
         THROW_ERROR("units.massSolar must be finite and positive\n");
     }
-    opts.gravity.pmmmMaxPrimeFactor = detail::parsePmmmMaxPrimeFactor(pmmmMaxPrimeFactorInput);
     opts.starFormation.seed = detail::parseStarFormationSeed(starFormationSeedInput);
-    int effectiveMeshSize = opts.gravity.meshSize;
     if (opts.gravity.errorInterval < 0) {
         THROW_ERROR("gravity.errorInterval must be nonnegative\n");
     }
@@ -912,6 +891,9 @@ bool processOptions(int argc, char* argv[]) {
     }
     if (opts.gravity.meshSize < 0) {
         THROW_ERROR("gravity.meshSize must be nonnegative\n");
+    }
+    if (opts.gravity.pmmmCoarseMeshSize < 0) {
+        THROW_ERROR("gravity.pmmmCoarseMeshSize must be nonnegative\n");
     }
     if (opts.gravity.pmmmBatchParticles <= 0) {
         THROW_ERROR("gravity.pmmmBatchParticles must be positive\n");
@@ -1029,19 +1011,34 @@ bool processOptions(int argc, char* argv[]) {
             THROW_ERROR("gravity.meshSize must be at least 2*gravity.pmmmNearWidth+1 "
                         "when gravity.method.far=pmmm\n");
         }
-        try {
-            effectiveMeshSize =
-                pmmm::detail::fftMeshSize(opts.gravity.meshSize, opts.gravity.pmmmMaxPrimeFactor);
-        } catch (std::exception const& error) {
-            THROW_ERROR(
-                "gravity.meshSize with gravity.pmmmMaxPrimeFactor is invalid: %s\n", error.what());
+        if (!pmmm::detail::isPowerOfTwo(opts.gravity.meshSize)) {
+            THROW_ERROR("gravity.meshSize must be a power of two when gravity.method.far=pmmm\n");
         }
-        size_t const meshSize = static_cast<size_t>(effectiveMeshSize);
+        int const minimumCoarse = pmmm::detail::minimumMeshSize(opts.gravity.pmmmNearWidth);
+        opts.gravity.pmmmCoarseMeshSize = pmmm::detail::resolvedCoarseMeshSize(
+            opts.gravity.meshSize, opts.gravity.pmmmCoarseMeshSize, opts.gravity.pmmmNearWidth);
+        if (!pmmm::detail::isPowerOfTwo(opts.gravity.pmmmCoarseMeshSize) ||
+            opts.gravity.pmmmCoarseMeshSize < minimumCoarse ||
+            opts.gravity.pmmmCoarseMeshSize > opts.gravity.meshSize) {
+            THROW_ERROR("gravity.pmmmCoarseMeshSize must be a power of two between the smallest "
+                        "power of two at least 2*gravity.pmmmNearWidth+1 and gravity.meshSize\n");
+        }
+        if (!pmmm::detail::isPowerOfTwo(uint64_t(hpxSize()))) {
+            THROW_ERROR("gravity.method.far=pmmm requires a power-of-two locality count; "
+                        "%i localities were started\n",
+                hpxSize());
+        }
+        int const localityMinimum = pmmm::detail::minimumCoarseMeshSizeForLocalities(hpxSize());
+        if (opts.gravity.pmmmCoarseMeshSize < localityMinimum) {
+            THROW_ERROR("gravity.pmmmCoarseMeshSize=%i cannot be cut among %i localities; the "
+                        "coarse mesh needs at least %i cells per axis\n",
+                opts.gravity.pmmmCoarseMeshSize, hpxSize(), localityMinimum);
+        }
+        size_t const meshSize = static_cast<size_t>(opts.gravity.meshSize);
         size_t const maximumCells = std::min(size_t(std::numeric_limits<ptrdiff_t>::max()),
             std::numeric_limits<size_t>::max() / (8 * sizeof(float)));
         if (meshSize > maximumCells / meshSize / meshSize) {
-            THROW_ERROR("Effective gravity.meshSize cubed after gravity.pmmmMaxPrimeFactor "
-                        "rounding exceeds mesh indexing/allocation limits\n");
+            THROW_ERROR("gravity.meshSize cubed exceeds mesh indexing/allocation limits\n");
         }
     }
 #endif
@@ -1565,11 +1562,10 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.gravity.enabled && opts.gravity.supportRadius >= 0.5) {
         THROW_ERROR("Periodic gravity requires normalized gravity.supportRadius below 0.5\n");
     }
-    if (usesMeshGravity(opts.gravity) &&
-        opts.gravity.supportRadius > double(opts.gravity.pmmmNearWidth) / effectiveMeshSize) {
+    if (usesMeshGravity(opts.gravity) && opts.gravity.meshSize > 0 &&
+        opts.gravity.supportRadius > double(opts.gravity.pmmmNearWidth) / opts.gravity.meshSize) {
         THROW_ERROR("PMMM requires the normalized gravity.supportRadius to be no larger than "
-                    "gravity.pmmmNearWidth/effectiveMeshSize after gravity.pmmmMaxPrimeFactor "
-                    "rounding\n");
+                    "gravity.pmmmNearWidth/gravity.meshSize\n");
     }
     detail::displayOptions = terminal::verbose() || !opts.run.test.empty();
     if (hpxRank() == 0 && opts.run.test.empty()) {
@@ -1600,11 +1596,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("run.timeIntegrator", run.timeIntegrator);
     SHOW("gravity.method.far", gravity.method);
     SHOW("gravity.meshSize", gravity.meshSize);
-    show("gravity.pmmmMaxPrimeFactor",
-        detail::pmmmMaxPrimeFactorText(opts.gravity.pmmmMaxPrimeFactor));
-    if (usesMeshGravity(opts.gravity)) {
-        show("gravity.effectiveMeshSize", effectiveMeshSize);
-    }
+    SHOW("gravity.pmmmCoarseMeshSize", gravity.pmmmCoarseMeshSize);
     SHOW("gravity.pmmmNearWidth", gravity.pmmmNearWidth);
     SHOW("gravity.method.near", gravity.pmmmNearMethod);
     SHOW("gravity.pmmmBatchParticles", gravity.pmmmBatchParticles);
@@ -1801,9 +1793,7 @@ bool processOptions(int argc, char* argv[]) {
             }
             if (usesMeshGravity(opts.gravity)) {
                 SHOW("gravity.meshSize", gravity.meshSize);
-                show("gravity.pmmmMaxPrimeFactor",
-                    detail::pmmmMaxPrimeFactorText(opts.gravity.pmmmMaxPrimeFactor));
-                show("gravity.effectiveMeshSize", effectiveMeshSize);
+                SHOW("gravity.pmmmCoarseMeshSize", gravity.pmmmCoarseMeshSize);
                 SHOW("gravity.pmmmNearWidth", gravity.pmmmNearWidth);
                 SHOW("gravity.method.near", gravity.pmmmNearMethod);
                 SHOW("gravity.pmmmBatchParticles", gravity.pmmmBatchParticles);

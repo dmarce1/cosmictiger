@@ -2,101 +2,96 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
-#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
 
 namespace pmmm::detail {
 
-// Zero denotes an unrestricted prime factor. A finite limit is inclusive and
-// need not itself be prime (for example, limits five and six are equivalent).
-inline int fftMeshSize(int requestedSize, int maxPrimeFactor) {
-    if (requestedSize <= 0 || maxPrimeFactor < 0 || maxPrimeFactor == 1) {
-        throw std::invalid_argument("Invalid PMMM mesh size or maximum prime factor");
-    }
-    if (maxPrimeFactor == 0 || requestedSize <= maxPrimeFactor) {
-        return requestedSize;
-    }
-    auto const allowed = [maxPrimeFactor](int64_t value) {
-        for (int64_t divisor = 2; divisor <= maxPrimeFactor && divisor * divisor <= value;
-            divisor += divisor == 2 ? 1 : 2) {
-            while (value % divisor == 0) {
-                value /= divisor;
-            }
-        }
-        return value <= maxPrimeFactor;
-    };
-    if (allowed(requestedSize)) {
-        return requestedSize;
-    }
-    constexpr int64_t kMaximum = std::numeric_limits<int>::max();
-    if (maxPrimeFactor < 17) {
-        // Small prime limits can leave very large gaps between valid lengths.
-        // Enumerate products instead of scanning every integer in those gaps.
-        constexpr std::array<int, 6> kPrimes{2, 3, 5, 7, 11, 13};
-        int64_t best = kMaximum + 1;
-        auto const search = [&](auto const& self, size_t index, int64_t value) -> void {
-            if (value >= requestedSize) {
-                best = std::min(best, value);
-                return;
-            }
-            if (index == kPrimes.size() || kPrimes[index] > maxPrimeFactor) {
-                return;
-            }
-            for (int64_t product = value; product < best && product <= kMaximum;
-                product *= kPrimes[index]) {
-                self(self, index + 1, product);
-            }
-        };
-        search(search, 0, 1);
-        if (best <= kMaximum) {
-            return int(best);
-        }
-    } else {
-        for (int64_t candidate = int64_t(requestedSize) + 1; candidate <= kMaximum; ++candidate) {
-            if (allowed(candidate)) {
-                return int(candidate);
-            }
-        }
-    }
-    throw std::overflow_error("No allowed PMMM FFT mesh length fits in an int");
+// Every PMMM mesh is a cube with a power-of-two side. Power-of-two sides make
+// each cell boundary an exact fixed-point plane shared by every coarser mesh,
+// so particle domains cut on the coarse mesh never split a cell of any finer one.
+inline constexpr bool isPowerOfTwo(uint64_t value) {
+    return value != 0 && (value & (value - 1)) == 0;
 }
 
-// The base mesh represents all owned particles. Select the smallest allowed
-// side whose volume is at least the requested base volume times active / total.
-inline int hierarchicalMeshSize(int baseSize, int nearWidth, uint64_t activeCount,
-    uint64_t totalCount, int maxPrimeFactor = 0) {
-    if (nearWidth < 1 || nearWidth > 4 || baseSize < 2 * nearWidth + 1 ||
-        activeCount > totalCount) {
+inline constexpr int nextPowerOfTwo(int value) {
+    if (value <= 1) {
+        return 1;
+    }
+    if (value > (1 << 30)) {
+        throw std::overflow_error("No power-of-two PMMM mesh length fits in an int");
+    }
+    int result = 1;
+    while (result < value) {
+        result <<= 1;
+    }
+    return result;
+}
+
+// The smallest valid side for a near width: periodic near cells must be
+// distinct, so the side is at least 2*w+1 and therefore the next power of two.
+inline constexpr int minimumMeshSize(int nearWidth) {
+    if (nearWidth < 1 || nearWidth > 4) {
+        throw std::invalid_argument("PMMM near width must be between 1 and 4");
+    }
+    return nextPowerOfTwo(2 * nearWidth + 1);
+}
+
+// The coarsest mesh any hierarchical stage may use, and the granularity of
+// particle-domain cuts. Zero requests the default: eight times coarser per
+// axis than the full mesh, never below the minimum side for the near width,
+// and never above the full mesh. A zero or invalid full mesh resolves to zero.
+inline int resolvedCoarseMeshSize(int meshSize, int coarseMeshSize, int nearWidth) {
+    if (coarseMeshSize > 0) {
+        return coarseMeshSize;
+    }
+    if (meshSize <= 0 || !isPowerOfTwo(meshSize)) {
+        return 0;
+    }
+    return std::min(meshSize, std::max(meshSize / 8, minimumMeshSize(nearWidth)));
+}
+
+// Particle domains bisect the box along x, y, z in turn, once per halving of
+// the locality count. Each coarse cell must survive every cut along its axis,
+// so the coarse side must be at least 2^ceil(log2(localities) / 3).
+inline int minimumCoarseMeshSizeForLocalities(int localities) {
+    if (localities < 1 || !isPowerOfTwo(uint64_t(localities))) {
+        throw std::invalid_argument("PMMM requires a power-of-two locality count");
+    }
+    int levels = 0;
+    while ((1 << levels) < localities) {
+        ++levels;
+    }
+    return 1 << ((levels + 2) / 3);
+}
+
+// Select the smallest power-of-two side, between the coarse and full meshes,
+// whose volume is at least the full mesh volume times active / total.
+inline int hierarchicalMeshSize(
+    int baseSize, int coarseSize, uint64_t activeCount, uint64_t totalCount) {
+    if (baseSize < 1 || coarseSize < 1 || coarseSize > baseSize || !isPowerOfTwo(baseSize) ||
+        !isPowerOfTwo(coarseSize) || activeCount > totalCount) {
         throw std::invalid_argument("Invalid hierarchical PMMM mesh or particle counts");
     }
     auto const cube = [](int side) {
         auto const value = static_cast<unsigned __int128>(side);
         return value * value * value;
     };
-    auto const baseCells = cube(baseSize);
-    if (baseCells > std::numeric_limits<uint64_t>::max()) {
+    if (cube(baseSize) > std::numeric_limits<uint64_t>::max()) {
         throw std::invalid_argument("Hierarchical PMMM mesh exceeds cell indexing limits");
     }
-    int lower = 2 * nearWidth + 1;
-    int upper = baseSize;
     if (activeCount == 0) {
-        return fftMeshSize(lower, maxPrimeFactor);
+        return coarseSize;
     }
     // Exact integer comparisons avoid rounding an exact cube ratio upward or
     // losing a one-particle increment in large global populations.
-    auto const target = baseCells * activeCount;
-    while (lower < upper) {
-        int const middle = lower + (upper - lower) / 2;
-        if (cube(middle) * totalCount < target) {
-            lower = middle + 1;
-        } else {
-            upper = middle;
-        }
+    auto const target = cube(baseSize) * activeCount;
+    int side = coarseSize;
+    while (side < baseSize && cube(side) * totalCount < target) {
+        side <<= 1;
     }
-    return fftMeshSize(lower, maxPrimeFactor);
+    return side;
 }
 
 }    // namespace pmmm::detail

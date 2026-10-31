@@ -162,9 +162,11 @@ void solve(SolveRequest request) {
     }
     auto const& options = getOptions().gravity;
     request.meshSize = request.applyKick ?
-        hierarchicalMeshSize(options.meshSize, options.pmmmNearWidth, request.activeParticles,
-            request.totalParticles, options.pmmmMaxPrimeFactor) :
-        fftMeshSize(options.meshSize, options.pmmmMaxPrimeFactor);
+        hierarchicalMeshSize(options.meshSize,
+            resolvedCoarseMeshSize(
+                options.meshSize, options.pmmmCoarseMeshSize, options.pmmmNearWidth),
+            request.activeParticles, request.totalParticles) :
+        options.meshSize;
 #if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
         sphParticlesClearCaches();

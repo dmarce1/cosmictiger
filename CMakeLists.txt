@@ -478,12 +478,16 @@ get_property(cosmictiger_targets_before_tests DIRECTORY PROPERTY BUILDSYSTEM_TAR
 # Register distributed regressions only when the configured launcher can run them.
 set(cosmictiger_mpi_tests FALSE)
 set(cosmictiger_mpi_three_ranks FALSE)
+set(cosmictiger_mpi_four_ranks FALSE)
 if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
     if(NOT DEFINED MPIEXEC_MAX_NUMPROCS OR MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 2)
         set(cosmictiger_mpi_tests TRUE)
     endif()
     if(NOT DEFINED MPIEXEC_MAX_NUMPROCS OR MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 3)
         set(cosmictiger_mpi_three_ranks TRUE)
+    endif()
+    if(NOT DEFINED MPIEXEC_MAX_NUMPROCS OR MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 4)
+        set(cosmictiger_mpi_four_ranks TRUE)
     endif()
 endif()
 
@@ -1778,7 +1782,7 @@ if(BUILD_TESTING)
         file(MAKE_DIRECTORY "${mesh_domain_workdir}")
         add_test(NAME mesh_domains_cpu COMMAND $<TARGET_FILE:cosmictiger>
             --run.test=meshDomains --gravity.method.far=pmmm --initial.particlesPerDimension=8
-            --gravity.meshSize=7 --hydro.enabled=false
+            --gravity.meshSize=8 --hydro.enabled=false
             --compute.cuda=false --compute.positionType=${COSMICTIGER_POSITION_TYPE}
             --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args} --gravity.method.near=${cosmictiger_default_near_method})
@@ -1852,7 +1856,8 @@ if(BUILD_TESTING)
             # FFTW and the near-field tasks share each rank's HPX workers.
             set_tests_properties(pmmm_mpi_threads PROPERTIES TIMEOUT 300 PROCESSORS 4
                 WORKING_DIRECTORY "${pmmm_threaded_workdir}" LABELS "pmmm;cpu;mpi;threads")
-            foreach(pmmm_ranks IN ITEMS 3 6)
+            # PMMM requires power-of-two locality counts.
+            foreach(pmmm_ranks IN ITEMS 4 8)
                 set(pmmm_workdir "${PROJECT_BINARY_DIR}/tests/pmmm_mpi_${pmmm_ranks}")
                 file(MAKE_DIRECTORY "${pmmm_workdir}")
                 add_test(NAME pmmm_mpi_${pmmm_ranks} COMMAND ${MPIEXEC_EXECUTABLE}
@@ -1866,7 +1871,7 @@ if(BUILD_TESTING)
                 set_tests_properties(pmmm_mpi_${pmmm_ranks} PROPERTIES TIMEOUT 300
                     PROCESSORS ${pmmm_ranks} WORKING_DIRECTORY "${pmmm_workdir}" LABELS "pmmm;mpi")
             endforeach()
-            foreach(mesh_domain_ranks IN ITEMS 2 3 6 9)
+            foreach(mesh_domain_ranks IN ITEMS 2 4 8)
                 set(mesh_domain_name "mesh_domains_mpi_${mesh_domain_ranks}")
                 set(mesh_domain_workdir "${PROJECT_BINARY_DIR}/tests/${mesh_domain_name}")
                 file(MAKE_DIRECTORY "${mesh_domain_workdir}")
@@ -1874,7 +1879,7 @@ if(BUILD_TESTING)
                     ${MPIEXEC_NUMPROC_FLAG} ${mesh_domain_ranks} ${MPIEXEC_PREFLAGS}
                     $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
                     --run.test=meshDomains --gravity.method.far=pmmm --initial.particlesPerDimension=8
-                    --gravity.meshSize=7 --hydro.enabled=false
+                    --gravity.meshSize=8 --hydro.enabled=false
                     --compute.cuda=false --compute.positionType=${COSMICTIGER_POSITION_TYPE}
                     --hpx:threads=1 --hpx:bind=none --hpx:localities=${mesh_domain_ranks}
                     ${cosmictiger_mpi_transport_args}
@@ -1898,17 +1903,17 @@ if(BUILD_TESTING)
                 RUN_SERIAL TRUE LABELS "particle_mesh;mpi")
             # This fixture uses arbitrary per-rank ownership and a global reduction.
             # The FMM near solver requires spatial ownership, covered by streamed tests.
-            if(COSMICTIGER_ENABLE_PMMM_PP AND cosmictiger_mpi_three_ranks)
+            if(COSMICTIGER_ENABLE_PMMM_PP AND cosmictiger_mpi_four_ranks)
                 set(pm_timestep_workdir "${PROJECT_BINARY_DIR}/tests/particle_mesh_timestep_mpi")
                 file(MAKE_DIRECTORY "${pm_timestep_workdir}")
                 add_test(NAME particle_mesh_timestep_mpi COMMAND ${MPIEXEC_EXECUTABLE}
-                    ${MPIEXEC_NUMPROC_FLAG} 3 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger>
+                    ${MPIEXEC_NUMPROC_FLAG} 4 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger>
                     ${MPIEXEC_POSTFLAGS} --run.test=particleMeshTimestep --gravity.method.far=pmmm --gravity.method.near=pp --initial.particlesPerDimension=8
                     --gravity.meshSize=8 --hydro.enabled=false
-                    --compute.cuda=false --hpx:threads=2 --hpx:bind=none --hpx:localities=3
+                    --compute.cuda=false --hpx:threads=2 --hpx:bind=none --hpx:localities=4
                     ${cosmictiger_mpi_transport_args}
                 ${cosmictiger_test_integrator_args})
-                set_tests_properties(particle_mesh_timestep_mpi PROPERTIES TIMEOUT 180 PROCESSORS 6
+                set_tests_properties(particle_mesh_timestep_mpi PROPERTIES TIMEOUT 180 PROCESSORS 8
                     WORKING_DIRECTORY "${pm_timestep_workdir}" LABELS "particle_mesh;mpi")
             endif()
         endif()

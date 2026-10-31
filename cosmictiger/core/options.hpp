@@ -131,8 +131,10 @@ struct Gravity {
     int errorSampleSize{100};
     // Selected algorithms retain their historical serialized field names.
     std::string method{gravity::kBuildGravityMethod};
-    int meshSize{};    // Requested full-particle PMMM side; scale by rung before FFT rounding.
-    int pmmmMaxPrimeFactor{5};    // Inclusive FFT mesh prime-factor limit; zero is unrestricted.
+    int meshSize{};    // Full-particle PMMM side; a power of two, scaled by rung per stage.
+    // Coarsest hierarchical stage mesh and the granularity of particle-domain
+    // cuts; a power of two. Zero resolves to meshSize/8, at least the near minimum.
+    int pmmmCoarseMeshSize{};
     int pmmmNearWidth{2};    // Direct neighbor cube radius for periodic PMMM, one to four cells.
     int pmmmOrder{gravity::kBuildFmmOrder};    // Potential expansion degree + 1, shared by far and
                                                // near fields.
@@ -409,7 +411,7 @@ struct Options {
         arc & gravity.pmmmBatchParticles;
         arc & gravity.pmmmOrder;
         arc & gravity.openingSchedule;
-        arc & gravity.pmmmMaxPrimeFactor;
+        arc & gravity.pmmmCoarseMeshSize;
         arc & gravity.errorInterval;
         arc & gravity.errorSampleSize;
         arc & starFormation.enabled;

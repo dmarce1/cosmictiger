@@ -32,6 +32,7 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/terminal.hpp>
+#include <cosmictiger/gravity/nitadori/mesh_size.hpp>
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/kernel.hpp>
@@ -579,15 +580,16 @@ std::array<uint64_t, 11> pmmmCheckpointParameters(Options const& opts) {
     // Version two appends the near solver. Version one always used direct PP.
     // Version three records the PMMM order and geometry-derived opening angle
     // so a restart preserves the shared near/far order and accuracy settings.
-    // Version four appends the maximum FFT prime factor. Earlier versions used
-    // unrestricted mesh sizes, represented by zero. Preserve the requested base
-    // mesh as well as the cap: both determine all future hierarchical meshes.
-    return {4, static_cast<uint64_t>(opts.gravity.meshSize),
+    // Version four appended the retired maximum FFT prime factor. Version five
+    // stores the coarse mesh in that slot: with the base mesh it determines every
+    // hierarchical stage mesh and the particle-domain cut granularity.
+    return {5, static_cast<uint64_t>(opts.gravity.meshSize),
         static_cast<uint64_t>(opts.gravity.fmmOrder),
         static_cast<uint64_t>(opts.gravity.pmmmNearWidth), static_cast<uint64_t>(opts.run.minRung),
         timestepEtaBits, 1, opts.gravity.pmmmNearMethod == "fmm" ? 1U : 0U,
         static_cast<uint64_t>(opts.gravity.pmmmOrder), openingAngleBits,
-        static_cast<uint64_t>(opts.gravity.pmmmMaxPrimeFactor)};
+        static_cast<uint64_t>(pmmm::detail::resolvedCoarseMeshSize(
+            opts.gravity.meshSize, opts.gravity.pmmmCoarseMeshSize, opts.gravity.pmmmNearWidth))};
 }
 
 std::array<uint64_t, 11> readPmmmCheckpointParameters(FILE* fp) {
@@ -597,7 +599,7 @@ std::array<uint64_t, 11> readPmmmCheckpointParameters(FILE* fp) {
         FREAD(&parameters[7], sizeof(uint64_t), 1, fp);
     } else if (parameters[0] == 3) {
         FREAD(&parameters[7], sizeof(uint64_t), 3, fp);
-    } else if (parameters[0] == 4) {
+    } else if (parameters[0] == 4 || parameters[0] == 5) {
         FREAD(&parameters[7], sizeof(uint64_t), 4, fp);
     } else if (parameters[0] != 1) {
         THROW_ERROR("Unsupported PMMM checkpoint parameter version\n");
@@ -617,9 +619,12 @@ bool pmmmCheckpointCompatible(std::array<uint64_t, 11> parameters, Options const
         parameters[9] = expected[9];
         parameters[0] = 3;
     }
-    if (parameters[0] == 3) {
-        parameters[10] = 0;
-        parameters[0] = 4;
+    if (parameters[0] == 3 || parameters[0] == 4) {
+        // Versions three and four predate the coarse mesh; version four's prime
+        // factor limit is retired. Every mesh is now a power of two, so a saved
+        // power-of-two base mesh restarts under the requested coarse mesh.
+        parameters[10] = expected[10];
+        parameters[0] = 5;
     }
     return parameters == expected;
 }
@@ -760,16 +765,10 @@ DriverParameters readDriverState(FILE* fp) {
             auto const meshParameters = readPmmmCheckpointParameters(fp);
             bool const requireMeshMatch =
                 getOptions().gravity.enabled || !getOptions().hydro.enabled;
-            if (requireMeshMatch && meshParameters[0] < 4 &&
-                getOptions().gravity.pmmmMaxPrimeFactor != 0) {
-                THROW_ERROR("This PMMM checkpoint predates gravity.pmmmMaxPrimeFactor and used "
-                            "unrestricted FFT mesh sizes. Restart with "
-                            "--gravity.pmmmMaxPrimeFactor=infinity to preserve its mesh policy.\n");
-            }
             if (requireMeshMatch && !pmmmCheckpointCompatible(meshParameters, getOptions())) {
                 THROW_ERROR(
                     "PMMM checkpoint version, mesh size, near/far expansion orders, opening "
-                    "angle, neighbor width/method, gravity.pmmmMaxPrimeFactor, timestep parameters "
+                    "angle, neighbor width/method, gravity.pmmmCoarseMeshSize, timestep parameters "
                     "or force convention differs from the requested run\n");
             }
         }
@@ -1017,8 +1016,10 @@ void checkpointStateTest() {
     }
     changed = getOptions();
     auto const pmmmParameters = detail::pmmmCheckpointParameters(changed);
-    ALWAYS_ASSERT(pmmmParameters[0] == 4 &&
-        pmmmParameters[10] == uint64_t(changed.gravity.pmmmMaxPrimeFactor));
+    ALWAYS_ASSERT(pmmmParameters[0] == 5 &&
+        pmmmParameters[10] ==
+            uint64_t(pmmm::detail::resolvedCoarseMeshSize(changed.gravity.meshSize,
+                changed.gravity.pmmmCoarseMeshSize, changed.gravity.pmmmNearWidth)));
     changed.gravity.meshSize += 1;
     ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
     changed = getOptions();
@@ -1036,24 +1037,26 @@ void checkpointStateTest() {
     changed = getOptions();
     changed.gravity.pmmmNearMethod = changed.gravity.pmmmNearMethod == "fmm" ? "pp" : "fmm";
     ALWAYS_ASSERT(pmmmParameters != detail::pmmmCheckpointParameters(changed));
+    // The coarse mesh is checkpoint identity: two coarse meshes under one full
+    // mesh select different hierarchical stage meshes after the restart. The
+    // default resolves to one eighth of the full mesh per axis.
     changed = getOptions();
-    changed.gravity.pmmmMaxPrimeFactor = changed.gravity.pmmmMaxPrimeFactor == 0 ? 5 : 0;
-    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(pmmmParameters, changed));
-    // A matching current mesh does not make two prime-factor policies equivalent:
-    // their next rung-selected mesh may differ after the restart.
-    changed.gravity.meshSize = 8;
-    changed.gravity.pmmmMaxPrimeFactor = 5;
-    auto const smoothPmmmParameters = detail::pmmmCheckpointParameters(changed);
-    changed.gravity.pmmmMaxPrimeFactor = 3;
-    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(smoothPmmmParameters, changed));
+    changed.gravity.meshSize = 64;
+    changed.gravity.pmmmNearWidth = 2;
+    changed.gravity.pmmmCoarseMeshSize = 8;
+    auto const coarsePmmmParameters = detail::pmmmCheckpointParameters(changed);
+    ALWAYS_ASSERT(coarsePmmmParameters[10] == 8);
+    changed.gravity.pmmmCoarseMeshSize = 16;
+    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(coarsePmmmParameters, changed));
+    changed.gravity.pmmmCoarseMeshSize = 0;
+    ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(coarsePmmmParameters, changed));
     changed = getOptions();
     changed.gravity.pmmmOrder = changed.gravity.fmmOrder;
     changed.gravity.pmmmNearMethod = "pp";
-    changed.gravity.pmmmMaxPrimeFactor = 0;
     auto legacyPmmmParameters = detail::pmmmCheckpointParameters(changed);
     legacyPmmmParameters[0] = 1;
     legacyPmmmParameters[7] = 0;
-    legacyPmmmParameters[8] = legacyPmmmParameters[9] = 0;
+    legacyPmmmParameters[8] = legacyPmmmParameters[9] = legacyPmmmParameters[10] = 0;
     ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
     changed.gravity.pmmmNearMethod = "fmm";
     ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
@@ -1064,24 +1067,35 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
     changed.gravity.pmmmOrder += 1;
     ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
-    changed = getOptions();
-    changed.gravity.pmmmMaxPrimeFactor = 0;
-    legacyPmmmParameters = detail::pmmmCheckpointParameters(changed);
-    legacyPmmmParameters[0] = 3;
-    ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
-    changed.gravity.pmmmMaxPrimeFactor = 5;
-    ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
+    // Versions three and four predate the coarse mesh and restart under any
+    // requested coarse mesh; version four's retired prime-factor slot is ignored.
+    for (uint64_t version : {uint64_t(3), uint64_t(4)}) {
+        changed = getOptions();
+        changed.gravity.meshSize = 64;
+        changed.gravity.pmmmNearWidth = 2;
+        changed.gravity.pmmmCoarseMeshSize = 8;
+        legacyPmmmParameters = detail::pmmmCheckpointParameters(changed);
+        legacyPmmmParameters[0] = version;
+        legacyPmmmParameters[10] = version == 4 ? 5 : 0;
+        ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
+        changed.gravity.pmmmCoarseMeshSize = 16;
+        ALWAYS_ASSERT(detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
+        changed.gravity.meshSize = 32;
+        ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(legacyPmmmParameters, changed));
+    }
     // Decode each historical extension without consuming any following driver
-    // bytes, and require the old mesh policy to remain explicitly unrestricted.
-    constexpr std::array<size_t, 4> kPmmmParameterWords{7, 8, 10, 11};
+    // bytes.
+    constexpr std::array<size_t, 5> kPmmmParameterWords{7, 8, 10, 11, 11};
     constexpr uint64_t kFollowingPayload = 0x0123456789abcdefULL;
-    for (uint64_t version = 1; version <= 4; ++version) {
+    for (uint64_t version = 1; version <= 5; ++version) {
         changed = getOptions();
         changed.gravity.pmmmOrder = changed.gravity.fmmOrder;
         changed.gravity.pmmmNearMethod = "pp";
-        changed.gravity.pmmmMaxPrimeFactor = version < 4 ? 0 : 5;
         auto serialized = detail::pmmmCheckpointParameters(changed);
         serialized[0] = version;
+        if (version < 5) {
+            serialized[10] = version == 4 ? 5 : 0;
+        }
         detail::CheckpointFile stream(tmpfile());
         ALWAYS_ASSERT(stream != nullptr);
         size_t const words = kPmmmParameterWords[version - 1];
@@ -1093,11 +1107,7 @@ void checkpointStateTest() {
         uint64_t followingPayload = 0;
         ALWAYS_ASSERT(fread(&followingPayload, sizeof(uint64_t), 1, stream.get()) == 1 &&
             followingPayload == kFollowingPayload);
-        if (version < 4) {
-            ALWAYS_ASSERT(decoded[10] == 0);
-            changed.gravity.pmmmMaxPrimeFactor = 5;
-            ALWAYS_ASSERT(!detail::pmmmCheckpointCompatible(decoded, changed));
-        }
+        ALWAYS_ASSERT(decoded[10] == (version == 5 ? serialized[10] : (version == 4 ? 5 : 0)));
     }
     changed = getOptions();
     changed.run.minRung += 1;

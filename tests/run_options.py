@@ -85,7 +85,7 @@ def main():
                 "hydro.viscosityEpsilon", "hydro.balsaraSwitch",
                 "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
-                "gravity.meshSize", "gravity.pmmmNearWidth", "gravity.pmmmMaxPrimeFactor",
+                "gravity.meshSize", "gravity.pmmmNearWidth", "gravity.pmmmCoarseMeshSize",
                 "gravity.openingAngle", "gravity.openingSchedule",
                 "gravity.errorInterval", "gravity.errorSampleSize",
                 "hydro.kernelFamily", "hydro.kernelDegree",
@@ -409,32 +409,6 @@ mapSize = 8
 
     assertCompiledSettings(balsara_default)
     assertCompiledSettings(configured)
-    assertNumericSetting(balsara_default, "gravity.pmmmMaxPrimeFactor", 5)
-    prime_config = args.workdir / "pmmm_prime_factor.ini"
-    for value in ("2", "6", "7", "2147483647", "infinity", "inf"):
-        expected = "infinity" if value in ("infinity", "inf") else value
-        prime_config.write_text(f"[gravity]\npmmmMaxPrimeFactor = {value}\n")
-        for source, arguments in (
-                ("cli", [f"--gravity.pmmmMaxPrimeFactor={value}"]),
-                ("ini", [f"--configuration={prime_config.resolve()}"])):
-            output = run(f"pmmm_prime_factor_{source}_{value}", metadata_options + arguments)
-            if not re.search(r"^gravity\.pmmmMaxPrimeFactor\s*:\s*" + expected + r"\s*$",
-                             output, re.MULTILINE):
-                raise RuntimeError(f"{source} maximum prime factor did not resolve to {expected}")
-    prime_config.write_text("[gravity]\npmmmMaxPrimeFactor = infinity\n")
-    output = run("pmmm_prime_factor_cli_override", metadata_options + [
-        f"--configuration={prime_config.resolve()}", "--gravity.pmmmMaxPrimeFactor=5"])
-    assertNumericSetting(output, "gravity.pmmmMaxPrimeFactor", 5)
-    for index, value in enumerate(("", "0", "1", "-2", "2.5", "nan", "2e1",
-                                   "5tail", "2147483648", "infinite")):
-        prime_config.write_text(f"[gravity]\npmmmMaxPrimeFactor = {value}\n")
-        for source, arguments in (
-                ("cli", [f"--gravity.pmmmMaxPrimeFactor={value}"]),
-                ("ini", [f"--configuration={prime_config.resolve()}"])):
-            rejected = run(f"pmmm_prime_factor_invalid_{source}_{index}",
-                           metadata_options + arguments, success=False)
-            if "gravity.pmmmMaxPrimeFactor" not in rejected:
-                raise RuntimeError("invalid maximum prime factor lacked its option diagnostic")
     for scenario in ("plummer", "glass"):
         output = run(f"integrator_{scenario}", metadata_options + [f"--run.scenario={scenario}"])
         assertCompiledSettings(output)
@@ -479,39 +453,86 @@ mapSize = 8
             raise RuntimeError(f"opening schedule was not explicitly rejected for {name}")
     run("gravity_negative_mesh", metadata_options + ["--gravity.meshSize=-1"], success=False)
     if args.gravity_method == "pmmm":
-        for near_width in (1, 2, 3, 4):
-            mesh_size = 2 * near_width + 1
+        # The smallest power-of-two mesh with distinct periodic near cells.
+        minimum_mesh = {1: 4, 2: 8, 3: 8, 4: 16}
+        for near_width, mesh_size in minimum_mesh.items():
             pmmm_output = run(f"pmmm_metadata_{near_width}", metadata_options + [
                 f"--gravity.meshSize={mesh_size}", f"--gravity.pmmmNearWidth={near_width}"])
             assertCompiledSettings(pmmm_output)
             for key, expected in (("gravity.meshSize", mesh_size),
-                                  ("gravity.pmmmNearWidth", near_width)):
+                                  ("gravity.pmmmNearWidth", near_width),
+                                  ("gravity.pmmmCoarseMeshSize", mesh_size)):
                 assertNumericSetting(pmmm_output, key, expected)
             assertNumericSetting(pmmm_output, "gravity.openingAngle", math.sqrt(3) / (near_width + 1))
         assertNumericSetting(balsara_default, "gravity.pmmmNearWidth", 2)
         assertNumericSetting(balsara_default, "gravity.pmmmBatchParticles", 4096)
-        assertNumericSetting(balsara_default, "gravity.effectiveMeshSize", 8)
+        assertNumericSetting(balsara_default, "gravity.pmmmCoarseMeshSize", 8)
         assertNumericSetting(balsara_default, "gravity.openingAngle", math.sqrt(3) / 3)
-        for limit, requested, expected in (("5", 7, 8), ("2", 9, 16), ("6", 11, 12),
-                                           ("7", 7, 7), ("infinity", 7, 7)):
-            output = run(f"pmmm_effective_mesh_{limit}", metadata_options + [
-                f"--gravity.meshSize={requested}", f"--gravity.pmmmMaxPrimeFactor={limit}"])
-            assertNumericSetting(output, "gravity.meshSize", requested)
-            assertNumericSetting(output, "gravity.effectiveMeshSize", expected)
-        radius_options = metadata_options + ["--gravity.meshSize=7", "--gravity.supportRadius=2.1"]
-        run("pmmm_unrestricted_support", radius_options + ["--gravity.pmmmMaxPrimeFactor=infinity"])
-        rejected = run("pmmm_rounded_support", radius_options + ["--gravity.pmmmMaxPrimeFactor=5"],
-                       success=False)
-        if "normalized gravity.supportRadius" not in rejected or "effectiveMeshSize" not in rejected:
-            raise RuntimeError("PMMM support validation did not use the rounded mesh")
-        allocation_options = metadata_options + ["--gravity.meshSize=800000",
-                                                  "--gravity.supportRadius=1e-6"]
-        run("pmmm_unrestricted_allocation", allocation_options + [
-            "--gravity.pmmmMaxPrimeFactor=infinity"])
-        rejected = run("pmmm_rounded_allocation", allocation_options + [
-            "--gravity.pmmmMaxPrimeFactor=2"], success=False)
-        if "indexing/allocation limits" not in rejected or "rounding" not in rejected:
-            raise RuntimeError("PMMM allocation validation did not use the rounded mesh")
+        # Zero resolves to meshSize/8, never below the near-width minimum and
+        # never above the mesh itself.
+        for mesh_size, near_width, expected in ((64, None, 8), (8, None, 8),
+                                                (16, 4, 16), (32, 1, 4)):
+            width_options = [] if near_width is None else [f"--gravity.pmmmNearWidth={near_width}"]
+            output = run(f"pmmm_coarse_default_{mesh_size}_{near_width}", metadata_options + [
+                f"--gravity.meshSize={mesh_size}"] + width_options)
+            assertNumericSetting(output, "gravity.meshSize", mesh_size)
+            assertNumericSetting(output, "gravity.pmmmCoarseMeshSize", expected)
+        for coarse in (8, 16, 64):
+            output = run(f"pmmm_coarse_cli_{coarse}", metadata_options + [
+                "--gravity.meshSize=64", f"--gravity.pmmmCoarseMeshSize={coarse}"])
+            assertNumericSetting(output, "gravity.pmmmCoarseMeshSize", coarse)
+        coarse_config = args.workdir / "pmmm_coarse_mesh.ini"
+        coarse_config.write_text("[gravity]\nmeshSize = 64\npmmmCoarseMeshSize = 16\n")
+        output = run("pmmm_coarse_ini", metadata_options + [
+            f"--configuration={coarse_config.resolve()}"], pmmm_mesh=None)
+        assertNumericSetting(output, "gravity.meshSize", 64)
+        assertNumericSetting(output, "gravity.pmmmCoarseMeshSize", 16)
+        output = run("pmmm_coarse_cli_override", metadata_options + [
+            f"--configuration={coarse_config.resolve()}", "--gravity.pmmmCoarseMeshSize=32"],
+            pmmm_mesh=None)
+        assertNumericSetting(output, "gravity.pmmmCoarseMeshSize", 32)
+        # Ignore an invalid INI value when the same option is replaced on CLI.
+        coarse_config.write_text("[gravity]\nmeshSize = 64\npmmmCoarseMeshSize = 12\n")
+        output = run("pmmm_coarse_invalid_ini_cli_override", metadata_options + [
+            f"--configuration={coarse_config.resolve()}", "--gravity.pmmmCoarseMeshSize=16"],
+            pmmm_mesh=None)
+        assertNumericSetting(output, "gravity.pmmmCoarseMeshSize", 16)
+        rejected = run("pmmm_coarse_invalid_ini", metadata_options + [
+            f"--configuration={coarse_config.resolve()}"], success=False, pmmm_mesh=None)
+        if "gravity.pmmmCoarseMeshSize must be a power of two" not in rejected:
+            raise RuntimeError("INI coarse mesh rejection lacked its option diagnostic")
+        power_of_two = "gravity.meshSize must be a power of two when gravity.method.far=pmmm"
+        coarse_range = ("gravity.pmmmCoarseMeshSize must be a power of two between the smallest "
+                        "power of two at least 2*gravity.pmmmNearWidth+1 and gravity.meshSize")
+        for label, options, diagnostic in (
+                ("mesh_7", ["--gravity.meshSize=7"], power_of_two),
+                ("mesh_12", ["--gravity.meshSize=12"], power_of_two),
+                ("mesh_6", ["--gravity.meshSize=6"], power_of_two),
+                ("mesh_overflow", ["--gravity.meshSize=2147483647"], power_of_two),
+                ("mesh_allocation", ["--gravity.meshSize=1073741824"],
+                 "gravity.meshSize cubed exceeds mesh indexing/allocation limits"),
+                ("coarse_3", ["--gravity.meshSize=64", "--gravity.pmmmCoarseMeshSize=3"],
+                 coarse_range),
+                ("coarse_12", ["--gravity.meshSize=64", "--gravity.pmmmCoarseMeshSize=12"],
+                 coarse_range),
+                ("coarse_below_minimum", ["--gravity.meshSize=64", "--gravity.pmmmNearWidth=2",
+                                          "--gravity.pmmmCoarseMeshSize=4"], coarse_range),
+                ("coarse_above_mesh", ["--gravity.meshSize=16", "--gravity.pmmmCoarseMeshSize=32"],
+                 coarse_range),
+                ("coarse_negative", ["--gravity.meshSize=64", "--gravity.pmmmCoarseMeshSize=-1"],
+                 "gravity.pmmmCoarseMeshSize must be nonnegative")):
+            rejected = run(f"pmmm_coarse_reject_{label}", metadata_options + options,
+                           success=False)
+            if diagnostic not in rejected:
+                raise RuntimeError(f"{label}: missing PMMM mesh diagnostic: {diagnostic}")
+        # The support radius is normalized by the 8**3 fixture; width/mesh = 0.25.
+        radius_options = metadata_options + ["--gravity.meshSize=8"]
+        run("pmmm_support_within_width", radius_options + ["--gravity.supportRadius=1.9"])
+        rejected = run("pmmm_support_beyond_width", radius_options + [
+            "--gravity.supportRadius=2.1"], success=False)
+        if ("PMMM requires the normalized gravity.supportRadius to be no larger than "
+                "gravity.pmmmNearWidth/gravity.meshSize") not in rejected:
+            raise RuntimeError("PMMM support validation lacked its near-width diagnostic")
         for scenario in ("cosmology", "plummer"):
             pmmm_output = run(f"pmmm_derived_angle_{scenario}", metadata_options + [
                 f"--run.scenario={scenario}", "--gravity.openingAngle=0.99"])
@@ -527,28 +548,29 @@ mapSize = 8
                 raise RuntimeError("independent saved field option enabled the wrong diagnostic")
     if args.gravity_method == "pmmm":
         for index, invalid in enumerate((
-                [], ["--gravity.meshSize=4"],
-                ["--gravity.meshSize=3", "--gravity.pmmmNearWidth=0"],
-                ["--gravity.meshSize=11", "--gravity.pmmmNearWidth=5"],
+                [], ["--gravity.meshSize=4"], ["--gravity.meshSize=12"],
+                ["--gravity.meshSize=8", "--gravity.pmmmNearWidth=0"],
+                ["--gravity.meshSize=16", "--gravity.pmmmNearWidth=5"],
                 ["--gravity.meshSize=6", "--gravity.pmmmNearWidth=3"],
+                ["--gravity.meshSize=4", "--gravity.pmmmNearWidth=3"],
                 ["--gravity.meshSize=8", "--gravity.pmmmNearWidth=4"],
                 ["--gravity.meshSize=2", "--gravity.pmmmNearWidth=1"],
-                ["--gravity.meshSize=7", "--gravity.supportRadius=8"],
-                ["--gravity.meshSize=7", "--gravity.pmmmBatchParticles=0"],
-                ["--gravity.meshSize=7", "--gravity.pmmmBatchParticles=-1"],
-                ["--gravity.meshSize=2147483647"])):
+                ["--gravity.meshSize=8", "--gravity.supportRadius=8"],
+                ["--gravity.meshSize=8", "--gravity.pmmmBatchParticles=0"],
+                ["--gravity.meshSize=8", "--gravity.pmmmBatchParticles=-1"],
+                ["--gravity.meshSize=2147483647"],
+                ["--gravity.meshSize=1073741824"])):
             run(f"pmmm_invalid_{index}", metadata_options + invalid,
                 success=False, pmmm_mesh=None)
         pmmm_config = args.workdir / "pmmm.ini"
-        pmmm_config.write_text("[gravity]\nmeshSize = 7\npmmmNearWidth = 2\nopeningAngle = 0.1\n"
-                               "pmmmMaxPrimeFactor = infinity\n")
+        pmmm_config.write_text("[gravity]\nmeshSize = 16\npmmmNearWidth = 2\nopeningAngle = 0.1\n")
         pmmm_output = run("pmmm_ini_cli", metadata_options + [
             f"--configuration={pmmm_config.resolve()}", "--gravity.pmmmNearWidth=1",
-            "--gravity.openingAngle=0.9", "--gravity.pmmmMaxPrimeFactor=5"], pmmm_mesh=None)
+            "--gravity.openingAngle=0.9"], pmmm_mesh=None)
         assertCompiledSettings(pmmm_output)
-        assertNumericSetting(pmmm_output, "gravity.meshSize", 7)
-        assertNumericSetting(pmmm_output, "gravity.pmmmMaxPrimeFactor", 5)
-        assertNumericSetting(pmmm_output, "gravity.effectiveMeshSize", 8)
+        assertNumericSetting(pmmm_output, "gravity.meshSize", 16)
+        # Width one lowers the minimum coarse mesh to four, above meshSize/8.
+        assertNumericSetting(pmmm_output, "gravity.pmmmCoarseMeshSize", 4)
         assertNumericSetting(pmmm_output, "gravity.pmmmNearWidth", 1)
         assertNumericSetting(pmmm_output, "gravity.openingAngle", math.sqrt(3) / 2)
 
