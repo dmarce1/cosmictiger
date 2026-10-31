@@ -69,7 +69,11 @@ Bryan-Norman backgrounds, `mvir` and `rvir` retain their virial meanings and
 `m200`, `m500`, and `m2500` mean M200c, M500c, and M2500c, relative to critical
 density. When the catalogue uses the 200-times-mean-matter fallback, those same
 stored fields are displayed as `M200m_main`, `r200m`, M200m, M500m, and M2500m.
-The 500-overdensity shape labels also use the matching reference. Filters,
+The 500-overdensity shape labels also use the matching reference. `mGas` and
+`mStar` (format version 3 records) are the gas and stellar mass within `rvir`,
+in solar masses/h; dark-matter-only catalogues and catalogues imported from
+version 2 files carry zeros, and a viewer database made before them gains the
+two columns, filled with zero, on its next open. Filters,
 table headings, inspector values, plot tooltips, and downloaded selection
 metadata use these catalogue-specific definitions; CSV field names stay stable.
 Records have inclusive halo masses, and `sys` describes internal substructure; distinct

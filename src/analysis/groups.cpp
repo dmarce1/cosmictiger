@@ -7,6 +7,8 @@
  */
 
 #include <algorithm>
+#include <atomic>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -34,6 +36,9 @@ void groupsTransmitParticles(Vector<std::pair<GroupInteger, Vector<ParticleData>
 Vector<GroupInteger> groupsExist(Vector<GroupInteger>);
 void groupsQueueAssignments(Vector<Pair<ParticleInteger, GroupInteger>> assignments);
 void groupsInstallHistory(Vector<Pair<GroupInteger>> entries);
+Vector<HaloAperture> groupsGatherApertures();
+Vector<Pair<double>> groupsSumBaryons(Vector<HaloAperture> apertures);
+void groupsInstallBaryons(Vector<Pair<double>> masses);
 
 HPX_PLAIN_ACTION(groupsAddParticles, GroupsAddParticlesAction);
 HPX_PLAIN_ACTION(groupsTransmitParticles, GroupsTransmitParticlesAction);
@@ -43,6 +48,9 @@ HPX_PLAIN_ACTION(groupsExist, GroupsExistAction);
 HPX_PLAIN_ACTION(groupsCull, GroupsCullAction);
 HPX_PLAIN_ACTION(groupsQueueAssignments, GroupsQueueAssignmentsAction);
 HPX_PLAIN_ACTION(groupsInstallHistory, GroupsInstallHistoryAction);
+HPX_PLAIN_ACTION(groupsGatherApertures, GroupsGatherAperturesAction);
+HPX_PLAIN_ACTION(groupsSumBaryons, GroupsSumBaryonsAction);
+HPX_PLAIN_ACTION(groupsInstallBaryons, GroupsInstallBaryonsAction);
 
 constexpr int kGroupTableSize = 1024;
 
@@ -57,6 +65,8 @@ static Array<std::unordered_map<GroupInteger, Vector<ParticleData>, GroupHashHi>
     groupData;
 static Vector<GroupEntry> groups;
 static Vector<RockstarRecord> rockstarRecords;
+// One aperture per rockstarRecords entry, in the same order.
+static Vector<HaloAperture> haloApertures;
 static Vector<Pair<GroupInteger>> haloHosts;
 static std::unordered_map<GroupInteger, GroupInteger> previousHaloHosts;
 static Vector<Pair<ParticleInteger, GroupInteger>> pendingAssignments;
@@ -295,6 +305,7 @@ std::pair<size_t, size_t> groupsSave(int number, double scale, double time) {
         throw std::runtime_error("Cannot write ROCKSTAR host history: " + historyName);
     }
     rockstarRecords.clear();
+    haloApertures.clear();
     haloHosts.clear();
     size_t count = groups.size();
     groups = decltype(groups)();
@@ -407,8 +418,20 @@ void groupsReduce(double scaleFactor) {
                                     auto const& particle = halo.parts[particleIndex];
                                     tags[particle.rank][particle.index] = halo.catalogueId;
                                 }
-                                auto record =
-                                    rockstarMakeRecord(halos, i, scaleFactor, origin, true, true);
+                                double virialRadius = 0.0;
+                                auto record = rockstarMakeRecord(
+                                    halos, i, scaleFactor, origin, true, true, &virialRadius);
+                                HaloAperture aperture;
+                                aperture.radius = virialRadius;
+                                aperture.rank = hpxRank();
+                                Array<double, kDimensions> peak;
+                                peak[0] = halo.x;
+                                peak[1] = halo.y;
+                                peak[2] = halo.z;
+                                for (int dim = 0; dim < kDimensions; ++dim) {
+                                    double const position = origin[dim] + peak[dim];
+                                    aperture.center[dim] = position - std::floor(position);
+                                }
                                 record.id.fofId = candidate.first;
                                 record.id.haloId = i;
                                 int const parent =
@@ -421,6 +444,7 @@ void groupsReduce(double scaleFactor) {
                                 std::lock_guard<SpinlockType> lock(mutex);
                                 groups.push_back(std::move(entry));
                                 rockstarRecords.push_back(record);
+                                haloApertures.push_back(aperture);
                                 haloHosts.push_back({halo.catalogueId, host});
                                 existingGroups.insert(candidate.first);
                             }
@@ -450,6 +474,162 @@ void groupsReduce(double scaleFactor) {
         future.get();
     }
     groupData = decltype(groupData)();
+}
+
+Vector<HaloAperture> groupsGatherApertures() {
+    Vector<hpx::future<Vector<HaloAperture>>> futures;
+    for (auto const& child : hpxChildren()) {
+        futures.push_back(hpx::async<GroupsGatherAperturesAction>(child));
+    }
+    // Each rank's apertures stay contiguous and in record order, so the owner
+    // can install the reduced masses by position.
+    Vector<HaloAperture> apertures = haloApertures;
+    for (auto& future : futures) {
+        auto const part = future.get();
+        apertures.insert(apertures.end(), part.begin(), part.end());
+    }
+    return apertures;
+}
+
+Vector<Pair<double>> groupsSumBaryons(Vector<HaloAperture> apertures) {
+    Vector<hpx::future<Vector<Pair<double>>>> futures;
+    for (auto const& child : hpxChildren()) {
+        futures.push_back(hpx::async<GroupsSumBaryonsAction>(child, apertures));
+    }
+    size_t const count = apertures.size();
+    // Equal per-species particle masses make these sums order independent.
+    std::vector<std::atomic<double>> gas(count);
+    std::vector<std::atomic<double>> star(count);
+    double maxRadius = 0.0;
+    for (auto const& aperture : apertures) {
+        maxRadius = std::max(maxRadius, aperture.radius);
+    }
+    if (getOptions().hydro.enabled && maxRadius > 0.0) {
+        // Bucket halo centres on a periodic grid whose cells are at least one
+        // maximum radius wide, so a particle's 27 neighbouring cells hold every
+        // aperture that can contain it. Fewer than three cells per dimension
+        // would alias the neighbourhood; use a single cell instead.
+        int cells = std::clamp(int(1.0 / maxRadius), 1, 256);
+        if (cells < 3) {
+            cells = 1;
+        }
+        auto const cellOf = [cells](double coordinate) {
+            return std::clamp(int(coordinate * cells), 0, cells - 1);
+        };
+        auto const cellIndex = [cells](int i, int j, int k) { return (i * cells + j) * cells + k; };
+        std::vector<Vector<int>> grid(size_t(cells) * cells * cells);
+        for (size_t i = 0; i < count; ++i) {
+            auto const& center = apertures[i].center;
+            grid[cellIndex(cellOf(center[0]), cellOf(center[1]), cellOf(center[2]))].push_back(i);
+        }
+        int const neighbours = cells == 1 ? 0 : 1;
+        int const numberOfThreads = hpxHardwareConcurrency();
+        Vector<hpx::future<void>> workers;
+        for (int proc = 0; proc < numberOfThreads; ++proc) {
+            workers.push_back(hpx::async(hpx::annotated_function(
+                [proc, numberOfThreads, cells, neighbours, &cellOf, &cellIndex, &grid, &apertures,
+                    &gas, &star]() {
+                    ParticleInteger const begin = (size_t) proc * particlesSize() / numberOfThreads;
+                    ParticleInteger const end =
+                        (size_t) (proc + 1) * particlesSize() / numberOfThreads;
+                    for (ParticleInteger i = begin; i < end; ++i) {
+                        int const type = particlesType(i);
+                        if (type == kDarkMatterType) {
+                            continue;
+                        }
+                        auto& species = type == kStarType ? star : gas;
+                        double const mass = particlesMass(i);
+                        Array<double, kDimensions> position;
+                        Array<int, kDimensions> cell;
+                        for (int dim = 0; dim < kDimensions; ++dim) {
+                            position[dim] = particlesPos(dim, i).toDouble();
+                            cell[dim] = cellOf(position[dim]);
+                        }
+                        for (int di = -neighbours; di <= neighbours; ++di) {
+                            for (int dj = -neighbours; dj <= neighbours; ++dj) {
+                                for (int dk = -neighbours; dk <= neighbours; ++dk) {
+                                    auto const& bucket =
+                                        grid[cellIndex((cell[0] + di + cells) % cells,
+                                            (cell[1] + dj + cells) % cells,
+                                            (cell[2] + dk + cells) % cells)];
+                                    for (int const index : bucket) {
+                                        auto const& aperture = apertures[index];
+                                        double r2 = 0.0;
+                                        for (int dim = 0; dim < kDimensions; ++dim) {
+                                            // Minimum image in the unit periodic box.
+                                            double dx = position[dim] - aperture.center[dim];
+                                            dx -= std::round(dx);
+                                            r2 += dx * dx;
+                                        }
+                                        if (r2 <= aperture.radius * aperture.radius) {
+                                            species[index].fetch_add(mass);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "analysis.groups.sumBaryons")));
+        }
+        hpx::wait_all(workers.begin(), workers.end());
+        for (auto& worker : workers) {
+            worker.get();
+        }
+    }
+    Vector<Pair<double>> masses(count);
+    for (size_t i = 0; i < count; ++i) {
+        masses[i] = {gas[i].load(), star[i].load()};
+    }
+    for (auto& future : futures) {
+        auto const part = future.get();
+        ALWAYS_ASSERT(part.size() == count);
+        for (size_t i = 0; i < count; ++i) {
+            masses[i].first += part[i].first;
+            masses[i].second += part[i].second;
+        }
+    }
+    return masses;
+}
+
+void groupsInstallBaryons(Vector<Pair<double>> masses) {
+    ALWAYS_ASSERT(masses.size() == haloApertures.size());
+    ALWAYS_ASSERT(rockstarRecords.size() == haloApertures.size());
+    ALWAYS_ASSERT(groups.size() == haloApertures.size());
+    // Records are in solar masses/h like mvir; GroupEntry masses are solar masses.
+    double const recordConversion = rockstarMassConversion();
+    double const entryConversion = getOptions().units.massG / constants::kM0;
+    for (size_t i = 0; i < masses.size(); ++i) {
+        rockstarRecords[i].mGas = masses[i].first * recordConversion;
+        rockstarRecords[i].mStar = masses[i].second * recordConversion;
+        groups[i].mGas = masses[i].first * entryConversion;
+        groups[i].mStar = masses[i].second * entryConversion;
+    }
+}
+
+void groupsMeasureBaryons() {
+    // SOAP-style aperture masses (Mondal et al. 2025, MNRAS 543, 1339): every
+    // gas and star particle within rvir counts, bound or not, while the FOF,
+    // 6D linking and unbinding above stay dark-matter-only.
+    if (!getOptions().hydro.enabled) {
+        return;
+    }
+    ALWAYS_ASSERT(hpxRank() == 0);
+    auto const apertures = groupsGatherApertures();
+    auto const masses = groupsSumBaryons(apertures);
+    Vector<Vector<Pair<double>>> perRank(hpxSize());
+    for (size_t i = 0; i < apertures.size(); ++i) {
+        perRank[apertures[i].rank].push_back(masses[i]);
+    }
+    Vector<hpx::future<void>> futures;
+    for (int rank = 0; rank < hpxSize(); ++rank) {
+        futures.push_back(hpx::async<GroupsInstallBaryonsAction>(
+            hpxLocalities()[rank], std::move(perRank[rank])));
+    }
+    hpx::wait_all(futures.begin(), futures.end());
+    for (auto& future : futures) {
+        future.get();
+    }
 }
 
 void groupsTransmitParticles(Vector<std::pair<GroupInteger, Vector<ParticleData>>> entries) {
@@ -548,6 +728,14 @@ namespace detail {
 
 Vector<GroupEntry> const& groupsLocalEntries() {
     return groups;
+}
+
+Vector<RockstarRecord> const& groupsLocalRecords() {
+    return rockstarRecords;
+}
+
+Vector<HaloAperture> const& groupsLocalApertures() {
+    return haloApertures;
 }
 
 Vector<Pair<ParticleInteger, GroupInteger>> const& groupsPendingAssignments() {

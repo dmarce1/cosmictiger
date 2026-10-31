@@ -85,9 +85,9 @@ packing also rejects nonfinite properties and reports the offending field name.
 Both snapshot and lightcone files have a companion `<filename>.format` sidecar:
 
 ```
-format_version 2
+format_version 3
 float16 ieee754_binary16
-record_size 128
+record_size 136
 record_count <number of records>
 byte_order little
 virial_density bryan_norman_flat
@@ -100,6 +100,17 @@ particle_mass total_matter_rescaled
 linked and that each one carries the total-matter mass of its lattice site
 (`Ω_m/Ω_c × m_dm`, equal to the dark-matter-only particle mass), so catalogue
 masses from SPH and dark-matter-only runs share one convention.
+
+Format version 3 appends two binary32 fields, `mGas` and `mStar`, after `vzb`
+(byte offsets 128 and 132), keeping every version 2 offset. They are the gas
+and stellar mass inside `rvir` of the halo's density peak, in solar masses/h
+like `mvir`. The rescaled dark-matter fields are unchanged: `mvir`, the SO
+masses, energies, spins and shapes still count dark-matter particles at the
+total-matter mass, so a dark-matter-only catalogue and an SPH catalogue of the
+same box remain directly comparable, and `mGas`/`mStar` are additional
+diagnostics rather than corrections to `mvir`. Dark-matter-only runs write zeros
+in both fields. Version 2 files (128-byte records) are still read by
+`halo_catalog_export`, which reports zero baryon masses for them.
 
 The writer records the actual native record size and byte order (`little` or
 `big`). The sidecar is published only after the data file closes successfully,
@@ -140,7 +151,8 @@ old five metadata fields must be updated before reading new catalogues.
 | Fields | Convention |
 | --- | --- |
 | `x,y,z` | Absolute halo peak position, comoving Mpc/h |
-| `mvir,m200,m500,m2500` | Solar masses/h |
+| `mvir,m200,m500,m2500` | Solar masses/h, rescaled dark-matter particle counts |
+| `mGas,mStar` | Solar masses/h; gas and stellar particle mass within `rvir`, bound or not |
 | Radii, position dispersions, position offsets, shape axes | Comoving kpc/h |
 | Core/bulk velocity, velocity dispersions, `vcircMax` | km/s |
 | `jx,jy,jz` | Physical angular momentum in (solar masses/h)(Mpc/h)(km/s) |
@@ -158,7 +170,9 @@ indices.
 
 The legacy `GroupEntry` output remains available: `com` is the measured center of
 mass, its legacy inertia components are centered there, and halo radial profiles
-are measured about the density peak. Its existing serialization is retained.
+are measured about the density peak. Its serialization gained the `mGas` and
+`mStar` floats (solar masses, like `mass`) after `izz`; `groups2halofunc` reads
+the same layout through `GroupEntry::read`.
 Snapshot output also contains:
 
 - `groups.N/rockstar.RANK.dat`: raw `RockstarRecord` entries for that rank.
@@ -184,8 +198,24 @@ the 6D linking or the unbinding, following the original ROCKSTAR default
 dark-matter-only linking that Mondal et al. (2025, MNRAS 543, 1339) found to
 recover dark-matter-only halo statistics in hydrodynamical runs. Every count-based
 quantity therefore reports total matter under the assumption that baryons trace the
-dark matter; gas and stellar aperture masses are not yet recorded. An SO search can only recover
-mass represented in the outer FOF candidate list. The virial fit is calibrated for
+dark matter. An SO search can only recover mass represented in the outer FOF
+candidate list.
+
+Baryons are attached afterwards, as the hydrodynamical ROCKSTAR workflows do
+(Mondal et al. 2025 on FLAMINGO; the FIRE-2 `rockstar_dm` catalogues with
+HaloAnalysis). After the last `groupsReduce` wave, `groupsMeasureBaryons` gathers
+every halo's peak position and virial radius to every rank, sums the mass of
+each gas and star particle whose minimum-image distance to a peak is at most
+`rvir` (a SOAP-style aperture: no FOF membership, no unbinding, so unbound gas
+and gas of a neighbouring halo inside the aperture both count), reduces the sums
+over ranks and installs them as `mGas` and `mStar` in the record and the
+`GroupEntry`. Stars carry the gas particle mass they formed from. The sums use
+the record's virial radius before binary16 rounding, so a halo whose `rvir`
+reads back from the half field encloses a slightly different sphere. The
+search buckets halo centres on a periodic grid at least one maximum virial
+radius wide; its cost is linear in the local gas and star count. The lightcone
+catalogue (`lc.groups.EPOCH.RANK`) is not measured: its FOF buffer holds the
+dark-matter crossings only, so its `mGas` and `mStar` are always zero. The virial fit is calibrated for
 flat matter–Lambda or open matter-only cosmologies; using the actual matter
 fraction with radiation or other curvature/Lambda combinations is an extrapolation.
 
@@ -261,6 +291,11 @@ library retains IEEE compilation settings. The runtime `rockstar_cpu` test also
 round-trips generated snapshot and lightcone records and synthetic half boundary
 patterns through the shared catalogue writer, checking all fields and format
 sidecars, along with field-specific overflow/nonfinite errors.
+`groupsCatalogue_hydro_cpu` and `groupsCatalogue_hydro_mpi` rerun the catalogue
+fixtures with `hydro.enabled`, placing gas and stars inside and far outside the
+synthetic halos on every rank: the finder inputs stay dark-matter-only, `mvir`
+remains an integer dark-matter count, and the written `mGas`/`mStar` equal the
+brute-force masses enclosed by each record's aperture, summed over both ranks.
 
 `rockstar_properties` checks SO membership/density consistency, equal-radius ties,
 multiple crossings, distant dense pairs, cosmology limits, rotated and degenerate

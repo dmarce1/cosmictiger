@@ -41,6 +41,9 @@ struct GroupEntry {
     float iyy;
     float iyz;
     float izz;
+    // Gas and stellar mass within the virial aperture, solar masses like mass.
+    float mGas;
+    float mStar;
     bool incomplete;
     std::unordered_map<GroupInteger, int> parents;
     GroupEntry() = default;

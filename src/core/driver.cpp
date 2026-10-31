@@ -177,6 +177,11 @@ void doGroups(int number, double scale, double years) {
     }
     reduce.stop();
     tm.start();
+    groupsMeasureBaryons();
+    tm.stop();
+    terminal::detailPrint("groups_baryons %s\n", terminal::formatDuration(tm.read()).c_str());
+    tm.reset();
+    tm.start();
     groupsCull();
     tm.stop();
     terminal::detailPrint("groups_cull %s\n", terminal::formatDuration(tm.read()).c_str());

@@ -35,7 +35,11 @@ kHalfFields = (
     "sigVb", "vcircMax", "deltaV", "boa", "coa", "ax", "ay", "az", "boa500", "coa500",
     "ax500", "ay500", "az500", "lambda", "lambdaB", "vxc", "vyc", "vzc", "vxb", "vyb", "vzb",
 )
-kRealFields = ("x", "y", "z", "mvir", "e", "jx", "jy", "jz", "m200", "m500", "m2500", *kHalfFields)
+kBaryonFields = ("mGas", "mStar")
+kRealFields = ("x", "y", "z", "mvir", "e", "jx", "jy", "jz", "m200", "m500", "m2500", *kHalfFields,
+               *kBaryonFields)
+kRecordSize = 136
+kLegacyRecordSize = 128
 # RFC 8259 section 6: the only number syntax JSON readers must accept.
 kJsonNumber = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?")
 
@@ -109,10 +113,12 @@ class ExportNumberTests(unittest.TestCase):
                 data = (snapshot / f"rockstar.{rank}.dat").read_bytes()
                 sidecar = dict(line.split() for line in
                                (snapshot / f"rockstar.{rank}.dat.format").read_text().splitlines())
-                self.assertEqual(int(sidecar["record_size"]), 128)
+                self.assertEqual(int(sidecar["record_size"]), kRecordSize)
+                self.assertEqual(sidecar["format_version"], "3")
                 endian = "<" if sidecar["byte_order"] == "little" else ">"
                 for row in (halo for halo in halos if halo["rank"] == rank):
-                    reference = struct.unpack_from(endian + "Q3d8fh31e", data, row["ordinal"] * 128)
+                    reference = struct.unpack_from(endian + "Q3d8fh31e2f", data,
+                                                   row["ordinal"] * kRecordSize)
                     self.assertEqual(row["pid"], reference[12])
                     for field, value in zip(kRealFields, reference[1:12] + reference[13:]):
                         self.assertIsInstance(row[field], float, field)
@@ -125,9 +131,49 @@ class ExportNumberTests(unittest.TestCase):
             self.assertTrue(any(abs(row["jz"]) >= 1.0e21 for row in halos))
             self.assertTrue(any(row["m2500"] == 0.0 and math.copysign(1.0, row["m2500"]) > 0
                                 for row in halos))
+            self.assertTrue(any(row["mGas"] > 0.0 and row["mStar"] > 0.0 for row in halos))
+            self.assertTrue(any(row["mGas"] > 0.0 and row["mStar"] == 0.0 for row in halos))
             self.assertTrue(any(row["vzc"] == 0.0 and math.copysign(1.0, row["vzc"]) < 0
                                 for row in halos))
             self.assertTrue(any(row["rs"] == math.ldexp(1.0, -24) for row in halos))
+
+    def test_legacy_version_2_records_export_zero_baryon_masses(self):
+        """A pre-baryon catalogue (128-byte records, format_version 2) still exports."""
+        with tempfile.TemporaryDirectory(prefix="halo_export_legacy_") as temporary:
+            snapshot = Path(temporary) / "snapshot"
+            runCommand([str(arguments.fixture), str(snapshot)])
+            reference = [loadStrictJson(line) for line in
+                         runCommand([str(arguments.exporter), str(snapshot)]).stdout.splitlines()]
+            for rank in (0, 1):
+                path = snapshot / f"rockstar.{rank}.dat"
+                data = path.read_bytes()
+                self.assertEqual(len(data) % kRecordSize, 0)
+                path.write_bytes(b"".join(data[offset:offset + kLegacyRecordSize]
+                                          for offset in range(0, len(data), kRecordSize)))
+                sidecar = Path(str(path) + ".format")
+                text = sidecar.read_text()
+                self.assertIn("format_version 3\n", text)
+                self.assertIn(f"record_size {kRecordSize}\n", text)
+                sidecar.write_text(text.replace("format_version 3\n", "format_version 2\n")
+                                   .replace(f"record_size {kRecordSize}\n",
+                                            f"record_size {kLegacyRecordSize}\n"))
+            rows = [loadStrictJson(line) for line in
+                    runCommand([str(arguments.exporter), str(snapshot)]).stdout.splitlines()]
+            self.assertEqual(rows[0], reference[0])
+            self.assertEqual(len(rows), len(reference))
+            for row, expected in zip(rows[1:], reference[1:]):
+                self.assertEqual(row["mGas"], 0.0)
+                self.assertEqual(row["mStar"], 0.0)
+                self.assertEqual({key: value for key, value in row.items() if key not in kBaryonFields},
+                                 {key: value for key, value in expected.items() if key not in kBaryonFields})
+            # A version 2 sidecar must describe the legacy record size, and a
+            # version 3 sidecar the current one; mismatches are refused.
+            for rank in (0, 1):
+                sidecar = Path(str(snapshot / f"rockstar.{rank}.dat") + ".format")
+                sidecar.write_text(sidecar.read_text().replace("format_version 2\n", "format_version 3\n"))
+            failed = runCommand([str(arguments.exporter), str(snapshot)], expectedSuccess=False)
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertEqual(failed.stdout, "")
 
 
 class FailedExportTests(unittest.TestCase):
@@ -187,7 +233,8 @@ class DensityConventionTests(unittest.TestCase):
                                          so_density_reference="mean_matter"))
         critical = backend.catalog_dict(legacy)
         self.assertEqual(mean["mass_definitions"], {
-            "mvir": "M200m_main", "m200": "M200m", "m500": "M500m", "m2500": "M2500m"})
+            "mvir": "M200m_main", "m200": "M200m", "m500": "M500m", "m2500": "M2500m",
+            "mGas": "gas within rvir", "mStar": "stars within rvir"})
         self.assertEqual(mean["field_labels"]["rvir"], "r200m")
         self.assertEqual(mean["field_labels"]["ax500"], "Shape axis X (500m)")
         self.assertEqual(critical["mass_definitions"]["mvir"], "Bryan-Norman virial")
@@ -318,11 +365,11 @@ class HaloViewerTests(unittest.TestCase):
             data = (self.snapshot / f"rockstar.{rank}.dat").read_bytes()
             sidecar = dict(line.split() for line in
                            (self.snapshot / f"rockstar.{rank}.dat.format").read_text().splitlines())
-            self.assertEqual(int(sidecar["record_size"]), 128)
+            self.assertEqual(int(sidecar["record_size"]), kRecordSize)
             endian = "<" if sidecar["byte_order"] == "little" else ">"
             for row in (halo for halo in self.expected if halo["rank"] == rank):
-                reference = struct.unpack_from(endian + "31e", data, row["ordinal"] * 128 + 66)
-                for field, value in zip(kHalfFields, reference):
+                reference = struct.unpack_from(endian + "31e2f", data, row["ordinal"] * kRecordSize + 66)
+                for field, value in zip((*kHalfFields, *kBaryonFields), reference):
                     self.assertEqual(row[field], value, field)
 
     def test_02_import_metadata_and_exact_ids(self):
@@ -336,6 +383,9 @@ class HaloViewerTests(unittest.TestCase):
         self.assertEqual(catalog["virial_density"], "bryan_norman")
         self.assertEqual(catalog["so_density_reference"], "critical")
         self.assertEqual(catalog["mass_definitions"]["m200"], "M200c")
+        self.assertEqual(catalog["mass_definitions"]["mGas"], "gas within rvir")
+        self.assertEqual(catalog["field_labels"]["mStar"], "Stellar mass")
+        self.assertEqual(catalog["units"]["mGas"], "solar masses/h (gas within rvir)")
         page = self.halos(limit=50)
         self.assertEqual(page["total"], 64)
         self.assertEqual(len(page["items"]), 50)
@@ -346,7 +396,7 @@ class HaloViewerTests(unittest.TestCase):
         for row in rows:
             expected = self.byId[row["halo_id"]]
             self.assertEqual(row["halo_id"], expected["halo_id"])
-            for field in ("x", "y", "z", "mvir", "e", "jx", "jy", "jz", "m200", "m500", "m2500", *kHalfFields):
+            for field in kRealFields:
                 self.assertEqual(row[field], expected[field], field)
 
     def test_02b_legacy_database_migration_preserves_catalog_and_halos(self):
@@ -356,11 +406,16 @@ class HaloViewerTests(unittest.TestCase):
             source.backup(connection)
             connection.execute("ALTER TABLE catalogs DROP COLUMN virial_density")
             connection.execute("ALTER TABLE catalogs DROP COLUMN so_density_reference")
+            for name in kBaryonFields:
+                connection.execute(f'ALTER TABLE halos DROP COLUMN "{name}"')
             connection.execute("PRAGMA user_version=1")
             connection.commit()
             connection.row_factory = sqlite3.Row
             backend.initialize_database(connection)
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 3)
+            # Catalogs imported before the baryon fields were dark matter only.
+            self.assertEqual(connection.execute(
+                'SELECT count(*) FROM halos WHERE "mGas"!=0.0 OR "mStar"!=0.0').fetchone()[0], 0)
             catalog = backend.catalog_dict(connection.execute("SELECT * FROM catalogs").fetchone())
             self.assertEqual(catalog["id"], self.catalogId)
             self.assertEqual(catalog["virial_density"], "bryan_norman")

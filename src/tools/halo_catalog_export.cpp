@@ -2,6 +2,7 @@
 #include <bit>
 #include <charconv>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -32,8 +33,13 @@ struct Halo {
     size_t ordinal;
 };
 
+// Version 2 records end at vzb; version 3 appends the mGas and mStar floats.
+constexpr size_t kLegacyRecordSize = offsetof(RockstarRecord, mGas);
+static_assert(kLegacyRecordSize == 128);
+
 struct CatalogueFormat {
     size_t recordCount = 0;
+    size_t recordSize = sizeof(RockstarRecord);
     std::string virialDensity = "bryan_norman";
     std::string soDensityReference = "critical";
 };
@@ -157,12 +163,16 @@ CatalogueFormat readFormat(fs::path const& path) {
     bool const hasSpecies =
         metadata.count("halo_particles") == 1 && metadata.count("particle_mass") == 1;
     size_t const expectedKeys = 5 + (hasConvention ? 2 : 0) + (hasSpecies ? 2 : 0);
-    if (metadata.size() != expectedKeys || metadata["format_version"] != "2" ||
+    // Version 2 catalogues predate the baryon aperture masses; their shorter
+    // records are read with mGas and mStar reported as zero.
+    std::string const version = metadata["format_version"];
+    size_t const recordSize = version == "2" ? kLegacyRecordSize : sizeof(RockstarRecord);
+    if (metadata.size() != expectedKeys || (version != "2" && version != "3") ||
         metadata["float16"] != "ieee754_binary16" || metadata["byte_order"] != byteOrder ||
-        metadata["record_size"] != std::to_string(sizeof(RockstarRecord)) ||
+        metadata["record_size"] != std::to_string(recordSize) ||
         metadata.count("record_count") != 1) {
         fail(formatPath,
-            "requires format_version 2, IEEE binary16, matching native ABI and byte order");
+            "requires format_version 2 or 3, IEEE binary16, matching native ABI and byte order");
     }
     if (hasSpecies &&
         (metadata.at("halo_particles") != "dark_matter" ||
@@ -172,11 +182,12 @@ CatalogueFormat readFormat(fs::path const& path) {
     std::uint64_t const count = unsignedInteger(metadata.at("record_count"), formatPath);
     if (count > std::numeric_limits<size_t>::max() / sizeof(RockstarRecord) ||
         count > std::numeric_limits<std::streamsize>::max() / sizeof(RockstarRecord) ||
-        fs::file_size(path) != count * sizeof(RockstarRecord)) {
+        fs::file_size(path) != count * recordSize) {
         fail(path, "record count or binary file size mismatch");
     }
     CatalogueFormat result;
     result.recordCount = static_cast<size_t>(count);
+    result.recordSize = recordSize;
     if (hasConvention) {
         result.virialDensity = metadata.at("virial_density");
         result.soDensityReference = metadata.at("so_density_reference");
@@ -210,8 +221,9 @@ GroupHeader readHeader(fs::path const& directory) {
 
 void validateProperties(Halo const& halo, fs::path const& path) {
     auto const& record = halo.record;
-    std::array<double, 11> const values{{record.x, record.y, record.z, record.mvir, record.e,
-        record.jx, record.jy, record.jz, record.m200, record.m500, record.m2500}};
+    std::array<double, 13> const values{
+        {record.x, record.y, record.z, record.mvir, record.e, record.jx, record.jy, record.jz,
+            record.m200, record.m500, record.m2500, record.mGas, record.mStar}};
     for (double const value : values) {
         if (!std::isfinite(value)) {
             fail(path, "nonfinite halo property at ordinal " + std::to_string(halo.ordinal));
@@ -257,7 +269,9 @@ std::vector<Halo> readHalos(fs::path const& directory, int rankCount, size_t exp
             Halo halo{};
             halo.rank = rank;
             halo.ordinal = ordinal;
-            if (!input.read(reinterpret_cast<char*>(&halo.record), sizeof(halo.record))) {
+            // Halo{} zero-initializes the fields a legacy record does not carry.
+            if (!input.read(reinterpret_cast<char*>(&halo.record),
+                    static_cast<std::streamsize>(format.recordSize))) {
                 fail(path, "cannot read record");
             }
             std::string line;
@@ -374,7 +388,9 @@ void exportSnapshot(fs::path const& directory) {
                   << ",\"jy\":" << JsonNumber{record.jy} << ",\"jz\":" << JsonNumber{record.jz}
                   << ",\"m200\":" << JsonNumber{record.m200}
                   << ",\"m500\":" << JsonNumber{record.m500}
-                  << ",\"m2500\":" << JsonNumber{record.m2500};
+                  << ",\"m2500\":" << JsonNumber{record.m2500}
+                  << ",\"mGas\":" << JsonNumber{record.mGas}
+                  << ",\"mStar\":" << JsonNumber{record.mStar};
         for (auto const& field : kHalfFields) {
             std::cout << ",\"" << field.first
                       << "\":" << JsonNumber{float162double(record.*field.second)};

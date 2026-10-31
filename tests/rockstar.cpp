@@ -135,9 +135,10 @@ void requireRockstarRecordEqual(
             std::bit_cast<uint64_t>(actual.*member) == std::bit_cast<uint64_t>(expected.*member),
             context + ": position changed");
     }
-    std::array<float RockstarRecord::*, 8> const properties{&RockstarRecord::mvir,
+    std::array<float RockstarRecord::*, 10> const properties{&RockstarRecord::mvir,
         &RockstarRecord::e, &RockstarRecord::jx, &RockstarRecord::jy, &RockstarRecord::jz,
-        &RockstarRecord::m200, &RockstarRecord::m500, &RockstarRecord::m2500};
+        &RockstarRecord::m200, &RockstarRecord::m500, &RockstarRecord::m2500, &RockstarRecord::mGas,
+        &RockstarRecord::mStar};
     for (auto const member : properties) {
         requireRockstar(
             std::bit_cast<uint32_t>(actual.*member) == std::bit_cast<uint32_t>(expected.*member),
@@ -156,11 +157,14 @@ void requireRockstarRecordEqual(
 
 void checkRockstarCatalogueRoundtrip(
     RockstarRecord const* records, size_t count, std::string const& context) {
-    // These are the existing native-layout offsets, before the IEEE conversion.
-    static_assert(sizeof(RockstarRecord) == 128);
+    // The version 2 native-layout offsets are retained; version 3 appends the
+    // baryon aperture masses after the last half field.
+    static_assert(sizeof(RockstarRecord) == 136);
     static_assert(offsetof(RockstarRecord, pid) == 64);
     static_assert(offsetof(RockstarRecord, zValue) == 66);
     static_assert(offsetof(RockstarRecord, vzb) == 126);
+    static_assert(offsetof(RockstarRecord, mGas) == 128);
+    static_assert(offsetof(RockstarRecord, mStar) == 132);
     RockstarCatalogueDirectory directory;
     auto const filename = (directory.path() / "catalogue.dat").string();
     rockstarWriteCatalogue(filename, records, count);
@@ -196,7 +200,7 @@ void checkRockstarCatalogueRoundtrip(
     std::string const virialDefinition = flatFit ? "bryan_norman_flat" :
         openFit                                  ? "bryan_norman_open" :
                                                    "200_mean_matter";
-    requireRockstar(metadata.size() == 9 && metadata["format_version"] == "2" &&
+    requireRockstar(metadata.size() == 9 && metadata["format_version"] == "3" &&
             metadata["float16"] == "ieee754_binary16" &&
             metadata["halo_particles"] == "dark_matter" &&
             metadata["particle_mass"] == "total_matter_rescaled" &&
@@ -222,7 +226,7 @@ void checkRockstarCataloguePublication() {
         while (format >> key >> value) {
             metadata.emplace(key, value);
         }
-        requireRockstar(metadata["format_version"] == "2" &&
+        requireRockstar(metadata["format_version"] == "3" &&
                 metadata["float16"] == "ieee754_binary16" &&
                 metadata["record_count"] == std::to_string(count),
             "rewritten catalogue has missing or stale format metadata");
@@ -286,6 +290,8 @@ void checkRockstarCatalogueHalfBoundaries() {
         record.m200 = 2.0f;
         record.m500 = 1.5f;
         record.m2500 = 0.75f;
+        record.mGas = 0.1875f * (i + 1);
+        record.mStar = i % 3 == 0 ? -0.0f : 0.03125f * i;
         for (size_t fieldIndex = 0; fieldIndex < kRockstarHalfFields.size(); ++fieldIndex) {
             auto const& field = kRockstarHalfFields[fieldIndex];
             size_t const caseIndex = (i + fieldIndex) % records.size();

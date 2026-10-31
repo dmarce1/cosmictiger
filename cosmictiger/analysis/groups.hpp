@@ -12,6 +12,7 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #include <functional>
 #include <unordered_map>
 
+#include <cosmictiger/analysis/rockstar_record.hpp>
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/safe_io.hpp>
@@ -38,7 +39,26 @@ struct ParticleData {
     }
 };
 
+// A catalogued halo's virial aperture: the centre in periodic box coordinates
+// and the radius in comoving code lengths, with the catalogue rank that owns
+// the record. Gas and stellar masses are summed inside it after the finder.
+struct HaloAperture {
+    Array<double, kDimensions> center;
+    double radius;
+    int rank;
+    template <class A>
+    void serialize(A&& arc, unsigned) {
+        arc & center;
+        arc & radius;
+        arc & rank;
+    }
+};
+
 void groupsAddParticles(int wave, double scale);
+// After the last groupsReduce wave: sum the mass of every gas and star particle
+// within each halo's virial radius across ranks into the records' mGas and
+// mStar (zero in dark-matter-only runs). Call on rank 0 before groupsSave.
+void groupsMeasureBaryons();
 void groupsPrepareHistory(int number);
 void groupsReduce(double);
 std::pair<size_t, size_t> groupsSave(int number, double scale, double time);
@@ -51,6 +71,8 @@ namespace detail {
 // previous snapshot, and a visit over every candidate group's collected
 // particles.
 Vector<GroupEntry> const& groupsLocalEntries();
+Vector<RockstarRecord> const& groupsLocalRecords();
+Vector<HaloAperture> const& groupsLocalApertures();
 Vector<Pair<ParticleInteger, GroupInteger>> const& groupsPendingAssignments();
 std::unordered_map<GroupInteger, GroupInteger> const& groupsPreviousHaloHosts();
 void groupsResetHistory();

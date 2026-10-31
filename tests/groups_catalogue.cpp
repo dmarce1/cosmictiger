@@ -25,7 +25,80 @@
 #include <cosmictiger/analysis/rockstar.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/particles/particles.hpp>
+
+namespace {
+
+// Brute-force gas and star mass within an aperture over local particles
+// [begin, end), with the minimum image in the unit periodic box.
+Pair<double> catalogueEnclosedBaryons(
+    HaloAperture const& aperture, ParticleInteger begin, ParticleInteger end) {
+    Pair<double> masses{0.0, 0.0};
+    for (ParticleInteger i = begin; i < end; ++i) {
+        int const type = particlesType(i);
+        if (type == kDarkMatterType) {
+            continue;
+        }
+        double r2 = 0.0;
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            double dx = particlesPos(dim, i).toDouble() - aperture.center[dim];
+            dx -= std::round(dx);
+            r2 += dx * dx;
+        }
+        if (r2 <= aperture.radius * aperture.radius) {
+            (type == kStarType ? masses.second : masses.first) += particlesMass(i);
+        }
+    }
+    return masses;
+}
+
+int catalogueDarkMatterWithin(
+    HaloAperture const& aperture, ParticleInteger begin, ParticleInteger end) {
+    int count = 0;
+    for (ParticleInteger i = begin; i < end; ++i) {
+        if (particlesType(i) != kDarkMatterType) {
+            continue;
+        }
+        double r2 = 0.0;
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            double dx = particlesPos(dim, i).toDouble() - aperture.center[dim];
+            dx -= std::round(dx);
+            r2 += dx * dx;
+        }
+        count += r2 <= aperture.radius * aperture.radius;
+    }
+    return count;
+}
+
+bool catalogueClose(double actual, double expected, double tolerance) {
+    return std::abs(actual - expected) <= tolerance * std::max(std::abs(expected), 1.0e-30) ||
+        (actual == 0.0 && expected == 0.0);
+}
+
+// Check the installed record and entry masses of every local halo against the
+// brute-force sums; the caller supplies the total over every rank.
+void catalogueRequireBaryonMasses(
+    Vector<Pair<double>> const& enclosed, std::function<void(bool, char const*)> const& require) {
+    auto const& records = detail::groupsLocalRecords();
+    auto const& entries = detail::groupsLocalEntries();
+    auto const& apertures = detail::groupsLocalApertures();
+    require(apertures.size() == records.size() && entries.size() == records.size() &&
+            enclosed.size() == records.size(),
+        "Halo apertures, records and entries are not aligned");
+    double const recordConversion = rockstarMassConversion();
+    double const entryConversion = getOptions().units.massG / constants::kM0;
+    for (size_t i = 0; i < records.size(); ++i) {
+        require(catalogueClose(records[i].mGas, enclosed[i].first * recordConversion, 2.0e-6) &&
+                catalogueClose(records[i].mStar, enclosed[i].second * recordConversion, 2.0e-6),
+            "Record gas or stellar aperture mass differs from the enclosed particle mass");
+        require(catalogueClose(entries[i].mGas, enclosed[i].first * entryConversion, 2.0e-6) &&
+                catalogueClose(entries[i].mStar, enclosed[i].second * entryConversion, 2.0e-6),
+            "GroupEntry gas or stellar aperture mass differs from the enclosed particle mass");
+    }
+}
+
+}    // namespace
 
 void groupsCatalogueTest() {
     if (hpxSize() != 1) {
@@ -48,17 +121,34 @@ void groupsCatalogueTest() {
     try {
         constexpr int kHaloParticles = 128;
         constexpr int kParticleCount = kHaloParticles + 2;
-        particlesResize(kParticleCount);
+        // With hydro enabled, gas and stars follow the dark matter: some inside
+        // the halo, some 0.4 box lengths away, none ever tagged or linked.
+        constexpr int kGasInside = 16;
+        constexpr int kGasOutside = 8;
+        constexpr int kStarInside = 6;
+        constexpr int kStarOutside = 4;
+        constexpr int kBaryonCount = kGasInside + kGasOutside + kStarInside + kStarOutside;
+        bool const hydro = getOptions().hydro.enabled;
+        int const totalCount = kParticleCount + (hydro ? kBaryonCount : 0);
+        particlesResize(totalCount);
         std::mt19937 generator(141018);
         std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
         float const support = getOptions().gravity.supportRadius;
         float const speed = 0.03f * std::sqrt(getOptions().gravity.gm / support);
-        for (int i = 0; i < kParticleCount; ++i) {
+        for (int i = 0; i < totalCount; ++i) {
+            int const baryon = i - kParticleCount;
+            bool const outside = (baryon >= kGasInside && baryon < kGasInside + kGasOutside) ||
+                baryon >= kGasInside + kGasOutside + kStarInside;
             for (int dim = 0; dim < kDimensions; ++dim) {
-                particlesPos(dim, i) = 0.5 + 0.2 * support * distribution(generator);
+                particlesPos(dim, i) = 0.5 + 0.2 * support * distribution(generator) +
+                    (outside && dim == 0 ? 0.4 : 0.0);
                 particlesVel(dim, i) = speed * distribution(generator);
             }
             particlesLastgroup(i) = kNoParticleGroup;
+            if (hydro) {
+                bool const star = baryon >= kGasInside + kGasOutside;
+                particlesType(i) = baryon < 0 ? kDarkMatterType : (star ? kStarType : kSphType);
+            }
         }
         Vector<GroupInteger> firstTags(kParticleCount, kNoParticleGroup);
         size_t firstHaloCount = 0;
@@ -84,6 +174,14 @@ void groupsCatalogueTest() {
             particlesGroup(kHaloParticles) = particlesGroupInit(kHaloParticles);
             for (int wave = 0; wave < kGroupWaves; ++wave) {
                 groupsAddParticles(wave, 1.0);
+                detail::groupsForEachCandidate(
+                    [&](GroupInteger, Vector<ParticleData> const& members) {
+                        for (auto const& particle : members) {
+                            require(particle.index < kParticleCount &&
+                                    particlesType(particle.index) == kDarkMatterType,
+                                "A gas or star particle reached the halo finder");
+                        }
+                    });
                 if (snapshot == 2) {
                     detail::groupsForEachCandidate(
                         [&](GroupInteger, Vector<ParticleData> const& members) {
@@ -102,12 +200,62 @@ void groupsCatalogueTest() {
                 }
                 groupsReduce(1.0);
             }
+            groupsMeasureBaryons();
+            require(!detail::groupsLocalEntries().empty(),
+                "Bound synthetic group produced an empty catalogue");
+            {
+                // SOAP-style aperture sums: every gas and star particle within
+                // the record's virial radius counts, while the dark-matter
+                // derived masses ignore the baryons sitting inside the halo.
+                auto const& apertures = detail::groupsLocalApertures();
+                auto const& records = detail::groupsLocalRecords();
+                auto const& entries = detail::groupsLocalEntries();
+                Vector<Pair<double>> enclosed;
+                double gasTotal = 0.0;
+                bool anyInside = false;
+                for (int i = kParticleCount; i < totalCount; ++i) {
+                    gasTotal += particlesType(i) == kSphType ? particlesMass(i) : 0.0;
+                }
+                double const entryConversion = getOptions().units.massG / constants::kM0;
+                // The rescaled dark-matter masses are integer particle counts;
+                // any admixture of the fractional gas mass would break that.
+                for (int k = 1; hydro && k <= kBaryonCount; ++k) {
+                    double const admixture = k * getOptions().initial.gasMass;
+                    require(std::abs(admixture - std::round(admixture)) > 1.0e-3,
+                        "Fixture gas mass cannot discriminate counted baryons");
+                }
+                for (size_t i = 0; i < apertures.size(); ++i) {
+                    enclosed.push_back(
+                        catalogueEnclosedBaryons(apertures[i], kParticleCount, totalCount));
+                    anyInside =
+                        anyInside || (enclosed.back().first > 0.0 && enclosed.back().second > 0.0);
+                    require(apertures[i].rank == 0 && apertures[i].radius > 0.0,
+                        "Catalogued halo has no virial aperture");
+                    double const count = records[i].mvir / rockstarMassConversion();
+                    int const darkMatter = std::lround(count);
+                    require(std::abs(count - darkMatter) < 1.0e-3 && darkMatter > 0 &&
+                            darkMatter <=
+                                catalogueDarkMatterWithin(apertures[i], 0, kParticleCount),
+                        "Record virial mass is not a dark-matter particle count");
+                    require(catalogueClose(entries[i].mass, darkMatter * entryConversion, 2.0e-6),
+                        "GroupEntry mass differs from the record's dark-matter count");
+                    if (!hydro) {
+                        require(records[i].mGas == 0.0f && records[i].mStar == 0.0f &&
+                                entries[i].mGas == 0.0f && entries[i].mStar == 0.0f,
+                            "Dark-matter-only catalogue carries baryon masses");
+                    } else {
+                        require(records[i].mGas < gasTotal * rockstarMassConversion(),
+                            "Gas outside the virial radius was counted");
+                    }
+                }
+                require(!hydro || anyInside,
+                    "Gas and stars inside the synthetic halo were not counted");
+                catalogueRequireBaryonMasses(enclosed, require);
+            }
             // This invalid original FOF tag has no queued halo assignment; it
             // specifically verifies that culling visits the final partition.
             particlesGroup(kParticleCount - 1) = particlesGroupInit(kParticleCount - 1);
             groupsCull();
-            require(!detail::groupsLocalEntries().empty(),
-                "Bound synthetic group produced an empty catalogue");
             require(particlesGroup(kHaloParticles) == kNoParticleGroup,
                 "Undersized FOF group retained a particle tag");
             require(particlesGroup(kParticleCount - 1) == kNoParticleGroup,
@@ -164,6 +312,8 @@ void groupsCatalogueTest() {
                 }
                 require(
                     identifiers.count(entry.id) != 0, "Saved catalogue ID differs from membership");
+                require((entry.mGas > 0.0f) == hydro && (entry.mStar > 0.0f) == hydro,
+                    "Saved GroupEntry baryon masses do not match the run's species");
                 ++readCount;
             }
             fclose(input);
@@ -173,6 +323,22 @@ void groupsCatalogueTest() {
             require(
                 std::filesystem::file_size(recordName) == written.first * sizeof(RockstarRecord),
                 "Saved ROCKSTAR property catalogue is empty or incomplete");
+            {
+                std::ifstream records(recordName, std::ios::binary);
+                RockstarRecord record;
+                while (records.read(reinterpret_cast<char*>(&record), sizeof(record))) {
+                    require((record.mGas > 0.0f) == hydro && (record.mStar > 0.0f) == hydro,
+                        "Saved ROCKSTAR baryon masses do not match the run's species");
+                }
+                std::ifstream format(recordName + ".format");
+                std::string key;
+                std::string value;
+                bool versioned = false;
+                while (format >> key >> value) {
+                    versioned = versioned || (key == "format_version" && value == "3");
+                }
+                require(versioned, "Saved ROCKSTAR sidecar does not declare format version 3");
+            }
             std::ifstream descendants(
                 "groups." + std::to_string(snapshotNumber) + "/rockstar_descendants.dat");
             GroupInteger previous;
@@ -197,11 +363,16 @@ void groupsCatalogueTest() {
                 require(particlesLastgroup(i) == firstTags[i],
                     "Halo membership was not carried to the next snapshot");
             }
+            for (int i = kParticleCount; i < totalCount; ++i) {
+                require(particlesLastgroup(i) == kNoParticleGroup,
+                    "A gas or star particle acquired a halo membership");
+            }
             firstHaloCount = written.first;
         }
         std::filesystem::current_path(originalDirectory);
         std::filesystem::remove_all(directory);
-        PRINT("Snapshot halo catalogue and temporal membership tests passed\n");
+        PRINT("Snapshot halo catalogue, %s and temporal membership tests passed\n",
+            hydro ? "gas/stellar aperture masses" : "zero baryon masses");
     } catch (...) {
         std::filesystem::current_path(originalDirectory);
         throw;
@@ -211,7 +382,23 @@ void groupsCatalogueTest() {
 namespace {
 constexpr int kDistributedHaloHalf = 64;
 constexpr int kDistributedLocalCount = 2 * kDistributedHaloHalf + 2;
+// With hydro enabled every rank appends gas and stars inside both halos and
+// gas far from either, so each aperture sum needs contributions from both ranks.
+constexpr int kDistributedGasPerHalo = 4;
+constexpr int kDistributedStarsPerHalo = 2;
+constexpr int kDistributedGasOutside = 2;
+constexpr int kDistributedBaryonCount =
+    2 * (kDistributedGasPerHalo + kDistributedStarsPerHalo) + kDistributedGasOutside;
 Vector<GroupInteger> distributedPreviousTags;
+
+int distributedLocalTotal() {
+    return kDistributedLocalCount + (getOptions().hydro.enabled ? kDistributedBaryonCount : 0);
+}
+
+// Global particle identity (particlesGroupInit) of a local index on a rank.
+GroupInteger distributedIdentity(int rank, int localIndex) {
+    return GroupInteger(rank) * distributedLocalTotal() + localIndex;
+}
 
 void requireDistributedCatalogue(bool condition, char const* message) {
     if (!condition) {
@@ -233,18 +420,34 @@ HPX_PLAIN_ACTION(groupsCatalogueTestDirectory, GroupsCatalogueTestDirectoryActio
 
 void groupsCatalogueDistributedSetup(std::string directory) {
     std::filesystem::current_path(directory);
-    particlesResize(kDistributedLocalCount);
+    int const total = distributedLocalTotal();
+    particlesResize(total);
     std::mt19937 generator(141018 + hpxRank());
     std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
     float const support = getOptions().gravity.supportRadius;
     float const speed = 0.03f * std::sqrt(getOptions().gravity.gm / support);
-    for (int i = 0; i < kDistributedLocalCount; ++i) {
-        double const center = i < kDistributedHaloHalf ? 0.25 : 0.75;
+    for (int i = 0; i < total; ++i) {
+        int const baryon = i - kDistributedLocalCount;
+        int type = kDarkMatterType;
+        double center = i < kDistributedHaloHalf ? 0.25 : 0.75;
+        if (baryon >= 0) {
+            constexpr int kPerHalo = kDistributedGasPerHalo + kDistributedStarsPerHalo;
+            if (baryon >= 2 * kPerHalo) {
+                type = kSphType;
+                center = 0.5;
+            } else {
+                center = baryon < kPerHalo ? 0.25 : 0.75;
+                type = baryon % kPerHalo < kDistributedGasPerHalo ? kSphType : kStarType;
+            }
+        }
         for (int dim = 0; dim < kDimensions; ++dim) {
             particlesPos(dim, i) = center + 0.2 * support * distribution(generator);
             particlesVel(dim, i) = speed * distribution(generator);
         }
         particlesLastgroup(i) = kNoParticleGroup;
+        if (getOptions().hydro.enabled) {
+            particlesType(i) = type;
+        }
     }
 }
 HPX_PLAIN_ACTION(groupsCatalogueDistributedSetup, GroupsCatalogueDistributedSetupAction);
@@ -261,7 +464,7 @@ void groupsCatalogueDistributedBegin(
     }
     distributedPreviousTags = std::move(previousTags);
     for (int i = 0; i < kDistributedLocalCount; ++i) {
-        requireDistributedCatalogue(particlesGroupInit(i) == hpxRank() * kDistributedLocalCount + i,
+        requireDistributedCatalogue(particlesGroupInit(i) == distributedIdentity(hpxRank(), i),
             "Distributed particle offsets do not match the fixture");
         requireDistributedCatalogue(particlesLastgroup(i) ==
                 distributedPreviousTags[hpxRank() * kDistributedLocalCount + i],
@@ -288,11 +491,12 @@ int groupsCatalogueDistributedInspect(int snapshot) {
             requireDistributedCatalogue(particle.rank >= 0 && particle.rank < 2 &&
                     particle.index >= 0 && particle.index < kDistributedLocalCount,
                 "Distributed finder input lost its source address");
-            GroupInteger const identity = particle.rank * kDistributedLocalCount + particle.index;
+            GroupInteger const identity = distributedIdentity(particle.rank, particle.index);
+            GroupInteger const tagIndex = particle.rank * kDistributedLocalCount + particle.index;
             requireDistributedCatalogue(
                 particle.identity == identity && identities.insert(identity).second,
                 "Distributed finder input duplicated or changed a particle identity");
-            requireDistributedCatalogue(particle.lastGroup == distributedPreviousTags[identity],
+            requireDistributedCatalogue(particle.lastGroup == distributedPreviousTags[tagIndex],
                 "Previous halo membership did not reach the remote finder");
             auto const host = hosts.find(particle.lastGroup);
             requireDistributedCatalogue(
@@ -315,6 +519,96 @@ int groupsCatalogueDistributedInspect(int snapshot) {
     return realInputs;
 }
 HPX_PLAIN_ACTION(groupsCatalogueDistributedInspect, GroupsCatalogueDistributedInspectAction);
+
+struct DistributedHaloBaryons {
+    HaloAperture aperture;
+    float recordGas;
+    float recordStar;
+    float entryGas;
+    float entryStar;
+    template <class A>
+    void serialize(A&& arc, unsigned) {
+        arc & aperture;
+        arc & recordGas;
+        arc & recordStar;
+        arc & entryGas;
+        arc & entryStar;
+    }
+};
+
+Vector<DistributedHaloBaryons> groupsCatalogueDistributedHalos() {
+    auto const& apertures = detail::groupsLocalApertures();
+    auto const& records = detail::groupsLocalRecords();
+    auto const& entries = detail::groupsLocalEntries();
+    requireDistributedCatalogue(
+        apertures.size() == records.size() && entries.size() == records.size(),
+        "Distributed halo apertures, records and entries are not aligned");
+    Vector<DistributedHaloBaryons> halos;
+    for (size_t i = 0; i < apertures.size(); ++i) {
+        requireDistributedCatalogue(apertures[i].rank == hpxRank() && apertures[i].radius > 0.0,
+            "Distributed halo aperture has the wrong owner or no radius");
+        halos.push_back(
+            {apertures[i], records[i].mGas, records[i].mStar, entries[i].mGas, entries[i].mStar});
+    }
+    return halos;
+}
+HPX_PLAIN_ACTION(groupsCatalogueDistributedHalos, GroupsCatalogueDistributedHalosAction);
+
+Vector<Pair<double>> groupsCatalogueDistributedLocalBaryons(Vector<HaloAperture> apertures) {
+    Vector<Pair<double>> enclosed;
+    for (auto const& aperture : apertures) {
+        enclosed.push_back(
+            catalogueEnclosedBaryons(aperture, kDistributedLocalCount, distributedLocalTotal()));
+    }
+    return enclosed;
+}
+HPX_PLAIN_ACTION(
+    groupsCatalogueDistributedLocalBaryons, GroupsCatalogueDistributedLocalBaryonsAction);
+
+// Rank 0: every catalogued halo's baryon masses equal the brute-force sums over
+// both ranks, and with hydro enabled both ranks contributed to each halo.
+void groupsCatalogueDistributedCheckBaryons() {
+    bool const hydro = getOptions().hydro.enabled;
+    Vector<DistributedHaloBaryons> halos;
+    for (auto const& locality : hpxLocalities()) {
+        auto const local = hpx::async<GroupsCatalogueDistributedHalosAction>(locality).get();
+        halos.insert(halos.end(), local.begin(), local.end());
+    }
+    requireDistributedCatalogue(!halos.empty(), "Distributed catalogue has no halo apertures");
+    Vector<HaloAperture> apertures;
+    for (auto const& halo : halos) {
+        apertures.push_back(halo.aperture);
+    }
+    Vector<Pair<double>> enclosed(apertures.size(), Pair<double>{0.0, 0.0});
+    for (auto const& locality : hpxLocalities()) {
+        auto const local =
+            hpx::async<GroupsCatalogueDistributedLocalBaryonsAction>(locality, apertures).get();
+        requireDistributedCatalogue(
+            local.size() == apertures.size(), "Local baryon sums do not cover every halo");
+        for (size_t i = 0; i < local.size(); ++i) {
+            requireDistributedCatalogue(!hydro || (local[i].first > 0.0 && local[i].second > 0.0),
+                "Each rank must hold gas and stars inside every distributed halo");
+            enclosed[i].first += local[i].first;
+            enclosed[i].second += local[i].second;
+        }
+    }
+    double const recordConversion = rockstarMassConversion();
+    double const entryConversion = getOptions().units.massG / constants::kM0;
+    for (size_t i = 0; i < halos.size(); ++i) {
+        requireDistributedCatalogue(
+            catalogueClose(halos[i].recordGas, enclosed[i].first * recordConversion, 2.0e-6) &&
+                catalogueClose(halos[i].recordStar, enclosed[i].second * recordConversion, 2.0e-6),
+            "Distributed record baryon masses differ from the two-rank enclosed mass");
+        requireDistributedCatalogue(
+            catalogueClose(halos[i].entryGas, enclosed[i].first * entryConversion, 2.0e-6) &&
+                catalogueClose(halos[i].entryStar, enclosed[i].second * entryConversion, 2.0e-6),
+            "Distributed GroupEntry baryon masses differ from the two-rank enclosed mass");
+        requireDistributedCatalogue(hydro ||
+                (halos[i].recordGas == 0.0f && halos[i].recordStar == 0.0f &&
+                    halos[i].entryGas == 0.0f && halos[i].entryStar == 0.0f),
+            "Dark-matter-only distributed catalogue carries baryon masses");
+    }
+}
 
 Vector<GroupInteger> groupsCatalogueDistributedBeforeCull(int snapshot) {
     for (int i = 0; i < 2 * kDistributedHaloHalf; ++i) {
@@ -423,6 +717,8 @@ void groupsCatalogueDistributedTest() {
             }
             requireDistributedCatalogue(inputCount == 4 * kDistributedHaloHalf,
                 "Distributed finder did not consume both complete FOF groups");
+            groupsMeasureBaryons();
+            groupsCatalogueDistributedCheckBaryons();
             Vector<GroupInteger> identifiers;
             Vector<Vector<GroupInteger>> rankIdentifiers;
             for (auto const& locality : hpxLocalities()) {
@@ -553,8 +849,10 @@ void groupsCatalogueDistributedTest() {
         }
         restoreDirectories();
         std::filesystem::remove_all(directory);
-        PRINT("Two-locality snapshot catalogue, remote membership, and temporal history tests "
-              "passed\n");
+        PRINT("Two-locality snapshot catalogue, remote membership, %s and temporal history "
+              "tests passed\n",
+            getOptions().hydro.enabled ? "two-rank gas/stellar aperture masses" :
+                                         "zero baryon masses");
     } catch (...) {
         restoreDirectories();
         throw;

@@ -11,16 +11,16 @@
   const context = canvas.getContext("2d");
   let plotSize = {width: 0, height: 0};
   const propertyGroups = [
-    ["Position & mass", ["x", "y", "z", "zValue", "mvir", "m200", "m500", "m2500"]],
+    ["Position & mass", ["x", "y", "z", "zValue", "mvir", "m200", "m500", "m2500", "mGas", "mStar"]],
     ["Radii & structure", ["rvir", "rmax", "rvmax", "rs", "rkly", "sigX", "deltaX", "lambda", "lambdaB", "toW"]],
     ["Velocities & dynamics", ["vcircMax", "sigV", "sigVb", "deltaV", "vxc", "vyc", "vzc", "vxb", "vyb", "vzb", "e", "jx", "jy", "jz"]],
     ["Shape", ["boa", "coa", "ax", "ay", "az", "boa500", "coa500", "ax500", "ay500", "az500"]],
     ["Identifiers & provenance", ["halo_id", "host_id", "fof_id", "local_halo_id", "rank", "ordinal", "sys", "pid"]]
   ];
-  const labels = {x:"X",y:"Y",z:"Z",zValue:"Redshift",mvir:"Virial mass",m200:"M200c",m500:"M500c",m2500:"M2500c",rvir:"Virial radius",rmax:"Maximum radius",rvmax:"Radius at Vmax",rs:"NFW scale radius",rkly:"Klypin scale radius",sigX:"Position dispersion",deltaX:"Position offset",lambda:"Spin λ",lambdaB:"Bullock spin λB",toW:"T / |U|",vcircMax:"Maximum circular velocity",sigV:"Velocity dispersion",sigVb:"Bulk velocity dispersion",deltaV:"Velocity offset",vxc:"Core velocity X",vyc:"Core velocity Y",vzc:"Core velocity Z",vxb:"Bulk velocity X",vyb:"Bulk velocity Y",vzb:"Bulk velocity Z",e:"Energy",jx:"Angular momentum X",jy:"Angular momentum Y",jz:"Angular momentum Z",boa:"Axis ratio b/a",coa:"Axis ratio c/a",ax:"Shape axis X",ay:"Shape axis Y",az:"Shape axis Z",boa500:"Axis ratio b/a (500c)",coa500:"Axis ratio c/a (500c)",ax500:"Shape axis X (500c)",ay500:"Shape axis Y (500c)",az500:"Shape axis Z (500c)",halo_id:"Persistent halo ID",host_id:"Host halo ID",fof_id:"FOF ID",local_halo_id:"Local halo index",rank:"Source rank",ordinal:"Record ordinal",sys:"Inclusive system flag",pid:"Local host index"};
+  const labels = {x:"X",y:"Y",z:"Z",zValue:"Redshift",mvir:"Virial mass",m200:"M200c",m500:"M500c",m2500:"M2500c",mGas:"Gas mass (within Rvir)",mStar:"Stellar mass (within Rvir)",rvir:"Virial radius",rmax:"Maximum radius",rvmax:"Radius at Vmax",rs:"NFW scale radius",rkly:"Klypin scale radius",sigX:"Position dispersion",deltaX:"Position offset",lambda:"Spin λ",lambdaB:"Bullock spin λB",toW:"T / |U|",vcircMax:"Maximum circular velocity",sigV:"Velocity dispersion",sigVb:"Bulk velocity dispersion",deltaV:"Velocity offset",vxc:"Core velocity X",vyc:"Core velocity Y",vzc:"Core velocity Z",vxb:"Bulk velocity X",vyb:"Bulk velocity Y",vzb:"Bulk velocity Z",e:"Energy",jx:"Angular momentum X",jy:"Angular momentum Y",jz:"Angular momentum Z",boa:"Axis ratio b/a",coa:"Axis ratio c/a",ax:"Shape axis X",ay:"Shape axis Y",az:"Shape axis Z",boa500:"Axis ratio b/a (500c)",coa500:"Axis ratio c/a (500c)",ax500:"Shape axis X (500c)",ay500:"Shape axis Y (500c)",az500:"Shape axis Z (500c)",halo_id:"Persistent halo ID",host_id:"Host halo ID",fof_id:"FOF ID",local_halo_id:"Local halo index",rank:"Source rank",ordinal:"Record ordinal",sys:"Inclusive system flag",pid:"Local host index"};
   const units = {};
   for (const name of ["x", "y", "z"]) units[name] = "comoving Mpc/h";
-  for (const name of ["mvir", "m200", "m500", "m2500"]) units[name] = "M☉/h";
+  for (const name of ["mvir", "m200", "m500", "m2500", "mGas", "mStar"]) units[name] = "M☉/h";
   for (const name of ["rvir", "rmax", "rvmax", "rs", "rkly", "sigX", "deltaX", "ax", "ay", "az", "ax500", "ay500", "az500"]) units[name] = "comoving kpc/h";
   for (const name of ["vcircMax", "sigV", "sigVb", "deltaV", "vxc", "vyc", "vzc", "vxb", "vyb", "vzb"]) units[name] = "km/s";
   for (const name of ["lambda", "lambdaB", "toW", "boa", "coa", "boa500", "coa500", "zValue"]) units[name] = "dimensionless";

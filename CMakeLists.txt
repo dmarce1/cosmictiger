@@ -1355,18 +1355,44 @@ if(BUILD_TESTING)
                     WORKING_DIRECTORY "${halo_workdir}" TIMEOUT 180 PROCESSORS 2)
             endforeach()
         endforeach()
-        if(cosmictiger_mpi_tests)
-            set(halo_mpi_workdir "${PROJECT_BINARY_DIR}/tests/groupsCatalogue_mpi")
-            file(MAKE_DIRECTORY "${halo_mpi_workdir}")
-            add_test(NAME groupsCatalogue_mpi COMMAND ${MPIEXEC_EXECUTABLE}
-                ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger>
-                ${cosmictiger_mpi_transport_args}
-                --run.test=groupsCatalogueDistributed ${cosmictiger_test_gravity_args} --compute.cuda=false --hydro.enabled=false
+        if(COSMICTIGER_WITH_SPH)
+            # The same catalogue fixture with gas and stars present: the finder
+            # stays dark-matter-only and the records gain rvir aperture masses.
+            set(halo_workdir "${PROJECT_BINARY_DIR}/tests/groupsCatalogue_hydro_cpu")
+            file(MAKE_DIRECTORY "${halo_workdir}")
+            add_test(NAME groupsCatalogue_hydro_cpu COMMAND cosmictiger
+                --run.test=groupsCatalogue ${cosmictiger_test_gravity_args} --compute.cuda=false --hydro.enabled=true
                 --initial.particlesPerDimension=8 --analysis.groups=true
-                --hpx:threads=2 --hpx:bind=none --hpx:localities=2 ${MPIEXEC_POSTFLAGS}
+                --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
-            set_tests_properties(groupsCatalogue_mpi PROPERTIES
-                WORKING_DIRECTORY "${halo_mpi_workdir}" TIMEOUT 240 PROCESSORS 4 RUN_SERIAL TRUE)
+            set_tests_properties(groupsCatalogue_hydro_cpu PROPERTIES
+                WORKING_DIRECTORY "${halo_workdir}" TIMEOUT 180 PROCESSORS 2)
+        endif()
+        if(cosmictiger_mpi_tests)
+            set(halo_mpi_variants dm)
+            if(COSMICTIGER_WITH_SPH)
+                list(APPEND halo_mpi_variants hydro)
+            endif()
+            foreach(halo_mpi_variant IN LISTS halo_mpi_variants)
+                if(halo_mpi_variant STREQUAL "hydro")
+                    set(halo_mpi_test groupsCatalogue_hydro_mpi)
+                    set(halo_mpi_hydro true)
+                else()
+                    set(halo_mpi_test groupsCatalogue_mpi)
+                    set(halo_mpi_hydro false)
+                endif()
+                set(halo_mpi_workdir "${PROJECT_BINARY_DIR}/tests/${halo_mpi_test}")
+                file(MAKE_DIRECTORY "${halo_mpi_workdir}")
+                add_test(NAME ${halo_mpi_test} COMMAND ${MPIEXEC_EXECUTABLE}
+                    ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger>
+                    ${cosmictiger_mpi_transport_args}
+                    --run.test=groupsCatalogueDistributed ${cosmictiger_test_gravity_args} --compute.cuda=false --hydro.enabled=${halo_mpi_hydro}
+                    --initial.particlesPerDimension=8 --analysis.groups=true
+                    --hpx:threads=2 --hpx:bind=none --hpx:localities=2 ${MPIEXEC_POSTFLAGS}
+                    ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
+                set_tests_properties(${halo_mpi_test} PROPERTIES
+                    WORKING_DIRECTORY "${halo_mpi_workdir}" TIMEOUT 240 PROCESSORS 4 RUN_SERIAL TRUE)
+            endforeach()
         endif()
     endif()
 

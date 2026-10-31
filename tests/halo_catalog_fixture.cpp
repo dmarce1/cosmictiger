@@ -65,6 +65,9 @@ RockstarRecord makeRecord(size_t index) {
     record.m200 = record.mvir * 0.9f;
     record.m500 = record.mvir * 0.7f;
     record.m2500 = record.mvir * 0.4f;
+    // Baryon aperture masses of an SPH run; a dark-matter-only run has zeros.
+    record.mGas = record.mvir * 0.15f;
+    record.mStar = record.mvir * 0.02f;
     if (index == 1) {
         // Binary32 magnitudes in [1e16, 1e17) carry seventeen integral significant
         // digits once promoted to binary64, like the halo energies of a 128^3 LCDM
@@ -80,6 +83,7 @@ RockstarRecord makeRecord(size_t index) {
         record.jy = -1.0e20f;
         record.jz = 1.0e21f;
         record.m2500 = 0.0f;
+        record.mStar = 0.0f;
     }
     for (size_t i = 0; i < kHalfFields.size(); ++i) {
         record.*kHalfFields[i] = double2float16(0.25 * (i + 1));
@@ -122,7 +126,7 @@ void writeFixture(fs::path const& directory) {
         std::string const basename = "rockstar." + std::to_string(rank) + ".dat";
         writeBinary(directory / basename, records.data(), records.size() * sizeof(RockstarRecord));
         writeText(directory / (basename + ".format"),
-            "format_version 2\nfloat16 ieee754_binary16\nrecord_size " +
+            "format_version 3\nfloat16 ieee754_binary16\nrecord_size " +
                 std::to_string(sizeof(RockstarRecord)) + "\nrecord_count " +
                 std::to_string(records.size()) + "\nbyte_order " +
                 (std::endian::native == std::endian::little ? "little" : "big") +

@@ -71,7 +71,9 @@ void rockstarWriteCatalogue(
     }
     std::string const temporaryPath = formatPath + ".tmp";
     std::ofstream format(temporaryPath);
-    format << "format_version 2\n"
+    // Version 3 appends mGas and mStar (gas and stellar mass within rvir) to
+    // the record; dark-matter-only runs and lightcone catalogues write zeros.
+    format << "format_version 3\n"
            << "float16 ieee754_binary16\n"
            << "record_size " << sizeof(RockstarRecord) << '\n'
            << "record_count " << count << '\n'
@@ -658,8 +660,13 @@ size_t rockstarCatalogueSize(size_t count) {
     return std::min(count, kCapacity);
 }
 
+double rockstarMassConversion() {
+    auto const units = units::scalesFromOptions(getOptions());
+    return (units.massScale() * getOptions().cosmology.hubble / units::kSolarMass).value();
+}
+
 RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, float scale,
-    Array<double, kDimensions> const& origin, bool inclusive, bool periodic) {
+    Array<double, kDimensions> const& origin, bool inclusive, bool periodic, double* virialRadius) {
     Subgroup const& group = groups[index];
     auto candidates = inclusive ? rockstarGatherParticles(groups, index) : group.parts;
     auto const density = detail::haloOverdensity(scale);
@@ -744,8 +751,7 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
     auto const shape500 =
         detail::shape(detail::withinRadius(group.parts, group, so500.radius), group);
     auto const units = units::scalesFromOptions(getOptions());
-    double const massConversion =
-        (units.massScale() * getOptions().cosmology.hubble / units::kSolarMass).value();
+    double const massConversion = rockstarMassConversion();
     double const positionConversion =
         (units.lengthScale() * getOptions().cosmology.hubble / units::kMegaparsec).value();
     double const lengthConversion = 1000.0 * positionConversion;
@@ -827,6 +833,13 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
     record.ay500 = rockstarEncodeHalf(shape500.major[1] * lengthConversion, "ay500");
     record.az500 = rockstarEncodeHalf(shape500.major[2] * lengthConversion, "az500");
     record.zValue = rockstarEncodeHalf(1.0 / scale - 1.0, "zValue");
+    // Baryon aperture masses are measured afterwards over the gas and star
+    // particles, which never enter the finder; see groupsMeasureBaryons.
+    record.mGas = 0.0f;
+    record.mStar = 0.0f;
+    if (virialRadius != nullptr) {
+        *virialRadius = virial.radius;
+    }
     return record;
 }
 

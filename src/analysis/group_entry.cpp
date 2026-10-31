@@ -42,6 +42,8 @@ void GroupEntry::write(FILE* fp) {
     fwriteSingle(fp, iyy);
     fwriteSingle(fp, iyz);
     fwriteSingle(fp, izz);
+    fwriteSingle(fp, mGas);
+    fwriteSingle(fp, mStar);
     int parentCount = parents.size();
     fwriteSingle(fp, parentCount);
     for (auto i = parents.begin(); i != parents.end(); i++) {
@@ -74,6 +76,8 @@ bool GroupEntry::read(FILE* fp) {
     freadSingle(fp, iyy);
     freadSingle(fp, iyz);
     freadSingle(fp, izz);
+    freadSingle(fp, mGas);
+    freadSingle(fp, mStar);
     int parentCount;
     freadSingle(fp, parentCount);
     for (int i = 0; i < parentCount; i++) {

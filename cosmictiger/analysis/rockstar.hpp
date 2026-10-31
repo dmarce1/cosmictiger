@@ -119,8 +119,13 @@ void rockstarFinalizeSubgroups(Vector<Subgroup>& groups, float scale);
 // Final catalogue thresholding after unbinding, preserving enclosing-host mass.
 void rockstarPruneCatalogueGroups(Vector<Subgroup>& groups, float scale);
 DeviceVector<RockstarParticle> rockstarGatherParticles(Vector<Subgroup> const& groups, int index);
+// virialRadius, when given, receives the record's virial aperture in comoving
+// code lengths before binary16 rounding (zero for an unresolved halo).
 RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, float scale,
-    Array<double, kDimensions> const& origin, bool inclusive = true, bool periodic = false);
+    Array<double, kDimensions> const& origin, bool inclusive = true, bool periodic = false,
+    double* virialRadius = nullptr);
+// Code mass (one lattice site of total matter) to solar masses/h, as used by mvir.
+double rockstarMassConversion();
 // The native record ABI has 15-bit halo IDs; warn and omit excess records.
 size_t rockstarCatalogueSize(size_t count);
 // Checked IEEE binary16 storage for finite physical catalogue properties.

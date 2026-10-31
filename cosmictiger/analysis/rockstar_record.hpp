@@ -59,8 +59,13 @@ struct RockstarRecord {
     Float16 vxb;
     Float16 vyb;
     Float16 vzb;
+    // Gas and stellar mass within rvir of the halo centre (SOAP-style aperture
+    // sums over every gas and star particle, bound or not); zero in
+    // dark-matter-only runs and in lightcone catalogues.
+    float mGas;
+    float mStar;
 };
 
 static_assert(std::is_trivial_v<RockstarRecord> && std::is_standard_layout_v<RockstarRecord>);
 static_assert(sizeof(RockstarId) == 8);
-static_assert(sizeof(RockstarRecord) == 128);
+static_assert(sizeof(RockstarRecord) == 136);

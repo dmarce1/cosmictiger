@@ -28,14 +28,16 @@ HALF_FIELDS = (
     "sigVb", "vcircMax", "deltaV", "boa", "coa", "ax", "ay", "az", "boa500", "coa500",
     "ax500", "ay500", "az500", "lambda", "lambdaB", "vxc", "vyc", "vzc", "vxb", "vyb", "vzb",
 )
-FLOAT_FIELDS = ("x", "y", "z", "mvir", "e", "jx", "jy", "jz", "m200", "m500", "m2500", *HALF_FIELDS)
+BARYON_FIELDS = ("mGas", "mStar")
+FLOAT_FIELDS = ("x", "y", "z", "mvir", "e", "jx", "jy", "jz", "m200", "m500", "m2500", *HALF_FIELDS,
+                *BARYON_FIELDS)
 IDENTITY_FIELDS = ("halo_id", "host_id", "fof_id", "local_halo_id", "rank", "ordinal", "sys", "pid")
 HALO_FIELDS = (*IDENTITY_FIELDS, *FLOAT_FIELDS)
 FILTER_FIELDS = ("mvir", "rvir", "vcircMax", "lambda", "x", "y", "z")
 SORT_FIELDS = {"halo_id", "rank", "mvir", "rvir", "vcircMax", "lambda", "x", "y", "z"}
 UNITS = {name: "dimensionless" for name in HALF_FIELDS}
 UNITS.update({name: "comoving Mpc/h" for name in ("x", "y", "z")})
-UNITS.update({name: "solar masses/h" for name in ("mvir", "m200", "m500", "m2500")})
+UNITS.update({name: "solar masses/h" for name in ("mvir", "m200", "m500", "m2500", *BARYON_FIELDS)})
 UNITS.update({name: "comoving kpc/h" for name in (
     "rmax", "rvir", "rvmax", "rs", "rkly", "sigX", "deltaX", "ax", "ay", "az", "ax500", "ay500", "az500")})
 UNITS.update({name: "km/s" for name in (
@@ -44,7 +46,7 @@ UNITS.update({name: "(solar masses/h)(Mpc/h)(km/s), physical" for name in ("jx",
 UNITS["e"] = "(solar masses/h)(km/s)^2"
 UNITS["box_length_mpc"] = "Mpc"
 STATIC_DIRECTORY = Path(__file__).resolve().parent / "static"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class ApiError(Exception):
@@ -67,7 +69,7 @@ def open_database(path, readonly=False):
 
 def initialize_database(connection):
     version = connection.execute("PRAGMA user_version").fetchone()[0]
-    if version not in (0, 1, SCHEMA_VERSION):
+    if version not in (0, 1, 2, SCHEMA_VERSION):
         raise ValueError(f"Unsupported viewer database version {version}")
     if version == 0 and connection.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
@@ -75,16 +77,21 @@ def initialize_database(connection):
         raise ValueError("Database contains unrelated tables; choose a new database file")
     if version == SCHEMA_VERSION:
         return
-    if version == 1:
-        # Existing catalogs predate explicit density conventions. Their main
+    if version in (1, 2):
+        # Version 1 catalogs predate explicit density conventions: their main
         # mass used Bryan-Norman and their SO masses used critical density.
-        connection.executescript(f"""
-            BEGIN IMMEDIATE;
-            ALTER TABLE catalogs ADD COLUMN virial_density TEXT NOT NULL DEFAULT 'bryan_norman';
-            ALTER TABLE catalogs ADD COLUMN so_density_reference TEXT NOT NULL DEFAULT 'critical';
-            PRAGMA user_version={SCHEMA_VERSION};
-            COMMIT;
-        """)
+        # Version 2 catalogs predate the baryon aperture masses, which were
+        # zero (dark matter only) for every catalog imported before them.
+        statements = ["BEGIN IMMEDIATE;"]
+        if version == 1:
+            statements += [
+                "ALTER TABLE catalogs ADD COLUMN virial_density TEXT NOT NULL DEFAULT 'bryan_norman';",
+                "ALTER TABLE catalogs ADD COLUMN so_density_reference TEXT NOT NULL DEFAULT 'critical';",
+            ]
+        statements += [f'ALTER TABLE halos ADD COLUMN "{name}" REAL NOT NULL DEFAULT 0.0;'
+                       for name in BARYON_FIELDS]
+        statements += [f"PRAGMA user_version={SCHEMA_VERSION};", "COMMIT;"]
+        connection.executescript("\n".join(statements))
         return
     scalar_columns = ",\n".join(f'"{name}" REAL NOT NULL' for name in FLOAT_FIELDS)
     connection.executescript(f"""
@@ -291,10 +298,13 @@ def catalog_dict(row):
     masses = {field: f"M{overdensity}{suffix}" for field, overdensity in
               (("m200", 200), ("m500", 500), ("m2500", 2500))}
     masses["mvir"] = "M200m_main" if fallback else "Bryan-Norman virial"
+    masses["mGas"] = "gas within rvir"
+    masses["mStar"] = "stars within rvir"
     result["mass_definitions"] = masses
     result["radius_definitions"] = {"rvir": "r200m" if fallback else "Bryan-Norman virial"}
     labels = dict(masses, mvir="M200m_main" if fallback else "Virial mass",
-                  rvir="r200m" if fallback else "Virial radius")
+                  rvir="r200m" if fallback else "Virial radius",
+                  mGas="Gas mass", mStar="Stellar mass")
     for field, description in (("boa500", "Axis ratio b/a"), ("coa500", "Axis ratio c/a"),
                                ("ax500", "Shape axis X"), ("ay500", "Shape axis Y"),
                                ("az500", "Shape axis Z")):
