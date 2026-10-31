@@ -481,7 +481,7 @@ cmake -S . -B build/apex -G Ninja \
   -DCMAKE_PREFIX_PATH=/path/to/apex-enabled-hpx \
   -DCOSMICTIGER_REQUIRE_APEX=ON
 cmake --build build/apex --target cosmictiger --parallel 4
-./build/apex/cosmictiger --configuration=lcdm.ini --hpx:threads=4
+./build/apex/cosmictiger --configuration=configurations/lcdm_present.ini --hpx:threads=4
 ```
 
 With an APEX-enabled HPX, CosmicTiger enables `apex_profiles.csv` and
@@ -511,7 +511,7 @@ runtime once, then launch the application:
 ```sh
 ./scripts/build_tau.sh
 ./scripts/profile_tau.sh ./build/apex/cosmictiger \
-  --configuration=lcdm.ini --hpx:threads=4
+  --configuration=configurations/lcdm_present.ini --hpx:threads=4
 ```
 
 The dependency script installs TAU 2.35.2 with MPI, pthread, BFD symbol
@@ -582,7 +582,7 @@ instead of invoking Open MPI's job-abort behavior:
 ```sh
 COSMICTIGER_PROFILE_DIR="$PWD/profiles/tau_mpi" \
   ./scripts/run_mpi.py -n 2 ./scripts/profile_tau.sh ./build/apex/cosmictiger \
-    --configuration=lcdm.ini --hpx:threads=4
+    --configuration=configurations/lcdm_present.ini --hpx:threads=4
 ```
 
 The wrapper queues an early interrupt until handlers are ready and forwards a

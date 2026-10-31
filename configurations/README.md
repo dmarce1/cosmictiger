@@ -52,12 +52,32 @@ To run a collisionless cosmology, set
 | [hydro_wave.ini](hydro_wave.ini) | `hydroWave` | SPH | `./output/hydroWave/` |
 | [cosmology.ini](cosmology.ini) | `cosmology` | Gravity, SPH, and GADGET-4 equilibrium cooling | `./output/cosmology/` |
 | [glass.ini](glass.ini) | `glass` | Repulsive gravity with damping | `./output/glass/` |
+| [lcdm_present.ini](lcdm_present.ini) | `cosmology` | Gravity, SPH, equilibrium cooling, and star formation; 99 coarse intervals | `./output/lcdm_present/` |
+| [star_formation/lcdm.ini](star_formation/lcdm.ini) | `cosmology` | Gravity, SPH, equilibrium cooling, and star formation; CPU, 64 coarse intervals | `./output/star_formation/` |
 
 Run from a build directory containing the executable and any runtime inputs:
 
 ```sh
 ./cosmictiger --configuration=../../configurations/sod.ini --hpx:threads=12 --hpx:bind=none
 ```
+
+From the top-level `release/` build directory, select the maintained present-day
+preset directly:
+
+```sh
+./cosmictiger --configuration=../configurations/lcdm_present.ini --hpx:threads=12 --hpx:bind=none
+```
+
+Prefer referring to the maintained file instead of copying it into a build
+directory. Local copies do not update when the program's options change.
+The two star-forming LCDM presets use different cosmological parameters,
+coarse-step counts, and output directories; both are intentional examples.
+For older local configurations, remove the retired network, ion/molecular
+fraction, chemistry subcycling, wind, and metal options. The current cooling
+section contains only `enabled`, `initializationTemperature`, and
+`minimumSpecificEnergy`; see [cooling configuration](../docs/primordial_chemistry.md#configuration)
+and [star formation](../docs/star_formation.md). The supplied initialization
+temperature is 10000 K; zero preserves initial-condition thermal energy.
 
 Use `--compute.cuda=false` for CPU execution. HPX thread and locality options
 stay on the command line. The examples use nominal resolution 32, except the

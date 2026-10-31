@@ -1,5 +1,10 @@
 # Native initialization and dependency removal, 2026-10-20
 
+> Historical validation archive: the chemistry initialization options below
+> describe the retired primordial network. Current runs use
+> [GADGET-4 equilibrium cooling](../primordial_chemistry.md); background
+> recombination remains available independently.
+
 The runtime now uses native recombination and internally generated linear
 power. Bundled RECFAST, its Fortran build requirement, the `power.init`
 reader, and `initial.usePowerFile` were removed. Offline CAMB comparison tools

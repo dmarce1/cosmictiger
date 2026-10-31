@@ -1100,10 +1100,8 @@ mapSize = 8
                          "critical.ini": 0.0,
                          "subcritical_no_dark_energy.ini": 0.6864421027750461}
     checked_presets = set()
-    local_presets = {root / "lcdm.ini", root / "configurations/lcdm_present.ini"}
+    local_presets = {root / "configurations/lcdm_present.ini"}
     preset_paths = [root / "default.ini", *sorted((root / "configurations").rglob("*.ini"))]
-    if (root / "lcdm.ini").is_file():
-        preset_paths.append(root / "lcdm.ini")
     for path in preset_paths:
         relative_path = path.relative_to(root)
         case_name = "_".join(relative_path.with_suffix("").parts)
@@ -1119,7 +1117,7 @@ mapSize = 8
         if actual_keys != expected_keys:
             raise RuntimeError(f"{relative_path} option coverage differs: {sorted(actual_keys ^ expected_keys)}")
         # Build-selected position width/bucket size and radius alternatives may
-        # remain commented. All four cooling controls must be explicit.
+        # remain commented. All three cooling controls must be explicit.
         documented_alternatives = set(active_optional_keys)
         section = None
         for line in path.read_text().splitlines():
