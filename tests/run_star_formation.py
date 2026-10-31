@@ -20,7 +20,7 @@ from run_checkpoint import checkManifest, checkpoint_position_bytes
 
 STAR_MAGIC = 0x4354534650415254
 STAR_RECORD = struct.Struct("=QQddfdddd")
-CHEMISTRY_RECORD = struct.Struct("=9f2d")
+CHEMISTRY_RECORD = struct.Struct("=12f2d")
 
 
 def run_process(command, directory, label, success=True):
@@ -73,7 +73,7 @@ def read_particle_state(checkpoint, expected_count, network="atomic6"):
         raise RuntimeError("truncated star formation particle metadata")
     candidates = []
     for integer_bytes in (4, 8):
-        for version in (40, 42, 44, 46):
+        for version in (60, 62, 64, 66):
             gas_magic = struct.pack("=7I", 0x43545350, version, integer_bytes, 8, 12, 3, 4)
             offset = data.find(gas_magic)
             if offset < 0:
@@ -98,7 +98,7 @@ def read_particle_state(checkpoint, expected_count, network="atomic6"):
         raise RuntimeError("invalid particle species in checkpoint")
     if types.count(1) != gas_count:
         raise RuntimeError("gas population disagrees with checkpoint particle types")
-    viscosity_bytes = {40: 0, 42: 8, 44: 12, 46: 12}[gas_version]
+    viscosity_bytes = {60: 0, 62: 8, 64: 12, 66: 12}[gas_version]
     # Fixed SPH arrays contain 58 bytes plus one particle index per gas particle.
     chemistry_offset = gas_offset + 28 + integer_bytes + gas_count * (
         58 + integer_bytes + viscosity_bytes)
@@ -129,16 +129,16 @@ def read_particle_state(checkpoint, expected_count, network="atomic6"):
             chemistry = CHEMISTRY_RECORD.unpack_from(
                 data, chemistry_offset + gas_index * CHEMISTRY_RECORD.size)
             if (not all(math.isfinite(value) for value in chemistry)
-                    or any(abs(value) > 0.5 for value in chemistry[:6])
-                    or min(chemistry[6:9]) <= 0):
+                    or min(chemistry[:9]) < 0
+                    or min(chemistry[9:12]) <= 0):
                 raise RuntimeError("checkpoint has invalid chemical abundances, energy or EOS")
-            fractions = [value if math.copysign(1.0, value) > 0 else 1.0 + value
-                         for value in chemistry[:6]]
-            if (fractions[1] + fractions[2] > 1.0 + 1e-6
-                    or fractions[0] + fractions[3] + fractions[4] + fractions[5] > 1.0 + 1e-6
-                    or (network == "atomic6" and any(value != 0.0 for value in fractions[3:]))):
+            hydrogen = chemistry[0] + chemistry[1] + chemistry[6] + 2 * (chemistry[7] + chemistry[8])
+            charge = chemistry[1] + chemistry[3] + 2 * chemistry[4] + chemistry[8] - chemistry[6]
+            if (abs(hydrogen - 1.0) > 1e-6
+                    or abs(chemistry[5] - charge) > 1e-6 * max(chemistry[5], abs(charge), 1e-30)
+                    or (network == "atomic6" and any(value != 0.0 for value in chemistry[6:9]))):
                 raise RuntimeError(f"checkpoint has invalid {network} chemical composition")
-            if chemistry[9:] != (0.0, 0.0):
+            if chemistry[12:] != (0.0, 0.0):
                 raise RuntimeError("chemistry and star formation both own a pending source step")
             states[identity]["chemistry"] = chemistry
     return data[start:end], states
@@ -234,7 +234,7 @@ def main():
                     raise RuntimeError("restart fixture did not capture pending source half steps")
                 chemistry_changed = sum(
                     state["type"] == 1 and reference[identity]["type"] == 1
-                    and state["chemistry"][:7] != reference[identity]["chemistry"][:7]
+                    and state["chemistry"][:10] != reference[identity]["chemistry"][:10]
                     for identity, state in first.items())
                 if chemistry_changed == 0:
                     raise RuntimeError("ordinary cosmological gas did not evolve its chemistry")
@@ -255,8 +255,8 @@ def main():
                 for key, value in (("starFormation.seed", 2), ("starFormation.beta", 0.15),
                                    ("starFormation.windEnergyFraction", 0.5),
                                    ("cosmology.heliumFraction", 0.3),
-                                   ("chemistry.relativeTolerance", 0.0002),
-                                   ("chemistry.energyAbsoluteTolerance", 2e-8)):
+                                   ("chemistry.fractionalChangeLimit", 0.05),
+                                   ("chemistry.electronFractionFloor", 2e-20)):
                     directory = prepare(base, "reject_" + label + "_" + key.split(".")[1],
                                         baseline / "checkpoint.1")
                     rejected = run_process(command(dict(resumed_options, **{key: value,

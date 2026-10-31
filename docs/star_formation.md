@@ -223,6 +223,29 @@ A compact cosmological example is
 It uses CPU execution, the traditional integrator, and FMM gravity. Set solver
 selectors to match the compiled capabilities when using a different build.
 
+## CUDA execution and section timings
+
+With CUDA compiled and `compute.cuda=true`, the per-particle SH03 work runs on
+CUDA: effective pressure and sound speed, source timestep limits, dense-phase
+projection, enrichment, wind clocks and kicks, stochastic conversion decisions,
+source heating, and the first gravity timestep and opening kick of newly formed
+stars. Ordinary gas uses the existing CUDA chemistry batch solver.
+The CPU implementation remains available with `compute.cuda=false`.
+
+Particle storage and membership remain host-owned. The host stages each batch,
+combines reductions in particle order, and commits successful source transactions,
+including gas-to-star membership changes. Failed CUDA batches raise an error
+before source state is committed; they do not silently switch to CPU. Model
+calibration at initialization and snapshot diagnostics still execute on the host.
+
+The major-section report separates `Hydrodynamics`, `Chemistry`, and
+`Star formation`. Hydro excludes both source categories; star formation excludes
+its nested ordinary-gas chemistry batches. SH03 effective-EOS and dense CIE work
+belong to star formation. The values are coordinator wall times: chemistry within
+a distributed star-formation transaction measures the coordinator's local batch,
+while waiting for remote preparations remains in star formation. Other report
+sections retain their inclusive timing semantics.
+
 ## Validation targets
 
 `springel_and_hernquist_test` checks the pure model and CIE adapter independently
@@ -241,10 +264,16 @@ cosmological evolution and exact particle/source-state restart with each
 compiled FMM/PMMM solver and both eligible integrators, and rejects changed
 model parameters or helium abundance on restart. `springel_and_hernquist_cuda_test`, when
 CUDA is compiled, compares the pure scalar equations with the CPU.
+`star_formation_cuda_test` checks the CUDA particle operations and source
+invariants. `star_formation_production_cuda_atomic6` and
+`star_formation_production_cuda_molecular9` compare CUDA with the original CPU
+particle path, then run the source fixture on CUDA, including rollback, wind
+recoupling, conversion, and restart between source halves. `section_timing_test`
+checks exclusive source accounting and scope migration between worker threads.
 `grouped_options` checks CLI/INI precedence, exact 64-bit seed metadata,
 incompatible physics, and parameter rejection. `tests/check_build_features.py`
-checks that both production source files disappear when the capability or SPH
-is disabled; `tests/check_build_variants.py` tests those graph checks.
+checks that star-formation sources disappear when the capability or SPH
+is disabled, and that the CUDA backend is included only in CUDA builds; `tests/check_build_variants.py` tests those graph checks.
 
 These targets are separate evidence from distributed evolution, CUDA runtime,
 galaxy-scale star-formation-law convergence, and cosmological production runs.

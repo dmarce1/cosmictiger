@@ -115,8 +115,9 @@ def sourceSelectionErrors(sources, configuration):
                 "tests/primordial_reference.cpp", "tests/primordial_cuda.cu"}:
             errors.append(f"particle chemistry disabled but compiles source: {source}")
         if not hasStarFormation(configuration) and source in {
-                "src/sph/star_formation.cpp", "src/sph/springel_and_hernquist/cooling.cpp",
-                "tests/sph/star_formation.cpp", "tests/star_formation_particles.cpp",
+                "src/sph/star_formation.cpp", "src/sph/star_formation_cuda.cu",
+                "src/sph/springel_and_hernquist/cooling.cpp",
+                "tests/sph/star_formation_cuda.cu", "tests/sph/star_formation.cpp", "tests/star_formation_particles.cpp",
                 "tests/springel_and_hernquist.cpp", "tests/springel_and_hernquist_cuda.cu"}:
             errors.append(f"star formation disabled but compiles source: {source}")
         if not configuration["SPH"]:
@@ -150,6 +151,8 @@ def requiredSources(configuration, cuda):
         required.add("src/sph/sph_chemistry.cpp")
     if hasStarFormation(configuration):
         required.update({"src/sph/star_formation.cpp", "src/sph/springel_and_hernquist/cooling.cpp"})
+        if cuda:
+            required.add("src/sph/star_formation_cuda.cu")
     if cuda:
         required.add("src/particles/drift.cu")
         if hasGravity(configuration):

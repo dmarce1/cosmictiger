@@ -27,7 +27,7 @@
 namespace detail {
 
 constexpr double kSfScale = 0.25;
-constexpr size_t kSfRecordWords = 25;
+constexpr size_t kSfRecordWords = 19 + primordial::kAbundanceCount;
 using SfSnapshot = std::vector<std::vector<uint64_t>>;
 FILE* sfCheckpoint = nullptr;
 
@@ -173,7 +173,7 @@ std::vector<uint64_t> sfLocalSnapshot() {
         primordial::State const chemistry =
             gas ? sphParticlesChemistryStates[particlesCatIndex(index)] : primordial::State{};
         for (auto const& abundance : chemistry.abundances) {
-            result.push_back(std::bit_cast<uint32_t>(abundance.raw()));
+            result.push_back(std::bit_cast<uint32_t>(abundance));
         }
         result.push_back(std::bit_cast<uint32_t>(chemistry.thermalEnergy));
         SphChemistryStep const step =
@@ -224,8 +224,7 @@ void alterSfFixture(int operation) {
         sphParticlesDensity(particlesCatIndex(1)) =
             sfStoredDensity(0.05 * starFormationModel().thresholdDensity);
     } else if (operation == 6 && hpxRank() == hpxSize() - 1) {
-        sphParticlesChemistryStates[particlesCatIndex(2)].abundances[0] =
-            primordial::SignedAbundance::fromRaw(2.0f);
+        sphParticlesChemistryStates[particlesCatIndex(2)].abundances[0] = 2.0f;
     } else if (operation == 7 || operation == 8) {
         sphParticlesDensity(particlesCatIndex(1)) =
             sfStoredDensity((operation == 7 ? 0.5 : 2.0) * starFormationModel().thresholdDensity);
@@ -247,7 +246,7 @@ std::vector<uint64_t> sfOrdinaryReference(int particle, double physicalInterval,
     }
     std::vector<uint64_t> result{std::bit_cast<uint32_t>(input.storedEnergy)};
     for (auto const& abundance : input.state.abundances) {
-        result.push_back(std::bit_cast<uint32_t>(abundance.raw()));
+        result.push_back(std::bit_cast<uint32_t>(abundance));
     }
     result.push_back(std::bit_cast<uint32_t>(input.state.thermalEnergy));
     return result;
@@ -279,15 +278,25 @@ void checkSfCompositionLocal(bool checkDense) {
             requireSf(springel_and_hernquist::evaluateEquilibrium(model, cooling, density, phase) &&
                     cooling.evaluateAtEnergy(phase.hotEnergy, hot),
                 "cannot evaluate dense projection reference");
-            requireSfClose(state.abundances[0].fraction(), phase.hotFraction * hot.hydrogenIonized,
-                2.e-6, "dense H ionization is not neutral-cold plus atomic-CIE hot gas");
-            requireSfClose(state.abundances[1].fraction(), phase.hotFraction * hot.heliumIonized,
+            double const heliumRatio =
+                options.cosmology.heliumFraction / (4.0 * (1.0 - options.cosmology.heliumFraction));
+            requireSfClose(state.abundances[0],
+                phase.coldFraction + phase.hotFraction * hot.hydrogenNeutral, 2.e-6,
+                "dense neutral hydrogen is not neutral-cold plus atomic-CIE hot gas");
+            requireSfClose(state.abundances[1], phase.hotFraction * hot.hydrogenIonized, 2.e-6,
+                "dense H ionization is not neutral-cold plus atomic-CIE hot gas");
+            requireSfClose(state.abundances[2],
+                heliumRatio * (phase.coldFraction + phase.hotFraction * hot.heliumNeutral), 2.e-6,
+                "dense neutral helium is not mass weighted");
+            requireSfClose(state.abundances[3], heliumRatio * phase.hotFraction * hot.heliumIonized,
                 2.e-6, "dense He ionization is not mass weighted");
-            requireSfClose(state.abundances[2].fraction(),
-                phase.hotFraction * hot.heliumDoubleIonized, 2.e-6,
+            requireSfClose(state.abundances[4],
+                heliumRatio * phase.hotFraction * hot.heliumDoubleIonized, 2.e-6,
                 "dense He double ionization is not mass weighted");
-            for (int species = 3; species != primordial::kAbundanceCount; ++species) {
-                requireSf(state.abundances[species].fraction() == 0.0f,
+            requireSfClose(state.abundances[5], phase.hotFraction * hot.electronsPerHydrogen, 2.e-6,
+                "dense electrons are not mass weighted");
+            for (int species = 6; species != primordial::kAbundanceCount; ++species) {
+                requireSf(state.abundances[species] == 0.0f,
                     "dense atomic projection retained a molecular species");
             }
             requireSfClose(sphParticlesInternalEnergy(gas), sfStoredEnergy(phase.effectiveEnergy),
@@ -308,8 +317,8 @@ void checkSfBatchBoundary() {
             zero.state.thermalEnergy == synchronized.thermalEnergy,
         "zero-interval chemistry changed stored energy or retained stale source energy");
     for (int species = 0; species != primordial::kAbundanceCount; ++species) {
-        requireSf(std::bit_cast<uint32_t>(zero.state.abundances[species].raw()) ==
-                std::bit_cast<uint32_t>(input.state.abundances[species].raw()),
+        requireSf(std::bit_cast<uint32_t>(zero.state.abundances[species]) ==
+                std::bit_cast<uint32_t>(input.state.abundances[species]),
             "zero-interval chemistry changed an abundance");
     }
     for (double interval : {-1.0, std::numeric_limits<double>::quiet_NaN()}) {
@@ -324,7 +333,7 @@ void checkSfBatchBoundary() {
     }
     input.physicalInterval = sfPhysicalHalf();
     auto invalid = input;
-    invalid.state.abundances[0] = primordial::SignedAbundance::fromRaw(2.0f);
+    invalid.state.abundances[0] = 2.0f;
     bool rejected = false;
     try {
         sphChemistryAdvanceBatch({input, invalid}, kSfScale);
@@ -476,7 +485,7 @@ void requireSfReference(SfSnapshot const& actual, SfSnapshot const& expected, si
     for (size_t rank = 0; rank < actual.size(); ++rank) {
         requireSf(actual[rank][particle * kSfRecordWords + 9] == expected[rank][0],
             "ordinary combined source energy differs from standalone chemistry batch");
-        for (size_t field = 0; field != 7; ++field) {
+        for (size_t field = 0; field != primordial::kAbundanceCount + 1; ++field) {
             requireSf(
                 actual[rank][particle * kSfRecordWords + 16 + field] == expected[rank][1 + field],
                 "ordinary combined source composition differs from standalone chemistry batch");
@@ -539,9 +548,11 @@ void checkSfClosure() {
     }
     requireSfClose(starFormationPressureIntegral(kSfScale), expected[0], 3.e-7,
         "global effective-pressure integral is inconsistent with the EOS");
-    requireSfClose(starFormationMaximumTimestep(3, kSfScale), expected[1], 2.e-12,
+    requireSfClose(starFormationMaximumTimestep(3, kSfScale), expected[1],
+        getOptions().compute.cuda ? 5.e-5 : 2.e-12,
         "SF timestep includes inactive particles or has the wrong physical units");
-    requireSfClose(starFormationMaximumTimestep(0, kSfScale), expected[2], 2.e-12,
+    requireSfClose(starFormationMaximumTimestep(0, kSfScale), expected[2],
+        getOptions().compute.cuda ? 5.e-5 : 2.e-12,
         "SF timestep missed the denser coarse-rung particle");
     requireSf(expected[2] < expected[1], "fixture does not distinguish active rung selection");
     requireSf(sfSnapshot() == before, "EOS diagnostics modified persistent source/particle state");
@@ -801,6 +812,100 @@ void checkSfOutput(bool wind) {
     viewConfigure();
 }
 
+#ifdef USE_CUDA
+void requireSfBackendParity(SfSnapshot const& actual, SfSnapshot const& expected) {
+    requireSf(actual.size() == expected.size(), "CUDA changed rank count");
+    for (size_t rank = 0; rank < actual.size(); ++rank) {
+        requireSf(actual[rank].size() == expected[rank].size(), "CUDA changed particle count");
+        for (size_t word = 0; word < actual[rank].size(); ++word) {
+            size_t const field = word % kSfRecordWords;
+            auto const a = actual[rank][word];
+            auto const b = expected[rank][word];
+            if (field == 0 || field == 1 || field == 13 || field == 14) {
+                requireSf(a == b, "CUDA changed identity, RNG event, rung, or species");
+            } else {
+                bool const isDouble = field == 2 || field == 3 || (field >= 5 && field <= 8) ||
+                    field >= 17 + primordial::kAbundanceCount;
+                double const av =
+                    isDouble ? std::bit_cast<double>(a) : double(std::bit_cast<float>(uint32_t(a)));
+                double const bv =
+                    isDouble ? std::bit_cast<double>(b) : double(std::bit_cast<float>(uint32_t(b)));
+                // Compare every direct species value against the production CPU path.
+                requireSfClose(av, bv, 5.e-5, "CPU/CUDA source state differs");
+            }
+        }
+    }
+}
+void checkSfProductionCudaParity() {
+    auto const original = getOptions();
+    for (int scenario = 0; scenario < 5; ++scenario) {
+        SfSnapshot expectedOpened, expectedClosed;
+        StarFormationUpdate expectedUpdate;
+        double expectedPressure = 0.0;
+        double expectedTimestep = 0.0;
+        for (int backend = 0; backend < 2; ++backend) {
+            auto options = original;
+            options.compute.cuda = backend == 1;
+            options.starFormation.winds = scenario == 1 || scenario == 2;
+            options.starFormation.windMassLoading = 1000.0;
+            setOptions(options);
+            resetSfFixture(options.starFormation.winds);
+            if (scenario == 0) {
+                auto const beforeInvalidScale = sfSnapshot();
+                bool rejected = false;
+                try {
+                    starFormationMaximumTimestep(3, -kSfScale);
+                } catch (std::exception const&) {
+                    rejected = true;
+                }
+                requireSf(rejected && sfSnapshot() == beforeInvalidScale,
+                    "source timestep accepted an invalid scale factor or changed state");
+            }
+            if (scenario == 2) {
+                onSfLocalities<AlterSfFixtureAction>(4);
+            } else if (scenario == 3) {
+                onSfLocalities<AlterSfFixtureAction>(7);
+            }
+            starFormationRefreshEos(kSfScale);
+            double const pressure = starFormationPressureIntegral(kSfScale);
+            double const timestep = starFormationMaximumTimestep(3, kSfScale);
+            starFormationOpen(3, kSfScale, 0.0, sfTimestep());
+            auto const opened = sfSnapshot();
+            if (scenario == 1) {
+                onSfLocalities<AlterSfFixtureAction>(3);
+            } else if (scenario == 3) {
+                onSfLocalities<AlterSfFixtureAction>(8);
+            } else if (scenario == 4) {
+                onSfLocalities<AlterSfFixtureAction>(2);
+            }
+            auto const update = starFormationClose(3, kSfScale, 0.0, sfTimestep());
+            auto const closed = sfSnapshot();
+            if (backend == 0) {
+                expectedOpened = opened;
+                expectedClosed = closed;
+                expectedUpdate = update;
+                expectedPressure = pressure;
+                expectedTimestep = timestep;
+            } else {
+                requireSfBackendParity(opened, expectedOpened);
+                requireSfBackendParity(closed, expectedClosed);
+                requireSf(update.converted == expectedUpdate.converted &&
+                        update.maximumNewStarRung == expectedUpdate.maximumNewStarRung,
+                    "CUDA changed conversion counts or new stellar rungs");
+                requireSfClose(update.heating, expectedUpdate.heating, 1.e-4,
+                    "CUDA source heating differs from CPU");
+                requireSfClose(pressure, expectedPressure, 5.e-5, "CUDA pressure differs from CPU");
+                requireSfClose(timestep, expectedTimestep, 5.e-5, "CUDA timestep differs from CPU");
+            }
+        }
+    }
+    setOptions(original);
+    PRINT(
+        "Star formation CPU/CUDA production parity passed: EOS, timestep, ordinary gas, "
+        "dense projection, threshold crossing, partial wind expiry, conversion, RNG, and ledger\n");
+}
+#endif
+
 }    // namespace detail
 
 void starFormationTest() {
@@ -809,8 +914,13 @@ void starFormationTest() {
     // Either network: the dense projection is atomic and the ordinary-gas
     // references below come from the configured chemistry batch solver.
     requireSf(originalOptions.starFormation.enabled && originalOptions.hydro.enabled &&
-            originalOptions.chemistry.enabled && !originalOptions.compute.cuda,
-        "fixture requires CPU SPH star formation with chemistry");
+            originalOptions.chemistry.enabled,
+        "fixture requires SPH star formation with chemistry");
+#ifdef USE_CUDA
+    if (originalOptions.compute.cuda) {
+        checkSfProductionCudaParity();
+    }
+#endif
     auto options = originalOptions;
     options.starFormation.winds = false;
     setOptions(options);

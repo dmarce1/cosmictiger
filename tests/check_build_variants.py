@@ -83,8 +83,9 @@ class BuildFeaturesTest(unittest.TestCase):
             self.check()
 
     def testDisabledStarFormationRejectsEveryImplementationSource(self):
-        for source in ("src/sph/star_formation.cpp", "src/sph/springel_and_hernquist/cooling.cpp",
-                       "tests/sph/star_formation.cpp", "tests/star_formation_particles.cpp",
+        for source in ("src/sph/star_formation.cpp", "src/sph/star_formation_cuda.cu",
+                       "src/sph/springel_and_hernquist/cooling.cpp",
+                       "tests/sph/star_formation_cuda.cu", "tests/sph/star_formation.cpp", "tests/star_formation_particles.cpp",
                        "tests/springel_and_hernquist.cpp", "tests/springel_and_hernquist_cuda.cu"):
             with self.subTest(source=source):
                 self.configure(STARS=False)
@@ -392,14 +393,14 @@ class FeatureConfigurationTest(unittest.TestCase):
 
     def testStarsControlsActualSourceSelection(self):
         source = Path(__file__).resolve().parents[1]
-        for sph, stars, testing in product(("OFF", "ON"), repeat=3):
-            with self.subTest(sph=sph, stars=stars, testing=testing), tempfile.TemporaryDirectory() as directory:
+        for sph, stars, testing, cuda in product(("OFF", "ON"), repeat=4):
+            with self.subTest(sph=sph, stars=stars, testing=testing, cuda=cuda), tempfile.TemporaryDirectory() as directory:
                 script = Path(directory) / "sources.cmake"
                 script.write_text(
                     f'set(PROJECT_SOURCE_DIR "{source}")\n'
                     f'set(COSMICTIGER_ENABLE_SPH {sph} CACHE BOOL "")\n'
                     f'set(COSMICTIGER_ENABLE_STARS {stars} CACHE BOOL "")\n'
-                    f'set(BUILD_TESTING {testing})\nset(COSMICTIGER_WITH_CUDA OFF)\n'
+                    f'set(BUILD_TESTING {testing})\nset(COSMICTIGER_WITH_CUDA {cuda})\n'
                     f'include("{source / "cmake/features.cmake"}")\n'
                     f'include("{source / "cmake/variant_sources.cmake"}")\n'
                     'cosmictiger_feature_sources(selected)\n'
@@ -409,6 +410,8 @@ class FeatureConfigurationTest(unittest.TestCase):
                 enabled = sph == "ON" and stars == "ON"
                 for name in ("src/sph/star_formation.cpp", "src/sph/springel_and_hernquist/cooling.cpp"):
                     self.assertEqual("source=" + name + "\n" in result.stdout, enabled)
+                self.assertEqual("source=src/sph/star_formation_cuda.cu\n" in result.stdout,
+                                 enabled and cuda == "ON")
                 for name in ("tests/sph/star_formation.cpp", "tests/star_formation_particles.cpp"):
                     self.assertEqual("source=" + name + "\n" in result.stdout, enabled and testing == "ON")
 

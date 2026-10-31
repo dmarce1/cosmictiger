@@ -257,9 +257,10 @@ void runFixedScenario() {
                 double const displayedRuntime = restoredRuntime + runtime.read();
                 runtime.start();
                 if (progressRows == 0) {
-                    PRINT("  TFLOP/s estimates counted gravity and SPH work during force "
-                          "advancement; "
-                          "chemistry is excluded.\n");
+                    PRINT("  TFLOP/s uses counted gravity and SPH operations divided by force "
+                          "advancement wall time.\n"
+                          "  Chemistry and star formation operations are excluded; their wall "
+                          "time is included.\n");
                 }
                 if (progressRows % 25 == 0) {
                     PRINT("\n%8s %13s %13s %7s %13s %13s %13s %10s\n", "Step", "Time", "dt",

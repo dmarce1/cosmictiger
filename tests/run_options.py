@@ -269,7 +269,7 @@ mapSize = 8
         raise RuntimeError("normal startup lacked comoving box units and Mpc conversion")
     if not re.search(r"^units\.massSolar\s*:\s*\S+ Msun$", startupOutput, re.MULTILINE):
         raise RuntimeError("normal startup lacked solar-mass units")
-    defaultMass = 1.e9 / .6732
+    defaultMass = 3.58e9
     defaultLength = (8**3 * defaultMass * solarMassG / matterDensity)**(1.0 / 3.0) * 0.7 / mpcToCm
     assertNormalization(run("units_default_mass", normalizationOptions), defaultLength, defaultMass)
     for resolution, closePack in ((16, False), (8, True), (16, True)):

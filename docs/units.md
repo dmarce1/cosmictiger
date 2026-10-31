@@ -41,8 +41,8 @@ boxLength = 100
 Remove or comment out any `massSolar` setting before using `boxLength`.
 Explicitly supplying both is an error, including one in the INI and the other
 on the command line. Command-line values still override the same key in the
-INI. If neither is supplied, the existing default mass of
-`1485442661.9132502` solar masses is used.
+INI. If neither is supplied, the default reference mass of
+`3.58e9` solar masses is used.
 
 `boxLength` is rejected for glass generation, which uses a fixed synthetic
 length and Hubble parameter, and for `initial.gadget4Restart` input, whose

@@ -28,7 +28,8 @@ struct RecombinationOptions {
 };
 
 // Homogeneous effective-atom specialization of primordial thermochemistry.
-// H and He abundances have the same nuclei normalization as State/Species.
+// History abundances use HII/H and HeII/He; particle State stores every
+// species as a direct count per H nucleus. chemistryState converts between them.
 // The rates implement RECFAST 1.5.2 Hswitch=1, Heswitch=6, with an independent
 // double-precision stiff integrator. This is not the optically thin SPH model.
 // No stellar reionization, molecules, deuterium, or massive neutrinos are included.

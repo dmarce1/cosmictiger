@@ -245,9 +245,8 @@ struct Chemistry {
     double hydrogenMinusFraction{0.0};
     double molecularFraction{0.0};
     double molecularIonFraction{0.0};
-    double relativeTolerance{1.0e-4};
-    double abundanceAbsoluteTolerance{1.0e-12};
-    double energyAbsoluteTolerance{1.0e-8};
+    double fractionalChangeLimit{0.1};
+    double electronFractionFloor{1.0e-20};
     int maxSubsteps{4096};
 };
 
@@ -419,9 +418,8 @@ struct Options {
         arc & chemistry.hydrogenMinusFraction;
         arc & chemistry.molecularFraction;
         arc & chemistry.molecularIonFraction;
-        arc & chemistry.relativeTolerance;
-        arc & chemistry.abundanceAbsoluteTolerance;
-        arc & chemistry.energyAbsoluteTolerance;
+        arc & chemistry.fractionalChangeLimit;
+        arc & chemistry.electronFractionFloor;
         arc & chemistry.maxSubsteps;
         arc & run.verbose;
         arc & hydro.zPlaneAcceleration;

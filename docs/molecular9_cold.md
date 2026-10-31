@@ -1,5 +1,7 @@
 # Molecular9 down to 10 K
 
+Solver update (2026-10-30): the cold rate/EOS model described here is retained. Historical solver validation below predates the switch to direct nine-species storage and the Anninos equilibrium-intermediate source integrator. See [the current solver](primordial_chemistry.md).
+
 This extension lowered the molecular network's floor from 100 K to 10 K at
 proper hydrogen-nucleus densities up to 10⁴ cm⁻³, without adding species or
 changing its source integrator; the ceiling, 6000 K at the time, was later

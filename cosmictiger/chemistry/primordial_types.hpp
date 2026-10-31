@@ -3,15 +3,25 @@
 
 #include <cmath>
 #include <cstdint>
+#include <limits>
+#include <type_traits>
 
 #include <cosmictiger/cuda/cuda_export.hpp>
-#include <cosmictiger/math/float_float.hpp>
 
 namespace primordial {
-inline constexpr int kAbundanceCount = 6;
-inline constexpr float kBoltzmannEv = 8.617333262145e-5f;    // eV K^-1.
-inline constexpr float kElectronVolt = 1.602176634e-12f;     // erg.
-inline constexpr unsigned kPhysicsVersion = 2;
+inline constexpr int kAbundanceCount = 9;
+inline constexpr int kInitialFractionCount = 6;
+template <class Real>
+inline constexpr Real kDefaultHeliumToHydrogenT = Real(0.24) / (Real(4) * Real(0.76));
+template <class Real>
+inline constexpr Real kBoltzmannEvT = Real(8.617333262145e-5);    // eV K^-1.
+template <class Real>
+inline constexpr Real kElectronVoltT = Real(1.602176634e-12);    // erg.
+inline constexpr float kBoltzmannEv = kBoltzmannEvT<float>;
+inline constexpr float kElectronVolt = kElectronVoltT<float>;
+inline constexpr unsigned kPhysicsVersion = 3;
+template <class Real>
+inline constexpr Real kScalarEpsilon = std::numeric_limits<Real>::epsilon();
 
 enum class Network { Atomic6, Molecular9 };
 enum class Status {
@@ -24,189 +34,186 @@ enum class Status {
     BackendFailure
 };
 enum class Species {
+    Hydrogen,
     HydrogenPlus,
+    Helium,
     HeliumPlus,
     HeliumDoublePlus,
+    Electron,
     HydrogenMinus,
     MolecularHydrogen,
     MolecularHydrogenPlus
 };
 
-// s=c for c<=1/2; s=c-1 otherwise. The sign bit, including -0, selects
-// the branch. Never reconstruct a minority species by subtracting decoded
-// float c from one: the negative branch already stores that minority.
-class SignedAbundance {
-    float encoded_{};
-
-public:
-    CUDA_EXPORT SignedAbundance() = default;
-    CUDA_EXPORT static SignedAbundance fromRaw(float encoded) {
-        SignedAbundance result;
-        result.encoded_ = encoded;
-        return result;
-    }
-    CUDA_EXPORT static SignedAbundance fromMinority(float minority, bool upper) {
-        return fromRaw(upper ? ::detail::floatFloatNegate(minority) : minority);
-    }
-    CUDA_EXPORT static SignedAbundance fromFraction(float fraction) {
-        return fraction > 0.5f ? fromMinority(1.0f - fraction, true) : fromRaw(fraction);
-    }
-    CUDA_EXPORT float raw() const {
-        return encoded_;
-    }
-    CUDA_EXPORT void setRaw(float encoded) {
-        encoded_ = encoded;
-    }
-    CUDA_EXPORT bool upper() const {
-        return (::detail::floatFloatBits(encoded_) & 0x80000000U) != 0;
-    }
-    CUDA_EXPORT FloatFloat value() const {
-        return upper() ? FloatFloat(1.0f) + FloatFloat(encoded_) : FloatFloat(encoded_);
-    }
-    CUDA_EXPORT FloatFloat complement() const {
-        return upper() ? FloatFloat(::detail::floatFloatNegate(encoded_)) :
-                         FloatFloat(1.0f) - FloatFloat(encoded_);
-    }
-    CUDA_EXPORT float fraction() const {
-        return value().toFloat();
-    }
-    CUDA_EXPORT float complementFraction() const {
-        return complement().toFloat();
-    }
+template <class Real>
+struct StateT {
+    // Direct particle counts per H nucleus, in Species order. Neutral species
+    // and electrons remain independent stored values, as in Anninos et al.
+    Real abundances[kAbundanceCount]{Real(1), Real(0), kDefaultHeliumToHydrogenT<Real>};
+    Real thermalEnergy{};    // eV per H nucleus; excludes chemical binding energy.
 };
-
-struct State {
-    // Fractional nuclei: Hp/H, Hep/He, Hepp/He, Hminus/H, 2H2/H, 2H2p/H.
-    SignedAbundance abundances[kAbundanceCount]{};
-    float thermalEnergy{};    // eV per H nucleus; excludes chemical binding energy.
+template <class Real>
+struct DerivativeT {
+    Real abundances[kAbundanceCount]{};    // particles per H nucleus per second.
+    Real thermalEnergy{};                  // eV per H nucleus per second.
 };
-struct WorkingState {
-    FloatFloat abundances[kAbundanceCount]{};    // decoded fractional nuclei.
-    FloatFloat thermalEnergy{};                  // eV per H nucleus.
-};
-struct Derivative {
-    FloatFloat abundances[kAbundanceCount]{};    // fractional nuclei per second.
-    FloatFloat thermalEnergy{};                  // eV per H nucleus per second.
-};
-struct Radiation {
+template <class Real>
+struct RadiationT {
     // s^-1 per absorber, optically thin or externally attenuated.
-    float hydrogenIonization{};
-    float heliumIonization{};
-    float heliumPlusIonization{};
-    float hydrogenMinusDetachment{};
-    float molecularHydrogenDissociation{};        // H2 -> 2H, including LW.
-    float molecularHydrogenIonization{};          // H2 -> H2+ + e.
-    float molecularHydrogenPlusDissociation{};    // H2+ -> H + H+.
-    float molecularHydrogenPlusIonization{};      // H2+ -> 2H+ + e.
+    Real hydrogenIonization{};
+    Real heliumIonization{};
+    Real heliumPlusIonization{};
+    Real hydrogenMinusDetachment{};
+    Real molecularHydrogenDissociation{};        // H2 -> 2H, including LW.
+    Real molecularHydrogenIonization{};          // H2 -> H2+ + e.
+    Real molecularHydrogenPlusDissociation{};    // H2+ -> H + H+.
+    Real molecularHydrogenPlusIonization{};      // H2+ -> 2H+ + e.
     // Net thermal energy deposited, eV per absorber per second, excluding
     // thresholds already consumed by the photon. No assumed UV spectrum.
-    float heatingPerHydrogen{};
-    float heatingPerHelium{};
-    float heatingPerHeliumPlus{};
-    float heatingPerHydrogenMinus{};
-    float heatingPerMolecularHydrogen{};
-    float heatingPerMolecularHydrogenPlus{};
+    Real heatingPerHydrogen{};
+    Real heatingPerHelium{};
+    Real heatingPerHeliumPlus{};
+    Real heatingPerHydrogenMinus{};
+    Real heatingPerMolecularHydrogen{};
+    Real heatingPerMolecularHydrogenPlus{};
 };
-struct Environment {
-    float nHydrogen{};    // proper H nuclei cm^-3, fixed during a source substep.
-    float heliumToHydrogenNumberRatio{0.24f / (4.0f * 0.76f)};
-    float cmbTemperature{2.7255f};    // K, supplied at the current cosmological epoch.
+template <class Real>
+struct EnvironmentT {
+    Real nHydrogen{};    // proper H nuclei cm^-3, fixed during a source substep.
+    Real heliumToHydrogenNumberRatio{kDefaultHeliumToHydrogenT<Real>};
+    Real cmbTemperature{Real(2.7255)};    // K, supplied at the current cosmological epoch.
     Network network{Network::Atomic6};
-    Radiation radiation{};
+    RadiationT<Real> radiation{};
 };
-struct Composition {
+template <class Real>
+struct CompositionT {
     // All counts here are particles per H nucleus, including He species.
-    FloatFloat hydrogen{}, hydrogenPlus{}, helium{}, heliumPlus{}, heliumDoublePlus{};
-    FloatFloat hydrogenMinus{}, molecularHydrogen{}, molecularHydrogenPlus{};
-    FloatFloat electrons{}, particles{};
+    Real hydrogen{}, hydrogenPlus{}, helium{}, heliumPlus{}, heliumDoublePlus{};
+    Real hydrogenMinus{}, molecularHydrogen{}, molecularHydrogenPlus{};
+    Real electrons{}, particles{};
 };
-struct Eos {
-    float temperature{};
-    float pressurePerHydrogen{};    // P/nH, eV per H nucleus.
-    float heatCapacity{};           // de/dT, eV per H nucleus per K at fixed composition.
-    float adiabaticIndex{};
-    float meanMolecularWeight{};    // particle mass / mH, with mHe=4mH.
-    float pressureEnergyRatio{};    // P/(rho*u).
+template <class Real>
+struct EosT {
+    Real temperature{};
+    Real pressurePerHydrogen{};    // P/nH, eV per H nucleus.
+    Real heatCapacity{};           // de/dT, eV per H nucleus per K at fixed composition.
+    Real adiabaticIndex{};
+    Real meanMolecularWeight{};    // particle mass / mH, with mHe=4mH.
+    Real pressureEnergyRatio{};    // P/(rho*u).
 };
-CUDA_EXPORT inline bool finite(float value) {
-    return ::detail::floatFloatFinite(value);
-}
-CUDA_EXPORT inline WorkingState workingState(State const& state) {
-    WorkingState result;
-    for (int i = 0; i < kAbundanceCount; ++i) {
-        result.abundances[i] = state.abundances[i].value();
+using State = StateT<float>;
+using Derivative = DerivativeT<float>;
+using Radiation = RadiationT<float>;
+using Environment = EnvironmentT<float>;
+using Composition = CompositionT<float>;
+using Eos = EosT<float>;
+// Inspect IEEE exponent bits because fast-math builds may fold isfinite away.
+template <class Real>
+CUDA_EXPORT inline bool finite(Real value) {
+    if constexpr (std::is_same_v<Real, float>) {
+        union Bits {
+            float value;
+            uint32_t bits;
+        } data{value};
+        return (data.bits & 0x7f800000U) != 0x7f800000U;
+    } else if constexpr (std::is_same_v<Real, double>) {
+        union Bits {
+            double value;
+            uint64_t bits;
+        } data{value};
+        return (data.bits & UINT64_C(0x7ff0000000000000)) != UINT64_C(0x7ff0000000000000);
+    } else {
+        using std::isfinite;
+        return isfinite(value);
     }
-    result.thermalEnergy = FloatFloat(state.thermalEnergy);
-    return result;
 }
-CUDA_EXPORT inline Status composeState(WorkingState const& state, State& result) {
-    for (int i = 0; i < kAbundanceCount; ++i) {
-        FloatFloat const value = state.abundances[i];
-        if (!value.isFinite() || value < FloatFloat(0.0f) || value > FloatFloat(1.0f)) {
-            return Status::InvalidInput;
-        }
-        bool const upper = value > FloatFloat(0.5f);
-        float const minority = (upper ? FloatFloat(1.0f) - value : value).toFloat();
-        result.abundances[i] = SignedAbundance::fromMinority(minority, upper);
-    }
-    if (!state.thermalEnergy.isFinite() || state.thermalEnergy <= FloatFloat(0.0f)) {
-        return Status::InvalidInput;
-    }
-    result.thermalEnergy = state.thermalEnergy.toFloat();
-    return Status::Success;
-}
-CUDA_EXPORT inline Composition composition(
-    WorkingState const& state, Environment const& environment) {
+template <class Real>
+CUDA_EXPORT inline CompositionT<Real> composition(
+    StateT<Real> const& state, EnvironmentT<Real> const&) {
     auto const* x = state.abundances;
-    FloatFloat const helium(environment.heliumToHydrogenNumberRatio);
-    Composition c;
-    c.hydrogenPlus = x[0];
-    c.hydrogenMinus = x[3];
-    c.molecularHydrogen = x[4] * FloatFloat(0.5f);
-    c.molecularHydrogenPlus = x[5] * FloatFloat(0.5f);
-    c.hydrogen = ((FloatFloat(1.0f) - x[0]) - x[3]) - (x[4] + x[5]);
-    c.heliumPlus = helium * x[1];
-    c.heliumDoublePlus = helium * x[2];
-    c.helium = helium * ((FloatFloat(1.0f) - x[1]) - x[2]);
-    c.electrons = (c.hydrogenPlus - c.hydrogenMinus) + c.molecularHydrogenPlus + c.heliumPlus +
-        FloatFloat(2.0f) * c.heliumDoublePlus;
-    c.particles =
-        FloatFloat(1.0f) + helium - c.molecularHydrogen - c.molecularHydrogenPlus + c.electrons;
+    CompositionT<Real> c;
+    c.hydrogen = x[0];
+    c.hydrogenPlus = x[1];
+    c.helium = x[2];
+    c.heliumPlus = x[3];
+    c.heliumDoublePlus = x[4];
+    c.electrons = x[5];
+    c.hydrogenMinus = x[6];
+    c.molecularHydrogen = x[7];
+    c.molecularHydrogenPlus = x[8];
+    for (int species = 0; species != kAbundanceCount; ++species) {
+        c.particles += x[species];
+    }
     return c;
 }
-CUDA_EXPORT inline Composition composition(State const& state, Environment const& environment) {
-    return composition(workingState(state), environment);
-}
+
+template <class Real>
 CUDA_EXPORT inline Status validateComposition(
-    WorkingState const& state, Environment const& environment) {
-    if (!finite(environment.nHydrogen) || environment.nHydrogen < 0.0f ||
+    StateT<Real> const& state, EnvironmentT<Real> const& environment) {
+    if (!finite(environment.nHydrogen) || environment.nHydrogen < Real(0) ||
         !finite(environment.heliumToHydrogenNumberRatio) ||
-        environment.heliumToHydrogenNumberRatio < 0.0f || !finite(environment.cmbTemperature) ||
-        environment.cmbTemperature < 0.0f ||
+        environment.heliumToHydrogenNumberRatio < Real(0) || !finite(environment.cmbTemperature) ||
+        environment.cmbTemperature < Real(0) ||
         (environment.network != Network::Atomic6 && environment.network != Network::Molecular9)) {
         return Status::InvalidInput;
     }
-    if (environment.nHydrogen > 1.0e4f) {
+    if (environment.nHydrogen > Real(1.e4)) {
         return Status::UnsupportedState;
     }
-    for (int i = 0; i < kAbundanceCount; ++i) {
-        FloatFloat const value = state.abundances[i];
-        if (!value.isFinite() || value < FloatFloat(0.0f) || value > FloatFloat(1.0f) ||
-            (environment.network == Network::Atomic6 && i >= 3 && value != FloatFloat(0.0f))) {
+    for (int species = 0; species != kAbundanceCount; ++species) {
+        Real const value = state.abundances[species];
+        if (!finite(value) || value < Real(0) ||
+            (environment.network == Network::Atomic6 && species >= 6 && value != Real(0))) {
             return Status::InvalidInput;
         }
     }
-    if (state.abundances[1] + state.abundances[2] > FloatFloat(1.0f)) {
-        return Status::InvalidInput;
-    }
-    Composition const c = composition(state, environment);
-    if (c.hydrogen < FloatFloat(0.0f) || c.electrons < FloatFloat(0.0f) ||
-        !c.particles.isFinite() || c.particles <= FloatFloat(0.0f)) {
+    CompositionT<Real> const c = composition(state, environment);
+    Real const tolerance = Real(32) * kScalarEpsilon<Real>;
+    Real const hydrogen = c.hydrogen + c.hydrogenPlus + c.hydrogenMinus +
+        Real(2) * (c.molecularHydrogen + c.molecularHydrogenPlus);
+    Real const helium = c.helium + c.heliumPlus + c.heliumDoublePlus;
+    Real const positiveCharge =
+        c.hydrogenPlus + c.heliumPlus + Real(2) * c.heliumDoublePlus + c.molecularHydrogenPlus;
+    Real const negativeCharge = c.electrons + c.hydrogenMinus;
+    if (!finite(c.particles) || c.particles <= Real(0) ||
+        std::fabs(hydrogen - Real(1)) > tolerance * std::fmax(Real(1), hydrogen) ||
+        std::fabs(helium - environment.heliumToHydrogenNumberRatio) >
+            tolerance * std::fmax(helium, environment.heliumToHydrogenNumberRatio) ||
+        std::fabs(positiveCharge - negativeCharge) >
+            tolerance * std::fmax(positiveCharge, negativeCharge)) {
         return Status::InvalidInput;
     }
     return Status::Success;
 }
-CUDA_EXPORT inline Status validateComposition(State const& state, Environment const& environment) {
-    return validateComposition(workingState(state), environment);
+
+// Initial-condition input retains the six convenient fractional nuclei:
+// H+/H, He+/He, He++/He, H-/H, 2H2/H, 2H2+/H. This one-time conversion does
+// not select an evolving variable basis or encode a complementary fraction.
+template <class Real>
+CUDA_EXPORT inline Status initializeState(StateT<Real>& state,
+    EnvironmentT<Real> const& environment, Real const (&fractions)[kInitialFractionCount]) {
+    for (Real fraction : fractions) {
+        if (!finite(fraction) || fraction < Real(0) || fraction > Real(1)) {
+            return Status::InvalidInput;
+        }
+    }
+    Real* x = state.abundances;
+    x[0] = Real(1) - ((fractions[0] + fractions[3]) + (fractions[4] + fractions[5]));
+    x[1] = fractions[0];
+    x[2] = environment.heliumToHydrogenNumberRatio * (Real(1) - (fractions[1] + fractions[2]));
+    x[3] = environment.heliumToHydrogenNumberRatio * fractions[1];
+    x[4] = environment.heliumToHydrogenNumberRatio * fractions[2];
+    x[6] = fractions[3];
+    x[7] = Real(0.5) * fractions[4];
+    x[8] = Real(0.5) * fractions[5];
+    x[5] = (x[1] - x[6]) + x[3] + Real(2) * x[4] + x[8];
+    return validateComposition(state, environment);
+}
+
+template <class Real>
+CUDA_EXPORT inline Status initializeState(
+    StateT<Real>& state, EnvironmentT<Real> const& environment) {
+    Real const fractions[kInitialFractionCount]{};
+    return initializeState(state, environment, fractions);
 }
 }    // namespace primordial

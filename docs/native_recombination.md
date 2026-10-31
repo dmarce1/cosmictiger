@@ -19,15 +19,15 @@ that approximation.
 
 The new homogeneous model belongs to `primordial_chemistry`. It uses the
 existing H/He species normalization and ideal-gas pressure convention.
-`chemistryState` converts a history sample into the existing signed-complement
+`chemistryState` converts a history sample into the direct nine-species
 `State` and `Environment`, constructing its energy through the existing
 chemistry EOS. Conversion returns `UnsupportedState` outside that EOS's
 temperature and density domain, without changing those limits.
 
 The homogeneous solver uses double precision and its own stiff integration.
-The SPH solver's float/FloatFloat storage, optically thin reaction network,
-thermal limits, and integration controls remain unchanged. Its `atomic6`
-and `molecular9` evolution retain their existing behavior. With chemistry enabled,
+The SPH source solver uses the single-scalar Anninos algorithm and direct species
+storage described in [primordial thermochemistry](primordial_chemistry.md). The
+native homogeneous recombination solver remains a separate physical initializer. With chemistry enabled,
 `chemistry.initialization=recombination` now fills unspecified initial temperature,
 H+/H, He+/He, and He++/He from the native history at `cosmology.startRedshift`.
 The configured cosmology controls that history. Explicit CLI or INI values override
@@ -39,7 +39,7 @@ Use `chemistry.initialization=manual` for the former fixed defaults (1000 K,
 H+/H = 2e-4, neutral helium) or for reproducing older runs. The example INIs
 comment out the four optional scalar overrides so the native defaults take effect.
 Particle initialization uses the existing SPH EOS and unit conversion, including
-its He/H mass convention. Later source integration is unchanged. Restart reads
+its He/H mass convention. Later source integration uses the selected particle chemistry network. Restart reads
 the stored particle state; it resolves the same initial options only to verify
 checkpoint compatibility. Restoring older checkpoints requires the original
 initial values, usually with `chemistry.initialization=manual`.

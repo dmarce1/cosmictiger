@@ -1,5 +1,7 @@
 # Primordial chemistry validation — 2026-10-18
 
+Validation-history note (2026-10-30): records below concerning signed-complement storage, FloatFloat and the coupled Newton solver describe the preceding implementation. The current solver uses direct nine-species storage and the templated Anninos algorithm; current evidence is recorded in [the Anninos validation](anninos_validation.md). See [the current solver](primordial_chemistry.md).
+
 Repository: `/home/dmarce1/workspace/cosmictiger`, branch `main`, base commit
 `f325926adb3489373c72ce121f3277b49df3c28f`. These results cover uncommitted
 implementation work. The applied recovery stash

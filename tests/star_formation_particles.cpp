@@ -23,9 +23,12 @@ void requireStarParticles(bool condition, char const* message) {
 
 primordial::State fixtureChemistry(int rank, int originalGasIndex) {
     primordial::State state;
-    state.abundances[0].setRaw(originalGasIndex == 0 ? 0.125f : -0.125f);
-    state.abundances[1].setRaw(0.125f);
-    state.abundances[2].setRaw(0.0625f);
+    primordial::Environment environment;
+    float const fractions[primordial::kInitialFractionCount] = {
+        originalGasIndex == 0 ? 0.125f : 0.875f, 0.125f, 0.0625f, 0.0f, 0.0f, 0.0f};
+    requireStarParticles(
+        primordial::initializeState(state, environment, fractions) == primordial::Status::Success,
+        "invalid chemistry persistence fixture");
     state.thermalEnergy = 4.0f + 2.0f * rank + originalGasIndex;
     return state;
 }
@@ -42,9 +45,9 @@ void requireFixtureChemistry(ParticleInteger gasIndex, int rank, int originalGas
     auto const expected = fixtureChemistry(rank, originalGasIndex);
     auto const& state = sphParticlesChemistryStates[gasIndex];
     for (int species = 0; species < primordial::kAbundanceCount; ++species) {
-        requireStarParticles(std::bit_cast<uint32_t>(state.abundances[species].raw()) ==
-                std::bit_cast<uint32_t>(expected.abundances[species].raw()),
-            "combined persistence changed a signed chemistry abundance");
+        requireStarParticles(std::bit_cast<uint32_t>(state.abundances[species]) ==
+                std::bit_cast<uint32_t>(expected.abundances[species]),
+            "combined persistence changed a direct chemistry species");
     }
     requireStarParticles(state.thermalEnergy == expected.thermalEnergy,
         "combined persistence changed chemistry thermal energy");

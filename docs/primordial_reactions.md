@@ -1,6 +1,6 @@
 # Primordial reaction and thermal catalogue
 
-This catalogue describes physics version **2**, implemented in
+This catalogue describes physics version **3**, implemented in
 `primordial_types.hpp`, `primordial_rates.hpp`, and `primordial_eos.hpp`. The
 shared source evaluates both CPU and CUDA physics. It is a defined, optically
 thin primordial model, with the limitations below; nine species do not imply
@@ -8,29 +8,29 @@ that every primordial process or density regime is represented.
 
 ## State, units, and numerical representation
 
-The six stored fractions are, in order, `H+/H`, `He+/He`, `He++/He`, `H-/H`,
-`2H2/H`, and `2H2+/H`. Here the denominators count nuclei. The independent
-helium fractions are normalized to helium, not hydrogen. The environment supplies
-proper hydrogen-nucleus density in cm⁻³, the He/H number ratio, CMB temperature
-in kelvin, network choice, and explicit radiation scalars.
+The state directly stores nine particle counts per hydrogen nucleus, in order:
+H, H+, He, He+, He++, electrons, H−, H2 and H2+. Molecules count once per
+molecule; helium is normalized to hydrogen. The environment supplies proper
+hydrogen-nucleus density in cm⁻³, the He/H number ratio, CMB temperature in
+kelvin, network choice and explicit radiation scalars.
 
-Each fraction `c` is stored as one float: `c` for `c <= 1/2`, otherwise `c-1`.
-The sign bit selects the branch, including negative zero at the upper endpoint.
-`SignedAbundance::complement()` returns a directly stored minority when present;
-callers must not compute `1 - fraction()` using an ordinary decoded float.
-Working abundances, constrained neutral/electron closure, products and source
-sums use `FloatFloat`. Two components can preserve a small minority separated
-from the leading component, including the tested `1e-30` neutral fraction next
-to unit ionization. This does not provide an extended exponent range or arbitrary
-precision for all operations.
+The state, coefficients, EOS and source integrator share one template scalar
+`Real`. The application selects ordinary float; the same implementation can be
+instantiated with double. Signed-complement encoding, FloatFloat products and
+compensated source sums have been removed. Dominant-species conservation
+corrections preserve the explicitly stored depleted species; they do not require
+reconstructing neutral abundances from rounded ion fractions.
 
-The kernel evolves **thermal energy in eV per H nucleus**. It excludes chemical
-binding energy. Rates are cm³ s⁻¹, photo coefficients are s⁻¹ per absorber, and
-radiation heating inputs are net eV per absorber per second. Temperature and
-rate functions use float; compensated Horner evaluation is used where needed,
-including split coefficients for the cancelling Savin polynomial. No FP64
-arithmetic is required by these physics headers. The typed host boundary converts
-between these scalars and stored hydrodynamic specific energy.
+The solver evolves thermal energy in eV per H nucleus, excluding chemical binding
+energy. Rates are cm³ s⁻¹, photo coefficients are s⁻¹ per absorber, and radiation
+heating inputs are net eV per absorber per second. The typed host boundary
+converts these quantities to and from hydrodynamic specific energy.
+
+The adopted reaction and thermal fits below remain the model catalogue. The
+Anninos source integrator uses algebraic equilibrium for H− and H2+ and neglects
+collisions between those trace intermediates when computing H− equilibrium,
+following equation (32). Thus the molecular solver no longer evolves their
+independent non-equilibrium transients. See [the solver description](primordial_chemistry.md).
 
 ## Implemented domains
 
@@ -223,7 +223,7 @@ spin mixture, energy convention, and temperature/domain handling.
 
 `tests/primordial_rates.cpp` checks all reaction rows, each photon source,
 coefficient anchors calculated independently in binary64, all-temperature
-coefficient scans, signed minority preservation, partition-energy/cv anchors,
+coefficient scans, direct species preservation, partition-energy/cv anchors,
 EOS inversion and derivatives, He²⁺ free-free weighting, signed Compton exchange,
 the thermal ledger, explicit domain rejection, and the hot-extension anchors,
 splices, freezes and the molecule-free atomic-limit identity. These tests establish local

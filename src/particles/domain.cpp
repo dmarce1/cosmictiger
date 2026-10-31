@@ -453,7 +453,7 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
         if (getOptions().chemistry.enabled) {
             auto const& state = sphParticlesChemistryStates[i];
             for (int species = 0; species < primordial::kAbundanceCount; ++species) {
-                gas.chemistry[species] = state.abundances[species].raw();
+                gas.chemistry[species] = state.abundances[species];
             }
             gas.chemistry[primordial::kAbundanceCount] = state.thermalEnergy;
             gas.chemistryStep = sphParticlesChemistrySteps[i];
@@ -496,7 +496,7 @@ static void unpackSphParticle(
         if (getOptions().chemistry.enabled) {
             auto& state = sphParticlesChemistryStates[i];
             for (int species = 0; species < primordial::kAbundanceCount; ++species) {
-                state.abundances[species].setRaw(gas.chemistry[species]);
+                state.abundances[species] = gas.chemistry[species];
             }
             state.thermalEnergy = gas.chemistry[primordial::kAbundanceCount];
             sphParticlesChemistrySteps[i] = gas.chemistryStep;

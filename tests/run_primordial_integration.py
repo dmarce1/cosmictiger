@@ -50,38 +50,43 @@ def gasState(path, requireEos=True, globalTimestep=None, expectedCount=512):
     if offset < 0:
         raise RuntimeError("No versioned chemistry gas payload in checkpoint")
     fields = struct.unpack_from("=7I", payload, offset)
-    if fields[1] not in (11, 13, 15, 17) or fields[2] not in (4, 8) or fields[5:] != (3, 4):
+    if fields[1] not in (51, 53, 55, 57) or fields[2] not in (4, 8) or fields[5:] != (3, 4):
         raise RuntimeError(f"Unsupported chemistry checkpoint layout {fields}")
     count = int.from_bytes(payload[offset + 28:offset + 28 + fields[2]], sys.byteorder, signed=True)
     if count != expectedCount:
         raise RuntimeError(f"Unexpected gas count {count}")
-    # The tail is explicitly serialized: six signed fractions, eV/H energy,
+    # The tail is explicitly serialized: nine species counts per H nucleus, eV/H energy,
     # pressure/energy ratio and frozen gamma, then each particle's pending
     # conformal half-interval and opening heating ledger (two doubles).
-    viscosityBytes = {11: 0, 13: 8, 15: 12, 17: 12}[fields[1]]
+    viscosityBytes = {51: 0, 53: 8, 55: 12, 57: 12}[fields[1]]
     chemistryStart = offset + 28 + fields[2] + count * (
         fields[3] + fields[4] + 38 + fields[2] + viscosityBytes)
-    chemistryEnd = chemistryStart + count * (9 * 4 + 2 * 8)
+    chemistryEnd = chemistryStart + count * (12 * 4 + 2 * 8)
     if chemistryEnd > len(payload):
         raise RuntimeError("Truncated chemistry checkpoint state")
     chemistry = payload[chemistryStart:chemistryEnd]
-    records = list(struct.iter_unpack("=9f2d", chemistry))
+    records = list(struct.iter_unpack("=12f2d", chemistry))
     for i, record in enumerate(records):
-        words = record[:9]
-        halfInterval, pendingHeating = record[9:]
+        words = record[:12]
+        halfInterval, pendingHeating = record[12:]
         if not (math.isfinite(halfInterval) and halfInterval >= 0 and
                 math.isfinite(pendingHeating)):
-            raise RuntimeError(f"Invalid per-particle chemistry phase {record[9:]}")
+            raise RuntimeError(f"Invalid per-particle chemistry phase {record[12:]}")
         if requireEos and halfInterval <= 0:
             raise RuntimeError("Evolved chemistry checkpoint lost its pending source half")
         if globalTimestep is not None and halfInterval != 0.5 * globalTimestep:
             raise RuntimeError("Chemistry half-interval differs from the exact global timestep")
         if not (all(math.isfinite(x) for x in words) and
-                all(abs(x) <= .5 for x in words[:6]) and words[6] > 0):
+                all(x >= 0 for x in words[:9]) and words[9] > 0):
             raise RuntimeError(f"Invalid chemistry checkpoint state {words}")
-        if requireEos and not (words[7] > 0 and words[8] > 1):
+        hydrogen = words[0] + words[1] + words[6] + 2.0 * (words[7] + words[8])
+        charge = words[1] + words[3] + 2.0 * words[4] + words[8] - words[6]
+        if (abs(hydrogen - 1.0) > 1e-6 or
+                abs(words[5] - charge) > 1e-6 * max(words[5], abs(charge), 1e-30)):
+            raise RuntimeError(f"Unconserved checkpoint chemistry state {words}")
+        if requireEos and not (words[10] > 0 and words[11] > 1):
             raise RuntimeError(f"Invalid evolved chemistry EOS state {words}")
-    return [record[:9] for record in records], payload[offset:chemistryEnd]
+    return [record[:12] for record in records], payload[offset:chemistryEnd]
 
 
 def gasPayload(path, globalMode=False, expectedCount=512):
@@ -104,22 +109,22 @@ def nativeInitialReference(executable, directory, redshift):
 
 def checkInitialChemistry(checkpoint, reference):
     # SPH retains its existing mass convention and monatomic ideal-gas EOS.
-    # Decode signed minority abundances and infer temperature from the saved
+    # Check all nine saved species counts and infer temperature from the saved
     # eV/H energy, independently of option printing and Silo derived fields.
     helium = 0.2454006 / (4.0 * (1.0 - 0.2454006))
     boltzmann = struct.unpack("=f", struct.pack("=f", 8.617333262145e-5))[0]
     states, _ = gasState(checkpoint, requireEos=False)
     for words in states:
-        fractions = [1.0 + value if math.copysign(1.0, value) < 0 else value
-                     for value in words[:6]]
-        expected = [reference["x_H"], reference["x_He"], reference["x_He_double"], 0, 0, 0]
+        hp = reference["x_H"]
+        hep = helium * reference["x_He"]
+        hepp = helium * reference["x_He_double"]
+        expected = [1.0 - hp, hp, helium - hep - hepp, hep, hepp,
+                    hp + hep + 2.0 * hepp, 0.0, 0.0, 0.0]
         if any(not math.isclose(actual, target, rel_tol=2e-6, abs_tol=2e-12)
-               for actual, target in zip(fractions, expected)):
-            raise RuntimeError(f"Initial checkpoint fractions {fractions} differ from native {expected}")
-        electrons = (fractions[0] - fractions[3] + 0.5 * fractions[5] +
-                     helium * (fractions[1] + 2.0 * fractions[2]))
-        particles = 1.0 + helium - 0.5 * (fractions[4] + fractions[5]) + electrons
-        temperature = words[6] / (1.5 * boltzmann * particles)
+               for actual, target in zip(words[:9], expected)):
+            raise RuntimeError(f"Initial checkpoint counts {words[:9]} differ from native {expected}")
+        particles = sum(words[:9])
+        temperature = words[9] / (1.5 * boltzmann * particles)
         if not math.isclose(temperature, reference["T_m"], rel_tol=3e-6):
             raise RuntimeError(f"Initial checkpoint T={temperature} K differs from native {reference['T_m']} K")
     print(f"Native initial checkpoint: {len(states)} gas particles, "
@@ -149,8 +154,10 @@ def checkOutput(directory):
         try:
             for system in ("cgs", "cosmological"):
                 for frame in ("comoving", "lab"):
-                    for field in ("chem_HI", "chem_H2", "chem_electrons", "chem_signed_fraction_0",
-                                  "temperature", "mean_molecular_weight", "frozen_gamma"):
+                    fields = ("chem_HI", "chem_H2", "chem_electrons", "temperature",
+                              "mean_molecular_weight", "frozen_gamma")
+                    fields += tuple(f"chem_number_per_h_{species}" for species in range(9))
+                    for field in fields:
                         name = f"{system}/{frame}/{field}".encode()
                         if silo.DBInqVarExists(handle, name) != 1:
                             raise RuntimeError(f"Missing chemistry output field {name!r}")
@@ -197,20 +204,17 @@ def main():
     cases = (("atomic6", "atomic6", []),
              ("molecular9_cold", "molecular9", []),
              # Molecule-rich gas needs many source substeps; use 64 particles to
-             # bound runtime while retaining the production solver tolerances.
+             # bound runtime while retaining the production fractional-change limit.
              ("molecular9", "molecular9",
               ["--chemistry.initialization=manual", "--chemistry.molecularFraction=0.2",
                "--initial.particlesPerDimension=4"]),
              # Hot molecular gas above the former 6000 K ceiling: molecules are
              # retained, dissociate and recombine within the nine-species network.
-             # Cooling, recombining gas costs the first-order source solver a few
-             # hundred substeps per particle, so this case uses 64 particles and
-             # the coarser production tolerances to stay inside the run timeout.
+             # Keep the production fractional-change limit and use 64 particles
+             # to bound the integration regression's runtime.
              ("molecular9_hot", "molecular9",
               ["--chemistry.initialization=manual", "--chemistry.initialTemperature=30000",
                "--chemistry.hydrogenIonFraction=0.5", "--chemistry.molecularFraction=0.001",
-               "--chemistry.relativeTolerance=1e-3",
-               "--chemistry.abundanceAbsoluteTolerance=1e-10",
                "--initial.particlesPerDimension=4"]))
     for name, network, initialization in cases:
         if selected and name not in selected:

@@ -2,10 +2,10 @@
 
 The opt-in primordial source operator evolves H, H+, He, He+, He++, electrons,
 and, for `molecular9`, H−, H2 and H2+. CPU and CUDA dispatch the same reaction,
-EOS and implicit integration implementation. The runtime `chemistry.enabled`
+EOS and scalar source integration implementation. The runtime `chemistry.enabled`
 option is disabled by default; cosmology scenario INIs enable it explicitly.
-The implemented model and remaining research/optimization gates are distinguished
-in [the plan](primordial_chemistry_plan.md). The complete reaction catalogue,
+The prior design is retained as a historical record in
+[the plan](primordial_chemistry_plan.md). The complete reaction catalogue,
 source citations, fit domains and thermal approximations are in
 [the reaction reference](primordial_reactions.md).
 
@@ -21,28 +21,27 @@ electron-volt convention as the rates, represented by a Boost.Units energy
 quantity, rather than the older rounded application constant. Cosmological conversions use the
 existing `a^2 u` energy, comoving density and conformal-time interfaces.
 
-The device/CPU numerical payload contains documented floats: eV/H, proper H
-nuclei/cm³, K, seconds, reaction coefficients in cm³/s, and specified radiation
-rates. It never stores tiny CGS volume energy densities as floats. Boundary
-conversion rejects nonfinite, overflowing and nonzero subnormal payload scales.
-Host dimensional conversions use double, as do the existing global cosmological
-clock and diagnostics; the chemistry device arithmetic uses float/FloatFloat.
+The numerical payload stores eV/H, proper H nuclei/cm³, K, seconds, reaction
+coefficients in cm³/s and radiation rates. The core is templated on one scalar
+type: `StateT<Real>`, `EnvironmentT<Real>`, `SolverOptionsT<Real>` and
+`advance<Real>`. Species, coefficients, EOS, energy and local time all use `Real`.
+The application's aliases select `float`; callers may instantiate the same
+implementation with `double`. There is no FloatFloat arithmetic, precision
+promotion, compensated accumulation or signed-complement representation.
+Boost.Units conversions and the application's global clock remain host boundaries.
 
-Six independent stored fractions count Hp/H, Hep/He, Hepp/He, Hminus/H, 2H2/H,
-and 2H2plus/H. For fraction c ≤ 1/2 the stored value is c; for c > 1/2 it is
-−(1−c). The sign **bit** selects the branch, so negative zero represents one.
-The minority is retained directly, including through checkpoint/migration; do
-not decode the dominant value into a float and subtract it from one. To initialize
-an extremely small minority, use `SignedAbundance::fromMinority` directly rather
-than first constructing `1-minority` in ordinary floating arithmetic.
+All nine species are saved directly, in this order: H, H+, He, He+, He++,
+electrons, H−, H2 and H2+. Each value is a particle count per hydrogen nucleus;
+helium counts are therefore not normalized by helium, and molecule counts are
+not doubled. The existing initialization options still specify ion fractions
+and molecular nuclei fractions; `initializeState` converts them once into the
+nine-species representation. `Atomic6` requires the last three counts to be zero.
+Hydrogen, helium and charge constraints are checked with ordinary rounding
+allowance. No species is encoded as a signed distance from one.
 
-FloatFloat is used for constrained species closure, reaction sums, cancellation
-sensitive rate polynomials, Newton residuals/linear algebra, trial states and
-local clocks. Rate transcendental functions and EOS temperature are FP32. The
-standalone chemistry library is compiled without fast-math or FTZ. CPU batch
-workers establish nearest rounding and gradual underflow with a scoped guard and
-restore the caller's floating-point environment; CUDA uses explicit strict flags.
-Boost.Units does not enter device structures.
+The standalone chemistry library is compiled without fast-math or FTZ. CPU
+batch workers establish nearest rounding and gradual underflow with a scoped
+guard and restore the caller's environment; CUDA uses matching strict flags.
 
 ## Running
 
@@ -72,7 +71,7 @@ context when `compute.cuda=false`. Auxiliary feature limitations are listed in
 The initial composition is explicit and is not automatically copied from RECFAST.
 Initial fractional nuclei and temperature are configured in the `chemistry.*`
 option group. Atomic6 requires its molecular fractions to be zero. Options and
-run output record the selected model and tolerances.
+run output record the selected model and subcycling controls.
 
 With star formation disabled, chemistry follows each active gas particle's SPH
 timestep. Each interval uses
@@ -90,13 +89,13 @@ The cosmic energy diagnostic uses the pressure integral for variable gamma.
 
 Hydro selects its next interval, including applicable neighbor limits, before
 the opening source step. Chemistry advances once over that selected half-interval;
-its implicit solver subcycles internally. The updated EOS and hydro rates are
+its scalar source solver subcycles internally. The updated EOS and hydro rates are
 recomputed for the opening kick without changing the selected timestep or
 repeating chemistry. Chemistry has no separate outer timestep option.
 Check timestep refinement
 for the intended problem: a successful local chemistry solve alone does not
 bound operator-splitting error, and the symmetric ordering does not make the
-backward-Euler source solver second order.
+first-order source solver second order.
 
 With `starFormation.enabled=true`, the Springel–Hernquist source operator owns
 the same opening/closing source clock and heating ledger. It invokes the shared
@@ -119,16 +118,39 @@ with old chemistry checkpoints.
 
 ## Solver and model limits
 
-The current solver is adaptive backward Euler with step doubling, bounded Newton
-iterations and positivity-aware line searches that project each fraction onto
-its branch's feasible half-line (fraction at least zero, at most one) before
-the residual is evaluated. The accepted fine solution consists
-of two half steps. It is a first-order baseline, not SDIRK. Relative tolerance is a
-**local** error control, not a promise of equally small global trajectory error.
-The default is 1e-4 and requests below the tested floor 1e-5 are rejected.
-Species absolute tolerances also matter for traces. Failure returns the last
-accepted state/time and work counters. The SPH bridge prepares all ranks before
-committing source results, and does not commit a partially failed batch.
+The source integrator follows Anninos, Zhang, Abel & Norman (1997),
+[sections 3.1–3.2](https://arxiv.org/abs/astro-ph/9608041). Explicit thermal
+subcycling precedes chemical subcycling over the supplied source interval.
+For each chemical sweep the fixed order is H, H+, He, He+, He++, electrons,
+algebraic equilibrium H− and H2+, then H2. The scalar update is
+`n_new = (n_old + dt*C)/(1 + dt*D)`. Creation/destruction terms use earlier
+species' newly updated values and the adopted reaction catalogue and rate fits.
+The rate temperature is held at its post-thermal value during the chemical stage,
+using the paper's advanced-temperature choice.
+The fast-intermediate equilibrium assumptions are part of this solver; it no
+longer evolves independent non-equilibrium histories for H− and H2+.
+
+After the full chemical stage, the hydrogen and helium conservation corrections
+change the dominant species, then charge conservation fixes electrons. Internal
+subcycles retain the independently evolved electron value for timestep selection. All nine counts are retained through
+storage, migration and restart, so neutral traces are not reconstructed from
+rounded ion fractions at every source call.
+
+`chemistry.fractionalChangeLimit` defaults to 0.1, the paper's ten-percent
+subcycle bound on electron abundance and thermal energy. It is a fractional
+change limit, not a local truncation-error estimate. Refining it does not by
+itself remove the splitting error between chemistry and thermal evolution over
+the supplied outer interval. `chemistry.electronFractionFloor` defaults to
+1e-20 and uses that minimum electron scale only for timestep selection whenever
+the electron abundance is below it; it never floors an abundance. `chemistry.maxSubsteps` bounds the combined number
+of thermal and chemical substeps. An unsupported or failed source interval
+returns the initial state and zero accepted time. The SPH bridge prepares all
+ranks before committing results and does not commit a failed batch.
+
+The old Newton/Jacobian, step-doubling and mixed-precision paths have been
+removed. Their relative and absolute tolerance settings are replaced by the
+subcycling controls above. CPU and CUDA run the same templated solver; there is
+no separate reduced-matrix or mixed-network solver implementation.
 
 The current density ceiling is 10^4 H nuclei/cm³. Both networks accept
 10–10^8 K: the [cold extension](molecular9_cold.md) supplies the molecular
@@ -179,11 +201,12 @@ old chemistry checkpoints with the common-rung layout are rejected.
 Combined star-formation runs retain chemical fractions and source energy in
 this payload, while their pending half-interval and heating live exclusively
 in the star-formation state; standalone chemical step fields remain zero.
-Restart checks the reaction/EOS physics version, network, solver settings,
+The direct nine-species payload uses physics version 3 and rejects older
+chemistry checkpoints. Restart checks the physics version, network, solver settings,
 initial composition, CMB/helium configuration, radiation file checksum and source
 stage state. Chemistry-disabled checkpoints retain the previous payload.
 
-Gas Silo output includes species counts per H nucleus, six raw signed fractions,
+Gas Silo output includes all nine direct species counts per H nucleus,
 temperature, mean molecular weight and frozen gamma. Existing output metadata
 still describes the stored staggered time stage; conversion to physical units
 does not synchronize a snapshot.
@@ -192,11 +215,11 @@ does not synchronize a snapshot.
 
 `primordial_rates`, `primordial_solver`, `primordial_units`, `primordial_cuda`,
 `primordial_integration_cpu`, `cpu_only_runtime`, `sph_cpu` and the existing CUDA
-SPH kernel tests cover the relevant layers. When NumPy/SciPy is available,
-`primordial_radau_reference` compares the production RHS integration against an
-independent Radau integrator. This tests the integrator, not the provenance of
-rate fits; coefficient/EOS anchors and reaction conservation are tested separately.
+SPH kernel tests cover the relevant layers. `primordial_reference` instantiates
+the same solver with double and checks independent analytic photoionization,
+photodissociation, Compton and split photoheating limits under refinement.
+Coefficient/EOS anchors and reaction conservation are tested separately.
 `tests/run_primordial_integration.py --cuda` exercises full CUDA source/hydro
 stepping and restart. Exact commands and observed outcomes belong in the run's
-[validation record](primordial_validation.md); a configured test target is not
+[validation record](anninos_validation.md); a configured test target is not
 evidence that it passed.

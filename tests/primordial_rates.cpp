@@ -23,6 +23,17 @@ void close(double actual, double expected, double tolerance, char const* message
         throw std::runtime_error(message);
     }
 }
+void setInitialFraction(
+    primordial::State& state, primordial::Environment const& environment, int index, float value) {
+    auto const& x = state.abundances;
+    float const helium = x[2] + x[3] + x[4];
+    float fractions[primordial::kInitialFractionCount] = {x[1],
+        helium > 0.0f ? x[3] / helium : 0.0f, helium > 0.0f ? x[4] / helium : 0.0f, x[6],
+        2.0f * x[7], 2.0f * x[8]};
+    fractions[index] = value;
+    // Some fixtures intentionally construct invalid compositions for validation.
+    primordial::initializeState(state, environment, fractions);
+}
 primordial::State atTemperature(
     primordial::State state, primordial::Environment const& environment, float temperature) {
     require(primordial::thermalEnergyAtTemperature(state, environment, temperature,
@@ -46,30 +57,118 @@ void checkStoichiometry() {
             "reaction violates exact nuclei or charge conservation");
     }
 }
+template <class Real>
+void checkCreationDestruction() {
+    using namespace primordial;
+    EnvironmentT<Real> environment;
+    environment.network = Network::Molecular9;
+    environment.nHydrogen = Real(8);
+    // Exercise every isolated channel and the full catalogue, with all species
+    // present, each species absent, and every species absent. These synthetic
+    // populations test the source algebra without imposing conserved totals.
+    for (int absent = -2; absent < kChemicalSpeciesCount; ++absent) {
+        StateT<Real> state;
+        for (int species = 0; species < kChemicalSpeciesCount; ++species) {
+            state.abundances[species] =
+                absent == -2 || absent == species ? Real(0) : std::ldexp(Real(1), -species - 2);
+        }
+        auto const c = composition(state, environment);
+        for (int active = -1; active < kReactionCount; ++active) {
+            SCOPED_TRACE(::testing::Message() << "scalar bytes=" << sizeof(Real)
+                                              << " absent=" << absent << " reaction=" << active);
+            RateCoefficientsT<Real> rates;
+            environment.radiation = {};
+            Real* photo[] = {&environment.radiation.hydrogenIonization,
+                &environment.radiation.heliumIonization,
+                &environment.radiation.heliumPlusIonization,
+                &environment.radiation.hydrogenMinusDetachment,
+                &environment.radiation.molecularHydrogenDissociation,
+                &environment.radiation.molecularHydrogenIonization,
+                &environment.radiation.molecularHydrogenPlusDissociation,
+                &environment.radiation.molecularHydrogenPlusIonization};
+            for (int reaction = 0; reaction < kReactionCount; ++reaction) {
+                if (active < 0 || active == reaction) {
+                    Real const coefficient = Real(reaction + 1) / Real(128);
+                    if (reaction >= 19 && reaction < 27) {
+                        *photo[reaction - 19] = coefficient;
+                    } else {
+                        rates.collision[reaction < 19 ? reaction : reaction - 8] = coefficient;
+                    }
+                }
+            }
+            Real flux[kReactionCount];
+            reactionFluxes(c, environment, rates, flux);
+            for (int species = 0; species < kChemicalSpeciesCount; ++species) {
+                Real expected = Real(0);
+                for (int reaction = 0; reaction < kReactionCount; ++reaction) {
+                    expected += Real(reactionStoichiometry(reaction, species)) * flux[reaction];
+                }
+                Real creation, destruction;
+                reactionCreationDestruction(c, environment, rates, species, creation, destruction);
+                ASSERT_TRUE(finite(creation));
+                ASSERT_TRUE(finite(destruction));
+                EXPECT_GE(creation, Real(0));
+                EXPECT_GE(destruction, Real(0));
+                Real const sink = destruction * state.abundances[species];
+                Real const tolerance =
+                    Real(32) * std::numeric_limits<Real>::epsilon() * (creation + sink);
+                EXPECT_NEAR(creation - sink, expected, tolerance) << "species=" << species;
+            }
+        }
+    }
+    // Source equality alone cannot constrain D when its species is absent.
+    // H+ + e -> H must still give D_H+ = k*n_H*x_e at x_H+ = 0.
+    environment.radiation = {};
+    CompositionT<Real> c;
+    c.electrons = Real(0.25);
+    RateCoefficientsT<Real> rates;
+    rates.collision[1] = Real(0.125);
+    Real creation, destruction;
+    reactionCreationDestruction(c, environment, rates, 1, creation, destruction);
+    EXPECT_EQ(creation, Real(0));
+    EXPECT_EQ(destruction, Real(0.25));
+    // H2 + H2 -> H2 + 2H consumes one net H2; removing one reactant
+    // factor leaves D_H2 = k*n_H*x_H2, including its zero-abundance limit.
+    rates = {};
+    rates.collision[19] = Real(0.125);
+    for (Real molecular : {Real(0), Real(0.25)}) {
+        c.molecularHydrogen = molecular;
+        reactionCreationDestruction(c, environment, rates, 7, creation, destruction);
+        EXPECT_EQ(creation, Real(0));
+        EXPECT_EQ(destruction, molecular);
+    }
+}
 void checkAbundances() {
     using namespace primordial;
-    auto const zero = SignedAbundance::fromMinority(0.0f, true);
-    require(zero.upper() && std::signbit(zero.raw()) && zero.value() == FloatFloat(1.0f),
-        "upper endpoint must store negative zero");
+    Environment environment;
     for (float minority : {1.0e-8f, 1.0e-20f, 1.0e-30f}) {
         State state;
-        state.abundances[0] = SignedAbundance::fromMinority(minority, true);
+        state.abundances[0] = minority;
+        state.abundances[1] = 1.0f;
+        state.abundances[5] = 1.0f;
         state.thermalEnergy = 1.0f;
-        Environment environment;
         Composition const c = composition(state, environment);
-        close(c.hydrogen.toDouble(), minority, 1.0e-6, "neutral minority survives closure");
-        State packed;
-        require(composeState(workingState(state), packed) == Status::Success, "abundance packing");
-        require(packed.abundances[0].raw() == state.abundances[0].raw(),
-            "packing preserves upper minority");
+        close(c.hydrogen, minority, 1.0e-6, "direct neutral trace survives composition access");
+        State const copied = state;
+        require(copied.abundances[0] == minority && copied.abundances[1] == 1.0f,
+            "direct state copy retains both neutral trace and dominant ion");
+        require(validateComposition(state, environment) == Status::Success,
+            "direct populations conserve within ordinary rounding");
     }
     State invalid;
-    invalid.abundances[0] = SignedAbundance::fromFraction(0.7f);
-    invalid.abundances[4] = SignedAbundance::fromFraction(0.4f);
-    Environment environment;
     environment.network = Network::Molecular9;
+    setInitialFraction(invalid, environment, 0, 0.7f);
+    setInitialFraction(invalid, environment, 4, 0.4f);
     require(validateComposition(invalid, environment) == Status::InvalidInput,
         "reject excess hydrogen nuclei");
+    invalid = State{};
+    invalid.abundances[5] = 0.1f;
+    require(validateComposition(invalid, environment) == Status::InvalidInput,
+        "reject charge imbalance");
+    invalid = State{};
+    invalid.abundances[2] *= 2.0f;
+    require(validateComposition(invalid, environment) == Status::InvalidInput,
+        "reject excess helium nuclei");
 }
 void checkRates() {
     using namespace primordial;
@@ -136,7 +235,7 @@ void checkEos() {
     close(eos.adiabaticIndex, 5.0 / 3.0, 3.0e-7, "monatomic gamma");
     environment.network = Network::Molecular9;
     State molecule;
-    molecule.abundances[4] = SignedAbundance::fromMinority(0.0f, true);
+    setInitialFraction(molecule, environment, 4, (1.0f - 0.0f));
     for (float temperature :
         {100.0f, 300.0f, 1000.0f, 3000.0f, 6000.0f, 8000.0f, 1.0e4f, 3.0e4f, 1.0e6f, 1.0e8f}) {
         molecule = atTemperature(molecule, environment, temperature);
@@ -146,27 +245,28 @@ void checkEos() {
         require(eos.heatCapacity > 0.0f && eos.adiabaticIndex > 1.0f && eos.adiabaticIndex < 1.67f,
             "physical molecular heat capacity");
         if (temperature > 100.0f && temperature < 1.0e8f) {
-            FloatFloat lower, upper;
+            float lower, upper;
             float capacity;
             float const step = 0.005f * temperature;
-            require(thermalEnergyAtTemperature(workingState(molecule), environment,
-                        temperature - step, lower, capacity) == Status::Success,
+            require(thermalEnergyAtTemperature(molecule, environment, temperature - step, lower,
+                        capacity) == Status::Success,
                 "lower EOS sample");
-            require(thermalEnergyAtTemperature(workingState(molecule), environment,
-                        temperature + step, upper, capacity) == Status::Success,
+            require(thermalEnergyAtTemperature(molecule, environment, temperature + step, upper,
+                        capacity) == Status::Success,
                 "upper EOS sample");
-            close(eos.heatCapacity, (upper - lower).toDouble() / (2.0 * step), 5.0e-5,
+            close(eos.heatCapacity, (upper - lower) / (2.0 * step), 5.0e-5,
                 "cv is the derivative of energy");
         }
     }
     environment.heliumToHydrogenNumberRatio = 0.0f;
+    setInitialFraction(molecule, environment, 4, 1.0f);
     double const referenceEnergy[] = {
         0.006635103227285061, 0.025635344015995497, 0.10161292585928484, 0.7901953105218633};
     double const referenceCapacity[] = {
         7.36423966206575e-5, 1.0593396721564733e-4, 1.1162197626272923e-4, 1.4739969716322487e-4};
     float const referenceTemperature[] = {100.0f, 300.0f, 1000.0f, 6000.0f};
     // Independent binary64 partition sums through J=201, not the runtime's
-    // 65-level float/FloatFloat sums. Zero-temperature ortho offsets are removed.
+    // 65-level float sums. Zero-temperature ortho offsets are removed.
     for (int i = 0; i < 4; ++i) {
         molecule = atTemperature(molecule, environment, referenceTemperature[i]);
         require(
@@ -272,15 +372,15 @@ void checkColdMolecularPhysics() {
                 for (int mixture = 0; mixture != 6; ++mixture) {
                     State state;
                     if (mixture == 1) {
-                        state.abundances[4] = SignedAbundance::fromFraction(1.0f);
+                        setInitialFraction(state, environment, 4, 1.0f);
                     } else if (mixture == 2) {
-                        state.abundances[0] = SignedAbundance::fromFraction(1.0f);
-                        state.abundances[2] = SignedAbundance::fromFraction(1.0f);
+                        setInitialFraction(state, environment, 0, 1.0f);
+                        setInitialFraction(state, environment, 2, 1.0f);
                     } else if (mixture >= 3) {
-                        state.abundances[0] = SignedAbundance::fromFraction(0.2f);
-                        state.abundances[1] = SignedAbundance::fromFraction(0.1f);
-                        state.abundances[4] = SignedAbundance::fromFraction(0.1f);
-                        state.abundances[5] = SignedAbundance::fromFraction(
+                        setInitialFraction(state, environment, 0, 0.2f);
+                        setInitialFraction(state, environment, 1, 0.1f);
+                        setInitialFraction(state, environment, 4, 0.1f);
+                        setInitialFraction(state, environment, 5,
                             mixture == 3 ? 0.0f : (mixture == 4 ? 1.0e-20f : 0.1f));
                     }
                     state = atTemperature(state, environment, static_cast<float>(temperature));
@@ -291,10 +391,10 @@ void checkColdMolecularPhysics() {
                     close(
                         eos.temperature, temperature, 1.5e-6, "cold mixture temperature roundtrip");
                     require(evaluateRhs(state, environment, derivative) == Status::Success &&
-                            derivative.thermalEnergy.isFinite(),
+                            finite(derivative.thermalEnergy),
                         "finite cold mixture thermal RHS");
                     for (auto const& abundance : derivative.abundances) {
-                        require(abundance.isFinite(), "finite cold mixture species RHS");
+                        require(finite(abundance), "finite cold mixture species RHS");
                     }
                 }
             }
@@ -306,16 +406,16 @@ void checkColdMolecularPhysics() {
     environment.nHydrogen = 1.0e4f;
     environment.cmbTemperature = 0.0f;
     State ionMixture;
-    ionMixture.abundances[0] = SignedAbundance::fromFraction(0.2f);
-    ionMixture.abundances[4] = SignedAbundance::fromFraction(0.1f);
-    ionMixture.abundances[5] = SignedAbundance::fromFraction(0.1f);
+    setInitialFraction(ionMixture, environment, 0, 0.2f);
+    setInitialFraction(ionMixture, environment, 4, 0.1f);
+    setInitialFraction(ionMixture, environment, 5, 0.1f);
     auto const ionComposition = composition(ionMixture, environment);
     for (int temperature = 30; temperature <= 70; ++temperature) {
         RateCoefficients rates;
         require(evaluateRateCoefficients(
                     static_cast<float>(temperature), Network::Molecular9, rates) == Status::Success,
             "H2+ bridge coefficient setup");
-        FloatFloat flux[kReactionCount]{};
+        float flux[kReactionCount]{};
         ThermalRates thermal;
         require(evaluateThermalRates(ionComposition, environment, static_cast<float>(temperature),
                     rates, flux, thermal) == Status::Success,
@@ -326,17 +426,15 @@ void checkColdMolecularPhysics() {
         double const lte = (2.0e-19 / 1.602176634e-12) *
             std::pow(static_cast<double>(temperature), 0.1) * std::exp(-3125.0 / temperature);
         double const low = environment.nHydrogen *
-            (ionComposition.hydrogen.toDouble() * atom +
-                ionComposition.electrons.toDouble() * electron);
-        double const expected =
-            ionComposition.molecularHydrogenPlus.toDouble() * low / (1.0 + low / lte);
-        require(std::abs(thermal.molecularIonLineCooling.toDouble() - expected) <=
+            (ionComposition.hydrogen * atom + ionComposition.electrons * electron);
+        double const expected = ionComposition.molecularHydrogenPlus * low / (1.0 + low / lte);
+        require(std::abs(thermal.molecularIonLineCooling - expected) <=
                 5.0 * std::numeric_limits<float>::denorm_min() + 3.0e-5 * expected,
             "H2+ bridge binary64 reference across subnormal LTE");
     }
-    State molecule;
-    molecule.abundances[4] = SignedAbundance::fromFraction(1.0f);
     environment.heliumToHydrogenNumberRatio = 0.0f;
+    State molecule;
+    setInitialFraction(molecule, environment, 4, 1.0f);
     for (float temperature : {10.0f, 20.0f, 49.0f, 80.0f, 100.0f}) {
         // Independent double partition sums through J=201 for fixed ortho:para
         // 3:1. This checks the thermal energy and derivative, not an E=cv*T model.
@@ -370,11 +468,11 @@ void checkColdMolecularPhysics() {
         close(molecule.thermalEnergy, expectedEnergy, 8.0e-7, "cold independent partition energy");
         close(eos.heatCapacity, expectedCapacity, 8.0e-7, "cold independent partition derivative");
     }
-    FloatFloat energy;
+    float energy;
     float capacity, cooling[5], lte;
     RateCoefficients rates;
-    require(thermalEnergyAtTemperature(workingState(molecule), environment, 9.99f, energy,
-                capacity) == Status::UnsupportedState &&
+    require(thermalEnergyAtTemperature(molecule, environment, 9.99f, energy, capacity) ==
+                Status::UnsupportedState &&
             molecularCoolingCoefficients(9.99f, cooling, lte) == Status::UnsupportedState &&
             evaluateRateCoefficients(9.99f, Network::Molecular9, rates) == Status::UnsupportedState,
         "no silent extrapolation below 10 K");
@@ -419,20 +517,20 @@ void checkHotMolecularPhysics() {
     // generated by the code under test.
     RateCoefficients rates;
     float cooling[5], lte;
-    FloatFloat energy;
+    float energy;
     float capacity;
-    State molecule;
-    molecule.abundances[4] = SignedAbundance::fromFraction(1.0f);
     Environment environment;
     environment.network = Network::Molecular9;
+    State molecule;
+    setInitialFraction(molecule, environment, 4, 1.0f);
     require(evaluateRateCoefficients(1.0e8f, Network::Molecular9, rates) == Status::Success &&
             molecularCoolingCoefficients(1.0e8f, cooling, lte) == Status::Success &&
-            thermalEnergyAtTemperature(
-                workingState(molecule), environment, 1.0e8f, energy, capacity) == Status::Success,
+            thermalEnergyAtTemperature(molecule, environment, 1.0e8f, energy, capacity) ==
+                Status::Success,
         "molecular ceiling is 1e8 K");
     require(molecularCoolingCoefficients(1.5e8f, cooling, lte) == Status::UnsupportedState &&
-            thermalEnergyAtTemperature(workingState(molecule), environment, 1.5e8f, energy,
-                capacity) == Status::UnsupportedState,
+            thermalEnergyAtTemperature(molecule, environment, 1.5e8f, energy, capacity) ==
+                Status::UnsupportedState,
         "no silent extrapolation above 1e8 K");
     // GA08 A1/1 (Wishart) hot branch times the 6000 K continuity ratio; GP98 H8
     // held at 32000 K; Savin held at 30000 K; Croft held at 1e4 K; GA08 A1/16
@@ -538,7 +636,7 @@ void checkHotMolecularPhysics() {
     environment.heliumToHydrogenNumberRatio = 0.0f;
     for (int ion = 0; ion != 2; ++ion) {
         State state;
-        state.abundances[ion == 0 ? 4 : 5] = SignedAbundance::fromFraction(1.0f);
+        setInitialFraction(state, environment, ion == 0 ? 4 : 5, 1.0f);
         double const rotation = ion == 0 ? 85.4 : (30.21 - 0.8425) * 1.438776877;
         double const vibration = ion == 0 ? 5987.0 : (2321.7 - 132.4) * 1.438776877;
         for (float temperature :
@@ -570,19 +668,19 @@ void checkHotMolecularPhysics() {
             for (int mixture = 0; mixture != 4; ++mixture) {
                 State state;
                 if (mixture == 1) {
-                    state.abundances[4] = SignedAbundance::fromFraction(1.0f);
+                    setInitialFraction(state, environment, 4, 1.0f);
                 } else if (mixture == 2) {
-                    state.abundances[0] = SignedAbundance::fromFraction(0.9f);
-                    state.abundances[1] = SignedAbundance::fromFraction(0.5f);
-                    state.abundances[2] = SignedAbundance::fromFraction(0.5f);
-                    state.abundances[3] = SignedAbundance::fromMinority(1.0e-8f, false);
-                    state.abundances[4] = SignedAbundance::fromFraction(1.0e-3f);
-                    state.abundances[5] = SignedAbundance::fromMinority(1.0e-6f, false);
+                    setInitialFraction(state, environment, 0, 0.9f);
+                    setInitialFraction(state, environment, 1, 0.5f);
+                    setInitialFraction(state, environment, 2, 0.5f);
+                    setInitialFraction(state, environment, 3, 1.0e-8f);
+                    setInitialFraction(state, environment, 4, 1.0e-3f);
+                    setInitialFraction(state, environment, 5, 1.0e-6f);
                 } else if (mixture == 3) {
-                    state.abundances[0] = SignedAbundance::fromFraction(0.3f);
-                    state.abundances[1] = SignedAbundance::fromFraction(0.1f);
-                    state.abundances[4] = SignedAbundance::fromFraction(0.2f);
-                    state.abundances[5] = SignedAbundance::fromFraction(0.1f);
+                    setInitialFraction(state, environment, 0, 0.3f);
+                    setInitialFraction(state, environment, 1, 0.1f);
+                    setInitialFraction(state, environment, 4, 0.2f);
+                    setInitialFraction(state, environment, 5, 0.1f);
                 }
                 state = atTemperature(state, environment, temperature);
                 Eos eos;
@@ -591,14 +689,14 @@ void checkHotMolecularPhysics() {
                     "hot mixture EOS inversion");
                 close(eos.temperature, temperature, 1.5e-6, "hot mixture temperature roundtrip");
                 require(evaluateRhs(state, environment, derivative) == Status::Success &&
-                        derivative.thermalEnergy.isFinite(),
+                        finite(derivative.thermalEnergy),
                     "finite hot mixture thermal RHS");
                 for (auto const& abundance : derivative.abundances) {
-                    require(abundance.isFinite(), "finite hot mixture species RHS");
+                    require(finite(abundance), "finite hot mixture species RHS");
                 }
                 if (mixture == 1 && density > 0.0f) {
-                    require(derivative.abundances[4] < FloatFloat(0.0f) &&
-                            derivative.thermalEnergy < FloatFloat(0.0f),
+                    require(derivative.abundances[7] < float(0.0f) &&
+                            derivative.thermalEnergy < float(0.0f),
                         "hot molecular gas dissociates and loses binding energy");
                 }
             }
@@ -614,9 +712,9 @@ void checkHotMolecularPhysics() {
     environment.cmbTemperature = 30.0f;
     for (float temperature : {2.0e4f, 1.0e5f, 1.0e6f, 1.0e7f, 1.0e8f}) {
         State state;
-        state.abundances[0] = SignedAbundance::fromFraction(0.5f);
-        state.abundances[1] = SignedAbundance::fromFraction(0.3f);
-        state.abundances[2] = SignedAbundance::fromFraction(0.2f);
+        setInitialFraction(state, environment, 0, 0.5f);
+        setInitialFraction(state, environment, 1, 0.3f);
+        setInitialFraction(state, environment, 2, 0.2f);
         Environment atomic = environment;
         atomic.network = Network::Atomic6;
         State molecularState = atTemperature(state, environment, temperature);
@@ -627,32 +725,29 @@ void checkHotMolecularPhysics() {
         // between the networks and a one-ulp temperature difference would leak
         // into the steep exponentials.
         Derivative molecularRhs, atomicRhs;
-        require(evaluateRhsAtTemperature(workingState(molecularState), environment, temperature,
-                    molecularRhs) == Status::Success &&
-                evaluateRhsAtTemperature(
-                    workingState(atomicState), atomic, temperature, atomicRhs) == Status::Success,
+        require(evaluateRhsAtTemperature(molecularState, environment, temperature, molecularRhs) ==
+                    Status::Success &&
+                evaluateRhsAtTemperature(atomicState, atomic, temperature, atomicRhs) ==
+                    Status::Success,
             "atomic limit RHS");
         require(
             evaluateRateCoefficients(temperature, Network::Molecular9, rates) == Status::Success,
             "atomic limit rates");
         Composition const c = composition(molecularState, environment);
         evaluateDensityDependentRates(c, environment, temperature, rates);
-        FloatFloat flux[kReactionCount];
+        float flux[kReactionCount];
         reactionFluxes(c, environment, rates, flux);
-        double const transfer = (flux[33] - flux[34]).toDouble();
-        double const association = flux[8].toDouble();
-        double const helium = environment.heliumToHydrogenNumberRatio;
+        double const transfer = (flux[33] - flux[34]);
+        double const association = flux[8];
         double const differences[] = {
-            (molecularRhs.abundances[0] - atomicRhs.abundances[0]).toDouble() - transfer +
-                association,
-            (molecularRhs.abundances[1] - atomicRhs.abundances[1]).toDouble() + transfer / helium,
-            (molecularRhs.abundances[2] - atomicRhs.abundances[2]).toDouble(),
-            (molecularRhs.thermalEnergy - atomicRhs.thermalEnergy).toDouble() +
-                (24.5874 - 13.5984) * flux[34].toDouble()};
-        double const scales[] = {std::abs(atomicRhs.abundances[0].toDouble()),
-            std::abs(atomicRhs.abundances[1].toDouble()),
-            std::abs(atomicRhs.abundances[2].toDouble()),
-            std::abs(atomicRhs.thermalEnergy.toDouble())};
+            (molecularRhs.abundances[1] - atomicRhs.abundances[1]) - transfer + association,
+            (molecularRhs.abundances[3] - atomicRhs.abundances[3]) + transfer,
+            (molecularRhs.abundances[4] - atomicRhs.abundances[4]),
+            (molecularRhs.thermalEnergy - atomicRhs.thermalEnergy) +
+                (24.5874 - 13.5984) * flux[34]};
+        double const scales[] = {std::abs(atomicRhs.abundances[1]),
+            std::abs(atomicRhs.abundances[3]), std::abs(atomicRhs.abundances[4]),
+            std::abs(atomicRhs.thermalEnergy)};
         for (int i = 0; i != 4; ++i) {
             if (std::abs(differences[i]) > 2.0e-6 * scales[i] + 1.0e-30) {
                 std::fprintf(stderr, "atomic limit T %g component %d residual %g scale %g\n",
@@ -663,16 +758,16 @@ void checkHotMolecularPhysics() {
         // Compare the differing channels with the H ionization plus recombination
         // traffic rather than their near-cancelling net, and the C27 cost with
         // the net thermal rate.
-        double const traffic = (flux[0] + flux[1]).toDouble();
-        double const cost = (24.5874 - 13.5984) * flux[34].toDouble();
+        double const traffic = (flux[0] + flux[1]);
+        double const cost = (24.5874 - 13.5984) * flux[34];
         std::printf("atomic limit T %.3g: |transfer|/traffic %.3g, association/traffic %.3g, "
                     "H- formation/traffic %.3g, C27 cost/|thermal| %.3g\n",
-            temperature, std::abs(transfer) / traffic, association / traffic,
-            flux[6].toDouble() / traffic, cost / scales[3]);
+            temperature, std::abs(transfer) / traffic, association / traffic, flux[6] / traffic,
+            cost / scales[3]);
         // Measured: 6e-5, 1.7e-4 and 2e-3 at 2e4 K, all falling with temperature;
         // the C27 share of the net thermal rate is 8e-8 at 2e4 K and at most 2e-6.
         require(std::abs(transfer) < 5.0e-3 * traffic && association < 5.0e-3 * traffic &&
-                flux[6].toDouble() < 5.0e-3 * traffic && cost < 5.0e-3 * scales[3],
+                flux[6] < 5.0e-3 * traffic && cost < 5.0e-3 * scales[3],
             "molecular9-only channels are negligible in molecule-free hot gas");
     }
     // Hot thermal ledger: every dissociation partner still consumes 4.48 eV and
@@ -680,17 +775,17 @@ void checkHotMolecularPhysics() {
     for (float temperature : {2.0e4f, 1.0e5f, 1.0e7f}) {
         environment.nHydrogen = 100.0f;
         State state;
-        state.abundances[0] = SignedAbundance::fromFraction(0.5f);
-        state.abundances[3] = SignedAbundance::fromMinority(1.0e-6f, false);
-        state.abundances[4] = SignedAbundance::fromFraction(0.01f);
-        state.abundances[5] = SignedAbundance::fromFraction(1.0e-4f);
+        setInitialFraction(state, environment, 0, 0.5f);
+        setInitialFraction(state, environment, 3, 1.0e-6f);
+        setInitialFraction(state, environment, 4, 0.01f);
+        setInitialFraction(state, environment, 5, 1.0e-4f);
         state = atTemperature(state, environment, temperature);
         Composition const c = composition(state, environment);
         require(
             evaluateRateCoefficients(temperature, Network::Molecular9, rates) == Status::Success,
             "hot ledger rates");
         evaluateDensityDependentRates(c, environment, temperature, rates);
-        FloatFloat flux[kReactionCount];
+        float flux[kReactionCount];
         reactionFluxes(c, environment, rates, flux);
         ThermalRates thermal;
         require(evaluateThermalRates(c, environment, temperature, rates, flux, thermal) ==
@@ -700,23 +795,21 @@ void checkHotMolecularPhysics() {
         // for all four partners, 1.83 eV reverse charge transfer, 0.7542 eV
         // per collisional detachment, dissociative attachment and the 10.99 eV
         // He/H charge-transfer cost. An equality catches a dropped partner.
-        double const dissociation = 4.48 * (flux[11] + flux[12] + flux[27] + flux[28]).toDouble();
-        double const ledger = dissociation + 1.83 * flux[10].toDouble() +
-            0.7542 * (flux[13] + flux[14] + flux[36]).toDouble() +
-            (4.48 - 0.7542) * flux[30].toDouble() + (24.5874 - 13.5984) * flux[34].toDouble();
+        double const dissociation = 4.48 * (flux[11] + flux[12] + flux[27] + flux[28]);
+        double const ledger = dissociation + 1.83 * flux[10] +
+            0.7542 * (flux[13] + flux[14] + flux[36]) + (4.48 - 0.7542) * flux[30] +
+            (24.5874 - 13.5984) * flux[34];
         require(dissociation > 0.0, "hot dissociation is active");
-        close(thermal.molecularChemicalCooling.toDouble(), ledger, 1.0e-6,
-            "hot chemical cooling ledger");
+        close(thermal.molecularChemicalCooling, ledger, 1.0e-6, "hot chemical cooling ledger");
         double const ionElectron = 4.666167586504443e-9, ionAtom = 5.744994354680924e-10,
                      ionLte = 2.2940483994493419e-7;
-        double const low = environment.nHydrogen *
-            (c.hydrogen.toDouble() * ionAtom + c.electrons.toDouble() * ionElectron);
-        close(thermal.molecularIonLineCooling.toDouble(),
-            c.molecularHydrogenPlus.toDouble() * low / (1.0 + low / ionLte), 3.0e-5,
-            "hot H2+ cooling uses the held GA08 coefficients");
+        double const low =
+            environment.nHydrogen * (c.hydrogen * ionAtom + c.electrons * ionElectron);
+        close(thermal.molecularIonLineCooling, c.molecularHydrogenPlus * low / (1.0 + low / ionLte),
+            3.0e-5, "hot H2+ cooling uses the held GA08 coefficients");
         Derivative rhs;
         require(evaluateRhs(state, environment, rhs) == Status::Success, "hot ledger RHS");
-        close(rhs.thermalEnergy.toDouble(), thermal.netHeating().toDouble(), 2.0e-5,
+        close(rhs.thermalEnergy, thermal.netHeating(), 2.0e-5,
             "hot RHS shares the single thermal ledger");
     }
 }
@@ -728,27 +821,29 @@ void checkSources() {
     environment.heliumToHydrogenNumberRatio = 0.0f;
     environment.cmbTemperature = 1000.0f;
     State ion;
-    ion.abundances[0] = SignedAbundance::fromMinority(0.0f, true);
+    setInitialFraction(ion, environment, 0, (1.0f - 0.0f));
     Derivative rhs;
     ion = atTemperature(ion, environment, 500.0f);
-    require(evaluateRhs(ion, environment, rhs) == Status::Success &&
-            rhs.thermalEnergy > FloatFloat(0.0f),
+    require(
+        evaluateRhs(ion, environment, rhs) == Status::Success && rhs.thermalEnergy > float(0.0f),
         "Compton heats below CMB");
     ion = atTemperature(ion, environment, 2000.0f);
-    require(evaluateRhs(ion, environment, rhs) == Status::Success &&
-            rhs.thermalEnergy < FloatFloat(0.0f),
+    require(
+        evaluateRhs(ion, environment, rhs) == Status::Success && rhs.thermalEnergy < float(0.0f),
         "Compton cools above CMB");
     ion = atTemperature(ion, environment, 1000.0f);
-    require(evaluateRhs(ion, environment, rhs) == Status::Success &&
-            rhs.thermalEnergy == FloatFloat(0.0f),
+    require(
+        evaluateRhs(ion, environment, rhs) == Status::Success && rhs.thermalEnergy == float(0.0f),
         "Compton balance at CMB");
     environment.cmbTemperature = 0.0f;
     environment.radiation.hydrogenIonization = 1.0e-12f;
     environment.radiation.heatingPerHydrogen = 3.0e-12f;
-    State neutral = atTemperature(State{}, environment, 1000.0f);
+    State neutral;
+    require(initializeState(neutral, environment) == Status::Success, "neutral input conversion");
+    neutral = atTemperature(neutral, environment, 1000.0f);
     require(evaluateRhs(neutral, environment, rhs) == Status::Success, "photo source");
-    close(rhs.abundances[0].toDouble(), 1.0e-12, 1.0e-7, "photo ionization per absorber");
-    close(rhs.thermalEnergy.toDouble(), 3.0e-12, 1.0e-7, "photo threshold is not charged twice");
+    close(rhs.abundances[1], 1.0e-12, 1.0e-7, "photo ionization per absorber");
+    close(rhs.thermalEnergy, 3.0e-12, 1.0e-7, "photo threshold is not charged twice");
     environment.radiation.hydrogenIonization = -1.0f;
     require(evaluateRhs(neutral, environment, rhs) == Status::InvalidInput,
         "negative radiation is rejected");
@@ -760,28 +855,28 @@ void checkThermalLedger() {
     environment.nHydrogen = 10.0f;
     environment.heliumToHydrogenNumberRatio = 0.1f;
     State state;
-    state.abundances[2] = SignedAbundance::fromMinority(0.0f, true);
+    setInitialFraction(state, environment, 2, (1.0f - 0.0f));
     Composition c = composition(state, environment);
     RateCoefficients rates;
     require(evaluateRateCoefficients(10000.0f, Network::Atomic6, rates) == Status::Success,
         "free-free setup");
-    FloatFloat flux[kReactionCount]{};
+    float flux[kReactionCount]{};
     reactionFluxes(c, environment, rates, flux);
     ThermalRates thermal;
     require(evaluateThermalRates(c, environment, 10000.0f, rates, flux, thermal) == Status::Success,
         "thermal evaluation");
     double const gaunt = 1.1 + .34 * std::exp(-2.25 / 3.0);
     double const expected = 10.0 * .2 * (4.0 * .1) * (1.42e-27 / 1.602176634e-12) * 100.0 * gaunt;
-    close(thermal.freeFreeCooling.toDouble(), expected, 3.0e-7, "He++ free-free uses Z squared");
-    close(thermal.ionizationCooling.toDouble(), 13.5984 * flux[0].toDouble(), 1.0e-7,
+    close(thermal.freeFreeCooling, expected, 3.0e-7, "He++ free-free uses Z squared");
+    close(thermal.ionizationCooling, 13.5984 * flux[0], 1.0e-7,
         "H ionization threshold uses the reaction flux once");
     environment.network = Network::Molecular9;
     environment.nHydrogen = 10000.0f;
     state = State{};
-    state.abundances[0] = SignedAbundance::fromFraction(0.1f);
-    state.abundances[3] = SignedAbundance::fromFraction(0.01f);
-    state.abundances[4] = SignedAbundance::fromFraction(0.2f);
-    state.abundances[5] = SignedAbundance::fromFraction(0.1f);
+    setInitialFraction(state, environment, 0, 0.1f);
+    setInitialFraction(state, environment, 3, 0.01f);
+    setInitialFraction(state, environment, 4, 0.2f);
+    setInitialFraction(state, environment, 5, 0.1f);
     state = atTemperature(state, environment, 1000.0f);
     c = composition(state, environment);
     require(evaluateRateCoefficients(1000.0f, Network::Molecular9, rates) == Status::Success,
@@ -790,30 +885,29 @@ void checkThermalLedger() {
     reactionFluxes(c, environment, rates, flux);
     require(evaluateThermalRates(c, environment, 1000.0f, rates, flux, thermal) == Status::Success,
         "molecular thermal evaluation");
-    require(thermal.molecularLineCooling > FloatFloat(0.0f) &&
-            thermal.molecularIonLineCooling > FloatFloat(0.0f),
+    require(
+        thermal.molecularLineCooling > float(0.0f) && thermal.molecularIonLineCooling > float(0.0f),
         "both molecular ions and molecules radiate");
-    require(thermal.unresolvedChemicalEnergyRelease > FloatFloat(0.0f),
+    require(thermal.unresolvedChemicalEnergyRelease > float(0.0f),
         "unresolved chemical energy is disclosed");
-    double const dissociation = 4.48 * (flux[11] + flux[12] + flux[27] + flux[28]).toDouble();
-    double const ledger = dissociation + 1.83 * flux[10].toDouble() +
-        0.7542 * (flux[13] + flux[14] + flux[36]).toDouble() +
-        (4.48 - 0.7542) * flux[30].toDouble() + (24.5874 - 13.5984) * flux[34].toDouble();
+    double const dissociation = 4.48 * (flux[11] + flux[12] + flux[27] + flux[28]);
+    double const ledger = dissociation + 1.83 * flux[10] +
+        0.7542 * (flux[13] + flux[14] + flux[36]) + (4.48 - 0.7542) * flux[30] +
+        (24.5874 - 13.5984) * flux[34];
     require(dissociation > 0.0, "dissociation partners are active");
-    close(thermal.molecularChemicalCooling.toDouble(), ledger, 1.0e-6,
+    close(thermal.molecularChemicalCooling, ledger, 1.0e-6,
         "all four dissociation partners and the other chemical costs form the ledger");
     Derivative rhs;
     require(evaluateRhs(state, environment, rhs) == Status::Success, "extended molecular RHS");
-    close(rhs.thermalEnergy.toDouble(), thermal.netHeating().toDouble(), 2.0e-5,
-        "RHS shares the single thermal ledger");
+    close(rhs.thermalEnergy, thermal.netHeating(), 2.0e-5, "RHS shares the single thermal ledger");
     // Each externally specified photo channel gets its own stoichiometry test
     // without collision or CMB sources; a nonzero net heating field is separate.
     environment.nHydrogen = 0.0f;
     environment.cmbTemperature = 0.0f;
-    state.abundances[1] = SignedAbundance::fromFraction(0.2f);
+    setInitialFraction(state, environment, 1, 0.2f);
     state = atTemperature(state, environment, 1000.0f);
     c = composition(state, environment);
-    FloatFloat const absorber[] = {c.hydrogen, c.helium, c.heliumPlus, c.hydrogenMinus,
+    float const absorber[] = {c.hydrogen, c.helium, c.heliumPlus, c.hydrogenMinus,
         c.molecularHydrogen, c.molecularHydrogen, c.molecularHydrogenPlus, c.molecularHydrogenPlus};
     for (int photo = 0; photo < 8; ++photo) {
         environment.radiation = Radiation{};
@@ -826,18 +920,56 @@ void checkThermalLedger() {
             &environment.radiation.molecularHydrogenPlusIonization};
         *fields[photo] = 1.0e-10f;
         require(evaluateRhs(state, environment, rhs) == Status::Success, "photo channel RHS");
-        int const columns[] = {1, 3, 4, 6, 7, 8};
         for (int species = 0; species < kAbundanceCount; ++species) {
-            double const scale = species == 1 || species == 2 ?
-                1.0 / environment.heliumToHydrogenNumberRatio :
-                (species >= 4 ? 2.0 : 1.0);
-            double const expectedSource = reactionStoichiometry(photo + 19, columns[species]) *
-                scale * absorber[photo].toDouble() * static_cast<double>(*fields[photo]);
-            close(rhs.abundances[species].toDouble(), expectedSource, 1.0e-6,
-                "photo stoichiometry source");
+            double const expectedSource = reactionStoichiometry(photo + 19, species) *
+                double(absorber[photo]) * static_cast<double>(*fields[photo]);
+            close(rhs.abundances[species], expectedSource, 1.0e-6,
+                "photo stoichiometry source for every direct population");
         }
-        require(rhs.thermalEnergy == FloatFloat(0.0f), "photo threshold is not thermal cooling");
+        require(rhs.thermalEnergy == float(0.0f), "photo threshold is not thermal cooling");
     }
+}
+void checkScalarTemplates() {
+    using namespace primordial;
+    long double const coefficients[] = {-3.3232183e-7L, 3.3735382e-7L, -1.4491368e-7L,
+        3.4172805e-8L, -4.781372e-9L, 3.9731542e-10L, -1.8171411e-11L, 3.5311932e-13L};
+    for (double temperature : {1000.0, 3000.0, 10000.0, 30000.0}) {
+        // Independent unshifted polynomial, evaluated with the wider host scalar.
+        long double const logarithm = std::log(static_cast<long double>(temperature));
+        long double polynomial = 0;
+        for (int power = 0; power != 8; ++power) {
+            polynomial +=
+                static_cast<long double>(coefficients[power]) * std::pow(logarithm, power);
+        }
+        long double const expected = polynomial * std::exp(-21237.15L / temperature);
+        RateCoefficientsT<double> rates;
+        require(
+            evaluateRateCoefficients(temperature, Network::Molecular9, rates) == Status::Success,
+            "double coefficient evaluation");
+        close(rates.collision[10], static_cast<double>(expected), 1.0e-12,
+            "double shifted Savin fit agrees with original polynomial");
+        RateCoefficients single;
+        require(evaluateRateCoefficients(static_cast<float>(temperature), Network::Molecular9,
+                    single) == Status::Success,
+            "float coefficient evaluation");
+        close(single.collision[10], static_cast<double>(expected), 3.0e-6,
+            "float shifted Savin fit preserves published coefficient accuracy");
+    }
+    EnvironmentT<double> environment;
+    environment.network = Network::Molecular9;
+    environment.nHydrogen = 1.0;
+    StateT<double> state;
+    double const fractions[6] = {0.2, 0.1, 0.2, 1.0e-8, 0.01, 1.0e-5};
+    require(
+        initializeState(state, environment, fractions) == Status::Success, "double initial state");
+    require(thermalEnergyAtTemperature(state, environment, 1234.5, state.thermalEnergy) ==
+            Status::Success,
+        "double thermal state");
+    EosT<double> eos;
+    require(evaluateEos(state, environment, eos) == Status::Success, "double EOS");
+    close(eos.temperature, 1234.5, 1.0e-12, "double EOS retains double precision");
+    DerivativeT<double> derivative;
+    require(evaluateRhs(state, environment, derivative) == Status::Success, "double RHS");
 }
 }    // namespace
 TEST(PrimordialRates, Stoichiometry) {
@@ -870,4 +1002,13 @@ TEST(PrimordialRates, Sources) {
 
 TEST(PrimordialRates, ThermalLedger) {
     checkThermalLedger();
+}
+
+TEST(PrimordialRates, ScalarTemplates) {
+    checkScalarTemplates();
+}
+
+TEST(PrimordialRates, CreationDestructionFloatAndDouble) {
+    checkCreationDestruction<float>();
+    checkCreationDestruction<double>();
 }

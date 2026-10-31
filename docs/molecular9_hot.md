@@ -1,5 +1,7 @@
 # Molecular9 up to 10⁸ K
 
+Solver update (2026-10-30): the rate/EOS extension described here remains the physical catalogue, but the recorded Newton and FloatFloat solver tests are historical. The current Anninos solver stores all nine species directly and places H− and H2+ in algebraic equilibrium. See [the current solver and its limits](primordial_chemistry.md).
+
 The nine-species network now shares the atomic ceiling: both `atomic6` and
 `molecular9` accept 10–10⁸ K at proper hydrogen-nucleus densities up to
 10⁴ cm⁻³. Heated molecular gas keeps all nine species while it dissociates,

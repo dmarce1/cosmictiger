@@ -889,7 +889,7 @@ namespace detail {
 uint32_t sphCheckpointVersion() {
     // Preserve the fixed-viscosity payload version and identify optional state.
     auto const& options = getOptions();
-    return (options.starFormation.enabled ? 40U : (options.chemistry.enabled ? 11U : 2U)) +
+    return (options.starFormation.enabled ? 60U : (options.chemistry.enabled ? 51U : 2U)) +
         (options.hydro.viscosityEvolution == "cullenAndDehnen" ?
                 4U :
                 (options.hydro.viscosityEvolution == "priceEtAl" ?
@@ -936,7 +936,7 @@ void sphParticlesLoad(FILE* fp) {
             FREAD(words, sizeof(float), primordial::kAbundanceCount + 3, fp);
             auto& state = sphParticlesChemistryStates[index];
             for (int species = 0; species < primordial::kAbundanceCount; ++species) {
-                state.abundances[species].setRaw(words[species]);
+                state.abundances[species] = words[species];
             }
             state.thermalEnergy = words[primordial::kAbundanceCount];
             sphParticlesChemistryEos[index] = {
@@ -977,7 +977,7 @@ void sphParticlesSave(FILE* fp) {
             float words[primordial::kAbundanceCount + 3];
             auto const& state = sphParticlesChemistryStates[index];
             for (int species = 0; species < primordial::kAbundanceCount; ++species) {
-                words[species] = state.abundances[species].raw();
+                words[species] = state.abundances[species];
             }
             words[primordial::kAbundanceCount] = state.thermalEnergy;
             words[primordial::kAbundanceCount + 1] = sphParticlesChemistryEos[index].first;
@@ -1048,12 +1048,10 @@ void sphCheckpointTest() {
     bool const testChemistry = getOptions().chemistry.enabled && sphParticlesSize() != 0;
     if (testChemistry) {
         originalChemicalState = sphParticlesChemistryStates[0];
-        // A fully ionized fraction is encoded as negative zero. Checkpoint I/O
-        // must retain the branch bit even in the application's fast-math build.
-        sphParticlesChemistryStates[0].abundances[0] =
-            primordial::SignedAbundance::fromMinority(0.0f, true);
-        sphParticlesChemistryStates[0].abundances[1] =
-            primordial::SignedAbundance::fromMinority(1.0e-25f, true);
+        // Direct species storage must preserve trace neutral gas independently
+        // of a dominant ion abundance rounded to one.
+        sphParticlesChemistryStates[0].abundances[0] = 1.0e-25f;
+        sphParticlesChemistryStates[0].abundances[1] = 1.0f;
     }
     Vector<unsigned char> expected;
     FILE* file = std::tmpfile();

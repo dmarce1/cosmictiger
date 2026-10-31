@@ -408,17 +408,16 @@ void writeChemistryFields(
         writeViewField(db, metadata, names[field], "gas", gas, field == 9 ? "K" : "1",
             [&](SphParticleInfo const&) { return double(fields[index++][field]); });
     }
-    // Preserve the minority and branch bit even when displaying the dominant
-    // abundance as an ordinary floating value would round it to one.
+    // Expose the saved direct species array, including trace abundances.
     for (int species = 0; species < primordial::kAbundanceCount; ++species) {
-        std::string const name = "chem_signed_fraction_" + std::to_string(species);
+        std::string const name = "chem_number_per_h_" + std::to_string(species);
         writeViewField(db, metadata, name.c_str(), "gas", gas, "1",
             [species](SphParticleInfo const& particle) {
-                return double(particle.chemistry.abundances[species].raw());
+                return double(particle.chemistry.abundances[species]);
             });
     }
     writeViewText(db, "chemistry_fraction_convention",
-        "species counts per H nucleus; signed fractions preserve minority branches");
+        "direct species counts per H nucleus; order: H,H+,He,He+,He++,e,H-,H2,H2+");
     writeViewText(db, "chemistry_network", getOptions().chemistry.network.c_str());
 }
 #endif

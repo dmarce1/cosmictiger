@@ -224,7 +224,8 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
 
 SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
     EnergiesT* energies, bool verbose, int uniformMinimumRung, bool closingOnly,
-    double previousTimestep, double maximumGlobalTimestep) {
+    double previousTimestep, double maximumGlobalTimestep,
+    section_timing::ScopedSection* hydroTimer) {
     bool const globalTimestep = maximumGlobalTimestep > 0.0;
     double selectedTimestep = maximumGlobalTimestep;
     double const closingTimestep = globalTimestep ? previousTimestep : -1.0;
@@ -242,6 +243,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     bool const chemistry = getOptions().chemistry.enabled && !getOptions().starFormation.enabled;
     if (chemistry) {
         // Viscosity decay uses the current sound speed during the density pass.
+        section_timing::ScopedSection sourceTimer(section_timing::Section::chemistry, hydroTimer);
         sphParticlesRefreshChemistryEos(scale);
     }
 #endif
@@ -331,6 +333,8 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         } while (needsNeighborRefresh);
 #if COSMICTIGER_ENABLE_STAR_FORMATION
         if (getOptions().starFormation.enabled) {
+            section_timing::ScopedSection sourceTimer(
+                section_timing::Section::starFormation, hydroTimer);
             starFormationRefreshEos(scale);
         }
 #endif
@@ -391,7 +395,11 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         }
 #if COSMICTIGER_ENABLE_STAR_FORMATION
         if (getOptions().starFormation.enabled) {
-            starFormationRefreshEos(scale);
+            {
+                section_timing::ScopedSection sourceTimer(
+                    section_timing::Section::starFormation, hydroTimer);
+                starFormationRefreshEos(scale);
+            }
             if (runParameters.variableViscosity) {
                 // The first density pass used the previous density's SH03 sound
                 // speed. Refresh viscosity diagnostics with the converged EOS,
@@ -430,13 +438,19 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     if (chemistry && tau > 0.0) {
         // CKDKC closes C only after the old hydro predictor has been replaced.
         // Each active gas particle still owns its old rung and source interval.
+        section_timing::ScopedSection sourceTimer(section_timing::Section::chemistry, hydroTimer);
         energies->heating += sphChemistryClose(minrung, scale, adot, t0, closingTimestep);
     }
 #endif
 
 #if COSMICTIGER_ENABLE_STAR_FORMATION
     if (getOptions().starFormation.enabled && tau > 0.0) {
-        auto const update = starFormationClose(minrung, scale, adot, t0, closingTimestep);
+        StarFormationUpdate update;
+        {
+            section_timing::ScopedSection sourceTimer(
+                section_timing::Section::starFormation, hydroTimer);
+            update = starFormationClose(minrung, scale, adot, t0, closingTimestep, &sourceTimer);
+        }
         energies->heating += update.heating;
         maxRung = std::max(maxRung, update.maximumNewStarRung);
         if (update.converted != 0 && !closingOnly) {
@@ -453,6 +467,8 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
                 sphParticlesUpdateTargetAlpha(minrung, t0, tau, 0.0);
             }
         }
+        section_timing::ScopedSection sourceTimer(
+            section_timing::Section::starFormation, hydroTimer);
         starFormationRefreshEos(scale);
     }
 #endif
@@ -471,6 +487,8 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     if (closingOnly) {
 #if COSMICTIGER_ENABLE_STAR_FORMATION
         if (getOptions().starFormation.enabled) {
+            section_timing::ScopedSection sourceTimer(
+                section_timing::Section::starFormation, hydroTimer);
             starFormationOpenNewStars(t0, scale, runParameters.maximumTimestep, minrung, false);
         }
 #endif
@@ -484,12 +502,15 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     }
 #if COSMICTIGER_ENABLE_CHEMISTRY
     if (chemistry) {
+        section_timing::ScopedSection sourceTimer(section_timing::Section::chemistry, hydroTimer);
         synchronizedChemistryPressure = sphChemistryPressureIntegral(scale);
         sphParticlesRefreshChemistryEos(scale);
     }
 #endif
 #if COSMICTIGER_ENABLE_STAR_FORMATION
     if (getOptions().starFormation.enabled) {
+        section_timing::ScopedSection sourceTimer(
+            section_timing::Section::starFormation, hydroTimer);
         starFormationRefreshEos(scale);
         synchronizedChemistryPressure = starFormationPressureIntegral(scale);
         runParameters.maximumTimestep = std::min(
@@ -532,9 +553,13 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
 #if COSMICTIGER_ENABLE_CHEMISTRY
     if (chemistry) {
         // Chemistry follows the selected SPH interval, subcycling internally.
-        sphChemistryOpen(minrung, scale, adot, t0, globalTimestep ? selectedTimestep : -1.0,
-            !globalTimestep && uniformMinimumRung >= 0 ? maxRung : -1);
-        sphParticlesRefreshChemistryEos(scale);
+        {
+            section_timing::ScopedSection sourceTimer(
+                section_timing::Section::chemistry, hydroTimer);
+            sphChemistryOpen(minrung, scale, adot, t0, globalTimestep ? selectedTimestep : -1.0,
+                !globalTimestep && uniformMinimumRung >= 0 ? maxRung : -1);
+            sphParticlesRefreshChemistryEos(scale);
+        }
         // Refresh the opening kick's rates without selecting another timestep.
         // Preserve the pre-source timestep reduction and its diagnostics.
         runParameters.phase = 0;
@@ -544,12 +569,18 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
 #endif
 #if COSMICTIGER_ENABLE_STAR_FORMATION
     if (getOptions().starFormation.enabled) {
-        starFormationOpen(minrung, scale, adot, t0, globalTimestep ? selectedTimestep : -1.0,
-            !globalTimestep && uniformMinimumRung >= 0 ? maxRung : -1);
-        starFormationRefreshEos(scale);
+        {
+            section_timing::ScopedSection sourceTimer(
+                section_timing::Section::starFormation, hydroTimer);
+            starFormationOpen(minrung, scale, adot, t0, globalTimestep ? selectedTimestep : -1.0,
+                !globalTimestep && uniformMinimumRung >= 0 ? maxRung : -1, &sourceTimer);
+            starFormationRefreshEos(scale);
+        }
         runParameters.phase = 0;
         runParameters.runType = kSphRunHydro;
         sphRun(runParameters, true);
+        section_timing::ScopedSection sourceTimer(
+            section_timing::Section::starFormation, hydroTimer);
         maxRung = std::max(maxRung,
             starFormationOpenNewStars(t0, scale, runParameters.maximumTimestep, minrung,
                 getOptions().gravity.enabled && !globalTimestep &&
@@ -763,7 +794,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
         sphStep1(activeRung);
         auto const hydro = sphStep2(activeRung, scale, time, baseTimestep, 1, scaleDerivative,
             &energies, true, meshGravity && !global ? gravity.maxRung : -1, closingOnly,
-            previousTimestep, global ? result.minimumTimestep : 0.0);
+            previousTimestep, global ? result.minimumTimestep : 0.0, &hydroTimer);
         gravity.maxRung = std::max(gravity.maxRung, hydro.maximumRung);
         if (global) {
             gravity.minimumTimestep =
@@ -1403,6 +1434,7 @@ void driver() {
     if (getOptions().checkpoint.readIndex == -1) {
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION
         if (getOptions().starFormation.enabled) {
+            section_timing::ScopedSection sourceTimer(section_timing::Section::starFormation);
             starFormationInitialize();
         }
 #endif
@@ -1791,8 +1823,10 @@ void driver() {
                 displayedMinimumRung, maxRung, bucketSize, flops * 1e-12, stepTm.read(), close,
                 direct);
             if (progressRows == 0) {
-                PRINT("  TFLOP/s estimates counted gravity and SPH work during force advancement; "
-                      "chemistry is excluded.\n");
+                PRINT("  TFLOP/s uses counted gravity and SPH operations divided by force "
+                      "advancement wall time.\n"
+                      "  Chemistry and star formation operations are excluded; their wall time "
+                      "is included.\n");
             }
             if (progressRows % 25 == 0) {
                 PRINT("\n%8s %10s %10s %10s %10s %7s %7s %13s %13s %10s\n", "Step", "z", "a", "tau",

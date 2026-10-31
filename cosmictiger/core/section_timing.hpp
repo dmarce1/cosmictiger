@@ -24,6 +24,8 @@ enum class Section {
     treeBuild,
     gravity,
     hydrodynamics,
+    chemistry,
+    starFormation,
     drift,
     checkpointRead,
     checkpointWrite,
@@ -59,10 +61,16 @@ namespace detail {
     inline void writeReport(std::FILE* stream, Registry const& state) {
         static constexpr std::array<char const*, static_cast<size_t>(Section::count)> labels{
             "Initial conditions", "Transfer functions", "Domains", "Particle sort", "Tree build",
-            "Gravity", "Hydrodynamics", "Drift", "Checkpoint read", "Checkpoint write",
-            "Snapshot output", "Analysis"};
+            "Gravity", "Hydrodynamics", "Chemistry", "Star formation", "Drift", "Checkpoint read",
+            "Checkpoint write", "Snapshot output", "Analysis"};
         std::fprintf(stream, "Major section timings (hh:mm:ss.ss)\n");
-        std::fprintf(stream, "Inclusive coordinator timings; nested sections overlap.\n");
+        std::fprintf(stream,
+            "Coordinator wall timings; Hydrodynamics, Chemistry, and Star formation "
+            "exclude one another.\n");
+        std::fprintf(stream, "Other sections are inclusive; nested sections may overlap.\n");
+        std::fprintf(stream,
+            "Chemistry within star formation measures coordinator work; "
+            "remote waits remain Star formation.\n");
         std::fprintf(stream, "%-24s %12s %16s %16s\n", "Section", "Calls", "Total", "Mean");
         for (size_t index = 0; index < state.entries.size(); ++index) {
             auto const& entry = state.entries[index];
@@ -95,12 +103,19 @@ inline bool start(std::string reportPath) {
 
 class ScopedSection {
 public:
-    explicit ScopedSection(Section section) noexcept
-      : index_(static_cast<size_t>(section)) {
+    // An explicit parent is paused for this child's lifetime. Scopes must nest
+    // on one logical task; they can resume on a different HPX worker thread.
+    // Remote actions receive no parent and only the coordinator enables reports.
+    explicit ScopedSection(Section section, ScopedSection* parent = nullptr) noexcept
+      : index_(static_cast<size_t>(section))
+      , parent_(parent) {
         auto& state = detail::registry();
         enabled_ = index_ < state.entries.size() && state.enabled.load(std::memory_order_acquire);
         if (enabled_) {
             start_ = detail::Clock::now();
+            if (parent_ != nullptr) {
+                parent_->pause(start_);
+            }
         }
     }
 
@@ -113,13 +128,19 @@ public:
         if (!enabled_) {
             return;
         }
-        auto const elapsed = detail::Clock::now() - start_;
+        auto const end = detail::Clock::now();
+        if (pauseDepth_ == 0) {
+            elapsed_ += end - start_;
+        }
+        if (parent_ != nullptr) {
+            parent_->resume(end);
+        }
         try {
             auto& state = detail::registry();
             std::lock_guard<std::mutex> lock(state.mutex);
             if (!state.finished) {
                 auto& entry = state.entries[index_];
-                entry.elapsed += elapsed;
+                entry.elapsed += elapsed_;
                 ++entry.calls;
             }
         } catch (...) {
@@ -128,9 +149,24 @@ public:
     }
 
 private:
+    void pause(detail::Clock::time_point now) noexcept {
+        if (enabled_ && pauseDepth_++ == 0) {
+            elapsed_ += now - start_;
+        }
+    }
+
+    void resume(detail::Clock::time_point now) noexcept {
+        if (enabled_ && --pauseDepth_ == 0) {
+            start_ = now;
+        }
+    }
+
     size_t index_;
+    ScopedSection* parent_;
     bool enabled_ = false;
+    size_t pauseDepth_ = 0;
     detail::Clock::time_point start_{};
+    detail::Clock::duration elapsed_{};
 };
 
 template <typename Callable>

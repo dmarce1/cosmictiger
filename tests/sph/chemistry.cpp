@@ -18,7 +18,11 @@
 namespace detail {
 
 constexpr double kChemistryTestScale = 0.02;
-constexpr size_t kChemistryRecordWords = 13;
+constexpr size_t kChemistryRecordWords = primordial::kAbundanceCount + 7;
+constexpr size_t kChemistryEnergyWord = primordial::kAbundanceCount + 1;
+constexpr size_t kChemistryIntervalWord = primordial::kAbundanceCount + 4;
+constexpr size_t kChemistryHeatingWord = primordial::kAbundanceCount + 5;
+constexpr size_t kChemistryRungWord = primordial::kAbundanceCount + 6;
 using ChemistrySnapshot = std::vector<std::vector<uint64_t>>;
 
 double chemistryTestTimestep() {
@@ -61,7 +65,7 @@ void initializeChemistryFixture(int activeRung, bool invalid) {
     sphParticlesChemistrySteps[0] = {std::ldexp(chemistryTestTimestep(), -2), 0.125};
     if (invalid && hpxRank() == hpxSize() - 1) {
         // Reject the last sink on the last rank after other sinks have prepared.
-        sphParticlesChemistryStates[2].abundances[0].setRaw(0.75f);
+        sphParticlesChemistryStates[2].abundances[1] = 2.0f;
     }
 }
 
@@ -70,7 +74,7 @@ std::vector<uint64_t> chemistryFixtureSnapshot() {
     for (ParticleInteger i = 0; i < 3; ++i) {
         auto const& state = sphParticlesChemistryStates[i];
         for (int species = 0; species < primordial::kAbundanceCount; ++species) {
-            words.push_back(std::bit_cast<uint32_t>(state.abundances[species].raw()));
+            words.push_back(std::bit_cast<uint32_t>(state.abundances[species]));
         }
         words.push_back(std::bit_cast<uint32_t>(state.thermalEnergy));
         words.push_back(std::bit_cast<uint32_t>(sphParticlesInternalEnergy(i)));
@@ -151,9 +155,10 @@ void requireChemistryAdvanced(
     for (size_t rank = 0; rank < before.size(); ++rank) {
         for (size_t particle = firstParticle; particle < 3; ++particle) {
             size_t const offset = particle * kChemistryRecordWords;
-            requireChemistry(before[rank][offset] != after[rank][offset],
+            requireChemistry(before[rank][offset + 1] != after[rank][offset + 1],
                 "opening chemistry did not change the hydrogen abundance");
-            requireChemistry(before[rank][offset + 7] != after[rank][offset + 7],
+            requireChemistry(before[rank][offset + kChemistryEnergyWord] !=
+                    after[rank][offset + kChemistryEnergyWord],
                 "opening chemistry did not change the thermal energy");
         }
     }
@@ -165,11 +170,14 @@ void requireClosingHeating(ChemistrySnapshot const& opened, ChemistrySnapshot co
     for (size_t rank = 0; rank < closed.size(); ++rank) {
         for (size_t particle = firstParticle; particle < 3; ++particle) {
             size_t const offset = particle * kChemistryRecordWords;
-            float const before = std::bit_cast<float>(uint32_t(opened[rank][offset + 7]));
-            float const after = std::bit_cast<float>(uint32_t(closed[rank][offset + 7]));
-            expectedHeating += std::bit_cast<double>(opened[rank][offset + 11]) -
+            float const before =
+                std::bit_cast<float>(uint32_t(opened[rank][offset + kChemistryEnergyWord]));
+            float const after =
+                std::bit_cast<float>(uint32_t(closed[rank][offset + kChemistryEnergyWord]));
+            expectedHeating += std::bit_cast<double>(opened[rank][offset + kChemistryHeatingWord]) -
                 getOptions().initial.gasMass * double(after - before) / kChemistryTestScale;
-            requireChemistry(closed[rank][offset + 10] == 0 && closed[rank][offset + 11] == 0,
+            requireChemistry(closed[rank][offset + kChemistryIntervalWord] == 0 &&
+                    closed[rank][offset + kChemistryHeatingWord] == 0,
                 "closing did not consume both pending interval and heating");
         }
     }
@@ -199,15 +207,15 @@ void sphChemistryTimestepsTest() {
     for (size_t rank = 0; rank < mixed.size(); ++rank) {
         for (size_t particle = 1; particle < 3; ++particle) {
             size_t const offset = particle * kChemistryRecordWords;
-            int const selectedRung = int(initial[rank][offset + 12]);
-            requireChemistry(mixed[rank][offset + 12] == uint64_t(selectedRung),
+            int const selectedRung = int(initial[rank][offset + kChemistryRungWord]);
+            requireChemistry(mixed[rank][offset + kChemistryRungWord] == uint64_t(selectedRung),
                 "opening chemistry changed a preselected SPH rung");
-            requireChemistry(std::bit_cast<double>(mixed[rank][offset + 10]) ==
+            requireChemistry(std::bit_cast<double>(mixed[rank][offset + kChemistryIntervalWord]) ==
                     std::ldexp(baseTimestep, -1 - selectedRung),
                 "opening chemistry changed a preselected SPH half interval");
         }
         requireChemistry(
-            mixed[rank][kChemistryRecordWords] != mixed[rank][2 * kChemistryRecordWords],
+            mixed[rank][kChemistryRecordWords + 1] != mixed[rank][2 * kChemistryRecordWords + 1],
             "different source intervals did not advance distinct abundances");
     }
     onChemistryLocalities<RoundtripChemistryFixtureAction>();
@@ -239,8 +247,9 @@ void sphChemistryTimestepsTest() {
     for (auto const& rank : uniform) {
         for (size_t particle = 0; particle < 3; ++particle) {
             size_t const offset = particle * kChemistryRecordWords;
-            requireChemistry(rank[offset + 12] == 6 &&
-                    std::bit_cast<double>(rank[offset + 10]) == std::ldexp(baseTimestep, -7),
+            requireChemistry(rank[offset + kChemistryRungWord] == 6 &&
+                    std::bit_cast<double>(rank[offset + kChemistryIntervalWord]) ==
+                        std::ldexp(baseTimestep, -7),
                 "uniform opening changed the selected common rung or interval");
         }
     }
@@ -256,9 +265,9 @@ void sphChemistryTimestepsTest() {
     for (size_t rank = 0; rank < explicitOpened.size(); ++rank) {
         for (size_t particle = 0; particle < 3; ++particle) {
             size_t const offset = particle * kChemistryRecordWords;
-            requireChemistry(
-                explicitOpened[rank][offset + 12] == explicitInitial[rank][offset + 12] &&
-                    std::bit_cast<double>(explicitOpened[rank][offset + 10]) ==
+            requireChemistry(explicitOpened[rank][offset + kChemistryRungWord] ==
+                        explicitInitial[rank][offset + kChemistryRungWord] &&
+                    std::bit_cast<double>(explicitOpened[rank][offset + kChemistryIntervalWord]) ==
                         0.5 * explicitTimestep,
                 "explicit opening changed the preselected interval or particle rungs");
         }

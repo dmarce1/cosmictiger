@@ -172,9 +172,9 @@ TEST(SpringelAndHernquist, AtomicEquilibriumChargeAndFluxBalance) {
         relativeNear(state.electronsPerHydrogen,
             state.hydrogenIonized +
                 heliumRatio * (state.heliumIonized + 2.0 * state.heliumDoubleIonized));
-        primordial::RateCoefficients rates;
-        ASSERT_EQ(primordial::evaluateRateCoefficients(
-                      static_cast<float>(temperature), primordial::Network::Atomic6, rates),
+        primordial::RateCoefficientsT<double> rates;
+        ASSERT_EQ(
+            primordial::evaluateRateCoefficients(temperature, primordial::Network::Atomic6, rates),
             primordial::Status::Success);
         relativeNear(
             state.hydrogenNeutral * rates.collision[0], state.hydrogenIonized * rates.collision[1]);

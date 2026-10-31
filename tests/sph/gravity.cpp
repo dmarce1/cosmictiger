@@ -123,10 +123,10 @@ void verifySphExceptionMask() {
 
 primordial::State migrationChemistryState(int target) {
     primordial::State state{};
-    state.abundances[0] = primordial::SignedAbundance::fromMinority(0.0f, true);
-    state.abundances[1] = primordial::SignedAbundance::fromMinority(1.0e-25f, true);
+    state.abundances[0] = 1.0e-25f;
+    state.abundances[1] = 1.0f;
     for (int species = 2; species < primordial::kAbundanceCount; ++species) {
-        state.abundances[species].setRaw(0.01f * (species + target));
+        state.abundances[species] = 0.01f * (species + target);
     }
     state.thermalEnergy = 60.0f + target;
     return state;
@@ -557,9 +557,9 @@ void validateSphDomainRegression() {
         auto const expected = migrationChemistryState(target);
         auto const& actual = sphParticlesChemistryStates[0];
         for (int species = 0; species < primordial::kAbundanceCount; ++species) {
-            if (std::bit_cast<uint32_t>(actual.abundances[species].raw()) !=
-                std::bit_cast<uint32_t>(expected.abundances[species].raw())) {
-                throw std::runtime_error("Migration changed encoded chemical abundance bits");
+            if (std::bit_cast<uint32_t>(actual.abundances[species]) !=
+                std::bit_cast<uint32_t>(expected.abundances[species])) {
+                throw std::runtime_error("Migration changed direct chemical abundance bits");
             }
         }
         requireClose("migration chemistry energy", actual.thermalEnergy, expected.thermalEnergy);

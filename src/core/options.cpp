@@ -154,11 +154,11 @@ void validateStarFormation(Options const& opts) {
         !isPositiveFloatOption(settings.coldTemperature) ||
         settings.coldTemperature >= kWarmTemperature ||
         !isPositiveFloatOption(settings.supernovaTemperature) ||
-        settings.supernovaTemperature <= kWarmTemperature) {
+        settings.supernovaTemperature <= kWarmTemperature || settings.supernovaTemperature > 1.0e8) {
         throw std::invalid_argument(
             "Invalid starFormation phase parameters: beta must be in (0,1), "
             "evaporationFactor and starFormationTimeGyr positive, coldTemperature in (0,10000) K, "
-            "and supernovaTemperature above 10000 K");
+            "and supernovaTemperature in (10000, 1e8] K");
     }
     if (!isFiniteOption(settings.metalYield) || settings.metalYield < 0.0 ||
         settings.metalYield > 1.0 || !isPositiveFloatOption(settings.windMassLoading) ||
@@ -439,9 +439,8 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"chemistry.hydrogenMinusFraction", options.chemistry.hydrogenMinusFraction},
         {"chemistry.molecularFraction", options.chemistry.molecularFraction},
         {"chemistry.molecularIonFraction", options.chemistry.molecularIonFraction},
-        {"chemistry.relativeTolerance", options.chemistry.relativeTolerance},
-        {"chemistry.abundanceAbsoluteTolerance", options.chemistry.abundanceAbsoluteTolerance},
-        {"chemistry.energyAbsoluteTolerance", options.chemistry.energyAbsoluteTolerance},
+        {"chemistry.fractionalChangeLimit", options.chemistry.fractionalChangeLimit},
+        {"chemistry.electronFractionFloor", options.chemistry.electronFractionFloor},
         {"chemistry.maxSubsteps", options.chemistry.maxSubsteps},
         {"hydro.enabled", options.hydro.enabled},
         {"hydro.kernelFamily", options.hydro.kernelFamily},
@@ -720,7 +719,7 @@ bool processOptions(int argc, char* argv[]) {
 
     po::options_description unitsOpts("Units");
     unitsOpts.add_options()("units.massSolar",
-        po::value<double>(&opts.units.massG)->default_value(1.e9 / .6732),
+        po::value<double>(&opts.units.massG)->default_value(3.58e9),
         "particle mass unit in solar masses; mutually exclusive with units.boxLength")(
         "units.boxLength", po::value<double>(&boxLength),
         "comoving box side length in Mpc/h; mutually exclusive with units.massSolar");
@@ -816,15 +815,13 @@ bool processOptions(int argc, char* argv[]) {
         po::value<double>(&opts.chemistry.molecularFraction)->default_value(0.0),
         "initial fraction of H nuclei in H2")("chemistry.molecularIonFraction",
         po::value<double>(&opts.chemistry.molecularIonFraction)->default_value(0.0),
-        "initial fraction of H nuclei in H2+")("chemistry.relativeTolerance",
-        po::value<double>(&opts.chemistry.relativeTolerance)->default_value(1.0e-4),
-        "local relative source tolerance (minimum 1e-5); not a global error guarantee")(
-        "chemistry.abundanceAbsoluteTolerance",
-        po::value<double>(&opts.chemistry.abundanceAbsoluteTolerance)->default_value(1.0e-12),
-        "absolute fractional-nuclei tolerance")("chemistry.energyAbsoluteTolerance",
-        po::value<double>(&opts.chemistry.energyAbsoluteTolerance)->default_value(1.0e-8),
-        "absolute thermal-energy tolerance, eV per H nucleus")("chemistry.maxSubsteps",
-        po::value<int>(&opts.chemistry.maxSubsteps)->default_value(4096),
+        "initial fraction of H nuclei in H2+")("chemistry.fractionalChangeLimit",
+        po::value<double>(&opts.chemistry.fractionalChangeLimit)->default_value(0.1),
+        "Anninos electron/energy fractional change limit per substep (0, 0.1]")(
+        "chemistry.electronFractionFloor",
+        po::value<double>(&opts.chemistry.electronFractionFloor)->default_value(1.0e-20),
+        "minimum electron scale for timestep selection; never floors species")(
+        "chemistry.maxSubsteps", po::value<int>(&opts.chemistry.maxSubsteps)->default_value(4096),
         "maximum accepted source substeps per half step");
 
     po::options_description starFormationOpts("Springel-Hernquist star formation");
@@ -1406,12 +1403,11 @@ bool processOptions(int argc, char* argv[]) {
             PRINT("Notice: chemistry.synchronizedRung is deprecated and ignored; "
                   "chemistry follows SPH timesteps.\n");
         }
-        if (!detail::isPositiveFloatOption(opts.chemistry.relativeTolerance) ||
-            opts.chemistry.relativeTolerance < 1.0e-5 || opts.chemistry.relativeTolerance > 0.1 ||
-            !detail::isPositiveFloatOption(opts.chemistry.abundanceAbsoluteTolerance) ||
-            !detail::isPositiveFloatOption(opts.chemistry.energyAbsoluteTolerance) ||
-            opts.chemistry.maxSubsteps < 1) {
-            THROW_ERROR("Invalid chemistry temperature, tolerances or work bound\n");
+        if (!detail::isPositiveFloatOption(opts.chemistry.fractionalChangeLimit) ||
+            opts.chemistry.fractionalChangeLimit > 0.1 ||
+            !detail::isPositiveFloatOption(opts.chemistry.electronFractionFloor) ||
+            opts.chemistry.electronFractionFloor > 1.0 || opts.chemistry.maxSubsteps < 1) {
+            THROW_ERROR("Invalid chemistry subcycling controls or work bound\n");
         }
         if (!detail::isFiniteOption(opts.cosmology.heliumFraction) ||
             opts.cosmology.heliumFraction < 0.0 || opts.cosmology.heliumFraction >= 1.0) {
@@ -1695,9 +1691,8 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("chemistry.hydrogenMinusFraction", chemistry.hydrogenMinusFraction);
     SHOW("chemistry.molecularFraction", chemistry.molecularFraction);
     SHOW("chemistry.molecularIonFraction", chemistry.molecularIonFraction);
-    SHOW("chemistry.relativeTolerance", chemistry.relativeTolerance);
-    SHOW("chemistry.abundanceAbsoluteTolerance", chemistry.abundanceAbsoluteTolerance);
-    SHOW("chemistry.energyAbsoluteTolerance", chemistry.energyAbsoluteTolerance);
+    SHOW("chemistry.fractionalChangeLimit", chemistry.fractionalChangeLimit);
+    SHOW("chemistry.electronFractionFloor", chemistry.electronFractionFloor);
     SHOW("chemistry.maxSubsteps", chemistry.maxSubsteps);
     SHOW("hydro.enabled", hydro.enabled);
     SHOW("gravity.enabled", gravity.enabled);

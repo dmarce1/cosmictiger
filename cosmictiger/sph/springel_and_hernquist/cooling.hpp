@@ -32,25 +32,32 @@ struct AtomicEquilibrium {
 struct AtomicCooling {
     double hydrogenMassFraction{0.76};
 
-    bool evaluateAtTemperature(double temperature, AtomicEquilibrium& result) const;
-    bool evaluateAtEnergy(double specificEnergy, AtomicEquilibrium& result) const;
-    double minimumEnergy() const;
-    double maximumEnergy() const;
+    CUDA_EXPORT bool evaluateAtTemperature(double temperature, AtomicEquilibrium& result) const;
+    CUDA_EXPORT bool evaluateAtEnergy(double specificEnergy, AtomicEquilibrium& result) const;
+    CUDA_EXPORT double minimumEnergy() const;
+    CUDA_EXPORT double maximumEnergy() const;
 
     // Backward-Euler isochoric loss: u_new-u_old+dt*rho*Lambda(u_new)/rho^2=0.
     // A floor only stops radiative losses: gas already below it is not heated.
     // Positive below-floor energy needs no rates, including below 10 K. For
     // rate evaluations outside the Atomic6 domain, return false unchanged.
-    bool cool(double specificEnergy, double density, double timestep, double floorEnergy,
-        double& cooledEnergy) const;
+    CUDA_EXPORT bool cool(double specificEnergy, double density, double timestep,
+        double floorEnergy, double& cooledEnergy) const;
 };
 
 // Canonical temperatures with explicitly chosen molecular weights: cold 1e3 K
 // and warm 1e4 K neutral, SN 1e8 K fully ionized. warmEnergy calibrates the
 // threshold; ordinary gas uses the separate time-dependent chemistry solver.
-Parameters defaultParameters(AtomicCooling const& cooling = {});
-bool makeModel(Parameters const& parameters, AtomicCooling const& cooling, Model& result);
-bool evaluateEquilibrium(
+CUDA_EXPORT Parameters defaultParameters(AtomicCooling const& cooling = {});
+CUDA_EXPORT bool makeModel(
+    Parameters const& parameters, AtomicCooling const& cooling, Model& result);
+CUDA_EXPORT bool evaluateEquilibrium(
     Model const& model, AtomicCooling const& cooling, double density, Equilibrium& result);
 
 }    // namespace springel_and_hernquist
+
+// The host ABI retains its out-of-line definitions in cooling.cpp. CUDA's
+// device pass sees the same algorithms inline, without device linking.
+#ifdef __CUDA_ARCH__
+#include <cosmictiger/sph/springel_and_hernquist/cooling_impl.hpp>
+#endif

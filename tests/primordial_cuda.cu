@@ -1,6 +1,6 @@
+/* CosmicTiger - scalar Anninos CPU/CUDA parity; BSL-1.0. */
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
 #include <limits>
 #include <string>
 #include <vector>
@@ -8,596 +8,161 @@
 #include <cuda_runtime.h>
 
 #include <cosmictiger/chemistry/primordial_chemistry.hpp>
-#include <cosmictiger/cuda/cuda_export.hpp>
 #include "cuda_test.hpp"
 
 namespace {
-bool close(float left, float right, float scale, float absolute = 1.e-30f) {
-    return primordial::finite(left) && primordial::finite(right) &&
-        ::fabsf(left - right) <= 2.e-4f * scale + absolute;
-}
-struct QuadraticTraceLoss {
-    float coefficient{};
-    bool upper{};
-    CUDA_EXPORT primordial::Status operator()(primordial::WorkingState const& state,
-        primordial::Environment const& environment, primordial::Derivative& derivative) const {
-        auto const status = primordial::validateComposition(state, environment);
-        if (status != primordial::Status::Success) {
-            return status;
-        }
-        FloatFloat const minority =
-            upper ? FloatFloat(1.0f) - state.abundances[0] : state.abundances[0];
-        FloatFloat const loss = FloatFloat(coefficient) * minority * minority;
-        derivative = {};
-        derivative.abundances[0] = upper ? loss : -loss;
-        return primordial::Status::Success;
-    }
-};
-CUDA_EXPORT primordial::StepResult quadraticCase(unsigned index) {
-    using namespace primordial;
-    float const minority = index < 2 ? 1.e-13f : 1.e-20f;
-    bool const upper = index % 2 != 0;
-    State initial;
-    initial.abundances[0] = SignedAbundance::fromMinority(minority, upper);
-    initial.thermalEnergy = 1.0f;
-    Environment environment;
-    environment.heliumToHydrogenNumberRatio = 0.0f;
-    SolverOptions options;
-    options.abundanceAbsoluteTolerance[0] = minority * 1.e-11f;
-    return advanceWithModel(initial, environment, 1.e10f, options,
-        QuadraticTraceLoss{index < 2 ? 1.e6f : 1.e13f, upper});
-}
-__global__ void quadraticTraceKernel(primordial::StepResult* results) {
-    if (threadIdx.x < 4) {
-        results[threadIdx.x] = quadraticCase(threadIdx.x);
-    }
-}
-struct ColdSample {
-    primordial::Status status{};
-    float cooling[5]{}, lte{}, heating{}, eosTemperature{};
-};
-CUDA_EXPORT ColdSample coldSample(unsigned index) {
-    using namespace primordial;
-    float const temperatures[] = {10.0f, 20.0f, 30.0f, 32.0f, 35.0f, 40.0f, 49.0f, 65.0f, 79.99f,
-        80.0f, 90.0f, 99.99f, 100.0f};
-    float const temperature = temperatures[index];
-    ColdSample result;
-    result.status = molecularCoolingCoefficients(temperature, result.cooling, result.lte);
-    if (result.status != Status::Success) {
-        return result;
-    }
-    Environment environment;
-    environment.network = Network::Molecular9;
-    environment.nHydrogen = index % 2 == 0 ? 1.e4f : 0.0f;
-    environment.cmbTemperature = 136.275f;
-    State state;
-    state.abundances[0] = SignedAbundance::fromFraction(2.e-4f);
-    state.abundances[4] = SignedAbundance::fromFraction(0.2f);
-    state.abundances[5] = SignedAbundance::fromFraction(1.e-6f);
-    result.status =
-        thermalEnergyAtTemperature(state, environment, temperature, state.thermalEnergy);
-    if (result.status != Status::Success) {
-        return result;
-    }
-    Eos eos;
-    result.status = evaluateEos(state, environment, eos);
-    if (result.status != Status::Success) {
-        return result;
-    }
-    result.eosTemperature = eos.temperature;
-    Derivative derivative;
-    result.status =
-        evaluateRhsAtTemperature(workingState(state), environment, temperature, derivative);
-    result.heating = derivative.thermalEnergy.toFloat();
-    return result;
-}
-__global__ void coldSampleKernel(ColdSample* results) {
-    if (threadIdx.x < 13) {
-        results[threadIdx.x] = coldSample(threadIdx.x);
-    }
-}
-// Hot extension (docs/molecular9_hot.md): published high-temperature branches,
-// held fits, the 1e4 K cooling clamp, the 129-level ladder and the rotor
-// asymptote on the device. Every rate coefficient, the five cooling
-// coefficients, the LTE asymptote, the thermal energy and heat capacity at the
-// sample temperature, the EOS inversion and all seven RHS components are
-// compared with the host for a half-ionized trace composition and for a
-// molecule-dominated one, so the hot branches that never reach the thermal
-// ledger are verified too.
-struct HotSample {
-    primordial::Status status{};
-    float collision[primordial::kCollisionCount]{};
-    float cooling[5]{}, lte{}, energy{}, heatCapacity{}, eosTemperature{}, heating{};
-    float derivative[primordial::kAbundanceCount]{};
-};
-CUDA_EXPORT HotSample hotSample(unsigned index) {
-    using namespace primordial;
-    float const temperatures[] = {
-        5999.0f, 6001.0f, 8000.0f, 9999.0f, 1.0e4f, 10001.0f, 3.0e4f, 1.0e5f, 1.0e6f, 1.0e8f};
-    float const temperature = temperatures[index % 10];
-    bool const molecular = index >= 10;
-    HotSample result;
-    RateCoefficients rates;
-    result.status = evaluateRateCoefficients(temperature, Network::Molecular9, rates);
-    if (result.status != Status::Success) {
-        return result;
-    }
-    for (int i = 0; i != kCollisionCount; ++i) {
-        result.collision[i] = rates.collision[i];
-    }
-    result.status = molecularCoolingCoefficients(temperature, result.cooling, result.lte);
-    if (result.status != Status::Success) {
-        return result;
-    }
-    Environment environment;
-    environment.network = Network::Molecular9;
-    environment.nHydrogen = index % 2 == 0 ? 1.0f : 1.0e4f;
-    environment.cmbTemperature = 30.0f;
-    State state;
-    if (molecular) {
-        state.abundances[0] = SignedAbundance::fromFraction(0.1f);
-        state.abundances[1] = SignedAbundance::fromFraction(0.3f);
-        state.abundances[3] = SignedAbundance::fromMinority(1.e-6f, false);
-        state.abundances[4] = SignedAbundance::fromFraction(0.6f);
-        state.abundances[5] = SignedAbundance::fromFraction(0.2f);
-    } else {
-        state.abundances[0] = SignedAbundance::fromFraction(0.5f);
-        state.abundances[1] = SignedAbundance::fromFraction(0.3f);
-        state.abundances[2] = SignedAbundance::fromFraction(0.2f);
-        state.abundances[3] = SignedAbundance::fromMinority(1.e-8f, false);
-        state.abundances[4] = SignedAbundance::fromFraction(1.e-3f);
-        state.abundances[5] = SignedAbundance::fromMinority(1.e-6f, false);
-    }
-    result.status =
-        thermalEnergyAtTemperature(state, environment, temperature, state.thermalEnergy);
-    if (result.status != Status::Success) {
-        return result;
-    }
-    result.energy = state.thermalEnergy;
-    Eos eos;
-    result.status = evaluateEos(state, environment, eos);
-    if (result.status != Status::Success) {
-        return result;
-    }
-    result.eosTemperature = eos.temperature;
-    result.heatCapacity = eos.heatCapacity;
-    Derivative derivative;
-    result.status =
-        evaluateRhsAtTemperature(workingState(state), environment, temperature, derivative);
-    for (int i = 0; i != kAbundanceCount; ++i) {
-        result.derivative[i] = derivative.abundances[i].toFloat();
-    }
-    result.heating = derivative.thermalEnergy.toFloat();
-    return result;
-}
-__global__ void hotSampleKernel(HotSample* results) {
-    if (threadIdx.x < 20) {
-        results[threadIdx.x] = hotSample(threadIdx.x);
-    }
-}
-}    // namespace
-using PrimordialCuda = detail::CudaTest;
+using namespace primordial;
+using PrimordialCuda = ::detail::CudaTest;
 
-TEST_F(PrimordialCuda, ColdMolecularRhsAndEosMatchCpu) {
-    using namespace primordial;
-    // Include subnormal H2+ cooling, zero collider density, and both matching
-    // endpoints. This one-block check exercises the production device formulas.
-    ColdSample* coldDevice = nullptr;
-    ColdSample coldResults[13];
-    cudaError_t coldStatus = cudaMalloc(reinterpret_cast<void**>(&coldDevice), sizeof(coldResults));
-    if (coldStatus == cudaSuccess) {
-        coldSampleKernel<<<1, 13>>>(coldDevice);
-        coldStatus = cudaGetLastError();
+template <class Real>
+struct ScalarInput {
+    StateT<Real> state{};
+    EnvironmentT<Real> environment{};
+    Real interval{};
+};
+
+template <class Real>
+ScalarInput<Real> fixture(unsigned index) {
+    ScalarInput<Real> input;
+    input.environment.cmbTemperature = Real(0);
+    input.environment.network = index % 2 == 0 ? Network::Atomic6 : Network::Molecular9;
+    Real const temperatures[] = {Real(10), Real(100), Real(1000), Real(30000), Real(1.e5)};
+    Real const fractions[6] = {Real(0.2), Real(0.01), Real(0.001), Real(0),
+        index % 2 == 0 ? Real(0) : Real(0.002), Real(0)};
+    EXPECT_EQ(initializeState(input.state, input.environment, fractions), Status::Success);
+    EXPECT_EQ(thermalEnergyAtTemperature(input.state, input.environment, temperatures[index % 5],
+                  input.state.thermalEnergy),
+        Status::Success);
+    input.environment.nHydrogen = index < 10 ? Real(0.01) : Real(0);
+    input.environment.radiation.hydrogenIonization = Real(1.e-12);
+    input.interval = Real(1.e7);
+    if (index % 5 == 0) {
+        // The lower thermal endpoint is stationary: ionization alone would
+        // lower its temperature by increasing particle count at fixed energy.
+        input.environment.nHydrogen = Real(0);
+        input.environment.radiation.hydrogenIonization = Real(0);
     }
-    if (coldStatus == cudaSuccess) {
-        coldStatus =
-            cudaMemcpy(coldResults, coldDevice, sizeof(coldResults), cudaMemcpyDeviceToHost);
+    if (index == 10) {
+        // Directly stored neutral trace, too small to survive a 1-x encoding.
+        input.state.abundances[0] = Real(1.e-30);
+        input.state.abundances[1] = Real(1);
+        input.state.abundances[5] =
+            Real(1) + input.state.abundances[3] + Real(2) * input.state.abundances[4];
+        input.environment.radiation.hydrogenIonization = Real(1.e-12);
+        EXPECT_EQ(thermalEnergyAtTemperature(
+                      input.state, input.environment, Real(10000), input.state.thermalEnergy),
+            Status::Success);
+    } else if (index == 11) {
+        input.interval = Real(0);
+    } else if (index == 12) {
+        input.state.abundances[0] = Real(-1);
     }
-    cudaError_t const coldRelease = cudaFree(coldDevice);
-    if (coldStatus != cudaSuccess || coldRelease != cudaSuccess) {
-        std::fprintf(stderr, "Cold molecular CUDA kernel failed\n");
-        FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-    }
-    for (unsigned i = 0; i != 13; ++i) {
-        ColdSample const cpu = coldSample(i);
-        ColdSample const& gpu = coldResults[i];
-        if (cpu.status != Status::Success || gpu.status != Status::Success ||
-            !close(cpu.heating, gpu.heating, ::fabsf(cpu.heating), 1.e-40f) ||
-            !close(cpu.lte, gpu.lte, cpu.lte, 1.e-44f) ||
-            !close(cpu.eosTemperature, gpu.eosTemperature, cpu.eosTemperature)) {
-            std::fprintf(stderr, "Cold molecular CUDA RHS/EOS mismatch at case%u\n", i);
-            FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-        }
-        for (int partner = 0; partner != 5; ++partner) {
-            if (!close(cpu.cooling[partner], gpu.cooling[partner], cpu.cooling[partner], 1.e-44f)) {
-                std::fprintf(
-                    stderr, "Cold molecular CUDA coefficient mismatch at case%u/%d\n", i, partner);
-                FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-            }
-        }
+    return input;
+}
+
+template <class Real>
+__global__ void scalarKernel(ScalarInput<Real> const* inputs, StepResultT<Real>* outputs,
+    unsigned count, SolverOptionsT<Real> options) {
+    unsigned const index = threadIdx.x;
+    if (index < count) {
+        auto const& input = inputs[index];
+        outputs[index] = advance(input.state, input.environment, input.interval, options);
     }
 }
 
-TEST_F(PrimordialCuda, HotMolecularRhsAndEosMatchCpu) {
-    using namespace primordial;
-    HotSample* hotDevice = nullptr;
-    HotSample hotResults[20];
-    cudaError_t hotStatus = cudaMalloc(reinterpret_cast<void**>(&hotDevice), sizeof(hotResults));
-    if (hotStatus == cudaSuccess) {
-        hotSampleKernel<<<1, 20>>>(hotDevice);
-        hotStatus = cudaGetLastError();
+template <class Real>
+void compare(StepResultT<Real> const& cpu, StepResultT<Real> const& gpu) {
+    ASSERT_EQ(gpu.status, cpu.status);
+    EXPECT_EQ(gpu.acceptedTime, cpu.acceptedTime);
+    EXPECT_EQ(gpu.acceptedSubsteps, cpu.acceptedSubsteps);
+    // Native CPU/CUDA elementary functions may differ by a few ulps. This
+    // tolerance covers their accumulated effect, without an abundance floor.
+    Real const relative = Real(128) * std::numeric_limits<Real>::epsilon();
+    auto check = [&](Real left, Real right) {
+        EXPECT_TRUE(finite(left));
+        EXPECT_TRUE(finite(right));
+        Real const scale = std::max(std::abs(left), std::abs(right));
+        EXPECT_NEAR(
+            left, right, relative * scale + Real(8) * std::numeric_limits<Real>::denorm_min());
+    };
+    for (int species = 0; species < kAbundanceCount; ++species) {
+        check(cpu.state.abundances[species], gpu.state.abundances[species]);
     }
-    if (hotStatus == cudaSuccess) {
-        hotStatus = cudaMemcpy(hotResults, hotDevice, sizeof(hotResults), cudaMemcpyDeviceToHost);
-    }
-    cudaError_t const hotRelease = cudaFree(hotDevice);
-    if (hotStatus != cudaSuccess || hotRelease != cudaSuccess) {
-        std::fprintf(stderr, "Hot molecular CUDA kernel failed\n");
-        FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-    }
-    for (unsigned i = 0; i != 20; ++i) {
-        HotSample const cpu = hotSample(i);
-        HotSample const& gpu = hotResults[i];
-        if (cpu.status != Status::Success || gpu.status != Status::Success ||
-            !close(cpu.heating, gpu.heating, ::fabsf(cpu.heating), 1.e-40f) ||
-            !close(cpu.lte, gpu.lte, cpu.lte, 1.e-44f) ||
-            !close(cpu.energy, gpu.energy, cpu.energy) ||
-            !close(cpu.heatCapacity, gpu.heatCapacity, cpu.heatCapacity) ||
-            !close(cpu.eosTemperature, gpu.eosTemperature, cpu.eosTemperature)) {
-            std::fprintf(stderr, "Hot molecular CUDA RHS/EOS mismatch at case%u\n", i);
-            FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-        }
-        for (int partner = 0; partner != 5; ++partner) {
-            if (!close(cpu.cooling[partner], gpu.cooling[partner], cpu.cooling[partner], 1.e-44f)) {
-                std::fprintf(
-                    stderr, "Hot molecular CUDA coefficient mismatch at case%u/%d\n", i, partner);
-                FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-            }
-        }
-        for (int reaction = 0; reaction != kCollisionCount; ++reaction) {
-            // Hot branches, held fits and the GA08 interpolation are compared
-            // coefficient by coefficient; underflowed cold tails compare as zero.
-            if (!close(cpu.collision[reaction], gpu.collision[reaction], cpu.collision[reaction],
-                    1.e-44f)) {
-                std::fprintf(
-                    stderr, "Hot molecular CUDA rate mismatch at case%u/k%d\n", i, reaction);
-                FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-            }
-        }
-        for (int species = 0; species != kAbundanceCount; ++species) {
-            if (!close(cpu.derivative[species], gpu.derivative[species],
-                    ::fabsf(cpu.derivative[species]), 1.e-40f)) {
-                std::fprintf(
-                    stderr, "Hot molecular CUDA species RHS mismatch at case%u/x%d\n", i, species);
-                FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-            }
-        }
-    }
+    check(cpu.state.thermalEnergy, gpu.state.thermalEnergy);
 }
 
-TEST_F(PrimordialCuda, HotMolecularBatchMatchesCpu) {
-    using namespace primordial;
-    // The device solver integrates hot molecular gas through the extended
-    // domain: the HotMolecularReference state (dissociation, cooling through
-    // 1e4 K and H2 reformation) and the molecular 1e8 K endpoint with trace H2
-    // and H2+. Status, accepted time, energy and every species must agree with
-    // the CPU as in the other batch cases.
-    std::vector<BatchInput> inputs(2);
-    inputs[0].environment.network = Network::Molecular9;
-    inputs[0].environment.nHydrogen = 1.0f;
-    inputs[0].environment.cmbTemperature = 30.0f;
-    inputs[0].state.abundances[0] = SignedAbundance::fromFraction(0.5f);
-    inputs[0].state.abundances[1] = SignedAbundance::fromFraction(1.e-2f);
-    inputs[0].state.abundances[2] = SignedAbundance::fromFraction(1.e-4f);
-    inputs[0].state.abundances[4] = SignedAbundance::fromFraction(2.e-3f);
-    inputs[0].interval = 1.e12f;
-    inputs[1].environment.network = Network::Molecular9;
-    inputs[1].environment.nHydrogen = 1.0f;
-    inputs[1].environment.cmbTemperature = 30.0f;
-    inputs[1].state.abundances[0] = SignedAbundance::fromMinority(2.e-6f, true);
-    inputs[1].state.abundances[2] = SignedAbundance::fromFraction(1.0f);
-    inputs[1].state.abundances[4] = SignedAbundance::fromMinority(1.e-6f, false);
-    inputs[1].state.abundances[5] = SignedAbundance::fromMinority(1.e-6f, false);
-    inputs[1].interval = 1.e12f;
-    float const temperatures[] = {30000.0f, maximumTemperature(Network::Molecular9)};
-    for (size_t i = 0; i != inputs.size(); ++i) {
-        if (thermalEnergyAtTemperature(inputs[i].state, inputs[i].environment, temperatures[i],
-                inputs[i].state.thermalEnergy) != Status::Success) {
-            FAIL() << "Primordial CUDA regression failed; see diagnostic above";
+template <class Real>
+void checkScalar() {
+    constexpr unsigned count = 13;
+    std::vector<ScalarInput<Real>> inputs;
+    for (unsigned index = 0; index < count; ++index) {
+        inputs.push_back(fixture<Real>(index));
+    }
+    ScalarInput<Real>* deviceInputs = nullptr;
+    StepResultT<Real>* deviceResults = nullptr;
+    ASSERT_EQ(
+        cudaMalloc(reinterpret_cast<void**>(&deviceInputs), sizeof(ScalarInput<Real>) * count),
+        cudaSuccess);
+    ASSERT_EQ(
+        cudaMalloc(reinterpret_cast<void**>(&deviceResults), sizeof(StepResultT<Real>) * count),
+        cudaSuccess);
+    ASSERT_EQ(cudaMemcpy(deviceInputs, inputs.data(), sizeof(ScalarInput<Real>) * count,
+                  cudaMemcpyHostToDevice),
+        cudaSuccess);
+    std::vector<StepResultT<Real>> results(count);
+    for (unsigned budget : {4096U, 1U}) {
+        SolverOptionsT<Real> options;
+        options.maxSubsteps = budget;
+        // One block only; direct float/double tests run sequentially.
+        scalarKernel<<<1, 32>>>(deviceInputs, deviceResults, count, options);
+        ASSERT_EQ(cudaGetLastError(), cudaSuccess);
+        ASSERT_EQ(cudaMemcpy(results.data(), deviceResults, sizeof(StepResultT<Real>) * count,
+                      cudaMemcpyDeviceToHost),
+            cudaSuccess);
+        for (unsigned index = 0; index < count; ++index) {
+            SCOPED_TRACE(index);
+            auto const cpu = advance(
+                inputs[index].state, inputs[index].environment, inputs[index].interval, options);
+            if (index < 12 && budget == 4096) {
+                ASSERT_EQ(cpu.status, Status::Success);
+            }
+            compare(cpu, results[index]);
         }
+    }
+    EXPECT_EQ(cudaFree(deviceResults), cudaSuccess);
+    EXPECT_EQ(cudaFree(deviceInputs), cudaSuccess);
+}
+
+TEST_F(PrimordialCuda, ScalarFloatCpuParity) {
+    checkScalar<float>();
+}
+TEST_F(PrimordialCuda, ScalarDoubleCpuParity) {
+    checkScalar<double>();
+}
+
+TEST_F(PrimordialCuda, ProductionBatchesAndInvalidLanes) {
+    // 65 lanes exercises a tail block; production uses 64-thread blocks.
+    // Maximum launch in this entire suite is therefore two blocks.
+    std::vector<BatchInput> inputs(65);
+    for (size_t index = 0; index < inputs.size(); ++index) {
+        auto const input = fixture<float>(unsigned(index % 13));
+        inputs[index] = {input.state, input.environment, input.interval};
     }
     std::vector<StepResult> cpu(inputs.size()), gpu(inputs.size());
-    SolverOptions const options;
-    std::string error;
-    if (!integrateBatchCpu(inputs.data(), cpu.data(), inputs.size(), options) ||
-        !integrateBatchCuda(inputs.data(), gpu.data(), inputs.size(), options, &error)) {
-        std::fprintf(stderr, "Hot molecular CUDA dispatch failed: %s\n", error.c_str());
-        FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-    }
-    for (size_t i = 0; i != inputs.size(); ++i) {
-        Eos eos;
-        if (cpu[i].status != Status::Success || gpu[i].status != Status::Success ||
-            cpu[i].acceptedTime != inputs[i].interval ||
-            gpu[i].acceptedTime != inputs[i].interval ||
-            evaluateEos(gpu[i].state, inputs[i].environment, eos) != Status::Success ||
-            eos.temperature >= temperatures[i] ||
-            !close(cpu[i].state.thermalEnergy, gpu[i].state.thermalEnergy,
-                cpu[i].state.thermalEnergy, 1.e-7f)) {
-            std::fprintf(stderr, "Hot molecular CUDA batch parity failed in case%zu\n", i);
-            FAIL() << "Primordial CUDA regression failed; see diagnostic above";
+    for (unsigned budget : {4096U, 1U}) {
+        SolverOptions options;
+        options.maxSubsteps = budget;
+        ASSERT_TRUE(integrateBatchCpu(inputs.data(), cpu.data(), inputs.size(), options, 1));
+        std::string error;
+        ASSERT_TRUE(integrateBatchCuda(inputs.data(), gpu.data(), inputs.size(), options, &error))
+            << error;
+        EXPECT_TRUE(error.empty());
+        for (size_t index = 0; index < inputs.size(); ++index) {
+            SCOPED_TRACE(index);
+            compare(cpu[index], gpu[index]);
         }
-        for (int j = 0; j < kAbundanceCount; ++j) {
-            if (cpu[i].state.abundances[j].upper() != gpu[i].state.abundances[j].upper() ||
-                !close(cpu[i].state.abundances[j].raw(), gpu[i].state.abundances[j].raw(),
-                    ::fabsf(cpu[i].state.abundances[j].raw()))) {
-                std::fprintf(stderr, "Hot molecular CUDA batch species mismatch at%zu/%d\n", i, j);
-                FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-            }
-        }
-        std::printf("hot molecular CUDA batch case%zu: %u device substeps, T %.5g K\n", i,
-            gpu[i].acceptedSubsteps, eos.temperature);
     }
+    EXPECT_TRUE(integrateBatchCuda(nullptr, nullptr, 0));
+    EXPECT_FALSE(integrateBatchCuda(nullptr, gpu.data(), 1));
 }
-
-TEST_F(PrimordialCuda, QuadraticTraceMatchesExactSolution) {
-    using namespace primordial;
-    // Device regression for the former false-convergence failure. The exact
-    // solution is independent of both CPU and device implementations.
-    StepResult* quadraticDevice = nullptr;
-    StepResult quadraticResults[4];
-    cudaError_t quadraticStatus =
-        cudaMalloc(reinterpret_cast<void**>(&quadraticDevice), sizeof(quadraticResults));
-    if (quadraticStatus == cudaSuccess) {
-        quadraticTraceKernel<<<1, 4>>>(quadraticDevice);
-        quadraticStatus = cudaGetLastError();
-    }
-    if (quadraticStatus == cudaSuccess) {
-        quadraticStatus = cudaMemcpy(
-            quadraticResults, quadraticDevice, sizeof(quadraticResults), cudaMemcpyDeviceToHost);
-    }
-    cudaError_t const quadraticRelease = cudaFree(quadraticDevice);
-    if (quadraticStatus != cudaSuccess || quadraticRelease != cudaSuccess) {
-        std::fprintf(stderr, "Quadratic trace CUDA kernel failed\n");
-        FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-    }
-    for (unsigned i = 0; i != 4; ++i) {
-        auto const cpu = quadraticCase(i);
-        auto const& gpu = quadraticResults[i];
-        bool const upper = i % 2 != 0;
-        double const initialMinority = static_cast<double>(i < 2 ? 1.e-13f : 1.e-20f);
-        double const coefficient = static_cast<double>(i < 2 ? 1.e6f : 1.e13f);
-        double const exact = initialMinority / (1.0 + coefficient * initialMinority * 1.e10);
-        float const cpuMinority = upper ? cpu.state.abundances[0].complementFraction() :
-                                          cpu.state.abundances[0].fraction();
-        float const gpuMinority = upper ? gpu.state.abundances[0].complementFraction() :
-                                          gpu.state.abundances[0].fraction();
-        if (cpu.status != Status::Success || gpu.status != Status::Success ||
-            cpu.acceptedTime != 1.e10f || gpu.acceptedTime != 1.e10f ||
-            std::fabs(static_cast<double>(gpuMinority) / exact - 1.0) >= 0.015 ||
-            !close(cpuMinority, gpuMinority, cpuMinority)) {
-            std::fprintf(stderr, "Quadratic trace CUDA regression failed in case%u\n", i);
-            FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-        }
-    }
-}
-
-TEST_F(PrimordialCuda, StiffNetworksTailsTracesAndFailureLanesMatchCpu) {
-    using namespace primordial;
-    SolverOptions options;
-    options.maxAttempts = 512;
-    options.maxSubsteps = 256;
-    std::string error;
-    if (!integrateBatchCuda(nullptr, nullptr, 0, options, &error)) {
-        std::fprintf(stderr, "Empty CUDA batch failed: %s\n", error.c_str());
-        FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-    }
-    unsigned randomState = 1234567U;
-    for (size_t count : {size_t(1), size_t(31), size_t(33), size_t(65), size_t(257)}) {
-        std::vector<BatchInput> inputs(count);
-        std::vector<StepResult> cpu(count), gpu(count);
-        for (size_t i = 0; i < count; ++i) {
-            randomState = 1664525U * randomState + 1013904223U;
-            float const uniform = static_cast<float>((randomState >> 8) & 0xFFFFU) / 65535.0f;
-            auto& input = inputs[i];
-            input.environment.nHydrogen = 0.01f + uniform;
-            input.state.abundances[0] = SignedAbundance::fromFraction(0.01f + 0.9f * uniform);
-            input.state.abundances[1] = SignedAbundance::fromFraction(0.05f);
-            input.state.abundances[2] = SignedAbundance::fromFraction(0.01f);
-            bool const molecular = i % 5 == 0;
-            if (molecular) {
-                input.environment.network = Network::Molecular9;
-                input.state.abundances[4] = SignedAbundance::fromFraction(2.e-6f);
-            }
-            if (thermalEnergyAtTemperature(input.state, input.environment,
-                    molecular ? 500.0f + 2000.0f * uniform : 1.e4f + 4.e4f * uniform,
-                    input.state.thermalEnergy) != Status::Success) {
-                FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-            }
-            input.interval = 1.e6f;
-            if (i == 0 || i == 4) {
-                // Nontrivial atomic and molecular transients, including fast
-                // intermediate relaxation from zero, span many source steps.
-                input.environment.network = i == 4 ? Network::Molecular9 : Network::Atomic6;
-                input.environment.nHydrogen = 1.0f;
-                input.environment.cmbTemperature = 30.0f;
-                input.state = State{};
-                input.state.abundances[0] = SignedAbundance::fromFraction(1.e-4f);
-                input.state.abundances[4] = SignedAbundance::fromFraction(i == 4 ? 2.e-6f : 0.0f);
-                thermalEnergyAtTemperature(input.state, input.environment,
-                    i == 4 ? 1000.0f : 20000.0f, input.state.thermalEnergy);
-                input.interval = 1.e12f;
-            } else if (i == 5 || i == 6) {
-                // Both signed endpoints and a minority far below epsilon32
-                // pass through actual accepted steps without decoding loss.
-                input.environment = Environment{};
-                input.environment.nHydrogen = 0.0f;
-                input.environment.cmbTemperature = 0.0f;
-                input.state = State{};
-                input.state.abundances[0] =
-                    SignedAbundance::fromMinority(i == 5 ? 0.0f : 1.e-20f, true);
-                thermalEnergyAtTemperature(
-                    input.state, input.environment, 20000.0f, input.state.thermalEnergy);
-            }
-            switch (i % 11) {
-            case 7:
-                input.interval = 0.0f;
-                break;
-            case 1:
-                input.interval = -1.0f;
-                break;
-            case 2:
-                input.environment.nHydrogen = 1.e5f;
-                break;
-            case 3:
-                input.state.thermalEnergy = std::numeric_limits<float>::quiet_NaN();
-                break;
-            default:
-                break;
-            }
-        }
-        if (!integrateBatchCpu(inputs.data(), cpu.data(), count, options, 1) ||
-            !integrateBatchCuda(inputs.data(), gpu.data(), count, options, &error)) {
-            std::fprintf(stderr, "CUDA dispatch failed: %s\n", error.c_str());
-            FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-        }
-        if (cpu[0].status != Status::Success || gpu[0].status != Status::Success ||
-            cpu[0].newtonIterations <= 3 || gpu[0].newtonIterations <= 3 ||
-            (count > 4 &&
-                (cpu[4].status != Status::Success || gpu[4].status != Status::Success ||
-                    cpu[4].newtonIterations <= 3 || gpu[4].newtonIterations <= 3))) {
-            std::fprintf(stderr, "Long atomic/molecular CUDA trajectories did not solve\n");
-            FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-        }
-        for (size_t i = 0; i < count; ++i) {
-            if (cpu[i].status != gpu[i].status || cpu[i].acceptedTime != gpu[i].acceptedTime) {
-                std::fprintf(stderr, "CUDA status/time mismatch at %zu/%zu\n", i, count);
-                FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-            }
-            if (cpu[i].status != Status::Success) {
-                continue;
-            }
-            if (!close(cpu[i].state.thermalEnergy, gpu[i].state.thermalEnergy,
-                    cpu[i].state.thermalEnergy, 1.e-7f)) {
-                std::fprintf(stderr, "CUDA thermal mismatch at %zu/%zu\n", i, count);
-                FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-            }
-            for (int j = 0; j < kAbundanceCount; ++j) {
-                if (cpu[i].state.abundances[j].upper() != gpu[i].state.abundances[j].upper() ||
-                    !close(cpu[i].state.abundances[j].raw(), gpu[i].state.abundances[j].raw(),
-                        ::fabsf(cpu[i].state.abundances[j].raw()))) {
-                    std::fprintf(
-                        stderr, "CUDA species mismatch at %zu/%zu species%d\n", i, count, j);
-                    FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-                }
-            }
-        }
-    }
-}
-
-TEST_F(PrimordialCuda, CoupledMolecularCoolingMatchesCpu) {
-    using namespace primordial;
-    std::string error;
-    // Significant molecular cooling couples species and energy across a large
-    // temperature change; use the full production work budget for this case.
-    BatchInput coolingInput;
-    coolingInput.environment.network = Network::Molecular9;
-    coolingInput.environment.nHydrogen = 1.0f;
-    coolingInput.environment.cmbTemperature = 30.0f;
-    coolingInput.state.abundances[0] = SignedAbundance::fromFraction(1.e-4f);
-    coolingInput.state.abundances[4] = SignedAbundance::fromFraction(0.2f);
-    coolingInput.interval = 1.e12f;
-    thermalEnergyAtTemperature(
-        coolingInput.state, coolingInput.environment, 2000.0f, coolingInput.state.thermalEnergy);
-    StepResult coolingCpu, coolingGpu;
-    SolverOptions const coolingOptions;
-    if (!integrateBatchCpu(&coolingInput, &coolingCpu, 1, coolingOptions) ||
-        !integrateBatchCuda(&coolingInput, &coolingGpu, 1, coolingOptions, &error) ||
-        coolingCpu.status != Status::Success || coolingGpu.status != Status::Success ||
-        coolingCpu.acceptedTime != coolingInput.interval ||
-        coolingGpu.acceptedTime != coolingInput.interval ||
-        coolingCpu.state.thermalEnergy > 0.7f * coolingInput.state.thermalEnergy ||
-        !close(coolingCpu.state.thermalEnergy, coolingGpu.state.thermalEnergy,
-            coolingCpu.state.thermalEnergy, 1.e-7f)) {
-        std::fprintf(stderr, "Coupled molecular cooling CUDA parity failed: %s\n", error.c_str());
-        FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-    }
-    for (int j = 0; j < kAbundanceCount; ++j) {
-        if (coolingCpu.state.abundances[j].upper() != coolingGpu.state.abundances[j].upper() ||
-            !close(coolingCpu.state.abundances[j].raw(), coolingGpu.state.abundances[j].raw(),
-                ::fabsf(coolingCpu.state.abundances[j].raw()))) {
-            std::fprintf(stderr, "Molecular cooling CUDA species mismatch at%d\n", j);
-            FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-        }
-    }
-}
-
-TEST_F(PrimordialCuda, RadiationHeatingMatchesExactEnergyIncrement) {
-    using namespace primordial;
-    SolverOptions const coolingOptions;
-    std::string error;
-    // Radiation-only heating has an independent exact energy increment. It
-    // crosses both the cold matching interval and the established 100 K domain.
-    BatchInput coldHeating;
-    coldHeating.environment.network = Network::Molecular9;
-    coldHeating.environment.nHydrogen = 0.0f;
-    coldHeating.environment.radiation.heatingPerHydrogen = 2.e-14f;
-    coldHeating.state.abundances[4] = SignedAbundance::fromFraction(0.2f);
-    coldHeating.interval = 1.e12f;
-    thermalEnergyAtTemperature(
-        coldHeating.state, coldHeating.environment, 20.0f, coldHeating.state.thermalEnergy);
-    StepResult coldCpu, coldGpu;
-    Eos heatedEos;
-    float const expectedEnergy = coldHeating.state.thermalEnergy +
-        0.8f * coldHeating.environment.radiation.heatingPerHydrogen * coldHeating.interval;
-    if (!integrateBatchCpu(&coldHeating, &coldCpu, 1, coolingOptions, 1) ||
-        !integrateBatchCuda(&coldHeating, &coldGpu, 1, coolingOptions, &error) ||
-        coldCpu.status != Status::Success || coldGpu.status != Status::Success ||
-        coldCpu.acceptedTime != coldHeating.interval ||
-        coldGpu.acceptedTime != coldHeating.interval ||
-        !close(coldCpu.state.thermalEnergy, coldGpu.state.thermalEnergy, expectedEnergy, 1.e-9f) ||
-        !close(expectedEnergy, coldGpu.state.thermalEnergy, expectedEnergy, 1.e-9f) ||
-        evaluateEos(coldGpu.state, coldHeating.environment, heatedEos) != Status::Success ||
-        heatedEos.temperature <= 100.0f) {
-        std::fprintf(stderr, "Cold molecular CUDA heating trajectory failed: %s\n", error.c_str());
-        FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-    }
-}
-
-TEST_F(PrimordialCuda, WorkBoundsPreservePartialStateAndAcceptedTime) {
-    using namespace primordial;
-    SolverOptions options;
-    options.maxAttempts = 512;
-    options.maxSubsteps = 256;
-    std::string error;
-    // Work bounds must preserve the same accepted partial interval and state.
-    BatchInput limitedInput;
-    limitedInput.environment.nHydrogen = 1.0f;
-    limitedInput.state.abundances[0] = SignedAbundance::fromFraction(1.e-4f);
-    limitedInput.interval = 1.e12f;
-    thermalEnergyAtTemperature(
-        limitedInput.state, limitedInput.environment, 20000.0f, limitedInput.state.thermalEnergy);
-    SolverOptions limitedOptions = options;
-    limitedOptions.maxSubsteps = 1;
-    limitedOptions.initialStepFraction = 1.e-4f;
-    StepResult limitedCpu, limitedGpu;
-    if (!integrateBatchCpu(&limitedInput, &limitedCpu, 1, limitedOptions) ||
-        !integrateBatchCuda(&limitedInput, &limitedGpu, 1, limitedOptions, &error) ||
-        limitedCpu.status != Status::StepLimit || limitedGpu.status != Status::StepLimit ||
-        limitedCpu.acceptedTime <= 0.0f || limitedGpu.acceptedTime <= 0.0f ||
-        !close(limitedCpu.acceptedTime, limitedGpu.acceptedTime, limitedCpu.acceptedTime) ||
-        !close(limitedCpu.state.thermalEnergy, limitedGpu.state.thermalEnergy,
-            limitedCpu.state.thermalEnergy, 1.e-7f)) {
-        std::fprintf(stderr, "CUDA bounded-work parity failed: %s\n", error.c_str());
-        FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-    }
-    limitedOptions.maxAttempts = 1;
-    limitedOptions.maxNewtonIterations = 1;
-    limitedOptions.initialStepFraction = 1.0f;
-    if (!integrateBatchCpu(&limitedInput, &limitedCpu, 1, limitedOptions) ||
-        !integrateBatchCuda(&limitedInput, &limitedGpu, 1, limitedOptions, &error) ||
-        limitedCpu.status != Status::StepLimit || limitedGpu.status != Status::StepLimit ||
-        limitedCpu.acceptedTime != 0.0f || limitedGpu.acceptedTime != 0.0f) {
-        std::fprintf(stderr, "CUDA rejected-attempt bound parity failed\n");
-        FAIL() << "Primordial CUDA regression failed; see diagnostic above";
-    }
-}
+}    // namespace

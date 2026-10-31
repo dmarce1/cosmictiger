@@ -137,8 +137,11 @@ It enables the `atomic6` primordial chemistry network; see
 [primordial chemistry](../docs/primordial_chemistry.md). A collisionless
 cosmological run can disable both `hydro.enabled` and `chemistry.enabled`.
 
-Five collisionless cosmology presets use 32³ particles in a 100 Mpc/h box,
-CPU execution, and 100 particle snapshots at equal conformal intervals:
+Five cosmology presets use 32³ reference particles with a reference mass of
+`3.58e9` solar masses, CPU execution, and 100 particle snapshots at equal
+conformal intervals. The derived comoving box side is about 9.68717 Mpc/h
+for the curved ΛCDM and subcritical models, 6.58072 Mpc/h for the critical
+model, and 5.22296 Mpc/h for the closed model:
 
 | Preset | Background and endpoint |
 | --- | --- |
@@ -169,7 +172,9 @@ from the five cosmology choices above.
 
 These files contain complete options and describe their assumptions in their
 headers. Their positive `run.endTime` values are **conformal code durations**,
-not years. To keep a fixed box while changing resolution, remove or comment out
+not years, and are normalized to the reference mass and resolution in each
+file to preserve the stated physical endpoint. To keep a fixed box while
+changing resolution, remove or comment out
 `units.massSolar` and set `units.boxLength` to the comoving side length in Mpc/h.
 For example, `initial.particlesPerDimension=128` and `units.boxLength=100` give a
 100 Mpc/h box with 128³ collisionless particles when `initial.closePack=false`.

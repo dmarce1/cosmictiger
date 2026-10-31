@@ -1,5 +1,7 @@
 # Primordial chemistry implementation plan
 
+Solver design update (2026-10-30): the production source integrator is now the single-scalar Anninos et al. sequential solver. The earlier Newton, SDIRK, step-doubling and mixed-precision proposals below are historical and superseded; they are not alternative production paths. See [the current implementation](primordial_chemistry.md).
+
 This records the original implementation plan and 2026-10-18 baseline.
 Subsequent changes add [native recombination and particle initialization](native_recombination.md),
 remove bundled RECFAST, [extend molecular9 to 10 K](molecular9_cold.md), and couple

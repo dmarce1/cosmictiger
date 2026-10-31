@@ -164,7 +164,7 @@ function(cosmictiger_feature_sources output)
         endif()
         if(COSMICTIGER_ENABLE_STAR_FORMATION)
             list(APPEND cosmictiger_source_files src/sph/star_formation.cpp
-                src/sph/springel_and_hernquist/cooling.cpp)
+                src/sph/star_formation_cuda.cu src/sph/springel_and_hernquist/cooling.cpp)
         endif()
     endif()
 

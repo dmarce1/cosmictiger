@@ -660,11 +660,13 @@ Status RecombinationHistory::chemistryState(
         return Status::UnsupportedState;
     }
     State converted;
-    for (int i = 0; i < 3; ++i) {
-        bool const upper = value[i] > 0.5;
-        converted.abundances[i] = SignedAbundance::fromMinority(
-            static_cast<float>(upper ? 1.0 - value[i] : value[i]), upper);
-    }
+    converted.abundances[0] = static_cast<float>(1.0 - value[0]);
+    converted.abundances[1] = static_cast<float>(value[0]);
+    converted.abundances[2] = static_cast<float>(heliumRatio_ * (1.0 - (value[1] + value[2])));
+    converted.abundances[3] = static_cast<float>(heliumRatio_ * value[1]);
+    converted.abundances[4] = static_cast<float>(heliumRatio_ * value[2]);
+    converted.abundances[5] =
+        static_cast<float>(value[0] + heliumRatio_ * (value[1] + 2.0 * value[2]));
     Environment convertedEnvironment;
     convertedEnvironment.nHydrogen = static_cast<float>(density);
     convertedEnvironment.heliumToHydrogenNumberRatio = static_cast<float>(heliumRatio_);

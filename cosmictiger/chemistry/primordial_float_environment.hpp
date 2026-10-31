@@ -12,8 +12,8 @@
 
 namespace primordial {
 
-// FloatFloat error-free transforms require nearest rounding and gradual
-// underflow. Save the caller environment, establish those conditions locally,
+// Chemistry uses ordinary IEEE arithmetic with nearest rounding and gradual
+// underflow on CPU and CUDA. Save the caller environment, establish it locally,
 // and restore it on every exit. Exceptions are nontrapping inside the scope;
 // nonfinite results remain explicit solver failures. Each worker needs a scope.
 // Intel SDM Vol1 section10.2.3 documents MXCSR FTZ(bit15)/DAZ(bit6):

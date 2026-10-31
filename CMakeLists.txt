@@ -360,7 +360,7 @@ target_link_libraries(halo_catalog_export PRIVATE cosmictiger_fp16)
 target_compile_options(halo_catalog_export PRIVATE -fno-fast-math)
 
 # Chemistry must not inherit the application's fast-math/FTZ settings: the
-# signed-complement and FloatFloat contracts require IEEE rounding and -0.
+# ordinary scalar source arithmetic uses matching IEEE semantics on CPU and CUDA.
 target_link_libraries(cosmictiger_profiler PRIVATE Threads::Threads)
 target_link_libraries(cosmictiger_stacktrace PRIVATE Threads::Threads)
 # Homogeneous recombination is shared. Particle chemistry is compiled only
@@ -393,6 +393,9 @@ endif()
 set_source_files_properties(src/sph/sph_chemistry.cpp tests/sph/chemistry.cpp
     src/sph/star_formation.cpp src/sph/springel_and_hernquist/cooling.cpp tests/sph/star_formation.cpp
     PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
+# Star-formation device physics shares the chemistry rounding contract.
+set_source_files_properties(src/sph/star_formation_cuda.cu PROPERTIES COMPILE_OPTIONS
+    "--expt-relaxed-constexpr;--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false;-Xcompiler=-fno-fast-math;-Xcompiler=-ffp-contract=off")
 # The adaptive Boltzmann solve needs finite-value checks and accurate
 # cancellation in the synchronous Einstein constraints.
 set_source_files_properties(src/cosmology/boltzmann.cpp PROPERTIES
@@ -768,6 +771,11 @@ if(BUILD_TESTING)
     target_include_directories(terminal_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_options(terminal_test PRIVATE -ffast-math)
     cosmictiger_add_gtest(NAME terminal TARGET terminal_test PROPERTIES TIMEOUT 10)
+    add_executable(section_timing_test tests/section_timing.cpp)
+    target_include_directories(section_timing_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_link_libraries(section_timing_test PRIVATE Threads::Threads)
+    cosmictiger_add_gtest(NAME section_timing TARGET section_timing_test
+        PROPERTIES TIMEOUT 30 PROCESSORS 1)
     # The collisionless checks also exercise terminal hierarchy synchronization.
     # The gas evolution fixture uses the traditional integrator with SPH.
     if(COSMICTIGER_ENABLE_FMM)
@@ -906,6 +914,30 @@ if(BUILD_TESTING)
         set_tests_properties(star_formation_application PROPERTIES
             RUN_SERIAL TRUE TIMEOUT 1200 PROCESSORS 2 LABELS "integration;star_formation;cpu")
         if(COSMICTIGER_WITH_CUDA)
+            add_executable(star_formation_cuda_test tests/sph/star_formation_cuda.cu
+                src/sph/star_formation_cuda.cu src/sph/springel_and_hernquist/cooling.cpp)
+            target_include_directories(star_formation_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+            target_compile_definitions(star_formation_cuda_test PRIVATE USE_CUDA)
+            target_link_libraries(star_formation_cuda_test PRIVATE CUDA::cudart Boost::boost)
+            target_compile_options(star_formation_cuda_test PRIVATE
+                $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false;-Xcompiler=-fno-fast-math;-Xcompiler=-ffp-contract=off>)
+            cosmictiger_add_gtest(NAME star_formation_cuda TARGET star_formation_cuda_test
+                PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77 RUN_SERIAL TRUE PROCESSORS 1)
+            foreach(star_cuda_network IN ITEMS atomic6 molecular9)
+                set(star_cuda_test "star_formation_production_cuda_${star_cuda_network}")
+                set(star_cuda_workdir "${PROJECT_BINARY_DIR}/tests/${star_cuda_test}")
+                file(MAKE_DIRECTORY "${star_cuda_workdir}")
+                add_test(NAME ${star_cuda_test} COMMAND cosmictiger --run.test=star_formation
+                    --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true
+                    --chemistry.initialization=manual --chemistry.network=${star_cuda_network}
+                    --compute.cuda=true --initial.particlesPerDimension=8
+                    --run.timeIntegrator=${star_formation_test_integrator}
+                    ${cosmictiger_test_gravity_args} ${cosmictiger_test_selection_args}
+                    --hpx:threads=1 --hpx:bind=none)
+                set_tests_properties(${star_cuda_test} PROPERTIES
+                    WORKING_DIRECTORY "${star_cuda_workdir}" RUN_SERIAL TRUE TIMEOUT 180
+                    PROCESSORS 1 LABELS "star_formation;cuda")
+            endforeach()
             add_executable(springel_and_hernquist_cuda_test tests/springel_and_hernquist_cuda.cu)
             target_include_directories(springel_and_hernquist_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
             target_link_libraries(springel_and_hernquist_cuda_test PRIVATE CUDA::cudart)
@@ -929,18 +961,14 @@ if(BUILD_TESTING)
             cosmictiger_add_gtest(NAME ${chemistry_test} TARGET ${chemistry_test}_test
                 PROPERTIES TIMEOUT 180 PROCESSORS ${chemistry_processors})
         endforeach()
-        execute_process(COMMAND ${Python3_EXECUTABLE} -c "import numpy, scipy"
-            RESULT_VARIABLE PRIMORDIAL_SCIPY_STATUS OUTPUT_QUIET ERROR_QUIET)
-        if(PRIMORDIAL_SCIPY_STATUS EQUAL 0)
-            add_library(primordial_reference SHARED tests/primordial_reference.cpp)
-            target_include_directories(primordial_reference PRIVATE ${PROJECT_SOURCE_DIR})
-            target_link_libraries(primordial_reference PRIVATE Boost::boost)
-            target_compile_options(primordial_reference PRIVATE -fno-fast-math -ffp-contract=off)
-            add_test(NAME primordial_radau_reference COMMAND ${Python3_EXECUTABLE}
-                ${PROJECT_SOURCE_DIR}/tests/primordial_reference.py $<TARGET_FILE:primordial_reference>)
-            set_tests_properties(primordial_radau_reference PROPERTIES TIMEOUT 600
-                ENVIRONMENT "OPENBLAS_NUM_THREADS=1;OMP_NUM_THREADS=1;MKL_NUM_THREADS=1")
-        endif()
+        add_library(primordial_reference SHARED tests/primordial_reference.cpp)
+        target_include_directories(primordial_reference PRIVATE ${PROJECT_SOURCE_DIR})
+        target_link_libraries(primordial_reference PRIVATE Boost::boost)
+        target_compile_options(primordial_reference PRIVATE -fno-fast-math -ffp-contract=off)
+        add_test(NAME primordial_reference COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/primordial_reference.py $<TARGET_FILE:primordial_reference>)
+        set_tests_properties(primordial_reference PROPERTIES TIMEOUT 600
+            ENVIRONMENT "OPENBLAS_NUM_THREADS=1;OMP_NUM_THREADS=1;MKL_NUM_THREADS=1")
     endif()
 
     # These analysis utilities also contain independent numerical regressions.

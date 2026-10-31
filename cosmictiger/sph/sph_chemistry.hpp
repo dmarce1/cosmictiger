@@ -7,6 +7,10 @@
 
 #include <cosmictiger/chemistry/primordial_types.hpp>
 
+namespace section_timing {
+class ScopedSection;
+}
+
 struct SphChemistryBatchInput {
     primordial::State state{};
     float storedEnergy{};
@@ -21,7 +25,8 @@ struct SphChemistryBatchResult {
 // Nonmutating source transaction: all elements must finish before results return.
 // Density and energy use stored code units; intervals are physical seconds.
 std::vector<SphChemistryBatchResult> sphChemistryAdvanceBatch(
-    std::vector<SphChemistryBatchInput> const& inputs, double scaleFactor);
+    std::vector<SphChemistryBatchInput> const& inputs, double scaleFactor,
+    section_timing::ScopedSection* sourceTimer = nullptr);
 primordial::State sphChemistrySynchronizeEnergy(
     primordial::State const& state, float storedEnergy, double scaleFactor);
 primordial::Eos sphChemistryEos(

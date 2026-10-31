@@ -18,6 +18,8 @@
 #include <cosmictiger/chemistry/primordial_float_environment.hpp>
 #include <cosmictiger/chemistry/primordial_units.hpp>
 #include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/core/section_timing.hpp>
+#include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
 #include <cosmictiger/sph/sph_chemistry.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
@@ -161,18 +163,36 @@ std::vector<primordial::StepResult> integrateChemistryBatch(
     std::vector<primordial::BatchInput> const& inputs) {
     auto const& options = getOptions();
     primordial::SolverOptions solverOptions;
-    solverOptions.relativeTolerance = options.chemistry.relativeTolerance;
-    for (int i = 0; i < primordial::kAbundanceCount; ++i) {
-        solverOptions.abundanceAbsoluteTolerance[i] = options.chemistry.abundanceAbsoluteTolerance;
-    }
-    solverOptions.energyAbsoluteTolerance = options.chemistry.energyAbsoluteTolerance;
+    solverOptions.fractionalChangeLimit = options.chemistry.fractionalChangeLimit;
+    solverOptions.electronFractionFloor = options.chemistry.electronFractionFloor;
     solverOptions.maxSubsteps = options.chemistry.maxSubsteps;
     std::vector<primordial::StepResult> results(inputs.size());
     std::string error;
-    bool const dispatched = inputs.empty() ||
-        primordial::integrateBatch(inputs.data(), results.data(), inputs.size(), solverOptions,
-            options.compute.cuda ? primordial::Backend::Cuda : primordial::Backend::Cpu,
-            static_cast<unsigned>(hpx::get_num_worker_threads()), &error);
+    bool dispatched = true;
+    if (options.compute.cuda) {
+        cudaSetDevice();
+        dispatched = primordial::integrateBatch(inputs.data(), results.data(), inputs.size(),
+            solverOptions, primordial::Backend::Cuda, 1, &error);
+    } else if (!inputs.empty()) {
+        size_t const workers = std::min<size_t>(hpx::get_num_worker_threads(), inputs.size());
+        std::vector<hpx::future<bool>> futures;
+        for (size_t worker = 0; worker < workers; ++worker) {
+            size_t const begin = inputs.size() * worker / workers;
+            size_t const end = inputs.size() * (worker + 1) / workers;
+            futures.push_back(hpx::async([&, begin, end]() {
+                // Each HPX task executes a serial strict-FP chunk. No nested OS workers.
+                return primordial::integrateBatch(inputs.data() + begin, results.data() + begin,
+                    end - begin, solverOptions, primordial::Backend::Cpu, 1);
+            }));
+        }
+        hpx::wait_all(futures);
+        for (auto& future : futures) {
+            dispatched = future.get() && dispatched;
+        }
+        if (!dispatched) {
+            error = "CPU chemistry dispatch failed";
+        }
+    }
     if (!dispatched) {
         throw std::runtime_error("Chemistry batch dispatch failed: " + error);
     }
@@ -205,7 +225,9 @@ primordial::State sphChemistrySynchronizeEnergy(
 }
 
 std::vector<SphChemistryBatchResult> sphChemistryAdvanceBatch(
-    std::vector<SphChemistryBatchInput> const& inputs, double scaleFactor) {
+    std::vector<SphChemistryBatchInput> const& inputs, double scaleFactor,
+    section_timing::ScopedSection* sourceTimer) {
+    section_timing::ScopedSection chemistryTimer(section_timing::Section::chemistry, sourceTimer);
     primordial::StrictFloatEnvironment const floatingEnvironment;
     if (!floatingEnvironment.valid()) {
         throw std::runtime_error("Chemistry requires IEEE nearest rounding and gradual underflow");
@@ -261,14 +283,23 @@ void sphChemistryInitializeParticle(long long index, double scaleFactor) {
         options.chemistry.heliumIonFraction, options.chemistry.heliumDoubleIonFraction,
         options.chemistry.hydrogenMinusFraction, options.chemistry.molecularFraction,
         options.chemistry.molecularIonFraction};
-    for (int i = 0; i < primordial::kAbundanceCount; ++i) {
-        bool const upper = fractions[i] > 0.5;
-        state.abundances[i] = primordial::SignedAbundance::fromMinority(
-            static_cast<float>(upper ? 1.0 - fractions[i] : fractions[i]), upper);
-    }
-    auto const status =
-        primordial::thermalEnergyAtTemperature(state, detail::environmentAt(scaleFactor),
+    auto const environment = detail::environmentAt(scaleFactor);
+    primordial::EnvironmentT<double> initialEnvironment;
+    initialEnvironment.network = environment.network;
+    initialEnvironment.heliumToHydrogenNumberRatio =
+        options.cosmology.heliumFraction / (4.0 * (1.0 - options.cosmology.heliumFraction));
+    primordial::StateT<double> initialState;
+    // Convert the double-valued input once before storing each direct species.
+    // This retains trace neutrals even when a dominant float ion rounds to one;
+    // every subsequent solver invocation still uses only its selected scalar type.
+    auto status = primordial::initializeState(initialState, initialEnvironment, fractions);
+    if (status == primordial::Status::Success) {
+        for (int species = 0; species != primordial::kAbundanceCount; ++species) {
+            state.abundances[species] = static_cast<float>(initialState.abundances[species]);
+        }
+        status = primordial::thermalEnergyAtTemperature(state, environment,
             static_cast<float>(options.chemistry.initialTemperature), state.thermalEnergy);
+    }
     if (status != primordial::Status::Success) {
         throw std::runtime_error(
             "Initial chemistry composition/temperature is outside the selected model");
@@ -426,11 +457,12 @@ void sphChemistryOpen(int minimumRung, double scaleFactor, double scaleDerivativ
 }
 std::array<double, 17> sphChemistryCheckpointParameters() {
     auto const& c = getOptions().chemistry;
-    return {double(primordial::kPhysicsVersion), c.network == "atomic6" ? 6.0 : 9.0, 0.0,
-        c.initialTemperature, c.hydrogenIonFraction, c.heliumIonFraction, c.heliumDoubleIonFraction,
-        c.hydrogenMinusFraction, c.molecularFraction, c.molecularIonFraction, c.relativeTolerance,
-        c.abundanceAbsoluteTolerance, c.energyAbsoluteTolerance, double(c.maxSubsteps),
-        getOptions().cosmology.heliumFraction, getOptions().cosmology.thetaCmb, 2.0};
+    return {double(primordial::kPhysicsVersion), c.network == "atomic6" ? 6.0 : 9.0,
+        double(primordial::kAbundanceCount), c.initialTemperature, c.hydrogenIonFraction,
+        c.heliumIonFraction, c.heliumDoubleIonFraction, c.hydrogenMinusFraction,
+        c.molecularFraction, c.molecularIonFraction, c.fractionalChangeLimit,
+        c.electronFractionFloor, 0.0, double(c.maxSubsteps), getOptions().cosmology.heliumFraction,
+        getOptions().cosmology.thetaCmb, 3.0};
 }
 uint64_t sphChemistryRadiationChecksum() {
     return detail::radiationTable().checksum;
@@ -444,10 +476,9 @@ std::array<float, 12> sphChemistryOutput(
     }
     auto const c = primordial::composition(state, detail::environmentAt(scaleFactor, 0.0f, false));
     auto const eos = sphChemistryEos(state, storedEnergy, scaleFactor);
-    return {c.hydrogen.toFloat(), c.hydrogenPlus.toFloat(), c.helium.toFloat(),
-        c.heliumPlus.toFloat(), c.heliumDoublePlus.toFloat(), c.hydrogenMinus.toFloat(),
-        c.molecularHydrogen.toFloat(), c.molecularHydrogenPlus.toFloat(), c.electrons.toFloat(),
-        eos.temperature, eos.meanMolecularWeight, eos.adiabaticIndex};
+    return {c.hydrogen, c.hydrogenPlus, c.helium, c.heliumPlus, c.heliumDoublePlus, c.hydrogenMinus,
+        c.molecularHydrogen, c.molecularHydrogenPlus, c.electrons, eos.temperature,
+        eos.meanMolecularWeight, eos.adiabaticIndex};
 }
 
 HPX_PLAIN_ACTION(sphChemistryPressureIntegral, SphChemistryPressureIntegralAction);
