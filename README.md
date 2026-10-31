@@ -651,10 +651,12 @@ enabled time integrators, and fixed32 or fixed64 position storage.
 Builds use `build/<mode>_<cuda|cpu>` (for example `build/release_cuda`), with live
 output and a `builder.*.log`. The default builds `cosmictiger` with FMM, SPH,
 particle chemistry, traditional integration, potential degrees 4–6, and fixed32
-positions. Building and running the test suite is opt-in. Build concurrency is
-capped at half the available CPUs. Use `./build.sh -j 4` to select a count, or
-`./build.sh -j` (also `-j max`) to use that ceiling. Test concurrency accounts for
-two MPI localities with two HPX threads each.
+positions. Building and running the test suite is opt-in. Build concurrency
+defaults to the detected system thread count, with no upper cap. Use `./build.sh -j 4` to select a count,
+or `./build.sh -j` (also `-j max`) to select the detected thread count.
+Builds show full compiler and linker commands using CMake's `--verbose` option
+(Make's `VERBOSE=1`). Test concurrency accounts for two MPI localities with two
+HPX threads each.
 
 The builder uses `~/local/hpx/<build type>` when installed (RelWithDebInfo for Profile),
 or normal CMake package discovery. Additional dependency prefixes default to the
