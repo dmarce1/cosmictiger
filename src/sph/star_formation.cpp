@@ -271,8 +271,8 @@ void starFormationCommit() {
         future.get();
     }
 }
-StarFormationUpdate starFormationClose(int minimumRung, double scaleFactor, double,
-    double baseTimestep, double explicitTimestep, section_timing::ScopedSection*) {
+StarFormationUpdate starFormationClose(
+    int minimumRung, double scaleFactor, double, double baseTimestep, double explicitTimestep) {
     auto const result =
         starFormationPrepare(minimumRung, scaleFactor, baseTimestep, explicitTimestep);
     starFormationCommit();

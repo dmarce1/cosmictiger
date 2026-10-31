@@ -22,10 +22,6 @@
 #include <cosmictiger/sph/sph_tree.hpp>
 #endif
 
-namespace section_timing {
-class ScopedSection;
-}
-
 // Output cadence follows the nominal coarse clock even with raw global steps.
 inline int driverOutputStep(double time, double coarseInterval) {
     double const phase = time / coarseInterval;
@@ -86,8 +82,7 @@ struct DriverParameters {
 SphTreeCreateReturn sphStep1(int minrung, bool verbose = true);
 SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
     EnergiesT* energies, bool verbose = true, int uniformMinimumRung = -1, bool closingOnly = false,
-    double previousTimestep = 0.0, double maximumGlobalTimestep = 0.0,
-    section_timing::ScopedSection* hydroTimer = nullptr);
+    double previousTimestep = 0.0, double maximumGlobalTimestep = 0.0);
 #endif
 #if COSMICTIGER_WITH_GRAVITY
 ForceStepResult kickStep(int minrung, double scale, double, double t0, double theta, bool firstCall,

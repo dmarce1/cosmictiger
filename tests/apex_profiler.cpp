@@ -1,4 +1,4 @@
-/* CosmicTiger - HPX APEX and CPU sampler coexistence regression; BSL-1.0. */
+/* CosmicTiger - HPX APEX task instrumentation regression; BSL-1.0. */
 
 #include <algorithm>
 #include <chrono>
@@ -29,7 +29,6 @@
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/interrupt_profile.hpp>
-#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/profiling_runtime.hpp>
 
 #if !defined(HPX_HAVE_APEX) || !defined(HPX_HAVE_THREAD_DESCRIPTION)
@@ -54,8 +53,8 @@ std::uint64_t threadCpuNanoseconds() {
         static_cast<std::uint64_t>(value.tv_nsec);
 }
 
-// No PROFILE() or APEX annotation: a suspended/resumed HPX context must still
-// produce ordinary ELF function attribution in the independent CPU sampler.
+// No APEX annotation: TAU attributes this ordinary function's samples to the
+// enclosing HPX task even across a suspended/resumed context.
 #if defined(__GNUC__) || defined(__clang__)
 __attribute__((noinline))
 #endif
@@ -123,7 +122,7 @@ std::uint64_t continuationTask(hpx::future<std::uint64_t> predecessor) {
 }
 
 // FULL thread descriptions should resolve this plain function pointer without
-// requiring an annotated_function wrapper or a PROFILE() registration.
+// requiring an annotated_function wrapper.
 #if defined(__GNUC__) || defined(__clang__)
 __attribute__((noinline))
 #endif
@@ -283,26 +282,16 @@ int hpx_main(int, char*[]) {
 int main(int argc, char* argv[]) {
     try {
         profile::configureRuntimeProfiling();
-#if defined(PROFILE_DISABLE)
-        bool samplerDisabled = true;
-#else
-        bool samplerDisabled = false;
-#endif
         int remaining = 1;
         for (int argument = 1; argument < argc; argument++) {
             std::string const option(argv[argument]);
-            if (option == "--sampler-disabled") {
-                samplerDisabled = true;
-            } else if (option == "--interrupt-exit") {
+            if (option == "--interrupt-exit") {
                 detail::interruptExit = true;
             } else {
                 argv[remaining++] = argv[argument];
             }
         }
         argv[argc = remaining] = nullptr;
-        if (!samplerDisabled) {
-            detail::require(profile::profileStart(), "cannot start the CPU sampler");
-        }
         profile::InterruptReportHandler interruptHandler;
         hpx::register_startup_function([&interruptHandler]() { interruptHandler.install(); });
         // HPX owns APEX initialization, task suspend/resume, and finalization.
@@ -320,22 +309,10 @@ int main(int argc, char* argv[]) {
         if (detail::interruptExit) {
             std::puts("APEX_INTERRUPT_FINALIZED=1");
         }
-        if (!samplerDisabled) {
-            profile::profileStop();
-            std::ofstream file("cpu_samples.txt");
-            file << profile::profileReport();
-            file.close();
-            detail::require(static_cast<bool>(file), "cannot save the CPU sample report");
-        }
 #if defined(HPX_HAVE_THREAD_DESCRIPTION_FULL)
         std::puts("APEX_FULL_THREAD_DESCRIPTION=1");
 #else
         std::puts("APEX_FULL_THREAD_DESCRIPTION=0");
-#endif
-#if defined(PROFILE_DISABLE)
-        std::puts("APEX_CPU_SAMPLER_COMPILED=0");
-#else
-        std::puts("APEX_CPU_SAMPLER_COMPILED=1");
 #endif
         std::puts("APEX profiler regression passed");
         return 0;

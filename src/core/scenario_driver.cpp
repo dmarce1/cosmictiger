@@ -10,7 +10,7 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/interrupt_profile.hpp>
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/core/section_timing.hpp>
+#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/core/timer.hpp>
 #if COSMICTIGER_WITH_GRAVITY
@@ -84,8 +84,9 @@ void writeScenarioDiagnostics(DriverParameters const& state) {
 void runFixedScenario() {
     profile::checkForInterrupt();
     auto const& definition = scenarios::definition(getOptions().run.scenario);
-    auto plan = section_timing::measure(
-        section_timing::Section::initialization, [&]() { return definition.initialize(); });
+    profile::profileBegin("initialize");
+    auto plan = definition.initialize();
+    profile::profileEnd();
     profile::checkForInterrupt();
     auto const baseOptions = getOptions();
     double const defaultDuration = std::accumulate(plan.stages.begin(), plan.stages.end(), 0.0,
@@ -117,8 +118,9 @@ void runFixedScenario() {
     state.bucketSize = baseOptions.compute.bucketSize;
     bool const restarting = baseOptions.checkpoint.readIndex >= 0;
     if (restarting) {
-        state = section_timing::measure(
-            section_timing::Section::checkpointRead, []() { return readCheckpoint(); });
+        profile::profileBegin("readCheckpoint");
+        state = readCheckpoint();
+        profile::profileEnd();
         if (state.tauMax != duration) {
             THROW_ERROR("Checkpoint duration differs from the selected scenario\n");
         }
@@ -134,7 +136,9 @@ void runFixedScenario() {
     bool const hierarchicalMesh =
         baseOptions.run.hierarchicalGravity && baseOptions.gravity.enabled;
     bool const global = usesGlobalIntegration(baseOptions.run);
-    section_timing::measure(section_timing::Section::domains, []() { domainsRebound(); });
+    profile::profileBegin("rebound");
+    domainsRebound();
+    profile::profileEnd();
     Timer checkpointTimer;
     checkpointTimer.start();
     Timer runtime;
@@ -155,8 +159,9 @@ void runFixedScenario() {
     auto const checkpoint = [&]() {
         auto const stageOptions = getOptions();
         setOptions(baseOptions);
-        section_timing::measure(
-            section_timing::Section::checkpointWrite, [&]() { writeCheckpoint(state); });
+        profile::profileBegin("writeCheckpoint");
+        writeCheckpoint(state);
+        profile::profileEnd();
         setOptions(stageOptions);
         lastCheckpoint = state.iter;
         checkpointTimer.reset();
@@ -201,8 +206,9 @@ void runFixedScenario() {
             bool const outputDue = fullEvaluation && (!global || outputStep > lastOutputStep);
             if (outputDue) {
                 lastOutputStep = outputStep;
-                section_timing::measure(section_timing::Section::snapshotOutput,
-                    [&]() { viewOutputViews(outputStep, 1.0); });
+                profile::profileBegin("output");
+                viewOutputViews(outputStep, 1.0);
+                profile::profileEnd();
             }
             resetFlops();
             int const errorInterval = baseOptions.gravity.errorInterval;
@@ -242,8 +248,9 @@ void runFixedScenario() {
                 state.energy0 = state.energies.kin + state.energies.therm + state.energies.pot;
             }
             if (outputDue) {
-                section_timing::measure(section_timing::Section::analysis,
-                    [&]() { detail::writeScenarioDiagnostics(state); });
+                profile::profileBegin("diagnostics");
+                detail::writeScenarioDiagnostics(state);
+                profile::profileEnd();
             }
             double const timestep = global ?
                 std::min(result.minimumTimestep, stageEnd - state.tau) :
@@ -253,8 +260,9 @@ void runFixedScenario() {
                 THROW_ERROR("Scenario timestep cannot advance time\n");
             }
             if (!hierarchicalMesh) {
-                section_timing::measure(section_timing::Section::drift,
-                    [&]() { drift(1.0, timestep, state.tau, state.tau + timestep, duration); });
+                profile::profileBegin("drift");
+                drift(1.0, timestep, state.tau, state.tau + timestep, duration);
+                profile::profileEnd();
             }
             state.tau += timestep;
             state.itime = global ? 0 : inc(state.itime, state.maxRung);
@@ -276,6 +284,7 @@ void runFixedScenario() {
             fprintf(progress, "%i %e %e %i %i\n", state.iter, state.tau, timestep,
                 displayedMinimumRung, state.maxRung);
             fclose(progress);
+            profile::profileOutput(outputPath("profile.txt"));
             checkpointTimer.stop();
             if (checkpointTimer.read() > baseOptions.checkpoint.intervalSeconds) {
                 checkpoint();
@@ -312,12 +321,14 @@ void runFixedScenario() {
         state.itime = 0;
     }
     // Use the next cycle for a final partial coarse step, preserving earlier snapshots.
-    section_timing::measure(section_timing::Section::snapshotOutput,
-        [&]() { viewOutputViews(driverFinalOutputStep(state.tau, coarseInterval), 1.0, true); });
+    profile::profileBegin("output");
+    viewOutputViews(driverFinalOutputStep(state.tau, coarseInterval), 1.0, true);
+    profile::profileEnd();
     setOptions(baseOptions);
     if (state.iter > 0 && state.iter != lastCheckpoint) {
-        section_timing::measure(
-            section_timing::Section::checkpointWrite, [&]() { writeCheckpoint(state); });
+        profile::profileBegin("writeCheckpoint");
+        writeCheckpoint(state);
+        profile::profileEnd();
     }
     bool const completed = state.tau >= duration * (1.0 - 1.0e-12);
     if (completed && !interrupted && iterations > 0) {

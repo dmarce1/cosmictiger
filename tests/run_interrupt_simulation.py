@@ -83,7 +83,7 @@ def check_checkpoint(directory, iteration, scenario, ranks):
             "checkpoint scenario metadata differs from the interrupted simulation")
 
 
-def check_profiles(directory, ranks, tau, sampler_disabled):
+def check_profiles(directory, ranks, tau, profile_disabled):
     expected_ranks = {str(rank) for rank in range(ranks)}
     with (directory / "apex" / "apex_profiles.csv").open(newline="") as stream:
         rows = list(csv.DictReader(stream))
@@ -93,19 +93,16 @@ def check_profiles(directory, ranks, tau, sampler_disabled):
         tree = list(csv.DictReader(stream))
     require(tree and {row["process rank"] for row in tree} == expected_ranks,
             "APEX did not finalize its task tree for every interrupted rank")
-    cpu_reports = list(directory.glob("cosmictiger.profile.*.txt"))
-    if sampler_disabled:
-        require(not cpu_reports, "disabled CPU sampling produced reports")
+    phase_profile = directory / "simulation" / "profile.txt"
+    if profile_disabled:
+        require(not phase_profile.exists(), "disabled phase profiler produced a report")
     else:
-        require(len(cpu_reports) == ranks, "missing or duplicate final CPU profiles")
-        for report in cpu_reports:
-            text = report.read_text()
-            require("Sampling is still active" not in text, "interrupt left an active CPU sampler")
-            diagnostics = re.search(
-                r"Delivered samples: (\d+); dropped samples: (\d+); "
-                r"timer overruns \(missing ticks\): (\d+); setup failures: (\d+)", text)
-            require(diagnostics is not None and int(diagnostics[4]) == 0,
-                    f"CPU sampling did not finalize successfully: {report}")
+        require(phase_profile.is_file(), "interrupt did not write the coordinator phase profile")
+        text = phase_profile.read_text()
+        require(text.startswith("Profile:") and re.search(r"^Total\s", text, re.MULTILINE),
+                f"phase profile is incomplete: {phase_profile}")
+        require(re.search(r"^(kick|pmmmKick|hydro)\s+\d+\s", text, re.MULTILINE),
+                f"phase profile lost the force phases: {phase_profile}")
     if tau:
         profiles, rows = read_tau_profiles(directory / "tau")
         require({path.name.split(".")[1] for path in profiles} == expected_ranks,
@@ -216,7 +213,7 @@ def run_regression(args, directory):
         require(rows[-1][1] < END_TIME if args.scenario == "hydroWave" else
                 rows[-1][5] < STEP_COUNT, "simulation reached its end before interruption")
         check_checkpoint(simulation / f"checkpoint.{iteration}", iteration, args.scenario, ranks)
-        check_profiles(directory, ranks, args.launcher is not None, args.sampler_disabled)
+        check_profiles(directory, ranks, args.launcher is not None, args.profile_disabled)
     except Exception as exception:
         raise RuntimeError(f"{exception}\nSimulation output:\n{output[-16000:]}") from exception
     recipient = "outer MPI wrapper" if args.mpi_wrapper else f"application rank {target_rank}"
@@ -236,8 +233,8 @@ def main():
     parser.add_argument("--mpi-postflag", action="append", default=[])
     parser.add_argument("--mpi-wrapper", type=Path, help="test terminal Ctrl-C through run_mpi.py")
     parser.add_argument("--signal-rank", type=int, help="default: worker rank 1 for MPI, otherwise 0")
-    parser.add_argument("--sampler-disabled", action="store_true",
-                        help="expect an application built without the CPU sampler")
+    parser.add_argument("--profile-disabled", action="store_true",
+                        help="expect an application built with COSMICTIGER_PROFILE=OFF")
     parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args()
     if args.output_dir is not None:

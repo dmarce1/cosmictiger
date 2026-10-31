@@ -7,9 +7,6 @@
 
 #include <cosmictiger/chemistry/gadget4_cooling.hpp>
 
-namespace section_timing {
-class ScopedSection;
-}
 struct SphChemistryBatchInput {
     gadget4::State state{};
     float storedEnergy{};
@@ -23,8 +20,7 @@ struct SphChemistryBatchResult {
 };
 gadget4::Parameters sphCoolingParameters(double scaleFactor);
 std::vector<SphChemistryBatchResult> sphChemistryAdvanceBatch(
-    std::vector<SphChemistryBatchInput> const& inputs, double scaleFactor,
-    section_timing::ScopedSection* sourceTimer = nullptr);
+    std::vector<SphChemistryBatchInput> const& inputs, double scaleFactor);
 void sphChemistryInitializeParticle(long long index, double scaleFactor);
 // One full source at each completed SPH step, matching the pinned GADGET-4 run loop.
 double sphChemistryClose(int minimumRung, double scaleFactor, double scaleDerivative,

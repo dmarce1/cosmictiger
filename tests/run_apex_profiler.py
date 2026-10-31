@@ -1,8 +1,7 @@
-"""Check HPX-owned APEX task lifecycles with optional independent CPU sampling."""
+"""Check HPX-owned APEX task lifecycles."""
 
 import argparse
 import csv
-import math
 import os
 from pathlib import Path
 import re
@@ -64,36 +63,9 @@ def check_apex(directory, full_thread_descriptions):
                 "APEX task tree lost the async parent/child dependency")
 
 
-def check_samples(directory):
-    report = (directory / "cpu_samples.txt").read_text()
-    require("Sampling is still active" not in report, "CPU sample report was not stopped")
-    diagnostics = re.search(
-        r"Delivered samples: (\d+); dropped samples: (\d+); "
-        r"timer overruns \(missing ticks\): (\d+); setup failures: (\d+)", report)
-    require(diagnostics is not None, "CPU sampler diagnostics are missing")
-    samples, dropped, overruns, failures = map(int, diagnostics.groups())
-    require(samples > 0 and dropped == 0 and failures == 0,
-            f"CPU sampling failed alongside APEX: {diagnostics[0]}")
-    workers = re.search(r"Attached OS workers: (\d+); registered function labels: (\d+)", report)
-    require(workers is not None and int(workers[1]) >= 3,
-            "CPU sampler did not attach the main thread and both HPX workers")
-    rows = re.findall(r"^\s*(\d+)\s+([0-9.e+-]+)\s+([0-9.]+)\s+(.+)$",
-                      report, re.MULTILINE)
-    require(any("detail::ordinaryHotFunction(" in row[3] for row in rows),
-            "CPU samples missed the ordinary unannotated function inside HPX contexts")
-    require(sum(int(row[0]) for row in rows) == samples - dropped,
-            "CPU function rows do not conserve the delivered sample count")
-    for count, seconds, percentage, function in rows:
-        require(math.isclose(float(seconds), int(count) * 0.01, rel_tol=1e-6),
-                f"wrong 10 ms CPU-time estimate for {function}")
-        require(math.isclose(float(percentage), 100 * int(count) / samples, abs_tol=0.011),
-                f"wrong CPU sample percentage for {function}")
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
-    parser.add_argument("--sampler-disabled", action="store_true")
     parser.add_argument("--reports-disabled", action="store_true")
     args = parser.parse_args()
     executable = args.executable.resolve()
@@ -110,10 +82,7 @@ def main():
             environment.update({name: "0" for name in
                                 ("APEX_SCREEN_OUTPUT", "APEX_CSV_OUTPUT",
                                  "APEX_TASKTREE_OUTPUT", "APEX_TASKGRAPH_OUTPUT")})
-        command = [str(executable)]
-        if args.sampler_disabled:
-            command.append("--sampler-disabled")
-        command.extend(("--hpx:threads=2", "--hpx:bind=none"))
+        command = [str(executable), "--hpx:threads=2", "--hpx:bind=none"]
         result = subprocess.run(command, cwd=directory, env=environment,
                                 text=True, errors="replace", stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, timeout=45)
@@ -123,9 +92,8 @@ def main():
             full_markers = re.findall(r"^APEX_FULL_THREAD_DESCRIPTION=([01])$",
                                       result.stdout, re.MULTILINE)
             require(len(full_markers) == 1, "fixture did not report its FULL description setting")
-            require("CPU Timers" not in result.stdout and
-                    "CosmicTiger statistical CPU profile (" not in result.stdout,
-                    "detailed profiler reports leaked to the terminal")
+            require("CPU Timers" not in result.stdout,
+                    "detailed APEX reports leaked to the terminal")
             if args.reports_disabled:
                 require(not list(directory.glob("apex*")) and
                         not list(directory.glob("taskgraph.*")),
@@ -136,21 +104,14 @@ def main():
                 check_apex(directory, full_markers[0] == "1")
                 require(list(directory.glob("apex_tasktree*")),
                         "APEX task tree was not enabled by default")
-            if args.sampler_disabled:
-                require(not (directory / "cpu_samples.txt").exists() and
-                        not list(directory.glob("cosmictiger.profile.*.txt")),
-                        "disabled CPU sampling unexpectedly produced reports")
-            else:
-                check_samples(directory)
         except Exception as exception:
             csv_output = directory / "apex_profiles.csv"
             details = csv_output.read_text(errors="replace") if csv_output.is_file() else "<missing CSV>"
             raise RuntimeError(f"{exception}\nAPEX CSV:\n{details}\n"
                                f"Fixture output:\n{result.stdout}") from exception
     print("APEX profiler regression passed: async, fork, post, continuation, action, resumed contexts, "
-          "task graph, " + ("automatic task naming, " if full_markers[0] == "1" else
-                            "automatic task naming skipped (FULL disabled), ") +
-          ("disabled CPU sampler" if args.sampler_disabled else "ordinary-function CPU samples"))
+          "task graph, " + ("automatic task naming" if full_markers[0] == "1" else
+                            "automatic task naming skipped (FULL disabled)"))
 
 
 if __name__ == "__main__":

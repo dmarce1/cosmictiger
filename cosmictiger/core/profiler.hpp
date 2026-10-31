@@ -19,80 +19,33 @@
 
 #pragma once
 
-#include <cstdint>
 #include <string>
-#include <type_traits>
 
-#if defined(__CUDACC__)
-#define COSMICTIGER_PROFILE_HOST_FORCE_INLINE __forceinline__
-#elif defined(__GNUC__) || defined(__clang__)
-#define COSMICTIGER_PROFILE_HOST_FORCE_INLINE inline __attribute__((always_inline))
-#elif defined(_MSC_VER)
-#define COSMICTIGER_PROFILE_HOST_FORCE_INLINE __forceinline
-#else
-#define COSMICTIGER_PROFILE_HOST_FORCE_INLINE inline
-#endif
-
+// Manual phase profiler. COSMICTIGER_PROFILE (a CMake option, on by default)
+// compiles the instrumentation; without it every call is an empty inline.
+//
+// profileBegin/profileEnd delimit high-level phases on the coordinator's
+// logical control flow (driver, scenario driver, initialization). Phases nest:
+// entering a child pauses its parent, so each name accumulates exclusive wall
+// time and the rows of the report sum to the instrumented total. Do not
+// instrument kernels, per-particle loops, or work that runs concurrently on
+// other HPX tasks; the single phase stack is not meant for parallel scopes.
 namespace profile {
 
-// Start before hpx::init to sample every newly created OS worker. A late start
-// attaches the caller and future workers; registration can attach other callers.
-// The interval measures each worker's CPU time, not elapsed wall time. A stopped
-// sampler cannot be restarted in the same process.
-bool profileStart(
-    std::uint64_t intervalNanoseconds = 10000000, std::string const& filename = {}) noexcept;
-void profileStop() noexcept;
-// PROFILE() registers optional signature metadata once per function. Repeated
-// call addresses do not identify inlining: samples use exact ELF function ranges,
-// and inlined work belongs to the enclosing compiled function.
-bool profileRegisterFunction(char const* functionName) noexcept;
+#if COSMICTIGER_PROFILE
+void profileBegin(char const* name);
+void profileEnd();
+// Table of exclusive wall time per phase, sorted by time; empty with no phases.
 std::string profileReport();
-bool writeProfileReport(std::string const& filename = {}) noexcept;
-
-namespace detail {
-
-    // Keep the constant-evaluation query outside consteval callers, where a
-    // direct query would produce a tautological-condition warning under NVCC.
-    COSMICTIGER_PROFILE_HOST_FORCE_INLINE constexpr bool registrationIsRuntime() noexcept {
-#if defined(__GNUC__) || defined(__clang__) || defined(__CUDACC__)
-        return !__builtin_is_constant_evaluated();
+// Writes profileReport() to filename (overwrite). Safe while phases are open.
+void profileOutput(std::string const& filename);
 #else
-        return !std::is_constant_evaluated();
+inline void profileBegin(char const*) noexcept {}
+inline void profileEnd() noexcept {}
+inline std::string profileReport() {
+    return {};
+}
+inline void profileOutput(std::string const&) noexcept {}
 #endif
-    }
-
-    // The macro's unique lambda type gives every function specialization its
-    // own once flag. Its static storage belongs here, so callers remain valid
-    // C++20 constexpr functions. Force inlining keeps the registration hook's
-    // return address inside the original caller, including in Debug builds.
-    template <typename FunctionTag>
-    COSMICTIGER_PROFILE_HOST_FORCE_INLINE void registerFunctionOnce(
-        char const* functionName) noexcept {
-        [[maybe_unused]] static bool const functionRegistered =
-            profileRegisterFunction(functionName);
-    }
-
-}    // namespace detail
 
 }    // namespace profile
-
-#undef COSMICTIGER_PROFILE_HOST_FORCE_INLINE
-
-#if defined(__clang__) || defined(__GNUC__)
-#define CURRENT_FUNCTION_SIGNATURE __PRETTY_FUNCTION__
-#elif defined(_MSC_VER)
-#define CURRENT_FUNCTION_SIGNATURE __FUNCSIG__
-#else
-#define CURRENT_FUNCTION_SIGNATURE __func__
-#endif
-
-#if !defined(PROFILE_DISABLE) && !defined(__CUDA_ARCH__)
-#define PROFILE()                                                                                 \
-    do {                                                                                          \
-        if (::profile::detail::registrationIsRuntime()) {                                         \
-            ::profile::detail::registerFunctionOnce<decltype([] {})>(CURRENT_FUNCTION_SIGNATURE); \
-        }                                                                                         \
-    } while (false)
-#else
-#define PROFILE() ((void) 0)
-#endif

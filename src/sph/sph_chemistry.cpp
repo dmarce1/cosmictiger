@@ -14,7 +14,6 @@
 
 #include <cosmictiger/chemistry/gadget4_cooling.hpp>
 #include <cosmictiger/core/hpx.hpp>
-#include <cosmictiger/core/section_timing.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
 #include <cosmictiger/sph/sph_chemistry.hpp>
@@ -105,9 +104,7 @@ gadget4::Parameters sphCoolingParameters(double scaleFactor) {
         scaleFactor, options.run.scenario == "cosmology", options.chemistry.minimumSpecificEnergy);
 }
 std::vector<SphChemistryBatchResult> sphChemistryAdvanceBatch(
-    std::vector<SphChemistryBatchInput> const& inputs, double scaleFactor,
-    section_timing::ScopedSection* sourceTimer) {
-    section_timing::ScopedSection timer(section_timing::Section::chemistry, sourceTimer);
+    std::vector<SphChemistryBatchInput> const& inputs, double scaleFactor) {
     if (!(scaleFactor > 0.0) || !std::isfinite(scaleFactor)) {
         throw std::invalid_argument("Cooling requires a finite positive scale factor");
     }

@@ -25,7 +25,6 @@
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/interrupt_profile.hpp>
 #include <cosmictiger/core/profiler.hpp>
-#include <cosmictiger/core/section_timing.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/core/time.hpp>
 #include <cosmictiger/core/timer.hpp>
@@ -119,7 +118,6 @@ static void flushTimings(bool reset) {
 
 #if COSMICTIGER_WITH_GRAVITY
 void doGroups(int number, double scale, double years) {
-    section_timing::ScopedSection sectionTimer(section_timing::Section::analysis);
     groupsPrepareHistory(number);
 
     Timer total;
@@ -229,8 +227,7 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
 
 SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
     EnergiesT* energies, bool verbose, int uniformMinimumRung, bool closingOnly,
-    double previousTimestep, double maximumGlobalTimestep,
-    section_timing::ScopedSection* hydroTimer) {
+    double previousTimestep, double maximumGlobalTimestep) {
     bool const globalTimestep = maximumGlobalTimestep > 0.0;
     double selectedTimestep = maximumGlobalTimestep;
     double const closingTimestep = globalTimestep ? previousTimestep : -1.0;
@@ -403,19 +400,18 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
 #if COSMICTIGER_ENABLE_CHEMISTRY
     if (chemistry && tau > 0.0) {
         // Apply the full completed source interval after the hydro corrector.
-        section_timing::ScopedSection sourceTimer(section_timing::Section::chemistry, hydroTimer);
+        profile::profileBegin("chemistry");
         energies->heating += sphChemistryClose(minrung, scale, adot, t0, closingTimestep);
+        profile::profileEnd();
     }
 #endif
 
 #if COSMICTIGER_ENABLE_STAR_FORMATION
     if (getOptions().starFormation.enabled && tau > 0.0) {
-        StarFormationUpdate update;
-        {
-            section_timing::ScopedSection sourceTimer(
-                section_timing::Section::starFormation, hydroTimer);
-            update = starFormationClose(minrung, scale, adot, t0, closingTimestep, &sourceTimer);
-        }
+        profile::profileBegin("starFormation");
+        StarFormationUpdate const update =
+            starFormationClose(minrung, scale, adot, t0, closingTimestep);
+        profile::profileEnd();
         energies->heating += update.heating;
         maxRung = std::max(maxRung, update.maximumNewStarRung);
         if (update.converted != 0 && !closingOnly) {
@@ -449,9 +445,9 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     if (closingOnly) {
 #if COSMICTIGER_ENABLE_STAR_FORMATION
         if (getOptions().starFormation.enabled) {
-            section_timing::ScopedSection sourceTimer(
-                section_timing::Section::starFormation, hydroTimer);
+            profile::profileBegin("starFormation");
             starFormationOpenNewStars(t0, scale, runParameters.maximumTimestep, minrung, false);
+            profile::profileEnd();
         }
 #endif
         // The final measurement includes cooling of the completed interval.
@@ -463,15 +459,16 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     }
 #if COSMICTIGER_ENABLE_CHEMISTRY
     if (chemistry) {
-        section_timing::ScopedSection sourceTimer(section_timing::Section::chemistry, hydroTimer);
+        profile::profileBegin("chemistry");
         synchronizedChemistryPressure = sphChemistryPressureIntegral(scale);
+        profile::profileEnd();
     }
 #endif
 #if COSMICTIGER_ENABLE_STAR_FORMATION
     if (getOptions().starFormation.enabled) {
-        section_timing::ScopedSection sourceTimer(
-            section_timing::Section::starFormation, hydroTimer);
+        profile::profileBegin("starFormation");
         synchronizedChemistryPressure = starFormationPressureIntegral(scale);
+        profile::profileEnd();
     }
 #endif
     runParameters.phase = 1;
@@ -497,20 +494,21 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     }
 #if COSMICTIGER_ENABLE_STAR_FORMATION
     if (getOptions().starFormation.enabled) {
-        section_timing::ScopedSection sourceTimer(
-            section_timing::Section::starFormation, hydroTimer);
+        profile::profileBegin("starFormation");
         maxRung = std::max(maxRung,
             starFormationOpenNewStars(t0, scale, runParameters.maximumTimestep, minrung,
                 getOptions().gravity.enabled && !globalTimestep &&
                     !usesMeshGravity(getOptions().gravity)));
+        profile::profileEnd();
     }
 #endif
     if (!globalTimestep && uniformMinimumRung >= 0) {
         // The dark matter and hydro proposals have both been reduced globally.
         // Set every rung before either species opens its next half-step.
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
-        section_timing::measure(
-            section_timing::Section::gravity, [&]() { particleMeshFinishKick(t0, maxRung); });
+        profile::profileBegin("particleMeshFinishKick");
+        particleMeshFinishKick(t0, maxRung);
+        profile::profileEnd();
 #endif
     }
     sphParticlesApplyUpdates(minrung, 2, t0, tau, globalTimestep ? selectedTimestep : -1.0);
@@ -569,11 +567,11 @@ ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, doub
     Timer tm;
     tm.start();
     terminal::detailPrint("domains_begin\n");
-    section_timing::measure(section_timing::Section::domains, [&]() {
-        domainsBegin(minrung);
-        terminal::detailPrint("domains_end \n");
-        domainsEnd();
-    });
+    profile::profileBegin("domains");
+    domainsBegin(minrung);
+    terminal::detailPrint("domains_end \n");
+    domainsEnd();
+    profile::profileEnd();
     tm.stop();
     domainTime += tm.read();
     tm.reset();
@@ -582,8 +580,9 @@ ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, doub
     // ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
     TreeCreateParameters tparams(minrung, theta, 0.f);
     terminal::detailPrint("Create tree %i %e\n", minrung, theta);
-    section_timing::measure(
-        section_timing::Section::treeBuild, [&]() { return treeCreate(tparams); });
+    profile::profileBegin("treeCreate");
+    treeCreate(tparams);
+    profile::profileEnd();
     terminal::detailPrint("Done with tree\n");
 
     tm.stop();
@@ -640,8 +639,9 @@ ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, doub
     Vector<TreeId> checklist;
     checklist.push_back(rootId);
     terminal::detailPrint("Do kick\n");
-    KickReturn kr = section_timing::measure(section_timing::Section::gravity,
-        [&]() { return kick(kparams, l, pos, rootId, checklist, checklist, nullptr); });
+    profile::profileBegin("kick");
+    KickReturn kr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
+    profile::profileEnd();
     tm.stop();
     kickTime += tm.read();
 
@@ -665,23 +665,26 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
     }
 #if COSMICTIGER_WITH_GRAVITY
     if (gravityErrorStep >= 0) {
-        section_timing::measure(section_timing::Section::analysis, []() { gravityErrorBegin(); });
+        profile::profileBegin("gravityError");
+        gravityErrorBegin();
+        profile::profileEnd();
     }
     if (getOptions().gravity.enabled) {
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
         if (meshGravity) {
             Timer timer;
             timer.start();
-            section_timing::measure(section_timing::Section::domains, [&]() {
-                domainsBegin(0);
-                domainsEnd();
-            });
+            profile::profileBegin("domains");
+            domainsBegin(0);
+            domainsEnd();
+            profile::profileEnd();
             timer.stop();
             domainTime += timer.read();
             timer.reset();
             timer.start();
-            section_timing::ScopedSection gravityTimer(section_timing::Section::gravity);
+            profile::profileBegin("pmmmSolve");
             pmmmSolve(true);
+            profile::profileEnd();
             double maximumTimestep = global ? maximumGlobalTimestep :
                                               std::ldexp(baseTimestep, -getOptions().run.minRung);
             if (getOptions().run.scenario == "cosmology") {
@@ -704,10 +707,10 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
     } else
 #endif
     {
-        section_timing::measure(section_timing::Section::domains, [&]() {
-            domainsBegin(minRung);
-            domainsEnd();
-        });
+        profile::profileBegin("domains");
+        domainsBegin(minRung);
+        domainsEnd();
+        profile::profileEnd();
     }
     if (global) {
         result.minimumTimestep = std::min(result.minimumTimestep, maximumGlobalTimestep);
@@ -715,12 +718,13 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
     auto& gravity = result;
 #if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
-        section_timing::ScopedSection hydroTimer(section_timing::Section::hydrodynamics);
+        profile::profileBegin("hydro");
         int const activeRung = meshGravity || global ? 0 : minRung;
         sphStep1(activeRung);
         auto const hydro = sphStep2(activeRung, scale, time, baseTimestep, 1, scaleDerivative,
             &energies, true, meshGravity && !global ? gravity.maxRung : -1, closingOnly,
-            previousTimestep, global ? result.minimumTimestep : 0.0, &hydroTimer);
+            previousTimestep, global ? result.minimumTimestep : 0.0);
+        profile::profileEnd();
         gravity.maxRung = std::max(gravity.maxRung, hydro.maximumRung);
         if (global) {
             gravity.minimumTimestep =
@@ -754,8 +758,9 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
         }
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
         if (meshGravity && !global && !closingOnly) {
-            energies.tckin = section_timing::measure(section_timing::Section::gravity,
-                [&]() { return particleMeshFinishKick(baseTimestep, gravity.maxRung); });
+            profile::profileBegin("particleMeshFinishKick");
+            energies.tckin = particleMeshFinishKick(baseTimestep, gravity.maxRung);
+            profile::profileEnd();
         }
 #endif
     }
@@ -773,8 +778,9 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
         energies.tckin = particlesSumEnergies().kin;
     }
     if (gravityErrorStep >= 0) {
-        section_timing::measure(section_timing::Section::analysis,
-            [&]() { gravityErrorFinish(gravityErrorStep, time, scale); });
+        profile::profileBegin("gravityError");
+        gravityErrorFinish(gravityErrorStep, time, scale);
+        profile::profileEnd();
     }
 #endif
     return result;
@@ -853,10 +859,10 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         if (ascending || top) {
             tm.reset();
             tm.start();
-            section_timing::measure(section_timing::Section::domains, [&]() {
-                domainsBegin(levels[li]);
-                domainsEnd();
-            });
+            profile::profileBegin("domains");
+            domainsBegin(levels[li]);
+            domainsEnd();
+            profile::profileEnd();
             tm.stop();
             //			PRINT("Domains took %e\n", tm.read());
         }
@@ -864,8 +870,9 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         if (!ascending) {
             tm.reset();
             tm.start();
-            section_timing::measure(
-                section_timing::Section::particleSort, [&]() { particlesSortByRung(levels[li]); });
+            profile::profileBegin("sortByRung");
+            particlesSortByRung(levels[li]);
+            profile::profileEnd();
             tm.stop();
             //			PRINT("Rung sort took %e\n", tm.read());
         }
@@ -904,16 +911,18 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
          }*/
         int minimumTreeLevel = 0;
         if (top && gravityErrorStep >= 0) {
-            section_timing::measure(
-                section_timing::Section::analysis, []() { gravityErrorBegin(); });
+            profile::profileBegin("gravityError");
+            gravityErrorBegin();
+            profile::profileEnd();
         }
         tm.reset();
         tm.start();
 #if COSMICTIGER_ENABLE_FMM
         if (!meshGravity) {
             TreeCreateParameters tparams(levels[li], theta, 0.f);
-            section_timing::measure(
-                section_timing::Section::treeBuild, [&]() { return treeCreate(tparams); });
+            profile::profileBegin("treeCreate");
+            treeCreate(tparams);
+            profile::profileEnd();
             minimumTreeLevel = tparams.minLevel;
         }
 #endif
@@ -972,14 +981,16 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         KickReturn thisKr;
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
         if (meshGravity) {
-            thisKr = section_timing::measure(
-                section_timing::Section::gravity, [&]() { return pmmmKick(kparams); });
+            profile::profileBegin("pmmmKick");
+            thisKr = pmmmKick(kparams);
+            profile::profileEnd();
         }
 #endif
 #if COSMICTIGER_ENABLE_FMM
         if (!meshGravity) {
-            thisKr = section_timing::measure(section_timing::Section::gravity,
-                [&]() { return kick(kparams, l, pos, rootId, checklist, checklist, nullptr); });
+            profile::profileBegin("kick");
+            thisKr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
+            profile::profileEnd();
         }
 #endif
         if (top) {
@@ -988,8 +999,9 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
 #endif
         }
         if (top && gravityErrorStep >= 0) {
-            section_timing::measure(section_timing::Section::analysis,
-                [&]() { gravityErrorFinish(gravityErrorStep, tau, scale); });
+            profile::profileBegin("gravityError");
+            gravityErrorFinish(gravityErrorStep, tau, scale);
+            profile::profileEnd();
         }
         energies->tckin += thisKr.dkin;
         tm.stop();
@@ -1038,10 +1050,10 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
                 double adotWork = adot;
                 a = 1.0 / cosmosAinv(adotWork, scaleWork, dt);
             }
-            section_timing::measure(section_timing::Section::drift, [&]() {
-                driftRungEverywhere(
-                    a, dt, tau, tau + dt, getOptions().run.numberOfSteps * t0, levels[li], drag);
-            });
+            profile::profileBegin("drift");
+            driftRungEverywhere(
+                a, dt, tau, tau + dt, getOptions().run.numberOfSteps * t0, levels[li], drag);
+            profile::profileEnd();
             tm.stop();
             // PRINT("Drift took %e\n", tm.read());
         }
@@ -1072,7 +1084,6 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
 #endif
 
 double doPowerSpectrum(int num, double a, double adot) {
-    section_timing::ScopedSection sectionTimer(section_timing::Section::analysis);
     auto const softFilter = [](double kh) {
         if (kh > 0.01) {
             return -15.0 * (3.0 * kh * cos(kh) + ((sqr(kh) - 3.0) * sin(kh))) * pow(kh, -5.0);
@@ -1207,8 +1218,9 @@ void driver() {
     int buckets[11] = {80, 112, 112, 128, 128, 160, 176, 184, 184, 184, 192};
     double a0 = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
     if (getOptions().checkpoint.readIndex != -1) {
-        params = section_timing::measure(
-            section_timing::Section::checkpointRead, []() { return readCheckpoint(); });
+        profile::profileBegin("readCheckpoint");
+        params = readCheckpoint();
+        profile::profileEnd();
         profile::checkForInterrupt();
         double const coarseInterval = params.tauMax / getOptions().run.numberOfSteps;
         double const endpointTolerance =
@@ -1272,7 +1284,7 @@ void driver() {
             }
         }
     } else {
-        section_timing::ScopedSection initializationTimer(section_timing::Section::initialization);
+        profile::profileBegin("initialize");
 #if COSMICTIGER_WITH_GRAVITY
         if (getOptions().run.scenario == "glass") {
             scenarios::initializeGlass(params);
@@ -1290,6 +1302,7 @@ void driver() {
                 params.tauMax = cosmology::configuredDuration(a0);
             }
         }
+        profile::profileEnd();
         profile::checkForInterrupt();
         if (getOptions().run.endTime > 0.0) {
             params.tauMax = getOptions().run.endTime;
@@ -1334,8 +1347,9 @@ void driver() {
     if (getOptions().checkpoint.readIndex == -1) {
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION
         if (getOptions().starFormation.enabled) {
-            section_timing::ScopedSection sourceTimer(section_timing::Section::starFormation);
+            profile::profileBegin("starFormation");
             starFormationInitialize();
+            profile::profileEnd();
         }
 #endif
         outputTimeFile(params);
@@ -1385,7 +1399,7 @@ void driver() {
 #if COSMICTIGER_WITH_GRAVITY
     auto const checkLc = [&tau, &dt, &tauMax, &a, &iter](bool force) {
         if (force || lcTimeToFlush(tau, tauMax)) {
-            section_timing::ScopedSection analysisTimer(section_timing::Section::analysis);
+            profile::profileBegin("lightcone");
             Timer tm;
             terminal::detailPrint("Flushing light cone\n");
             tm.start();
@@ -1451,6 +1465,7 @@ void driver() {
             tm.stop();
             terminal::detailPrint("lc_init %s\n", terminal::formatDuration(tm.read()).c_str());
             tm.reset();
+            profile::profileEnd();
         }
     };
 #endif
@@ -1494,8 +1509,9 @@ void driver() {
                 totalTime.start();
                 terminal::detailPrint(
                     "WRITING CHECKPOINT FOR Z = %e\n", doCheck ? checkz : 1.0 / a - 1.0);
-                section_timing::measure(
-                    section_timing::Section::checkpointWrite, [&]() { writeCheckpoint(params); });
+                profile::profileBegin("writeCheckpoint");
+                writeCheckpoint(params);
+                profile::profileEnd();
                 lastCheckpointIteration = params.iter;
                 tmr.reset();
                 if (doCheck && hpxRank() == 0) {
@@ -1512,7 +1528,7 @@ void driver() {
                 global ? std::min(tauMax - tau, (outputStep + 1) * t0 - tau) : 0.0;
             if (outputDue) {
                 lastOutputStep = outputStep;
-                section_timing::ScopedSection outputTimer(section_timing::Section::snapshotOutput);
+                profile::profileBegin("output");
                 int const number = outputStep;
                 if (getOptions().analysis.tracers) {
                     outputTracers(number);
@@ -1530,6 +1546,7 @@ void driver() {
                     tm.stop();
                     //					PRINT("View %i took %e \n", number, tm.read());
                 }
+                profile::profileEnd();
             }
             bool rebound = false;
             if (tau == 0.0) {
@@ -1540,12 +1557,13 @@ void driver() {
                 rebound = (imbalance > kMaxLoadImbalance);
             }
             if (rebound) {
-                section_timing::ScopedSection domainTimer(section_timing::Section::domains);
+                profile::profileBegin("rebound");
                 terminal::detailPrint("Doing rebound\n");
                 domainsRebound();
                 domainsBegin(0);
                 domainsEnd();
                 terminal::detailPrint("Rebound done\n");
+                profile::profileEnd();
             }
             auto opts = getOptions();
             opts.gravity.supportRadius =
@@ -1568,11 +1586,15 @@ void driver() {
                 //				kick_workspace::clear_buffers();
                 //				tree_destroy(true);
                 if (getOptions().analysis.power) {
+                    profile::profileBegin("powerSpectrum");
                     doPowerSpectrum(outputStep, a, adot);
+                    profile::profileEnd();
                 }
 #if COSMICTIGER_WITH_GRAVITY && !defined(CHECK_MUTUAL_SORT)
                 if (getOptions().analysis.groups) {
+                    profile::profileBegin("groups");
                     doGroups(outputStep, a, years);
+                    profile::profileEnd();
                 }
 #endif
             }
@@ -1671,8 +1693,9 @@ void driver() {
             Timer dtm;
             dtm.start();
             if (!getOptions().run.hierarchicalGravity || !getOptions().gravity.enabled) {
-                section_timing::measure(section_timing::Section::drift,
-                    [&]() { drift(driftScale, dt, tau, tau + dt, tauMax); });
+                profile::profileBegin("drift");
+                drift(driftScale, dt, tau, tau + dt, tauMax);
+                profile::profileEnd();
             }
             dtm.stop();
             driftTime += dtm.read();
@@ -1737,6 +1760,7 @@ void driver() {
                 terminal::formatDuration(stepTm.read()).c_str(), flops * 1e-12);
             progressRows++;
             fclose(textfp);
+            profile::profileOutput(outputPath("profile.txt"));
             totalTime.reset();
             remainingTime.stop();
             runtime += remainingTime.read();
@@ -1785,8 +1809,9 @@ void driver() {
     if (interrupted) {
         PRINT("\n  Interrupted: saving the completed simulation state before shutdown.\n");
     }
-    section_timing::measure(section_timing::Section::snapshotOutput,
-        [&]() { viewOutputViews(driverFinalOutputStep(tau, coarseInterval), a, true, years); });
+    profile::profileBegin("output");
+    viewOutputViews(driverFinalOutputStep(tau, coarseInterval), a, true, years);
+    profile::profileEnd();
 #if COSMICTIGER_WITH_GRAVITY
     if (getOptions().run.scenario == "glass") {
         scenarios::saveGlass();
@@ -1799,8 +1824,9 @@ void driver() {
         totalTime.stop();
         runtime += totalTime.read();
         terminal::detailPrint("Writing final checkpoint for iteration %i\n", params.iter);
-        section_timing::measure(
-            section_timing::Section::checkpointWrite, [&]() { writeCheckpoint(params); });
+        profile::profileBegin("writeCheckpoint");
+        writeCheckpoint(params);
+        profile::profileEnd();
         if (doCheck && hpxRank() == 0) {
             detail::checkpointRedshiftAlias(params.iter, checkz);
         }

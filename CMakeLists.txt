@@ -25,7 +25,7 @@ if(NOT COSMICTIGER_POSITION_TYPE MATCHES "^(fixed32|fixed64)$")
     message(FATAL_ERROR "COSMICTIGER_POSITION_TYPE must be fixed32 or fixed64")
 endif()
 string(REPLACE "fixed" "" COSMICTIGER_POSITION_BITS "${COSMICTIGER_POSITION_TYPE}")
-option(COSMICTIGER_ENABLE_PROFILING "Enable statistical CPU sampling and PROFILE() metadata" ON)
+option(COSMICTIGER_PROFILE "Compile the manual phase profiler (profileBegin/profileEnd)" ON)
 set(cosmictiger_require_apex_default OFF)
 if(CMAKE_BUILD_TYPE MATCHES "^(RelWithDebInfo|Debug|Profile)$")
     set(cosmictiger_require_apex_default ON)
@@ -70,8 +70,8 @@ target_include_directories(cosmictiger_profiler PUBLIC ${PROJECT_SOURCE_DIR})
 target_compile_features(cosmictiger_profiler PUBLIC cxx_std_20)
 target_link_libraries(cosmictiger_profiler PUBLIC HPX::hpx ${CMAKE_DL_LIBS}
     "$<$<PLATFORM_ID:Linux>:rt>")
-if(NOT COSMICTIGER_ENABLE_PROFILING)
-    target_compile_definitions(cosmictiger_profiler PUBLIC PROFILE_DISABLE=1)
+if(COSMICTIGER_PROFILE)
+    target_compile_definitions(cosmictiger_profiler PUBLIC COSMICTIGER_PROFILE=1)
 endif()
 if(COSMICTIGER_WITH_CUDA AND NOT HPX_WITH_CUDA)
     message(FATAL_ERROR
@@ -591,25 +591,13 @@ if(BUILD_TESTING)
         endif()
     endif()
 
-    add_executable(profiler_disabled_test tests/profiler_disabled.cpp)
-    target_include_directories(profiler_disabled_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_compile_definitions(profiler_disabled_test PRIVATE PROFILE_DISABLE=1)
-    add_test(NAME profiler_disabled COMMAND profiler_disabled_test)
-    set_tests_properties(profiler_disabled PROPERTIES TIMEOUT 10 LABELS "profiler;cpu")
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_test(NAME mpi_interrupt_launcher COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_mpi_launcher.py ${PROJECT_SOURCE_DIR}/scripts/run_mpi.py)
         set_tests_properties(mpi_interrupt_launcher PROPERTIES TIMEOUT 60 PROCESSORS 2
             LABELS "profiler;interrupt;cpu")
     endif()
-    if(COSMICTIGER_ENABLE_PROFILING AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
-       CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|aarch64|arm64)$")
-        add_hpx_executable(profiler_test SOURCES tests/profiler.cpp)
-        target_link_libraries(profiler_test PRIVATE cosmictiger_profiler)
-        add_test(NAME profiler COMMAND ${Python3_EXECUTABLE}
-            ${PROJECT_SOURCE_DIR}/tests/run_profiler.py $<TARGET_FILE:profiler_test>)
-        set_tests_properties(profiler PROPERTIES TIMEOUT 90 PROCESSORS 2
-            LABELS "profiler;cpu" ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         if(HPX_WITH_APEX)
             add_hpx_executable(apex_profiler_test SOURCES tests/apex_profiler.cpp)
             # Match the application's exported symbols for APEX address lookup.
@@ -617,10 +605,7 @@ if(BUILD_TESTING)
             target_link_libraries(apex_profiler_test PRIVATE cosmictiger_profiler)
             add_test(NAME apex_profiler COMMAND ${Python3_EXECUTABLE}
                 ${PROJECT_SOURCE_DIR}/tests/run_apex_profiler.py $<TARGET_FILE:apex_profiler_test>)
-            add_test(NAME apex_profiler_without_sampler COMMAND ${Python3_EXECUTABLE}
-                ${PROJECT_SOURCE_DIR}/tests/run_apex_profiler.py $<TARGET_FILE:apex_profiler_test>
-                --sampler-disabled)
-            set_tests_properties(apex_profiler apex_profiler_without_sampler
+            set_tests_properties(apex_profiler
                 PROPERTIES TIMEOUT 90 PROCESSORS 2
                 LABELS "profiler;apex;cpu;hpx"
                 ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
@@ -629,52 +614,36 @@ if(BUILD_TESTING)
                 --reports-disabled)
             set_tests_properties(apex_reports_disabled PROPERTIES TIMEOUT 90 PROCESSORS 2
                 LABELS "profiler;apex;cpu;hpx")
-            add_hpx_executable(apex_interrupt_disabled_test SOURCES tests/apex_profiler.cpp
-                src/core/profiler.cpp src/core/interrupt_profile.cpp src/core/profiling_runtime.cpp)
-            target_include_directories(apex_interrupt_disabled_test PRIVATE ${PROJECT_SOURCE_DIR})
-            target_compile_definitions(apex_interrupt_disabled_test PRIVATE PROFILE_DISABLE=1)
-            target_link_libraries(apex_interrupt_disabled_test PRIVATE ${CMAKE_DL_LIBS} rt)
-            set_target_properties(apex_interrupt_disabled_test PROPERTIES ENABLE_EXPORTS ON)
-            foreach(interrupt_mode IN ITEMS enabled disabled)
-                set(interrupt_fixture apex_profiler_test)
-                set(interrupt_args)
-                if(interrupt_mode STREQUAL "disabled")
-                    set(interrupt_fixture apex_interrupt_disabled_test)
-                    list(APPEND interrupt_args --require-compiled-disabled)
-                endif()
-                add_test(NAME apex_interrupt_${interrupt_mode} COMMAND ${Python3_EXECUTABLE}
-                    ${PROJECT_SOURCE_DIR}/tests/run_interrupt_profiler.py
-                    $<TARGET_FILE:${interrupt_fixture}> ${interrupt_args})
-                set_tests_properties(apex_interrupt_${interrupt_mode} PROPERTIES
-                    TIMEOUT 120 PROCESSORS 2 LABELS "profiler;apex;cpu;hpx;interrupt")
-            endforeach()
+            add_test(NAME apex_interrupt COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_interrupt_profiler.py
+                $<TARGET_FILE:apex_profiler_test>)
+            set_tests_properties(apex_interrupt PROPERTIES
+                TIMEOUT 120 PROCESSORS 2 LABELS "profiler;apex;cpu;hpx;interrupt")
             find_program(COSMICTIGER_TAU_EXEC tau_exec
                 HINTS "$ENV{TAU_ROOT}/bin" "$ENV{TAU_ROOT}/x86_64/bin"
                     "$ENV{TAU_ROOT}/arm64_linux/bin" "$ENV{HOME}/local/tau/bin"
                     "$ENV{HOME}/local/tau/x86_64/bin" "$ENV{HOME}/local/tau/arm64_linux/bin")
             if(COSMICTIGER_TAU_EXEC)
-                foreach(sampler_mode IN ITEMS enabled disabled config interrupt interrupt_disabled interrupt_usr1)
+                set(cosmictiger_profile_test_args)
+                if(NOT COSMICTIGER_PROFILE)
+                    set(cosmictiger_profile_test_args --profile-disabled)
+                endif()
+                foreach(tau_mode IN ITEMS default config interrupt interrupt_usr1)
                     set(tau_test_args)
-                    set(tau_fixture apex_profiler_test)
-                    if(sampler_mode STREQUAL "disabled")
-                        list(APPEND tau_test_args --sampler-disabled)
-                    elseif(sampler_mode STREQUAL "config")
+                    if(tau_mode STREQUAL "config")
                         list(APPEND tau_test_args --apex-config)
-                    elseif(sampler_mode MATCHES "^interrupt")
+                    elseif(tau_mode MATCHES "^interrupt")
                         list(APPEND tau_test_args --interrupt-exit)
-                        if(sampler_mode STREQUAL "interrupt_disabled")
-                            set(tau_fixture apex_interrupt_disabled_test)
-                            list(APPEND tau_test_args --require-compiled-disabled)
-                        elseif(sampler_mode STREQUAL "interrupt_usr1")
+                        if(tau_mode STREQUAL "interrupt_usr1")
                             list(APPEND tau_test_args --interrupt-signal=SIGUSR1)
                         endif()
                     endif()
-                    add_test(NAME tau_profiler_${sampler_mode} COMMAND ${Python3_EXECUTABLE}
+                    add_test(NAME tau_profiler_${tau_mode} COMMAND ${Python3_EXECUTABLE}
                         ${PROJECT_SOURCE_DIR}/tests/run_tau_profiler.py
-                        $<TARGET_FILE:${tau_fixture}>
+                        $<TARGET_FILE:apex_profiler_test>
                         ${PROJECT_SOURCE_DIR}/scripts/profile_tau.sh ${COSMICTIGER_TAU_EXEC}
                         ${tau_test_args})
-                    set_tests_properties(tau_profiler_${sampler_mode} PROPERTIES
+                    set_tests_properties(tau_profiler_${tau_mode} PROPERTIES
                         TIMEOUT 120 PROCESSORS 2 LABELS "profiler;apex;tau;cpu;hpx")
                 endforeach()
                 if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
@@ -682,7 +651,7 @@ if(BUILD_TESTING)
                         ${PROJECT_SOURCE_DIR}/tests/run_interrupt_simulation.py
                         $<TARGET_FILE:cosmictiger> --scenario=hydroWave
                         --launcher=${PROJECT_SOURCE_DIR}/scripts/profile_tau.sh
-                        --tau-exec=${COSMICTIGER_TAU_EXEC})
+                        --tau-exec=${COSMICTIGER_TAU_EXEC} ${cosmictiger_profile_test_args})
                     set_tests_properties(tau_interrupt_simulation_hydro PROPERTIES TIMEOUT 240
                         PROCESSORS 2 LABELS "profiler;apex;tau;cpu;hpx;interrupt")
                 endif()
@@ -706,7 +675,7 @@ if(BUILD_TESTING)
                         $<TARGET_FILE:cosmictiger> --scenario=plummer
                         --mpi-exec=${MPIEXEC_EXECUTABLE} ${tau_mpi_args}
                         --launcher=${PROJECT_SOURCE_DIR}/scripts/profile_tau.sh
-                        --tau-exec=${COSMICTIGER_TAU_EXEC})
+                        --tau-exec=${COSMICTIGER_TAU_EXEC} ${cosmictiger_profile_test_args})
                     set_tests_properties(tau_interrupt_simulation_mpi_worker PROPERTIES
                         TIMEOUT 240 PROCESSORS 4 LABELS "profiler;apex;tau;cpu;hpx;mpi;interrupt")
                 endif()
@@ -807,11 +776,6 @@ if(BUILD_TESTING)
     target_include_directories(terminal_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_options(terminal_test PRIVATE -ffast-math)
     cosmictiger_add_gtest(NAME terminal TARGET terminal_test PROPERTIES TIMEOUT 10)
-    add_executable(section_timing_test tests/section_timing.cpp)
-    target_include_directories(section_timing_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_link_libraries(section_timing_test PRIVATE Threads::Threads)
-    cosmictiger_add_gtest(NAME section_timing TARGET section_timing_test
-        PROPERTIES TIMEOUT 30 PROCESSORS 1)
     # The collisionless checks also exercise terminal hierarchy synchronization.
     # The gas evolution fixture uses the traditional integrator with SPH.
     if(COSMICTIGER_ENABLE_FMM)

@@ -32,7 +32,6 @@
 #include <cosmictiger/core/options_metadata.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/profiling_runtime.hpp>
-#include <cosmictiger/core/section_timing.hpp>
 #include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/core/unordered_set_ts.hpp>
 #include <cosmictiger/cosmology/fftw_threads.hpp>
@@ -60,6 +59,23 @@
 #include <tests/test.hpp>
 #endif
 
+namespace detail {
+
+// The coordinator owns the phase stack; print and save its exclusive phase times.
+void writeProfile() {
+    if (hpxRank() != 0 || !getOptions().run.test.empty()) {
+        return;
+    }
+    std::string const report = profile::profileReport();
+    if (report.empty()) {
+        return;
+    }
+    PRINT("\n%s", report.c_str());
+    profile::profileOutput(outputPath("profile.txt"));
+}
+
+}    // namespace detail
+
 int hpx_main(int argc, char* argv[]) {
     std::atomic<int> i;
     if (!i.is_lock_free()) {
@@ -75,9 +91,6 @@ int hpx_main(int argc, char* argv[]) {
         if (processOptions(argc, argv)) {
             profile::checkForInterrupt();
             validateCheckpointOutput();
-            if (hpxRank() == 0 && getOptions().run.test.empty()) {
-                section_timing::start(outputPath("section_timings.txt"));
-            }
             startMemuseDaemon();
             daemonStarted = true;
 #if COSMICTIGER_WITH_GRAVITY
@@ -165,6 +178,7 @@ int hpx_main(int argc, char* argv[]) {
             } else {
 #endif
                 driver();
+                detail::writeProfile();
 #ifdef COSMICTIGER_BUILD_TESTING
             }
 #endif
@@ -175,6 +189,7 @@ int hpx_main(int argc, char* argv[]) {
         particlesDestroy();
     } catch (profile::Interrupted const&) {
         PRINT("\n  Interrupted: finishing cleanup and writing profiling reports.\n");
+        detail::writeProfile();
         try {
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
             pmmmDestroy();
@@ -351,7 +366,6 @@ void validatePositionType(int argc, char* argv[]) {
 }    // namespace detail
 
 int main(int argc, char* argv[]) {
-    section_timing::registerExitReport();
     StackTraceHandler stackTraceHandler;
     profile::InterruptReportHandler interruptReportHandler;
     bool ownsMpi = false;
@@ -366,21 +380,6 @@ int main(int argc, char* argv[]) {
         // Startup callbacks also run on worker localities that do not enter hpx_main.
         hpx::register_startup_function(
             [&stackTraceHandler]() { stackTraceHandler.install(hpx::get_locality_id()); });
-#ifndef PROFILE_DISABLE
-        // Install worker hooks before HPX creates its OS threads. The sampler
-        // writes the final cumulative report from its process-exit callback.
-        int const profilerStarted = profile::profileStart() ? 1 : 0;
-        int allProfilersStarted = 0;
-        if (MPI_Allreduce(&profilerStarted, &allProfilersStarted, 1, MPI_INT, MPI_MIN,
-                MPI_COMM_WORLD) != MPI_SUCCESS) {
-            profile::profileStop();
-            throw std::runtime_error("MPI_Allreduce failed while checking profiler startup");
-        }
-        if (!allProfilersStarted) {
-            profile::profileStop();
-            throw std::runtime_error("Unable to start the CPU sampling profiler on every MPI rank");
-        }
-#endif
         hpx::register_startup_function(
             [&interruptReportHandler]() { interruptReportHandler.install(); });
         std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};

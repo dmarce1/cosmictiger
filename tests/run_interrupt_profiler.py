@@ -1,4 +1,4 @@
-"""Check cooperative HPX shutdown and completed profiles after one interrupt."""
+"""Check cooperative HPX shutdown and completed APEX reports after one interrupt."""
 
 import argparse
 from contextlib import nullcontext
@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 import time
 
-from run_apex_profiler import check_apex, check_samples, require
+from run_apex_profiler import check_apex, require
 
 
 def run_interrupt_fixture(command, directory, environment, interrupt_signal=signal.SIGINT):
@@ -62,41 +62,22 @@ def run_regression(args, directory):
                         "OPENBLAS_NUM_THREADS": "1"})
     command = [str(args.executable.resolve()), "--interrupt-exit", "--hpx:threads=2",
                "--hpx:bind=none"]
-    if args.sampler_disabled:
-        command.append("--sampler-disabled")
     result = run_interrupt_fixture(command, directory, environment,
                                    getattr(signal, args.interrupt_signal))
-    if args.require_compiled_disabled:
-        require(result.stdout.count("APEX_CPU_SAMPLER_COMPILED=0") == 1,
-                "interrupt fixture was not compiled with PROFILE_DISABLE")
     markers = re.findall(r"^APEX_FULL_THREAD_DESCRIPTION=([01])$", result.stdout, re.MULTILINE)
     require(len(markers) == 1, "fixture did not report its FULL description setting")
-    require("CPU Timers" not in result.stdout and
-            "CosmicTiger statistical CPU profile (" not in result.stdout,
-            "interrupt printed detailed profiler reports to the terminal")
+    require("CPU Timers" not in result.stdout,
+            "interrupt printed detailed APEX reports to the terminal")
     check_apex(directory, markers[0] == "1")
-    if args.sampler_disabled:
-        require(not (directory / "cpu_samples.txt").exists() and
-                not list(directory.glob("cosmictiger.profile.*.txt")),
-                "disabled CPU sampling unexpectedly produced reports after an interrupt")
-    else:
-        check_samples(directory)
-        require(len(list(directory.glob("cosmictiger.profile.*.txt"))) == 1,
-                "interrupt shutdown did not produce exactly one automatic CPU report")
-    print("Interrupt profiler regression passed: cooperative HPX shutdown, APEX reports, " +
-          ("disabled CPU sampler" if args.sampler_disabled else "completed CPU samples"))
+    print("Interrupt profiler regression passed: cooperative HPX shutdown and APEX reports")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
-    parser.add_argument("--sampler-disabled", action="store_true")
-    parser.add_argument("--require-compiled-disabled", action="store_true")
     parser.add_argument("--interrupt-signal", choices=("SIGINT", "SIGUSR1"), default="SIGINT")
     parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args()
-    if args.require_compiled_disabled:
-        args.sampler_disabled = True
     if args.output_dir is not None:
         args.output_dir = args.output_dir.resolve()
         args.output_dir.mkdir(parents=True, exist_ok=True)

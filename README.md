@@ -396,62 +396,42 @@ pattern used here. See the [output-file inventory](docs/output_files.txt) for
 runtime diagnostics, analysis products, and tool outputs other than Silo and
 checkpoints, including their names and the conditions that create them.
 
-## CPU profiling
+## Phase profiling
 
-Normal simulation exit and a clean first Ctrl-C print a compact **Major section
-timings** table to the terminal and save the same table as `section_timings.txt`
-in the simulation output directory. It lists call count, total wall seconds, and
-mean wall seconds for the major sections that ran (initial conditions, domains,
-tree build, gravity, hydrodynamics, drift, checkpoints, snapshots, and analysis).
-These are inclusive coordinator timings; nested sections overlap and must not be
-added together as a breakdown of total runtime. Detailed profiler reports stay
-in files by default.
+`COSMICTIGER_PROFILE=ON` is the CMake default for every build type and compiles
+the manual phase profiler; configure with `-DCOSMICTIGER_PROFILE=OFF` to turn
+every call into an empty inline. The driver, scenario driver, and initialization
+bracket their high-level phases with `profile::profileBegin("name")` and
+`profile::profileEnd()` from `cosmictiger/core/profiler.hpp`: initialization,
+transfer functions, domains, rebound, rung sort, tree creation, kicks, mesh
+solves, hydro, chemistry, star formation, drift, checkpoints, output, lightcone,
+groups, power spectra, and gravity-error passes. Phases nest on the coordinator's
+logical control flow; entering a child pauses its parent, so each name collects
+exclusive wall time and the rows sum to the instrumented total. Individual
+kernels, per-particle loops, and work on concurrent HPX tasks are deliberately
+not instrumented: the single phase stack belongs to the coordinator.
 
-`COSMICTIGER_ENABLE_PROFILING=ON` is the CMake default. The internal profiler is
-the statistical CPU sampler adapted from
-[`dmarce1/experimental` at `7ba8f1829fdede7348a1418b7cb36c0e7a955302`](https://github.com/dmarce1/experimental/blob/7ba8f1829fdede7348a1418b7cb36c0e7a955302/src/profiler.cpp).
-It requires Linux on x86-64 or AArch64. Configure with
-`-DCOSMICTIGER_ENABLE_PROFILING=OFF` to disable it.
+Every completed step overwrites `profile.txt` in the simulation output
+directory with the cumulative table (phase, calls, total, mean, share). Normal
+driver exit and a clean first Ctrl-C print the same table to the terminal.
+Only rank 0 writes it; worker localities keep no phase profile. The report
+measures the coordinator's wall time, including remote waits; it does not
+measure per-worker CPU time, GPU execution, or anonymous HPX tasks. Use APEX
+and TAU below for those.
 
-Sampling starts before HPX initialization. Each attached OS worker has a timer
-that samples its interrupted instruction address every 10 ms of that worker's
-CPU time. HPX startup and shutdown hooks attach and detach workers automatically,
-so HPX tasks can suspend, wait for futures, and resume on other workers without
-manual profiling markers. There is no separate sampling thread. Optional
-`PROFILE()` calls register metadata once per function specialization; they do
-not set the current function or delimit a timed scope. They remain valid in
-C++20 `constexpr` functions and become no-ops with `PROFILE_DISABLE` or in CUDA
-device compilation.
-
-Reports resolve sampled instruction addresses to ELF function symbols, including
-functions without `PROFILE()` calls. Rows contain samples, estimated exclusive
-CPU seconds, and their percentage of delivered samples. Inlined work belongs to
-the enclosing compiled function. Parallel CPU totals can exceed elapsed wall
-time. This does not measure call counts, inclusive time, blocked waiting time,
-or GPU execution; simulation progress tables still report elapsed wall time.
-Keep executable and shared-library symbol tables for useful function names.
-
-Normal process exit writes the detailed report to
-`cosmictiger.profile.<pid>.txt` in the working directory. The driver does not
-print reports after individual steps. The first Ctrl-C requests a clean stop at
-the next safe phase or completed substep. Active work finishes, the simulation's
-ordinary final checkpoint is written when a completed state is available, and
-HPX/MPI shutdown finalizes the CPU, APEX, and TAU reports. The handler remains
-available when CPU sampling is disabled. Long initialization batches or force
-calculations must finish before shutdown; the signal handler never cancels a
-worker or calls MPI. A second Ctrl-C forces immediate termination and can leave
-reports or checkpoints incomplete. A clean interrupted run exits successfully.
-Each process has its own file; reports are not reduced across MPI localities.
-The report includes dropped samples, missed timer ticks, and setup failures so
-sampling losses remain visible. The bounded signal-handler buffers are allocated
-before sampling; symbol resolution and demangling happen while reporting.
+The first Ctrl-C requests a clean stop at the next safe phase or completed
+substep. Active work finishes, the simulation's ordinary final checkpoint is
+written when a completed state is available, and HPX/MPI shutdown finalizes the
+APEX and TAU reports. Long initialization batches or force calculations must
+finish before shutdown; the signal handler never cancels a worker or calls MPI.
+A second Ctrl-C forces immediate termination and can leave reports or
+checkpoints incomplete. A clean interrupted run exits successfully.
 
 ### HPX task profiles with APEX
 
-The CPU sampler sees ordinary functions executing inside HPX tasks, including
-`async`, `post`, actions, and continuations. A context switch does not hide the
-currently executing instruction. Its flat report does not retain the active
-HPX task's identity, parent, or suspend/resume history.
+The phase profile above only knows the coordinator's named phases; it does not
+retain the identity, parent, or suspend/resume history of the HPX tasks that
+run inside them.
 
 Use an HPX installation built with `HPX_WITH_APEX=ON` for task instrumentation.
 HPX then creates APEX tasks from the descriptions it already knows and starts,
@@ -492,7 +472,7 @@ cmake --build build/apex --target cosmictiger --parallel 4
 ```
 
 With an APEX-enabled HPX, CosmicTiger enables `apex_profiles.csv` and
-`apex_tasktree.csv` by default, even when the separate CPU sampler is disabled.
+`apex_tasktree.csv` by default, independently of `COSMICTIGER_PROFILE`.
 The detailed screen report is off by default, including through
 `scripts/profile_tau.sh`. Set `APEX_SCREEN_OUTPUT=1` to request it explicitly, or
 `APEX_CSV_OUTPUT=0` and `APEX_TASKTREE_OUTPUT=0` to disable individual file reports.
@@ -500,9 +480,9 @@ Existing environment settings are preserved. `APEX_OUTPUT_FILE_PATH` selects the
 otherwise APEX writes to the working directory. APEX 1.11 gives an explicitly
 requested `APEX_TASKGRAPH_OUTPUT=1` precedence over task-tree output.
 
-APEX's task summary, CSV, and task tree complement the existing
-`cosmictiger.profile.<pid>.txt`. Task timers measure execution intervals between
-scheduler events; they are not the sampler's exclusive CPU-time estimates.
+APEX's task summary, CSV, and task tree complement `profile.txt`. Task timers
+measure execution intervals between scheduler events; they are not the phase
+profile's exclusive coordinator wall times.
 `APEX_TRACE_EVENT=1` additionally requests a task timeline viewable in Perfetto.
 APEX task instrumentation alone does not establish CUDA kernel profiling;
 device activity requires a compatible GPU instrumentation backend.
@@ -540,8 +520,8 @@ below.
 Open the TAU directory in ParaProf, or run `~/local/tau/x86_64/bin/pprof -a`
 from that directory. Contextual entries connect the task timer to a
 `[CONTEXT]` node (`[INTERMEDIATE]` in older releases) and then a `[SAMPLE]`
-function. These are the combined task/function profiles; the old
-`cosmictiger.profile.<pid>.txt` remains a separate flat CPU report.
+function. These are the combined task/function profiles; `profile.txt` remains
+the separate coordinator phase report.
 
 The launcher enables `APEX_TAU=1`, TAU profiling and sampling, and disables
 TAU tracing. Defaults are function resolution, a 10 ms sampling period,
@@ -579,8 +559,8 @@ and [TAU sampling options](https://www.cs.uoregon.edu/research/tau/docs/html-doc
 The listener forwards active task names, not the complete asynchronous parent
 graph; keep APEX's task tree for that information. TAU timer call counts include
 resumptions, whereas APEX reports completed tasks and yields separately. Linux
-TAU timer sampling uses a wall-clock timer; CosmicTiger's independent sampler
-uses a thread CPU clock. Their totals are not directly interchangeable.
+TAU timer sampling uses a wall-clock timer on every worker; the phase profile
+measures the coordinator alone. Their totals are not directly interchangeable.
 
 Ctrl-C uses the same clean HPX/MPI shutdown as a completed run. For MPI, place
 the supplied wrapper outside the launcher so terminal Ctrl-C requests shutdown
@@ -599,17 +579,16 @@ and a working directory visible at the same path on every host. Direct SIGINT or
 rank requests a clean stop across the localities. See
 [Open MPI signal handling](https://docs.open-mpi.org/en/v5.0.10/man-openmpi/man1/mpirun.1.html#signal-handling).
 
-The `tau_profiler_enabled` and
-`tau_profiler_disabled` CTests are registered when `tau_exec` is found (or set
-`COSMICTIGER_TAU_EXEC` at CMake configuration). They require sampled ordinary
-functions to be connected to their distinct task contexts, reject crossed
-parent/child attribution, observe an explicit worker migration, and check
-coexistence with the independent CPU sampler. The APEX tests also cover default reporting and
-explicit report opt-outs. `tau_profiler_config` checks configuration-file
-precedence, and `tau_profiler_mpi_startup` checks a two-rank application startup
-and shutdown with separate rank profiles and a bounded task-tree merge.
-The interrupt regressions check first-interrupt finalization, second-interrupt
-emergency termination, and APEX/TAU output with CPU sampling compiled out.
+The `tau_profiler_default` CTest is registered when `tau_exec` is found (or set
+`COSMICTIGER_TAU_EXEC` at CMake configuration). It requires sampled ordinary
+functions to be connected to their distinct task contexts, rejects crossed
+parent/child attribution, and observes an explicit worker migration. The APEX
+tests also cover default reporting and explicit report opt-outs.
+`tau_profiler_config` checks configuration-file precedence, and
+`tau_profiler_mpi_startup` checks a two-rank application startup and shutdown
+with separate rank profiles and a bounded task-tree merge. The interrupt
+regressions check first-interrupt finalization, second-interrupt emergency
+termination, and the completed APEX, TAU, and `profile.txt` reports.
 
 ## Source layout
 

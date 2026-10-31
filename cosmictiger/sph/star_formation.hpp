@@ -6,10 +6,6 @@
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/sph/star_formation_kernel.hpp>
 
-namespace section_timing {
-class ScopedSection;
-}
-
 struct StarFormationUpdate {
     double heating{};
     uint64_t converted{};
@@ -27,8 +23,7 @@ star_formation_backend::Output starFormationDiagnostics(ParticleInteger gas, dou
 void starFormationRefreshEos(double scaleFactor);
 double starFormationPressureIntegral(double scaleFactor);
 StarFormationUpdate starFormationClose(int minimumRung, double scaleFactor, double scaleDerivative,
-    double baseTimestep, double explicitTimestep = -1.0,
-    section_timing::ScopedSection* sourceTimer = nullptr);
+    double baseTimestep, double explicitTimestep = -1.0);
 // FMM traditional kicks defer gas gravity to SPH. Newly converted stars need
 // exactly the opening gravity half kick; global/mesh finish routines own theirs.
 int starFormationOpenNewStars(double baseTimestep, double scaleFactor, double maximumTimestep,

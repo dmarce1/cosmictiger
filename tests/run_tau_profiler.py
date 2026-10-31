@@ -10,7 +10,7 @@ import signal
 import subprocess
 import tempfile
 
-from run_apex_profiler import check_apex, check_samples, require
+from run_apex_profiler import check_apex, require
 from run_interrupt_profiler import run_interrupt_fixture
 
 
@@ -105,8 +105,6 @@ def run_regression(args, directory):
                         "HWLOC_COMPONENTS": "-gl", "OMP_NUM_THREADS": "1",
                         "OPENBLAS_NUM_THREADS": "1"})
     command = [str(args.launcher.resolve()), str(args.executable.resolve())]
-    if args.sampler_disabled:
-        command.append("--sampler-disabled")
     if args.interrupt_exit:
         command.append("--interrupt-exit")
     command.extend(("--hpx:threads=2", "--hpx:bind=none"))
@@ -120,9 +118,6 @@ def run_regression(args, directory):
     (directory / "fixture_output.txt").write_text(result.stdout)
     try:
         require(result.returncode == 0, f"TAU fixture failed with status {result.returncode}")
-        if args.require_compiled_disabled:
-            require(result.stdout.count("APEX_CPU_SAMPLER_COMPILED=0") == 1,
-                    "TAU fixture was not compiled with PROFILE_DISABLE")
         full_markers = re.findall(r"^APEX_FULL_THREAD_DESCRIPTION=([01])$",
                                   result.stdout, re.MULTILINE)
         require(len(full_markers) == 1, "fixture did not report its FULL description setting")
@@ -131,17 +126,10 @@ def run_regression(args, directory):
         require(len(migration_markers) == 1 and
                 migration_markers[0][0] != migration_markers[0][1],
                 "fixture did not confirm HPX task migration between two distinct workers")
-        require("CPU Timers" not in result.stdout and
-                "CosmicTiger statistical CPU profile (" not in result.stdout,
-                "TAU launcher printed detailed profiler reports to the terminal")
+        require("CPU Timers" not in result.stdout,
+                "TAU launcher printed detailed APEX reports to the terminal")
         check_apex(directory / "apex", full_markers[0] == "1")
         profiles, contexts = check_tau(directory / "tau")
-        if args.sampler_disabled:
-            require(not (directory / "cpu_samples.txt").exists() and
-                    not list(directory.glob("cosmictiger.profile.*.txt")),
-                    "disabled CPU sampling unexpectedly produced reports")
-        else:
-            check_samples(directory)
     except Exception as exception:
         csv_output = directory / "apex" / "apex_profiles.csv"
         details = csv_output.read_text(errors="replace") if csv_output.is_file() else "<missing CSV>"
@@ -157,8 +145,7 @@ def run_regression(args, directory):
                            f"\nFixture output:\n{result.stdout}") from exception
     print(f"TAU profiler regression passed: {len(profiles)} thread profiles; "
           "distinct ordinary functions attributed to their named parent and child contexts; "
-          "migrated context samples on both workers; APEX completion/yield counts and task tree; " +
-          ("disabled CPU sampler" if args.sampler_disabled else "coexisting CPU sampler"))
+          "migrated context samples on both workers; APEX completion/yield counts and task tree")
     for task, rows in contexts.items():
         print(f"  {task}: {len(rows)} positive contextual sample rows")
 
@@ -168,8 +155,6 @@ def main():
     parser.add_argument("executable", type=Path)
     parser.add_argument("launcher", type=Path)
     parser.add_argument("tau_exec", type=Path)
-    parser.add_argument("--sampler-disabled", action="store_true")
-    parser.add_argument("--require-compiled-disabled", action="store_true")
     parser.add_argument("--interrupt-exit", action="store_true")
     parser.add_argument("--interrupt-signal", choices=("SIGINT", "SIGUSR1"), default="SIGINT")
     parser.add_argument("--apex-config", action="store_true",
@@ -177,8 +162,6 @@ def main():
     parser.add_argument("--output-dir", type=Path,
                         help="retain evidence in an empty directory instead of a temporary one")
     args = parser.parse_args()
-    if args.require_compiled_disabled:
-        args.sampler_disabled = True
     if args.output_dir is not None:
         args.output_dir = args.output_dir.resolve()
         args.output_dir.mkdir(parents=True, exist_ok=True)
