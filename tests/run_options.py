@@ -71,9 +71,9 @@ def main():
     if not re.search(r"^\s*Time integrators:.*\b" + args.time_integrator + r"\b",
                      help_text, re.MULTILINE):
         raise RuntimeError("help did not identify the compiled time integrator")
-    if not re.search(r"^\s*Particle chemistry: " + ("enabled" if chemistryAvailable else "disabled") + r"\s*$",
+    if not re.search(r"^\s*Equilibrium cooling: " + ("enabled" if chemistryAvailable else "disabled") + r"\s*$",
                      help_text, re.MULTILINE):
-        raise RuntimeError("help did not identify the compiled particle chemistry capability")
+        raise RuntimeError("help did not identify the compiled equilibrium cooling capability")
     if not re.search(r"^\s*Star formation: " + ("enabled" if starFormationAvailable else "disabled") + r"\s*$",
                      help_text, re.MULTILINE):
         raise RuntimeError("help did not identify the compiled star formation capability")
@@ -98,8 +98,9 @@ def main():
                 "output.units", "output.frame",
                 "units.massSolar", "units.boxLength",
                 "output.xMin", "output.xMax", "output.yMin", "output.yMax",
-                "output.zMin", "output.zMax", "chemistry.initialization",
-                "starFormation.enabled", "starFormation.seed", "starFormation.winds",
+                "output.zMin", "output.zMax", "chemistry.initializationTemperature", "chemistry.minimumSpecificEnergy",
+                "starFormation.enabled", "starFormation.seed", "starFormation.criticalPhysicalDensity",
+                "starFormation.criticalOverDensity",
                 "starFormation.evaporationFactor", "starFormation.starFormationTimeGyr"}
     required.update({"run.timeIntegrator", "gravity.method.far", "gravity.method.near",
                      "gravity.expansionDegree", "hydro.viscosityEvolution", "hydro.viscosityAlphaMin",
@@ -113,7 +114,17 @@ def main():
                        "initial.usePowerFile", "gravity.cloud", "gravity.method",
                        "gravity.pmmmNearMethod", "gravity.pmmmOrder", "gravity.fmmOrder",
                        "run.hierarchicalGravity", "initial.createGlass", "initial.plummer",
-                       "hydro.pressureOperator"}
+                       "hydro.pressureOperator", "chemistry.network", "chemistry.initialization",
+                       "chemistry.initialTemperature", "chemistry.radiationFile", "chemistry.radiationTable",
+                       "chemistry.hydrogenIonFraction", "chemistry.heliumIonFraction",
+                       "chemistry.heliumDoubleIonFraction", "chemistry.hydrogenMinusFraction",
+                       "chemistry.molecularFraction", "chemistry.molecularIonFraction",
+                       "chemistry.fractionalChangeLimit", "chemistry.electronFractionFloor",
+                       "chemistry.maxSubsteps", "chemistry.synchronizedRung",
+                       "starFormation.metalYield", "starFormation.winds",
+                       "starFormation.windMassLoading", "starFormation.windEnergyFraction",
+                       "starFormation.windDecouplingMyr", "starFormation.windRecoupleDensityFraction",
+                       "starFormation.windDirection"}
     if removed_options & option_names:
         raise RuntimeError(f"removed options remain in help: {sorted(removed_options & option_names)}")
     for name in option_names - {"help", "configuration"}:
@@ -381,7 +392,7 @@ mapSize = 8
         assertNumericSetting(output, "gravity.expansionDegree", args.order - 1)
         if not re.search(r"^build\.chemistry\s*:\s*" + ("T" if chemistryAvailable else "F") + r"\s*$",
                          output, re.MULTILINE):
-            raise RuntimeError("build metadata did not identify the compiled particle chemistry capability")
+            raise RuntimeError("build metadata did not identify the compiled equilibrium cooling capability")
         if not re.search(r"^build\.starFormation\s*:\s*" + ("T" if starFormationAvailable else "F") + r"\s*$",
                          output, re.MULTILINE):
             raise RuntimeError("build metadata did not identify the compiled star formation capability")
@@ -699,10 +710,10 @@ mapSize = 8
         star_options = [option for option in metadata_options
                         if not option.startswith("--hydro.enabled=")] + [
                             "--hydro.enabled=true", "--starFormation.enabled=true",
-                            "--chemistry.enabled=true", "--chemistry.initialization=manual"]
+                            "--chemistry.enabled=true", "--chemistry.initializationTemperature=10000"]
         star_config = args.workdir / "star_formation.ini"
         star_config.write_text("[starFormation]\nenabled=true\nbeta=0.15\nseed=18446744073709551615\n"
-                               "[chemistry]\nenabled=true\ninitialization=manual\n")
+                               "[chemistry]\nenabled=true\ninitializationTemperature=10000\n")
         star_ini_options = [option for option in star_options
                             if not option.startswith(("--starFormation.enabled=", "--chemistry.enabled="))]
         output = run("star_formation_ini", star_ini_options + [f"--configuration={star_config.resolve()}"])
@@ -717,9 +728,8 @@ mapSize = 8
                            ("beta", "0"), ("beta", "1"), ("beta", "nan"),
                            ("evaporationFactor", "0"), ("starFormationTimeGyr", "-1"),
                            ("coldTemperature", "10000"), ("supernovaTemperature", "0"),
-                           ("metalYield", "-0.01"), ("windMassLoading", "0"),
-                           ("windEnergyFraction", "-0.1"), ("windDecouplingMyr", "-1"),
-                           ("windRecoupleDensityFraction", "0"), ("windDirection", "unknown")):
+                           ("criticalPhysicalDensity", "-1"), ("criticalPhysicalDensity", "nan"),
+                           ("criticalOverDensity", "-1"), ("criticalOverDensity", "inf")):
             rejected = run("star_formation_reject_" + key + "_" + value,
                            star_options + [f"--starFormation.{key}={value}"], success=False)
             if "starFormation" not in rejected:
@@ -729,26 +739,16 @@ mapSize = 8
                 ("no_chemistry", [option for option in star_options
                                   if not option.startswith("--chemistry.enabled=")] +
                  ["--chemistry.enabled=false"], "chemistry.enabled=true"),
-                ("wrong_gamma", star_options + ["--hydro.gamma=1.4"], "hydro.gamma"),
-                ("winds_without_model", metadata_options + ["--starFormation.winds=true"], "starFormation.enabled")):
+                ("wrong_gamma", star_options + ["--hydro.gamma=1.4"], "hydro.gamma")):
             rejected = run("star_formation_" + label, options, success=False)
             if diagnostic not in rejected:
                 raise RuntimeError("incompatible star formation selection lacked a diagnostic")
-        for network in ("atomic6", "molecular9"):
-            # Both networks share the 10 K to 1e8 K domain, so SH03's hot and
-            # effective temperatures are representable with molecules retained.
-            output = run("star_formation_with_" + network,
-                         star_options + [f"--chemistry.network={network}"])
-            for key in ("starFormation.enabled", "chemistry.enabled"):
-                if not re.search(r"^" + re.escape(key) + r"\s*:\s*T\s*$", output, re.MULTILINE):
-                    raise RuntimeError("combined chemistry and star formation was not enabled")
-            if not re.search(r"^chemistry\.network\s*:\s*" + network + r"\s*$", output, re.MULTILINE):
-                raise RuntimeError("combined star formation did not keep the selected network")
-            if "Checkpoint state and mode validation passed" not in output:
-                raise RuntimeError("combined star formation checkpoint state did not round-trip")
-
-    chemistry_fields = ("initialTemperature", "hydrogenIonFraction",
-                        "heliumIonFraction", "heliumDoubleIonFraction", "molecularFraction")
+        output = run("star_formation_thresholds", star_options + [
+            "--starFormation.criticalPhysicalDensity=0.1", "--starFormation.criticalOverDensity=60"])
+        assertNumericSetting(output, "starFormation.criticalPhysicalDensity", 0.1)
+        assertNumericSetting(output, "starFormation.criticalOverDensity", 60)
+        if "Checkpoint state and mode validation passed" not in output:
+            raise RuntimeError("GADGET-4 star formation checkpoint state did not round-trip")
 
     if args.without_chemistry and not args.without_sph:
         chemistryConfig = args.workdir / "disabled_chemistry.ini"
@@ -774,90 +774,38 @@ mapSize = 8
                 raise RuntimeError("z-plane acceleration checkpoint state did not round-trip")
 
     if chemistryAvailable and args.time_integrator != "hierarchical":
-        chemistry_options = [option for option in metadata_options
-                             if not option.startswith("--hydro.enabled=")] + [
-                                 "--hydro.enabled=true", "--chemistry.enabled=true",
-                                 "--cosmology.startRedshift=49"]
-        # Chemistry supplies its EOS while retaining the default pressure operator.
-        for network in ("atomic6", "molecular9"):
-            output = run("variational_chemistry_" + network,
-                         chemistry_options + [f"--chemistry.network={network}"])
-            for key, value in (("chemistry.enabled", "T"), ("chemistry.network", network)):
-                if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + value + r"\s*$",
-                                 output, re.MULTILINE):
-                    raise RuntimeError(f"variational chemistry did not retain {key}={value}")
-            if "Checkpoint state and mode validation passed" not in output:
-                raise RuntimeError("variational chemistry checkpoint state did not round-trip")
-
-        def chemistrySettings(output):
-            result = {}
-            for field in chemistry_fields:
-                match = re.search(r"^chemistry\." + field + r"\s*:\s*(\S+)", output, re.MULTILINE)
-                if match is None or not math.isfinite(float(match.group(1))):
-                    raise RuntimeError(f"missing finite resolved chemistry.{field}")
-                result[field] = float(match.group(1))
-            return result
-
-        native = chemistrySettings(run("chemistry_native_defaults", chemistry_options))
-        if not (10 < native["initialTemperature"] < 100 and
-                1e-5 < native["hydrogenIonFraction"] < 1e-3):
-            raise RuntimeError(f"Native chemistry defaults are not a cold residual plasma: {native}")
-        earlier = chemistrySettings(run("chemistry_native_earlier_epoch", [
-            option for option in chemistry_options if not option.startswith("--cosmology.startRedshift=")
-        ] + ["--cosmology.startRedshift=99"]))
-        if earlier["initialTemperature"] <= native["initialTemperature"]:
-            raise RuntimeError("Native chemistry initialization ignored the requested starting epoch")
-        restarted = chemistrySettings(run("chemistry_restart_resolution",
-                                          chemistry_options + ["--checkpoint.readIndex=1"]))
-        if restarted != native:
-            raise RuntimeError("Restart option resolution changed native initialization metadata")
-        manual = run("chemistry_manual_defaults",
-                     chemistry_options + ["--chemistry.initialization=manual"])
-        for field, value in zip(chemistry_fields, (1000.0, 2e-4, 0.0, 0.0)):
-            assertNumericSetting(manual, f"chemistry.{field}", value)
-        for field, value in zip(chemistry_fields, (777.0, 0.01, 0.1, 0.02)):
-            output = run(f"chemistry_override_{field}", chemistry_options + [f"--chemistry.{field}={value}"])
-            for checked in chemistry_fields:
-                assertNumericSetting(output, f"chemistry.{checked}",
-                                     value if checked == field else native[checked])
-        chemistry_config = args.workdir / "chemistry_initialization.ini"
-        chemistry_config.write_text("[chemistry]\ninitialTemperature = 500\nhydrogenIonFraction = 0.01\n")
-        output = run("chemistry_override_precedence", chemistry_options + [
-            f"--configuration={chemistry_config.resolve()}", "--chemistry.initialTemperature=750"])
-        for field, value in (("initialTemperature", 750), ("hydrogenIonFraction", 0.01),
-                             ("heliumIonFraction", native["heliumIonFraction"]),
-                             ("heliumDoubleIonFraction", native["heliumDoubleIonFraction"])):
+        cooling_options = [option for option in metadata_options
+                           if not option.startswith("--hydro.enabled=")] + [
+                               "--hydro.enabled=true", "--chemistry.enabled=true"]
+        output = run("gadget4_cooling_defaults", cooling_options)
+        assertNumericSetting(output, "chemistry.initializationTemperature", 10000.0)
+        assertNumericSetting(output, "chemistry.minimumSpecificEnergy", 0.0)
+        if "Checkpoint state and mode validation passed" not in output:
+            raise RuntimeError("GADGET-4 cooling checkpoint state did not round-trip")
+        for field, value in (("initializationTemperature", 0.0),
+                             ("initializationTemperature", 2e9),
+                             ("minimumSpecificEnergy", 1e10)):
+            output = run(f"gadget4_cooling_override_{field}_{value}",
+                         cooling_options + [f"--chemistry.{field}={value}"])
             assertNumericSetting(output, f"chemistry.{field}", value)
-        molecular_native = chemistrySettings(run(
-            "chemistry_molecular_native", chemistry_options + ["--chemistry.network=molecular9"]))
-        if molecular_native != native:
-            raise RuntimeError("Cold molecular initialization differs from the native atomic history")
-        for network in ("atomic6", "molecular9"):
-            # Hot initial states are inside both domains; manual molecular
-            # fractions are retained rather than reset above 6000 K.
-            hot = chemistrySettings(run("chemistry_hot_" + network, chemistry_options + [
-                f"--chemistry.network={network}", "--chemistry.initialization=manual",
-                "--chemistry.initialTemperature=50000", "--chemistry.hydrogenIonFraction=0.9"]
-                + (["--chemistry.molecularFraction=0.001"] if network == "molecular9" else [])))
-            expectedMolecular = 0.001 if network == "molecular9" else 0.0
-            if (hot["initialTemperature"] != 50000.0 or hot["hydrogenIonFraction"] != 0.9
-                    or hot["molecularFraction"] != expectedMolecular):
-                raise RuntimeError(f"Hot manual {network} initialization was not retained")
-        for label, extra in (("unknown_mode", ["--chemistry.initialization=unknown"]),
-                             ("molecular_too_hot", ["--chemistry.network=molecular9",
-                                                    "--chemistry.initialization=manual",
-                                                    "--chemistry.initialTemperature=2e8"]),
-                             ("atomic_too_hot", ["--chemistry.network=atomic6",
-                                                 "--chemistry.initialization=manual",
-                                                 "--chemistry.initialTemperature=2e8"])):
-            output = run(f"chemistry_{label}", chemistry_options + extra, success=False)
-            if "chemistry" not in output.lower():
-                raise RuntimeError(f"Invalid chemistry initialization {label} lacked a diagnostic")
-        output = run("chemistry_molecular_below_floor", [
-            option for option in chemistry_options if not option.startswith("--cosmology.startRedshift=")
-        ] + ["--cosmology.startRedshift=10", "--chemistry.network=molecular9"], success=False)
-        if "chemistry" not in output.lower():
-            raise RuntimeError("Native molecular initialization below 10 K lacked a diagnostic")
+        cooling_config = args.workdir / "gadget4_cooling.ini"
+        cooling_config.write_text("[chemistry]\ninitializationTemperature=500\nminimumSpecificEnergy=1000\n")
+        output = run("gadget4_cooling_precedence", cooling_options + [
+            f"--configuration={cooling_config.resolve()}", "--chemistry.initializationTemperature=750"])
+        assertNumericSetting(output, "chemistry.initializationTemperature", 750.0)
+        assertNumericSetting(output, "chemistry.minimumSpecificEnergy", 1000.0)
+        for index, extra in enumerate(("--chemistry.initializationTemperature=-1",
+                                       "--chemistry.initializationTemperature=nan",
+                                       "--chemistry.minimumSpecificEnergy=-1",
+                                       "--chemistry.minimumSpecificEnergy=inf",
+                                       "--hydro.gamma=1.4")):
+            run(f"gadget4_cooling_invalid_{index}", cooling_options + [extra], success=False)
+        for index, removed in enumerate(("--chemistry.network=atomic6",
+                                         "--chemistry.initialization=manual",
+                                         "--chemistry.maxSubsteps=4096",
+                                         "--starFormation.winds=true",
+                                         "--starFormation.metalYield=0.02")):
+            run(f"gadget4_removed_option_{index}", cooling_options + [removed], success=False)
 
     # Photon density is fixed by the requested blackbody temperature and H0;
     # neutrinos add radiation without changing that photon density.
@@ -1138,12 +1086,8 @@ mapSize = 8
                      "gravity.method.near", "gravity.expansionDegree",
                      "units.boxLength",
                      "hydro.centralEffectiveRadius", "hydro.centralSupportRadius",
-                     "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius",
-                     *(f"chemistry.{field}" for field in chemistry_fields)}
-    # Retired compatibility inputs are not required defaults. Local presets may
-    # retain them, but maintained examples must not advertise them as controls.
-    compatibility_keys = {"chemistry.synchronizedRung"}
-    public_keys = set(option_names) - {"help", "configuration"} - compatibility_keys
+                     "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius"}
+    public_keys = set(option_names) - {"help", "configuration"}
     preset_curvatures = {"closed_no_dark_energy.ini": -1.000092093902909,
                          "omega_k_negative.ini": -0.1, "omega_k_positive.ini": 0.1,
                          "critical.ini": 0.0,
@@ -1163,15 +1107,12 @@ mapSize = 8
         preset_optional_keys = optional_keys | ({"gravity.method.far"}
             if "method.far" not in ini["gravity"] else set())
         actual_keys = {f"{section}.{key}" for section in ini.sections() for key in ini[section]}
-        if path in local_presets:
-            actual_keys -= compatibility_keys
         active_optional_keys = actual_keys & preset_optional_keys
         expected_keys = (public_keys - preset_optional_keys) | active_optional_keys
         if actual_keys != expected_keys:
             raise RuntimeError(f"{relative_path} option coverage differs: {sorted(actual_keys ^ expected_keys)}")
-        # Position width and radius alternatives may remain commented. Curved
-        # cosmologies use explicit manual chemistry initial values because
-        # the recombination initializer requires a flat background.
+        # Position width and radius alternatives may remain commented.
+        # Cooling controls must be explicit.
         documented_alternatives = set(active_optional_keys)
         section = None
         for line in path.read_text().splitlines():

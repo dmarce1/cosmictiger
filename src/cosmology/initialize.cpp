@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <numbers>
 #include <stdexcept>
 #include <utility>
@@ -705,6 +706,15 @@ static void initX0() {
     auto const ibox = findMyBox();
     auto const glass = getOptions().initial.useGlass;
     auto const closePack = getOptions().initial.closePack;
+    // Origin identities precede displacements and partitioning. The same lattice
+    // cell (or glass tile/file index) always receives the same random stream.
+    bool const identify = getOptions().starFormation.enabled;
+    if (identify &&
+        getOptions().initial.numberOfParticles > std::numeric_limits<uint64_t>::max() / 2) {
+        throw std::overflow_error(
+            "Initial particle population exceeds the star-formation ID range");
+    }
+    Vector<uint64_t> sourceIds;
     if (!glass) {
         auto box = findMyBox();
         Array<int64_t, kDimensions> iValue;
@@ -716,9 +726,22 @@ static void initX0() {
         for (int dim = 0; dim < kDimensions; dim++) {
             x0Value[dim].resize(total);
         }
+        if (identify) {
+            sourceIds.resize(total);
+        }
+        uint64_t const side = getOptions().initial.particlesPerDimension;
         for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
             for (iValue[1] = box.begin[1]; iValue[1] != box.end[1]; iValue[1]++) {
                 for (iValue[2] = box.begin[2]; iValue[2] != box.end[2]; iValue[2]++) {
+                    uint64_t const cell =
+                        (uint64_t(iValue[0]) * side + uint64_t(iValue[1])) * side +
+                        uint64_t(iValue[2]);
+                    if (identify) {
+                        sourceIds[index] = closePack ? 2 * cell : cell;
+                        if (closePack) {
+                            sourceIds[index + 1] = 2 * cell + 1;
+                        }
+                    }
                     if (closePack) {
                         for (int dim1 = 0; dim1 < kDimensions; dim1++) {
                             double x = iValue[dim1] * ninv;
@@ -815,10 +838,13 @@ static void initX0() {
         for (int dim = 0; dim < kDimensions; dim++) {
             x0Value[dim].resize(total);
         }
+        if (identify) {
+            sourceIds.resize(total);
+        }
         for (int j = jb; j < je; j++) {
             ParticleInteger const indexBegin = counts[j - jb];
             futs.push_back(hpx::async(hpx::annotated_function(
-                [j, lb, le, kb, ke, numberOfGlassParticles, &mutex, box, nf, indexBegin]() {
+                [j, lb, le, kb, ke, numberOfGlassParticles, &mutex, box, nf, indexBegin, &sourceIds, identify]() {
                     ParticleInteger iii = indexBegin;
                     for (int k = kb; k < ke; k++) {
                         for (int l = lb; l < le; l++) {
@@ -838,6 +864,12 @@ static void initX0() {
                                             x0Value[kXDimension][iii] = xValue;
                                             x0Value[kYDimension][iii] = yValue;
                                             x0Value[kZDimension][iii] = zValue;
+                                            if (identify) {
+                                                uint64_t const tile =
+                                                    (uint64_t(j) * nf + uint64_t(k)) * nf +
+                                                    uint64_t(l);
+                                                sourceIds[iii] = tile * numberOfGlassParticles + i;
+                                            }
                                             iii++;
                                         }
                                     }
@@ -859,6 +891,9 @@ static void initX0() {
         particlesVel(kYDimension, i) = 0.0;
         particlesVel(kZDimension, i) = 0.0;
         particlesRung(i) = 0;
+        if (identify) {
+            particlesStarFormationStates[i].id = 2 * sourceIds[i] + 1;
+        }
     }
 #if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
@@ -882,7 +917,7 @@ static void initX0() {
         auto const unitScales = units::scalesFromOptions(getOptions());
         units::CosmologicalContext const context(scale, getOptions().cosmology.hubble);
         // Without chemistry, the cosmological gas starts neutral at 1000 K.
-        // The enabled network replaces this energy/composition below.
+        // Generated cooling ICs have no supplied energy; InitGasTemp initializes them below.
         double const neutralNumber = 1.0 - 0.75 * getOptions().cosmology.heliumFraction;
         auto const initialTemperature = units::Temperature::from_value(1000.0);
         units::SpecificEnergy const physicalEnergy =
@@ -896,11 +931,17 @@ static void initX0() {
             ((4.0 * std::numbers::pi / 3.0) * getOptions().initial.numberOfParticles));
         for (ParticleInteger i = 0; i < count; i++) {
             particlesRung(count + i) = 0;
+            if (identify) {
+                particlesStarFormationStates[count + i].id = 2 * sourceIds[i] + 2;
+            }
             sphParticlesThermodynamicState(i).internalEnergy = storedThermalEnergy;
             sphParticlesSupportRadius(i) = smoothLength;
             sphParticlesDensity(i) = density;
 #if COSMICTIGER_ENABLE_CHEMISTRY
             if (getOptions().chemistry.enabled) {
+                if (getOptions().chemistry.initializationTemperature > 0.0) {
+                    sphParticlesInternalEnergy(i) = 0.0f;
+                }
                 sphChemistryInitializeParticle(i, scale);
             }
 #endif

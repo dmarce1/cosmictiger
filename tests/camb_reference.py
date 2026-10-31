@@ -376,6 +376,27 @@ def runSolver(arguments):
           f"rtol={arguments.rtol:g}: {len(rows)} rows in {metadata['seconds']:.2f}s")
 
 
+def matchReferenceRows(reference, candidate, tolerances):
+    """Require a complete, unique grid match before comparing any metric."""
+    if not reference or len(candidate) != len(reference):
+        raise ValueError(f"Incomplete reference coverage: {len(candidate)} candidate rows for "
+                         f"{len(reference)} reference rows")
+    for row in (*reference, *candidate):
+        if any(key not in row or not math.isfinite(row[key]) for key in tolerances):
+            raise ValueError(f"Invalid comparison grid coordinate: {row}")
+    used = set()
+    pairs = []
+    for ref in reference:
+        matches = [index for index, row in enumerate(candidate)
+                   if all(math.isclose(row[key], ref[key], rel_tol=relative, abs_tol=absolute)
+                          for key, (relative, absolute) in tolerances.items())]
+        if len(matches) != 1 or matches[0] in used:
+            raise ValueError(f"Expected exactly one unused candidate for reference sample {ref}")
+        used.add(matches[0])
+        pairs.append((ref, candidate[matches[0]]))
+    return pairs
+
+
 def compare(arguments):
     reference = readRows(arguments.reference)
     candidate = readRows(arguments.candidate)
@@ -383,15 +404,8 @@ def compare(arguments):
     if all("p_cb_mpc3" in row for row in candidate):
         metrics.append("p_cb_mpc3")
     differences = []
-    for row in candidate:
-        matches = [
-            entry for entry in reference
-            if all(math.isclose(row[key], entry[key], rel_tol=1e-9, abs_tol=1e-12)
-                   for key in ("n_eff", "z", "k_mpc"))
-        ]
-        if len(matches) != 1:
-            raise ValueError(f"Expected exactly one reference for {row}")
-        ref = matches[0]
+    for ref, row in matchReferenceRows(reference, candidate,
+            {key: (1e-9, 1e-12) for key in ("n_eff", "z", "k_mpc")}):
         difference = {key: row[key] for key in ("n_eff", "z", "k_mpc")}
         for key in metrics:
             if not math.isfinite(row[key]) or not math.isfinite(ref[key]) or ref[key] == 0:

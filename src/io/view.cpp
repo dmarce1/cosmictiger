@@ -19,6 +19,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -66,7 +67,8 @@ struct DarkMatterParticleInfo {
     float vy;
     float vz;
     int rung;
-    StarFormationState starFormation;
+    uint64_t id{};
+    double formationTime = -1.0;
 };
 
 #if COSMICTIGER_WITH_SPH
@@ -79,17 +81,69 @@ struct SphParticleInfo : public DarkMatterParticleInfo {
     float alpha;
     float divergence;
 #if COSMICTIGER_ENABLE_CHEMISTRY
-    primordial::State chemistry;
+    std::array<float, 9> chemistryFields{};
+#endif
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+    std::array<double, 3> starFormationFields{};
 #endif
 };
 
 #endif
-struct ViewParticles {
+struct ViewSnapshot {
 #if COSMICTIGER_WITH_SPH
     Vector<SphParticleInfo> gas;
     Vector<StarParticleInfo> stars;
 #endif
     Vector<DarkMatterParticleInfo> darkMatter;
+};
+
+// A box selects immutable snapshot records by address. Frames share those same
+// records and cached physical diagnostics instead of duplicating the population.
+template <typename Particle>
+class ParticleSelection {
+    Vector<Particle const*> particles_;
+
+public:
+    class Iterator {
+        typename Vector<Particle const*>::const_iterator iterator_;
+
+    public:
+        explicit Iterator(typename Vector<Particle const*>::const_iterator iterator)
+          : iterator_(iterator) {}
+        Particle const& operator*() const {
+            return **iterator_;
+        }
+        Iterator& operator++() {
+            ++iterator_;
+            return *this;
+        }
+        bool operator!=(Iterator const& other) const {
+            return iterator_ != other.iterator_;
+        }
+    };
+    size_t size() const {
+        return particles_.size();
+    }
+    bool empty() const {
+        return particles_.empty();
+    }
+    void push_back(Particle const& particle) {
+        particles_.push_back(&particle);
+    }
+    Iterator begin() const {
+        return Iterator(particles_.begin());
+    }
+    Iterator end() const {
+        return Iterator(particles_.end());
+    }
+};
+
+struct ViewParticles {
+#if COSMICTIGER_WITH_SPH
+    ParticleSelection<SphParticleInfo> gas;
+    ParticleSelection<StarParticleInfo> stars;
+#endif
+    ParticleSelection<DarkMatterParticleInfo> darkMatter;
 };
 
 namespace detail {
@@ -235,7 +289,7 @@ struct ViewDirectoryMetadata {
 
 template <typename Particle, typename Position>
 void writeParticlePointmesh(DBfile* db, ViewDirectoryMetadata& metadata, char const* mesh,
-    Vector<Particle> const& particles, Position position, DBoptlist* options) {
+    ParticleSelection<Particle> const& particles, Position position, DBoptlist* options) {
     if (particles.size() > size_t(std::numeric_limits<int>::max())) {
         throw std::runtime_error("Too many particles for a Silo point mesh");
     }
@@ -267,7 +321,7 @@ void writeParticlePointmesh(DBfile* db, ViewDirectoryMetadata& metadata, char co
 
 template <typename Particle, typename Value>
 void writeViewField(DBfile* db, ViewDirectoryMetadata& metadata, char const* name, char const* mesh,
-    Vector<Particle> const& particles, char const* unitName, Value value) {
+    ParticleSelection<Particle> const& particles, char const* unitName, Value value) {
     Vector<double> values;
     values.reserve(particles.size());
     for (auto const& particle : particles) {
@@ -293,29 +347,26 @@ void writeViewField(DBfile* db, ViewDirectoryMetadata& metadata, char const* nam
 
 template <typename Particle>
 void writeStarFormationFields(DBfile* db, ViewDirectoryMetadata& metadata, char const* mesh,
-    char const* prefix, Vector<Particle> const& particles) {
+    char const* prefix, ParticleSelection<Particle> const& particles) {
     if (!getOptions().starFormation.enabled) {
         return;
     }
     std::string const name(prefix);
     // Double point fields preserve each 32-bit limb exactly, including IDs > 2^53.
     writeViewField(db, metadata, (name + "id_low").c_str(), mesh, particles, "1",
-        [](Particle const& particle) { return double(uint32_t(particle.starFormation.id)); });
+        [](Particle const& particle) { return double(uint32_t(particle.id)); });
     writeViewField(db, metadata, (name + "id_high").c_str(), mesh, particles, "1",
-        [](Particle const& particle) { return double(particle.starFormation.id >> 32); });
-    writeViewField(db, metadata, (name + "formation_time").c_str(), mesh, particles, "s",
-        [](Particle const& particle) { return particle.starFormation.formationTime; });
-    writeViewField(db, metadata, (name + "metallicity").c_str(), mesh, particles, "1",
-        [](Particle const& particle) { return double(particle.starFormation.metallicity); });
-    writeViewField(db, metadata, (name + "wind_time_remaining").c_str(), mesh, particles, "s",
-        [](Particle const& particle) { return particle.starFormation.windTimeRemaining; });
+        [](Particle const& particle) { return double(particle.id >> 32); });
+    writeViewField(db, metadata, (name + "formation_time").c_str(), mesh, particles,
+        getOptions().run.scenario == "cosmology" ? "1" : "s",
+        [](Particle const& particle) { return particle.formationTime; });
 }
 
 template <typename Particle>
 void writeViewSpecies(DBfile* db, ViewDirectoryMetadata& metadata, char const* mesh,
-    char const* prefix, Vector<Particle> const& particles, ViewUnitConversion const& conversion,
-    char const* lengthUnit, char const* velocityUnit, char const* massUnit, double mass,
-    double time, int cycle) {
+    char const* prefix, ParticleSelection<Particle> const& particles,
+    ViewUnitConversion const& conversion, char const* lengthUnit, char const* velocityUnit,
+    char const* massUnit, double mass, double time, int cycle) {
     auto* options = DBMakeOptlist(5);
     DBAddOption(options, DBOPT_XUNITS, const_cast<char*>(lengthUnit));
     DBAddOption(options, DBOPT_YUNITS, const_cast<char*>(lengthUnit));
@@ -342,7 +393,7 @@ void writeViewSpecies(DBfile* db, ViewDirectoryMetadata& metadata, char const* m
 
 #if COSMICTIGER_WITH_SPH
 void writeViscosityField(
-    DBfile* db, ViewDirectoryMetadata& metadata, Vector<SphParticleInfo> const& gas) {
+    DBfile* db, ViewDirectoryMetadata& metadata, ParticleSelection<SphParticleInfo> const& gas) {
     if (getOptions().hydro.viscosityEvolution != "none") {
         writeViewField(db, metadata, "alpha", "gas", gas, "1",
             [](SphParticleInfo const& particle) { return double(particle.alpha); });
@@ -351,74 +402,39 @@ void writeViscosityField(
 
 #if COSMICTIGER_ENABLE_STAR_FORMATION
 void writeStarFormationGasFields(
-    DBfile* db, ViewDirectoryMetadata& metadata, Vector<SphParticleInfo> const& gas, double a) {
-    auto const& options = getOptions();
-    if (!options.starFormation.enabled) {
+    DBfile* db, ViewDirectoryMetadata& metadata, ParticleSelection<SphParticleInfo> const& gas) {
+    if (!getOptions().starFormation.enabled) {
         return;
-    }
-    auto const model = starFormationModel();
-    springel_and_hernquist::AtomicCooling const cooling{1.0 - options.cosmology.heliumFraction};
-    units::UnitScales const scales(
-        options.units.lengthCm, options.units.massG, options.units.timeSeconds);
-    units::CosmologicalContext const context(a, options.cosmology.hubble);
-    std::vector<std::array<double, 3>> fields(gas.size());
-    for (size_t index = 0; index < gas.size(); ++index) {
-        auto const& particle = gas[index];
-        double const density =
-            units::toProperDensity(units::StoredDensity(particle.rho), scales, context)
-                .quantity()
-                .value();
-        if (density < model.thresholdDensity || particle.starFormation.windTimeRemaining > 0.0) {
-            continue;
-        }
-        springel_and_hernquist::Equilibrium phase;
-        springel_and_hernquist::AtomicEquilibrium hot;
-        if (!springel_and_hernquist::evaluateEquilibrium(model, cooling, density, phase) ||
-            !cooling.evaluateAtEnergy(phase.hotEnergy, hot)) {
-            throw std::runtime_error("Cannot evaluate SH03 gas phase diagnostics");
-        }
-        fields[index] = {phase.coldFraction, hot.temperature, phase.specificStarFormationRate};
     }
     char const* names[] = {"cold_fraction", "hot_temperature", "specific_sfr"};
     char const* unitNames[] = {"1", "K", "1/s"};
     for (size_t field = 0; field < 3; ++field) {
-        size_t index = 0;
         writeViewField(db, metadata, names[field], "gas", gas, unitNames[field],
-            [&](SphParticleInfo const&) { return fields[index++][field]; });
+            [field](
+                SphParticleInfo const& particle) { return particle.starFormationFields[field]; });
     }
 }
+
 #endif
 
 #if COSMICTIGER_ENABLE_CHEMISTRY
 void writeChemistryFields(
-    DBfile* db, ViewDirectoryMetadata& metadata, Vector<SphParticleInfo> const& gas, double a) {
+    DBfile* db, ViewDirectoryMetadata& metadata, ParticleSelection<SphParticleInfo> const& gas) {
     if (!getOptions().chemistry.enabled) {
         return;
     }
     char const* names[] = {"chem_HI", "chem_HII", "chem_HeI", "chem_HeII", "chem_HeIII",
-        "chem_Hminus", "chem_H2", "chem_H2plus", "chem_electrons", "temperature",
-        "mean_molecular_weight", "frozen_gamma"};
-    std::vector<std::array<float, 12>> fields;
-    fields.reserve(gas.size());
-    for (auto const& particle : gas) {
-        fields.push_back(sphChemistryOutput(particle.chemistry, particle.eint, a));
-    }
-    for (size_t field = 0; field < 12; ++field) {
-        size_t index = 0;
-        writeViewField(db, metadata, names[field], "gas", gas, field == 9 ? "K" : "1",
-            [&](SphParticleInfo const&) { return double(fields[index++][field]); });
-    }
-    // Expose the saved direct species array, including trace abundances.
-    for (int species = 0; species < primordial::kAbundanceCount; ++species) {
-        std::string const name = "chem_number_per_h_" + std::to_string(species);
-        writeViewField(db, metadata, name.c_str(), "gas", gas, "1",
-            [species](SphParticleInfo const& particle) {
-                return double(particle.chemistry.abundances[species]);
+        "chem_electrons", "temperature", "mean_molecular_weight", "frozen_gamma"};
+    for (size_t field = 0; field < 9; ++field) {
+        writeViewField(db, metadata, names[field], "gas", gas, field == 6 ? "K" : "1",
+            [field](SphParticleInfo const& particle) {
+                return double(particle.chemistryFields[field]);
             });
     }
-    writeViewText(db, "chemistry_fraction_convention",
-        "direct species counts per H nucleus; order: H,H+,He,He+,He++,e,H-,H2,H2+");
-    writeViewText(db, "chemistry_network", getOptions().chemistry.network.c_str());
+    writeViewText(db, "cooling_model", "GADGET-4 equilibrium atomic H/He; X=0.76; gamma=5/3");
+    writeViewText(db, "cooling_abundance_convention",
+        "Instantaneous equilibrium species counts per H nucleus; the saved electron "
+        "abundance is an iteration guess, not a time-evolved ionization history.");
 }
 #endif
 
@@ -472,10 +488,10 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
         writeViewSpecies(db, metadata, "gas", "hydro_", gas, conversion, lengthUnit, velocityUnit,
             massUnit, getOptions().initial.gasMass, time, cycle);
 #if COSMICTIGER_ENABLE_CHEMISTRY
-        writeChemistryFields(db, metadata, gas, a);
+        writeChemistryFields(db, metadata, gas);
 #endif
 #if COSMICTIGER_ENABLE_STAR_FORMATION
-        writeStarFormationGasFields(db, metadata, gas, a);
+        writeStarFormationGasFields(db, metadata, gas);
 #endif
         writeViscosityField(db, metadata, gas);
         if (getOptions().hydro.viscosityGradientSwitch()) {
@@ -503,8 +519,14 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
 
 std::mutex siloViewMutex;
 
-ViewParticles collectViewParticles() {
-    ViewParticles snapshot;
+ViewSnapshot collectViewParticles(double a) {
+    ViewSnapshot snapshot;
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION
+    std::optional<star_formation_backend::Parameters> parameters;
+    if (getOptions().starFormation.enabled) {
+        parameters = starFormationParameters(a);
+    }
+#endif
     for (ParticleInteger i = 0; i < particlesSize(); ++i) {
         DarkMatterParticleInfo info{};
         info.x = particlesPos(kXDimension, i);
@@ -515,7 +537,8 @@ ViewParticles collectViewParticles() {
         info.vz = particlesVel(kZDimension, i);
         info.rung = particlesRung(i);
         if (getOptions().starFormation.enabled) {
-            info.starFormation = particlesStarFormationStates[i];
+            info.id = particlesStarFormationStates[i].id;
+            info.formationTime = particlesStarFormationStates[i].formationTime;
         }
         if (particlesType(i) == kDarkMatterType) {
             snapshot.darkMatter.push_back(info);
@@ -540,7 +563,33 @@ ViewParticles collectViewParticles() {
             }
 #if COSMICTIGER_ENABLE_CHEMISTRY
             if (getOptions().chemistry.enabled) {
-                gas.chemistry = sphParticlesChemistryStates[index];
+                gas.chemistryFields =
+                    sphChemistryOutput(sphParticlesChemistryStates[index], gas.eint, gas.rho, a);
+            }
+#endif
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+            if (parameters) {
+                star_formation_backend::Input input{};
+                input.state = particlesStarFormationStates[i];
+                input.chemistry = sphParticlesChemistryStates[index];
+                input.energy = gas.eint;
+                input.density = gas.rho;
+                auto const phase = star_formation_backend::diagnostics(input, *parameters);
+                if (phase.status != 0) {
+                    throw std::runtime_error("Cannot evaluate GADGET-4 gas phase diagnostics");
+                }
+                double hotTemperature = 0.0;
+                if (phase.starForming) {
+                    double electrons = input.chemistry.electronFraction;
+                    double const density = double(gas.rho) * parameters->densityScale / (a * a * a);
+                    if (gadget4::temperatureFromEnergy(phase.hotEnergy, density,
+                            parameters->cooling, electrons,
+                            hotTemperature) != gadget4::Status::Success) {
+                        throw std::runtime_error("Cannot evaluate GADGET-4 hot-phase temperature");
+                    }
+                }
+                gas.starFormationFields = {
+                    phase.coldFraction, hotTemperature, input.state.specificStarFormationRate};
             }
 #endif
             snapshot.gas.push_back(gas);
@@ -669,13 +718,15 @@ void writeParticleMetadata(DBfile* db) {
         writeViewText(db, "particle_id_convention",
             "Persistent unsigned ID = id_high * 4294967296 + id_low; both limbs are exact.");
         writeViewText(db, "formation_time_convention",
-            "Physical seconds since simulation start at formation; -1 for nonstellar particles.");
+            getOptions().run.scenario == "cosmology" ?
+                "Scale factor at formation, as in GADGET-4; -1 for nonstellar particles." :
+                "Physical seconds since simulation start at formation; -1 for nonstellar "
+                "particles.");
         writeViewText(db, "star_formation_phase_convention",
-            "Equilibrium unresolved phases from the last SPH density, converted to proper "
-            "density at the output epoch. cold_fraction is the cold gas mass fraction; "
-            "hot_temperature is the CIE hot-phase temperature in K; specific_sfr is "
-            "long-lived stellar mass per gas mass per physical second. All three are zero "
-            "for ordinary gas and decoupled winds.");
+            "GADGET-4 algebraic phases evaluated at the stored density and output epoch. "
+            "cold_fraction and hot_temperature describe that equilibrium target, not "
+            "persistent reservoirs. specific_sfr is the saved post-cooling long-lived "
+            "stellar mass rate per gas mass per physical second used by the next conversion.");
     }
 #if COSMICTIGER_WITH_SPH
     writeViewText(db, "gas_geometry", "SPH particle point mesh");
@@ -745,10 +796,10 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
         writeViewField(db, metadata, "kernel_support_radius", "gas", gas, "code",
             [](auto const& p) { return p.h; });
 #if COSMICTIGER_ENABLE_CHEMISTRY
-        writeChemistryFields(db, metadata, gas, a);
+        writeChemistryFields(db, metadata, gas);
 #endif
 #if COSMICTIGER_ENABLE_STAR_FORMATION
-        writeStarFormationGasFields(db, metadata, gas, a);
+        writeStarFormationGasFields(db, metadata, gas);
 #endif
         writeViscosityField(db, metadata, gas);
         if (getOptions().hydro.viscosityGradientSwitch()) {
@@ -764,7 +815,7 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
 
 ViewLeafMetadata writeParticleLeaf(Vector<Range<double>> const& boxes, int cycle, double a,
     double time, std::string const& generation) {
-    auto const snapshot = collectViewParticles();
+    auto const snapshot = collectViewParticles(a);
     ViewLeafMetadata metadata;
     metadata.boxes.resize(boxes.size());
     auto const frames = particleViewFrames();

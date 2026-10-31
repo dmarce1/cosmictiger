@@ -1,3 +1,10 @@
+> Historical record, superseded by the GADGET-4 replacement on 2026-10-31.
+> The particle reaction networks and their runtime controls have been removed.
+> Statements and validation below describe the earlier checkout, including any
+> references to a "current" Anninos solver. They do not validate the new model.
+> See [current equilibrium cooling](primordial_chemistry.md) and
+> [current star formation](star_formation.md).
+
 # Primordial chemistry validation — 2026-10-18
 
 Validation-history note (2026-10-30): records below concerning signed-complement storage, FloatFloat and the coupled Newton solver describe the preceding implementation. The current solver uses direct nine-species storage and the templated Anninos algorithm; current evidence is recorded in [the Anninos validation](anninos_validation.md). See [the current solver](primordial_chemistry.md).

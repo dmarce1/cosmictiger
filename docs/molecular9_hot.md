@@ -1,3 +1,9 @@
+> Historical record, superseded by the GADGET-4 replacement. The molecular9
+> network and all associated runtime options have been removed. The descriptions
+> and results below refer to the earlier implementation and do not describe the
+> current executable. See [current equilibrium cooling](primordial_chemistry.md)
+> and [current star formation](star_formation.md).
+
 # Molecular9 up to 10⁸ K
 
 Solver update (2026-10-30): the rate/EOS extension described here remains the physical catalogue, but the recorded Newton and FloatFloat solver tests are historical. The current Anninos solver stores all nine species directly and places H− and H2+ in algebraic equilibrium. See [the current solver and its limits](primordial_chemistry.md).

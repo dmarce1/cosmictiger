@@ -9,7 +9,7 @@
 namespace {
 namespace sh = springel_and_hernquist;
 inline constexpr int kSampleCount = 16;
-inline constexpr int kValueCount = 16;
+inline constexpr int kValueCount = 12;
 
 struct Sample {
     bool valid{};
@@ -26,13 +26,10 @@ CUDA_EXPORT Sample sample(int index) {
     double const coefficient = 1.0e25;
     Sample result;
     result.valid = sh::calibrate(parameters, coefficient, model) &&
-        sh::equilibrium(
-            model, model.thresholdDensity * ::pow(10.0, 0.5 * index), coefficient, state);
+        sh::equilibrium(model, model.thresholdDensity * ::pow(10.0, 0.5 * index), 1.e13, state);
     if (!result.valid) {
         return result;
     }
-    double const ratios[kSampleCount] = {0.0, 1.0e-300, 1.0e-30, 1.0e-12, 1.0e-6, 0.01, 0.1, 0.9,
-        1.0, 1.1, 10.0, 1.0e6, 1.0e12, 1.0e30, 1.0e100, 1.0e300};
     double const timestep = parameters.starFormationTime * ::pow(10.0, 0.5 * index - 6.0);
     result.values[0] = model.thresholdDensity;
     result.values[1] = state.starFormationTime;
@@ -44,12 +41,9 @@ CUDA_EXPORT Sample sample(int index) {
     result.values[7] = state.pressure;
     result.values[8] = state.relaxationTime;
     result.values[9] = state.specificStarFormationRate;
-    result.values[10] = sh::coldFraction(ratios[index]);
-    result.values[11] = sh::hotFraction(ratios[index]);
-    result.values[12] = sh::starFormationProbability(state, timestep);
-    result.values[13] = sh::enrichmentIncrement(state, timestep, 0.02);
-    result.values[14] = sh::windProbability(state, timestep, 2.0);
-    result.values[15] = sh::windSpeed(parameters, 2.0, 0.25);
+    result.values[10] = sh::starFormationProbability(state, timestep);
+    result.valid = sh::clampSourceTime(parameters, 10.0 * state.starFormationTime, state);
+    result.values[11] = state.specificStarFormationRate;
     return result;
 }
 

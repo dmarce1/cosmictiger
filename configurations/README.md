@@ -2,7 +2,7 @@
 
 Select a physical simulation with `run.scenario`. Each scenario has its own
 initializer under `src/scenarios/` and header under `cosmictiger/scenarios/`.
-The evolution driver calls gravity, SPH, and chemistry according to the enabled
+The evolution driver calls gravity, SPH, and cooling according to the enabled
 physics. `run.test` is reserved for developer regressions and benchmarks.
 
 Each INI below contains every application option except the top-level `help`
@@ -13,8 +13,9 @@ to use the width selected by `COSMICTIGER_POSITION_TYPE` when building. An expli
 position width must match the executable.
 The files are independent: no other INI is loaded or inherited. Sections map to
 CLI groups, and explicit CLI values override values in the selected file.
-[default.ini](../default.ini) records the application defaults; the cosmology
-scenario configuration below also enables primordial chemistry explicitly.
+[default.ini](../default.ini) is a supplied cosmological configuration; it and
+the cosmology scenario below enable GADGET-4 equilibrium cooling explicitly.
+The parser defaults leave hydro, cooling and star formation disabled.
 
 CMake `COSMICTIGER_ENABLE_*` options select which algorithms are compiled.
 `gravity.method.far=fmm|pmmm`, `gravity.method.near=pp|fmm` (PMMM only), and
@@ -37,7 +38,7 @@ gravity without SPH. Global integration advances all particles using the smalles
 raw allowable timestep across all particles and localities, without power-of-two
 rounding; final-time and scenario-stage boundaries can shorten that interval.
 To run a collisionless cosmology, set
-`--hydro.enabled=false --chemistry.enabled=false`.
+`--hydro.enabled=false --chemistry.enabled=false --starFormation.enabled=false`.
 
 | Configuration | `run.scenario` | Enabled physics | Output directory |
 | --- | --- | --- | --- |
@@ -49,7 +50,7 @@ To run a collisionless cosmology, set
 | [disc.ini](disc.ini) | `disc` | Gravity and SPH | `./output/disc/` |
 | [polytropic_star.ini](polytropic_star.ini) | `polytropicStar` | Gravity and SPH | `./output/polytropicStar/` |
 | [hydro_wave.ini](hydro_wave.ini) | `hydroWave` | SPH | `./output/hydroWave/` |
-| [cosmology.ini](cosmology.ini) | `cosmology` | Gravity, SPH, and primordial chemistry | `./output/cosmology/` |
+| [cosmology.ini](cosmology.ini) | `cosmology` | Gravity, SPH, and GADGET-4 equilibrium cooling | `./output/cosmology/` |
 | [glass.ini](glass.ini) | `glass` | Repulsive gravity with damping | `./output/glass/` |
 
 Run from a build directory containing the executable and any runtime inputs:
@@ -70,8 +71,7 @@ Every scenario configuration writes generated simulation products beneath its
 `output.directory`, including particle Silo snapshots, text diagnostics,
 checkpoints, and analysis products. Its lightcone directory is a subdirectory
 of that location. Relative paths begin at the launch working directory; input
-files such as existing glass loads and chemistry radiation tables
-retain their input-path meanings.
+files such as existing glass loads retain their input-path meanings.
 
 Restart with the same scenario configuration and `--checkpoint.readIndex=N`.
 The selected output directory must contain `checkpoint.N`. Scenario checkpoints
@@ -133,8 +133,8 @@ and zero artificial-viscosity alpha, while the second uses no damping and alpha
 The cosmological configuration creates `N^3` gas and `N^3` dark-matter particles
 for `initial.particlesPerDimension=N`. Class masses are fixed within each
 species, with relative gas and dark-matter weights set by `omegaB` and `omegaC`.
-It enables the `atomic6` primordial chemistry network; see
-[primordial chemistry](../docs/primordial_chemistry.md). A collisionless
+It enables GADGET-4 equilibrium atomic cooling; see
+[the cooling options](../docs/primordial_chemistry.md). A collisionless
 cosmological run can disable both `hydro.enabled` and `chemistry.enabled`.
 
 Five cosmology presets use 32³ reference particles with a reference mass of
@@ -195,7 +195,8 @@ neighbors. All SPH runs use the [variational pressure
 operator](../docs/variational_sph.md), including chemistry and star-formation
 examples and `default.ini`.
 Every project INI lists all current application
-options, with mutually exclusive alternatives and manual chemistry initialization
-inputs commented where appropriate. Set gravity radius through `gravity.effectiveRadius`,
+options, with mutually exclusive alternatives commented where appropriate.
+Cooling initialization uses `chemistry.initializationTemperature`; zero preserves
+initial-condition energy. Set gravity radius through `gravity.effectiveRadius`,
 `gravity.supportRadius`, or the legacy `gravity.softening` alias. Alternative
 radius representations remain commented to avoid conflicting inputs.

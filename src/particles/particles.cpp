@@ -1061,21 +1061,29 @@ void particlesResize(ParticleInteger sz, bool lock) {
     }
 }
 
-static uint64_t particlesStarFormationCount() {
-    return particlesOwnedSize();
-}
-static void particlesAssignStarFormationIds(uint64_t offset) {
+static Pair<uint64_t> particlesStarFormationCount() {
     particlesEnsureStarFormationStorage();
+    std::unordered_set<uint64_t> ids;
+    uint64_t missing = 0;
     for (ParticleInteger index = 0; index < particlesOwnedSize(); ++index) {
-        auto& state = particlesStarFormationStates[index];
-        if (state.id != 0) {
-            throw std::logic_error("Star-formation identities may only be initialized once");
+        uint64_t const id = particlesStarFormationStates[index].id;
+        if (id == 0) {
+            ++missing;
+        } else if (!ids.insert(id).second) {
+            throw std::logic_error("Duplicate initial star-formation identity");
         }
-        state.id = offset + uint64_t(index) + 1;
+    }
+    return {uint64_t(particlesOwnedSize()), missing};
+}
+
+static void particlesAssignStarFormationIds() {
+    // Fixed scenarios initialize their full population on rank zero. Assign
+    // source-order IDs there before the first migration, independently of MPI size.
+    for (ParticleInteger index = 0; index < particlesOwnedSize(); ++index) {
+        particlesStarFormationStates[index].id = uint64_t(index) + 1;
     }
 }
 HPX_PLAIN_ACTION(particlesStarFormationCount, ParticlesStarFormationCountAction);
-HPX_PLAIN_ACTION(particlesAssignStarFormationIds, ParticlesAssignStarFormationIdsAction);
 
 void particlesInitializeStarFormationIds() {
     if (!getOptions().starFormation.enabled) {
@@ -1084,24 +1092,45 @@ void particlesInitializeStarFormationIds() {
     if (hpxRank() != 0) {
         throw std::logic_error("Initialize star-formation IDs from rank zero only");
     }
-    std::vector<hpx::future<uint64_t>> counts;
-    for (auto const& locality : hpxLocalities()) {
-        counts.push_back(hpx::async<ParticlesStarFormationCountAction>(locality));
-    }
-    uint64_t offset = 0;
-    std::vector<hpx::future<void>> assignments;
-    for (size_t rank = 0; rank < counts.size(); ++rank) {
-        uint64_t const count = counts[rank].get();
-        if (count > std::numeric_limits<uint64_t>::max() - offset) {
-            throw std::overflow_error("Star-formation particle identity overflow");
+    std::vector<hpx::future<Pair<uint64_t>>> counts;
+    std::exception_ptr failure;
+    try {
+        counts.reserve(hpxLocalities().size());
+        for (auto const& locality : hpxLocalities()) {
+            counts.push_back(hpx::async<ParticlesStarFormationCountAction>(locality));
         }
-        assignments.push_back(
-            hpx::async<ParticlesAssignStarFormationIdsAction>(hpxLocalities()[rank], offset));
-        offset += count;
+    } catch (...) {
+        failure = std::current_exception();
     }
-    for (auto& assignment : assignments) {
-        assignment.get();
+    uint64_t total = 0;
+    uint64_t missing = 0;
+    hpx::wait_all(counts);
+    for (auto& future : counts) {
+        try {
+            auto const count = future.get();
+            if (count.first > std::numeric_limits<uint64_t>::max() - total) {
+                throw std::overflow_error("Star-formation particle identity overflow");
+            }
+            total += count.first;
+            missing += count.second;
+        } catch (...) {
+            if (!failure) {
+                failure = std::current_exception();
+            }
+        }
     }
+    if (failure) {
+        std::rethrow_exception(failure);
+    }
+    if (missing == 0) {
+        return;
+    }
+    if (missing != total || total != uint64_t(particlesOwnedSize()) ||
+        (getOptions().run.scenario == "cosmology" && getOptions().run.test.empty())) {
+        throw std::logic_error(
+            "Distributed initial conditions must supply globally stable star-formation IDs");
+    }
+    particlesAssignStarFormationIds();
 }
 
 void particlesConvertToStar(ParticleInteger index, double formationTime) {
@@ -1119,10 +1148,7 @@ void particlesConvertToStar(ParticleInteger index, double formationTime) {
     particlesCatIndex(index) = kNoParticleIndex;
     auto& state = particlesStarFormationStates[index];
     state.formationTime = formationTime;
-    state.windTimeRemaining = 0.0;
-    state.sourceHalfInterval = 0.0;
-    state.pendingHeating = 0.0;
-    state.formationOpticalDepth = 0.0;
+    state.specificStarFormationRate = 0.0;
 #else
     throw std::logic_error("Star formation requires SPH");
 #endif
@@ -1463,7 +1489,7 @@ Vector<ParticleSample> particlesSample(int cnt) {
 namespace detail {
 
 constexpr uint64_t kStarFormationParticleMagic = 0x4354534650415254ULL;
-constexpr uint64_t kStarFormationParticleVersion = 1;
+constexpr uint64_t kStarFormationParticleVersion = 2;
 
 bool finiteStarFormationScalar(double value) {
     uint64_t bits;
@@ -1484,29 +1510,17 @@ void loadStarFormationParticles(FILE* fp) {
         FREAD(&state.id, sizeof(state.id), 1, fp);
         FREAD(&state.eventCounter, sizeof(state.eventCounter), 1, fp);
         FREAD(&state.formationTime, sizeof(state.formationTime), 1, fp);
-        FREAD(&state.windTimeRemaining, sizeof(state.windTimeRemaining), 1, fp);
-        FREAD(&state.metallicity, sizeof(state.metallicity), 1, fp);
-        FREAD(&state.sourceHalfInterval, sizeof(state.sourceHalfInterval), 1, fp);
-        FREAD(&state.pendingHeating, sizeof(state.pendingHeating), 1, fp);
-        FREAD(&state.formationOpticalDepth, sizeof(state.formationOpticalDepth), 1, fp);
+        FREAD(&state.specificStarFormationRate, sizeof(state.specificStarFormationRate), 1, fp);
         FREAD(&state.elapsedPhysicalTime, sizeof(state.elapsedPhysicalTime), 1, fp);
         int const type = particlesType(index);
         if (state.id == 0 || !ids.insert(state.id).second ||
             !finiteStarFormationScalar(state.formationTime) ||
-            !finiteStarFormationScalar(state.windTimeRemaining) ||
-            !finiteStarFormationScalar(double(state.metallicity)) ||
-            !finiteStarFormationScalar(state.sourceHalfInterval) ||
-            !finiteStarFormationScalar(state.pendingHeating) ||
-            !finiteStarFormationScalar(state.formationOpticalDepth) ||
+            !finiteStarFormationScalar(state.specificStarFormationRate) ||
             !finiteStarFormationScalar(state.elapsedPhysicalTime) ||
-            state.sourceHalfInterval < 0.0 || state.formationOpticalDepth < 0.0 ||
-            state.elapsedPhysicalTime < 0.0 || state.windTimeRemaining < 0.0 ||
-            state.metallicity < 0.0f || state.metallicity > 1.0f ||
+            state.specificStarFormationRate < 0.0 || state.elapsedPhysicalTime < 0.0 ||
             (type != kDarkMatterType && type != kSphType && type != kStarType) ||
             ((type == kStarType) != (state.formationTime >= 0.0)) ||
-            (type == kStarType &&
-                (state.windTimeRemaining != 0.0 || state.sourceHalfInterval != 0.0 ||
-                    state.pendingHeating != 0.0 || state.formationOpticalDepth != 0.0))) {
+            (type != kSphType && state.specificStarFormationRate != 0.0)) {
             THROW_ERROR("Invalid star-formation particle checkpoint metadata\n");
         }
     }
@@ -1522,11 +1536,8 @@ void saveStarFormationParticles(FILE* fp) {
         if (fwrite(&state.id, sizeof(state.id), 1, fp) != 1 ||
             fwrite(&state.eventCounter, sizeof(state.eventCounter), 1, fp) != 1 ||
             fwrite(&state.formationTime, sizeof(state.formationTime), 1, fp) != 1 ||
-            fwrite(&state.windTimeRemaining, sizeof(state.windTimeRemaining), 1, fp) != 1 ||
-            fwrite(&state.metallicity, sizeof(state.metallicity), 1, fp) != 1 ||
-            fwrite(&state.sourceHalfInterval, sizeof(state.sourceHalfInterval), 1, fp) != 1 ||
-            fwrite(&state.pendingHeating, sizeof(state.pendingHeating), 1, fp) != 1 ||
-            fwrite(&state.formationOpticalDepth, sizeof(state.formationOpticalDepth), 1, fp) != 1 ||
+            fwrite(&state.specificStarFormationRate, sizeof(state.specificStarFormationRate), 1,
+                fp) != 1 ||
             fwrite(&state.elapsedPhysicalTime, sizeof(state.elapsedPhysicalTime), 1, fp) != 1) {
             THROW_ERROR("Unable to write star-formation particle checkpoint metadata\n");
         }
@@ -1579,10 +1590,12 @@ void particlesLoad(FILE* fp) {
     if (getOptions().starFormation.enabled) {
         detail::loadStarFormationParticles(fp);
     }
-    FREAD(&size, sizeof(int), 1, fp);
-    rungBegins.resize(size);
-    FREAD(&rungBegin, sizeof(int), 1, fp);
-    FREAD(rungBegins.data(), sizeof(int), rungBegins.size(), fp);
+    int rungCount = 0;
+    FREAD(&rungCount, sizeof(rungCount), 1, fp);
+    ALWAYS_ASSERT(rungCount >= 0 && rungCount <= kMaxRung);
+    rungBegins.resize(rungCount);
+    FREAD(&rungBegin, sizeof(ParticleInteger), 1, fp);
+    FREAD(rungBegins.data(), sizeof(ParticleInteger), rungBegins.size(), fp);
 #if !COSMICTIGER_WITH_GRAVITY
     // Force diagnostics are absent from the checkpoint, including same-process reloads.
     particlesClearGravityDiagnostics(0, particlesSize());
@@ -1619,10 +1632,10 @@ void particlesSave(FILE* fp) {
     if (getOptions().starFormation.enabled) {
         detail::saveStarFormationParticles(fp);
     }
-    size = rungBegins.size();
-    fwrite(&size, sizeof(int), 1, fp);
-    fwrite(&rungBegin, sizeof(int), 1, fp);
-    fwrite(rungBegins.data(), sizeof(int), rungBegins.size(), fp);
+    int const rungCount = rungBegins.size();
+    fwrite(&rungCount, sizeof(rungCount), 1, fp);
+    fwrite(&rungBegin, sizeof(ParticleInteger), 1, fp);
+    fwrite(rungBegins.data(), sizeof(ParticleInteger), rungBegins.size(), fp);
 }
 
 void particlesSaveGlass(char const* filename) {

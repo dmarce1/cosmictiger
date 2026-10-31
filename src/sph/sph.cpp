@@ -55,7 +55,6 @@ struct SphRunWorkspace {
     Vector<float, PinnedAllocator<float>> hostInternalEnergy;
     Vector<float, PinnedAllocator<float>> hostPressureEnergyRatio;
     Vector<float, PinnedAllocator<float>> hostAdiabaticIndex;
-    Vector<float, PinnedAllocator<float>> hostHydroCoupling;
     Vector<float, PinnedAllocator<float>> hostDensity;
     Vector<float, PinnedAllocator<float>> hostGradHCorrection;
     Vector<float, PinnedAllocator<float>> hostBalsaraFactor;
@@ -464,9 +463,6 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     if (params.runType == kSphRunHydro) {
         hostDensity.resize(particleStorageSize);
         hostGradHCorrection.resize(particleStorageSize);
-        if (getOptions().starFormation.enabled) {
-            hostHydroCoupling.resize(particleStorageSize);
-        }
     }
     if (params.runType == kSphRunHydro ||
         (params.runType == kSphRunPrehydro2 && params.variableViscosity)) {
@@ -513,12 +509,6 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
                             sphParticlesGlobalReadChemistryEos(node.globalParticleRange(),
                                 hostPressureEnergyRatio.data(), hostAdiabaticIndex.data(), offset);
                         }
-#if COSMICTIGER_ENABLE_STAR_FORMATION
-                        if (getOptions().starFormation.enabled) {
-                            starFormationReadHydroCoupling(
-                                node.globalParticleRange(), hostHydroCoupling.data(), offset);
-                        }
-#endif
                         // The correction shares the density's cache line, so a remote
                         // source's ζ is from the same density pass as its ρ.
                         sphParticlesGlobalReadDensity(node.globalParticleRange(),
@@ -558,7 +548,6 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
         copy(runData.sourceInternalEnergy, hostInternalEnergy);
         copy(runData.sourcePressureEnergyRatio, hostPressureEnergyRatio);
         copy(runData.sourceAdiabaticIndex, hostAdiabaticIndex);
-        copy(runData.sourceHydroCoupling, hostHydroCoupling);
         copy(runData.sourceDensity, hostDensity);
         copy(runData.sourceGradHCorrection, hostGradHCorrection);
         copy(runData.sourceBalsaraFactor, hostBalsaraFactor);

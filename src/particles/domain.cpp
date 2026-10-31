@@ -9,8 +9,10 @@
 #include <algorithm>
 #include <cmath>
 #include <shared_mutex>
+#include <stdexcept>
 #include <unordered_map>
 
+#include <hpx/serialization/output_archive.hpp>
 #include <hpx/threading_base/annotated_function.hpp>
 
 #include <cosmictiger/core/containers.hpp>
@@ -52,6 +54,15 @@ static void domainsCheck();
 static Vector<DomainLocal> localDomains;
 
 namespace detail {
+
+template <typename Record>
+size_t migrationPayloadBytes(Record const& record, size_t count) {
+    std::vector<char> buffer;
+    Vector<Record> records(count, record);
+    hpx::serialization::output_archive archive(buffer);
+    archive << records;
+    return archive.bytes_written();
+}
 
 Vector<size_t> countDomainSplits(Vector<double> const& bounds, int depth) {
     Vector<hpx::future<Vector<size_t>>> pending;
@@ -377,9 +388,8 @@ struct GasMigrationState {
     char converged, semiactive;
     Pair<float> viscosity;    // Alpha and its previous conformal-time rate.
     float divergence;         // Previous physical divergence for Cullen-Dehnen and Price et al.
-    Array<float, primordial::kAbundanceCount + 1> chemistry;
+    gadget4::State chemistry;
     Pair<float> chemistryEos;
-    SphChemistryStep chemistryStep;
     template <class Archive>
     void serialize(Archive& arc, unsigned) {
         arc & acceleration;
@@ -400,8 +410,6 @@ struct GasMigrationState {
         }
         if (getOptions().chemistry.enabled) {
             arc & chemistry;
-            arc & chemistryStep.halfInterval;
-            arc & chemistryStep.pendingHeating;
         }
         if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
             arc & chemistryEos;
@@ -420,11 +428,16 @@ struct SphMigrationParticle {
     }
 };
 static Vector<SphMigrationParticle> retainedSphParticles;
-static Vector<Vector<SphMigrationParticle>> receivedSphParticles;
-void receiveSphParticles(Vector<SphMigrationParticle> parts) {
+struct SphMigrationParcel {
+    int sourceRank;
+    size_t sequence;
+    Vector<SphMigrationParticle> particles;
+};
+static Vector<SphMigrationParcel> receivedSphParticles;
+void receiveSphParticles(Vector<SphMigrationParticle> parts, int sourceRank, size_t sequence) {
     static MutexType mutex;
     std::lock_guard<MutexType> lock(mutex);
-    receivedSphParticles.push_back(std::move(parts));
+    receivedSphParticles.push_back({sourceRank, sequence, std::move(parts)});
 }
 HPX_PLAIN_ACTION(receiveSphParticles, ReceiveSphParticlesAction);
 static SphMigrationParticle packSphParticle(ParticleInteger index) {
@@ -451,12 +464,7 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
             gas.divergence = sphParticlesCullenDehnenStates[i].divergence;
         }
         if (getOptions().chemistry.enabled) {
-            auto const& state = sphParticlesChemistryStates[i];
-            for (int species = 0; species < primordial::kAbundanceCount; ++species) {
-                gas.chemistry[species] = state.abundances[species];
-            }
-            gas.chemistry[primordial::kAbundanceCount] = state.thermalEnergy;
-            gas.chemistryStep = sphParticlesChemistrySteps[i];
+            gas.chemistry = sphParticlesChemistryStates[i];
         }
         if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
             gas.chemistryEos = sphParticlesChemistryEos[i];
@@ -494,12 +502,7 @@ static void unpackSphParticle(
             sphParticlesCullenDehnenStates[i] = {gas.divergence, 0.0f, 0.0f, 0.0f};
         }
         if (getOptions().chemistry.enabled) {
-            auto& state = sphParticlesChemistryStates[i];
-            for (int species = 0; species < primordial::kAbundanceCount; ++species) {
-                state.abundances[species] = gas.chemistry[species];
-            }
-            state.thermalEnergy = gas.chemistry[primordial::kAbundanceCount];
-            sphParticlesChemistrySteps[i] = gas.chemistryStep;
+            sphParticlesChemistryStates[i] = gas.chemistry;
         }
         if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
             sphParticlesChemistryEos[i] = gas.chemistryEos;
@@ -518,6 +521,8 @@ static void beginSphMigration(int rung) {
     retainedSphParticles.clear();
     auto const box = domainsFindMyBox();
     std::unordered_map<int, Vector<SphMigrationParticle>> sends;
+    size_t parcelSequence = 0;
+    size_t const parcelCapacity = domainsMigrationParcelCapacity(true);
     // The ordinary integrator retains every rung in the same particle range.
     // Moving every out-of-domain particle also handles domain rebalancing.
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
@@ -532,17 +537,17 @@ static void beginSphMigration(int rung) {
             auto const rank = findParticleDomain(x);
             auto& send = sends[rank];
             send.push_back(std::move(record));
-            if (send.size() >= kMaxParticlesPerParcel) {
-                pending.push_back(
-                    hpx::async<ReceiveSphParticlesAction>(hpxLocalities()[rank], std::move(send)));
+            if (send.size() >= parcelCapacity) {
+                pending.push_back(hpx::async<ReceiveSphParticlesAction>(
+                    hpxLocalities()[rank], std::move(send), hpxRank(), parcelSequence++));
                 send.clear();
             }
         }
     }
     for (auto& entry : sends) {
         if (!entry.second.empty()) {
-            pending.push_back(hpx::async<ReceiveSphParticlesAction>(
-                hpxLocalities()[entry.first], std::move(entry.second)));
+            pending.push_back(hpx::async<ReceiveSphParticlesAction>(hpxLocalities()[entry.first],
+                std::move(entry.second), hpxRank(), parcelSequence++));
         }
     }
     for (auto& future : pending) {
@@ -554,8 +559,15 @@ static void endSphMigration() {
     for (auto const& child : hpxChildren()) {
         pending.push_back(hpx::async<DomainsEndAction>(child));
     }
+    // Arrival order depends on action scheduling. Reassemble each sender's
+    // original particle order, with senders ordered by rank, before tree builds.
+    std::sort(receivedSphParticles.begin(), receivedSphParticles.end(),
+        [](auto const& first, auto const& second) {
+            return first.sourceRank < second.sourceRank ||
+                (first.sourceRank == second.sourceRank && first.sequence < second.sequence);
+        });
     for (auto& parcel : receivedSphParticles) {
-        for (auto& record : parcel) {
+        for (auto& record : parcel.particles) {
             retainedSphParticles.push_back(std::move(record));
         }
     }
@@ -578,6 +590,42 @@ static void endSphMigration() {
 }
 
 #endif
+
+size_t domainsMigrationPayloadBytes(bool gas, size_t count) {
+#if COSMICTIGER_WITH_SPH
+    if (gas) {
+        SphMigrationParticle record{};
+        record.part.type = kSphType;
+        return detail::migrationPayloadBytes(record, count);
+    }
+#else
+    if (gas) {
+        throw std::logic_error("SPH migration is unavailable in this build");
+    }
+#endif
+    return detail::migrationPayloadBytes(Particle{}, count);
+}
+
+size_t domainsMigrationRecordBytes(bool gas) {
+    // Measure the actual serializer, including enabled optional fields. Difference
+    // of two vector sizes removes fixed archive/vector headers. Verify affine
+    // record growth against a third sample rather than assuming sizeof(Record).
+    size_t const one = domainsMigrationPayloadBytes(gas, 1);
+    size_t const two = domainsMigrationPayloadBytes(gas, 2);
+    size_t const stride = two - one;
+    if (two <= one || domainsMigrationPayloadBytes(gas, 3) != two + stride ||
+        one > stride + kMigrationParcelOverheadBytes ||
+        stride > kMaxMigrationParcelBytes - kMigrationParcelOverheadBytes) {
+        throw std::runtime_error("Unsupported variable-length migration record serialization");
+    }
+    return stride;
+}
+
+size_t domainsMigrationParcelCapacity(bool gas) {
+    return (kMaxMigrationParcelBytes - kMigrationParcelOverheadBytes) /
+        domainsMigrationRecordBytes(gas);
+}
+
 void domainsBegin(int rung) {
 #if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
@@ -591,6 +639,7 @@ void domainsBegin(int rung) {
         futs.push_back(hpx::async<DomainsBeginAction>(c, rung));
     }
     auto const myDomain = domainsFindMyBox();
+    size_t const parcelCapacity = domainsMigrationParcelCapacity(false);
     freeIndices.resize(0);
     MutexType mutex;
     int const numberOfThreads = hpxHardwareConcurrency();
@@ -599,7 +648,8 @@ void domainsBegin(int rung) {
     constexpr int kChunkSize = 1024;
     for (int proc = 0; proc < numberOfThreads; proc++) {
         futs.push_back(hpx::async(hpx::annotated_function(
-            [proc, numberOfThreads, &mutex, &nextBegin, myDomain, currentRange, rung]() {
+            [proc, numberOfThreads, &mutex, &nextBegin, myDomain, currentRange, rung,
+                parcelCapacity]() {
                 std::unordered_map<int, Vector<Particle>> sends;
                 Vector<hpx::future<void>> futs;
                 Vector<ParticleInteger> myFreeIndices;
@@ -619,7 +669,7 @@ void domainsBegin(int rung) {
                                 ParticleInteger const rank = findParticleDomain(x);
                                 auto& send = sends[rank];
                                 send.push_back(particlesGetParticle(i));
-                                if (send.size() >= kMaxParticlesPerParcel) {
+                                if (send.size() >= parcelCapacity) {
                                     //				PRINT( "Sending %i from %i to %i\n",
                                     // send.size(),
                                     // hpx_rank(), rank);

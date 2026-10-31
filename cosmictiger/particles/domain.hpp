@@ -13,6 +13,10 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #include <cosmictiger/math/range.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
+// Measured serialized payload, record stride and byte-bounded send capacity.
+size_t domainsMigrationPayloadBytes(bool gas, size_t count);
+size_t domainsMigrationRecordBytes(bool gas);
+size_t domainsMigrationParcelCapacity(bool gas);
 void domainsBegin(int rung);
 void domainsEnd();
 void domainsRebound();

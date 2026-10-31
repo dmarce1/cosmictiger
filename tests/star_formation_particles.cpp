@@ -21,45 +21,19 @@ void requireStarParticles(bool condition, char const* message) {
     }
 }
 
-primordial::State fixtureChemistry(int rank, int originalGasIndex) {
-    primordial::State state;
-    primordial::Environment environment;
-    float const fractions[primordial::kInitialFractionCount] = {
-        originalGasIndex == 0 ? 0.125f : 0.875f, 0.125f, 0.0625f, 0.0f, 0.0f, 0.0f};
-    requireStarParticles(
-        primordial::initializeState(state, environment, fractions) == primordial::Status::Success,
-        "invalid chemistry persistence fixture");
-    state.thermalEnergy = 4.0f + 2.0f * rank + originalGasIndex;
-    return state;
+gadget4::State fixtureChemistry(int rank, int originalGasIndex) {
+    return {float(0.25 + 0.125 * originalGasIndex + 0.01 * rank)};
 }
 
 Pair<float> fixtureChemistryEos(int originalGasIndex) {
     return {0.5f + 0.0625f * originalGasIndex, 1.5f + 0.0625f * originalGasIndex};
 }
 
-SphChemistryStep fixtureChemistryStep(int rank, int originalGasIndex) {
-    return {0.25 * (originalGasIndex + 1) + rank, -0.5 * (originalGasIndex + 1) - rank};
-}
-
 void requireFixtureChemistry(ParticleInteger gasIndex, int rank, int originalGasIndex) {
     auto const expected = fixtureChemistry(rank, originalGasIndex);
-    auto const& state = sphParticlesChemistryStates[gasIndex];
-    for (int species = 0; species < primordial::kAbundanceCount; ++species) {
-        requireStarParticles(std::bit_cast<uint32_t>(state.abundances[species]) ==
-                std::bit_cast<uint32_t>(expected.abundances[species]),
-            "combined persistence changed a direct chemistry species");
-    }
-    requireStarParticles(state.thermalEnergy == expected.thermalEnergy,
-        "combined persistence changed chemistry thermal energy");
-    auto const expectedEos = fixtureChemistryEos(originalGasIndex);
-    auto const eos = sphParticlesChemistryEos[gasIndex];
-    requireStarParticles(eos.first == expectedEos.first && eos.second == expectedEos.second,
-        "combined persistence changed chemistry EOS");
-    auto const expectedStep = fixtureChemistryStep(rank, originalGasIndex);
-    auto const step = sphParticlesChemistrySteps[gasIndex];
-    requireStarParticles(step.halfInterval == expectedStep.halfInterval &&
-            step.pendingHeating == expectedStep.pendingHeating,
-        "combined persistence changed the pending chemistry source");
+    requireStarParticles(
+        sphParticlesChemistryStates[gasIndex].electronFraction == expected.electronFraction,
+        "combined persistence changed the GADGET-4 electron guess");
 }
 
 void initializeStarParticleFixture() {
@@ -67,6 +41,7 @@ void initializeStarParticleFixture() {
     sphParticlesResize(2, false);
     for (ParticleInteger index = 0; index < 3; ++index) {
         particlesStarFormationStates[index] = {};
+        particlesStarFormationStates[index].id = uint64_t(hpxRank()) * 3 + index + 1;
         particlesRung(index) = 2;
         particlesType(index) = index == 0 ? kDarkMatterType : kSphType;
         particlesCatIndex(index) = index == 0 ? kNoParticleIndex : index - 1;
@@ -82,7 +57,6 @@ void initializeStarParticleFixture() {
             sphParticlesDensity(gasIndex) = 2.0f + index;
             sphParticlesChemistryStates[gasIndex] = fixtureChemistry(hpxRank(), gasIndex);
             sphParticlesChemistryEos[gasIndex] = fixtureChemistryEos(gasIndex);
-            sphParticlesChemistrySteps[gasIndex] = fixtureChemistryStep(hpxRank(), gasIndex);
         }
     }
 }
@@ -92,17 +66,11 @@ std::vector<Particle> exerciseStarParticleFixture() {
     for (ParticleInteger index = 0; index < 3; ++index) {
         auto& state = particlesStarFormationStates[index];
         requireStarParticles(state.id == offset + uint64_t(index) + 1,
-            "distributed IDs are not unique rank-prefix identities");
+            "initialization changed the supplied source identities");
         state.id += uint64_t{1} << 60;
         state.eventCounter = uint64_t{1} << (index + 40);
-        state.metallicity = float(index) / 64.0f;
         state.elapsedPhysicalTime = 16.0;
-        if (index > 0) {
-            state.sourceHalfInterval = 0.125;
-            state.pendingHeating = -0.25;
-            state.formationOpticalDepth = 0.5;
-            state.windTimeRemaining = 0.75;
-        }
+        state.specificStarFormationRate = index > 0 ? 0.125 * (index + 1) : 0.0;
     }
     auto const oldGasId = particlesStarFormationStates[2].id;
     particlesSwap(0, 2);
@@ -129,9 +97,7 @@ std::vector<Particle> exerciseStarParticleFixture() {
     }
     auto const& star = particlesStarFormationStates[1];
     requireStarParticles(star.id == stellarId && star.eventCounter == stellarCounter &&
-            star.formationTime == 16.0 && star.windTimeRemaining == 0.0 &&
-            star.sourceHalfInterval == 0.0 && star.pendingHeating == 0.0 &&
-            star.formationOpticalDepth == 0.0,
+            star.formationTime == 16.0 && star.specificStarFormationRate == 0.0,
         "conversion lost identity or retained pending sources");
     auto const gas = particlesStarFormationStates[0];
     FILE* file = std::tmpfile();
@@ -142,20 +108,12 @@ std::vector<Particle> exerciseStarParticleFixture() {
     }
     sphParticlesChemistryStates[0] = {};
     sphParticlesChemistryEos[0] = {};
-    sphParticlesChemistrySteps[0] = {};
     std::rewind(file);
     particlesLoad(file);
     FILE* const mixedCheckpoint = file;
     requireFixtureChemistry(0, hpxRank(), 1);
     auto const& restoredGas = particlesStarFormationStates[0];
-    requireStarParticles(restoredGas.id == gas.id && restoredGas.eventCounter == gas.eventCounter &&
-            restoredGas.metallicity == gas.metallicity &&
-            restoredGas.sourceHalfInterval == gas.sourceHalfInterval &&
-            restoredGas.pendingHeating == gas.pendingHeating &&
-            restoredGas.formationOpticalDepth == gas.formationOpticalDepth &&
-            restoredGas.elapsedPhysicalTime == gas.elapsedPhysicalTime &&
-            restoredGas.windTimeRemaining == gas.windTimeRemaining,
-        "checkpoint changed persistent gas source state");
+    requireStarParticles(restoredGas == gas, "checkpoint changed persistent gas source state");
     requireStarParticles(particlesStarFormationStates[1].id == stellarId &&
             particlesStarFormationStates[1].eventCounter == stellarCounter &&
             particlesStarFormationStates[1].formationTime == 16.0,
@@ -211,6 +169,19 @@ void starFormationParticlesTest() {
     detail::requireStarParticles(getOptions().starFormation.enabled && getOptions().hydro.enabled &&
             getOptions().chemistry.enabled && !getOptions().compute.cuda,
         "fixture requires CPU SPH star formation with particle chemistry");
+    for (bool const gas : {false, true}) {
+        size_t const stride = domainsMigrationRecordBytes(gas);
+        size_t const capacity = domainsMigrationParcelCapacity(gas);
+        size_t const budget = kMaxMigrationParcelBytes - kMigrationParcelOverheadBytes;
+        detail::requireStarParticles(
+            capacity > 0 && capacity * stride <= budget && (capacity + 1) * stride > budget,
+            "migration send boundary does not enforce the serialized byte budget");
+        size_t const empty = domainsMigrationPayloadBytes(gas, 0);
+        size_t const payload = domainsMigrationPayloadBytes(gas, capacity);
+        detail::requireStarParticles(
+            payload <= kMaxMigrationParcelBytes && payload - empty == capacity * stride,
+            "a full migration vector exceeds its measured serialized byte budget");
+    }
     std::vector<hpx::future<void>> initialization;
     for (auto const& locality : hpxLocalities()) {
         initialization.push_back(hpx::async<InitializeStarParticleFixtureAction>(locality));
@@ -256,7 +227,7 @@ void starFormationParticlesTest() {
     for (size_t index = 0; index < beforeMigration.size(); ++index) {
         detail::requireStarParticles(beforeMigration[index].type == afterMigration[index].type &&
                 beforeMigration[index].starFormation == afterMigration[index].starFormation,
-            "migration lost stellar identity or pending gas source state");
+            "migration lost stellar identity or saved gas source state");
     }
     PRINT("Star-formation particles passed: IDs, permutation, conversion, compaction, "
           "momentum, checkpoint, combined chemistry/source metadata, empty gas, "

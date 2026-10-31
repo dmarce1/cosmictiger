@@ -26,6 +26,12 @@
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
+#if COSMICTIGER_ENABLE_CHEMISTRY
+#include <cosmictiger/sph/sph_chemistry.hpp>
+#endif
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+#include <cosmictiger/sph/star_formation.hpp>
+#endif
 
 namespace detail {
 
@@ -140,8 +146,8 @@ void checkUnitsOutputCommandLine(DBfile* file) {
     requireUnitsOutput(foundHpxThreads && foundTest, "original HPX and application arguments");
 }
 
-void checkUnitsOutputField(
-    DBfile* file, std::string const& name, int count, double expected, char const* unit = nullptr) {
+void checkUnitsOutputField(DBfile* file, std::string const& name, int count, double expected,
+    char const* unit = nullptr, char const* expectedMesh = nullptr) {
     UnitsOutputField field(DBGetPointvar(file, name.c_str()), DBFreePointvar);
     requireUnitsOutput(bool(field), name + " field exists");
     requireUnitsOutput(field->datatype == DB_DOUBLE, name + " double datatype");
@@ -153,12 +159,47 @@ void checkUnitsOutputField(
         name.ends_with("eint") || name.ends_with("kernel_support_radius") ||
         name.ends_with("alpha");
     requireUnitsOutput(field->meshname &&
-            std::filesystem::path(field->meshname).filename() == (gas ? "gas" : "dark_matter"),
+            std::filesystem::path(field->meshname).filename() ==
+                (expectedMesh ? expectedMesh : (gas ? "gas" : "dark_matter")),
         name + " attaches to the correct particle species");
     auto const* values = static_cast<double const*>(field->vals[0]);
     for (int i = 0; i < field->nels; i++) {
         requireUnitsOutputClose(values[i], expected, name + " value");
     }
+}
+
+void checkUnitsOutputSourceFields(DBfile* file, std::string const& path, int rank) {
+#if COSMICTIGER_ENABLE_CHEMISTRY
+    auto const chemistry = sphChemistryOutput(sphParticlesChemistryStates[0],
+        sphParticlesInternalEnergy(0), sphParticlesDensity(0), 0.25);
+    char const* names[] = {"chem_HI", "chem_HII", "chem_HeI", "chem_HeII", "chem_HeIII",
+        "chem_electrons", "temperature", "mean_molecular_weight", "frozen_gamma"};
+    for (size_t field = 0; field < chemistry.size(); ++field) {
+        checkUnitsOutputField(
+            file, path + names[field], 1, chemistry[field], field == 6 ? "K" : "1", "gas");
+    }
+#endif
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+    auto const phase = starFormationDiagnostics(0, 0.25);
+    double hotTemperature = 0.0;
+    if (phase.starForming) {
+        auto const parameters = starFormationParameters(0.25);
+        double electrons = sphParticlesChemistryStates[0].electronFraction;
+        double const density =
+            double(sphParticlesDensity(0)) * parameters.densityScale / (0.25 * 0.25 * 0.25);
+        requireUnitsOutput(
+            gadget4::temperatureFromEnergy(phase.hotEnergy, density, parameters.cooling, electrons,
+                hotTemperature) == gadget4::Status::Success,
+            "reference hot-phase temperature");
+    }
+    checkUnitsOutputField(file, path + "cold_fraction", 1, phase.coldFraction, "1", "gas");
+    checkUnitsOutputField(file, path + "hot_temperature", 1, hotTemperature, "K", "gas");
+    checkUnitsOutputField(file, path + "specific_sfr", 1,
+        particlesStarFormationStates[2].specificStarFormationRate, "1/s", "gas");
+    uint64_t const identity = (uint64_t{1} << 60) + 3 * uint64_t(rank) + 3;
+    checkUnitsOutputField(file, path + "hydro_id_low", 1, uint32_t(identity), "1", "gas");
+    checkUnitsOutputField(file, path + "hydro_id_high", 1, identity >> 32, "1", "gas");
+#endif
 }
 
 void checkUnitsOutputViscosity(DBfile* file, std::string const& path) {
@@ -310,7 +351,18 @@ void unitsOutputParticleFixture(bool initialize) {
             particlesRung(i) = 1;
             particlesType(i) = i == 2 ? kSphType : kDarkMatterType;
             particlesCatIndex(i) = i == 2 ? 0 : kNoParticleIndex;
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+            particlesStarFormationStates[i] = {};
+            particlesStarFormationStates[i].id =
+                (uint64_t{1} << 60) + 3 * uint64_t(hpxRank()) + i + 1;
+#endif
         }
+#if COSMICTIGER_ENABLE_CHEMISTRY
+        sphParticlesChemistryStates[0] = {0.25f};
+#endif
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+        particlesStarFormationStates[2].specificStarFormationRate = 0.125;
+#endif
         sphParticlesParticleIndex(0) = 2;
         sphParticlesSupportRadius(0) = 0.03125;
         sphParticlesDensity(0) = 8.0;
@@ -332,11 +384,41 @@ void unitsOutputParticleFixture(bool initialize) {
     }
 }
 
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+void unitsOutputSourceFixture(int snapshot);
+HPX_PLAIN_ACTION(unitsOutputSourceFixture, UnitsOutputSourceFixtureAction);
+void unitsOutputSourceFixture(int snapshot) {
+    Vector<hpx::future<void>> pending;
+    for (auto const& child : hpxChildren()) {
+        pending.push_back(hpx::async<UnitsOutputSourceFixtureAction>(child, snapshot));
+    }
+    auto const parameters = starFormationParameters(0.25);
+    double const density = std::max(parameters.model.thresholdDensity,
+        parameters.model.overdensityThreshold / (0.25 * 0.25 * 0.25));
+    sphParticlesDensity(0) =
+        float((10.0 + snapshot) * density * (0.25 * 0.25 * 0.25) / parameters.densityScale);
+    sphParticlesInternalEnergy(0) =
+        float((snapshot + 1.0) * 1.e12 * (0.25 * 0.25) / parameters.energyScale);
+    particlesStarFormationStates[2].specificStarFormationRate = 0.125 * (snapshot + 1);
+    detail::requireUnitsOutput(starFormationDiagnostics(0, 0.25).starForming,
+        "dense output fixture has a multiphase target");
+    for (auto& future : pending) {
+        future.get();
+    }
+}
+#endif
+
 void unitsOutputTest() {
     using namespace detail;
     auto const originalOptions = getOptions();
     auto options = originalOptions;
     options.hydro.enabled = true;
+#if COSMICTIGER_ENABLE_CHEMISTRY
+    options.chemistry.enabled = true;
+#endif
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+    options.starFormation.enabled = true;
+#endif
 
     options.output.silo = true;
     options.output.siloInterval = 1;
@@ -367,6 +449,7 @@ void unitsOutputTest() {
         auto file = openUnitsOutput(0, rank);
         checkUnitsOutputCommandLine(file.get());
         checkUnitsOutputViscosity(file.get(), "");
+        checkUnitsOutputSourceFields(file.get(), "", rank);
         UnitsOutputMesh mesh(DBGetPointmesh(file.get(), "dark_matter"), DBFreePointmesh);
         requireUnitsOutput(bool(mesh) && mesh->datatype == DB_DOUBLE && mesh->nels == 2,
             "code-unit dark matter mesh schema");
@@ -396,6 +479,9 @@ void unitsOutputTest() {
         for (bool cosmological : {false, true}) {
             for (bool lab : {false, true}) {
                 checkConvertedUnitsOutput(file.get(), cosmological, lab);
+                std::string const path = std::string(cosmological ? "cosmological/" : "cgs/") +
+                    (lab ? "lab/" : "comoving/");
+                checkUnitsOutputSourceFields(file.get(), path, rank);
             }
         }
         requireUnitsOutput(
@@ -426,6 +512,22 @@ void unitsOutputTest() {
             "cosmological comoving selection");
     }
     unitsOutputParticleFixture(false);
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+    options.output.units = "both";
+    options.output.frame = "both";
+    setOptions(options);
+    for (int snapshot = 0; snapshot < 2; ++snapshot) {
+        unitsOutputSourceFixture(snapshot);
+        viewOutputViews(4 + snapshot, 0.25, true);
+        for (int rank = 0; rank < hpxSize(); ++rank) {
+            auto file = openUnitsOutput(4 + snapshot, rank);
+            for (auto const* path :
+                {"cgs/comoving/", "cgs/lab/", "cosmological/comoving/", "cosmological/lab/"}) {
+                checkUnitsOutputSourceFields(file.get(), path, rank);
+            }
+        }
+    }
+#endif
     setOptions(originalOptions);
     viewConfigure();
     PRINT("Boost.Units Silo output checks passed (%i localities)\n", hpxSize());

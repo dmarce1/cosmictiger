@@ -68,7 +68,9 @@ def configurationDefinitions(configuration, bits, degrees):
     if not hasGravity(configuration):
         low = high = -1
     definitions = {"COSMICTIGER_ENABLE_" + key: str(int(configuration[key])) for key in FEATURES}
-    definitions["COSMICTIGER_ENABLE_STAR_FORMATION"] = str(int(configuration["STARS"]))
+    definitions["COSMICTIGER_ENABLE_CHEMISTRY"] = str(int(hasChemistry(configuration)))
+    definitions["COSMICTIGER_ENABLE_STARS"] = str(int(hasStarFormation(configuration)))
+    definitions["COSMICTIGER_ENABLE_STAR_FORMATION"] = str(int(hasStarFormation(configuration)))
     definitions.update({"ORDER": str(high + 1), "FMM_MIN_ORDER": str(low + 1),
                         "FMM_MAX_ORDER": str(high + 1), "COSMICTIGER_POSITION_BITS": str(bits),
                         "COSMICTIGER_WITH_SPH": str(int(configuration["SPH"])),
@@ -109,14 +111,12 @@ def sourceSelectionErrors(sources, configuration):
         if (not configuration["SPH"] or not configuration["FMM"]) and source == "tests/kernel_selection_cuda.cu":
             errors.append(f"unavailable SPH gravity regression's CUDA helper: {source}")
         if not hasChemistry(configuration) and source in {
-                "src/chemistry/primordial_chemistry.cpp", "src/chemistry/primordial_chemistry.cu",
+                "src/chemistry/gadget4_cooling.cpp", "src/chemistry/gadget4_cooling.cu",
                 "src/sph/sph_chemistry.cpp", "tests/sph/chemistry.cpp",
-                "tests/primordial_rates.cpp", "tests/primordial_solver.cpp", "tests/primordial_units.cpp",
-                "tests/primordial_reference.cpp", "tests/primordial_cuda.cu"}:
-            errors.append(f"particle chemistry disabled but compiles source: {source}")
+                "tests/gadget4_cooling.cpp"}:
+            errors.append(f"equilibrium cooling disabled but compiles source: {source}")
         if not hasStarFormation(configuration) and source in {
                 "src/sph/star_formation.cpp", "src/sph/star_formation_cuda.cu",
-                "src/sph/springel_and_hernquist/cooling.cpp",
                 "tests/sph/star_formation_cuda.cu", "tests/sph/star_formation.cpp", "tests/star_formation_particles.cpp",
                 "tests/springel_and_hernquist.cpp", "tests/springel_and_hernquist_cuda.cu"}:
             errors.append(f"star formation disabled but compiles source: {source}")
@@ -150,7 +150,7 @@ def requiredSources(configuration, cuda):
     if hasChemistry(configuration):
         required.add("src/sph/sph_chemistry.cpp")
     if hasStarFormation(configuration):
-        required.update({"src/sph/star_formation.cpp", "src/sph/springel_and_hernquist/cooling.cpp"})
+        required.update({"src/sph/star_formation.cpp"})
         if cuda:
             required.add("src/sph/star_formation_cuda.cu")
     if cuda:
@@ -240,13 +240,23 @@ def checkBuild(buildDirectory):
         if count != 1:
             errors.append(f"cosmictiger_objects compiles {source} {count} times instead of once")
     expectedDefinitions = configurationDefinitions(configuration, bits, degrees)
+    starCudaSources = set(sourcesByTarget.get("cosmictiger_star_formation_cuda", {}))
+    if cuda and hasStarFormation(configuration):
+        if sourcesByTarget.get("cosmictiger_star_formation_cuda", {}) != Counter({"src/sph/star_formation_cuda.cu": 1}):
+            errors.append("strict star-formation CUDA target must compile its production source once")
+        for source, definitions in definitionsByTarget.get("cosmictiger_star_formation_cuda", []):
+            for name, value in expectedDefinitions.items():
+                if definitions.get(name) != {value}:
+                    errors.append(f"cosmictiger_star_formation_cuda: {source} needs {name}={value}")
+    elif starCudaSources:
+        errors.append("unavailable strict star-formation CUDA target is compiled")
     for target in ("cosmictiger", "cosmictiger_objects"):
         sources = set(sourcesByTarget.get(target, {}))
         if target == "cosmictiger":
             if sources != {"src/main.cpp"}:
                 errors.append("cosmictiger: executable must compile only src/main.cpp")
         else:
-            for missing in sorted(requiredSources(configuration, cuda) - sources):
+            for missing in sorted(requiredSources(configuration, cuda) - (sources | starCudaSources)):
                 errors.append(f"{target}: required source missing: {missing}")
             instances = Counter(Path(source).name for source, count in sourcesByTarget.get(target, {}).items()
                                 for _ in range(count) if Path(source).name.startswith("fmm_instance_"))
@@ -282,11 +292,11 @@ def checkBuild(buildDirectory):
         if "src/chemistry/recombination.cpp" not in linkedSources:
             errors.append("cosmictiger lacks shared homogeneous recombination")
         if hasChemistry(configuration):
-            chemistry = {"src/chemistry/primordial_chemistry.cpp"}
+            chemistry = {"src/chemistry/gadget4_cooling.cpp"}
             if cuda:
-                chemistry.add("src/chemistry/primordial_chemistry.cu")
+                chemistry.add("src/chemistry/gadget4_cooling.cu")
             for missing in chemistry - linkedSources:
-                errors.append(f"cosmictiger lacks particle chemistry source {missing}")
+                errors.append(f"cosmictiger lacks equilibrium cooling source {missing}")
     elif setting("CMAKE_GENERATOR") == "Unix Makefiles":
         errors.append("cosmictiger generated Makefile link command is missing")
     if errors:

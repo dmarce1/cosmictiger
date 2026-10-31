@@ -20,8 +20,6 @@
 
 #include <hpx/modules/program_options.hpp>
 
-#include <cosmictiger/chemistry/primordial_eos.hpp>
-#include <cosmictiger/chemistry/recombination.hpp>
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/diagnostic_output.hpp>
 #include <cosmictiger/core/hpx.hpp>
@@ -117,14 +115,28 @@ bool isPositiveFloatOption(double value) {
     return isFiniteFloatOption(value) && value >= std::numeric_limits<float>::min();
 }
 
-void validateStarFormation(Options const& opts) {
-    constexpr double kGamma = 5.0 / 3.0;
-    constexpr double kGammaTolerance = 1.0e-12;
-    constexpr double kWarmTemperature = 1.0e4;
-    auto const& settings = opts.starFormation;
-    if (settings.winds && !settings.enabled) {
-        throw std::invalid_argument("starFormation.winds requires starFormation.enabled=true");
+void validateCooling(Options const& opts) {
+    if (!opts.chemistry.enabled) {
+        return;
     }
+    if (!opts.hydro.enabled) {
+        throw std::invalid_argument("chemistry.enabled requires hydro.enabled=true");
+    }
+    if (!isFiniteOption(opts.hydro.gamma) || std::abs(opts.hydro.gamma - 5.0 / 3.0) > 1.0e-12) {
+        throw std::invalid_argument("GADGET-4 equilibrium cooling requires hydro.gamma=5/3");
+    }
+    if (!isFiniteOption(opts.chemistry.initializationTemperature) ||
+        opts.chemistry.initializationTemperature < 0.0 ||
+        !isFiniteOption(opts.chemistry.minimumSpecificEnergy) ||
+        opts.chemistry.minimumSpecificEnergy < 0.0) {
+        throw std::invalid_argument(
+            "chemistry.initializationTemperature and "
+            "chemistry.minimumSpecificEnergy must be finite and nonnegative");
+    }
+}
+
+void validateStarFormation(Options const& opts) {
+    auto const& settings = opts.starFormation;
     if (!settings.enabled) {
         return;
     }
@@ -140,10 +152,6 @@ void validateStarFormation(Options const& opts) {
     if (!opts.chemistry.enabled) {
         throw std::invalid_argument("starFormation.enabled requires chemistry.enabled=true");
     }
-    if (!isFiniteOption(opts.hydro.gamma) ||
-        std::abs(opts.hydro.gamma - kGamma) > kGammaTolerance) {
-        throw std::invalid_argument("starFormation.enabled requires hydro.gamma=5/3");
-    }
     if (opts.run.timeIntegrator != "traditional" && opts.run.timeIntegrator != "global") {
         throw std::invalid_argument(
             "Star formation requires the traditional or global time integrator");
@@ -151,28 +159,20 @@ void validateStarFormation(Options const& opts) {
     if (!isFiniteOption(settings.beta) || settings.beta <= 0.0 || settings.beta >= 1.0 ||
         !isPositiveFloatOption(settings.evaporationFactor) ||
         !isPositiveFloatOption(settings.starFormationTimeGyr) ||
-        !isPositiveFloatOption(settings.coldTemperature) ||
-        settings.coldTemperature >= kWarmTemperature ||
+        !isPositiveFloatOption(settings.coldTemperature) || settings.coldTemperature >= 1.0e4 ||
         !isPositiveFloatOption(settings.supernovaTemperature) ||
-        settings.supernovaTemperature <= kWarmTemperature || settings.supernovaTemperature > 1.0e8) {
+        settings.supernovaTemperature <= 1.0e4) {
         throw std::invalid_argument(
             "Invalid starFormation phase parameters: beta must be in (0,1), "
             "evaporationFactor and starFormationTimeGyr positive, coldTemperature in (0,10000) K, "
-            "and supernovaTemperature in (10000, 1e8] K");
+            "and supernovaTemperature above 10000 K");
     }
-    if (!isFiniteOption(settings.metalYield) || settings.metalYield < 0.0 ||
-        settings.metalYield > 1.0 || !isPositiveFloatOption(settings.windMassLoading) ||
-        !isFiniteOption(settings.windEnergyFraction) || settings.windEnergyFraction < 0.0 ||
-        !isFiniteOption(settings.windDecouplingMyr) || settings.windDecouplingMyr < 0.0 ||
-        !isFiniteOption(settings.windRecoupleDensityFraction) ||
-        settings.windRecoupleDensityFraction <= 0.0 || settings.windRecoupleDensityFraction > 1.0) {
-        throw std::invalid_argument("Invalid starFormation yield or wind parameters: yield must be "
-                                    "in [0,1], energy fraction and decoupling time nonnegative, "
-                                    "mass loading positive, "
-                                    "and recoupling density fraction in (0,1]");
-    }
-    if (settings.windDirection != "isotropic") {
-        throw std::invalid_argument("starFormation.windDirection must be isotropic");
+    if (!isFiniteOption(settings.criticalPhysicalDensity) ||
+        settings.criticalPhysicalDensity < 0.0 || !isFiniteOption(settings.criticalOverDensity) ||
+        settings.criticalOverDensity < 0.0) {
+        throw std::invalid_argument(
+            "starFormation.criticalPhysicalDensity and "
+            "starFormation.criticalOverDensity must be finite and nonnegative");
     }
 }
 
@@ -215,6 +215,7 @@ Options const& getOptions() {
 }
 
 void setOptions(Options const& opts) {
+    detail::validateCooling(opts);
     detail::validateStarFormation(opts);
 #if !COSMICTIGER_WITH_GRAVITY
     if (opts.gravity.enabled || opts.analysis.groups || opts.lightcone.enabled) {
@@ -229,7 +230,7 @@ void setOptions(Options const& opts) {
 #endif
 #if !COSMICTIGER_ENABLE_CHEMISTRY
     if (opts.chemistry.enabled) {
-        throw std::invalid_argument("Particle chemistry requires COSMICTIGER_ENABLE_CHEMISTRY=ON");
+        throw std::invalid_argument("Equilibrium cooling requires COSMICTIGER_ENABLE_CHEMISTRY=ON");
     }
 #endif
     if (opts.compute.positionType != (kPositionBits == 64 ? "fixed64" : "fixed32")) {
@@ -420,28 +421,11 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"starFormation.coldTemperature", options.starFormation.coldTemperature},
         {"starFormation.supernovaTemperature", options.starFormation.supernovaTemperature},
         {"starFormation.seed", std::to_string(options.starFormation.seed)},
-        {"starFormation.metalYield", options.starFormation.metalYield},
-        {"starFormation.winds", options.starFormation.winds},
-        {"starFormation.windMassLoading", options.starFormation.windMassLoading},
-        {"starFormation.windEnergyFraction", options.starFormation.windEnergyFraction},
-        {"starFormation.windDecouplingMyr", options.starFormation.windDecouplingMyr},
-        {"starFormation.windRecoupleDensityFraction",
-            options.starFormation.windRecoupleDensityFraction},
-        {"starFormation.windDirection", options.starFormation.windDirection},
+        {"starFormation.criticalPhysicalDensity", options.starFormation.criticalPhysicalDensity},
+        {"starFormation.criticalOverDensity", options.starFormation.criticalOverDensity},
         {"chemistry.enabled", options.chemistry.enabled},
-        {"chemistry.network", options.chemistry.network},
-        {"chemistry.initialization", options.chemistry.initialization},
-        {"chemistry.radiationFile", options.chemistry.radiationFile},
-        {"chemistry.initialTemperature", options.chemistry.initialTemperature},
-        {"chemistry.hydrogenIonFraction", options.chemistry.hydrogenIonFraction},
-        {"chemistry.heliumIonFraction", options.chemistry.heliumIonFraction},
-        {"chemistry.heliumDoubleIonFraction", options.chemistry.heliumDoubleIonFraction},
-        {"chemistry.hydrogenMinusFraction", options.chemistry.hydrogenMinusFraction},
-        {"chemistry.molecularFraction", options.chemistry.molecularFraction},
-        {"chemistry.molecularIonFraction", options.chemistry.molecularIonFraction},
-        {"chemistry.fractionalChangeLimit", options.chemistry.fractionalChangeLimit},
-        {"chemistry.electronFractionFloor", options.chemistry.electronFractionFloor},
-        {"chemistry.maxSubsteps", options.chemistry.maxSubsteps},
+        {"chemistry.initializationTemperature", options.chemistry.initializationTemperature},
+        {"chemistry.minimumSpecificEnergy", options.chemistry.minimumSpecificEnergy},
         {"hydro.enabled", options.hydro.enabled},
         {"hydro.kernelFamily", options.hydro.kernelFamily},
         {"hydro.kernelDegree", options.hydro.kernelDegree},
@@ -788,76 +772,44 @@ bool processOptions(int argc, char* argv[]) {
         po::value<double>(&opts.hydro.cfl)->default_value(0.22821773229381923),
         "Courant time-step factor using effective radius (2 sigma)");
 
-    po::options_description chemistryOpts("Primordial chemistry");
+    po::options_description chemistryOpts("GADGET-4 equilibrium cooling");
     chemistryOpts.add_options()("chemistry.enabled",
         po::value<bool>(&opts.chemistry.enabled)->default_value(false),
-        "evolve primordial thermochemistry (requires hydro.enabled)")("chemistry.network",
-        po::value<std::string>(&opts.chemistry.network)->default_value("atomic6"),
-        "atomic6 or molecular9; optically thin gas, 10 K to 1e8 K")("chemistry.initialization",
-        po::value<std::string>(&opts.chemistry.initialization)->default_value("recombination"),
-        "recombination fills unspecified initial T/H+/He+/He++; manual uses fixed defaults")(
-        "chemistry.radiationFile",
-        po::value<std::string>(&opts.chemistry.radiationFile)->default_value(""),
-        "optional versioned redshift/photo-rate table; empty means no imposed UV")(
-        "chemistry.synchronizedRung", po::value<int>(),
-        "deprecated and ignored; chemistry follows SPH timesteps")(
-        "chemistry.initialTemperature",
-        po::value<double>(&opts.chemistry.initialTemperature)->default_value(1000.0),
-        "initial gas temperature in kelvin")("chemistry.hydrogenIonFraction",
-        po::value<double>(&opts.chemistry.hydrogenIonFraction)->default_value(2.0e-4),
-        "initial H+ fraction per H nucleus")("chemistry.heliumIonFraction",
-        po::value<double>(&opts.chemistry.heliumIonFraction)->default_value(0.0),
-        "initial He+ fraction per He nucleus")("chemistry.heliumDoubleIonFraction",
-        po::value<double>(&opts.chemistry.heliumDoubleIonFraction)->default_value(0.0),
-        "initial He++ fraction per He nucleus")("chemistry.hydrogenMinusFraction",
-        po::value<double>(&opts.chemistry.hydrogenMinusFraction)->default_value(0.0),
-        "initial H- fraction per H nucleus")("chemistry.molecularFraction",
-        po::value<double>(&opts.chemistry.molecularFraction)->default_value(0.0),
-        "initial fraction of H nuclei in H2")("chemistry.molecularIonFraction",
-        po::value<double>(&opts.chemistry.molecularIonFraction)->default_value(0.0),
-        "initial fraction of H nuclei in H2+")("chemistry.fractionalChangeLimit",
-        po::value<double>(&opts.chemistry.fractionalChangeLimit)->default_value(0.1),
-        "Anninos electron/energy fractional change limit per substep (0, 0.1]")(
-        "chemistry.electronFractionFloor",
-        po::value<double>(&opts.chemistry.electronFractionFloor)->default_value(1.0e-20),
-        "minimum electron scale for timestep selection; never floors species")(
-        "chemistry.maxSubsteps", po::value<int>(&opts.chemistry.maxSubsteps)->default_value(4096),
-        "maximum accepted source substeps per half step");
+        "equilibrium atomic H/He cooling with fixed X=0.76; requires hydro.enabled and gamma=5/3")(
+        "chemistry.initializationTemperature",
+        po::value<double>(&opts.chemistry.initializationTemperature)->default_value(10000.0),
+        "GADGET-4 InitGasTemp in kelvin; zero preserves initial-condition thermal energy")(
+        "chemistry.minimumSpecificEnergy",
+        po::value<double>(&opts.chemistry.minimumSpecificEnergy)->default_value(0.0),
+        "GADGET-4 MinEgySpec in physical erg/g; zero adds no thermal-energy floor");
 
-    po::options_description starFormationOpts("Springel-Hernquist star formation");
+    po::options_description starFormationOpts("GADGET-4 star formation");
     starFormationOpts.add_options()("starFormation.enabled",
         po::value<bool>(&opts.starFormation.enabled)->default_value(false),
-        "enable the equilibrium Springel-Hernquist model; requires SPH and chemistry")(
-        "starFormation.beta", po::value<double>(&opts.starFormation.beta)->default_value(0.1),
-        "instantaneously recycled massive-star mass fraction")("starFormation.evaporationFactor",
+        "GADGET-4 multiphase relaxation and whole-particle star conversion; requires SPH and "
+        "cooling")("starFormation.beta",
+        po::value<double>(&opts.starFormation.beta)->default_value(0.1),
+        "instantaneously recycled massive-star mass fraction (FactorSN)")(
+        "starFormation.evaporationFactor",
         po::value<double>(&opts.starFormation.evaporationFactor)->default_value(1000.0),
-        "cloud evaporation factor A0 at the derived density threshold")(
+        "cloud evaporation factor A0 at the physical threshold (FactorEVP)")(
         "starFormation.starFormationTimeGyr",
         po::value<double>(&opts.starFormation.starFormationTimeGyr)->default_value(2.1),
-        "star formation time at the density threshold, in Gyr")("starFormation.coldTemperature",
+        "star formation timescale at the physical threshold in Gyr (MaxSfrTimescale)")(
+        "starFormation.coldTemperature",
         po::value<double>(&opts.starFormation.coldTemperature)->default_value(1000.0),
-        "cold-cloud temperature in kelvin")("starFormation.supernovaTemperature",
+        "neutral cold-cloud temperature in kelvin (TempClouds)")(
+        "starFormation.supernovaTemperature",
         po::value<double>(&opts.starFormation.supernovaTemperature)->default_value(1.0e8),
-        "supernova specific-energy temperature in kelvin")("starFormation.seed",
-        po::value<std::string>(&starFormationSeedInput)->default_value("1"),
-        "seed for particle-identity-based star formation and wind random streams")(
-        "starFormation.metalYield",
-        po::value<double>(&opts.starFormation.metalYield)->default_value(0.02),
-        "new metal mass per mass locked into long-lived stars")("starFormation.winds",
-        po::value<bool>(&opts.starFormation.winds)->default_value(false),
-        "enable stochastic kinetic winds")("starFormation.windMassLoading",
-        po::value<double>(&opts.starFormation.windMassLoading)->default_value(2.0),
-        "wind mass per mass locked into long-lived stars")("starFormation.windEnergyFraction",
-        po::value<double>(&opts.starFormation.windEnergyFraction)->default_value(0.25),
-        "fraction of supernova energy assigned to kinetic winds")("starFormation.windDecouplingMyr",
-        po::value<double>(&opts.starFormation.windDecouplingMyr)->default_value(50.0),
-        "maximum hydrodynamic wind decoupling time in Myr")(
-        "starFormation.windRecoupleDensityFraction",
-        po::value<double>(&opts.starFormation.windRecoupleDensityFraction)->default_value(0.1),
-        "recouple winds below this fraction of the star formation density threshold")(
-        "starFormation.windDirection",
-        po::value<std::string>(&opts.starFormation.windDirection)->default_value("isotropic"),
-        "wind launch direction: isotropic");
+        "ionized supernova specific-energy temperature in kelvin (TempSupernova)")(
+        "starFormation.criticalPhysicalDensity",
+        po::value<double>(&opts.starFormation.criticalPhysicalDensity)->default_value(0.0),
+        "physical threshold in H nuclei/cm^3; zero derives it (CritPhysDensity)")(
+        "starFormation.criticalOverDensity",
+        po::value<double>(&opts.starFormation.criticalOverDensity)->default_value(57.7),
+        "comoving threshold relative to mean baryon density (CritOverDensity)")(
+        "starFormation.seed", po::value<std::string>(&starFormationSeedInput)->default_value("1"),
+        "seed for particle-identity-based star conversion random streams");
 
     po::options_description commandOpts("CosmicTiger options");
     commandOpts.add(runOpts)
@@ -893,7 +845,7 @@ bool processOptions(int argc, char* argv[]) {
                   << "  PMMM near solvers:"
                   << (gravity::kBuildHasPmmmNearPp ? " pp" : "")
                   << (gravity::kBuildHasPmmmNearFmm ? " fmm" : "") << "\n";
-        std::cout << "  Particle chemistry: "
+        std::cout << "  Equilibrium cooling: "
                   << (COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY ? "enabled" : "disabled")
                   << "\n";
         std::cout << "  Star formation: "
@@ -1389,31 +1341,8 @@ bool processOptions(int argc, char* argv[]) {
                     "requires gravity without SPH\n");
     }
     opts.run.hierarchicalGravity = usesHierarchicalIntegration(opts.run);
+    detail::validateCooling(opts);
     detail::validateStarFormation(opts);
-    if (opts.chemistry.enabled) {
-        if (!opts.hydro.enabled ||
-            (opts.run.scenario != "cosmology" && opts.run.test != "sphGravity") ||
-            opts.run.scenario == "glass" || opts.run.scenario == "plummer") {
-            THROW_ERROR("chemistry.enabled requires cosmological SPH initial conditions\n");
-        }
-        if (opts.chemistry.network != "atomic6" && opts.chemistry.network != "molecular9") {
-            THROW_ERROR("chemistry.network must be atomic6 or molecular9\n");
-        }
-        if (isExplicit("chemistry.synchronizedRung")) {
-            PRINT("Notice: chemistry.synchronizedRung is deprecated and ignored; "
-                  "chemistry follows SPH timesteps.\n");
-        }
-        if (!detail::isPositiveFloatOption(opts.chemistry.fractionalChangeLimit) ||
-            opts.chemistry.fractionalChangeLimit > 0.1 ||
-            !detail::isPositiveFloatOption(opts.chemistry.electronFractionFloor) ||
-            opts.chemistry.electronFractionFloor > 1.0 || opts.chemistry.maxSubsteps < 1) {
-            THROW_ERROR("Invalid chemistry subcycling controls or work bound\n");
-        }
-        if (!detail::isFiniteOption(opts.cosmology.heliumFraction) ||
-            opts.cosmology.heliumFraction < 0.0 || opts.cosmology.heliumFraction >= 1.0) {
-            THROW_ERROR("Chemistry requires helium mass fraction in [0,1)\n");
-        }
-    }
     if (opts.hydro.enabled) {
         if (opts.run.scenario == "glass" || opts.run.scenario == "plummer" ||
             !opts.initial.gadget4Restart.empty()) {
@@ -1558,73 +1487,6 @@ bool processOptions(int argc, char* argv[]) {
             opts.cosmology.omegaK = 0.0;
         }
     }
-    if (opts.chemistry.enabled) {
-        if (opts.chemistry.initialization != "recombination" &&
-            opts.chemistry.initialization != "manual") {
-            THROW_ERROR("chemistry.initialization must be recombination or manual\n");
-        }
-        if (opts.chemistry.initialization == "recombination") {
-            if (!detail::isFiniteOption(opts.cosmology.startRedshift) ||
-                opts.cosmology.startRedshift <= -1.0 || std::abs(opts.cosmology.omegaK) > 1.0e-12) {
-                THROW_ERROR("Native chemistry initialization requires finite startRedshift > -1 "
-                            "and a spatially flat cosmology\n");
-            }
-            primordial::RecombinationParameters parameters;
-            parameters.hubble = opts.cosmology.hubble;
-            parameters.omegaB = opts.cosmology.omegaB;
-            parameters.omegaC = opts.cosmology.omegaC;
-            parameters.omegaRadiation = opts.cosmology.omegaR;
-            parameters.heliumMassFraction = opts.cosmology.heliumFraction;
-            parameters.cmbTemperature = constants::kTcmb * opts.cosmology.thetaCmb;
-            double const scaleFactor = 1.0 / (1.0 + opts.cosmology.startRedshift);
-            primordial::RecombinationOptions historyOptions;
-            historyOptions.maxScaleFactor = std::max(historyOptions.maxScaleFactor, scaleFactor);
-            primordial::RecombinationHistory const history(parameters, historyOptions);
-            if (!isExplicit("chemistry.initialTemperature")) {
-                opts.chemistry.initialTemperature = history.gasTemperature(scaleFactor);
-            }
-            if (!isExplicit("chemistry.hydrogenIonFraction")) {
-                opts.chemistry.hydrogenIonFraction = history.hydrogenIonizedFraction(scaleFactor);
-            }
-            if (!isExplicit("chemistry.heliumIonFraction")) {
-                opts.chemistry.heliumIonFraction = history.heliumSinglyIonizedFraction(scaleFactor);
-            }
-            if (!isExplicit("chemistry.heliumDoubleIonFraction")) {
-                opts.chemistry.heliumDoubleIonFraction =
-                    history.heliumDoublyIonizedFraction(scaleFactor);
-            }
-            // Resolve options on restart as well for checkpoint compatibility.
-            // Restarts restore particle state and never call particle initialization.
-        }
-        primordial::Network const network = opts.chemistry.network == "molecular9" ?
-            primordial::Network::Molecular9 :
-            primordial::Network::Atomic6;
-        if (!detail::isPositiveFloatOption(opts.chemistry.initialTemperature) ||
-            opts.chemistry.initialTemperature < primordial::minimumTemperature(network) ||
-            opts.chemistry.initialTemperature > primordial::maximumTemperature(network)) {
-            THROW_ERROR("Initial chemistry temperature %g K is outside %s domain [%g, %g] K; "
-                        "set chemistry.initialTemperature explicitly or select "
-                        "chemistry.initialization=manual\n",
-                opts.chemistry.initialTemperature, opts.chemistry.network.c_str(),
-                double(primordial::minimumTemperature(network)),
-                double(primordial::maximumTemperature(network)));
-        }
-        double const fractions[] = {opts.chemistry.hydrogenIonFraction,
-            opts.chemistry.heliumIonFraction, opts.chemistry.heliumDoubleIonFraction,
-            opts.chemistry.hydrogenMinusFraction, opts.chemistry.molecularFraction,
-            opts.chemistry.molecularIonFraction};
-        for (double const fraction : fractions) {
-            if (!detail::isFiniteOption(fraction) || fraction < 0.0 || fraction > 1.0) {
-                THROW_ERROR("Initial chemistry fractions must be finite and in [0,1]\n");
-            }
-        }
-        if (fractions[0] + fractions[3] + fractions[4] + fractions[5] > 1.0 ||
-            fractions[1] + fractions[2] > 1.0 ||
-            (opts.chemistry.network == "atomic6" &&
-                fractions[3] + fractions[4] + fractions[5] != 0.0)) {
-            THROW_ERROR("Initial chemistry fractions violate nuclear closure/network\n");
-        }
-    }
     // ROCKSTAR Sec. III.1 and Table 2: outer FOF linking length b=0.28.
     // Behroozi, Wechsler & Wu (2013), https://arxiv.org/html/1110.4372v3
     opts.analysis.linkingLength = pow(opts.initial.numberOfParticles, -1.0 / kDimensions) * 0.28;
@@ -1672,28 +1534,12 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("starFormation.starFormationTimeGyr", starFormation.starFormationTimeGyr);
     SHOW("starFormation.coldTemperature", starFormation.coldTemperature);
     SHOW("starFormation.supernovaTemperature", starFormation.supernovaTemperature);
+    SHOW("starFormation.criticalPhysicalDensity", starFormation.criticalPhysicalDensity);
+    SHOW("starFormation.criticalOverDensity", starFormation.criticalOverDensity);
     show("starFormation.seed", std::to_string(opts.starFormation.seed));
-    SHOW("starFormation.metalYield", starFormation.metalYield);
-    SHOW("starFormation.winds", starFormation.winds);
-    SHOW("starFormation.windMassLoading", starFormation.windMassLoading);
-    SHOW("starFormation.windEnergyFraction", starFormation.windEnergyFraction);
-    SHOW("starFormation.windDecouplingMyr", starFormation.windDecouplingMyr);
-    SHOW("starFormation.windRecoupleDensityFraction", starFormation.windRecoupleDensityFraction);
-    SHOW("starFormation.windDirection", starFormation.windDirection);
     SHOW("chemistry.enabled", chemistry.enabled);
-    SHOW("chemistry.network", chemistry.network);
-    SHOW("chemistry.initialization", chemistry.initialization);
-    SHOW("chemistry.radiationFile", chemistry.radiationFile);
-    SHOW("chemistry.initialTemperature", chemistry.initialTemperature);
-    SHOW("chemistry.hydrogenIonFraction", chemistry.hydrogenIonFraction);
-    SHOW("chemistry.heliumIonFraction", chemistry.heliumIonFraction);
-    SHOW("chemistry.heliumDoubleIonFraction", chemistry.heliumDoubleIonFraction);
-    SHOW("chemistry.hydrogenMinusFraction", chemistry.hydrogenMinusFraction);
-    SHOW("chemistry.molecularFraction", chemistry.molecularFraction);
-    SHOW("chemistry.molecularIonFraction", chemistry.molecularIonFraction);
-    SHOW("chemistry.fractionalChangeLimit", chemistry.fractionalChangeLimit);
-    SHOW("chemistry.electronFractionFloor", chemistry.electronFractionFloor);
-    SHOW("chemistry.maxSubsteps", chemistry.maxSubsteps);
+    SHOW("chemistry.initializationTemperature", chemistry.initializationTemperature);
+    SHOW("chemistry.minimumSpecificEnergy", chemistry.minimumSpecificEnergy);
     SHOW("hydro.enabled", hydro.enabled);
     SHOW("gravity.enabled", gravity.enabled);
     SHOW("gravity.errorInterval", gravity.errorInterval);
@@ -1929,7 +1775,6 @@ bool processOptions(int argc, char* argv[]) {
         }
         SHOW("chemistry.enabled", chemistry.enabled);
         if (opts.chemistry.enabled) {
-            SHOW("chemistry.network", chemistry.network);
         }
         SHOW("run.maxIterations", run.maxIterations);
         SHOW("run.numberOfSteps", run.numberOfSteps);

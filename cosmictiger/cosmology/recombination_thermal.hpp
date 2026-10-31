@@ -20,27 +20,34 @@ inline double comptonTemperatureCoupling(double scaleFactor, double omegaPhoton,
         (scaleFactor * omegaBaryon) * constants::kSigmaT * electronNumberDensity / hubbleRate;
 }
 
-// The existing two-stage implicit background step for
-// dT_gas/dln(a) = -2 T_gas + (Gamma_C/H) (T_rad - T_gas).
-// Radiation temperature and coupling are held fixed during this nonnegative step.
-inline double advanceGasTemperature(double gasTemperature, double radiationTemperature,
-    double logScaleStep, double comptonCoupling) {
+struct ThermalRates {
+    double radiationTemperature;
+    double comptonCoupling;
+};
+
+// Two-stage SDIRK step for dT/dln(a) = -2 T + (Gamma_C/H) (T_rad - T).
+// Evaluate the source and damping at both implicit stage times. Freezing the
+// rates at the endpoint is only first order during thermal decoupling.
+// ratesAtScaleFactor supplies ThermalRates for a physical scale factor.
+template <typename RatesAtScaleFactor>
+inline double advanceGasTemperature(double gasTemperature, double endLogScaleFactor,
+    double logScaleStep, RatesAtScaleFactor const& ratesAtScaleFactor) {
     if (logScaleStep == 0.0) {
         return gasTemperature;
     }
     double const gamma = 1.0 - 1.0 / std::sqrt(2.0);
+    auto const derivative = [&](double stageLogScale, double stageTemperature) {
+        auto const rates = ratesAtScaleFactor(std::exp(stageLogScale));
+        return (rates.comptonCoupling * (rates.radiationTemperature - stageTemperature) -
+                   2.0 * stageTemperature) /
+            (1.0 + gamma * logScaleStep * (2.0 + rates.comptonCoupling));
+    };
     double const firstDerivative =
-        ((gasTemperature + gamma * logScaleStep * comptonCoupling * radiationTemperature) /
-                (1.0 + gamma * logScaleStep * (2.0 + comptonCoupling)) -
-            gasTemperature) /
-        (gamma * logScaleStep);
+        derivative(endLogScaleFactor - (1.0 - gamma) * logScaleStep, gasTemperature);
     double const stageTemperature =
         gasTemperature + (1.0 - 2.0 * gamma) * firstDerivative * logScaleStep;
     double const secondDerivative =
-        ((stageTemperature + gamma * logScaleStep * comptonCoupling * radiationTemperature) /
-                (1.0 + gamma * logScaleStep * (2.0 + comptonCoupling)) -
-            stageTemperature) /
-        (gamma * logScaleStep);
+        derivative(endLogScaleFactor - gamma * logScaleStep, stageTemperature);
     return gasTemperature + 0.5 * (firstDerivative + secondDerivative) * logScaleStep;
 }
 

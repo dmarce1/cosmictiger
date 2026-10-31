@@ -39,12 +39,15 @@ endif()
 
 # Capability definitions are shared by the executable and standalone tests.
 add_library(cosmictiger_default_config INTERFACE)
-foreach(feature IN ITEMS FMM PMMM_PP PMMM_FMM SPH CHEMISTRY STARS STAR_FORMATION
+foreach(feature IN ITEMS FMM PMMM_PP PMMM_FMM SPH
         INTEGRATOR_TRADITIONAL INTEGRATOR_HIERARCHICAL INTEGRATOR_GLOBAL)
     target_compile_definitions(cosmictiger_default_config INTERFACE
         COSMICTIGER_ENABLE_${feature}=$<BOOL:${COSMICTIGER_ENABLE_${feature}}>)
 endforeach()
 target_compile_definitions(cosmictiger_default_config INTERFACE
+    COSMICTIGER_ENABLE_CHEMISTRY=$<BOOL:${COSMICTIGER_WITH_CHEMISTRY}>
+    COSMICTIGER_ENABLE_STARS=$<BOOL:${COSMICTIGER_WITH_STARS}>
+    COSMICTIGER_ENABLE_STAR_FORMATION=$<BOOL:${COSMICTIGER_WITH_STARS}>
     COSMICTIGER_WITH_GRAVITY=$<BOOL:${COSMICTIGER_WITH_GRAVITY}>
     COSMICTIGER_WITH_SPH=$<BOOL:${COSMICTIGER_WITH_SPH}>
     COSMICTIGER_POSITION_BITS=${COSMICTIGER_POSITION_BITS}
@@ -54,6 +57,18 @@ target_compile_definitions(cosmictiger_default_config INTERFACE
     MAX_BUCKET_SIZE=${COSMICTIGER_WITH_MAX_BUCKET})
 
 cosmictiger_feature_sources(cosmictiger_enabled_sources)
+if(COSMICTIGER_WITH_CUDA AND COSMICTIGER_WITH_STARS)
+    # The GADGET-4 device EOS/rates must use the same precise math as the CPU
+    # chemistry backend and its tests. Per-source flags cannot undo the
+    # intrinsic substitutions enabled by the platform's --use_fast_math.
+    list(REMOVE_ITEM cosmictiger_enabled_sources src/sph/star_formation_cuda.cu)
+    add_library(cosmictiger_star_formation_cuda OBJECT src/sph/star_formation_cuda.cu)
+    target_include_directories(cosmictiger_star_formation_cuda PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_definitions(cosmictiger_star_formation_cuda PRIVATE USE_CUDA)
+    target_link_libraries(cosmictiger_star_formation_cuda PRIVATE
+        cosmictiger_default_config cosmictiger_sph_chemistry CUDA::cudart Boost::boost)
+    set_target_properties(cosmictiger_star_formation_cuda PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+endif()
 if(COSMICTIGER_ENABLE_FMM OR
         COSMICTIGER_ENABLE_PMMM_FMM)
     foreach(order IN LISTS COSMICTIGER_FMM_ORDERS)
@@ -81,6 +96,9 @@ if(COSMICTIGER_WITH_CUDA)
 endif()
 add_hpx_executable(cosmictiger SOURCES src/main.cpp)
 target_link_libraries(cosmictiger PRIVATE cosmictiger_objects cosmictiger_core)
+if(TARGET cosmictiger_star_formation_cuda)
+    target_link_libraries(cosmictiger PRIVATE cosmictiger_star_formation_cuda)
+endif()
 set_target_properties(cosmictiger PROPERTIES ENABLE_EXPORTS ON)
 if(COSMICTIGER_WITH_CUDA)
     set_target_properties(cosmictiger PROPERTIES CUDA_SEPARABLE_COMPILATION ON)

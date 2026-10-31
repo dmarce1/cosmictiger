@@ -35,7 +35,7 @@ class BuildFeaturesTest(unittest.TestCase):
         self.addCompilation("cosmictiger_core", "src/core/flops.cpp", {})
         self.addCompilation("cosmictiger_recombination", "src/chemistry/recombination.cpp", {})
         if hasChemistry(self.features):
-            self.addCompilation("cosmictiger_sph_chemistry", "src/chemistry/primordial_chemistry.cpp", {})
+            self.addCompilation("cosmictiger_sph_chemistry", "src/chemistry/gadget4_cooling.cpp", {})
         self.definitions = configurationDefinitions(self.features, 32, self.degrees)
         for source in sorted(requiredSources(self.features, False)):
             self.addCompilation("cosmictiger_objects", source, self.definitions)
@@ -69,8 +69,8 @@ class BuildFeaturesTest(unittest.TestCase):
             with self.subTest(sph=sph, starFormation=starFormation):
                 self.configure(SPH=sph, STARS=starFormation)
                 self.assertIn("Build features passed", self.check())
-                self.assertEqual(self.definitions["COSMICTIGER_ENABLE_STARS"], str(int(starFormation)))
-                self.assertEqual(self.definitions["COSMICTIGER_ENABLE_STAR_FORMATION"], str(int(starFormation)))
+                self.assertEqual(self.definitions["COSMICTIGER_ENABLE_STARS"], str(int(sph and starFormation)))
+                self.assertEqual(self.definitions["COSMICTIGER_ENABLE_STAR_FORMATION"], str(int(sph and starFormation)))
 
     def testStarsCacheAliasMustMatch(self):
         self.cache["COSMICTIGER_ENABLE_STAR_FORMATION"] = "ON"
@@ -84,8 +84,7 @@ class BuildFeaturesTest(unittest.TestCase):
 
     def testDisabledStarFormationRejectsEveryImplementationSource(self):
         for source in ("src/sph/star_formation.cpp", "src/sph/star_formation_cuda.cu",
-                       "src/sph/springel_and_hernquist/cooling.cpp",
-                       "tests/sph/star_formation_cuda.cu", "tests/sph/star_formation.cpp", "tests/star_formation_particles.cpp",
+                              "tests/sph/star_formation_cuda.cu", "tests/sph/star_formation.cpp", "tests/star_formation_particles.cpp",
                        "tests/springel_and_hernquist.cpp", "tests/springel_and_hernquist_cuda.cu"):
             with self.subTest(source=source):
                 self.configure(STARS=False)
@@ -93,8 +92,8 @@ class BuildFeaturesTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "star formation disabled but compiles source: " + source):
                     self.check()
 
-    def testEnabledStarFormationRequiresBothRuntimeSources(self):
-        for source in ("src/sph/star_formation.cpp", "src/sph/springel_and_hernquist/cooling.cpp"):
+    def testEnabledStarFormationRequiresRuntimeSource(self):
+        for source in ("src/sph/star_formation.cpp",):
             with self.subTest(source=source):
                 self.configure(STARS=True)
                 self.commands = [entry for entry in self.commands if not entry["file"].endswith(source)]
@@ -185,8 +184,8 @@ class BuildFeaturesTest(unittest.TestCase):
 
     def testUnlinkedChemistryLeak(self):
         self.configure(SPH=False)
-        self.addCompilation("unused_chemistry", "src/chemistry/primordial_chemistry.cpp", {})
-        with self.assertRaisesRegex(ValueError, "particle chemistry disabled but compiles source"):
+        self.addCompilation("unused_chemistry", "src/chemistry/gadget4_cooling.cpp", {})
+        with self.assertRaisesRegex(ValueError, "equilibrium cooling disabled but compiles source"):
             self.check()
 
     def testChemistryCapabilityCombinations(self):
@@ -194,17 +193,16 @@ class BuildFeaturesTest(unittest.TestCase):
             with self.subTest(sph=sph, chemistry=chemistry):
                 self.configure(SPH=sph, CHEMISTRY=chemistry)
                 self.assertIn("Build features passed", self.check())
-                self.assertEqual(self.definitions["COSMICTIGER_ENABLE_CHEMISTRY"], str(int(chemistry)))
+                self.assertEqual(self.definitions["COSMICTIGER_ENABLE_CHEMISTRY"], str(int(sph and chemistry)))
 
     def testDisabledChemistrySourceLeak(self):
-        for source in ("src/chemistry/primordial_chemistry.cpp", "src/chemistry/primordial_chemistry.cu",
+        for source in ("src/chemistry/gadget4_cooling.cpp", "src/chemistry/gadget4_cooling.cu",
                        "src/sph/sph_chemistry.cpp", "tests/sph/chemistry.cpp",
-                       "tests/primordial_rates.cpp", "tests/primordial_solver.cpp", "tests/primordial_units.cpp",
-                       "tests/primordial_reference.cpp", "tests/primordial_cuda.cu"):
+                       "tests/gadget4_cooling.cpp"):
             with self.subTest(source=source):
                 self.configure(CHEMISTRY=False)
                 self.addCompilation("unused_chemistry", source, {})
-                with self.assertRaisesRegex(ValueError, "particle chemistry disabled but compiles source: " + source):
+                with self.assertRaisesRegex(ValueError, "equilibrium cooling disabled but compiles source: " + source):
                     self.check()
 
     def testMissingSphChemistrySource(self):
@@ -269,7 +267,7 @@ class BuildFeaturesTest(unittest.TestCase):
 
     def testMissingChemistry(self):
         self.linkPath.write_text(self.linkPath.read_text().replace("libcosmictiger_sph_chemistry.a", ""))
-        with self.assertRaisesRegex(ValueError, "lacks particle chemistry source"):
+        with self.assertRaisesRegex(ValueError, "lacks equilibrium cooling source"):
             self.check()
 
     def testMissingRecombinationWithoutChemistry(self):
@@ -301,6 +299,43 @@ class BuildFeaturesTest(unittest.TestCase):
             self.check()
 
 
+class BuildConfigHeaderTest(unittest.TestCase):
+    def compile(self, definitions):
+        source = Path(__file__).resolve().parents[1]
+        command = ["c++", "-std=c++20", "-fsyntax-only", "-x", "c++", "-I", str(source), "-"]
+        command += [f"-D{name}={value}" for name, value in definitions.items()]
+        return subprocess.run(command, input="#include <cosmictiger/core/build_config.hpp>\n",
+                              text=True, capture_output=True)
+
+    def definitions(self):
+        return {"COSMICTIGER_ENABLE_" + name: int(name == "INTEGRATOR_TRADITIONAL")
+                for name in ("SPH", "CHEMISTRY", "STARS", "STAR_FORMATION",
+                             "INTEGRATOR_TRADITIONAL", "INTEGRATOR_HIERARCHICAL", "INTEGRATOR_GLOBAL")}
+
+    def testExplicitCapabilitiesCompile(self):
+        result = self.compile(self.definitions())
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def testEveryMissingCapabilityFails(self):
+        definitions = self.definitions()
+        for missing in definitions:
+            with self.subTest(missing=missing):
+                result = self.compile({key: value for key, value in definitions.items() if key != missing})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Missing CosmicTiger build capabilities", result.stderr)
+
+    def testImpossibleCapabilitiesFail(self):
+        for values, diagnostic in (({"CHEMISTRY": 1}, "chemistry capability requires SPH"),
+                ({"STARS": 1, "STAR_FORMATION": 1}, "stars capability requires chemistry"),
+                ({"STARS": 1}, "must match"),
+                ({"INTEGRATOR_TRADITIONAL": 0}, "At least one time integrator")):
+            with self.subTest(values=values):
+                definitions = self.definitions() | {"COSMICTIGER_ENABLE_" + key: value for key, value in values.items()}
+                result = self.compile(definitions)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(diagnostic, result.stderr)
+
+
 class FeatureConfigurationTest(unittest.TestCase):
     def configure(self, values):
         with tempfile.TemporaryDirectory() as directory:
@@ -316,6 +351,8 @@ class FeatureConfigurationTest(unittest.TestCase):
                               'message(STATUS "pmmm_pp=${COSMICTIGER_ENABLE_PMMM_PP}")\n'
                               'message(STATUS "pmmm_fmm=${COSMICTIGER_ENABLE_PMMM_FMM}")\n'
                               'message(STATUS "chemistry=${COSMICTIGER_ENABLE_CHEMISTRY}")\n'
+                              'message(STATUS "effective_chemistry=${COSMICTIGER_WITH_CHEMISTRY}")\n'
+                              'message(STATUS "effective_stars=${COSMICTIGER_WITH_STARS}")\n'
                               'message(STATUS "stars=${COSMICTIGER_ENABLE_STARS}")\n'
                               'message(STATUS "star_formation=${COSMICTIGER_ENABLE_STAR_FORMATION}")\n')
             return subprocess.run(["cmake", "-P", str(script)], text=True, capture_output=True)
@@ -340,6 +377,7 @@ class FeatureConfigurationTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn("stars=" + stars, result.stdout)
                 self.assertIn("star_formation=" + stars, result.stdout)
+                self.assertIn("effective_stars=" + ("ON" if sph == "ON" and stars == "ON" else "OFF"), result.stdout)
 
     def testFreshLegacyStarsOption(self):
         for value in ("OFF", "ON"):
@@ -408,7 +446,7 @@ class FeatureConfigurationTest(unittest.TestCase):
                 result = subprocess.run(["cmake", "-P", str(script)], text=True, capture_output=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 enabled = sph == "ON" and stars == "ON"
-                for name in ("src/sph/star_formation.cpp", "src/sph/springel_and_hernquist/cooling.cpp"):
+                for name in ("src/sph/star_formation.cpp",):
                     self.assertEqual("source=" + name + "\n" in result.stdout, enabled)
                 self.assertEqual("source=src/sph/star_formation_cuda.cu\n" in result.stdout,
                                  enabled and cuda == "ON")
@@ -422,6 +460,7 @@ class FeatureConfigurationTest(unittest.TestCase):
                                          "COSMICTIGER_ENABLE_CHEMISTRY": chemistry})
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn("chemistry=" + chemistry, result.stdout)
+                self.assertIn("effective_chemistry=" + ("ON" if sph == "ON" and chemistry == "ON" else "OFF"), result.stdout)
 
     def testSingleAndBoundaryDegrees(self):
         for value, orders in (("2", "3-3"), ("8", "9-9"), ("2-8", "3-9")):

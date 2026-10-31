@@ -10,7 +10,6 @@
 
 #include <gtest/gtest.h>
 
-#include <cosmictiger/chemistry/primordial_eos.hpp>
 #include <cosmictiger/chemistry/recombination.hpp>
 #include <cosmictiger/cosmology/native_recombination.hpp>
 
@@ -250,44 +249,6 @@ void testNoHelium(primordial::RecombinationParameters parameters) {
     }
 }
 
-void testChemistryComposition(primordial::RecombinationHistory const& history) {
-    // The homogeneous effective-atom rates differ from the optically thin SPH
-    // network, but both must use identical species charges and ideal-gas EOS
-    // within the existing atomic framework's temperature and density domain.
-    for (double const scale : {1.0 / 3001.0, 0.001, 0.002, 0.01}) {
-        primordial::State state;
-        primordial::Environment environment;
-        auto status = history.chemistryState(scale, state, environment);
-        require(status == primordial::Status::Success,
-            "Native history converts within the existing chemistry EOS domain");
-        require(environment.network == primordial::Network::Atomic6,
-            "Homogeneous atomic history maps to the existing atomic network");
-        requireClose(environment.nHydrogen, history.hydrogenNumberDensity(scale), 1.0e-7, 0.0,
-            "Chemistry conversion preserves hydrogen nuclei density");
-        primordial::Eos eos;
-        status = primordial::evaluateEos(state, environment, eos);
-        require(status == primordial::Status::Success, "Existing chemistry evaluates native state");
-        requireClose(eos.temperature, history.gasTemperature(scale), 2.0e-6, 0.0,
-            "Chemistry conversion preserves temperature");
-        requireClose(primordial::composition(state, environment).electrons.toDouble(),
-            history.electronFraction(scale), 2.0e-6, 1.0e-12,
-            "Homogeneous ion charges agree with the existing chemistry composition");
-        requireClose(eos.pressurePerHydrogen, history.pressurePerHydrogen(scale), 2.0e-6, 0.0,
-            "Homogeneous pressure agrees with the existing chemistry ideal-gas EOS");
-    }
-    for (double const scale : {1.0e-6, 1.0}) {
-        primordial::State state;
-        state.thermalEnergy = 123.0f;
-        primordial::Environment environment;
-        environment.nHydrogen = 456.0f;
-        auto const status = history.chemistryState(scale, state, environment);
-        require(status == primordial::Status::UnsupportedState,
-            "Cosmic epochs outside the existing SPH domain remain unsupported by that network");
-        require(state.thermalEnergy == 123.0f && environment.nHydrogen == 456.0f,
-            "Unsupported chemistry conversion preserves output objects");
-    }
-}
-
 void testBackgroundAdapter(
     primordial::RecombinationHistory const& history, CosmicParameters const& parameters) {
     using namespace constants;
@@ -350,13 +311,6 @@ TEST(NativeRecombination, NoHelium) {
     CosmicParameters const cosmology = detail::fiducialCosmology();
     auto const parameters = recombinationParameters(cosmology);
     detail::testNoHelium(parameters);
-}
-
-TEST(NativeRecombination, ChemistryComposition) {
-    CosmicParameters const cosmology = detail::fiducialCosmology();
-    auto const parameters = recombinationParameters(cosmology);
-    primordial::RecombinationHistory const history(parameters);
-    detail::testChemistryComposition(history);
 }
 
 TEST(NativeRecombination, BackgroundAdapter) {

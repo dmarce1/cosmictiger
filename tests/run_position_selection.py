@@ -9,6 +9,7 @@ import subprocess
 import struct
 import sys
 
+from checkpoint_format import decode_checkpoint
 from run_checkpoint import checkManifest, checkpoint_position_bytes, fnv1a64, prepareCase, runSimulation
 from run_scenarios import hydro_particle_payload
 
@@ -73,7 +74,6 @@ def main():
 
     selection("default", [])
     selection("explicit", [f"--compute.positionType={selected}"])
-    selection("abbreviated", [f"--compute.positionT={selected}"])
     selection("spaced", ["--compute.positionType", selected])
     rejection("opposite", [f"--compute.positionType={opposite}"])
     rejection("opposite_abbreviated", [f"--compute.positionT={opposite}"])
@@ -81,7 +81,14 @@ def main():
     config = workdir / "position.ini"
     config.write_text(f"[compute]\npositionType = {selected}\n")
     selection("ini", [f"--configuration={config}"])
-    selection("abbreviated_config", [f"--config={config}"])
+    # The main option parser rejects abbreviations after the early ABI check.
+    for name, option in (("abbreviated", f"--compute.positionT={selected}"),
+                         ("abbreviated_config", f"--config={config}")):
+        directory = prepareCase(workdir, name)
+        output = runSimulation([str(executable), *common, option], directory,
+                               "run.log", expectSuccess=False)
+        if "unrecognized option" not in output or option not in output:
+            raise RuntimeError(f"{name}: abbreviated option lacked its rejection diagnostic")
     rejection("cli_opposite_precedence", ["--configuration", str(config),
                                            f"--compute.positionType={opposite}"])
     config.write_text(f"compute.positionType = {opposite}\n")
@@ -164,17 +171,9 @@ def main():
     checkManifest(hydro_checkpoint, 1, scenario="sod", endTime=0.00001, gravity=False)
     if checkpoint_position_bytes((hydro_checkpoint / "checkpoint.0.dat").read_bytes()) != bits // 8:
         raise RuntimeError("hydro checkpoint used the wrong position representation")
-    payload = hydro_particle_payload(hydro_checkpoint)
-    candidates = [(payload.find(struct.pack("=7I", 0x43545350, version, size, 8, 12, 3, 4)), size)
-                  for size in (4, 8) for version in (2, 4, 6)]
-    sph_offset, integer_bytes = max(candidates)
-    if sph_offset < 0:
-        raise RuntimeError("hydro checkpoint reader could not locate the SPH header")
-    count = int.from_bytes(payload[:integer_bytes], sys.byteorder, signed=True)
-    if bits == 64:
-        raw_positions = struct.unpack_from(f"={3 * count}Q", payload, 2 * integer_bytes)
-        if not any(word & 0xFFFFFFFF for word in raw_positions):
-            raise RuntimeError("fixed64 hydro checkpoint reader lost position precision")
+    state = decode_checkpoint((hydro_checkpoint / "checkpoint.0.dat").read_bytes())
+    if bits == 64 and not any(word & 0xFFFFFFFF for axis in state.positions for word in axis):
+        raise RuntimeError("fixed64 hydro checkpoint reader lost position precision")
     mislabeled = prepareCase(workdir, "hydro_wrong_width", hydro_checkpoint) / hydro_checkpoint.name
     rank_file = mislabeled / "checkpoint.0.dat"
     payload = bytearray(rank_file.read_bytes())

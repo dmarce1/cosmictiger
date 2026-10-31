@@ -1,8 +1,11 @@
 /* CosmicTiger - parallel SH03 source, EOS, and timestep batches; BSL-1.0. */
 #include <algorithm>
+#include <iomanip>
 #include <limits>
+#include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <cuda_runtime.h>
 
@@ -59,17 +62,37 @@ void runCuda(Operation operation, Input const* inputs, Output* outputs, size_t c
         cudaMemcpy(deviceOutputs.get(), outputs, count * sizeof(Output), cudaMemcpyHostToDevice));
     constexpr unsigned kBlockSize = 64;
     unsigned const blocks = unsigned(std::min<size_t>(65535, 1 + (count - 1) / kBlockSize));
-    detail::batchKernel<<<blocks, kBlockSize>>>(
-        operation, deviceInputs.get(), deviceOutputs.get(), count, parameters);
-    detail::check(cudaGetLastError());
-    detail::check(
-        cudaMemcpy(outputs, deviceOutputs.get(), count * sizeof(Output), cudaMemcpyDeviceToHost));
-    for (size_t index = 0; index < count; ++index) {
-        if (outputs[index].status != 0) {
-            throw std::runtime_error("SH03 CUDA particle " + std::to_string(index) +
-                " failed with status " + std::to_string(outputs[index].status) +
-                "; no source state committed");
+    auto deviceParameters = parameters;
+    if (operation == Operation::advance || operation == Operation::diagnostics) {
+        std::string error;
+        deviceParameters.cooling.rates = gadget4::deviceRateTable(&error);
+        if (deviceParameters.cooling.rates == nullptr) {
+            throw std::runtime_error("GADGET-4 SF CUDA table: " + error);
         }
     }
+    detail::batchKernel<<<blocks, kBlockSize>>>(
+        operation, deviceInputs.get(), deviceOutputs.get(), count, deviceParameters);
+    detail::check(cudaGetLastError());
+    std::vector<Output> staged(count);
+    detail::check(cudaMemcpy(
+        staged.data(), deviceOutputs.get(), count * sizeof(Output), cudaMemcpyDeviceToHost));
+    for (size_t index = 0; index < count; ++index) {
+        if (staged[index].status != 0) {
+            auto const& input = inputs[index];
+            double const step = parameters.explicitTimestep >= 0.0 ?
+                parameters.explicitTimestep :
+                std::ldexp(parameters.baseTimestep, -input.rung);
+            std::ostringstream message;
+            message << std::scientific << std::setprecision(17)
+                    << "GADGET-4 SF CUDA particle_id=" << input.state.id << " batch_index=" << index
+                    << " status=" << statusName(staged[index].status)
+                    << " rho_g_cm3=" << detail::density(input, parameters)
+                    << " u_erg_g=" << detail::energy(input.energy, parameters)
+                    << " dt_seconds=" << parameters.scaleFactor * step * parameters.timeSeconds
+                    << "; no source state committed";
+            throw std::runtime_error(message.str());
+        }
+    }
+    std::copy(staged.begin(), staged.end(), outputs);
 }
 }    // namespace star_formation_backend

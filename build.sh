@@ -12,7 +12,7 @@ showUsage() {
     printf 'Run the interactive CosmicTiger configure and build menu in a terminal.\n'
     printf 'The menu selects compiled capabilities for cosmictiger.\n'
     printf 'SPH requires traditional or global integration; gravity may be disabled.\n'
-    printf 'Particle chemistry is independently selectable and requires SPH.\n'
+    printf 'Equilibrium cooling is independently selectable and requires SPH.\n'
     printf 'Stars are selectable with COSMICTIGER_ENABLE_STARS and require chemistry and SPH.\n'
     printf 'Position storage is selected for the whole build directory; fixed32 is the default.\n'
     printf 'Build jobs default to the detected system thread count, with no upper cap.\n'
@@ -372,7 +372,7 @@ showMainMenu() {
     printf ' 11) Integrators: traditional=%s hierarchical=%s global=%s\n' "$enableTraditional" "$enableHierarchical" "$enableGlobal"
     printf ' 12) Build SPH support: %s\n' "$enableSph"
     printf ' 13) Position storage: %s\n' "$positionType"
-    printf ' 14) Build particle chemistry (requires SPH): %s\n' "$enableChemistry"
+    printf ' 14) Build equilibrium cooling (requires SPH): %s\n' "$enableChemistry"
     printf ' 15) Build stars (requires chemistry and SPH): %s\n' "$enableStars"
     printf '  Enter or b) Configure and build    q) Quit\n'
     printf 'Build jobs default to %s system threads, with no upper cap; MPI tests use four CPUs each.\n' "$coreCount"
@@ -397,7 +397,7 @@ chooseMainMenu() {
             11 "Integrators: traditional=$enableTraditional hierarchical=$enableHierarchical global=$enableGlobal" \
             12 "Build SPH support: $enableSph" \
             13 "Position storage: $positionType" \
-            14 "Build particle chemistry (requires SPH): $enableChemistry" \
+            14 "Build equilibrium cooling (requires SPH): $enableChemistry" \
             15 "Build stars (requires chemistry and SPH): $enableStars" \
             b 'Configure and build' q 'Quit'); then
             promptValue=q
@@ -419,7 +419,7 @@ validateFeatures() {
         showMessage 'SPH requires traditional or global integration.'; return 1
     fi
     if [[ $enableStars == ON && $enableChemistry != ON ]]; then
-        showMessage 'Stars require particle chemistry. Enable chemistry (option 14) or disable stars (option 15).'; return 1
+        showMessage 'Stars require equilibrium cooling. Enable chemistry (option 14) or disable stars (option 15).'; return 1
     fi
     if (( testJobs > maxTestJobs )); then
         showMessage "Test concurrency is limited to $maxTestJobs jobs (four CPUs per MPI test)."; return 1
@@ -449,7 +449,7 @@ while true; do
         11) chooseIntegrators ;;
         12) chooseToggle 'Build SPH support' "$enableSph"; enableSph=$promptValue ;;
         13) choosePositionType ;;
-        14) chooseToggle 'Build particle chemistry (requires SPH)' "$enableChemistry"; enableChemistry=$promptValue ;;
+        14) chooseToggle 'Build equilibrium cooling (requires SPH)' "$enableChemistry"; enableChemistry=$promptValue ;;
         15) chooseToggle 'Build stars (requires chemistry and SPH)' "$enableStars"; enableStars=$promptValue ;;
         *) printf 'Unknown option.\n' ;;
     esac
@@ -567,7 +567,7 @@ runStage() {
 printf '\nGravity: FMM=%s PMMM PP=%s PMMM FMM=%s; potential degrees=%s\n' "$enableFmm" "$enablePmmmPp" "$enablePmmmFmm" "$expansionDegree"
 printf 'Integrators: traditional=%s hierarchical=%s global=%s\n' "$enableTraditional" "$enableHierarchical" "$enableGlobal"
 printf 'SPH support: %s\n' "$enableSph"
-printf 'Particle chemistry: %s (requires SPH)\n' "$enableChemistry"
+printf 'Equilibrium cooling: %s (requires SPH)\n' "$enableChemistry"
 printf 'Stars: %s (requires chemistry and SPH)\n' "$enableStars"
 printf 'Position storage: %s\n' "$positionType"
 printf 'Build target: %s\n' "$buildTarget"

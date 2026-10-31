@@ -1,280 +1,134 @@
-# Springel–Hernquist star formation
+# GADGET-4 multiphase star formation
 
-The optional star formation module implements the equilibrium, effective
-equation-of-state form of Springel & Hernquist (2003),
-[*Cosmological smoothed particle hydrodynamics simulations: a hybrid multiphase
-model for star formation*](https://doi.org/10.1046/j.1365-8711.2003.06206.x).
-Equation numbers below refer to the published paper. This implementation uses
-one stochastic stellar generation per gas particle, \(N_g=1\).
+This module follows standard `COOLING` + `STARFORMATION` in official GADGET-4
+revision [`6fb393b5e25907f2ff06211f67d341c5e40e90d1`](https://gitlab.mpcdf.mpg.de/vrs/gadget4/-/commit/6fb393b5e25907f2ff06211f67d341c5e40e90d1).
+The controlling sources are
+[`sfr_eos.cc`](https://gitlab.mpcdf.mpg.de/vrs/gadget4/-/blob/6fb393b5e25907f2ff06211f67d341c5e40e90d1/src/cooling_sfr/sfr_eos.cc),
+[`starformation.cc`](https://gitlab.mpcdf.mpg.de/vrs/gadget4/-/blob/6fb393b5e25907f2ff06211f67d341c5e40e90d1/src/cooling_sfr/starformation.cc)
+and the main-loop call ordering in
+[`run.cc`](https://gitlab.mpcdf.mpg.de/vrs/gadget4/-/blob/6fb393b5e25907f2ff06211f67d341c5e40e90d1/src/main/run.cc).
 
-Compile with `COSMICTIGER_ENABLE_SPH=ON`, `COSMICTIGER_ENABLE_CHEMISTRY=ON`, and
-`COSMICTIGER_ENABLE_STARS=ON`; the latter defaults to `OFF`. The former
-`COSMICTIGER_ENABLE_STAR_FORMATION` name initializes an unmigrated cache;
-afterward `STARS` controls both names, including when explicitly set `OFF`.
-At runtime set `hydro.enabled=true`, `starFormation.enabled=true`,
-`chemistry.enabled=true`. The variational pressure operator uses the effective
-pressure and acoustic index supplied by the
-closure. The traditional and global time integrators are
-supported. The gas adiabatic index must be \(\gamma=5/3\). Stars require
-chemistry at configure time and runtime, with either `chemistry.network`.
-Both networks cover 10–10⁸ K, so the hot gas released from this closure stays
-inside the [molecular network's domain](molecular9_hot.md); ordinary
-`molecular9` gas keeps all nine species through heating and cooling.
+The underlying model is Springel & Hernquist (2003). The implemented closure
+retains the gas particle's bulk thermal energy and relaxes it toward an
+algebraic multiphase target. It does not persist separate cold/hot masses,
+energies, or chemical histories. The former immediate energy/composition
+projection, Anninos networks, metallicity enrichment, kinetic winds, and wind
+decoupling options have been removed.
 
-## Cooling assumptions and units
+## Gas evolution
 
-The dense-gas closure uses optically thin, primordial H/He collisional ionization
-equilibrium (CIE), built from the existing Atomic6 reaction and thermal rate
-primitives. The unresolved phases do not integrate separate non-equilibrium
-chemical histories, and the closure does not impose that network's low-density
-runtime limit. There are no
-molecules, metal-line cooling, external UV background, or CMB exchange in this
-adapter. Its atomic temperature domain is 10–10⁸ K; unsupported states fail
-explicitly. Metallicity is an enrichment tracer and does not change cooling.
+For eligible gas at physical density `rho`, the model calculates
 
-Ordinary gas and hydrodynamically decoupled winds instead advance the existing
-non-equilibrium thermochemistry operator of the configured `chemistry.network`
-(`atomic6` or `molecular9`). They use its configured
-radiation table, cosmological CMB exchange, solver tolerances, and supported
-density/temperature domain. They do not additionally call the CIE cooling
-adapter. Thus imposed radiation affects ordinary gas but does not modify the
-dense SH03 calibration or unresolved phase balance.
+```text
+t_star = t_star_0 sqrt(rho_threshold / rho)
+A = A_0 (rho / rho_threshold)^(-0.8)
+u_hot = u_SN / (1 + A) + u_cold
+u_eff = (1 - x) u_hot + x u_cold
+```
 
-**This is a CIE realization of the SH03 model.** The paper's simulations
-included an external UV background and different historical cooling fits.
-Consequently the derived threshold and numerical curves need not reproduce
-the paper's figures exactly. There is no supplied UV table or hard-coded
-hydrogen-density threshold in this implementation.
+The cloud fraction `x` comes from the hot-phase equilibrium cooling time,
+evaluated at the bulk physical density. GADGET-4's atomic H/He equilibrium
+cooling, fixed hydrogen mass fraction 0.76 and `gamma=5/3` are used throughout.
+Cold-cloud energy uses the neutral mean molecular weight; supernova energy
+and the `10^4 K` calibration energy use the fully ionized mean weight.
+When deriving the physical threshold, the calibration hot energy is `u_SN/A_0`,
+as in GADGET-4's initialization routine.
 
-The model evaluates proper density \(\rho\) in g cm⁻³, specific thermal
-energy \(u\) in erg g⁻¹, pressure in erg cm⁻³, and physical time in seconds.
-The adapter converts cosmological particle storage into these units before
-calling the source model. Formation timestamps record elapsed physical seconds
-since the simulation began, rather than cosmic age.
+When current gas energy is below `u_eff`, it relaxes exponentially on
+`t_relax = t_star (1-x)/(beta x (1+A))`. When it is above `u_eff`, ordinary
+implicit cooling applies with `u_eff` as a floor. Gas whose resulting energy
+exceeds `1.01 u_eff` has zero star-formation rate. The effective star-formation
+timescale is bounded below by the selected interval after calculating the
+cloud fraction. Ordinary gas below the threshold uses the same equilibrium
+cooling module. The configured minimum physical energy is enforced.
 
-For hydrogen mass fraction \(X\), the neutral molecular weight is
-\(\mu_n=[X+(1-X)/4]^{-1}\), and the fully ionized value is
-\(\mu_i=[2X+3(1-X)/4]^{-1}\). Temperature parameters are converted using
-\(u=k_B T/[(\gamma-1)\mu m_p]\): cold clouds and the nominal 10⁴ K warm
-energy use \(\mu_n\); the supernova energy uses \(\mu_i\). The warm energy
-is a reference for threshold calibration, not a floor imposed on ordinary
-non-equilibrium gas. Ordinary gas can cool below that energy within the
-configured network's domain. Pressure continuity at the calibrated threshold applies when the
-ordinary gas has energy \(u_4\); a parcel arriving at another energy undergoes
-a thermal projection whose change enters the source-energy ledger.
+Eligibility requires the physical density threshold and, in cosmological runs,
+the comoving overdensity threshold. `criticalPhysicalDensity=0` requests the
+GADGET-4 threshold calibration; a positive value directly specifies hydrogen
+nuclei per cubic centimetre. `criticalOverDensity` multiplies the mean comoving
+baryon density. It is not a multiple of the physical threshold.
 
-## Equilibrium closure
+## Timestep ordering and conversion
 
-The cold-cloud fraction \(x=\rho_c/\rho\) and hot fraction \(1-x\) are
-unresolved constituents of one SPH gas particle. They share its momentum;
-they are not separate particle populations. The density-dependent formation
-time and evaporation efficiency are equations (20)–(21):
+At the end of a selected SPH interval, GADGET-4's caller first samples star
+creation using the previously stored star-formation rate. Surviving gas then
+receives the full-interval cooling/multiphase update, which stores its new rate.
+CosmicTiger follows that ordering. There are no opening source half steps,
+accumulated half-step formation optical depths, wind clocks, or source-driven
+outer-step retries.
 
-\[
-t_\star=t_0^\star(\rho/\rho_{\rm th})^{-1/2},\qquad
-A=A_0(\rho/\rho_{\rm th})^{-4/5}.
-\]
+For gas mass `m`, the event probability is `1-exp(-SFR dt/m)`. A successful event
+converts the whole gas particle into a star; gas mass is not continuously
+removed before the event. Position, velocity and particle mass are retained,
+and the star continues its gravitational evolution. Birth time is the scale
+factor in cosmological runs and elapsed physical seconds in noncosmological
+runs, matching GADGET-4. No kinetic wind kick is
+part of the standard implementation.
 
-The hot energy is equation (11),
-\(u_h=u_c+u_{\rm SN}/(1+A)\). With
-\(Q=\beta u_{\rm SN}-(1-\beta)u_c\) and the CIE coefficient
-\(\lambda(u_h)=\Lambda(\rho,u_h)/\rho^2\), equations (16)–(18) become
+CosmicTiger retains its particle-identity-based seeded random stream for
+parallel execution. This is an integration convention, not a claim of identical
+random draws or trajectories to GADGET-4. Thermodynamic and conversion state
+must follow sorting, migration and restart together; old projection-model
+checkpoints have a different state contract.
 
-\[
-y={t_\star\rho\lambda(u_h)\over Q},\qquad
-x={2y\over1+2y+\sqrt{1+4y}}.
-\]
+Generated cosmological IDs come from the initial source before displacement or
+migration, independently of the number of localities. The source index is the
+global lattice cell in x/y/z order, with a second index for each close-packed
+phase, or the glass tile and particle index within `glass.bin`. Dark matter uses
+`2*source+1` and its gas partner uses `2*source+2`. Fixed scenarios assign source-order
+IDs on rank zero before distribution. Distributed initial conditions must supply
+IDs rather than deriving them from rank offsets. This fixes the random stream
+associated with each source particle; it does not guarantee identical floating
+point trajectories or event times across decompositions.
 
-The code retains the small hot fraction separately to avoid cancellation at
-large \(y\). Equation (19) gives
-\(u_{\rm eff}=(1-x)u_h+xu_c\) and
-\(P_{\rm eff}=(\gamma-1)\rho u_{\rm eff}\). The SPH pressure uses this
-effective closure in star-forming gas. Its signal speed uses the acoustic
-derivative \(c_{\rm eff}^2=dP_{\rm eff}/d\rho\), evaluated by a local
-logarithmic finite difference, and enters the hydrodynamic timestep.
+## Configuration
 
-The threshold is calibrated from continuity with the warm energy \(u_4\),
-using equation (23) and the exact hot-energy expression:
-
-\[
-u_{h0}=u_c+{u_{\rm SN}\over1+A_0},\qquad
-x_{\rm th}={u_{h0}-u_4\over u_{h0}-u_c},\qquad
-\rho_{\rm th}={x_{\rm th}\over(1-x_{\rm th})^2}
-{Q\over t_0^\star\lambda(u_{h0})}.
-\]
-
-Calibration requires \(u_{h0}>u_4>u_c\) and \(Q>0\). Changing cooling or
-phase parameters recalculates \(\rho_{\rm th}\).
-Eligibility uses this proper-density threshold alone. At sufficiently high
-redshift the mean cosmic gas density can exceed it. This implementation does
-not add the later GADGET overdensity requirement of 57.7.
-
-## Chemical state and source ownership
-
-When star formation is enabled, its source operator owns the opening and
-closing half-intervals and the heating ledger for every active gas particle.
-The driver does not also run standalone chemistry half-steps. Ordinary gas
-uses the shared, nonmutating chemistry batch solver over the same physical
-interval; the standalone `SphChemistryStep` clock and heating fields remain
-zero. All local and remote preparations must succeed before chemical state,
-energy, metallicity, wind clocks, or conversion events are committed.
-
-Eligible dense gas receives \(u_{\rm eff}\) and a mass-weighted chemical
-projection: cold gas is neutral and atomic, while hot gas has the CIE
-composition at \(u_h\). Both phases use the same primordial hydrogen and
-helium mass fractions. Each ionized fraction is the hot-phase fraction times
-\(1-x\); molecular fractions are zero, so a `molecular9` parcel's H⁻, H₂ and
-H₂⁺ are discarded on entry along with its atomic history. This preserves H/He
-nuclei and charge closure. The stored chemical thermal energy is synchronized with the projected
-SPH energy, but the hydrodynamic pressure and signal speed still come from the
-SH03 effective equation of state. Ordinary chemical cooling is never applied
-to this effective mixture.
-
-Entering the dense branch replaces the parcel's previous chemical history
-with that projection. Leaving it starts ordinary chemistry from the last
-projected composition and current SPH energy. There is no independently
-evolved hot/cold chemical state or hidden phase-history flag. A wind remains
-ordinary gas until its decoupling clock expires; a half-step that straddles
-expiry advances chemistry for the decoupled portion and applies the dense
-closure only for any remaining eligible duration. Density-based recoupling
-is evaluated at the source boundary.
-
-Chemical output for dense particles describes the projected mixture. Its
-single-state temperature is an effective diagnostic, not either phase's
-physical temperature; `hot_temperature` reports the hot-phase temperature.
-This is a combined ordinary-chemistry and equilibrium-SH03 model, not a
-phase-resolved non-equilibrium multiphase chemistry calculation.
-
-## Conversion, enrichment, and winds
-
-The long-lived stellar mass rate is
-\(\dot\rho_\star=(1-\beta)x\rho/t_\star\), equation (1). For an elapsed
-source interval \(\Delta t\), equation (39) with \(N_g=1\) converts an
-entire gas particle with probability
-\(p_\star=1-\exp[-(1-\beta)x\Delta t/t_\star]\). This preserves the
-fixed baryonic particle mass and avoids fractional-mass gravity sources.
-Converted particles remain gravitational sources and sinks and cease SPH
-interactions. The phase equations already include instantaneous recycling;
-conversion must not subtract another factor \(\beta\) from particle mass.
-
-Equation (40) adds
-\(\Delta Z=y_\star(1-\beta)x\Delta t/t_\star\), where \(y_\star\) is
-metal mass per mass locked into long-lived stars. Stellar particles retain
-their inherited metallicity. Random draws use particle identity, an event
-counter, the configured seed, and separate formation/wind streams so particle
-sorting and worker assignment do not determine the realization. These state
-fields must survive migration and checkpoint/restart.
-Enrichment follows the linear expected mass increment while whole-particle
-conversion samples the exponential probability. Their finite-step difference
-vanishes with the source timestep.
-
-Winds are optional. Equations (28) and (41) give
-
-\[
-p_w=1-\exp[-\eta(1-\beta)x\Delta t/t_\star],\qquad
-v_w=\sqrt{{2\beta\chi u_{\rm SN}\over\eta(1-\beta)}}.
-\]
-
-Directions are isotropic. The kinetic wind energy is additional to the
-unchanged thermal feedback channel, following section 4.1; \(\chi\) is
-nonnegative and may exceed unity. Launched particles recouple to hydrodynamics
-when either their elapsed decoupling time expires or their proper density
-falls below the configured fraction of \(\rho_{\rm th}\). They remain
-gravitationally active during this interval.
-Formation is sampled first; surviving gas then samples a wind event. This
-ordering has a finite-step bias relative to simultaneous competing events.
-The selected gas timestep limits the combined formation and enabled-wind
-hazard to 0.05; smaller timesteps reduce both this bias and the enrichment
-discretization error.
-
-Particle Silo output includes persistent identity, formation time,
-metallicity, and remaining wind decoupling time. Gas additionally exposes
-`cold_fraction`, `hot_temperature` in K, and `specific_sfr` in s⁻¹ (long-lived
-stellar mass formed per gas mass per physical second). These describe the
-unresolved equilibrium phases evaluated from the last stored SPH density,
-converted to proper density at the output epoch. All three are zero for
-ordinary gas and decoupled winds. They are independent of the selected output
-unit system; snapshot metadata records these conventions.
-
-## Runtime settings
-
-All keys use the `starFormation.` prefix; in an INI file use a
-`[starFormation]` section.
-
-| Key | Default | Meaning |
-| --- | ---: | --- |
-| `enabled` | `false` | Enable the combined ordinary-chemistry and dense SH03 source |
-| `beta` | `0.1` | Instantaneously recycled massive-star fraction |
-| `evaporationFactor` | `1000` | \(A_0\) |
-| `starFormationTimeGyr` | `2.1` | \(t_0^\star\), in Gyr |
-| `coldTemperature` | `1000` | Cold temperature, K |
-| `supernovaTemperature` | `1e8` | Supernova energy temperature, K |
-| `seed` | `1` | Unsigned 64-bit stochastic seed |
-| `metalYield` | `0.02` | \(y_\star\) |
-| `winds` | `false` | Enable wind launching |
-| `windMassLoading` | `2` | \(\eta\) |
-| `windEnergyFraction` | `0.25` | \(\chi\) |
-| `windDecouplingMyr` | `50` | Maximum physical decoupling interval, Myr |
-| `windRecoupleDensityFraction` | `0.1` | Recoupling density relative to \(\rho_{\rm th}\) |
-| `windDirection` | `isotropic` | Currently supported launch geometry |
-
-A compact cosmological example is
+Build with `COSMICTIGER_ENABLE_SPH=ON`,
+`COSMICTIGER_ENABLE_CHEMISTRY=ON`, and `COSMICTIGER_ENABLE_STARS=ON`.
+Choose traditional or global integration. A starting configuration is
 [`configurations/star_formation/lcdm.ini`](../configurations/star_formation/lcdm.ini).
-It uses CPU execution, the traditional integrator, and FMM gravity. Set solver
-selectors to match the compiled capabilities when using a different build.
 
-## CUDA execution and section timings
+```ini
+[hydro]
+enabled = true
+gamma = 1.6666666666666667
 
-With CUDA compiled and `compute.cuda=true`, the per-particle SH03 work runs on
-CUDA: effective pressure and sound speed, source timestep limits, dense-phase
-projection, enrichment, wind clocks and kicks, stochastic conversion decisions,
-source heating, and the first gravity timestep and opening kick of newly formed
-stars. Ordinary gas uses the existing CUDA chemistry batch solver.
-The CPU implementation remains available with `compute.cuda=false`.
+[chemistry]
+enabled = true
+initializationTemperature = 10000
+minimumSpecificEnergy = 0
 
-Particle storage and membership remain host-owned. The host stages each batch,
-combines reductions in particle order, and commits successful source transactions,
-including gas-to-star membership changes. Failed CUDA batches raise an error
-before source state is committed; they do not silently switch to CPU. Model
-calibration at initialization and snapshot diagnostics still execute on the host.
+[starFormation]
+enabled = true
+beta = 0.1
+evaporationFactor = 1000
+starFormationTimeGyr = 2.1
+coldTemperature = 1000
+supernovaTemperature = 1e8
+criticalPhysicalDensity = 0
+criticalOverDensity = 57.7
+seed = 1
+```
 
-The major-section report separates `Hydrodynamics`, `Chemistry`, and
-`Star formation`. Hydro excludes both source categories; star formation excludes
-its nested ordinary-gas chemistry batches. SH03 effective-EOS and dense CIE work
-belong to star formation. The values are coordinator wall times: chemistry within
-a distributed star-formation transaction measures the coordinator's local batch,
-while waiting for remote preparations remains in star formation. Other report
-sections retain their inclusive timing semantics.
+`starFormationTimeGyr` is a physical timescale in Gyr. It corresponds to
+GADGET-4's `MaxSfrTimescale` after converting that code's configured time unit;
+a number printed in a GADGET-4 example is not automatically a number in Gyr.
+All threshold/temperature/evaporation parameters retain the meanings of
+`CritPhysDensity`, `CritOverDensity`, `TempClouds`, `TempSupernova`, and
+`FactorEVP`. `beta` corresponds to `FactorSN`.
 
-## Validation targets
+`chemistry.*` retains its historical group name but selects equilibrium cooling;
+see [the cooling documentation](primordial_chemistry.md) for initialization,
+physical energy floor and supported physics. External UV is disabled and no
+radiation file is required. The background
+cosmology's helium abundance remains independent of GADGET-4's fixed cooling
+composition.
 
-`springel_and_hernquist_test` checks the pure model and CIE adapter independently
-of HPX. `star_formation_cpu` exercises the particle integration fixture and
-checks Silo phase diagnostics, species, and persistent identities in code,
-CGS, and cosmological output frames. It also compares ordinary and decoupled
-wind evolution with the shared chemistry batch solver, checks dense chemical
-projection and threshold crossings, and verifies chemical/source rollback
-after a failed preparation. The fixture covers EOS/timestep closure,
-new-star gravity kicks, and stepping after all gas has converted.
-`star_formation_particles_cpu` checks population persistence and compaction.
-When HPX uses MPI, `star_formation_mpi` and `star_formation_particles_mpi`
-repeat the source and persistence fixtures across two localities.
-`star_formation_application` runs the fixtures with one and two workers, checks
-cosmological evolution and exact particle/source-state restart with each
-compiled FMM/PMMM solver and both eligible integrators, and rejects changed
-model parameters or helium abundance on restart. `springel_and_hernquist_cuda_test`, when
-CUDA is compiled, compares the pure scalar equations with the CPU.
-`star_formation_cuda_test` checks the CUDA particle operations and source
-invariants. `star_formation_production_cuda_atomic6` and
-`star_formation_production_cuda_molecular9` compare CUDA with the original CPU
-particle path, then run the source fixture on CUDA, including rollback, wind
-recoupling, conversion, and restart between source halves. `section_timing_test`
-checks exclusive source accounting and scope migration between worker threads.
-`grouped_options` checks CLI/INI precedence, exact 64-bit seed metadata,
-incompatible physics, and parameter rejection. `tests/check_build_features.py`
-checks that star-formation sources disappear when the capability or SPH
-is disabled, and that the CUDA backend is included only in CUDA builds; `tests/check_build_variants.py` tests those graph checks.
+## Validation
 
-These targets are separate evidence from distributed evolution, CUDA runtime,
-galaxy-scale star-formation-law convergence, and cosmological production runs.
-A passing local model test alone does not validate those larger calculations.
+Core equilibrium/calibration and relaxation fixtures, production CPU/CUDA
+source fixtures, particle conversion/lifecycle fixtures, and application
+restart tests cover different parts of the integration. Agreement with the
+pinned equations does not establish identical SPH force discretization,
+random streams, or galaxy statistics between codes. Report the actual builds,
+backends and application runs used when assessing a change.

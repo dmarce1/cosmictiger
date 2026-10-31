@@ -4,7 +4,6 @@
 
 """Decode PMMM checkpoints and verify clocks, drift, and restart state for either integrator."""
 
-import ctypes
 import math
 import struct
 import sys
@@ -14,34 +13,8 @@ sys.dont_write_bytecode = True
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from checkpoint_format import Header, decode_checkpoint
 from run_checkpoint import fnv1a64
-
-
-class Header(ctypes.Structure):
-    _fields_ = [("magic", ctypes.c_uint64), ("version", ctypes.c_uint32),
-                ("flags", ctypes.c_uint32), ("physics", ctypes.c_double * 11),
-                ("particles_per_species", ctypes.c_uint64), ("steps", ctypes.c_int32),
-                ("reserved", ctypes.c_uint32)]
-
-
-class Driver(ctypes.Structure):
-    _fields_ = [(name, ctypes.c_double) for name in
-                ("a", "adot", "dummy", "tau", "tau_max", "energy0")]
-    _fields_ += [("energies", ctypes.c_double * 10)]
-    _fields_ += [(name, ctypes.c_int) for name in
-                 ("max_rung", "iteration", "min_rung", "step", "bucket_size")]
-    _fields_ += [("processed", ctypes.c_size_t)]
-    _fields_ += [(name, ctypes.c_double) for name in ("flops", "runtime", "years")]
-    _fields_ += [("integer_time", ctypes.c_uint64)]
-
-
-class Domain(ctypes.Structure):
-    _fields_ = [("box", ctypes.c_double * 6), ("midpoint", ctypes.c_double),
-                ("rank", ctypes.c_int)]
-
-
-class DomainEntry(ctypes.Structure):
-    _fields_ = [("key", ctypes.c_size_t), ("domain", Domain)]
 
 
 def require(condition, message):
@@ -50,36 +23,22 @@ def require(condition, message):
 
 
 def read_rank(path, expected_iteration, ranks, time_integrator):
-    data = path.read_bytes()
-    header = Header.from_buffer_copy(data)
-    require(header.magic == 0x4354535048303031 and header.version == 3,
-            f"{path}: unsupported checkpoint header")
+    decoded = decode_checkpoint(path.read_bytes(), ranks=ranks)
+    header, driver, extension = decoded.header, decoded.driver, decoded.pmmm
     require(header.flags & (1 << 17), f"{path}: PMMM flag is missing")
-    require(bool(header.flags & (1 << 6)) == (time_integrator == "hierarchical"),
-            f"{path}: checkpoint time integrator differs from the compiled selection")
-    require(not header.flags & (1 << 16), f"{path}: removed PM solver flag is set")
+    require(bool(header.flags & (1 << 6)) == (time_integrator == "hierarchical") and
+            bool(header.flags & (1 << 19)) == (time_integrator == "global"),
+            f"{path}: checkpoint time integrator differs from the selected mode")
     require(not header.flags & ((1 << 7) | (1 << 8) | (1 << 9) | (1 << 11) | (1 << 12)),
             f"{path}: fixture unexpectedly enabled optional checkpoint fields")
-    hydro = bool(header.flags & 1)
-    position_bytes = 8 if header.flags & (1 << 15) else 4
-    offset = ctypes.sizeof(Header)
-    require(bool(header.flags & (1 << 19)) == (time_integrator == "global"),
-            f"{path}: global integrator flag differs from the selected mode")
-    if header.flags & (1 << 18):
-        algorithms = struct.unpack_from("=5Q", data, offset)
-        require(algorithms[0] == 1 and algorithms[1] == 2,
-                f"{path}: invalid algorithm selection extension")
-        require(algorithms[4] == {"traditional": 0, "hierarchical": 1, "global": 2}[time_integrator],
-                f"{path}: algorithm selection integrator differs")
-        offset += 40
-    extension_version = struct.unpack_from("=Q", data, offset)[0]
-    require(extension_version in (1, 2, 3, 4), f"{path}: unsupported PMMM version")
-    extension_size = {1: 7, 2: 8, 3: 10, 4: 11}[extension_version]
-    extension = struct.unpack_from(f"={extension_size}Q", data, offset)
+    if decoded.algorithms:
+        require(decoded.algorithms[1] == 2 and decoded.algorithms[4] ==
+                {"traditional": 0, "hierarchical": 1, "global": 2}[time_integrator],
+                f"{path}: checkpoint algorithm selection differs")
     require(extension[6] == 1, f"{path}: unsupported PMMM convention")
-    if extension_version >= 2:
+    if extension[0] >= 2:
         require(extension[7] in (0, 1), f"{path}: unknown PMMM near solver")
-    if extension_version >= 3:
+    if extension[0] >= 3:
         theta = struct.unpack("=d", struct.pack("=Q", extension[9]))[0]
         require(3 <= extension[8] <= 9 and extension[2] == extension[8],
                 f"{path}: PMMM and near FMM orders differ or are invalid")
@@ -89,118 +48,26 @@ def read_rank(path, expected_iteration, ranks, time_integrator):
         require(math.isfinite(theta) and math.isclose(
                     theta, math.sqrt(3.0) / (width + 1), rel_tol=1.0e-15, abs_tol=0.0),
                 f"{path}: PMMM opening angle differs from the near-width geometry")
-    if extension_version >= 4:
+    if extension[0] >= 4:
         require(extension[10] == 0 or 2 <= extension[10] <= 2 ** 31 - 1,
                 f"{path}: invalid PMMM maximum FFT prime factor")
-    offset += 8 * extension_size + (104 if hydro else 0)
-    gas_version = 2
-    if hydro and header.flags & (1 << 14):
-        viscosity = struct.unpack_from("=7d", data, offset)
-        require(all(math.isfinite(value) for value in viscosity) and viscosity[4] in (0.0, 1.0),
+    if decoded.viscosity:
+        require(all(decoded.viscosity[index] > 0.0 for index in (0, 1, 3, 4, 5, 6)),
                 f"{path}: invalid variable-viscosity parameters")
-        gas_version = 6 if viscosity[4] else 4
-        offset += 56
-    driver = Driver.from_buffer_copy(data, offset)
     require(driver.iteration == expected_iteration, f"{path}: driver layout/iteration mismatch")
     require(all(math.isfinite(value) for value in
                 [driver.a, driver.adot, driver.tau, driver.tau_max, *driver.energies]),
             f"{path}: nonfinite driver state")
-    offset += ctypes.sizeof(Driver)
-    driver.global_timestep = 0.0
-    if header.flags & (1 << 19):
-        version, driver.global_timestep = struct.unpack_from("=Qd", data, offset)
-        require(version == 1 and math.isfinite(driver.global_timestep) and driver.global_timestep >= 0,
-                f"{path}: invalid explicit global timestep")
-        offset += 16
-
-    def parse_particles(integer_bytes):
-        cursor = offset
-
-        def take(code, count):
-            nonlocal cursor
-            values = struct.unpack_from(f"={count}{code}", data, cursor)
-            cursor += count * struct.calcsize("=" + code)
-            return values
-
-        integer_code = "i" if integer_bytes == 4 else "q"
-        count = take(integer_code, 1)[0]
-        gas_count = take(integer_code, 1)[0] if hydro else 0
-        require(0 <= gas_count <= count <= header.particles_per_species * (2 if hydro else 1),
-                f"{path}: invalid particle counts")
-        raw_positions = [take("Q" if position_bytes == 8 else "I", count) for _ in range(3)]
-        velocities = take("f", 3 * count)
-        rungs = take("b", count)
-        types = take("b", count) if hydro else (0,) * count
-        gas_indices = take(integer_code, count) if hydro else ()
-        rows = [{"x": tuple(raw_positions[dim][i] / 2 ** (8 * position_bytes)
-                            for dim in range(3)), "v": velocities[3 * i:3 * i + 3],
-                 "rung": rungs[i], "type": types[i], "gas": ()} for i in range(count)]
-        if hydro:
-            gas_header = take("I", 7)
-            require(gas_header == (0x43545350, gas_version, integer_bytes, 8, 12, 3, 4),
-                    f"{path}: unsupported gas layout {gas_header}")
-            require(take(integer_code, 1)[0] == gas_count, f"{path}: inconsistent gas count")
-            thermodynamic = take("f", 2 * gas_count)
-            acceleration = take("f", 3 * gas_count)
-            gravity_indices = take(integer_code, gas_count)
-            scalar_fields = [take("f", gas_count) for _ in range(3)]
-            flags = [take("B", gas_count) for _ in range(2)]
-            vector_fields = [take("f", gas_count) for _ in range(6)]
-            # Production writes two separate arrays: the common two-float
-            # viscosity state, then Cullen-Dehnen's one-float extension.
-            viscosity = take("f", 2 * gas_count) if gas_version >= 4 else ()
-            cullen_dehnen = take("f", gas_count) if gas_version == 6 else ()
-            require(sorted(gravity_indices) == [i for i, species in enumerate(types)
-                                                if species == 1],
-                    f"{path}: missing or duplicate gas mapping")
-            for gas_index, particle in enumerate(gravity_indices):
-                require(0 <= particle < count and types[particle] == 1 and
-                        gas_indices[particle] == gas_index, f"{path}: broken gas mapping")
-                rows[particle]["gas"] = (
-                    *thermodynamic[2 * gas_index:2 * gas_index + 2],
-                    *acceleration[3 * gas_index:3 * gas_index + 3],
-                    *(field[gas_index] for field in scalar_fields),
-                    *(field[gas_index] for field in flags),
-                    *(field[gas_index] for field in vector_fields),
-                    *viscosity[2 * gas_index:2 * gas_index + 2],
-                    *cullen_dehnen[gas_index:gas_index + 1])
-                require(thermodynamic[2 * gas_index] > 0.0 and
-                        thermodynamic[2 * gas_index + 1] > 0.0 and
-                        scalar_fields[2][gas_index] > 0.0,
-                        f"{path}: nonpositive gas energy, support radius, or density")
-        rung_count, rung_begin = take("i", 2)
-        require(0 <= rung_count <= 64 and 0 <= rung_begin <= count,
-                f"{path}: invalid rung stack")
-        rung_begins = take("i", rung_count)
-        require(all(0 <= begin <= count for begin in rung_begins) and
-                list(rung_begins) == sorted(rung_begins) and
-                (not rung_begins or rung_begins[-1] <= rung_begin),
-                f"{path}: invalid nested rung selections")
-        # domainsSave writes native domain records after the particle payload.
-        # Their particle-index members follow the executable's integer width.
-        class LocalDomain(ctypes.Structure):
-            _fields_ = [("box", ctypes.c_double * 6), ("process_range", ctypes.c_int * 2),
-                        ("particle_range", (ctypes.c_int32 if integer_bytes == 4
-                                            else ctypes.c_int64) * 2),
-                        ("depth", ctypes.c_int)]
-
-        domain_count = ctypes.c_size_t.from_buffer_copy(data, cursor).value
-        cursor += ctypes.sizeof(ctypes.c_size_t)
-        cursor += domain_count * ctypes.sizeof(DomainEntry) + ranks * ctypes.sizeof(LocalDomain)
-        require(cursor == len(data), f"{path}: trailing/unparsed checkpoint data")
-        require(all(math.isfinite(value) for row in rows for value in (*row["v"], *row["gas"])),
-                f"{path}: nonfinite particle state")
-        return rows
-
-    errors = []
-    for integer_bytes in (4, 8):
-        try:
-            rows = parse_particles(integer_bytes)
-            break
-        except (RuntimeError, struct.error, OverflowError, ValueError) as error:
-            errors.append(str(error))
-    else:
-        raise RuntimeError(f"{path}: unable to decode particle layout: {errors}")
+    scale = 2 ** (8 * decoded.position_bytes)
+    rows = []
+    for index, kind in enumerate(decoded.types):
+        gas = decoded.gas[decoded.gas_indices[index]] if kind == 1 else ()
+        if gas:
+            require(gas[0] > 0 and gas[1] > 0 and gas[7] > 0,
+                    f"{path}: nonpositive gas energy, support radius, or density")
+        rows.append({"x": tuple(decoded.positions[dim][index] / scale for dim in range(3)),
+                     "v": decoded.velocities[3 * index:3 * index + 3],
+                     "rung": decoded.rungs[index], "type": kind, "gas": gas})
     return header, driver, rows
 
 

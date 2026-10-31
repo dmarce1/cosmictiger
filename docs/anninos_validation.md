@@ -1,3 +1,10 @@
+> Historical record, superseded by the GADGET-4 replacement on 2026-10-31.
+> The particle reaction networks and their runtime controls have been removed.
+> Statements and validation below describe the earlier checkout, including any
+> references to a "current" Anninos solver. They do not validate the new model.
+> See [current equilibrium cooling](primordial_chemistry.md) and
+> [current star formation](star_formation.md).
+
 # Anninos chemistry validation — 2026-10-30
 
 This record covers the replacement of the particle chemistry Newton/FloatFloat

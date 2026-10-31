@@ -32,7 +32,6 @@
 #include <stdexcept>
 #include <string>
 
-#include <cosmictiger/chemistry/primordial_eos.hpp>
 #include <cosmictiger/chemistry/recombination.hpp>
 
 // The cosmological stiff solve relies on finite checks and cancellation near
@@ -649,37 +648,7 @@ double RecombinationHistory::pressurePerHydrogen(double scaleFactor) const {
     return (1.0 + heliumRatio_ + electronFraction(scaleFactor)) *
         static_cast<double>(kBoltzmannEv) * gasTemperature(scaleFactor);
 }
-Status RecombinationHistory::chemistryState(
-    double scaleFactor, State& state, Environment& environment) const {
-    auto const value = sample(scaleFactor);
-    double const density = hydrogenNumberDensity(scaleFactor);
-    double const radiationTemperature = parameters_.cmbTemperature / scaleFactor;
-    if (density > 1.0e4 || value[3] < minimumTemperature(Network::Atomic6) ||
-        value[3] > maximumTemperature(Network::Atomic6) ||
-        radiationTemperature > std::numeric_limits<float>::max()) {
-        return Status::UnsupportedState;
-    }
-    State converted;
-    converted.abundances[0] = static_cast<float>(1.0 - value[0]);
-    converted.abundances[1] = static_cast<float>(value[0]);
-    converted.abundances[2] = static_cast<float>(heliumRatio_ * (1.0 - (value[1] + value[2])));
-    converted.abundances[3] = static_cast<float>(heliumRatio_ * value[1]);
-    converted.abundances[4] = static_cast<float>(heliumRatio_ * value[2]);
-    converted.abundances[5] =
-        static_cast<float>(value[0] + heliumRatio_ * (value[1] + 2.0 * value[2]));
-    Environment convertedEnvironment;
-    convertedEnvironment.nHydrogen = static_cast<float>(density);
-    convertedEnvironment.heliumToHydrogenNumberRatio = static_cast<float>(heliumRatio_);
-    convertedEnvironment.cmbTemperature = static_cast<float>(radiationTemperature);
-    auto const status = thermalEnergyAtTemperature(
-        converted, convertedEnvironment, static_cast<float>(value[3]), converted.thermalEnergy);
-    if (status != Status::Success) {
-        return status;
-    }
-    state = converted;
-    environment = convertedEnvironment;
-    return Status::Success;
-}
+
 }    // namespace primordial
 
 #if defined(__clang__)

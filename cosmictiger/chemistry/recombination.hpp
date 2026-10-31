@@ -5,9 +5,8 @@
 #include <cstddef>
 #include <vector>
 
-#include <cosmictiger/chemistry/primordial_types.hpp>
-
 namespace primordial {
+inline constexpr float kBoltzmannEv = 8.617333262145e-5f;    // eV/K for background output.
 
 // Spatially flat matter + radiation + cosmological constant background.
 // The radiation density includes photons and any massless neutrinos.
@@ -28,8 +27,8 @@ struct RecombinationOptions {
 };
 
 // Homogeneous effective-atom specialization of primordial thermochemistry.
-// History abundances use HII/H and HeII/He; particle State stores every
-// species as a direct count per H nucleus. chemistryState converts between them.
+// History abundances use HII/H and HeII/He. This background model is independent
+// of the equilibrium atomic cooling used for SPH gas.
 // The rates implement RECFAST 1.5.2 Hswitch=1, Heswitch=6, with an independent
 // double-precision stiff integrator. This is not the optically thin SPH model.
 // No stellar reionization, molecules, deuterium, or massive neutrinos are included.
@@ -63,10 +62,5 @@ public:
     double heliumToHydrogenNumberRatio() const;
     double hydrogenNumberDensity(double scaleFactor) const;    // Proper cm^-3.
     double pressurePerHydrogen(double scaleFactor) const;      // P/nH in eV.
-
-    // Convert to the existing chemistry state and EOS when inside their domain.
-    // Outside that domain, returns UnsupportedState rather than relaxing the
-    // SPH chemistry guards. Outputs are written only on Success.
-    Status chemistryState(double scaleFactor, State& state, Environment& environment) const;
 };
 }    // namespace primordial

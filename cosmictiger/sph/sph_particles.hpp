@@ -7,7 +7,7 @@
  */
 #pragma once
 
-#include <cosmictiger/chemistry/primordial_types.hpp>
+#include <cosmictiger/chemistry/gadget4_cooling.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/sph/cullen_and_dehnen/state.hpp>
@@ -38,17 +38,9 @@ struct SphAcceleration {
     Array<float, kDimensions> acceleration;
 };
 
-struct SphChemistryStep {
-    double halfInterval{};
-    double pendingHeating{};
-};
-
-// Optional thermal closure cache is shared by chemistry and SH03.
-// Chemistry abundances are authoritative; the source bridge
-// derives chemistry energy from the hydrodynamic stored a^2 u at each use.
-SPH_PARTICLES_EXTERN primordial::State* sphParticlesChemistryStates;
+// Cooling stores only an equilibrium electron-fraction guess; hydro owns thermal energy.
+SPH_PARTICLES_EXTERN gadget4::State* sphParticlesChemistryStates;
 SPH_PARTICLES_EXTERN Pair<float>* sphParticlesChemistryEos;
-SPH_PARTICLES_EXTERN SphChemistryStep* sphParticlesChemistrySteps;
 
 SPH_PARTICLES_EXTERN SphThermodynamicState* sphParticlesThermodynamicStates;
 SPH_PARTICLES_EXTERN SphAcceleration* sphParticlesAccelerationStates;

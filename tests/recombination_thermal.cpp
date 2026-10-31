@@ -79,16 +79,20 @@ void testComptonCoefficient() {
     }
 }
 
+double advanceConstantRates(double temperature, double radiation, double step, double coupling) {
+    return recombination::advanceGasTemperature(temperature, step, step,
+        [=](double) { return recombination::ThermalRates{radiation, coupling}; });
+}
+
 void testTemperatureEvolution() {
     double const initialTemperature = 300.0;
-    requireClose(recombination::advanceGasTemperature(initialTemperature, 1000.0, 0.0, 1.e10),
-        initialTemperature, 0.0, "Zero timestep preserves temperature");
+    requireClose(advanceConstantRates(initialTemperature, 1000.0, 0.0, 1.e10), initialTemperature,
+        0.0, "Zero timestep preserves temperature");
     double const logScaleInterval = 1.0;
     int const stepCount = 1000;
     double temperature = initialTemperature;
     for (int step = 0; step < stepCount; ++step) {
-        temperature = recombination::advanceGasTemperature(
-            temperature, 1000.0, logScaleInterval / stepCount, 0.0);
+        temperature = advanceConstantRates(temperature, 1000.0, logScaleInterval / stepCount, 0.0);
     }
     requireClose(temperature, initialTemperature * std::exp(-2.0 * logScaleInterval), 4.e-7,
         "Expansion-only T proportional to a^-2");
@@ -101,7 +105,7 @@ void testTemperatureEvolution() {
     for (double const startingTemperature : {1.0, 300.0}) {
         temperature = startingTemperature;
         for (int step = 0; step < stepCount; ++step) {
-            temperature = recombination::advanceGasTemperature(
+            temperature = advanceConstantRates(
                 temperature, radiationTemperature, logScaleInterval / stepCount, coupling);
         }
         double const exactTemperature = equilibriumTemperature +
@@ -110,15 +114,14 @@ void testTemperatureEvolution() {
         requireClose(temperature, exactTemperature, 2.e-7,
             "Gas heating and cooling against exact constant-rate solution");
     }
-    requireClose(recombination::advanceGasTemperature(
-                     equilibriumTemperature, radiationTemperature, 0.05, coupling),
+    requireClose(advanceConstantRates(equilibriumTemperature, radiationTemperature, 0.05, coupling),
         equilibriumTemperature, 2.e-14, "Thermal equilibrium is stationary");
 
     double const strongCoupling = 1.e10;
     double const strongEquilibrium = radiationTemperature * strongCoupling / (2.0 + strongCoupling);
     for (double const startingTemperature : {1.0, 300.0}) {
-        requireClose(recombination::advanceGasTemperature(
-                         startingTemperature, radiationTemperature, 0.01, strongCoupling),
+        requireClose(
+            advanceConstantRates(startingTemperature, radiationTemperature, 0.01, strongCoupling),
             strongEquilibrium, 2.e-7, "Stiff Compton coupling approaches equilibrium");
     }
 }
@@ -137,4 +140,30 @@ TEST(RecombinationThermal, ComptonCoefficient) {
 
 TEST(RecombinationThermal, TemperatureEvolution) {
     detail::testTemperatureEvolution();
+}
+
+TEST(RecombinationThermal, TimeDependentProductionStages) {
+    // Manufactured solution T(a)=300/a, with Gamma_C/H=a and
+    // T_rad=T(1+1/a). These varying coefficients exercise the production
+    // stages; endpoint-frozen rates would converge only at first order.
+    auto const rates = [](double scaleFactor) {
+        return recombination::ThermalRates{
+            300.0 / scaleFactor * (1.0 + 1.0 / scaleFactor), scaleFactor};
+    };
+    double const exact = 300.0 / std::exp(1.0);
+    double previousError = 0.0;
+    for (int const steps : {20, 40, 80}) {
+        double temperature = 300.0;
+        double const step = 1.0 / steps;
+        for (int i = 1; i <= steps; ++i) {
+            temperature = recombination::advanceGasTemperature(temperature, i * step, step, rates);
+        }
+        double const error = std::abs(temperature - exact);
+        EXPECT_LT(error, 0.1);
+        if (previousError > 0.0) {
+            EXPECT_GT(previousError / error, 3.7);
+            EXPECT_LT(previousError / error, 4.3);
+        }
+        previousError = error;
+    }
 }

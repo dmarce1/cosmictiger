@@ -103,7 +103,7 @@ build/release_cpu/cosmictiger --gravity.method.far=pmmm \
   --run.timeIntegrator=global --compute.cuda=false
 ```
 
-Fresh defaults enable FMM, SPH, particle chemistry, traditional nested integration,
+Fresh defaults enable FMM, SPH, equilibrium cooling, traditional nested integration,
 and potential expansion degrees 4-6. PMMM with PP or FMM near fields, hierarchical
 integration, and global integration can be enabled independently. Both PMMM options default
 to `OFF` and may be enabled together. A single eligible algorithm is
@@ -125,7 +125,7 @@ Set `COSMICTIGER_ENABLE_SPH=OFF` for gravity-only builds, or disable
 `COSMICTIGER_ENABLE_FMM`, `COSMICTIGER_ENABLE_PMMM_PP`, and
 `COSMICTIGER_ENABLE_PMMM_FMM` for SPH-only builds.
 `COSMICTIGER_ENABLE_CHEMISTRY` defaults to `ON`; set it to `OFF` to retain SPH
-without particle chemistry. Particle chemistry is compiled only when SPH and
+without equilibrium cooling. Equilibrium cooling is compiled only when SPH and
 chemistry are both enabled. The chemistry setting is inactive when SPH is off;
 homogeneous cosmological recombination remains available in every configuration.
 Disabled physics and its test problems are excluded from compilation and test
@@ -281,15 +281,18 @@ For a small cosmological run using the native Einstein–Boltzmann power spectru
 ```
 
 The gas controls appear under `hydro.*` in `--help` and can also be
-specified in the INI configuration file. Primordial chemistry is configured under
-`chemistry.*`. The cosmological INIs enable both chemistry and SH03 star
-formation, requiring `COSMICTIGER_ENABLE_SPH=ON`,
-`COSMICTIGER_ENABLE_CHEMISTRY=ON`, and `COSMICTIGER_ENABLE_STARS=ON`.
-The variational pressure operator supports both chemistry and star formation.
-The `starFormation.*` controls select the equilibrium multiphase model;
-ordinary gas uses the selected chemistry network (`atomic6` or `molecular9`), and converted stars retain gravitational
-interactions. See [the star-formation documentation](docs/star_formation.md)
-for the phase assumptions, source coupling, and supported domains.
+specified in the INI configuration file. The compatibility group `chemistry.*`
+selects [GADGET-4 equilibrium atomic cooling](docs/primordial_chemistry.md), with
+fixed H/He composition and no external UV background. The cosmological
+configurations enable cooling; `configurations/star_formation/lcdm.ini` and
+`configurations/lcdm_present.ini` additionally enable star formation and require
+`COSMICTIGER_ENABLE_STARS=ON` as well as SPH and cooling.
+The variational pressure operator supports both cooling and star formation.
+The `starFormation.*` controls select GADGET-4's algebraic multiphase target,
+bulk-energy relaxation, and stochastic whole-particle conversion. Converted
+stars retain gravitational interactions. See [star formation](docs/star_formation.md)
+for source ordering, thresholds and configuration. The former reaction networks,
+manual species fractions, Anninos controls and wind options are not accepted.
 Diffusion and conduction remain unsupported. Their former options, the obsolete `hydro.chemistry` switch,
 `hydro.yReflect`, and `gravity.sphSmoothing` are no longer accepted, including
 false entries in older INI files. Gas smoothing lengths remain adaptive;
@@ -644,13 +647,13 @@ is best effort. This handler is adapted from OctoTiger's `stacktrace_fix` commit
 
 Run `./build.sh` in a terminal for the interactive builder. Choose Release,
 RelWithDebInfo, Debug, or Profile (host gprof instrumentation), CUDA, SPH,
-particle chemistry, job counts, HPX prefix, CUDA architectures, additional
+equilibrium cooling, job counts, HPX prefix, CUDA architectures, additional
 dependency prefixes, enabled gravity and near methods, potential expansion degrees
 (a scalar or inclusive range),
 enabled time integrators, and fixed32 or fixed64 position storage.
 Builds use `build/<mode>_<cuda|cpu>` (for example `build/release_cuda`), with live
 output and a `builder.*.log`. The default builds `cosmictiger` with FMM, SPH,
-particle chemistry, traditional integration, potential degrees 4–6, and fixed32
+equilibrium cooling, traditional integration, potential degrees 4–6, and fixed32
 positions. Building and running the test suite is opt-in. Build concurrency
 defaults to the detected system thread count, with no upper cap. Use `./build.sh -j 4` to select a count,
 or `./build.sh -j` (also `-j max`) to select the detected thread count.

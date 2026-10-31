@@ -26,8 +26,8 @@ build/release_cpu/cosmictiger --gravity.method.far=pmmm \
 | `COSMICTIGER_ENABLE_PMMM_PP` | `OFF` | Compile PMMM gravity with direct particle-pair near interactions. |
 | `COSMICTIGER_ENABLE_PMMM_FMM` | `OFF` | Compile PMMM gravity with cell FMM near interactions. Includes shared FMM machinery without requiring global FMM. |
 | `COSMICTIGER_ENABLE_SPH` | `ON` | Compile SPH and hydro problems. |
-| `COSMICTIGER_ENABLE_CHEMISTRY` | `ON` | Compile particle chemistry when SPH is also enabled. Inactive with SPH disabled. |
-| `COSMICTIGER_ENABLE_STARS` | `OFF` | Compile Springel–Hernquist multiphase star formation. Requires particle chemistry; inactive with SPH disabled. |
+| `COSMICTIGER_ENABLE_CHEMISTRY` | `ON` | Compile equilibrium cooling when SPH is also enabled. Inactive with SPH disabled. |
+| `COSMICTIGER_ENABLE_STARS` | `OFF` | Compile GADGET-4 multiphase star formation. Requires equilibrium cooling; inactive with SPH disabled. |
 | `COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL` | `ON` | Traditional nested individual block timesteps. |
 | `COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL` | `OFF` | Hierarchical Hamiltonian integration for collisionless gravity. |
 | `COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL` | `OFF` | All particles share the smallest raw allowable timestep, without power-of-two quantization. |
@@ -48,9 +48,9 @@ To build SPH only, disable `COSMICTIGER_ENABLE_FMM`,
 `COSMICTIGER_ENABLE_PMMM_PP`, and `COSMICTIGER_ENABLE_PMMM_FMM`.
 To build gravity only, disable `COSMICTIGER_ENABLE_SPH`.
 
-Particle chemistry requires both `COSMICTIGER_ENABLE_SPH=ON` and
+Equilibrium cooling requires both `COSMICTIGER_ENABLE_SPH=ON` and
 `COSMICTIGER_ENABLE_CHEMISTRY=ON`. Disable chemistry to retain SPH without the
-particle reaction network. With SPH disabled, the chemistry setting is inactive
+GADGET-4 atomic cooling module. With SPH disabled, the chemistry setting is inactive
 and remains unchanged in the cache. Homogeneous cosmological recombination is
 available regardless of these two options.
 
@@ -59,9 +59,9 @@ Star formation requires `COSMICTIGER_ENABLE_STARS=ON`,
 Configuration rejects stars enabled with chemistry disabled. With SPH disabled,
 the stars and chemistry settings remain cached but their sources and tests
 are excluded. Runtime `starFormation.enabled=true` requires
-`hydro.enabled=true`, `chemistry.enabled=true` with either network,
+`hydro.enabled=true`, `chemistry.enabled=true` with `hydro.gamma=5/3`,
 and traditional or global integration. See [the model documentation](docs/star_formation.md) for the
-CIE cooling assumptions, configuration example, and validation targets.
+equilibrium cooling assumptions, configuration example, and validation targets.
 
 The former `COSMICTIGER_ENABLE_STAR_FORMATION` name initializes `STARS` when
 the canonical option is absent, including an existing cache created before
@@ -168,7 +168,7 @@ An FMM-only build still discovers the project's full required dependency set.
 When tests are enabled and no installed GoogleTest is found, configuration
 fetches a pinned GoogleTest source archive unless its source directory is
 overridden. The fallback forces `BUILD_GMOCK=OFF` and `INSTALL_GTEST=OFF`.
-The available tests also depend on the selected solver, SPH, particle chemistry, star formation,
+The available tests also depend on the selected solver, SPH, equilibrium cooling, star formation,
 CUDA, HPX features, and optional Python packages such as NumPy, SciPy, and Matplotlib.
 
 `HPX_WITH_CUDA` and `HPX_WITH_APEX` describe the selected HPX installation.

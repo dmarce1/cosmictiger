@@ -289,31 +289,21 @@ void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(dou
         ne = fxe(a) * nH;
         sigmaC =
             recombination::comptonTemperatureCoupling(a, omegaGam, omegaB, nH, nHe, ne, hubble);
-        // Evaluate both the radiation source and the Compton rate at the
-        // implicit stage times. Freezing them at the endpoint is only first
-        // order through thermal decoupling.
-        double const gamma = 1.0 - 1.0 / std::sqrt(2.0);
-        auto const thermalDerivative = [&](double stageScale, double stageTemperature) {
+        auto const thermalRates = [&](double stageScale) {
             double const stageDensity = rhoBaryon(stageScale);
             double const stageHydrogen = (1.0 - y) * stageDensity / kMh;
             double const stageHelium = y * stageDensity / (4.0 * kMh);
             double const stageElectrons = fxe(stageScale) * stageHydrogen;
             double const coupling = recombination::comptonTemperatureCoupling(stageScale, omegaGam,
                 omegaB, stageHydrogen, stageHelium, stageElectrons, cgsHubble(stageScale));
-            return (coupling * (tRadiation(stageScale) - stageTemperature) -
-                       2.0 * stageTemperature) /
-                (1.0 + gamma * dloga * (2.0 + coupling));
+            return recombination::ThermalRates{tRadiation(stageScale), coupling};
         };
         if (thermalHistory.temperature) {
             // A coupled chemistry history already contains the matter
             // temperature. Use it consistently with its electron fraction.
             tgas = checkedPositive(thermalHistory.temperature(a));
         } else {
-            double const firstDerivative =
-                thermalDerivative(std::exp(loga - (1.0 - gamma) * dloga), tgas);
-            double const secondDerivative = thermalDerivative(std::exp(loga - gamma * dloga),
-                tgas + (1.0 - 2.0 * gamma) * dloga * firstDerivative);
-            tgas += 0.5 * dloga * (firstDerivative + secondDerivative);
+            tgas = recombination::advanceGasTemperature(tgas, loga, dloga, thermalRates);
         }
         ne = fxe(a) * nH;
         n = nH + nHe;

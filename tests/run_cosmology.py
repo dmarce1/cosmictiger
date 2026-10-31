@@ -19,6 +19,7 @@ import zlib
 from application_selection import application_arguments
 import sys
 
+from checkpoint_format import decode_checkpoint
 from run_checkpoint import checkManifest, checkpoint_position_bytes
 
 
@@ -57,23 +58,13 @@ def checkpoint_state(path, end_time):
     iteration = int(path.name.split(".")[1])
     checkManifest(path, iteration, scenario="cosmology", endTime=end_time, gravity=True)
     payload = (path / "checkpoint.0.dat").read_bytes()
-    header_format = struct.Struct("=QII11dQiI")
-    require(len(payload) >= header_format.size + 40, f"truncated driver state in {path}")
-    header = header_format.unpack_from(payload)
-    magic, version, flags = header[:3]
-    require(magic == 0x4354535048303031 and version == 3,
-            f"unsupported checkpoint header in {path}")
-    require(flags & (1 | (1 << 11)) == 0,
+    decoded = decode_checkpoint(payload)
+    header, driver = decoded.header, decoded.driver
+    require(not decoded.hydro and not decoded.has_cooling,
             f"expected a dark-matter checkpoint without chemistry in {path}")
-    # These are the leading fields of DriverParameters. Optional hydro and
-    # chemistry blocks are absent in this explicitly dark-matter-only fixture.
-    # Capability builds append five uint64 runtime-algorithm fields before
-    # DriverParameters (kRuntimeAlgorithms in checkpoint.cpp).
-    driver_offset = header_format.size + (40 if flags & (1 << 18) else 0)
-    require(len(payload) >= driver_offset + 40, f"truncated driver state in {path}")
-    scale, derivative, _, time, end = struct.unpack_from("=5d", payload, driver_offset)
-    gravitational_mass, omega_matter, omega_radiation, omega_lambda = header[7:11]
-    particles = header[14]
+    scale, derivative, time, end = driver.a, driver.adot, driver.tau, driver.tau_max
+    gravitational_mass, omega_matter, omega_radiation, omega_lambda = header.physics[4:8]
+    particles = header.particles_per_species
     hubble = math.sqrt(gravitational_mass * 8.0 * math.pi * particles / (3.0 * omega_matter))
     require(all(math.isfinite(value) for value in (scale, derivative, time, end, hubble)),
             f"nonfinite cosmological state in {path}")

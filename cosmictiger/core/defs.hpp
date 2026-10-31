@@ -10,6 +10,8 @@
 #ifndef DEFS_HPP_
 #define DEFS_HPP_
 
+#include <cstddef>
+
 // #define LONG_LONG_PART_INT
 
 #define COUNT_FLOPS
@@ -49,7 +51,10 @@ inline constexpr double kEwaldRealCutoff = (2.6);
 inline constexpr double kEwaldRealCutoffSquared = (kEwaldRealCutoff * kEwaldRealCutoff);
 inline constexpr int kKickOversubscription = 1;
 inline constexpr int kMaxDepth = 128;
-inline constexpr int kMaxParticlesPerParcel = (8 * 1024 * 1024);
+// Migration vectors are capped by their serialized payload, not record count.
+// Leave 64 KiB inside this cap for action/vector metadata and transport framing.
+inline constexpr size_t kMaxMigrationParcelBytes = 32ULL * 1024 * 1024;
+inline constexpr size_t kMigrationParcelOverheadBytes = 64ULL * 1024;
 inline constexpr int kMaxRung = 16;
 inline constexpr int kMinKickThreadParts = (1024);
 inline constexpr int kMinSortThreadParts = (64 * 1024);

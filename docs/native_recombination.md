@@ -2,7 +2,7 @@
 
 The internal Einstein–Boltzmann initializer obtains its electron fraction,
 gas temperature, hydrogen density, and gas pressure from the primordial
-chemistry library's `RecombinationHistory`. It no longer launches a RECFAST
+recombination library's `RecombinationHistory`. It no longer launches a RECFAST
 process or reads a generated RECFAST table. The bundled Fortran program and
 table reader have been removed. Saved RECFAST output remains as regression
 data, and offline CAMB comparison tools remain available. Cosmological initial
@@ -15,48 +15,25 @@ the accuracy of a new multilevel-atom calculation. Its agreement with
 RECFAST and CAMB tests the implementation and numerical integration of
 that approximation.
 
-## Chemistry framework and SPH
+## Background recombination and SPH
 
-The new homogeneous model belongs to `primordial_chemistry`. It uses the
-existing H/He species normalization and ideal-gas pressure convention.
-`chemistryState` converts a history sample into the direct nine-species
-`State` and `Environment`, constructing its energy through the existing
-chemistry EOS. Conversion returns `UnsupportedState` outside that EOS's
-temperature and density domain, without changing those limits.
+The homogeneous `RecombinationHistory` remains in the independent
+`cosmictiger_recombination` library. Its double-precision effective-atom solver
+supplies the cosmological background electron history, gas temperature,
+pressure and opacity. `cosmology.heliumFraction` controls that background.
 
-The homogeneous solver uses double precision and its own stiff integration.
-The SPH source solver uses the single-scalar Anninos algorithm and direct species
-storage described in [primordial thermochemistry](primordial_chemistry.md). The
-native homogeneous recombination solver remains a separate physical initializer. With chemistry enabled,
-`chemistry.initialization=recombination` now fills unspecified initial temperature,
-H+/H, He+/He, and He++/He from the native history at `cosmology.startRedshift`.
-The configured cosmology controls that history. Explicit CLI or INI values override
-each field independently; the distributed options and metadata contain the resolved
-values. H-, H2, and H2+ keep their existing explicit/default initial values because
-the homogeneous history does not model molecules.
+Particle cooling now uses [GADGET-4 equilibrium H/He](primordial_chemistry.md),
+with fixed hydrogen mass fraction 0.76 and gamma 5/3. Particle state saves only
+the electron guess for equilibrium iterations; it does not inherit a persistent
+non-equilibrium abundance history. The former `chemistry.initialization`,
+manual species and molecular options have been removed.
 
-Use `chemistry.initialization=manual` for the former fixed defaults (1000 K,
-H+/H = 2e-4, neutral helium) or for reproducing older runs. The example INIs
-comment out the four optional scalar overrides so the native defaults take effect.
-Particle initialization uses the existing SPH EOS and unit conversion, including
-its He/H mass convention. Later source integration uses the selected particle chemistry network. Restart reads
-the stored particle state; it resolves the same initial options only to verify
-checkpoint compatibility. Restoring older checkpoints requires the original
-initial values, usually with `chemistry.initialization=manual`.
-
-The temperature limits are 10–1e8 K for both networks, following the
-subsequent [cold](molecular9_cold.md) and [hot](molecular9_hot.md) molecular
-extensions.
-An out-of-domain initial temperature fails explicitly and is never raised to a
-floor. The fiducial native history at z=49 is 48.855 K and can initialize either
-network. An unheated background falls below 10 K near z=20; the supported
-initialization range does not imply support for every later epoch.
-
-At a typical starting redshift of 50, cosmological photon escape corrections
-primarily matter through the inherited electron abundance and temperature.
-The local network still assumes escaping radiation. Dense or irradiated
-SPH gas may require shielding and radiation transport; a low redshift
-does not establish that it is optically thin.
+The generated cosmological gas uses `chemistry.initializationTemperature`
+(default 10000 K) when cooling is enabled. Setting it to zero preserves the
+initial energy supplied from the native background. The cooling boundary also
+applies `chemistry.minimumSpecificEnergy` in physical erg/g. Restart restores
+the saved energy/electron guess and checks the new model fingerprint. Previous
+reaction-network checkpoints require the matching historical executable.
 
 ## Physical model
 
@@ -155,14 +132,14 @@ Both reference models disable reionization and massive neutrinos.
 
 The focused tests cover charge accounting, bounded abundances, helium
 recombination ordering, residual ionization, thermal coupling and decoupling,
-the helium-free limit, numerical convergence, invalid inputs, conversion
-through the existing chemistry EOS, and consistent background pressure
+the helium-free limit, numerical convergence, invalid inputs, and background pressure
 and Thomson opacity. A comparison against frozen RECFAST reference data is
 included in CTest; no Fortran compiler or reference executable is needed.
 The application smoke tests exercise native internal power generation
 without a RECFAST executable in their working directory.
 
-Before removal of the reference executable and the SPH initialization update,
+Historical validation (2026-10-20), before the GADGET-4 replacement: before
+removal of the reference executable and the earlier SPH initialization update,
 all 19 focused and application CPU tests passed. These include existing
 `atomic6` and `molecular9` evolution and exact checkpoint/restart checks.
 The 11 existing chemistry and SPH source files match their pre-change

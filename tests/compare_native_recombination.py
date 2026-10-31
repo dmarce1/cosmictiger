@@ -114,22 +114,13 @@ def compareHistories(arguments):
     if arguments.integer_redshifts:
         # CAMB RECFAST has a fixed integer-z thermal table. Its natural spline
         # has a sizeable endpoint artifact between z=0 and z=1 without reionization.
-        reference = [
-            row for row in reference
-            if math.isclose(row["z"], round(row["z"]), rel_tol=0, abs_tol=1e-8)
-        ]
+        reference = [row for row in reference
+                     if math.isclose(row["z"], round(row["z"]), rel_tol=0, abs_tol=1e-8)]
+        candidate = [row for row in candidate
+                     if math.isclose(row["z"], round(row["z"]), rel_tol=0, abs_tol=1e-8)]
     differences = []
-    for ref in reference:
-        matches = [
-            row for row in candidate
-            if math.isclose(row["n_eff"], ref["n_eff"], abs_tol=1e-10)
-            and math.isclose(row["z"], ref["z"], rel_tol=1e-10, abs_tol=1e-8)
-        ]
-        if not matches:
-            continue
-        if len(matches) != 1:
-            raise ValueError(f"Duplicate native samples for {ref}")
-        row = matches[0]
+    for ref, row in camb_reference.matchReferenceRows(reference, candidate,
+            {"n_eff": (1e-9, 1e-10), "z": (1e-10, 1e-8)}):
         difference = {key: ref[key] for key in ("n_eff", "z")}
         for key in ("x_e", "T_m"):
             if not math.isfinite(row[key]) or not math.isfinite(ref[key]) or ref[key] <= 0:

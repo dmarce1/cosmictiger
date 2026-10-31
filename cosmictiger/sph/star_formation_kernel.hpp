@@ -1,39 +1,26 @@
-/* CosmicTiger - SH03 per-particle source operations; BSL-1.0. */
+/* CosmicTiger - GADGET-4 per-particle cooling and SF source; BSL-1.0. */
 #pragma once
 
 #include <cfloat>
 #include <cmath>
 #include <cstdint>
 
-#include <cosmictiger/chemistry/primordial_eos.hpp>
 #include <cosmictiger/particles/star_formation_state.hpp>
 #include <cosmictiger/sph/springel_and_hernquist/cooling.hpp>
 
 namespace star_formation_backend {
 
-// Host unit conversion supplies these scales once per batch. Keep the order of
-// each conversion identical to the typed host boundary (including powers of a).
 struct Parameters {
     springel_and_hernquist::Model model;
-    springel_and_hernquist::AtomicCooling cooling;
-    primordial::Environment environment;
+    gadget4::Parameters cooling;
     double densityScale{};
     double energyScale{};
-    double hydrogenMass{};
     double scaleFactor{};
     double timeSeconds{};
-    double lengthCm{};
     double gasMass{};
     double scaleDerivative{};
     double baseTimestep{};
     double explicitTimestep{-1.0};
-    double metalYield{};
-    double windMassLoading{};
-    double windEnergyFraction{};
-    double windDecouplingSeconds{};
-    double windRecoupleDensityFraction{};
-    // Newborn collisionless timestep and kick scales, already rounded as in
-    // the host gravity boundary. baseTimestep retains double kick precision.
     float effectiveRadius{};
     float timestepBase{};
     float timestepCap{};
@@ -42,16 +29,10 @@ struct Parameters {
     int rungLimit{};
     uint64_t seed{};
     int minimumRung{};
-    int uniformRung{-1};
-    bool opening{};
-    bool winds{};
 };
-
 struct Input {
     StarFormationState state;
-    primordial::State chemistry;
-    double chemistryHalfInterval{};
-    double chemistryPendingHeating{};
+    gadget4::State chemistry;
     float velocity[3]{};
     float gravity[3]{};
     float energy{};
@@ -61,19 +42,43 @@ struct Input {
 };
 struct Output {
     StarFormationState state;
-    primordial::State chemistry;
-    double chemistryInterval{};
-    double value{};    // Minimum timestep, pressure integral contribution, or heating.
+    gadget4::State chemistry;
+    double value{};
+    double physicalInterval{};
+    double specificStarFormationRate{};
+    double coldFraction{};
+    double hotEnergy{};
+    double effectiveEnergy{};
     float velocity[3]{};
     float energy{};
     float pressureRatio{};
     float signalIndex{};
     int rung{};
-    int status{};    // Zero means the entire particle operation succeeded.
-    bool project{};
+    int status{};
+    bool starForming{};
     bool convert{};
 };
-enum class Operation { eos, timestep, prepare, finish, pressure, openNewStar };
+enum class Operation { eos, diagnostics, advance, pressure, openNewStar };
+inline char const* statusName(int status) {
+    switch (status) {
+    case 0:
+        return "success";
+    case 1:
+        return "equilibrium_failed";
+    case 2:
+        return "cooling_or_energy_storage_failed";
+    case 3:
+        return "invalid_bulk_energy";
+    case 4:
+        return "invalid_source_state_or_interval";
+    case 7:
+        return "unknown_operation";
+    case 8:
+        return "new_star_timestep_out_of_range";
+    default:
+        return "unknown_status";
+    }
+}
 
 namespace detail {
     CUDA_EXPORT inline uint64_t mix(uint64_t value) {
@@ -87,12 +92,6 @@ namespace detail {
             mix(stream + UINT64_C(0x632be59bd9b4e019)));
         return double(bits >> 11) * 0x1.0p-53;
     }
-    CUDA_EXPORT inline double minimum(double a, double b) {
-        return a < b ? a : b;
-    }
-    CUDA_EXPORT inline double maximum(double a, double b) {
-        return a > b ? a : b;
-    }
     CUDA_EXPORT inline bool finite(double value) {
         return springel_and_hernquist::detail::finite(value);
     }
@@ -103,218 +102,151 @@ namespace detail {
     CUDA_EXPORT inline double energy(float value, Parameters const& p) {
         return double(value) * p.energyScale / p.scaleFactor / p.scaleFactor;
     }
-    CUDA_EXPORT inline bool checkedFloat(double value, float& result) {
-        if (!finite(value) || ::fabs(value) > FLT_MAX ||
-            (value != 0.0 && ::fabs(value) < FLT_MIN)) {
-            return false;
-        }
-        result = float(value);
-        return true;
-    }
-    CUDA_EXPORT inline bool synchronizeEnergy(
-        primordial::State& state, float value, Parameters const& p) {
-        return checkedFloat(
-            energy(value, p) * p.hydrogenMass / (p.cooling.hydrogenMassFraction * 1.602176634e-12),
-            state.thermalEnergy);
-    }
     CUDA_EXPORT inline bool storedEnergy(double value, Parameters const& p, float& result) {
         double const stored = value / p.energyScale * p.scaleFactor * p.scaleFactor;
         if (!(stored > 0.0) || !finite(stored) || stored > FLT_MAX) {
             return false;
         }
         result = float(stored);
-        return true;
+        return result > 0.0f;
     }
-    CUDA_EXPORT inline bool equilibrium(
-        double rho, Parameters const& p, springel_and_hernquist::Equilibrium& state) {
-        return springel_and_hernquist::evaluateEquilibrium(p.model, p.cooling, rho, state);
-    }
-    CUDA_EXPORT inline bool starForming(Input const& input, Parameters const& p, double rho) {
-        return rho >= p.model.thresholdDensity && input.state.windTimeRemaining <= 0.0;
+    CUDA_EXPORT inline bool eligible(Input const& input, Parameters const& p) {
+        return density(input, p) >= p.model.thresholdDensity &&
+            (!p.cooling.comoving ||
+                double(input.density) * p.densityScale >= p.model.overdensityThreshold);
     }
     CUDA_EXPORT inline Output initial(Input const& input) {
-        Output result;
-        result.state = input.state;
-        result.chemistry = input.chemistry;
-        result.energy = input.energy;
-        result.rung = input.rung;
+        Output output;
+        output.state = input.state;
+        output.chemistry = input.chemistry;
+        output.energy = input.energy;
+        output.rung = input.rung;
         for (int dim = 0; dim < 3; ++dim) {
-            result.velocity[dim] = input.velocity[dim];
+            output.velocity[dim] = input.velocity[dim];
         }
-        return result;
+        return output;
+    }
+    CUDA_EXPORT inline void recordPhase(
+        Output& output, springel_and_hernquist::Equilibrium const& phase, double energy) {
+        output.starForming = true;
+        output.coldFraction = phase.coldFraction;
+        output.hotEnergy = phase.hotEnergy;
+        output.effectiveEnergy = phase.effectiveEnergy;
+        output.specificStarFormationRate =
+            energy > 1.01 * phase.effectiveEnergy ? 0.0 : phase.specificStarFormationRate;
     }
 }    // namespace detail
-
-CUDA_EXPORT inline Output evaluateEos(Input const& input, Parameters const& p) {
+CUDA_EXPORT inline Output evaluateEos(Input const& input, Parameters const&) {
     Output output = detail::initial(input);
-    double pressureRatio;
-    double signalIndex;
-    double const rho = detail::density(input, p);
-    if (detail::starForming(input, p, rho)) {
-        springel_and_hernquist::Equilibrium state, lower, upper;
-        double const lowerDensity = detail::maximum(p.model.thresholdDensity, rho * 0.999);
-        double const upperDensity = rho * 1.001;
-        if (!detail::equilibrium(rho, p, state) || !detail::equilibrium(lowerDensity, p, lower) ||
-            !detail::equilibrium(upperDensity, p, upper)) {
-            output.status = 1;
-            return output;
-        }
-        pressureRatio = (p.model.parameters.gamma - 1.0) * state.effectiveEnergy /
-            detail::energy(input.energy, p);
-        signalIndex = ::log(upper.pressure / lower.pressure) / ::log(upperDensity / lowerDensity);
-    } else {
-        primordial::Eos eos;
-        if (!detail::synchronizeEnergy(output.chemistry, input.energy, p) ||
-            primordial::evaluateEos(output.chemistry, p.environment, eos) !=
-                primordial::Status::Success) {
-            output.status = 2;
-            return output;
-        }
-        pressureRatio = eos.pressureEnergyRatio;
-        signalIndex = eos.adiabaticIndex;
-    }
-    if (!(pressureRatio > 0.0) || !(signalIndex > 0.0) || !detail::finite(pressureRatio) ||
-        !detail::finite(signalIndex)) {
+    if (!(input.energy > 0.0f) || !detail::finite(input.energy)) {
         output.status = 3;
         return output;
     }
-    output.pressureRatio = float(pressureRatio);
-    output.signalIndex = float(signalIndex);
+    // GADGET-4 hydrodynamics uses the carried bulk thermal energy and gamma,
+    // not dP_eff/drho along an equilibrium curve.
+    output.pressureRatio = float(2.0 / 3.0);
+    output.signalIndex = float(5.0 / 3.0);
     return output;
 }
-CUDA_EXPORT inline Output maximumTimestep(Input const& input, Parameters const& p) {
+CUDA_EXPORT inline Output diagnostics(Input const& input, Parameters const& p) {
     Output output = detail::initial(input);
-    output.value = DBL_MAX;
-    if (input.rung < p.minimumRung) {
+    if (!detail::eligible(input, p)) {
         return output;
     }
-    double physicalLimit = DBL_MAX;
-    double const rho = detail::density(input, p);
-    if (detail::starForming(input, p, rho)) {
-        springel_and_hernquist::Equilibrium state;
-        if (!detail::equilibrium(rho, p, state)) {
-            output.status = 1;
-            return output;
-        }
-        physicalLimit =
-            0.05 / (state.specificStarFormationRate * (1.0 + (p.winds ? p.windMassLoading : 0.0)));
-    } else if (input.state.windTimeRemaining > 0.0) {
-        physicalLimit = input.state.windTimeRemaining;
+    springel_and_hernquist::Equilibrium phase;
+    double electrons = input.chemistry.electronFraction;
+    if (!springel_and_hernquist::evaluateEquilibrium(
+            p.model, p.cooling, detail::density(input, p), electrons, phase)) {
+        output.status = 1;
+        return output;
     }
-    output.value = physicalLimit / p.scaleFactor / p.timeSeconds;
+    detail::recordPhase(output, phase, detail::energy(input.energy, p));
     return output;
 }
-CUDA_EXPORT inline Output prepare(Input const& input, Parameters const& p) {
+CUDA_EXPORT inline Output advance(Input const& input, Parameters const& p) {
     Output output = detail::initial(input);
-    int const rung = p.opening && p.uniformRung >= 0 ? p.uniformRung : input.rung;
-    double const halfInterval =
-        p.explicitTimestep >= 0.0 ? 0.5 * p.explicitTimestep : ::ldexp(0.5 * p.baseTimestep, -rung);
+    double const step =
+        p.explicitTimestep >= 0.0 ? p.explicitTimestep : ::ldexp(p.baseTimestep, -input.rung);
+    double const interval = p.scaleFactor * step * p.timeSeconds;
     auto& state = output.state;
-    if (!detail::finite(p.explicitTimestep) || state.id == 0 || !(halfInterval > 0.0) ||
-        !detail::finite(halfInterval) ||
-        (p.opening && (state.sourceHalfInterval != 0.0 || state.pendingHeating != 0.0)) ||
-        (!p.opening && state.sourceHalfInterval != halfInterval) ||
-        input.chemistryHalfInterval != 0.0 || input.chemistryPendingHeating != 0.0) {
+    if (state.id == 0 || !detail::finite(p.explicitTimestep) || !(interval > 0.0) ||
+        !detail::finite(interval) || !detail::finite(state.specificStarFormationRate) ||
+        state.specificStarFormationRate < 0.0 || !detail::finite(state.elapsedPhysicalTime)) {
         output.status = 4;
         return output;
     }
-    double const midpointScale =
-        p.scaleFactor + (p.opening ? 0.5 : -0.5) * p.scaleDerivative * halfInterval;
-    double const physicalInterval = midpointScale * halfInterval * p.timeSeconds;
-    if (!(physicalInterval > 0.0) || !detail::finite(physicalInterval)) {
-        output.status = 5;
+    // Official run.cc calls sfr_create_star_particles BEFORE cooling_and_starformation.
+    // Sample the saved previous SFR over this full selected SPH interval.
+    double const probability =
+        springel_and_hernquist::starFormationProbability(state.specificStarFormationRate, interval);
+    output.convert = detail::uniform(state.id, state.eventCounter, 0, p.seed) < probability;
+    ++state.eventCounter;
+    state.elapsedPhysicalTime += interval;
+    if (!detail::finite(state.elapsedPhysicalTime)) {
+        output.status = 4;
+        return output;
+    }
+    output.physicalInterval = interval;
+    if (output.convert) {
+        output.energy = 0.0f;
+        state.specificStarFormationRate = 0.0;
+        state.formationTime = p.cooling.comoving ? p.scaleFactor : state.elapsedPhysicalTime;
+        output.value = p.gasMass * double(input.energy) / p.scaleFactor;
         return output;
     }
     double const rho = detail::density(input, p);
-    if (rho < p.windRecoupleDensityFraction * p.model.thresholdDensity) {
-        state.windTimeRemaining = 0.0;
-    }
-    double const windInterval = detail::minimum(state.windTimeRemaining, physicalInterval);
-    state.windTimeRemaining -= windInterval;
-    double const eligibleInterval = physicalInterval - windInterval;
-    output.project = eligibleInterval > 0.0 && rho >= p.model.thresholdDensity;
-    output.chemistryInterval = output.project ? windInterval : physicalInterval;
-    double opticalDepth = 0.0;
-    if (output.project) {
+    double const oldEnergy = detail::energy(input.energy, p);
+    double newEnergy = oldEnergy;
+    double electrons = input.chemistry.electronFraction;
+    if (detail::eligible(input, p)) {
         springel_and_hernquist::Equilibrium phase;
-        springel_and_hernquist::AtomicEquilibrium hot;
-        if (!detail::equilibrium(rho, p, phase) ||
-            !p.cooling.evaluateAtEnergy(phase.hotEnergy, hot) ||
-            !detail::storedEnergy(phase.effectiveEnergy, p, output.energy)) {
+        if (!springel_and_hernquist::evaluateEquilibrium(
+                p.model, p.cooling, rho, electrons, phase) ||
+            !springel_and_hernquist::clampSourceTime(p.model.parameters, interval, phase)) {
             output.status = 1;
             return output;
         }
-        output.chemistry = primordial::State{};
-        double const heliumRatio =
-            (1.0 - p.cooling.hydrogenMassFraction) / (4.0 * p.cooling.hydrogenMassFraction);
-        output.chemistry.abundances[0] =
-            float(phase.coldFraction + phase.hotFraction * hot.hydrogenNeutral);
-        output.chemistry.abundances[1] = float(phase.hotFraction * hot.hydrogenIonized);
-        output.chemistry.abundances[2] =
-            float(heliumRatio * (phase.coldFraction + phase.hotFraction * hot.heliumNeutral));
-        output.chemistry.abundances[3] = float(heliumRatio * phase.hotFraction * hot.heliumIonized);
-        output.chemistry.abundances[4] =
-            float(heliumRatio * phase.hotFraction * hot.heliumDoubleIonized);
-        output.chemistry.abundances[5] = float(phase.hotFraction * hot.electronsPerHydrogen);
-        if (!detail::synchronizeEnergy(output.chemistry, output.energy, p)) {
+        // The official dense branch persists Ne from the hot cooling-time
+        // lookup. Its subsequent DoCooling uses a local Ne, not that field.
+        double coolingElectrons = electrons;
+        if (oldEnergy > phase.effectiveEnergy) {
+            if (gadget4::doCooling(oldEnergy, rho, interval, p.cooling, coolingElectrons,
+                    newEnergy) != gadget4::Status::Success) {
+                output.status = 2;
+                return output;
+            }
+            if (newEnergy < phase.effectiveEnergy) {
+                newEnergy = phase.effectiveEnergy;
+            }
+        } else {
+            newEnergy = phase.effectiveEnergy +
+                (oldEnergy - phase.effectiveEnergy) * ::exp(-interval / phase.relaxationTime);
+        }
+        if (newEnergy < p.cooling.minimumSpecificEnergy) {
+            newEnergy = p.cooling.minimumSpecificEnergy;
+        }
+        detail::recordPhase(output, phase, newEnergy);
+    } else {
+        double const initialEnergy = oldEnergy < p.cooling.minimumSpecificEnergy ?
+            p.cooling.minimumSpecificEnergy :
+            oldEnergy;
+        if (gadget4::doCooling(initialEnergy, rho, interval, p.cooling, electrons, newEnergy) !=
+            gadget4::Status::Success) {
             output.status = 2;
             return output;
         }
-        opticalDepth = phase.specificStarFormationRate * eligibleInterval;
-        state.metallicity += float(
-            springel_and_hernquist::enrichmentIncrement(phase, eligibleInterval, p.metalYield));
+        if (newEnergy < p.cooling.minimumSpecificEnergy) {
+            newEnergy = p.cooling.minimumSpecificEnergy;
+        }
     }
-    if (!(state.metallicity >= 0.0f && state.metallicity <= 1.0f)) {
-        output.status = 6;
+    if (!detail::storedEnergy(newEnergy, p, output.energy) || !detail::finite(electrons) ||
+        electrons < 0.0 || electrons > FLT_MAX) {
+        output.status = 2;
         return output;
     }
-    state.formationOpticalDepth += opticalDepth;
-    state.elapsedPhysicalTime += physicalInterval;
-    state.sourceHalfInterval = halfInterval;
-    return output;
-}
-// Chemistry has completed transactionally before this operation. Its output is
-// applied only to ordinary gas; a wind recoupling midway ends on the SH03 branch.
-CUDA_EXPORT inline Output finish(Input const& input, Output output, Parameters const& p) {
-    auto& state = output.state;
-    double kineticChange = 0.0;
-    if (!p.opening) {
-        double const probability = -::expm1(-state.formationOpticalDepth);
-        output.convert = detail::uniform(state.id, state.eventCounter, 0, p.seed) < probability;
-        if (output.convert) {
-            output.energy = 0.0f;
-        } else if (p.winds && state.windTimeRemaining == 0.0 &&
-            detail::uniform(state.id, state.eventCounter, 1, p.seed) <
-                -::expm1(-p.windMassLoading * state.formationOpticalDepth)) {
-            double const speed = springel_and_hernquist::windSpeed(
-                p.model.parameters, p.windMassLoading, p.windEnergyFraction);
-            double const cosine =
-                2.0 * detail::uniform(state.id, state.eventCounter, 2, p.seed) - 1.0;
-            double const azimuth =
-                6.2831853071795864769 * detail::uniform(state.id, state.eventCounter, 3, p.seed);
-            double const sine = ::sqrt(detail::maximum(0.0, 1.0 - cosine * cosine));
-            double const direction[] = {sine * ::cos(azimuth), sine * ::sin(azimuth), cosine};
-            double const storedSpeed = speed * p.scaleFactor * p.timeSeconds / p.lengthCm;
-            for (int dim = 0; dim < 3; ++dim) {
-                double const before = output.velocity[dim];
-                output.velocity[dim] = float(before + storedSpeed * direction[dim]);
-                kineticChange +=
-                    0.5 * (double(output.velocity[dim]) * output.velocity[dim] - before * before);
-            }
-            state.windTimeRemaining = p.windDecouplingSeconds;
-        }
-        ++state.eventCounter;
-        state.formationOpticalDepth = 0.0;
-    }
-    double const change =
-        -p.gasMass * (double(output.energy) - input.energy + kineticChange) / p.scaleFactor;
-    if (p.opening) {
-        state.pendingHeating = change;
-    } else {
-        output.value = input.state.pendingHeating + change;
-        state.sourceHalfInterval = 0.0;
-        state.pendingHeating = 0.0;
-    }
+    output.chemistry.electronFraction = float(electrons);
+    state.specificStarFormationRate = output.specificStarFormationRate;
+    output.value = -p.gasMass * (double(output.energy) - input.energy) / p.scaleFactor;
     return output;
 }
 // A converted particle missed the collisionless gravity timestep proposal.
@@ -360,12 +292,10 @@ CUDA_EXPORT inline Output evaluate(
     switch (operation) {
     case Operation::eos:
         return evaluateEos(input, p);
-    case Operation::timestep:
-        return maximumTimestep(input, p);
-    case Operation::prepare:
-        return prepare(input, p);
-    case Operation::finish:
-        return finish(input, output, p);
+    case Operation::diagnostics:
+        return diagnostics(input, p);
+    case Operation::advance:
+        return advance(input, p);
     case Operation::openNewStar:
         return openNewStar(input, p);
     case Operation::pressure:

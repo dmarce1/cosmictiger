@@ -11,7 +11,7 @@ a CFL-halving check, and small SPH cosmologies for two adiabatic indices. Option
 runs compare two localities and CUDA against CPU. Every run uses a fresh directory
 under workdir, and any failed run or accuracy check produces a nonzero exit status.
 Chemistry and star-formation evolution and restart coverage lives in
-run_primordial_integration.py and run_star_formation.py.
+run_gadget4_cooling.py and run_star_formation.py.
 """
 
 import argparse
@@ -124,7 +124,7 @@ def prepareDirectory(base, name):
     return directory
 
 
-def buildCommand(spec, mpiExec):
+def buildCommand(spec, launcher):
     if spec.rawCommand is not None:
         command = list(spec.rawCommand)
     else:
@@ -140,8 +140,9 @@ def buildCommand(spec, mpiExec):
         options.update(spec.overrides)
         command += [f"--{key}={value}" for key, value in options.items()]
     if spec.localities > 1:
-        command = [mpiExec, "-n", str(spec.localities)] + command + [
-            f"--hpx:localities={spec.localities}"]
+        command = [launcher.mpi_exec, launcher.mpi_numproc_flag, str(spec.localities),
+                   *launcher.mpi_preflag, command[0], *launcher.mpi_postflag, *command[1:],
+                   f"--hpx:localities={spec.localities}", *launcher.hpx_argument]
     return command
 
 
@@ -225,6 +226,11 @@ def analyzeRun(spec, directory, returnCode, timedOut, wall, output):
         result.update(status="timeout", message=f"exceeded {spec.timeout} s")
         return result
     if returnCode != 0:
+        unavailable = ("This executable was compiled without CUDA support",
+                       "compute.cuda=true requires an available CUDA device")
+        if spec.backend == "cuda" and any(message in output for message in unavailable):
+            result.update(status="skipped", message="CUDA backend or device unavailable")
+            return result
         result.update(status="abort", message=failureExcerpt(directory, output),
                       steps=lastStep(directory))
         return result
@@ -261,8 +267,15 @@ def analyzeRun(spec, directory, returnCode, timedOut, wall, output):
                           maxDensity=max(row[1] for row in density))
             if spec.stem == "sod":
                 samples = readTable(directory / "sod.txt", 5)
-                if len(samples) != 1000:
-                    raise ValueError(f"sod.txt has {len(samples)} samples, expected 1000")
+                initialized = re.search(r"^\s*Initialized particles\s*:\s*(\d+)\s*$",
+                                        output, re.MULTILINE)
+                if initialized is None or int(initialized[1]) == 0:
+                    raise ValueError("Sod initialized particle count missing or zero")
+                # Single-locality diagnostics include each particle once below
+                # the sample cap, and take 1000 samples for larger fixtures.
+                expectedSamples = min(1000, int(initialized[1]))
+                if len(samples) != expectedSamples:
+                    raise ValueError(f"sod.txt has {len(samples)} samples, expected {expectedSamples}")
                 if any(min(row[1:]) <= 0.0 for row in samples):
                     raise ValueError("Sod density or pressure is nonpositive")
                 # Columns: x, SPH density, exact density, SPH pressure, exact pressure.
@@ -274,9 +287,9 @@ def analyzeRun(spec, directory, returnCode, timedOut, wall, output):
     return result
 
 
-def execute(spec, base, mpiExec):
+def execute(spec, base, launcher):
     directory = prepareDirectory(base, spec.name)
-    command = buildCommand(spec, mpiExec)
+    command = buildCommand(spec, launcher)
     (directory / "command.txt").write_text(" ".join(command) + "\n")
     returnCode, timedOut, wall, output = runProcess(command, directory, environmentFor(spec),
                                                     spec.timeout)
@@ -393,6 +406,9 @@ def checkEnergy(validation, results, key, label, limit=1.e-2):
 
 def gpuBusyWithOurJobs():
     """Return a reason to skip CUDA cases, or None when the GPU can be used."""
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if visible is not None and visible.strip() in ("", "-1"):
+        return "CUDA devices disabled by CUDA_VISIBLE_DEVICES"
     try:
         result = subprocess.run(["nvidia-smi", "--query-compute-apps=pid,process_name",
                                  "--format=csv,noheader"], text=True, capture_output=True,
@@ -420,6 +436,10 @@ def main():
     parser.add_argument("--cuda-executable", type=Path,
                         help="binary for the CUDA runs; defaults to the main executable")
     parser.add_argument("--mpi-exec", help="run the two-locality comparisons with this launcher")
+    parser.add_argument("--mpi-numproc-flag", default="-n")
+    parser.add_argument("--mpi-preflag", action="append", default=[])
+    parser.add_argument("--mpi-postflag", action="append", default=[])
+    parser.add_argument("--hpx-argument", action="append", default=[])
     parser.add_argument("--quick", action="store_true",
                         help="8^3 runs with a single integrator, suitable for CTest")
     parser.add_argument("--jobs", type=int, choices=(1, 2), default=2,
@@ -509,6 +529,8 @@ def main():
         cudaSkip = gpuBusyWithOurJobs()
         cudaIntegrators = [value for value in matrixIntegrators
                            if value in compiled_algorithms(str(cudaExecutable))["integrator"]]
+        if cudaSkip is None and not cudaIntegrators:
+            cudaSkip = "no common compiled hydro integrator for the CUDA comparison"
         if cudaSkip is None:
             if "traditional" in cudaIntegrators:
                 name = f"cuda_sod_n{sodSize}_traditional"
@@ -534,7 +556,7 @@ def main():
         print(runLine(result), flush=True)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        futures = [pool.submit(execute, spec, base, args.mpi_exec) for spec in cpuSpecs]
+        futures = [pool.submit(execute, spec, base, args) for spec in cpuSpecs]
         try:
             for future in concurrent.futures.as_completed(futures):
                 record(future.result())
@@ -551,7 +573,11 @@ def main():
             if reason is not None:
                 cudaSkip = reason
                 break
-        record(execute(spec, base, args.mpi_exec))
+        result = execute(spec, base, args)
+        record(result)
+        if spec.backend == "cuda" and result["status"] == "skipped":
+            cudaSkip = result["message"]
+            break
 
     results = {keys[name]: result for name, result in resultsByName.items()}
     validation = Validation()
@@ -635,7 +661,7 @@ def main():
             gpu = results.get((stem, "cuda", size, integrator))
             cpu = results.get((stem, "cpu", size, integrator))
             name = f"cuda {stem} n{size} {integrator}"
-            if gpu is None:
+            if gpu is None or gpu["status"] == "skipped":
                 validation.add(name, "SKIP", cudaSkip or "not run")
                 continue
             if not ok(gpu) or not ok(cpu):
@@ -656,8 +682,8 @@ def main():
                 validation.add(f"cuda sod n{sodSize} traditional accuracy",
                                "FAIL", f"L1={result['l1']:.4e} "
                                        f"max|dE|={result['maxEnergyError']:.3e}")
-        checkSod(validation, results, ("sod", "cuda", sodSize, "traditional"),
-                 f"sod n{sodSize} traditional cuda L1")
+        if key in results and results[key]["status"] != "skipped":
+            checkSod(validation, results, key, f"sod n{sodSize} traditional cuda L1")
     else:
         validation.add("cuda", "SKIP", "no --cuda")
 
@@ -673,7 +699,14 @@ def main():
             "finalThermal": result["thermal"][-1] if result.get("thermal") else None}
             for result in resultsByName.values()],
          "checks": validation.asList(), "seconds": elapsed}, indent=1, default=str))
-    return 1 if validation.failures() else 0
+    if validation.failures():
+        return 1
+    if args.cuda and any(spec.name not in resultsByName or
+                        resultsByName[spec.name]["status"] == "skipped" for spec in cudaSpecs):
+        return 77
+    if args.cuda and not cudaSpecs:
+        return 77
+    return 0
 
 
 def terminate(signalNumber, frame):

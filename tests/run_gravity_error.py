@@ -4,18 +4,16 @@
 
 import argparse
 import csv
-import ctypes
 import math
+import struct
 from pathlib import Path
 
 from application_selection import application_options
-import struct
 import sys
 
 sys.dont_write_bytecode = True
-sys.path.insert(0, str(Path(__file__).resolve().parent / "gravity" / "nitadori"))
 
-from pmmm_evolution_helpers import DomainEntry, Driver, Header
+from checkpoint_format import decode_checkpoint
 from run_checkpoint import fnv1a64, prepareCase, runSimulation
 
 
@@ -37,63 +35,20 @@ def readState(checkpoint, ranks):
         require(manifest[rank + 1].split() == [str(rank), str(len(data)),
                                               f"{fnv1a64(data):016x}"],
                 "checkpoint checksum differs from manifest")
-        header = Header.from_buffer_copy(data)
-        require(header.magic == 0x4354535048303031 and header.version == 3,
-                "unsupported checkpoint header")
+        decoded = decode_checkpoint(data, ranks=ranks)
+        header, driver = decoded.header, decoded.driver
         require(not header.flags & ((1 << 0) | (1 << 7) | (1 << 8) | (1 << 9) | (1 << 11)),
                 "fixture enabled optional particle fields")
-        offset = ctypes.sizeof(Header)
-        if header.flags & (1 << 17):
-            version = struct.unpack_from("=Q", data, offset)[0]
-            offset += 8 * {1: 7, 2: 8, 3: 10, 4: 11}[version]
-        driver = Driver.from_buffer_copy(data, offset)
         require(driver.iteration == iteration, "checkpoint driver layout mismatch")
         if state is None:
             state = driver
         else:
             require((state.tau, state.integer_time, state.step) ==
                     (driver.tau, driver.integer_time, driver.step), "locality clocks disagree")
-        offset += ctypes.sizeof(Driver)
-        positionCode = "Q" if header.flags & (1 << 15) else "I"
-        errors = []
-        for integerBytes, integerCode in ((4, "i"), (8, "q")):
-            try:
-                cursor = offset
-
-                def take(code, count):
-                    nonlocal cursor
-                    values = struct.unpack_from(f"={count}{code}", data, cursor)
-                    cursor += struct.calcsize("=" + code) * count
-                    return values
-
-                count = take(integerCode, 1)[0]
-                require(0 <= count <= header.particles_per_species, "invalid particle count")
-                positions = [take(positionCode, count) for _ in range(3)]
-                velocities = take("f", 3 * count)
-                rungs = take("b", count)
-                rungCount, rungBegin = take("i", 2)
-                require(0 <= rungCount <= 64 and 0 <= rungBegin <= count, "invalid rung stack")
-                take("i", rungCount)
-                domainCount = ctypes.c_size_t.from_buffer_copy(data, cursor).value
-
-                class LocalDomain(ctypes.Structure):
-                    _fields_ = [("box", ctypes.c_double * 6), ("ranks", ctypes.c_int * 2),
-                                ("particles", (ctypes.c_int32 if integerBytes == 4
-                                               else ctypes.c_int64) * 2),
-                                ("depth", ctypes.c_int)]
-
-                cursor += ctypes.sizeof(ctypes.c_size_t)
-                cursor += domainCount * ctypes.sizeof(DomainEntry) + ranks * ctypes.sizeof(LocalDomain)
-                require(cursor == len(data), "incorrect particle-index width or trailing payload")
-                require(all(math.isfinite(value) for value in velocities), "nonfinite velocity")
-                scale = 2 ** (64 if positionCode == "Q" else 32)
-                particles.extend((tuple(positions[dim][i] / scale for dim in range(3)),
-                                  velocities[3 * i:3 * i + 3], rungs[i]) for i in range(count))
-                break
-            except (RuntimeError, struct.error, ValueError, OverflowError) as error:
-                errors.append(str(error))
-        else:
-            raise RuntimeError(f"cannot decode checkpoint particles: {errors}")
+        scale = 2 ** (8 * decoded.position_bytes)
+        particles.extend((tuple(decoded.positions[dim][i] / scale for dim in range(3)),
+                          decoded.velocities[3 * i:3 * i + 3], decoded.rungs[i])
+                         for i in range(decoded.count))
     return state, sorted(particles)
 
 

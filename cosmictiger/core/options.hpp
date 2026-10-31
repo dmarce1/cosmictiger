@@ -233,21 +233,12 @@ struct Hydro {
 };
 
 struct Chemistry {
-    // Source half steps follow each active gas particle's hydrodynamic timestep.
+    // Compatibility group name: GADGET-4 equilibrium atomic cooling.
     bool enabled{false};
-    std::string network{"atomic6"};
-    std::string initialization{"recombination"};
-    std::string radiationFile{""};
-    double initialTemperature{1000.0};
-    double hydrogenIonFraction{2.0e-4};
-    double heliumIonFraction{0.0};
-    double heliumDoubleIonFraction{0.0};
-    double hydrogenMinusFraction{0.0};
-    double molecularFraction{0.0};
-    double molecularIonFraction{0.0};
-    double fractionalChangeLimit{0.1};
-    double electronFractionFloor{1.0e-20};
-    int maxSubsteps{4096};
+    // GADGET-4 InitGasTemp; zero retains the initial-condition thermal energy.
+    double initializationTemperature{10000.0};
+    // Physical CGS erg/g, independent of cosmological storage factors.
+    double minimumSpecificEnergy{0.0};
 };
 
 struct StarFormation {
@@ -257,14 +248,10 @@ struct StarFormation {
     double starFormationTimeGyr{2.1};
     double coldTemperature{1000.0};
     double supernovaTemperature{1.0e8};
+    // Hydrogen nuclei/cm^3; zero derives the threshold as in GADGET-4.
+    double criticalPhysicalDensity{0.0};
+    double criticalOverDensity{57.7};
     std::uint64_t seed{1};
-    double metalYield{0.02};
-    bool winds{false};
-    double windMassLoading{2.0};
-    double windEnergyFraction{0.25};
-    double windDecouplingMyr{50.0};
-    double windRecoupleDensityFraction{0.1};
-    std::string windDirection{"isotropic"};
 };
 
 struct Options {
@@ -408,19 +395,8 @@ struct Options {
         arc & hydro.kernelFamily;
         arc & hydro.kernelDegree;
         arc & chemistry.enabled;
-        arc & chemistry.network;
-        arc & chemistry.initialization;
-        arc & chemistry.radiationFile;
-        arc & chemistry.initialTemperature;
-        arc & chemistry.hydrogenIonFraction;
-        arc & chemistry.heliumIonFraction;
-        arc & chemistry.heliumDoubleIonFraction;
-        arc & chemistry.hydrogenMinusFraction;
-        arc & chemistry.molecularFraction;
-        arc & chemistry.molecularIonFraction;
-        arc & chemistry.fractionalChangeLimit;
-        arc & chemistry.electronFractionFloor;
-        arc & chemistry.maxSubsteps;
+        arc & chemistry.initializationTemperature;
+        arc & chemistry.minimumSpecificEnergy;
         arc & run.verbose;
         arc & hydro.zPlaneAcceleration;
         arc & gravity.method;
@@ -441,14 +417,9 @@ struct Options {
         arc & starFormation.starFormationTimeGyr;
         arc & starFormation.coldTemperature;
         arc & starFormation.supernovaTemperature;
+        arc & starFormation.criticalPhysicalDensity;
+        arc & starFormation.criticalOverDensity;
         arc & starFormation.seed;
-        arc & starFormation.metalYield;
-        arc & starFormation.winds;
-        arc & starFormation.windMassLoading;
-        arc & starFormation.windEnergyFraction;
-        arc & starFormation.windDecouplingMyr;
-        arc & starFormation.windRecoupleDensityFraction;
-        arc & starFormation.windDirection;
     }
 };
 

@@ -1,0 +1,63 @@
+GADGET-4 cooling and star formation: zero-UV follow-up — 2026-10-31
+
+Target checkout: /home/dmarce1/workspace/cosmictiger
+Official source pin: 6fb393b5e25907f2ff06211f67d341c5e40e90d1
+https://gitlab.mpcdf.mpg.de/vrs/gadget4/-/tree/6fb393b5e25907f2ff06211f67d341c5e40e90d1/src/cooling_sfr
+Caller ordering: src/main/run.cc in the same pinned revision.
+This record supersedes the earlier UV-enabled replacement validation.
+
+Current model
+- Fixed-X=0.76 atomic H/He ionization equilibrium and gamma=5/3, using the pinned GADGET-4 coefficients, constants, branch thresholds, implicit energy update and iteration criteria.
+- External UV is disabled. TREECOOL loading/interpolation, radiation-table options, photoionization/photoheating branches and the radiation checkpoint checksum are removed. No UV file is required. Atomic radiative cooling, cosmological CMB Compton exchange and stellar feedback remain.
+- SH03 algebraic hot/cold target with retained bulk thermal-energy relaxation, excess-energy cooling, physical/overdensity eligibility and automatic physical threshold calibration.
+- At each completed selected interval, sample whole-particle conversion from the previous saved SFR, then cool surviving gas and store the next SFR. Individual and exact global intervals remain; no opening chemical half step or source-driven outer-step retry is introduced.
+- Only the electron estimate persists as chemical state, as an equilibrium iteration guess. Hydro owns thermal energy. Star formation retains stable identity/event state, birth time and previous SFR. Failed source batches do not partially commit.
+
+Removed and retained boundaries
+The Anninos/non-equilibrium atomic and molecular networks, molecular EOS/energies, duplicated chemical thermal energy, abundance initialization controls, half-source bookkeeping, hazard timestep caps, winds/decoupling and metallicity/yield state are retired. Historical findings/documents retain their original provenance and verdicts. The independent homogeneous background-recombination model remains in cosmology and linear perturbations.
+
+chemistry.enabled selects equilibrium cooling and requires hydro.enabled and gamma=5/3. The other retained controls are chemistry.initializationTemperature and chemistry.minimumSpecificEnergy; the latter is in physical erg/g. Positive initial-condition thermal energy is preserved. Retired radiation and network option keys are rejected. Generic supplied cosmology/default INIs disable star formation; explicit star-formation presets select it.
+
+Cooling fingerprint version 6 contains six doubles and no radiation checksum. Version-five UV-enabled cooling and old non-equilibrium/projected-SH03 checkpoints are intentionally incompatible and rejected. Source state is carried through sorting, migration, conversion and checkpoints. CosmicTiger retains its hydro discretization, units/precision and particle-ID random stream; whole-simulation trajectories are not claimed identical to GADGET-4. Saved SFR is a double specific rate per second.
+
+Deferred-inventory changes
+The current disposition is recorded by original finding ID in gadget4_bug_disposition.txt. Applicable fixes include source-order identities independent of the initial rank split; measured serialized-byte migration limits and deterministic receive ordering; fixed-gamma state initialization without repeated EOS sweeps; draining launched source/refresh futures after failures; snapshot-owned output data with once-per-snapshot diagnostics; a shared strict checkpoint decoder; time-dependent background thermal stepping shared by production and tests; effective build capability checks; chemistry-independent variational-SPH registration; and explicit Python checks that remain effective under optimization. The historical REFUTED finding remains REFUTED.
+
+Independent original-source oracle
+- Re-extracted pinned original cooling routines with original SetZeroIonization: all 20,010 rate coefficients and all 90 thermal/ionization trajectories match bit for bit. Diagnostics report mismatches=0, matched_reference_failures=0 and worst_relative=0. The 90 cases span three background modes, three densities and ten temperatures from 5 K to 1e10 K.
+- Independent SF reference using original cooling: 225 source combinations, zero mismatches, zero matched reference failures and worst_relative=0.
+- Evidence: work/gadget4_no_uv_oracle.cpp, gadget4_no_uv_oracle_results.csv (90 data rows), gadget4_no_uv_oracle_diagnostics.txt and gadget4_no_uv_sf_oracle_diagnostics.txt in the task workspace. Earlier UV interpolation tests and three cold-UV convergence failures describe a removed configuration and are not current limitations.
+
+Completed full-snapshot validation
+- CPU and CUDA application targets built with SPH, cooling and stars. Strict floating-point compilation remains enforced for cooling/star-formation paths. These earlier runs built the application targets; the later combined all-target build is recorded below.
+- Scalar/background selection: 27 passed and one CUDA-only comparison skipped in the CPU build (28 selected). All ten retained background thermal/recombination tests passed under standard and fast-math callers.
+- Four CPU source/lifecycle/output smoke tests passed. Six host-executed two-rank MPI tests passed, covering source evaluation, lifecycle, source identity, mixed/global source intervals, output and migration. Initial restricted-environment MPI launch failures were rerun successfully with host access.
+- Cooling integration passed on one and two ranks with traditional and global intervals; star-formation application/restart, global integrator, checkpoint integrity and position selection passed. These check exact physical-state restart and incompatible source-setting/model rejection. The gravity-error test's missing Python struct import was corrected and its rerun passed.
+- All 14 focused CUDA tests passed on the RTX 3090, including scalar parity, ordinary/dense source states, conversion, failed-batch sentinel preservation, newborn-star kicks and production CUDA dispatch. Initial restricted-environment CUDA failures/skips were rerun successfully with device access.
+- A separate chemistry-disabled application built and its variational_sph_application test passed (54.93 seconds).
+- Build-feature checks and 57 static build-variant regressions passed. Sixteen Python regression tests passed, including ten CLI exit-guard subcases; normal and optimized-Python CTest registrations passed.
+
+Exact first-publication candidate validation
+The scoped first candidate excludes other-chat changes that the user has authorized as a separate second commit. It is distinct from the full snapshot above.
+- CPU and CUDA application targets built. The CUDA-only build exposed an unguarded hierarchical FMM test helper; its definition/call now use the same capability guard as the driver declaration.
+- The 53-test CPU/MPI/application selection is complete: 52 passes and one intentional CPU-build CUDA skip, with zero unresolved failures. The initial run exposed two split-content expectation mismatches: H0/preset/Gadget expectations depended on production changes reserved for the second commit, and a position test expected abbreviations accepted despite the exact main parser. Python/configuration expectations were reconciled with the first candidate without changing production physics; grouped_options then passed in 529.81 seconds and position_selection in 12.89 seconds.
+- All 14 focused CUDA tests passed again on this exact first candidate (45.68 seconds). Python regression tests passed again (16 tests).
+- These first-candidate application/runtime results are separate from the broader combined-tree build and fast-test results below. Commit/push completion is recorded separately.
+
+Combined publication tree validation
+This combines the scoped GADGET-4/no-UV/deferred work with the separately authorized other-chat code changes. It is broader than the first candidate above.
+- The complete configured CPU build, including all build targets, passed with exit status 0. No source fixes were needed during this build.
+- The 450-test fast selection (standalone C++ suites plus eight build/Python/code-generation/analysis checks) completed with 449 passes, one intentional CPU-build CUDA-only skip and zero failures in 25.39 seconds.
+- After validation, all 5,014 combined source-file hashes matched the reviewed source manifest; no source mismatches were found. This establishes the tested combined tree, without claiming an exhaustive runtime test of every registered application scenario.
+
+Evidence location
+Task workspace: /home/dmarce1/Documents/Codex/2026-10-31/recommend-how-to-proceed-given-the
+Full-snapshot logs: work/no_uv_scalar_tests.log, no_uv_runtime_smoke.log, no_uv_mpi_host_tests.log, no_uv_application_tests.log, no_uv_gravity_error_retest.log, no_uv_cuda_host_tests.log and no_uv_harness_tests.log.
+Additional logs: work/deferred_no_chemistry_build.log, deferred_no_chemistry_variational.log and deferred_build_variants_test.log.
+First-candidate logs: work/publication_cpu_build.log, publication_cpu_tests.log, publication_cuda_rebuild.log, publication_cuda_tests.log, publication_python_tests.log and publication_config_retest.log. The two-test rerun completed successfully in 542.70 seconds.
+Combined-tree logs: work/combined_cpu_all_targets_build.log and combined_cpu_fast_tests.log; exact test selection and inventory are in combined_cpu_fast_tests.txt and combined_cpu_ctest_inventory_final.json.
+
+Validation limits and resources
+Focused tests establish the scalar model and exercised application interfaces, not production cosmological population statistics or performance. Lattice/closePack identities were compared on one and two ranks; glass ID construction was inspected without a glass-file application comparison. Multi-GPU mapping, transport stress at scale, exhaustive build combinations and full-simulation agreement with GADGET-4 remain unvalidated.
+
+Local work is capped across agents at 12 of the workstation's 24 CPU cores after the user turned War Thunder off; earlier work observed the stricter concurrent allocation. GPU validation resumed after War Thunder was off. QB login attempts: zero; no QB access was authorized. Publication uses separately reviewed first/second scopes and preserves local instructions, handoff/IDE files, generated artifacts and independent planning documents outside those scopes. This record does not assert a final commit or push outcome.

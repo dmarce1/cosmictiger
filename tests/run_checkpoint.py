@@ -16,17 +16,12 @@ import subprocess
 import struct
 import sys
 
+from checkpoint_format import Header, decode_checkpoint, read_header
+
 
 def checkpoint_position_bytes(payload):
     """Read the position width from a current versioned checkpoint header."""
-    if len(payload) < 16:
-        raise RuntimeError("truncated checkpoint header")
-    magic = int.from_bytes(payload[:8], byteorder=sys.byteorder)
-    version = int.from_bytes(payload[8:12], byteorder=sys.byteorder)
-    if magic != 0x4354535048303031 or version != 3:
-        raise RuntimeError(f"unexpected checkpoint header: magic={magic:x}, version={version}")
-    flags = int.from_bytes(payload[12:16], byteorder=sys.byteorder)
-    return 8 if flags & (1 << 15) else 4
+    return 8 if read_header(payload).flags & (1 << 15) else 4
 
 
 def fnv1a64(payload):
@@ -119,25 +114,26 @@ def checkFreshOutput(options, baseWorkdir, baseline):
 
 
 def checkManifest(checkpointDir, iteration, scenario="cosmology", endTime=0.0, gravity=True,
-                  testFixture=False):
+                  testFixture=False, ranks=1):
     manifest = checkpointDir / "checkpoint.meta"
     if not manifest.is_file():
         raise RuntimeError("completed checkpoint has no manifest")
     lines = manifest.read_text().splitlines()
-    if len(lines) != (2 if testFixture else 3) or lines[0].split() != [
-                                             "COSMICTIGER_CHECKPOINT", "1" if testFixture else "2", "3",
-                                             str(iteration), "1"]:
+    if len(lines) != ranks + (1 if testFixture else 2) or lines[0].split() != [
+            "COSMICTIGER_CHECKPOINT", "1" if testFixture else "2", "3", str(iteration), str(ranks)]:
         raise RuntimeError(f"unexpected checkpoint manifest: {lines}")
-    rank, byteCount, checksumText = lines[1].split()
-    if rank != "0" or not re.fullmatch(r"[0-9a-fA-F]{1,16}", checksumText):
-        raise RuntimeError(f"invalid rank record in checkpoint manifest: {lines[1]}")
-    payload = (checkpointDir / "checkpoint.0.dat").read_bytes()
-    if int(byteCount) != len(payload) or int(checksumText, 16) != fnv1a64(payload):
-        raise RuntimeError("checkpoint manifest size or checksum differs from rank file")
+    for expected_rank in range(ranks):
+        rank, byteCount, checksumText = lines[expected_rank + 1].split()
+        if rank != str(expected_rank) or not re.fullmatch(r"[0-9a-fA-F]{1,16}", checksumText):
+            raise RuntimeError(f"invalid rank record in checkpoint manifest: {lines[expected_rank + 1]}")
+        payload = (checkpointDir / f"checkpoint.{expected_rank}.dat").read_bytes()
+        if int(byteCount) != len(payload) or int(checksumText, 16) != fnv1a64(payload):
+            raise RuntimeError("checkpoint manifest size or checksum differs from rank file")
+        checkpoint_position_bytes(payload)
     if not testFixture:
-        scenarioLabel, scenarioBytes, scenarioChecksum = lines[2].split()
+        scenarioLabel, scenarioBytes, scenarioChecksum = lines[ranks + 1].split()
         if scenarioLabel != "SCENARIO" or not re.fullmatch(r"[0-9a-fA-F]{1,16}", scenarioChecksum):
-            raise RuntimeError(f"invalid scenario record in checkpoint manifest: {lines[2]}")
+            raise RuntimeError(f"invalid scenario record in checkpoint manifest: {lines[ranks + 1]}")
         scenarioPayload = (checkpointDir / "scenario.meta").read_bytes()
         if int(scenarioBytes) != len(scenarioPayload) or int(scenarioChecksum, 16) != fnv1a64(scenarioPayload):
             raise RuntimeError("checkpoint manifest size or checksum differs from scenario metadata")
@@ -151,36 +147,12 @@ def checkManifest(checkpointDir, iteration, scenario="cosmology", endTime=0.0, g
 
 def hydro_particle_payload(checkpoint, expected_count=None):
     """Read the all-gas physical payload, excluding native driver timing/padding."""
-    data = (checkpoint / "checkpoint.0.dat").read_bytes()
-    position_bytes = checkpoint_position_bytes(data)
-    candidates = [data.find(struct.pack("=7I", 0x43545350, version, integer_bytes, 8, 12, 3, 4))
-                  for integer_bytes in (4, 8) for version in (2, 4, 6, 8)]
-    offset = max(candidates)
-    if offset < 0:
-        raise RuntimeError(f"missing versioned SPH payload in {checkpoint}")
-    header = struct.unpack_from("=7I", data, offset)
-    integer_bytes = header[2]
-    if integer_bytes not in (4, 8) or header[5:] != (3, 4):
-        raise RuntimeError(f"unsupported particle layout in {checkpoint}: {header}")
-    count = int.from_bytes(data[offset + 28:offset + 28 + integer_bytes],
-                           sys.byteorder, signed=True)
-    if count <= 0 or (expected_count is not None and count != expected_count):
-        raise RuntimeError(f"unexpected gas count in {checkpoint}: {count}")
-    # Particle positions, velocities, rungs, species, and gas index precede
-    # the gas header. The 38 bytes below are rates, density, flags, and six
-    # predictor/gravity acceleration floats in visitSphCheckpointArrays().
-    start = offset - 2 * integer_bytes - count * (3 * position_bytes + 14 + integer_bytes)
-    # Price et al. (version 8) shares the Cullen-Dehnen divergence layout.
-    viscosity_bytes = {2: 0, 4: 8, 6: 12, 8: 12}[header[1]]
-    end = offset + 28 + integer_bytes + count * (
-        header[3] + header[4] + integer_bytes + 38 + viscosity_bytes)
-    if start < 0 or end > len(data):
-        raise RuntimeError(f"truncated physical particle payload in {checkpoint}")
-    counts = [int.from_bytes(data[start + i * integer_bytes:start + (i + 1) * integer_bytes],
-                             sys.byteorder, signed=True) for i in range(2)]
-    if counts != [count, count]:
-        raise RuntimeError(f"restart fixture is not all gas: {counts}")
-    return data[start:end]
+    state = decode_checkpoint((checkpoint / "checkpoint.0.dat").read_bytes())
+    if not state.hydro or state.gas_count != state.count or state.count <= 0:
+        raise RuntimeError("restart fixture is not all gas")
+    if expected_count is not None and state.count != expected_count:
+        raise RuntimeError(f"unexpected gas count in {checkpoint}: {state.count}")
+    return state.physical
 
 
 def checkViscosityRestarts(executable, baseWorkdir):
@@ -269,7 +241,7 @@ def checkVariationalPressureRestart(executable, baseWorkdir):
     rank_file = checkpoint_dir / "checkpoint.0.dat"
     payload = bytearray(rank_file.read_bytes())
     checkpoint_position_bytes(payload)  # Validate the current native header before changing it.
-    physics_offset = struct.calcsize("@QII11dQi")
+    physics_offset = Header.reserved.offset
     physics_code = struct.unpack_from("@I", payload, physics_offset)[0]
     if physics_code & 0xff != 2:
         raise RuntimeError("SPH checkpoint did not record the variational formulation")

@@ -264,7 +264,6 @@ void visitSphCheckpointArrays(
     }
     if (includeChemistry && sphParticlesChemistryStates != nullptr) {
         visit(sphParticlesChemistryStates, count);
-        visit(sphParticlesChemistrySteps, count);
     }
     if (includeChemistry && sphParticlesChemistryEos != nullptr) {
         visit(sphParticlesChemistryEos, count);
@@ -356,7 +355,6 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         }
         if (getOptions().chemistry.enabled) {
             sphParticlesArrayResize(sphParticlesChemistryStates, newCapacity);
-            sphParticlesArrayResize(sphParticlesChemistrySteps, newCapacity);
         }
         if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
             sphParticlesArrayResize(sphParticlesChemistryEos, newCapacity);
@@ -411,7 +409,6 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         sphParticlesThermodynamicStates[slot] = {};
         if (getOptions().chemistry.enabled) {
             sphParticlesChemistryStates[slot] = {};
-            sphParticlesChemistrySteps[slot] = {};
         }
         if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
             sphParticlesChemistryEos[slot] = {
@@ -841,17 +838,33 @@ void sphParticlesRefreshChemistryEos(double scaleFactor) {
         return;
     }
     Vector<hpx::future<void>> futures;
-    for (auto const& child : hpxChildren()) {
-        futures.push_back(hpx::async<SphParticlesRefreshChemistryEosAction>(child, scaleFactor));
+    std::exception_ptr failure;
+    try {
+        futures.reserve(hpxChildren().size());
+        for (auto const& child : hpxChildren()) {
+            futures.push_back(
+                hpx::async<SphParticlesRefreshChemistryEosAction>(child, scaleFactor));
+        }
+        for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
+            sphParticlesChemistryEos[index] = {
+                float(gadget4::kGammaMinusOne), float(gadget4::kGamma)};
+        }
+        chemistryEosParticleCache = decltype(chemistryEosParticleCache)();
+    } catch (...) {
+        failure = std::current_exception();
     }
-    for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
-        auto const eos = sphChemistryEos(
-            sphParticlesChemistryStates[index], sphParticlesInternalEnergy(index), scaleFactor);
-        sphParticlesChemistryEos[index] = {eos.pressureEnergyRatio, eos.adiabaticIndex};
-    }
-    chemistryEosParticleCache = decltype(chemistryEosParticleCache)();
+    hpx::wait_all(futures.begin(), futures.end());
     for (auto& future : futures) {
-        future.get();
+        try {
+            future.get();
+        } catch (...) {
+            if (!failure) {
+                failure = std::current_exception();
+            }
+        }
+    }
+    if (failure) {
+        std::rethrow_exception(failure);
     }
 }
 #endif
@@ -889,7 +902,7 @@ namespace detail {
 uint32_t sphCheckpointVersion() {
     // Preserve the fixed-viscosity payload version and identify optional state.
     auto const& options = getOptions();
-    return (options.starFormation.enabled ? 60U : (options.chemistry.enabled ? 51U : 2U)) +
+    return (options.starFormation.enabled ? 90U : (options.chemistry.enabled ? 80U : 2U)) +
         (options.hydro.viscosityEvolution == "cullenAndDehnen" ?
                 4U :
                 (options.hydro.viscosityEvolution == "priceEtAl" ?
@@ -932,18 +945,13 @@ void sphParticlesLoad(FILE* fp) {
     }
     if (getOptions().chemistry.enabled) {
         for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
-            float words[primordial::kAbundanceCount + 3];
-            FREAD(words, sizeof(float), primordial::kAbundanceCount + 3, fp);
-            auto& state = sphParticlesChemistryStates[index];
-            for (int species = 0; species < primordial::kAbundanceCount; ++species) {
-                state.abundances[species] = words[species];
+            float words[3];
+            FREAD(words, sizeof(float), 3, fp);
+            if (!std::isfinite(words[0]) || words[0] < 0.0f) {
+                THROW_ERROR("Invalid equilibrium electron fraction in checkpoint\n");
             }
-            state.thermalEnergy = words[primordial::kAbundanceCount];
-            sphParticlesChemistryEos[index] = {
-                words[primordial::kAbundanceCount + 1], words[primordial::kAbundanceCount + 2]};
-            double stepWords[2];
-            FREAD(stepWords, sizeof(double), 2, fp);
-            sphParticlesChemistrySteps[index] = {stepWords[0], stepWords[1]};
+            sphParticlesChemistryStates[index].electronFraction = words[0];
+            sphParticlesChemistryEos[index] = {words[1], words[2]};
         }
     }
 }
@@ -974,18 +982,9 @@ void sphParticlesSave(FILE* fp) {
     }
     if (getOptions().chemistry.enabled) {
         for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
-            float words[primordial::kAbundanceCount + 3];
-            auto const& state = sphParticlesChemistryStates[index];
-            for (int species = 0; species < primordial::kAbundanceCount; ++species) {
-                words[species] = state.abundances[species];
-            }
-            words[primordial::kAbundanceCount] = state.thermalEnergy;
-            words[primordial::kAbundanceCount + 1] = sphParticlesChemistryEos[index].first;
-            words[primordial::kAbundanceCount + 2] = sphParticlesChemistryEos[index].second;
-            FWRITE(words, sizeof(float), primordial::kAbundanceCount + 3, fp);
-            auto const& step = sphParticlesChemistrySteps[index];
-            double const stepWords[2] = {step.halfInterval, step.pendingHeating};
-            FWRITE(stepWords, sizeof(double), 2, fp);
+            float const words[3] = {sphParticlesChemistryStates[index].electronFraction,
+                sphParticlesChemistryEos[index].first, sphParticlesChemistryEos[index].second};
+            FWRITE(words, sizeof(float), 3, fp);
         }
     }
 }
@@ -1044,14 +1043,11 @@ void sphCheckpointTest() {
     floorState.rate = 1.0f;
     morris_and_monaghan::applyUpdate(floorState, 0.1f, 0.25f, 1);
     ALWAYS_ASSERT(std::fabs(floorState.alpha - 0.45f) < 1.0e-6f);
-    primordial::State originalChemicalState{};
+    gadget4::State originalChemicalState{};
     bool const testChemistry = getOptions().chemistry.enabled && sphParticlesSize() != 0;
     if (testChemistry) {
         originalChemicalState = sphParticlesChemistryStates[0];
-        // Direct species storage must preserve trace neutral gas independently
-        // of a dominant ion abundance rounded to one.
-        sphParticlesChemistryStates[0].abundances[0] = 1.0e-25f;
-        sphParticlesChemistryStates[0].abundances[1] = 1.0f;
+        sphParticlesChemistryStates[0].electronFraction = 1.0e-25f;
     }
     Vector<unsigned char> expected;
     FILE* file = std::tmpfile();

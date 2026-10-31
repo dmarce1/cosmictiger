@@ -139,8 +139,8 @@ find_path(HEALPIX_CXX_INCLUDE_DIR healpix_base.h PATH_SUFFIXES healpix_cxx REQUI
 find_library(HEALPIX_CXX_LIBRARY NAMES healpix_cxx REQUIRED)
 
 message(STATUS "cosmictiger SPH = ${COSMICTIGER_WITH_SPH}")
-message(STATUS "cosmictiger particle chemistry = ${COSMICTIGER_ENABLE_CHEMISTRY} (requires SPH)")
-message(STATUS "cosmictiger stars = ${COSMICTIGER_ENABLE_STARS} (COSMICTIGER_ENABLE_STARS; requires chemistry and SPH)")
+message(STATUS "cosmictiger equilibrium cooling = ${COSMICTIGER_WITH_CHEMISTRY} (requires SPH)")
+message(STATUS "cosmictiger stars = ${COSMICTIGER_WITH_STARS} (COSMICTIGER_ENABLE_STARS; requires chemistry and SPH)")
 message(STATUS "cosmictiger position storage = ${COSMICTIGER_POSITION_TYPE}")
 message(STATUS "cosmictiger integrators: traditional=${COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL}, hierarchical=${COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL}, global=${COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL}")
 message(STATUS "cosmictiger gravity algorithms: FMM=${COSMICTIGER_ENABLE_FMM}, PMMM-PP=${COSMICTIGER_ENABLE_PMMM_PP}, PMMM-FMM=${COSMICTIGER_ENABLE_PMMM_FMM}")
@@ -174,13 +174,8 @@ set(cosmictiger_header_files
     cosmictiger/analysis/rockstar_core.hpp
     cosmictiger/analysis/rockstar_properties.hpp
     cosmictiger/analysis/rockstar_record.hpp
-    cosmictiger/chemistry/primordial_chemistry.hpp
-    cosmictiger/chemistry/primordial_eos.hpp
-    cosmictiger/chemistry/primordial_float_environment.hpp
-    cosmictiger/chemistry/primordial_rates.hpp
-    cosmictiger/chemistry/primordial_solver.hpp
-    cosmictiger/chemistry/primordial_types.hpp
-    cosmictiger/chemistry/primordial_units.hpp
+    cosmictiger/chemistry/gadget4_cooling.hpp
+    cosmictiger/chemistry/gadget4_cooling_impl.hpp
     cosmictiger/chemistry/recombination.hpp
     cosmictiger/core/assert.hpp
     cosmictiger/core/containers.hpp
@@ -359,39 +354,33 @@ add_executable(halo_catalog_export src/tools/halo_catalog_export.cpp)
 target_link_libraries(halo_catalog_export PRIVATE cosmictiger_fp16)
 target_compile_options(halo_catalog_export PRIVATE -fno-fast-math)
 
-# Chemistry must not inherit the application's fast-math/FTZ settings: the
-# ordinary scalar source arithmetic uses matching IEEE semantics on CPU and CUDA.
+# Equilibrium cooling must not inherit the application's fast-math/FTZ settings: the
+# scalar cooling arithmetic uses matching IEEE semantics on CPU and CUDA.
 target_link_libraries(cosmictiger_profiler PRIVATE Threads::Threads)
 target_link_libraries(cosmictiger_stacktrace PRIVATE Threads::Threads)
-# Homogeneous recombination is shared. Particle chemistry is compiled only
+# Homogeneous recombination is shared. Particle cooling is compiled only
 # when both SPH and chemistry are enabled.
 add_library(cosmictiger_recombination STATIC src/chemistry/recombination.cpp)
 target_include_directories(cosmictiger_recombination PUBLIC ${PROJECT_SOURCE_DIR})
 target_link_libraries(cosmictiger_recombination PUBLIC Threads::Threads Boost::boost)
 target_compile_options(cosmictiger_recombination PRIVATE -fno-fast-math -ffp-contract=off)
 if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
-    add_library(cosmictiger_sph_chemistry STATIC src/chemistry/primordial_chemistry.cpp)
+    add_library(cosmictiger_sph_chemistry STATIC src/chemistry/gadget4_cooling.cpp)
     target_include_directories(cosmictiger_sph_chemistry PUBLIC ${PROJECT_SOURCE_DIR})
     target_link_libraries(cosmictiger_sph_chemistry PUBLIC cosmictiger_recombination
         Threads::Threads Boost::boost)
     target_compile_options(cosmictiger_sph_chemistry PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:-fno-fast-math;-ffp-contract=off>)
     if(COSMICTIGER_WITH_CUDA)
-        target_sources(cosmictiger_sph_chemistry PRIVATE src/chemistry/primordial_chemistry.cu)
+        target_sources(cosmictiger_sph_chemistry PRIVATE src/chemistry/gadget4_cooling.cu)
         target_compile_definitions(cosmictiger_sph_chemistry PRIVATE USE_CUDA)
         target_link_libraries(cosmictiger_sph_chemistry PUBLIC CUDA::cudart)
         target_compile_options(cosmictiger_sph_chemistry PRIVATE
-            $<$<COMPILE_LANGUAGE:CUDA>:--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false>)
+            $<$<COMPILE_LANGUAGE:CUDA>:--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false;-Xcompiler=-fno-fast-math;-Xcompiler=-ffp-contract=off>)
     endif()
 endif()
-# Preserve the existing test-facing dependency for the configured default.
-add_library(primordial_chemistry INTERFACE)
-target_link_libraries(primordial_chemistry INTERFACE cosmictiger_recombination)
-if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
-    target_link_libraries(primordial_chemistry INTERFACE cosmictiger_sph_chemistry)
-endif()
-set_source_files_properties(src/sph/sph_chemistry.cpp tests/sph/chemistry.cpp
-    src/sph/star_formation.cpp src/sph/springel_and_hernquist/cooling.cpp tests/sph/star_formation.cpp
+set_source_files_properties(src/sph/sph_chemistry.cpp src/io/view.cpp tests/sph/chemistry.cpp
+    src/sph/star_formation.cpp tests/sph/star_formation.cpp
     PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 # Star-formation device physics shares the chemistry rounding contract.
 set_source_files_properties(src/sph/star_formation_cuda.cu PROPERTIES COMPILE_OPTIONS
@@ -486,6 +475,14 @@ endforeach()
 # Capture standalone test targets so they inherit the same capability definitions.
 get_property(cosmictiger_targets_before_tests DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
 
+# Register two-rank application regressions only when the launcher supports them.
+set(cosmictiger_mpi_tests FALSE)
+if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+    if(NOT DEFINED MPIEXEC_MAX_NUMPROCS OR MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 2)
+        set(cosmictiger_mpi_tests TRUE)
+    endif()
+endif()
+
 if(BUILD_TESTING)
     add_test(NAME build_features COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/check_build_features.py ${PROJECT_BINARY_DIR})
@@ -493,10 +490,32 @@ if(BUILD_TESTING)
     add_test(NAME build_variants_checker COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/check_build_variants.py)
     set_tests_properties(build_variants_checker PROPERTIES TIMEOUT 30 LABELS "build")
+    add_test(NAME python_regressions COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/tests/test_python_regressions.py)
+    add_test(NAME python_regressions_optimized COMMAND ${Python3_EXECUTABLE} -O
+        ${PROJECT_SOURCE_DIR}/tests/test_python_regressions.py)
+    set_tests_properties(python_regressions python_regressions_optimized PROPERTIES
+        TIMEOUT 60 PROCESSORS 1 LABELS "python")
+    set(COSMICTIGER_TEST_CUDA_EXECUTABLE "" CACHE FILEPATH
+        "Optional second CUDA-enabled build for cross-build SPH comparisons")
+    if(COSMICTIGER_TEST_CUDA_EXECUTABLE AND NOT EXISTS "${COSMICTIGER_TEST_CUDA_EXECUTABLE}")
+        message(FATAL_ERROR "COSMICTIGER_TEST_CUDA_EXECUTABLE does not exist")
+    endif()
     set(cosmictiger_mpi_transport_args --hpx:ini=hpx.parcel.mpi.enable=1)
     if(HPX_WITH_PARCELPORT_TCP)
         list(APPEND cosmictiger_mpi_transport_args --hpx:ini=hpx.parcel.tcp.enable=0)
     endif()
+    set(cosmictiger_python_mpi_args --mpi-exec=${MPIEXEC_EXECUTABLE}
+        --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG})
+    foreach(flag IN LISTS MPIEXEC_PREFLAGS)
+        list(APPEND cosmictiger_python_mpi_args "--mpi-preflag=${flag}")
+    endforeach()
+    foreach(flag IN LISTS MPIEXEC_POSTFLAGS)
+        list(APPEND cosmictiger_python_mpi_args "--mpi-postflag=${flag}")
+    endforeach()
+    foreach(flag IN LISTS cosmictiger_mpi_transport_args)
+        list(APPEND cosmictiger_python_mpi_args "--hpx-argument=${flag}")
+    endforeach()
     # Test fixtures select algorithms explicitly so mixed-capability builds
     # exercise their intended path without changing normal option validation.
     set(cosmictiger_test_integrator_args --run.timeIntegrator=${cosmictiger_default_integrator})
@@ -848,10 +867,9 @@ if(BUILD_TESTING)
     set_tests_properties(halo_viewer PROPERTIES TIMEOUT 180 PROCESSORS 2)
 
     if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_STAR_FORMATION)
-        add_executable(springel_and_hernquist_test tests/springel_and_hernquist.cpp
-            src/sph/springel_and_hernquist/cooling.cpp)
+        add_executable(springel_and_hernquist_test tests/springel_and_hernquist.cpp)
         target_include_directories(springel_and_hernquist_test PRIVATE ${PROJECT_SOURCE_DIR})
-        target_link_libraries(springel_and_hernquist_test PRIVATE Boost::boost)
+        target_link_libraries(springel_and_hernquist_test PRIVATE cosmictiger_sph_chemistry)
         target_compile_options(springel_and_hernquist_test PRIVATE -fno-fast-math -ffp-contract=off)
         cosmictiger_add_gtest(NAME springel_and_hernquist TARGET springel_and_hernquist_test
             PROPERTIES TIMEOUT 120 PROCESSORS 1)
@@ -863,7 +881,7 @@ if(BUILD_TESTING)
         set(star_formation_workdir "${PROJECT_BINARY_DIR}/tests/star_formation_cpu")
         file(MAKE_DIRECTORY "${star_formation_workdir}")
         add_test(NAME star_formation_cpu COMMAND cosmictiger --run.test=star_formation
-            --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true --chemistry.initialization=manual
+            --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true --chemistry.initializationTemperature=10000
             --compute.cuda=false --initial.particlesPerDimension=8
             --run.timeIntegrator=${star_formation_test_integrator}
             ${cosmictiger_test_gravity_args} ${cosmictiger_test_selection_args}
@@ -873,14 +891,14 @@ if(BUILD_TESTING)
         set(star_formation_particles_workdir "${PROJECT_BINARY_DIR}/tests/star_formation_particles_cpu")
         file(MAKE_DIRECTORY "${star_formation_particles_workdir}")
         add_test(NAME star_formation_particles_cpu COMMAND cosmictiger --run.test=starFormationParticles
-            --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true --chemistry.initialization=manual
+            --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true --chemistry.initializationTemperature=10000
             --compute.cuda=false --initial.particlesPerDimension=8
             --run.timeIntegrator=${star_formation_test_integrator}
             ${cosmictiger_test_gravity_args} ${cosmictiger_test_selection_args}
             --hpx:threads=1 --hpx:bind=none)
         set_tests_properties(star_formation_particles_cpu PROPERTIES
             WORKING_DIRECTORY "${star_formation_particles_workdir}" RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 1)
-        if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+        if(cosmictiger_mpi_tests)
             foreach(star_mpi_fixture IN ITEMS star_formation star_formation_particles)
                 set(star_mpi_test "${star_mpi_fixture}_mpi")
                 set(star_mpi_workdir "${PROJECT_BINARY_DIR}/tests/${star_mpi_test}")
@@ -895,7 +913,7 @@ if(BUILD_TESTING)
                     ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
                     $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
                     --run.test=${star_mpi_run_test}
-                    --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true --chemistry.initialization=manual
+                    --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true --chemistry.initializationTemperature=10000
                     --compute.cuda=false --initial.particlesPerDimension=8
                     --run.timeIntegrator=${star_formation_test_integrator}
                     ${cosmictiger_test_gravity_args} ${cosmictiger_test_selection_args}
@@ -907,6 +925,12 @@ if(BUILD_TESTING)
                     PROCESSORS 4 LABELS "star_formation;cpu;mpi"
                     ENVIRONMENT "CUDA_VISIBLE_DEVICES=;OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
             endforeach()
+            add_test(NAME star_formation_ids_mpi COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_star_formation_ids.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/star_formation_ids_mpi ${cosmictiger_python_mpi_args})
+            set_tests_properties(star_formation_ids_mpi PROPERTIES
+                RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2 LABELS "integration;star_formation;cpu;mpi"
+                ENVIRONMENT "CUDA_VISIBLE_DEVICES=;OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
         endif()
         add_test(NAME star_formation_application COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_star_formation.py $<TARGET_FILE:cosmictiger>
@@ -915,32 +939,30 @@ if(BUILD_TESTING)
             RUN_SERIAL TRUE TIMEOUT 1200 PROCESSORS 2 LABELS "integration;star_formation;cpu")
         if(COSMICTIGER_WITH_CUDA)
             add_executable(star_formation_cuda_test tests/sph/star_formation_cuda.cu
-                src/sph/star_formation_cuda.cu src/sph/springel_and_hernquist/cooling.cpp)
+                src/sph/star_formation_cuda.cu)
             target_include_directories(star_formation_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
             target_compile_definitions(star_formation_cuda_test PRIVATE USE_CUDA)
-            target_link_libraries(star_formation_cuda_test PRIVATE CUDA::cudart Boost::boost)
+            target_link_libraries(star_formation_cuda_test PRIVATE cosmictiger_sph_chemistry CUDA::cudart Boost::boost)
             target_compile_options(star_formation_cuda_test PRIVATE
                 $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false;-Xcompiler=-fno-fast-math;-Xcompiler=-ffp-contract=off>)
             cosmictiger_add_gtest(NAME star_formation_cuda TARGET star_formation_cuda_test
                 PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77 RUN_SERIAL TRUE PROCESSORS 1)
-            foreach(star_cuda_network IN ITEMS atomic6 molecular9)
-                set(star_cuda_test "star_formation_production_cuda_${star_cuda_network}")
-                set(star_cuda_workdir "${PROJECT_BINARY_DIR}/tests/${star_cuda_test}")
-                file(MAKE_DIRECTORY "${star_cuda_workdir}")
-                add_test(NAME ${star_cuda_test} COMMAND cosmictiger --run.test=star_formation
-                    --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true
-                    --chemistry.initialization=manual --chemistry.network=${star_cuda_network}
-                    --compute.cuda=true --initial.particlesPerDimension=8
-                    --run.timeIntegrator=${star_formation_test_integrator}
-                    ${cosmictiger_test_gravity_args} ${cosmictiger_test_selection_args}
-                    --hpx:threads=1 --hpx:bind=none)
-                set_tests_properties(${star_cuda_test} PROPERTIES
-                    WORKING_DIRECTORY "${star_cuda_workdir}" RUN_SERIAL TRUE TIMEOUT 180
-                    PROCESSORS 1 LABELS "star_formation;cuda")
-            endforeach()
+            set(star_cuda_test star_formation_production_cuda)
+            set(star_cuda_workdir "${PROJECT_BINARY_DIR}/tests/${star_cuda_test}")
+            file(MAKE_DIRECTORY "${star_cuda_workdir}")
+            add_test(NAME ${star_cuda_test} COMMAND cosmictiger --run.test=star_formation
+                --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true
+                --chemistry.initializationTemperature=10000
+                --compute.cuda=true --initial.particlesPerDimension=8
+                --run.timeIntegrator=${star_formation_test_integrator}
+                ${cosmictiger_test_gravity_args} ${cosmictiger_test_selection_args}
+                --hpx:threads=1 --hpx:bind=none)
+            set_tests_properties(${star_cuda_test} PROPERTIES
+                WORKING_DIRECTORY "${star_cuda_workdir}" RUN_SERIAL TRUE TIMEOUT 180
+                PROCESSORS 1 LABELS "star_formation;cuda")
             add_executable(springel_and_hernquist_cuda_test tests/springel_and_hernquist_cuda.cu)
             target_include_directories(springel_and_hernquist_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
-            target_link_libraries(springel_and_hernquist_cuda_test PRIVATE CUDA::cudart)
+            target_link_libraries(springel_and_hernquist_cuda_test PRIVATE cosmictiger_sph_chemistry CUDA::cudart)
             target_compile_options(springel_and_hernquist_cuda_test PRIVATE
                 $<$<COMPILE_LANGUAGE:CUDA>:--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false;-Xcompiler=-fno-fast-math;-Xcompiler=-ffp-contract=off>)
             cosmictiger_add_gtest(NAME springel_and_hernquist_cuda TARGET springel_and_hernquist_cuda_test
@@ -949,26 +971,14 @@ if(BUILD_TESTING)
     endif()
 
     if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
-        foreach(chemistry_test IN ITEMS primordial_rates primordial_solver primordial_units)
-            add_executable(${chemistry_test}_test tests/${chemistry_test}.cpp)
-            target_link_libraries(${chemistry_test}_test PRIVATE primordial_chemistry)
-            target_compile_options(${chemistry_test}_test PRIVATE -fno-fast-math -ffp-contract=off)
-            if(chemistry_test STREQUAL "primordial_solver")
-                set(chemistry_processors 2)
-            else()
-                set(chemistry_processors 1)
-            endif()
-            cosmictiger_add_gtest(NAME ${chemistry_test} TARGET ${chemistry_test}_test
-                PROPERTIES TIMEOUT 180 PROCESSORS ${chemistry_processors})
-        endforeach()
-        add_library(primordial_reference SHARED tests/primordial_reference.cpp)
-        target_include_directories(primordial_reference PRIVATE ${PROJECT_SOURCE_DIR})
-        target_link_libraries(primordial_reference PRIVATE Boost::boost)
-        target_compile_options(primordial_reference PRIVATE -fno-fast-math -ffp-contract=off)
-        add_test(NAME primordial_reference COMMAND ${Python3_EXECUTABLE}
-            ${PROJECT_SOURCE_DIR}/tests/primordial_reference.py $<TARGET_FILE:primordial_reference>)
-        set_tests_properties(primordial_reference PROPERTIES TIMEOUT 600
-            ENVIRONMENT "OPENBLAS_NUM_THREADS=1;OMP_NUM_THREADS=1;MKL_NUM_THREADS=1")
+        add_executable(gadget4_cooling_test tests/gadget4_cooling.cpp)
+        target_link_libraries(gadget4_cooling_test PRIVATE cosmictiger_sph_chemistry)
+        target_compile_options(gadget4_cooling_test PRIVATE -fno-fast-math -ffp-contract=off)
+        if(COSMICTIGER_WITH_CUDA)
+            target_compile_definitions(gadget4_cooling_test PRIVATE USE_CUDA)
+        endif()
+        cosmictiger_add_gtest(NAME gadget4_cooling TARGET gadget4_cooling_test
+            PROPERTIES TIMEOUT 180 PROCESSORS 2 RUN_SERIAL TRUE)
     endif()
 
     # These analysis utilities also contain independent numerical regressions.
@@ -992,37 +1002,64 @@ if(BUILD_TESTING)
                 LABELS "analysis;python")
         endforeach()
     endif()
-    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY AND
-            COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
         set(chemistry_timesteps_workdir "${PROJECT_BINARY_DIR}/tests/sph_chemistry_timesteps_cpu")
         file(MAKE_DIRECTORY "${chemistry_timesteps_workdir}")
         add_test(NAME sph_chemistry_timesteps_cpu COMMAND cosmictiger
             --run.test=sphChemistryTimesteps --run.scenario=cosmology
             --initial.particlesPerDimension=8 --hydro.enabled=true --chemistry.enabled=true
-            --chemistry.initialization=manual --chemistry.initialTemperature=1000
-            --chemistry.hydrogenIonFraction=0.1 --chemistry.network=atomic6
+            --chemistry.initializationTemperature=10000
             --compute.cuda=false --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
         set_tests_properties(sph_chemistry_timesteps_cpu PROPERTIES
             WORKING_DIRECTORY "${chemistry_timesteps_workdir}" RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 2)
+        if(cosmictiger_mpi_tests)
+            set(chemistry_mpi_workdir "${PROJECT_BINARY_DIR}/tests/sph_chemistry_timesteps_mpi")
+            file(MAKE_DIRECTORY "${chemistry_mpi_workdir}")
+            add_test(NAME sph_chemistry_timesteps_mpi COMMAND ${MPIEXEC_EXECUTABLE}
+                ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
+                $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
+                --run.test=sphChemistryTimesteps --run.scenario=cosmology
+                --initial.particlesPerDimension=8 --hydro.enabled=true --chemistry.enabled=true
+                --starFormation.enabled=false --chemistry.initializationTemperature=10000
+                --compute.cuda=false --hpx:threads=1 --hpx:localities=2 --hpx:bind=none
+                ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args}
+                ${cosmictiger_mpi_transport_args})
+            set_tests_properties(sph_chemistry_timesteps_mpi PROPERTIES
+                WORKING_DIRECTORY "${chemistry_mpi_workdir}" RUN_SERIAL TRUE TIMEOUT 180
+                PROCESSORS 2 LABELS "chemistry;cpu;mpi"
+                ENVIRONMENT "CUDA_VISIBLE_DEVICES=;OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
+        endif()
     endif()
-    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY AND COSMICTIGER_ENABLE_FMM AND
-            COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
-        add_test(NAME primordial_integration_cpu COMMAND ${Python3_EXECUTABLE}
-            ${PROJECT_SOURCE_DIR}/tests/run_primordial_integration.py $<TARGET_FILE:cosmictiger>
-            ${PROJECT_BINARY_DIR}/tests/primordial_integration_cpu
-            --recombination-reference $<TARGET_FILE:recombination_reference>)
-        set_tests_properties(primordial_integration_cpu PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
-    endif()
-
-    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY AND COSMICTIGER_ENABLE_FMM AND
-            COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
-        add_test(NAME primordial_integration_global_cpu COMMAND ${Python3_EXECUTABLE}
-            ${PROJECT_SOURCE_DIR}/tests/run_primordial_integration.py $<TARGET_FILE:cosmictiger>
-            ${PROJECT_BINARY_DIR}/tests/primordial_integration_global_cpu --time-integrator=global
-            --recombination-reference $<TARGET_FILE:recombination_reference>)
-        set_tests_properties(primordial_integration_global_cpu PROPERTIES
-            TIMEOUT 1200 RUN_SERIAL TRUE PROCESSORS 2 LABELS "integration;global;chemistry;cpu")
+    if(COSMICTIGER_WITH_CHEMISTRY AND COSMICTIGER_ENABLE_FMM)
+        foreach(integrator IN ITEMS traditional global)
+            string(TOUPPER "${integrator}" integrator_upper)
+            if(NOT COSMICTIGER_ENABLE_INTEGRATOR_${integrator_upper})
+                continue()
+            endif()
+            foreach(backend IN ITEMS cpu mpi cuda)
+                if((backend STREQUAL "mpi" AND NOT cosmictiger_mpi_tests) OR
+                        (backend STREQUAL "cuda" AND NOT COSMICTIGER_WITH_CUDA))
+                    continue()
+                endif()
+                set(cooling_test "gadget4_cooling_integration_${backend}")
+                if(integrator STREQUAL "global")
+                    set(cooling_test "gadget4_cooling_integration_global_${backend}")
+                endif()
+                set(cooling_backend_args)
+                if(backend STREQUAL "mpi")
+                    set(cooling_backend_args ${cosmictiger_python_mpi_args})
+                elseif(backend STREQUAL "cuda")
+                    set(cooling_backend_args --cuda)
+                endif()
+                add_test(NAME ${cooling_test} COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/run_gadget4_cooling.py $<TARGET_FILE:cosmictiger>
+                    ${PROJECT_BINARY_DIR}/tests/${cooling_test}
+                    --time-integrator=${integrator} ${cooling_backend_args})
+                set_tests_properties(${cooling_test} PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE
+                    PROCESSORS 2 SKIP_RETURN_CODE 77 LABELS "integration;chemistry;${backend}")
+            endforeach()
+        endforeach()
     endif()
     if(COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
         set(global_integrator_args)
@@ -1037,6 +1074,14 @@ if(BUILD_TESTING)
             ${PROJECT_BINARY_DIR}/tests/global_integrator_cpu ${global_integrator_args})
         set_tests_properties(global_integrator_cpu PROPERTIES
             TIMEOUT 1200 RUN_SERIAL TRUE PROCESSORS 2 LABELS "integration;global;cpu")
+        if(cosmictiger_mpi_tests)
+            add_test(NAME global_integrator_mpi COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_global_integrator.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/global_integrator_mpi ${global_integrator_args}
+                ${cosmictiger_python_mpi_args})
+            set_tests_properties(global_integrator_mpi PROPERTIES
+                TIMEOUT 1200 RUN_SERIAL TRUE PROCESSORS 4 LABELS "integration;global;mpi")
+        endif()
     endif()
 
     if(COSMICTIGER_WITH_GRAVITY AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -1087,15 +1132,6 @@ if(BUILD_TESTING)
             endif()
         endif()
     endif()
-    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY AND COSMICTIGER_WITH_CUDA)
-        target_compile_definitions(primordial_solver_test PRIVATE USE_CUDA)
-        add_executable(primordial_cuda_test tests/primordial_cuda.cu)
-        target_link_libraries(primordial_cuda_test PRIVATE primordial_chemistry CUDA::cudart)
-        target_compile_options(primordial_cuda_test PRIVATE
-            $<$<COMPILE_LANGUAGE:CUDA>:--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false>)
-        cosmictiger_add_gtest(NAME primordial_cuda TARGET primordial_cuda_test
-            PROPERTIES TIMEOUT 240 SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
-    endif()
     foreach(recombination_variant IN ITEMS standard fast_math)
         set(thermal_target recombination_thermal_${recombination_variant}_test)
         add_executable(${thermal_target} tests/recombination_thermal.cpp)
@@ -1104,7 +1140,7 @@ if(BUILD_TESTING)
         add_executable(${background_target} tests/recombination_background.cpp
             src/cosmology/zero_order.cpp)
         target_include_directories(${background_target} PRIVATE ${PROJECT_SOURCE_DIR})
-        target_link_libraries(${background_target} PRIVATE primordial_chemistry)
+        target_link_libraries(${background_target} PRIVATE cosmictiger_recombination)
         if(recombination_variant STREQUAL "fast_math")
             target_compile_options(${thermal_target} PRIVATE -ffast-math)
             target_compile_options(${background_target} PRIVATE -ffast-math)
@@ -1116,7 +1152,7 @@ if(BUILD_TESTING)
     endforeach()
 
     add_executable(recombination_reference tests/recombination_reference.cpp)
-    target_link_libraries(recombination_reference PRIVATE primordial_chemistry)
+    target_link_libraries(recombination_reference PRIVATE cosmictiger_recombination)
     target_compile_options(recombination_reference PRIVATE -fno-fast-math -ffp-contract=off)
     add_test(NAME native_recombination_reference COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/compare_native_recombination.py check-reference
@@ -1127,7 +1163,7 @@ if(BUILD_TESTING)
     foreach(native_variant IN ITEMS standard fast_math)
         set(native_target native_recombination_${native_variant}_test)
         add_executable(${native_target} tests/native_recombination.cpp src/cosmology/zero_order.cpp)
-        target_link_libraries(${native_target} PRIVATE primordial_chemistry)
+        target_link_libraries(${native_target} PRIVATE cosmictiger_recombination)
         if(native_variant STREQUAL "fast_math")
             target_compile_options(${native_target} PRIVATE -ffast-math)
         endif()
@@ -1153,7 +1189,7 @@ if(BUILD_TESTING)
         add_executable(${boltzmann_target} ${boltzmann_test_source}
             src/cosmology/boltzmann.cpp src/cosmology/zero_order.cpp)
         target_include_directories(${boltzmann_target} PRIVATE ${PROJECT_SOURCE_DIR})
-        target_link_libraries(${boltzmann_target} PRIVATE primordial_chemistry)
+        target_link_libraries(${boltzmann_target} PRIVATE cosmictiger_recombination)
     endforeach()
     cosmictiger_add_gtest(NAME boltzmann TARGET boltzmann_test
         PROPERTIES TIMEOUT 120)
@@ -2406,16 +2442,37 @@ if(BUILD_TESTING)
                 --extra-option=--gravity.method.far=fmm)
             set_tests_properties(smoke_${smoke_mode}_cpu PROPERTIES RUN_SERIAL TRUE TIMEOUT 500)
         endforeach()
-        # Both SPH pressure operators in the Sod, blast, hydroWave and cosmology scenarios,
-        # a CFL refinement and the chemistry rejection; the cosmology case needs gravity.
+        # Variational SPH in Sod, blast, hydroWave and cosmology, plus CFL refinement.
+        # These ideal-gas cases need FMM for their cosmology/migration fixtures,
+        # but must remain registered when equilibrium cooling is disabled.
         if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL AND
-                COSMICTIGER_ENABLE_CHEMISTRY AND COSMICTIGER_WITH_GRAVITY)
-            add_test(NAME variational_sph_application COMMAND ${Python3_EXECUTABLE}
-                ${PROJECT_SOURCE_DIR}/tests/run_variational_sph.py
-                $<TARGET_FILE:cosmictiger>
-                ${PROJECT_BINARY_DIR}/tests/variational_sph_application --quick)
-            set_tests_properties(variational_sph_application PROPERTIES
-                RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 4)
+                COSMICTIGER_ENABLE_FMM)
+            foreach(backend IN ITEMS cpu mpi cuda cross_build)
+                if((backend STREQUAL "mpi" AND NOT cosmictiger_mpi_tests) OR
+                        (backend STREQUAL "cuda" AND NOT COSMICTIGER_WITH_CUDA) OR
+                        (backend STREQUAL "cross_build" AND NOT COSMICTIGER_TEST_CUDA_EXECUTABLE))
+                    continue()
+                endif()
+                set(variational_test variational_sph_application)
+                set(variational_backend_args)
+                if(backend STREQUAL "mpi")
+                    set(variational_backend_args ${cosmictiger_python_mpi_args})
+                elseif(backend STREQUAL "cuda")
+                    set(variational_backend_args --cuda)
+                elseif(backend STREQUAL "cross_build")
+                    set(variational_backend_args --cuda
+                        --cuda-executable=${COSMICTIGER_TEST_CUDA_EXECUTABLE})
+                endif()
+                if(NOT backend STREQUAL "cpu")
+                    string(APPEND variational_test "_${backend}")
+                endif()
+                add_test(NAME ${variational_test} COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/run_variational_sph.py $<TARGET_FILE:cosmictiger>
+                    ${PROJECT_BINARY_DIR}/tests/${variational_test} --quick --jobs=1
+                    ${variational_backend_args})
+                set_tests_properties(${variational_test} PROPERTIES RUN_SERIAL TRUE TIMEOUT 900
+                    PROCESSORS 4 SKIP_RETURN_CODE 77 LABELS "integration;sph;${backend}")
+            endforeach()
         endif()
         foreach(smoke_mode IN ITEMS sod dm_cpu dm_cuda sph)
             if((NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL) AND

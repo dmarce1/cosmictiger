@@ -92,19 +92,23 @@ def exercise(wrapper, base, fake_mpi, app, mode):
                 # Exercise actual terminal-style process-group delivery, before
                 # the applications have installed their SIGUSR1 handlers.
                 os.killpg(process.pid, signal.SIGINT)
-                assert process.wait(timeout=8) == 0, log_path.read_text()
-                assert len(list(base.glob("clean-*"))) == 2, log_path.read_text()
+                if not (process.wait(timeout=8) == 0):
+                    raise RuntimeError(log_path.read_text())
+                if not (len(list(base.glob('clean-*'))) == 2):
+                    raise RuntimeError(log_path.read_text())
             elif mode == "second":
                 os.killpg(process.pid, signal.SIGINT)
                 wait_until(lambda: len(list(base.glob("notified-*"))) == 2,
                            "first interrupt reached both applications")
                 os.killpg(process.pid, signal.SIGINT)
-                assert process.wait(timeout=8) != 0
+                if not (process.wait(timeout=8) != 0):
+                    raise RuntimeError('Check failed: process.wait(timeout=8) != 0')
             elif mode == "death":
                 os.kill(process.pid, signal.SIGKILL)
                 process.wait(timeout=8)
             else:
-                assert process.wait(timeout=8) == 7, log_path.read_text()
+                if not (process.wait(timeout=8) == 7):
+                    raise RuntimeError(log_path.read_text())
             wait_until(lambda: not any(alive(pid) for pid in pids), "owned applications exited")
         finally:
             if process.poll() is None:

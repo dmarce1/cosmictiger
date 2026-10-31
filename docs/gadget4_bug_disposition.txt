@@ -1,0 +1,312 @@
+Current deferred-inventory disposition — 2026-10-31, zero-UV follow-up
+
+This update supersedes the earlier replacement audit below. External UV support,
+TREECOOL parsing/configuration/photo-rates and the radiation checkpoint checksum
+are removed. Cooling fingerprint 6 is explicitly incompatible with older models.
+Atomic cooling, CMB Compton exchange and stellar feedback remain.
+
+All original finding IDs and the historical REFUTED verdict are preserved.
+The applicable remaining findings were fixed; deleted model mechanisms are
+classified as superseded. Focused validation is recorded in gadget4_validation.txt.
+Earlier CPU/CUDA measurements belong to the earlier revision. GPU validation
+resumed after the user said War Thunder was off. Production-scale statistics, performance and multi-GPU
+validation remain outside the demonstrated coverage.
+
+01. chemistry_star_formation#2
+Shipped cosmology configs cannot reach z=0: unheated gas falls below the hard 10 K EOS floor near z~21 and the run aborts
+Status: superseded
+Assessment: The old chemical EOS and UnsupportedState temperature floor are removed. GADGET-4 returns neutral gas below the table minimum; hydro uses fixed gamma. It preserves GADGET-4 low-temperature rate policy, rather than the old molecular continuation.
+Evidence (checkout-relative): cosmictiger/chemistry/gadget4_cooling_impl.hpp:90,193; src/sph/sph_particles.cpp:836; tests/gadget4_cooling.cpp:46,255
+Validation limit: the former low-temperature UV nonconvergence branch is now removed. Long expanding-gas cosmological runs remain outside focused validation.
+
+02. recent_commits_b#1, chemistry_star_formation#1, chemistry_star_formation#6
+Per-particle SH03 hazard and wind-decoupling limits are applied as a global SPH timestep cap (wind case drives rungs past kMaxRung)
+Status: superseded
+Assessment: Wind clocks, conversion hazards and per-source timestep caps are removed. GADGET-4 uses the saved prior SFR over the full completed interval, then computes cooling/new SFR.
+Evidence (checkout-relative): cosmictiger/particles/star_formation_state.hpp; cosmictiger/sph/star_formation_kernel.hpp:166; src/core/driver.cpp:514
+Completed: source ordering, inactive gas, conversion and exact restart passed for individual/global intervals. Source timestep-cap state and code are deleted.
+
+03. sph_infrastructure#1
+Hydro reruns after chemistry/star-formation open reuse the RUNGS neighbour lists, which leave out inactive particles whose support reaches an active one
+Status: superseded
+Assessment: The opening chemistry source and its post-RUNGS hydro rerun no longer exist. Post-density all-particle IJ lists remain available for the rung limiter and hydro.
+Evidence (checkout-relative): src/core/driver.cpp:499,514,526; src/sph/sph_chemistry.cpp:247
+Remaining validation/action: Verify inactive large-support neighbors through normal hydro/conversion density rebuilds; source-stage deletion is not a general neighbor-search proof.
+
+04. chemistry_star_formation#17, recent_commits_b#4
+supernovaTemperature has no upper bound, so dense gas later exceeds the 1e8 K CIE ceiling and aborts
+Status: superseded
+Assessment: The old 1e8 K CIE ceiling is gone. GADGET-4 has a fully ionized/free-free high-temperature branch; the new option validator permits positive SN temperatures above 1e8 K.
+Evidence (checkout-relative): cosmictiger/chemistry/gadget4_cooling_impl.hpp:95,230; src/core/options.cpp; tests/gadget4_cooling.cpp:88
+Completed: hot/dense closure passed host/device fixtures and the independent SF reference. No arbitrary old temperature cap was restored.
+
+05. scenarios_configs#7
+Cosmology INIs and default.ini enable star formation: default builds reject them, and the documented collisionless recipe fails
+Status: resolved
+Assessment: Generic cosmology/default INIs disable SF. Only the explicitly named SF presets enable it and document the stars build requirement. Collisionless instructions disable hydro and cooling.
+Evidence (checkout-relative): default.ini:175; configurations/README.md:16,145; configurations/star_formation/lcdm.ini; configurations/lcdm_present.ini
+Completed: all shipped INIs/schema and applicable option checks passed. A separate collisionless-only application build was not repeated.
+
+06. chemistry_star_formation#11
+CPU chemistry batch spawns one std::thread per HPX worker from inside an HPX task (oversubscription, blocks the worker)
+Status: resolved
+Assessment: The production CPU cooling bridge dispatches HPX chunks and calls the standalone core with workers=1, avoiding nested raw-thread fanout. The standalone core may still use std::thread when explicitly requested by a direct caller.
+Evidence (checkout-relative): src/sph/sph_chemistry.cpp:83-97; src/chemistry/gadget4_cooling.cpp:194
+Completed: production HPX source fixtures ran within the pinned CPU budget. The source calls each scalar CPU chunk with workers=1; performance scalability was not measured.
+
+07. chemistry_star_formation#3
+chemistry.maxSubsteps above 8192 is silently ineffective: hard-coded maxAttempts caps the solver
+Status: superseded
+Assessment: The Anninos solver, maxSubsteps option and former maxAttempts mismatch are removed. GADGET-4 uses its fixed iteration limit and reports nonconvergence transactionally.
+Evidence (checkout-relative): cosmictiger/core/options.hpp; cosmictiger/chemistry/gadget4_cooling.hpp; cosmictiger/chemistry/gadget4_cooling_impl.hpp:354,383; tests/gadget4_cooling.cpp:174,255
+Completed: invalid-state, failed-batch tests passed. The fixed GADGET-4 loop limit is not a configurable substep promise.
+
+08. recent_commits_b#5, chemistry_star_formation#5
+Decoupled winds in gas denser than n_H=1e4 cm^-3 are sent to the non-equilibrium solver, which rejects them and aborts the run
+Status: superseded
+Assessment: Winds and the old nH=1e4 network acceptance gate are removed by the explicitly authorized model replacement. Equilibrium cooling has no such density gate.
+Evidence (checkout-relative): cosmictiger/particles/star_formation_state.hpp; cosmictiger/chemistry/gadget4_cooling_impl.hpp:108; tests/gadget4_cooling.cpp:65
+Completed: dense equilibrium/SF source results passed CPU/CUDA and reference comparisons. The retired wind model is not certified.
+
+09. tests_sph_chem_cpp#1, chemistry_star_formation#4
+App builds the SH03 CUDA kernel with inherited --use_fast_math, but its unit test builds it strict
+Status: resolved
+Assessment: Production SF CUDA is compiled in a dedicated object target outside cosmictiger_platform fast-math propagation. Core cooling and host bridge/view sources have strict FP flags; CUDA host passes explicitly disable fast math/contraction.
+Evidence (checkout-relative): cmake/variants.cmake:57-67; CMakeLists.txt:367-387,926
+Completed: actual generated production commands were inspected for strict FP flags and production CUDA parity passed. PTX was not separately audited.
+
+10. chemistry_star_formation#10
+New CUDA entry points never call cudaSetDevice(); batches run on whatever device the current OS thread has
+Status: resolved
+Assessment: The final inspected application cooling branch selects the locality device, and newborn-star kicks now route through the common SF dispatch that also selects it. The standalone core intentionally uses the calling thread current device and caches per device.
+Evidence (checkout-relative): src/sph/sph_chemistry.cpp:84-89; src/sph/star_formation.cpp:100-108,340; src/chemistry/gadget4_cooling.cu:27
+Remaining validation/action: Run multi-rank/multi-device mapping; source correction does not establish multi-GPU execution coverage.
+
+11. chemistry_star_formation#9, recent_commits_b#2
+Serial per-particle EOS/CIE loops repeat expensive work (duplicate EOS pass, 3 bisections per dense particle, constant endpoints recomputed)
+Status: superseded; remaining repeated sweeps resolved
+Assessment: Fixed gamma is initialized with gas storage and retained through migration/restart. Repeated full-population EOS refreshes were removed from the driver. Source commits invalidate thermal caches.
+Validation: see the current focused evidence in docs/gadget4_validation.txt.
+
+12. sph_infrastructure#4
+sphParticlesRefreshChemistryEos runs serially over every gas particle and abandons child futures on error
+Status: resolved
+Assessment: The retained explicit refresh drains every launched child future after launch, local, or remote exceptions. Ordinary source stepping no longer performs this full-population refresh.
+Validation: see the current focused evidence in docs/gadget4_validation.txt.
+
+13. core_options_driver#17, recent_commits_b#10
+default.ini is not the 'active source defaults' it claims to be
+Status: resolved
+Assessment: default.ini is now explicitly a supplied cosmological example whose hydro/cooling choices differ from parser defaults; configurations guide makes the distinction too.
+Evidence (checkout-relative): default.ini:1-9,169; configurations/README.md:16-18
+Remaining validation/action: Documentation correction checked statically; enabled values intentionally unchanged.
+
+14. core_options_driver#19
+docs/pmmm.md claims global-mode chemistry retries that the driver does not implement
+Status: resolved
+Assessment: PMMM guide now describes one source update after the completed SPH interval, saved-SFR conversion before cooling, and no source retry/shortening. Hydro pending half-kick is distinguished from removed chemical half-state.
+Evidence (checkout-relative): docs/pmmm.md:402; src/core/driver.cpp:419; src/sph/sph_chemistry.cpp:247
+Completed: caller ordering was checked against pinned run.cc and application integration/restart tests passed.
+
+15. recent_commits_b#3
+starFormationRefreshEos runs twice back-to-back after closing, and its pre-density call is always superseded
+Status: resolved
+Assessment: Removed redundant constant-gamma refresh dispatches before/after density work and after closing. Source completion still invalidates hydro caches and conversion still rebuilds gas/tree state.
+Validation: see the current focused evidence in docs/gadget4_validation.txt.
+
+16. chemistry_star_formation#15
+SH03 adapter uses the proton mass while the chemistry boundary uses m_H; physical constants duplicated across headers
+Status: resolved
+Assessment: Cooling and SF share fixed GADGET-4 proton/Boltzmann constants; the old eV-per-H boundary and its competing hydrogen-mass conversion were removed.
+Evidence (checkout-relative): cosmictiger/chemistry/gadget4_cooling.hpp; cosmictiger/sph/springel_and_hernquist/cooling.hpp:10; src/sph/star_formation.cpp:46
+Completed: physical/stored boundary fixtures and official cooling/SF reference comparisons passed.
+
+17. recent_commits_b#7
+AtomicCooling::cool and maximumEnergy are dead in production; the comment claims cool() is the single radiative-loss site
+Status: superseded
+Assessment: The old AtomicCooling implementation and maximumEnergy/cool paths were deleted. The adapter now calls the common GADGET-4 equilibrium cooling core.
+Evidence (checkout-relative): cosmictiger/sph/springel_and_hernquist/cooling.hpp; deleted src/sph/springel_and_hernquist/cooling.cpp and cooling_impl.hpp
+Completed: CPU/CUDA application builds, source graph check and 57 static build-variant tests passed with the obsolete files absent.
+
+18. chemistry_star_formation#13
+Test-only SH03 API: cool(), starFormationProbability(), windProbability(), relaxationTime are unused in production, which re-implements the probabilities inline
+Status: resolved
+Assessment: Production conversion and unit tests use the same saved-specific-SFR probability helper. Retired wind/cooling/relaxation APIs remain deleted.
+Validation: see the current focused evidence in docs/gadget4_validation.txt.
+
+19. chemistry_star_formation#18
+Stale doc: molecular9_hot.md says the SH03 fixtures refuse compute.cuda, contradicting the new CUDA SH03 backend
+Status: resolved
+Assessment: molecular9_hot.md explicitly identifies the whole document, including former CUDA claims, as a historical record of the removed implementation. Current model docs describe the shared CPU/CUDA backend without carrying forward old validation.
+Evidence (checkout-relative): docs/molecular9_hot.md:1; docs/star_formation.md; docs/chemistry_cpu_support.md
+Completed: replacement GPU tests passed; historical logs remain retired evidence.
+
+20. chemistry_star_formation#16, recent_commits_b#9
+Fatal chemistry/SH03 errors report raw enum ints and batch indices, not the offending particle state
+Status: resolved
+Assessment: Cooling now reports symbolic status, rank, gas index, scientific-format rho/u/Ne/dt. SF CPU/CUDA reports symbolic status, particle ID, batch index and scientific-format rho/u/dt; the application adds rank to CUDA failures.
+Evidence (checkout-relative): src/sph/sph_chemistry.cpp:110-119; src/sph/star_formation.cpp:115-129; src/sph/star_formation_cuda.cu:79-93
+Completed: non-leading-lane failures checked ID/index/symbolic diagnostics and unchanged outputs; MPI failure atomicity/recovery passed.
+
+21. chemistry_star_formation#12
+SH03 CIE evaluations use FloatFloat without the StrictFloatEnvironment guard every chemistry entry point installs
+Status: superseded
+Assessment: FloatFloat chemistry/CIE and StrictFloatEnvironment contract were removed. New scalar-double GADGET-4 routines have explicit strict compiler flags, including view.cpp inline diagnostics.
+Evidence (checkout-relative): CMakeLists.txt:372-387; cosmictiger/chemistry/gadget4_cooling_impl.hpp
+Completed: host/device/reference checks passed. Behavior under manually altered host FP modes was not separately tested.
+
+22. chemistry_star_formation#8
+CPU star-formation path duplicates the shared CUDA_EXPORT kernel logic (and the RNG) instead of calling it
+Status: resolved
+Assessment: CPU source dispatch and CUDA kernels call the same star_formation_backend evaluator, including stochastic decision logic. Public CPU RNG utility still mirrors the shared hash formula but no independent CPU physical source algorithm remains.
+Evidence (checkout-relative): src/sph/star_formation.cpp:95-114; src/sph/star_formation_cuda.cu:12; cosmictiger/sph/star_formation_kernel.hpp
+Completed: source/conversion parity and lifecycle/restart fixtures passed, including prior SFR and birth-time behavior.
+
+23. recent_commits_b#6
+Chemistry for a wind that expires mid-half-step in dense gas is integrated and then discarded, and its failure can still abort the run
+Status: superseded
+Assessment: There is no wind decoupling, expiry split or chemical prefix to discard. One full-step source ledger records the committed thermal change/conversion.
+Evidence (checkout-relative): cosmictiger/sph/star_formation_kernel.hpp:166; src/sph/star_formation.cpp:208; tests/sph/star_formation.cpp
+Completed: source energy-ledger and failed-batch fixtures passed for ordinary/dense/converting particles.
+
+24. chemistry_star_formation#7, recent_commits_b#8
+Hydro-coupling flags are fetched with one blocking, uncached remote action per tree node
+Status: superseded
+Assessment: Wind hydro-coupling flags and the blocking remote fetch API were removed. Gas remains hydrodynamically coupled until particle conversion.
+Evidence (checkout-relative): cosmictiger/sph/sph_kernel.hpp; src/sph/sph.cpp; src/sph/star_formation.cpp
+Completed: two-rank SPH migration/source fixtures passed with the retained EOS state. No wind-fetch path remains.
+
+25. chemistry_star_formation#14
+Stochastic realization depends on the number of localities: identities come from the initial rank decomposition
+Status: resolved
+Assessment: Cosmology assigns IDs from undisplaced global lattice cell and closePack phase, or glass tile and source-file index. DM and gas receive distinct interleaved IDs. Fixed scenarios assign source-order IDs on rank zero before decomposition. Distributed untagged inputs are rejected. The MPI regression checks each identity against its physical lattice source and compares one and two ranks.
+Validation: see the current focused evidence in docs/gadget4_validation.txt.
+
+26. tests_sph_chem_cpp#12
+Radau chemistry reference test silently disappears when numpy/scipy are missing
+Status: superseded
+Assessment: The SciPy Radau network reference and optional configure-time import registration were deleted with the old solver. New cooling tests contain frozen trajectories from the pinned official implementation without a SciPy runtime dependency.
+Evidence (checkout-relative): CMakeLists.txt:958-967; tests/gadget4_cooling.cpp:194
+Completed: pinned-reference cases passed, with source pin and comparison provenance retained in gadget4_validation.txt.
+
+27. tests_sph_chem_cpp#11
+SPH chemistry timestep regression runs on one locality only and only with the traditional integrator
+Status: resolved
+Assessment: The CPU fixture covers mixed/global intervals, and sph_chemistry_timesteps_mpi now registers the same production source fixture on two localities.
+Evidence (checkout-relative): CMakeLists.txt (sph_chemistry_timesteps_mpi); tests/sph/chemistry.cpp.
+Completed: registered two-rank test passed selected intervals, inactive state, checkpoint state, failure atomicity and recovery. A separate global-only build configuration was not compiled.
+
+28. build_cmake_scripts#14
+Capability macros come from raw cache values, so SPH-off builds still see COSMICTIGER_ENABLE_CHEMISTRY=1 (and STARS)
+Status: resolved
+Assessment: Compile definitions now encode effective SPH/cooling/star capabilities while preserving requested cache options. No-SPH builds with raw CHEMISTRY/STARS enabled compile-check all effective macros as zero. The exposed Sedov test target is also correctly SPH-gated.
+Validation: see the current focused evidence in docs/gadget4_validation.txt.
+
+29. tests_python#10
+zip() truncation silently skips chemistry.molecularFraction in run_options manual and override loops
+Status: superseded
+Assessment: Manual abundance/molecularFraction fields and the mismatched zip loops were removed. Option tests now exercise the three retained cooling options and reject obsolete keys.
+Evidence (checkout-relative): tests/run_options.py; cosmictiger/core/options.hpp
+Completed: full grouped_options passed in the SPH/cooling/SF-enabled CPU build; no molecular-fraction override contract remains.
+
+30. tests_sph_chem_cpp#7
+Snapshot record layouts are hard-coded magic offsets with no static_assert; one label is misleading
+Status: resolved
+Assessment: Cooling and star-formation source snapshots use typed records with explicit fields and serialization. The five/thirteen-word magic-offset snapshot construction is removed.
+Validation: see the current focused evidence in docs/gadget4_validation.txt.
+
+31. tests_sph_chem_cpp#4
+Host/device parity compares signed abundances via fraction(), losing minority precision
+Status: superseded
+Assessment: Signed-complement abundances and minority-branch encoding no longer exist. Host/device comparisons use the single direct electron guess.
+Evidence (checkout-relative): cosmictiger/chemistry/gadget4_cooling.hpp; tests/sph/star_formation_cuda.cu:60
+Completed: scalar and host/device fixtures passed for neutral, partially ionized and hot fully ionized states. The removed signed-branch representation is not exercised.
+
+32. tests_sph_chem_cpp#3
+star_formation_cuda tests treat any CUDA error as 'no device' and silently skip
+Status: resolved
+Assessment: CUDA SF fixtures skip only cudaErrorNoDevice or a successful query with zero devices. Other cudaGetDeviceCount failures trigger ASSERT_EQ with the CUDA diagnostic.
+Evidence (checkout-relative): tests/sph/star_formation_cuda.cu:80-87,101-107,138
+Completed: tests ran on the available CUDA device. No-device and deliberately misconfigured-driver paths were not separately exercised.
+
+33. tests_sph_chem_cpp#2
+RejectsInvalidSourceBeforeCommit asserts on const inputs that cannot change
+Status: resolved
+Assessment: The CUDA regression seeds mutable outputs, fails the second lane, checks its ID/index/symbolic error, and verifies every output sentinel remains unchanged. runCuda now validates a staged vector before copying any outputs to the caller.
+Evidence (checkout-relative): tests/sph/star_formation_cuda.cu:101-135; src/sph/star_formation_cuda.cu:76-96
+Completed: production-backed CUDA sentinel atomicity and distributed source transaction tests passed.
+
+34. tests_python#5
+At least eight hand-rolled, drifting decoders of the same binary checkpoint format across test scripts
+Status: resolved
+Assessment: Checkpoint readers share tests/checkpoint_format.py. It consumes optional blocks in writer order, validates versions, lengths, gas mappings and source metadata, and supports position/index widths. It does not search particle bytes for a magic marker.
+Validation: see the current focused evidence in docs/gadget4_validation.txt.
+
+35. particles_domain_drift#10
+SPH migration leaves received particles in nondeterministic arrival order
+Status: resolved
+Assessment: The inherited generic fix sorts received SPH parcels by source rank and sequence before installing records. The new electron/SF fields are carried with particle records. This fixes arrival ordering, not cross-decomposition RNG identity.
+Evidence (checkout-relative): src/particles/domain.cpp:420-429,552-558; tests/sph/gravity.cpp
+Completed: two-rank migration and source lifecycle tests plus traditional/global restart tests passed. Source identities are covered separately by resolved finding #25; glass-file application comparison remains a validation limit.
+
+36. recent_commits_a#9
+Capability headers now silently default missing build macros instead of #error
+Status: resolved
+Assessment: Missing or inconsistent capability definitions are compile errors. CMake supplies the complete effective capability contract to application and standalone consumers.
+Validation: see the current focused evidence in docs/gadget4_validation.txt.
+
+37. particles_domain_drift#15
+Parcel limit counts particles, not bytes, giving ~1-2 GB SPH migration messages
+Status: resolved
+Assessment: Both collisionless and SPH migration capacity derive from the actual enabled HPX serialized record size. The 32 MiB budget reserves 64 KiB for metadata/framing. A fixture serializes a full-capacity vector to verify the payload bound.
+Validation: see the current focused evidence in docs/gadget4_validation.txt.
+
+38. io_checkpoint_output_tools#10
+Silo view output copies every particle twice with a 72-byte StarFormationState each, and recomputes frame-independent diagnostics per frame
+Status: resolved
+Assessment: Selected output populations reference one immutable snapshot. Chemistry and phase diagnostics are evaluated once per snapshot and reused across frames; full stochastic state is not copied into each output record. Output regressions check all cooling/phase fields across frames and changing snapshots.
+Validation: see the current focused evidence in docs/gadget4_validation.txt.
+
+39. cosmology#19
+recombination::advanceGasTemperature is test-only; production duplicates a modified version of the SDIRK step inline
+Status: resolved
+Assessment: Production homogeneous-background evolution and thermal regressions use the same time-dependent two-stage SDIRK helper. Manufactured varying-coefficient tests exercise the stage times and second-order convergence under normal and fast-math callers.
+Validation: see the current focused evidence in docs/gadget4_validation.txt.
+
+40. tests_python#14, recent_commits_b#11
+variational_sph_application registration needlessly requires CHEMISTRY and has a stale comment
+Status: resolved
+Assessment: Variational SPH registration is independent of particle chemistry. Chemistry-disabled graph/configuration and application validation exercise this capability combination.
+Validation: see the current focused evidence in docs/gadget4_validation.txt.
+
+41. tests_python#19
+compare_native_recombination 'compare' silently drops unmatched reference rows and passes on any overlap
+Status: resolved
+Assessment: Native/CAMB comparisons require complete unique reference-grid coverage; missing, duplicate, and extra grid points are errors. Explicit regressions reject truncated candidates/references.
+Validation: see the current focused evidence in docs/gadget4_validation.txt.
+
+42. tests_python#11
+Assert-only checks, one with a side effect, would pass vacuously under python -O / PYTHONOPTIMIZE
+Status: resolved
+Assessment: Affected harnesses use explicit runtime checks. Subprocess waits execute outside assertions. Normal and optimized-Python regression runs cover failures and launcher cleanup.
+Validation: see the current focused evidence in docs/gadget4_validation.txt.
+
+43. tests_python#16
+MPI, CUDA and cross-build comparison paths exist in drivers but CTest never enables them
+Status: resolved
+Assessment: Supported MPI cooling/global/variational and source-identity paths are registered with CTest. CUDA and cross-build comparisons have explicit opt-in configuration and unavailable-CUDA skip status 77. Generated registration and mocked unavailable/failure behavior were checked. GPU validation resumed only after the user said War Thunder was off.
+Validation: see the current focused evidence in docs/gadget4_validation.txt.
+
+44. recent_commits_a#7
+Historical fixed-rung checkpoint rejection diagnostic report
+Status: superseded; original verdict remains REFUTED.
+The original verifier found rejection occurred earlier with the Monaghan-support diagnostic. Do not relabel that historical finding as a confirmed bug or claim a fix. New format compatibility is a separate assessment: cooling model fingerprint 6, new electron-only SPH payload, SF fingerprint version 3 and particle metadata version 2 reject older network state.
+Evidence: src/sph/sph_chemistry.cpp:255; src/io/checkpoint.cpp; src/sph/sph_particles.cpp; src/particles/particles.cpp:1487. New rejection/restart tests passed for traditional and global intervals.
+
+Remaining validation limits
+- Focused single-GPU execution passed after War Thunder was turned off; multi-GPU mapping is not validated.
+- No production-scale cosmological population/performance study.
+- Lattice and closePack identity regressions cover one and two ranks; glass ID
+  construction was inspected, but a glass-file application comparison was not run.
+- Migration payload serialization is measured; a transport stress test at scale
+  and exhaustive capability combinations were not run.

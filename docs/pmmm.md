@@ -399,12 +399,14 @@ It does not round that interval to a power of two, impose rung-growth limits, or
 apply the minimum-rung floor. The previous interval's closing half-kick uses its
 saved duration; the new opening half-kick uses the newly selected duration after
 the collective reduction. The path supports gravity-only, SPH-only, and coupled
-gravity/SPH evolution on CPU and CUDA. With chemistry, each candidate opening
-chemistry half-step is a transaction from the same synchronized state: if its
-updated gas state tightens the hydro bound, the candidate is retried at the
-smaller interval before committing. Checkpoints preserve the pending closing
-half-step and its exact interval. Final diagnostics close that half-step after
-the final checkpoint, without opening another interval.
+gravity/SPH evolution on CPU and CUDA. GADGET-4 cooling and star formation
+run once after the completed SPH interval: star conversion uses the saved
+previous star-formation rate, followed by cooling and the new rate. The source
+does not retry or shorten that completed interval. Checkpoints preserve the
+hydrodynamic closing half-kick and its exact interval; cooling has no pending
+half-step state. Final diagnostics close the final hydrodynamic interval and
+its cooling source without opening another interval. See
+[equilibrium cooling](primordial_chemistry.md) and [star formation](star_formation.md).
 
 Select `run.timeIntegrator=hierarchical` to use the hierarchical
 particle timestep ladder for dark matter. Every ladder stage selects one

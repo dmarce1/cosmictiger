@@ -23,9 +23,10 @@ References:
 Remove the obsolete `hydro.pressureOperator` key from older INI files and command
 lines; pressure no longer has a runtime selector.
 
-The variational operator supports the constant-\(\gamma\) ideal gas,
-primordial chemistry (`atomic6` and `molecular9`), and the SH03 effective
-equation of state on CPU and CUDA, with every viscosity model
+The variational operator supports constant-\(\gamma\) ideal gas and the
+GADGET-4 equilibrium cooling and star-formation model on CPU and CUDA. Cooling
+gas uses fixed \(\gamma=5/3\) and its actual thermal energy; the multiphase
+closure supplies the thermal source. Both paths support every viscosity model
 (`hydro.viscosityEvolution`) and the Balsara limiter, with or without self-gravity,
 in isolated scenarios and in comoving cosmology, with the traditional and global
 time integrators. No entropy variable is stored: the operator evolves the stored
@@ -256,10 +257,11 @@ not stored.
 
 ## Validation
 
-The results below were recorded before removal of the legacy pressure operator.
-Monaghan comparisons are historical measurements; that operator is no longer
-available to rerun. Test coverage described here records those earlier runs and
-does not by itself validate the removal.
+The results below were recorded before removal of the legacy pressure operator
+and before replacement of the particle chemistry/SF model by GADGET-4. Monaghan,
+atomic6, molecular9 and Anninos references below are historical measurements;
+those implementations are no longer available to rerun. These records do not
+validate the current GADGET-4 implementation or transfer its test coverage.
 
 **Composition EOS support (October 30, 2026):** the CPU SPH and volume suites
 pass all 45 tests, including `SphCpuTest.VariationalCompositionEos`. That test

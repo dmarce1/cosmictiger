@@ -1,6 +1,6 @@
-# CosmicTiger - SH03 application and restart regression; BSL-1.0.
+# CosmicTiger - GADGET-4 application and restart regression; BSL-1.0.
 
-"""Exercise source events, particle persistence, and cosmological SH03 restarts."""
+"""Exercise source events, particle persistence, and cosmological GADGET-4 restarts."""
 
 import argparse
 import json
@@ -15,12 +15,8 @@ import subprocess
 import sys
 
 from application_selection import application_options, compiled_algorithms
-from run_checkpoint import checkManifest, checkpoint_position_bytes
-
-
-STAR_MAGIC = 0x4354534650415254
-STAR_RECORD = struct.Struct("=QQddfdddd")
-CHEMISTRY_RECORD = struct.Struct("=12f2d")
+from run_checkpoint import checkManifest
+from checkpoint_format import decode_checkpoint
 
 
 def run_process(command, directory, label, success=True):
@@ -57,91 +53,36 @@ def prepare(base, name, checkpoint=None):
     return directory
 
 
-def read_particle_state(checkpoint, expected_count, network="atomic6"):
-    """Exclude driver timing/padding; retain physical arrays and every source scalar."""
+def read_particle_state(checkpoint, expected_count):
+    """Read the versioned Ne/SFR payload and exclude driver timing/padding."""
     data = (checkpoint / "checkpoint.0.dat").read_bytes()
-    position_bytes = checkpoint_position_bytes(data)
-    flags = struct.unpack_from("=I", data, 12)[0]
-    if not flags & (1 << 20) or not flags & (1 << 11):
-        raise RuntimeError("checkpoint did not mark both star formation and chemistry")
-    magic = struct.pack("=QQ", STAR_MAGIC, 1)
-    star_offset = data.find(magic)
-    if star_offset < 0 or data.find(magic, star_offset + 1) >= 0:
-        raise RuntimeError("missing or ambiguous versioned star formation particle block")
-    end = star_offset + len(magic) + expected_count * STAR_RECORD.size
-    if end > len(data):
-        raise RuntimeError("truncated star formation particle metadata")
-    candidates = []
-    for integer_bytes in (4, 8):
-        for version in (60, 62, 64, 66):
-            gas_magic = struct.pack("=7I", 0x43545350, version, integer_bytes, 8, 12, 3, 4)
-            offset = data.find(gas_magic)
-            if offset < 0:
-                continue
-            start = offset - 2 * integer_bytes - expected_count * (
-                3 * position_bytes + 14 + integer_bytes)
-            if start < 0:
-                continue
-            count = int.from_bytes(data[start:start + integer_bytes], sys.byteorder, signed=True)
-            gas_count = int.from_bytes(data[start + integer_bytes:start + 2 * integer_bytes],
-                                       sys.byteorder, signed=True)
-            stored_gas_count = int.from_bytes(data[offset + 28:offset + 28 + integer_bytes],
-                                              sys.byteorder, signed=True)
-            if count == expected_count and 0 <= gas_count <= count and gas_count == stored_gas_count:
-                candidates.append((start, integer_bytes, gas_count, offset, version))
-    if len(candidates) != 1:
-        raise RuntimeError(f"cannot identify a unique physical particle block: {candidates}")
-    start, integer_bytes, gas_count, gas_offset, gas_version = candidates[0]
-    type_offset = start + 2 * integer_bytes + expected_count * (3 * position_bytes + 13)
-    types = data[type_offset:type_offset + expected_count]
-    if len(types) != expected_count or any(kind not in (0, 1, 2) for kind in types):
-        raise RuntimeError("invalid particle species in checkpoint")
-    if types.count(1) != gas_count:
-        raise RuntimeError("gas population disagrees with checkpoint particle types")
-    viscosity_bytes = {60: 0, 62: 8, 64: 12, 66: 12}[gas_version]
-    # Fixed SPH arrays contain 58 bytes plus one particle index per gas particle.
-    chemistry_offset = gas_offset + 28 + integer_bytes + gas_count * (
-        58 + integer_bytes + viscosity_bytes)
-    if chemistry_offset + gas_count * CHEMISTRY_RECORD.size != star_offset:
-        raise RuntimeError("combined SPH chemistry payload has an unexpected size")
-    cat_offset = type_offset + expected_count
-    gas_indices = set()
+    decoded = decode_checkpoint(data)
+    if not decoded.has_stars or not decoded.has_cooling or decoded.count != expected_count:
+        raise RuntimeError("checkpoint did not contain the expected cooling and star population")
+    types = decoded.types
     states = {}
+    expected_eos = struct.unpack("=2f", struct.pack("=2f", 2.0 / 3.0, 5.0 / 3.0))
     for index in range(expected_count):
-        offset = star_offset + len(magic) + index * STAR_RECORD.size
-        record = STAR_RECORD.unpack_from(data, offset)
-        identity, counter, formation, wind, metal, half, heating, optical, elapsed = record
-        if identity == 0 or identity in states or not all(math.isfinite(value) for value in record[2:]):
-            raise RuntimeError("checkpoint has duplicate IDs or nonfinite source metadata")
-        if not 0 <= metal <= 1 or min(wind, half, optical, elapsed) < 0:
-            raise RuntimeError("checkpoint has invalid source clocks or metallicity")
+        identity, counter, formation, rate, elapsed = decoded.stars[index]
+        if identity == 0 or identity in states or not all(math.isfinite(x) for x in (formation, rate, elapsed)):
+            raise RuntimeError("duplicate IDs or nonfinite source metadata")
+        if min(rate, elapsed) < 0 or (types[index] != 1 and rate != 0):
+            raise RuntimeError("invalid stored SFR or elapsed time")
         if (formation >= 0) != (types[index] == 2):
-            raise RuntimeError("stellar identity disagrees with its formation timestamp")
+            raise RuntimeError("stellar identity disagrees with birth timestamp")
         states[identity] = {"type": types[index], "counter": counter, "formation": formation,
-                            "wind": wind, "metal": metal, "half": half, "elapsed": elapsed}
+                            "specific_sfr": rate, "elapsed": elapsed}
         if types[index] == 1:
-            gas_index = int.from_bytes(data[cat_offset + index * integer_bytes:
-                                            cat_offset + (index + 1) * integer_bytes],
-                                       sys.byteorder, signed=True)
-            if gas_index < 0 or gas_index >= gas_count or gas_index in gas_indices:
-                raise RuntimeError("gas particle indices do not form a unique mapping")
-            gas_indices.add(gas_index)
-            chemistry = CHEMISTRY_RECORD.unpack_from(
-                data, chemistry_offset + gas_index * CHEMISTRY_RECORD.size)
-            if (not all(math.isfinite(value) for value in chemistry)
-                    or min(chemistry[:9]) < 0
-                    or min(chemistry[9:12]) <= 0):
-                raise RuntimeError("checkpoint has invalid chemical abundances, energy or EOS")
-            hydrogen = chemistry[0] + chemistry[1] + chemistry[6] + 2 * (chemistry[7] + chemistry[8])
-            charge = chemistry[1] + chemistry[3] + 2 * chemistry[4] + chemistry[8] - chemistry[6]
-            if (abs(hydrogen - 1.0) > 1e-6
-                    or abs(chemistry[5] - charge) > 1e-6 * max(chemistry[5], abs(charge), 1e-30)
-                    or (network == "atomic6" and any(value != 0.0 for value in chemistry[6:9]))):
-                raise RuntimeError(f"checkpoint has invalid {network} chemical composition")
-            if chemistry[12:] != (0.0, 0.0):
-                raise RuntimeError("chemistry and star formation both own a pending source step")
-            states[identity]["chemistry"] = chemistry
-    return data[start:end], states
+            gas_index = decoded.gas_indices[index]
+            cooling = decoded.cooling[gas_index]
+            energy = decoded.thermodynamic[2 * gas_index]
+            if not all(math.isfinite(x) for x in cooling) or cooling[0] < 0 or cooling[1:] != expected_eos:
+                raise RuntimeError("invalid electron guess or constant-gamma EOS")
+            if not math.isfinite(energy) or energy <= 0:
+                raise RuntimeError("invalid gas thermal energy")
+            states[identity]["cooling"] = cooling
+            states[identity]["energy"] = energy
+    return decoded.physical, states
 
 
 def check_diagnostics(path):
@@ -178,21 +119,18 @@ def main():
     def command(options):
         return [str(executable), *[f"--{key}={value}" for key, value in options.items()]]
 
-    # Both chemistry networks cover 10 K to 1e8 K, so the SH03 closure runs with
-    # either; the molecular network keeps its nine species in ordinary gas.
-    for workers, network in ((1, "atomic6"), (2, "atomic6"), (1, "molecular9")):
-        for fixture, marker in (("star_formation", "Star formation passed:"),
+    for workers in (1, 2):
+        for fixture, marker in (("star_formation", "GADGET-4 star formation passed:"),
                                 ("starFormationParticles", "Star-formation particles passed:"),
                                 ("checkpointState", "Checkpoint state and mode validation passed")):
-            name = fixture + "_" + network + "_threads_" + str(workers)
+            name = fixture + "_threads_" + str(workers)
             directory = prepare(base, name)
             output = run_process(command(dict(common, **selection,
-                **{"run.test": fixture, "hpx:threads": workers, "chemistry.initialization": "manual",
-                   "chemistry.network": network})), directory, name)
+                **{"run.test": fixture, "hpx:threads": workers,
+                   "chemistry.initializationTemperature": 10000})), directory, name)
             if marker not in output:
                 raise RuntimeError(f"{name} did not report its assertions passed")
-            evidence["fixtures"].append({"name": fixture, "workers": workers, "network": network,
-                                         "passed": True})
+            evidence["fixtures"].append({"name": fixture, "workers": workers, "passed": True})
 
     if not args.fixtures_only:
         solvers = [("fmm", None)] if "fmm" in available["far"] else []
@@ -200,81 +138,66 @@ def main():
             solvers.extend(("pmmm", near) for near in ("pp", "fmm") if near in available["near"])
         if not solvers:
             solvers = [("none", None)]
-        # One combination also runs the nine-species network: ordinary gas and
-        # winds then evolve molecular fractions that the dense projection drops.
-        combinations = [(far, near, integrator, "atomic6")
-                        for far, near in solvers for integrator in integrators]
-        combinations.append((*combinations[0][:3], "molecular9"))
-        for far, near, integrator, network in combinations:
+        for far, near in solvers:
+            for integrator in integrators:
                 selections = application_options(executable, far=far, near=near,
                                                  integrator=integrator, hydro=True)
                 gravity = far != "none"
                 label = "_".join(value for value in (far, near, integrator) if value)
-                if network != "atomic6":
-                    label += "_" + network
                 options = dict(common, **selections, **{"run.scenario": "cosmology",
                     "gravity.enabled": str(gravity).lower(), "run.maxIterations": 2,
                     "run.numberOfSteps": 64, "run.minRung": 0,
                     "cosmology.sigma8": 0, "cosmology.startRedshift": 49,
                     "cosmology.endRedshift": 0, "checkpoint.intervalSeconds": 0,
-                    "hpx:threads": 1, "chemistry.network": network})
+                    "hpx:threads": 1, "chemistry.initializationTemperature": 10000})
                 baseline = prepare(base, "cosmology_" + label)
                 run_process(command(options), baseline, "baseline")
                 for iteration in (1, 2):
                     checkManifest(baseline / f"checkpoint.{iteration}", iteration, gravity=gravity)
-                _, first = read_particle_state(baseline / "checkpoint.1", 1024, network)
-                reference_payload, reference = read_particle_state(
-                    baseline / "checkpoint.2", 1024, network)
+                _, first = read_particle_state(baseline / "checkpoint.1", 1024)
+                reference_payload, reference = read_particle_state(baseline / "checkpoint.2", 1024)
                 if set(first) != set(reference):
-                    raise RuntimeError("evolution changed stable particle identities")
-                gas_states = [state for state in first.values() if state["type"] == 1]
-                if not gas_states or not any(state["counter"] > 0 for state in reference.values()):
-                    raise RuntimeError("cosmological source closing did not advance gas event counters")
-                if not any(state["half"] > 0 for state in gas_states):
-                    raise RuntimeError("restart fixture did not capture pending source half steps")
-                chemistry_changed = sum(
+                    raise RuntimeError("evolution changed stable identities")
+                if not any(state["type"] == 1 and state["counter"] > 0 for state in reference.values()):
+                    raise RuntimeError("full-step source did not advance gas event counters")
+                cooling_changed = sum(
                     state["type"] == 1 and reference[identity]["type"] == 1
-                    and state["chemistry"][:10] != reference[identity]["chemistry"][:10]
+                    and (state["cooling"] != reference[identity]["cooling"]
+                         or state["energy"] != reference[identity]["energy"])
                     for identity, state in first.items())
-                if chemistry_changed == 0:
-                    raise RuntimeError("ordinary cosmological gas did not evolve its chemistry")
+                if cooling_changed == 0:
+                    raise RuntimeError("cosmological gas thermal state did not evolve")
                 check_diagnostics(baseline / "energy.txt")
                 resumed = prepare(base, "cosmology_" + label + "_restart", baseline / "checkpoint.1")
                 resumed_options = dict(options, **{"run.maxIterations": 1, "checkpoint.readIndex": 1})
                 output = run_process(command(resumed_options), resumed, "restart")
                 if "Done reading checkpoint" not in output:
-                    raise RuntimeError("restart did not load its saved simulation")
+                    raise RuntimeError("restart did not load the saved simulation")
                 checkManifest(resumed / "checkpoint.2", 2, gravity=gravity)
-                resumed_payload, resumed_state = read_particle_state(
-                    resumed / "checkpoint.2", 1024, network)
+                resumed_payload, resumed_state = read_particle_state(resumed / "checkpoint.2", 1024)
                 if reference_payload != resumed_payload or reference != resumed_state:
-                    raise RuntimeError("restart changed particle arrays or persistent star formation state")
-                # A short restart may not cross the next coarse diagnostic boundary.
+                    raise RuntimeError("restart changed particle arrays, electron state, or saved SFR")
                 if (resumed / "energy.txt").exists():
                     check_diagnostics(resumed / "energy.txt")
                 for key, value in (("starFormation.seed", 2), ("starFormation.beta", 0.15),
-                                   ("starFormation.windEnergyFraction", 0.5),
-                                   ("cosmology.heliumFraction", 0.3),
-                                   ("chemistry.fractionalChangeLimit", 0.05),
-                                   ("chemistry.electronFractionFloor", 2e-20)):
+                                   ("starFormation.criticalOverDensity", 58),
+                                   ("starFormation.criticalPhysicalDensity", 0.1),
+                                   ("chemistry.initializationTemperature", 20000),
+                                   ("chemistry.minimumSpecificEnergy", 1e8)):
                     directory = prepare(base, "reject_" + label + "_" + key.split(".")[1],
                                         baseline / "checkpoint.1")
                     rejected = run_process(command(dict(resumed_options, **{key: value,
                         "run.maxIterations": 0})), directory, "incompatible_restart", success=False)
                     if "checkpoint" not in rejected.lower() or "Done reading checkpoint" in rejected:
                         raise RuntimeError("incompatible source parameters were not rejected before loading")
-                entry = {"gravity": far, "near": near, "integrator": integrator, "network": network,
-                         "particles": len(reference),
-                         "gas": sum(state["type"] == 1 for state in reference.values()),
-                         "stars": sum(state["type"] == 2 for state in reference.values()),
-                         "maximum_event_counter": max(state["counter"] for state in reference.values()),
-                         "pending_source_restart": True, "exact_particle_restart": True,
-                         "chemistry_particles_changed": chemistry_changed,
-                         "exact_chemistry_restart": True,
-                         "changed_chemistry_parameters_rejected": True,
-                         "changed_parameters_rejected": True}
-                evidence["cosmology"].append(entry)
-                print(f"{label}: finite cosmology, pending source state and exact restart passed", flush=True)
+                evidence["cosmology"].append({"gravity": far, "near": near, "integrator": integrator,
+                    "particles": len(reference), "gas": sum(s["type"] == 1 for s in reference.values()),
+                    "stars": sum(s["type"] == 2 for s in reference.values()),
+                    "maximum_event_counter": max(s["counter"] for s in reference.values()),
+                    "source_schedule": "event_then_cooling_full_step", "exact_particle_restart": True,
+                    "thermal_particles_changed": cooling_changed, "exact_electron_sfr_restart": True,
+                    "changed_parameters_rejected": True})
+                print(f"{label}: finite cosmology and exact electron/SFR restart passed", flush=True)
     (base / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
     print("Star formation application regression passed", flush=True)
     return 0

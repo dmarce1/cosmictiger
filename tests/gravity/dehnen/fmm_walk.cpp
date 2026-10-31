@@ -1157,6 +1157,7 @@ void fmmWalkOrdinaryTimesteps(bool useCuda) {
     setOptions(saved);
 }
 
+#if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
 void fmmWalkHierarchicalTerminalEnergy(bool useCuda) {
     auto const saved = getOptions();
     auto options = saved;
@@ -1297,6 +1298,8 @@ void fmmWalkHierarchicalTerminalEnergy(bool useCuda) {
     }
     setOptions(saved);
 }
+
+#endif
 
 void fmmWalkPeriodicBackground(bool useCuda) {
     constexpr float kTheta = 0.1f;
@@ -1691,9 +1694,12 @@ void fmmWalkTest() {
         detail::fmmWalkPeriodicBackground(useCuda);
         if (!getOptions().run.hierarchicalGravity) {
             detail::fmmWalkOrdinaryTimesteps(useCuda);
-        } else {
+        }
+#if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
+        else {
             detail::fmmWalkHierarchicalTerminalEnergy(useCuda);
         }
+#endif
         detail::fmmWalkOpenLargerCell(useCuda);
     } else {
         Vector<hpx::future<void>> pending;

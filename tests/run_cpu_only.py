@@ -28,7 +28,7 @@ def main():
              ('sphGravity', 'SPH gravity regression passed', [])]
     if not args.without_chemistry:
         cases.append(('sphGravity', 'SPH gravity regression passed',
-                      ['--chemistry.enabled=true', '--chemistry.initialization=manual']))
+                      ['--chemistry.enabled=true']))
     for case, (test, marker, options) in enumerate(cases):
         result = subprocess.run(command + [f'--run.test={test}'] + options, cwd=workdir,
                                 env=environment, text=True, stdout=subprocess.PIPE,
