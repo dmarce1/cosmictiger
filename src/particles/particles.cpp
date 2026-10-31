@@ -24,6 +24,7 @@ constexpr bool kVerbose = true;
 #include <gsl/gsl_rng.h>
 #include <hpx/threading_base/annotated_function.hpp>
 
+#include <cosmictiger/core/file_handle.hpp>
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/safe_io.hpp>
@@ -1943,7 +1944,7 @@ GadgetIoHeader readGadgetHeader(FILE* fp, std::string const& filename) {
 
 GadgetIoHeader particlesReadGadget4Header(std::string const& filenameBase) {
     std::string const filename = filenameBase + (hpxSize() > 1 ? ".0" : "");
-    std::unique_ptr<FILE, decltype(&fclose)> file(fopen(filename.c_str(), "rb"), &fclose);
+    UniqueFile file(fopen(filename.c_str(), "rb"));
     if (!file) {
         THROW_ERROR("Unable to open %s for reading.\n", filename.c_str());
     }

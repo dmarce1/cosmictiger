@@ -28,6 +28,7 @@
 #include <cosmictiger/analysis/lightcone_map.hpp>
 #include <cosmictiger/analysis/rockstar.hpp>
 #include <cosmictiger/core/containers.hpp>
+#include <cosmictiger/core/file_handle.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/safe_io.hpp>
@@ -345,7 +346,7 @@ void lcParts2groups(double a, double linkingLength, int ti) {
     rockstarWriteCatalogue(filename, recs.data(), recs.size());
     std::string const mapFilename = getOptions().lightcone.directory + "/lc.healpix." +
         std::to_string(epoch) + "." + std::to_string(hpxRank());
-    std::unique_ptr<FILE, decltype(&fclose)> mapFile(fopen(mapFilename.c_str(), "wb"), &fclose);
+    UniqueFile mapFile(fopen(mapFilename.c_str(), "wb"));
     if (!mapFile) {
         THROW_ERROR("Unable to open %s for writing\n", mapFilename.c_str());
     }

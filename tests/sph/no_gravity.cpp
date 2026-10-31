@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 
+#include <cosmictiger/core/file_handle.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
@@ -67,7 +68,7 @@ void sphOnlyDiagnosticsTest() {
         sphParticlesInternalEnergyRate(index) = 0.125f;
         sphParticlesPredictedInternalEnergyRate(index) = 0.375f;
     }
-    std::unique_ptr<FILE, decltype(&std::fclose)> checkpoint(std::tmpfile(), std::fclose);
+    UniqueFile checkpoint(std::tmpfile());
     if (checkpoint == nullptr) {
         throw std::runtime_error("Cannot create SPH-only particle checkpoint fixture");
     }

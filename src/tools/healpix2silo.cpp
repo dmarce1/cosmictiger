@@ -14,6 +14,8 @@
 #include <chealpix.h>
 #include <silo.h>
 
+#include <cosmictiger/core/file_handle.hpp>
+
 namespace detail {
 
 template <class T>
@@ -54,7 +56,7 @@ int convert(int argc, char** argv) {
     if (infile.empty() || outfile.empty()) {
         throw std::invalid_argument("Both input.file and output.file are required");
     }
-    std::unique_ptr<FILE, decltype(&fclose)> input(fopen(infile.c_str(), "rb"), &fclose);
+    UniqueFile input(fopen(infile.c_str(), "rb"));
     if (!input) {
         throw std::runtime_error("Cannot open " + infile);
     }

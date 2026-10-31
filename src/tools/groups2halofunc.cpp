@@ -19,6 +19,7 @@
 #include <boost/program_options.hpp>
 
 #include <cosmictiger/analysis/group_entry.hpp>
+#include <cosmictiger/core/file_handle.hpp>
 
 namespace detail {
 
@@ -27,10 +28,8 @@ bool positiveFinite(double value) {
         (std::bit_cast<uint64_t>(value) & 0x7ff0000000000000ULL) != 0x7ff0000000000000ULL;
 }
 
-using InputFile = std::unique_ptr<FILE, decltype(&fclose)>;
-
-InputFile openInput(std::filesystem::path const& path) {
-    InputFile input(fopen(path.c_str(), "rb"), &fclose);
+UniqueFile openInput(std::filesystem::path const& path) {
+    UniqueFile input(fopen(path.c_str(), "rb"));
     if (!input) {
         throw std::runtime_error("Cannot open " + path.string());
     }

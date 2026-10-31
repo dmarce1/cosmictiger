@@ -28,6 +28,7 @@
 #include <cosmictiger/analysis/lightcone.hpp>
 #endif
 #include <cosmictiger/core/driver.hpp>
+#include <cosmictiger/core/file_handle.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/terminal.hpp>
@@ -159,15 +160,7 @@ struct CheckpointFileInfo {
     uint64_t checksum;
 };
 
-struct CheckpointFileCloser {
-    void operator()(FILE* file) const {
-        if (file != nullptr) {
-            fclose(file);
-        }
-    }
-};
-
-using CheckpointFile = std::unique_ptr<FILE, CheckpointFileCloser>;
+using CheckpointFile = UniqueFile;
 
 fs::path checkpointDirectory(int iteration) {
     return outputPath("checkpoint." + std::to_string(iteration));
