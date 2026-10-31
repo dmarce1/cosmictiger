@@ -476,10 +476,9 @@ void destroy() {
     meshCachePool = MeshCachePool{};
     state.cells.clear();
     state.moments.clear();
-    state.sources.clear();
+    state.ownedCells.clear();
     state.sourceCells.clear();
     state.sourceCellsByKey.clear();
-    state.sourceOwners.clear();
     state.tasks.clear();
     state.acceleration.clear();
     state.potential.clear();

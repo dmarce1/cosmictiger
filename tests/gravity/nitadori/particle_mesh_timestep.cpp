@@ -14,6 +14,7 @@
 #include <cosmictiger/core/time.hpp>
 #include <cosmictiger/gravity/nitadori/kick.hpp>
 #include <cosmictiger/gravity/nitadori/solver.hpp>
+#include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 namespace detail {
@@ -39,23 +40,34 @@ void requireMeshTimestep(bool condition, std::string const& message) {
 }
 
 void initializeMeshTimestepFixture() {
-    // The symmetry center has negligible acceleration. On multiple localities
-    // both force-limiting particles belong to rank one, testing the reduction.
-    bool const center = hpxRank() == 0;
-    bool const endpoints = hpxRank() == (hpxSize() == 1 ? 0 : 1);
-    particlesResize(int(center) + 2 * int(endpoints));
-    ParticleInteger local = 0;
-    for (int point = 0; point < 3; ++point) {
-        if ((point == 1 && !center) || (point != 1 && !endpoints)) {
-            continue;
-        }
+    // The symmetry center has negligible acceleration. Its two endpoints sit one
+    // cell away through the periodic seam, so the coarse-aligned domain cuts put
+    // the center on a low rank and both force-limiting particles on another
+    // locality, testing the global timestep reduction. Every particle starts on
+    // the root and is migrated to its spatial owner before the first solve.
+    constexpr double kFixtureX[3] = {0.9375, 0.0625, 0.1875};
+    particlesResize(hpxRank() == 0 ? 3 : 0);
+    for (ParticleInteger local = 0; local < particlesSize(); ++local) {
         for (int dim = 0; dim < kDimensions; ++dim) {
-            particlesPos(dim, local) = dim == kXDimension ? 0.375 + 0.125 * point : 0.5;
+            particlesPos(dim, local) = dim == kXDimension ? kFixtureX[local] : 0.5;
             particlesVel(dim, local) = 0.0f;
         }
         particlesRung(local) = 1;
-        ++local;
     }
+}
+
+// PMMM near fields read each cell's particles from its spatial owner.
+void distributeMeshTimestepFixture() {
+    auto const saved = getOptions();
+    auto options = saved;
+    options.gravity.enabled = false;
+    options.run.hierarchicalGravity = false;
+    setOptions(options);
+    particlesSortByRung(0);
+    domainsRebound();
+    domainsBegin(0);
+    domainsEnd();
+    setOptions(saved);
 }
 
 Vector<MeshTimestepSample> readMeshTimestepFixture() {
@@ -269,6 +281,7 @@ void particleMeshTimestepTest() {
     for (auto& future : initialization) {
         future.get();
     }
+    detail::distributeMeshTimestepFixture();
     pmmmSolve(true);
     auto const samples = detail::meshTimestepSamples();
     double maximumAcceleration = 0.0;

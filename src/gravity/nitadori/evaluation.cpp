@@ -110,9 +110,12 @@ void evaluateParticles(bool doPotential) {
         for (size_t cellIndex = cellBegin; cellIndex < cellEnd; ++cellIndex) {
             auto const& cell = state.cells[cellIndex];
             auto const center = coordinates(cell.key);
+            // The slab owner serves the sink cell's local expansion; each
+            // neighbor cell's owner serves that cell's particles directly.
+            auto coefficients = localExpansion(cell.key);
             struct Request {
                 std::vector<uint64_t> keys;
-                hpx::future<std::vector<CellData>> future;
+                hpx::future<std::vector<CellParticles>> future;
             };
             std::unordered_map<int, Request> requests;
             std::unordered_map<uint64_t, std::array<int, 3>> displacements;
@@ -123,7 +126,7 @@ void evaluateParticles(bool doPotential) {
                         int const sy = periodicIndex(center[1] - y);
                         int const sz = periodicIndex(center[2] - z);
                         uint64_t const key = (uint64_t(sx) * n + sy) * n + sz;
-                        requests[cache.slabOwner[sx]].keys.push_back(key);
+                        requests[cellOwner(key)].keys.push_back(key);
                         displacements.emplace(key, std::array<int, 3>{x, y, z});
                     }
                 }
@@ -131,10 +134,11 @@ void evaluateParticles(bool doPotential) {
             std::exception_ptr failure;
             try {
                 for (auto& [owner, request] : requests) {
-                    request.future = cache.owners[owner] == hpx::find_here() ?
-                        hpx::make_ready_future(readCells(request.keys, cell.key)) :
-                        hpx::async<PmmmReadCellsAction>(
-                            cache.owners[owner], request.keys, cell.key);
+                    request.future = owner == hpxRank() ?
+                        hpx::make_ready_future(
+                            readCellParticles(state.request.generation, request.keys)) :
+                        hpx::async<PmmmReadCellParticlesAction>(
+                            hpxLocalities()[owner], state.request.generation, request.keys);
                 }
             } catch (...) {
                 failure = std::current_exception();
@@ -148,15 +152,11 @@ void evaluateParticles(bool doPotential) {
             if (failure) {
                 std::rethrow_exception(failure);
             }
-            std::vector<double> coefficients;
             std::vector<PmmmNearParticle> sources;
             for (auto& [owner, request] : requests) {
                 for (auto& result : request.future.get()) {
-                    if (result.key == cell.key) {
-                        coefficients = std::move(result.coefficients);
-                    }
                     auto const displacement = displacements.at(result.key);
-                    for (auto source : result.sources) {
+                    for (auto source : result.particles) {
                         for (int axis = 0; axis < kDimensions; ++axis) {
                             source.offset[axis] -= displacement[axis];
                         }

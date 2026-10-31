@@ -48,34 +48,55 @@ std::vector<uint64_t> neighbors(uint64_t key) {
 }
 
 void planGhosts() {
-    std::unordered_set<uint64_t> keys;
-    for (auto const& cell : state.cells) {
-        for (auto key : neighbors(cell.key)) {
-            keys.insert(key);
+    // Every neighbor cell has exactly one owner, known from the particle-domain
+    // tree. Ask each remote owner how many particles its cells hold so the ghost
+    // arena can be reserved before any record arrives; an empty cell needs no
+    // ghost. Owned neighbors are already source cells.
+    std::unordered_map<int, std::vector<uint64_t>> requests;
+    {
+        std::unordered_set<uint64_t> keys;
+        for (auto const& cell : state.cells) {
+            for (auto key : neighbors(cell.key)) {
+                if (keys.insert(key).second) {
+                    int const owner = cellOwner(key);
+                    if (owner != hpxRank()) {
+                        requests[owner].push_back(key);
+                    }
+                }
+            }
         }
     }
-    std::unordered_map<int, std::vector<uint64_t>> requests;
-    for (auto key : keys) {
-        requests[cache.slabOwner[key / (uint64_t(cache.meshSize) * cache.meshSize)]].push_back(key);
-    }
-    std::vector<hpx::future<std::vector<CellOwners>>> futures;
+    std::vector<std::pair<int, hpx::future<std::vector<ParticleInteger>>>> futures;
     futures.reserve(requests.size());
     try {
         for (auto& [owner, request] : requests) {
-            futures.push_back(
-                hpx::async<PmmmReadOwnersAction>(cache.owners[owner], std::move(request)));
+            std::sort(request.begin(), request.end());
+            futures.emplace_back(owner,
+                hpx::async<PmmmReadCellCountsAction>(
+                    hpxLocalities()[owner], state.request.generation, request));
         }
     } catch (...) {
-        hpx::wait_all(futures);
+        for (auto& [owner, future] : futures) {
+            future.wait();
+        }
         throw;
     }
-    hpx::wait_all(futures);
-    std::vector<CellOwners> directory;
-    for (auto& future : futures) {
-        for (auto& cell : future.get()) {
-            std::sort(cell.owners.begin(), cell.owners.end(),
-                [](auto const& first, auto const& second) { return first.rank < second.rank; });
-            directory.push_back(std::move(cell));
+    struct GhostCell {
+        uint64_t key;
+        int owner;
+        ParticleInteger count;
+    };
+    std::vector<GhostCell> directory;
+    for (auto& [owner, future] : futures) {
+        auto const counts = future.get();
+        auto const& request = requests[owner];
+        if (counts.size() != request.size()) {
+            throw std::runtime_error("PMMM cell count reply has the wrong length");
+        }
+        for (size_t i = 0; i < request.size(); ++i) {
+            if (counts[i] > 0) {
+                directory.push_back({request[i], owner, counts[i]});
+            }
         }
     }
     // Arrival order must not change source traversal or floating-point sums.
@@ -83,21 +104,15 @@ void planGhosts() {
         [](auto const& first, auto const& second) { return first.key < second.key; });
     ParticleInteger ghostCount = 0;
     for (auto const& cell : directory) {
-        for (auto const owner : cell.owners) {
-            if (owner.rank == hpxRank()) {
-                continue;
-            }
-            if (owner.count <= 0 ||
-                owner.count > std::numeric_limits<ParticleInteger>::max() - ghostCount) {
-                throw std::runtime_error("PMMM ghost count exceeds its index range");
-            }
-            auto source = std::make_shared<SourceCell>();
-            source->range = {cell.key, ghostCount, ghostCount + owner.count, true};
-            source->owner = owner.rank;
-            ghostCount += owner.count;
-            state.sourceCellsByKey[cell.key].push_back(state.sourceCells.size());
-            state.sourceCells.push_back(std::move(source));
+        if (cell.count > std::numeric_limits<ParticleInteger>::max() - ghostCount) {
+            throw std::runtime_error("PMMM ghost count exceeds its index range");
         }
+        auto source = std::make_shared<SourceCell>();
+        source->range = {cell.key, ghostCount, ghostCount + cell.count, true};
+        source->owner = cell.owner;
+        ghostCount += cell.count;
+        state.sourceCellsByKey.emplace(cell.key, state.sourceCells.size());
+        state.sourceCells.push_back(std::move(source));
     }
     fmmGhostReserve(ghostCount);
     state.pendingGhosts = state.sourceCells.size() - state.cells.size();
@@ -112,10 +127,8 @@ void planGhosts() {
         for (auto key : neighbors(state.cells[sink].key)) {
             auto const found = state.sourceCellsByKey.find(key);
             if (found != state.sourceCellsByKey.end()) {
-                for (size_t source : found->second) {
-                    dependencies.push_back(source);
-                    state.sourceCells[source]->dependents.push_back(sink);
-                }
+                dependencies.push_back(found->second);
+                state.sourceCells[found->second]->dependents.push_back(sink);
             }
         }
         state.unresolvedSources[sink] = dependencies.size();

@@ -22,6 +22,8 @@ void domainsEnd();
 void domainsRebound();
 Range<double> domainsFindMyBox();
 Range<double> domainsRange(size_t key);
+// Locality whose half-open domain box contains the point; every PMMM cell lies in one.
+int domainsFindRank(Array<double, kDimensions> const& x);
 void domainsSave(FILE* fp);
 void domainsLoad(FILE* fp);
 double domainsGetLoadImbalance();

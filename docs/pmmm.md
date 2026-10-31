@@ -295,28 +295,31 @@ trades balance for a coarser minimum stage mesh. Global FMM retains the
 unrestricted continuous cuts. Particle migration and checkpoint reload preserve
 the domains independently of the FFT slabs. Each solve sorts local particle
 arrays in place into cell ranges, using parallel CPU partitioning and preserving
-all attached particle fields. The cell-fragment paths below remain the general
-implementation and are exercised by tests with arbitrary particle ownership.
+all attached particle fields. The hierarchical ladder keeps this ownership
+exact for every active particle: a rung drifts only at its own level and is
+migrated at that level before it next serves as a source.
 The FFTW mesh retains its separate slab distribution, independent of particle
-counts and particle-domain boundaries. Each particle owner forms partial cell
-moments about the same mesh-cell center and sends them to that cell's FFTW slab
-owner, which sums all fragments before the FFT. After the inverse FFT, every
-particle owner fetches the completed expansion for each of its occupied cells
-and evaluates it on its own particles. In PP mode, slab owners also hold copies
-of near-source particles and return the requested neighboring records. In FMM
-mode, a cell-owner directory identifies the sources needed by each locality's
-occupied sink cells. Their owners send complete particle records for those
-remote source-cell fragments; each arrival permits its source-tree construction.
-All owner fragments of a required mesh cell are made available locally. A source
-cell is copied once per recipient even when several sink cells need it.
+counts and particle-domain boundaries. Each cell's owner forms the cell's
+moments about the mesh-cell center and sends them to that cell's FFTW slab
+owner, which sums the packets before the FFT. After the inverse FFT, every
+owner fetches the completed expansion for each of its occupied cells and
+evaluates it on its own particles. Near-field sources never pass through the
+slab owner: the owner of any cell is found from the particle-domain tree by the
+cell center, and sinks read source particles directly from that owner. In PP
+mode each sink cell requests its neighbor cells' particle records from their
+owners, local ones without a message. In FMM mode each locality asks the remote
+owners of its neighbor cells for their particle counts, reserves ghost storage,
+and then fetches each occupied remote cell once; each arrival permits its
+source-tree construction. A source cell is copied once per recipient even when
+several sink cells need it.
 
 Ghost records occupy a separate source arena; owned particle arrays retain their
 original size. The counts and storage are reserved before arrivals, so building
 or filling one cell cannot invalidate a running walk's data. Each owner builds
 its cell tree before serving the cell's final particle permutation. Rungs and
 other source metadata are captured for the current stage before any sink kick
-can change them. Multiple owner fragments of one cell contribute local source
-roots, and periodic source copies retain the existing image selection.
+can change them. Every source cell, owned or ghost, contributes exactly one
+source root, and periodic source copies retain the existing image selection.
 
 All owned and ghost source trees are local, so near walks fetch no remote tree
 nodes or particles. A cell's sink task waits only for its required neighborhood,
@@ -328,7 +331,7 @@ cleared after the solve; the reusable ghost arena retains its allocated capacity
 Ghosts never enter migration, checkpoints, or owned particle counts. Neither mode permanently migrates particles into FFT slabs.
 
 `PmmmDiagnostics::ghostParticles`, `ghostCells`, and `ghostBytes` describe the
-last solve's remote source copies, source cell-owner fragments, and particle-record payload
+last solve's remote source copies, remote source cells, and particle-record payload
 bytes, summed across localities. Payload bytes exclude directory and transport
 metadata. `nearRemoteTreeFetches` and `nearRemoteParticleFetches` count remote
 fetches during the near walk; both must remain zero. Near-field preparation

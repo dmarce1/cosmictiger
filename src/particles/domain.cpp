@@ -981,6 +981,16 @@ Range<double> domainsFindMyBox() {
     return localDomains[hpxRank()].box;
 }
 
+int domainsFindRank(Array<double, kDimensions> const& x) {
+    if (hpxSize() == 1) {
+        return 0;
+    }
+    if (boxesByKey.find(1) == boxesByKey.end()) {
+        throw std::runtime_error("Particle domains have not been decomposed");
+    }
+    return findParticleDomain(x);
+}
+
 static void domainsCheck() {
     std::atomic<int> fail(0);
     auto const myDomain = domainsFindMyBox();

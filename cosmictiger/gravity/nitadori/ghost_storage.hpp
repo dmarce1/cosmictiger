@@ -9,7 +9,7 @@
 
 #include <cosmictiger/gravity/sources.hpp>
 
-// Frozen source record sent once per occupied PMMM cell fragment.
+// Frozen source record sent once per occupied remote PMMM cell.
 struct ParticleGhost {
     Array<Position, kDimensions> x;
     char type = kDarkMatterType;

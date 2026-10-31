@@ -1,5 +1,7 @@
 /* CosmicTiger - Nitadori PMMM mesh exchange; BSL-1.0. */
 
+#include <cosmictiger/particles/domain.hpp>
+
 #include "actions.hpp"
 
 namespace pmmm::detail {
@@ -16,6 +18,18 @@ int signedIndex(int index) {
 std::array<int, 3> coordinates(uint64_t key) {
     uint64_t const n = cache.meshSize;
     return {int(key / (n * n)), int(key / n % n), int(key % n)};
+}
+
+// Particle domains cut only on coarse-mesh planes and every stage mesh is a
+// power of two no coarser than the coarse mesh, so one locality owns all the
+// particles of any cell. The cell center identifies that locality.
+int cellOwner(uint64_t key) {
+    auto const cell = coordinates(key);
+    Array<double, kDimensions> center;
+    for (int axis = 0; axis < kDimensions; ++axis) {
+        center[axis] = (cell[axis] + 0.5) / cache.meshSize;
+    }
+    return domainsFindRank(center);
 }
 
 PmmmNearParticle particle(ParticleInteger index, std::array<int, 3> const& cell, FlopCount& flops) {
@@ -55,61 +69,73 @@ void accumulate(std::vector<CellData> const& cells) {
             state.moments[begin + component] += cell.coefficients[component];
         }
         state.radialTrace += cell.radialTrace;
-        if (cell.sourceRank >= 0) {
-            state.sourceOwners[cell.key].push_back({cell.sourceRank, cell.particleCount});
-        } else {
-            auto& sources = state.sources[cell.key];
-            sources.insert(sources.end(), cell.sources.begin(), cell.sources.end());
-        }
     }
     addCpuFlops(FlopCount(cells.size()) * (cache.sourceCount + 1));
 }
 
-std::vector<CellOwners> readOwners(std::vector<uint64_t> const& keys) {
-    std::vector<CellOwners> result;
-    for (auto key : keys) {
-        auto const found = state.sourceOwners.find(key);
-        if (found != state.sourceOwners.end()) {
-            result.push_back({key, found->second});
-        }
+static ParticleMeshCell const* ownedCell(uint64_t generation, uint64_t key) {
+    if (generation != state.request.generation) {
+        throw std::runtime_error("PMMM cell request belongs to another solve");
     }
-    return result;
+    auto const found = state.ownedCells.find(key);
+    return found == state.ownedCells.end() ? nullptr : &state.cells[found->second];
 }
 
-std::vector<CellData> readCells(std::vector<uint64_t> const& keys, uint64_t expansionKey) {
-    state.farReady.get();
-    std::vector<CellData> result;
-    result.reserve(keys.size());
-    int const n = cache.meshSize;
-    double const normalization = 1.0 / (double(n) * n * n);
-    FlopCount flops = 3;
+// Occupied-cell particle counts; an unoccupied cell reports zero. Every cell
+// requested here lies in this locality's domain, so zero means empty.
+std::vector<ParticleInteger> readCellCounts(
+    uint64_t generation, std::vector<uint64_t> const& keys) {
+    std::vector<ParticleInteger> counts;
+    counts.reserve(keys.size());
     for (auto key : keys) {
-        CellData cell;
-        cell.key = key;
-        size_t const index = cache.cellIndex(key);
-        auto const found = state.sources.find(key);
-        if (found != state.sources.end()) {
-            cell.sources = found->second;
+        auto const* cell = ownedCell(generation, key);
+        counts.push_back(cell == nullptr ? 0 : cell->end - cell->begin);
+    }
+    return counts;
+}
+
+std::vector<CellParticles> readCellParticles(
+    uint64_t generation, std::vector<uint64_t> const& keys) {
+    std::vector<CellParticles> result;
+    result.reserve(keys.size());
+    FlopCount flops = 0;
+    for (auto key : keys) {
+        auto const* cell = ownedCell(generation, key);
+        if (cell == nullptr) {
+            continue;
         }
-        if (key == expansionKey) {
-            cell.coefficients.resize(cache.localCount);
-            size_t const padded = ((index / n) * (2 * (n / 2 + 1)) + index % n) * cache.localCount;
-            for (int component = 0; component < cache.localCount; ++component) {
-                cell.coefficients[component] = normalization * cache.localReal[padded + component];
-            }
-            double const traceFactor = (4 * std::numbers::pi / 3) / (double(n) * n);
-            if (cache.order >= 4) {
-                cell.coefficients[0] -= 0.5 * traceFactor * state.background[4];
-            }
-            cell.coefficients[3] -= 2 * traceFactor * state.background[1];
-            cell.coefficients[1] -= 2 * traceFactor * state.background[2];
-            cell.coefficients[2] -= traceFactor * state.background[3];
-            flops += cache.localCount + 10 + (cache.order >= 4 ? 3 : 0);
+        CellParticles particles;
+        particles.key = key;
+        particles.particles.reserve(cell->end - cell->begin);
+        auto const center = coordinates(key);
+        for (ParticleInteger i = cell->begin; i < cell->end; ++i) {
+            particles.particles.push_back(particle(i, center, flops));
         }
-        result.push_back(std::move(cell));
+        result.push_back(std::move(particles));
     }
     addCpuFlops(flops);
     return result;
+}
+
+std::vector<double> readExpansion(uint64_t key) {
+    state.farReady.get();
+    int const n = cache.meshSize;
+    double const normalization = 1.0 / (double(n) * n * n);
+    size_t const index = cache.cellIndex(key);
+    std::vector<double> coefficients(cache.localCount);
+    size_t const padded = ((index / n) * (2 * (n / 2 + 1)) + index % n) * cache.localCount;
+    for (int component = 0; component < cache.localCount; ++component) {
+        coefficients[component] = normalization * cache.localReal[padded + component];
+    }
+    double const traceFactor = (4 * std::numbers::pi / 3) / (double(n) * n);
+    if (cache.order >= 4) {
+        coefficients[0] -= 0.5 * traceFactor * state.background[4];
+    }
+    coefficients[3] -= 2 * traceFactor * state.background[1];
+    coefficients[1] -= 2 * traceFactor * state.background[2];
+    coefficients[2] -= traceFactor * state.background[3];
+    addCpuFlops(3 + cache.localCount + 10 + (cache.order >= 4 ? 3 : 0));
+    return coefficients;
 }
 
 void deposit() {
@@ -126,13 +152,6 @@ void deposit() {
                 CellData cell;
                 cell.key = range.key;
                 cell.coefficients.assign(cache.sourceCount, 0.0);
-                bool const useFmm = getOptions().gravity.pmmmNearMethod == "fmm";
-                if (useFmm) {
-                    cell.sourceRank = hpxRank();
-                    cell.particleCount = range.end - range.begin;
-                } else {
-                    cell.sources.reserve(range.end - range.begin);
-                }
                 for (ParticleInteger i = range.begin; i < range.end; ++i) {
                     auto const source = particle(i, cellCoordinates, flops);
                     flops += addMoments(
@@ -141,9 +160,6 @@ void deposit() {
                         cell.radialTrace += source.mass * source.offset[axis] * source.offset[axis];
                     }
                     flops += 3 * kDimensions;
-                    if (!useFmm) {
-                        cell.sources.push_back(source);
-                    }
                 }
                 packets[cache.slabOwner[cellCoordinates[0]]].push_back(std::move(cell));
             }
@@ -173,18 +189,19 @@ void deposit() {
 
 std::vector<double> localExpansion(uint64_t key) {
     auto const owner = cache.slabOwner[key / (uint64_t(cache.meshSize) * cache.meshSize)];
-    auto packet = cache.owners[owner] == hpx::find_here() ?
-        readCells(std::vector<uint64_t>{key}, key) :
-        hpx::async<PmmmReadCellsAction>(cache.owners[owner], std::vector<uint64_t>{key}, key).get();
-    if (packet.size() != 1 || packet[0].coefficients.size() != size_t(cache.localCount)) {
+    auto coefficients = cache.owners[owner] == hpx::find_here() ?
+        readExpansion(key) :
+        hpx::async<PmmmReadExpansionAction>(cache.owners[owner], key).get();
+    if (coefficients.size() != size_t(cache.localCount)) {
         throw std::runtime_error("PMMM local expansion is missing");
     }
-    return std::move(packet[0].coefficients);
+    return coefficients;
 }
 
 }    // namespace pmmm::detail
 
 HPX_REGISTER_ACTION(PmmmAccumulateAction, PmmmAccumulateAction);
-HPX_REGISTER_ACTION(PmmmReadCellsAction, PmmmReadCellsAction);
-HPX_REGISTER_ACTION(PmmmReadOwnersAction, PmmmReadOwnersAction);
+HPX_REGISTER_ACTION(PmmmReadExpansionAction, PmmmReadExpansionAction);
+HPX_REGISTER_ACTION(PmmmReadCellCountsAction, PmmmReadCellCountsAction);
+HPX_REGISTER_ACTION(PmmmReadCellParticlesAction, PmmmReadCellParticlesAction);
 HPX_REGISTER_ACTION(PmmmDepositAction, PmmmDepositAction);

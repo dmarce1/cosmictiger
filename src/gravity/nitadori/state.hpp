@@ -73,37 +73,26 @@ struct SolveRequest {
     }
 };
 
-struct CellOwner {
-    int rank;
-    ParticleInteger count;
-
-    template <class Archive>
-    void serialize(Archive& archive, unsigned) {
-        archive & rank & count;
-    }
-};
-
+// Moment packet from a cell's particle owner to its FFT slab owner.
 struct CellData {
     uint64_t key = 0;
     std::vector<double> coefficients;
-    std::vector<PmmmNearParticle> sources;
-    int sourceRank = -1;
-    ParticleInteger particleCount = 0;
     double radialTrace = 0;
 
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
-        archive & key & coefficients & sources & sourceRank & particleCount & radialTrace;
+        archive & key & coefficients & radialTrace;
     }
 };
 
-struct CellOwners {
-    uint64_t key;
-    std::vector<CellOwner> owners;
+// Direct near-field source records of one cell, served by the cell's owner.
+struct CellParticles {
+    uint64_t key = 0;
+    std::vector<PmmmNearParticle> particles;
 
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
-        archive & key & owners;
+        archive & key & particles;
     }
 };
 
@@ -171,7 +160,7 @@ struct SolveState {
     std::vector<char> stageRungs;
     std::unordered_map<uint64_t, size_t> ownedCells;
     std::vector<std::shared_ptr<SourceCell>> sourceCells;
-    std::unordered_map<uint64_t, std::vector<size_t>> sourceCellsByKey;
+    std::unordered_map<uint64_t, size_t> sourceCellsByKey;
     std::vector<std::vector<size_t>> sinkSources;
     std::vector<size_t> unresolvedSources;
     std::deque<size_t> readySinks;
@@ -187,8 +176,6 @@ struct SolveState {
     hpx::condition_variable queueChanged;
     KickReturn kickResult;
     std::vector<double> moments;
-    std::unordered_map<uint64_t, std::vector<PmmmNearParticle>> sources;
-    std::unordered_map<uint64_t, std::vector<CellOwner>> sourceOwners;
     double radialTrace = 0;
     std::array<double, 5> background{};
     Vector<Array<float, kDimensions>> acceleration;
@@ -217,9 +204,13 @@ std::array<uint64_t, 2> particleCounts(bool applyKick);
 void initializeGreen();
 void prepare(SolveRequest const& request);
 void accumulate(std::vector<CellData> const& cells);
-std::vector<CellOwners> readOwners(std::vector<uint64_t> const& keys);
+// The locality owning every particle of a cell, from the particle-domain tree.
+int cellOwner(uint64_t key);
+std::vector<ParticleInteger> readCellCounts(uint64_t generation, std::vector<uint64_t> const& keys);
+std::vector<CellParticles> readCellParticles(
+    uint64_t generation, std::vector<uint64_t> const& keys);
 Vector<ParticleGhost> readGhostParticles(uint64_t generation, uint64_t key);
-std::vector<CellData> readCells(std::vector<uint64_t> const& keys, uint64_t expansionKey);
+std::vector<double> readExpansion(uint64_t key);
 std::vector<uint64_t> neighbors(uint64_t key);
 void planGhosts();
 void recordFailure(std::exception_ptr failure);

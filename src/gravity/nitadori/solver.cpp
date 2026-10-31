@@ -42,9 +42,10 @@ void prepare(SolveRequest const& request) {
         state.cells = particleMeshSort(cache.meshSize, state.activeRange);
         state.stageRungs.resize(state.activeRange.second - state.activeRange.first);
         state.moments.assign(cache.cellCount() * cache.sourceCount, 0.0);
-        state.sources.clear();
-        state.sourceOwners.clear();
         state.ownedCells.clear();
+        for (size_t index = 0; index < state.cells.size(); ++index) {
+            state.ownedCells.emplace(state.cells[index].key, index);
+        }
         state.sourceCells.clear();
         state.sourceCellsByKey.clear();
         state.sinkSources.clear();
@@ -65,8 +66,7 @@ void prepare(SolveRequest const& request) {
                 auto source = std::make_shared<SourceCell>();
                 source->range = state.cells[index];
                 source->owner = hpxRank();
-                state.ownedCells.emplace(source->range.key, index);
-                state.sourceCellsByKey[source->range.key].push_back(index);
+                state.sourceCellsByKey.emplace(source->range.key, index);
                 state.sourceCells.push_back(std::move(source));
             }
         }

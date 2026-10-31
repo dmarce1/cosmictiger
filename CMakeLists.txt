@@ -1865,8 +1865,8 @@ if(BUILD_TESTING)
                 ${PROJECT_BINARY_DIR}/tests/particle_mesh_dispatch_failures_mpi ${pm_launcher_args})
             set_tests_properties(particle_mesh_dispatch_failures_mpi PROPERTIES TIMEOUT 100 PROCESSORS 4
                 RUN_SERIAL TRUE LABELS "particle_mesh;mpi")
-            # This fixture uses arbitrary per-rank ownership and a global reduction.
-            # The FMM near solver requires spatial ownership, covered by streamed tests.
+            # The fixture migrates to spatial ownership, then checks the global
+            # timestep reduction; the FMM near solver is covered by streamed tests.
             if(COSMICTIGER_ENABLE_PMMM_PP AND cosmictiger_mpi_four_ranks)
                 set(pm_timestep_workdir "${PROJECT_BINARY_DIR}/tests/particle_mesh_timestep_mpi")
                 file(MAKE_DIRECTORY "${pm_timestep_workdir}")
