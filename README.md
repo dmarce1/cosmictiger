@@ -411,10 +411,10 @@ exclusive wall time and the rows sum to the instrumented total. Individual
 kernels, per-particle loops, and work on concurrent HPX tasks are deliberately
 not instrumented: the single phase stack belongs to the coordinator.
 
-Every completed step overwrites `profile.txt` in the simulation output
-directory with the cumulative table (phase, calls, total, mean, share). Normal
-driver exit and a clean first Ctrl-C print the same table to the terminal.
-Only rank 0 writes it; worker localities keep no phase profile. The report
+Normal driver exit and a clean first Ctrl-C print the table (phase, calls,
+total, mean, share) to the terminal and save it as `profile.txt` in the
+simulation output directory. Only rank 0 writes it; worker localities keep no
+phase profile. The report
 measures the coordinator's wall time, including remote waits; it does not
 measure per-worker CPU time, GPU execution, or anonymous HPX tasks. Use APEX
 and TAU below for those.

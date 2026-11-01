@@ -284,7 +284,6 @@ void runFixedScenario() {
             fprintf(progress, "%i %e %e %i %i\n", state.iter, state.tau, timestep,
                 displayedMinimumRung, state.maxRung);
             fclose(progress);
-            profile::profileOutput(outputPath("profile.txt"));
             checkpointTimer.stop();
             if (checkpointTimer.read() > baseOptions.checkpoint.intervalSeconds) {
                 checkpoint();

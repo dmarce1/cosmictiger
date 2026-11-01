@@ -1760,7 +1760,6 @@ void driver() {
                 terminal::formatDuration(stepTm.read()).c_str(), flops * 1e-12);
             progressRows++;
             fclose(textfp);
-            profile::profileOutput(outputPath("profile.txt"));
             totalTime.reset();
             remainingTime.stop();
             runtime += remainingTime.read();
