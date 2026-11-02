@@ -81,7 +81,25 @@ def main():
         (args.workdir / f"{name}.log").write_text(result.stdout)
         if (result.returncode == 0) != success:
             raise RuntimeError(f"{name} returned {result.returncode}:\n{result.stdout}")
+        if result.returncode == 0 and "--help" not in options:
+            assertResolvedOptions(result.stdout)
         return result.stdout
+
+    def assertResolvedOptions(output):
+        if "Resolved options\n" not in output:
+            raise RuntimeError("successful startup did not print its resolved options")
+        names = []
+        for line in output.split("Resolved options\n", 1)[1].splitlines():
+            match = re.match(r"^([A-Za-z][A-Za-z0-9_.]*)\s*:", line)
+            if match:
+                names.append(match[1])
+            elif names:
+                break
+        if names != sorted(names) or len(names) != len(set(names)):
+            raise RuntimeError("resolved options were not alphabetical and unique")
+        missing = option_names - set(names)
+        if missing:
+            raise RuntimeError(f"resolved output omitted registered options: {sorted(missing)}")
 
     def assertNumericSetting(output, key, expected):
         match = re.search(r"^" + re.escape(key) + r"\s*:\s*(\S+)", output, re.MULTILINE)
@@ -105,7 +123,10 @@ def main():
     hopkins_available = hopkins_capability[1] == "enabled"
     if hopkins_available and args.without_sph:
         raise RuntimeError("Hopkins capability was enabled without its SPH dependency")
-    option_names = set(re.findall(r"^\s+--([A-Za-z][A-Za-z0-9_.]*)", help_text, re.MULTILINE))
+    help_option_names = re.findall(r"^\s+--([A-Za-z][A-Za-z0-9_.]*)", help_text, re.MULTILINE)
+    option_names = set(help_option_names)
+    if help_option_names != sorted(option_names):
+        raise RuntimeError("help options were not alphabetical and unique")
     required = {"help", "configuration", "run.scenario", "run.endTime", "run.verbose",
                 "initial.particlesPerDimension", "compute.bucketSize",
                 "compute.sphBucketSize", "compute.positionType",
@@ -135,32 +156,17 @@ def main():
                      "hydro.viscosityDecay", "hydro.viscosityAlphaMax",
                      "hydro.viscosityDecayCD", "hydro.viscosityAlphaMaxPrice",
                      "hydro.viscosityDecayPrice"})
-    required.update(key for key in cuda_keys if key != "lightcone.cuda" or args.gravity_method != "none")
+    required.update(cuda_keys)
+    required.update({"cosmology.omegaLambda", "cosmology.startRedshift", "lightcone.enabled"})
     required.update("gravity.cuda." + key for key in cuda_tunings)
     if not required <= option_names:
         raise RuntimeError(f"grouped help is missing {sorted(required - option_names)}")
 
-    sph_only_keys = {"hydro.viscosityAlpha", "hydro.viscosityBeta", "hydro.viscosityEpsilon",
-                     "hydro.balsaraSwitch", "hydro.viscosityEvolution", "hydro.viscosityAlphaMin",
-                     "hydro.viscosityDecay", "hydro.viscosityAlphaMax", "hydro.viscosityDecayCD",
-                     "hydro.viscosityAlphaMaxPrice", "hydro.viscosityDecayPrice"}
     sph_controls_available = not args.without_sph and args.time_integrator != "hierarchical"
     sph_control_options = ["--hydro.enabled=true"] if sph_controls_available else []
 
     def assertStartupOptions(output, hydroMethod):
-        if "Resolved options" not in output:
-            raise RuntimeError("normal startup did not print its full resolved options")
-        printed = set(re.findall(r"^([A-Za-z][A-Za-z0-9_.]*)\s*:", output, re.MULTILINE))
-        selected_sph = hydroMethod == "sph" and re.search(
-            r"^hydro\.enabled\s*:\s*T\s*$", output, re.MULTILINE)
-        expected = option_names - {"help"}
-        if not selected_sph:
-            expected -= sph_only_keys
-            if printed & sph_only_keys:
-                raise RuntimeError("startup printed SPH viscosity controls without active SPH")
-        missing = expected - printed
-        if missing:
-            raise RuntimeError(f"normal startup omitted selected physics options: {sorted(missing)}")
+        assertResolvedOptions(output)
         for key, value in (("run.verbose", "F"), ("hydro.method", hydroMethod)):
             if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + value + r"\s*$",
                              output, re.MULTILINE):
@@ -178,9 +184,27 @@ def main():
             f"--hydro.method={hydroMethod}", "--initial.particlesPerDimension=8",
             "--cosmology.sigma8=0", "--run.maxIterations=0", "--output.silo=false",
             "--analysis.power=false", "--analysis.groups=false", "--analysis.tracers=false",
-            "--lightcone.enabled=false", f"--output.directory={startupDirectory.resolve()}"])
+            "--lightcone.enabled=false", f"--output.directory={startupDirectory.resolve()}",
+            "--units.boxLength=20", "--compute.sphBucketSize=0", "--cosmology.omegaLambda=auto",
+            "--hydro.centralSupportRadius=0.02", "--hydro.minEffectiveRadius=0.001",
+            "--hydro.maxSupportRadius=1000", "--starFormation.seed=18446744073709551615",
+            "--analysis.saveForce=true"])
         assertStartupOptions(output, hydroMethod)
-        print("Nonverbose startup printed common and selected physics options, including hydro.method")
+        assertNumericSetting(output, "compute.sphBucketSize", 106)
+        assertNumericSetting(output, "hydro.maxSupportRadius", 4)
+        assertNumericSetting(output, "units.boxLength", 20)
+        assertNumericSetting(output, "hydro.centralSupportRadius", 0.02)
+        assertNumericSetting(output, "hydro.minEffectiveRadius", 0.001)
+        for key, expected in (("starFormation.seed", "18446744073709551615"),
+                              ("analysis.saveForce", "T"), ("analysis.saveAcceleration", "F"),
+                              ("analysis.savePotential", "F"), ("help", "F")):
+            if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected + r"\s*$",
+                             output, re.MULTILINE):
+                raise RuntimeError(f"startup did not print the resolved {key}")
+        omegaLambda = re.search(r"^cosmology\.omegaLambda\s*:\s*(\S+)", output, re.MULTILINE)
+        if omegaLambda is None or not math.isfinite(float(omegaLambda[1])):
+            raise RuntimeError("startup printed the unresolved automatic cosmological constant")
+        print("Nonverbose startup printed every registered option alphabetically with resolved values")
         return
 
     removed_options = {"compute.cuda", "hydro.chemistry", "hydro.conduction", "hydro.diffusion",
@@ -252,8 +276,6 @@ mapSize = 8
                 "gravity.kernelDegree": 4.0,
                 "compute.bucketSize": 64.0, "compute.sphBucketSize": 73.0}
     for name, value in expected.items():
-        if name in sph_only_keys and not sph_controls_available:
-            continue
         match = re.search(r"^" + re.escape(name) + r"\s*:\s*(\S+)", configured, re.MULTILINE)
         if match is None or abs(float(match.group(1)) - value) > 1.0e-6:
             raise RuntimeError(f"configured {name} did not equal {value}")
@@ -283,10 +305,7 @@ mapSize = 8
     def assertHydroMethod(output, method):
         if not re.search(r"^hydro\.method\s*:\s*" + method + r"\s*$", output, re.MULTILINE):
             raise RuntimeError(f"hydro.method did not resolve to {method}")
-        if method in ("mfm", "mfv"):
-            printed = set(re.findall(r"^([A-Za-z][A-Za-z0-9_.]*)\s*:", output, re.MULTILINE))
-            if printed & sph_only_keys:
-                raise RuntimeError(f"{method} printed inapplicable SPH viscosity controls")
+        assertResolvedOptions(output)
 
     assertHydroMethod(configured, "sph")
     for method in ("sph", "mfm", "mfv"):
@@ -1138,8 +1157,7 @@ mapSize = 8
                        ("hydro.viscosityAlphaMax", 2), ("hydro.viscosityDecayCD", 0.05),
                        ("hydro.viscosityAlphaMaxPrice", 1), ("hydro.viscosityDecayPrice", 0.1),
                        ("compute.bucketSize", 128), ("compute.sphBucketSize", 106)):
-        if key not in sph_only_keys or sph_controls_available:
-            assertNumericSetting(defaults, key, value)
+        assertNumericSetting(defaults, key, value)
 
     # SPH leaf capacity follows its own explicit setting or neighbor-derived
     # automatic value, independently of the gravity bucket and its compile-time cap.
