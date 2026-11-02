@@ -62,6 +62,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/gravity/fmm_acceptance.hpp>
 #include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
@@ -130,6 +131,15 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
     using Expansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
     constexpr int kLocalDegree = FmmOrder<order>::kLocalDegree_;
+    // These intervals belong to this invocation, not to a system-thread stack:
+    // other HPX workers may visit nodes at the same time. Stop before descending
+    // into children or handing off a packet that can synchronously run the GPU.
+#if COSMICTIGER_PROFILE
+    bool const profileWork = hpxRank() == 0;
+#else
+    bool const profileWork = false;
+#endif
+    profile::ScopedWork work(profile::WorkPhase::KickCpuPrepare, profileWork);
     // The buffer travels with the work item; the view aliases its leading coefficients.
     Expansion& expansion = l.template expansion<order>();
     FlopCounter<FlopCount> flops = 0;    // Float force and timestep arithmetic.
@@ -172,6 +182,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
         if (params.gpu && selfPtr->numberOfParticles() <= maximumGpuParticles &&
             selfPtr->isLocal() && detail::kickSourcesAreSingleRank(dchecklist) &&
             detail::kickSourcesAreSingleRank(echecklist)) {
+            work.stop();
             if (selfPtr->numberOfParticles()) {
                 if (!cudaWorkspace->isBatch()) {
                     context.coverParticles(selfPtr->numberOfParticles());
@@ -184,6 +195,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
             addCpuFlops(static_cast<FlopCounts>(policyFlops));
             addCpuFlops(geometryFlops);
             if (selfPtr->localRoot && !params.forceOnly) {
+                profile::ScopedWork wait(profile::WorkPhase::KickResultWait, profileWork);
                 return context.waitReturn();
             } else {
                 return KickReturn();
@@ -257,10 +269,12 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
         }
     }
     if (context.periodic != nullptr) {
+        work.next(profile::WorkPhase::KickCpuPeriodic);
         policyFlops += context.periodic(order, params, l, self, echecklist, counts);
     }
 
     {
+        work.next(profile::WorkPhase::KickCpuTraversal);
         nextlist.resize(0);
         cclist.resize(0);
         pclist.resize(0);
@@ -377,22 +391,29 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     (long long) numberOfSelfParticles * treeGetNode(id)->numberOfParticles();
             }
         }
+        work.next(profile::WorkPhase::KickCpuM2L);
         cpuGravityCc<order>(expansion, cclist, self, params.doPhi, params.geometry);
         // Internal sinks pass these source-leaf contributions to their children via L2L.
+        work.next(profile::WorkPhase::KickCpuP2L);
         cpuGravityCp<order>(expansion, cplist, self, params.doPhi, params.geometry);
         if (selfPtr->leaf) {
             if (selfPtr->numberOfParticles() > 0) {
+                work.next(profile::WorkPhase::KickCpuM2P);
                 cpuGravityPc<order>(forces, params.doPhi, self, pclist, params.geometry);
+                work.next(profile::WorkPhase::KickCpuP2P);
                 cpuGravityPp(forces, params.doPhi, self, leaflist, params.gravitySupportRadius,
                     params.geometry);
             }
         } else {
+            work.next(profile::WorkPhase::KickCpuTraversal);
             ALWAYS_ASSERT(pclist.size() == 0);
             checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
         }
     }
+    work.next(profile::WorkPhase::KickCpuPrepare);
 
     if (selfPtr->leaf) {
+        work.next(profile::WorkPhase::KickCpuLeafKick);
         detail::kickReleaseLists(std::move(workspace));
         auto const rng = selfPtr->particleRange;
         for (ParticleInteger i = rng.first; i < rng.second; i++) {
@@ -604,6 +625,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
         addCpuFlops(doubleFlops, FlopPrecision::Double);
         addCpuFlops(static_cast<FlopCounts>(policyFlops));
         addCpuFlops(geometryFlops);
+        work.stop();
         if (cudaWorkspace != nullptr) {
             cudaWorkspace->recordProcessedParticles(cudaWorkspace, selfPtr->numberOfParticles());
         }
@@ -619,6 +641,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
         TreeNode const* cr = treeGetNode(selfPtr->children[kRightChild]);
         (void) cl;
         (void) cr;
+        work.stop();
         std::array<hpx::future<KickReturn>, kChildCount> futs;
         futs[kRightChild] = context.fork(params, l, selfPtr->pos, selfPtr->children[kRightChild],
             dchecklist, echecklist, cudaWorkspace, threadLeft);
@@ -627,10 +650,14 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 std::move(dchecklist), std::move(echecklist), cudaWorkspace, false);
         } catch (...) {
             // Keep shared tree data alive until the asynchronous sibling exits.
+            profile::ScopedWork wait(profile::WorkPhase::KickChildJoin, profileWork);
             futs[kRightChild].wait();
             throw;
         }
-        hpx::wait_all(futs);
+        {
+            profile::ScopedWork wait(profile::WorkPhase::KickChildJoin, profileWork);
+            hpx::wait_all(futs);
+        }
         // Surface launch/completion failures before waiting for a result that
         // only a successful GPU batch can publish.
         auto const rcl = futs[kLeftChild].get();
@@ -640,6 +667,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
             kr += rcr;
         } else {
             if (selfPtr->localRoot && !params.forceOnly) {
+                profile::ScopedWork wait(profile::WorkPhase::KickResultWait, profileWork);
                 kr = context.waitReturn();
             }
         }

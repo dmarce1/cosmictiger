@@ -115,6 +115,12 @@ KickReturn kickWaitLocalReturn() {
 hpx::future<KickReturn> kickFork(KickParameters params, ExpansionBuffer const& l,
     Vector3<Position> pos, TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
     std::shared_ptr<KickWorkspace> cudaWorkspace, bool threadme) {
+#if COSMICTIGER_PROFILE
+    bool const profileWork = hpxRank() == 0;
+#else
+    bool const profileWork = false;
+#endif
+    profile::ScopedWork scheduling(profile::WorkPhase::KickCpuSchedule, profileWork);
     static std::atomic<int> numberOfThreads(1);
     hpx::future<KickReturn> rc;
     TreeNode const* selfPtr = treeGetNode(self);
@@ -148,6 +154,7 @@ hpx::future<KickReturn> kickFork(KickParameters params, ExpansionBuffer const& l
         if (allLocal) {
             hpxYield();
         }
+        scheduling.stop();
         rc = hpx::make_ready_future(kick(params, l, pos, self, std::move(dchecklist),
             std::move(echecklist), std::move(cudaWorkspace)));
     } else if (remote) {

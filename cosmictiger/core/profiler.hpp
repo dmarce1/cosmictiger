@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <string>
 
 // Manual phase profiler. COSMICTIGER_PROFILE (a CMake option, on by default)
@@ -32,13 +33,47 @@
 // other HPX tasks; the single phase stack is not meant for parallel scopes.
 namespace profile {
 
+// Fixed identifiers keep concurrent work sampling free of allocation and name
+// lookup. These intervals are independent of the coordinator phase stack.
+enum class WorkPhase {
+    KickCpuPrepare,
+    KickCpuPeriodic,
+    KickCpuTraversal,
+    KickCpuM2L,
+    KickCpuP2L,
+    KickCpuM2P,
+    KickCpuP2P,
+    KickCpuLeafKick,
+    KickCpuSchedule,
+    KickGpuQueue,
+    KickChildJoin,
+    KickResultWait,
+    KickGpuGroupSources,
+    KickGpuCollectSources,
+    KickGpuRemap,
+    KickGpuSortFetchWait,
+    KickGpuMemoryAdvice,
+    KickGpuCleanup,
+    KickGpuLaunchQueue,
+    KickGpuPrepareLaunch,
+    KickGpuSubmitWait,
+    KickGpuHostToDevice,
+    KickGpuKernel,
+    KickGpuDeviceToHost,
+    Count
+};
+
 #if COSMICTIGER_PROFILE
 void profileBegin(char const* name);
 void profileEnd();
-// Table of exclusive wall time per phase, sorted by time; empty with no phases.
+// Exclusive coordinator phases plus separate concurrent work detail tables.
+// Empty when no completed work intervals or coordinator phases were recorded.
 std::string profileReport();
 // Writes profileReport() to filename (overwrite). Safe while phases are open.
 void profileOutput(std::string const& filename);
+// Record externally timed intervals, such as CUDA event durations, in seconds.
+// Rank filtering is the caller's responsibility for all work profiling APIs.
+void recordWork(WorkPhase phase, double seconds) noexcept;
 #else
 inline void profileBegin(char const*) noexcept {}
 inline void profileEnd() noexcept {}
@@ -46,7 +81,40 @@ inline std::string profileReport() {
     return {};
 }
 inline void profileOutput(std::string const&) noexcept {}
+inline void recordWork(WorkPhase, double) noexcept {}
 #endif
+
+// Independent host elapsed intervals, safe in concurrent HPX tasks. They may
+// include suspension/waits and overlap other work, so they are not CPU time or
+// additive to the coordinator total. Only completed intervals are reported.
+class ScopedWork {
+public:
+#if COSMICTIGER_PROFILE
+    explicit ScopedWork(WorkPhase phase, bool enabled = true) noexcept;
+    ~ScopedWork();
+    // Finish the current interval and start another without reading the clock
+    // twice. A stopped or disabled scope stays inactive.
+    void next(WorkPhase phase) noexcept;
+    void stop() noexcept;
+#else
+    explicit ScopedWork(WorkPhase, bool = true) noexcept {}
+    ~ScopedWork() = default;
+    void next(WorkPhase) noexcept {}
+    void stop() noexcept {}
+#endif
+
+    ScopedWork(ScopedWork const&) = delete;
+    ScopedWork& operator=(ScopedWork const&) = delete;
+    ScopedWork(ScopedWork&&) = delete;
+    ScopedWork& operator=(ScopedWork&&) = delete;
+
+private:
+#if COSMICTIGER_PROFILE
+    WorkPhase phase_;
+    std::chrono::steady_clock::time_point resumed_;
+    bool enabled_;
+#endif
+};
 
 // Balance a coordinator phase on every exit path, including exceptions. Use
 // enabled only where the caller can identify a serialized coordinator entry;

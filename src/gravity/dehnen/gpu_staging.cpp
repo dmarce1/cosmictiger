@@ -13,7 +13,7 @@
 
 #include <hpx/threading_base/annotated_function.hpp>
 
-#include <cosmictiger/core/timer.hpp>
+#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/gravity/dehnen/execution.hpp>
 #include <cosmictiger/gravity/dehnen/gpu_staging.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
@@ -56,15 +56,17 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
     std::unordered_set<TreeId, KickWorkspaceTreeIdHash> const& treeIds, detail::FmmForceOutput) {
 #ifdef USE_CUDA
     cudaSetDevice();
-    //	PRINT("Preparing gpu send on %i\n", hpx_rank());
-
-    Timer tm;
-    tm.start();
     auto const treeNodesRemoteBegin = treeNodesNextIndex();
     if (workitems.size() == 0) {
         kickSetRc(KickReturn());
         return KickReturn();
     }
+#if COSMICTIGER_PROFILE
+    bool const profileEnabled = hpxRank() == 0;
+#else
+    bool const profileEnabled = false;
+#endif
+    profile::ScopedWork gpuPhase(profile::WorkPhase::KickGpuGroupSources, profileEnabled);
 
     struct GlobalParticleRange {
         int rank;
@@ -79,10 +81,6 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
             return (size_t) hpxSize() * g.range.first + g.rank;
         }
     };
-    Timer tm2;
-    Timer tm3;
-    Timer tm4;
-    tm2.start();
     MutexType mutex;
     Vector<hpx::shared_future<void>> futs1;
     Vector<TreeId> treeIdsVector(treeIds.begin(), treeIds.end());
@@ -116,8 +114,7 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
         }
         throw;
     }
-    tm2.stop();
-    tm3.start();
+    gpuPhase.next(profile::WorkPhase::KickGpuCollectSources);
     struct ParticleRequest {
         Vector<Vector<Pair<ParticleInteger>>> data;
         size_t count;
@@ -206,18 +203,12 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
             }
             futs0.resize(0);
         }
-        tm3.stop();
-        tm4.start();
+        gpuPhase.next(profile::WorkPhase::KickGpuRemap);
         for (int i = 0; i < trees.size(); i++) {
             if (trees[i].proc != hpxRank()) {
                 treeMap[trees[i]] = treeAddRemote(*treeGetNode(trees[i]));
             }
         }
-        tm4.stop();
-
-        //	PRINT("%e / %e %e %e to load tree nodes\n", tm2.read() + tm3.read() + tm4.read(),
-        // tm2.read(), tm3.read(), tm4.read());
-        tm2.reset();
         futs1.resize(0);
         numberOfThreads = std::max(1, (int) hpxHardwareConcurrency());
         futs1.reserve(particleRequests.size());
@@ -374,6 +365,7 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
         }
         hpx::wait_all(futs2.begin(), futs2.end());
         futs2.resize(0);
+        gpuPhase.next(profile::WorkPhase::KickGpuSortFetchWait);
         sortFuture = hpx::sort(annotatedParallelPolicy("gravity.gpuStage.sortWorkitems"),
             workitems.begin(), workitems.end(), [](KickWorkitem const& a, KickWorkitem const& b) {
                 return treeGetNode(a.self)->particleRange.first <
@@ -382,21 +374,21 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
         hpx::wait_all(futs3.begin(), futs3.end());
         hpx::wait_all(futs1.begin(), futs1.end());
         sortFuture.get();
-        tm.stop();
-        //	PRINT("Took %e seconds to prepare gpu send\n", tm.read());
-        tm.reset();
-        tm.start();
+        gpuPhase.next(profile::WorkPhase::KickGpuMemoryAdvice);
         tree2Gpu();
         particlesMemadviseGpu();
+        gpuPhase.stop();
         auto const kr = cudaExecuteKicks(params, &particlesPos(kXDimension, 0),
             &particlesPos(kYDimension, 0), &particlesPos(kZDimension, 0), treeNodes,
             std::move(workitems), {}, sourceMasses.get());
+        profile::ScopedWork cleanupPhase(profile::WorkPhase::KickGpuCleanup, profileEnabled);
         tree2Cpu();
-        tm.stop();
         particlesResize(originalParticleCount);
         kickSetRc(kr);
         return kr;
     } catch (...) {
+        gpuPhase.stop();
+        profile::ScopedWork cleanupPhase(profile::WorkPhase::KickGpuCleanup, profileEnabled);
         // All referents of these tasks are still in scope. Waiting on valid
         // futures joins work without rethrowing the task's stored exception.
         auto const join = [](auto& futures) {
@@ -416,7 +408,6 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
         particlesResize(originalParticleCount);
         throw;
     }
-    //	PRINT("GPU took %e seconds\n", tm.read());
 #else
     THROW_ERROR("GPU gravity requested in a build without CUDA\n");
     return {};

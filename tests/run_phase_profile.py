@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Dominic C. Marcello
 # SPDX-License-Identifier: BSL-1.0
 
-"""Check fine-grained coordinator profiles in small sequential CPU simulations."""
+"""Check coordinator and gravity work profiles in small sequential simulations."""
 
 import argparse
 import math
@@ -23,6 +23,13 @@ from application_selection import application_options, compiled_algorithms
 DURATION = r"\d+:[0-5]\d:[0-5]\d\.\d{2}"
 ROW = re.compile(rf"(\S+)\s+(\d+)\s+({DURATION})\s+({DURATION})\s+(\d+\.\d{{2}})%")
 TOTAL = re.compile(rf"Total\s+({DURATION})")
+WORK_ROW = re.compile(rf"(\S+)\s+(\d+)\s+({DURATION})\s+(\d+\.\d{{3}})")
+WORK_SECTIONS = {
+    "Profile detail: rank-0 local host elapsed intervals (overlap; not CPU time)":
+        "Intervals may overlap and are not additive to the coordinator total.",
+    "Profile detail: rank-0 CUDA device elapsed intervals (overlap possible)":
+        "Device intervals are not additive to host or coordinator totals.",
+}
 
 
 def require(condition, message):
@@ -44,19 +51,19 @@ def read_profile(path, output):
     require(len(lines) >= 4 and lines[0].startswith("Profile:") and
             lines[1].split() == ["Phase", "Calls", "Total", "Mean", "Share"],
             f"invalid profile header: {path}")
-    # Compare the actual printed section, including every row and its spacing.
+    # Compare the entire printed report, including appended work tables and spacing.
     starts = list(re.finditer(r"^Profile:[^\n]*\n", output, re.MULTILINE))
     require(len(starts) == 1, f"expected one terminal profile section: {path}")
-    terminal_end = re.search(rf"^Total\s+{DURATION}\n", output[starts[0].start():], re.MULTILINE)
-    require(terminal_end is not None, f"missing terminal profile total: {path}")
-    printed = output[starts[0].start():starts[0].start() + terminal_end.end()]
+    printed = output[starts[0].start():starts[0].start() + len(report)]
     require(printed == report, f"terminal and saved phase profiles differ: {path}")
 
-    total_match = TOTAL.fullmatch(lines[-1])
-    require(total_match is not None, f"invalid profile total: {path}")
+    totals = [(index, TOTAL.fullmatch(line)) for index, line in enumerate(lines)]
+    totals = [(index, match) for index, match in totals if match is not None]
+    require(len(totals) == 1, f"expected one coordinator profile total: {path}")
+    coordinator_end, total_match = totals[0]
     total = duration_seconds(total_match[1])
     rows = {}
-    for line in lines[2:-1]:
+    for line in lines[2:coordinator_end]:
         match = ROW.fullmatch(line)
         require(match is not None, f"invalid profile row in {path}: {line}")
         name, calls, elapsed, mean, share = match.groups()
@@ -75,7 +82,39 @@ def read_profile(path, output):
     require(abs(math.fsum(row["share"] for row in rows.values()) - 100.0) <=
             0.005 * len(rows) + 1.e-9,
             f"phase shares do not sum to 100 percent: {path}")
-    return rows
+    detail_rows = {}
+    detail_sections = set()
+    index = coordinator_end + 1
+    while index < len(lines):
+        require(lines[index] == "" and len(lines) - index >= 5,
+                f"invalid work-profile section: {path}")
+        title, explanation, header = lines[index + 1:index + 4]
+        require(title in WORK_SECTIONS and title not in detail_sections,
+                f"unknown or duplicate work-profile section: {title}")
+        require(explanation == WORK_SECTIONS[title] and
+                header.split() == ["Work", "Calls", "Total", "Mean(us)"],
+                f"invalid work-profile header: {path}")
+        detail_sections.add(title)
+        index += 4
+        section_start = index
+        while index < len(lines) and lines[index]:
+            line = lines[index]
+            match = WORK_ROW.fullmatch(line)
+            require(match is not None, f"invalid work-profile row in {path}: {line}")
+            name, calls, elapsed, mean = match.groups()
+            calls, elapsed, mean = int(calls), duration_seconds(elapsed), float(mean)
+            require(name not in detail_rows and calls > 0,
+                    f"duplicate work phase or invalid calls: {line}")
+            require(math.isfinite(mean) and mean >= 0.0, f"invalid work-profile mean: {line}")
+            # Total rounds to 0.01 s, while the mean rounds to 0.001 microseconds.
+            require(abs(elapsed - calls * mean * 1.e-6) <=
+                    0.005 + calls * 0.0005e-6 + 1.e-9,
+                    f"work-profile mean disagrees with total/calls: {line}")
+            detail_rows[name] = {"calls": calls, "elapsed": elapsed, "mean": mean}
+            index += 1
+        require(index > section_start, f"empty work-profile section: {path}")
+    # Concurrent host intervals and device intervals are deliberately not summed.
+    return rows, detail_rows
 
 
 def require_phases(rows, names, label):
@@ -135,10 +174,12 @@ def run_case(executable, directory, options, deadline):
     options = dict(options, **{"output.directory": str(directory / "simulation")})
     command = [str(executable), "--hpx:threads=2", "--hpx:bind=none"]
     command += [f"--{key}={value}" for key, value in options.items()]
-    environment = dict(os.environ, CUDA_VISIBLE_DEVICES="", OMP_NUM_THREADS="1",
-                       OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1")
+    environment = dict(os.environ, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1",
+                       MKL_NUM_THREADS="1")
+    if options.get("compute.cuda") != "true":
+        environment["CUDA_VISIBLE_DEVICES"] = ""
     remaining = deadline - time.monotonic()
-    require(remaining > 0.0, "phase-profile regression exceeded its total 115 s budget")
+    require(remaining > 0.0, "phase-profile regression exceeded its total runtime budget")
     log_path = directory / "run.log"
     with log_path.open("w") as log:
         with subprocess.Popen(command, cwd=directory, env=environment, text=True, stdout=log,
@@ -155,9 +196,9 @@ def run_case(executable, directory, options, deadline):
                 raise RuntimeError(f"phase-profile fixture timed out; see {log_path}")
     output = log_path.read_text(errors="replace")
     require(result == 0, f"fixture exited {result}; see {log_path}\n{output[-6000:]}")
-    rows = read_profile(directory / "simulation/profile.txt", output)
+    rows, detail_rows = read_profile(directory / "simulation/profile.txt", output)
     require_phases(rows, ("initialize", "writeCheckpoint", "drift"), directory.name)
-    return rows
+    return rows, detail_rows
 
 
 def main():
@@ -166,9 +207,10 @@ def main():
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--hopkins", action="store_true", help="also check compiled Hopkins MFM/MFV")
     parser.add_argument("--gravity", action="store_true", help="also check available FMM/PMMM modes")
+    parser.add_argument("--cuda", action="store_true", help="also check one FMM CUDA fixture")
     args = parser.parse_args()
     executable, base = args.executable.resolve(), args.workdir.resolve()
-    deadline = time.monotonic() + 115.0
+    deadline = time.monotonic() + (160.0 if args.cuda else 115.0)
     compiled = compiled_algorithms(str(executable))
     integrators = [name for name in ("traditional", "global") if name in compiled["integrator"]]
     require(bool(integrators), "phase-profile regression requires a hydro-capable integrator")
@@ -187,8 +229,9 @@ def main():
     for integrator in integrators:
         selections = application_options(executable, integrator=integrator, hydro=True)
         label = f"sph_{integrator}"
-        rows = run_case(executable, base / label, dict(common, **selections), deadline)
+        rows, detail_rows = run_case(executable, base / label, dict(common, **selections), deadline)
         check_sph(rows, integrator)
+        require(not detail_rows, f"{label}: gravity-disabled run reported gravity work")
         print(f"{label}: child phases, call counts, totals and terminal/file equality passed")
         count += 1
         if args.hopkins:
@@ -197,8 +240,9 @@ def main():
                 options = dict(common, **selections)
                 options.update({"run.scenario": "soundWave", "hydro.method": method,
                                 "initial.particlesPerDimension": 16, "hydro.neighborNumber": 4})
-                rows = run_case(executable, base / label, options, deadline)
+                rows, detail_rows = run_case(executable, base / label, options, deadline)
                 check_hopkins(rows, label)
+                require(not detail_rows, f"{label}: gravity-disabled run reported gravity work")
                 print(f"{label}: Hopkins child phases and report accounting passed")
                 count += 1
     if args.gravity:
@@ -210,10 +254,16 @@ def main():
                 options = dict(common, **selections)
                 options.update({"run.scenario": "plummer", "gravity.enabled": "true",
                                 "hydro.enabled": "false", "initial.particlesPerDimension": 4})
-                rows = run_case(executable, base / label, options, deadline)
+                if far == "fmm":
+                    options.update({"initial.particlesPerDimension": 8, "compute.bucketSize": 32})
+                rows, detail_rows = run_case(executable, base / label, options, deadline)
                 if far == "fmm":
                     require_phases(rows, ("treeCreate.allocate", "treeCreate.build",
                                           "kick.walk", "kick.background"), label)
+                    require_phases(detail_rows, (
+                        "kick.cpu.prepare", "kick.cpu.traversal", "kick.cpu.M2L", "kick.cpu.P2L",
+                        "kick.cpu.M2P", "kick.cpu.P2P", "kick.cpu.leafKick",
+                        "kick.wait.children"), label)
                 else:
                     prefix = "pmmmSolve" if integrators[0] == "global" else "pmmmKick"
                     phases = ["particleCounts", "prepare", "deposit", "transform", "diagnostics"]
@@ -222,7 +272,28 @@ def main():
                     require_phases(rows, (f"{prefix}.{name}" for name in phases), label)
                 print(f"{label}: gravity child phases and report accounting passed")
                 count += 1
-    print(f"Phase profiling passed for {count} sequential CPU fixtures")
+    if args.cuda:
+        label = "fmm_cuda"
+        selections = application_options(executable, far="fmm", integrator=integrators[0])
+        options = dict(common, **selections)
+        options.update({"run.scenario": "plummer", "gravity.enabled": "true",
+                        "hydro.enabled": "false", "initial.particlesPerDimension": 8,
+                        "compute.bucketSize": 32, "compute.cuda": "true"})
+        rows, detail_rows = run_case(executable, base / label, options, deadline)
+        require_phases(rows, ("treeCreate.allocate", "treeCreate.build", "kick.walk"), label)
+        require_phases(detail_rows, (
+            "kick.gpu.hostToDevice", "kick.gpu.kernel", "kick.gpu.deviceToHost",
+            "kick.gpu.launchQueue", "kick.gpu.prepareLaunch", "kick.gpu.submitWait",
+            "kick.gpu.groupSources", "kick.gpu.collectSources", "kick.gpu.remap",
+            "kick.gpu.sortFetchWait", "kick.gpu.memoryAdvice", "kick.gpu.cleanup"), label)
+        device_calls = [detail_rows[name]["calls"] for name in (
+            "kick.gpu.hostToDevice", "kick.gpu.kernel", "kick.gpu.deviceToHost")]
+        require(device_calls[0] > 0 and len(set(device_calls)) == 1,
+                f"{label}: transfer/kernel event call counts differ or are empty")
+        print(f"{label}: host staging, CUDA event phases and report accounting passed")
+        count += 1
+    device_label = "CPU/CUDA" if args.cuda else "CPU"
+    print(f"Phase profiling passed for {count} sequential {device_label} fixtures")
     return 0
 
 

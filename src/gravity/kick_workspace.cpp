@@ -10,7 +10,7 @@
 #include <mutex>
 #include <set>
 
-#include <cosmictiger/core/timer.hpp>
+#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -77,6 +77,13 @@ KickReturn KickWorkspace::toGpu() {
 
 void KickWorkspace::recordProcessedParticles(
     std::shared_ptr<KickWorkspace> ptr, ParticleInteger n) {
+    profile::ScopedWork work(profile::WorkPhase::KickGpuQueue,
+#if COSMICTIGER_PROFILE
+        hpxRank() == 0
+#else
+        false
+#endif
+    );
     bool doWork = false;
     std::unique_lock<MutexType> lock(mutex_);
     numberOfProcessedParticles_ += n;
@@ -85,6 +92,7 @@ void KickWorkspace::recordProcessedParticles(
         doWork = true;
     }
     lock.unlock();
+    work.stop();
     if (doWork) {
         ptr->toGpu();
     }
@@ -93,6 +101,13 @@ void KickWorkspace::recordProcessedParticles(
 void KickWorkspace::addWork(std::shared_ptr<KickWorkspace> ptr, ExpansionBuffer const& l,
     Vector3<Position> pos, TreeId self, Vector<TreeId>&& dchecks, Vector<TreeId>&& echecks,
     FmmGeometry const& geometry, ParticleInteger outputOffset) {
+    profile::ScopedWork work(profile::WorkPhase::KickGpuQueue,
+#if COSMICTIGER_PROFILE
+        hpxRank() == 0
+#else
+        false
+#endif
+    );
     KickWorkitem item;
     item.geometry = geometry;
     item.outputOffset = outputOffset;
@@ -119,6 +134,7 @@ void KickWorkspace::addWork(std::shared_ptr<KickWorkspace> ptr, ExpansionBuffer 
         ALWAYS_ASSERT(numberOfProcessedParticles_ <= totalParticles_);
         doWork = !batch_ && numberOfProcessedParticles_ == totalParticles_;
     }
+    work.stop();
     if (doWork) {
         ptr->toGpu();
     }

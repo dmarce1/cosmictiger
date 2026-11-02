@@ -19,6 +19,7 @@
 #include <stdexcept>
 #include <string>
 
+#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/gravity/kick_cuda_kernel.hpp>
 #if COSMICTIGER_WITH_SPH
@@ -26,6 +27,87 @@
 #endif
 
 namespace detail {
+
+#if COSMICTIGER_PROFILE
+// Four stream boundaries separate launch-packet transfer, the fused gravity
+// kernel, and result transfer. The caller collects only after its existing
+// stream wait, so profiling does not add a synchronization point.
+class KickCudaProfileEvents {
+public:
+    explicit KickCudaProfileEvents(bool enabled) {
+        if (!enabled) {
+            return;
+        }
+        CUDA_CHECK(cudaGetDevice(&device_));
+        try {
+            for (auto& event : events_) {
+                auto const status = cudaEventCreate(&event);
+                if (status != cudaSuccess) {
+                    throw std::runtime_error(std::string("CUDA kick profiling event failed: ") +
+                        cudaGetErrorString(status));
+                }
+            }
+        } catch (...) {
+            release();
+            throw;
+        }
+    }
+
+    ~KickCudaProfileEvents() noexcept {
+        release();
+    }
+
+    KickCudaProfileEvents(KickCudaProfileEvents const&) = delete;
+    KickCudaProfileEvents& operator=(KickCudaProfileEvents const&) = delete;
+
+    void record(int boundary, cudaStream_t stream) {
+        if (device_ >= 0) {
+            CUDA_CHECK(cudaEventRecord(events_[boundary], stream));
+        }
+    }
+
+    void collect() const {
+        if (device_ < 0) {
+            return;
+        }
+        int previousDevice;
+        CUDA_CHECK(cudaGetDevice(&previousDevice));
+        CUDA_CHECK(cudaSetDevice(device_));
+        constexpr profile::WorkPhase kPhases[] = {profile::WorkPhase::KickGpuHostToDevice,
+            profile::WorkPhase::KickGpuKernel, profile::WorkPhase::KickGpuDeviceToHost};
+        for (int boundary = 0; boundary < 3; ++boundary) {
+            float milliseconds;
+            CUDA_CHECK(
+                cudaEventElapsedTime(&milliseconds, events_[boundary], events_[boundary + 1]));
+            profile::recordWork(kPhases[boundary], double(milliseconds) * 1.0e-3);
+        }
+        CUDA_CHECK(cudaSetDevice(previousDevice));
+    }
+
+private:
+    void release() noexcept {
+        if (device_ < 0) {
+            return;
+        }
+        int previousDevice = device_;
+        bool const restoreDevice = cudaGetDevice(&previousDevice) == cudaSuccess;
+        CUDA_WARN(cudaSetDevice(device_));
+        for (auto& event : events_) {
+            if (event != nullptr) {
+                CUDA_WARN(cudaEventDestroy(event));
+                event = nullptr;
+            }
+        }
+        if (restoreDevice) {
+            CUDA_WARN(cudaSetDevice(previousDevice));
+        }
+        device_ = -1;
+    }
+
+    int device_ = -1;
+    cudaEvent_t events_[4]{};
+};
+#endif
 
 inline char* kickAllocateLaunchStorage(size_t bytes) {
     char* pointer = nullptr;
@@ -291,8 +373,12 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     Position* devZ, TreeNode* devTreeNodes, Vector<KickWorkitem> workitems,
     detail::FmmForceOutput output, float const* sourceMasses) {
     using Parameters = CudaKickParameters<order>;
-    Timer tm;
-    tm.start();
+#if COSMICTIGER_PROFILE
+    bool const profileEnabled = hpxRank() == 0;
+#else
+    bool const profileEnabled = false;
+#endif
+    profile::ScopedWork launchPhase(profile::WorkPhase::KickGpuPrepareLaunch, profileEnabled);
     auto const& layout = kickArenaLayoutImpl<order>();
     int numberOfBlocks = layout.residency * cudaSmpCount();
     ALWAYS_ASSERT(workitems.size());
@@ -449,13 +535,35 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
         ikickParams[i] = std::move(params);
     }
     cudaSetDevice();
+#if COSMICTIGER_PROFILE
+    // Keep events alive until the stream guard has drained on exception paths.
+    detail::KickCudaProfileEvents deviceEvents(profileEnabled);
+#endif
     CudaStream stream(cudaGetDevice());
+    launchPhase.next(profile::WorkPhase::KickGpuSubmitWait);
+#if COSMICTIGER_PROFILE
+    auto const streamHandle = profileEnabled ? stream.nativeHandle() : nullptr;
+    deviceEvents.record(0, streamHandle);
+#endif
     stream.copyAsync(devDataPtr, dataPtr, sizeof(char) * allocSize, cudaMemcpyHostToDevice);
+#if COSMICTIGER_PROFILE
+    deviceEvents.record(1, streamHandle);
+#endif
     cudaKickKernel<order>
         <<<numberOfBlocks, kWarpSize, layout.totalBytes, stream.nativeHandle()>>>(devReturnArg,
             kparams, data, devIkickParams, workitems.size(), devCurrentIndex, layout, devListSlab);
     stream.checkLaunch();
+#if COSMICTIGER_PROFILE
+    deviceEvents.record(2, streamHandle);
+#endif
     stream.copyAsync(result, devReturnArg, sizeof(KickReturn), cudaMemcpyDeviceToHost);
+#if COSMICTIGER_PROFILE
+    deviceEvents.record(3, streamHandle);
+#endif
     stream.wait();
+    launchPhase.stop();
+#if COSMICTIGER_PROFILE
+    deviceEvents.collect();
+#endif
     return *result;
 }

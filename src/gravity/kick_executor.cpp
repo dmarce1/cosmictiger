@@ -9,10 +9,17 @@
 #include <mutex>
 
 #include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 
 #ifdef USE_CUDA
 KickReturn kickRunCudaLaunch(std::function<KickReturn()> const& launch) {
+#if COSMICTIGER_PROFILE
+    bool const profileEnabled = hpxRank() == 0;
+#else
+    bool const profileEnabled = false;
+#endif
+    profile::ScopedWork queuePhase(profile::WorkPhase::KickGpuLaunchQueue, profileEnabled);
     // The per-order launch packet and list slab are reused across launches.
     // Tickets preserve submission order without holding a mutex over an HPX
     // event wait, so later ready batches cannot starve an earlier packet.
@@ -29,6 +36,7 @@ KickReturn kickRunCudaLaunch(std::function<KickReturn()> const& launch) {
     KickReturn result;
     try {
         predecessor.wait();
+        queuePhase.stop();
         result = launch();
     } catch (...) {
         // The launch's stream guard has drained before the next ticket runs.

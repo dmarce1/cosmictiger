@@ -449,9 +449,37 @@ Normal driver exit and a clean first Ctrl-C print the table (phase, calls,
 total, mean, share) to the terminal and save it as `profile.txt` in the
 simulation output directory. Only rank 0 writes it; worker localities keep no
 phase profile. The report
-measures the coordinator's wall time, including remote waits; it does not
-measure per-worker CPU time, GPU execution, or anonymous HPX tasks. Use APEX
-and TAU below for those.
+measures the coordinator's wall time, including remote waits.
+
+Gravity also appends a detailed breakdown to the terminal and the same
+`profile.txt`. The host table separates CPU setup (including L2L), periodic
+work, tree acceptance and interaction-list processing (`kick.cpu.traversal`),
+M2L, P2L, M2P, P2P, task scheduling, and leaf expansion evaluation/velocity/rung updates
+(`kick.cpu.leafKick`). It also measures GPU work-packet queueing, source
+grouping/collection, remapping, sorting/fetch completion, memory advice,
+launch preparation, submission/completion, cleanup, and child/result waits.
+Calls count timed sections, including interaction routines given empty lists.
+Mean durations in these detail tables are in microseconds so short operations
+remain visible.
+
+These are accumulated elapsed intervals from rank 0's local tasks, including
+any suspension or waiting, not CPU execution time or an all-rank reduction.
+Timers stop before recursive descent and GPU execution handoff. Concurrent
+tasks and nested waits can overlap; detail rows have no percentage share or
+grand total and must not be added to the coordinator total. The independent
+`profile::ScopedWork` counters do not use the coordinator's phase stack or a
+system-thread-local stack. They also cover force-only uses of the shared FMM
+walk, such as gravity error checks and PMMM near interactions when enabled.
+
+For CUDA, a separate device table uses stream events to measure the explicit
+launch-packet host-to-device copy, fused gravity kernel, and result
+device-to-host copy. Events are read after the existing stream completion
+wait; profiling adds no extra synchronization. Kernel time includes managed
+memory stalls, and the copy rows do not account for all managed-memory
+migration. Internal CUDA traversal and interaction operators are still fused
+and are not individually timed. `COSMICTIGER_PROFILE=OFF` removes both the
+host detail timers and CUDA timing events. Use APEX and TAU below for broader
+HPX task attribution.
 
 The first Ctrl-C requests a clean stop at the next safe phase or completed
 substep. Active work finishes, the simulation's ordinary final checkpoint is
