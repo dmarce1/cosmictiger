@@ -139,15 +139,9 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
             types.resize(numberOfSources);
             int count = 0;
             for (int i = 0; i < maxi; i++) {
-                gravityReadSourcePositions(
-                    *treePtrs[i], srcx.data(), srcy.data(), srcz.data(), types.data(), count);
+                gravityReadSourcePositions(*treePtrs[i], srcx.data(), srcy.data(), srcz.data(),
+                    types.data(), masses.data(), count);
                 count += treePtrs[i]->numberOfParticles();
-            }
-            for (int i = 0; i < count; i++) {
-                masses[i] = getOptions().hydro.enabled ?
-                    (types[i] == kDarkMatterType ? getOptions().initial.darkMatterMass :
-                                                   getOptions().initial.gasMass) :
-                    1.0f;
             }
             for (int i = count; i < numberOfSources; i++) {
                 // A zero mass does not make an overflowing Green derivative
@@ -180,8 +174,8 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
                 }
                 cosmictiger::gravity::cartesian::Expansion<SimdFloat, order> d;
                 d = simdBroadcast<SimdFloat>(0);
-                greenFlops = cosmictiger::gravity::cartesian::P2L(d,
-                    simdBroadcast<SimdFloat>(1), fmmScaleDisplacement(dx));
+                greenFlops = cosmictiger::gravity::cartesian::P2L(
+                    d, simdBroadcast<SimdFloat>(1), fmmScaleDisplacement(dx));
                 for (int l = 0; l < kLocalCoefficients; l++) {
                     l0[l] += mass * d[l];
                 }

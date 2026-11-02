@@ -196,6 +196,7 @@ struct Units {
 
 struct Hydro {
     bool enabled{};
+    std::string method{"sph"};
     std::string kernelFamily{"spline"};
     int kernelDegree{3};
     double viscosityAlpha{};
@@ -402,6 +403,7 @@ struct Options {
         arc & chemistry.minimumSpecificEnergy;
         arc & run.verbose;
         arc & hydro.zPlaneAcceleration;
+        arc & hydro.method;
         arc & gravity.method;
         arc & gravity.meshSize;
         arc & gravity.pmmmNearWidth;

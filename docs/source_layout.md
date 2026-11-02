@@ -126,8 +126,14 @@ The runtime selector remains
 `hydro.viscosityEvolution=none|morrisAndMonaghan|cullenAndDehnen`. Model-specific
 state allocation, migration, checkpoint identity, and output are handled at the
 existing storage and integration boundaries. Cullen–Dehnen's additional
-particle exchange is owned by its module. The author-directory reorganization
-does not introduce Hopkins/MFV hydrodynamics.
+particle exchange is owned by its module.
+
+The separate `hydro/hopkins.hpp` and `hydro/hopkins_state.hpp` headers implement
+Hopkins MFM/MFV geometry, reconstruction, Riemann fluxes, and double state.
+`src/hydro/hopkins_driver.cpp` integrates them with traditional and global stepping;
+`hydro.method=sph|mfm|mfv` selects the runtime method. Particle storage, drift,
+migration, gravity masses, checkpoints, and output share the existing lifecycle
+boundaries. See [Hopkins hydrodynamics](hopkins_hydro.md).
 
 Exact Sod, Sedov, and hydrostatic sphere reference/initial-condition helpers live
 in `scenarios/`, alongside the scenarios that use them.

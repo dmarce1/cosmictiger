@@ -81,7 +81,7 @@ def main():
     required = {"help", "configuration", "run.scenario", "run.endTime", "run.verbose",
                 "initial.particlesPerDimension", "compute.cuda", "compute.bucketSize",
                 "compute.sphBucketSize", "compute.positionType",
-                "hydro.enabled", "hydro.viscosityAlpha", "hydro.viscosityBeta",
+                "hydro.enabled", "hydro.method", "hydro.viscosityAlpha", "hydro.viscosityBeta",
                 "hydro.viscosityEpsilon", "hydro.balsaraSwitch",
                 "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
@@ -186,6 +186,84 @@ mapSize = 8
 
     metadata_options = ["--run.test=checkpointState", "--compute.cuda=false",
                         "--hydro.enabled=false", "--initial.particlesPerDimension=8"]
+
+    def assertHydroMethod(output, method):
+        if not re.search(r"^hydro\.method\s*:\s*" + method + r"\s*$", output, re.MULTILINE):
+            raise RuntimeError(f"hydro.method did not resolve to {method}")
+
+    assertHydroMethod(configured, "sph")
+    for method in ("sph", "mfm", "mfv"):
+        output = run("hydro_method_" + method, metadata_options + [f"--hydro.method={method}"])
+        assertHydroMethod(output, method)
+    method_config = args.workdir / "hydro_method.ini"
+    method_config.write_text("[hydro]\nmethod = mfm\n")
+    output = run("hydro_method_ini", metadata_options + [f"--configuration={method_config.resolve()}"])
+    assertHydroMethod(output, "mfm")
+    output = run("hydro_method_cli_override", metadata_options + [
+        f"--configuration={method_config.resolve()}", "--hydro.method=mfv"])
+    assertHydroMethod(output, "mfv")
+    invalid_method_config = args.workdir / "hydro_method_invalid.ini"
+    invalid_method_config.write_text("[hydro]\nmethod = unknown\n")
+    for label, options in (("cli", ["--hydro.method=unknown"]),
+                           ("ini", [f"--configuration={invalid_method_config.resolve()}"])):
+        rejected = run("hydro_method_invalid_" + label, metadata_options + options, success=False)
+        if "hydro.method must be sph, mfm, or mfv" not in rejected:
+            raise RuntimeError("invalid hydro.method lacked the allowed-method diagnostic")
+
+    position_type = re.search(r"^compute\.positionType\s*:\s*(fixed32|fixed64)\s*$",
+                              configured, re.MULTILINE)[1]
+    fixed64_available = position_type == "fixed64"
+    compiled_integrators = re.search(r"^\s*Time integrators:([^\n]*)", help_text, re.MULTILINE)[1].split()
+    compiled_gravity = re.search(r"^\s*Gravity solvers:([^\n]*)", help_text, re.MULTILINE)[1].split()
+    compiled_near = re.search(r"^\s*PMMM near solvers:([^\n]*)", help_text, re.MULTILINE)[1].split()
+    meshless_options = [option for option in metadata_options
+                        if not option.startswith("--hydro.enabled=")] + [
+                            "--hydro.enabled=true", "--gravity.enabled=false",
+                            "--chemistry.enabled=false", "--starFormation.enabled=false"]
+    for method in ("mfm", "mfv"):
+        method_options = meshless_options + [f"--hydro.method={method}"]
+        if args.without_sph:
+            rejected = run("hydro_method_disabled_" + method, method_options, success=False)
+            if "COSMICTIGER_ENABLE_SPH=ON" not in rejected:
+                raise RuntimeError("meshless hydrodynamics lacked SPH build guidance")
+            continue
+        if not fixed64_available:
+            for integrator in ("traditional", "global"):
+                if integrator not in compiled_integrators:
+                    continue
+                rejected = run(f"hydro_method_fixed64_required_{method}_{integrator}",
+                               method_options + [f"--run.timeIntegrator={integrator}"], success=False)
+                if "Hopkins MFM/MFV requires a build with COSMICTIGER_POSITION_TYPE=fixed64" not in rejected:
+                    raise RuntimeError("meshless hydrodynamics lacked the Fixed64 build restriction")
+            continue
+        if "hierarchical" in compiled_integrators:
+            rejected = run("hydro_method_hierarchical_" + method, method_options + [
+                "--run.timeIntegrator=hierarchical"], success=False)
+            if "run.timeIntegrator is unavailable for the selected physics" not in rejected:
+                raise RuntimeError("meshless hydrodynamics accepted the hierarchical integrator")
+        for integrator in ("traditional", "global"):
+            if integrator not in compiled_integrators:
+                continue
+            integration_options = method_options + [f"--run.timeIntegrator={integrator}"]
+            output = run(f"hydro_method_enabled_{method}_{integrator}", integration_options)
+            assertHydroMethod(output, method)
+            for key in ("chemistry.enabled", "starFormation.enabled"):
+                options = [option for option in integration_options if not option.startswith(f"--{key}=")]
+                rejected = run(f"hydro_method_{method}_{integrator}_{key}",
+                               options + [f"--{key}=true"], success=False)
+                diagnostic = ("COSMICTIGER_ENABLE_CHEMISTRY=ON"
+                              if key == "chemistry.enabled" and not chemistryAvailable else
+                              "Hopkins MFM/MFV requires chemistry.enabled=false and starFormation.enabled=false")
+                if diagnostic not in rejected:
+                    raise RuntimeError(f"meshless hydrodynamics lacked the {key} restriction")
+            if "pmmm" in compiled_gravity:
+                options = [option for option in integration_options
+                           if not option.startswith("--gravity.enabled=")]
+                for near_method in compiled_near:
+                    output = run(f"hydro_method_pmmm_{near_method}_{method}_{integrator}", options + [
+                        "--gravity.enabled=true", "--gravity.method.far=pmmm",
+                        f"--gravity.method.near={near_method}", "--gravity.meshSize=8"])
+                    assertHydroMethod(output, method)
 
     for key, value in (("gravity.method.far", "unknown"),
                        ("run.timeIntegrator", "unknown"),
@@ -1157,7 +1235,8 @@ mapSize = 8
                 (ini["output"]["units"] != "code" or ini["output"]["frame"] != "comoving")):
             raise RuntimeError(f"{relative_path} must preserve native output defaults")
         metadata_directory = args.workdir.resolve() / "output" / "options_presets" / case_name
-        runtime_overrides = [f"--output.directory={metadata_directory}",
+        runtime_overrides = [f"--compute.positionType={position_type}",
+                             f"--output.directory={metadata_directory}",
                              f"--lightcone.directory={metadata_directory / 'lightcone'}"]
         if args.gravity_method == "pmmm":
             # The metadata fixture selects the compiled solver independently of
@@ -1174,9 +1253,26 @@ mapSize = 8
             # Keep validating every example's option coverage and syntax when its
             # physical scenario is unavailable in the compiled executable.
             preset_options.append("--run.scenario=cosmology")
-        output = run(f"complete_{case_name}", metadata_options + preset_options)
+        preset_metadata = metadata_options
+        if ini["run"]["scenario"] == "soundWave":
+            preset_metadata = [option for option in metadata_options
+                               if not option.startswith("--initial.particlesPerDimension=")] + [
+                                   "--initial.particlesPerDimension=16"]
+        output = run(f"complete_{case_name}", preset_metadata + preset_options)
         if "Checkpoint state and mode validation passed" not in output:
             raise RuntimeError(f"{relative_path} did not finish metadata validation")
+        if ini["hydro"]["method"] != "sph" and not args.without_sph:
+            integrator = next(mode for mode in ("traditional", "global") if mode in compiled_integrators)
+            enabled_metadata = [option for option in preset_metadata
+                                if not option.startswith("--hydro.enabled=")]
+            enabled_preset = [option for option in preset_options
+                              if not option.startswith("--gravity.enabled=")]
+            enabled = run(f"enabled_meshless_{case_name}", enabled_metadata + enabled_preset + [
+                "--hydro.enabled=true", f"--run.timeIntegrator={integrator}"], success=fixed64_available)
+            if fixed64_available:
+                assertHydroMethod(enabled, ini["hydro"]["method"])
+            elif "Hopkins MFM/MFV requires a build with COSMICTIGER_POSITION_TYPE=fixed64" not in enabled:
+                raise RuntimeError(f"{relative_path} lacked the Fixed64 build restriction")
         if (ini["run"]["scenario"] == "cosmology" and chemistryAvailable and
                 starFormationAvailable and args.time_integrator != "hierarchical"):
             enabled_options = [option for option in metadata_options

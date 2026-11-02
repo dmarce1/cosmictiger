@@ -14,10 +14,11 @@ struct ParticleGhost {
     Array<Position, kDimensions> x;
     char type = kDarkMatterType;
     char rung = 0;
+    float mass = 1.0f;
 
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
-        archive & x & type & rung;
+        archive & x & type & rung & mass;
     }
 };
 

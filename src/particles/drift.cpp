@@ -16,6 +16,9 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/drift_cpu.hpp>
+#if COSMICTIGER_WITH_SPH
+#include <cosmictiger/sph/sph_particles.hpp>
+#endif
 
 HPX_PLAIN_ACTION(drift, DriftAction);
 
@@ -40,6 +43,14 @@ void cpuDrift(int rung, double a, double dt, double tau0, double tau1, double ta
     parameters.lightcone = getOptions().lightcone.enabled && tauMax > 0.0f && tauMax - tau1 < 1.0f;
 #endif
     parameters.mapSize = getOptions().lightcone.mapSize;
+    HopkinsParticleState* meshStates = nullptr;
+    ParticleInteger const* gasIndices = nullptr;
+#if COSMICTIGER_WITH_SPH
+    if (getOptions().hydro.enabled && getOptions().hydro.method != "sph") {
+        meshStates = sphParticlesHopkinsStates;
+        gasIndices = particlesSph;
+    }
+#endif
     constexpr size_t kMinimumChunkSize = 4096;
     size_t const workers = std::min(
         size_t(std::max(1, hpxHardwareConcurrency())), (count - 1) / kMinimumChunkSize + 1);
@@ -51,7 +62,8 @@ void cpuDrift(int rung, double a, double dt, double tau0, double tau1, double ta
         char const* const types = getOptions().hydro.enabled ? particlesTy + begin : nullptr;
         cpuDriftKernel(&particlesPos(kXDimension, begin), &particlesPos(kYDimension, begin),
             &particlesPos(kZDimension, begin), particlesVelData() + begin, &particlesRung(begin),
-            types, end - begin, parameters, parameters.lightcone ? &entries[worker] : nullptr);
+            types, end - begin, parameters, parameters.lightcone ? &entries[worker] : nullptr,
+            meshStates, gasIndices != nullptr ? gasIndices + begin : nullptr);
     };
     if (workers == 1) {
         run(0);

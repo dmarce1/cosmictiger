@@ -318,8 +318,14 @@ void analysisCheckSpeciesLightcone(int epoch) {
         direction.z = 0.0;
         entry.pix = pixels.vec2pix(direction);
         entry.type = darkMatter ? kDarkMatterType : kSphType;
-        double const mass =
-            darkMatter ? getOptions().initial.darkMatterMass : getOptions().initial.gasMass;
+        if (i == kDarkMatterCount) {
+            // A variable-mass gas crossing carries its mass at emission, while
+            // the other gas entry exercises the fixed-species fallback.
+            entry.mass = 1.5f * getOptions().initial.gasMass;
+        }
+        double const mass = entry.mass >= 0.0f ?
+            entry.mass :
+            (darkMatter ? getOptions().initial.darkMatterMass : getOptions().initial.gasMass);
         expectedWeight += mass / (radius * radius);
         entries[0].push_back(entry);
     }

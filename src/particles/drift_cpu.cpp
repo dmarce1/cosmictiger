@@ -17,13 +17,19 @@ namespace detail {
 void appendDriftLightconeEntries(Array<double, kDimensions> const& before,
     Array<double, kDimensions> const& after, Array<float, kDimensions> const& velocity,
     Array<float, kDimensions> const& outputVelocity, char type, DriftParameters const& parameters,
-    std::vector<LightconeEntry>& entries) {
+    std::vector<LightconeEntry>& entries, HopkinsParticleState const* meshState) {
     double const inverseScale = 1.0 / parameters.scale;
     double const inverseTauMax = 1.0 / parameters.tauMax;
     // CUDA uses float physical velocities for the crossing interpolation.
-    float const vx = velocity[kXDimension] * inverseScale;
-    float const vy = velocity[kYDimension] * inverseScale;
-    float const vz = velocity[kZDimension] * inverseScale;
+    float const vx =
+        (meshState != nullptr ? meshState->meshVelocity[kXDimension] : velocity[kXDimension]) *
+        inverseScale;
+    float const vy =
+        (meshState != nullptr ? meshState->meshVelocity[kYDimension] : velocity[kYDimension]) *
+        inverseScale;
+    float const vz =
+        (meshState != nullptr ? meshState->meshVelocity[kZDimension] : velocity[kZDimension]) *
+        inverseScale;
     for (int imageX = -1; imageX <= 0; ++imageX) {
         double const x0 = before[kXDimension] + imageX;
         double const x1 = after[kXDimension] + imageX;
@@ -64,6 +70,9 @@ void appendDriftLightconeEntries(Array<double, kDimensions> const& before,
                     entry.vz = outputVelocity[kZDimension];
                     entry.pix = pixel;
                     entry.type = type;
+                    if (meshState != nullptr) {
+                        entry.mass = float(meshState->mass);
+                    }
                     entries.push_back(entry);
                 }
             }
@@ -75,7 +84,8 @@ void appendDriftLightconeEntries(Array<double, kDimensions> const& before,
 
 void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensions>* velocities,
     char const* rungs, char const* types, size_t count, DriftParameters const& parameters,
-    std::vector<LightconeEntry>* entries) {
+    std::vector<LightconeEntry>* entries, HopkinsParticleState* meshStates,
+    ParticleInteger const* gasIndices) {
     if (count == 0) {
         return;
     }
@@ -86,6 +96,19 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensi
     }
     double const driftFactor = parameters.timestep / parameters.scale;
     double const damping = 1.0 / (1.0 + parameters.drag * parameters.timestep);
+    auto const meshState = [&](size_t particle) -> HopkinsParticleState* {
+        if (meshStates != nullptr && types != nullptr && types[particle] == kSphType) {
+            ALWAYS_ASSERT(gasIndices != nullptr && gasIndices[particle] >= 0);
+            auto* state = meshStates + gasIndices[particle];
+            return state->initialized ? state : nullptr;
+        }
+        return nullptr;
+    };
+    auto const meshDriftVelocity = [&](size_t particle, int dimension) {
+        auto const* state = meshState(particle);
+        return state != nullptr ? state->meshVelocity[dimension] :
+                                  double(velocities[particle][dimension]);
+    };
     Position* positions[kDimensions] = {x, y, z};
     size_t index = 0;
     if (!lightcone) {
@@ -96,12 +119,13 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensi
                 DriftPack const velocity([&](auto lane) {
                     size_t const particle = index + lane;
                     return parameters.rung < 0 || rungs[particle] == parameters.rung ?
-                        double(velocities[particle][dim]) :
+                        meshDriftVelocity(particle, dim) :
                         0.0;
                 });
                 for (size_t lane = 0; lane < kWidth; ++lane) {
                     size_t const particle = index + lane;
                     if (parameters.rung < 0 || rungs[particle] == parameters.rung) {
+                        auto* state = meshState(particle);
                         if constexpr (kPositionBits == 64) {
                             // Add in fixed point so conversion of the absolute
                             // position to double cannot discard its low bits.
@@ -110,7 +134,7 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensi
                             positions[dim][particle].raw() += static_cast<PositionInteger>(
                                 std::llrint(std::remainder(velocity[lane] * driftFactor, 1.0) * 0x1p32));
                         }
-                        if (parameters.drag != 0.0) {
+                        if (parameters.drag != 0.0 && state == nullptr) {
                             velocities[particle][dim] = velocity[lane] * damping;
                         }
                     }
@@ -126,18 +150,19 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensi
         Array<double, kDimensions> after;
         Array<double, kDimensions> displacement;
         auto const driftVelocity = velocities[index];
+        auto* state = meshState(index);
         for (int dim = 0; dim < kDimensions; ++dim) {
             before[dim] = positions[dim][index].toDouble();
-            after[dim] = std::fma(double(velocities[index][dim]), driftFactor, before[dim]);
-            displacement[dim] = double(velocities[index][dim]) * driftFactor;
-            if (parameters.drag != 0.0) {
+            after[dim] = std::fma(meshDriftVelocity(index, dim), driftFactor, before[dim]);
+            displacement[dim] = meshDriftVelocity(index, dim) * driftFactor;
+            if (parameters.drag != 0.0 && state == nullptr) {
                 velocities[index][dim] *= damping;
             }
         }
         if (lightcone) {
             char const type = types != nullptr ? types[index] : char(kDarkMatterType);
             detail::appendDriftLightconeEntries(
-                before, after, driftVelocity, velocities[index], type, parameters, *entries);
+                before, after, driftVelocity, velocities[index], type, parameters, *entries, state);
         }
         for (int dim = 0; dim < kDimensions; ++dim) {
             if constexpr (kPositionBits == 64) {

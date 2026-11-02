@@ -43,6 +43,7 @@ struct CudaKickData {
     bool sph;
     float darkMatterMass;
     float sphMass;
+    float const* sourceMasses;
     char* rungs;
     float* gx;
     float* gy;
@@ -204,7 +205,8 @@ struct FmmForceOutput {
 KickReturn kickRunCudaLaunch(std::function<KickReturn()> const& launch);
 // Dispatches to the per-order CUDA kick instantiation for fmmOrder().
 KickReturn cudaExecuteKicks(KickParameters params, Position*, Position*, Position*, TreeNode*,
-    Vector<KickWorkitem> workitems, detail::FmmForceOutput output = {});
+    Vector<KickWorkitem> workitems, detail::FmmForceOutput output = {},
+    float const* sourceMasses = nullptr);
 // Shared-memory policy of the runtime order's kick kernel (selected once per order).
 CudaKickArenaLayout const& kickArenaLayout();
 #endif

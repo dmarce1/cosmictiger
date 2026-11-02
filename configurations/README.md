@@ -2,7 +2,7 @@
 
 Select a physical simulation with `run.scenario`. Each scenario has its own
 initializer under `src/scenarios/` and header under `cosmictiger/scenarios/`.
-The evolution driver calls gravity, SPH, and cooling according to the enabled
+The evolution driver calls gravity, hydrodynamics, and cooling according to the enabled
 physics. `run.test` is reserved for developer regressions and benchmarks.
 
 Each INI below contains every application option except the top-level `help`
@@ -36,8 +36,10 @@ PMMM requires an explicit valid `gravity.meshSize`: a power of two at least
 stage mesh and the granularity of PMMM particle-domain cuts; PMMM runs need a
 power-of-two locality count.
 
-Traditional and global integration support SPH. Hierarchical integration requires
-gravity without SPH. Global integration advances all particles using the smallest
+Traditional and global integration support SPH and Hopkins MFM/MFV.
+Select `hydro.method=sph|mfm|mfv`; the meshless methods require Fixed64 positions,
+with cooling and star formation disabled. Hierarchical integration requires gravity
+without hydro. Global integration advances all particles using the smallest
 raw allowable timestep across all particles and localities, without power-of-two
 rounding; final-time and scenario-stage boundaries can shorten that interval.
 To run a collisionless cosmology, set
@@ -53,6 +55,8 @@ To run a collisionless cosmology, set
 | [disc.ini](disc.ini) | `disc` | Gravity and SPH | `./output/disc/` |
 | [polytropic_star.ini](polytropic_star.ini) | `polytropicStar` | Gravity and SPH | `./output/polytropicStar/` |
 | [hydro_wave.ini](hydro_wave.ini) | `hydroWave` | SPH | `./output/hydroWave/` |
+| [sound_wave.ini](sound_wave.ini) | `soundWave` | Hopkins MFM, one-dimensional linear wave | `./output/soundWave/` |
+| [gresho.ini](gresho.ini) | `gresho` | Hopkins MFM, Gresho vortex | `./output/gresho/` |
 | [cosmology.ini](cosmology.ini) | `cosmology` | Gravity, SPH, and GADGET-4 equilibrium cooling | `./output/cosmology/` |
 | [glass.ini](glass.ini) | `glass` | Repulsive gravity with damping | `./output/glass/` |
 | [lcdm_present.ini](lcdm_present.ini) | `cosmology` | Gravity, SPH, equilibrium cooling, and star formation; 99 coarse intervals | `./output/lcdm_present/` |

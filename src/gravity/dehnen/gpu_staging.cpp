@@ -7,6 +7,7 @@
  */
 
 #include <algorithm>
+#include <memory>
 #include <mutex>
 #include <set>
 
@@ -139,6 +140,7 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
     TreeNode* treeNodes = treeData();
     std::function<void(int, ParticleInteger)> adjustParticleReferences;
     hpx::future<void> sortFuture;
+    std::unique_ptr<float, void (*)(void*)> sourceMasses(nullptr, freeManagedMemory);
     futs0.reserve(numberOfThreads);
     futs2.reserve(std::max(numberOfThreads, int(hpxHardwareConcurrency())));
     try {
@@ -218,6 +220,13 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
         futs1.resize(0);
         numberOfThreads = std::max(1, (int) hpxHardwareConcurrency());
         futs1.reserve(particleRequests.size());
+        if (getOptions().hydro.enabled && getOptions().hydro.method == "mfv") {
+            sourceMasses.reset(
+                static_cast<float*>(allocateManagedMemory(sizeof(float) * particlesSize())));
+            for (ParticleInteger i = 0; i < originalParticleCount; ++i) {
+                sourceMasses.get()[i] = particlesMass(i);
+            }
+        }
         for (auto i = particleRequests.begin(); i != particleRequests.end(); i++) {
             int const rank = i->first;
             // Retain the predecessor if continuation attachment throws. A plain
@@ -227,49 +236,53 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
                 for (int j = 0; j < i->second.data.size(); j++) {
                     size_t const count = i->second.data[j].size();
                     if (count) {
-                        fut = fut.then(hpx::annotated_function(
-                                           [rank, count, &particleMap, i, j](
-                                               hpx::shared_future<void> fut) {
-                                               fut.get();
-                                               auto const& ranges = i->second.data[j];
-                                               auto const data = particlesGet(rank, ranges).get();
-                                               ParticleInteger index = 0;
-                                               for (int k = 0; k < ranges.size(); k++) {
-                                                   index += ranges[k].second - ranges[k].first;
-                                               }
-                                               size_t sz = index;
-                                               index = 0;
-                                               for (int k = 0; k < ranges.size(); k++) {
-                                                   GlobalParticleRange gpr;
-                                                   gpr.rank = rank;
-                                                   gpr.range = ranges[k];
-                                                   auto localRange = particleMap[gpr];
-                                                   auto const numberOfParticles =
-                                                       localRange.second - localRange.first;
-                                                   for (int dim = 0; dim < kDimensions; dim++) {
-                                                       memcpy(&particlesPos(dim, localRange.first),
-                                                           &data[sz * dim + index],
-                                                           numberOfParticles * sizeof(Position));
-                                                   }
-                                                   if (getOptions().hydro.enabled) {
-                                                       Vector<Position> x(numberOfParticles),
-                                                           y(numberOfParticles),
-                                                           z(numberOfParticles);
-                                                       Vector<char> types(numberOfParticles);
-                                                       ParticleGlobalRange source;
-                                                       source.proc = rank;
-                                                       source.range = ranges[k];
-                                                       particlesGlobalReadPos(source, x.data(),
-                                                           y.data(), z.data(), types.data(), 0);
-                                                       std::memcpy(&particlesType(localRange.first),
-                                                           types.data(),
-                                                           numberOfParticles * sizeof(char));
-                                                   }
-                                                   index += numberOfParticles;
-                                               }
-                                           },
-                                           "gravity.gpuStage.fetchParticles"))
-                                  .share();
+                        fut =
+                            fut.then(hpx::annotated_function(
+                                         [rank, count, &particleMap, &sourceMasses, i, j](
+                                             hpx::shared_future<void> fut) {
+                                             fut.get();
+                                             auto const& ranges = i->second.data[j];
+                                             auto const data = particlesGet(rank, ranges).get();
+                                             ParticleInteger index = 0;
+                                             for (int k = 0; k < ranges.size(); k++) {
+                                                 index += ranges[k].second - ranges[k].first;
+                                             }
+                                             size_t sz = index;
+                                             index = 0;
+                                             for (int k = 0; k < ranges.size(); k++) {
+                                                 GlobalParticleRange gpr;
+                                                 gpr.rank = rank;
+                                                 gpr.range = ranges[k];
+                                                 auto localRange = particleMap[gpr];
+                                                 auto const numberOfParticles =
+                                                     localRange.second - localRange.first;
+                                                 for (int dim = 0; dim < kDimensions; dim++) {
+                                                     memcpy(&particlesPos(dim, localRange.first),
+                                                         &data[sz * dim + index],
+                                                         numberOfParticles * sizeof(Position));
+                                                 }
+                                                 if (getOptions().hydro.enabled) {
+                                                     Vector<Position> x(numberOfParticles),
+                                                         y(numberOfParticles), z(numberOfParticles);
+                                                     Vector<char> types(numberOfParticles);
+                                                     ParticleGlobalRange source;
+                                                     source.proc = rank;
+                                                     source.range = ranges[k];
+                                                     particlesGlobalReadPos(source, x.data(),
+                                                         y.data(), z.data(), types.data(), 0);
+                                                     std::memcpy(&particlesType(localRange.first),
+                                                         types.data(),
+                                                         numberOfParticles * sizeof(char));
+                                                     if (sourceMasses != nullptr) {
+                                                         particlesGlobalReadMasses(source,
+                                                             sourceMasses.get(), localRange.first);
+                                                     }
+                                                 }
+                                                 index += numberOfParticles;
+                                             }
+                                         },
+                                         "gravity.gpuStage.fetchParticles"))
+                                .share();
                     }
                 }
                 futs1.push_back(std::move(fut));
@@ -374,9 +387,9 @@ KickReturn dehnenStageGpu(KickParameters params, Vector<KickWorkitem> workitems,
         tm.start();
         tree2Gpu();
         particlesMemadviseGpu();
-        auto const kr =
-            cudaExecuteKicks(params, &particlesPos(kXDimension, 0), &particlesPos(kYDimension, 0),
-                &particlesPos(kZDimension, 0), treeNodes, std::move(workitems));
+        auto const kr = cudaExecuteKicks(params, &particlesPos(kXDimension, 0),
+            &particlesPos(kYDimension, 0), &particlesPos(kZDimension, 0), treeNodes,
+            std::move(workitems), {}, sourceMasses.get());
         tree2Cpu();
         tm.stop();
         particlesResize(originalParticleCount);

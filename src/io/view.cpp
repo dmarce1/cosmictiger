@@ -75,6 +75,7 @@ struct DarkMatterParticleInfo {
 struct StarParticleInfo : public DarkMatterParticleInfo {};
 
 struct SphParticleInfo : public DarkMatterParticleInfo {
+    double mass;
     float eint;
     float rho;
     float h;
@@ -387,7 +388,14 @@ void writeViewSpecies(DBfile* db, ViewDirectoryMetadata& metadata, char const* m
     writeViewField(db, metadata, (fieldPrefix + "rung").c_str(), mesh, particles, "1",
         [](Particle const& particle) { return double(particle.rung); });
     writeViewField(db, metadata, (fieldPrefix + "mass").c_str(), mesh, particles, massUnit,
-        [&conversion, mass](Particle const&) { return conversion.mass(mass); });
+        [&conversion, mass](Particle const& particle) {
+#if COSMICTIGER_WITH_SPH
+            if constexpr (std::is_same_v<Particle, SphParticleInfo>) {
+                return conversion.mass(particle.mass);
+            }
+#endif
+            return conversion.mass(mass);
+        });
     writeStarFormationFields(db, metadata, mesh, prefix, particles);
 }
 
@@ -552,6 +560,10 @@ ViewSnapshot collectViewParticles(double a) {
             SphParticleInfo gas{};
             static_cast<DarkMatterParticleInfo&>(gas) = info;
             int const index = particlesCatIndex(i);
+            gas.mass = sphParticlesMass(index);
+            if (getOptions().hydro.method != "sph" && sphParticlesHopkinsState(index).initialized) {
+                gas.mass = sphParticlesHopkinsState(index).mass;
+            }
             gas.eint = sphParticlesInternalEnergy(index);
             gas.rho = sphParticlesDensity(index);
             gas.h = sphParticlesSupportRadius(index);
@@ -787,7 +799,7 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
         writeViewField(
             db, metadata, "hydro_rung", "gas", gas, "1", [](auto const& p) { return p.rung; });
         writeViewField(db, metadata, "hydro_mass", "gas", gas, "code",
-            [](auto const&) { return getOptions().initial.gasMass; });
+            [](auto const& particle) { return particle.mass; });
         writeStarFormationFields(db, metadata, "gas", "hydro_", gas);
         writeViewField(
             db, metadata, "rho", "gas", gas, "code", [](auto const& p) { return p.rho; });

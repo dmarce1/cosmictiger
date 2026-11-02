@@ -24,6 +24,7 @@ struct ScenarioDefinition {
     bool fixedTime;
     int numberOfSteps;
     ScenarioPlan (*initialize)();
+    int hydroDimensions{3};
 };
 
 ScenarioDefinition const& definition(std::string const& name);

@@ -20,6 +20,8 @@ struct FmmSourceView {
     char* types = nullptr;
     char* rungs = nullptr;
     ParticleInteger count = 0;
+    float* masses = nullptr;
+    FmmParticleStore store = FmmParticleStore::Owned;
 };
 
 static_assert(std::is_trivially_copyable_v<FmmSourceView>);
@@ -32,6 +34,12 @@ ParticleInteger fmmSourcePartition(FmmParticleStore store, FmmSourceView const& 
     Pair<ParticleInteger> range, Position split, int dimension);
 
 inline float fmmSourceMass(FmmSourceView const& sources, ParticleInteger index) {
+    if (sources.masses != nullptr) {
+        return sources.masses[index];
+    }
+    if (sources.store == FmmParticleStore::Owned) {
+        return particlesMass(index);
+    }
     if (!getOptions().hydro.enabled) {
         return 1.0f;
     }

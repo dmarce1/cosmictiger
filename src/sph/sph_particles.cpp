@@ -23,6 +23,7 @@
 #define SPH_PARTICLES_CPP
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/hydro/hopkins_driver.hpp>
 #include <cosmictiger/sph/cullen_and_dehnen/particle_exchange.hpp>
 #include <cosmictiger/sph/cullen_and_dehnen/viscosity.hpp>
 #include <cosmictiger/sph/morris_and_monaghan/viscosity.hpp>
@@ -65,6 +66,7 @@ static Vector<Pair<float>> sphParticlesFetchChemistryEosCacheLine(ParticleIntege
 static Vector<Array<Position, kDimensions>> sphParticlesFetchCacheLine(ParticleInteger index);
 static Vector<char> sphParticlesFetchRungCacheLine(ParticleInteger index);
 static Vector<Array<float, kDimensions>> sphParticlesFetchVelocityCacheLine(ParticleInteger index);
+static Vector<float> sphParticlesFetchMassCacheLine(ParticleInteger index);
 static Vector<SphDensityCacheEntry> sphParticlesFetchDensityCacheLine(ParticleInteger index);
 static Vector<Pair<float>> sphParticlesFetchThermodynamicCacheLine(ParticleInteger index);
 
@@ -74,6 +76,7 @@ HPX_PLAIN_ACTION(
 HPX_PLAIN_ACTION(sphParticlesFetchRungCacheLine, SphParticlesFetchRungCacheLineAction);
 HPX_PLAIN_ACTION(sphParticlesFetchVelocityCacheLine, SphParticlesFetchVelocityCacheLineAction);
 HPX_PLAIN_ACTION(sphParticlesFetchDensityCacheLine, SphParticlesFetchDensityCacheLineAction);
+HPX_PLAIN_ACTION(sphParticlesFetchMassCacheLine, SphParticlesFetchMassCacheLineAction);
 HPX_PLAIN_ACTION(sphParticlesClearHydroCaches, SphParticlesClearHydroCachesAction);
 HPX_PLAIN_ACTION(sphParticlesClearCaches, SphParticlesClearCachesAction);
 #if COSMICTIGER_ENABLE_CHEMISTRY
@@ -111,6 +114,11 @@ static Array<
         std::shared_ptr<hpx::shared_future<Vector<Pair<float>>>>, detail::SphCacheLineHashHi>,
     kParticleCacheSize>
     chemistryEosParticleCache;
+static Array<std::unordered_map<detail::SphCacheLineId,
+                 std::shared_ptr<hpx::shared_future<Vector<float>>>, detail::SphCacheLineHashHi>,
+    kParticleCacheSize>
+    massParticleCache;
+static Array<SpinlockType, kParticleCacheSize> massMutexes;
 static Array<SpinlockType, kParticleCacheSize> chemistryEosMutexes;
 static Array<SpinlockType, kParticleCacheSize> mutexes;
 static Array<SpinlockType, kParticleCacheSize> energyMutexes;
@@ -240,8 +248,8 @@ void sphParticlesApplyUpdates(
 namespace detail {
 
 template <typename Visitor>
-void visitSphCheckpointArrays(
-    Visitor&& visit, bool includeChemistry = true, bool includeViscosity = true) {
+void visitSphCheckpointArrays(Visitor&& visit, bool includeChemistry = true,
+    bool includeViscosity = true, bool includeHopkins = true) {
     size_t const count = sphParticlesSize();
     // Keep stage fields as well as the physical fields: fine rungs may be staggered at checkpoints.
     visit(sphParticlesThermodynamicStates, count);
@@ -255,6 +263,12 @@ void visitSphCheckpointArrays(
     for (int dim = 0; dim < kDimensions; dim++) {
         visit(sphParticlesPredictedAccelerations[dim], count);
         visit(sphParticlesGravityAccelerations[dim], count);
+    }
+    if (sphParticlesMasses != nullptr) {
+        visit(sphParticlesMasses, count);
+    }
+    if (includeHopkins && sphParticlesHopkinsStates != nullptr) {
+        visit(sphParticlesHopkinsStates, count);
     }
     if (includeViscosity && sphParticlesViscosityStates != nullptr) {
         visit(sphParticlesViscosityStates, count);
@@ -318,6 +332,10 @@ void sphParticlesArrayResize(T*& ptr, ParticleInteger newCapacity) {
 }
 
 void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticles) {
+    bool const meshless = getOptions().hydro.method != "sph";
+    bool const initializeHopkins = meshless && sphParticlesHopkinsStates == nullptr;
+    bool const variableMass = getOptions().hydro.method == "mfv";
+    bool const initializeMass = variableMass && sphParticlesMasses == nullptr;
     bool const initializeBalsara =
         getOptions().hydro.balsaraSwitch && sphParticlesBalsaraFactors == nullptr;
     bool const gradientSwitch = getOptions().hydro.viscosityGradientSwitch();
@@ -332,6 +350,12 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
             newCapacity = size_t(101) * newCapacity / size_t(100);
         }
         sphParticlesArrayResize(sphParticlesDensities, newCapacity);
+        if (meshless) {
+            sphParticlesArrayResize(sphParticlesHopkinsStates, newCapacity);
+        }
+        if (variableMass) {
+            sphParticlesArrayResize(sphParticlesMasses, newCapacity);
+        }
         if (getOptions().hydro.balsaraSwitch) {
             sphParticlesArrayResize(sphParticlesBalsaraFactors, newCapacity);
         }
@@ -360,6 +384,28 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
             sphParticlesArrayResize(sphParticlesChemistryEos, newCapacity);
         }
         capacity = newCapacity;
+    }
+    if (!meshless && sphParticlesHopkinsStates != nullptr) {
+        freeManagedMemory(sphParticlesHopkinsStates);
+        sphParticlesHopkinsStates = nullptr;
+    } else if (meshless && sphParticlesHopkinsStates == nullptr && capacity > 0) {
+        sphParticlesArrayResize(sphParticlesHopkinsStates, capacity);
+    }
+    if (initializeHopkins) {
+        for (ParticleInteger index = 0; index < size; ++index) {
+            sphParticlesHopkinsStates[index] = {};
+        }
+    }
+    if (!variableMass && sphParticlesMasses != nullptr) {
+        freeManagedMemory(sphParticlesMasses);
+        sphParticlesMasses = nullptr;
+    } else if (variableMass && sphParticlesMasses == nullptr && capacity > 0) {
+        sphParticlesArrayResize(sphParticlesMasses, capacity);
+    }
+    if (initializeMass) {
+        for (ParticleInteger index = 0; index < size; ++index) {
+            sphParticlesMasses[index] = getOptions().initial.gasMass;
+        }
     }
     if (!getOptions().hydro.balsaraSwitch && sphParticlesBalsaraFactors != nullptr) {
         freeManagedMemory(sphParticlesBalsaraFactors);
@@ -419,6 +465,12 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         sphParticlesPredictedInternalEnergyRates[slot] = 0.0f;
         sphParticlesInternalEnergyRates[slot] = 0.0f;
         sphParticlesDensities[slot] = 0.0f;
+        if (meshless) {
+            sphParticlesHopkinsStates[slot] = {};
+        }
+        if (variableMass) {
+            sphParticlesMasses[slot] = getOptions().initial.gasMass;
+        }
         if (getOptions().hydro.balsaraSwitch) {
             sphParticlesBalsaraFactors[slot] = 0.0f;
         }
@@ -709,6 +761,49 @@ static Vector<Array<float, kDimensions>> sphParticlesFetchVelocityCacheLine(Part
     return line;
 }
 
+static Vector<float> sphParticlesFetchMassCacheLine(ParticleInteger index) {
+    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
+    Vector<float> line(lineSize);
+    ParticleInteger const begin = (index / lineSize) * lineSize;
+    ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
+    for (ParticleInteger i = begin; i < end; ++i) {
+        line[i - begin] = sphParticlesMass(i);
+    }
+    return line;
+}
+
+void sphParticlesGlobalReadMasses(
+    ParticleGlobalRange range, float* masses, ParticleInteger offset) {
+    if (range.range.first == range.range.second) {
+        return;
+    }
+    if (getOptions().hydro.method != "mfv") {
+        std::fill_n(masses + offset, range.range.second - range.range.first,
+            float(getOptions().initial.gasMass));
+        return;
+    }
+    if (range.proc == hpxRank()) {
+        for (ParticleInteger i = range.range.first; i < range.range.second; ++i) {
+            masses[offset + i - range.range.first] = sphParticlesMass(i);
+        }
+        return;
+    }
+    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
+    ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
+    ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
+    ParticleInteger destination = offset;
+    for (ParticleInteger line = startLine; line <= stopLine; line += lineSize) {
+        detail::SphCacheLineId const lineId{range.proc, line};
+        auto const* values = detail::readSphCacheLine<SphParticlesFetchMassCacheLineAction>(
+            lineId, massParticleCache, massMutexes);
+        auto const begin = std::max(line, range.range.first);
+        auto const end = std::min(line + lineSize, range.range.second);
+        for (ParticleInteger i = begin; i < end; ++i) {
+            masses[destination++] = values[i - line];
+        }
+    }
+}
+
 void sphParticlesGlobalReadDensity(ParticleGlobalRange range, float* rho, ParticleInteger offset,
     float* balsaraFactor, float* viscosityAlpha, float* gradHCorrection) {
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
@@ -878,6 +973,7 @@ void sphParticlesClearHydroCaches() {
     chemistryEosParticleCache = decltype(chemistryEosParticleCache)();
     particleVelocityCache = decltype(particleVelocityCache)();
     densityParticleCache = decltype(densityParticleCache)();
+    massParticleCache = decltype(massParticleCache)();
     cullen_and_dehnen::clearDiagnosticCache();
     hpx::wait_all(futures.begin(), futures.end());
 }
@@ -893,6 +989,7 @@ void sphParticlesClearCaches() {
     rungParticleCache = decltype(rungParticleCache)();
     particleVelocityCache = decltype(particleVelocityCache)();
     densityParticleCache = decltype(densityParticleCache)();
+    massParticleCache = decltype(massParticleCache)();
     cullen_and_dehnen::clearDiagnosticCache();
     hpx::wait_all(futures.begin(), futures.end());
 }
@@ -902,7 +999,10 @@ namespace detail {
 uint32_t sphCheckpointVersion() {
     // Preserve the fixed-viscosity payload version and identify optional state.
     auto const& options = getOptions();
+    uint32_t const methodVersion =
+        options.hydro.method == "mfv" ? 64U : (options.hydro.method == "mfm" ? 32U : 0U);
     return (options.starFormation.enabled ? 90U : (options.chemistry.enabled ? 80U : 2U)) +
+        methodVersion +
         (options.hydro.viscosityEvolution == "cullenAndDehnen" ?
                 4U :
                 (options.hydro.viscosityEvolution == "priceEtAl" ?
@@ -930,7 +1030,7 @@ void sphParticlesLoad(FILE* fp) {
                 FREAD(values, sizeof(*values), count, fp);
             }
         },
-        false, false);
+        false, false, false);
     if (getOptions().hydro.viscosityEvolution != "none") {
         for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
             float words[2];
@@ -954,6 +1054,18 @@ void sphParticlesLoad(FILE* fp) {
             sphParticlesChemistryEos[index] = {words[1], words[2]};
         }
     }
+    if (getOptions().hydro.method != "sph") {
+        uint32_t stateHeader[3];
+        FREAD(stateHeader, sizeof(uint32_t), 3, fp);
+        if (stateHeader[0] != 0x484f5053U || stateHeader[1] != 4U ||
+            stateHeader[2] != sizeof(HopkinsParticleState)) {
+            THROW_ERROR("Incompatible Hopkins particle-state checkpoint layout\n");
+        }
+        if (savedCount != 0) {
+            FREAD(sphParticlesHopkinsStates, sizeof(HopkinsParticleState), savedCount, fp);
+        }
+        hopkinsReadCheckpoint(fp);
+    }
 }
 
 void sphParticlesSave(FILE* fp) {
@@ -968,7 +1080,7 @@ void sphParticlesSave(FILE* fp) {
                 FWRITE(values, sizeof(*values), count, fp);
             }
         },
-        false, false);
+        false, false, false);
     if (getOptions().hydro.viscosityEvolution != "none") {
         for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
             auto const& state = sphParticlesViscosityStates[index];
@@ -987,9 +1099,60 @@ void sphParticlesSave(FILE* fp) {
             FWRITE(words, sizeof(float), 3, fp);
         }
     }
+    if (getOptions().hydro.method != "sph") {
+        uint32_t stateHeader[3] = {0x484f5053U, 4U, sizeof(HopkinsParticleState)};
+        FWRITE(stateHeader, sizeof(uint32_t), 3, fp);
+        if (count != 0) {
+            // HPX serializes members individually. Canonicalize native padding
+            // so migration cannot change otherwise identical checkpoint bytes.
+            constexpr size_t kInitialFieldsEnd =
+                offsetof(HopkinsParticleState, initialized) + sizeof(bool);
+            constexpr size_t kPredictorFieldsBegin = offsetof(HopkinsParticleState, predictor);
+            constexpr size_t kPredictorFieldsEnd =
+                offsetof(HopkinsParticleState, predictorInitialized) + sizeof(bool);
+            constexpr size_t kSupportFieldBegin = offsetof(HopkinsParticleState, supportRadius);
+            constexpr size_t kStateFieldsEnd =
+                offsetof(HopkinsParticleState, supportRadius) + sizeof(double);
+            for (ParticleInteger index = 0; index < count; ++index) {
+                auto* bytes = reinterpret_cast<unsigned char*>(sphParticlesHopkinsStates + index);
+                std::memset(
+                    bytes + kInitialFieldsEnd, 0, kPredictorFieldsBegin - kInitialFieldsEnd);
+                std::memset(
+                    bytes + kPredictorFieldsEnd, 0, kSupportFieldBegin - kPredictorFieldsEnd);
+                std::memset(
+                    bytes + kStateFieldsEnd, 0, sizeof(HopkinsParticleState) - kStateFieldsEnd);
+            }
+            FWRITE(sphParticlesHopkinsStates, sizeof(HopkinsParticleState), count, fp);
+        }
+        hopkinsWriteCheckpoint(fp);
+    }
 }
 
 void sphCheckpointTest() {
+    ALWAYS_ASSERT(sphParticlesSize() == 0 ||
+        (sphParticlesHopkinsStates != nullptr) == (getOptions().hydro.method != "sph"));
+    ALWAYS_ASSERT(sphParticlesSize() == 0 ||
+        (sphParticlesMasses != nullptr) == (getOptions().hydro.method == "mfv"));
+    Vector<HopkinsParticleState> originalHopkins;
+    if (sphParticlesHopkinsStates != nullptr && sphParticlesSize() != 0) {
+        originalHopkins.assign(
+            sphParticlesHopkinsStates, sphParticlesHopkinsStates + sphParticlesSize());
+        for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
+            auto& state = sphParticlesHopkinsState(index);
+            double const offset = index + 1.0;
+            state.totalEnergy = 1.0 + offset * 0x1p-38;
+            state.momentum = {
+                0.125 + offset * 0x1p-38, 0.375 - offset * 0x1p-39, 0.75 + offset * 0x1p-40};
+            state.supportRadius = 0.125 + offset * 0x1p-37;
+        }
+    }
+    Vector<float> originalMasses;
+    if (getOptions().hydro.method == "mfv" && sphParticlesSize() != 0) {
+        originalMasses.assign(sphParticlesMasses, sphParticlesMasses + sphParticlesSize());
+        for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
+            sphParticlesMfvMass(index) = getOptions().initial.gasMass * (1.0f + 0.01f * index);
+        }
+    }
     ALWAYS_ASSERT(sphParticlesSize() == 0 ||
         (sphParticlesViscosityStates != nullptr) ==
             (getOptions().hydro.viscosityEvolution != "none"));
@@ -1076,13 +1239,17 @@ void sphCheckpointTest() {
         }
     });
     if (sphParticlesSize() >= 2) {
+        std::array<HopkinsParticleState, 2> expectedHopkins;
+        if (sphParticlesHopkinsStates != nullptr) {
+            expectedHopkins = {sphParticlesHopkinsState(0), sphParticlesHopkinsState(1)};
+        }
         detail::visitSphCheckpointArrays(
             [](auto* values, size_t) {
                 std::memset(values, 0x11, sizeof(*values));
                 std::memset(values + 1, 0x22, sizeof(*values));
             },
-            true, true);
-        auto checkOrder = [](unsigned char first, unsigned char second) {
+            true, true, false);
+        auto checkOrder = [&expectedHopkins](unsigned char first, unsigned char second) {
             detail::visitSphCheckpointArrays(
                 [first, second](auto* values, size_t) {
                     auto const* bytes = reinterpret_cast<unsigned char const*>(values);
@@ -1092,7 +1259,28 @@ void sphCheckpointTest() {
                         }
                     }
                 },
-                true, true);
+                true, true, false);
+            if (sphParticlesHopkinsStates != nullptr) {
+                for (int index = 0; index < 2; ++index) {
+                    auto const& actual = sphParticlesHopkinsState(index);
+                    auto const& expected = expectedHopkins[first == 0x11 ? index : 1 - index];
+                    ALWAYS_ASSERT(actual.identifier == expected.identifier &&
+                        actual.mass == expected.mass &&
+                        actual.totalEnergy == expected.totalEnergy &&
+                        actual.momentum == expected.momentum &&
+                        actual.meshVelocity == expected.meshVelocity &&
+                        actual.sourceAcceleration == expected.sourceAcceleration &&
+                        actual.pendingGravityWork == expected.pendingGravityWork &&
+                        actual.sourceTime == expected.sourceTime &&
+                        actual.expansionCoefficient == expected.expansionCoefficient &&
+                        actual.initialized == expected.initialized &&
+                        actual.predictor == expected.predictor &&
+                        actual.gradients == expected.gradients &&
+                        actual.lastKickTick == expected.lastKickTick &&
+                        actual.predictorInitialized == expected.predictorInitialized &&
+                        actual.supportRadius == expected.supportRadius);
+                }
+            }
         };
         sphParticlesSwap(0, 1);
         checkOrder(0x22, 0x11);
@@ -1118,6 +1306,12 @@ void sphCheckpointTest() {
     }
     for (size_t index = 0; index < originalCullenDehnen.size(); ++index) {
         sphParticlesCullenDehnenStates[index] = originalCullenDehnen[index];
+    }
+    for (size_t index = 0; index < originalMasses.size(); ++index) {
+        sphParticlesMfvMass(index) = originalMasses[index];
+    }
+    for (size_t index = 0; index < originalHopkins.size(); ++index) {
+        sphParticlesHopkinsState(index) = originalHopkins[index];
     }
     PRINT("SPH checkpoint roundtrip passed (all fields and empty gas payload)\n");
 }

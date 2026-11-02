@@ -25,6 +25,7 @@ Vector<ParticleGhost> readGhostParticles(uint64_t generation, uint64_t key) {
         }
         particle.type = getOptions().hydro.enabled ? particlesType(i) : kDarkMatterType;
         particle.rung = state.stageRungs[i - state.activeRange.first];
+        particle.mass = particlesMass(i);
     }
     return result;
 }
@@ -118,8 +119,8 @@ void planGhosts() {
     state.pendingGhosts = state.sourceCells.size() - state.cells.size();
     state.diagnostics.ghostParticles = ghostCount;
     state.diagnostics.ghostCells = state.pendingGhosts;
-    state.diagnostics.ghostBytes =
-        uint64_t(ghostCount) * (kDimensions * sizeof(PositionInteger) + 2 * sizeof(char));
+    state.diagnostics.ghostBytes = uint64_t(ghostCount) *
+        (kDimensions * sizeof(PositionInteger) + 2 * sizeof(char) + sizeof(float));
     state.sinkSources.resize(state.cells.size());
     state.unresolvedSources.resize(state.cells.size());
     for (size_t sink = 0; sink < state.cells.size(); ++sink) {
@@ -159,6 +160,7 @@ void receiveGhostCell(size_t index) {
             }
             view.types[i] = particle.type;
             view.rungs[i] = particle.rung;
+            view.masses[i] = particle.mass;
         }
         auto root = treeCreateCell(cell, cache.meshSize, FmmParticleStore::Ghost);
         --state.pendingGhosts;

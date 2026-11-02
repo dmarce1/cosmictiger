@@ -190,9 +190,18 @@ PARTICLES_EXTERN ParticleInteger* particlesGravitySampleIndices;
 PARTICLES_EXTERN Array<float, kDimensions>* particlesGravitySampleAccelerations;
 PARTICLES_EXTERN size_t particlesGlobalOffset;
 
+// MFV gas mass projection follows the gas category index, never stellar indices.
+#if COSMICTIGER_WITH_SPH
+extern float* sphParticlesMasses;
+#endif
+
 struct ParticleGlobalRange {
     int proc;
     Pair<ParticleInteger> range;
+    template <class Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & proc & range;
+    }
 };
 
 ParticleInteger particlesSize();
@@ -220,6 +229,7 @@ void particlesDestroy();
 ParticleInteger particlesPartitionDarkMatter(Pair<ParticleInteger> rng);
 void particlesGlobalReadPos(
     ParticleGlobalRange, Position* x, Position* y, Position* z, char* type, ParticleInteger offset);
+void particlesGlobalReadMasses(ParticleGlobalRange range, float* masses, ParticleInteger offset);
 inline void particlesGlobalReadPos(
     ParticleGlobalRange range, Position* x, Position* y, Position* z, ParticleInteger offset) {
     particlesGlobalReadPos(range, x, y, z, nullptr, offset);
@@ -285,6 +295,11 @@ inline float particlesMass(ParticleInteger index) {
     float const sphMass = getOptions().initial.gasMass;
     float const darkMatterMass = getOptions().initial.darkMatterMass;
     if (particlesType(index) != kDarkMatterType) {
+#if COSMICTIGER_WITH_SPH
+        if (particlesType(index) == kSphType && getOptions().hydro.method == "mfv") {
+            return sphParticlesMasses[particlesSph[index]];
+        }
+#endif
         return sphMass;
     } else {
         return darkMatterMass;

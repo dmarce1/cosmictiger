@@ -500,8 +500,12 @@ uint32_t checkpointPhysicsCode(Options const& opts) {
     uint32_t const hydroCode =
         checkpointKernelCode(opts.hydro.kernelFamily, opts.hydro.kernelDegree) ^
         checkpointKernelCode("spline", 3);
+    uint32_t const methodCode = !opts.hydro.enabled || opts.hydro.method == "sph" ?
+        0U :
+        (opts.hydro.method == "mfm" ? 1U : 2U);
+    // Bit 24 identifies compact gas storage; bits 25-26 identify its hydro method.
     return (opts.hydro.enabled ? kVariationalSph | kCompactSphLayout : 0U) | (gravityCode << 8) |
-        (hydroCode << 16);
+        (hydroCode << 16) | (methodCode << 25);
 }
 
 bool legacyCheckpointCompatible(Options const& opts) {
@@ -1178,6 +1182,7 @@ void checkpointStateTest() {
     defaultKernelOptions.gravity.kernelDegree = 8;
     defaultKernelOptions.hydro.kernelFamily = "spline";
     defaultKernelOptions.hydro.kernelDegree = 3;
+    defaultKernelOptions.hydro.method = "sph";
     ALWAYS_ASSERT(detail::checkpointHeader(defaultKernelOptions).reserved ==
         (defaultKernelOptions.hydro.enabled ? detail::kVariationalSph | detail::kCompactSphLayout :
                                               0U));
@@ -1209,6 +1214,18 @@ void checkpointStateTest() {
         (legacyDarkMatterOptions.compute.positionType == "fixed32" &&
             legacyDarkMatterOptions.gravity.method == "fmm"));
     auto const sphParameters = detail::sphCheckpointParameters(getOptions());
+    for (auto const* method : {"sph", "mfm", "mfv"}) {
+        auto methodOptions = getOptions();
+        methodOptions.hydro.enabled = true;
+        methodOptions.hydro.method = method;
+        auto const methodHeader = detail::checkpointHeader(methodOptions);
+        for (auto const* otherMethod : {"sph", "mfm", "mfv"}) {
+            auto otherOptions = methodOptions;
+            otherOptions.hydro.method = otherMethod;
+            ALWAYS_ASSERT(detail::checkpointCompatible(methodHeader, otherOptions) ==
+                (methodOptions.hydro.method == otherOptions.hydro.method));
+        }
+    }
     auto starOptions = getOptions();
     starOptions.hydro.enabled = true;
     starOptions.chemistry.enabled = true;

@@ -3,6 +3,9 @@
 #include <cosmictiger/particles/particles.hpp>
 
 void dehnenReadSourcePositions(TreeNode const& source, Position* x, Position* y, Position* z,
-    char* types, ParticleInteger offset) {
+    char* types, float* masses, ParticleInteger offset) {
     particlesGlobalReadPos(source.globalParticleRange(), x, y, z, types, offset);
+    if (masses != nullptr) {
+        particlesGlobalReadMasses(source.globalParticleRange(), masses, offset);
+    }
 }

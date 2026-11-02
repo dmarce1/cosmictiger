@@ -47,6 +47,9 @@ ParticleInteger fmmSourcePartition(FmmParticleStore store, FmmSourceView const& 
                     }
                     std::swap(sources.types[lower], sources.types[upper]);
                     std::swap(sources.rungs[lower], sources.rungs[upper]);
+                    if (sources.masses != nullptr) {
+                        std::swap(sources.masses[lower], sources.masses[upper]);
+                    }
                     break;
                 }
             }

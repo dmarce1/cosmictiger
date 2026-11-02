@@ -139,6 +139,9 @@ function(cosmictiger_feature_sources output)
             src/scenarios/disc.cpp
             src/scenarios/polytropic_star.cpp
             src/scenarios/hydro_wave.cpp
+            src/scenarios/gresho.cpp
+            src/scenarios/sound_wave.cpp
+            src/hydro/hopkins_driver.cpp
             src/scenarios/exact_sod.cpp
             src/scenarios/sedov.cpp
             src/sph/sph.cpp

@@ -65,15 +65,9 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
             sourceWeights.resize(numberOfSources);
             int count = 0;
             for (int i = 0; i < maxi; i++) {
-                gravityReadSourcePositions(
-                    *treePtrs[i], srcx.data(), srcy.data(), srcz.data(), types.data(), count);
+                gravityReadSourcePositions(*treePtrs[i], srcx.data(), srcy.data(), srcz.data(),
+                    types.data(), sourceWeights.data(), count);
                 count += treePtrs[i]->numberOfParticles();
-            }
-            for (int i = 0; i < count; i++) {
-                sourceWeights[i] = getOptions().hydro.enabled ?
-                    (types[i] == kDarkMatterType ? getOptions().initial.darkMatterMass :
-                                                   getOptions().initial.gasMass) :
-                    1.0f;
             }
             for (int i = count; i < numberOfSources; i++) {
                 srcx[i] = 0.f;

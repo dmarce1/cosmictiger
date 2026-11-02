@@ -71,6 +71,29 @@ void requirePmmm(bool condition, std::string const& message) {
     }
 }
 
+void checkGhostMassPermutation() {
+    std::array<Position, 4> x{0.875, 0.125, 0.625, 0.375};
+    std::array<Position, 4> y{}, z{};
+    std::array<char, 4> types{}, rungs{7, 1, 5, 3};
+    std::array<float, 4> masses{0.875f, 0.125f, 0.625f, 0.375f};
+    FmmSourceView view;
+    view.positions[kXDimension] = x.data();
+    view.positions[kYDimension] = y.data();
+    view.positions[kZDimension] = z.data();
+    view.types = types.data();
+    view.rungs = rungs.data();
+    view.masses = masses.data();
+    view.count = 4;
+    view.store = FmmParticleStore::Ghost;
+    auto const middle = fmmSourcePartition(FmmParticleStore::Ghost, view, {0, 4}, 0.5, 0);
+    requirePmmm(middle == 2, "ghost source split selected the wrong count");
+    for (ParticleInteger i = 0; i < 4; ++i) {
+        requirePmmm(fmmSourceMass(view, i) == x[i].toDouble() &&
+                rungs[i] == int(8 * x[i].toDouble()) && (x[i].toDouble() < 0.5) == (i < middle),
+            "ghost source permutation detached a variable mass or rung from its position");
+    }
+}
+
 #if COSMICTIGER_ENABLE_PMMM_FMM
 void reservePmmmCudaFixture() {
     // Reserve the largest fixture on every rank before temporary CPU execution.
@@ -424,6 +447,9 @@ void initializePmmmFixture(int fixture, int ownership) {
             if (isGas) {
                 sphParticlesParticleIndex(gas) = local;
                 sphParticlesSupportRadius(gas) = 0.01f;
+                if (getOptions().hydro.method == "mfv") {
+                    sphParticlesMfvMass(gas) = 0.125f + 0.03125f * float(id + 1);
+                }
                 for (int dim = 0; dim < kDimensions; ++dim) {
                     sphParticlesGravityAcceleration(dim, gas) = 0.0f;
                 }
@@ -1106,6 +1132,12 @@ void checkPmmmTraditionalKicks() {
     options.gravity.pmmmNearWidth = 2;
     options.gravity.openingAngle = 0.02;
     options.analysis.saveForce = true;
+#if COSMICTIGER_WITH_SPH
+    if (kPositionBits == 64 && options.run.timeIntegrator != "hierarchical" &&
+        !options.chemistry.enabled && !options.starFormation.enabled) {
+        options.hydro.method = "mfv";
+    }
+#endif
     pmmmDestroy();
     setOptions(options);
     preparePmmmFixture(8);
@@ -1927,6 +1959,7 @@ void checkPmmmFmmNear() {
 }    // namespace detail
 
 void pmmmTest() {
+    detail::checkGhostMassPermutation();
     auto options = getOptions();
     // Every PMMM mesh side is a power of two; the legacy force oracles cover
     // sides 8 and 16 at every near width, and the default coarse mesh (zero).
@@ -2042,6 +2075,33 @@ void pmmmTest() {
         }
     }
     pmmmDestroy();
+#if COSMICTIGER_WITH_SPH
+    // Force-only MFV: unequal gas masses must survive ownership exchange and
+    // feed both the far moments and the PP/FMM near sources independently of
+    // the selected evolution integrator.
+    if (kPositionBits == 64 && getOptions().run.timeIntegrator == "traditional" &&
+        !getOptions().chemistry.enabled && !getOptions().starFormation.enabled) {
+        auto const savedMassOptions = getOptions();
+        auto massOptions = savedMassOptions;
+        massOptions.hydro.method = "mfv";
+        massOptions.gravity.enabled = false;
+        massOptions.run.hierarchicalGravity = false;
+        massOptions.gravity.meshSize = 8;
+        massOptions.gravity.pmmmNearWidth = 2;
+        setOptions(massOptions);
+        detail::preparePmmmFixture(0);
+        detail::distributePmmmFixture(0);
+        pmmmSolve(true);
+        auto const variableMassReference = detail::gatherPmmmSamples();
+        detail::verifyPmmmReference(variableMassReference);
+        detail::preparePmmmFixture(0, 1);
+        detail::distributePmmmFixture(0);
+        pmmmSolve(true);
+        detail::comparePmmmSamples(variableMassReference, detail::gatherPmmmSamples());
+        pmmmDestroy();
+        setOptions(savedMassOptions);
+    }
+#endif
 #if COSMICTIGER_ENABLE_PMMM_FMM
     detail::checkPmmmFmmNear();
 #endif

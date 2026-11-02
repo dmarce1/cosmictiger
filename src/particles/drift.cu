@@ -15,9 +15,13 @@
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/cuda/cuda_reduce.hpp>
 #include <cosmictiger/cuda/device_vector.hpp>
+#include <cosmictiger/hydro/hopkins_state.hpp>
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#if COSMICTIGER_WITH_SPH
+#include <cosmictiger/sph/sph_particles.hpp>
+#endif
 
 constexpr int kDriftBlockSize = 512;
 
@@ -30,7 +34,8 @@ __managed__ ListType* listPtr;
 __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __restrict__ const y,
     Position* __restrict__ const z, Array<float, kDimensions>* const vels, char const* const rungs,
     char const* const types, ParticleInteger count, int rung, double a, double dt, double tau0,
-    double tau1, double tauMax, bool doLc, int nside, double drag) {
+    double tau1, double tauMax, bool doLc, int nside, double drag, HopkinsParticleState* meshStates,
+    ParticleInteger const* gasIndices) {
     auto const& tid = threadIdx.x;
     auto const& bid = blockIdx.x;
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
@@ -60,25 +65,44 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
         float vx = 0.0f, vy = 0.0f, vz = 0.0f;
 #endif
         float* vel;
+        HopkinsParticleState* meshState = nullptr;
         if (i < end) {
             thisRung = rungs[i];
             if ((rung < 0 || thisRung == rung)) {
                 vel = vels[i].data();
+                if (meshStates != nullptr && types != nullptr && types[i] == kSphType) {
+                    meshState = meshStates + gasIndices[i];
+                    if (!meshState->initialized) {
+                        meshState = nullptr;
+                    }
+                }
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
-                vx = vel[kXDimension] * ainv;
-                vy = vel[kYDimension] * ainv;
-                vz = vel[kZDimension] * ainv;
+                vx = (meshState != nullptr ? meshState->meshVelocity[kXDimension] :
+                                             double(vel[kXDimension])) *
+                    ainv;
+                vy = (meshState != nullptr ? meshState->meshVelocity[kYDimension] :
+                                             double(vel[kYDimension])) *
+                    ainv;
+                vz = (meshState != nullptr ? meshState->meshVelocity[kZDimension] :
+                                             double(vel[kZDimension])) *
+                    ainv;
 #endif
                 x0 = x[i].toDouble();
                 y0 = y[i].toDouble();
                 z0 = z[i].toDouble();
-                displacementX = double(vel[kXDimension]) * c1;
-                displacementY = double(vel[kYDimension]) * c1;
-                displacementZ = double(vel[kZDimension]) * c1;
+                displacementX = (meshState != nullptr ? meshState->meshVelocity[kXDimension] :
+                                                        double(vel[kXDimension])) *
+                    c1;
+                displacementY = (meshState != nullptr ? meshState->meshVelocity[kYDimension] :
+                                                        double(vel[kYDimension])) *
+                    c1;
+                displacementZ = (meshState != nullptr ? meshState->meshVelocity[kZDimension] :
+                                                        double(vel[kZDimension])) *
+                    c1;
                 x1 = x0 + displacementX;
                 y1 = y0 + displacementY;
                 z1 = z0 + displacementZ;
-                if (drag != 0.0) {
+                if (drag != 0.0 && meshState == nullptr) {
                     double const c0 = 1.0 / (1.0 + drag * dt);
                     for (int dim = 0; dim < kDimensions; dim++) {
                         vel[dim] *= c0;
@@ -136,6 +160,9 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                                     entry.vz = vel[kZDimension];
                                     entry.type =
                                         types != nullptr ? types[i] : char(kDarkMatterType);
+                                    if (meshState != nullptr) {
+                                        entry.mass = float(meshState->mass);
+                                    }
                                     test = true;
                                 }
                             }
@@ -212,10 +239,18 @@ void cudaDrift(int rung, double a, double dt, double tau0, double tau1, double t
     // particlesTy is managed memory; particlesType() returns a shared static when hydro is off.
     char const* const types = getOptions().hydro.enabled ? particlesTy + rng.first : nullptr;
     drag = getOptions().run.scenario == "glass" ? std::numbers::pi : 0.0;
+    HopkinsParticleState* meshStates = nullptr;
+    ParticleInteger const* gasIndices = nullptr;
+#if COSMICTIGER_WITH_SPH
+    if (getOptions().hydro.enabled && getOptions().hydro.method != "sph") {
+        meshStates = sphParticlesHopkinsStates;
+        gasIndices = particlesSph + rng.first;
+    }
+#endif
     CudaStream stream(cudaGetDevice());
     cudaDriftKernel<<<numberOfBlocks, kDriftBlockSize, 0, stream.nativeHandle()>>>(x, y, z, vels,
         rungs, types, cnt, rung, a, dt, tau0, tau1, tauMax, doLc, getOptions().lightcone.mapSize,
-        drag);
+        drag, meshStates, gasIndices);
     stream.checkLaunch();
     stream.wait();
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY

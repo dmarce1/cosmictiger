@@ -409,7 +409,7 @@ PMMM's `traditional` path uses individual block timesteps, as FMM does. Every
 substep rebuilds the mesh source field from all particles, including inactive
 particles. Only sinks whose rung is active receive a gravity kick or a new rung;
 inactive sinks retain their velocities and rungs. The gas acceleration is passed
-to SPH for its own hydrodynamic update. `pmmmKick` consumes each
+to SPH or Hopkins MFM/MFV for its own hydrodynamic update. `pmmmKick` consumes each
 completed near-plus-far field directly; no common rung is imposed.
 
 The `global` path advances every particle on one continuous timestep: the

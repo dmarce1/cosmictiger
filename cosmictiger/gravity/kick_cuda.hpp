@@ -191,6 +191,6 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
 template <int order>
 KickReturn cudaExecuteKicksImpl(KickParameters params, Position* devX, Position* devY,
     Position* devZ, TreeNode* devTreeNodes, Vector<KickWorkitem> workitems,
-    detail::FmmForceOutput output);
+    detail::FmmForceOutput output, float const* sourceMasses);
 template <int order>
 CudaKickArenaLayout const& kickArenaLayoutImpl();

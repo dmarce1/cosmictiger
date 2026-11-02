@@ -280,6 +280,13 @@ For a small cosmological run using the native Einstein–Boltzmann power spectru
 ./cosmictiger --hydro.enabled=true --compute.cuda=true --initial.particlesPerDimension=16 --run.maxIterations=2 --hpx:threads=4
 ```
 
+Select `hydro.method=sph|mfm|mfv` to choose SPH or the restored
+[Hopkins MFM/MFV solver](docs/hopkins_hydro.md). The Hopkins implementation uses
+double precision hydrodynamic state on the CPU and supports traditional individual
+steps or global continuous steps, with FMM or PMMM gravity. It requires a Fixed64
+position build, with cooling and star formation disabled. `configurations/sound_wave.ini` and
+`configurations/gresho.ini` provide meshless test problems.
+
 The gas controls appear under `hydro.*` in `--help` and can also be
 specified in the INI configuration file. The compatibility group `chemistry.*`
 selects [GADGET-4 equilibrium atomic cooling](docs/primordial_chemistry.md), with

@@ -289,7 +289,7 @@ CudaKickArenaLayout const& kickArenaLayoutImpl() {
 template <int order>
 KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position* devY,
     Position* devZ, TreeNode* devTreeNodes, Vector<KickWorkitem> workitems,
-    detail::FmmForceOutput output) {
+    detail::FmmForceOutput output, float const* sourceMasses) {
     using Parameters = CudaKickParameters<order>;
     Timer tm;
     tm.start();
@@ -400,6 +400,7 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     data.sph = COSMICTIGER_WITH_SPH && getOptions().hydro.enabled;
     data.darkMatterMass = getOptions().initial.darkMatterMass;
     data.sphMass = getOptions().initial.gasMass;
+    data.sourceMasses = sourceMasses;
     data.type = data.sph ? &particlesType(0) : nullptr;
 #if COSMICTIGER_WITH_SPH
     bool const gasKick = data.sph && !kparams.forceOnly;

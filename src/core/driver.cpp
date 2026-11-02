@@ -69,6 +69,7 @@
 #if COSMICTIGER_ENABLE_CHEMISTRY
 #include <cosmictiger/sph/sph_chemistry.hpp>
 #endif
+#include <cosmictiger/hydro/hopkins_driver.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
 #if COSMICTIGER_ENABLE_STAR_FORMATION
 #include <cosmictiger/sph/star_formation.hpp>
@@ -742,15 +743,25 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
     if (getOptions().hydro.enabled) {
         profile::profileBegin("hydro");
         int const activeRung = global ? 0 : minRung;
-        sphStep1(activeRung);
-        auto const hydro =
-            sphStep2(activeRung, scale, time, baseTimestep, 1, scaleDerivative, &energies, true, -1,
-                closingOnly, previousTimestep, global ? result.minimumTimestep : 0.0);
-        profile::profileEnd();
-        gravity.maxRung = std::max(gravity.maxRung, hydro.maximumRung);
-        if (global) {
-            gravity.minimumTimestep =
-                std::min(gravity.minimumTimestep, static_cast<double>(hydro.minimumTimestep));
+        if (getOptions().hydro.method == "sph") {
+            sphStep1(activeRung);
+            auto const hydro =
+                sphStep2(activeRung, scale, time, baseTimestep, 1, scaleDerivative, &energies, true,
+                    -1, closingOnly, previousTimestep, global ? result.minimumTimestep : 0.0);
+            profile::profileEnd();
+            gravity.maxRung = std::max(gravity.maxRung, hydro.maximumRung);
+            if (global) {
+                gravity.minimumTimestep =
+                    std::min(gravity.minimumTimestep, static_cast<double>(hydro.minimumTimestep));
+            }
+        } else {
+            auto const hydro = hopkinsKick(activeRung, scale, scaleDerivative, time, baseTimestep,
+                energies, closingOnly, previousTimestep, global ? result.minimumTimestep : 0.0);
+            gravity.maxRung = std::max(gravity.maxRung, hydro.maximumRung);
+            if (global) {
+                gravity.minimumTimestep = std::min(gravity.minimumTimestep, hydro.minimumTimestep);
+            }
+            profile::profileEnd();
         }
         if (fullEvaluation || global) {
             energies.pot = gravity.pot / scale;

@@ -124,7 +124,9 @@ __device__ FlopCount doKick(KickReturn& result, KickParameters params, CudaKickD
         vx = vels[sinkIndex][kXDimension];
         vy = vels[sinkIndex][kYDimension];
         vz = vels[sinkIndex][kZDimension];
-        float const mass = data.sph ?
+        float const mass = data.sourceMasses != nullptr ?
+            data.sourceMasses[sinkIndex] :
+            data.sph ?
             (data.type[sinkIndex] == kDarkMatterType ? data.darkMatterMass : data.sphMass) :
             1.0f;
         float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
@@ -643,7 +645,9 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                             for (int l = tid; l < sinkCount; l += kWarpSize) {
                                 ParticleInteger const sinkIndex =
                                     self.particleRange.first + sinkBegin + l;
-                                float const mass = data.sph ?
+                                float const mass = data.sourceMasses != nullptr ?
+                                    data.sourceMasses[sinkIndex] :
+                                    data.sph ?
                                     (data.type[sinkIndex] == kDarkMatterType ? data.darkMatterMass :
                                                                                data.sphMass) :
                                     1.0f;

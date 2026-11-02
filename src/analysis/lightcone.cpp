@@ -187,7 +187,9 @@ size_t lcAddParticleEntries(EntryLists const& entries) {
             double const radius =
                 sqrtf(sqr(entry.x.toDouble(), entry.y.toDouble(), entry.z.toDouble()));
             ALWAYS_ASSERT(entry.pix >= 0 && size_t(entry.pix) < npix);
-            double const mass = entry.type == kDarkMatterType ? darkMatterMass : gasMass;
+            double const mass = entry.mass >= 0.0f ?
+                entry.mass :
+                (entry.type == kDarkMatterType ? darkMatterMass : gasMass);
             epochMap.add(entry.pix, mass / sqr(radius), getOptions().lightcone.mapSize);
         }
     }

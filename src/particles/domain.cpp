@@ -561,6 +561,8 @@ void domainsTransmitParticles(Vector<Particle> parts) {
 struct GasMigrationState {
     Array<float, kDimensions> acceleration, predictedAcceleration, gravityAcceleration;
     float supportRadius, internalEnergy, predictedInternalEnergyRate, internalEnergyRate, density;
+    float mass;
+    HopkinsParticleState hopkins;
     char converged, semiactive;
     Pair<float> viscosity;    // Alpha and its previous conformal-time rate.
     float divergence;         // Previous physical divergence for Cullen-Dehnen and Price et al.
@@ -578,6 +580,12 @@ struct GasMigrationState {
         arc & density;
         arc & converged;
         arc & semiactive;
+        if (getOptions().hydro.method == "mfv") {
+            arc & mass;
+        }
+        if (getOptions().hydro.method != "sph") {
+            arc & hopkins;
+        }
         if (getOptions().hydro.viscosityEvolution != "none") {
             arc & viscosity;
         }
@@ -632,6 +640,12 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
         gas.converged = sphParticlesConvergenceFlags[i];
         gas.semiactive = sphParticlesSemiactiveFlags[i];
         gas.internalEnergy = sphParticlesThermodynamicStates[i].internalEnergy;
+        if (getOptions().hydro.method == "mfv") {
+            gas.mass = sphParticlesMass(i);
+        }
+        if (getOptions().hydro.method != "sph") {
+            gas.hopkins = sphParticlesHopkinsState(i);
+        }
         if (getOptions().hydro.viscosityEvolution != "none") {
             auto const& state = sphParticlesViscosityStates[i];
             gas.viscosity = {state.alpha, state.rate};
@@ -670,6 +684,12 @@ static void unpackSphParticle(
         sphParticlesConvergenceFlags[i] = gas.converged;
         sphParticlesSemiactiveFlags[i] = gas.semiactive;
         sphParticlesThermodynamicStates[i].internalEnergy = gas.internalEnergy;
+        if (getOptions().hydro.method == "mfv") {
+            sphParticlesMfvMass(i) = gas.mass;
+        }
+        if (getOptions().hydro.method != "sph") {
+            sphParticlesHopkinsState(i) = gas.hopkins;
+        }
         if (getOptions().hydro.viscosityEvolution != "none") {
             sphParticlesViscosityStates[i] = {
                 gas.viscosity.first, gas.viscosity.second, gas.viscosity.first};

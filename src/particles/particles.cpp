@@ -48,10 +48,14 @@ void particlesGroupCacheFree();
 struct ParticlesCacheEntry {
     Array<Position, kDimensions> x;
     char type;
+    float mass;
     template <class A>
     void serialize(A&& arc, unsigned) {
         arc & type;
         arc & x;
+        if (getOptions().hydro.method == "mfv") {
+            arc & mass;
+        }
     }
 };
 
@@ -818,6 +822,36 @@ void particlesSetMinrung(int minrung) {
     }
 }
 
+void particlesGlobalReadMasses(ParticleGlobalRange range, float* masses, ParticleInteger offset) {
+    if (range.range.first == range.range.second) {
+        return;
+    }
+    if (range.proc == hpxRank()) {
+        for (ParticleInteger i = range.range.first; i < range.range.second; ++i) {
+            masses[offset + i - range.range.first] = particlesMass(i);
+        }
+        return;
+    }
+    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
+    ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
+    ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
+    ParticleInteger destination = offset;
+    for (ParticleInteger line = startLine; line <= stopLine; line += lineSize) {
+        auto const* values = particlesCacheReadLine({range.proc, line});
+        auto const begin = std::max(line, range.range.first);
+        auto const end = std::min(line + lineSize, range.range.second);
+        for (ParticleInteger i = begin; i < end; ++i) {
+            auto const& value = values[i - line];
+            masses[destination++] = getOptions().hydro.method == "mfv" ?
+                value.mass :
+                (getOptions().hydro.enabled ?
+                        float(value.type == kDarkMatterType ? getOptions().initial.darkMatterMass :
+                                                              getOptions().initial.gasMass) :
+                        1.0f);
+        }
+    }
+}
+
 void particlesGlobalReadPos(ParticleGlobalRange range, Position* x, Position* y, Position* z,
     char* types, ParticleInteger offset) {
     static bool const sph = getOptions().hydro.enabled;
@@ -887,6 +921,12 @@ static Vector<ParticlesCacheEntry> particlesFetchCacheLine(ParticleInteger index
     ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; i++) {
         auto& ln = line[i - begin];
+        // A final owned cache line may include Dehnen's temporary imported tail.
+        // Imported gas has no local hydro category; its mass is fetched separately
+        // from the source owner, never through the local gas mirror.
+        bool const importedGas = getOptions().hydro.enabled && particlesType(i) == kSphType &&
+            particlesCatIndex(i) == kNoParticleIndex;
+        ln.mass = importedGas ? 0.0f : particlesMass(i);
         for (int dim = 0; dim < kDimensions; dim++) {
             ln.x[dim] = particlesPos(dim, i);
         }
@@ -1837,6 +1877,28 @@ EnergiesT particlesSumEnergies() {
                 ParticleInteger const b = (size_t) proc * particlesSize() / numberOfThreads;
                 ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
                 for (ParticleInteger i = b; i != e; i++) {
+#if COSMICTIGER_WITH_SPH
+                    if (getOptions().hydro.method != "sph" && particlesType(i) == kSphType) {
+                        auto const& state = sphParticlesHopkinsState(particlesCatIndex(i));
+                        if (state.initialized) {
+                            double momentumSquared = 0.0;
+                            for (double component : state.momentum) {
+                                momentumSquared += component * component;
+                            }
+                            double const kinetic = 0.5 * momentumSquared / state.mass;
+                            if (saveParticlePotential(getOptions().analysis)) {
+                                energies.pot += 0.5 * state.mass * particlesPot(i);
+                            }
+                            energies.kin += kinetic;
+                            energies.therm += state.totalEnergy - kinetic;
+                            energies.xmom += state.momentum[0];
+                            energies.ymom += state.momentum[1];
+                            energies.zmom += state.momentum[2];
+                            energies.nmom += std::sqrt(momentumSquared);
+                            continue;
+                        }
+                    }
+#endif
                     float const vx = particlesVel(kXDimension, i);
                     float const vy = particlesVel(kYDimension, i);
                     float const vz = particlesVel(kZDimension, i);

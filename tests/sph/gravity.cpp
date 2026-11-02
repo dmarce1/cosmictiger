@@ -22,6 +22,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
 #include <cosmictiger/gravity/dehnen/execution.hpp>
+#include <cosmictiger/gravity/dehnen/particle_exchange.hpp>
 #include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
@@ -204,8 +205,7 @@ void resetKickState() {
 void verifyKick(double inverseCube, double inverseRadius, double separation) {
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         bool const gas = particlesIsSph(i);
-        double const sourceMass =
-            gas ? getOptions().initial.darkMatterMass : getOptions().initial.gasMass;
+        double const sourceMass = particlesMass(1 - i);
         double const acceleration =
             kGravityScale * (gas ? 1.0 : -1.0) * sourceMass * separation * inverseCube;
         requireClose(
@@ -237,7 +237,7 @@ void verifySynchronizedDiagnostics(KickReturn const& result) {
         zMomentum += mass * vz;
         momentumNorm += mass * std::sqrt(vx * vx + vy * vy + vz * vz);
     }
-    double const gasMass = getOptions().initial.gasMass;
+    double const gasMass = particlesMass(sphParticlesParticleIndex(0));
     double const initialSpeed2 = 0.125 * 0.125 * (1.0 + 4.0 + 9.0);
     requireClose("synchronized kinetic diagnostic", kinetic + result.darkMatterKineticCorrection,
         0.5 * gasMass * initialSpeed2);
@@ -317,13 +317,19 @@ void verifyBhPotentials(bool useCuda) {
         "halo midpoint potential uses selected gravity kernel", potential[1], expectedMidpoint);
 }
 
-void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
+void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f, float gasMass = -1.0f) {
     double const nominalSeparation = softened ? 0.25 * getOptions().gravity.supportRadius : 0.25;
     initializePair(nominalSeparation);
+    if (gasMass >= 0.0f) {
+        ALWAYS_ASSERT(getOptions().hydro.method == "mfv");
+        sphParticlesMfvMass(0) = gasMass;
+    }
+    gasMass = particlesMass(sphParticlesParticleIndex(0));
     sphParticlesSupportRadius(0) = hydroSupport;
     auto const built = treeCreate(TreeCreateParameters(0, 0.5, getOptions().gravity.supportRadius));
     verifyMappings();
-    requireClose("root mixed mass", nodeMass(treeGetNode(built.id)), 1.0);
+    requireClose("root mixed mass", nodeMass(treeGetNode(built.id)),
+        getOptions().initial.darkMatterMass + gasMass);
     requireClose("gravity tree support is independent of hydro smoothing",
         built.maxGravitySupportRadius, getOptions().gravity.supportRadius);
     ParticleInteger const gas = sphParticlesParticleIndex(0);
@@ -382,8 +388,7 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
         origin[dim] = 0.0;
     }
     auto params = makeKickParams();
-    double const darkMatterAcceleration =
-        kGravityScale * getOptions().initial.gasMass * separation * inverseCube;
+    double const darkMatterAcceleration = kGravityScale * gasMass * separation * inverseCube;
     double const gravityEffectiveRadius = getOptions().gravity.supportRadius /
         selectedGravityKernel().supportRadiusPerEffectiveRadius;
     double const darkMatterTimestep =
@@ -393,9 +398,7 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
     auto const cpuResult =
         kick(params, local, origin, built.id, Vector<TreeId>{built.id}, Vector<TreeId>{}, nullptr);
     requireClose("CPU kick total potential", cpuResult.pot,
-        -kGravityScale * getOptions().initial.darkMatterMass * getOptions().initial.gasMass *
-            inverseRadius,
-        2e-4);
+        -kGravityScale * getOptions().initial.darkMatterMass * gasMass * inverseRadius, 2e-4);
     verifyKick(inverseCube, inverseRadius, separation);
     requireClose(
         "CPU gravity rung uses the variance smoothing length", particlesRung(darkMatterIndex), 2);
@@ -620,6 +623,44 @@ void validateSphRemoteTreeCache() {
 }
 HPX_PLAIN_ACTION(validateSphRemoteTreeCache, ValidateSphRemoteTreeCacheAction);
 
+void initializeMfvGravityMasses() {
+    detail::initializePair(0.25);
+    sphParticlesMfvMass(0) = 0.375f + 0.03125f * hpxRank();
+    // Dehnen CUDA staging can append imported gas positions before another
+    // rank requests the final cache line of the two owned particles. Such an
+    // unused tail entry has no local gas record and must not read its mass.
+    particlesResize(3);
+    particlesType(2) = kSphType;
+    particlesCatIndex(2) = kNoParticleIndex;
+    particlesRung(2) = 0;
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        particlesPos(dim, 2) = 0.0;
+        particlesVel(dim, 2) = 0.0f;
+    }
+}
+HPX_PLAIN_ACTION(initializeMfvGravityMasses, InitializeMfvGravityMassesAction);
+
+void finishMfvGravityMasses() {
+    particlesResize(2);
+}
+HPX_PLAIN_ACTION(finishMfvGravityMasses, FinishMfvGravityMassesAction);
+
+void validateMfvGravityMasses() {
+    int const rank = (hpxRank() + 1) % hpxSize();
+    TreeNode source;
+    source.processRange = {rank, rank + 1};
+    source.particleRange = {0, 2};
+    Position x[4]{}, y[4]{}, z[4]{};
+    char types[4]{};
+    float masses[4]{-1.0f, -1.0f, -1.0f, -1.0f};
+    dehnenReadSourcePositions(source, x, y, z, types, masses, 1);
+    detail::requireClose("remote DM source mass", masses[1], getOptions().initial.darkMatterMass);
+    detail::requireClose("remote MFV source mass", masses[2], 0.375f + 0.03125f * rank);
+    detail::requireClose("remote MFV mass preceding guard", masses[0], -1.0);
+    detail::requireClose("remote MFV mass following guard", masses[3], -1.0);
+}
+HPX_PLAIN_ACTION(validateMfvGravityMasses, ValidateMfvGravityMassesAction);
+
 void sphGravityTest() {
 #ifdef USE_CUDA
     if (getOptions().compute.cuda) {
@@ -661,6 +702,16 @@ void sphGravityTest() {
         runPairCase(useCuda, true, 0.001f);
         runPairCase(useCuda, true, 0.1f);
         runPairCase(useCuda, true);
+        if (kPositionBits == 64 && opts.run.timeIntegrator == "traditional" &&
+            !opts.chemistry.enabled && !opts.starFormation.enabled) {
+            opts.hydro.method = "mfv";
+            setOptions(opts);
+            runPairCase(useCuda, false, 0.02f, 0.375f);
+            runPairCase(useCuda, true, 0.02f, 0.0625f);
+            opts.hydro.method = "sph";
+            setOptions(opts);
+            runPairCase(useCuda, true);
+        }
         checkpointPair();
         sphParticlesResize(2);
         auto const secondGas = sphParticlesParticleIndex(1);
@@ -707,6 +758,36 @@ void sphGravityTest() {
             future.get();
         }
         treeDestroy(true);
+    }
+    if (kPositionBits == 64 && opts.run.timeIntegrator == "traditional" &&
+        !opts.chemistry.enabled && !opts.starFormation.enabled) {
+        opts.hydro.method = "mfv";
+        setOptions(opts);
+        pending.clear();
+        for (auto const& locality : hpxLocalities()) {
+            pending.push_back(hpx::async<InitializeMfvGravityMassesAction>(locality));
+        }
+        for (auto& future : pending) {
+            future.get();
+        }
+        particlesCacheFree();
+        pending.clear();
+        for (auto const& locality : hpxLocalities()) {
+            pending.push_back(hpx::async<ValidateMfvGravityMassesAction>(locality));
+        }
+        for (auto& future : pending) {
+            future.get();
+        }
+        pending.clear();
+        for (auto const& locality : hpxLocalities()) {
+            pending.push_back(hpx::async<FinishMfvGravityMassesAction>(locality));
+        }
+        for (auto& future : pending) {
+            future.get();
+        }
+        particlesCacheFree();
+        opts.hydro.method = "sph";
+        setOptions(opts);
     }
     PRINT("SPH gravity regression passed (%s, %i localities)\n", useCuda ? "CPU and CUDA" : "CPU",
         hpxSize());

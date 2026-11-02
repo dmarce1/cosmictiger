@@ -4,7 +4,7 @@
 #include <cosmictiger/gravity/tree.hpp>
 
 using GravityRemoteSourceReader = void (*)(
-    TreeNode const&, Position*, Position*, Position*, char*, ParticleInteger);
+    TreeNode const&, Position*, Position*, Position*, char*, float*, ParticleInteger);
 void gravitySetRemoteSourceReader(GravityRemoteSourceReader reader);
 void gravityReadSourcePositions(
-    TreeNode const&, Position*, Position*, Position*, char*, ParticleInteger);
+    TreeNode const&, Position*, Position*, Position*, char*, float*, ParticleInteger);

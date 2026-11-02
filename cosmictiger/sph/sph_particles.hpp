@@ -8,6 +8,7 @@
 #pragma once
 
 #include <cosmictiger/chemistry/gadget4_cooling.hpp>
+#include <cosmictiger/hydro/hopkins_state.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/sph/cullen_and_dehnen/state.hpp>
@@ -51,6 +52,9 @@ SPH_PARTICLES_EXTERN Array<float*, kDimensions> sphParticlesGravityAccelerations
 SPH_PARTICLES_EXTERN float* sphParticlesPredictedInternalEnergyRates;
 SPH_PARTICLES_EXTERN float* sphParticlesInternalEnergyRates;
 SPH_PARTICLES_EXTERN float* sphParticlesDensities;
+// MFV mass projection for shared gravity/output; conserved mass stays in the double state.
+SPH_PARTICLES_EXTERN float* sphParticlesMasses;
+SPH_PARTICLES_EXTERN HopkinsParticleState* sphParticlesHopkinsStates;
 // Derived during every density pass; rebuilt after restart and migration.
 SPH_PARTICLES_EXTERN float* sphParticlesBalsaraFactors;
 // Variational operator only: zeta_i of cosmictiger/sph/volume.hpp, written by the density pass
@@ -80,6 +84,7 @@ void sphParticlesGlobalReadInternalEnergyAndSupportRadius(
 void sphParticlesGlobalReadRungs(ParticleGlobalRange range, char*, ParticleInteger offset);
 void sphParticlesGlobalReadVelocities(
     ParticleGlobalRange range, float*, float*, float*, ParticleInteger offset);
+void sphParticlesGlobalReadMasses(ParticleGlobalRange range, float* masses, ParticleInteger offset);
 void sphParticlesGlobalReadDensity(ParticleGlobalRange range, float*, ParticleInteger offset,
     float* balsaraFactor = nullptr, float* viscosityAlpha = nullptr,
     float* gradHCorrection = nullptr);
@@ -102,6 +107,24 @@ void sphParticlesUpdateTargetAlpha(
 
 inline float& sphParticlesPredictedInternalEnergyRate(ParticleInteger index) {
     return sphParticlesPredictedInternalEnergyRates[index];
+}
+
+inline HopkinsParticleState& sphParticlesHopkinsState(ParticleInteger index) {
+    CHECK_SPH_PART_BOUNDS(index);
+    ALWAYS_ASSERT(sphParticlesHopkinsStates != nullptr);
+    return sphParticlesHopkinsStates[index];
+}
+
+inline float sphParticlesMass(ParticleInteger index) {
+    CHECK_SPH_PART_BOUNDS(index);
+    return getOptions().hydro.method == "mfv" ? sphParticlesMasses[index] :
+                                                float(getOptions().initial.gasMass);
+}
+
+inline float& sphParticlesMfvMass(ParticleInteger index) {
+    CHECK_SPH_PART_BOUNDS(index);
+    ALWAYS_ASSERT(sphParticlesMasses != nullptr);
+    return sphParticlesMasses[index];
 }
 
 inline char& sphParticlesConverged(ParticleInteger index) {

@@ -10,12 +10,12 @@ void gravitySetRemoteSourceReader(GravityRemoteSourceReader reader) {
     remoteSourceReader.store(reader);
 }
 void gravityReadSourcePositions(TreeNode const& source, Position* x, Position* y, Position* z,
-    char* types, ParticleInteger offset) {
+    char* types, float* masses, ParticleInteger offset) {
     if (!source.isLocalHere()) {
         ALWAYS_ASSERT(source.sourceStore == FmmParticleStore::Owned);
         auto const reader = remoteSourceReader.load();
         ALWAYS_ASSERT(reader != nullptr);
-        reader(source, x, y, z, types, offset);
+        reader(source, x, y, z, types, masses, offset);
         return;
     }
     auto const view = treeSourceView(source);
@@ -25,6 +25,11 @@ void gravityReadSourcePositions(TreeNode const& source, Position* x, Position* y
     std::copy_n(view.positions[kXDimension] + range.first, count, x + offset);
     std::copy_n(view.positions[kYDimension] + range.first, count, y + offset);
     std::copy_n(view.positions[kZDimension] + range.first, count, z + offset);
+    if (masses != nullptr) {
+        for (ParticleInteger i = 0; i < count; ++i) {
+            masses[offset + i] = fmmSourceMass(view, range.first + i);
+        }
+    }
     if (types != nullptr) {
         if (view.types != nullptr) {
             std::copy_n(view.types + range.first, count, types + offset);

@@ -187,6 +187,9 @@ set(cosmictiger_header_files
     cosmictiger/core/flops.hpp
     cosmictiger/core/hpx.hpp
     cosmictiger/core/memused.hpp
+    cosmictiger/hydro/hopkins.hpp
+    cosmictiger/hydro/hopkins_state.hpp
+    cosmictiger/hydro/hopkins_driver.hpp
     cosmictiger/core/options.hpp
     cosmictiger/core/options_metadata.hpp
     cosmictiger/core/profiler.hpp
@@ -385,6 +388,10 @@ set_source_files_properties(src/sph/sph_chemistry.cpp src/io/view.cpp tests/sph/
 # Star-formation device physics shares the chemistry rounding contract.
 set_source_files_properties(src/sph/star_formation_cuda.cu PROPERTIES COMPILE_OPTIONS
     "--expt-relaxed-constexpr;--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false;-Xcompiler=-fno-fast-math;-Xcompiler=-ffp-contract=off")
+# Meshless conservative updates and the small-amplitude wave retain double precision.
+set_source_files_properties(src/hydro/hopkins_driver.cpp src/scenarios/sound_wave.cpp
+    PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
+
 # The adaptive Boltzmann solve needs finite-value checks and accurate
 # cancellation in the synchronous Einstein constraints.
 set_source_files_properties(src/cosmology/boltzmann.cpp PROPERTIES
@@ -1883,6 +1890,67 @@ if(BUILD_TESTING)
         endif()
     endif()
     if(COSMICTIGER_WITH_SPH)
+        add_executable(hopkins_test tests/hopkins.cpp)
+        target_include_directories(hopkins_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_options(hopkins_test PRIVATE -fno-fast-math -ffp-contract=off)
+        cosmictiger_add_gtest(NAME hopkins TARGET hopkins_test PROPERTIES TIMEOUT 30 LABELS "hopkins;cpu")
+        add_executable(gresho_test tests/gresho.cpp)
+        target_include_directories(gresho_test PRIVATE ${PROJECT_SOURCE_DIR})
+        cosmictiger_add_gtest(NAME gresho TARGET gresho_test PROPERTIES TIMEOUT 30 LABELS "hopkins;cpu")
+        if(COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL AND COSMICTIGER_ENABLE_FMM AND
+                COSMICTIGER_POSITION_TYPE STREQUAL "fixed64" AND
+                COSMICTIGER_MIN_EXPANSION_DEGREE LESS_EQUAL 6 AND
+                COSMICTIGER_MAX_EXPANSION_DEGREE GREATER_EQUAL 6)
+            add_test(NAME hopkins_application COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_hopkins.py $<TARGET_FILE:cosmictiger>
+                ${CMAKE_CURRENT_BINARY_DIR}/hopkins_application)
+            set_tests_properties(hopkins_application PROPERTIES TIMEOUT 600 PROCESSORS 2
+                RUN_SERIAL TRUE LABELS "hopkins;cpu")
+            if(COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
+                add_test(NAME hopkins_global_sources COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/run_hopkins.py $<TARGET_FILE:cosmictiger>
+                    ${PROJECT_BINARY_DIR}/tests/hopkins_global_sources --global-sources-only)
+                set_tests_properties(hopkins_global_sources PROPERTIES TIMEOUT 300 PROCESSORS 2
+                    RUN_SERIAL TRUE LABELS "hopkins;cpu")
+            endif()
+        endif()
+        if(COSMICTIGER_POSITION_TYPE STREQUAL "fixed64" AND
+                COSMICTIGER_MIN_EXPANSION_DEGREE LESS_EQUAL 6 AND
+                COSMICTIGER_MAX_EXPANSION_DEGREE GREATER_EQUAL 6)
+            foreach(hopkins_integrator IN ITEMS traditional global)
+                string(TOUPPER "${hopkins_integrator}" hopkins_integrator_feature)
+                if(NOT COSMICTIGER_ENABLE_INTEGRATOR_${hopkins_integrator_feature})
+                    continue()
+                endif()
+                foreach(hopkins_solver IN ITEMS fmm pmmm_pp pmmm_fmm)
+                    string(TOUPPER "${hopkins_solver}" hopkins_solver_feature)
+                    if(NOT COSMICTIGER_ENABLE_${hopkins_solver_feature})
+                        continue()
+                    endif()
+                    set(hopkins_solver_args --gravity-method fmm)
+                    if(hopkins_solver MATCHES "^pmmm_(pp|fmm)$")
+                        set(hopkins_solver_args --gravity-method pmmm --near-method ${CMAKE_MATCH_1})
+                    endif()
+                    foreach(hopkins_backend IN ITEMS cpu cuda)
+                        if(hopkins_backend STREQUAL "cuda" AND NOT COSMICTIGER_WITH_CUDA)
+                            continue()
+                        endif()
+                        set(hopkins_backend_args)
+                        if(hopkins_backend STREQUAL "cuda")
+                            set(hopkins_backend_args --cuda)
+                        endif()
+                        set(hopkins_case hopkins_${hopkins_solver}_${hopkins_integrator}_${hopkins_backend})
+                        add_test(NAME ${hopkins_case} COMMAND ${Python3_EXECUTABLE}
+                            ${PROJECT_SOURCE_DIR}/tests/run_hopkins.py $<TARGET_FILE:cosmictiger>
+                            ${PROJECT_BINARY_DIR}/tests/${hopkins_case} --matrix-only
+                            --time-integrator ${hopkins_integrator} ${hopkins_solver_args}
+                            ${hopkins_backend_args})
+                        set_tests_properties(${hopkins_case} PROPERTIES TIMEOUT 600 PROCESSORS 2
+                            RUN_SERIAL TRUE LABELS "hopkins;${hopkins_backend}")
+                    endforeach()
+                endforeach()
+            endforeach()
+        endif()
         add_executable(radial_density_kernel_test tests/radial_density_kernel.cpp)
         target_include_directories(radial_density_kernel_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(radial_density_kernel_test PRIVATE RADIAL_KERNEL_TEST_SIMD)

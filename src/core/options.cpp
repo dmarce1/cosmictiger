@@ -99,6 +99,44 @@ bool isPositiveFloatOption(double value) {
     return isFiniteFloatOption(value) && value >= std::numeric_limits<float>::min();
 }
 
+void validateHydroMethod(Options const& opts) {
+    if (opts.hydro.method != "sph" && opts.hydro.method != "mfm" && opts.hydro.method != "mfv") {
+        throw std::invalid_argument("hydro.method must be sph, mfm, or mfv");
+    }
+    if (opts.hydro.enabled && opts.hydro.method != "sph") {
+        if constexpr (kPositionBits != 64) {
+            throw std::invalid_argument(
+                "Hopkins MFM/MFV requires a build with COSMICTIGER_POSITION_TYPE=fixed64");
+        }
+        if (opts.run.timeIntegrator != "traditional" && opts.run.timeIntegrator != "global") {
+            throw std::invalid_argument(
+                "Hopkins MFM/MFV requires run.timeIntegrator=traditional or global");
+        }
+        if (opts.chemistry.enabled || opts.starFormation.enabled) {
+            throw std::invalid_argument(
+                "Hopkins MFM/MFV requires chemistry.enabled=false and starFormation.enabled=false");
+        }
+    }
+    if (opts.run.scenario == "soundWave") {
+        if (opts.hydro.method == "sph" || opts.hydro.kernelFamily != "spline" ||
+            opts.hydro.kernelDegree != 3 || opts.hydro.gamma != 5.0 / 3.0) {
+            throw std::invalid_argument(
+                "run.scenario=soundWave requires hydro.method=mfm or mfv, "
+                "hydro.kernelFamily=spline, hydro.kernelDegree=3 and hydro.gamma=5/3");
+        }
+        if (opts.gravity.enabled || opts.hydro.damping != 0.0 || opts.hydro.yAcceleration != 0.0 ||
+            opts.hydro.zPlaneAcceleration != 0.0 || opts.hydro.centralAcceleration != 0.0) {
+            throw std::invalid_argument("run.scenario=soundWave requires gravity.enabled=false and "
+                                        "zero external acceleration");
+        }
+        if (opts.initial.particlesPerDimension < 16 || opts.initial.closePack) {
+            throw std::invalid_argument(
+                "run.scenario=soundWave requires initial.particlesPerDimension>=16 and "
+                "initial.closePack=false");
+        }
+    }
+}
+
 void validateCooling(Options const& opts) {
     if (!opts.chemistry.enabled) {
         return;
@@ -199,6 +237,7 @@ Options const& getOptions() {
 }
 
 void setOptions(Options const& opts) {
+    detail::validateHydroMethod(opts);
     detail::validateCooling(opts);
     detail::validateStarFormation(opts);
 #if !COSMICTIGER_WITH_GRAVITY
@@ -412,6 +451,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"chemistry.initializationTemperature", options.chemistry.initializationTemperature},
         {"chemistry.minimumSpecificEnergy", options.chemistry.minimumSpecificEnergy},
         {"hydro.enabled", options.hydro.enabled},
+        {"hydro.method", options.hydro.method},
         {"hydro.kernelFamily", options.hydro.kernelFamily},
         {"hydro.kernelDegree", options.hydro.kernelDegree},
         {"hydro.yAcceleration", options.hydro.yAcceleration},
@@ -473,7 +513,7 @@ bool processOptions(int argc, char* argv[]) {
         "print all resolved options and detailed internal diagnostics")("run.scenario",
         po::value<std::string>(&opts.run.scenario)->default_value("cosmology"),
         "physical scenario: plummer, sod, blast, rayleighTaylor, kelvinHelmholtz, disc, "
-        "polytropicStar, hydroWave, cosmology, glass")("run.endTime",
+        "polytropicStar, hydroWave, soundWave, gresho, cosmology, glass")("run.endTime",
         po::value<double>(&opts.run.endTime)->default_value(0.0),
         "total evolution time (conformal code time for cosmology); positive values override "
         "endRedshift, 0 uses the scenario duration")("run.maxIterations",
@@ -696,8 +736,9 @@ bool processOptions(int argc, char* argv[]) {
 
     po::options_description hydroOpts("Monaghan (1992) SPH");
     hydroOpts.add_options()("hydro.enabled",
-        po::value<bool>(&opts.hydro.enabled)->default_value(false),
-        "use density/internal-energy SPH")("hydro.kernelFamily",
+        po::value<bool>(&opts.hydro.enabled)->default_value(false), "enable gas hydrodynamics")(
+        "hydro.method", po::value<std::string>(&opts.hydro.method)->default_value("sph"),
+        "hydrodynamic method: sph, mfm, or mfv")("hydro.kernelFamily",
         po::value<std::string>(&opts.hydro.kernelFamily)->default_value("spline"),
         "density kernel family: spline, wendland, or ferrers")("hydro.kernelDegree",
         po::value<int>(&opts.hydro.kernelDegree)->default_value(3),
@@ -1133,7 +1174,8 @@ bool processOptions(int argc, char* argv[]) {
         resolveSupportRadius("hydro.maxEffectiveRadius", "hydro.maxSupportRadius", nullptr,
             opts.hydro.maxSupportRadius, hydroTable.supportRadiusPerEffectiveRadius);
     double const selfNeighborFloor =
-        4.0 * std::numbers::pi / 3.0 * radial_kernel::value(hydroTable, 0.0);
+        (scenario.hydroDimensions == 1 ? std::numbers::pi / 3.0 : 4.0 * std::numbers::pi / 3.0) *
+        radial_kernel::value(hydroTable, 0.0);
     if (opts.output.siloInterval <= 0) {
         THROW_ERROR("output.siloInterval must be positive\n");
     }
@@ -1357,6 +1399,7 @@ bool processOptions(int argc, char* argv[]) {
                     "requires gravity without SPH\n");
     }
     opts.run.hierarchicalGravity = usesHierarchicalIntegration(opts.run);
+    detail::validateHydroMethod(opts);
     detail::validateCooling(opts);
     detail::validateStarFormation(opts);
     if (opts.hydro.enabled) {
@@ -1590,6 +1633,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("chemistry.initializationTemperature", chemistry.initializationTemperature);
     SHOW("chemistry.minimumSpecificEnergy", chemistry.minimumSpecificEnergy);
     SHOW("hydro.enabled", hydro.enabled);
+    SHOW("hydro.method", hydro.method);
     SHOW("gravity.enabled", gravity.enabled);
     SHOW("gravity.errorInterval", gravity.errorInterval);
     SHOW("gravity.errorSampleSize", gravity.errorSampleSize);
