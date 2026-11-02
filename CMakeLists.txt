@@ -6,6 +6,35 @@
 
 cmake_minimum_required(VERSION 3.24)
 project(cosmictiger LANGUAGES CXX C)
+
+find_program(cosmictiger_ccache_program NAMES ccache NO_CACHE)
+set(cosmictiger_use_ccache_default ON)
+if(NOT cosmictiger_ccache_program)
+    set(cosmictiger_use_ccache_default OFF)
+    if(NOT DEFINED COSMICTIGER_USE_CCACHE)
+        message(WARNING
+            "ccache is recommended but optional and is not installed. "
+            "Changing the default for COSMICTIGER_USE_CCACHE from ON to OFF.")
+    endif()
+endif()
+option(COSMICTIGER_USE_CCACHE "Use ccache for compilation when available"
+    ${cosmictiger_use_ccache_default})
+if(COSMICTIGER_USE_CCACHE)
+    if(cosmictiger_ccache_program)
+        foreach(cosmictiger_language IN ITEMS C CXX CUDA)
+            # Preserve user launchers, including CUDA's not-yet-initialized environment value.
+            if(NOT DEFINED CMAKE_${cosmictiger_language}_COMPILER_LAUNCHER AND
+                NOT DEFINED ENV{CMAKE_${cosmictiger_language}_COMPILER_LAUNCHER})
+                set(CMAKE_${cosmictiger_language}_COMPILER_LAUNCHER "${cosmictiger_ccache_program}")
+            endif()
+        endforeach()
+    else()
+        message(WARNING
+            "COSMICTIGER_USE_CCACHE is ON, but ccache is not installed. "
+            "ccache is recommended but optional; continuing without automatic compiler caching.")
+    endif()
+endif()
+
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/lib")
 include(CTest)
 
