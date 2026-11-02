@@ -8,7 +8,9 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <type_traits>
 
 #include <cosmictiger/math/position.hpp>
@@ -90,6 +92,23 @@ struct HopkinsParticleState {
 
 static_assert(std::is_trivially_copyable_v<HopkinsParticleState>);
 static_assert(std::is_standard_layout_v<HopkinsParticleState>);
+
+// HPX serializes members individually. Canonicalize native padding so a
+// migrated state has the same bytes as a local one: checkpoints stay identical
+// and the owner mirrors can compare records bytewise.
+inline void hopkinsCanonicalizePadding(HopkinsParticleState& state) {
+    constexpr size_t kInitialFieldsEnd = offsetof(HopkinsParticleState, initialized) + sizeof(bool);
+    constexpr size_t kPredictorFieldsBegin = offsetof(HopkinsParticleState, gradients);
+    constexpr size_t kPredictorFieldsEnd =
+        offsetof(HopkinsParticleState, predictorInitialized) + sizeof(bool);
+    constexpr size_t kSupportFieldBegin = offsetof(HopkinsParticleState, supportRadius);
+    constexpr size_t kStateFieldsEnd =
+        offsetof(HopkinsParticleState, hierarchicalActive) + sizeof(bool);
+    auto* bytes = reinterpret_cast<unsigned char*>(&state);
+    std::memset(bytes + kInitialFieldsEnd, 0, kPredictorFieldsBegin - kInitialFieldsEnd);
+    std::memset(bytes + kPredictorFieldsEnd, 0, kSupportFieldBegin - kPredictorFieldsEnd);
+    std::memset(bytes + kStateFieldsEnd, 0, sizeof(HopkinsParticleState) - kStateFieldsEnd);
+}
 
 static_assert(sizeof(Vector3<double>) == sizeof(std::array<double, 3>));
 static_assert(alignof(Vector3<double>) == alignof(std::array<double, 3>));

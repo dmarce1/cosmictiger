@@ -16,8 +16,10 @@ void hopkinsPrepareGravityMasses(double time);
 // Begin a geometry event; the stable-ID source tree is refitted during gathering.
 void hopkinsPrepareTree();
 // Support/geometry preparation reads no live gravity force or dark-matter rung.
-// Call only after hopkinsPrepareTree; completion is consumed by hopkinsKick.
-void hopkinsPrepareGeometry(double scale, double expansionRate, double time);
+// It refreshes the retained records and solves only the due cells and their
+// halo. Call only after hopkinsPrepareTree; completion is consumed by hopkinsKick.
+void hopkinsPrepareGeometry(
+    double scale, double expansionRate, double time, double baseTimestep, bool global);
 
 // Close due/woken own intervals, reconstruct active cells, and open pair intervals.
 // Gravity accelerations must be fresh for all gas, including potential wake-ups.
@@ -41,5 +43,8 @@ double hopkinsHierarchicalDriftThermalEnergy();
 // Recompute the one-dimensional sound-wave density at the final drifted positions.
 // This diagnostic does not advance the conserved state or the integration clock.
 void hopkinsSoundWaveDiagnostics(double time);
+// Discard the retained coordinator records and owner mirrors; cached pair
+// intervals are kept. Gas teardown and checkpoint loading call this.
+void hopkinsResetSources();
 void hopkinsWriteCheckpoint(FILE* file);
 void hopkinsReadCheckpoint(FILE* file);

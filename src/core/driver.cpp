@@ -963,7 +963,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
                         sphAdvanced = true;
                     } else {
 #if COSMICTIGER_ENABLE_HOPKINS
-                        hopkinsPrepareGeometry(scale, scaleDerivative, time);
+                        hopkinsPrepareGeometry(scale, scaleDerivative, time, baseTimestep, global);
 #endif
                     }
                     joinGravity();
