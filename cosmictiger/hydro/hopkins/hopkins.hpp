@@ -17,6 +17,7 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/hydro/hopkins/hopkins_simd.hpp>
+#include <cosmictiger/math/matrix.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
 // Hopkins (2015), MNRAS 450, 53, doi:10.1093/mnras/stv195.
@@ -39,7 +40,7 @@ namespace detail {
 }    // namespace detail
 
 using Vector = Vector3<double>;
-using Matrix = std::array<Vector, 3>;
+using Matrix = math::Matrix<double, 3>;
 
 struct Primitive {
     double density = 0.0;
@@ -172,7 +173,9 @@ struct PairGravityWork {
     double rightEnergyRate = 0.0;
 };
 
-inline double dot(Vector const& a, Vector const& b, FlopCount* operations = nullptr) {
+template <class LeftDerived, class RightDerived>
+inline double dot(math::Vector<double, 3, LeftDerived> const& a,
+    math::Vector<double, 3, RightDerived> const& b, FlopCount* operations = nullptr) {
     detail::countFlops(operations, 5);
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
@@ -244,8 +247,9 @@ inline PairGravityWorkIntegral integratePairGravityWork(Vector const& initial,
 
 inline Vector multiply(
     Matrix const& matrix, Vector const& vector, FlopCount* operations = nullptr) {
-    return {dot(matrix[0], vector, operations), dot(matrix[1], vector, operations),
-        dot(matrix[2], vector, operations)};
+    detail::countFlops(operations, 15);
+    auto const result = matrix * vector;
+    return {result[0], result[1], result[2]};
 }
 
 // Safeguarded Newton step for the monotonically increasing kernel-count sum.
@@ -289,6 +293,73 @@ inline double supportRadiusStep(double radius, double residual, double derivativ
     return floatStorage ? double(float(next)) : next;
 }
 
+namespace detail {
+
+    template <int dimensions>
+    inline Geometry invertMoment(Geometry result, Matrix const& moment, double scale,
+        double maximumCondition, FlopCount* operations) {
+        math::SymmetricMatrix<double, dimensions> activeMoment;
+        math::SymmetricMatrix<double, dimensions> normalized;
+        for (int row = 0; row < dimensions; ++row) {
+            for (int column = 0; column <= row; ++column) {
+                activeMoment(row, column) = moment(row, column);
+                countFlops(operations, 1);
+                normalized(row, column) = moment(row, column) / scale;
+            }
+        }
+        // These leading-minor ratios are the squared Cholesky pivots. Preserve
+        // the normalized SPD rejection policy without factoring the matrix.
+        // This arithmetic is validation only, so it does not enter FLOP totals.
+        constexpr double kPivotTolerance = 64.0 * std::numeric_limits<double>::epsilon();
+        if (!(normalized(0, 0) > kPivotTolerance)) {
+            return result;
+        }
+        if constexpr (dimensions >= 2) {
+            double const minor =
+                normalized(0, 0) * normalized(1, 1) - normalized(0, 1) * normalized(0, 1);
+            if (!(minor / normalized(0, 0) > kPivotTolerance)) {
+                return result;
+            }
+        }
+        // The application SPD and condition checks own admissibility. The shared
+        // inverse still checks exact singularity and finite inputs/results.
+        math::SymmetricMatrix<double, dimensions> inverse;
+        size_t inverseOperations = 0;
+        auto const status =
+            math::tryInverse(activeMoment, inverse, math::MatrixOptions<double>{0.0, 0.0},
+                operations != nullptr ? &inverseOperations : nullptr);
+        countFlops(operations, inverseOperations);
+        if (status != math::MatrixStatus::Success) {
+            return result;
+        }
+        // Cancel the physical scale before squaring either matrix. Computing
+        // ||E||^2 ||E^-1||^2 first can overflow or underflow for a well-conditioned E.
+        countFlops(operations, dimensions * (dimensions + 1) / 2);
+        auto const normalizedInverse = inverse * scale;
+        if constexpr (dimensions == 3) {
+            // B_22 = minor_01/det(E) is the reciprocal of the final squared
+            // Cholesky pivot. Reuse it instead of evaluating the determinant twice.
+            double const inversePivot = normalizedInverse(2, 2);
+            if (!(inversePivot > 0.0 && inversePivot < 1.0 / kPivotTolerance)) {
+                return result;
+            }
+        }
+        for (int row = 0; row < dimensions; ++row) {
+            for (int column = 0; column < dimensions; ++column) {
+                result.inverseMoment(row, column) = inverse(row, column);
+            }
+        }
+        countFlops(operations, 4 * dimensions * dimensions + 3);
+        result.conditionNumber =
+            std::sqrt(math::squaredNorm(normalized) * math::squaredNorm(normalizedInverse)) /
+            double(dimensions);
+        result.valid =
+            std::isfinite(result.conditionNumber) && result.conditionNumber <= maximumCondition;
+        return result;
+    }
+
+}    // namespace detail
+
 // Equations (24)-(26), (27), and (77). kernelSum includes the self contribution;
 // kernelWeightedMoment is sum W(r,h) r tensor r, without particle-mass weighting.
 // A rejected matrix must trigger a larger neighbor search (Appendix C), never a
@@ -306,69 +377,23 @@ inline Geometry makeGeometry(double kernelSum, Matrix const& kernelWeightedMomen
     for (int i = 0; i < dimensions; i++) {
         for (int j = 0; j < dimensions; j++) {
             detail::countFlops(operations, 1);
-            moment[i][j] = kernelWeightedMoment[i][j] / kernelSum;
-            scale = std::max(scale, std::abs(moment[i][j]));
+            moment(i, j) = kernelWeightedMoment(i, j) / kernelSum;
+            if (!std::isfinite(moment(i, j))) {
+                return result;
+            }
+            scale = std::max(scale, std::abs(moment(i, j)));
         }
     }
     if (!(scale > 0.0) || !std::isfinite(scale)) {
         return result;
     }
-    Matrix lower{};
-    for (int i = 0; i < dimensions; i++) {
-        for (int j = 0; j <= i; j++) {
-            detail::countFlops(operations, 1);
-            double value = moment[i][j] / scale;
-            for (int k = 0; k < j; k++) {
-                detail::countFlops(operations, 2);
-                value -= lower[i][k] * lower[j][k];
-            }
-            if (i == j) {
-                if (!(value > 64.0 * std::numeric_limits<double>::epsilon())) {
-                    return result;
-                }
-                detail::countFlops(operations, 1);
-                lower[i][j] = std::sqrt(value);
-            } else {
-                detail::countFlops(operations, 1);
-                lower[i][j] = value / lower[j][j];
-            }
-        }
+    if (dimensions == 1) {
+        return detail::invertMoment<1>(result, moment, scale, maximumCondition, operations);
     }
-    for (int column = 0; column < dimensions; column++) {
-        Vector solution{};
-        for (int i = 0; i < dimensions; i++) {
-            double value = i == column ? 1.0 : 0.0;
-            for (int j = 0; j < i; j++) {
-                detail::countFlops(operations, 2);
-                value -= lower[i][j] * solution[j];
-            }
-            detail::countFlops(operations, 1);
-            solution[i] = value / lower[i][i];
-        }
-        for (int i = dimensions - 1; i >= 0; i--) {
-            double value = solution[i];
-            for (int j = i + 1; j < dimensions; j++) {
-                detail::countFlops(operations, 2);
-                value -= lower[j][i] * solution[j];
-            }
-            detail::countFlops(operations, 1);
-            solution[i] = value / lower[i][i];
-            detail::countFlops(operations, 1);
-            result.inverseMoment[i][column] = solution[i] / scale;
-        }
+    if (dimensions == 2) {
+        return detail::invertMoment<2>(result, moment, scale, maximumCondition, operations);
     }
-    double momentNorm = 0.0;
-    double inverseNorm = 0.0;
-    for (int i = 0; i < dimensions; i++) {
-        detail::countFlops(operations, 2);
-        momentNorm += dot(moment[i], moment[i], operations);
-        inverseNorm += dot(result.inverseMoment[i], result.inverseMoment[i], operations);
-    }
-    detail::countFlops(operations, 3);
-    result.conditionNumber = std::sqrt(momentNorm * inverseNorm) / double(dimensions);
-    result.valid =
-        std::isfinite(result.conditionNumber) && result.conditionNumber <= maximumCondition;
-    return result;
+    return detail::invertMoment<3>(result, moment, scale, maximumCondition, operations);
 }
 
 // Differentiate B = E^-1, where E is the normalized moment used by makeGeometry.
@@ -377,24 +402,8 @@ inline GeometryRate geometryRate(Geometry const& geometry, double volumeRate,
     Matrix const& momentRate, FlopCount* operations = nullptr) {
     GeometryRate result;
     result.volume = volumeRate;
-    Matrix intermediate{};
-    for (int row = 0; row < 3; row++) {
-        for (int column = 0; column < 3; column++) {
-            for (int k = 0; k < 3; k++) {
-                detail::countFlops(operations, 2);
-                intermediate[row][column] += geometry.inverseMoment[row][k] * momentRate[k][column];
-            }
-        }
-    }
-    for (int row = 0; row < 3; row++) {
-        for (int column = 0; column < 3; column++) {
-            for (int k = 0; k < 3; k++) {
-                detail::countFlops(operations, 2);
-                result.inverseMoment[row][column] -=
-                    intermediate[row][k] * geometry.inverseMoment[k][column];
-            }
-        }
-    }
+    detail::countFlops(operations, 90);
+    result.inverseMoment = -(geometry.inverseMoment * momentRate * geometry.inverseMoment);
     return result;
 }
 

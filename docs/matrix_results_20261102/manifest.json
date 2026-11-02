@@ -1,0 +1,48 @@
+{
+  "date": "2026-11-02",
+  "branch": "codex/matrix_algebra",
+  "base_commit": "63924895",
+  "cpu": "AMD Ryzen 9 3900X",
+  "gpu": "RTX 3090 (sm_86)",
+  "compilers": [
+    "GCC 15.2",
+    "GCC 13.4",
+    "CUDA 13.1"
+  ],
+  "benchmark_flags": "-std=c++20 -O3 -march=native -ffp-contract=off",
+  "benchmark_calls": {
+    "gcc15_strict.csv": 32768,
+    "gcc13_strict.csv": 32768,
+    "gcc15_strict_repeat.csv": 131072
+  },
+  "benchmark_repeats": 7,
+  "benchmark_samples": 256,
+  "benchmark_seed": "20261102 + dimensions",
+  "cpu_tests": {
+    "ctest_default": 79,
+    "hopkins_per_threshold_configuration": 53,
+    "hopkins_threshold_configurations": [
+      0,
+      "default",
+      6
+    ],
+    "cullen_and_dehnen_per_configuration": 4,
+    "price_per_configuration": 3,
+    "sph_configurations": [
+      "default",
+      "symmetric inverse threshold 0"
+    ]
+  },
+  "gpu_tests": 4,
+  "resource_limit": "WT on: CPUs 4-5, at most 2 workers; GPU tests one block, below allocated 1/8 GPU",
+  "sha256": {
+    "cosmictiger/math/matrix.hpp": "80664158144b9820364ac245a740a70dc4f00556ede507b65f2eb80f73ac40fa",
+    "cosmictiger/math/matrix_eigen.hpp": "b56f5d2b862a806c407d5914bb0ce16f2117f5c2d3453ac87e319f2afb23b41f",
+    "benchmarks/math/matrix.cpp": "f12cf91bd3ca75747188785e542abed3a3d3827dd9858cad261b55c92390fa66",
+    "tests/matrix.cpp": "f545b47bbacbcdd0f38f2c6c6120f0fbc51e2ded8406158e4c7b8fd5b0325805",
+    "tests/matrix_eigen.cpp": "0269b1b67649884523258b5fcb78c5ef3dfcb0c38d79d46833f64e807621d321",
+    "tests/matrix_cuda.cu": "a5f231950d542abde66d45b8ab3acab9ecad24bdcb67caabc67e386e1c55267b",
+    "tests/matrix_eigen_cuda.cu": "e1f1375e008ec95e1012b612cb7456fe6fcf7a08daebcb334603b4eec4e74751"
+  },
+  "gpu_driver": "595.99.02"
+}

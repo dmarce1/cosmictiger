@@ -68,6 +68,7 @@ option(COSMICTIGER_REQUIRE_APEX "Require HPX task profiling through an APEX-enab
     ${cosmictiger_require_apex_default})
 option(COSMICTIGER_WITH_LONG_LONG_PART_INT "Use long long to index local particles" OFF)
 include(cmake/features.cmake)
+include(cmake/matrix.cmake)
 # Compile-time cap on the tree leaf bucket. compute.bucketSize may be any
 # runtime value up to this power of two; leaves then hold between half the
 # runtime bucket plus one and the runtime bucket particles. The CUDA kick
@@ -299,6 +300,8 @@ set(cosmictiger_header_files
     cosmictiger/math/interpolation.hpp
     cosmictiger/math/kernel.hpp
     cosmictiger/math/math.hpp
+    cosmictiger/math/matrix.hpp
+    cosmictiger/math/matrix_eigen.hpp
     cosmictiger/math/position.hpp
     cosmictiger/math/radial_density_kernel.hpp
     cosmictiger/math/radial_kernel.hpp
@@ -2243,6 +2246,37 @@ if(BUILD_TESTING)
         cosmictiger_add_gtest(NAME sph_cpu TARGET sph_cpu_test
             PROPERTIES TIMEOUT 120)
 
+    endif()
+
+    foreach(matrix_variant IN ITEMS standard fast_math)
+        set(matrix_target matrix_${matrix_variant}_test)
+        add_executable(${matrix_target} tests/matrix.cpp tests/matrix_eigen.cpp)
+        target_include_directories(${matrix_target} PRIVATE ${PROJECT_SOURCE_DIR})
+        if(matrix_variant STREQUAL "fast_math")
+            target_compile_options(${matrix_target} PRIVATE -ffast-math)
+        else()
+            target_compile_options(${matrix_target} PRIVATE -fno-fast-math -ffp-contract=off)
+        endif()
+        if(COMPILER_SUPPORTS_MARCH_NATIVE)
+            target_compile_options(${matrix_target} PRIVATE -march=native)
+        endif()
+        cosmictiger_add_gtest(NAME matrix_${matrix_variant} TARGET ${matrix_target}
+            PROPERTIES TIMEOUT 30 LABELS "math;cpu")
+    endforeach()
+    if(COSMICTIGER_WITH_CUDA)
+        add_executable(matrix_cuda_test tests/matrix_cuda.cu tests/matrix_eigen_cuda.cu)
+        target_include_directories(matrix_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_link_libraries(matrix_cuda_test PRIVATE CUDA::cudart)
+        target_compile_options(matrix_cuda_test PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
+        cosmictiger_add_gtest(NAME matrix_cuda TARGET matrix_cuda_test
+            PROPERTIES TIMEOUT 30 RESOURCE_LOCK cuda LABELS "math;cuda")
+    endif()
+    add_executable(matrix_benchmark EXCLUDE_FROM_ALL benchmarks/math/matrix.cpp)
+    target_include_directories(matrix_benchmark PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_options(matrix_benchmark PRIVATE -O3 -fno-fast-math -ffp-contract=off)
+    if(COMPILER_SUPPORTS_MARCH_NATIVE)
+        target_compile_options(matrix_benchmark PRIVATE -march=native)
     endif()
 
     add_executable(vector_test tests/vector.cpp)

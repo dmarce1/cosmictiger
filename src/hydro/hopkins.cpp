@@ -902,7 +902,7 @@ hopkins::Gradient hopkinsStoredGradient(HopkinsParticleState const& state) {
     gradient.density = state.gradients[0];
     gradient.pressure = state.gradients[1];
     for (int dim = 0; dim < 3; dim++) {
-        gradient.velocity[dim] = state.gradients[dim + 2];
+        gradient.velocity[dim] = math::Vector<double, 3>(state.gradients[dim + 2]);
     }
     return gradient;
 }
@@ -969,12 +969,9 @@ void hopkinsGradients(HopkinsWorkspace& workspace) {
                 HopkinsSimd(geometry.volume);
             HopkinsSimdVector weight;
             hopkins::detail::countFlops(operations, 19 * HopkinsSimd::size());
+            auto const projected = geometry.inverseMoment * batch.separation;
             for (int dim = 0; dim < 3; dim++) {
-                weight[dim] =
-                    (HopkinsSimd(geometry.inverseMoment[dim][0]) * batch.separation[0] +
-                        HopkinsSimd(geometry.inverseMoment[dim][1]) * batch.separation[1] +
-                        HopkinsSimd(geometry.inverseMoment[dim][2]) * batch.separation[2]) *
-                    weightScale;
+                weight[dim] = projected[dim] * weightScale;
             }
             std::array<HopkinsSimd, 5> neighborValues;
             neighborValues[0] = hopkinsNeighborValues(
@@ -1048,7 +1045,7 @@ void hopkinsGradients(HopkinsWorkspace& workspace) {
         gradient.density = gradients[0];
         gradient.pressure = gradients[1];
         for (int dim = 0; dim < 3; dim++) {
-            gradient.velocity[dim] = gradients[dim + 2];
+            gradient.velocity[dim] = math::Vector<double, 3>(gradients[dim + 2]);
         }
         // Appendix G: only a completed or explicitly woken cell replaces its
         // primitive/gradient anchor. Conserved exchanges continue accumulating

@@ -14,6 +14,7 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #include <vector>
 
 #include <cosmictiger/cosmology/boltzmann.hpp>
+#include <cosmictiger/math/matrix.hpp>
 
 namespace detail {
 
@@ -38,7 +39,7 @@ enum Field {
     CoreSize
 };
 
-using CoreMatrix = std::array<std::array<double, CoreSize>, CoreSize>;
+using CoreMatrix = math::Matrix<double, CoreSize>;
 constexpr std::array<int, 3> kQuadrupoles = {PhotonQuadrupole, Polarization2, NeutrinoQuadrupole};
 
 struct LinearState {
@@ -188,7 +189,7 @@ class BoltzmannIntegrator {
         LinearState result = rhs;
         result.tau += weight / bg.expansion;
         CoreMatrix matrix = coreOperator(bg);
-        std::array<double, CoreSize> coreRhs{};
+        math::Vector<double, CoreSize> coreRhs{};
         for (int row = 0; row < CoreSize; ++row) {
             coreRhs[row] = rhs.values[row];
             for (int col = 0; col < CoreSize; ++col) {
@@ -224,35 +225,14 @@ class BoltzmannIntegrator {
             coreRhs[quadrupole] -= upper * result.values[first];
         }
 
-        // Partial-pivot elimination of the small coupled metric/fluid block.
-        for (int col = 0; col < CoreSize; ++col) {
-            int pivot = col;
-            for (int row = col + 1; row < CoreSize; ++row) {
-                if (std::abs(matrix[row][col]) > std::abs(matrix[pivot][col])) {
-                    pivot = row;
-                }
-            }
-            if (pivot != col) {
-                std::swap(matrix[col], matrix[pivot]);
-                std::swap(coreRhs[col], coreRhs[pivot]);
-            }
-            if (matrix[col][col] == 0.0) {
-                throw std::runtime_error("Singular Boltzmann stage");
-            }
-            for (int row = col + 1; row < CoreSize; ++row) {
-                double const factor = matrix[row][col] / matrix[col][col];
-                for (int j = col + 1; j < CoreSize; ++j) {
-                    matrix[row][j] -= factor * matrix[col][j];
-                }
-                coreRhs[row] -= factor * coreRhs[col];
-            }
+        // Keep the exact-zero pivot rule: stiffness gives very unequal scales.
+        math::Vector<double, CoreSize> coreSolution{};
+        if (math::trySolve(matrix, coreRhs, coreSolution, {0.0, 0.0}) !=
+            math::MatrixStatus::Success) {
+            throw std::runtime_error("Singular or non-finite Boltzmann stage");
         }
-        for (int row = CoreSize - 1; row >= 0; --row) {
-            double value = coreRhs[row];
-            for (int col = row + 1; col < CoreSize; ++col) {
-                value -= matrix[row][col] * result.values[col];
-            }
-            result.values[row] = value / matrix[row][row];
+        for (int row = 0; row < CoreSize; ++row) {
+            result.values[row] = coreSolution[row];
         }
         for (int species = 0; species < species_; ++species) {
             double previous = result.values[kQuadrupoles[species]];

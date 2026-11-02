@@ -17,6 +17,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include <cosmictiger/math/matrix_eigen.hpp>
+
 namespace rockstar {
 
 // ROCKSTAR references: Behroozi, Wechsler & Wu (2013), arXiv:1110.4372v3,
@@ -388,81 +390,23 @@ struct SymmetricEigenpairs {
 };
 
 inline SymmetricEigenpairs symmetricEigenpairs(Matrix3 const& matrix) {
-    double scale = 0.0;
-    for (auto const& row : matrix) {
-        for (double const value : row) {
-            if (!detail::isFinite(value)) {
-                throw std::invalid_argument("Shape tensor must be finite");
-            }
-            scale = std::max(scale, std::abs(value));
+    math::Matrix<double, 3> tensor;
+    for (int row = 0; row < 3; ++row) {
+        for (int column = 0; column < 3; ++column) {
+            tensor(row, column) = matrix[row][column];
         }
     }
-    Matrix3 vectors{};
-    Matrix3 diagonalized{};
-    for (size_t row = 0; row < 3; ++row) {
-        vectors[row][row] = 1.0;
-        for (size_t column = 0; column < 3; ++column) {
-            if (scale > 0.0) {
-                diagonalized[row][column] =
-                    0.5 * (matrix[row][column] / scale + matrix[column][row] / scale);
-            }
-        }
+    math::SymmetricEigenpairs<double, 3> eigenpairs;
+    if (math::trySymmetricEigenpairs(tensor, eigenpairs) != math::MatrixStatus::Success) {
+        throw std::invalid_argument("Shape tensor must have finite eigenpairs");
     }
-    // Jacobi rotations obtain all three orthogonal eigenvectors, including when
-    // a coordinate axis is already an eigenvector or eigenvalues are repeated.
-    for (int iteration = 0; iteration < 64; ++iteration) {
-        size_t first = 0;
-        size_t second = 1;
-        double largestOffDiagonal = std::abs(diagonalized[first][second]);
-        double largestDiagonal = 0.0;
-        for (size_t row = 0; row < 3; ++row) {
-            largestDiagonal = std::max(largestDiagonal, std::abs(diagonalized[row][row]));
-            for (size_t column = row + 1; column < 3; ++column) {
-                double const offDiagonal = std::abs(diagonalized[row][column]);
-                if (offDiagonal > largestOffDiagonal) {
-                    first = row;
-                    second = column;
-                    largestOffDiagonal = offDiagonal;
-                }
-            }
-        }
-        if (largestOffDiagonal <= 8.0 * std::numeric_limits<double>::epsilon() * largestDiagonal) {
-            break;
-        }
-        double const offDiagonal = diagonalized[first][second];
-        double const tangentTwice =
-            (diagonalized[second][second] - diagonalized[first][first]) / (2.0 * offDiagonal);
-        double const tangent = std::copysign(1.0, tangentTwice) /
-            (std::abs(tangentTwice) + std::hypot(1.0, tangentTwice));
-        double const cosine = 1.0 / std::hypot(1.0, tangent);
-        double const sine = tangent * cosine;
-        diagonalized[first][first] -= tangent * offDiagonal;
-        diagonalized[second][second] += tangent * offDiagonal;
-        diagonalized[first][second] = diagonalized[second][first] = 0.0;
-        for (size_t axis = 0; axis < 3; ++axis) {
-            if (axis != first && axis != second) {
-                double const firstValue = diagonalized[axis][first];
-                double const secondValue = diagonalized[axis][second];
-                diagonalized[axis][first] = diagonalized[first][axis] =
-                    cosine * firstValue - sine * secondValue;
-                diagonalized[axis][second] = diagonalized[second][axis] =
-                    sine * firstValue + cosine * secondValue;
-            }
-            double const firstVector = vectors[axis][first];
-            double const secondVector = vectors[axis][second];
-            vectors[axis][first] = cosine * firstVector - sine * secondVector;
-            vectors[axis][second] = sine * firstVector + cosine * secondVector;
-        }
-    }
-    std::array<size_t, 3> order{0, 1, 2};
-    std::stable_sort(order.begin(), order.end(), [&](size_t left, size_t right) {
-        return diagonalized[left][left] > diagonalized[right][right];
-    });
+    // The catalogue interface stores eigenvectors as rows. The common algebra
+    // interface uses columns and preserves the existing descending stable order.
     SymmetricEigenpairs result;
-    for (size_t axis = 0; axis < 3; ++axis) {
-        result.values[axis] = diagonalized[order[axis]][order[axis]] * scale;
-        for (size_t component = 0; component < 3; ++component) {
-            result.vectors[axis][component] = vectors[component][order[axis]];
+    for (int axis = 0; axis < 3; ++axis) {
+        result.values[axis] = eigenpairs.values[axis];
+        for (int component = 0; component < 3; ++component) {
+            result.vectors[axis][component] = eigenpairs.vectors(component, axis);
         }
     }
     return result;
