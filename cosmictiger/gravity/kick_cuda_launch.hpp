@@ -396,8 +396,21 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
         dcount += workitems[i].dchecklist.size();
         ecount += workitems[i].echecklist.size();
     }
-    size_t const allocSize = sizeof(int) + sizeof(Parameters) * workitems.size() +
+    size_t const packetSize = sizeof(int) + sizeof(Parameters) * workitems.size() +
         sizeof(KickReturn) + sizeof(int) * dcount + sizeof(int) * ecount;
+    size_t allocSize = packetSize;
+#if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
+    // Reuse the launch-owned packet storage. The launch ticket keeps it alive
+    // and exclusive through completion, without per-launch profiling allocations.
+    constexpr size_t kProfileAlignment = alignof(profile::DeviceBlockRecord);
+    size_t const profileOffset =
+        (packetSize + kProfileAlignment - 1) / kProfileAlignment * kProfileAlignment;
+    size_t const profileBytes =
+        profileEnabled ? sizeof(profile::DeviceBlockRecord) * size_t(numberOfBlocks) : 0;
+    if (profileEnabled) {
+        allocSize = profileOffset + profileBytes;
+    }
+#endif
     if (dataSize < allocSize) {
         std::unique_ptr<char, decltype(&std::free)> replacement(
             static_cast<char*>(std::malloc(allocSize)), &std::free);
@@ -447,6 +460,14 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     offset += sizeof(int) * ecount;
     int* devCurrentIndex = (int*) (devDataPtr + offset);
     offset += sizeof(int);
+#if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
+    auto* const profileRecords = profileEnabled ?
+        reinterpret_cast<profile::DeviceBlockRecord*>(dataPtr + profileOffset) :
+        nullptr;
+    auto* const devProfileRecords = profileEnabled ?
+        reinterpret_cast<profile::DeviceBlockRecord*>(devDataPtr + profileOffset) :
+        nullptr;
+#endif
     *currentIndex = 0;
     *result = KickReturn();
     Vector<int> dindices(workitems.size() + 1);
@@ -545,13 +566,19 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     auto const streamHandle = profileEnabled ? stream.nativeHandle() : nullptr;
     deviceEvents.record(0, streamHandle);
 #endif
-    stream.copyAsync(devDataPtr, dataPtr, sizeof(char) * allocSize, cudaMemcpyHostToDevice);
+    // Device counters are fully overwritten by each block, so copy only inputs.
+    stream.copyAsync(devDataPtr, dataPtr, packetSize, cudaMemcpyHostToDevice);
 #if COSMICTIGER_PROFILE
     deviceEvents.record(1, streamHandle);
 #endif
-    cudaKickKernel<order>
-        <<<numberOfBlocks, kWarpSize, layout.totalBytes, stream.nativeHandle()>>>(devReturnArg,
-            kparams, data, devIkickParams, workitems.size(), devCurrentIndex, layout, devListSlab);
+    cudaKickKernel<order><<<numberOfBlocks, kWarpSize, layout.totalBytes, stream.nativeHandle()>>>(
+        devReturnArg, kparams, data, devIkickParams, workitems.size(), devCurrentIndex, layout,
+        devListSlab
+#if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
+        ,
+        devProfileRecords
+#endif
+    );
     stream.checkLaunch();
 #if COSMICTIGER_PROFILE
     deviceEvents.record(2, streamHandle);
@@ -560,10 +587,20 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
 #if COSMICTIGER_PROFILE
     deviceEvents.record(3, streamHandle);
 #endif
+#if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
+    if (profileEnabled) {
+        stream.copyAsync(profileRecords, devProfileRecords, profileBytes, cudaMemcpyDeviceToHost);
+    }
+#endif
     stream.wait();
     launchPhase.stop();
 #if COSMICTIGER_PROFILE
     deviceEvents.collect();
+#endif
+#if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
+    if (profileEnabled) {
+        profile::recordDeviceBlocks(profileRecords, size_t(numberOfBlocks));
+    }
 #endif
     return *result;
 }

@@ -56,6 +56,10 @@ if(NOT COSMICTIGER_POSITION_TYPE MATCHES "^(fixed32|fixed64)$")
 endif()
 string(REPLACE "fixed" "" COSMICTIGER_POSITION_BITS "${COSMICTIGER_POSITION_TYPE}")
 option(COSMICTIGER_PROFILE "Compile the manual phase profiler (profileBegin/profileEnd)" ON)
+option(COSMICTIGER_DEVICE_PROFILE "Compile per-block CUDA gravity cycle profiling" OFF)
+if(COSMICTIGER_DEVICE_PROFILE AND (NOT COSMICTIGER_PROFILE OR NOT COSMICTIGER_WITH_CUDA))
+    message(FATAL_ERROR "COSMICTIGER_DEVICE_PROFILE requires COSMICTIGER_PROFILE and COSMICTIGER_WITH_CUDA")
+endif()
 set(cosmictiger_require_apex_default OFF)
 if(CMAKE_BUILD_TYPE MATCHES "^(RelWithDebInfo|Debug|Profile)$")
     set(cosmictiger_require_apex_default ON)
@@ -102,6 +106,9 @@ target_link_libraries(cosmictiger_profiler PUBLIC HPX::hpx ${CMAKE_DL_LIBS}
     "$<$<PLATFORM_ID:Linux>:rt>")
 if(COSMICTIGER_PROFILE)
     target_compile_definitions(cosmictiger_profiler PUBLIC COSMICTIGER_PROFILE=1)
+endif()
+if(COSMICTIGER_DEVICE_PROFILE)
+    target_compile_definitions(cosmictiger_profiler PUBLIC COSMICTIGER_DEVICE_PROFILE=1)
 endif()
 if(COSMICTIGER_WITH_CUDA AND NOT HPX_WITH_CUDA)
     message(FATAL_ERROR
@@ -542,20 +549,58 @@ if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
 endif()
 
 if(BUILD_TESTING)
-    foreach(profile_mode IN ITEMS enabled disabled)
+    foreach(profile_mode IN ITEMS enabled disabled host_only)
         add_executable(phase_profiler_${profile_mode}_test
             tests/phase_profiler.cpp src/core/profiler.cpp)
         target_include_directories(phase_profiler_${profile_mode}_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_features(phase_profiler_${profile_mode}_test PRIVATE cxx_std_20)
         target_link_libraries(phase_profiler_${profile_mode}_test PRIVATE Threads::Threads)
         target_compile_definitions(phase_profiler_${profile_mode}_test PRIVATE
-            COSMICTIGER_PROFILE=$<IF:$<STREQUAL:${profile_mode},enabled>,1,0>)
+            COSMICTIGER_PROFILE=$<IF:$<STREQUAL:${profile_mode},disabled>,0,1>
+            COSMICTIGER_DEVICE_PROFILE=$<IF:$<STREQUAL:${profile_mode},host_only>,0,1>)
         add_test(NAME phase_profiler_${profile_mode}
             COMMAND phase_profiler_${profile_mode}_test
                 ${PROJECT_BINARY_DIR}/phase_profiler_${profile_mode}.txt)
         set_tests_properties(phase_profiler_${profile_mode} PROPERTIES
             TIMEOUT 10 PROCESSORS 1 LABELS "profiler;cpu")
     endforeach()
+    if(COSMICTIGER_WITH_CUDA)
+        foreach(profile_mode IN ITEMS enabled disabled)
+            add_executable(device_profiler_${profile_mode}_test tests/device_profiler.cu)
+            target_include_directories(device_profiler_${profile_mode}_test PRIVATE ${PROJECT_SOURCE_DIR})
+            target_compile_definitions(device_profiler_${profile_mode}_test PRIVATE
+                COSMICTIGER_PROFILE=1
+                COSMICTIGER_DEVICE_PROFILE=$<IF:$<STREQUAL:${profile_mode},enabled>,1,0>)
+            target_link_libraries(device_profiler_${profile_mode}_test PRIVATE CUDA::cudart)
+            set_target_properties(device_profiler_${profile_mode}_test PROPERTIES CUDA_STANDARD 20)
+            add_test(NAME device_profiler_${profile_mode} COMMAND device_profiler_${profile_mode}_test)
+            set_tests_properties(device_profiler_${profile_mode} PROPERTIES
+                TIMEOUT 30 PROCESSORS 1 RUN_SERIAL TRUE SKIP_RETURN_CODE 77 LABELS "profiler;cuda")
+        endforeach()
+        if(COSMICTIGER_ENABLE_FMM)
+            foreach(profile_mode IN ITEMS enabled disabled)
+                add_executable(kick_device_profile_${profile_mode}_test
+                    tests/gravity/kick_device_profile.cu tests/cuda_memory_backend.cpp
+                    src/core/flops.cu src/math/kernel.cu src/cuda/cuda_memory.cu src/core/assert.cu)
+                target_include_directories(kick_device_profile_${profile_mode}_test PRIVATE
+                    ${PROJECT_SOURCE_DIR})
+                target_compile_definitions(kick_device_profile_${profile_mode}_test PRIVATE
+                    USE_CUDA CUDA_MEM_STACK_SIZE=128 COSMICTIGER_PROFILE=1
+                    COSMICTIGER_DEVICE_PROFILE=$<IF:$<STREQUAL:${profile_mode},enabled>,1,0>)
+                target_compile_options(kick_device_profile_${profile_mode}_test PRIVATE
+                    $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--use_fast_math>)
+                target_link_libraries(kick_device_profile_${profile_mode}_test PRIVATE
+                    CUDA::cudart HPX::hpx)
+                set_target_properties(kick_device_profile_${profile_mode}_test PROPERTIES
+                    CUDA_STANDARD 20 CUDA_SEPARABLE_COMPILATION ON)
+                add_test(NAME kick_device_profile_${profile_mode}
+                    COMMAND kick_device_profile_${profile_mode}_test)
+                set_tests_properties(kick_device_profile_${profile_mode} PROPERTIES
+                    TIMEOUT 60 PROCESSORS 1 RUN_SERIAL TRUE SKIP_RETURN_CODE 77
+                    LABELS "profiler;cuda;gravity")
+            endforeach()
+        endif()
+    endif()
     if(COSMICTIGER_PROFILE AND COSMICTIGER_WITH_SPH AND
             (COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL OR COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL))
         set(cosmictiger_phase_profile_args)

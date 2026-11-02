@@ -30,6 +30,16 @@ WORK_SECTIONS = {
     "Profile detail: rank-0 CUDA device elapsed intervals (overlap possible)":
         "Device intervals are not additive to host or coordinator totals.",
 }
+DEVICE_SECTION = (
+    "Profile device cycles: rank-0 summed CUDA block cycles (overlapping; not wall time)")
+DEVICE_EXPLANATION = (
+    "Shares divide summed instrumented block cycles; no conversion to wall time.")
+DEVICE_ROW = re.compile(r"(kick\.device\.\S+)\s+(\d+)\s+(\d+)\s+(\d+\.\d{3})\s+(\d+\.\d{2})%")
+DEVICE_STATS = re.compile(
+    r"Recorded (blocks|launches): (\d+); cycles min/mean/max: (\d+) / (\d+\.\d{3}) / (\d+)")
+DEVICE_PHASES = tuple(f"kick.device.{name}" for name in (
+    "prepare", "periodic", "traversal", "M2L", "P2L", "M2P", "P2P", "leafKick",
+    "copyWait", "schedule", "cleanup"))
 
 
 def require(condition, message):
@@ -42,6 +52,56 @@ def duration_seconds(value):
     result = 3600 * int(hours) + 60 * int(minutes) + float(seconds)
     require(math.isfinite(result) and result >= 0.0, f"invalid duration: {value}")
     return result
+
+
+def read_device_cycles(lines, index, path, detail_rows):
+    cycle_rows = {}
+    while index < len(lines) and lines[index].startswith("kick.device."):
+        line = lines[index]
+        match = DEVICE_ROW.fullmatch(line)
+        require(match is not None, f"invalid device-cycle row in {path}: {line}")
+        name, calls, cycles, mean, share = match.groups()
+        calls, cycles, mean, share = int(calls), int(cycles), float(mean), float(share)
+        require(name in DEVICE_PHASES and name not in detail_rows and calls > 0,
+                f"unknown/duplicate device phase or invalid calls: {line}")
+        require(math.isfinite(mean) and mean >= 0.0 and
+                math.isfinite(share) and 0.0 <= share <= 100.0,
+                f"invalid device-cycle mean or share: {line}")
+        # Cycles are exact integers; only the printed mean is rounded.
+        require(abs(mean - cycles / calls) <= 0.0005 + 2 * math.ulp(mean),
+                f"device-cycle mean disagrees with cycles/calls: {line}")
+        row = {"calls": calls, "cycles": cycles, "mean": mean, "share": share}
+        cycle_rows[name] = row
+        detail_rows[name] = row
+        index += 1
+    require(bool(cycle_rows), f"empty device-cycle profile: {path}")
+    cycles = sum(row["cycles"] for row in cycle_rows.values())
+    for name, row in cycle_rows.items():
+        expected_share = 100.0 * row["cycles"] / cycles if cycles else 0.0
+        require(abs(row["share"] - expected_share) <= 0.005 + 1.e-9,
+                f"{name}: device share disagrees with summed cycles: {path}")
+    require(abs(math.fsum(row["share"] for row in cycle_rows.values()) -
+                (100.0 if cycles else 0.0)) <= 0.005 * len(cycle_rows) + 1.e-9,
+            f"device-cycle shares do not sum correctly: {path}")
+    stats = {}
+    for label in ("blocks", "launches"):
+        require(index < len(lines), f"missing device-cycle {label} statistics: {path}")
+        match = DEVICE_STATS.fullmatch(lines[index])
+        require(match is not None and match[1] == label,
+                f"invalid device-cycle {label} statistics: {path}")
+        samples, minimum, mean, maximum = (
+            int(match[2]), int(match[3]), float(match[4]), int(match[5]))
+        require(samples > 0 and math.isfinite(mean) and minimum <= mean <= maximum,
+                f"invalid device-cycle {label} range or sample count: {path}")
+        require(minimum * samples <= cycles <= maximum * samples and
+                abs(mean - cycles / samples) <= 0.0005 + 2 * math.ulp(mean),
+                f"device-cycle {label} statistics disagree with phase totals: {path}")
+        stats[label] = samples
+        index += 1
+    require(stats["launches"] <= stats["blocks"] <=
+            sum(row["calls"] for row in cycle_rows.values()),
+            f"inconsistent device launch/block/call counts: {path}")
+    return index, stats
 
 
 def read_profile(path, output):
@@ -84,11 +144,19 @@ def read_profile(path, output):
             f"phase shares do not sum to 100 percent: {path}")
     detail_rows = {}
     detail_sections = set()
+    device_stats = None
     index = coordinator_end + 1
     while index < len(lines):
         require(lines[index] == "" and len(lines) - index >= 5,
                 f"invalid work-profile section: {path}")
         title, explanation, header = lines[index + 1:index + 4]
+        if title == DEVICE_SECTION:
+            require(title not in detail_sections and explanation == DEVICE_EXPLANATION and
+                    header.split() == ["Work", "Calls", "Cycles", "Mean(cycles)", "Share"],
+                    f"invalid or duplicate device-cycle header: {path}")
+            detail_sections.add(title)
+            index, device_stats = read_device_cycles(lines, index + 4, path, detail_rows)
+            continue
         require(title in WORK_SECTIONS and title not in detail_sections,
                 f"unknown or duplicate work-profile section: {title}")
         require(explanation == WORK_SECTIONS[title] and
@@ -113,6 +181,9 @@ def read_profile(path, output):
             detail_rows[name] = {"calls": calls, "elapsed": elapsed, "mean": mean}
             index += 1
         require(index > section_start, f"empty work-profile section: {path}")
+    if device_stats is not None and "kick.gpu.kernel" in detail_rows:
+        require(device_stats["launches"] == detail_rows["kick.gpu.kernel"]["calls"],
+                f"recorded device launches differ from CUDA event calls: {path}")
     # Concurrent host intervals and device intervals are deliberately not summed.
     return rows, detail_rows
 
@@ -198,6 +269,9 @@ def run_case(executable, directory, options, deadline):
     require(result == 0, f"fixture exited {result}; see {log_path}\n{output[-6000:]}")
     rows, detail_rows = read_profile(directory / "simulation/profile.txt", output)
     require_phases(rows, ("initialize", "writeCheckpoint", "drift"), directory.name)
+    if options.get("compute.cuda") != "true":
+        require(not any("cycles" in row for row in detail_rows.values()),
+                f"{directory.name}: CPU fixture reported CUDA device cycles")
     return rows, detail_rows
 
 
@@ -208,7 +282,11 @@ def main():
     parser.add_argument("--hopkins", action="store_true", help="also check compiled Hopkins MFM/MFV")
     parser.add_argument("--gravity", action="store_true", help="also check available FMM/PMMM modes")
     parser.add_argument("--cuda", action="store_true", help="also check one FMM CUDA fixture")
+    parser.add_argument("--device-profile", action="store_true",
+                        help="require per-block CUDA cycle profiling in the --cuda fixture")
     args = parser.parse_args()
+    if args.device_profile and not args.cuda:
+        parser.error("--device-profile requires --cuda")
     executable, base = args.executable.resolve(), args.workdir.resolve()
     deadline = time.monotonic() + (160.0 if args.cuda else 115.0)
     compiled = compiled_algorithms(str(executable))
@@ -290,6 +368,12 @@ def main():
             "kick.gpu.hostToDevice", "kick.gpu.kernel", "kick.gpu.deviceToHost")]
         require(device_calls[0] > 0 and len(set(device_calls)) == 1,
                 f"{label}: transfer/kernel event call counts differ or are empty")
+        if args.device_profile:
+            require_phases(detail_rows, DEVICE_PHASES, label)
+            require(all("cycles" in detail_rows[name] for name in DEVICE_PHASES),
+                    f"{label}: device phase appeared outside the cycle table")
+            require(sum(detail_rows[name]["cycles"] for name in DEVICE_PHASES) > 0,
+                    f"{label}: device phases recorded no cycles")
         print(f"{label}: host staging, CUDA event phases and report accounting passed")
         count += 1
     device_label = "CPU/CUDA" if args.cuda else "CPU"

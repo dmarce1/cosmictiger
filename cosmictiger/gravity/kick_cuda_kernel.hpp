@@ -19,6 +19,7 @@
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/cuda/cuda_memory.hpp>
 #include <cosmictiger/cuda/cuda_reduce.hpp>
+#include <cosmictiger/cuda/device_profiler.hpp>
 #include <cosmictiger/gravity/fmm_acceptance.hpp>
 #include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
@@ -363,7 +364,18 @@ __device__ __forceinline__ FlopCount cudaApplyPeriodicPolicy(CudaKickData const&
 template <int order>
 __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, CudaKickData data,
     CudaKickParameters<order>* params, int itemCount, int* nextItem, CudaKickArenaLayout layout,
-    char* listSlab) {
+    char* listSlab
+#if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
+    ,
+    profile::DeviceBlockRecord* profileRecords
+#endif
+) {
+#if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
+    profile::DeviceProfiler work(profileRecords != nullptr ? profileRecords + blockIdx.x : nullptr,
+        profile::DevicePhase::KickPrepare);
+#else
+    profile::DeviceProfiler work(nullptr, profile::DevicePhase::KickPrepare);
+#endif
     int const& tid = threadIdx.x;
     extern __shared__ __align__(16) char shmemPtr[];
     using Control = CudaKickControl<order>;
@@ -440,6 +452,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
         init(&barrier, group.size());
     }
     group.sync();
+    work.next(profile::DevicePhase::KickSchedule);
     if (tid == 0) {
         index = atomicAdd(nextItem, 1);
     }
@@ -452,6 +465,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
     FlopCounter<FlopCounts> interactionFlops;
     FlopCounts geometryFlops{};
     while (index < itemCount) {
+        work.next(profile::DevicePhase::KickPrepare);
         FmmGeometry const geometry = params[index].geometry;
         ancestors.resize(0);
         dchecks.resize(0);
@@ -481,6 +495,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
             auto const& self = treeNodes[sparams.back().self];
             switch (sparams.back().phase) {
             case 0: {
+                // Match the CPU setup interval, including the L2L translation.
+                work.next(profile::DevicePhase::KickPrepare);
                 Vector3<float> dx;
                 for (int dim = 0; dim < kDimensions; dim++) {
                     dx[dim] = unwrappedDistance(self.pos[dim], expansionPos[dim]);
@@ -510,11 +526,13 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     self.particleRange.second - self.particleRange.first;
 #if COSMICTIGER_ENABLE_FMM
                 if (numberOfSinks && geometry.meshSize == 0) {
+                    work.next(profile::DevicePhase::KickPeriodic);
                     flops += cudaApplyPeriodicPolicy<order>(data, globalParams, expansion, self,
                         echecks, nextlist, cclist, leaflist, bothlist);
                 }
 #endif
                 if (numberOfSinks) {
+                    work.next(profile::DevicePhase::KickTraversal);
                     nextlist.resize(0);
                     leaflist.resize(0);
                     cclist.resize(0);
@@ -625,8 +643,10 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     } while (checks.size() && (self.leaf || globalParams.openLargerCell));
                     if (self.leaf) {
                         __syncwarp();
+                        work.next(profile::DevicePhase::KickM2L);
                         interactionFlops += cudaGravityCcDirect<order>(
                             data, expansion, self, cclist, globalParams.doPhi, geometry);
+                        work.next(profile::DevicePhase::KickP2L);
                         if (equalMass) {
                             interactionFlops += cudaGravityCpDirect<order, true>(data, control,
                                 expansion, self, cplist, globalParams.doPhi, geometry);
@@ -636,6 +656,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                         }
                         // The cell interactions are complete, so the arena scratch is
                         // free: initialize the sink forces and stream the sink tiles.
+                        work.next(profile::DevicePhase::KickPrepare);
                         if (!sharedForces) {
                             control.forceBacking.resize(4 * numberOfSinks);
                             if (tid == 0) {
@@ -648,6 +669,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                         }
                         int const tile = sharedForces ? layout.sinkCapacity : numberOfSinks;
                         for (int sinkBegin = 0; sinkBegin < numberOfSinks; sinkBegin += tile) {
+                            work.next(profile::DevicePhase::KickPrepare);
                             int const sinkCount = min(tile, int(numberOfSinks - sinkBegin));
                             auto const& force = control.forces;
                             for (int l = tid; l < sinkCount; l += kWarpSize) {
@@ -664,8 +686,10 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                 flops += 2;
                             }
                             __syncwarp();
+                            work.next(profile::DevicePhase::KickM2P);
                             interactionFlops += cudaGravityPcDirect<order>(data, control, self,
                                 sinkBegin, sinkCount, pclist, globalParams.doPhi, geometry);
+                            work.next(profile::DevicePhase::KickP2P);
                             if (equalMass) {
                                 interactionFlops += cudaGravityPpDirect<order, true>(data, control,
                                     self, sinkBegin, sinkCount, leaflist, supportRadius,
@@ -676,6 +700,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                     globalParams.doPhi, geometry);
                             }
                             __syncwarp();
+                            work.next(profile::DevicePhase::KickLeafKick);
                             interactionFlops += doKick<order>(kr, globalParams, data, expansion,
                                 self, force, sinkBegin, sinkCount, params[index].outputOffset);
                             // The next tile reinitializes the force planes.
@@ -695,10 +720,15 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                 children[kRightChild].index;
                         }
                         __syncwarp();
+                        work.next(profile::DevicePhase::KickM2L);
                         interactionFlops += cudaGravityCcDirect<order>(
                             data, expansion, self, cclist, globalParams.doPhi, geometry);
+                        // Keep the checklist copy overlapping M2L; charge only
+                        // its remaining wait here, before P2L reuses the barrier.
+                        work.next(profile::DevicePhase::KickCopyWait);
                         barrier.arrive_and_wait();
                         // CP reuses the barrier, so finish the checklist copy before calling it.
+                        work.next(profile::DevicePhase::KickP2L);
                         if (equalMass) {
                             interactionFlops += cudaGravityCpDirect<order, true>(data, control,
                                 expansion, self, cplist, globalParams.doPhi, geometry);
@@ -708,6 +738,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                         }
                     }
                 }
+                work.next(profile::DevicePhase::KickSchedule);
                 if (self.leaf) {
                     __syncwarp();
                     sparams.popBack();
@@ -769,12 +800,14 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
             }
         }
 
+        work.next(profile::DevicePhase::KickSchedule);
         if (tid == 0) {
             index = atomicAdd(nextItem, 1);
         }
         index = __shfl_sync(0xFFFFFFFF, index, 0);
         ASSERT(ancestors.size() == 0);
     }
+    work.next(profile::DevicePhase::KickCleanup);
     if (tid == 0) {
         atomicAdd(&rc->dkin, kr.dkin);
         atomicAdd(&rc->kin, kr.kin);
@@ -798,4 +831,5 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
     addGpuFlops(static_cast<FlopCounts>(interactionFlops));
     addGpuFlops(geometryFlops);
     control.~Control();
+    work.finish();
 }

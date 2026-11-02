@@ -132,6 +132,104 @@ namespace detail {
         }
     }
 
+#if COSMICTIGER_DEVICE_PROFILE
+    constexpr std::array<char const*, kDevicePhaseCount> kDeviceNames{
+        {"kick.device.prepare", "kick.device.periodic", "kick.device.traversal", "kick.device.M2L",
+            "kick.device.P2L", "kick.device.M2P", "kick.device.P2P", "kick.device.leafKick",
+            "kick.device.copyWait", "kick.device.schedule", "kick.device.cleanup"}};
+
+    struct CycleDistribution {
+        std::uint64_t samples = 0;
+        std::uint64_t total = 0;
+        std::uint64_t minimum = std::numeric_limits<std::uint64_t>::max();
+        std::uint64_t maximum = 0;
+    };
+
+    struct DeviceSnapshot {
+        std::array<DeviceCounter, kDevicePhaseCount> phases{};
+        CycleDistribution blocks;
+        CycleDistribution launches;
+    };
+
+    struct DeviceRegistry {
+        std::mutex mutex;
+        DeviceSnapshot snapshot;
+    };
+
+    DeviceRegistry& deviceRegistry() {
+        static DeviceRegistry value;
+        return value;
+    }
+
+    void addCycleSample(CycleDistribution& distribution, std::uint64_t cycles) noexcept {
+        ++distribution.samples;
+        distribution.total += cycles;
+        distribution.minimum = std::min(distribution.minimum, cycles);
+        distribution.maximum = std::max(distribution.maximum, cycles);
+    }
+
+    void appendDeviceReport(std::string& report) {
+        DeviceSnapshot snapshot;
+        {
+            auto& state = deviceRegistry();
+            std::lock_guard<std::mutex> lock(state.mutex);
+            snapshot = state.snapshot;
+        }
+        if (snapshot.launches.samples == 0) {
+            return;
+        }
+        std::vector<size_t> rows;
+        size_t width = 4;
+        for (size_t index = 0; index < kDevicePhaseCount; ++index) {
+            if (snapshot.phases[index].calls != 0) {
+                rows.push_back(index);
+                width = std::max(width, std::char_traits<char>::length(kDeviceNames[index]));
+            }
+        }
+        std::sort(rows.begin(), rows.end(), [&](size_t a, size_t b) {
+            return snapshot.phases[a].cycles != snapshot.phases[b].cycles ?
+                snapshot.phases[a].cycles > snapshot.phases[b].cycles :
+                std::string(kDeviceNames[a]) < kDeviceNames[b];
+        });
+        if (!report.empty()) {
+            report += '\n';
+        }
+        report +=
+            "Profile device cycles: rank-0 summed CUDA block cycles (overlapping; not wall time)\n"
+            "Shares divide summed instrumented block cycles; no conversion to wall time.\n";
+        char line[512];
+        std::snprintf(line, sizeof(line), "%-*s %10s %20s %16s %8s\n", int(width), "Work", "Calls",
+            "Cycles", "Mean(cycles)", "Share");
+        report += line;
+        double const share = snapshot.launches.total > 0 ?
+            100.0 / static_cast<double>(snapshot.launches.total) :
+            0.0;
+        for (size_t index : rows) {
+            auto const& counter = snapshot.phases[index];
+            double const cycles = static_cast<double>(counter.cycles);
+            std::snprintf(line, sizeof(line), "%-*s %10llu %20llu %16.3f %7.2f%%\n", int(width),
+                kDeviceNames[index], static_cast<unsigned long long>(counter.calls),
+                static_cast<unsigned long long>(counter.cycles),
+                cycles / static_cast<double>(counter.calls), cycles * share);
+            report += line;
+        }
+        auto const appendDistribution = [&](char const* label,
+                                            CycleDistribution const& distribution) {
+            std::snprintf(line, sizeof(line),
+                "Recorded %s: %llu; cycles min/mean/max: %llu / %.3f / %llu\n", label,
+                static_cast<unsigned long long>(distribution.samples),
+                static_cast<unsigned long long>(distribution.minimum),
+                static_cast<double>(distribution.total) / static_cast<double>(distribution.samples),
+                static_cast<unsigned long long>(distribution.maximum));
+            report += line;
+        };
+        appendDistribution("blocks", snapshot.blocks);
+        appendDistribution("launches", snapshot.launches);
+    }
+#else
+    void appendDeviceReport(std::string&) {}
+#endif
+
     struct Phase {
         Clock::duration elapsed{};
         std::uint64_t calls = 0;
@@ -199,6 +297,49 @@ void recordWork(WorkPhase phase, double seconds) noexcept {
     detail::recordNanoseconds(phase, static_cast<std::uint64_t>(nanoseconds));
 }
 
+#if COSMICTIGER_DEVICE_PROFILE
+void recordDeviceBlocks(DeviceBlockRecord const* blocks, size_t count) noexcept {
+    if (blocks == nullptr || count == 0) {
+        return;
+    }
+    detail::DeviceSnapshot batch;
+    for (size_t block = 0; block < count; ++block) {
+        std::uint64_t cycles = 0;
+        bool recorded = false;
+        for (size_t phase = 0; phase < kDevicePhaseCount; ++phase) {
+            auto const& counter = blocks[block].phases[phase];
+            if (counter.calls != 0) {
+                batch.phases[phase].cycles += counter.cycles;
+                batch.phases[phase].calls += counter.calls;
+                cycles += counter.cycles;
+                recorded = true;
+            }
+        }
+        if (recorded) {
+            detail::addCycleSample(batch.blocks, cycles);
+        }
+    }
+    if (batch.blocks.samples == 0) {
+        return;
+    }
+    // Import once per completed launch, outside the kernel and its event timer.
+    // A separate mutex provides a consistent report without touching host work
+    // counters or adding synchronization to any device sampling operation.
+    auto& state = detail::deviceRegistry();
+    std::lock_guard<std::mutex> lock(state.mutex);
+    auto& snapshot = state.snapshot;
+    for (size_t phase = 0; phase < kDevicePhaseCount; ++phase) {
+        snapshot.phases[phase].cycles += batch.phases[phase].cycles;
+        snapshot.phases[phase].calls += batch.phases[phase].calls;
+    }
+    snapshot.blocks.samples += batch.blocks.samples;
+    snapshot.blocks.total += batch.blocks.total;
+    snapshot.blocks.minimum = std::min(snapshot.blocks.minimum, batch.blocks.minimum);
+    snapshot.blocks.maximum = std::max(snapshot.blocks.maximum, batch.blocks.maximum);
+    detail::addCycleSample(snapshot.launches, batch.blocks.total);
+}
+#endif
+
 void profileBegin(char const* name) {
     auto const now = detail::Clock::now();
     auto& state = detail::registry();
@@ -236,6 +377,7 @@ std::string profileReport() {
         std::string report;
         detail::appendWorkReport(report, false);
         detail::appendWorkReport(report, true);
+        detail::appendDeviceReport(report);
         return report;
     }
     std::sort(rows.begin(), rows.end(), [](auto const& a, auto const& b) {
@@ -268,6 +410,7 @@ std::string profileReport() {
     report += line;
     detail::appendWorkReport(report, false);
     detail::appendWorkReport(report, true);
+    detail::appendDeviceReport(report);
     return report;
 }
 

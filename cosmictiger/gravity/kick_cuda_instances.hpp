@@ -21,9 +21,14 @@
 static_assert(COSMICTIGER_FMM_INSTANCE_ORDER >= kFmmMinOrder &&
     COSMICTIGER_FMM_INSTANCE_ORDER <= kFmmMaxOrder);
 
-template __global__ void cudaKickKernel<COSMICTIGER_FMM_INSTANCE_ORDER>(KickReturn*, KickParameters,
-    CudaKickData, CudaKickParameters<COSMICTIGER_FMM_INSTANCE_ORDER>*, int, int*,
-    CudaKickArenaLayout, char*);
+template __global__ void cudaKickKernel<COSMICTIGER_FMM_INSTANCE_ORDER>(
+    KickReturn*, KickParameters, CudaKickData, CudaKickParameters<COSMICTIGER_FMM_INSTANCE_ORDER>*,
+    int, int*, CudaKickArenaLayout, char*
+#if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
+    ,
+    profile::DeviceBlockRecord*
+#endif
+);
 template KickReturn cudaExecuteKicksImpl<COSMICTIGER_FMM_INSTANCE_ORDER>(KickParameters, Position*,
     Position*, Position*, TreeNode*, Vector<KickWorkitem>, detail::FmmForceOutput, float const*);
 template CudaKickArenaLayout const& kickArenaLayoutImpl<COSMICTIGER_FMM_INSTANCE_ORDER>();

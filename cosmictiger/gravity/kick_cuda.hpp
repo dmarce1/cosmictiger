@@ -18,6 +18,7 @@
 #include <cuda/barrier>
 
 #include <cosmictiger/core/defs.hpp>
+#include <cosmictiger/core/device_profile.hpp>
 #include <cosmictiger/core/stack_vector.hpp>
 #include <cosmictiger/cuda/device_vector.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
@@ -186,7 +187,12 @@ struct CudaKickParameters {
 template <int order>
 __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, CudaKickData data,
     CudaKickParameters<order>* params, int itemCount, int* nextItem, CudaKickArenaLayout layout,
-    char* listSlab);
+    char* listSlab
+#if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
+    ,
+    profile::DeviceBlockRecord* profileRecords
+#endif
+);
 
 // Per-order host entry points, defined in kick_cuda_launch.hpp.
 template <int order>

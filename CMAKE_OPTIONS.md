@@ -37,6 +37,7 @@ build/release_cpu/cosmictiger --gravity.method.far=pmmm \
 | `COSMICTIGER_WITH_MAX_BUCKET` | `128` | Maximum tree leaf bucket: 32, 64, 128, 256, 512, or 1024. |
 | `COSMICTIGER_WITH_LONG_LONG_PART_INT` | `OFF` | Use long long local particle indices. |
 | `COSMICTIGER_PROFILE` | `ON` | Manual phase profiler (`profileBegin`/`profileEnd`, `profile.txt`). |
+| `COSMICTIGER_DEVICE_PROFILE` | `OFF` | Per-block CUDA gravity phase cycles in `profile.txt`; requires `COSMICTIGER_PROFILE` and `COSMICTIGER_WITH_CUDA`. |
 | `COSMICTIGER_REQUIRE_APEX` | Build-dependent | ON for Debug, RelWithDebInfo, Profile; otherwise OFF. Requires an APEX-enabled HPX installation. |
 | `BUILD_TESTING` | `ON` | Compile and register tests supported by the enabled capabilities. |
 

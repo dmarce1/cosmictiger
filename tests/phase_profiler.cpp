@@ -20,6 +20,8 @@ namespace detail {
 
 struct UnwindChild {};
 
+constexpr char kDeviceReportTitle[] = "Profile device cycles:";
+
 void require(bool condition, char const* message) {
     if (!condition) {
         throw std::runtime_error(message);
@@ -71,6 +73,9 @@ std::unordered_map<std::string, Row> workRows(std::string const& report) {
     std::string line;
     std::unordered_map<std::string, Row> result;
     while (std::getline(input, line)) {
+        if (line.starts_with(kDeviceReportTitle)) {
+            break;
+        }
         std::istringstream fields(line);
         std::string name, duration;
         Row row{};
@@ -193,8 +198,86 @@ void checkWork(std::string const& report, WorkExpected const& expected) {
         report.find("rank-0 CUDA device elapsed intervals (overlap possible)") != std::string::npos,
         "Device work accounting semantics missing from report");
     auto const detailStart = report.find("Profile detail:");
-    require(report.find("Share", detailStart) == std::string::npos,
+    auto const deviceStart = report.find(kDeviceReportTitle);
+    auto const elapsedTables = report.substr(detailStart,
+        deviceStart == std::string::npos ? std::string::npos : deviceStart - detailStart);
+    require(elapsedTables.find("Share") == std::string::npos,
         "Concurrent work report incorrectly includes additive shares");
+}
+
+void exerciseDeviceWork() {
+    std::array<profile::DeviceBlockRecord, 5> blocks{};
+    profile::recordDeviceBlocks(nullptr, 5);
+    profile::recordDeviceBlocks(blocks.data(), 0);
+    profile::recordDeviceBlocks(blocks.data(), blocks.size());
+    // Cycles without a recorded invocation are invalid and must not create a
+    // row, block, or launch. A genuine zero-cycle invocation below is retained.
+    blocks[2].phases[static_cast<size_t>(profile::DevicePhase::KickPeriodic)].cycles = 999;
+    profile::recordDeviceBlocks(blocks.data(), blocks.size());
+    require(profile::profileReport().empty(), "Empty/invalid device records created a report");
+    blocks[0].phases[static_cast<size_t>(profile::DevicePhase::KickPrepare)] = {100, 2};
+    blocks[0].phases[static_cast<size_t>(profile::DevicePhase::KickP2P)] = {300, 3};
+    blocks[1].phases[static_cast<size_t>(profile::DevicePhase::KickPrepare)] = {50, 1};
+    blocks[1].phases[static_cast<size_t>(profile::DevicePhase::KickP2P)] = {150, 2};
+    blocks[1].phases[static_cast<size_t>(profile::DevicePhase::KickTraversal)] = {0, 2};
+    blocks[3].phases[static_cast<size_t>(profile::DevicePhase::KickCleanup)] = {0, 1};
+    profile::recordDeviceBlocks(blocks.data(), blocks.size());
+    profile::recordDeviceBlocks(blocks.data(), 1);
+}
+
+void checkDeviceWork(std::string const& report) {
+    auto const start = report.find(kDeviceReportTitle);
+#if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
+    require(start != std::string::npos, "Device cycles missing from report");
+    auto const table = report.substr(start);
+    require(table.find("rank-0 summed CUDA block cycles (overlapping; not wall time)") !=
+                std::string::npos &&
+            table.find("no conversion to wall time") != std::string::npos,
+        "Device cycle accounting semantics missing");
+    struct CycleRow {
+        unsigned long long calls;
+        unsigned long long cycles;
+        double mean;
+        double share;
+    };
+    std::unordered_map<std::string, CycleRow> values;
+    std::istringstream input(table);
+    std::string line;
+    while (std::getline(input, line)) {
+        std::istringstream fields(line);
+        std::string name;
+        CycleRow row{};
+        if ((fields >> name) && name.starts_with("kick.device.")) {
+            require(bool(fields >> row.calls >> row.cycles >> row.mean >> row.share),
+                "Malformed device cycle row");
+            require(values.emplace(name, row).second, "Duplicate device cycle row");
+        }
+    }
+    require(values.size() == 4, "Empty/invalid device phases were recorded");
+    auto const& prepare = values.at("kick.device.prepare");
+    require(prepare.calls == 5 && prepare.cycles == 250 && prepare.mean == 50.0 &&
+            prepare.share == 25.0,
+        "Device preparation samples were not aggregated across blocks/launches");
+    auto const& p2p = values.at("kick.device.P2P");
+    require(p2p.calls == 8 && p2p.cycles == 750 && p2p.mean == 93.75 && p2p.share == 75.0,
+        "Device interaction samples have incorrect mean or share");
+    auto const& traversal = values.at("kick.device.traversal");
+    require(traversal.calls == 2 && traversal.cycles == 0 && traversal.mean == 0.0 &&
+            traversal.share == 0.0,
+        "Zero-cycle device invocations were lost");
+    auto const& cleanup = values.at("kick.device.cleanup");
+    require(
+        cleanup.calls == 1 && cleanup.cycles == 0 && cleanup.mean == 0.0 && cleanup.share == 0.0,
+        "A block with only zero-cycle invocations was lost");
+    require(table.find("Recorded blocks: 4; cycles min/mean/max: 0 / 250.000 / 400\n") !=
+            std::string::npos,
+        "Device block statistics include invalid/empty blocks or omit valid zero cycles");
+    require(table.find("Recorded launches: 2; cycles min/mean/max: 400 / 500.000 / 600\n") !=
+            std::string::npos,
+        "Device launch statistics were not aggregated independently");
+#else
+    require(start == std::string::npos, "Disabled device profiler produced cycle output");
+#endif
 }
 
 }    // namespace detail
@@ -203,6 +286,23 @@ int main(int argc, char** argv) {
     try {
         detail::require(argc == 2, "Expected output filename");
         detail::require(profile::profileReport().empty(), "New registry is not empty");
+        detail::exerciseDeviceWork();
+        auto const deviceOnlyReport = profile::profileReport();
+        detail::checkDeviceWork(deviceOnlyReport);
+#if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
+        detail::require(deviceOnlyReport.starts_with(detail::kDeviceReportTitle),
+            "Device-only report invented elapsed-time sections");
+        profile::profileOutput(argv[1]);
+        {
+            std::ifstream file(argv[1]);
+            std::string const saved(
+                (std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+            detail::require(
+                saved == deviceOnlyReport, "Device-only output file differs from report");
+        }
+#else
+        detail::require(deviceOnlyReport.empty(), "Disabled device profiling created a report");
+#endif
         auto const workExpected = detail::exerciseWork();
         auto const workOnlyReport = profile::profileReport();
 #if COSMICTIGER_PROFILE
@@ -247,6 +347,7 @@ int main(int argc, char** argv) {
             profile::profileEnd();
         }
         auto const report = profile::profileReport();
+        detail::checkDeviceWork(report);
         profile::profileOutput(argv[1]);
 #if COSMICTIGER_PROFILE
         auto const values = detail::rows(report);

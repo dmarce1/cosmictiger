@@ -22,6 +22,8 @@
 #include <chrono>
 #include <string>
 
+#include <cosmictiger/core/device_profile.hpp>
+
 // Manual phase profiler. COSMICTIGER_PROFILE (a CMake option, on by default)
 // compiles the instrumentation; without it every call is an empty inline.
 //
@@ -82,6 +84,15 @@ inline std::string profileReport() {
 }
 inline void profileOutput(std::string const&) noexcept {}
 inline void recordWork(WorkPhase, double) noexcept {}
+#endif
+
+#if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
+// Import completed per-block records after the launch's existing stream wait.
+// Null/empty batches and counters with no calls are ignored. Rank filtering is
+// the caller's responsibility, as with recordWork.
+void recordDeviceBlocks(DeviceBlockRecord const* blocks, size_t count) noexcept;
+#else
+inline void recordDeviceBlocks(DeviceBlockRecord const*, size_t) noexcept {}
 #endif
 
 // Independent host elapsed intervals, safe in concurrent HPX tasks. They may

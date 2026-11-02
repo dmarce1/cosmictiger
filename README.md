@@ -425,9 +425,9 @@ transfer functions, domains, rebound, rung sort, tree creation, kicks, mesh
 solves, hydro, chemistry, star formation, drift, checkpoints, output, lightcone,
 groups, power spectra, and gravity-error passes. Phases nest on the coordinator's
 logical control flow; entering a child pauses its parent, so each name collects
-exclusive wall time and the rows sum to the instrumented total. Individual
-kernels, per-particle loops, and work on concurrent HPX tasks are deliberately
-not instrumented: the single phase stack belongs to the coordinator.
+exclusive wall time and the rows sum to the instrumented total. These
+coordinator scopes exclude individual kernels, per-particle loops, and work
+on concurrent HPX tasks: the single phase stack belongs to the coordinator.
 
 The report uses dotted names for finer stages. SPH separates tree creation,
 neighbor boxes/lists, density/support solves, viscosity targets, closing/opening
@@ -476,10 +476,38 @@ launch-packet host-to-device copy, fused gravity kernel, and result
 device-to-host copy. Events are read after the existing stream completion
 wait; profiling adds no extra synchronization. Kernel time includes managed
 memory stalls, and the copy rows do not account for all managed-memory
-migration. Internal CUDA traversal and interaction operators are still fused
-and are not individually timed. `COSMICTIGER_PROFILE=OFF` removes both the
-host detail timers and CUDA timing events. Use APEX and TAU below for broader
-HPX task attribution.
+migration. `COSMICTIGER_PROFILE=OFF` removes the host detail timers and CUDA
+timing events. Use APEX and TAU below for broader HPX task attribution.
+
+Configure a CUDA build with `-DCOSMICTIGER_PROFILE=ON` and
+`-DCOSMICTIGER_DEVICE_PROFILE=ON` to also time sections inside the fused gravity
+kernel. Device profiling is off by default and requires CUDA and the host
+profiler. Its `kick.device.*` rows match the CPU sections: `prepare` (including
+L2L and force-tile setup), `periodic`, `traversal` (acceptance tests and
+interaction lists), `M2L`, `P2L`, `M2P`, `P2P`, and `leafKick` (L2P and particle
+updates). Additional rows separate `schedule` (work-queue and walk-stack
+operations), `copyWait` (remaining checklist-copy wait), and `cleanup`.
+The asynchronous checklist copy still overlaps M2L. Calls count phase visits
+across blocks, including empty interaction lists, rather than particle pairs;
+CPU and CUDA visit counts can differ because the CUDA walk processes tiles.
+
+The device report uses `clock64()` elapsed cycles, accumulated independently
+by each block, with calls, mean cycles, and shares of summed instrumented block
+cycles. It also reports min/mean/max total cycles across recorded blocks and
+launches. These include stalls, scheduling, and instrumentation overhead;
+overlapping block cycles are not kernel wall time and are never converted
+using a nominal GPU frequency. Keep the event-based kernel duration as the
+elapsed-time measurement. Only rank 0 imports device records, after the
+existing stream wait. The counter transfer is separate from the ordinary
+result-copy event interval.
+
+`profile::DeviceProfiler` is collective on exactly one complete 32-thread
+warp per block, as used by the kick kernel. All lanes must reach its
+constructor, `next`, and `finish` calls with identical phase choices and a
+block-owned output record. Counters are distributed across warp lanes and
+written once to disjoint global records, without profiling atomics or shared
+counter arrays. `COSMICTIGER_DEVICE_PROFILE=OFF` compiles out its state, clock
+reads, synchronization, and record transfers.
 
 The first Ctrl-C requests a clean stop at the next safe phase or completed
 substep. Active work finishes, the simulation's ordinary final checkpoint is
