@@ -1,0 +1,201 @@
+/*
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2026  Dominic C. Marcello
+
+ Distributed under the Boost Software License, Version 1.0.
+ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
+ */
+#pragma once
+
+#include <cosmictiger/chemistry/gadget4_cooling.hpp>
+#include <cosmictiger/hydro/hopkins/hopkins_state.hpp>
+#include <cosmictiger/hydro/sph/cullen_and_dehnen/state.hpp>
+#include <cosmictiger/hydro/sph/viscosity_state.hpp>
+#include <cosmictiger/math/math.hpp>
+#include <cosmictiger/particles/particles.hpp>
+
+#ifdef SPH_PARTICLES_CPP
+#define SPH_PARTICLES_EXTERN
+#else
+#define SPH_PARTICLES_EXTERN extern
+#endif
+#ifdef CHECK_BOUNDS
+#define CHECK_SPH_PART_BOUNDS(i)                                                                 \
+    if (i < 0 || i >= sphParticlesSize()) {                                                      \
+        PRINT("particle bound check failure %li should be between %li and %li\n", (long long) i, \
+            (long long) 0, (long long) sphParticlesSize());                                      \
+        ALWAYS_ASSERT(false);                                                                    \
+    }
+#else
+#define CHECK_SPH_PART_BOUNDS(i)
+#endif
+
+struct SphThermodynamicState {
+    float internalEnergy;    // Stored a^2 times the specific internal energy.
+    float supportRadius;     // Compact support radius of the SPH smoothing kernel.
+};
+
+struct SphAcceleration {
+    Array<float, kDimensions> acceleration;
+};
+
+// Cooling stores only an equilibrium electron-fraction guess; hydro owns thermal energy.
+SPH_PARTICLES_EXTERN gadget4::State* sphParticlesChemistryStates;
+SPH_PARTICLES_EXTERN Pair<float>* sphParticlesChemistryEos;
+
+SPH_PARTICLES_EXTERN SphThermodynamicState* sphParticlesThermodynamicStates;
+SPH_PARTICLES_EXTERN SphAcceleration* sphParticlesAccelerationStates;
+SPH_PARTICLES_EXTERN ParticleInteger* sphParticlesParticleIndices;
+// Rates used by the predictor, retained until the corrector replaces their kick.
+SPH_PARTICLES_EXTERN Array<float*, kDimensions> sphParticlesPredictedAccelerations;
+SPH_PARTICLES_EXTERN Array<float*, kDimensions> sphParticlesGravityAccelerations;
+SPH_PARTICLES_EXTERN float* sphParticlesPredictedInternalEnergyRates;
+SPH_PARTICLES_EXTERN float* sphParticlesInternalEnergyRates;
+SPH_PARTICLES_EXTERN float* sphParticlesDensities;
+// MFV mass projection for shared gravity/output; conserved mass stays in the double state.
+SPH_PARTICLES_EXTERN float* sphParticlesMasses;
+SPH_PARTICLES_EXTERN HopkinsParticleState* sphParticlesHopkinsStates;
+// Derived during every density pass; rebuilt after restart and migration.
+SPH_PARTICLES_EXTERN float* sphParticlesBalsaraFactors;
+// Variational operator only: zeta_i of cosmictiger/hydro/sph/volume.hpp, written by the density pass
+// for every semiactive particle before each force pass. Neither checkpointed nor migrated:
+// sphParticlesResetConverged sets every slot to NaN when a density pass starts, so a force
+// pass can use only corrections rebuilt by the current pass.
+SPH_PARTICLES_EXTERN float* sphParticlesGradHCorrections;
+SPH_PARTICLES_EXTERN SphViscosityState* sphParticlesViscosityStates;
+SPH_PARTICLES_EXTERN SphCullenDehnenState* sphParticlesCullenDehnenStates;
+SPH_PARTICLES_EXTERN char* sphParticlesConvergenceFlags;
+SPH_PARTICLES_EXTERN char* sphParticlesSemiactiveFlags;
+
+ParticleInteger sphParticlesSize();
+void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticles = true);
+void sphParticlesFree();
+void sphParticlesRemove(ParticleInteger index);
+void sphParticlesClearHydroCaches();
+void sphParticlesClearCaches();
+void sphParticlesResolveWithParticles();
+void sphParticlesSwap(ParticleInteger i, ParticleInteger j);
+ParticleInteger sphParticlesSort(
+    Pair<ParticleInteger> particleRange, Position splitPosition, int splitDimension);
+void sphParticlesGlobalReadPositions(
+    ParticleGlobalRange range, Position* x, Position* y, Position* z, ParticleInteger offset);
+void sphParticlesGlobalReadInternalEnergyAndSupportRadius(
+    ParticleGlobalRange range, float* internalEnergy, float* supportRadius, ParticleInteger offset);
+void sphParticlesGlobalReadRungs(ParticleGlobalRange range, char*, ParticleInteger offset);
+void sphParticlesGlobalReadVelocities(
+    ParticleGlobalRange range, float*, float*, float*, ParticleInteger offset);
+void sphParticlesGlobalReadMasses(ParticleGlobalRange range, float* masses, ParticleInteger offset);
+void sphParticlesGlobalReadDensity(ParticleGlobalRange range, float*, ParticleInteger offset,
+    float* balsaraFactor = nullptr, float* viscosityAlpha = nullptr,
+    float* gradHCorrection = nullptr);
+void sphParticlesGlobalReadChemistryEos(ParticleGlobalRange range, float* pressureEnergyRatio,
+    float* adiabaticIndex, ParticleInteger offset);
+#if COSMICTIGER_ENABLE_CHEMISTRY
+void sphParticlesRefreshChemistryEos(double scaleFactor);
+#endif
+void sphParticlesResetConverged();
+void sphParticlesResetSemiactive();
+void sphParticlesLoad(FILE* fp);
+void sphParticlesSave(FILE* fp);
+void sphCheckpointTest();
+void sphParticlesApplyUpdates(
+    int minimumRung, int phase, float timeStepScale, float time, double explicitTimestep = -1.0);
+// Cullen-Dehnen and Price et al.: commit the pending divergences and move alpha toward the
+// density pass's target before the force pass snapshots it.
+void sphParticlesUpdateTargetAlpha(
+    int minimumRung, float timeStepScale, float time, double explicitTimestep = -1.0);
+
+inline float& sphParticlesPredictedInternalEnergyRate(ParticleInteger index) {
+    return sphParticlesPredictedInternalEnergyRates[index];
+}
+
+inline HopkinsParticleState& sphParticlesHopkinsState(ParticleInteger index) {
+    CHECK_SPH_PART_BOUNDS(index);
+    ALWAYS_ASSERT(sphParticlesHopkinsStates != nullptr);
+    return sphParticlesHopkinsStates[index];
+}
+
+inline float sphParticlesMass(ParticleInteger index) {
+    CHECK_SPH_PART_BOUNDS(index);
+    return getOptions().hydro.method == "mfv" ? sphParticlesMasses[index] :
+                                                float(getOptions().initial.gasMass);
+}
+
+inline float& sphParticlesMfvMass(ParticleInteger index) {
+    CHECK_SPH_PART_BOUNDS(index);
+    ALWAYS_ASSERT(sphParticlesMasses != nullptr);
+    return sphParticlesMasses[index];
+}
+
+inline char& sphParticlesConverged(ParticleInteger index) {
+    return sphParticlesConvergenceFlags[index];
+}
+
+inline char& sphParticlesSemiactive(ParticleInteger index) {
+    return sphParticlesSemiactiveFlags[index];
+}
+
+inline SphThermodynamicState& sphParticlesThermodynamicState(ParticleInteger index) {
+    return sphParticlesThermodynamicStates[index];
+}
+
+inline SphAcceleration& sphParticlesAccelerationState(ParticleInteger index) {
+    return sphParticlesAccelerationStates[index];
+}
+
+inline ParticleInteger& sphParticlesParticleIndex(ParticleInteger index) {
+    CHECK_SPH_PART_BOUNDS(index);
+    return sphParticlesParticleIndices[index];
+}
+
+inline Position& sphParticlesPosition(int dim, int index) {
+    return particlesPos(dim, sphParticlesParticleIndex(index));
+}
+
+inline float& sphParticlesVelocity(int dim, int index) {
+    return particlesVel(dim, sphParticlesParticleIndex(index));
+}
+
+inline char& sphParticlesRung(int index) {
+    return particlesRung(sphParticlesParticleIndex(index));
+}
+
+inline float& sphParticlesInternalEnergy(ParticleInteger index) {
+    CHECK_SPH_PART_BOUNDS(index);
+    return sphParticlesThermodynamicStates[index].internalEnergy;
+}
+
+inline float& sphParticlesInternalEnergyRate(ParticleInteger index) {
+    CHECK_SPH_PART_BOUNDS(index);
+    return sphParticlesInternalEnergyRates[index];
+}
+
+inline float& sphParticlesPredictedAcceleration(int dim, ParticleInteger index) {
+    CHECK_SPH_PART_BOUNDS(index);
+    return sphParticlesPredictedAccelerations[dim][index];
+}
+
+inline float& sphParticlesAcceleration(int dim, ParticleInteger index) {
+    CHECK_SPH_PART_BOUNDS(index);
+    return sphParticlesAccelerationStates[index].acceleration[dim];
+}
+
+inline float& sphParticlesGravityAcceleration(int dim, ParticleInteger index) {
+    CHECK_SPH_PART_BOUNDS(index);
+    return sphParticlesGravityAccelerations[dim][index];
+}
+
+inline float& sphParticlesSupportRadius(ParticleInteger index) {
+    CHECK_SPH_PART_BOUNDS(index);
+    return sphParticlesThermodynamicStates[index].supportRadius;
+}
+
+inline float& sphParticlesDensity(ParticleInteger index) {
+    return sphParticlesDensities[index];
+}
+
+inline float sphParticlesPressure(ParticleInteger index) {
+    float const ratio = getOptions().chemistry.enabled ? sphParticlesChemistryEos[index].first :
+                                                         getOptions().hydro.gamma - 1.0f;
+    return ratio * sphParticlesDensity(index) * sphParticlesInternalEnergy(index);
+}

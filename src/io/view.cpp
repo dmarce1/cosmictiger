@@ -50,13 +50,13 @@
 #include <cosmictiger/math/units.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/sph/sph.hpp>
+#include <cosmictiger/hydro/sph/sph.hpp>
 #if COSMICTIGER_ENABLE_CHEMISTRY
-#include <cosmictiger/sph/sph_chemistry.hpp>
+#include <cosmictiger/hydro/sph/sph_chemistry.hpp>
 #endif
-#include <cosmictiger/sph/sph_particles.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #if COSMICTIGER_ENABLE_STAR_FORMATION
-#include <cosmictiger/sph/star_formation.hpp>
+#include <cosmictiger/hydro/sph/star_formation.hpp>
 #endif
 #endif
 

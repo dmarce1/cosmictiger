@@ -93,7 +93,7 @@ class BuildFeaturesTest(unittest.TestCase):
             self.check()
 
     def testDisabledHopkinsRejectsImplementationSources(self):
-        for source in ("src/hydro/hopkins_driver.cpp", "src/scenarios/sound_wave.cpp", "tests/hopkins.cpp"):
+        for source in ("src/hydro/hopkins.cpp", "src/scenarios/sound_wave.cpp", "tests/hopkins.cpp"):
             with self.subTest(source=source):
                 self.configure(HOPKINS=False)
                 self.addCompilation("unused_hopkins", source, {})
@@ -101,8 +101,8 @@ class BuildFeaturesTest(unittest.TestCase):
                     self.check()
 
     def testEnabledHopkinsRequiresRuntimeAndSharedSphSources(self):
-        for source in ("src/hydro/hopkins_driver.cpp", "src/scenarios/sound_wave.cpp",
-                       "src/sph/sph_particles.cpp", "src/sph/sph_tree.cpp"):
+        for source in ("src/hydro/hopkins.cpp", "src/scenarios/sound_wave.cpp",
+                       "src/hydro/sph/sph_particles.cpp", "src/hydro/sph/sph_tree.cpp"):
             with self.subTest(source=source):
                 self.configure(HOPKINS=True)
                 self.commands = [entry for entry in self.commands if not entry["file"].endswith(source)]
@@ -133,7 +133,7 @@ class BuildFeaturesTest(unittest.TestCase):
             self.check()
 
     def testDisabledStarFormationRejectsEveryImplementationSource(self):
-        for source in ("src/sph/star_formation.cpp", "src/sph/star_formation_cuda.cu",
+        for source in ("src/hydro/sph/star_formation.cpp", "src/hydro/sph/star_formation_cuda.cu",
                               "tests/sph/star_formation_cuda.cu", "tests/sph/star_formation.cpp", "tests/star_formation_particles.cpp",
                        "tests/springel_and_hernquist.cpp", "tests/springel_and_hernquist_cuda.cu"):
             with self.subTest(source=source):
@@ -143,7 +143,7 @@ class BuildFeaturesTest(unittest.TestCase):
                     self.check()
 
     def testEnabledStarFormationRequiresRuntimeSource(self):
-        for source in ("src/sph/star_formation.cpp",):
+        for source in ("src/hydro/sph/star_formation.cpp",):
             with self.subTest(source=source):
                 self.configure(STARS=True)
                 self.commands = [entry for entry in self.commands if not entry["file"].endswith(source)]
@@ -228,7 +228,7 @@ class BuildFeaturesTest(unittest.TestCase):
 
     def testSphSourceLeak(self):
         self.configure(SPH=False)
-        self.addCompilation("cosmictiger_objects", "src/sph/sph.cpp", self.definitions)
+        self.addCompilation("cosmictiger_objects", "src/hydro/sph/sph.cpp", self.definitions)
         with self.assertRaisesRegex(ValueError, "SPH disabled but compiles SPH source"):
             self.check()
 
@@ -247,7 +247,7 @@ class BuildFeaturesTest(unittest.TestCase):
 
     def testDisabledChemistrySourceLeak(self):
         for source in ("src/chemistry/gadget4_cooling.cpp", "src/chemistry/gadget4_cooling.cu",
-                       "src/sph/sph_chemistry.cpp", "tests/sph/chemistry.cpp",
+                       "src/hydro/sph/sph_chemistry.cpp", "tests/sph/chemistry.cpp",
                        "tests/gadget4_cooling.cpp"):
             with self.subTest(source=source):
                 self.configure(CHEMISTRY=False)
@@ -257,7 +257,7 @@ class BuildFeaturesTest(unittest.TestCase):
 
     def testMissingSphChemistrySource(self):
         self.commands = [entry for entry in self.commands if not entry["file"].endswith("sph/sph_chemistry.cpp")]
-        with self.assertRaisesRegex(ValueError, "required source missing: src/sph/sph_chemistry.cpp"):
+        with self.assertRaisesRegex(ValueError, "required source missing: src/hydro/sph/sph_chemistry.cpp"):
             self.check()
 
     def testSphOnlyGravitySourceLeak(self):
@@ -594,10 +594,10 @@ class FeatureConfigurationTest(unittest.TestCase):
                     'foreach(path IN LISTS selected)\nmessage(STATUS "source=${path}")\nendforeach()\n')
                 result = subprocess.run(["cmake", "-P", str(script)], text=True, capture_output=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                for name in ("src/hydro/hopkins_driver.cpp", "src/scenarios/sound_wave.cpp"):
+                for name in ("src/hydro/hopkins.cpp", "src/scenarios/sound_wave.cpp"):
                     self.assertEqual("source=" + name + "\n" in result.stdout, hopkins == "ON")
-                for name in ("src/sph/sph_particles.cpp", "src/sph/sph_tree.cpp",
-                             "src/sph/sph_hydro_cpu.cpp", "src/scenarios/gresho.cpp"):
+                for name in ("src/hydro/sph/sph_particles.cpp", "src/hydro/sph/sph_tree.cpp",
+                             "src/hydro/sph/sph_hydro_cpu.cpp", "src/scenarios/gresho.cpp"):
                     self.assertEqual("source=" + name + "\n" in result.stdout, sph == "ON")
 
     def testStarsCapabilityCombinations(self):
@@ -677,9 +677,9 @@ class FeatureConfigurationTest(unittest.TestCase):
                 result = subprocess.run(["cmake", "-P", str(script)], text=True, capture_output=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 enabled = sph == "ON" and stars == "ON"
-                for name in ("src/sph/star_formation.cpp",):
+                for name in ("src/hydro/sph/star_formation.cpp",):
                     self.assertEqual("source=" + name + "\n" in result.stdout, enabled)
-                self.assertEqual("source=src/sph/star_formation_cuda.cu\n" in result.stdout,
+                self.assertEqual("source=src/hydro/sph/star_formation_cuda.cu\n" in result.stdout,
                                  enabled and cuda == "ON")
                 for name in ("tests/sph/star_formation.cpp", "tests/star_formation_particles.cpp"):
                     self.assertEqual("source=" + name + "\n" in result.stdout, enabled and testing == "ON")

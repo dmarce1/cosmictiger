@@ -21,8 +21,8 @@
 
 #include <cuda_runtime.h>
 
-#include <cosmictiger/sph/sph_cpu.hpp>
-#include <cosmictiger/sph/sph_cuda.hpp>
+#include <cosmictiger/hydro/sph/sph_cpu.hpp>
+#include <cosmictiger/hydro/sph/sph_cuda.hpp>
 #include <tests/cuda_test.hpp>
 #include <tests/sph/global_timestep_cases.hpp>
 

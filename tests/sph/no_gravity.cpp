@@ -9,8 +9,8 @@
 
 #include <cosmictiger/core/file_handle.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/particles/particles.hpp>
-#include <cosmictiger/sph/sph_particles.hpp>
 
 void sphOnlyDiagnosticsTest() {
     static_assert(!COSMICTIGER_WITH_GRAVITY && COSMICTIGER_WITH_SPH);

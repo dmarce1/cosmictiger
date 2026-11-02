@@ -53,9 +53,9 @@ scale 100, and the pair limiter uses `psi_1=0.5`, `psi_2=0.25` (Appendix B).
 The current geometry acceptance bound is also 100, so accepted gradients use
 the upper beta bound of 2.
 
-The numerical primitives are in `cosmictiger/hydro/hopkins.hpp`, with the shared
+The numerical primitives are in `cosmictiger/hydro/hopkins/hopkins.hpp`, with the shared
 scalar/SIMD reconstruction and HLLC arithmetic in
-`cosmictiger/hydro/hopkins_simd.hpp`. HLLC uses the Davis extrema of the two
+`cosmictiger/hydro/hopkins/hopkins_simd.hpp`. HLLC uses the Davis extrema of the two
 one-sided acoustic speeds. For face vector \(\boldsymbol A\) and input frame
 velocity \(\boldsymbol w\), define \(A=|\boldsymbol A|\),
 \(\boldsymbol n=\boldsymbol A/A\),
@@ -170,7 +170,7 @@ without hydrodynamics. A uniform global timestep is optional; choosing PMMM does
 not select it. Both chemistry and star formation must be disabled for MFM/MFV;
 incompatible combinations are rejected during option validation.
 
-`src/hydro/hopkins_driver.cpp` is a CPU SIMD backend, including in a
+`src/hydro/hopkins.cpp` is a CPU SIMD backend, including in a
 CUDA-enabled build. It gathers gas state and tree-derived neighbor ranges from
 all HPX localities onto the coordinating locality, runs CPU SIMD loops there, and
 scatters updated states to the particle owners. MPI domain ownership and

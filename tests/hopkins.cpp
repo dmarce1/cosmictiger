@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include <cosmictiger/hydro/hopkins.hpp>
-#include <cosmictiger/hydro/hopkins_simd.hpp>
+#include <cosmictiger/hydro/hopkins/hopkins.hpp>
+#include <cosmictiger/hydro/hopkins/hopkins_simd.hpp>
 
 namespace detail {
 

@@ -18,10 +18,10 @@ equation 3.19 is not enabled.
 ## Notation in the code
 
 The computation code transcribes the paper's kernel and viscosity formulas.
-`cosmictiger/sph/monaghan/viscosity.hpp` holds the per-pair viscosity formulas,
+`cosmictiger/hydro/sph/monaghan/viscosity.hpp` holds the per-pair viscosity formulas,
 and the pair, density, and support-radius loops in
-`src/sph/sph_hydro_cpu.cpp`, `src/sph/sph_hydro.cu`, `src/sph/sph_prehydro_cpu.cpp`,
-`src/sph/sph_prehydro.cu`, and `cosmictiger/sph/sph_cuda.hpp` apply them to the staged particle
+`src/hydro/sph/sph_hydro_cpu.cpp`, `src/hydro/sph/sph_hydro.cu`, `src/hydro/sph/sph_prehydro_cpu.cpp`,
+`src/hydro/sph/sph_prehydro.cu`, and `cosmictiger/hydro/sph/sph_cuda.hpp` apply them to the staged particle
 arrays. Inside those regions the local variables carry the paper's symbols and each
 block names the equation it implements; function parameters and data fields keep their
 descriptive names, and the regions are fenced with
@@ -324,7 +324,7 @@ divergence state. Under CD, β follows α as described above.
 astrophysics*, PASA 35, e031,
 [doi:10.1017/pasa.2018.25](https://doi.org/10.1017/pasa.2018.25)
 ([arXiv:1702.03930](https://arxiv.org/abs/1702.03930)), section 2.2.9. It is their
-variation on Cullen & Dehnen, implemented in `sph/price_etal/`:
+variation on Cullen & Dehnen, implemented in `hydro/sph/price_etal/`:
 
 \[
  A_i=\xi_i\max\!\left[-\frac{d}{dt}(\nabla\cdot\mathbf v_i),0\right]\ \text{(46)},\qquad
@@ -554,7 +554,7 @@ or evidence of long-time accuracy. No performance claim follows from them.
 ## Source layout
 
 Common particle storage, source staging, neighbor traversal, CPU/CUDA execution,
-and timestep scheduling stay directly in `cosmictiger/sph/` and `src/sph/`.
+and timestep scheduling stay directly in `cosmictiger/hydro/sph/` and `src/hydro/sph/`.
 The numerical components live in separate formulation and author directories:
 
 - `variational/equations.hpp`: compatible pressure force and thermal work with grad-H corrections; the shared volume and support algebra stays in `volume.hpp`.

@@ -15,9 +15,9 @@
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/hydro/sph/sph_tree.hpp>
 #include <cosmictiger/particles/particles.hpp>
-#include <cosmictiger/sph/sph_particles.hpp>
-#include <cosmictiger/sph/sph_tree.hpp>
 
 namespace detail {
 constexpr int kSphTreeMinimumRung = 1;

@@ -14,12 +14,12 @@
 #include <stdexcept>
 
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/blast.hpp>
 #include <cosmictiger/scenarios/diagnostics.hpp>
 #include <cosmictiger/scenarios/sedov.hpp>
-#include <cosmictiger/sph/sph_particles.hpp>
 
 namespace scenarios {
 

@@ -11,7 +11,7 @@
 
 #include <gtest/gtest.h>
 
-#include <cosmictiger/sph/price_etal/viscosity.hpp>
+#include <cosmictiger/hydro/sph/price_etal/viscosity.hpp>
 #include <tests/sph/test_helpers.hpp>
 
 namespace detail {

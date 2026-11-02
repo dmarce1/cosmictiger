@@ -11,7 +11,7 @@
 
 #include <gtest/gtest.h>
 
-#include <cosmictiger/sph/kernels.hpp>
+#include <cosmictiger/hydro/sph/kernels.hpp>
 #include <tests/sph/test_helpers.hpp>
 
 namespace detail {

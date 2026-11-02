@@ -11,9 +11,9 @@
 #include <stdexcept>
 
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/disc.hpp>
-#include <cosmictiger/sph/sph_particles.hpp>
 
 namespace scenarios {
 

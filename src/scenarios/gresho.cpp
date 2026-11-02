@@ -1,8 +1,8 @@
 #include <cmath>
 
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/scenarios/gresho.hpp>
-#include <cosmictiger/sph/sph_particles.hpp>
 
 namespace scenarios {
 

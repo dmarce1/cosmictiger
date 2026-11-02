@@ -127,34 +127,34 @@ function(cosmictiger_feature_sources output)
             src/scenarios/gresho.cpp
             src/scenarios/exact_sod.cpp
             src/scenarios/sedov.cpp
-            src/sph/sph.cpp
-            src/sph/sph.cu
-            src/sph/sph_cpu.cpp
-            src/sph/sph_hydro.cu
-            src/sph/sph_hydro_cpu.cpp
-            src/sph/sph_particles.cpp
-            src/sph/sph_prehydro.cu
-            src/sph/sph_prehydro_cpu.cpp
-            src/sph/sph_rungs.cu
-            src/sph/sph_rungs_cpu.cpp
-            src/sph/sph_tree.cpp
+            src/hydro/sph/sph.cpp
+            src/hydro/sph/sph.cu
+            src/hydro/sph/sph_cpu.cpp
+            src/hydro/sph/sph_hydro.cu
+            src/hydro/sph/sph_hydro_cpu.cpp
+            src/hydro/sph/sph_particles.cpp
+            src/hydro/sph/sph_prehydro.cu
+            src/hydro/sph/sph_prehydro_cpu.cpp
+            src/hydro/sph/sph_rungs.cu
+            src/hydro/sph/sph_rungs_cpu.cpp
+            src/hydro/sph/sph_tree.cpp
             src/scenarios/sphere.cpp
             src/scenarios/sphere.cu
-            src/sph/cullen_and_dehnen/particle_exchange.cpp
-            src/sph/cullen_and_dehnen/viscosity.cpp
-            src/sph/morris_and_monaghan/viscosity.cpp
-            src/sph/price_etal/viscosity.cpp
+            src/hydro/sph/cullen_and_dehnen/particle_exchange.cpp
+            src/hydro/sph/cullen_and_dehnen/viscosity.cpp
+            src/hydro/sph/morris_and_monaghan/viscosity.cpp
+            src/hydro/sph/price_etal/viscosity.cpp
         )
         if(COSMICTIGER_ENABLE_HOPKINS)
             list(APPEND cosmictiger_source_files
-                src/hydro/hopkins_driver.cpp src/scenarios/sound_wave.cpp)
+                src/hydro/hopkins.cpp src/scenarios/sound_wave.cpp)
         endif()
         if(COSMICTIGER_ENABLE_CHEMISTRY)
-            list(APPEND cosmictiger_source_files src/sph/sph_chemistry.cpp)
+            list(APPEND cosmictiger_source_files src/hydro/sph/sph_chemistry.cpp)
         endif()
         if(COSMICTIGER_ENABLE_STAR_FORMATION)
-            list(APPEND cosmictiger_source_files src/sph/star_formation.cpp
-                src/sph/star_formation_cuda.cu)
+            list(APPEND cosmictiger_source_files src/hydro/sph/star_formation.cpp
+                src/hydro/sph/star_formation_cuda.cu)
         endif()
     endif()
 

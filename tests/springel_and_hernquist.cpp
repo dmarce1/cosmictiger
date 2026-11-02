@@ -3,7 +3,7 @@
 
 #include <gtest/gtest.h>
 
-#include <cosmictiger/sph/star_formation_kernel.hpp>
+#include <cosmictiger/hydro/sph/star_formation_kernel.hpp>
 
 namespace {
 namespace sh = springel_and_hernquist;

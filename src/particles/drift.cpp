@@ -18,7 +18,7 @@
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/drift_cpu.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/sph/sph_particles.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #endif
 
 HPX_PLAIN_ACTION(drift, DriftAction);

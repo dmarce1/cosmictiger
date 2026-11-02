@@ -10,9 +10,9 @@
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/hydro/sph/sph_chemistry.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
-#include <cosmictiger/sph/sph_chemistry.hpp>
-#include <cosmictiger/sph/sph_particles.hpp>
 
 namespace detail {
 constexpr double kChemistryTestScale = 0.02;

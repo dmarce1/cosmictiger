@@ -18,10 +18,10 @@
 
 #include <gtest/gtest.h>
 
+#include <cosmictiger/hydro/sph/kernels.hpp>
+#include <cosmictiger/hydro/sph/monaghan/viscosity.hpp>
+#include <cosmictiger/hydro/sph/variational/equations.hpp>
 #include <cosmictiger/math/vector3.hpp>
-#include <cosmictiger/sph/kernels.hpp>
-#include <cosmictiger/sph/monaghan/viscosity.hpp>
-#include <cosmictiger/sph/variational/equations.hpp>
 
 #include <tests/sph/test_helpers.hpp>
 

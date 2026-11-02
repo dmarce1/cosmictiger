@@ -40,11 +40,11 @@
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/sph/sph.hpp>
+#include <cosmictiger/hydro/sph/sph.hpp>
 #if COSMICTIGER_ENABLE_CHEMISTRY
-#include <cosmictiger/sph/sph_chemistry.hpp>
+#include <cosmictiger/hydro/sph/sph_chemistry.hpp>
 #endif
-#include <cosmictiger/sph/sph_particles.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #endif
 
 HPX_PLAIN_ACTION(writeCheckpoint, WriteCheckpointAction);

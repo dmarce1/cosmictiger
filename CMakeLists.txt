@@ -193,10 +193,10 @@ set(cosmictiger_header_files
     cosmictiger/core/flops.hpp
     cosmictiger/core/hpx.hpp
     cosmictiger/core/memused.hpp
-    cosmictiger/hydro/hopkins.hpp
-    cosmictiger/hydro/hopkins_simd.hpp
-    cosmictiger/hydro/hopkins_state.hpp
-    cosmictiger/hydro/hopkins_driver.hpp
+    cosmictiger/hydro/hopkins/hopkins.hpp
+    cosmictiger/hydro/hopkins/hopkins_simd.hpp
+    cosmictiger/hydro/hopkins/hopkins_state.hpp
+    cosmictiger/hydro/hopkins/hopkins_hydro.hpp
     cosmictiger/core/options.hpp
     cosmictiger/core/options_metadata.hpp
     cosmictiger/core/profiler.hpp
@@ -292,13 +292,13 @@ set(cosmictiger_header_files
     cosmictiger/scenarios/glass.hpp
     cosmictiger/scenarios/exact_sod.hpp
     cosmictiger/scenarios/sedov.hpp
-    cosmictiger/sph/sph.hpp
-    cosmictiger/sph/sph_chemistry.hpp
-    cosmictiger/sph/sph_cpu.hpp
-    cosmictiger/sph/sph_cuda.hpp
-    cosmictiger/sph/sph_kernel.hpp
-    cosmictiger/sph/sph_particles.hpp
-    cosmictiger/sph/sph_tree.hpp
+    cosmictiger/hydro/sph/sph.hpp
+    cosmictiger/hydro/sph/sph_chemistry.hpp
+    cosmictiger/hydro/sph/sph_cpu.hpp
+    cosmictiger/hydro/sph/sph_cuda.hpp
+    cosmictiger/hydro/sph/sph_kernel.hpp
+    cosmictiger/hydro/sph/sph_particles.hpp
+    cosmictiger/hydro/sph/sph_tree.hpp
     cosmictiger/scenarios/sphere.hpp
     cosmictiger/core/tree_id.hpp
     cosmictiger/gravity/dehnen/cpu_instances.hpp
@@ -324,18 +324,18 @@ set(cosmictiger_header_files
     cosmictiger/gravity/source_access.hpp
     cosmictiger/gravity/sources.hpp
     cosmictiger/gravity/tree_build.hpp
-    cosmictiger/sph/balsara/shear_limiter.hpp
-    cosmictiger/sph/cullen_and_dehnen/particle_exchange.hpp
-    cosmictiger/sph/cullen_and_dehnen/state.hpp
-    cosmictiger/sph/cullen_and_dehnen/viscosity.hpp
-    cosmictiger/sph/kernels.hpp
-    cosmictiger/sph/monaghan/viscosity.hpp
-    cosmictiger/sph/morris_and_monaghan/viscosity.hpp
-    cosmictiger/sph/price_etal/viscosity.hpp
-    cosmictiger/sph/sph_flops.hpp
-    cosmictiger/sph/variational/equations.hpp
-    cosmictiger/sph/viscosity_state.hpp
-    cosmictiger/sph/volume.hpp
+    cosmictiger/hydro/sph/balsara/shear_limiter.hpp
+    cosmictiger/hydro/sph/cullen_and_dehnen/particle_exchange.hpp
+    cosmictiger/hydro/sph/cullen_and_dehnen/state.hpp
+    cosmictiger/hydro/sph/cullen_and_dehnen/viscosity.hpp
+    cosmictiger/hydro/sph/kernels.hpp
+    cosmictiger/hydro/sph/monaghan/viscosity.hpp
+    cosmictiger/hydro/sph/morris_and_monaghan/viscosity.hpp
+    cosmictiger/hydro/sph/price_etal/viscosity.hpp
+    cosmictiger/hydro/sph/sph_flops.hpp
+    cosmictiger/hydro/sph/variational/equations.hpp
+    cosmictiger/hydro/sph/viscosity_state.hpp
+    cosmictiger/hydro/sph/volume.hpp
 )
 
 if(BUILD_TESTING)
@@ -392,14 +392,14 @@ if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
             $<$<COMPILE_LANGUAGE:CUDA>:--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false;-Xcompiler=-fno-fast-math;-Xcompiler=-ffp-contract=off>)
     endif()
 endif()
-set_source_files_properties(src/sph/sph_chemistry.cpp src/io/view.cpp tests/sph/chemistry.cpp
-    src/sph/star_formation.cpp tests/sph/star_formation.cpp
+set_source_files_properties(src/hydro/sph/sph_chemistry.cpp src/io/view.cpp tests/sph/chemistry.cpp
+    src/hydro/sph/star_formation.cpp tests/sph/star_formation.cpp
     PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 # Star-formation device physics shares the chemistry rounding contract.
-set_source_files_properties(src/sph/star_formation_cuda.cu PROPERTIES COMPILE_OPTIONS
+set_source_files_properties(src/hydro/sph/star_formation_cuda.cu PROPERTIES COMPILE_OPTIONS
     "--expt-relaxed-constexpr;--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false;-Xcompiler=-fno-fast-math;-Xcompiler=-ffp-contract=off")
 # Meshless conservative updates and the small-amplitude wave retain double precision.
-set_source_files_properties(src/hydro/hopkins_driver.cpp src/scenarios/sound_wave.cpp
+set_source_files_properties(src/hydro/hopkins.cpp src/scenarios/sound_wave.cpp
     PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 
 # The adaptive Boltzmann solve needs finite-value checks and accurate
@@ -949,7 +949,7 @@ if(BUILD_TESTING)
             RUN_SERIAL TRUE TIMEOUT 1200 PROCESSORS 2 LABELS "integration;star_formation;cpu")
         if(COSMICTIGER_WITH_CUDA)
             add_executable(star_formation_cuda_test tests/sph/star_formation_cuda.cu
-                src/sph/star_formation_cuda.cu)
+                src/hydro/sph/star_formation_cuda.cu)
             target_include_directories(star_formation_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
             target_compile_definitions(star_formation_cuda_test PRIVATE USE_CUDA)
             target_link_libraries(star_formation_cuda_test PRIVATE cosmictiger_sph_chemistry CUDA::cudart Boost::boost)
@@ -2032,7 +2032,7 @@ if(BUILD_TESTING)
         cosmictiger_add_gtest(NAME cullen_and_dehnen TARGET cullen_and_dehnen_test
             PROPERTIES TIMEOUT 30 LABELS "sph;cpu")
 
-        add_executable(price_etal_test tests/sph/price_etal/viscosity.cpp src/sph/price_etal/viscosity.cpp)
+        add_executable(price_etal_test tests/sph/price_etal/viscosity.cpp src/hydro/sph/price_etal/viscosity.cpp)
         target_include_directories(price_etal_test PRIVATE ${PROJECT_SOURCE_DIR})
         cosmictiger_add_gtest(NAME price_etal TARGET price_etal_test
             PROPERTIES TIMEOUT 30 LABELS "sph;cpu")
@@ -2156,8 +2156,8 @@ if(BUILD_TESTING)
             PROPERTIES TIMEOUT 120 PROCESSORS 2)
 
         # Compile the production SIMD path without USE_CUDA or device kernels.
-        add_executable(sph_cpu_test tests/sph/cpu.cpp src/sph/sph_cpu.cpp
-            src/sph/sph_prehydro_cpu.cpp src/sph/sph_hydro_cpu.cpp src/sph/sph_rungs_cpu.cpp src/math/kernel.cpp)
+        add_executable(sph_cpu_test tests/sph/cpu.cpp src/hydro/sph/sph_cpu.cpp
+            src/hydro/sph/sph_prehydro_cpu.cpp src/hydro/sph/sph_hydro_cpu.cpp src/hydro/sph/sph_rungs_cpu.cpp src/math/kernel.cpp)
         target_include_directories(sph_cpu_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(sph_cpu_test PRIVATE ORDER=${cosmictiger_default_fmm_order})
         cosmictiger_use_generated_kernels(sph_cpu_test)
@@ -2313,8 +2313,8 @@ if(BUILD_TESTING)
             add_executable(monaghan_sph_cuda_test tests/sph/cuda.cu
                 tests/cuda_memory_backend.cpp
                 src/core/flops.cu
-                src/sph/sph_prehydro.cu src/sph/sph_hydro.cu src/sph/sph_rungs.cu
-                src/sph/sph_cpu.cpp src/sph/sph_prehydro_cpu.cpp src/sph/sph_hydro_cpu.cpp src/sph/sph_rungs_cpu.cpp
+                src/hydro/sph/sph_prehydro.cu src/hydro/sph/sph_hydro.cu src/hydro/sph/sph_rungs.cu
+                src/hydro/sph/sph_cpu.cpp src/hydro/sph/sph_prehydro_cpu.cpp src/hydro/sph/sph_hydro_cpu.cpp src/hydro/sph/sph_rungs_cpu.cpp
                 src/math/kernel.cpp src/math/kernel.cu src/cuda/cuda_memory.cu src/core/assert.cu)
             target_include_directories(monaghan_sph_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
             target_compile_definitions(monaghan_sph_cuda_test PRIVATE

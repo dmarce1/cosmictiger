@@ -12,9 +12,9 @@
 
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/terminal.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/kelvin_helmholtz.hpp>
-#include <cosmictiger/sph/sph_particles.hpp>
 
 namespace scenarios {
 

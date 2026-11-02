@@ -21,16 +21,16 @@
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/io/view.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/particles/particles.hpp>
-#include <cosmictiger/sph/sph_particles.hpp>
 #if COSMICTIGER_ENABLE_CHEMISTRY
-#include <cosmictiger/sph/sph_chemistry.hpp>
+#include <cosmictiger/hydro/sph/sph_chemistry.hpp>
 #endif
 #if COSMICTIGER_ENABLE_STAR_FORMATION
-#include <cosmictiger/sph/star_formation.hpp>
+#include <cosmictiger/hydro/sph/star_formation.hpp>
 #endif
 
 namespace detail {

@@ -19,7 +19,7 @@
 #include <hpx/hpx_init.hpp>
 
 #include <cosmictiger/analysis/lightcone_entry.hpp>
-#include <cosmictiger/hydro/hopkins_state.hpp>
+#include <cosmictiger/hydro/hopkins/hopkins_state.hpp>
 #include <cosmictiger/particles/drift.hpp>
 
 Array<Position*, kDimensions> particlesX;

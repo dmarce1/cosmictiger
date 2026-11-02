@@ -20,7 +20,7 @@
 #if COSMICTIGER_ENABLE_HOPKINS
 #include <cosmictiger/scenarios/sound_wave.hpp>
 #endif
-#include <cosmictiger/sph/sph_particles.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #endif
 
 namespace scenarios {

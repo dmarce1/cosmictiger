@@ -15,12 +15,12 @@
 
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/terminal.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/diagnostics.hpp>
 #include <cosmictiger/scenarios/exact_sod.hpp>
 #include <cosmictiger/scenarios/sod.hpp>
-#include <cosmictiger/sph/sph_particles.hpp>
 
 namespace scenarios {
 

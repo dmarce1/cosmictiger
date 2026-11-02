@@ -31,7 +31,7 @@
 #include <cosmictiger/particles/particle_mesh_sort.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/sph/sph_particles.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #endif
 #include <src/gravity/nitadori/state.hpp>
 

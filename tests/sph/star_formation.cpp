@@ -10,10 +10,10 @@
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/hydro/sph/sph_chemistry.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/hydro/sph/star_formation.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
-#include <cosmictiger/sph/sph_chemistry.hpp>
-#include <cosmictiger/sph/sph_particles.hpp>
-#include <cosmictiger/sph/star_formation.hpp>
 
 namespace detail {
 constexpr double kSfScale = 0.25;

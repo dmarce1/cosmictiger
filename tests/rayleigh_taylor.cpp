@@ -21,8 +21,8 @@
 #include <gtest/gtest.h>
 
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/scenarios/rayleigh_taylor.hpp>
-#include <cosmictiger/sph/sph_particles.hpp>
 
 // Ordinary host storage lets this test call the production initializer without
 // starting HPX, allocating managed memory, or running the evolution driver.

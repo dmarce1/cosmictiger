@@ -28,12 +28,12 @@
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/hydro/sph/cullen_and_dehnen/particle_exchange.hpp>
+#include <cosmictiger/hydro/sph/sph.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/hydro/sph/sph_tree.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
-#include <cosmictiger/sph/cullen_and_dehnen/particle_exchange.hpp>
-#include <cosmictiger/sph/sph.hpp>
-#include <cosmictiger/sph/sph_particles.hpp>
-#include <cosmictiger/sph/sph_tree.hpp>
 
 #ifdef USE_CUDA
 void verifySelectedKernelsCuda();

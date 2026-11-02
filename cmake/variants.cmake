@@ -20,8 +20,8 @@ if(COSMICTIGER_WITH_CUDA)
     target_compile_options(cosmictiger_platform INTERFACE
         $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math;-lineinfo>)
     set_source_files_properties(src/particles/drift.cu PROPERTIES COMPILE_OPTIONS -maxrregcount=64)
-    set_source_files_properties(src/sph/sph.cu src/sph/sph_prehydro.cu
-        src/sph/sph_hydro.cu src/sph/sph_rungs.cu PROPERTIES COMPILE_OPTIONS -maxrregcount=128)
+    set_source_files_properties(src/hydro/sph/sph.cu src/hydro/sph/sph_prehydro.cu
+        src/hydro/sph/sph_hydro.cu src/hydro/sph/sph_rungs.cu PROPERTIES COMPILE_OPTIONS -maxrregcount=128)
 endif()
 
 add_library(cosmictiger_core STATIC ${cosmictiger_core_source_files})
@@ -95,8 +95,8 @@ if(COSMICTIGER_WITH_CUDA AND COSMICTIGER_WITH_STARS)
     # The GADGET-4 device EOS/rates must use the same precise math as the CPU
     # chemistry backend and its tests. Per-source flags cannot undo the
     # intrinsic substitutions enabled by the platform's --use_fast_math.
-    list(REMOVE_ITEM cosmictiger_enabled_sources src/sph/star_formation_cuda.cu)
-    add_library(cosmictiger_star_formation_cuda OBJECT src/sph/star_formation_cuda.cu)
+    list(REMOVE_ITEM cosmictiger_enabled_sources src/hydro/sph/star_formation_cuda.cu)
+    add_library(cosmictiger_star_formation_cuda OBJECT src/hydro/sph/star_formation_cuda.cu)
     target_include_directories(cosmictiger_star_formation_cuda PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_definitions(cosmictiger_star_formation_cuda PRIVATE USE_CUDA)
     target_link_libraries(cosmictiger_star_formation_cuda PRIVATE

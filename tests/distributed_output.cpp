@@ -23,10 +23,10 @@
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/io/view.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/particles/particles.hpp>
-#include <cosmictiger/sph/sph_particles.hpp>
 
 namespace detail {
 

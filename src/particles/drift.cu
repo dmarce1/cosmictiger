@@ -15,12 +15,12 @@
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/cuda/cuda_reduce.hpp>
 #include <cosmictiger/cuda/device_vector.hpp>
-#include <cosmictiger/hydro/hopkins_state.hpp>
+#include <cosmictiger/hydro/hopkins/hopkins_state.hpp>
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/sph/sph_particles.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #endif
 
 constexpr int kDriftBlockSize = 512;

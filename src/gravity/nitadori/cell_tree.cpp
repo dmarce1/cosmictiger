@@ -23,7 +23,7 @@
 #include <cosmictiger/gravity/tree_build.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/sph/sph_particles.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #endif
 
 constexpr bool kVerbose = true;

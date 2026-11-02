@@ -3,7 +3,7 @@
 
 #include <cuda_runtime.h>
 
-#include <cosmictiger/sph/springel_and_hernquist/equations.hpp>
+#include <cosmictiger/hydro/sph/springel_and_hernquist/equations.hpp>
 #include "cuda_test.hpp"
 
 namespace {

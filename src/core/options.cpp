@@ -44,7 +44,7 @@
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/scenarios/scenario.hpp>
 #if !COSMICTIGER_WITH_GRAVITY && COSMICTIGER_WITH_SPH
-#include <cosmictiger/sph/sph_tree.hpp>
+#include <cosmictiger/hydro/sph/sph_tree.hpp>
 #endif
 
 #define SHOW(label, opt) show(label, opts.opt)

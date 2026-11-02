@@ -12,7 +12,7 @@
 
 #include <cosmictiger/analysis/lightcone_entry.hpp>
 #include <cosmictiger/core/containers.hpp>
-#include <cosmictiger/hydro/hopkins_state.hpp>
+#include <cosmictiger/hydro/hopkins/hopkins_state.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 struct DriftParameters {

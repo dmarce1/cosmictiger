@@ -17,14 +17,14 @@
 
 #include <gtest/gtest.h>
 
+#include <cosmictiger/hydro/sph/variational/equations.hpp>
+#include <cosmictiger/hydro/sph/volume.hpp>
 #include <cosmictiger/math/radial_kernel.hpp>
 #include <cosmictiger/math/simd_math.hpp>
-#include <cosmictiger/sph/variational/equations.hpp>
-#include <cosmictiger/sph/volume.hpp>
 #include <tests/sph/test_helpers.hpp>
 
-// Double-precision references for cosmictiger/sph/volume.hpp and
-// cosmictiger/sph/variational/equations.hpp. A small isolated particle system with its own
+// Double-precision references for cosmictiger/hydro/sph/volume.hpp and
+// cosmictiger/hydro/sph/variational/equations.hpp. A small isolated particle system with its own
 // exact support solve supplies the discrete thermal energy whose gradient the compatible
 // density-energy force must be (docs/variational_sph.md).
 namespace detail {

@@ -11,7 +11,7 @@
 
 #include <gtest/gtest.h>
 
-#include <cosmictiger/sph/morris_and_monaghan/viscosity.hpp>
+#include <cosmictiger/hydro/sph/morris_and_monaghan/viscosity.hpp>
 #include <tests/sph/test_helpers.hpp>
 
 namespace detail {

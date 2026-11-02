@@ -165,20 +165,20 @@ def sourceSelectionErrors(sources, configuration):
         if (not configuration["SPH"] or not configuration["FMM"]) and source == "tests/kernel_selection_cuda.cu":
             errors.append(f"unavailable SPH gravity regression's CUDA helper: {source}")
         if not configuration["HOPKINS"] and source in {
-                "src/hydro/hopkins_driver.cpp", "src/scenarios/sound_wave.cpp", "tests/hopkins.cpp"}:
+                "src/hydro/hopkins.cpp", "src/scenarios/sound_wave.cpp", "tests/hopkins.cpp"}:
             errors.append(f"Hopkins disabled but compiles source: {source}")
         if not hasChemistry(configuration) and source in {
                 "src/chemistry/gadget4_cooling.cpp", "src/chemistry/gadget4_cooling.cu",
-                "src/sph/sph_chemistry.cpp", "tests/sph/chemistry.cpp",
+                "src/hydro/sph/sph_chemistry.cpp", "tests/sph/chemistry.cpp",
                 "tests/gadget4_cooling.cpp"}:
             errors.append(f"equilibrium cooling disabled but compiles source: {source}")
         if not hasStarFormation(configuration) and source in {
-                "src/sph/star_formation.cpp", "src/sph/star_formation_cuda.cu",
+                "src/hydro/sph/star_formation.cpp", "src/hydro/sph/star_formation_cuda.cu",
                 "tests/sph/star_formation_cuda.cu", "tests/sph/star_formation.cpp", "tests/star_formation_particles.cpp",
                 "tests/springel_and_hernquist.cpp", "tests/springel_and_hernquist_cuda.cu"}:
             errors.append(f"star formation disabled but compiles source: {source}")
         if not configuration["SPH"]:
-            if source.startswith(("src/sph/", "tests/sph/", "tests/scenarios/")) or source in {
+            if source.startswith(("src/hydro/sph/", "tests/sph/", "tests/scenarios/")) or source in {
                     "tests/gresho.cpp", "tests/radial_density_kernel.cpp", "tests/rayleigh_taylor.cpp",
                     "tests/units_output.cpp", "tests/distributed_output.cpp"}:
                 errors.append(f"SPH disabled but compiles SPH source: {source}")
@@ -202,18 +202,18 @@ def requiredSources(configuration, cuda):
     if hasTree(configuration):
         required.add("src/gravity/kick.cpp")
     if configuration["SPH"]:
-        required.update({"src/sph/sph.cpp", "src/sph/sph_hydro_cpu.cpp", "src/sph/sph_prehydro_cpu.cpp",
-                         "src/sph/sph_rungs_cpu.cpp", "src/sph/sph_particles.cpp", "src/sph/sph_tree.cpp"})
+        required.update({"src/hydro/sph/sph.cpp", "src/hydro/sph/sph_hydro_cpu.cpp", "src/hydro/sph/sph_prehydro_cpu.cpp",
+                         "src/hydro/sph/sph_rungs_cpu.cpp", "src/hydro/sph/sph_particles.cpp", "src/hydro/sph/sph_tree.cpp"})
         if cuda:
-            required.update({"src/sph/sph.cu", "src/sph/sph_hydro.cu", "src/sph/sph_prehydro.cu", "src/sph/sph_rungs.cu"})
+            required.update({"src/hydro/sph/sph.cu", "src/hydro/sph/sph_hydro.cu", "src/hydro/sph/sph_prehydro.cu", "src/hydro/sph/sph_rungs.cu"})
     if configuration["HOPKINS"]:
-        required.update({"src/hydro/hopkins_driver.cpp", "src/scenarios/sound_wave.cpp"})
+        required.update({"src/hydro/hopkins.cpp", "src/scenarios/sound_wave.cpp"})
     if hasChemistry(configuration):
-        required.add("src/sph/sph_chemistry.cpp")
+        required.add("src/hydro/sph/sph_chemistry.cpp")
     if hasStarFormation(configuration):
-        required.update({"src/sph/star_formation.cpp"})
+        required.update({"src/hydro/sph/star_formation.cpp"})
         if cuda:
-            required.add("src/sph/star_formation_cuda.cu")
+            required.add("src/hydro/sph/star_formation_cuda.cu")
     if cuda:
         required.add("src/particles/drift.cu")
         if hasGravity(configuration):
@@ -330,7 +330,7 @@ def checkBuild(buildDirectory):
     expectedDefinitions = configurationDefinitions(configuration, bits, degrees)
     starCudaSources = set(sourcesByTarget.get("cosmictiger_star_formation_cuda", {}))
     if cuda and hasStarFormation(configuration):
-        if sourcesByTarget.get("cosmictiger_star_formation_cuda", {}) != Counter({"src/sph/star_formation_cuda.cu": 1}):
+        if sourcesByTarget.get("cosmictiger_star_formation_cuda", {}) != Counter({"src/hydro/sph/star_formation_cuda.cu": 1}):
             errors.append("strict star-formation CUDA target must compile its production source once")
         for source, definitions in definitionsByTarget.get("cosmictiger_star_formation_cuda", []):
             for name, value in expectedDefinitions.items():

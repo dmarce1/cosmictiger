@@ -22,7 +22,7 @@
 
 #include <gtest/gtest.h>
 
-#include <cosmictiger/sph/sph_cpu.hpp>
+#include <cosmictiger/hydro/sph/sph_cpu.hpp>
 #include <tests/sph/global_timestep_cases.hpp>
 
 namespace detail {
@@ -1573,7 +1573,7 @@ void testRungPropagation() {
     }
 }
 
-// Variational pressure operator (cosmictiger/sph/variational/equations.hpp). A
+// Variational pressure operator (cosmictiger/hydro/sph/variational/equations.hpp). A
 // double-precision periodic reference evaluates the same equations at given supports;
 // tests/sph/volume.cpp shows that
 // those equations are the exact gradient of the discrete thermal energy.

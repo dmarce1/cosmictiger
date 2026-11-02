@@ -1,8 +1,10 @@
 # Source organization
 
 Public headers live under `cosmictiger/` and implementations under `src/`.
-Both trees use the same algorithm directories. Common machinery sits directly
-in its subsystem directory; there is no `shared/` layer.
+Both trees are organized by subsystem and algorithm. A backend with one source
+file can live directly in its subsystem directory, as `src/hydro/hopkins.cpp`
+does. Common machinery sits directly in its subsystem directory; there is no
+`shared/` layer.
 
 ## Build libraries
 
@@ -116,7 +118,7 @@ inactive; homogeneous recombination remains available with either setting.
 Homogeneous recombination is built only when a gravity algorithm is enabled.
 
 ```text
-sph/
+hydro/sph/
 ├── sph.*, sph_cpu.hpp, sph_cuda.hpp, sph_kernel.hpp
 ├── sph_particles.*, sph_tree.*
 ├── sph_prehydro_cpu.cpp, sph_prehydro.cu
@@ -140,7 +142,7 @@ sph/
     └── shear_limiter.hpp
 ```
 
-The parent directory owns particle storage, neighbor traversal, smoothing and
+The `hydro/sph/` directory owns particle storage, neighbor traversal, smoothing and
 density loops, execution, timesteps, and common viscosity state. The Monaghan
 module supplies pair viscosity;
 Morris–Monaghan and Cullen–Dehnen supply the coefficient-evolution laws. The
@@ -157,9 +159,11 @@ state allocation, migration, checkpoint identity, and output are handled at the
 existing storage and integration boundaries. Cullen–Dehnen's additional
 particle exchange is owned by its module.
 
-The separate `hydro/hopkins.hpp` and `hydro/hopkins_state.hpp` headers implement
+The separate `cosmictiger/hydro/hopkins/` directory contains `hopkins.hpp`,
+`hopkins_simd.hpp`, `hopkins_state.hpp`, and the `hopkins_hydro.hpp` interface for
 Hopkins MFM/MFV geometry, reconstruction, Riemann fluxes, and double state.
-`src/hydro/hopkins_driver.cpp` integrates them with traditional and global stepping;
+`src/hydro/hopkins.cpp` implements their hydrodynamic stage. The shared
+`src/core/driver.cpp` selects SPH or Hopkins for traditional and global stepping;
 `hydro.method=sph|mfm|mfv` selects the runtime method. Particle storage, drift,
 migration, gravity masses, checkpoints, and output share the existing lifecycle
 boundaries. See [Hopkins hydrodynamics](hopkins_hydro.md).

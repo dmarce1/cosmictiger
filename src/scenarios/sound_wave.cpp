@@ -1,9 +1,9 @@
 #include <algorithm>
 
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/hydro/hopkins_driver.hpp>
+#include <cosmictiger/hydro/hopkins/hopkins_hydro.hpp>
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/scenarios/sound_wave.hpp>
-#include <cosmictiger/sph/sph_particles.hpp>
 
 namespace scenarios {
 

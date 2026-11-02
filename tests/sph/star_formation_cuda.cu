@@ -8,7 +8,7 @@
 #include <cuda_runtime.h>
 #include <gtest/gtest.h>
 
-#include <cosmictiger/sph/star_formation_cuda.hpp>
+#include <cosmictiger/hydro/sph/star_formation_cuda.hpp>
 
 namespace {
 namespace sf = star_formation_backend;

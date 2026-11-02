@@ -11,7 +11,7 @@
 
 #include <gtest/gtest.h>
 
-#include <cosmictiger/sph/cullen_and_dehnen/viscosity.hpp>
+#include <cosmictiger/hydro/sph/cullen_and_dehnen/viscosity.hpp>
 #include <tests/sph/test_helpers.hpp>
 
 namespace detail {
