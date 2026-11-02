@@ -754,6 +754,19 @@ of `tests/run_hopkins.py`, the `hopkins_flops_application` CTest, all 117
 Hopkins/SPH/drift/source-tree gtests, and the two SPH hierarchical CTests.
 Multi-locality runs were not repeated for this change.
 
+After merging `main` (`01107f96`: cooling and star formation coupling, HLL
+fallback, matrix algebra, dual-energy entropy switch) into the retained-record
+branch as `088543f9`, the same fixed64 CPU tree rebuilt and passed 133
+Hopkins/SPH/drift/source-tree gtests, `hopkins_hierarchical_application` (16
+events, 381 wakes, exact restart; wave refinement errors 4.059e-4, 1.635e-4,
+5.085e-5 with the dual-energy switch now active), `hopkins_flops_application`,
+both SPH hierarchical CTests, the FMM restart/split matrix for all three
+integrators and the three `run_hopkins.py` fixtures. A second tree with
+`COSMICTIGER_ENABLE_STARS=ON` and expansion degree 6 passed `hopkins_application`,
+`hopkins_global_sources` and `hopkins_thermal_sources`, so gas-to-star
+conversion drops resident records and rebuilds the tree topology as intended.
+The checkpoint state layout is version 7 (472 bytes) after the merge.
+
 ### Davis HLL fallback validation on 2026-11-02
 
 The CPU application and unit binary were rebuilt in `build/hopkins_sources_cpu`
