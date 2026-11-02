@@ -43,16 +43,16 @@
 #include <cosmictiger/cosmology/fftw_threads.hpp>
 #endif
 #if COSMICTIGER_ENABLE_FMM
-#include <cosmictiger/gravity/dehnen/ewald_indices.hpp>
-#include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_operators.hpp>
+#include <cosmictiger/gravity/global_fmm/ewald_indices.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree_ewald_operators.hpp>
 #endif
 #if COSMICTIGER_WITH_GRAVITY
-#include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
-#include <cosmictiger/gravity/nitadori/solver.hpp>
+#include <cosmictiger/gravity/pmmm/solver.hpp>
 #endif
 #include <cosmictiger/gravity/tree.hpp>
 #endif
@@ -135,7 +135,7 @@ int hpx_main(int argc, char* argv[]) {
                 // Debug dump of the Ewald Green's function along x for the runtime order.
                 fmmDispatch([](auto orderTag) {
                     constexpr int kOrder = decltype(orderTag)::value;
-                    cosmictiger::gravity::cartesian::Green<SimdFloat, kOrder> d;
+                    cosmictiger::gravity::cartesian::tracefree::Green<SimdFloat, kOrder> d;
                     Vector3<SimdFloat> xValue;
                     FILE* fp = fopen(outputPath("ewald.txt").c_str(), "wt");
                     if (fp == nullptr) {
@@ -159,7 +159,7 @@ int hpx_main(int argc, char* argv[]) {
                     for (double x = 0.00; x < 0.5; x += 0.001) {
                         xValue[0] = simdBroadcast<SimdFloat>(x);
                         d = SimdFloat(0.0f);
-                        cosmictiger::gravity::cartesian::evaluateEwaldGreen(d, xValue);
+                        cosmictiger::gravity::cartesian::tracefree::evaluateEwaldGreen(d, xValue);
                         fprintf(fp, "%e ", x);
                         for (int n = 0; n < kOrder; n++) {
                             for (int m = 0; m < kOrder - n; m++) {

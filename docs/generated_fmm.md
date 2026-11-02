@@ -1,13 +1,14 @@
 # Generated FMM representations
 
-`tools/generate_fmm.py` emits two representations together:
+`tools/generate_fmm.py` emits three representations together:
 
 | Representation | Storage through degree d | Use |
 | --- | --- | --- |
-| Cartesian | `(d + 1)^2` symmetric trace-free coefficients; a local Laplacian slot | Existing production Newtonian FMM |
+| Cartesian | `(d + 1)(d + 2)(d + 3)/6` full symmetric coefficients, including every trace | General supplied Green tensors and Newtonian/Plummer helpers |
+| Cartesian tracefree | `(d + 1)^2` symmetric trace-free coefficients; a local Laplacian slot | Existing production Newtonian FMM |
 | Spherical | `(d + 1)^2` real slots for complex-conjugate harmonic coefficients | Newtonian free-space and periodic Ewald kernels |
 
-The checked-in headers contain both families for local degrees 2 through 8,
+The checked-in headers contain all three families for local degrees 2 through 8,
 source degrees 1 through 7, corresponding to application FMM orders 3 through 9.
 M2L keeps terms of combined source and local degree at most the local-degree
 limit. `--min-order` and `--max-order` retain the
@@ -23,21 +24,26 @@ source headers but are excluded from compilation. Use
 When reusing an older cache, remove the retired options with
 `-U COSMICTIGER_FMM_MIN_ORDER -U COSMICTIGER_FMM_MAX_ORDER`.
 
-The representations are generated and tested independently. The runtime
-walk, tree layout, checkpoint representation, and softening selection still use
-the Cartesian representation. Connecting a new family to those paths is separate
-work. Cartesian moments remain symmetric and trace-free; these names do not
-change the coefficient layout or mathematics.
+The representations are generated and tested independently. The runtime walk,
+tree layout, checkpoint representation, and softening selection continue using
+Cartesian tracefree. General Cartesian operators are an additional mathematical
+API; this change does not select them for production gravity or add FMM-PM.
 
-The public C++ namespaces are `cosmictiger::gravity::cartesian` and
-`cosmictiger::gravity::spherical`. Both provide `Multipole` and `Expansion`
-structures and generated operators named `P2M`, `M2M`, `M2L`, `M2P`, `P2L`,
-`L2L`, and `L2P`. The derivative-contraction operator is `M2LDerivatives`.
-Cartesian `Multipole<Real, order>` and `Expansion<Real, order>` retain the
-application FMM order: their degrees are `order - 2` and `order - 1`, respectively.
-Spherical `Multipole<Real, order>` and `Expansion<Real, order>` use the same
-order convention and degrees. Generated operators in both namespaces also retain degree-based
-template arguments.
+The public C++ namespaces are `cosmictiger::gravity::cartesian`,
+`cosmictiger::gravity::cartesian::tracefree`, and
+`cosmictiger::gravity::spherical`. Each provides distinct `Multipole`, `Expansion`,
+and `Green` types and destination-first additive operators `P2M`, `M2M`, `M2L`,
+`M2P`, `P2L`, `L2L`, and `L2P`. All share `gravity::Field`, with acceleration
+being minus the potential gradient. There are no implicit conversions between
+representations. Existing STF callers must include `cartesian_tracefree_operators.hpp`
+and qualify `cartesian::tracefree` (or use ADL with its types).
+
+`Multipole<Real, order>` has source degree `order - 2`; `Expansion` and `Green`
+have degree `order - 1`. The generated implementation classes use degrees.
+General Cartesian moments retain every trace. Its supplied Green tensor contains
+ordinary derivatives of the negative unit-source potential, so the same tensor
+contraction can represent nonharmonic kernels. See [the full Cartesian API](generated_cartesian.md)
+for normalization, centered-source contracts, and numerical coverage.
 Types use PascalCase, functions and variables camelCase, and namespaces and
 filenames snake_case, with the standard FMM operator abbreviations retained.
 
@@ -46,20 +52,21 @@ filenames snake_case, with the standard FMM operator abbreviations retained.
 ```sh
 python3 tools/generate_fmm.py
 python3 tools/generate_fmm.py --check
-python3 tests/gravity/check_generated_fmm_flops.py --generated-dir cosmictiger/gravity/fmm_kernels --compiler c++
+python3 tests/gravity/check_generated_fmm_flops.py --generated-dir cosmictiger/gravity/kernels --compiler c++
 ```
 
 Generated headers and their operation report are checked in under
-`cosmictiger/gravity/fmm_kernels/`:
+`cosmictiger/gravity/kernels/`:
 
-- `cartesian_m2l.hpp`, `cartesian_kernels.hpp`, and `cartesian_config.hpp`
-  contain the Cartesian operators and degree configuration.
-- `cartesian_ewald_kernels.hpp` contains the Cartesian Ewald derivatives.
+- `cartesian_kernels.hpp` contains the full symmetric Cartesian operators.
+- `cartesian_tracefree_m2l.hpp`, `cartesian_tracefree_kernels.hpp`, and
+  `cartesian_tracefree_config.hpp` contain the STF operators and degree configuration.
+- `cartesian_tracefree_ewald_kernels.hpp` contains the STF Ewald derivatives.
 - `spherical_kernels.hpp` and `spherical_ewald_kernels.hpp` contain the
   spherical kernels.
 - `operation_counts.json` records the generated arithmetic counts and selections.
 
-The generator defaults to this source directory and emits both families for
+The generator defaults to this source directory and emits all three families for
 FMM orders 3 through 9, formatting headers with the repository's clang-format
 configuration. Use `--output-dir` to write a separate copy. Never hand-edit
 generated headers; update their generators and regenerate them. `--check`
@@ -86,7 +93,7 @@ both M2L source-degree branches and verify FMA counts as well as both
 operation-count conventions. The direct Python counting command above omits
 the range options and checks all generated orders 3 through 9.
 
-## Cartesian fused arithmetic
+## Cartesian tracefree fused arithmetic
 
 The shared Cartesian emitter fuses single-use products into addition,
 subtraction, and destination accumulation through explicit `simdFma` calls.
@@ -162,17 +169,17 @@ accumulation and geometry; FMA costs 1 and sqrt costs 7.
 | 8 | 696 (full) | 1001 (full) | 401 (azimuth) | 990 (full) | 369 (full) |
 | 9 | 990 (full) | 1370 (full) | 510 (azimuth) | 1353 (full) | 482 (full) |
 
-## Cartesian versus Spherical direct M2L
+## Cartesian tracefree versus Spherical direct M2L
 
 These counts include displacement geometry and additive output, retain arbitrary
 source dipoles, and use the same degree truncation. Application coordinate-unit
-conversion is excluded for both representations. Cartesian geometry adds 14 to
+conversion is excluded for both representations. Cartesian tracefree geometry adds 14 to
 its generated body: one multiply, two FMAs, one square root, one division, and
 three coordinate multiplies. Both generators emit explicit FMAs. FMA costs 1
 and sqrt costs 7; the table counts emitted arithmetic, not measured instruction
 counts or timings.
 
-| FMM order | Cartesian | Spherical | Spherical rotation |
+| FMM order | Cartesian tracefree | Spherical | Spherical rotation |
 | --- | --- | --- | --- |
 | 3 | 47 | 62 | none |
 | 4 | 99 | 144 | azimuth |

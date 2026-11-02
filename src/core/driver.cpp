@@ -38,16 +38,16 @@
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/cosmology/initialize.hpp>
 #if COSMICTIGER_ENABLE_FMM
-#include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
-#include <cosmictiger/gravity/dehnen/execution.hpp>
+#include <cosmictiger/gravity/global_fmm/distributed_tree.hpp>
+#include <cosmictiger/gravity/global_fmm/execution.hpp>
 #endif
 #include <cosmictiger/gravity/error.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
-#include <cosmictiger/gravity/nitadori/kick.hpp>
-#include <cosmictiger/gravity/nitadori/solver.hpp>
+#include <cosmictiger/gravity/pmmm/kick.hpp>
+#include <cosmictiger/gravity/pmmm/solver.hpp>
 #endif
 #include <cosmictiger/gravity/opening_schedule.hpp>
 #endif

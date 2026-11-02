@@ -18,7 +18,7 @@ erfcexp and sincos each produce two elementary-function results. SIMD callers
 multiply these per-lane counts by the width, including masked/padded lanes.
 """
 
-from math import factorial, pi, prod, sqrt
+from math import factorial, pi, prod
 
 
 def symmetricIndex(alpha):
@@ -216,97 +216,34 @@ def computeDetraceEwald(code, order):
 
 
 def radialDerivatives(code, order, origin):
+    """Assemble the existing normalized tensor from shared screened radial terms.
+
+    Nearest-image Ewald needs +erf(alpha r)/r, the negative of the shared
+    long-range gravitational kernel. Wrapped separations satisfy alpha^2 r^2
+    <= 3, so its compile-time bounded evaluator avoids the general branch.
+    Nonzero images use the shared negative erfc(alpha r)/r short-range kernel.
+    """
+    component = 'Long' if origin else 'Short'
+    fixedDomain = ', true' if origin else ''
     code.extend([
-        'T const r = simdSqrt(r2);',
-        'T const n8r = simdBroadcast<T>(-8*kScaleFactorInverse2) * r;',
-        'T const rinv = simdSelect(r > simdBroadcast<T>(0), simdBroadcast<T>(1), '
-        'simdBroadcast<T>(0)) / simdMax(r, simdBroadcast<T>(1.0e-20));',
+        f'auto const radial = evaluateGaussianRadial<GaussianComponent::{component}, '
+        f'{order - 1}{fixedDomain}>(r2, '
+        'GaussianScreening<SimdScalar<T>>(SimdScalar<T>(2) * kScaleFactorInverse1));',
+        'T const rinv = radial.inverseRadius();',
+        'radialFlops += radial.flops();',
     ])
-    if not origin:
-        code.extend([
-            'T exp0;',
-            'T erfc0;',
-            'erfcexp(simdBroadcast<T>(2.*kScaleFactorInverse1) * r, &erfc0, &exp0);',
-            'T const expfactor = fouroversqrtpi * simdBroadcast<T>(kScaleFactorInverse1) * exp0;',
-            'T e0 = expfactor * rinv;',
-        ])
-    code.extend([
-        'T const rinv0 = simdBroadcast<T>(1);',
-        'T const rinv1 = rinv;',
-    ])
-    # sqrt, multiplication by -8, and reciprocal. Masks and min/max are free.
-    flops = 3
-    if not origin:
-        # erfcexp argument/result pair, expfactor, and e0.
-        flops += 6
-    for power in range(2, (order + 1) // 2 if not origin else 2):
-        left = power // 2
-        right = power - left
-        code.append(f'T const rinv{power} = rinv{left} * rinv{right};')
-        flops += 1
-    if origin:
-        # For the nearest image, d_l = (2 alpha / sqrt(pi)) (-2 alpha^2 r)^l S_l(y),
-        # where y = alpha^2 r^2 and S_l(y) = integral_0^1 t^(2l) exp(-y t^2) dt.
-        # The upward recurrence subtracts nearly equal terms at small r. Instead,
-        # sum S_(order-1) and recur downward using positive terms:
-        # S_(l-1) = (exp(-y) + 2 y S_l) / (2l - 1).
-        # Wrapped separations give y <= 3; twenty series terms put truncation
-        # below float rounding throughout that interval.
-        seriesTerms = 20
-        code.extend([
-            '// Stable nearest-image radial terms: series followed by downward recurrence.',
-            'T const ar2 = simdBroadcast<T>(4*kScaleFactorInverse2) * r2;',
-            'T const twoAr2 = ar2 + ar2;',
-            'T const expAr2 = exp(-ar2);',
-        ])
-        # ar2, twoAr2, exp, Horner FMAs, downward recurrence, and radial powers.
-        flops += 3 + 2 * (seriesTerms - 1) + 3 * (order - 1) + order - 2
-        for term in range(seriesTerms - 1, -1, -1):
-            coefficient = (-1.0 if term % 2 else 1.0) / (
-                factorial(term) * (2 * term + 2 * (order - 1) + 1))
-            if term == seriesTerms - 1:
-                code.append(f'T s{order - 1} = simdBroadcast<T>({coefficient:.17e});')
-            else:
-                code.append(f's{order - 1} = simdFma(s{order - 1}, ar2, '
-                            f'simdBroadcast<T>({coefficient:.17e}));')
-        for degree in range(order - 1, 0, -1):
-            code.append(f'T const s{degree - 1} = simdFma(twoAr2, s{degree}, expAr2) '
-                        f'* simdBroadcast<T>({1.0 / (2 * degree - 1):.17e});')
-        code.append('T const n8rPower1 = n8r;')
-        for degree in range(2, order):
-            code.append(f'T const n8rPower{degree} = n8rPower{degree - 1} * n8r;')
-        # Cancel r^j/r^k analytically before evaluation. Forming d_j first
-        # can flush it to zero even when d_j/r^k is a normal float (j=k=4).
-        for traceCount in range((order + 1) // 2):
-            coefficient = 2.256758334191025 * (-8)**traceCount
-            scaling = 'kScaleFactorInverse1' + ' * kScaleFactorInverse2' * traceCount
-            code.append(f'T const radialCoefficient{traceCount} = '
-                        f'simdBroadcast<T>({coefficient:.17e} * {scaling});')
-    else:
-        flops += 1 + 3 * (order - 1) + (order - 2)
-        code.append('T const d0 = -erfc0 * rinv;')
-        for degree in range(1, order):
-            code.append(f'T const d{degree} = simdFma(simdBroadcast<T>({-2 * degree + 1}) '
-                        f'* d{degree - 1}, rinv, e0);')
-            if degree != order - 1:
-                code.append('e0 *= n8r;')
     for degree in range(order):
         for traceCount in range(degree + 1):
             if degree + traceCount < order:
-                if origin:
-                    power = degree - traceCount
-                    radial = f's{degree}' if power == 0 else f'(n8rPower{power} * s{degree})'
-                    code.append(f'T const dRinvPower{degree}Order{traceCount} '
-                                f'= radialCoefficient{traceCount} * {radial};')
-                    flops += 1 + int(power != 0)
-                else:
-                    code.append(f'T const dRinvPower{degree}Order{traceCount} '
-                                f'= d{degree} * rinv{traceCount};')
-                    flops += 1
+                sign = '-' if origin else ''
+                code.append(f'T const dRinvPower{degree}Order{traceCount} = '
+                            f'{sign}radial.template coefficient<{degree}, {traceCount}>();')
+                code.append('radialFlops += decltype(radial)::template '
+                            f'coefficientFlops<{degree}, {traceCount}>();')
     code.append('Vector3<T> dxrinv;')
     for axis in range(3):
         code.append(f'dxrinv[{axis}] = dx[{axis}] * rinv;')
-    flops += computeDx(code, order)
+    flops = computeDx(code, order)
     flops += 3  # dxrinv
     flops += computeDetraceEwald(code, order)
     return flops
@@ -324,7 +261,6 @@ def ewald(code, order):
         '// Per-lane source-operation estimate; FMA=2, elementary results=1.',
         'T r = simdSqrt(simdFma(position[0], position[0], simdFma(position[1], position[1], '
         'sqr(position[2]))));',
-        f'T const fouroversqrtpi = simdBroadcast<T>({4.0 / sqrt(pi):.9e});',
         f'SymmetricTensor<T, {order}> dreal;',
         f'SymmetricTracelessTensor<T, {order}> dfour;',
         'dreal = 0.0f;',
@@ -333,6 +269,7 @@ def ewald(code, order):
         'auto const realsz = EwaldConst::nreal();',
         'auto const zeroMask = r > simdBroadcast<T>(0.0);',
         'int acceptedRealImages = 0;',
+        'int radialFlops = 0;',
         'auto const foursz = EwaldConst::nfour();',
         'for (int i = 0; i < foursz; i++) {',
         'auto const &h = EwaldConst::fourIndex(i);',
@@ -385,7 +322,8 @@ def ewald(code, order):
         # Scale/radius (9), repeated origin radius squared (5), tensor sum (N),
         # potential shift (1), and each image displacement/radius squared (11).
         f'return {14 + originFlops + detraceFlops + order * order + 2} '
-        f'+ {fourierFlops} * foursz + 11 * realsz + {realFlops} * acceptedRealImages;',
+        f'+ {fourierFlops} * foursz + 11 * realsz + {realFlops} * acceptedRealImages '
+        '+ radialFlops;',
         '}',
     ])
 
@@ -399,18 +337,19 @@ def generateEwald(minLocalDegree, maxLocalDegree):
         '#include <numbers>',
         '',
         '#include <cosmictiger/core/flops.hpp>',
-        '#include <cosmictiger/gravity/dehnen/ewald_indices.hpp>',
+        '#include <cosmictiger/gravity/global_fmm/ewald_indices.hpp>',
+        '#include <cosmictiger/gravity/kernels/gaussian_screening.hpp>',
         '#include <cosmictiger/math/math.hpp>',
         '#include <cosmictiger/math/simd_math.hpp>',
         '#include <cosmictiger/math/tensor.hpp>',
         '#include <cosmictiger/math/vector3.hpp>',
         '',
-        'namespace detail {',
+        'namespace cosmictiger::gravity::cartesian::tracefree::detail {',
     ]
     for localDegree in range(minLocalDegree, maxLocalDegree + 1):
         code.append(f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {localDegree + 1}) && '
                     f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {localDegree + 1})')
         ewald(code, localDegree + 1)
         code.append('#endif')
-    code.append('} // namespace detail')
+    code.append('} // namespace cosmictiger::gravity::cartesian::tracefree::detail')
     return '\n'.join(code) + '\n'

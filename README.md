@@ -698,15 +698,15 @@ termination, and the completed APEX, TAU, and `profile.txt` reports.
 
 Common gravity and SPH machinery lives directly in each subsystem directory.
 The same subsystem organization is used beneath `cosmictiger/` for headers and `src/` for
-implementations. Gravity solver code is in `gravity/dehnen/` for global adaptive
-FMM and `gravity/nitadori/` for PMMM. SPH numerical modules are in
+implementations. Gravity solver code is in `gravity/global_fmm/` for global adaptive
+FMM and `gravity/pmmm/` for PMMM. SPH numerical modules are in
 `hydro/sph/variational/`, `hydro/sph/monaghan/`, `hydro/sph/morris_and_monaghan/`,
 `hydro/sph/cullen_and_dehnen/`, `hydro/sph/price_etal/`, and `hydro/sph/balsara/`.
 Hopkins MFM/MFV headers live in `cosmictiger/hydro/hopkins/`;
 `src/hydro/hopkins.cpp` implements their hydrodynamic stage within the shared
 simulation driver.
 Owned particle storage stays in `particles/`; PMMM owns its
-separate ghost arena in `gravity/nitadori/`.
+separate ghost arena in `gravity/pmmm/`.
 
 See [the source organization guide](docs/source_layout.md) for file responsibilities,
 dependency boundaries, and generated-code placement.

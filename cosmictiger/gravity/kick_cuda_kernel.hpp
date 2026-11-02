@@ -21,9 +21,9 @@
 #include <cosmictiger/cuda/cuda_reduce.hpp>
 #include <cosmictiger/cuda/device_profiler.hpp>
 #include <cosmictiger/gravity/fmm_acceptance.hpp>
-#include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/gravity_cuda.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_cuda.hpp>
 #include <cosmictiger/math/vector3.hpp>
@@ -42,8 +42,9 @@ __device__ inline void cudaCopyExpansion(float* destination, float const* source
 
 template <int order>
 __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKickData const& data,
-    cosmictiger::gravity::cartesian::Expansion<float, order> const& lValue2, TreeNode const& self,
-    CudaKickForceTile const& force, int sinkBegin, int sinkCount, ParticleInteger outputOffset) {
+    cosmictiger::gravity::cartesian::tracefree::Expansion<float, order> const& lValue2,
+    TreeNode const& self, CudaKickForceTile const& force, int sinkBegin, int sinkCount,
+    ParticleInteger outputOffset) {
     int const& tid = threadIdx.x;
     auto& allPhi = data.pot;
     auto& allGx = data.gx;
@@ -96,7 +97,8 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
         dx[kXDimension] = unwrappedDistance(sinkX[i], self.pos[kXDimension]);
         dx[kYDimension] = unwrappedDistance(sinkY[i], self.pos[kYDimension]);
         dx[kZDimension] = unwrappedDistance(sinkZ[i], self.pos[kZDimension]);
-        cosmictiger::gravity::cartesian::L2P(l2, lValue2, fmmScaleDisplacement(dx), params.doPhi);
+        cosmictiger::gravity::cartesian::tracefree::L2P(
+            l2, lValue2, fmmScaleDisplacement(dx), params.doPhi);
         float gx = force.gx[i];
         float gy = force.gy[i];
         float gz = force.gz[i];
@@ -111,8 +113,8 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             allGx[outputIndex] = gx;
             allGy[outputIndex] = gy;
             allGz[outputIndex] = gz;
-            flops +=
-                cosmictiger::gravity::cartesian::detail::L2P<fmmLocalDegree(order), true>::kFlops_ +
+            flops += cosmictiger::gravity::cartesian::tracefree::detail::L2P<fmmLocalDegree(order),
+                         true>::kFlops_ +
                 14;
             continue;
         }
@@ -141,8 +143,8 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             if (allPhi != nullptr) {
                 allPhi[sinkIndex] = phi;
             }
-            flops +=
-                cosmictiger::gravity::cartesian::detail::L2P<fmmLocalDegree(order), true>::kFlops_ +
+            flops += cosmictiger::gravity::cartesian::tracefree::detail::L2P<fmmLocalDegree(order),
+                         true>::kFlops_ +
                 15;
             continue;
         }
@@ -323,8 +325,9 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
         dkinTot += kin1 - kin0;
         // Displacement, L2P coordinate scaling and force accumulation/scaling.
         // Energy and momentum diagnostics, including their reductions, are excluded.
-        flops +=
-            cosmictiger::gravity::cartesian::detail::L2P<fmmLocalDegree(order), true>::kFlops_ + 18;
+        flops += cosmictiger::gravity::cartesian::tracefree::detail::L2P<fmmLocalDegree(order),
+                     true>::kFlops_ +
+            18;
     }
     sharedReduceAdd(phiTot);
     sharedReduceAdd(xmomTot);
@@ -382,7 +385,7 @@ __device__ inline void cudaOpenOrDefer(bool openLargerCell, TreeNode const& sink
 // instantiation. It is an inline device call, with no function-pointer dispatch.
 template <int order>
 __device__ __forceinline__ FlopCount cudaApplyPeriodicPolicy(CudaKickData const&,
-    KickParameters const&, cosmictiger::gravity::cartesian::Expansion<float, order>&,
+    KickParameters const&, cosmictiger::gravity::cartesian::tracefree::Expansion<float, order>&,
     TreeNode const&, StackVector<int>&, DeviceVector<int>&, DeviceVector<int>&, DeviceVector<int>&,
     DeviceVector<int>&);
 
@@ -406,7 +409,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
     int const& tid = threadIdx.x;
     extern __shared__ __align__(16) char shmemPtr[];
     using Control = CudaKickControl<order>;
-    using Expansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
+    using Expansion = cosmictiger::gravity::cartesian::tracefree::Expansion<float, order>;
     constexpr int kLocalExpansionBytes = FmmOrder<order>::kLocalExpansionBytes_;
     Control& control = *reinterpret_cast<Control*>(shmemPtr + layout.controlOffset);
     if (layout.listSlabBytes > 0) {
@@ -534,7 +537,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                 {
                     // Cooperative translation into the scratch expansion, then
                     // publish it as the active expansion at this node's center.
-                    cosmictiger::gravity::cartesian::L2LWarpInto(
+                    cosmictiger::gravity::cartesian::tracefree::L2LWarpInto(
                         scratch, expansion, fmmScaleDisplacement(dx), globalParams.doPhi);
                     detail::cudaCopyExpansion<order>(&expansion[0], scratch);
                     if (tid < kDimensions) {
@@ -543,9 +546,9 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     __syncwarp();
                     if (tid == 0) {
                         flops += globalParams.doPhi ?
-                            cosmictiger::gravity::cartesian::detail::detail::L2LWarp<
+                            cosmictiger::gravity::cartesian::tracefree::detail::detail::L2LWarp<
                                 fmmLocalDegree(order), true>::kFlops_ :
-                            cosmictiger::gravity::cartesian::detail::detail::L2LWarp<
+                            cosmictiger::gravity::cartesian::tracefree::detail::detail::L2LWarp<
                                 fmmLocalDegree(order), true>::kFlopsNoPotential_;
                     }
                 }

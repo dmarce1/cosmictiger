@@ -76,41 +76,41 @@ function(cosmictiger_feature_sources output)
 
     if(COSMICTIGER_ENABLE_FMM)
         list(APPEND cosmictiger_source_files
-            src/gravity/dehnen/ewald_indices.cpp
-            src/gravity/dehnen/ewald_indices.cu
-            src/gravity/dehnen/distributed_tree.cpp
-            src/gravity/dehnen/execution.cpp
-            src/gravity/dehnen/gpu_staging.cpp
-            src/gravity/dehnen/particle_exchange.cpp
-            src/gravity/dehnen/periodic.cpp
-            src/gravity/dehnen/remote_cache.cpp
+            src/gravity/global_fmm/ewald_indices.cpp
+            src/gravity/global_fmm/ewald_indices.cu
+            src/gravity/global_fmm/distributed_tree.cpp
+            src/gravity/global_fmm/execution.cpp
+            src/gravity/global_fmm/gpu_staging.cpp
+            src/gravity/global_fmm/particle_exchange.cpp
+            src/gravity/global_fmm/periodic.cpp
+            src/gravity/global_fmm/remote_cache.cpp
         )
     endif()
 
     if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
         list(APPEND cosmictiger_source_files
-            src/gravity/nitadori/collective_dispatch.cpp
-            src/gravity/nitadori/kick.cpp
-            src/gravity/nitadori/solver.cpp
-            src/gravity/nitadori/kernels.cpp
+            src/gravity/pm/collective_dispatch.cpp
+            src/gravity/pmmm/kick.cpp
+            src/gravity/pmmm/solver.cpp
+            src/gravity/pmmm/kernels.cpp
             src/particles/particle_mesh_sort.cpp
-            src/gravity/nitadori/evaluation.cpp
-            src/gravity/nitadori/fft.cpp
-            src/gravity/nitadori/mesh_exchange.cpp
+            src/gravity/pmmm/evaluation.cpp
+            src/gravity/pmmm/fft.cpp
+            src/gravity/pmmm/mesh_exchange.cpp
         )
         if(COSMICTIGER_ENABLE_PMMM_FMM)
             list(APPEND cosmictiger_source_files
-                src/gravity/nitadori/cell_schedule.cpp
-                src/gravity/nitadori/cell_tree.cpp
-                src/gravity/nitadori/fmm_batch.cpp
-                src/gravity/nitadori/ghost_exchange.cpp
-                src/gravity/nitadori/ghost_storage.cpp
+                src/gravity/pmmm/fmm/cell_schedule.cpp
+                src/gravity/pmmm/fmm/cell_tree.cpp
+                src/gravity/pmmm/fmm/fmm_batch.cpp
+                src/gravity/pmmm/fmm/ghost_exchange.cpp
+                src/gravity/pmmm/fmm/ghost_storage.cpp
             )
         endif()
         if(COSMICTIGER_ENABLE_PMMM_PP)
             list(APPEND cosmictiger_source_files
-                src/gravity/nitadori/near_pp.cpp
-                src/gravity/nitadori/near_pp.cu
+                src/gravity/pmmm/pp/near_pp.cpp
+                src/gravity/pmmm/pp/near_pp.cu
             )
         endif()
     endif()
@@ -168,14 +168,14 @@ function(cosmictiger_feature_sources output)
         if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
             list(APPEND cosmictiger_source_files
                 tests/mesh_domains.cpp
-                tests/gravity/nitadori/particle_mesh_dispatch.cpp
+                tests/gravity/pmmm/particle_mesh_dispatch.cpp
                 tests/particle_mesh_sort.cpp
-                tests/gravity/nitadori/particle_mesh_timestep.cpp
-                tests/gravity/nitadori/pmmm.cpp)
+                tests/gravity/pmmm/particle_mesh_timestep.cpp
+                tests/gravity/pmmm/pmmm.cpp)
         endif()
         if(COSMICTIGER_ENABLE_FMM)
             list(APPEND cosmictiger_source_files
-                tests/gravity/dehnen/fmm_tree.cpp tests/gravity/dehnen/fmm_walk.cpp
+                tests/gravity/global_fmm/fmm_tree.cpp tests/gravity/global_fmm/fmm_walk.cpp
                 tests/gravity/analytic.cpp tests/gravity/analytic.cu tests/linear_growth.cpp)
         endif()
         if(NOT COSMICTIGER_WITH_GRAVITY)

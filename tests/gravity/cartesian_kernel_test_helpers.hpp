@@ -12,19 +12,20 @@
 
 #include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
-#include <cosmictiger/gravity/fmm_kernels/cartesian_m2l.hpp>
-#include <cosmictiger/gravity/fmm_kernels/cartesian_kernels.hpp>
-#include <cosmictiger/gravity/fmm_kernels/cartesian_config.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree_config.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree_kernels.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree_m2l.hpp>
 
 namespace detail {
 
-namespace kernels = cosmictiger::gravity::cartesian::detail;
+namespace kernels = cosmictiger::gravity::cartesian::tracefree::detail;
 
 // Every FMM order from kFmmMinOrder to kFmmMaxOrder is compiled into the
 // binary. An order selects the multipole degree p = order - 2 and the local
 // degree p + 1; the generated kernels must cover that whole range.
-static_assert(cosmictiger::gravity::cartesian::kMinLocalDegree <= fmmLocalDegree(kFmmMinOrder) &&
-        cosmictiger::gravity::cartesian::kMaxLocalDegree >= fmmLocalDegree(kFmmMaxOrder),
+static_assert(
+    cosmictiger::gravity::cartesian::tracefree::kMinLocalDegree <= fmmLocalDegree(kFmmMinOrder) &&
+        cosmictiger::gravity::cartesian::tracefree::kMaxLocalDegree >= fmmLocalDegree(kFmmMaxOrder),
     "The generated Cartesian kernels do not cover FMM orders 3 to 9");
 
 constexpr int kFieldCount = 4;

@@ -1,6 +1,6 @@
 # Generated spherical kernels
 
-`tools/generate_fmm.py` generates `cosmictiger/gravity/fmm_kernels/spherical_kernels.hpp` for the same
+`tools/generate_fmm.py` generates `cosmictiger/gravity/kernels/spherical_kernels.hpp` for the same
 inclusive local-degree range as the Cartesian representations. FMM order `q`
 means source degree `q-2` and local degree `q-1`; the source headers contain
 orders 3–9, with source degrees 1–7 and local degrees 2–8. CMake's `COSMICTIGER_EXPANSION_DEGREE` selects potential degrees, defaulting
@@ -118,7 +118,7 @@ previous finite-order rotation pitfalls. Its C++ generator is not copied.
 
 ## Validation
 
-`tests/gravity/nitadori/generated_spherical.cpp` uses independently written loop-based complex
+`tests/gravity/pmmm/generated_spherical.cpp` uses independently written loop-based complex
 harmonic recurrences and translation/contraction sums, rather than the Python
 DAG. It checks the selected operators, arbitrary Green contraction, additive
 outputs, P2M/P2L normalization, and a three-particle direct

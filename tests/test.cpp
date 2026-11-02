@@ -26,8 +26,8 @@
 #include <cosmictiger/cosmology/initialize.hpp>
 #endif
 #if COSMICTIGER_ENABLE_FMM
-#include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
-#include <cosmictiger/gravity/dehnen/execution.hpp>
+#include <cosmictiger/gravity/global_fmm/distributed_tree.hpp>
+#include <cosmictiger/gravity/global_fmm/execution.hpp>
 #endif
 #if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/gravity/gravity.hpp>

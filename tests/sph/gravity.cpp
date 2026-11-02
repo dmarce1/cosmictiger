@@ -23,12 +23,12 @@
 #include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
-#include <cosmictiger/gravity/dehnen/execution.hpp>
-#include <cosmictiger/gravity/dehnen/particle_exchange.hpp>
-#include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
+#include <cosmictiger/gravity/global_fmm/distributed_tree.hpp>
+#include <cosmictiger/gravity/global_fmm/execution.hpp>
+#include <cosmictiger/gravity/global_fmm/particle_exchange.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/hydro/sph/cullen_and_dehnen/particle_exchange.hpp>
@@ -376,7 +376,7 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f, float 
                         cpuGravityCc<order.value>(expansion, sources, self, true);
                     }
                     cosmictiger::gravity::Field<float> field{};
-                    cosmictiger::gravity::cartesian::L2P(
+                    cosmictiger::gravity::cartesian::tracefree::L2P(
                         field, expansion, fmmScaleDisplacement(dx));
                     return field;
                 });
@@ -806,7 +806,7 @@ void validateMfvGravityMasses() {
     Position x[4]{}, y[4]{}, z[4]{};
     char types[4]{};
     float masses[4]{-1.0f, -1.0f, -1.0f, -1.0f};
-    dehnenReadSourcePositions(source, x, y, z, types, masses, 1);
+    globalFmmReadSourcePositions(source, x, y, z, types, masses, 1);
     detail::requireClose("remote DM source mass", masses[1], getOptions().initial.darkMatterMass);
     detail::requireClose("remote MFV source mass", masses[2], 0.375f + 0.03125f * rank);
     detail::requireClose("remote MFV mass preceding guard", masses[0], -1.0);

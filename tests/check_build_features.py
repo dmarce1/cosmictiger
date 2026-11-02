@@ -137,17 +137,18 @@ def sourceSelectionErrors(sources, configuration):
                 errors.append(f"gravity disabled but compiles gravity source: {source}")
             if cosmologySource:
                 errors.append(f"gravity disabled but compiles cosmology source: {source}")
-        for feature, enabled, directory in (("FMM", configuration["FMM"], "dehnen"),
-                                            ("PMMM", hasPmmm(configuration), "nitadori")):
+        for feature, enabled, directory in (("FMM", configuration["FMM"], "global_fmm"),
+                                            ("PMMM", hasPmmm(configuration), "pmmm")):
             if not enabled and source.startswith(
                     (f"src/gravity/{directory}/", f"tests/gravity/{directory}/")):
                 errors.append(f"{feature} disabled but compiles solver source: {source}")
         for feature, pattern in (
-                ("PMMM_PP", r"(?:src|tests)/gravity/nitadori/near_pp[^/]*\.(?:cpp|cu)$"),
-                ("PMMM_FMM", r"(?:src|tests)/gravity/nitadori/(?:cell_|ghost_|fmm_batch)[^/]*\.(?:cpp|cu)$")):
+                ("PMMM_PP", r"(?:src|tests)/gravity/pmmm/pp/near_pp[^/]*\.(?:cpp|cu)$"),
+                ("PMMM_FMM", r"(?:src|tests)/gravity/pmmm/fmm/(?:cell_|ghost_|fmm_batch)[^/]*\.(?:cpp|cu)$")):
             if not configuration[feature] and re.fullmatch(pattern, source):
                 errors.append(f"{feature} disabled but compiles near solver: {source}")
         if not hasPmmm(configuration) and source in {
+                "src/gravity/pm/collective_dispatch.cpp", "tests/gravity/pm/fft_flops.cpp",
                 "src/particles/particle_mesh_sort.cpp", "tests/particle_mesh_sort.cpp",
                 "tests/mesh_domain.cpp", "tests/mesh_domains.cpp"}:
             errors.append(f"PMMM disabled but compiles solver source: {source}")
@@ -192,13 +193,13 @@ def requiredSources(configuration, cuda):
     if hasGravity(configuration):
         required.update({"src/gravity/fmm_order.cpp", "src/gravity/error.cpp", "src/gravity/reference_table.cpp"})
     if configuration["FMM"]:
-        required.add("src/gravity/dehnen/execution.cpp")
+        required.add("src/gravity/global_fmm/execution.cpp")
     if hasPmmm(configuration):
-        required.update({"src/gravity/nitadori/solver.cpp", "src/gravity/nitadori/fft.cpp"})
+        required.update({"src/gravity/pmmm/solver.cpp", "src/gravity/pmmm/fft.cpp"})
         if configuration["PMMM_PP"]:
-            required.add("src/gravity/nitadori/near_pp.cpp")
+            required.add("src/gravity/pmmm/pp/near_pp.cpp")
         if configuration["PMMM_FMM"]:
-            required.add("src/gravity/nitadori/fmm_batch.cpp")
+            required.add("src/gravity/pmmm/fmm/fmm_batch.cpp")
     if hasTree(configuration):
         required.add("src/gravity/kick.cpp")
     if configuration["SPH"]:

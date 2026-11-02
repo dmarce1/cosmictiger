@@ -172,8 +172,8 @@ subsequent crossings, so use the same configured schedule and original
 
 ## Source organization
 
-PMMM interfaces are in `cosmictiger/gravity/nitadori/` and implementations in
-`src/gravity/nitadori/`. `solver.cpp` coordinates the solve; `fft.cpp` owns the
+PMMM interfaces are in `cosmictiger/gravity/pmmm/` and implementations in
+`src/gravity/pmmm/`. `solver.cpp` coordinates the solve; `fft.cpp` owns the
 persistent transform/cache lifecycle; `mesh_exchange.cpp` transfers moments and
 local expansions. `ghost_storage.cpp` owns the reusable source arena,
 `ghost_exchange.cpp` handles whole-cell requests, and `cell_schedule.cpp` launches
@@ -184,7 +184,7 @@ alternative direct near field, and `kernels.cpp` adapts the spherical operators.
 
 Common Cartesian operators, tree construction, source views, and CPU/CUDA walks
 remain directly in `gravity/`. PMMM near FMM uses this common code without a
-dependency on the global solver in `gravity/dehnen/`. Owned particle arrays and
+dependency on the global solver in `gravity/global_fmm/`. Owned particle arrays and
 sorting remain in `particles/`. See [source organization](source_layout.md) for
 the complete ownership and generated-code layout.
 

@@ -24,7 +24,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/safe_io.hpp>
-#include <cosmictiger/gravity/nitadori/mesh_size.hpp>
+#include <cosmictiger/gravity/pmmm/mesh_size.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>

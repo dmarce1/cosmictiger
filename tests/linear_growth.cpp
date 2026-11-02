@@ -24,8 +24,8 @@
 #include <cosmictiger/core/build_config.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
-#include <cosmictiger/gravity/dehnen/execution.hpp>
+#include <cosmictiger/gravity/global_fmm/distributed_tree.hpp>
+#include <cosmictiger/gravity/global_fmm/execution.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/math/vector3.hpp>

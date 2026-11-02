@@ -211,7 +211,7 @@ def generate(minLocalDegree=2,maxLocalDegree=8):
     if not 2 <= minLocalDegree <= maxLocalDegree <= 8:
         raise ValueError("Spherical Ewald is validated for local degrees 2 through 8")
     lines = [NOTICE,"#pragma once", "#include <cmath>", "#include <type_traits>", "", "#include <cosmictiger/cuda/cuda_export.hpp>",
-             "#include <cosmictiger/gravity/fmm_kernels/spherical_kernels.hpp>", "#include <cosmictiger/math/simd_math.hpp>",
+             "#include <cosmictiger/gravity/kernels/spherical_kernels.hpp>", "#include <cosmictiger/math/simd_math.hpp>",
              "", "namespace cosmictiger::gravity::spherical {", "namespace detail {"]
     lines += ["template <typename Real> class EwaldWorkingType { public: using Type = Real; };",
               "template <> class EwaldWorkingType<float> { public: using Type = double; };",

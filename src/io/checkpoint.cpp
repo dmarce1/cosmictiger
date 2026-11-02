@@ -33,7 +33,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/terminal.hpp>
-#include <cosmictiger/gravity/nitadori/mesh_size.hpp>
+#include <cosmictiger/gravity/pmmm/mesh_size.hpp>
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/kernel.hpp>
@@ -699,7 +699,7 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
     if (getOptions().chemistry.enabled) {
         auto const chemicalParameters = sphChemistryCheckpointParameters();
         if (fwrite(chemicalParameters.data(), sizeof(double), chemicalParameters.size(), fp) !=
-                chemicalParameters.size()) {
+            chemicalParameters.size()) {
             THROW_ERROR("Unable to write equilibrium-cooling checkpoint parameters\n");
         }
     }

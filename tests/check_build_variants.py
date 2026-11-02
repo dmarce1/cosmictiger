@@ -194,35 +194,35 @@ class BuildFeaturesTest(unittest.TestCase):
         for feature in ("PMMM_PP", "PMMM_FMM"):
             with self.subTest(feature=feature):
                 self.configure(FMM=False, **{feature: True})
-                self.commands = [entry for entry in self.commands if not entry["file"].endswith("nitadori/solver.cpp")]
-                with self.assertRaisesRegex(ValueError, "required source missing: src/gravity/nitadori/solver.cpp"):
+                self.commands = [entry for entry in self.commands if not entry["file"].endswith("pmmm/solver.cpp")]
+                with self.assertRaisesRegex(ValueError, "required source missing: src/gravity/pmmm/solver.cpp"):
                     self.check()
 
     def testMissingEnabledNearSolver(self):
-        for feature, source in (("PMMM_PP", "near_pp.cpp"), ("PMMM_FMM", "fmm_batch.cpp")):
+        for feature, source in (("PMMM_PP", "pp/near_pp.cpp"), ("PMMM_FMM", "fmm/fmm_batch.cpp")):
             with self.subTest(feature=feature):
                 self.configure(FMM=False, **{feature: True})
-                self.commands = [entry for entry in self.commands if not entry["file"].endswith("nitadori/" + source)]
-                with self.assertRaisesRegex(ValueError, "required source missing: src/gravity/nitadori/" + source):
+                self.commands = [entry for entry in self.commands if not entry["file"].endswith("pmmm/" + source)]
+                with self.assertRaisesRegex(ValueError, "required source missing: src/gravity/pmmm/" + source):
                     self.check()
 
     def testPmmmSourceLeak(self):
-        self.addCompilation("cosmictiger_objects", "src/gravity/nitadori/solver.cpp", self.definitions)
+        self.addCompilation("cosmictiger_objects", "src/gravity/pmmm/solver.cpp", self.definitions)
         with self.assertRaisesRegex(ValueError, "PMMM disabled but compiles solver source"):
             self.check()
 
     def testFmmSourceLeak(self):
         self.configure(FMM=False, PMMM_PP=True)
-        self.addCompilation("cosmictiger_objects", "src/gravity/dehnen/execution.cpp", self.definitions)
+        self.addCompilation("cosmictiger_objects", "src/gravity/global_fmm/execution.cpp", self.definitions)
         with self.assertRaisesRegex(ValueError, "FMM disabled but compiles solver source"):
             self.check()
 
     def testNearSolverLeak(self):
-        for enabled, disabled, source in (("PMMM_PP", "PMMM_FMM", "cell_tree.cpp"),
-                                           ("PMMM_FMM", "PMMM_PP", "near_pp.cpp")):
+        for enabled, disabled, source in (("PMMM_PP", "PMMM_FMM", "fmm/cell_tree.cpp"),
+                                           ("PMMM_FMM", "PMMM_PP", "pp/near_pp.cpp")):
             with self.subTest(disabled=disabled):
                 self.configure(FMM=False, **{enabled: True})
-                self.addCompilation("cosmictiger_objects", "src/gravity/nitadori/" + source, self.definitions)
+                self.addCompilation("cosmictiger_objects", "src/gravity/pmmm/" + source, self.definitions)
                 with self.assertRaisesRegex(ValueError, disabled + " disabled but compiles near solver"):
                     self.check()
 
@@ -383,7 +383,8 @@ class BuildFeaturesTest(unittest.TestCase):
                     self.check()
 
     def testFmmRejectsParticleMeshSourcesAndTests(self):
-        for source in ("src/particles/particle_mesh_sort.cpp", "tests/particle_mesh_sort.cpp",
+        for source in ("src/gravity/pm/collective_dispatch.cpp", "tests/gravity/pm/fft_flops.cpp",
+                       "src/particles/particle_mesh_sort.cpp", "tests/particle_mesh_sort.cpp",
                        "tests/mesh_domain.cpp", "tests/mesh_domains.cpp"):
             with self.subTest(source=source):
                 self.configure()
@@ -391,6 +392,11 @@ class BuildFeaturesTest(unittest.TestCase):
                 self.addCompilation("unused_mesh", source, {})
                 with self.assertRaisesRegex(ValueError, "PMMM disabled but compiles solver source: " + source):
                     self.check()
+
+    def testFmmAllowsSharedParticleMeshCloud(self):
+        self.cache["BUILD_TESTING"] = "ON"
+        self.addCompilation("pm_cloud_test", "tests/gravity/pm/cloud.cpp", self.definitions)
+        self.assertIn("Build features passed", self.check())
 
     def testConfiguredRuntimeMustNotMoveIntoSharedCore(self):
         self.commands = [entry for entry in self.commands if not entry["file"].endswith("src/core/hpx.cpp")]

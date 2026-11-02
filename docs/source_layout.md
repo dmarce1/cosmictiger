@@ -38,52 +38,52 @@ definitions without linking unrelated physics libraries.
 
 ```text
 gravity/
+├── kernels/                               # Shared Cartesian, STF, spherical, screened kernels
 ├── fmm_types.hpp, fmm_order.*
-├── fmm_kernels/                            # Flat cartesian_* and spherical_* headers
 ├── fmm_acceptance.hpp, fmm_geometry.hpp
 ├── sources.*, source_access.*
-├── tree.hpp, tree_build.*, tree_arena.cpp, tree_multipole.hpp
-├── gravity.*, gravity_cpu.hpp, gravity_cuda.hpp
-├── kick.*, kick_context.hpp, kick_walk.hpp, kick_workspace.*
-├── kick_executor.cpp, kick_cuda*.hpp, kick_interaction_counts.*
-├── dehnen/
-│   ├── distributed_tree.*
-│   ├── remote_cache.*, particle_exchange.*
-│   ├── execution.*, gpu_staging.*
-│   ├── periodic.*, periodic_cpu.hpp, periodic_cuda.hpp
+├── tree*, gravity*, kick*                  # Shared local tree/walk/CPU/CUDA execution
+├── global_fmm/                            # Distributed global FMM and periodic corrections
+│   ├── distributed_tree.*, remote_cache.*, particle_exchange.*
+│   ├── execution.*, gpu_staging.*, periodic*
 │   └── ewald_indices.*, ewald_tables.hpp
-└── nitadori/
-    ├── solver.*
-    ├── fft.cpp, mesh_exchange.cpp, evaluation.cpp
-    ├── ghost_storage.*, ghost_exchange.cpp
-    ├── cell_tree.*, cell_schedule.cpp, fmm_batch.*
-    ├── kernels.*, near_pp.*
-    ├── kick.*, collective_dispatch.*
-    └── state.hpp, actions.hpp                 # Private implementation headers
+├── pm/                                    # Shared particle-mesh infrastructure
+│   ├── cloud.hpp
+│   ├── collective_dispatch.*
+│   └── fft_flops.hpp
+├── pmmm/
+│   ├── solver.*, kernels.*, mesh_size.hpp, fft.cpp, mesh_exchange.cpp
+│   ├── evaluation.cpp, kick.*
+│   ├── state.hpp, actions.hpp              # Private source implementation headers
+│   ├── pp/near_pp.*
+│   └── fmm/{cell_tree.*,fmm_batch.*,cell_schedule.cpp,ghost_storage.*,ghost_exchange.cpp}
+└── p3m/
+    ├── pp/kernels.hpp                     # Screened pair kernel adapter
+    └── fmm/kernels.hpp                    # Screened full Cartesian Green adapter
 ```
 
 An asterisk denotes the applicable header, C++ implementation, and/or CUDA
 implementation, rather than a requirement that every file have all three.
-The `state.hpp` and `actions.hpp` headers belong only to `src/gravity/nitadori/`.
+The `state.hpp` and `actions.hpp` headers belong only to `src/gravity/pmmm/`.
 
-`dehnen/` contains the global adaptive Cartesian FMM solver, including distributed
-tree construction, remote node and particle access, and Cartesian Ewald
-corrections. `nitadori/` contains the particle mesh multipole solver: spherical
-moments and FFT convolution, whole-cell ghost exchange, readiness scheduling,
-and the direct-PP or cell-FMM near-field adapters. The directory names identify
-method families; the numerical documentation records the particular conventions
-and implementation choices.
+Directories identify solver families, not paper authors. `global_fmm/` owns
+only the global adaptive FMM solver; its local tree and walk machinery remains
+shared at the gravity root. `pmmm/` owns the multipole mesh convolution and its
+PP/FMM near variants. Generic FFT accounting and collective dispatch live in
+`pm/`, available to both `pmmm/` and `p3m/`. PMMM's tensor convolution still
+belongs to PMMM; it is not a scalar PM solve merely because it uses FFTs.
 
-Paper-name directories contain only code that can be excluded when that solver
-is not built. Shared implementation belongs in the parent subsystem directory.
-`COSMICTIGER_ENABLE_FMM=OFF` excludes Dehnen sources and headers;
+`p3m/` provides screened short-force adapters for the planned PP-PM and FMM-PM
+solvers. The mesh solve supplies their long force. The restored cloud weights
+are shared PM infrastructure; a pure-PM runtime and the P3M walks/integration
+are separate work, not enabled by this directory reorganization.
+
+`COSMICTIGER_ENABLE_FMM=OFF` excludes the global FMM adapter;
 disabling both `COSMICTIGER_ENABLE_PMMM_PP` and
-`COSMICTIGER_ENABLE_PMMM_FMM` excludes Nitadori sources and headers. Global FMM
-and either or both PMMM options may be enabled in one executable. Each PMMM
-option enables the shared PMMM implementation, its corresponding near field,
-and supported tests. Runtime `gravity.method.far=fmm|pmmm` and
-`gravity.method.near=pp|fmm` select among enabled algorithms; a selector is
-required when more than one applicable choice is compiled.
+`COSMICTIGER_ENABLE_PMMM_FMM` excludes the PMMM solver. Global FMM and either
+or both PMMM options may be enabled in one executable. Each PMMM option enables
+the shared PMMM implementation, its corresponding near field, and supported
+tests. Existing public runtime selectors and serialized layouts are preserved.
 
 Global FMM and PMMM's FMM near solver use the parent directory's Cartesian
 operators, local tree construction, acceptance tests, traversal, and CPU/CUDA
@@ -96,7 +96,7 @@ node, or source-copy boundaries; pair operators remain inline CPU/CUDA code.
 
 Owned particle storage remains in `particles/`. It is also used by drift,
 domain migration, SPH, checkpoints, and output. Common gravity source views
-borrow that storage. Nitadori owns a separate ghost arena and publishes its
+borrow that storage. PMMM owns a separate ghost arena and publishes its
 borrowed source view before readers start. Ghost packets contain source
 positions, particle types, and frozen timestep rungs, and never become owned
 particles. Generic particle-release hooks let solver-owned auxiliary storage
@@ -174,7 +174,7 @@ in `scenarios/`, alongside the scenarios that use them.
 ## Generated code and build integration
 
 The old `cosmictiger/fmm/` and `src/fmm/` directories are folded into gravity.
-Generated headers are checked in beneath `cosmictiger/gravity/fmm_kernels/`,
+Generated headers are checked in beneath `cosmictiger/gravity/kernels/`,
 with flat `cartesian_*` and `spherical_*` names for free-space and Ewald operators
 and their configuration.
 

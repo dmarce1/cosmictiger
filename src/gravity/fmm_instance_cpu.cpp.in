@@ -11,6 +11,6 @@
 #define COSMICTIGER_FMM_INSTANCE_ORDER @FMM_INSTANCE_ORDER@
 
 #if COSMICTIGER_ENABLE_FMM
-#include <cosmictiger/gravity/dehnen/cpu_instances.hpp>
+#include <cosmictiger/gravity/global_fmm/cpu_instances.hpp>
 #endif
 #include <cosmictiger/gravity/fmm_cpu_instances.hpp>
