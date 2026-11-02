@@ -1427,15 +1427,18 @@ void hopkinsPairBatch(HopkinsWorkspace const& workspace,
             getOptions().hydro.method == "mfm", solveMask, operations);
     };
     hopkins::FluxValues<HopkinsSimd> initial, midpoint;
+    char const* solveStage = "initial spatial reconstruction";
     try {
         initial = solve(zero, active);
         midpoint = initial;
         if (anySecondOrder) {
             hopkins::detail::countFlops(operations, kWidth);
+            solveStage = "midpoint prediction";
             midpoint = solve(HopkinsSimd(0.5) * interval, secondOrder);
         }
     } catch (std::exception const& error) {
-        std::string message = std::string(error.what()) + " [Hopkins pair IDs by SIMD lane:";
+        std::string message =
+            std::string(error.what()) + " [Hopkins " + solveStage + "; pair IDs by SIMD lane:";
         for (size_t lane = 0; lane < count; lane++) {
             message += " " + std::to_string(lane) + "=" +
                 std::to_string(inputs[lane].record.leftId) + "," +

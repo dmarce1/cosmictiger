@@ -70,7 +70,7 @@ struct Flux {
     Vector momentum{};
     double energy = 0.0;
     double signalSpeed = 0.0;     // Maximum wave speed relative to the input frame.
-    double contactSpeed = 0.0;    // Contact speed relative to the input frame.
+    double contactSpeed = 0.0;    // Contact, or HLL massless-face speed, in the input frame.
 };
 
 struct Conserved {
@@ -650,9 +650,10 @@ inline Primitive reconstruct(Primitive const& center, Gradient const& gradient,
 
 // An outward (i -> j) flux, including |area|. Apply -dt*flux to i and +dt*flux
 // to j, once per pair. Appendix A supplies the Galilean boost/deboost. In MFM
-// the Riemann face additionally moves at S_* (section 2.6): mass flux is exactly
+// accepted HLLC uses a face moving at S_* (section 2.6): mass flux is exactly
 // zero, momentum flux is P_* n, and energy flux is P_* (S_*+v_frame dot n).
-// Scalar reference and packed production use the same strict HLLC kernel.
+// HLL fallback uses its massless-plane speed and the full moving-face flux.
+// Scalar reference and packed production share the HLLC/HLL kernel.
 inline Flux riemannFlux(Primitive const& left, Primitive const& right, Vector const& area,
     Vector const& frameVelocity, double gamma, bool finiteMass, FlopCount* operations = nullptr) {
     PrimitiveValues<double> const leftValues{left.density, left.velocity, left.pressure};
