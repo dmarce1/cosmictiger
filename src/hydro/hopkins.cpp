@@ -139,6 +139,10 @@ struct HopkinsWorkspace {
     bool readForces = false;
     uint64_t tick = 0;
     double searchSupportFactor = 1.0;
+    // Dual-energy pressure switches taken at this kick's closures, and the total
+    // energy they added; the energy budget books it like a thermal source.
+    size_t switched = 0;
+    double switchedEnergy = 0.0;
     int darkMatterRung = 0;
     int dimensions = 3;
 };
@@ -1551,6 +1555,16 @@ void hopkinsInitialize(HopkinsWorkspace& workspace) {
             state.sourceAcceleration = particle.acceleration;
             state.expansionCoefficient = coefficient;
         }
+        if (!state.predictorInitialized || !(state.entropy > 0.0)) {
+            double const thermal =
+                hopkins::thermalEnergy({state.mass, state.momentum, state.totalEnergy}) /
+                state.mass;
+            if (!(thermal > 0.0) || !std::isfinite(thermal)) {
+                throw std::runtime_error("Nonpositive Hopkins thermal energy at initialization");
+            }
+            state.entropy = hopkins::entropyFunction(
+                thermal, state.mass / state.anchorVolume, getOptions().hydro.gamma);
+        }
     }
 }
 
@@ -1567,11 +1581,30 @@ void hopkinsCloseParticle(HopkinsWorkspace& workspace, size_t i) {
                 (particle.acceleration[dim] - state.sourceAcceleration[dim]) / duration;
         }
     }
-    auto const next =
-        hopkins::closeConservedInterval({state.mass, state.momentum, state.totalEnergy},
-            {state.pendingMass, state.pendingMomentum, state.pendingEnergy},
-            state.sourceAcceleration, particle.acceleration, duration, getOptions().hydro.damping,
-            state.expansionCoefficient, coefficient, work);
+    auto next = hopkins::closeConservedInterval({state.mass, state.momentum, state.totalEnergy},
+        {state.pendingMass, state.pendingMomentum, state.pendingEnergy}, state.sourceAcceleration,
+        particle.acceleration, duration, getOptions().hydro.damping, state.expansionCoefficient,
+        coefficient, work);
+    auto const& options = getOptions();
+    // The expansion source scales the entropy exactly as the closure scaled the thermal
+    // energy over its two half intervals; a fixed-mass cell exchanges no entropy otherwise.
+    double const advectedEntropy =
+        state.entropy * std::exp(0.5 * duration * (state.expansionCoefficient + coefficient));
+    if (options.hydro.method == "mfm" && options.hydro.dualEnergyPressureSwitch > 0.0) {
+        auto const closure =
+            hopkins::dualEnergyClosure(next, advectedEntropy, workspace.geometry[i].volume,
+                options.hydro.gamma, options.hydro.dualEnergyPressureSwitch);
+        next = closure.state;
+        if (closure.switched) {
+            ++workspace.switched;
+            workspace.switchedEnergy += closure.correction;
+        }
+    } else if (!(hopkins::thermalEnergy(next) > 0.0)) {
+        throw std::runtime_error(
+            "Nonpositive Hopkins thermal energy at own-step closure; "
+            "reduce hydro.cfl (published pair transfers cannot be retried one-sided)");
+    }
+    state.entropy = advectedEntropy;
     state.mass = next.mass;
     state.momentum = next.momentum;
     state.totalEnergy = next.energy;
@@ -1584,6 +1617,26 @@ void hopkinsCloseParticle(HopkinsWorkspace& workspace, size_t i) {
     state.beginTick = state.endTick = workspace.tick;
     state.expansionCoefficient = coefficient;
     state.anchorVolume = workspace.geometry[i].volume;
+}
+
+// Thermal sources change the entropy by the specific energy they add to the cell. If an
+// independently evolved entropy cannot absorb that increment, it restarts from the
+// cell's own post-source thermal energy.
+void hopkinsAddSourceEntropy(HopkinsParticle& particle, double delta) {
+    auto& state = particle.state;
+    double const gamma = getOptions().hydro.gamma;
+    double const density = state.mass / state.anchorVolume;
+    double const entropy = state.entropy + hopkins::entropyFunction(delta, density, gamma);
+    if (entropy > 0.0 && std::isfinite(entropy)) {
+        state.entropy = entropy;
+        return;
+    }
+    double const thermal =
+        hopkins::thermalEnergy({state.mass, state.momentum, state.totalEnergy}) / state.mass;
+    if (!(thermal > 0.0) || !std::isfinite(thermal)) {
+        throw std::runtime_error("Nonpositive Hopkins thermal energy after sources");
+    }
+    state.entropy = hopkins::entropyFunction(thermal, density, gamma);
 }
 
 // Operator-split GADGET-4 sources for cells whose own-step intervals have just closed.
@@ -1665,8 +1718,9 @@ void hopkinsApplySources(HopkinsWorkspace& workspace, std::vector<size_t> const&
                 ++converted;
                 continue;
             }
-            particle.state.totalEnergy +=
-                particle.state.mass * (double(output.energy) - double(inputs[k].energy));
+            double const delta = double(output.energy) - double(inputs[k].energy);
+            particle.state.totalEnergy += particle.state.mass * delta;
+            hopkinsAddSourceEntropy(particle, delta);
             particle.chemistry = output.chemistry;
         }
 #else
@@ -1686,6 +1740,7 @@ void hopkinsApplySources(HopkinsWorkspace& workspace, std::vector<size_t> const&
             double const delta = double(results[k].storedEnergy) - double(inputs[k].storedEnergy);
             heating -= particle.state.mass * delta / workspace.scale;
             particle.state.totalEnergy += particle.state.mass * delta;
+            hopkinsAddSourceEntropy(particle, delta);
             particle.chemistry = results[k].state;
         }
     }
@@ -1693,6 +1748,36 @@ void hopkinsApplySources(HopkinsWorkspace& workspace, std::vector<size_t> const&
 #else
     throw std::logic_error("Equilibrium cooling requires COSMICTIGER_ENABLE_CHEMISTRY=ON");
 #endif
+}
+
+// Bryan et al. (1995) update switch over the cells that closed at this instant. Every
+// closure and source of the instant has already been applied, so the neighborhood
+// maximum does not depend on the closure order; inactive neighbors contribute their
+// anchors. A converted cell keeps its closing entropy.
+void hopkinsSynchronizeEntropy(HopkinsWorkspace& workspace, std::vector<size_t> const& closing) {
+    auto const& options = getOptions();
+    auto const energyDensity = [&](size_t j) {
+        auto const& state = workspace.particles[j].state;
+        return state.totalEnergy / state.anchorVolume;
+    };
+    for (size_t i : closing) {
+        auto& particle = workspace.particles[i];
+        if (particle.convert) {
+            continue;
+        }
+        auto& state = particle.state;
+        double maximum = energyDensity(i);
+        for (size_t j : workspace.neighbors[i]) {
+            maximum = std::max(maximum, energyDensity(j));
+        }
+        double const thermal =
+            hopkins::thermalEnergy({state.mass, state.momentum, state.totalEnergy});
+        if (hopkins::entropyUpdateDue(
+                thermal / state.anchorVolume, maximum, options.hydro.dualEnergyUpdateSwitch)) {
+            state.entropy = hopkins::entropyFunction(
+                thermal / state.mass, state.mass / state.anchorVolume, options.hydro.gamma);
+        }
+    }
 }
 
 void hopkinsCurrentViews(HopkinsWorkspace& workspace) {
@@ -1952,6 +2037,7 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
                 }
             }
             detail::hopkinsApplySources(workspace, closing, durations, energies, converted);
+            detail::hopkinsSynchronizeEntropy(workspace, closing);
         }
         detail::hopkinsCurrentViews(workspace);
         if (closingOnly) {
@@ -1968,6 +2054,9 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
             break;
         }
     }
+    // The pressure switch added the entropy estimate's excess over the total-energy
+    // closure; book it like the thermal sources so the energy budget stays exact.
+    energies.heating -= workspace.switchedEnergy / scale;
     size_t active = 0;
     int minimumGasRung = kMaxRung, maximumGasRung = 0;
     for (auto& particle : workspace.particles) {
@@ -2024,9 +2113,9 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
     }
     terminal::detailPrint("Hopkins step: time=%.17g active=%zu total=%zu minRung=%d maxRung=%d "
                           "pairs=%zu cached=%zu refreshed=%zu woken=%zu settled=%zu stars=%zu "
-                          "terminal=%d\n",
+                          "switched=%zu terminal=%d\n",
         time, active, workspace.particles.size(), minimumGasRung, maximumGasRung, retained + opened,
-        retained, opened, woken, settled, converted, int(closingOnly));
+        retained, opened, woken, settled, converted, workspace.switched, int(closingOnly));
     {
         profile::ScopedPhase treePhase("hydro.hopkins.tree.destroy");
         sphTreeDestroy();

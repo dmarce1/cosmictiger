@@ -107,32 +107,32 @@ def particle_rank_state(path, method):
         if end + 12 > len(data):
             raise RuntimeError(f"missing meshless integration state in {path}")
         state_header = struct.unpack_from("=3I", data, end)
-        if state_header != (0x484f5053, 5, 400):
+        if state_header != (0x484f5053, 6, 408):
             raise RuntimeError(f"unsupported meshless integration state in {path}: {state_header}")
         state_offset = end + 12
-        cache_offset = state_offset + 400 * count
+        cache_offset = state_offset + 408 * count
         if cache_offset + 32 > len(data):
             raise RuntimeError(f"truncated meshless integration state in {path}")
         # Native AoS records have padding after each bool. Compare every named
         # field exactly without treating that padding as numerical state.
-        integration_state = [struct.unpack_from("=Q29d2Q?", data, state_offset + 400 * i) +
-                             struct.unpack_from("=15d?", data, state_offset + 400 * i + 264) +
-                             struct.unpack_from("=d", data, state_offset + 400 * i + 392)
+        integration_state = [struct.unpack_from("=Q30d2Q?", data, state_offset + 408 * i) +
+                             struct.unpack_from("=15d?", data, state_offset + 408 * i + 272) +
+                             struct.unpack_from("=d", data, state_offset + 408 * i + 400)
                              for i in range(count)]
         for index, state in enumerate(integration_state):
-            if (not state[32] or not state[48] or
+            if (not state[33] or not state[49] or
                     any(not math.isfinite(value) for value in state[1:]) or
                     state[1] <= 0.0 or state[2] <= math.fsum(
-                        value * value for value in state[3:6]) / (2.0 * state[1]) or
-                    state[11] <= 0.0 or state[49] <= 0.0):
+                        value * value for value in state[4:7]) / (2.0 * state[1]) or
+                    state[3] <= 0.0 or state[12] <= 0.0 or state[50] <= 0.0):
                 raise RuntimeError(f"invalid conservative meshless state in {path}")
             if method == "mfm" and state[1] != fixed_mass:
                 raise RuntimeError(f"MFM changed a particle's conserved mass in {path}")
-            if struct.unpack("=f", struct.pack("=f", state[1] + state[6]))[0] != masses[index]:
+            if struct.unpack("=f", struct.pack("=f", state[1] + state[7]))[0] != masses[index]:
                 raise RuntimeError(f"conserved and public particle masses disagree in {path}")
-            if struct.unpack("=f", struct.pack("=f", state[49]))[0] != supports[index]:
+            if struct.unpack("=f", struct.pack("=f", state[50]))[0] != supports[index]:
                 raise RuntimeError(f"double and public support radii disagree in {path}")
-        pending_work = [state[24:27] for state in integration_state]
+        pending_work = [state[25:28] for state in integration_state]
         cache_header = struct.unpack_from("=4Q", data, cache_offset)
         if cache_header[:3] != (0x484f504341434845, 2, 176):
             raise RuntimeError(f"unsupported pair cache in {path}: {cache_header}")
@@ -158,11 +158,11 @@ def particle_rank_state(path, method):
                                for d in range(3))
     primitive_energy = math.fsum(masses[i] * (thermal[i] + 0.5 * math.fsum(
         value * value for value in velocities[i])) for i in range(count))
-    momentum = (tuple(math.fsum(state[3 + d] + state[8 + d] for state in integration_state) for d in range(3))
+    momentum = (tuple(math.fsum(state[4 + d] + state[9 + d] for state in integration_state) for d in range(3))
                 if method != "sph" else primitive_momentum)
-    energy = (math.fsum(state[2] + state[7] for state in integration_state)
+    energy = (math.fsum(state[2] + state[8] for state in integration_state)
               if method != "sph" else primitive_energy)
-    total_mass = (math.fsum(state[1] + state[6] for state in integration_state)
+    total_mass = (math.fsum(state[1] + state[7] for state in integration_state)
                   if method != "sph" else math.fsum(masses))
     physical_records = {}
     for i, state in enumerate(integration_state):
@@ -240,8 +240,8 @@ def particle_state(checkpoint, method):
         raise RuntimeError(f"duplicate meshless particle identifiers in {checkpoint}")
     result["identifier_ranks"] = {state[0]: rank_index for rank_index, rank in enumerate(ranks)
                                   for state in rank["integration_state"]}
-    result["predictor_anchors"] = {state[0]: state[1:6] + state[11:21] + state[27:28] + state[29:31] + state[33:48] for state in result["integration_state"]}
-    result["kick_phases"] = [state[30] for state in result["integration_state"]]
+    result["predictor_anchors"] = {state[0]: state[1:7] + state[12:22] + state[28:29] + state[30:32] + state[34:49] for state in result["integration_state"]}
+    result["kick_phases"] = [state[31] for state in result["integration_state"]]
     result["physical_records"] = {identifier: values for rank in ranks
                                   for identifier, values in rank["physical_records"].items()}
     return result
@@ -390,7 +390,7 @@ def check_uniform_acceleration(destination, mass, acceleration, context, method)
         # The position clock may be ahead of the owning conserved anchor.
         # This uniform-force fixture has a single gas rung; compare the stored
         # U at its own source clock, and the diagnostics above at physical time.
-        anchors = {record[27] for record in state["integration_state"]}
+        anchors = {record[28] for record in state["integration_state"]}
         if len(anchors) != 1:
             raise RuntimeError(f"{context} uniform-force fixture has asynchronous source anchors")
         anchor_time = anchors.pop()
@@ -416,15 +416,15 @@ def check_uniform_acceleration(destination, mass, acceleration, context, method)
 
 def pending_gravity_work_signal(state):
     """Measure source work retained in endpoint ledgers and elapsed live pairs."""
-    integrals = {entry[0]: list(entry[21:24]) for entry in state["integration_state"]}
-    moments = {entry[0]: list(entry[24:27]) for entry in state["integration_state"]}
+    integrals = {entry[0]: list(entry[22:25]) for entry in state["integration_state"]}
+    moments = {entry[0]: list(entry[25:28]) for entry in state["integration_state"]}
     anchors = {entry[0]: entry for entry in state["integration_state"]}
     time = state["clock"][0]
     for pair in state["pair_cache"]:
         interval = pair[5] - pair[4]
         elapsed = max(0.0, min(time, pair[5]) - pair[4])
         for endpoint in pair[:2]:
-            age = pair[4] - anchors[endpoint][27]
+            age = pair[4] - anchors[endpoint][28]
             for dimension in range(3):
                 initial = pair[16 + dimension]
                 slope = 2.0 * (pair[19 + dimension] - initial) / interval
@@ -434,10 +434,10 @@ def pending_gravity_work_signal(state):
                 moments[endpoint][dimension] += age * integral + first_moment
     signal = 0.0
     for identifier, entry in anchors.items():
-        force = entry[18:21]
+        force = entry[19:22]
         signal = max(signal, abs(math.fsum(integrals[identifier][d] * force[d]
                                           for d in range(3))))
-        duration = time - entry[27]
+        duration = time - entry[28]
         if duration > 0.0:
             signal = max(signal, abs(math.fsum(moments[identifier][d] * force[d]
                                               for d in range(3))) / duration)
@@ -458,7 +458,7 @@ def check_wake_transactions(output, states, context):
         before = {entry[0]: entry for entry in previous["integration_state"]}
         after = {entry[0]: entry for entry in current["integration_state"]}
         woken = {identifier for identifier in before
-                 if before[identifier][31] > tick and after[identifier][30] == tick}
+                 if before[identifier][32] > tick and after[identifier][31] == tick}
         record = next((entry for entry in records if math.isclose(float(entry["time"]), time,
                        rel_tol=1.e-13, abs_tol=1.e-15)), None)
         if record is None or int(record["woken"]) != len(woken):
@@ -489,7 +489,7 @@ def check_wake_transactions(output, states, context):
         # in U + pending, including the inactive partners of woken particles.
         for identifier in before:
             old, new = before[identifier], after[identifier]
-            for component, (anchor, pending) in enumerate(((1, 6), (3, 8), (4, 9), (5, 10), (2, 7))):
+            for component, (anchor, pending) in enumerate(((1, 7), (4, 9), (5, 10), (6, 11), (2, 8))):
                 expected = old[anchor] + old[pending] + deposits[identifier][component]
                 actual = new[anchor] + new[pending]
                 if not math.isclose(actual, expected, rel_tol=2.e-12, abs_tol=1.e-14):

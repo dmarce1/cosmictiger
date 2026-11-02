@@ -272,12 +272,106 @@ inline Conserved closeConservedInterval(Conserved const& anchor, Conserved const
         result.energy += 0.5 * result.mass * (velocity[dim] - oldVelocity[dim]) *
             (velocity[dim] + oldVelocity[dim]);
     }
-    if (!(thermal > 0.0) || !std::isfinite(result.energy)) {
-        throw std::runtime_error(
-            "Nonpositive Hopkins thermal energy at own-step closure; "
-            "reduce hydro.cfl (published pair transfers cannot be retried one-sided)");
+    if (!std::isfinite(result.energy)) {
+        throw std::runtime_error("Nonfinite Hopkins energy at own-step closure");
     }
+    // The thermal part may be nonpositive here: the caller owns the dual-energy decision.
     return result;
+}
+
+// Thermal energy recovered from the conserved total by subtracting the kinetic energy.
+inline double thermalEnergy(Conserved const& state, FlopCount* operations = nullptr) {
+    if (!(state.mass > 0.0)) {
+        throw std::invalid_argument("Hopkins thermal energy requires a positive mass");
+    }
+    detail::countFlops(operations, 3);
+    return state.energy - 0.5 * dot(state.momentum, state.momentum, operations) / state.mass;
+}
+
+// Entropic function K = P rho^-gamma = (gamma-1) u rho^(1-gamma) of a cell with specific
+// thermal energy u. It is the dual-energy auxiliary variable: an MFM cell exchanges no
+// mass, so K is constant along the cell in smooth adiabatic flow and only shocks,
+// the cosmological expansion source and the thermal sources change it. The same comoving
+// variables as the conserved state are used throughout, so a homogeneous expansion
+// scales K exactly as the closure scales the thermal energy.
+inline double entropyFunction(
+    double specificThermalEnergy, double density, double gamma, FlopCount* operations = nullptr) {
+    if (!(density > 0.0) || !std::isfinite(density) || !(gamma > 1.0) || !std::isfinite(gamma) ||
+        !std::isfinite(specificThermalEnergy)) {
+        throw std::invalid_argument("Invalid Hopkins entropic function inputs");
+    }
+    detail::countFlops(operations, 3);
+    return (gamma - 1.0) * specificThermalEnergy * std::pow(density, 1.0 - gamma);
+}
+
+// Specific thermal energy u = K rho^(gamma-1) / (gamma-1) implied by the entropic function.
+inline double thermalEnergyFromEntropy(
+    double entropy, double density, double gamma, FlopCount* operations = nullptr) {
+    if (!(density > 0.0) || !std::isfinite(density) || !(gamma > 1.0) || !std::isfinite(gamma) ||
+        !std::isfinite(entropy)) {
+        throw std::invalid_argument("Invalid Hopkins entropy thermal energy inputs");
+    }
+    detail::countFlops(operations, 3);
+    return entropy * std::pow(density, gamma - 1.0) / (gamma - 1.0);
+}
+
+struct DualEnergyClosure {
+    Conserved state;
+    bool switched = false;
+    // Energy added to the cell by replacing the total-energy thermal estimate.
+    double correction = 0.0;
+};
+
+// Dual-energy pressure switch of Bryan et al. (1995), Comput. Phys. Commun. 89, 149,
+// equation 10, with the entropic function as the auxiliary variable. While the thermal
+// energy recovered from the total energy exceeds pressureSwitch times the total energy,
+// the conservative closure stands. Otherwise the thermal energy is swamped by kinetic
+// cancellation (cold, high-Mach gas) and is replaced by the entropy estimate at the
+// closing volume; the returned correction is the resulting change of total energy,
+// which the caller books as a nonconservative source. A pressure switch of zero keeps
+// every positive total-energy estimate and still rescues a nonpositive one.
+inline DualEnergyClosure dualEnergyClosure(Conserved const& state, double entropy, double volume,
+    double gamma, double pressureSwitch, FlopCount* operations = nullptr) {
+    if (!(state.mass > 0.0) || !std::isfinite(state.mass) || !(volume > 0.0) ||
+        !std::isfinite(volume) || !(gamma > 1.0) || !std::isfinite(gamma) || !(entropy > 0.0) ||
+        !std::isfinite(entropy) || !(pressureSwitch >= 0.0) || !(pressureSwitch < 1.0)) {
+        throw std::invalid_argument("Invalid Hopkins dual-energy closure");
+    }
+    DualEnergyClosure result;
+    result.state = state;
+    detail::countFlops(operations, 3);
+    double const kinetic = 0.5 * dot(state.momentum, state.momentum, operations) / state.mass;
+    double const thermal = state.energy - kinetic;
+    if (std::isfinite(thermal) && thermal > pressureSwitch * state.energy) {
+        return result;
+    }
+    detail::countFlops(operations, 4);
+    double const replacement =
+        state.mass * thermalEnergyFromEntropy(entropy, state.mass / volume, gamma, operations);
+    if (!(replacement > 0.0) || !std::isfinite(replacement)) {
+        throw std::runtime_error(
+            "Nonpositive Hopkins thermal energy at own-step closure from both the total energy "
+            "and the entropy; reduce hydro.cfl (published pair transfers cannot be retried "
+            "one-sided)");
+    }
+    result.state.energy = kinetic + replacement;
+    result.switched = true;
+    result.correction = result.state.energy - state.energy;
+    return result;
+}
+
+// Dual-energy update switch of Bryan et al. (1995), equation 11: the auxiliary follows
+// the total-energy closure whenever the cell's thermal energy density reaches
+// updateSwitch times the largest total energy density among the cell and its neighbors,
+// so shock heating enters the entropy; a cold cell inside a hot neighborhood keeps its
+// own adiabatic entropy. A nonpositive thermal estimate is never adopted.
+inline bool entropyUpdateDue(
+    double thermalEnergyDensity, double maximumEnergyDensity, double updateSwitch) {
+    if (!(updateSwitch >= 0.0) || !std::isfinite(updateSwitch)) {
+        throw std::invalid_argument("Invalid Hopkins dual-energy update switch");
+    }
+    return thermalEnergyDensity > 0.0 && std::isfinite(thermalEnergyDensity) &&
+        thermalEnergyDensity >= updateSwitch * maximumEnergyDensity;
 }
 
 struct PairGravityWorkIntegral {

@@ -185,15 +185,38 @@ Ill-conditioned gradient matrices cause the actual neighbor search
 to expand, up to the configured support bound, rather than introducing an SPH
 pressure-force fallback. An invalid face-area predictor uses a conservative
 first-order face flux.
-A nonpositive mass or thermal energy at an own-step closure stops with a diagnostic
-requesting a lower `hydro.cfl`. Already published transfers cannot be retried on
-only one endpoint: there is no one-sided first-order retry or nonconservative
-mass/energy floor.
-Thermal energy is recovered by subtracting kinetic energy from the conserved
-total energy. Hopkins's Appendix D dual-energy/entropy switch is not implemented,
-so extremely high-Mach, cold flows can lose thermal accuracy through cancellation
-or fail the positive-energy check. This backend does not reproduce the full
-high-Mach robustness machinery of GIZMO.
+A nonpositive mass at an own-step closure stops with a diagnostic. Already
+published transfers cannot be retried on only one endpoint: there is no
+one-sided first-order retry or nonconservative mass floor.
+
+Thermal energy is recovered by subtracting the kinetic energy from the conserved
+total energy, which loses accuracy through cancellation in cold, high-Mach gas.
+MFM therefore carries the dual-energy formalism of Bryan et al. (1995),
+Comput. Phys. Commun. 89, 149, with the entropic function
+\(K=P\rho^{-\gamma}\) of each cell, in the code's comoving variables, as the
+auxiliary variable. A fixed-mass cell exchanges no entropy, so \(K\) is constant
+between closures except for the cosmological expansion source, which scales it
+exactly as the closure scales the thermal energy, and the thermal sources, which
+add the same specific energy to both estimates. At each own-step closure the
+entropy estimate \(u_K=K\rho^{\gamma-1}/(\gamma-1)\), evaluated at the closing
+kernel-partition volume, replaces the total-energy estimate when the latter is
+nonpositive or below `hydro.dualEnergyPressureSwitch` (default `1e-3`) times the
+cell's total energy (Bryan et al. equation 10). The energy this adds is booked in
+the heating diagnostic like a thermal source, so the energy budget stays exact,
+and the per-step report counts such cells as `switched=`. After every closure and
+source of an instant, each closed cell's entropy follows its total-energy closure
+when the cell's thermal energy density reaches `hydro.dualEnergyUpdateSwitch`
+(default `0.1`) times the largest total energy density among the cell and its
+neighbours (equation 11); otherwise it keeps its own adiabatic value. Shocks thus
+heat the entropy while a cold cell beside hot gas keeps its cold state. Both
+switches are ordinary `hydro` options with INI and command-line overrides.
+Setting the pressure switch to zero restores the strict closure, which stops
+with a diagnostic requesting a lower `hydro.cfl` when the thermal energy becomes
+nonpositive. MFV exchanges mass and would have to advect the entropy with its
+mass fluxes, so it keeps the strict total-energy closure. The entropy is stored
+with the per-particle integration state, whose checkpoint layout version is 6.
+This backend still does not reproduce the full high-Mach robustness machinery of
+GIZMO.
 
 ## Implementation scope
 
@@ -426,7 +449,8 @@ therefore integrates the source over the shortened interval rather than the
 scheduled rung interval. The source consumes the cell's current density
 (mass over the kernel-partition volume) and the float stored thermal energy, as
 the SPH coupling does, and applies only the resulting change to the double
-anchor, so storage rounding does not accumulate. The heating diagnostic and the
+anchor, so storage rounding does not accumulate; the same specific-energy change
+enters the cell's dual-energy entropy. The heating diagnostic and the
 synchronized pressure integral of the cosmological energy budget follow the SPH
 conventions.
 
@@ -457,6 +481,32 @@ path/to/build/cosmictiger --configuration=configurations/sod.ini --hydro.method=
 ```
 
 ## Validation
+
+### Dual-energy entropy switch validation on 2026-11-02
+
+Branch `claude/hopkins_entropy_switch`, CPU Release tree (g++-15, Hopkins + SPH +
+cooling + star formation, Fixed64, FMM, traditional and global integrators).
+`hopkins_test` passes 69 unit tests, including six new ones: entropic-function
+inversion and adiabatic compression, the closure's expansion scaling against the
+entropy scaling, a warm cell left conservative, a cold supersonic cell whose swamped
+thermal energy is replaced from the entropy with the booked correction, a
+nonpositive thermal energy rescued at both switch settings, and the update-switch
+thresholds. The CTests `startup_options` (7.0 s), `hydro_methods` (23.9 s),
+`hopkins_flops_application` (3.9 s), `hopkins_application` (147.8 s),
+`hopkins_global_sources` (17.6 s), `hopkins_thermal_sources` (87.3 s),
+`hopkins_fmm_traditional_cpu` (12.4 s), `hopkins_fmm_global_cpu` (13.6 s) and
+`checkpoint_integrity` (94.4 s) passed serially; with the default switches no
+fixture took a pressure switch, so their conservation and exact-restart checks are
+unchanged. A 16^3 MFM Sod run over 40 steps took zero switches and conserved
+energy exactly. The same run with the diagnostic setting
+`--hydro.dualEnergyPressureSwitch=0.99`, which puts nearly every moving cell on
+the entropy estimate, took 640 to 1920 switches per step, kept every state
+positive, lost 0.55% of the total energy (the entropy formulation omits shock
+heating, as expected) and differed from the conservative run by a mean relative
+density of 2.6e-3 (maximum 2.6e-2) and a mean relative thermal energy of 2.0e-2
+(maximum 0.25, at the shock). Not validated: the 128^3 `lcdm.ini` cosmology with
+cooling and star formation that failed at z=6.86 was not rerun under the shared
+6-core limit.
 
 The numerical results dated 2026-10-21 and 2026-10-22 below are historical
 measurements copied with the saved implementation. They are not fresh validation

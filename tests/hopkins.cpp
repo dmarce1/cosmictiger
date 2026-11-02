@@ -1470,9 +1470,104 @@ TEST(Hopkins, OwnStepClosureRejectsInvalidPublishedTransfers) {
     EXPECT_THROW(
         hopkins::closeConservedInterval(anchor, {-2.0, {}, 0.0}, {}, {}, 1.0, 0.0, 0.0, 0.0),
         std::runtime_error);
+    double const infinity = std::numeric_limits<double>::infinity();
     EXPECT_THROW(
-        hopkins::closeConservedInterval(anchor, {0.0, {}, -2.0}, {}, {}, 1.0, 0.0, 0.0, 0.0),
+        hopkins::closeConservedInterval(anchor, {0.0, {}, -infinity}, {}, {}, 1.0, 0.0, 0.0, 0.0),
         std::runtime_error);
+    // A published transfer that exhausts the thermal energy closes; the caller's
+    // dual-energy switch owns that decision.
+    auto const exhausted =
+        hopkins::closeConservedInterval(anchor, {0.0, {}, -2.0}, {}, {}, 1.0, 0.0, 0.0, 0.0);
+    EXPECT_DOUBLE_EQ(hopkins::thermalEnergy(exhausted), -1.0);
+}
+
+TEST(Hopkins, EntropicFunctionInvertsAndFollowsAdiabaticCompression) {
+    double const gamma = 5.0 / 3.0;
+    double const thermal = 0.3;
+    double const density = 2.0;
+    double const entropy = hopkins::entropyFunction(thermal, density, gamma);
+    EXPECT_NEAR(hopkins::thermalEnergyFromEntropy(entropy, density, gamma), thermal, 1.0e-15);
+    EXPECT_NEAR(hopkins::entropyFunction(2.0 * thermal, density, gamma), 2.0 * entropy, 1.0e-15);
+    // Adiabatic compression by eight raises the thermal energy by 8^(gamma-1) = 4.
+    EXPECT_NEAR(
+        hopkins::thermalEnergyFromEntropy(entropy, 8.0 * density, gamma), 4.0 * thermal, 1.0e-14);
+    EXPECT_THROW(hopkins::entropyFunction(thermal, 0.0, gamma), std::invalid_argument);
+    EXPECT_THROW(hopkins::thermalEnergyFromEntropy(entropy, density, 1.0), std::invalid_argument);
+}
+
+TEST(Hopkins, ClosureExpansionScalesThermalEnergyLikeTheEntropy) {
+    // Without transfers or forces the two half-interval expansion sources multiply the
+    // thermal energy by exp(duration (old + new) / 2); the entropy carries the same factor.
+    double const gamma = 5.0 / 3.0;
+    hopkins::Conserved const anchor{1.0, {1.0, 0.0, 0.0}, 0.5 + 0.3};
+    double const duration = 0.4, oldExpansion = -0.2, newExpansion = -0.3;
+    auto const closed = hopkins::closeConservedInterval(
+        anchor, {}, {}, {}, duration, 0.0, oldExpansion, newExpansion);
+    double const factor = std::exp(0.5 * duration * (oldExpansion + newExpansion));
+    EXPECT_NEAR(hopkins::thermalEnergy(closed), 0.3 * factor, 1.0e-15);
+    double const entropy = hopkins::entropyFunction(0.3, 4.0, gamma) * factor;
+    EXPECT_NEAR(hopkins::thermalEnergyFromEntropy(entropy, 4.0, gamma),
+        hopkins::thermalEnergy(closed), 1.0e-15);
+}
+
+TEST(Hopkins, DualEnergyClosureKeepsAWarmCellConservative) {
+    double const gamma = 5.0 / 3.0;
+    hopkins::Conserved const state{2.0, {1.0, 0.0, 0.0}, 0.25 + 1.0};
+    auto const entropy = hopkins::entropyFunction(0.4, 2.0, gamma);
+    auto const closure = hopkins::dualEnergyClosure(state, entropy, 1.0, gamma, 1.0e-3);
+    EXPECT_FALSE(closure.switched);
+    EXPECT_EQ(closure.correction, 0.0);
+    EXPECT_DOUBLE_EQ(closure.state.energy, state.energy);
+    EXPECT_EQ(closure.state.momentum, state.momentum);
+    EXPECT_DOUBLE_EQ(closure.state.mass, state.mass);
+}
+
+TEST(Hopkins, DualEnergyClosureReplacesASwampedThermalEnergyFromTheEntropy) {
+    // Cold supersonic cell: kinetic energy 1e6 against thermal energy 1, a fraction
+    // of 1e-6 of the total, which is below the Bryan et al. pressure switch 1e-3.
+    double const gamma = 5.0 / 3.0;
+    hopkins::Conserved const state{2.0, {2000.0, 0.0, 0.0}, 1.0e6 + 1.0};
+    double const volume = 1.0;
+    auto const entropy = hopkins::entropyFunction(0.75, state.mass / volume, gamma);
+    auto const closure = hopkins::dualEnergyClosure(state, entropy, volume, gamma, 1.0e-3);
+    EXPECT_TRUE(closure.switched);
+    EXPECT_NEAR(closure.state.energy, 1.0e6 + 1.5, 1.0e-9);
+    EXPECT_NEAR(closure.correction, 0.5, 1.0e-9);
+    EXPECT_NEAR(hopkins::thermalEnergy(closure.state), 1.5, 1.0e-9);
+    EXPECT_EQ(closure.state.momentum, state.momentum);
+    EXPECT_DOUBLE_EQ(closure.state.mass, state.mass);
+    // A zero pressure switch keeps every positive total-energy estimate.
+    auto const strict = hopkins::dualEnergyClosure(state, entropy, volume, gamma, 0.0);
+    EXPECT_FALSE(strict.switched);
+    EXPECT_DOUBLE_EQ(strict.state.energy, state.energy);
+}
+
+TEST(Hopkins, DualEnergyClosureRescuesANonpositiveThermalEnergy) {
+    double const gamma = 5.0 / 3.0;
+    hopkins::Conserved const state{1.0, {2.0, 0.0, 0.0}, 1.5};
+    EXPECT_DOUBLE_EQ(hopkins::thermalEnergy(state), -0.5);
+    auto const entropy = hopkins::entropyFunction(0.3, 1.0, gamma);
+    for (double pressureSwitch : {0.0, 1.0e-3}) {
+        auto const closure = hopkins::dualEnergyClosure(state, entropy, 1.0, gamma, pressureSwitch);
+        EXPECT_TRUE(closure.switched);
+        EXPECT_NEAR(closure.state.energy, 2.3, 1.0e-15);
+        EXPECT_NEAR(closure.correction, 0.8, 1.0e-15);
+    }
+    EXPECT_THROW(hopkins::dualEnergyClosure(state, 0.0, 1.0, gamma, 1.0e-3), std::invalid_argument);
+    EXPECT_THROW(
+        hopkins::dualEnergyClosure(state, entropy, 1.0, gamma, 1.0), std::invalid_argument);
+    EXPECT_THROW(
+        hopkins::dualEnergyClosure(state, entropy, 0.0, gamma, 1.0e-3), std::invalid_argument);
+}
+
+TEST(Hopkins, EntropyUpdateSwitchFollowsTheNeighborhoodEnergyDensity) {
+    EXPECT_TRUE(hopkins::entropyUpdateDue(0.2, 1.0, 0.1));
+    EXPECT_TRUE(hopkins::entropyUpdateDue(0.1, 1.0, 0.1));
+    EXPECT_FALSE(hopkins::entropyUpdateDue(0.05, 1.0, 0.1));
+    EXPECT_TRUE(hopkins::entropyUpdateDue(1.0e-9, 1.0, 0.0));
+    EXPECT_FALSE(hopkins::entropyUpdateDue(-1.0, 1.0, 0.0));
+    EXPECT_FALSE(hopkins::entropyUpdateDue(0.0, 1.0, 0.0));
+    EXPECT_THROW(hopkins::entropyUpdateDue(1.0, 1.0, -1.0), std::invalid_argument);
 }
 
 TEST(Hopkins, CachedFluxCompleteIntervalIsMidpointUpdate) {

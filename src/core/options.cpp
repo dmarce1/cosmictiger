@@ -561,6 +561,8 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
             options.hydro.maxSupportRadius * options.initial.particlesPerDimension},
         {"hydro.neighborNumber", options.hydro.neighborNumber},
         {"hydro.cfl", options.hydro.cfl},
+        {"hydro.dualEnergyPressureSwitch", options.hydro.dualEnergyPressureSwitch},
+        {"hydro.dualEnergyUpdateSwitch", options.hydro.dualEnergyUpdateSwitch},
     };
 }
 
@@ -952,7 +954,16 @@ bool processOptions(int argc, char* argv[]) {
         po::value<double>(&opts.hydro.neighborNumber)->default_value(42),
         "kernel-weighted neighbor target within the support sphere, including self")("hydro.cfl",
         po::value<double>(&opts.hydro.cfl)->default_value(0.22821773229381923),
-        "Courant time-step factor using effective radius (2 sigma)");
+        "Courant time-step factor using effective radius (2 sigma)")(
+        "hydro.dualEnergyPressureSwitch",
+        po::value<double>(&opts.hydro.dualEnergyPressureSwitch)->default_value(1.0e-3),
+        "MFM dual-energy pressure switch: thermal fraction of the total energy below which the "
+        "entropy estimate replaces the total-energy closure; 0 keeps the strict closure")(
+        "hydro.dualEnergyUpdateSwitch",
+        po::value<double>(&opts.hydro.dualEnergyUpdateSwitch)->default_value(0.1),
+        "MFM dual-energy update switch: the entropy follows the total-energy closure when the "
+        "thermal energy density reaches this fraction of the largest neighboring total energy "
+        "density");
 
     po::options_description chemistryOpts("GADGET-4 equilibrium cooling");
     chemistryOpts.add_options()("chemistry.cuda",
@@ -1479,6 +1490,14 @@ bool processOptions(int argc, char* argv[]) {
     }
     if (!detail::isFiniteOption(opts.hydro.cfl) || opts.hydro.cfl <= 0.0 || opts.hydro.cfl > 1.0) {
         THROW_ERROR("hydro.cfl must be finite and in (0, 1]\n");
+    }
+    if (!detail::isFiniteOption(opts.hydro.dualEnergyPressureSwitch) ||
+        opts.hydro.dualEnergyPressureSwitch < 0.0 || opts.hydro.dualEnergyPressureSwitch >= 1.0) {
+        THROW_ERROR("hydro.dualEnergyPressureSwitch must be finite and in [0, 1)\n");
+    }
+    if (!detail::isFiniteOption(opts.hydro.dualEnergyUpdateSwitch) ||
+        opts.hydro.dualEnergyUpdateSwitch < 0.0) {
+        THROW_ERROR("hydro.dualEnergyUpdateSwitch must be finite and nonnegative\n");
     }
     if (!detail::isFiniteOption(opts.hydro.neighborNumber) ||
         opts.hydro.neighborNumber <= selfNeighborFloor) {
