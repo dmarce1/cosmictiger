@@ -217,10 +217,22 @@ worker threads; `--run.test=pm`, `--run.test=p3m` and
   cloud, eta, split, cutoff, short solver and far solver. The mixed SPH case
   (cosmology scenario) checks finite gas state and restart.
 
-Limits: no CUDA execution of the new PP-PM kernel or full CUDA application run
-was performed in this stage; the FMM-PM walk is CPU only; the `global` inner
-integrator and Hopkins MFM/MFV are rejected; the multi-locality unit tests are
-registered (`pm_mpi_2`, `p3m_mpi_2`, `pm_evolution_mpi`) and their results are
-listed in the handoff note. Energy conservation over long evolutions and the
-time-convergence of the outer interval have not been measured beyond the
-restart-equivalence and clock checks above.
+- CUDA (`build/p3m_cuda`, PM and PP-PM only, sm_86): the `p3m` regression with
+  `gravity.cuda=true` ran its clustered pair batch on the device (diagnostic
+  `cudaBatches` 1 of 1) and reproduced the CPU forces digit for digit in the
+  printed errors; a bounded unit-test run, not a full CUDA application run.
+- Two localities (`pm_mpi_2`, `p3m_mpi_2`, `pm_evolution_mpi`): the PM oracle,
+  the P3M references and the pure-PM evolution/restart checks pass with the
+  MPI parcelport; the search-mesh cells of each locality fetch their remote
+  neighbor cells once per solve.
+- The options regression (`tests/run_options.py --gravity-method p3m`) covers the
+  new keys, the derived P3M geometry, the cloud/mesh/cutoff/support rejections,
+  the rejected `global` integrator and the complete INI presets.
+
+Limits: the FMM-PM walk is CPU only and has no CUDA counterpart; the `global`
+inner integrator and Hopkins MFM/MFV are rejected for pm/p3m; no full CUDA
+application run, production cosmology or more than two localities were tried.
+Energy conservation over long evolutions and the time convergence of the outer
+interval have not been measured beyond the restart-equivalence and clock checks
+above; the standalone gtest binaries of the foundation stage were not rebuilt in
+this tree.

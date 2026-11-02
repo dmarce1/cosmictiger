@@ -13,7 +13,7 @@
 
 namespace cosmictiger::gravity::p3m::pp {
 
-void shortFieldBatch(std::vector<ShortParticle> const& sinks,
+bool shortFieldBatch(std::vector<ShortParticle> const& sinks,
     std::vector<ShortParticle> const& sources, std::vector<ShortSourceRange> const& sourceRanges,
     ShortPairParameters const& parameters, bool doPotential,
     std::vector<std::array<double, 4>>& fields) {
@@ -32,12 +32,12 @@ void shortFieldBatch(std::vector<ShortParticle> const& sinks,
     }
     fields.assign(sinks.size(), {});
     if (candidatePairs == 0) {
-        return;
+        return false;
     }
 #ifdef USE_CUDA
     if (getOptions().gravity.cuda && shouldUseShortCuda(usefulSinkCount, candidatePairs)) {
         shortFieldCuda(sinks, sources, sourceRanges, parameters, doPotential, fields);
-        return;
+        return true;
     }
 #endif
     auto const& kernel = selectedGravityKernel();
@@ -50,6 +50,7 @@ void shortFieldBatch(std::vector<ShortParticle> const& sinks,
         }
     }
     addCpuFlops(flops, FlopPrecision::Double);
+    return false;
 }
 
 }    // namespace cosmictiger::gravity::p3m::pp
@@ -97,7 +98,7 @@ void evaluatePairs() {
                 return;
             }
             std::vector<std::array<double, 4>> fields;
-            pp::shortFieldBatch(
+            bool const device = pp::shortFieldBatch(
                 sinks, batchSources, sourceRanges, pairParameters, doPotential, fields);
             KickReturn result;
             for (size_t sink = 0; sink < sinks.size(); ++sink) {
@@ -115,6 +116,7 @@ void evaluatePairs() {
                 state.diagnostics.evaluatedParticles += sinks.size();
                 state.diagnostics.directPairs += pairs;
                 ++state.diagnostics.batches;
+                state.diagnostics.cudaBatches += device ? 1 : 0;
             }
             pairs = 0;
             sinks.clear();

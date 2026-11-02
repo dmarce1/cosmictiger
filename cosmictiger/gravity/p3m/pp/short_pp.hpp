@@ -12,7 +12,8 @@ namespace cosmictiger::gravity::p3m::pp {
 // Each sink uses its own half-open source range. Positions are box units with
 // the periodic image already selected. Fields are overwritten as
 // {potential, ax, ay, az} without G. Identical primary particles are excluded.
-void shortFieldBatch(std::vector<ShortParticle> const& sinks,
+// Returns true when the batch ran on the CUDA device.
+bool shortFieldBatch(std::vector<ShortParticle> const& sinks,
     std::vector<ShortParticle> const& sources, std::vector<ShortSourceRange> const& sourceRanges,
     ShortPairParameters const& parameters, bool doPotential,
     std::vector<std::array<double, 4>>& fields);

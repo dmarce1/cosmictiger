@@ -369,6 +369,7 @@ static void solve(SolveRequest request) {
         globalDiagnostics.cutoffRejections += value.cutoffRejections;
         globalDiagnostics.sourceTreeNodes += value.sourceTreeNodes;
         globalDiagnostics.batches += value.batches;
+        globalDiagnostics.cudaBatches += value.cudaBatches;
         globalDiagnostics.storedAccelerationParticles += value.storedAccelerationParticles;
         globalDiagnostics.solveCount = std::max(globalDiagnostics.solveCount, value.solveCount);
     }

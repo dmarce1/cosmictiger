@@ -22,6 +22,8 @@ struct P3mDiagnostics {
     uint64_t cutoffRejections = 0;
     uint64_t sourceTreeNodes = 0;
     uint64_t batches = 0;
+    // PP-PM pair batches that ran on the CUDA device.
+    uint64_t cudaBatches = 0;
     uint64_t storedAccelerationParticles = 0;
     uint64_t solveCount = 0;
 
@@ -29,7 +31,7 @@ struct P3mDiagnostics {
     void serialize(Archive& archive, unsigned) {
         archive & meshSize & activeParticles & totalParticles & evaluatedParticles & ghostCells &
             ghostParticles & directPairs & acceptedMultipoles & cutoffRejections & sourceTreeNodes &
-            batches & storedAccelerationParticles & solveCount;
+            batches & cudaBatches & storedAccelerationParticles & solveCount;
     }
 };
 

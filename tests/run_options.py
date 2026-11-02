@@ -704,38 +704,6 @@ mapSize = 8
                 assertNumericSetting(pmmm_output, key, expected)
             assertNumericSetting(pmmm_output, "gravity.openingAngle", math.sqrt(3) / (near_width + 1))
         assertNumericSetting(balsara_default, "gravity.pmmmNearWidth", 2)
-    if args.gravity_method in ("pm", "p3m"):
-        for cloud, points in (("ngp", 1), ("cic", 2), ("tsc", 3), ("pcs", 4)):
-            mesh_output = run(f"{args.gravity_method}_cloud_{cloud}", metadata_options + [
-                "--gravity.meshSize=32", f"--gravity.cloud={cloud}"])
-            assertCompiledSettings(mesh_output)
-            if not re.search(r"^gravity\.cloud\s*:\s*" + cloud + r"\s*$", mesh_output, re.MULTILINE):
-                raise RuntimeError(f"resolved options did not report gravity.cloud={cloud}")
-            assertNumericSetting(mesh_output, "gravity.meshSize", 32)
-            if args.gravity_method == "p3m":
-                # r_s = 1.25/32, cutoff 4.5 r_s = 0.1758; the search mesh with width
-                # two is 8 (2/8 >= 0.1758) and its coarse mesh resolves to the near minimum.
-                assertNumericSetting(mesh_output, "gravity.p3mSplitRadius", 1.25 / 32)
-                assertNumericSetting(mesh_output, "gravity.p3mCutoffRadius", 4.5 * 1.25 / 32)
-                assertNumericSetting(mesh_output, "gravity.p3mMeshSize", 8)
-                assertNumericSetting(mesh_output, "gravity.pmmmCoarseMeshSize", 8)
-            else:
-                assertNumericSetting(mesh_output, "gravity.p3mMeshSize", 0)
-        run(f"{args.gravity_method}_invalid_cloud", metadata_options + [
-            "--gravity.meshSize=32", "--gravity.cloud=sph"], success=False)
-        run(f"{args.gravity_method}_mesh_too_small", metadata_options + [
-            "--gravity.meshSize=3", "--gravity.cloud=pcs"], success=False, pmmm_mesh=None)
-        run(f"{args.gravity_method}_global_rejected", metadata_options + [
-            "--gravity.meshSize=32", "--run.timeIntegrator=global"], success=False)
-        # Non-power-of-two meshes are valid for the scalar PM solve.
-        odd_output = run(f"{args.gravity_method}_odd_mesh", metadata_options + ["--gravity.meshSize=36"])
-        assertNumericSetting(odd_output, "gravity.meshSize", 36)
-        if args.gravity_method == "p3m":
-            for index, invalid in enumerate((["--gravity.meshSize=32", "--gravity.p3mSplitCells=0"],
-                                             ["--gravity.meshSize=32", "--gravity.p3mCutoff=-1"],
-                                             ["--gravity.meshSize=16", "--gravity.p3mCutoff=4.5"],
-                                             ["--gravity.meshSize=32", "--gravity.supportRadius=8"])):
-                run(f"p3m_invalid_{index}", metadata_options + invalid, success=False, pmmm_mesh=None)
         assertNumericSetting(balsara_default, "gravity.pmmmBatchParticles", 4096)
         assertNumericSetting(balsara_default, "gravity.pmmmCoarseMeshSize", 8)
         assertNumericSetting(balsara_default, "gravity.openingAngle", math.sqrt(3) / 3)
@@ -809,6 +777,38 @@ mapSize = 8
                 f"--run.scenario={scenario}", "--gravity.openingAngle=0.99"])
             assertCompiledSettings(pmmm_output)
             assertNumericSetting(pmmm_output, "gravity.openingAngle", math.sqrt(3) / 3)
+    if args.gravity_method in ("pm", "p3m"):
+        for cloud, points in (("ngp", 1), ("cic", 2), ("tsc", 3), ("pcs", 4)):
+            mesh_output = run(f"{args.gravity_method}_cloud_{cloud}", metadata_options + [
+                "--gravity.meshSize=32", f"--gravity.cloud={cloud}"])
+            assertCompiledSettings(mesh_output)
+            if not re.search(r"^gravity\.cloud\s*:\s*" + cloud + r"\s*$", mesh_output, re.MULTILINE):
+                raise RuntimeError(f"resolved options did not report gravity.cloud={cloud}")
+            assertNumericSetting(mesh_output, "gravity.meshSize", 32)
+            if args.gravity_method == "p3m":
+                # r_s = 1.25/32, cutoff 4.5 r_s = 0.1758; the search mesh with width
+                # two is 8 (2/8 >= 0.1758) and its coarse mesh resolves to the near minimum.
+                assertNumericSetting(mesh_output, "gravity.p3mSplitRadius", 1.25 / 32)
+                assertNumericSetting(mesh_output, "gravity.p3mCutoffRadius", 4.5 * 1.25 / 32)
+                assertNumericSetting(mesh_output, "gravity.p3mMeshSize", 8)
+                assertNumericSetting(mesh_output, "gravity.pmmmCoarseMeshSize", 8)
+            else:
+                assertNumericSetting(mesh_output, "gravity.p3mMeshSize", 0)
+        run(f"{args.gravity_method}_invalid_cloud", metadata_options + [
+            "--gravity.meshSize=32", "--gravity.cloud=sph"], success=False)
+        run(f"{args.gravity_method}_mesh_too_small", metadata_options + [
+            "--gravity.meshSize=3", "--gravity.cloud=pcs"], success=False, pmmm_mesh=None)
+        run(f"{args.gravity_method}_global_rejected", metadata_options + [
+            "--gravity.meshSize=32", "--run.timeIntegrator=global"], success=False)
+        # Non-power-of-two meshes are valid for the scalar PM solve.
+        odd_output = run(f"{args.gravity_method}_odd_mesh", metadata_options + ["--gravity.meshSize=36"])
+        assertNumericSetting(odd_output, "gravity.meshSize", 36)
+        if args.gravity_method == "p3m":
+            for index, invalid in enumerate((["--gravity.meshSize=32", "--gravity.p3mSplitCells=0"],
+                                             ["--gravity.meshSize=32", "--gravity.p3mCutoff=-1"],
+                                             ["--gravity.meshSize=16", "--gravity.p3mCutoff=4.5"],
+                                             ["--gravity.meshSize=32", "--gravity.supportRadius=8"])):
+                run(f"p3m_invalid_{index}", metadata_options + invalid, success=False, pmmm_mesh=None)
     for selected_field in ("saveAcceleration", "savePotential"):
         output = run(f"diagnostic_{selected_field}", metadata_options + [
             f"--analysis.{selected_field}=true"])
@@ -1437,7 +1437,7 @@ mapSize = 8
         if args.gravity_method in ("pmmm", "pm", "p3m"):
             # The metadata fixture selects the compiled solver independently of
             # a local preset's FMM-specific opening schedule.
-            runtime_overrides.append("--gravity.openingSchedule=")
+            runtime_overrides.append("--gravity.openingSchedule=none")
         preset_options = [f"--configuration={path}", "--chemistry.enabled=false",
                           "--starFormation.enabled=false"] + runtime_overrides
         if args.time_integrator == "hierarchical":

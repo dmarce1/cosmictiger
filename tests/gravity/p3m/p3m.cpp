@@ -14,7 +14,9 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/gravity/direct_reference.hpp>
 #include <cosmictiger/gravity/kernels/gaussian_screening.hpp>
+#if COSMICTIGER_ENABLE_P3M_FMM
 #include <cosmictiger/gravity/p3m/fmm/short_fmm.hpp>
+#endif
 #include <cosmictiger/gravity/p3m/short_pair.hpp>
 #include <cosmictiger/gravity/p3m/solver.hpp>
 #include <cosmictiger/gravity/pm/geometry.hpp>
@@ -109,6 +111,7 @@ void checkSplitClosure() {
     requireP3m(beyond[0] == 0.0 && beyond[1] == 0.0, "pair beyond the cutoff contributed");
 }
 
+#if COSMICTIGER_ENABLE_P3M_FMM
 // The screened tree walk against direct pair sums: a dense source ball seen
 // from sinks at several distances inside the cutoff forces multipole acceptance.
 void checkScreenedWalk() {
@@ -202,6 +205,8 @@ void checkScreenedWalk() {
         }
     }
 }
+
+#endif
 
 struct P3mSample {
     Vector3<double> position{};
@@ -399,7 +404,9 @@ double compareWithReference(
 
 void p3mTest() {
     detail::checkSplitClosure();
+#if COSMICTIGER_ENABLE_P3M_FMM
     detail::checkScreenedWalk();
+#endif
     auto options = getOptions();
     options.gravity.method = "p3m";
     options.gravity.gm = 0.125;
@@ -459,10 +466,17 @@ void p3mTest() {
         detail::requireP3m(
             denseError < 2.0e-2, "clustered P3M total force differs from the periodic reference");
         auto const denseDiagnostics = p3mDiagnostics();
-        PRINT("%s clustered: %llu direct pairs, %llu accepted multipoles, %llu cutoff rejections\n",
+        PRINT("%s clustered: %llu direct pairs, %llu accepted multipoles, %llu cutoff rejections, "
+              "%llu of %llu batches on CUDA\n",
             label, static_cast<unsigned long long>(denseDiagnostics.directPairs),
             static_cast<unsigned long long>(denseDiagnostics.acceptedMultipoles),
-            static_cast<unsigned long long>(denseDiagnostics.cutoffRejections));
+            static_cast<unsigned long long>(denseDiagnostics.cutoffRejections),
+            static_cast<unsigned long long>(denseDiagnostics.cudaBatches),
+            static_cast<unsigned long long>(denseDiagnostics.batches));
+        if (near == "pp" && getOptions().gravity.cuda) {
+            detail::requireP3m(denseDiagnostics.cudaBatches > 0,
+                "CUDA was requested but no PP-PM batch ran on the device");
+        }
         if (near == "fmm") {
             detail::requireP3m(denseDiagnostics.acceptedMultipoles > 0,
                 "the screened tree walk accepted no multipole interaction");
