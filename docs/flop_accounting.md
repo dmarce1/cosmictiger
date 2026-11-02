@@ -21,19 +21,45 @@ source counts.
 ## Arithmetic precision
 
 CPU worker shards, CUDA warp submissions, and HPX locality reductions retain
-separate unsigned 64-bit totals for FP32, FP64, and legacy mixed/unclassified
-arithmetic. One rate snapshot uses the same elapsed interval for all three, and
-the original total is their sum. The terminal displays all three rates plus the
-total. Existing cosmological progress fields keep their positions; precision
-rates are appended as `Tflops32`, `Tflops64`, and `TflopsMixed`.
+separate unsigned 64-bit totals for FP32 and FP64 arithmetic. A rate snapshot uses
+the same elapsed interval for both. The legacy unclassified field and `Mixed`
+column remain for serialization and output compatibility, and are zero for the
+audited production paths. Existing cosmological progress fields keep their
+positions; precision rates are appended as `Tflops32`, `Tflops64`, and
+`TflopsMixed`. The reported total includes every bucket.
 
 Hopkins submits double-precision operations. Cosmological background evolution,
 PMMM double-precision operators/direct pairs/mesh geometry and accumulation, and
 the double portions of its spectral work are tagged FP64. Single-precision FFTW
-execution counts are tagged FP32. Existing aggregate SPH/tree/walk counts combine
-float kernels with double coordinate and kernel-table arithmetic; they remain
-in `Mixed` until those individual contributions are split. Their counts are
-preserved, rather than being incorrectly labelled entirely FP32.
+execution counts are tagged FP32. SPH and FMM submissions split their arithmetic
+by the actual expression precision, including FP64 coordinate work and
+floating-point conversions alongside FP32 particle kernels.
+
+A scalar submission to `addCpuFlops` or `addGpuFlops` must specify
+`FlopPrecision::Single` or `FlopPrecision::Double`; omitting that argument is a
+compile error. A `FlopCounts` batch submits its separate fields. Explicit
+`Unclassified` submissions and the batch's legacy field remain available for
+counter diagnostics, but production instrumentation does not use them. CUDA
+reduces each precision separately even when active lanes submit different
+precisions.
+
+FMM Cartesian and Ewald operators instantiated with `float` or `SimdFloat` count
+as FP32. Internal-tree M2M instantiated with `SimdDouble` counts as FP64; leaf P2M
+uses FP32 with FP64 accumulation and storage conversions. Tree bounds and centers
+use FP64, while float radius rescans and float acceptance norms use FP32.
+Traditional float timestep and velocity updates use FP32. Global half-kicks use
+double timesteps and `std::fma`, so their arithmetic and float/double conversions
+use FP64. Generated operator arithmetic totals retain their established
+convention; call-site conversions are counted separately.
+
+SPH density, support-radius, viscosity and force equations, SIMD/CUDA reductions,
+and particle support multipliers use FP32. Tree boxes and periodic fixed-bound
+geometry use FP64. Runtime radial-table widths are subtracted in FP64, and the
+double bounds and coefficients narrow once per scalar broadcast, rather than once
+per SIMD lane. Host particle half-kicks use double timesteps and count their
+float promotions and narrowing stores as FP64. CPU timestep minima promote the
+selected float timestep to double; CUDA retains a float reduction. Fixed64 host
+midpoint construction also counts the arithmetic used to separate its limbs.
 
 ## Hopkins MFM/MFV
 
@@ -50,8 +76,8 @@ The physics formulas and operation order are unchanged. Diagnostic sound-wave
 reconstruction disables counting, and validation used only to throw or assert remains
 excluded. Arithmetic and precision conversions that select a retry or fallback count
 because they control the numerical algorithm. Floating precision conversions in the production bridge count as FP64,
-including narrowing writes to legacy float particle fields. The shared SPH tree
-retains its existing mixed count, separately from Hopkins' FP64 arithmetic.
+including narrowing writes to legacy float particle fields. Shared SPH tree work
+is submitted to its FP32 and FP64 buckets separately from the Hopkins bridge.
 
 ## SPH audit
 
@@ -63,6 +89,8 @@ Rayleigh–Taylor baseline consequently reported zero TFLOP/s.
 Each production function now counts the branches and iterations it executes.
 `W` below denotes CPU SIMD width; `B(n)=3n(n+1)/2` is a Bernstein polynomial's
 arithmetic count. Kernel degree and span count come from the selected table.
+Kernel arithmetic terms below are supplemented by the runtime table and
+floating-precision conversions described above.
 
 | Function | Counted work |
 | --- | --- |
@@ -76,10 +104,10 @@ arithmetic count. Kernel degree and span count come from the selected table.
 | `sphCudaHydro` | Sink setup per executing thread, including 5 for its directed pressure coefficient; 8 per candidate, another 2 for nonzero separation; 79 per accepted pair plus both derivative kernels and enabled viscosity switches; actual block sums; external accelerations, damping, thermal work and timestep/rung selection. |
 | Hydro timestep selection | 25 per active phase-1 sink plus 13 when self-gravity constrains the rung; another 3 when the thermal limiter executes. Signal-speed reporting and gravity-only diagnostic calculations with self-gravity disabled are excluded. |
 | `sphCpuRungs`, `sphCudaRungs` | Support squares, actual distance/dot products and neighbor geometry; integer rung propagation costs zero. |
-| `sphParticlesApplyUpdates` | Two per visited particle for its half-step; active predictor/opening kick adds 8, corrector adds 13. |
+| `sphParticlesApplyUpdates` | Half-step construction costs one FP64 operation for an explicit step, two for a rung step. An active predictor/opening kick adds 20 FP64 operations including conversions; the corrector adds 25 FP64 operations and three FP32 acceleration differences. |
 | `sphTreeCreate` | Local splitting, fixed-coordinate bounds, support multipliers and active support boxes. Each node submits only its own work. |
 | `sphTreeNeighbor` | Actual search intersections and refreshed support boxes. Self-box validation checks are excluded. |
-| `SphRunWorkspace::run` | Gravity effective-radius division; staging/copies and dispatch have no arithmetic count. |
+| `SphRunWorkspace::run` | Gravity effective-radius division and its narrowing store are FP64; staging/copies and dispatch have no arithmetic count. |
 
 The reusable Monaghan viscosity helper costs are 9 (`viscosityMu`) and 10
 (`artificialViscosity`). The variational pressure helpers cost 3
@@ -182,7 +210,11 @@ the production block-reduction operators for 64, 96, 160 and 256 threads.
 `fmmWalk` verifies that production CPU interaction functions and CPU/CUDA walks
 submit counts. The counter regressions separately cover concurrency, integer
 precision above the exact-double range, partial/divergent warps and multiple
-localities.
+localities. They also require explicit precision for scalar submissions, exercise
+classified batches, and check that ordinary FP32/FP64 submissions leave the
+unclassified bucket empty. Separate explicit-unclassified fixtures preserve the
+diagnostic compatibility path. The Hopkins application regression requires a
+zero `Mixed` rate in its progress rows.
 
 The earlier working-tree Release build passed 41 focused CTest cases, including CPU and CUDA
 production gravity walks, a three-locality gravity walk and two-locality counter

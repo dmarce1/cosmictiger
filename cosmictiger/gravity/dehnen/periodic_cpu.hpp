@@ -13,6 +13,8 @@ void cpuGravityEwald(cosmictiger::gravity::cartesian::Expansion<float, order>& l
     Vector<TreeId> const& list, TreeId self, bool doPhi, FmmGeometry const& geometry) {
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
     FlopCounter<FlopCount> flops = 0;
+    FlopCounter<FlopCount> doubleFlops = 0;
+    FlopCounts geometryFlops{};
     if (list.size()) {
         Vector<TreeNode const*> treePtrs(list.size());
         TreeNode const* selfPtr = treeGetNode(self);
@@ -34,7 +36,8 @@ void cpuGravityEwald(cosmictiger::gravity::cartesian::Expansion<float, order>& l
         for (int j = 0; j < numberOfSources; j++) {
             Array<SimdFloat, kDimensions> dx{};
             for (int dim = 0; dim < kDimensions; dim++) {
-                dx[dim] = fmmPositionDifference(x[dim], yValue[j][dim], dim, geometry);
+                dx[dim] =
+                    fmmPositionDifference(x[dim], yValue[j][dim], dim, geometry, &geometryFlops);
             }
             Array<SimdFloat, kDimensions> unwrappedPosition{};
             for (int lane = 0; lane < kSimdFloatSize; lane++) {
@@ -52,18 +55,21 @@ void cpuGravityEwald(cosmictiger::gravity::cartesian::Expansion<float, order>& l
             flops += FlopCount(kSimdFloatSize) *
                 cosmictiger::gravity::cartesian::M2L(l0, mValue[j], d, doPhi);
         }
-        // Fixed displacement and kernel work is batched outside the source loop.
-        flops += FlopCount(numberOfSources) * kSimdFloatSize * (3 + 9);
+        // Canonical-coordinate conversions are batched outside the source loop.
+        doubleFlops += FlopCount(numberOfSources) * kSimdFloatSize * 12;
+        // Two fixed-to-double scales, subtraction, and narrowing in each dimension.
         for (int i = 0; i < kLocalCoefficients; i++) {
             lValue[i] += simdSum(l0[i]);
         }
         flops += kSimdFloatSize * kLocalCoefficients;
     }
-    addCpuFlops(flops);
+    addCpuFlops(flops, FlopPrecision::Single);
+    addCpuFlops(doubleFlops, FlopPrecision::Double);
+    addCpuFlops(geometryFlops);
 }
 
 template <int order>
-FlopCount dehnenBackgroundImpl(KickParameters const& params, ExpansionBuffer& l,
+FlopCounts dehnenBackgroundImpl(KickParameters const& params, ExpansionBuffer& l,
     Array<Position, kDimensions>& pos, TreeId self, Vector<TreeId> const& echecklist) {
     using Expansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
@@ -71,6 +77,7 @@ FlopCount dehnenBackgroundImpl(KickParameters const& params, ExpansionBuffer& l,
     auto& expansion = l.template expansion<order>();
     auto const* selfPtr = treeGetNode(self);
     FlopCounter<FlopCount> flops = 0;
+    FlopCounter<FlopCount> doubleFlops = 0;
     if (!params.forceOnly && self.proc == 0 && self.index == 0 && echecklist.size() == 1 &&
         echecklist[0] == self) {
         // The Ewald operators contain only the harmonic part. Add the uniform
@@ -98,13 +105,17 @@ FlopCount dehnenBackgroundImpl(KickParameters const& params, ExpansionBuffer& l,
         for (int i = 0; i < kLocalCoefficients; i++) {
             expansion[i] += background[i];
         }
-        flops += cosmictiger::gravity::cartesian::detail::L2L<kLocalDegree, true>::kFlops_ + 26 + kLocalCoefficients;
+        flops += cosmictiger::gravity::cartesian::detail::L2L<kLocalDegree, true>::kFlops_ + 3 +
+            kLocalCoefficients;
+        // Displacement scaling/narrowing, followed by the double background
+        // polynomial and its five multipole widenings and six output narrowings.
+        doubleFlops += 6 + 27;
     }
-    return flops;
+    return {flops, doubleFlops, 0};
 }
 
 template <int order>
-FlopCount dehnenPeriodicImpl(KickParameters const& params, ExpansionBuffer& l, TreeId self,
+FlopCounts dehnenPeriodicImpl(KickParameters const& params, ExpansionBuffer& l, TreeId self,
     Vector<TreeId>& echecklist, KickInteractionCounts& counts) {
     auto& expansion = l.template expansion<order>();
     auto const* selfPtr = treeGetNode(self);
@@ -193,6 +204,6 @@ FlopCount dehnenPeriodicImpl(KickParameters const& params, ExpansionBuffer& l, T
         }
     }
     detail::kickReleaseLists(std::move(workspace));
-    return flops;
+    return {flops, 0, 0};
 }
 #endif

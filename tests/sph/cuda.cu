@@ -29,7 +29,6 @@
 // Only the options-constructor, CPU counter, and host assertion services are replaced here.
 // Density, smoothing, forces, heating, device assertions, and allocation use the
 // production translation units. The test does not start an HPX runtime.
-void addCpuFlops(FlopCount) {}
 void addCpuFlops(FlopCount, FlopPrecision) {}
 
 Options const& getOptions() {
@@ -104,6 +103,8 @@ class Fixture {
         require(reduction_->floatingPointOperations > 0, "SPH kernel did not count floating work");
         require(getGpuFlops() == reduction_->floatingPointOperations,
             "SPH launch count did not reach the global GPU counter exactly once");
+        require(getGpuFlopCounts().unclassified == 0,
+            "SPH launch retained unclassified floating-point work");
     }
 
     void resetReduction() {
@@ -283,7 +284,6 @@ public:
         data_.sourcePressureEnergyRatio = allocate<float>(count_);
         data_.sourceAdiabaticIndex = allocate<float>(count_);
     }
-
 
     void density() {
         resetReduction();

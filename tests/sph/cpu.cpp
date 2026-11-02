@@ -26,15 +26,17 @@
 #include <tests/sph/global_timestep_cases.hpp>
 
 namespace detail {
-FlopCount submittedSphFlops = 0;
+FlopCounts submittedSphFlops;
 }
 
-void addCpuFlops(FlopCount count) {
-    detail::submittedSphFlops += count;
-}
-
-void addCpuFlops(FlopCount count, FlopPrecision) {
-    addCpuFlops(count);
+void addCpuFlops(FlopCount count, FlopPrecision precision) {
+    if (precision == FlopPrecision::Single) {
+        detail::submittedSphFlops.singlePrecision += count;
+    } else if (precision == FlopPrecision::Double) {
+        detail::submittedSphFlops.doublePrecision += count;
+    } else {
+        detail::submittedSphFlops.unclassified += count;
+    }
 }
 
 // The fixture owns ordinary host arrays and calls the production SIMD kernels.
@@ -2525,10 +2527,12 @@ TEST_F(SphCpuTest, EveryPhaseSubmitsItsArithmeticCount) {
         fixture.data_.sourceDensity[source] = 1.0f;
     }
     for (int runType : {kSphRunPrehydro1, kSphRunPrehydro2, kSphRunHydro, kSphRunRungs}) {
-        detail::submittedSphFlops = 0;
+        detail::submittedSphFlops = {};
         auto const result = fixture.run(runType);
-        EXPECT_GT(detail::submittedSphFlops, 0) << "phase " << runType;
-        EXPECT_EQ(result.floatingPointOperations, double(detail::submittedSphFlops))
+        EXPECT_GT(detail::submittedSphFlops.singlePrecision, 0) << "phase " << runType;
+        EXPECT_GT(detail::submittedSphFlops.doublePrecision, 0) << "phase " << runType;
+        EXPECT_EQ(detail::submittedSphFlops.unclassified, 0) << "phase " << runType;
+        EXPECT_EQ(result.floatingPointOperations, double(detail::submittedSphFlops.total()))
             << "phase " << runType;
         fixture.publishSupport();
         fixture.publishDensity();
@@ -2543,16 +2547,26 @@ TEST_F(SphCpuTest, DensityAndRungsCountPaddedPackets) {
     // Every neighbor passes all three dimensions of the first periodic image:
     // six fixed-point image conversions per source. Two SIMD packets execute
     // per sink, including the unused lanes of the final packet.
+    detail::submittedSphFlops = {};
     auto const rungs = fixture.run(kSphRunRungs);
     EXPECT_EQ(rungs.floatingPointOperations, double(fixture.count_) * (7 + 18 * width));
+    EXPECT_EQ(detail::submittedSphFlops.singlePrecision, fixture.count_ * (1 + 18 * width));
+    EXPECT_EQ(detail::submittedSphFlops.doublePrecision, 6 * fixture.count_);
+    EXPECT_EQ(detail::submittedSphFlops.unclassified, 0);
     // Cubic density evaluates both Bernstein spans in every lane: each span
     // has six interpolation steps (18 operations), four weights, one scalar
     // width subtraction. Include distance/normalization, density accumulation,
     // four scalar setup operations and a width-1 additive reduction per sink.
     // Grad-H adds both quadratic derivative spans, three sums per lane, two
     // reductions, and eight scalar operations for its residual and correction.
+    // Each two-span density/derivative pair adds 40 table narrowing conversions
+    // per packet (44 double operations including its four width subtractions).
+    detail::submittedSphFlops = {};
     auto const density = fixture.run(kSphRunPrehydro2);
-    EXPECT_EQ(density.floatingPointOperations, double(fixture.count_) * (23 + 173 * width));
+    EXPECT_EQ(density.floatingPointOperations, double(fixture.count_) * (103 + 173 * width));
+    EXPECT_EQ(detail::submittedSphFlops.singlePrecision, fixture.count_ * (9 + 173 * width));
+    EXPECT_EQ(detail::submittedSphFlops.doublePrecision, 94 * fixture.count_);
+    EXPECT_EQ(detail::submittedSphFlops.unclassified, 0);
 }
 
 TEST_F(SphCpuTest, DisabledGravityTimestepDiagnosticsAreExcluded) {
@@ -2567,9 +2581,10 @@ TEST_F(SphCpuTest, DisabledGravityTimestepDiagnosticsAreExcluded) {
 #if COSMICTIGER_WITH_GRAVITY
     // The same gravity limit and rung expressions execute in both cases, but
     // constrain the evolution only when self-gravity is enabled. Otherwise
-    // their 13 operations produce diagnostics and must not enter the count.
+    // their 13 arithmetic operations produce diagnostics and must not enter
+    // the count. The enabled minimum also promotes its float timestep to double.
     EXPECT_EQ(withGravity.floatingPointOperations - withoutGravity.floatingPointOperations,
-        13.0 * fixture.count_);
+        14.0 * fixture.count_);
 #else
     EXPECT_EQ(withGravity.floatingPointOperations, withoutGravity.floatingPointOperations);
     EXPECT_EQ(withGravity.maximumGravityRung, 0);

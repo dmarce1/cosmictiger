@@ -92,24 +92,25 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(cosmictiger_stacktrace PUBLIC
         "$<$<COMPILE_LANGUAGE:CXX>:-fno-omit-frame-pointer>")
 endif()
-find_package(GSL REQUIRED)
 find_package(MPI REQUIRED COMPONENTS CXX)
 find_package(Threads REQUIRED)
-find_path(FFTW3F_INCLUDE_DIR fftw3.h REQUIRED)
-find_library(FFTW3F_LIBRARY NAMES fftw3f REQUIRED)
-find_library(FFTW3F_THREADS_LIBRARY NAMES fftw3f_threads REQUIRED)
-find_path(FFTW3F_MPI_INCLUDE_DIR fftw3-mpi.h HINTS ${FFTW3F_INCLUDE_DIR} REQUIRED)
-find_library(FFTW3F_MPI_LIBRARY NAMES fftw3f_mpi REQUIRED)
+if(COSMICTIGER_WITH_GRAVITY)
+    find_package(GSL REQUIRED)
+    find_path(FFTW3F_INCLUDE_DIR fftw3.h REQUIRED)
+    find_library(FFTW3F_LIBRARY NAMES fftw3f REQUIRED)
+    find_library(FFTW3F_THREADS_LIBRARY NAMES fftw3f_threads REQUIRED)
+    find_path(FFTW3F_MPI_INCLUDE_DIR fftw3-mpi.h HINTS ${FFTW3F_INCLUDE_DIR} REQUIRED)
+    find_library(FFTW3F_MPI_LIBRARY NAMES fftw3f_mpi REQUIRED)
 
-# Check the threaded single-precision MPI API without running it during
-# configuration. Keep MPI and threads before their serial FFTW dependency.
-include(CheckCXXSourceCompiles)
-include(CMakePushCheckState)
-cmake_push_check_state(RESET)
-set(CMAKE_REQUIRED_INCLUDES ${FFTW3F_INCLUDE_DIR} ${FFTW3F_MPI_INCLUDE_DIR})
-set(CMAKE_REQUIRED_LIBRARIES ${FFTW3F_MPI_LIBRARY} ${FFTW3F_THREADS_LIBRARY}
-    ${FFTW3F_LIBRARY} MPI::MPI_CXX Threads::Threads)
-check_cxx_source_compiles([=[
+    # Check the threaded single-precision MPI API without running it during
+    # configuration. Keep MPI and threads before their serial FFTW dependency.
+    include(CheckCXXSourceCompiles)
+    include(CMakePushCheckState)
+    cmake_push_check_state(RESET)
+    set(CMAKE_REQUIRED_INCLUDES ${FFTW3F_INCLUDE_DIR} ${FFTW3F_MPI_INCLUDE_DIR})
+    set(CMAKE_REQUIRED_LIBRARIES ${FFTW3F_MPI_LIBRARY} ${FFTW3F_THREADS_LIBRARY}
+        ${FFTW3F_LIBRARY} MPI::MPI_CXX Threads::Threads)
+    check_cxx_source_compiles([=[
 #include <fftw3-mpi.h>
 
 int main() {
@@ -126,17 +127,18 @@ int main() {
     return provided;
 }
 ]=] COSMICTIGER_FFTW3F_MPI_CALLBACK_LINKS)
-cmake_pop_check_state()
-if(NOT COSMICTIGER_FFTW3F_MPI_CALLBACK_LINKS)
-    message(FATAL_ERROR
-        "FFTW3 single-precision MPI and thread callback support must compile and link with the selected MPI installation")
+    cmake_pop_check_state()
+    if(NOT COSMICTIGER_FFTW3F_MPI_CALLBACK_LINKS)
+        message(FATAL_ERROR
+            "FFTW3 single-precision MPI and thread callback support must compile and link with the selected MPI installation")
+    endif()
 endif()
 
 find_path(SILO_INCLUDE_DIR silo.h REQUIRED)
 find_library(SILO_LIBRARY NAMES siloh5 silo REQUIRED)
-find_path(CHEALPIX_INCLUDE_DIR chealpix.h REQUIRED)
-find_library(CHEALPIX_LIBRARY NAMES chealpix REQUIRED)
 if(COSMICTIGER_WITH_GRAVITY)
+    find_path(CHEALPIX_INCLUDE_DIR chealpix.h REQUIRED)
+    find_library(CHEALPIX_LIBRARY NAMES chealpix REQUIRED)
     find_path(HEALPIX_CXX_INCLUDE_DIR healpix_base.h PATH_SUFFIXES healpix_cxx REQUIRED)
     find_library(HEALPIX_CXX_LIBRARY NAMES healpix_cxx REQUIRED)
 endif()
@@ -367,17 +369,18 @@ endif()
 # scalar cooling arithmetic uses matching IEEE semantics on CPU and CUDA.
 target_link_libraries(cosmictiger_profiler PRIVATE Threads::Threads)
 target_link_libraries(cosmictiger_stacktrace PRIVATE Threads::Threads)
-# Homogeneous recombination is shared. Particle cooling is compiled only
-# when both SPH and chemistry are enabled.
-add_library(cosmictiger_recombination STATIC src/chemistry/recombination.cpp)
-target_include_directories(cosmictiger_recombination PUBLIC ${PROJECT_SOURCE_DIR})
-target_link_libraries(cosmictiger_recombination PUBLIC Threads::Threads Boost::boost)
-target_compile_options(cosmictiger_recombination PRIVATE -fno-fast-math -ffp-contract=off)
+# Homogeneous recombination supplies the gravity-enabled cosmological background.
+# Particle cooling is independent and requires both SPH and chemistry.
+if(COSMICTIGER_WITH_GRAVITY)
+    add_library(cosmictiger_recombination STATIC src/chemistry/recombination.cpp)
+    target_include_directories(cosmictiger_recombination PUBLIC ${PROJECT_SOURCE_DIR})
+    target_link_libraries(cosmictiger_recombination PUBLIC Threads::Threads Boost::boost)
+    target_compile_options(cosmictiger_recombination PRIVATE -fno-fast-math -ffp-contract=off)
+endif()
 if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
     add_library(cosmictiger_sph_chemistry STATIC src/chemistry/gadget4_cooling.cpp)
     target_include_directories(cosmictiger_sph_chemistry PUBLIC ${PROJECT_SOURCE_DIR})
-    target_link_libraries(cosmictiger_sph_chemistry PUBLIC cosmictiger_recombination
-        Threads::Threads Boost::boost)
+    target_link_libraries(cosmictiger_sph_chemistry PUBLIC Threads::Threads Boost::boost)
     target_compile_options(cosmictiger_sph_chemistry PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:-fno-fast-math;-ffp-contract=off>)
     if(COSMICTIGER_WITH_CUDA)
@@ -435,16 +438,18 @@ set(COSMICTIGER_GENERATED_FMM_FILES
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical_ewald_kernels.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/operation_counts.json)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
-# Embed the renderer so copied executables do not depend on the source tree.
-# Matplotlib is needed on the execution host only; missing runtime support
-# produces a warning while preserving the background samples and simulation.
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    ${PROJECT_SOURCE_DIR}/scripts/plot_cosmology.py)
-file(READ ${PROJECT_SOURCE_DIR}/scripts/plot_cosmology.py cosmictiger_background_plot_script)
-configure_file(cmake/background_plot_script.hpp.in
-    ${PROJECT_BINARY_DIR}/generated/cosmictiger/background_plot_script.hpp @ONLY)
-set_source_files_properties(src/cosmology/background_plot.cpp PROPERTIES
-    INCLUDE_DIRECTORIES "${PROJECT_BINARY_DIR}/generated")
+if(COSMICTIGER_WITH_GRAVITY)
+    # Embed the renderer so copied executables do not depend on the source tree.
+    # Matplotlib is needed on the execution host only; missing runtime support
+    # produces a warning while preserving the background samples and simulation.
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        ${PROJECT_SOURCE_DIR}/scripts/plot_cosmology.py)
+    file(READ ${PROJECT_SOURCE_DIR}/scripts/plot_cosmology.py cosmictiger_background_plot_script)
+    configure_file(cmake/background_plot_script.hpp.in
+        ${PROJECT_BINARY_DIR}/generated/cosmictiger/background_plot_script.hpp @ONLY)
+    set_source_files_properties(src/cosmology/background_plot.cpp PROPERTIES
+        INCLUDE_DIRECTORIES "${PROJECT_BINARY_DIR}/generated")
+endif()
 # Do not declare source headers as OUTPUT/BYPRODUCTS or mark them GENERATED:
 # build-system clean targets must never delete these version-controlled files.
 add_custom_target(generate_fmm_kernels
@@ -737,31 +742,31 @@ if(BUILD_TESTING)
 
     # The selected run.test application check executes inside the HPX runtime.
     target_link_libraries(cosmictiger_application_tests PRIVATE GTest::gtest)
-    add_executable(cosmology_flops_test tests/cosmology_flops.cpp src/cosmology/cosmology.cpp
-        src/cosmology/friedmann.cpp)
-    target_include_directories(cosmology_flops_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_link_libraries(cosmology_flops_test PRIVATE HPX::hpx Boost::boost)
-    cosmictiger_add_gtest(NAME cosmology_flops TARGET cosmology_flops_test
-        PROPERTIES TIMEOUT 30)
-    target_compile_options(cosmology_flops_test PRIVATE -fno-fast-math -ffp-contract=off)
-    add_executable(friedmann_test tests/friedmann.cpp src/cosmology/friedmann.cpp)
-    target_include_directories(friedmann_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_compile_options(friedmann_test PRIVATE -fno-fast-math -ffp-contract=off)
-    cosmictiger_add_gtest(NAME friedmann TARGET friedmann_test PROPERTIES TIMEOUT 60)
-
     if(COSMICTIGER_WITH_GRAVITY)
+        add_executable(cosmology_flops_test tests/cosmology_flops.cpp src/cosmology/cosmology.cpp
+            src/cosmology/friedmann.cpp)
+        target_include_directories(cosmology_flops_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_link_libraries(cosmology_flops_test PRIVATE HPX::hpx Boost::boost)
+        cosmictiger_add_gtest(NAME cosmology_flops TARGET cosmology_flops_test
+            PROPERTIES TIMEOUT 30)
+        target_compile_options(cosmology_flops_test PRIVATE -fno-fast-math -ffp-contract=off)
+        add_executable(friedmann_test tests/friedmann.cpp src/cosmology/friedmann.cpp)
+        target_include_directories(friedmann_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_options(friedmann_test PRIVATE -fno-fast-math -ffp-contract=off)
+        cosmictiger_add_gtest(NAME friedmann TARGET friedmann_test PROPERTIES TIMEOUT 60)
+
         add_executable(opening_schedule_test tests/gravity/opening_schedule.cpp)
         target_include_directories(opening_schedule_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_options(opening_schedule_test PRIVATE -ffast-math)
         cosmictiger_add_gtest(NAME opening_schedule TARGET opening_schedule_test
             PROPERTIES TIMEOUT 30)
-    endif()
 
-    add_executable(cosmology_evolution_test tests/cosmology_evolution.cpp)
-    target_include_directories(cosmology_evolution_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_compile_options(cosmology_evolution_test PRIVATE -fno-fast-math -ffp-contract=off)
-    cosmictiger_add_gtest(NAME cosmology_evolution TARGET cosmology_evolution_test
-        PROPERTIES TIMEOUT 30)
+        add_executable(cosmology_evolution_test tests/cosmology_evolution.cpp)
+        target_include_directories(cosmology_evolution_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_options(cosmology_evolution_test PRIVATE -fno-fast-math -ffp-contract=off)
+        cosmictiger_add_gtest(NAME cosmology_evolution TARGET cosmology_evolution_test
+            PROPERTIES TIMEOUT 30)
+    endif()
     add_executable(terminal_test tests/terminal.cpp)
     target_include_directories(terminal_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_options(terminal_test PRIVATE -ffast-math)
@@ -793,18 +798,20 @@ if(BUILD_TESTING)
         endforeach()
     endif()
 
-    add_hpx_executable(fftw_threads_test
-        SOURCES tests/fftw_threads.cpp src/cosmology/fftw_threads.cpp)
-    target_include_directories(fftw_threads_test PRIVATE ${PROJECT_SOURCE_DIR} ${FFTW3F_INCLUDE_DIR})
-    target_link_libraries(fftw_threads_test PRIVATE
-        ${FFTW3F_THREADS_LIBRARY} ${FFTW3F_LIBRARY} Threads::Threads)
-    cosmictiger_add_gtest(NAME fftw_hpx_threads TARGET fftw_threads_test HPX_MAIN
-        ARGS --hpx:threads=2 --hpx:bind=none
-        PROPERTIES TIMEOUT 30 PROCESSORS 2 LABELS "fft;cpu;threads")
-    add_test(NAME fftw_hpx_single_worker COMMAND $<TARGET_FILE:fftw_threads_test>
-        --hpx:threads=1 --hpx:bind=none)
-    set_tests_properties(fftw_hpx_single_worker PROPERTIES
-        TIMEOUT 30 PROCESSORS 1 LABELS "fft;cpu;threads")
+    if(COSMICTIGER_WITH_GRAVITY)
+        add_hpx_executable(fftw_threads_test
+            SOURCES tests/fftw_threads.cpp src/cosmology/fftw_threads.cpp)
+        target_include_directories(fftw_threads_test PRIVATE ${PROJECT_SOURCE_DIR} ${FFTW3F_INCLUDE_DIR})
+        target_link_libraries(fftw_threads_test PRIVATE
+            ${FFTW3F_THREADS_LIBRARY} ${FFTW3F_LIBRARY} Threads::Threads)
+        cosmictiger_add_gtest(NAME fftw_hpx_threads TARGET fftw_threads_test HPX_MAIN
+            ARGS --hpx:threads=2 --hpx:bind=none
+            PROPERTIES TIMEOUT 30 PROCESSORS 2 LABELS "fft;cpu;threads")
+        add_test(NAME fftw_hpx_single_worker COMMAND $<TARGET_FILE:fftw_threads_test>
+            --hpx:threads=1 --hpx:bind=none)
+        set_tests_properties(fftw_hpx_single_worker PROPERTIES
+            TIMEOUT 30 PROCESSORS 1 LABELS "fft;cpu;threads")
+    endif()
 
     add_hpx_executable(flops_test SOURCES tests/flops.cpp src/core/flops.cpp)
     target_include_directories(flops_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -954,28 +961,30 @@ if(BUILD_TESTING)
             PROPERTIES TIMEOUT 180 PROCESSORS 2 RUN_SERIAL TRUE)
     endif()
 
-    # These analysis utilities also contain independent numerical regressions.
-    execute_process(COMMAND ${Python3_EXECUTABLE} -c "import numpy, scipy, matplotlib"
-        RESULT_VARIABLE ANALYSIS_PYTHON_STATUS OUTPUT_QUIET ERROR_QUIET)
-    if(ANALYSIS_PYTHON_STATUS EQUAL 0)
-        foreach(analysis_check IN ITEMS linear_growth glass_fixed_evolution glass_ic_corrections)
-            if(analysis_check STREQUAL "linear_growth")
-                set(analysis_check_argument --self-check)
-            else()
-                set(analysis_check_argument self-check)
-            endif()
-            set(analysis_check_name "${analysis_check}_analysis_self_check")
-            set(analysis_check_workdir "${PROJECT_BINARY_DIR}/tests/${analysis_check_name}")
-            file(MAKE_DIRECTORY "${analysis_check_workdir}")
-            add_test(NAME ${analysis_check_name} COMMAND ${Python3_EXECUTABLE}
-                ${PROJECT_SOURCE_DIR}/tests/analyze_${analysis_check}.py ${analysis_check_argument})
-            set_tests_properties(${analysis_check_name} PROPERTIES TIMEOUT 120 PROCESSORS 1
-                WORKING_DIRECTORY "${analysis_check_workdir}"
-                ENVIRONMENT "OPENBLAS_NUM_THREADS=1;OMP_NUM_THREADS=1;MKL_NUM_THREADS=1;MPLCONFIGDIR=${analysis_check_workdir}/matplotlib"
-                LABELS "analysis;python")
-        endforeach()
+    if(COSMICTIGER_WITH_GRAVITY)
+        # These analysis utilities also contain independent numerical regressions.
+        execute_process(COMMAND ${Python3_EXECUTABLE} -c "import numpy, scipy, matplotlib"
+            RESULT_VARIABLE ANALYSIS_PYTHON_STATUS OUTPUT_QUIET ERROR_QUIET)
+        if(ANALYSIS_PYTHON_STATUS EQUAL 0)
+            foreach(analysis_check IN ITEMS linear_growth glass_fixed_evolution glass_ic_corrections)
+                if(analysis_check STREQUAL "linear_growth")
+                    set(analysis_check_argument --self-check)
+                else()
+                    set(analysis_check_argument self-check)
+                endif()
+                set(analysis_check_name "${analysis_check}_analysis_self_check")
+                set(analysis_check_workdir "${PROJECT_BINARY_DIR}/tests/${analysis_check_name}")
+                file(MAKE_DIRECTORY "${analysis_check_workdir}")
+                add_test(NAME ${analysis_check_name} COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/analyze_${analysis_check}.py ${analysis_check_argument})
+                set_tests_properties(${analysis_check_name} PROPERTIES TIMEOUT 120 PROCESSORS 1
+                    WORKING_DIRECTORY "${analysis_check_workdir}"
+                    ENVIRONMENT "OPENBLAS_NUM_THREADS=1;OMP_NUM_THREADS=1;MKL_NUM_THREADS=1;MPLCONFIGDIR=${analysis_check_workdir}/matplotlib"
+                    LABELS "analysis;python")
+            endforeach()
+        endif()
     endif()
-    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
+    if(COSMICTIGER_WITH_GRAVITY AND COSMICTIGER_WITH_CHEMISTRY)
         set(chemistry_timesteps_workdir "${PROJECT_BINARY_DIR}/tests/sph_chemistry_timesteps_cpu")
         file(MAKE_DIRECTORY "${chemistry_timesteps_workdir}")
         add_test(NAME sph_chemistry_timesteps_cpu COMMAND cosmictiger
@@ -1124,54 +1133,56 @@ if(BUILD_TESTING)
             endif()
         endif()
     endif()
-    foreach(recombination_variant IN ITEMS standard fast_math)
-        set(thermal_target recombination_thermal_${recombination_variant}_test)
-        add_executable(${thermal_target} tests/recombination_thermal.cpp)
-        target_include_directories(${thermal_target} PRIVATE ${PROJECT_SOURCE_DIR})
-        set(background_target recombination_background_${recombination_variant}_test)
-        add_executable(${background_target} tests/recombination_background.cpp
-            src/cosmology/zero_order.cpp)
-        target_include_directories(${background_target} PRIVATE ${PROJECT_SOURCE_DIR})
-        target_link_libraries(${background_target} PRIVATE cosmictiger_recombination)
-        if(recombination_variant STREQUAL "fast_math")
-            target_compile_options(${thermal_target} PRIVATE -ffast-math)
-            target_compile_options(${background_target} PRIVATE -ffast-math)
-        endif()
-        cosmictiger_add_gtest(NAME recombination_thermal_${recombination_variant}
-            TARGET ${thermal_target} PROPERTIES TIMEOUT 30)
-        cosmictiger_add_gtest(NAME recombination_background_${recombination_variant}
-            TARGET ${background_target} PROPERTIES TIMEOUT 30)
-    endforeach()
+    if(COSMICTIGER_WITH_GRAVITY)
+        foreach(recombination_variant IN ITEMS standard fast_math)
+            set(thermal_target recombination_thermal_${recombination_variant}_test)
+            add_executable(${thermal_target} tests/recombination_thermal.cpp)
+            target_include_directories(${thermal_target} PRIVATE ${PROJECT_SOURCE_DIR})
+            set(background_target recombination_background_${recombination_variant}_test)
+            add_executable(${background_target} tests/recombination_background.cpp
+                src/cosmology/zero_order.cpp)
+            target_include_directories(${background_target} PRIVATE ${PROJECT_SOURCE_DIR})
+            target_link_libraries(${background_target} PRIVATE cosmictiger_recombination)
+            if(recombination_variant STREQUAL "fast_math")
+                target_compile_options(${thermal_target} PRIVATE -ffast-math)
+                target_compile_options(${background_target} PRIVATE -ffast-math)
+            endif()
+            cosmictiger_add_gtest(NAME recombination_thermal_${recombination_variant}
+                TARGET ${thermal_target} PROPERTIES TIMEOUT 30)
+            cosmictiger_add_gtest(NAME recombination_background_${recombination_variant}
+                TARGET ${background_target} PROPERTIES TIMEOUT 30)
+        endforeach()
 
-    add_executable(recombination_reference tests/recombination_reference.cpp)
-    target_link_libraries(recombination_reference PRIVATE cosmictiger_recombination)
-    target_compile_options(recombination_reference PRIVATE -fno-fast-math -ffp-contract=off)
-    add_test(NAME native_recombination_reference COMMAND ${Python3_EXECUTABLE}
-        ${PROJECT_SOURCE_DIR}/tests/compare_native_recombination.py check-reference
-        --native-executable $<TARGET_FILE:recombination_reference>
-        --reference-root ${PROJECT_SOURCE_DIR}/docs/native_recombination_results_20261020/recfast
-        --workdir ${PROJECT_BINARY_DIR}/tests/native_recfast_regression)
-    set_tests_properties(native_recombination_reference PROPERTIES TIMEOUT 60)
-    foreach(native_variant IN ITEMS standard fast_math)
-        set(native_target native_recombination_${native_variant}_test)
-        add_executable(${native_target} tests/native_recombination.cpp src/cosmology/zero_order.cpp)
-        target_link_libraries(${native_target} PRIVATE cosmictiger_recombination)
-        if(native_variant STREQUAL "fast_math")
-            target_compile_options(${native_target} PRIVATE -ffast-math)
-        endif()
-        cosmictiger_add_gtest(NAME native_recombination_${native_variant} TARGET ${native_target}
-            PROPERTIES TIMEOUT 180)
-    endforeach()
+        add_executable(recombination_reference tests/recombination_reference.cpp)
+        target_link_libraries(recombination_reference PRIVATE cosmictiger_recombination)
+        target_compile_options(recombination_reference PRIVATE -fno-fast-math -ffp-contract=off)
+        add_test(NAME native_recombination_reference COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/compare_native_recombination.py check-reference
+            --native-executable $<TARGET_FILE:recombination_reference>
+            --reference-root ${PROJECT_SOURCE_DIR}/docs/native_recombination_results_20261020/recfast
+            --workdir ${PROJECT_BINARY_DIR}/tests/native_recfast_regression)
+        set_tests_properties(native_recombination_reference PROPERTIES TIMEOUT 60)
+        foreach(native_variant IN ITEMS standard fast_math)
+            set(native_target native_recombination_${native_variant}_test)
+            add_executable(${native_target} tests/native_recombination.cpp src/cosmology/zero_order.cpp)
+            target_link_libraries(${native_target} PRIVATE cosmictiger_recombination)
+            if(native_variant STREQUAL "fast_math")
+                target_compile_options(${native_target} PRIVATE -ffast-math)
+            endif()
+            cosmictiger_add_gtest(NAME native_recombination_${native_variant} TARGET ${native_target}
+                PROPERTIES TIMEOUT 180)
+        endforeach()
 
-    add_executable(linear_power_test tests/linear_power.cpp)
-    target_include_directories(linear_power_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_compile_options(linear_power_test PRIVATE -ffast-math)
-    cosmictiger_add_gtest(NAME linear_power TARGET linear_power_test
-        PROPERTIES TIMEOUT 30)
-    add_executable(lpt_test tests/lpt.cpp)
-    target_include_directories(lpt_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_compile_options(lpt_test PRIVATE -fno-fast-math -ffp-contract=off)
-    cosmictiger_add_gtest(NAME lpt TARGET lpt_test PROPERTIES TIMEOUT 30)
+        add_executable(linear_power_test tests/linear_power.cpp)
+        target_include_directories(linear_power_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_options(linear_power_test PRIVATE -ffast-math)
+        cosmictiger_add_gtest(NAME linear_power TARGET linear_power_test
+            PROPERTIES TIMEOUT 30)
+        add_executable(lpt_test tests/lpt.cpp)
+        target_include_directories(lpt_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_options(lpt_test PRIVATE -fno-fast-math -ffp-contract=off)
+        cosmictiger_add_gtest(NAME lpt TARGET lpt_test PROPERTIES TIMEOUT 30)
+    endif()
     if(COSMICTIGER_WITH_SPH)
         add_executable(sedov_test tests/scenarios/sedov.cpp src/scenarios/sedov.cpp)
         target_include_directories(sedov_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -1189,31 +1200,33 @@ if(BUILD_TESTING)
             LABELS "analysis;cpu" PROPERTIES TIMEOUT 60)
     endif()
 
-    foreach(boltzmann_target IN ITEMS boltzmann_test boltzmann_reference)
-        if(boltzmann_target STREQUAL "boltzmann_test")
-            set(boltzmann_test_source tests/boltzmann.cpp)
-        else()
-            set(boltzmann_test_source tests/boltzmann_reference.cpp)
-        endif()
-        add_executable(${boltzmann_target} ${boltzmann_test_source}
-            src/cosmology/boltzmann.cpp src/cosmology/zero_order.cpp)
-        target_include_directories(${boltzmann_target} PRIVATE ${PROJECT_SOURCE_DIR})
-        target_link_libraries(${boltzmann_target} PRIVATE cosmictiger_recombination)
-    endforeach()
-    cosmictiger_add_gtest(NAME boltzmann TARGET boltzmann_test
-        PROPERTIES TIMEOUT 120)
-    if(COSMICTIGER_ENABLE_FMM)
-        foreach(boltzmann_two_lpt IN ITEMS false true)
-            set(boltzmann_smoke boltzmann_initialization_${boltzmann_two_lpt}_cpu)
-            add_test(NAME ${boltzmann_smoke} COMMAND ${Python3_EXECUTABLE}
-                ${PROJECT_SOURCE_DIR}/tests/run_smoke.py dm_cpu $<TARGET_FILE:cosmictiger>
-                ${PROJECT_BINARY_DIR}/tests/${boltzmann_smoke}
-                --extra-option=--initial.twoLpt=${boltzmann_two_lpt}
-                --extra-option=--run.timeIntegrator=${cosmictiger_default_integrator}
-                --extra-option=--gravity.method.far=fmm)
-            set_tests_properties(${boltzmann_smoke}
-                PROPERTIES RUN_SERIAL TRUE TIMEOUT 240 PROCESSORS 2)
+    if(COSMICTIGER_WITH_GRAVITY)
+        foreach(boltzmann_target IN ITEMS boltzmann_test boltzmann_reference)
+            if(boltzmann_target STREQUAL "boltzmann_test")
+                set(boltzmann_test_source tests/boltzmann.cpp)
+            else()
+                set(boltzmann_test_source tests/boltzmann_reference.cpp)
+            endif()
+            add_executable(${boltzmann_target} ${boltzmann_test_source}
+                src/cosmology/boltzmann.cpp src/cosmology/zero_order.cpp)
+            target_include_directories(${boltzmann_target} PRIVATE ${PROJECT_SOURCE_DIR})
+            target_link_libraries(${boltzmann_target} PRIVATE cosmictiger_recombination)
         endforeach()
+        cosmictiger_add_gtest(NAME boltzmann TARGET boltzmann_test
+            PROPERTIES TIMEOUT 120)
+        if(COSMICTIGER_ENABLE_FMM)
+            foreach(boltzmann_two_lpt IN ITEMS false true)
+                set(boltzmann_smoke boltzmann_initialization_${boltzmann_two_lpt}_cpu)
+                add_test(NAME ${boltzmann_smoke} COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/run_smoke.py dm_cpu $<TARGET_FILE:cosmictiger>
+                    ${PROJECT_BINARY_DIR}/tests/${boltzmann_smoke}
+                    --extra-option=--initial.twoLpt=${boltzmann_two_lpt}
+                    --extra-option=--run.timeIntegrator=${cosmictiger_default_integrator}
+                    --extra-option=--gravity.method.far=fmm)
+                set_tests_properties(${boltzmann_smoke}
+                    PROPERTIES RUN_SERIAL TRUE TIMEOUT 240 PROCESSORS 2)
+            endforeach()
+        endif()
     endif()
 
     if(COSMICTIGER_WITH_GRAVITY)
@@ -2012,7 +2025,7 @@ if(BUILD_TESTING)
     endif()
 
     foreach(analysis_kernel IN ITEMS power lightcone)
-        if(analysis_kernel STREQUAL "lightcone" AND NOT COSMICTIGER_WITH_GRAVITY)
+        if(NOT COSMICTIGER_WITH_GRAVITY)
             continue()
         endif()
         add_executable(${analysis_kernel}_cpu_test
@@ -2025,18 +2038,18 @@ if(BUILD_TESTING)
     endforeach()
 
     if(COSMICTIGER_WITH_CUDA)
-        add_executable(power_cuda_test tests/power_cuda.cu src/analysis/power_cpu.cpp src/analysis/power_cuda.cu
-            src/core/assert.cu)
-        target_include_directories(power_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
-        target_compile_definitions(power_cuda_test PRIVATE USE_CUDA)
-        target_link_libraries(power_cuda_test PRIVATE HPX::hpx CUDA::cudart)
-        target_compile_options(power_cuda_test PRIVATE
-            $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>)
-        set_target_properties(power_cuda_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-        cosmictiger_add_gtest(NAME power_cuda TARGET power_cuda_test
-            PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
-
         if(COSMICTIGER_WITH_GRAVITY)
+            add_executable(power_cuda_test tests/power_cuda.cu src/analysis/power_cpu.cpp src/analysis/power_cuda.cu
+                src/core/assert.cu)
+            target_include_directories(power_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+            target_compile_definitions(power_cuda_test PRIVATE USE_CUDA)
+            target_link_libraries(power_cuda_test PRIVATE HPX::hpx CUDA::cudart)
+            target_compile_options(power_cuda_test PRIVATE
+                $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>)
+            set_target_properties(power_cuda_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+            cosmictiger_add_gtest(NAME power_cuda TARGET power_cuda_test
+                PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+
             add_executable(lightcone_cuda_test tests/lightcone_cuda.cu src/analysis/lightcone.cu
                 src/analysis/lightcone_cpu.cpp src/core/assert.cu src/cuda/cuda_stream.cpp)
             target_include_directories(lightcone_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -2064,8 +2077,11 @@ if(BUILD_TESTING)
     # Compile CPU drift with ordinary host arrays and no CUDA device kernels.
     add_executable(drift_cpu_test tests/drift_cpu.cpp src/particles/drift_cpu.cpp)
     target_include_directories(drift_cpu_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_include_directories(drift_cpu_test SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR})
-    target_link_libraries(drift_cpu_test PRIVATE HPX::hpx ${CHEALPIX_LIBRARY})
+    target_link_libraries(drift_cpu_test PRIVATE HPX::hpx)
+    if(COSMICTIGER_WITH_GRAVITY)
+        target_include_directories(drift_cpu_test SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR})
+        target_link_libraries(drift_cpu_test PRIVATE ${CHEALPIX_LIBRARY})
+    endif()
     target_compile_options(drift_cpu_test PRIVATE -ffast-math)
     if(COMPILER_SUPPORTS_MARCH_NATIVE)
         target_compile_options(drift_cpu_test PRIVATE -march=native)
@@ -2076,10 +2092,12 @@ if(BUILD_TESTING)
     add_hpx_executable(drift_dispatch_test
         SOURCES tests/drift_dispatch.cpp src/particles/drift.cpp src/particles/drift_cpu.cpp)
     target_include_directories(drift_dispatch_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_include_directories(drift_dispatch_test SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR})
     target_compile_definitions(drift_dispatch_test PRIVATE ORDER=${cosmictiger_default_fmm_order})
     cosmictiger_use_generated_kernels(drift_dispatch_test)
-    target_link_libraries(drift_dispatch_test PRIVATE ${CHEALPIX_LIBRARY})
+    if(COSMICTIGER_WITH_GRAVITY)
+        target_include_directories(drift_dispatch_test SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR})
+        target_link_libraries(drift_dispatch_test PRIVATE ${CHEALPIX_LIBRARY})
+    endif()
     target_compile_options(drift_dispatch_test PRIVATE -ffast-math)
     if(COMPILER_SUPPORTS_MARCH_NATIVE)
         target_compile_options(drift_dispatch_test PRIVATE -march=native)

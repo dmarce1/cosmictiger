@@ -62,6 +62,30 @@ void checkSphRadialCounts(radial_kernel::KernelTable const& table, double radius
 
 }    // namespace detail
 
+TEST(SphFlops, FloatKernelArithmeticAndDoubleTableConversions) {
+    auto const table = radial_kernel::makeKernelTable({radial_kernel::Family::Spline, 3});
+    auto const density = sph_flops::densityKernelOperations(table, 0.25f);
+    EXPECT_EQ(density.singlePrecision, 22);
+    // One branch bound, two clamp bounds, one width, two weight bounds and
+    // four coefficients narrow from double; the width subtraction is double.
+    EXPECT_EQ(density.doublePrecision, 11);
+    auto const derivative = sph_flops::densityKernelOperations(table, 0.25f, true);
+    EXPECT_EQ(derivative.singlePrecision, 13);
+    EXPECT_EQ(derivative.doublePrecision, 10);
+    auto const secondSpan = sph_flops::densityKernelOperations(table, 0.75f);
+    EXPECT_EQ(secondSpan.singlePrecision, 22);
+    EXPECT_EQ(secondSpan.doublePrecision, 12);
+    auto const outside = sph_flops::densityKernelOperations(table, 1.25f);
+    EXPECT_EQ(outside.singlePrecision, 0);
+    EXPECT_EQ(outside.doublePrecision, 2);
+    auto const force = sph_flops::forceKernelOperations(table, 0.25f);
+    EXPECT_EQ(force.singlePrecision, 21);
+    EXPECT_EQ(force.doublePrecision, 10);
+    auto const doubleDensity = sph_flops::densityKernelOperations(table, 0.25);
+    EXPECT_EQ(doubleDensity.singlePrecision, 0);
+    EXPECT_EQ(doubleDensity.doublePrecision, 23);
+}
+
 TEST(SphFlops, EveryRadialFamilySpanAndOutsideBranch) {
     for (auto family : {radial_kernel::Family::Spline, radial_kernel::Family::Wendland,
              radial_kernel::Family::Ferrers}) {

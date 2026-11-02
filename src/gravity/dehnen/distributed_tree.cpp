@@ -84,7 +84,12 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     bool const ewaldSatisfied =
         distanceSatisfied && boxR < 0.125 - 0.25 * getOptions().gravity.supportRadius;
     policy.extraSubdivision = !ewaldSatisfied && particleRange.second > particleRange.first;
-    policy.subdivisionFlops = 16 + (distanceSatisfied ? 2 : 0);
+    // Box extents/accumulation and opening arithmetic are double. The
+    // float radius accumulator widens and narrows in each dimension.
+    policy.subdivisionFlops = {std::is_same_v<decltype(sqrt(boxR)), float> ? 1ULL : 0ULL,
+        18 + 5 + (distanceSatisfied ? 2ULL : 0ULL) +
+            (std::is_same_v<decltype(sqrt(boxR)), float> ? 0ULL : 3ULL),
+        0};
     policy.splitDomains = [](void*, TreeBuildRequest& left, TreeBuildRequest& right) {
         int const mid = (left.processRange.first + left.processRange.second) / 2;
         left.box = domainsRange(left.key);

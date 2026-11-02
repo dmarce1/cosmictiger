@@ -451,8 +451,12 @@ ForceVectors fmmWalkInteractionReference(
         cpuGravityPp(reference, true, sink, sources, support);
     }
     if constexpr (kCountFlops) {
-        if (readFlops() <= beforeFlops) {
+        auto const afterFlops = readFlopCounts();
+        if (afterFlops.total() <= beforeFlops) {
             throw std::runtime_error("CPU gravity interaction did not submit its FLOP count");
+        }
+        if (afterFlops.unclassified != 0) {
+            throw std::runtime_error("CPU gravity interaction submitted unclassified FLOPs");
         }
     }
     return reference;
@@ -469,10 +473,14 @@ ForceVectors fmmWalkApplyInteraction(TreeId sink, TreeId source, float support, 
     FlopCount const beforeFlops = useCuda ? getGpuFlops() : readFlops();
     kick(params, local, position, sink, Vector<TreeId>{source}, Vector<TreeId>{}, nullptr);
     if constexpr (kCountFlops) {
-        FlopCount const afterFlops = useCuda ? getGpuFlops() : readFlops();
-        if (afterFlops <= beforeFlops) {
+        auto const afterFlops = useCuda ? getGpuFlopCounts() : readFlopCounts();
+        if (afterFlops.total() <= beforeFlops) {
             throw std::runtime_error(useCuda ? "CUDA gravity walk did not submit its FLOP count" :
                                                "CPU gravity walk did not submit its FLOP count");
+        }
+        if (afterFlops.unclassified != 0) {
+            throw std::runtime_error(useCuda ? "CUDA gravity walk submitted unclassified FLOPs" :
+                                               "CPU gravity walk submitted unclassified FLOPs");
         }
     }
     ForceVectors result(range.second - range.first);

@@ -131,7 +131,10 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
     constexpr int kLocalDegree = FmmOrder<order>::kLocalDegree_;
     // The buffer travels with the work item; the view aliases its leading coefficients.
     Expansion& expansion = l.template expansion<order>();
-    FlopCounter<FlopCount> flops = 0;
+    FlopCounter<FlopCount> flops = 0;    // Float force and timestep arithmetic.
+    FlopCounter<FlopCount> doubleFlops = 0;
+    FlopCounter<FlopCounts> policyFlops;
+    FlopCounts geometryFlops{};
     TreeNode const* selfPtr = treeGetNode(self);
     if (selfPtr->localRoot && !params.forceOnly) {
         context.beginReturn(selfPtr->numberOfParticles());
@@ -145,7 +148,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
         return KickReturn();
     }
     if (context.background != nullptr) {
-        flops += context.background(order, params, l, pos, self, echecklist);
+        policyFlops += context.background(order, params, l, pos, self, echecklist);
     }
     bool threadLeft = true;
 #ifdef USE_CUDA
@@ -175,7 +178,10 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
                 cudaWorkspace->addWork(cudaWorkspace, l, pos, self, std::move(dchecklist),
                     std::move(echecklist), params.geometry, params.outputOffset);
             }
-            addCpuFlops(flops);
+            addCpuFlops(flops, FlopPrecision::Single);
+            addCpuFlops(doubleFlops, FlopPrecision::Double);
+            addCpuFlops(static_cast<FlopCounts>(policyFlops));
+            addCpuFlops(geometryFlops);
             if (selfPtr->localRoot && !params.forceOnly) {
                 return context.waitReturn();
             } else {
@@ -233,8 +239,10 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
     cosmictiger::gravity::cartesian::L2L(
         translated, expansion, fmmScaleDisplacement(ldx), params.doPhi);
     expansion = translated;
-    flops += cosmictiger::gravity::cartesian::detail::L2L<kLocalDegree, true>::kFlops_ + 14 +
-        6 * kSimdFloatSize;
+    flops += cosmictiger::gravity::cartesian::detail::L2L<kLocalDegree, true>::kFlops_ + 5;
+    // Box scaling stays double; each local displacement scales in double and
+    // narrows before the float L2L coordinate scaling. Two reciprocals are float.
+    doubleFlops += 6 + 6 * kSimdFloatSize;
     float const inverseSupportRadius = 1.0f / params.gravitySupportRadius;
     ForceVectors forces;
     ParticleInteger const numberOfSelfParticles = selfPtr->numberOfParticles();
@@ -248,7 +256,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
         }
     }
     if (context.periodic != nullptr) {
-        flops += context.periodic(order, params, l, self, echecklist, counts);
+        policyFlops += context.periodic(order, params, l, self, echecklist, counts);
     }
 
     {
@@ -282,8 +290,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
                     simdSetLane(otherSupportRadius, i, 0.f);
                 }
                 for (int dim = 0; dim < kDimensions; dim++) {
-                    dx[dim] =
-                        fmmPositionDifference(selfPos[dim], otherPos[dim], dim, params.geometry);
+                    dx[dim] = fmmPositionDifference(
+                        selfPos[dim], otherPos[dim], dim, params.geometry, &geometryFlops);
                 }
                 SimdFloat const r2 = simdFma(dx[kXDimension], dx[kXDimension],
                     simdFma(dx[kYDimension], dx[kYDimension], dx[kZDimension] * dx[kZDimension]));
@@ -293,7 +301,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
                 auto acceptance =
                     computeFmmAcceptance(r2, selfRadius, otherRadius, simdBroadcast<SimdFloat>(0),
                         simdBroadcast<SimdFloat>(0), pairSupportRadius, thetainv);
-                flops += kSimdFloatSize * 27;
+                flops += kSimdFloatSize *
+                    24;    // Float norm and acceptance; geometry counted separately.
                 if (selfPtr->leaf || simdAnyOf(otherLeaf != simdBroadcast<SimdFloat>(0.0f))) {
                     for (int i = 0; i < maxi; i++) {
                         for (int dim = 0; dim < kDimensions; dim++) {
@@ -312,10 +321,13 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
                         }
                     }
                     acceptance = computeFmmAcceptance(r2, selfRadius, otherRadius,
-                        fmmSinkBoxDistanceSquared(selfBox, otherPos, params.geometry),
-                        fmmSourceBoxDistanceSquared(otherBox, selfPos, otherPos, params.geometry),
+                        fmmSinkBoxDistanceSquared(
+                            selfBox, otherPos, params.geometry, &geometryFlops),
+                        fmmSourceBoxDistanceSquared(
+                            otherBox, selfPos, otherPos, params.geometry, &geometryFlops),
                         pairSupportRadius, thetainv);
-                    flops += kSimdFloatSize * 85;
+                    flops += kSimdFloatSize * 19;         // Acceptance only.
+                    doubleFlops += 6 * kSimdFloatSize;    // Source box scaling.
                 }
                 for (int i = 0; i < maxi; i++) {
                     auto const interaction = selectFmmInteraction(bool(acceptance.cellCell[i]),
@@ -398,6 +410,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
                 forces.gx[j] += kScaleFactor2 * l2.accelerationX();
                 forces.gy[j] += kScaleFactor2 * l2.accelerationY();
                 forces.gz[j] += kScaleFactor2 * l2.accelerationZ();
+                // Three double displacements each narrow to float; the effective
+                // radius divides a widened float by a double and narrows back.
+                doubleFlops += 9;
                 if (params.forceOnly) {
                     ALWAYS_ASSERT(cudaWorkspace != nullptr && cudaWorkspace->isBatch());
                     auto const output = cudaWorkspace->output();
@@ -408,7 +423,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
                     output.acceleration[kZDimension][outputIndex] = forces.gz[j];
                     flops +=
                         cosmictiger::gravity::cartesian::detail::L2P<kLocalDegree, true>::kFlops_ +
-                        14;
+                        11;
                     continue;
                 }
                 forces.gx[j] *= gm;
@@ -457,7 +472,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
                         vx = std::fma(gx, halfStep, vx);
                         vy = std::fma(gy, halfStep, vy);
                         vz = std::fma(gz, halfStep, vz);
-                        flops += 8;    // Signed half-interval and three fused multiply-adds.
+                        doubleFlops +=
+                            18;    // Signed double half-step and three mixed-precision FMAs.
                     }
                     kr.kin += 0.5 * mass * sqr(vx, vy, vz);
                     kr.xmom += mass * vx;
@@ -468,6 +484,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
                     kr.dkin += 0.5 * mass * sqr(vx, vy, vz) - oldKinetic;
                     rung = 0;
                     flops += 12;
+                    doubleFlops += 2;    // Float timestep and maximum widened for selection.
                 } else if (params.htime) {
                     float g2;
                     float kin0 = 0.5 * sqr(vx, vy, vz);
@@ -572,7 +589,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
                     kr.dkin += 0.5f * mass * sqr(vx, vy, vz) - kin0;
                 }
                 flops +=
-                    cosmictiger::gravity::cartesian::detail::L2P<kLocalDegree, true>::kFlops_ + 25;
+                    cosmictiger::gravity::cartesian::detail::L2P<kLocalDegree, true>::kFlops_ + 15;
             }
         }
         if (cudaWorkspace != nullptr && cudaWorkspace->isBatch()) {
@@ -582,7 +599,10 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
             context.accumulateReturn(kr, selfPtr->numberOfParticles(), cudaWorkspace == nullptr);
             kickAddInteractionCounts(counts);
         }
-        addCpuFlops(flops);
+        addCpuFlops(flops, FlopPrecision::Single);
+        addCpuFlops(doubleFlops, FlopPrecision::Double);
+        addCpuFlops(static_cast<FlopCounts>(policyFlops));
+        addCpuFlops(geometryFlops);
         if (cudaWorkspace != nullptr) {
             cudaWorkspace->recordProcessedParticles(cudaWorkspace, selfPtr->numberOfParticles());
         }
@@ -628,7 +648,10 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
         } else {
             kickAddInteractionCounts(counts);
         }
-        addCpuFlops(flops);
+        addCpuFlops(flops, FlopPrecision::Single);
+        addCpuFlops(doubleFlops, FlopPrecision::Double);
+        addCpuFlops(static_cast<FlopCounts>(policyFlops));
+        addCpuFlops(geometryFlops);
         return kr;
     }
 }

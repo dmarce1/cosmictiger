@@ -108,10 +108,6 @@ double flopsPerSecond() {
     return flopRatesPerSecond().total();
 }
 
-void addCpuFlops(FlopCount count) {
-    addCpuFlops(count, FlopPrecision::Unclassified);
-}
-
 void addCpuFlops(FlopCount count, FlopPrecision precision) {
 #ifdef COUNT_FLOPS
     if (count != 0) {

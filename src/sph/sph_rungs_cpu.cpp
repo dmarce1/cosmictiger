@@ -11,7 +11,7 @@
 SphRunReturn sphCpuRungs(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
-    FlopCounter<> flops;
+    sph_flops::Counter flops;
     auto const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
     auto const neighbors =
         detail::sphCpuNeighbors(data, targetNode, true, flops, true, parameters.minimumRung);
@@ -52,6 +52,6 @@ SphRunReturn sphCpuRungs(
         }
     }
     result.floatingPointOperations = FlopCount(flops);
-    addCpuFlops(flops);
+    addCpuFlops(flops.counts());
     return result;
 }

@@ -1,10 +1,6 @@
 # Select the union of enabled algorithms, keeping the shared core separate.
 function(cosmictiger_feature_sources output)
     set(cosmictiger_source_files
-        src/analysis/power.cpp
-        src/analysis/power.cu
-        src/analysis/power_cpu.cpp
-        src/analysis/power_cuda.cu
         src/core/assert.cpp
         src/core/assert.cu
         src/core/driver.cpp
@@ -15,16 +11,6 @@ function(cosmictiger_feature_sources output)
         src/core/hpx.cpp
         src/core/memused.cpp
         src/core/options.cpp
-        src/cosmology/boltzmann.cpp
-        src/cosmology/background.cpp
-        src/cosmology/background_plot.cpp
-        src/cosmology/evolution.cpp
-        src/cosmology/friedmann.cpp
-        src/cosmology/cosmology.cpp
-        src/cosmology/fft.cpp
-        src/cosmology/fftw_threads.cpp
-        src/cosmology/initialize.cpp
-        src/cosmology/zero_order.cpp
         src/cuda/cuda.cpp
         src/cuda/cuda_memory.cu
         src/io/checkpoint.cpp
@@ -39,7 +25,6 @@ function(cosmictiger_feature_sources output)
         src/particles/drift_cpu.cpp
         src/particles/particles.cpp
         src/scenarios/scenario.cpp
-        src/scenarios/cosmology.cpp
         src/particles/particle_partition.cpp
     )
 
@@ -63,6 +48,7 @@ function(cosmictiger_feature_sources output)
             src/gravity/reference_table.cpp
             src/analysis/bh.cpp
             src/analysis/bh.cu
+            src/scenarios/cosmology.cpp
             src/scenarios/plummer.cpp
             src/scenarios/glass.cpp
         )

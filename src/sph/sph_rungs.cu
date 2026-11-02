@@ -31,7 +31,7 @@ __global__ void sphCudaRungs(
     }
     __syncthreads();
     new (&workspace) detail::RungsWorkspace();
-    FlopCounter<> flops = 0;
+    sph_flops::Counter flops = 0;
     Array<Position, kDimensions> position;
     int changes = 0;
     while (targetNodeIndex < data.numberOfTargetNodes) {
@@ -62,7 +62,7 @@ __global__ void sphCudaRungs(
                         position[kXDimension] = data.sourcePositionX[sourceParticleIndex];
                         position[kYDimension] = data.sourcePositionY[sourceParticleIndex];
                         position[kZDimension] = data.sourcePositionZ[sourceParticleIndex];
-                        if (targetNode.outerBox.contains(position, &flops)) {
+                        if (targetNode.outerBox.contains(position, &flops.doublePrecision)) {
                             contains = true;
                         } else {
                             contains = sphSupportIntersects(targetNode.innerBox, position,

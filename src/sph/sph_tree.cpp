@@ -20,6 +20,7 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/sph/sph_flops.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
 #include <cosmictiger/sph/sph_tree.hpp>
 
@@ -303,7 +304,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     Array<Position, kDimensions> x;
     Array<double, kDimensions> xc;
     size_t numberOfActiveParticles;
-    FlopCounter<> flops;
+    sph_flops::Counter flops;
     double totalFlops = 0.0;
     float radius;
     double r;
@@ -358,7 +359,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
             leftParticleRange.second = rightParticleRange.first = mid;
             leftBox.end[xdim] = rightBox.begin[xdim] = xmid;
             // Three spans, midpoint addition/multiplication and the fixed split conversion.
-            flops += kDimensions + 3;
+            flops.doublePrecision += kDimensions + 2 + sph_flops::positionConstructionFlops();
         }
         auto futr = sphTreeCreateFork(params, (key << 1) + 1, rightRange, rightParticleRange,
             rightBox, depth + 1, rightLocalRoot, true);
@@ -403,10 +404,10 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
             outerBox.end[dim] = -0.9;
         }
         auto const tiny = 2.0 * RangeFixed::min().toDouble();
-        flops += 4 * kDimensions + 2;
+        flops.doublePrecision += 4 * kDimensions + 2;
         for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
             float const h = params.supportRadiusMultiplier * sphParticlesSupportRadius(i);
-            flops += 1;
+            flops.singlePrecision += 1;
             Array<Position, kDimensions> xValue;
             for (int dim = 0; dim < kDimensions; dim++) {
                 xValue[dim] = sphParticlesPosition(dim, i);
@@ -416,11 +417,11 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
                 innerBox.begin[dim] = std::min(innerBox.begin[dim].toDouble(), x - tiny);
                 innerBox.end[dim] = std::max(innerBox.end[dim].toDouble(), x + tiny);
                 // Position and old-bound conversions, two offsets and two new bounds.
-                flops += 7;
+                flops.doublePrecision += 7;
                 if (sphParticlesRung(i) >= params.minimumRung) {
                     outerBox.begin[dim] = std::min(outerBox.begin[dim].toDouble(), x - h - tiny);
                     outerBox.end[dim] = std::max(outerBox.end[dim].toDouble(), x + h + tiny);
-                    flops += 8;
+                    flops.doublePrecision += 10;    // Includes both support promotions.
                 }
             }
             if (sphParticlesRung(i) >= params.minimumRung) {
@@ -499,8 +500,10 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     rc.activeLeafNodes = activeLeafNodes;
     rc.nodeCount = node.nodeCount;
     rc.numberOfActiveParticles = numberOfActiveParticles;
-    flops += 2 * kDimensions;    // Store the double spatial box as fixed-point bounds.
-    addCpuFlops(flops);    // Children submit their own work; do not submit their totals twice.
+    flops.doublePrecision +=
+        2 * kDimensions;    // Store the double spatial box as fixed-point bounds.
+    addCpuFlops(
+        flops.counts());    // Children submit their own work; do not submit their totals twice.
     totalFlops += FlopCount(flops);
     rc.floatingPointOperations = totalFlops;
     rc.minDepth = minDepth;

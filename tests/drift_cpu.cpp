@@ -239,6 +239,7 @@ void testFixed64Ticks() {
     }
 }
 
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
 Fixture stationaryParticle(double coordinate) {
     Fixture fixture(1);
     for (int dim = 0; dim < kDimensions; dim++) {
@@ -393,6 +394,8 @@ void testMovingLightcone() {
     }
 }
 
+#endif
+
 }    // namespace detail
 
 TEST(DriftCpu, Empty) {
@@ -407,6 +410,7 @@ TEST(DriftCpu, Fixed64Ticks) {
     detail::testFixed64Ticks();
 }
 
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
 TEST(DriftCpu, LightconeImages) {
     detail::testLightconeImages();
 }
@@ -422,3 +426,4 @@ TEST(DriftCpu, LightconeTypes) {
 TEST(DriftCpu, MovingLightcone) {
     detail::testMovingLightcone();
 }
+#endif

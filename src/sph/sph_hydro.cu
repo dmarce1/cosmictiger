@@ -47,7 +47,7 @@ struct HydroWorkspace {
 // NOLINTBEGIN(readability-identifier-naming)
 __global__ void sphCudaHydro(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
-    FlopCounter<> flops = 2;    // Inverse scale factor and gas mass scaling.
+    sph_flops::Counter flops = 2;    // Inverse scale factor and gas mass scaling.
     int const threadIndex = threadIdx.x;
     int const blockSize = blockDim.x;
     __shared__ int targetNodeIndex;
@@ -68,6 +68,7 @@ __global__ void sphCudaHydro(
     constexpr float kHydroAccelerationScale = 0.7115965735877551f;
     float const supportRadiusPerEffectiveRadius =
         float(selectedHydroKernel().supportRadiusPerEffectiveRadius);
+    flops.doublePrecision += 1;
     float const m_b = data.gasMass;    // every gas particle has the same mass
     float const m_b_over_a = m_b * inverseScaleFactor;
     float const ε = parameters.viscosityEpsilon;       // η²/h² of p. 551
@@ -95,7 +96,7 @@ __global__ void sphCudaHydro(
                     position[kXDimension] = data.sourcePositionX[sourceParticleIndex];
                     position[kYDimension] = data.sourcePositionY[sourceParticleIndex];
                     position[kZDimension] = data.sourcePositionZ[sourceParticleIndex];
-                    contains = targetNode.outerBox.contains(position, &flops);
+                    contains = targetNode.outerBox.contains(position, &flops.doublePrecision);
                     if (!contains) {
                         contains = sphSupportIntersects(targetNode.innerBox, position,
                             data.sourceSupportRadius[sourceParticleIndex], &flops);
@@ -260,8 +261,8 @@ __global__ void sphCudaHydro(
                 // and dot products 10; force accumulation 8; energy factors 4. The pressure
                 // terms are counted above.
                 flops += 39 + sph_flops::kViscosityMu + sph_flops::kArtificialViscosity +
-                    sph_flops::densityKernelFlops(selectedHydroKernel(), q_a, true) +
-                    sph_flops::densityKernelFlops(selectedHydroKernel(), q_b, true);
+                    sph_flops::densityKernelOperations(selectedHydroKernel(), q_a, true) +
+                    sph_flops::densityKernelOperations(selectedHydroKernel(), q_b, true);
             }
             sharedReduceAdd<float, kHydroBlockSize>(dv_a_dt[kXDimension]);
             sharedReduceAdd<float, kHydroBlockSize>(dv_a_dt[kYDimension]);
@@ -296,7 +297,8 @@ __global__ void sphCudaHydro(
 #endif
                 dv_a_dt[kYDimension] += parameters.uniformAccelerationY;
                 dv_a_dt[kZDimension] += parameters.midplaneAccelerationZ(z_a);
-                flops += 3;    // Force sums and the midplane fixed-point conversion.
+                flops += 2;    // Force sums are float; the midpoint is scaled in double.
+                flops.doublePrecision += sph_flops::positionConstructionFlops();
                 if (data.centralAcceleration != 0.0f) {
                     Vector3<float> const separation(distance(x_a, Position(0.5)),
                         distance(y_a, Position(0.5)), distance(z_a, Position(0.5)));
@@ -307,8 +309,9 @@ __global__ void sphCudaHydro(
                         radial_kernel::forceFactor(selectedGravityKernel(), normalizedRadius) *
                         inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
                     dv_a_dt -= force * separation;
-                    flops +=
-                        24 + sph_flops::forceKernelFlops(selectedGravityKernel(), normalizedRadius);
+                    flops += 21 +
+                        sph_flops::forceKernelOperations(selectedGravityKernel(), normalizedRadius);
+                    flops.doublePrecision += 3 * sph_flops::positionConstructionFlops();
                 }
                 dv_a_dt -= parameters.velocityDampingRate * v_a;
                 for (int dim = 0; dim < kDimensions; dim++) {

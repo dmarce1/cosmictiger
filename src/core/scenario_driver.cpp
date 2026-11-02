@@ -22,6 +22,7 @@
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/io/view.hpp>
+#include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -207,7 +208,8 @@ void runFixedScenario() {
             if (outputDue) {
                 lastOutputStep = outputStep;
                 profile::profileBegin("output");
-                viewOutputViews(outputStep, 1.0);
+                viewOutputViews(outputStep, 1.0, false,
+                    state.tau * getOptions().units.timeSeconds * constants::kSecondsToYears);
                 profile::profileEnd();
             }
             resetFlops();
@@ -298,8 +300,8 @@ void runFixedScenario() {
                     PRINT("  TFLOP/s uses counted gravity, SPH, and Hopkins operations divided by "
                           "force "
                           "advancement wall time.\n"
-                          "  FP32/FP64 separate arithmetic precision; Mixed retains counts whose "
-                          "precision is not yet split.\n"
+                          "  FP32/FP64 separate arithmetic precision; Mixed is reserved for "
+                          "unclassified diagnostic counts (normally zero).\n"
                           "  Chemistry and star formation operations are excluded; their wall "
                           "time is included.\n");
                 }
@@ -326,7 +328,8 @@ void runFixedScenario() {
     }
     // Use the next cycle for a final partial coarse step, preserving earlier snapshots.
     profile::profileBegin("output");
-    viewOutputViews(driverFinalOutputStep(state.tau, coarseInterval), 1.0, true);
+    viewOutputViews(driverFinalOutputStep(state.tau, coarseInterval), 1.0, true,
+        state.tau * getOptions().units.timeSeconds * constants::kSecondsToYears);
     profile::profileEnd();
     setOptions(baseOptions);
     if (state.iter > 0 && state.iter != lastCheckpoint) {

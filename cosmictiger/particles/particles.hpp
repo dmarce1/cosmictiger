@@ -250,7 +250,9 @@ void particlesCacheFreeLocal();
 void particlesGroupCacheFree();
 Pair<Array<double, kDimensions>, double> particlesEnclosingSphere(Pair<ParticleInteger> rng);
 Vector<OutputParticle> particlesGetSample(Range<double> const& box);
+#if COSMICTIGER_WITH_GRAVITY
 Vector<ParticleSample> particlesSample(int cnt);
+#endif
 void particlesLoad(FILE* fp);
 void particlesSave(FILE* fp);
 void particlesIncGroupCacheEpoch();

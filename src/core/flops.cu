@@ -63,10 +63,6 @@ __device__ FlopCount* gpuFlopCounter(FlopPrecision precision) {
 
 }    // namespace detail
 
-__device__ void addGpuFlops(FlopCount count) {
-    addGpuFlops(count, FlopPrecision::Unclassified);
-}
-
 __device__ void addGpuFlops(FlopCount count, FlopPrecision precision) {
 #ifdef COUNT_FLOPS
     unsigned const mask = __activemask();

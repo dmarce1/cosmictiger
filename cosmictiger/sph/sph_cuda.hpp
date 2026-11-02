@@ -98,9 +98,10 @@ __device__ inline FlopCount sphReductionFlops() {
     return count;
 }
 
-__device__ inline void recordSphGpuFlops(FlopCount count, SphReduction* reduction) {
+__device__ inline void recordSphGpuFlops(sph_flops::Counter const& flops, SphReduction* reduction) {
     if constexpr (kCountFlops) {
-        addGpuFlops(count);
+        addGpuFlops(flops.counts());
+        FlopCount count = FlopCount(flops);
         // Every SPH block is a multiple of a full warp. Keep the per-launch
         // diagnostic exact independently of the global reporting interval.
         sharedReduceAdd(count);
@@ -124,7 +125,7 @@ inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimum
     float maximumSupportRadius, float targetNeighborCount,
     DeviceVector<SphNeighborPosition> const& neighbors,
     Array<Position, kDimensions> const& position, Fixed32Range const& neighborSearchBox,
-    FlopCounter<>& flops) {
+    sph_flops::Counter& flops) {
     int const threadIndex = threadIdx.x;
     int const runtimeBlockSize = blockDim.x;
     ALWAYS_ASSERT(minimumSupportRadius > 0.0f && maximumSupportRadius >= minimumSupportRadius &&
@@ -142,11 +143,12 @@ inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimum
         for (int dim = 0; dim < kDimensions; dim++) {
             bool const upperExceeded = neighborSearchBox.end[dim] <
                 RangeFixed(position[dim]) + RangeFixed(supportRadius) + RangeFixed::min();
-            flops += 1;    // Floating support-to-fixed scaling, preserving short circuiting.
+            // Promotion to double and fixed-point scale, preserving short circuiting.
+            flops.doublePrecision += 2;
             if (upperExceeded) {
                 boxExceeded = true;
             } else {
-                flops += 1;
+                flops.doublePrecision += 2;
                 if (RangeFixed(position[dim]) <
                     neighborSearchBox.begin[dim] + RangeFixed(supportRadius) + RangeFixed::min()) {
                     boxExceeded = true;
@@ -171,8 +173,8 @@ inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimum
             if (q_ab < 1.0f) {
                 ΣW += kernelW(q_ab);
                 dΣW_dH_a -= q_ab * dkernelWDq(q_ab) * one_over_H_a;
-                flops += 4 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab) +
-                    sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
+                flops += 4 + sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab) +
+                    sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
             }
         }
         sharedReduceAdd<float, blockSize>(ΣW);

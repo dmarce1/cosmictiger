@@ -11,6 +11,16 @@
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 
+namespace detail {
+
+template <class Count>
+concept HasImplicitPrecisionSubmission = requires(Count count) { addCpuFlops(count); };
+
+static_assert(!HasImplicitPrecisionSubmission<FlopCount>);
+static_assert(HasImplicitPrecisionSubmission<FlopCounts>);
+
+}    // namespace detail
+
 Vector<hpx::id_type> const& hpxChildren() {
     static auto const children = []() {
         Vector<hpx::id_type> result;
@@ -27,9 +37,8 @@ Vector<hpx::id_type> const& hpxChildren() {
 
 void contributeFlops() {
     // A single contribution already exceeds both int32 and exact double range.
-    addCpuFlops((FlopCount(1) << 54) + 7);
-    addCpuFlops((FlopCount(1) << 53) + 5, FlopPrecision::Single);
-    addCpuFlops((FlopCount(1) << 55) + 11, FlopPrecision::Double);
+    addCpuFlops((FlopCount(1) << 54) + 7, FlopPrecision::Single);
+    addCpuFlops(FlopCounts{(FlopCount(1) << 53) + 5, (FlopCount(1) << 55) + 11, 0});
 }
 HPX_PLAIN_ACTION(contributeFlops, ContributeFlopsAction);
 
@@ -43,6 +52,25 @@ TEST(Flops, WideCounterAndDisabledCounter) {
     (disabled = 123) += 456;
     disabled -= 7;
     EXPECT_EQ(FlopCount(disabled), 0);
+}
+
+TEST(Flops, AggregateCountersRespectDisabledInstrumentation) {
+    FlopCounter<FlopCounts> counter(FlopCounts{11, 13, 17});
+    counter += FlopCounts{19, 23, 29};
+    FlopCounts const counts = counter;
+    EXPECT_EQ(counts.singlePrecision, 30);
+    EXPECT_EQ(counts.doublePrecision, 36);
+    EXPECT_EQ(counts.unclassified, 46);
+    EXPECT_EQ(counts.total(), 112);
+
+    FlopCounter<FlopCounts, false> disabled(FlopCounts{11, 13, 17});
+    disabled = FlopCounts{19, 23, 29};
+    disabled += FlopCounts{31, 37, 41};
+    FlopCounts const disabledCounts = disabled;
+    EXPECT_EQ(disabledCounts.singlePrecision, 0);
+    EXPECT_EQ(disabledCounts.doublePrecision, 0);
+    EXPECT_EQ(disabledCounts.unclassified, 0);
+    EXPECT_EQ(disabledCounts.total(), 0);
 }
 
 TEST(Flops, FloatingConversionsCountAtHigherPrecision) {
@@ -70,7 +98,7 @@ TEST(Flops, ConcurrentAndDistributedAggregation) {
         for (int thread = 0; thread < 4; ++thread) {
             workers.emplace_back([]() {
                 for (int i = 0; i < 10000; ++i) {
-                    addCpuFlops(1234567);
+                    addCpuFlops(1234567, FlopPrecision::Single);
                     addCpuFlops(2468, FlopPrecision::Single);
                     addCpuFlops(913, FlopPrecision::Double);
                 }
@@ -82,26 +110,35 @@ TEST(Flops, ConcurrentAndDistributedAggregation) {
         for (auto const& locality : localities) {
             hpx::async<ContributeFlopsAction>(locality).get();
         }
-        FlopCounts const expected{
-            FlopCount(4) * 10000 * 2468 + localities.size() * ((FlopCount(1) << 53) + 5),
-            FlopCount(4) * 10000 * 913 + localities.size() * ((FlopCount(1) << 55) + 11),
-            FlopCount(4) * 10000 * 1234567 + localities.size() * ((FlopCount(1) << 54) + 7)};
+        FlopCounts const expected{FlopCount(4) * 10000 * (1234567 + 2468) +
+                localities.size() * ((FlopCount(1) << 54) + (FlopCount(1) << 53) + 12),
+            FlopCount(4) * 10000 * 913 + localities.size() * ((FlopCount(1) << 55) + 11), 0};
         auto const actual = readFlopCounts();
         EXPECT_EQ(actual.singlePrecision, expected.singlePrecision);
         EXPECT_EQ(actual.doublePrecision, expected.doublePrecision);
-        EXPECT_EQ(actual.unclassified, expected.unclassified);
+        EXPECT_EQ(actual.unclassified, 0);
         EXPECT_EQ(readFlops(), expected.total());
         auto const rates = flopRatesPerSecond();
         EXPECT_NEAR(rates.singlePrecision / rates.doublePrecision,
             double(expected.singlePrecision) / double(expected.doublePrecision), 1.e-15);
-        EXPECT_NEAR(rates.unclassified / rates.doublePrecision,
-            double(expected.unclassified) / double(expected.doublePrecision), 1.e-15);
+        EXPECT_EQ(rates.unclassified, 0.0);
         double const first = flopsPerSecond();
         double const second = flopsPerSecond();
         EXPECT_TRUE(std::isfinite(first));
         EXPECT_GT(second, 0.0);
         EXPECT_LE(second, first);
     }
+}
+
+TEST(Flops, ExplicitUnclassifiedDiagnosticIsPreserved) {
+    resetFlops();
+    addCpuFlops(17, FlopPrecision::Unclassified);
+    addCpuFlops(FlopCounts{2, 3, 19});
+    auto const counts = readFlopCounts();
+    EXPECT_EQ(counts.singlePrecision, 2);
+    EXPECT_EQ(counts.doublePrecision, 3);
+    EXPECT_EQ(counts.unclassified, 36);
+    EXPECT_EQ(counts.total(), 41);
 }
 
 TEST(Flops, EmptyRate) {

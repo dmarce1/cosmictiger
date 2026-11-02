@@ -10,9 +10,9 @@ struct KickContext {
     hpx::future<KickReturn> (*fork)(KickParameters, ExpansionBuffer const&,
         Array<Position, kDimensions>, TreeId, Vector<TreeId>, Vector<TreeId>,
         std::shared_ptr<KickWorkspace>, bool) = nullptr;
-    FlopCount (*background)(int, KickParameters const&, ExpansionBuffer&,
+    FlopCounts (*background)(int, KickParameters const&, ExpansionBuffer&,
         Array<Position, kDimensions>&, TreeId, Vector<TreeId> const&) = nullptr;
-    FlopCount (*periodic)(int, KickParameters const&, ExpansionBuffer&, TreeId, Vector<TreeId>&,
+    FlopCounts (*periodic)(int, KickParameters const&, ExpansionBuffer&, TreeId, Vector<TreeId>&,
         KickInteractionCounts&) = nullptr;
     void (*beginReturn)(ParticleInteger) = nullptr;
     void (*coverParticles)(ParticleInteger) = nullptr;

@@ -15,13 +15,16 @@ constexpr bool kVerbose = true;
 #include <exception>
 #include <limits>
 #include <memory>
+#include <random>
 #include <stdexcept>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#if COSMICTIGER_WITH_GRAVITY
 #include <gsl/gsl_rng.h>
+#endif
 #include <hpx/threading_base/annotated_function.hpp>
 
 #include <cosmictiger/core/file_handle.hpp>
@@ -90,7 +93,9 @@ HPX_PLAIN_ACTION(particlesFetchCacheLine, ParticlesFetchCacheLineAction);
 HPX_PLAIN_ACTION(particlesGroupRefreshCacheLine, ParticlesGroupRefreshCacheLineAction);
 HPX_PLAIN_ACTION(particlesGroupFetchCacheLine, ParticlesGroupFetchCacheLineAction);
 HPX_PLAIN_ACTION(particlesRandomInit, ParticlesRandomInitAction);
+#if COSMICTIGER_WITH_GRAVITY
 HPX_PLAIN_ACTION(particlesSample, ParticlesSampleAction);
+#endif
 HPX_PLAIN_ACTION(particlesGroupsInit, ParticlesGroupsInitAction);
 HPX_PLAIN_ACTION(particlesGroupsDestroy, ParticlesGroupsDestroyAction);
 HPX_PLAIN_ACTION(particlesSetGlobalOffset, ParticlesSetGlobalOffsetAction);
@@ -1342,16 +1347,26 @@ void particlesRandomInit() {
                 ParticleInteger const begin = (size_t) proc * particlesSize() / numberOfThreads;
                 ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
                 int const seed = 4321 * (hpxRank() * numberOfThreads + proc) + 42;
+#if COSMICTIGER_WITH_GRAVITY
                 gsl_rng* rndgen = gsl_rng_alloc(gsl_rng_taus);
                 gsl_rng_set(rndgen, seed);
+#else
+                std::mt19937_64 generator(seed);
+#endif
                 for (ParticleInteger i = begin; i < end; i++) {
                     for (int dim = 0; dim < kDimensions; dim++) {
+#if COSMICTIGER_WITH_GRAVITY
                         particlesPos(dim, i) = gsl_rng_uniform(rndgen);
+#else
+                        particlesPos(dim, i) = std::generate_canonical<double, 53>(generator);
+#endif
                         particlesVel(dim, i) = 0.0f;
                     }
                     particlesRung(i) = 0;
                 }
+#if COSMICTIGER_WITH_GRAVITY
                 gsl_rng_free(rndgen);
+#endif
             },
             "particles.randomInit")));
     }
@@ -1541,6 +1556,7 @@ static Vector<char> particlesFetchCacheLineRungs(ParticleInteger index) {
     return line;
 }
 
+#if COSMICTIGER_WITH_GRAVITY
 Vector<ParticleSample> particlesSample(int cnt) {
     auto const& analysis = getOptions().analysis;
     Vector<ParticleSample> parts;
@@ -1586,6 +1602,7 @@ Vector<ParticleSample> particlesSample(int cnt) {
     }
     return std::move(parts);
 }
+#endif
 
 namespace detail {
 

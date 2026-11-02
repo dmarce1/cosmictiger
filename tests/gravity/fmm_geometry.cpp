@@ -14,6 +14,51 @@
 #include <cosmictiger/gravity/fmm_geometry.hpp>
 #include <cosmictiger/math/tensor.hpp>
 
+TEST(FmmGeometryFlops, DisplacementPrecisionTracksPeriodicAndShiftedPaths) {
+    auto check = [](Position sink, Position source, FmmGeometry const& geometry, FlopCount single,
+                     FlopCount doublePrecision) {
+        FlopCounts counts{};
+        float const counted = fmmPositionDifference(sink, source, kXDimension, geometry, &counts);
+        EXPECT_EQ(counted, fmmPositionDifference(sink, source, kXDimension, geometry));
+        EXPECT_EQ(counts.singlePrecision, kCountFlops ? single : 0);
+        EXPECT_EQ(counts.doublePrecision, kCountFlops ? doublePrecision : 0);
+        EXPECT_EQ(counts.unclassified, 0);
+    };
+    check(Position(0.3), Position(0.2), {}, 1, 0);
+    FmmGeometry geometry;
+    geometry.meshSize = 4;
+    geometry.sinkCell[kXDimension] = 1;
+    check(Position(0.3), Position(0.2), geometry, 0, 3);
+    geometry.sinkCell[kXDimension] = 3;
+    check(Position(0.99), Position(0.01), geometry, 0, 2);
+}
+
+TEST(FmmGeometryFlops, BoxGeometrySeparatesDoubleCoordinatesFromFloatNorms) {
+    Fixed32Range box;
+    Array<Position, kDimensions> point;
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        box.begin[dim] = 0.125;
+        box.end[dim] = 0.25;
+        point[dim] = 0.5;
+    }
+    FlopCounts periodic{};
+    float const periodicValue = fmmSinkBoxDistanceSquared(box, point, {}, &periodic);
+    EXPECT_EQ(periodicValue, fmmSinkBoxDistanceSquared(box, point, {}));
+    EXPECT_EQ(periodic.singlePrecision, kCountFlops ? 6 : 0);
+    EXPECT_EQ(periodic.doublePrecision, kCountFlops ? 15 : 0);
+    FlopCounts bounded{};
+    FmmGeometry geometry;
+    geometry.meshSize = 4;
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        geometry.sinkCell[dim] = 2;
+    }
+    float const boundedValue = fmmSinkBoxDistanceSquared(box, point, geometry, &bounded);
+    EXPECT_EQ(boundedValue, fmmSinkBoxDistanceSquared(box, point, geometry));
+    EXPECT_EQ(bounded.singlePrecision, kCountFlops ? 6 : 0);
+    EXPECT_EQ(bounded.doublePrecision, kCountFlops ? (kPositionBits == 64 ? 57 : 39) : 0);
+    EXPECT_EQ(bounded.unclassified, 0);
+}
+
 void cosmictigerAssert(char const*, bool condition, char const*, int) {
     if (!condition) {
         throw std::runtime_error("FMM geometry assertion failed");

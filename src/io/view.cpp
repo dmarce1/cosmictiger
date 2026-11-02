@@ -28,7 +28,9 @@
 #include <variant>
 #include <vector>
 
+#if COSMICTIGER_WITH_GRAVITY
 #include <chealpix.h>
+#endif
 #include <hpx/serialization/vector.hpp>
 #include <hpx/threading_base/annotated_function.hpp>
 #include <silo.h>
@@ -37,7 +39,9 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/options_metadata.hpp>
 #include <cosmictiger/core/terminal.hpp>
+#if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/cosmology/cosmology.hpp>
+#endif
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/io/view.hpp>
 #include <cosmictiger/math/constants.hpp>
@@ -55,7 +59,9 @@
 #endif
 #endif
 
+#if COSMICTIGER_WITH_GRAVITY
 HPX_PLAIN_ACTION(outputView, OutputViewAction);
+#endif
 
 static Vector<Range<double>> viewBoxes;
 
@@ -402,7 +408,7 @@ void writeViewSpecies(DBfile* db, ViewDirectoryMetadata& metadata, char const* m
 #if COSMICTIGER_WITH_SPH
 void writeViscosityField(
     DBfile* db, ViewDirectoryMetadata& metadata, ParticleSelection<SphParticleInfo> const& gas) {
-    if (getOptions().hydro.viscosityEvolution != "none") {
+    if (getOptions().hydro.method == "sph" && getOptions().hydro.viscosityEvolution != "none") {
         writeViewField(db, metadata, "alpha", "gas", gas, "1",
             [](SphParticleInfo const& particle) { return double(particle.alpha); });
     }
@@ -502,7 +508,7 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
         writeStarFormationGasFields(db, metadata, gas);
 #endif
         writeViscosityField(db, metadata, gas);
-        if (getOptions().hydro.viscosityGradientSwitch()) {
+        if (getOptions().hydro.method == "sph" && getOptions().hydro.viscosityGradientSwitch()) {
             writeViewField(db, metadata, "divv", "gas", gas,
                 cosmological ? "(km/s)/(Mpc/h)" : "1/s",
                 [&conversion](SphParticleInfo const& particle) {
@@ -567,10 +573,12 @@ ViewSnapshot collectViewParticles(double a) {
             gas.eint = sphParticlesInternalEnergy(index);
             gas.rho = sphParticlesDensity(index);
             gas.h = sphParticlesSupportRadius(index);
-            if (getOptions().hydro.viscosityEvolution != "none") {
+            if (getOptions().hydro.method == "sph" &&
+                getOptions().hydro.viscosityEvolution != "none") {
                 gas.alpha = sphParticlesViscosityStates[index].alpha;
             }
-            if (getOptions().hydro.viscosityGradientSwitch()) {
+            if (getOptions().hydro.method == "sph" &&
+                getOptions().hydro.viscosityGradientSwitch()) {
                 gas.divergence = sphParticlesCullenDehnenStates[index].divergence;
             }
 #if COSMICTIGER_ENABLE_CHEMISTRY
@@ -814,7 +822,7 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
         writeStarFormationGasFields(db, metadata, gas);
 #endif
         writeViscosityField(db, metadata, gas);
-        if (getOptions().hydro.viscosityGradientSwitch()) {
+        if (getOptions().hydro.method == "sph" && getOptions().hydro.viscosityGradientSwitch()) {
             writeViewField(db, metadata, "divv", "gas", gas, "1/code_time",
                 [](SphParticleInfo const& particle) { return double(particle.divergence); });
             writeViewText(db, "divv_convention",
@@ -990,9 +998,13 @@ void viewOutputViews(int cycle, double a, bool force, double physicalYears) {
         (!force && cycle % getOptions().output.siloInterval != 0)) {
         return;
     }
-    double const time = physicalYears >= 0.0 ?
-        physicalYears / 1.0e9 :
-        cosmosTime(1e-6, a) * getOptions().units.timeSeconds * constants::kSecondsToYears / 1e9;
+    double time = physicalYears >= 0.0 ? physicalYears / 1.0e9 : 0.0;
+#if COSMICTIGER_WITH_GRAVITY
+    if (physicalYears < 0.0) {
+        time =
+            cosmosTime(1e-6, a) * getOptions().units.timeSeconds * constants::kSecondsToYears / 1e9;
+    }
+#endif
     detail::writeDistributedParticleViews(cycle, a, time);
 }
 
@@ -1035,6 +1047,7 @@ void viewConfigure() {
     }
 }
 
+#if COSMICTIGER_WITH_GRAVITY
 Vector<float> outputView(int number, double time) {
     Vector<hpx::future<void>> futs;
     Vector<hpx::future<Vector<float>>> valFuts;
@@ -1103,3 +1116,4 @@ Vector<float> outputView(int number, double time) {
     }
     return results;
 }
+#endif

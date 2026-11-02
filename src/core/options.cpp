@@ -250,9 +250,13 @@ void setOptions(Options const& opts) {
     detail::validateCooling(opts);
     detail::validateStarFormation(opts);
 #if !COSMICTIGER_WITH_GRAVITY
-    if (opts.gravity.enabled || opts.analysis.groups || opts.lightcone.enabled) {
-        throw std::invalid_argument(
-            "Self-gravity, halo groups, and lightcones require a gravity-enabled build");
+    if (opts.gravity.enabled || opts.analysis.groups || opts.analysis.power ||
+        opts.lightcone.enabled) {
+        throw std::invalid_argument("Self-gravity, halo groups, power spectra, and lightcones "
+                                    "require a gravity-enabled build");
+    }
+    if (opts.run.scenario == "cosmology") {
+        throw std::invalid_argument("This build does not include run.scenario=cosmology");
     }
 #endif
 #if !COSMICTIGER_WITH_SPH
@@ -521,10 +525,15 @@ bool processOptions(int argc, char* argv[]) {
         "name of developer regression to run (requires BUILD_TESTING=ON)")("run.verbose",
         po::value<bool>(&opts.run.verbose)->default_value(false),
         "print detailed internal diagnostics")("run.scenario",
-        po::value<std::string>(&opts.run.scenario)->default_value("cosmology"),
+        po::value<std::string>(&opts.run.scenario)->default_value(opts.run.scenario),
+#if COSMICTIGER_WITH_GRAVITY
         "physical scenario: plummer, sod, blast, rayleighTaylor, kelvinHelmholtz, disc, "
-        "polytropicStar, hydroWave, soundWave, gresho, cosmology, glass")("run.endTime",
-        po::value<double>(&opts.run.endTime)->default_value(0.0),
+        "polytropicStar, hydroWave, soundWave, gresho, cosmology, glass"
+#else
+        "physical scenario: sod, blast, rayleighTaylor, kelvinHelmholtz, disc, "
+        "polytropicStar, hydroWave, soundWave, gresho"
+#endif
+        )("run.endTime", po::value<double>(&opts.run.endTime)->default_value(0.0),
         "total evolution time (conformal code time for cosmology); positive values override "
         "endRedshift, 0 uses the scenario duration")("run.maxIterations",
         po::value<int>(&opts.run.maxIterations)->default_value(1000000),
@@ -895,7 +904,22 @@ bool processOptions(int argc, char* argv[]) {
                   << kFmmMaxOrder - 1 << "\n";
 #endif
         std::cout << "\n";
-        std::cout << commandOpts << "\n";
+        po::options_description visibleOpts("CosmicTiger options");
+        visibleOpts.add(runOpts)
+            .add(computeOpts)
+            .add(checkpointOpts)
+            .add(initialOpts)
+            .add(outputOpts)
+            .add(analysisOpts)
+            .add(gravityOpts)
+            .add(unitsOpts)
+            .add(hydroOpts)
+            .add(chemistryOpts)
+            .add(starFormationOpts);
+#if COSMICTIGER_WITH_GRAVITY
+        visibleOpts.add(lightconeOpts).add(cosmologyOpts);
+#endif
+        std::cout << visibleOpts << "\n";
         rc = false;
     } else {
         if (!opts.configuration.empty()) {
@@ -963,6 +987,12 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.run.scenario == "plummer" || opts.run.scenario == "glass") {
         THROW_ERROR(
             "run.scenario=%s requires a gravity-enabled build\n", opts.run.scenario.c_str());
+    }
+    if (opts.run.scenario == "cosmology") {
+        THROW_ERROR("This build does not include run.scenario=cosmology\n");
+    }
+    if (opts.analysis.power) {
+        THROW_ERROR("analysis.power requires a gravity-enabled build\n");
     }
     if (opts.analysis.groups || opts.lightcone.enabled) {
         THROW_ERROR("Halo groups and lightcones require a gravity-enabled build\n");
@@ -1135,7 +1165,8 @@ bool processOptions(int argc, char* argv[]) {
         opts.run.maxIterations < 0) {
         THROW_ERROR("run.endTime and run.maxIterations must be finite and nonnegative\n");
     }
-    if (scenario.fixedTime && !opts.run.test.empty() && opts.run.test != "checkpointState") {
+    if (scenario.fixedTime && isExplicit("run.scenario") && !opts.run.test.empty() &&
+        opts.run.test != "checkpointState") {
         THROW_ERROR("run.scenario and run.test select separate execution modes\n");
     }
     auto const gravityTable = radial_kernel::makeKernelTable(
@@ -1659,17 +1690,19 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("gravity.method.near", gravity.pmmmNearMethod);
     SHOW("gravity.pmmmBatchParticles", gravity.pmmmBatchParticles);
     SHOW("run.hierarchicalGravity", run.hierarchicalGravity);
-    SHOW("hydro.viscosityAlpha", hydro.viscosityAlpha);
-    SHOW("hydro.viscosityBeta", hydro.viscosityBeta);
-    SHOW("hydro.viscosityEpsilon", hydro.viscosityEpsilon);
-    SHOW("hydro.balsaraSwitch", hydro.balsaraSwitch);
-    SHOW("hydro.viscosityEvolution", hydro.viscosityEvolution);
-    SHOW("hydro.viscosityAlphaMin", hydro.viscosityAlphaMin);
-    SHOW("hydro.viscosityDecay", hydro.viscosityDecay);
-    SHOW("hydro.viscosityAlphaMax", hydro.viscosityAlphaMax);
-    SHOW("hydro.viscosityDecayCD", hydro.viscosityDecayCD);
-    SHOW("hydro.viscosityAlphaMaxPrice", hydro.viscosityAlphaMaxPrice);
-    SHOW("hydro.viscosityDecayPrice", hydro.viscosityDecayPrice);
+    if (opts.hydro.enabled && opts.hydro.method == "sph") {
+        SHOW("hydro.viscosityAlpha", hydro.viscosityAlpha);
+        SHOW("hydro.viscosityBeta", hydro.viscosityBeta);
+        SHOW("hydro.viscosityEpsilon", hydro.viscosityEpsilon);
+        SHOW("hydro.balsaraSwitch", hydro.balsaraSwitch);
+        SHOW("hydro.viscosityEvolution", hydro.viscosityEvolution);
+        SHOW("hydro.viscosityAlphaMin", hydro.viscosityAlphaMin);
+        SHOW("hydro.viscosityDecay", hydro.viscosityDecay);
+        SHOW("hydro.viscosityAlphaMax", hydro.viscosityAlphaMax);
+        SHOW("hydro.viscosityDecayCD", hydro.viscosityDecayCD);
+        SHOW("hydro.viscosityAlphaMaxPrice", hydro.viscosityAlphaMaxPrice);
+        SHOW("hydro.viscosityDecayPrice", hydro.viscosityDecayPrice);
+    }
     SHOW("hydro.gamma", hydro.gamma);
     SHOW("hydro.yAcceleration", hydro.yAcceleration);
     SHOW("hydro.zPlaneAcceleration", hydro.zPlaneAcceleration);

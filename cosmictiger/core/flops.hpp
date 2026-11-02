@@ -79,7 +79,7 @@ constexpr bool kCountFlops = false;
 
 template <class Count = FlopCount, bool enabled = kCountFlops>
 class FlopCounter {
-    Count count_ = 0;
+    Count count_{};
 
 public:
     CUDA_EXPORT
@@ -90,7 +90,7 @@ public:
         return *this;
     }
     CUDA_EXPORT
-    inline FlopCounter(Count count = 0) {
+    inline FlopCounter(Count count = {}) {
         *this = count;
     }
     CUDA_EXPORT
@@ -124,14 +124,25 @@ FlopRates flopRatesPerSecond();
 double flopsPerSecond();
 FlopCounts getGpuFlopCounts();
 FlopCount getGpuFlops();
-// Legacy, one-argument submissions retain their totals without claiming a
-// precision: some count mixed float/double expressions. New instrumentation
-// must submit audited single/double batches explicitly.
-void addCpuFlops(FlopCount count);
+// Scalar submissions must identify the arithmetic precision. Mixed routines
+// submit separate audited batches; unclassified is reserved for diagnostics.
 void addCpuFlops(FlopCount count, FlopPrecision precision);
+inline void addCpuFlops(FlopCounts const& counts) {
+    addCpuFlops(counts.singlePrecision, FlopPrecision::Single);
+    addCpuFlops(counts.doublePrecision, FlopPrecision::Double);
+    if (counts.unclassified != 0) {
+        addCpuFlops(counts.unclassified, FlopPrecision::Unclassified);
+    }
+}
 #ifdef __CUDACC__
-__device__ void addGpuFlops(FlopCount count);
 __device__ void addGpuFlops(FlopCount count, FlopPrecision precision);
+__device__ inline void addGpuFlops(FlopCounts const& counts) {
+    addGpuFlops(counts.singlePrecision, FlopPrecision::Single);
+    addGpuFlops(counts.doublePrecision, FlopPrecision::Double);
+    if (counts.unclassified != 0) {
+        addGpuFlops(counts.unclassified, FlopPrecision::Unclassified);
+    }
+}
 #endif
 
 #endif /* FLOPS_HPP_ */

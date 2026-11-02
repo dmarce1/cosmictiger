@@ -31,6 +31,7 @@
 #include <cosmictiger/sph/morris_and_monaghan/viscosity.hpp>
 #include <cosmictiger/sph/price_etal/viscosity.hpp>
 #include <cosmictiger/sph/sph.hpp>
+#include <cosmictiger/sph/sph_flops.hpp>
 #if COSMICTIGER_ENABLE_CHEMISTRY
 #include <cosmictiger/sph/sph_chemistry.hpp>
 #endif
@@ -147,19 +148,20 @@ void sphParticlesApplyUpdates(
                     (size_t) threadIndex * sphParticlesSize() / numberOfThreads;
                 ParticleInteger const rangeEnd =
                     (size_t) (threadIndex + 1) * sphParticlesSize() / numberOfThreads;
-                FlopCounter<> flops;
+                sph_flops::Counter flops;
                 for (int gasIndex = rangeBegin; gasIndex < rangeEnd; gasIndex++) {
                     ParticleInteger const gravityIndex = sphParticlesParticleIndex(gasIndex);
                     auto const rung = sphParticlesRung(gasIndex);
                     double const halfTimeStep = explicitTimestep >= 0.0 ?
                         0.5 * explicitTimestep :
                         std::ldexp(double(timeStepScale), -1 - int(rung));
-                    flops += 2;
+                    flops.doublePrecision += explicitTimestep >= 0.0 ? 1 : 2;
                     if (getOptions().hydro.viscosityEvolution == "morrisAndMonaghan" &&
                         rung >= minimumRung) {
                         morris_and_monaghan::applyUpdate(sphParticlesViscosityStates[gasIndex],
                             getOptions().hydro.viscosityAlphaMin, halfTimeStep, phase);
                         flops += 2;
+                        flops.doublePrecision += 2;    // Two double-to-float arguments.
                     }
                     // Each active particle gets two half-kicks per step: one closes the step
                     // that just drifted, one opens the next. Hydro rates depend on the
@@ -171,7 +173,9 @@ void sphParticlesApplyUpdates(
                         // so the hydro run sees velocities and energies at the end of the
                         // drift. Save those rates so phase 1 can take this kick back out.
                         if (rung >= minimumRung) {
-                            flops += 2 * kDimensions + 2;
+                            // Each mixed multiply/add promotes two float values and narrows
+                            // the stored result, in addition to two double arithmetic ops.
+                            flops.doublePrecision += 5 * (kDimensions + 1);
                             for (int dimension = 0; dimension < kDimensions; dimension++) {
                                 sphParticlesPredictedAcceleration(dimension, gasIndex) =
                                     sphParticlesAcceleration(dimension, gasIndex);
@@ -195,7 +199,8 @@ void sphParticlesApplyUpdates(
                         // energy after either step is reported before the assertion fires.
                         // Particles are now synchronized for the energy diagnostics.
                         if (rung >= minimumRung) {
-                            flops += 3 * kDimensions + 4;
+                            flops += kDimensions;    // Float acceleration differences.
+                            flops.doublePrecision += 5 * (kDimensions + 2);
                             for (int dimension = 0; dimension < kDimensions; dimension++) {
                                 particlesVel(dimension, gravityIndex) +=
                                     (sphParticlesAcceleration(dimension, gasIndex) -
@@ -223,7 +228,7 @@ void sphParticlesApplyUpdates(
                         // the next step with the synchronized rates and the new rung's
                         // half-step, ahead of the drift. The next step's phase 0 closes it.
                         if (rung >= minimumRung) {
-                            flops += 2 * kDimensions + 2;
+                            flops.doublePrecision += 5 * (kDimensions + 1);
                             for (int dimension = 0; dimension < kDimensions; dimension++) {
                                 particlesVel(dimension, gravityIndex) +=
                                     sphParticlesAcceleration(dimension, gasIndex) * halfTimeStep;
@@ -235,7 +240,7 @@ void sphParticlesApplyUpdates(
                         }
                     }
                 }
-                addCpuFlops(flops);
+                addCpuFlops(flops.counts());
             },
             phase == 0     ? "sph.particles.predictKick" :
                 phase == 1 ? "sph.particles.correctKick" :
@@ -1389,7 +1394,7 @@ void sphParticlesUpdateTargetAlpha(
         pending.push_back(hpx::async<SphParticlesUpdateTargetAlphaAction>(
             child, minimumRung, timeStepScale, time, explicitTimestep));
     }
-    FlopCounter<> flops;
+    sph_flops::Counter flops;
     for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
         int const rung = sphParticlesRung(index);
         bool const active = rung >= minimumRung;
@@ -1401,17 +1406,20 @@ void sphParticlesUpdateTargetAlpha(
             float const timeStep = explicitTimestep >= 0.0 ?
                 explicitTimestep :
                 (time > 0.0f ? timeStepScale / (1 << rung) : 0.0f);
+            flops.doublePrecision += explicitTimestep >= 0.0 ? 1 : 2;
+            flops += explicitTimestep < 0.0 && time > 0.0f ? 1 : 0;
             auto& state = sphParticlesViscosityStates[index];
+            bool const increasing = state.alpha < diagnostic.targetAlpha;
             // Cullen & Dehnen (2010), equation (A15), or Price et al. (2018), equation (50).
             state.alpha = cullenDehnen ?
                 cullen_and_dehnen::evolvedAlpha(
                     state.alpha, diagnostic.targetAlpha, diagnostic.inverseDecayTime, timeStep) :
                 price_etal::evolvedAlpha(
                     state.alpha, diagnostic.targetAlpha, diagnostic.inverseDecayTime, timeStep);
-            flops += 7;
+            flops += increasing ? (cullenDehnen ? 0 : 1) : 5;
         }
     }
-    addCpuFlops(flops);
+    addCpuFlops(flops.counts());
     for (auto& future : pending) {
         future.get();
     }

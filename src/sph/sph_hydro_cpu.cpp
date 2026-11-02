@@ -29,7 +29,7 @@
 SphRunReturn sphCpuHydro(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
-    FlopCounter<> flops = 2;    // Scale-factor reciprocal and gas mass scaling.
+    sph_flops::Counter flops = 2;    // Scale-factor reciprocal and gas mass scaling.
     auto const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
     auto const neighbors = detail::sphCpuNeighbors(data, targetNode, true, flops);
     float const inverseScaleFactor = 1.0f / parameters.scaleFactor;
@@ -43,6 +43,7 @@ SphRunReturn sphCpuHydro(
     constexpr float kHydroAccelerationScale = 0.7115965735877551f;
     float const supportRadiusPerEffectiveRadius =
         float(selectedHydroKernel().supportRadiusPerEffectiveRadius);
+    flops.doublePrecision += 1;
     SimdFloat const zero(0.0f);
     SimdFloat const one(1.0f);
     SimdFloat const half(0.5f);
@@ -141,8 +142,8 @@ SphRunReturn sphCpuHydro(
             SimdFloat const q_b = r * one_over_H_b;
             SimdFloat const F_a = dkernelWDq(q_a) * SimdFloat(one_over_H_a4) / r;
             SimdFloat const F_b = dkernelWDq(q_b) * sqr(sqr(one_over_H_b)) / r;
-            flops += sph_flops::densityKernelFlops(selectedHydroKernel(), q_a, true) +
-                sph_flops::densityKernelFlops(selectedHydroKernel(), q_b, true);
+            flops += sph_flops::densityKernelOperations(selectedHydroKernel(), q_a, true) +
+                sph_flops::densityKernelOperations(selectedHydroKernel(), q_b, true);
             SimdFloat const F_ab = simdSelect(interacts, half * (F_a + F_b), zero);
             // v_ab = v_a − v_b from the stored peculiar velocities. The physical relative
             // velocity adds the Hubble flow (a da/dt) r_ab and enters only the viscosity.
@@ -243,7 +244,8 @@ SphRunReturn sphCpuHydro(
         dv_a_dt[kYDimension] += parameters.uniformAccelerationY;
         dv_a_dt[kZDimension] +=
             parameters.midplaneAccelerationZ(data.sourcePositionZ[particleIndex]);
-        flops += 3;    // Two acceleration additions and fixed-point midpoint conversion.
+        flops += 2;    // Acceleration additions remain float.
+        flops.doublePrecision += sph_flops::positionConstructionFlops();
         if (data.centralAcceleration != 0.0f) {
             Vector3<float> const separation(
                 distance(data.sourcePositionX[particleIndex], Position(0.5)),
@@ -256,7 +258,8 @@ SphRunReturn sphCpuHydro(
                 radial_kernel::forceFactor(selectedGravityKernel(), q) * inverseSupportRadius *
                 inverseSupportRadius * inverseSupportRadius;
             dv_a_dt -= force * separation;
-            flops += 24 + sph_flops::forceKernelFlops(selectedGravityKernel(), q);
+            flops += 21 + sph_flops::forceKernelOperations(selectedGravityKernel(), q);
+            flops.doublePrecision += 3 * sph_flops::positionConstructionFlops();
         }
         dv_a_dt -= parameters.velocityDampingRate * v_a;
         for (int dim = 0; dim < kDimensions; dim++) {
@@ -305,6 +308,7 @@ SphRunReturn sphCpuHydro(
             }
             ALWAYS_ASSERT(std::isfinite(δt) && δt > 0.0f);
             result.minimumTimestep = std::min(result.minimumTimestep, double(δt));
+            flops.doublePrecision += 1;
             int const hydroRung = parameters.globalTimestep ?
                 0 :
                 std::max(1, int(std::ceil(std::log2(parameters.baseTimestep / δt))));
@@ -316,6 +320,7 @@ SphRunReturn sphCpuHydro(
                         std::fmax(gravityAcceleration.norm(), 1.0e-30f)));
             if (data.selfGravityEnabled) {
                 result.minimumTimestep = std::min(result.minimumTimestep, double(gravityTimestep));
+                flops.doublePrecision += 1;
             }
             int const gravityRung = parameters.globalTimestep ?
                 0 :
@@ -367,7 +372,7 @@ SphRunReturn sphCpuHydro(
         }
     }
     result.floatingPointOperations = FlopCount(flops);
-    addCpuFlops(flops);
+    addCpuFlops(flops.counts());
     return result;
 }
 // NOLINTEND(readability-identifier-naming)

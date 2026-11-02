@@ -16,7 +16,7 @@ __global__ void contributeFlops(bool divergent) {
     if (!divergent || index % 3 == 1) {
         FlopCounter<> count = FlopCount(1) << 54;
         (count += index) += 1;
-        addGpuFlops(count);
+        addGpuFlops(count, FlopPrecision::Single);
     }
 }
 
@@ -24,8 +24,16 @@ __global__ void contributePrecisionFlops(bool divergent, int precision) {
     unsigned const index = threadIdx.x + blockDim.x * (threadIdx.y + blockDim.y * threadIdx.z);
     if (!divergent || index % 3 == 1) {
         FlopPrecision const selected =
-            FlopPrecision(precision < 0 ? (index / 3) % 3 : unsigned(precision));
+            FlopPrecision(precision < 0 ? (index / 3) % 2 : unsigned(precision));
         addGpuFlops((FlopCount(1) << 54) + index + 3, selected);
+    }
+}
+
+__global__ void contributeBatchedFlops(bool divergent, bool diagnostic) {
+    unsigned const index = threadIdx.x + blockDim.x * (threadIdx.y + blockDim.y * threadIdx.z);
+    if (!divergent || index % 3 == 1) {
+        addGpuFlops(FlopCounts{(FlopCount(1) << 54) + index + 3,
+            (FlopCount(1) << 53) + 2 * index + 7, diagnostic ? FlopCount(index + 11) : 0});
     }
 }
 
@@ -65,9 +73,9 @@ TEST_F(FlopsCuda, ExactCountsForMultiplePartialAndDivergentWarps) {
             }
             ASSERT_EQ(getGpuFlops(), expected);
             auto const counts = getGpuFlopCounts();
-            EXPECT_EQ(counts.singlePrecision, 0);
+            EXPECT_EQ(counts.singlePrecision, expected);
             EXPECT_EQ(counts.doublePrecision, 0);
-            EXPECT_EQ(counts.unclassified, expected);
+            EXPECT_EQ(counts.unclassified, 0);
         }
     }
     resetGpuFlops();
@@ -78,7 +86,7 @@ TEST_F(FlopsCuda, ExactCountsForMultiplePartialAndDivergentWarps) {
 TEST_F(FlopsCuda, PrecisionCountsForUniformMixedAndDivergentWarps) {
     for (auto const block : {dim3(1), dim3(17), dim3(32), dim3(65), dim3(7, 3, 2)}) {
         for (bool divergent : {false, true}) {
-            for (int precision : {-1, 0, 1, 2}) {
+            for (int precision : {-1, 0, 1}) {
                 resetGpuFlops();
                 contributePrecisionFlops<<<2, block>>>(divergent, precision);
                 ASSERT_EQ(cudaGetLastError(), cudaSuccess);
@@ -88,14 +96,43 @@ TEST_F(FlopsCuda, PrecisionCountsForUniformMixedAndDivergentWarps) {
                     if (!divergent || index % 3 == 1) {
                         FlopCount const count = 2 * ((FlopCount(1) << 54) + index + 3);
                         unsigned const selected =
-                            precision < 0 ? (index / 3) % 3 : unsigned(precision);
+                            precision < 0 ? (index / 3) % 2 : unsigned(precision);
                         if (selected == 0) {
                             expected.singlePrecision += count;
-                        } else if (selected == 1) {
-                            expected.doublePrecision += count;
                         } else {
-                            expected.unclassified += count;
+                            expected.doublePrecision += count;
                         }
+                    }
+                }
+                auto const actual = getGpuFlopCounts();
+                EXPECT_EQ(actual.singlePrecision, expected.singlePrecision);
+                EXPECT_EQ(actual.doublePrecision, expected.doublePrecision);
+                EXPECT_EQ(actual.unclassified, 0);
+                EXPECT_EQ(getGpuFlops(), expected.total());
+            }
+        }
+    }
+    resetGpuFlops();
+    auto const counts = getGpuFlopCounts();
+    EXPECT_EQ(counts.singlePrecision, 0);
+    EXPECT_EQ(counts.doublePrecision, 0);
+    EXPECT_EQ(counts.unclassified, 0);
+}
+
+TEST_F(FlopsCuda, ClassifiedBatchesAndExplicitUnclassifiedDiagnostics) {
+    for (auto const block : {dim3(1), dim3(17), dim3(32), dim3(65), dim3(7, 3, 2)}) {
+        for (bool divergent : {false, true}) {
+            for (bool diagnostic : {false, true}) {
+                resetGpuFlops();
+                contributeBatchedFlops<<<2, block>>>(divergent, diagnostic);
+                ASSERT_EQ(cudaGetLastError(), cudaSuccess);
+                ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+                FlopCounts expected;
+                for (unsigned index = 0; index < block.x * block.y * block.z; ++index) {
+                    if (!divergent || index % 3 == 1) {
+                        expected.singlePrecision += 2 * ((FlopCount(1) << 54) + index + 3);
+                        expected.doublePrecision += 2 * ((FlopCount(1) << 53) + 2 * index + 7);
+                        expected.unclassified += diagnostic ? 2 * FlopCount(index + 11) : 0;
                     }
                 }
                 auto const actual = getGpuFlopCounts();
@@ -107,8 +144,5 @@ TEST_F(FlopsCuda, PrecisionCountsForUniformMixedAndDivergentWarps) {
         }
     }
     resetGpuFlops();
-    auto const counts = getGpuFlopCounts();
-    EXPECT_EQ(counts.singlePrecision, 0);
-    EXPECT_EQ(counts.doublePrecision, 0);
-    EXPECT_EQ(counts.unclassified, 0);
+    EXPECT_EQ(getGpuFlops(), 0);
 }

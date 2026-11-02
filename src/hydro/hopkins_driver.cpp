@@ -20,8 +20,10 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/terminal.hpp>
+#if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/cosmology/cosmology.hpp>
 #include <cosmictiger/cosmology/evolution.hpp>
+#endif
 #include <cosmictiger/hydro/hopkins.hpp>
 #include <cosmictiger/hydro/hopkins_driver.hpp>
 #include <cosmictiger/hydro/hopkins_state.hpp>
@@ -896,12 +898,14 @@ HopkinsStepResult hopkinsSelectTimesteps(HopkinsWorkspace& workspace, int minimu
     hopkins::detail::countFlops(operations, global ? 0 : 1);
     double backgroundTimestep =
         global ? maximumGlobalTimestep : std::ldexp(baseTimestep, -options.run.minRung);
+#if COSMICTIGER_WITH_GRAVITY
     if (options.run.scenario == "cosmology") {
         hopkins::detail::countFlops(operations, 1);
         backgroundTimestep = std::min(backgroundTimestep,
             cosmology::expansionTimestep(workspace.scale, workspace.expansionRate / workspace.scale,
                 cosmosD2adt2(workspace.scale), 0.01, operations));
     }
+#endif
     for (size_t i = 0; i < workspace.particles.size(); i++) {
         auto& particle = workspace.particles[i];
         particle.active = particle.rung >= minimumRung;

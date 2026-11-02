@@ -4,6 +4,34 @@ Public headers live under `cosmictiger/` and implementations under `src/`.
 Both trees use the same algorithm directories. Common machinery sits directly
 in its subsystem directory; there is no `shared/` layer.
 
+## Build libraries
+
+The application combines capability-dependent objects with smaller static
+libraries selected in `cmake/variants.cmake`:
+
+| Library | Contents | Build requirement |
+| --- | --- | --- |
+| `cosmictiger_core` | Assertions, counters, memory utilities, kernels, and CUDA utilities | All builds |
+| `cosmictiger_cosmology` | Background evolution, Einstein–Boltzmann solver, cosmological initial conditions, and background plotting | Gravity |
+| `cosmictiger_fft` | Distributed transforms and FFTW threading support | Gravity |
+| `cosmictiger_power` | CPU/CUDA power-spectrum analysis | Gravity |
+| `cosmictiger_recombination` | Homogeneous recombination history | Gravity |
+| `cosmictiger_sph_chemistry` | GADGET-4 particle cooling | SPH and chemistry |
+
+The cosmology library depends on FFT and recombination; power analysis depends
+on FFT. Particle cooling does not depend on homogeneous recombination. The
+generic core has no cosmology or analysis sources and does not inherit the
+application's capability definitions.
+
+Disabling all three gravity algorithms (`COSMICTIGER_ENABLE_FMM`,
+`COSMICTIGER_ENABLE_PMMM_PP`, and `COSMICTIGER_ENABLE_PMMM_FMM`) excludes the
+gravity-only libraries, cosmological scenario, and their tests and reference
+executables. Such builds also omit GSL, FFTW, and both HEALPix dependencies.
+HPX, MPI, threads, and Silo remain available for hydrodynamics, distribution,
+and output. Capability definitions propagate through the selected physics
+libraries and application objects; standalone tests receive the same
+definitions without linking unrelated physics libraries.
+
 ## Gravity
 
 ```text
@@ -85,6 +113,7 @@ recombination remains available for collisionless cosmology.
 defaults to `ON`. Particle chemistry sources and tests are included only when
 both SPH and chemistry are enabled. With SPH off, the chemistry setting is
 inactive; homogeneous recombination remains available with either setting.
+Homogeneous recombination is built only when a gravity algorithm is enabled.
 
 ```text
 sph/

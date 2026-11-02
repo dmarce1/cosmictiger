@@ -120,14 +120,14 @@ double gravityFinishGlobalKick(double timestep) {
             if (!options.hydro.enabled || particlesType(i) != kSphType) {
                 particlesVel(dim, i) =
                     std::fma(detail::globalAccelerations[dim][i], halfStep, particlesVel(dim, i));
-                flops += 2;
+                flops += 5;    // Double FMA, two float inputs, and float output conversion.
             }
             double const velocity = particlesVel(dim, i);
             velocitySquared += velocity * velocity;
         }
         kinetic += 0.5 * particlesMass(i) * velocitySquared;
     }
-    addCpuFlops(flops);
+    addCpuFlops(flops, FlopPrecision::Double);
     hpx::wait_all(futures.begin(), futures.end());
     for (auto& future : futures) {
         kinetic += future.get();

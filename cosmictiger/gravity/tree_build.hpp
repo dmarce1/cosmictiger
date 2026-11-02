@@ -28,7 +28,7 @@ struct TreeBuildPolicy {
     FmmParticleStore sourceStore = FmmParticleStore::Owned;
     bool boundedGeometry = false;
     bool extraSubdivision = false;
-    FlopCount subdivisionFlops = 0;
+    FlopCounts subdivisionFlops{};
     Pair<int, int> representedProcessRange;
     void* context = nullptr;
     void (*constrainCenter)(

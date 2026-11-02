@@ -33,7 +33,7 @@ namespace detail {
 // limit the support radius without modifying the density sum.
 bool solveSphCpuSupportRadius(SphRunParameters const& parameters, SphRunData const& data,
     SphTreeNode const& targetNode, std::vector<int> const& neighbors, int particleIndex,
-    float& supportRadius, FlopCounter<>& flops) {
+    float& supportRadius, sph_flops::Counter& flops) {
     float const minimumSupportRadius = parameters.minimumSupportRadius;
     float const maximumSupportRadius = parameters.maximumSupportRadius;
     ALWAYS_ASSERT(minimumSupportRadius > 0.0f && maximumSupportRadius >= minimumSupportRadius &&
@@ -59,12 +59,12 @@ bool solveSphCpuSupportRadius(SphRunParameters const& parameters, SphRunData con
     flops += 1;
     for (int iteration = 0; iteration < 128; ++iteration) {
         for (int dim = 0; dim < kDimensions; ++dim) {
-            flops += 1;    // Float-to-fixed scaling; fixed-point arithmetic is integer.
+            flops.doublePrecision += 2;    // Float-to-double promotion and fixed scaling.
             if (targetNode.outerBox.end[dim] <
                 RangeFixed(position[dim]) + RangeFixed(H_a) + RangeFixed::min()) {
                 return false;
             }
-            flops += 1;
+            flops.doublePrecision += 2;
             if (RangeFixed(position[dim]) <
                 targetNode.outerBox.begin[dim] + RangeFixed(H_a) + RangeFixed::min()) {
                 return false;
@@ -82,8 +82,8 @@ bool solveSphCpuSupportRadius(SphRunParameters const& parameters, SphRunData con
                 simdSelect(contributes, q_ab * dkernelWDq(q_ab) * one_over_H_a, SimdFloat(0.0f));
             // q, two accumulations and the two derivative products, in every lane.
             flops += 5 * SimdFloat::size() +
-                sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab) +
-                sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
+                sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab) +
+                sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
         }
         float const residual = simdSum(ΣW_pack) - ΣW_target;
         flops += SimdFloat::size() - 1 +
@@ -144,7 +144,7 @@ void recordSphCpuGradH(SphGradHEvaluation const& gradH, float supportRadius, flo
 
 bool sphCpuHasActiveNeighbor(SphRunParameters const& parameters, SphRunData const& data,
     std::vector<int> const& neighbors, int particleIndex, float supportRadius,
-    FlopCounter<>& flops) {
+    sph_flops::Counter& flops) {
     SimdFloat const squaredSupportRadius(supportRadius * supportRadius);
     flops += 1;
     for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
@@ -171,7 +171,7 @@ bool sphCpuHasActiveNeighbor(SphRunParameters const& parameters, SphRunData cons
 SphRunReturn sphCpuPrehydro1(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
-    FlopCounter<> flops;
+    sph_flops::Counter flops;
     auto const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
     auto const neighbors = detail::sphCpuNeighbors(data, targetNode, false, flops);
     for (int particleIndex = targetNode.particleRange.first;
@@ -194,14 +194,14 @@ SphRunReturn sphCpuPrehydro1(
         }
     }
     result.floatingPointOperations = FlopCount(flops);
-    addCpuFlops(flops);
+    addCpuFlops(flops.counts());
     return result;
 }
 
 SphRunReturn sphCpuPrehydro2(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
-    FlopCounter<> flops;
+    sph_flops::Counter flops;
     auto const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
     auto const neighbors = detail::sphCpuNeighbors(data, targetNode, true, flops);
     for (int particleIndex = targetNode.particleRange.first;
@@ -259,14 +259,14 @@ SphRunReturn sphCpuPrehydro2(
             SimdFloat const w_ab = kernelW(q_ab);
             ρ_a_pack += simdSelect(
                 detail::sphCpuValidLanes(neighbors, first), m_b_over_H_a3 * w_ab, SimdFloat(0.0f));
-            flops +=
-                12 * SimdFloat::size() + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab);
+            flops += 12 * SimdFloat::size() +
+                sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab);
             auto const inside =
                 detail::sphCpuValidLanes(neighbors, first) && q_ab < SimdFloat(1.0f);
             ΣW_pack += simdSelect(inside, w_ab, SimdFloat(0.0f));
             Σqdw_pack += simdSelect(inside, q_ab * dkernelWDq(q_ab), SimdFloat(0.0f));
             flops += 3 * SimdFloat::size() +
-                sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
+                sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
             if (parameters.balsaraSwitch || parameters.variableViscosity) {
                 // GADGET-4 equation (72): accumulate ρ_a div(v)_a and ρ_a curl(v)_a
                 // as −Σ_b m_b v_ab·gradW_ab and Σ_b m_b v_ab×gradW_ab.
@@ -344,10 +344,10 @@ SphRunReturn sphCpuPrehydro2(
                                 simdMin(v_ab_dot_r̂_ab, SimdFloat(0)),
                             SimdFloat(0)));
                     flops += 25 * SimdFloat::size() +
-                        sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab);
+                        sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab);
                 }
                 flops += 33 * SimdFloat::size() +
-                    sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
+                    sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
             }
         }
         float const ρ_a = simdSum(ρ_a_pack);
@@ -384,6 +384,7 @@ SphRunReturn sphCpuPrehydro2(
                 std::sqrt(γ_a * P_over_ρu_a * data.sourceInternalEnergy[particleIndex]);
             float const h_a = H_a / float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
                 0.9128709291752769f;
+            flops.doublePrecision += 1;    // Runtime kernel-table coefficient narrowing.
             float const one_over_τ_a =
                 parameters.viscosityDecay * c_a / (parameters.scaleFactor * h_a);
             auto& viscosity = data.sinkViscosityStates[sinkIndex];
@@ -414,6 +415,7 @@ SphRunReturn sphCpuPrehydro2(
                 float const h_a = H_a /
                     float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
                     0.9128709291752769f;
+                flops.doublePrecision += 1;
                 diagnostics = price_etal::diagnostics(sums, parameters.scaleFactor,
                     parameters.expansionRate, h_a, c_a_switch, parameters.viscosityAlphaMaxPrice,
                     parameters.viscosityDecayPrice, flops);
@@ -429,7 +431,7 @@ SphRunReturn sphCpuPrehydro2(
         result.maximumSupportRadius = std::max(result.maximumSupportRadius, H_a);
     }
     result.floatingPointOperations = FlopCount(flops);
-    addCpuFlops(flops);
+    addCpuFlops(flops.counts());
     return result;
 }
 // NOLINTEND(readability-identifier-naming)

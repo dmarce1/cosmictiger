@@ -7,11 +7,14 @@
 
 #include <cmath>
 
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
 #include <chealpix.h>
+#endif
 
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/particles/drift_cpu.hpp>
 
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
 namespace detail {
 
 void appendDriftLightconeEntries(Array<double, kDimensions> const& before,
@@ -81,6 +84,7 @@ void appendDriftLightconeEntries(Array<double, kDimensions> const& before,
 }
 
 }    // namespace detail
+#endif
 
 void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensions>* velocities,
     char const* rungs, char const* types, size_t count, DriftParameters const& parameters,
@@ -89,8 +93,12 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensi
     if (count == 0) {
         return;
     }
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
     bool const lightcone = entries != nullptr && parameters.lightcone && parameters.tauMax > 0.0 &&
         parameters.tauMax - parameters.tau1 < 1.0;
+#else
+    bool const lightcone = false;
+#endif
     if (parameters.timestep == 0.0 && !lightcone) {
         return;
     }
@@ -149,7 +157,9 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensi
         Array<double, kDimensions> before;
         Array<double, kDimensions> after;
         Array<double, kDimensions> displacement;
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
         auto const driftVelocity = velocities[index];
+#endif
         auto* state = meshState(index);
         for (int dim = 0; dim < kDimensions; ++dim) {
             before[dim] = positions[dim][index].toDouble();
@@ -159,11 +169,13 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensi
                 velocities[index][dim] *= damping;
             }
         }
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
         if (lightcone) {
             char const type = types != nullptr ? types[index] : char(kDarkMatterType);
             detail::appendDriftLightconeEntries(
                 before, after, driftVelocity, velocities[index], type, parameters, *entries, state);
         }
+#endif
         for (int dim = 0; dim < kDimensions; ++dim) {
             if constexpr (kPositionBits == 64) {
                 positions[dim][index] += Position(displacement[dim]);

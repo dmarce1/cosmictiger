@@ -21,7 +21,37 @@ FEATURE_DEFINITIONS.update({"ORDER", "FMM_MIN_ORDER", "FMM_MAX_ORDER",
 LEGACY_DEFINITIONS = {"COSMICTIGER_GRAVITY_PMMM", "COSMICTIGER_PMMM_NEAR_FMM",
                       "COSMICTIGER_INTEGRATOR_HIERARCHICAL", "COSMICTIGER_ENABLE_PMMM",
                       "COSMICTIGER_ENABLE_PMMM_NEAR_PP", "COSMICTIGER_ENABLE_PMMM_NEAR_FMM"}
-TARGET_PATTERN = re.compile(r"CMakeFiles[/\\]([^/\\]+)\.dir[/\\]")
+TARGET_PATTERN = re.compile(r"CMakeFiles[/\\]([^/\\]+)\.dir(?:[/\\]|$)", re.MULTILINE)
+COSMOLOGY_NAME_PATTERN = re.compile(
+    r"(?:^|_)(?:cosmology|boltzmann|recombination|friedmann|fft(?:w|[0-9]+)?|"
+    r"linear_power|linear_growth|lpt|power)(?:_|$)")
+
+
+def registeredTestNames(buildDirectory):
+    names, pending, visited = set(), [buildDirectory], set()
+    # Follow the current CTest directory graph instead of scanning stale discovery
+    # files left by an earlier configuration of this build directory.
+    while pending:
+        directory = pending.pop().resolve()
+        if directory in visited:
+            continue
+        visited.add(directory)
+        path = directory / "CTestTestfile.cmake"
+        if not path.exists():
+            continue
+        for line in path.read_text().splitlines():
+            match = re.match(
+                r'^\s*(add_test|include|subdirs)\((?:\[=\[(.*?)\]=\]|"([^"]+)"|([^\s)]+))', line)
+            if match is None:
+                continue
+            value = next(value for value in match.groups()[1:] if value is not None)
+            if match[1] == "subdirs":
+                pending.append(directory / value)
+            elif match[1] == "include":
+                names.add(Path(value).name.split("[", 1)[0])
+            else:
+                names.add(value)
+    return names
 
 
 def readCache(path):
@@ -84,6 +114,12 @@ def sourceSelectionErrors(sources, configuration):
     for source in sorted(sources):
         if not hasGravity(configuration):
             gravitySource = source.startswith(("src/gravity/", "tests/gravity/"))
+            cosmologySource = source.startswith(("src/cosmology/", "tests/cosmology/")) or source in {
+                "src/chemistry/recombination.cpp", "src/scenarios/cosmology.cpp"}
+            cosmologySource = cosmologySource or bool(re.fullmatch(
+                r"src/analysis/power(?:_cpu|_cuda)?\.(?:cpp|cu)", source))
+            cosmologySource = cosmologySource or (source.startswith("tests/") and
+                COSMOLOGY_NAME_PATTERN.search(Path(source).stem) is not None)
             haloSource = re.fullmatch(
                 r"src/analysis/(?:bh|compress|group_entry|groups|group_tree|groups_find|healpix|rockstar|rockstar_catalogue|"
                 r"lightcone|lightcone_cpu)\.(?:cpp|cu)", source)
@@ -99,6 +135,8 @@ def sourceSelectionErrors(sources, configuration):
                 "tests/softening_flops.cpp", "tests/sph/gravity.cpp"}
             if gravitySource or haloSource or excludedSource or Path(source).name.startswith("fmm_instance_"):
                 errors.append(f"gravity disabled but compiles gravity source: {source}")
+            if cosmologySource:
+                errors.append(f"gravity disabled but compiles cosmology source: {source}")
         for feature, enabled, directory in (("FMM", configuration["FMM"], "dehnen"),
                                             ("PMMM", hasPmmm(configuration), "nitadori")):
             if not enabled and source.startswith(
@@ -150,7 +188,7 @@ def sourceSelectionErrors(sources, configuration):
 
 
 def requiredSources(configuration, cuda):
-    required = {"src/core/driver.cpp", "src/core/hpx.cpp", "src/particles/particles.cpp", "src/cosmology/fft.cpp"}
+    required = {"src/core/driver.cpp", "src/core/hpx.cpp", "src/particles/particles.cpp"}
     if hasGravity(configuration):
         required.update({"src/gravity/fmm_order.cpp", "src/gravity/error.cpp", "src/gravity/reference_table.cpp"})
     if configuration["FMM"]:
@@ -246,9 +284,32 @@ def checkBuild(buildDirectory):
             errors.append(f"{target}: {source} needs COSMICTIGER_POSITION_BITS={expectedBits}, found {sorted(foundBits or set())}")
         for error in sourceSelectionErrors({source}, configuration):
             errors.append(f"{target}: {error}")
+    if not hasGravity(configuration):
+        targets = set(sourcesByTarget)
+        targetDirectories = buildDirectory / "CMakeFiles/TargetDirectories.txt"
+        if targetDirectories.exists():
+            targets.update(match[1] for match in TARGET_PATTERN.finditer(targetDirectories.read_text()))
+        for target in sorted(targets):
+            if COSMOLOGY_NAME_PATTERN.search(target):
+                errors.append(f"gravity disabled but configures cosmology target: {target}")
+        if testing:
+            for name in sorted(registeredTestNames(buildDirectory)):
+                if COSMOLOGY_NAME_PATTERN.search(name):
+                    errors.append(f"gravity disabled but registers cosmology test: {name}")
     coreSources = set(sourcesByTarget.get("cosmictiger_core", {}))
     if not coreSources:
         errors.append("shared cosmictiger_core library has no compilation entries")
+    if hasGravity(configuration):
+        for target, source in (
+                ("cosmictiger_cosmology", "src/cosmology/boltzmann.cpp"),
+                ("cosmictiger_fft", "src/cosmology/fft.cpp"),
+                ("cosmictiger_power", "src/analysis/power.cpp"),
+                ("cosmictiger_recombination", "src/chemistry/recombination.cpp")):
+            if source not in sourcesByTarget.get(target, {}):
+                errors.append(f"{target}: required library source missing: {source}")
+    for source in sorted(coreSources):
+        if source.startswith(("src/cosmology/", "src/analysis/")) or source == "src/chemistry/recombination.cpp":
+            errors.append(f"shared core compiles physics library source: {source}")
     for source, count in sourcesByTarget.get("cosmictiger_core", {}).items():
         if count != 1:
             errors.append(f"cosmictiger_core compiles {source} {count} times instead of once")
@@ -316,8 +377,14 @@ def checkBuild(buildDirectory):
         if "cosmictiger_core" not in libraries:
             errors.append("cosmictiger does not link the shared cosmictiger_core library")
         linkedSources = set().union(*(set(sourcesByTarget.get(library, {})) for library in libraries))
-        if "src/chemistry/recombination.cpp" not in linkedSources:
+        if hasGravity(configuration) and "src/chemistry/recombination.cpp" not in linkedSources:
             errors.append("cosmictiger lacks shared homogeneous recombination")
+        if hasGravity(configuration) and "src/cosmology/fft.cpp" not in linkedSources:
+            errors.append("cosmictiger lacks its cosmology FFT library")
+        if not hasGravity(configuration):
+            for argument in shlex.split(linkCommand):
+                if "fftw" in Path(argument).name.lower():
+                    errors.append(f"gravity disabled but links FFTW: {argument}")
         if hasChemistry(configuration):
             chemistry = {"src/chemistry/gadget4_cooling.cpp"}
             if cuda:

@@ -24,13 +24,13 @@
 
 // Internal node: translate the children's multipoles to `center` and sum them.
 template <int order>
-FlopCount treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& left,
+FlopCounts treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& left,
     MultipoleBuffer const& right, Array<double, kDimensions> const& leftCenter,
     Array<double, kDimensions> const& rightCenter, Array<double, kDimensions> const& center);
 
 // Leaf: accumulate P2M over the local particles of `particleRange` about `center`.
 template <int order>
-FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> particleRange,
+FlopCounts treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> particleRange,
     Array<double, kDimensions> const& center,
     FmmSourceView const& sources = fmmSourceView(FmmParticleStore::Owned));
 
@@ -42,7 +42,7 @@ FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> par
 #include <cosmictiger/math/simd.hpp>
 
 template <int order>
-FlopCount treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& left,
+FlopCounts treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& left,
     MultipoleBuffer const& right, Array<double, kDimensions> const& leftCenter,
     Array<double, kDimensions> const& rightCenter, Array<double, kDimensions> const& center) {
     constexpr int kMultipoleCoefficients = FmmOrder<order>::kMultipoleCoefficients_;
@@ -62,13 +62,18 @@ FlopCount treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& le
     for (int i = 0; i < kMultipoleCoefficients; i++) {
         multi[i] = simdM[i][kLeftChild] + simdM[i][kRightChild];
     }
-    return 2 *
-        cosmictiger::gravity::cartesian::detail::M2M<FmmOrder<order>::kMultipoleDegree_>::kFlops_ +
-        12 + kMultipoleCoefficients;
+    // M2M is double, including two input widenings and one output narrowing
+    // per stored coefficient. Only the two populated SIMD lanes are counted.
+    return {0,
+        2 *
+                cosmictiger::gravity::cartesian::detail::M2M<
+                    FmmOrder<order>::kMultipoleDegree_>::kFlops_ +
+            12 + 4 * kMultipoleCoefficients,
+        0};
 }
 
 template <int order>
-FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> particleRange,
+FlopCounts treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> particleRange,
     Array<double, kDimensions> const& center, FmmSourceView const& sources) {
     constexpr int kMultipoleCoefficients = FmmOrder<order>::kMultipoleCoefficients_;
     static SimdFloat const toFloatFactor = kPositionToFloat;
@@ -117,10 +122,21 @@ FlopCount treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> par
     }
     // Every SIMD lane executes P2M, including the zero-mass padding. Each
     // coefficient has a lane multiply and a reduction plus scalar accumulation.
-    return 3 +
-        FlopCount(maxi - particleRange.first) *
-        (cosmictiger::gravity::cartesian::detail::P2M<FmmOrder<order>::kMultipoleDegree_>::kFlops_ +
-            6 + 2 * kMultipoleCoefficients);
+    FlopCount centerConversions = 0;
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        centerConversions +=
+            (kPositionBits == 64 ? 4 : 1) + FlopCount(!(center[dim] > -1.0 && center[dim] < 1.0));
+    }
+    FlopCount const lanes = maxi - particleRange.first;
+    FlopCount const packets = lanes / kSimdFloatSize;
+    // P2M, lane mass weights, and SIMD reductions are float. Each reduced
+    // coefficient widens and accumulates in double, then narrows into storage.
+    return {lanes *
+                (cosmictiger::gravity::cartesian::detail::P2M<
+                     FmmOrder<order>::kMultipoleDegree_>::kFlops_ +
+                    6 + kMultipoleCoefficients) +
+            packets * (kSimdFloatSize - 1) * kMultipoleCoefficients,
+        centerConversions + (2 * packets + 1) * kMultipoleCoefficients, 0};
 }
 
 #endif

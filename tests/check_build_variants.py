@@ -34,7 +34,11 @@ class BuildFeaturesTest(unittest.TestCase):
                            for key, value in self.features.items()})
         self.cache["COSMICTIGER_ENABLE_STAR_FORMATION"] = self.cache["COSMICTIGER_ENABLE_STARS"]
         self.addCompilation("cosmictiger_core", "src/core/flops.cpp", {})
-        self.addCompilation("cosmictiger_recombination", "src/chemistry/recombination.cpp", {})
+        if hasGravity(self.features):
+            self.addCompilation("cosmictiger_recombination", "src/chemistry/recombination.cpp", {})
+            self.addCompilation("cosmictiger_cosmology", "src/cosmology/boltzmann.cpp", {})
+            self.addCompilation("cosmictiger_fft", "src/cosmology/fft.cpp", {})
+            self.addCompilation("cosmictiger_power", "src/analysis/power.cpp", {})
         if hasChemistry(self.features):
             self.addCompilation("cosmictiger_sph_chemistry", "src/chemistry/gadget4_cooling.cpp", {})
         bits = 64 if self.features["HOPKINS"] else 32
@@ -51,7 +55,10 @@ class BuildFeaturesTest(unittest.TestCase):
         self.linkPath.parent.mkdir(parents=True, exist_ok=True)
         self.linkPath.write_text("c++ CMakeFiles/cosmictiger.dir/src/main.cpp.o "
                                 "CMakeFiles/cosmictiger_objects.dir/src/core/driver.cpp.o "
-                                "libcosmictiger_core.a libcosmictiger_recombination.a\n" +
+                                "libcosmictiger_core.a\n" +
+                                ("libcosmictiger_cosmology.a libcosmictiger_fft.a "
+                                 "libcosmictiger_power.a libcosmictiger_recombination.a\n"
+                                 if hasGravity(self.features) else "") +
                                 ("libcosmictiger_sph_chemistry.a\n" if hasChemistry(self.features) else ""))
 
     def addCompilation(self, target, source, definitions):
@@ -258,6 +265,81 @@ class BuildFeaturesTest(unittest.TestCase):
         self.addCompilation("cosmictiger_objects", "src/gravity/reference_table.cpp", self.definitions)
         with self.assertRaisesRegex(ValueError, "gravity disabled but compiles gravity source"):
             self.check()
+
+    def testSphOnlyRejectsCosmologySourcesAndReferences(self):
+        for source in ("src/cosmology/boltzmann.cpp", "src/cosmology/zero_order.cpp",
+                       "src/cosmology/background.cpp", "src/cosmology/fft.cpp",
+                       "src/chemistry/recombination.cpp", "src/scenarios/cosmology.cpp",
+                       "src/analysis/power.cpp", "src/analysis/power_cuda.cu",
+                       "tests/recombination_reference.cpp", "tests/boltzmann_reference.cpp",
+                       "tests/native_recombination.cpp", "tests/friedmann.cpp",
+                       "tests/cosmology_evolution.cpp", "tests/fftw_threads.cpp",
+                       "tests/linear_power.cpp", "tests/linear_growth.cpp", "tests/lpt.cpp"):
+            with self.subTest(source=source):
+                self.configure(FMM=False)
+                self.cache["BUILD_TESTING"] = "ON"
+                self.addCompilation("unused_cosmology", source, {})
+                with self.assertRaisesRegex(ValueError, "gravity disabled but compiles cosmology source: " + source):
+                    self.check()
+
+    def testSphOnlyRejectsCosmologyTargetsWithoutCompiledSources(self):
+        self.configure(FMM=False)
+        targetPath = self.buildDirectory / "CMakeFiles/TargetDirectories.txt"
+        for name in ("cosmictiger_recombination", "boltzmann_reference", "cosmictiger_cosmology",
+                     "cosmictiger_fft", "cosmictiger_power"):
+            with self.subTest(name=name):
+                targetPath.write_text(f"{self.buildDirectory}/CMakeFiles/{name}.dir\n")
+                with self.assertRaisesRegex(ValueError, "gravity disabled but configures cosmology target: " + name):
+                    self.check()
+
+    def testSphOnlyRejectsRegisteredCosmologyTests(self):
+        self.configure(FMM=False)
+        self.cache["BUILD_TESTING"] = "ON"
+        registration = self.buildDirectory / "CTestTestfile.cmake"
+        for name in ("cosmology_integration", "native_recombination_reference", "fft1_cpu",
+                     "linear_growth_analysis_self_check", "power_cpu"):
+            with self.subTest(name=name):
+                registration.write_text(f'add_test([=[{name}]=] "unused")\n')
+                with self.assertRaisesRegex(ValueError, "gravity disabled but registers cosmology test: " + name):
+                    self.check()
+
+    def testSphOnlyFollowsActiveCTestDirectories(self):
+        self.configure(FMM=False)
+        self.cache["BUILD_TESTING"] = "ON"
+        registration = self.buildDirectory / "CTestTestfile.cmake"
+        registration.write_text('subdirs("tests/cmake")\n')
+        discovery = self.buildDirectory / "tests/cmake"
+        discovery.mkdir(parents=True)
+        (self.buildDirectory / "stale").mkdir()
+        (self.buildDirectory / "stale/CTestTestfile.cmake").write_text('add_test(cosmology_stale "unused")\n')
+        self.assertIn("Build features passed", self.check())
+        (discovery / "CTestTestfile.cmake").write_text('include("recombination_thermal_test[1]_include.cmake")\n')
+        with self.assertRaisesRegex(ValueError, "registers cosmology test: recombination_thermal_test"):
+            self.check()
+
+    def testSphOnlyRejectsLinkedFftw(self):
+        self.configure(FMM=False)
+        for library in ("-lfftw3f", "/usr/lib/libfftw3f_mpi.so", "/usr/lib/libfftw3f_threads.a"):
+            with self.subTest(library=library):
+                original = self.linkPath.read_text()
+                self.linkPath.write_text(original + library + "\n")
+                with self.assertRaisesRegex(ValueError, "gravity disabled but links FFTW"):
+                    self.check()
+                self.linkPath.write_text(original)
+
+    def testCoreRejectsPhysicsLibrarySources(self):
+        self.addCompilation("cosmictiger_core", "src/cosmology/background.cpp", {})
+        with self.assertRaisesRegex(ValueError, "shared core compiles physics library source"):
+            self.check()
+
+    def testGravityRequiresSeparatePhysicsLibraries(self):
+        for source in ("src/cosmology/boltzmann.cpp", "src/cosmology/fft.cpp", "src/analysis/power.cpp"):
+            with self.subTest(source=source):
+                self.configure()
+                self.commands = [entry for entry in self.commands if not entry["file"].endswith(source)]
+                self.addCompilation("cosmictiger_objects", source, self.definitions)
+                with self.assertRaisesRegex(ValueError, "required library source missing: " + source):
+                    self.check()
 
     def testSphOnlyRejectsHaloToolsAndSupportingSources(self):
         for source in ("src/tools/groups2halofunc.cpp", "src/tools/halo_catalog_export.cpp",

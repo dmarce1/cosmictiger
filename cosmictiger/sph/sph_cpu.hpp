@@ -31,7 +31,7 @@ SphRunReturn sphCpuRungs(
 namespace detail {
 
 inline std::vector<int> sphCpuNeighbors(SphRunData const& data, SphTreeNode const& targetNode,
-    bool symmetric, FlopCounter<>& flops, bool activeOnly = false, int minimumRung = 0) {
+    bool symmetric, sph_flops::Counter& flops, bool activeOnly = false, int minimumRung = 0) {
     std::vector<int> neighbors;
     for (int nodeIndex = targetNode.neighborRange.first;
         nodeIndex < targetNode.neighborRange.second; nodeIndex++) {
@@ -45,7 +45,7 @@ inline std::vector<int> sphCpuNeighbors(SphRunData const& data, SphTreeNode cons
             position[kXDimension] = data.sourcePositionX[sourceIndex];
             position[kYDimension] = data.sourcePositionY[sourceIndex];
             position[kZDimension] = data.sourcePositionZ[sourceIndex];
-            if (targetNode.outerBox.contains(position, &flops) ||
+            if (targetNode.outerBox.contains(position, &flops.doublePrecision) ||
                 (symmetric &&
                     sphSupportIntersects(targetNode.innerBox, position,
                         data.sourceSupportRadius[sourceIndex], &flops))) {

@@ -44,7 +44,7 @@ struct DensityWorkspace {
 
 __global__ void sphCudaPrehydro1(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
-    FlopCounter<> flops = 0;
+    sph_flops::Counter flops = 0;
     int const threadIndex = threadIdx.x;
     int const blockSize = blockDim.x;
     __shared__ int targetNodeIndex;
@@ -71,7 +71,7 @@ __global__ void sphCudaPrehydro1(
                     position[kXDimension] = data.sourcePositionX[sourceParticleIndex];
                     position[kYDimension] = data.sourcePositionY[sourceParticleIndex];
                     position[kZDimension] = data.sourcePositionZ[sourceParticleIndex];
-                    contains = targetNode.outerBox.contains(position, &flops);
+                    contains = targetNode.outerBox.contains(position, &flops.doublePrecision);
                 }
                 int slot = contains;
                 int total;
@@ -125,7 +125,7 @@ __global__ void sphCudaPrehydro1(
 
 __global__ void sphCudaPrehydro2(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
-    FlopCounter<> flops = 0;
+    sph_flops::Counter flops = 0;
     int const threadIndex = threadIdx.x;
     int const blockSize = blockDim.x;
     __shared__ int targetNodeIndex;
@@ -153,7 +153,7 @@ __global__ void sphCudaPrehydro2(
                     position[kXDimension] = data.sourcePositionX[sourceParticleIndex];
                     position[kYDimension] = data.sourcePositionY[sourceParticleIndex];
                     position[kZDimension] = data.sourcePositionZ[sourceParticleIndex];
-                    contains = targetNode.outerBox.contains(position, &flops);
+                    contains = targetNode.outerBox.contains(position, &flops.doublePrecision);
                     if (!contains) {
                         contains = sphSupportIntersects(targetNode.innerBox, position,
                             data.sourceSupportRadius[sourceParticleIndex], &flops);
@@ -296,11 +296,12 @@ __global__ void sphCudaPrehydro2(
                 float const q_ab = radius * one_over_H_a;    // r_ab/H_a
                 float const w_ab = kernelW(q_ab);
                 ρ_a += m_b_over_H_a3 * w_ab;
-                flops += 12 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab);
+                flops += 12 + sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab);
                 if (q_ab < 1.0f) {
                     ΣW += w_ab;
                     Σqdw += q_ab * dkernelWDq(q_ab);
-                    flops += 3 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
+                    flops +=
+                        3 + sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
                 }
                 if (parameters.cullenDehnen) {
                     // Cullen & Dehnen (2010), equation (17), including the self term.
@@ -308,7 +309,7 @@ __global__ void sphCudaPrehydro2(
                     float const sign_div_v_b =
                         div_v_b > 0.0f ? 1.0f : (div_v_b < 0.0f ? -1.0f : 0.0f);
                     ρ_a_R_a += m_b_over_H_a3 * kernelW(q_ab) * sign_div_v_b;
-                    flops += 3 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab);
+                    flops += 3 + sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab);
                 }
                 if ((parameters.balsaraSwitch || parameters.variableViscosity) && radius > 0.0f &&
                     q_ab < 1.0f) {
@@ -360,7 +361,8 @@ __global__ void sphCudaPrehydro2(
                             fmaxf(v_sig_a, 0.5f * (c_a_switch + c_b) - fminf(v_ab_dot_r̂_ab, 0.0f));
                         flops += 13;
                     }
-                    flops += 33 + sph_flops::densityKernelFlops(selectedHydroKernel(), q_ab, true);
+                    flops +=
+                        33 + sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
                 }
             }
             sharedReduceAdd<float, kPrehydro2BlockSize>(ρ_a);
@@ -441,6 +443,7 @@ __global__ void sphCudaPrehydro2(
                     float const h_a = H_a /
                         float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
                         0.9128709291752769f;
+                    flops.doublePrecision += 1;
                     float const one_over_τ_a =
                         parameters.viscosityDecay * c_a / (parameters.scaleFactor * h_a);
                     auto& viscosity = data.sinkViscosityStates[sinkIndex];
@@ -463,6 +466,7 @@ __global__ void sphCudaPrehydro2(
                         float const h_a = H_a /
                             float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
                             0.9128709291752769f;
+                        flops.doublePrecision += 1;
                         diagnostics = price_etal::diagnostics(gradientSums, parameters.scaleFactor,
                             parameters.expansionRate, h_a, c_a_switch,
                             parameters.viscosityAlphaMaxPrice, parameters.viscosityDecayPrice,

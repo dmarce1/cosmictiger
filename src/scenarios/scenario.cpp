@@ -89,8 +89,8 @@ ScenarioDefinition const& definition(std::string const& name) {
 #endif
         {"gresho", false, true, true, 16, initializeGresho},
 #endif
-        {"cosmology", true, COSMICTIGER_WITH_SPH != 0, false, 64, nullptr},
 #if COSMICTIGER_WITH_GRAVITY
+        {"cosmology", true, COSMICTIGER_WITH_SPH != 0, false, 64, nullptr},
         {"glass", true, false, false, 64, nullptr},
 #endif
     };

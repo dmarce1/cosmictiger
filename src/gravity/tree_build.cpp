@@ -41,7 +41,9 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     auto const localRoot = request.localRoot;
     bool const boundedGeometry = policy.boundedGeometry;
     auto const sources = fmmSourceView(policy.sourceStore);
-    FlopCounter<FlopCount> flops = 0;
+    FlopCounter<FlopCount> flops = 0;    // Double box/center arithmetic.
+    FlopCounter<FlopCount> singleFlops = 0;
+    FlopCounter<FlopCounts> multipoleFlops;
     double const h = getOptions().gravity.supportRadius;
     int bucketSize = getOptions().compute.bucketSize;
     TreeCreateReturn rc;
@@ -67,7 +69,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     int const index = treeAllocateNode();
     bool isleaf = true;
     auto const numberOfParticles = particleRange.second - particleRange.first;
-    flops += policy.subdivisionFlops;
+    multipoleFlops += policy.subdivisionFlops;
     static SimdFloat const toFloatFactor = kPositionToFloat;
     if (processRange.second - processRange.first > 1 || numberOfParticles > bucketSize ||
         policy.extraSubdivision) {
@@ -99,10 +101,8 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             flops += 2;
             ParticleInteger mid = fmmSourcePartition(
                 policy.sourceStore, sources, particleRange, Position(xmid), xdim);
-            addCpuFlops(1);
-            if (boundedGeometry) {
-                flops += detail::treePositionConversionExtraFlops(xmid);
-            }
+            addCpuFlops(1, FlopPrecision::Double);
+            flops += detail::treePositionConversionExtraFlops(xmid);
             if ((boundedGeometry || !policy.extraSubdivision) && numberOfParticles > 1 &&
                 (mid == particleRange.first || mid == particleRange.second)) {
                 // Once a global cell meets its geometric/Ewald subdivision
@@ -171,6 +171,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         auto const& mr = rcr.multi;
         double const& rlValue = rcl.radius;
         double const& rrValue = rcr.radius;
+        flops += 2;    // Float child radii widened into the double geometry.
         auto const& boxl = rcl.box;
         auto const& boxr = rcr.box;
         for (int dim = 0; dim < kDimensions; dim++) {
@@ -209,9 +210,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             Array<SimdPosition, kDimensions> xc{};
             for (int dim = 0; dim < kDimensions; dim++) {
                 xc[dim] = simdBroadcast<SimdPosition>(Position(xc1[dim]).raw());
-                if (boundedGeometry) {
-                    flops += detail::treePositionConversionExtraFlops(xc1[dim]);
-                }
+                flops += detail::treePositionConversionExtraFlops(xc1[dim]);
             }
             flops += 9;
             SimdFloat r2Max = simdBroadcast<SimdFloat>(0.0);
@@ -237,7 +236,14 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             for (int i = 0; i < kSimdFloatSize; i++) {
                 r2 = std::max(r2, static_cast<float>(r2Max[i]));
             }
-            flops += FlopCount(roundUp(numberOfParticles, ParticleInteger(kSimdFloatSize))) * 8 + 1;
+            singleFlops +=
+                FlopCount(roundUp(numberOfParticles, ParticleInteger(kSimdFloatSize))) * 8;
+            if constexpr (std::is_same_v<decltype(sqrt(r2)), float>) {
+                singleFlops += 1;
+                flops += 1;    // Float square root widened to radius1.
+            } else {
+                flops += 2;    // Float argument widened before a double square root.
+            }
             radius1 = sqrt(r2);
             //	PRINT("%e\n", radius);
         }
@@ -297,6 +303,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             xcValue = xc2;
             radius = radius2;
         }
+        flops += 1;    // The selected double radius narrows into tree storage.
         r = 0.0;
         for (int dim = 0; dim < kDimensions; dim++) {
             double const span = (rbox.end[dim] - rbox.begin[dim]);
@@ -307,6 +314,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         flops += 13;
         if (r < radius) {
             radius = r;
+            flops += 1;    // Double radius narrows to float.
             for (int dim = 0; dim < kDimensions; dim++) {
                 xcValue[dim] = (rbox.begin[dim] + rbox.end[dim]) * 0.5;
             }
@@ -327,14 +335,16 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             double const enclosingRadius = std::max(std::sqrt(leftDistanceSquared) + rlValue,
                 std::sqrt(rightDistanceSquared) + rrValue);
             radius = std::nextafter(float(enclosingRadius), std::numeric_limits<float>::infinity());
-            flops += 6 * kDimensions + 5;
+            flops += 6 * kDimensions + 5;    // Includes enclosing-radius narrowing.
+            singleFlops += 1;                // nextafter(float, float).
         } else {
             for (int dim = 0; dim < kDimensions; dim++) {
                 x[dim] = xcValue[dim];
+                flops += detail::treePositionConversionExtraFlops(xcValue[dim]);
             }
             flops += 3;
         }
-        flops += fmmDispatch([&](auto orderTag) {
+        multipoleFlops += fmmDispatch([&](auto orderTag) {
             return treeComputeMultipole<decltype(orderTag)::value>(
                 multi, ml, mr, xlValue, xrValue, xcValue);
         });
@@ -344,6 +354,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         // All species use the same fixed comoving gravity support. Gas smoothing
         // lengths belong only to the hydrodynamic tree and neighbor searches.
         rc.maxGravitySupportRadius = numberOfParticles > 0 ? float(h) : 0.0f;
+        flops += numberOfParticles > 0 ? 1 : 0;
         Array<double, kDimensions>& xminValue = rbox.begin;
         Array<double, kDimensions>& xmaxValue = rbox.end;
         for (int dim = 0; dim < kDimensions; dim++) {
@@ -398,23 +409,21 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             r = std::max(r, thisRadius);
         }
         radius = std::sqrt(r);
+        flops += 1;    // Double square-root result narrows into radius.
         if (boundedGeometry) {
             radius = std::nextafter(radius, std::numeric_limits<float>::infinity());
-            flops += 1;
+            singleFlops += 1;
         }
         flops += 4;    // Square root and three center-to-fixed conversions below.
         children[kLeftChild].index = children[kRightChild].index = -1;
-        flops += fmmDispatch([&](auto orderTag) {
+        multipoleFlops += fmmDispatch([&](auto orderTag) {
             return treeComputeMultipole<decltype(orderTag)::value>(
                 multi, particleRange, xcValue, sources);
         });
         for (int dim = 0; dim < kDimensions; dim++) {
             x[dim] = xcValue[dim];
-            if (boundedGeometry) {
-                // Both this assignment and the P2M center conversion above
-                // have one scaling multiply in the existing shared estimates.
-                flops += 2 * detail::treePositionConversionExtraFlops(xcValue[dim]);
-            }
+            // P2M counts its own center conversion; this is the stored center.
+            flops += detail::treePositionConversionExtraFlops(xcValue[dim]);
         }
     }
     TreeNode node;
@@ -439,12 +448,14 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             node.box.end[dim].raw()++;
         }
     }
-    flops += 4 * kDimensions;    // Bounds to/from fixed-point for outward rounding.
+    flops += 4 * kDimensions;    // RangeFixed bounds: one scaling into fixed and one out.
     bool const global = processRange.second - processRange.first > 1;
     node.leaf = isleaf;
     treeStoreNode(index, node, multi);
     rc.id.index = index;
     rc.id.proc = hpxRank();
-    addCpuFlops(flops);
+    addCpuFlops(flops, FlopPrecision::Double);
+    addCpuFlops(singleFlops, FlopPrecision::Single);
+    addCpuFlops(static_cast<FlopCounts>(multipoleFlops));
     return rc;
 }

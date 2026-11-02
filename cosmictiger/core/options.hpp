@@ -18,7 +18,7 @@
 // Public data groups mirror the CLI/INI category names. Radius aliases are
 // resolved during parsing; canonical radii and unit conversions are stored below.
 struct Run {
-    std::string scenario{"cosmology"};
+    std::string scenario{gravity::kBuildHasGravity ? "cosmology" : "sod"};
     double endTime{};
     std::string test{};
     bool verbose{};

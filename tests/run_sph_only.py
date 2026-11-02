@@ -30,7 +30,7 @@ def main():
                        OPENBLAS_NUM_THREADS="1")
     common = ["--hpx:threads=2", "--hpx:bind=none", "--compute.cuda=false",
               "--chemistry.enabled=false", "--analysis.groups=false",
-              "--analysis.views=false", "--analysis.power=false", "--lightcone.enabled=false",
+              "--analysis.views=false", "--lightcone.enabled=false",
               "--output.directory=.", "--output.silo=false",
               "--run.verbose=true", "--checkpoint.intervalSeconds=0"]
     selected = application_options(args.executable.resolve(), hydro=True)
@@ -68,6 +68,12 @@ def main():
         raise RuntimeError("help does not identify the gravity-free build")
     if "Potential expansion degrees:" in helpText:
         raise RuntimeError("SPH-only help advertises an unused expansion order")
+    if re.search(r"^\s*Cosmology:\s*$", helpText, re.MULTILINE):
+        raise RuntimeError("SPH-only help advertises unavailable cosmology options")
+    scenarioHelp = re.search(r"^\s*--run\.scenario\b.*?(?=^\s*--|\Z)",
+                             helpText, re.MULTILINE | re.DOTALL)
+    if scenarioHelp is None or "cosmology" in scenarioHelp[0]:
+        raise RuntimeError("SPH-only scenario help is missing or advertises cosmology")
     chemistryDisabled = re.search(r"Particle chemistry:\s*disabled\s*$", helpText, re.MULTILINE) is not None
     if chemistryDisabled:
         reject("chemistry_cli", ["--chemistry.enabled=true"], "COSMICTIGER_ENABLE_CHEMISTRY=ON",
@@ -80,6 +86,7 @@ def main():
     execute(prepare("saved_diagnostics"), ["--run.test=sphOnlyDiagnostics", "--hydro.enabled=true"])
     for key, value in (("gravity.method.far", "none"), ("gravity.expansionDegree", "0"),
                        ("run.timeIntegrator", selected["run.timeIntegrator"]),
+                       ("run.scenario", "sod"),
                        ("compute.positionType", args.position_type), ("gravity.enabled", "F")):
         if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + value + r"\s*$",
                          metadata, re.MULTILINE):
@@ -92,6 +99,19 @@ def main():
             "--gravity.enabled=false", "--run.test=checkpointState", "--hydro.enabled=false"])
     for scenario in ("plummer", "glass"):
         reject(scenario, [f"--run.scenario={scenario}"], "gravity-enabled build")
+    reject("cosmology_cli", ["--run.scenario=cosmology"], "does not include run.scenario=cosmology")
+    cosmologyConfig = base / "cosmology.ini"
+    cosmologyConfig.write_text("[run]\nscenario = cosmology\n")
+    reject("cosmology_ini", [f"--configuration={cosmologyConfig}"],
+           "does not include run.scenario=cosmology")
+    # Shared hydro presets retain inert cosmology values for cross-build use.
+    hydroConfig = base / "hydro_cosmology_defaults.ini"
+    hydroConfig.write_text("[run]\nscenario = sod\n[cosmology]\nsigma8 = 0.81\n")
+    execute(prepare("hydro_cosmology_defaults"), [f"--configuration={hydroConfig}",
+            "--run.test=checkpointState", "--hydro.enabled=false"])
+    reject("power", ["--analysis.power=true"], "analysis.power requires a gravity-enabled build")
+    for fftTest in ("fft1", "fft2"):
+        reject(fftTest, [f"--run.test={fftTest}"], f"test {fftTest} is not known")
     reject("hydro_disabled", ["--run.scenario=sod", "--hydro.enabled=false"], "requires hydro.enabled")
     reject("gravity_error", ["--gravity.errorInterval=1"], "requires gravity.enabled=true")
     reject("opening_schedule", ["--gravity.openingSchedule=50:0.7"], "requires an FMM build")
@@ -181,15 +201,6 @@ def main():
     if "gravity.enabled differs" not in output:
         raise RuntimeError("gravity-enabled checkpoint was not rejected at compatibility check")
 
-    cosmology = prepare("cosmology")
-    output = execute(cosmology, ["--run.scenario=cosmology", "--run.maxIterations=1",
-                                "--initial.particlesPerDimension=4", "--cosmology.sigma8=0",
-                                "--cosmology.startRedshift=49", "--cosmology.endRedshift=48.9"])
-    if not re.search(r"^gravity.enabled\s*:\s*F\s*$", output, re.MULTILINE):
-        raise RuntimeError("cosmology defaults enabled self-gravity")
-    if not (cosmology / "energy.txt").is_file() or not list(cosmology.glob("checkpoint.*/checkpoint.meta")):
-        raise RuntimeError("cosmological SPH failed to produce diagnostics and a checkpoint")
-    print("cosmology: gravity-free SPH evolution passed")
     if args.reference:
         reference, _ = evolve("wave_gravity_build", "hydroWave", 2,
                               ["--gravity.enabled=false"], args.reference)

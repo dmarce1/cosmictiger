@@ -20,8 +20,10 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/core/timer.hpp>
+#if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/cosmology/initialize.hpp>
+#endif
 #if COSMICTIGER_ENABLE_FMM
 #include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
 #include <cosmictiger/gravity/dehnen/execution.hpp>
@@ -37,8 +39,10 @@
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/scenarios/cosmology.hpp>
 #include <cosmictiger/scenarios/plummer.hpp>
+#endif
 #include <tests/application_test.hpp>
 #if COSMICTIGER_WITH_GRAVITY
 #include <tests/gravity/analytic.hpp>
@@ -47,7 +51,7 @@
 
 constexpr bool kVerbose = true;
 
-#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY
+#if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY
 static void nativeChemistryInitializationTest() {
     auto const& options = getOptions();
     if (!options.hydro.enabled || !options.chemistry.enabled ||
@@ -78,6 +82,7 @@ static void nativeChemistryInitializationTest() {
  }
  */
 
+#if COSMICTIGER_WITH_GRAVITY
 static bool fftFinite(float value) {
     // Keep nonfinite checks effective in the application's fast-math build.
     return (std::bit_cast<uint32_t>(value) & 0x7f800000U) != 0x7f800000U;
@@ -186,6 +191,7 @@ static void fft2Test() {
     PRINT("FFT cosine mode: maximum spectrum error %e, reconstruction error %e\n", maxSpectrumError,
         maxRoundTripError);
 }
+#endif
 
 static void domainTest() {
     Timer tm;
@@ -743,7 +749,9 @@ ApplicationTest const applicationTests[] = {
     {"starFormationParticles", starFormationParticlesTest},
 #endif
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY
+#if COSMICTIGER_WITH_GRAVITY
     {"nativeChemistryInitialization", nativeChemistryInitializationTest},
+#endif
     {"sphChemistryTimesteps", sphChemistryTimestepsTest},
 #endif
 #if COSMICTIGER_WITH_GRAVITY
@@ -778,8 +786,10 @@ ApplicationTest const applicationTests[] = {
     {"sphTree", sphTreeTest},
 #endif
     {"domain", domainTest},
+#if COSMICTIGER_WITH_GRAVITY
     {"fft1", fft1Test},
     {"fft2", fft2Test},
+#endif
 #if COSMICTIGER_ENABLE_FMM
     {"speed", speedTest},
     {"buckets", bucketTest},

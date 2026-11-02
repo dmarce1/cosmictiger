@@ -201,7 +201,7 @@ __device__ inline void cudaApplyPpForce(
 template <int kPairs>
 __device__ inline void cudaPpInversePowers(float const (&r2)[kPairs], float h2, float hinv,
     float h2inv, float h3inv, bool doPhi, float (&r3inv)[kPairs], float (&r1inv)[kPairs],
-    FlopCount& close, FlopCounter<FlopCount>& flops) {
+    FlopCount& close, FlopCounter<FlopCount>& flops, FlopCounts& mixedFlops) {
     float minR2 = r2[0];
 #pragma unroll
     for (int p = 0; p < kPairs; p++) {
@@ -215,8 +215,8 @@ __device__ inline void cudaPpInversePowers(float const (&r2)[kPairs], float h2, 
         for (int p = 0; p < kPairs; p++) {
             if (!(r2[p] > h2)) {
                 close++;
-                flops +=
-                    gravitySofteningKernel(r3inv[p], r1inv[p], r2[p], hinv, h2inv, h3inv, doPhi);
+                gravitySofteningKernel(
+                    r3inv[p], r1inv[p], r2[p], hinv, h2inv, h3inv, doPhi, &mixedFlops);
             }
         }
     }
@@ -234,7 +234,8 @@ __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int cou
     Position const (&sinkX)[nSinks], Position const (&sinkY)[nSinks],
     Position const (&sinkZ)[nSinks], float h2, float hinv, float h2inv, float h3inv, bool doPhi,
     float (&fx)[nSinks], float (&fy)[nSinks], float (&fz)[nSinks], float (&pot)[nSinks],
-    FlopCount& close, FlopCounter<FlopCount>& flops, FmmGeometry const& geometry) {
+    FlopCount& close, FlopCounter<FlopCount>& flops, FmmGeometry const& geometry,
+    FlopCounts& mixedFlops) {
     constexpr int kVector = 4;
     constexpr int kPairs = kVector * nSinks;
     int j = 0;
@@ -283,13 +284,17 @@ __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int cou
 #pragma unroll
             for (int s = 0; s < nSinks; s++) {
                 int const p = u * nSinks + s;
-                dx0[p] = fmmPositionDifference(sinkX[s], sourceX, kXDimension, geometry);    // 1
-                dx1[p] = fmmPositionDifference(sinkY[s], sourceY, kYDimension, geometry);    // 1
-                dx2[p] = fmmPositionDifference(sinkZ[s], sourceZ, kZDimension, geometry);    // 1
-                r2[p] = sqr(dx0[p], dx1[p], dx2[p]);                                         // 5
+                dx0[p] = fmmPositionDifference(
+                    sinkX[s], sourceX, kXDimension, geometry, &mixedFlops);    // 1
+                dx1[p] = fmmPositionDifference(
+                    sinkY[s], sourceY, kYDimension, geometry, &mixedFlops);    // 1
+                dx2[p] = fmmPositionDifference(
+                    sinkZ[s], sourceZ, kZDimension, geometry, &mixedFlops);    // 1
+                r2[p] = sqr(dx0[p], dx1[p], dx2[p]);                           // 5
             }
         }
-        cudaPpInversePowers<kPairs>(r2, h2, hinv, h2inv, h3inv, doPhi, r3inv, r1inv, close, flops);
+        cudaPpInversePowers<kPairs>(
+            r2, h2, hinv, h2inv, h3inv, doPhi, r3inv, r1inv, close, flops, mixedFlops);
 #pragma unroll
         for (int u = 0; u < kVector; u++) {
 #pragma unroll
@@ -322,12 +327,13 @@ __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int cou
         float r1inv[nSinks];
 #pragma unroll
         for (int s = 0; s < nSinks; s++) {
-            dx0[s] = fmmPositionDifference(sinkX[s], sourceX, kXDimension, geometry);
-            dx1[s] = fmmPositionDifference(sinkY[s], sourceY, kYDimension, geometry);
-            dx2[s] = fmmPositionDifference(sinkZ[s], sourceZ, kZDimension, geometry);
+            dx0[s] = fmmPositionDifference(sinkX[s], sourceX, kXDimension, geometry, &mixedFlops);
+            dx1[s] = fmmPositionDifference(sinkY[s], sourceY, kYDimension, geometry, &mixedFlops);
+            dx2[s] = fmmPositionDifference(sinkZ[s], sourceZ, kZDimension, geometry, &mixedFlops);
             r2[s] = sqr(dx0[s], dx1[s], dx2[s]);
         }
-        cudaPpInversePowers<nSinks>(r2, h2, hinv, h2inv, h3inv, doPhi, r3inv, r1inv, close, flops);
+        cudaPpInversePowers<nSinks>(
+            r2, h2, hinv, h2inv, h3inv, doPhi, r3inv, r1inv, close, flops, mixedFlops);
 #pragma unroll
         for (int s = 0; s < nSinks; s++) {
             if constexpr (!equalMass) {
@@ -345,12 +351,13 @@ __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int cou
 }    // namespace detail
 
 template <int order>
-__device__ FlopCount cudaGravityCcDirect(CudaKickData const& data,
+__device__ FlopCounts cudaGravityCcDirect(CudaKickData const& data,
     cosmictiger::gravity::cartesian::Expansion<float, order>& lacc, TreeNode const& self,
     DeviceVector<int> const& multlist, bool doPhi, FmmGeometry const& geometry) {
     int const& tid = threadIdx.x;
     auto const& treeNodes = data.treeNodes;
     FlopCounter<FlopCount> flops = 0;
+    FlopCounts mixedFlops{};
     if (multlist.size()) {
         cosmictiger::gravity::cartesian::Expansion<float, order> l;
         for (int i = 0; i < FmmOrder<order>::kLocalCoefficients_; i++) {
@@ -362,8 +369,8 @@ __device__ FlopCount cudaGravityCcDirect(CudaKickData const& data,
                 fmmMultiPos<order>(other.mpos).multi;
             Array<float, kDimensions> dx;
             for (int dim = 0; dim < kDimensions; dim++) {
-                dx[dim] =
-                    fmmPositionDifference(self.mpos->pos[dim], other.mpos->pos[dim], dim, geometry);
+                dx[dim] = fmmPositionDifference(
+                    self.mpos->pos[dim], other.mpos->pos[dim], dim, geometry, &mixedFlops);
             }
             flops +=
                 3 + cosmictiger::gravity::cartesian::M2L(l, m, fmmScaleDisplacement(dx), doPhi);
@@ -380,11 +387,11 @@ __device__ FlopCount cudaGravityCcDirect(CudaKickData const& data,
         }
         __syncwarp();
     }
-    return flops;
+    return {FlopCount(flops) + mixedFlops.singlePrecision, mixedFlops.doublePrecision, 0};
 }
 
 template <int order, bool equalMass>
-__device__ FlopCount cudaGravityCpDirect(CudaKickData const& data, CudaKickControl<order>& control,
+__device__ FlopCounts cudaGravityCpDirect(CudaKickData const& data, CudaKickControl<order>& control,
     cosmictiger::gravity::cartesian::Expansion<float, order>& lacc, TreeNode const& self,
     DeviceVector<int> const& partlist, bool doPhi, FmmGeometry const& geometry) {
     int const& tid = threadIdx.x;
@@ -394,6 +401,7 @@ __device__ FlopCount cudaGravityCpDirect(CudaKickData const& data, CudaKickContr
     // control block's reloaded pointer.
     detail::CudaStagedSources const sources = detail::cudaStagedSources<order>(control);
     FlopCounter<FlopCount> flops = 0;
+    FlopCounts mixedFlops{};
     if (partlist.size()) {
         cosmictiger::gravity::cartesian::Expansion<float, order> l;
         for (int j = 0; j < FmmOrder<order>::kLocalCoefficients_; j++) {
@@ -408,11 +416,11 @@ __device__ FlopCount cudaGravityCpDirect(CudaKickData const& data, CudaKickContr
             for (int j = tid; j < count; j += kWarpSize) {
                 Array<float, kDimensions> dx;
                 dx[kXDimension] = fmmPositionDifference(
-                    self.mpos->pos[kXDimension], sources.x[j], kXDimension, geometry);
+                    self.mpos->pos[kXDimension], sources.x[j], kXDimension, geometry, &mixedFlops);
                 dx[kYDimension] = fmmPositionDifference(
-                    self.mpos->pos[kYDimension], sources.y[j], kYDimension, geometry);
+                    self.mpos->pos[kYDimension], sources.y[j], kYDimension, geometry, &mixedFlops);
                 dx[kZDimension] = fmmPositionDifference(
-                    self.mpos->pos[kZDimension], sources.z[j], kZDimension, geometry);
+                    self.mpos->pos[kZDimension], sources.z[j], kZDimension, geometry, &mixedFlops);
                 cosmictiger::gravity::cartesian::Expansion<float, order> d{};
                 flops += (equalMass ? 1 : 2) * FmmOrder<order>::kLocalCoefficients_ + 3 +
                     cosmictiger::gravity::cartesian::P2L(d, 1.0f, fmmScaleDisplacement(dx));
@@ -442,11 +450,11 @@ __device__ FlopCount cudaGravityCpDirect(CudaKickData const& data, CudaKickContr
         }
         __syncwarp();
     }
-    return flops;
+    return {FlopCount(flops) + mixedFlops.singlePrecision, mixedFlops.doublePrecision, 0};
 }
 
 template <int order>
-__device__ FlopCount cudaGravityPcDirect(CudaKickData const& data, CudaKickControl<order>& control,
+__device__ FlopCounts cudaGravityPcDirect(CudaKickData const& data, CudaKickControl<order>& control,
     TreeNode const& self, int sinkBegin, int sinkCount, DeviceVector<int> const& multlist,
     bool doPhi, FmmGeometry const& geometry) {
     int const& tid = threadIdx.x;
@@ -467,6 +475,7 @@ __device__ FlopCount cudaGravityPcDirect(CudaKickData const& data, CudaKickContr
     constexpr int kStride = FmmOrder<order>::kPositionedMultipoleStride_;
     char* const multipoles = detail::cudaStagedMultipoles<order>(control);
     FlopCounter<FlopCount> flops = 0;
+    FlopCounts mixedFlops{};
     auto group = cooperative_groups::this_thread_block();
     // Each record is copied whole at the stride the tree arena and the staged
     // tile share. The aligned byte count makes libcu++ issue 16-byte cp.async
@@ -494,12 +503,12 @@ __device__ FlopCount cudaGravityPcDirect(CudaKickData const& data, CudaKickContr
                 for (int j = 0; j < mend; j++) {
                     FmmMultiPos<order> const& mp =
                         detail::cudaStagedMultipole<order>(multipoles + j * kStride);
-                    dx[kXDimension] =
-                        fmmPositionDifference(sinkX[k], mp.pos[kXDimension], kXDimension, geometry);
-                    dx[kYDimension] =
-                        fmmPositionDifference(sinkY[k], mp.pos[kYDimension], kYDimension, geometry);
-                    dx[kZDimension] =
-                        fmmPositionDifference(sinkZ[k], mp.pos[kZDimension], kZDimension, geometry);
+                    dx[kXDimension] = fmmPositionDifference(
+                        sinkX[k], mp.pos[kXDimension], kXDimension, geometry, &mixedFlops);
+                    dx[kYDimension] = fmmPositionDifference(
+                        sinkY[k], mp.pos[kYDimension], kYDimension, geometry, &mixedFlops);
+                    dx[kZDimension] = fmmPositionDifference(
+                        sinkZ[k], mp.pos[kZDimension], kZDimension, geometry, &mixedFlops);
                     flops += 3 +
                         cosmictiger::gravity::cartesian::M2P(
                             l, mp.multi, fmmScaleDisplacement(dx), doPhi);
@@ -516,11 +525,11 @@ __device__ FlopCount cudaGravityPcDirect(CudaKickData const& data, CudaKickContr
         }
     }
     __syncwarp();
-    return flops;
+    return {FlopCount(flops) + mixedFlops.singlePrecision, mixedFlops.doublePrecision, 0};
 }
 
 template <int order, bool equalMass>
-__device__ FlopCount cudaGravityPpDirect(CudaKickData const& data, CudaKickControl<order>& control,
+__device__ FlopCounts cudaGravityPpDirect(CudaKickData const& data, CudaKickControl<order>& control,
     TreeNode const& self, int sinkBegin, int sinkCount, DeviceVector<int> const& partlist, float h,
     bool doPhi, FmmGeometry const& geometry) {
     int const& tid = threadIdx.x;
@@ -540,9 +549,10 @@ __device__ FlopCount cudaGravityPpDirect(CudaKickData const& data, CudaKickContr
     float const h2inv = sqr(hinv);
     float const h3inv = h2inv * hinv;
     FlopCounter<FlopCount> flops = 4;
+    FlopCounts mixedFlops{};
     FlopCount close = 0;
     FlopCount pairs = 0;
-    constexpr FlopCount kPairFlops = equalMass ? 18 : 20;
+    constexpr FlopCount kPairFlops = equalMass ? 15 : 17;    // Geometry is counted separately.
     FlopCount const forceAddFlops = 3 + int(doPhi);
     if (partlist.size()) {
         int i = 0;
@@ -569,7 +579,7 @@ __device__ FlopCount cudaGravityPpDirect(CudaKickData const& data, CudaKickContr
                 float fz[kPair] = {0.f, 0.f};
                 float pot[kPair] = {0.f, 0.f};
                 detail::cudaPpSinkGroup<kPair, equalMass>(sources, particleIndex, sx, sy, sz, h2,
-                    hinv, h2inv, h3inv, doPhi, fx, fy, fz, pot, close, flops, geometry);
+                    hinv, h2inv, h3inv, doPhi, fx, fy, fz, pot, close, flops, geometry, mixedFlops);
 #pragma unroll
                 for (int s = 0; s < kPair; s++) {
                     int const sink = k + s * kWarpSize;
@@ -593,7 +603,7 @@ __device__ FlopCount cudaGravityPpDirect(CudaKickData const& data, CudaKickContr
                 float fz[1] = {0.f};
                 float pot[1] = {0.f};
                 detail::cudaPpSinkGroup<1, equalMass>(sources, particleIndex, sx, sy, sz, h2, hinv,
-                    h2inv, h3inv, doPhi, fx, fy, fz, pot, close, flops, geometry);
+                    h2inv, h3inv, doPhi, fx, fy, fz, pot, close, flops, geometry, mixedFlops);
                 if (sharedForces) {
                     detail::cudaApplyPpForce(arenaForce, k, fx[0], fy[0], fz[0], pot[0], doPhi);
                 } else {
@@ -613,17 +623,17 @@ __device__ FlopCount cudaGravityPpDirect(CudaKickData const& data, CudaKickContr
                 Position const sy = sinkY[sink];
                 Position const sz = sinkZ[sink];
                 for (int j = tid; j < particleIndex; j += kWarpSize) {
-                    float const dx0 =
-                        fmmPositionDifference(sx, sources.x[j], kXDimension, geometry);    // 1
-                    float const dx1 =
-                        fmmPositionDifference(sy, sources.y[j], kYDimension, geometry);    // 1
-                    float const dx2 =
-                        fmmPositionDifference(sz, sources.z[j], kZDimension, geometry);    // 1
-                    float const r2[1] = {sqr(dx0, dx1, dx2)};                              // 5
+                    float const dx0 = fmmPositionDifference(
+                        sx, sources.x[j], kXDimension, geometry, &mixedFlops);    // 1
+                    float const dx1 = fmmPositionDifference(
+                        sy, sources.y[j], kYDimension, geometry, &mixedFlops);    // 1
+                    float const dx2 = fmmPositionDifference(
+                        sz, sources.z[j], kZDimension, geometry, &mixedFlops);    // 1
+                    float const r2[1] = {sqr(dx0, dx1, dx2)};                     // 5
                     float r3inv[1];
                     float r1inv[1];
                     detail::cudaPpInversePowers<1>(
-                        r2, h2, hinv, h2inv, h3inv, doPhi, r3inv, r1inv, close, flops);
+                        r2, h2, hinv, h2inv, h3inv, doPhi, r3inv, r1inv, close, flops, mixedFlops);
                     if constexpr (!equalMass) {
                         r3inv[0] *= sources.mass[j];
                         r1inv[0] *= sources.mass[j];
@@ -670,5 +680,5 @@ __device__ FlopCount cudaGravityPpDirect(CudaKickData const& data, CudaKickContr
     }
 
     __syncwarp();
-    return flops;
+    return {FlopCount(flops) + mixedFlops.singlePrecision, mixedFlops.doublePrecision, 0};
 }

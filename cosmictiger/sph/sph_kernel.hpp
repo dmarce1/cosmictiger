@@ -12,6 +12,7 @@
 
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/sph/sph.hpp>
+#include <cosmictiger/sph/sph_flops.hpp>
 #include <cosmictiger/sph/sph_particles.hpp>
 #include <cosmictiger/sph/sph_tree.hpp>
 #include <cosmictiger/sph/volume.hpp>
@@ -106,14 +107,15 @@ CUDA_EXPORT inline SphGradHEvaluation sphGradHEvaluation(float supportRadius,
 // the unwrapped interval before testing avoids inconsistent endpoint wrapping.
 CUDA_EXPORT inline bool sphSupportIntersects(Fixed32Range const& sinkBox,
     Array<Position, kDimensions> const& sourcePosition, float sourceSupport,
-    FlopCounter<>* flops = nullptr) {
+    sph_flops::Counter* flops = nullptr) {
     Fixed32Range expanded = sinkBox;
     for (int dim = 0; dim < kDimensions; dim++) {
         expanded.begin[dim] -= RangeFixed(sourceSupport);
         expanded.end[dim] += RangeFixed(sourceSupport);
     }
     if (flops) {
-        *flops += 2 * kDimensions;    // Two support-to-fixed scaling products per dimension.
+        // Each float support is promoted to double before the fixed-point scale.
+        flops->doublePrecision += 4 * kDimensions;
     }
-    return expanded.contains(sourcePosition, flops);
+    return expanded.contains(sourcePosition, flops ? &flops->doublePrecision : nullptr);
 }

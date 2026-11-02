@@ -251,6 +251,7 @@ void checkEmptyRanges() {
     require(lightconeCalls == 0, "empty dispatch unexpectedly emitted particles");
 }
 
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
 void checkLightcone() {
     constexpr size_t kCount = 8201;
     Fixture fixture(kCount);
@@ -283,6 +284,7 @@ void checkLightcone() {
     drift(0.5, 0.125, 0.5, 0.625, 2.0, -1);
     require(lightconeCalls == 0, "distant lightcone shell was not skipped");
 }
+#endif
 
 }    // namespace detail
 
@@ -382,6 +384,7 @@ TEST(DriftDispatch, MeshlessPreservesDoubleTimestepAndScale) {
     }
 }
 
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
 TEST(DriftDispatch, MeshlessLightconeMassAndFluidVelocity) {
     detail::Fixture fixture(3);
     detail::options.hydro.enabled = true;
@@ -420,6 +423,7 @@ TEST(DriftDispatch, MeshlessLightconeMassAndFluidVelocity) {
         }
     }
 }
+#endif
 
 #endif
 
@@ -437,9 +441,11 @@ TEST(DriftDispatch, EmptyRanges) {
     detail::checkEmptyRanges();
 }
 
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
 TEST(DriftDispatch, Lightcone) {
     detail::checkLightcone();
 }
+#endif
 
 int hpx_main(int, char*[]) {
     int const status = RUN_ALL_TESTS();

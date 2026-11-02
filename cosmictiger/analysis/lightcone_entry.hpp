@@ -13,7 +13,9 @@
 #include <stdexcept>
 #include <vector>
 
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/cosmology/background.hpp>
+#endif
 #include <cosmictiger/math/fixed.hpp>
 #include <cosmictiger/particles/particle_types.hpp>
 
@@ -34,6 +36,7 @@ size_t lcAddParticles(
     std::vector<std::vector<LightconeEntry>> const& entries, double scale, double tau);
 
 // Positions encode the remaining light-travel conformal time, not emission time.
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
 inline double lightconeEmissionScale(
     cosmology::SimulationBackgroundTable const& background, double tauMax, double radius) {
     if (!std::isfinite(radius) || radius < 0.0 || !std::isfinite(tauMax)) {
@@ -41,3 +44,4 @@ inline double lightconeEmissionScale(
     }
     return background.sample(std::max(0.0, tauMax - radius)).state.scaleFactor;
 }
+#endif

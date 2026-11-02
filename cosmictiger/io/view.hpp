@@ -9,9 +9,12 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #ifndef VIEW_HPP_
 #define VIEW_HPP_
 
+#if COSMICTIGER_WITH_GRAVITY
 Vector<float> outputView(int number, double time);
+#endif
 // Pass the actual elapsed cosmological age when a may revisit an earlier value.
-// A negative physicalYears retains the expanding-branch diagnostic fallback.
+// A negative physicalYears retains the expanding-branch diagnostic fallback
+// when gravity is compiled, or writes zero when cosmology is unavailable.
 void viewOutputViews(int cycle, double a, bool force = false, double physicalYears = -1.0);
 
 void viewConfigure();

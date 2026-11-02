@@ -19,11 +19,15 @@
 #include <utility>
 #include <vector>
 
+#if COSMICTIGER_WITH_GRAVITY
 #include <fftw3.h>
+#endif
 #include <hpx/modules/program_options.hpp>
 #include <mpi.h>
 
+#if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/analysis/lightcone.hpp>
+#endif
 #include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/interrupt_profile.hpp>
@@ -34,7 +38,9 @@
 #include <cosmictiger/core/profiling_runtime.hpp>
 #include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/core/unordered_set_ts.hpp>
+#if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/cosmology/fftw_threads.hpp>
+#endif
 #if COSMICTIGER_ENABLE_FMM
 #include <cosmictiger/gravity/dehnen/ewald_indices.hpp>
 #include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_operators.hpp>
@@ -305,6 +311,7 @@ void initializeMpi(int& argc, char**& argv, bool& ownsMpi) {
     }
 }
 
+#if COSMICTIGER_WITH_GRAVITY
 void initializeFftw() {
     // Initialize before HPX starts: cosmology may create serial plans before
     // PMMM initializes FFTW MPI. Thread support must precede both kinds of use.
@@ -318,6 +325,7 @@ void initializeFftw() {
         throw std::runtime_error("Unable to initialize FFTW thread support on every MPI rank");
     }
 }
+#endif
 
 // Reject a position ABI mismatch before HPX/MPI initializes. Keep unknown
 // application/HPX options for their normal parsers after this check.
@@ -375,8 +383,10 @@ int main(int argc, char* argv[]) {
         detail::validatePositionType(argc, argv);
         recordCommandLineArguments(argc, argv);
         detail::initializeMpi(argc, argv, ownsMpi);
+#if COSMICTIGER_WITH_GRAVITY
         detail::initializeFftw();
         hpx::register_startup_function(fftw_threads::initialize);
+#endif
         // Startup callbacks also run on worker localities that do not enter hpx_main.
         hpx::register_startup_function(
             [&stackTraceHandler]() { stackTraceHandler.install(hpx::get_locality_id()); });

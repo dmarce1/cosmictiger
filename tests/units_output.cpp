@@ -36,6 +36,7 @@
 namespace detail {
 
 constexpr float kUnitsOutputViscosityAlpha = 0.375f;
+constexpr double kUnitsOutputPhysicalYears = 4.2e9;
 
 void requireUnitsOutput(bool condition, std::string const& message) {
     if (!condition) {
@@ -352,16 +353,22 @@ void unitsOutputParticleFixture(bool initialize) {
             particlesType(i) = i == 2 ? kSphType : kDarkMatterType;
             particlesCatIndex(i) = i == 2 ? 0 : kNoParticleIndex;
 #if COSMICTIGER_ENABLE_STAR_FORMATION
-            particlesStarFormationStates[i] = {};
-            particlesStarFormationStates[i].id =
-                (uint64_t{1} << 60) + 3 * uint64_t(hpxRank()) + i + 1;
+            if (getOptions().starFormation.enabled) {
+                particlesStarFormationStates[i] = {};
+                particlesStarFormationStates[i].id =
+                    (uint64_t{1} << 60) + 3 * uint64_t(hpxRank()) + i + 1;
+            }
 #endif
         }
 #if COSMICTIGER_ENABLE_CHEMISTRY
-        sphParticlesChemistryStates[0] = {0.25f};
+        if (getOptions().chemistry.enabled) {
+            sphParticlesChemistryStates[0] = {0.25f};
+        }
 #endif
 #if COSMICTIGER_ENABLE_STAR_FORMATION
-        particlesStarFormationStates[2].specificStarFormationRate = 0.125;
+        if (getOptions().starFormation.enabled) {
+            particlesStarFormationStates[2].specificStarFormationRate = 0.125;
+        }
 #endif
         sphParticlesParticleIndex(0) = 2;
         sphParticlesSupportRadius(0) = 0.03125;
@@ -444,7 +451,7 @@ void unitsOutputTest() {
     setOptions(options);
     unitsOutputParticleFixture(true);
     viewConfigure();
-    viewOutputViews(0, 0.25, true);
+    viewOutputViews(0, 0.25, true, kUnitsOutputPhysicalYears);
     for (int rank = 0; rank < hpxSize(); rank++) {
         auto file = openUnitsOutput(0, rank);
         checkUnitsOutputCommandLine(file.get());
@@ -472,7 +479,7 @@ void unitsOutputTest() {
     options.output.units = "both";
     options.output.frame = "both";
     setOptions(options);
-    viewOutputViews(1, 0.25, true);
+    viewOutputViews(1, 0.25, true, kUnitsOutputPhysicalYears);
     for (int rank = 0; rank < hpxSize(); rank++) {
         auto file = openUnitsOutput(1, rank);
         checkUnitsOutputCommandLine(file.get());
@@ -490,7 +497,7 @@ void unitsOutputTest() {
     options.output.units = "cgs";
     options.output.frame = "lab";
     setOptions(options);
-    viewOutputViews(2, 0.25, true);
+    viewOutputViews(2, 0.25, true, kUnitsOutputPhysicalYears);
     for (int rank = 0; rank < hpxSize(); rank++) {
         auto file = openUnitsOutput(2, rank);
         checkUnitsOutputCommandLine(file.get());
@@ -502,7 +509,7 @@ void unitsOutputTest() {
     options.output.units = "cosmological";
     options.output.frame = "comoving";
     setOptions(options);
-    viewOutputViews(3, 0.25, true);
+    viewOutputViews(3, 0.25, true, kUnitsOutputPhysicalYears);
     for (int rank = 0; rank < hpxSize(); rank++) {
         auto file = openUnitsOutput(3, rank);
         checkUnitsOutputCommandLine(file.get());
@@ -518,12 +525,46 @@ void unitsOutputTest() {
     setOptions(options);
     for (int snapshot = 0; snapshot < 2; ++snapshot) {
         unitsOutputSourceFixture(snapshot);
-        viewOutputViews(4 + snapshot, 0.25, true);
+        viewOutputViews(4 + snapshot, 0.25, true, kUnitsOutputPhysicalYears);
         for (int rank = 0; rank < hpxSize(); ++rank) {
             auto file = openUnitsOutput(4 + snapshot, rank);
             for (auto const* path :
                 {"cgs/comoving/", "cgs/lab/", "cosmological/comoving/", "cosmological/lab/"}) {
                 checkUnitsOutputSourceFields(file.get(), path, rank);
+            }
+        }
+    }
+#endif
+#if COSMICTIGER_ENABLE_HOPKINS
+    if constexpr (kPositionBits == 64) {
+        options.chemistry.enabled = false;
+        options.starFormation.enabled = false;
+        options.hydro.viscosityEvolution = "cullenAndDehnen";
+        int cycle = 6;
+        for (auto const* method : {"mfm", "mfv"}) {
+            options.hydro.method = method;
+            for (auto const* units : {"code", "both"}) {
+                options.output.units = units;
+                options.output.frame = "both";
+                setOptions(options);
+                unitsOutputParticleFixture(true);
+                viewOutputViews(cycle, 0.25, true, kUnitsOutputPhysicalYears);
+                for (int rank = 0; rank < hpxSize(); ++rank) {
+                    auto file = openUnitsOutput(cycle, rank);
+                    std::vector<std::string> const paths = options.output.units == "code" ?
+                        std::vector<std::string>{""} :
+                        std::vector<std::string>{"cgs/comoving/", "cgs/lab/",
+                            "cosmological/comoving/", "cosmological/lab/"};
+                    for (auto const& path : paths) {
+                        requireUnitsOutput(DBInqVarExists(file.get(), (path + "gas").c_str()),
+                            "Hopkins output retains gas fields");
+                        for (auto const* field : {"alpha", "divv", "divv_convention"}) {
+                            requireUnitsOutput(!DBInqVarExists(file.get(), (path + field).c_str()),
+                                "Hopkins output omits SPH viscosity fields");
+                        }
+                    }
+                }
+                ++cycle;
             }
         }
     }

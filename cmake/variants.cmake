@@ -1,18 +1,11 @@
 # Build one application with the configured capabilities.
 add_library(cosmictiger_platform INTERFACE)
 target_include_directories(cosmictiger_platform INTERFACE ${PROJECT_SOURCE_DIR})
-target_include_directories(cosmictiger_platform SYSTEM INTERFACE
-    ${FFTW3F_INCLUDE_DIR} ${FFTW3F_MPI_INCLUDE_DIR}
-    ${SILO_INCLUDE_DIR} ${CHEALPIX_INCLUDE_DIR})
+target_include_directories(cosmictiger_platform SYSTEM INTERFACE ${SILO_INCLUDE_DIR})
 target_link_libraries(cosmictiger_platform INTERFACE
-    HPX::hpx Boost::boost Boost::program_options GSL::gsl GSL::gslcblas
-    ${FFTW3F_MPI_LIBRARY} ${FFTW3F_THREADS_LIBRARY} ${FFTW3F_LIBRARY}
+    HPX::hpx Boost::boost Boost::program_options
     MPI::MPI_CXX Threads::Threads
-    ${SILO_LIBRARY} ${CHEALPIX_LIBRARY} dl quadmath)
-if(COSMICTIGER_WITH_GRAVITY)
-    target_include_directories(cosmictiger_platform SYSTEM INTERFACE ${HEALPIX_CXX_INCLUDE_DIR})
-    target_link_libraries(cosmictiger_platform INTERFACE ${HEALPIX_CXX_LIBRARY})
-endif()
+    ${SILO_LIBRARY} dl quadmath)
 target_compile_options(cosmictiger_platform INTERFACE
     $<$<COMPILE_LANGUAGE:CXX>:-Wno-attributes;-ffast-math;-fno-finite-math-only>)
 if(COMPILER_SUPPORTS_MARCH_NATIVE)
@@ -32,11 +25,8 @@ if(COSMICTIGER_WITH_CUDA)
 endif()
 
 add_library(cosmictiger_core STATIC ${cosmictiger_core_source_files})
-target_link_libraries(cosmictiger_core PUBLIC cosmictiger_platform cosmictiger_recombination
+target_link_libraries(cosmictiger_core PUBLIC cosmictiger_platform
     cosmictiger_profiler cosmictiger_stacktrace)
-if(COSMICTIGER_WITH_GRAVITY)
-    target_link_libraries(cosmictiger_core PUBLIC cosmictiger_fp16)
-endif()
 if(COSMICTIGER_WITH_CUDA)
     # Resolve device symbols when linking the final executable, alongside its
     # capability-dependent CUDA objects.
@@ -62,6 +52,43 @@ target_compile_definitions(cosmictiger_default_config INTERFACE
     FMM_MIN_ORDER=${COSMICTIGER_FMM_MIN_ORDER}
     FMM_MAX_ORDER=${COSMICTIGER_FMM_MAX_ORDER}
     MAX_BUCKET_SIZE=${COSMICTIGER_WITH_MAX_BUCKET})
+
+if(COSMICTIGER_WITH_GRAVITY)
+    # These physics libraries are absent from hydrodynamics-only builds. Keep
+    # the background/Einstein-Boltzmann solve, distributed transform, and power
+    # analysis separate from the capability-independent utility library.
+    add_library(cosmictiger_fft STATIC
+        src/cosmology/fft.cpp src/cosmology/fftw_threads.cpp)
+    target_include_directories(cosmictiger_fft SYSTEM PUBLIC
+        ${FFTW3F_INCLUDE_DIR} ${FFTW3F_MPI_INCLUDE_DIR})
+    target_link_libraries(cosmictiger_fft PUBLIC cosmictiger_core cosmictiger_default_config
+        ${FFTW3F_MPI_LIBRARY} ${FFTW3F_THREADS_LIBRARY} ${FFTW3F_LIBRARY})
+
+    add_library(cosmictiger_cosmology STATIC
+        src/cosmology/background.cpp
+        src/cosmology/background_plot.cpp
+        src/cosmology/boltzmann.cpp
+        src/cosmology/cosmology.cpp
+        src/cosmology/evolution.cpp
+        src/cosmology/friedmann.cpp
+        src/cosmology/initialize.cpp
+        src/cosmology/zero_order.cpp)
+    target_link_libraries(cosmictiger_cosmology PUBLIC
+        cosmictiger_fft cosmictiger_recombination GSL::gsl GSL::gslcblas)
+
+    add_library(cosmictiger_power STATIC src/analysis/power.cpp src/analysis/power_cpu.cpp)
+    target_link_libraries(cosmictiger_power PUBLIC cosmictiger_fft)
+    if(COSMICTIGER_WITH_CUDA)
+        # These host-only archives inherit core's relocatable device objects.
+        # Keep them unresolved until the executable links the complete graph;
+        # an intermediate device link would consume the shared core symbols.
+        set_target_properties(cosmictiger_fft cosmictiger_cosmology PROPERTIES
+            CUDA_RESOLVE_DEVICE_SYMBOLS OFF)
+        target_sources(cosmictiger_power PRIVATE src/analysis/power.cu src/analysis/power_cuda.cu)
+        set_target_properties(cosmictiger_power PROPERTIES
+            CUDA_SEPARABLE_COMPILATION ON CUDA_RESOLVE_DEVICE_SYMBOLS OFF)
+    endif()
+endif()
 
 cosmictiger_feature_sources(cosmictiger_enabled_sources)
 if(COSMICTIGER_WITH_CUDA AND COSMICTIGER_WITH_STARS)
@@ -95,6 +122,13 @@ endif()
 add_library(cosmictiger_objects OBJECT ${cosmictiger_enabled_sources}
     ${cosmictiger_header_files} ${COSMICTIGER_GENERATED_FMM_FILES})
 target_link_libraries(cosmictiger_objects PUBLIC cosmictiger_core cosmictiger_default_config)
+if(COSMICTIGER_WITH_GRAVITY)
+    target_include_directories(cosmictiger_objects SYSTEM PUBLIC
+        ${CHEALPIX_INCLUDE_DIR} ${HEALPIX_CXX_INCLUDE_DIR})
+    target_link_libraries(cosmictiger_objects PUBLIC
+        cosmictiger_cosmology cosmictiger_power cosmictiger_fp16
+        ${CHEALPIX_LIBRARY} ${HEALPIX_CXX_LIBRARY})
+endif()
 if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
     target_link_libraries(cosmictiger_objects PUBLIC cosmictiger_sph_chemistry)
 endif()

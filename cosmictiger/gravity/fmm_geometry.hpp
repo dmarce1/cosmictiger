@@ -1,6 +1,7 @@
 /* CosmicTiger - FMM geometry for periodic mesh-cell forests; BSL-1.0. */
 #pragma once
 
+#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/range.hpp>
 
@@ -18,6 +19,16 @@ struct FmmGeometry {
 
 namespace detail {
 
+CUDA_EXPORT inline void addFmmGeometryFlops(
+    FlopCounts* counts, FlopCount single, FlopCount doublePrecision) {
+    if constexpr (kCountFlops) {
+        if (counts != nullptr) {
+            counts->singlePrecision += single;
+            counts->doublePrecision += doublePrecision;
+        }
+    }
+}
+
 CUDA_EXPORT inline int fmmSourceImage(Position source, int dim, FmmGeometry const& geometry) {
     int sourceCell;
     if constexpr (kPositionBits == 64) {
@@ -32,77 +43,134 @@ CUDA_EXPORT inline int fmmSourceImage(Position source, int dim, FmmGeometry cons
 }
 
 // Subtract before conversion so tiny separations across the Q0.64 seam survive.
-CUDA_EXPORT inline double fmmShiftedDifference(Position sink, Position source, int image) {
+CUDA_EXPORT inline double fmmShiftedDifference(
+    Position sink, Position source, int image, FlopCounts* counts = nullptr) {
     PositionInteger const a = sink.raw();
     PositionInteger const b = source.raw();
     if (image == 1 && a > b) {
+        addFmmGeometryFlops(counts, 0, 1);
         return -double(PositionInteger(b - a)) * Position::kToFloatFactor_;
     }
     if (image == -1 && a < b) {
+        addFmmGeometryFlops(counts, 0, 1);
         return double(PositionInteger(a - b)) * Position::kToFloatFactor_;
     }
+    addFmmGeometryFlops(counts, 0, 2);
     return unwrappedDoubleDistance(sink, source) - image;
 }
 
-CUDA_EXPORT inline double fmmBoundaryDifference(RangeFixed boundary, Position point, int image) {
+CUDA_EXPORT inline double fmmBoundaryDifference(
+    RangeFixed boundary, Position point, int image, FlopCounts* counts = nullptr) {
     double const bound = boundary.toDouble();
     int const whole = int(floor(bound));
     Position const fraction(bound - whole);
-    return fmmShiftedDifference(fraction, point, image - whole);
+    // Bound scaling, floor, fractional subtraction, and Position(double).
+#ifdef __CUDA_ARCH__
+    addFmmGeometryFlops(counts, 0, 4);
+#else
+    addFmmGeometryFlops(counts, 0, kPositionBits == 64 ? 7 : 4);
+#endif
+    return fmmShiftedDifference(fraction, point, image - whole, counts);
 }
 
 CUDA_EXPORT inline float fmmBoxDistanceSquared(Fixed32Range const& box,
-    Array<Position, kDimensions> const& point, Array<int, kDimensions> const& image) {
+    Array<Position, kDimensions> const& point, Array<int, kDimensions> const& image,
+    FlopCounts* counts = nullptr) {
     float result = 0;
     for (int dim = 0; dim < kDimensions; ++dim) {
-        double const lower = fmmBoundaryDifference(box.begin[dim], point[dim], image[dim]);
-        double const upper = fmmBoundaryDifference(box.end[dim], point[dim], image[dim]);
+        double const lower = fmmBoundaryDifference(box.begin[dim], point[dim], image[dim], counts);
+        double const upper = fmmBoundaryDifference(box.end[dim], point[dim], image[dim], counts);
         float const delta = float(lower > 0 ? lower : (upper < 0 ? -upper : 0));
         result = fmaf(delta, delta, result);
+        addFmmGeometryFlops(counts, 2, 1);    // Float FMA and double-to-float delta.
     }
     return result;
 }
 
+CUDA_EXPORT inline void countPeriodicBoxDistance(Fixed32Range const& box, FlopCounts* counts) {
+    if constexpr (kCountFlops) {
+        if (counts != nullptr) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                // Each endpoint scales to double before the extent comparison.
+                addFmmGeometryFlops(counts, 0, 3);
+                if (box.end[dim].toDouble() - box.begin[dim].toDouble() < 1.0) {
+                    // Integer displacement scales in double then narrows for the FMA.
+                    addFmmGeometryFlops(counts, 2, 2);
+                }
+            }
+        }
+    }
+}
+
 }    // namespace detail
 
-CUDA_EXPORT inline float fmmPositionDifference(
-    Position sink, Position source, int dim, FmmGeometry const& geometry) {
+CUDA_EXPORT inline float fmmPositionDifference(Position sink, Position source, int dim,
+    FmmGeometry const& geometry, FlopCounts* counts = nullptr) {
     if (geometry.meshSize == 0) {
+        detail::addFmmGeometryFlops(counts, 1, 0);
         return distance(sink, source);
     }
-    return float(
-        detail::fmmShiftedDifference(sink, source, detail::fmmSourceImage(source, dim, geometry)));
+    detail::addFmmGeometryFlops(counts, 0, 1);    // Narrowing to the force precision.
+    return float(detail::fmmShiftedDifference(
+        sink, source, detail::fmmSourceImage(source, dim, geometry), counts));
 }
 
 CUDA_EXPORT inline float fmmSinkBoxDistanceSquared(Fixed32Range const& box,
-    Array<Position, kDimensions> const& source, FmmGeometry const& geometry) {
+    Array<Position, kDimensions> const& source, FmmGeometry const& geometry,
+    FlopCounts* counts = nullptr) {
     if (geometry.meshSize == 0) {
+        detail::countPeriodicBoxDistance(box, counts);
         return boxDistanceSquared(box, source);
     }
     Array<int, kDimensions> image;
     for (int dim = 0; dim < kDimensions; ++dim) {
         image[dim] = detail::fmmSourceImage(source[dim], dim, geometry);
     }
-    return detail::fmmBoxDistanceSquared(box, source, image);
+    return detail::fmmBoxDistanceSquared(box, source, image, counts);
 }
 
 CUDA_EXPORT inline float fmmSourceBoxDistanceSquared(Fixed32Range const& box,
     Array<Position, kDimensions> const& sink, Array<Position, kDimensions> const& source,
-    FmmGeometry const& geometry) {
+    FmmGeometry const& geometry, FlopCounts* counts = nullptr) {
     if (geometry.meshSize == 0) {
+        detail::countPeriodicBoxDistance(box, counts);
         return boxDistanceSquared(box, sink);
     }
     Array<int, kDimensions> image;
     for (int dim = 0; dim < kDimensions; ++dim) {
         image[dim] = -detail::fmmSourceImage(source[dim], dim, geometry);
     }
-    return detail::fmmBoxDistanceSquared(box, sink, image);
+    return detail::fmmBoxDistanceSquared(box, sink, image, counts);
 }
 
 #ifndef __CUDACC__
-inline SimdFloat fmmPositionDifference(
-    SimdPosition const& sink, SimdPosition const& source, int dim, FmmGeometry const& geometry) {
+inline SimdFloat fmmPeriodicBoxDistanceSquared(Range<SimdDouble8> const& box,
+    Array<SimdPosition, kDimensions> const& point, FlopCounts* counts) {
+    if constexpr (kPositionBits == 64) {
+        return SimdFloat([&](auto lane) {
+            Fixed32Range scalarBox;
+            Array<Position, kDimensions> scalarPoint;
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                scalarBox.begin[dim] = box.begin[dim][lane];
+                scalarBox.end[dim] = box.end[dim][lane];
+                scalarPoint[dim].setInteger(static_cast<PositionInteger>(point[dim][lane]));
+            }
+            detail::addFmmGeometryFlops(counts, 0, 2 * kDimensions);
+            detail::countPeriodicBoxDistance(scalarBox, counts);
+            return boxDistanceSquared(scalarBox, scalarPoint);
+        });
+    } else {
+        // Per dimension: nine double operations/conversions and one float FMA.
+        detail::addFmmGeometryFlops(
+            counts, 2 * kDimensions * kSimdFloatSize, 9 * kDimensions * kSimdFloatSize);
+        return boxDistanceSquared(box, point);
+    }
+}
+
+inline SimdFloat fmmPositionDifference(SimdPosition const& sink, SimdPosition const& source,
+    int dim, FmmGeometry const& geometry, FlopCounts* counts = nullptr) {
     if (geometry.meshSize == 0) {
+        detail::addFmmGeometryFlops(counts, kSimdFloatSize, 0);
         return simdCast<SimdFloat>(simdPositionDifference(sink, source)) *
             simdBroadcast<SimdFloat>(kPositionToFloat);
     }
@@ -110,14 +178,15 @@ inline SimdFloat fmmPositionDifference(
         Position a, b;
         a.setInteger(static_cast<PositionInteger>(sink[lane]));
         b.setInteger(static_cast<PositionInteger>(source[lane]));
-        return fmmPositionDifference(a, b, dim, geometry);
+        return fmmPositionDifference(a, b, dim, geometry, counts);
     });
 }
 
 inline SimdFloat fmmSinkBoxDistanceSquared(Range<SimdDouble8> const& box,
-    Array<SimdPosition, kDimensions> const& source, FmmGeometry const& geometry) {
+    Array<SimdPosition, kDimensions> const& source, FmmGeometry const& geometry,
+    FlopCounts* counts = nullptr) {
     if (geometry.meshSize == 0) {
-        return boxDistanceSquared(box, source);
+        return fmmPeriodicBoxDistanceSquared(box, source, counts);
     }
     return SimdFloat([&](auto lane) {
         Fixed32Range scalarBox;
@@ -127,15 +196,16 @@ inline SimdFloat fmmSinkBoxDistanceSquared(Range<SimdDouble8> const& box,
             scalarBox.end[dim] = box.end[dim][lane];
             point[dim].setInteger(static_cast<PositionInteger>(source[dim][lane]));
         }
-        return fmmSinkBoxDistanceSquared(scalarBox, point, geometry);
+        detail::addFmmGeometryFlops(counts, 0, 2 * kDimensions);
+        return fmmSinkBoxDistanceSquared(scalarBox, point, geometry, counts);
     });
 }
 
 inline SimdFloat fmmSourceBoxDistanceSquared(Range<SimdDouble8> const& box,
     Array<SimdPosition, kDimensions> const& sink, Array<SimdPosition, kDimensions> const& source,
-    FmmGeometry const& geometry) {
+    FmmGeometry const& geometry, FlopCounts* counts = nullptr) {
     if (geometry.meshSize == 0) {
-        return boxDistanceSquared(box, sink);
+        return fmmPeriodicBoxDistanceSquared(box, sink, counts);
     }
     return SimdFloat([&](auto lane) {
         Fixed32Range scalarBox;
@@ -146,7 +216,8 @@ inline SimdFloat fmmSourceBoxDistanceSquared(Range<SimdDouble8> const& box,
             a[dim].setInteger(static_cast<PositionInteger>(sink[dim][lane]));
             b[dim].setInteger(static_cast<PositionInteger>(source[dim][lane]));
         }
-        return fmmSourceBoxDistanceSquared(scalarBox, a, b, geometry);
+        detail::addFmmGeometryFlops(counts, 0, 2 * kDimensions);
+        return fmmSourceBoxDistanceSquared(scalarBox, a, b, geometry, counts);
     });
 }
 #endif

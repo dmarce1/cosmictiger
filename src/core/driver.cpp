@@ -18,8 +18,8 @@
 #include <cosmictiger/analysis/groups.hpp>
 #include <cosmictiger/analysis/groups_find.hpp>
 #include <cosmictiger/analysis/lightcone.hpp>
-#endif
 #include <cosmictiger/analysis/power.hpp>
+#endif
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/flops.hpp>
@@ -28,13 +28,13 @@
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/core/time.hpp>
 #include <cosmictiger/core/timer.hpp>
+#if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/cosmology/background.hpp>
 #include <cosmictiger/cosmology/background_plot.hpp>
 #include <cosmictiger/cosmology/cosmology.hpp>
 #include <cosmictiger/cosmology/evolution.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/cosmology/initialize.hpp>
-#if COSMICTIGER_WITH_GRAVITY
 #if COSMICTIGER_ENABLE_FMM
 #include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
 #include <cosmictiger/gravity/dehnen/execution.hpp>
@@ -58,8 +58,8 @@
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/particles.hpp>
-#include <cosmictiger/scenarios/cosmology.hpp>
 #if COSMICTIGER_WITH_GRAVITY
+#include <cosmictiger/scenarios/cosmology.hpp>
 #include <cosmictiger/scenarios/glass.hpp>
 #include <cosmictiger/scenarios/plummer.hpp>
 #endif
@@ -247,10 +247,12 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     bool const chemistry = getOptions().chemistry.enabled && !getOptions().starFormation.enabled;
 #endif
     SphRunParameters runParameters;
+#if COSMICTIGER_WITH_GRAVITY
     if (getOptions().run.scenario == "cosmology") {
         runParameters.maximumTimestep =
             cosmology::expansionTimestep(scale, adot / scale, cosmosD2adt2(scale), kScaleTimestep);
     }
+#endif
     runParameters.globalTimestep = globalTimestep;
     if (globalTimestep) {
         // The reduction is clipped to the exact double cap below. Round this
@@ -266,9 +268,11 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     }
 
     runParameters.expansionRate = adot;
+#if COSMICTIGER_WITH_GRAVITY
     if (runParameters.gradientSwitch() && getOptions().run.scenario == "cosmology") {
         runParameters.expansionAcceleration = scale * scale * scale * cosmosD2adt2(scale);
     }
+#endif
     runParameters.scaleFactor = scale;
     runParameters.baseTimestep = t0;
     runParameters.minimumRung = minrung;
@@ -1116,6 +1120,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
 
 #endif
 
+#if COSMICTIGER_WITH_GRAVITY
 double doPowerSpectrum(int num, double a, double adot) {
     auto const softFilter = [](double kh) {
         if (kh > 0.01) {
@@ -1236,6 +1241,8 @@ static void outputEnergy(double coarseTime, double scale, EnergiesT const& energ
     fclose(fp);
 }
 
+#endif
+
 void driver() {
     profile::checkForInterrupt();
     bool const global = usesGlobalIntegration(getOptions().run);
@@ -1243,6 +1250,7 @@ void driver() {
         runFixedScenario();
         return;
     }
+#if COSMICTIGER_WITH_GRAVITY
     Timer totalTime;
     Timer tmr;
     tmr.start();
@@ -1781,8 +1789,8 @@ void driver() {
                 PRINT(
                     "  TFLOP/s uses counted gravity, SPH, and Hopkins operations divided by force "
                     "advancement wall time.\n"
-                    "  FP32/FP64 separate arithmetic precision; Mixed retains counts whose "
-                    "precision is not yet split.\n"
+                    "  FP32/FP64 separate arithmetic precision; Mixed is reserved for "
+                    "unclassified diagnostic counts (normally zero).\n"
                     "  Chemistry and star formation operations are excluded; their wall time "
                     "is included.\n");
             }
@@ -1908,4 +1916,8 @@ void driver() {
             terminal::formatDuration(previousRuntime + (thisIter > 0 ? evolutionTime.read() : 0.0))
                 .c_str());
     }
+#else
+    THROW_ERROR(
+        "run.scenario=%s requires a gravity-enabled build\n", getOptions().run.scenario.c_str());
+#endif
 }

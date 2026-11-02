@@ -73,6 +73,7 @@ void cpuGravityCc(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
     Vector<TreeId> const& list, TreeId self, bool doPhi, FmmGeometry const& geometry) {
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
     FlopCounter<FlopCount> flops = 0;
+    FlopCounts geometryFlops{};
     if (list.size()) {
         Vector<TreeNode const*> treePtrs(list.size());
         TreeNode const* selfPtr = treeGetNode(self);
@@ -95,19 +96,21 @@ void cpuGravityCc(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
         for (int j = 0; j < numberOfSources; j++) {
             Array<SimdFloat, kDimensions> dx{};
             for (int dim = 0; dim < kDimensions; dim++) {
-                dx[dim] = fmmPositionDifference(x[dim], yValue[j][dim], dim, geometry);
+                dx[dim] =
+                    fmmPositionDifference(x[dim], yValue[j][dim], dim, geometry, &geometryFlops);
             }
             directFlops = cosmictiger::gravity::cartesian::M2L(
                 l0, mValue[j], fmmScaleDisplacement(dx), doPhi);
         }
-        // Fixed displacement and kernel work is batched outside the source loop.
+        // Coordinate scaling and kernel work is batched outside the source loop.
         flops += FlopCount(numberOfSources) * kSimdFloatSize * (3 + directFlops);
         for (int i = 0; i < kLocalCoefficients; i++) {
             lValue[i] += simdSum(l0[i]);
         }
         flops += kSimdFloatSize * kLocalCoefficients;
     }
-    addCpuFlops(flops);
+    addCpuFlops(flops, FlopPrecision::Single);
+    addCpuFlops(geometryFlops);
 }
 
 template <int order>
@@ -116,6 +119,7 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
     constexpr int kChunkSize = 32;
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
     FlopCounter<FlopCount> flops = 0;
+    FlopCounts geometryFlops{};
     if (list.size()) {
         TreeNode const* selfPtr = treeGetNode(self);
         for (int li = 0; li < list.size(); li += kChunkSize) {
@@ -170,7 +174,8 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
                 }
                 Array<SimdFloat, kDimensions> dx{};
                 for (int dim = 0; dim < kDimensions; dim++) {
-                    dx[dim] = fmmPositionDifference(x[dim], yValue[dim], dim, geometry);
+                    dx[dim] =
+                        fmmPositionDifference(x[dim], yValue[dim], dim, geometry, &geometryFlops);
                 }
                 cosmictiger::gravity::cartesian::Expansion<SimdFloat, order> d;
                 d = simdBroadcast<SimdFloat>(0);
@@ -188,13 +193,15 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
             flops += kSimdFloatSize * kLocalCoefficients;
         }
     }
-    addCpuFlops(flops);
+    addCpuFlops(flops, FlopPrecision::Single);
+    addCpuFlops(geometryFlops);
 }
 
 template <int order>
 void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const& list,
     FmmGeometry const& geometry) {
     FlopCounter<FlopCount> flops = 0;
+    FlopCounts geometryFlops{};
     if (list.size()) {
         Vector<TreeNode const*> treePtrs(list.size());
         TreeNode const* selfPtr = treeGetNode(self);
@@ -221,7 +228,8 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
             for (int j = 0; j < numberOfSources; j++) {
                 Array<SimdFloat, kDimensions> dx{};
                 for (int dim = 0; dim < kDimensions; dim++) {
-                    dx[dim] = fmmPositionDifference(x[dim], yValue[j][dim], dim, geometry);
+                    dx[dim] = fmmPositionDifference(
+                        x[dim], yValue[j][dim], dim, geometry, &geometryFlops);
                 }
                 kernelFlops = cosmictiger::gravity::cartesian::M2P(
                     lValue2, mValue[j], fmmScaleDisplacement(dx), doPhi);
@@ -236,5 +244,6 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
             (FlopCount(numberOfSources) * kSimdFloatSize * (kernelFlops + 3) +
                 4 * (kSimdFloatSize + 1));
     }
-    addCpuFlops(flops);
+    addCpuFlops(flops, FlopPrecision::Single);
+    addCpuFlops(geometryFlops);
 }

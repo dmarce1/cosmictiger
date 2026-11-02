@@ -96,11 +96,45 @@ CUDA_EXPORT inline FlopCount gravitySofteningFlops(
     }
 }
 
+// The arithmetic oracle above includes each double span-width subtraction but
+// excludes table casts. Float kernels narrow each scalar table value once per
+// broadcast, not once per SIMD lane; polynomial evaluation remains FP32.
+template <class T>
+CUDA_EXPORT inline FlopCounts gravitySofteningOperations(
+    radial_kernel::KernelTable const& kernel, T const& q, bool doPhi) {
+    FlopCount const arithmetic = gravitySofteningFlops(kernel, q, doPhi);
+    if constexpr (std::is_same_v<SimdScalar<T>, double>) {
+        return {0, arithmetic, 0};
+    } else if constexpr (std::is_arithmetic_v<T>) {
+        FlopCount visited = 0;
+        for (int piece = 0; piece < kernel.pieceCount; ++piece) {
+            ++visited;
+            if (q < T(kernel.changePoints[piece + 1])) {
+                FlopCount const forceDouble = piece == 0 ? kernel.degree + 6 : kernel.degree + 11;
+                FlopCount const potentialDouble =
+                    piece == 0 ? kernel.degree + 9 : 2 * kernel.degree + 14;
+                return {arithmetic - 1 - int(doPhi),
+                    visited * (1 + int(doPhi)) + forceDouble + (doPhi ? potentialDouble : 0), 0};
+            }
+        }
+        return {arithmetic, visited * (1 + int(doPhi)), 0};
+    } else {
+        FlopCount const outer = kernel.pieceCount - 1;
+        FlopCount const masks = 2 * kernel.pieceCount - 1;
+        FlopCount doublePrecision = masks + kernel.degree + 6 + outer * (kernel.degree + 11);
+        if (doPhi) {
+            doublePrecision += masks + kernel.degree + 9 + outer * (2 * kernel.degree + 14);
+        }
+        return {arithmetic - kernel.pieceCount * (1 + int(doPhi)), doublePrecision, 0};
+    }
+}
+
 }    // namespace detail
 
 template <class T>
 CUDA_EXPORT inline FlopCount gravitySofteningKernel(T& force, T& phi, T radiusSquared,
-    T inverseSupport, T inverseSupportSquared, T inverseSupportCubed, bool doPhi) {
+    T inverseSupport, T inverseSupportSquared, T inverseSupportCubed, bool doPhi,
+    FlopCounts* operations = nullptr) {
     T const q = simdSqrt(radiusSquared * inverseSupportSquared);
     auto const& kernel = selectedGravityKernel();
     force = radial_kernel::forceFactor(kernel, q) * inverseSupportCubed;
@@ -108,6 +142,11 @@ CUDA_EXPORT inline FlopCount gravitySofteningKernel(T& force, T& phi, T radiusSq
         phi = radial_kernel::potential(kernel, q) * inverseSupport;
     } else {
         phi = simdBroadcast<T>(0);
+    }
+    if constexpr (kCountFlops) {
+        if (operations != nullptr) {
+            *operations += detail::gravitySofteningOperations(kernel, q, doPhi);
+        }
     }
     return detail::gravitySofteningFlops(kernel, q, doPhi);
 }

@@ -12,12 +12,12 @@ template <int order>
 void cpuGravityEwald(cosmictiger::gravity::cartesian::Expansion<float, order>&,
     Vector<TreeId> const&, TreeId, bool, FmmGeometry const& geometry = {});
 template <int order>
-FlopCount dehnenBackgroundImpl(KickParameters const&, ExpansionBuffer&,
+FlopCounts dehnenBackgroundImpl(KickParameters const&, ExpansionBuffer&,
     Array<Position, kDimensions>&, TreeId, Vector<TreeId> const&);
 template <int order>
-FlopCount dehnenPeriodicImpl(
+FlopCounts dehnenPeriodicImpl(
     KickParameters const&, ExpansionBuffer&, TreeId, Vector<TreeId>&, KickInteractionCounts&);
-FlopCount dehnenBackground(int, KickParameters const&, ExpansionBuffer&,
+FlopCounts dehnenBackground(int, KickParameters const&, ExpansionBuffer&,
     Array<Position, kDimensions>&, TreeId, Vector<TreeId> const&);
-FlopCount dehnenPeriodic(
+FlopCounts dehnenPeriodic(
     int, KickParameters const&, ExpansionBuffer&, TreeId, Vector<TreeId>&, KickInteractionCounts&);

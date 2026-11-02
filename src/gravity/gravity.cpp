@@ -24,6 +24,8 @@
 void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const& list, float hfloat,
     FmmGeometry const& geometry) {
     FlopCounter<FlopCount> flops = 0;
+    FlopCounts geometryFlops{};
+    FlopCounter<FlopCount> doubleFlops = 0;
     Timer tm;
     tm.start();
     constexpr int kChunkSize = 32;
@@ -35,8 +37,8 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
         SimdFloat const h2 = sqr(sinkHsoft);
         flops += 4 * kSimdFloatSize;
         FlopCount softenedPackets = 0;
-        FlopCount const softeningFlops =
-            detail::gravitySofteningFlops(selectedGravityKernel(), SimdFloat{}, doPhi);
+        FlopCounts const softeningFlops =
+            detail::gravitySofteningOperations(selectedGravityKernel(), SimdFloat{}, doPhi);
         SimdFloat const one = simdBroadcast<SimdFloat>(1.0);
         SimdFloat const tiny = simdBroadcast<SimdFloat>(1.0e-20);
         TreeNode const* selfPtr = treeGetNode(self);
@@ -97,7 +99,8 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                     }
                     Array<SimdFloat, kDimensions> dx{};
                     for (int dim = 0; dim < kDimensions; dim++) {
-                        dx[dim] = fmmPositionDifference(x[dim], yValue[dim], dim, geometry);
+                        dx[dim] = fmmPositionDifference(
+                            x[dim], yValue[dim], dim, geometry, &geometryFlops);
                     }
                     SimdFloat const r2 = sqr(dx[kXDimension], dx[kYDimension], dx[kZDimension]);
                     SimdFloat const rinv1Far =
@@ -136,11 +139,14 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
             // Per pair: displacement 3, norm 5, sqrt/divide 2, inverse cube 2,
             // weights 2, three FMAs 6, and potential accumulation 1.
             flops +=
-                FlopCount(numberOfSinks) * (FlopCount(numberOfSources) * 21 + 4 * kSimdFloatSize);
+                FlopCount(numberOfSinks) * (FlopCount(numberOfSources) * 18 + 4 * kSimdFloatSize);
         }
-        flops += softenedPackets * softeningFlops;
+        flops += softenedPackets * softeningFlops.singlePrecision;
+        doubleFlops += softenedPackets * softeningFlops.doublePrecision;
     }
-    addCpuFlops(flops);
+    addCpuFlops(flops, FlopPrecision::Single);
+    addCpuFlops(geometryFlops);
+    addCpuFlops(doubleFlops, FlopPrecision::Double);
 }
 
 #ifdef USE_CUDA
