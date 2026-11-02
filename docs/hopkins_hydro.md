@@ -307,10 +307,112 @@ coarse prefix is absent from finer gravity trees. This permits hydro wake-ups
 without changing a gravity interval that is already open. It does not eliminate
 wake-ups or establish a new bound on nonlinear waves.
 
-This branch still gathers all MFM gas and solves support/geometry at each
-Begin/Finish event. Persistent sorting and independent gravity scheduling are
-implemented; sparse MFM geometry work is not. The historical validation below
-predates hierarchical MFM unless explicitly identified otherwise.
+Persistent sorting, independent gravity scheduling and sparse MFM geometry work
+are implemented; the retained-record design below replaced the earlier whole-gas
+gather at every Begin/Finish event. The historical validation below predates
+hierarchical MFM unless explicitly identified otherwise.
+
+### Retained distributed source records (November 2, 2026)
+
+MFM no longer collects every gas particle onto the coordinator at each event.
+`src/hydro/hopkins.cpp` keeps two resident structures:
+
+- Owner mirrors on every locality. For each local gas slot the owner stores the
+  stable identifier and a bytewise key of every input the coordinator record is
+  derived from: the padded-canonical `HopkinsParticleState`, the shared gravity
+  rung, and the raw position, velocity, mass, internal energy, support and
+  gravity acceleration where the state does not yet supply them. At each
+  collection the owner recomputes the keys and reports only the records whose
+  key changed, plus its complete identifier list when its membership changed
+  (migration, first contact, or new gas). A live gravity force is never read
+  while the kick runs: without `readForces` the previously mirrored force is
+  reused, and the next collection that may read forces reports the change.
+- A coordinator workspace that persists between events. Records sit in
+  increasing identifier order, so slot order is reduction order and the
+  summation order of every neighbor loop survives migration and restart. The
+  workspace also holds the owner map, the hydro source tree, the own-support and
+  symmetric neighbor lists, and the per-cell geometry, face rates, primitives
+  and gradients, together with per-event flags recording which cells were
+  solved, built, listed or touched.
+
+The coordinator derives the time-dependent inputs of clean records itself:
+under hierarchical gravity a sleeping record's position is its retained
+trajectory `positionAt(t)` and its imposed acceleration follows from that
+position. Those are the same formulas the owner evaluates for a changed record,
+so no record is communicated merely because time advanced.
+
+Sources in the tree carry trajectories. A sleeping hierarchical cell's source is
+anchored at `positionEpoch` with velocity `meshVelocity/positionDriftScale`,
+acceleration `meshAcceleration/positionDriftScale` and validity through its own
+hydro endpoint (padded by the predictor's rounding tolerance). The tree's moving
+bounds then enclose the retained predictor without any per-event refit of
+sleeping sources. Static anchors (traditional and global integration, or cells
+without a predictor) stay valid until their owner reports a changed record. The
+topology is rebuilt only when the identifier set changes; an owner change alone
+(migration) keeps the records and the tree, and a vanished identifier resets the
+resident set and every owner mirror before recollecting.
+
+Neighbor lists are own-support lists: cell i's list is `{j : r_ij < h_i}` from
+one tree query with radius `h_i`, and the symmetric list is the union of own
+lists. Because `r < max(h_i, h_j)` holds exactly when either own test holds,
+the symmetric lists are the sets the previous gather produced, but a changed
+support now requeries only that cell and repairs the lists of the neighbors it
+gained or lost. Supports therefore no longer need any scatter/gather iteration:
+the constant kernel-number solve iterates on the coordinator with own queries at
+1.2 times the current radius, and only the cells whose radius is still changing
+are requeried.
+
+Each event refreshes the active set A (due cells, gravity-touched cells, invalid
+predictions, terminal closures) and the first-ring halo N(A): both endpoints of
+every incident pair flux need current supports, volume partitions, moment
+matrices and face rates, and the active gradients need the halo primitives.
+`hopkinsEnsureGeometry` solves the active supports, builds every cell's own
+list once at the event time, solves the halo supports, repairs the lists of the
+cells whose supports moved, and builds geometry for A and N(A), repeating until
+no support, list or geometry changes. Woken cells that join A during the wake
+loop extend the same flags incrementally. Cells outside A and N(A) keep their
+own-step anchors, supports, predictors and cached pair intervals untouched;
+only touched records (solved, closed, or credited by a settled pair) return to
+their owners, and each owner refreshes the predicted public density, velocity
+and internal-energy mirrors of its untouched initialized cells locally.
+
+The wake logic is unchanged in form: every cell's own list is rebuilt at each
+event from the retained tree, so the required-rung scan over predicted neighbor
+states, the invalid-prediction wake and the Appendix G rung-contrast
+propagation still examine every sleeping cell. Two inputs changed. A sleeping
+cell's Courant radius comes from its own-event `anchorVolume` instead of a
+fresh geometry solve (an active cell was just closed, so its anchor volume is
+the fresh geometry), which keeps the scan independent of history and exactly
+reproducible after a restart. Cells outside the halo keep the support from
+their last refresh instead of being re-solved at every event. Conservative
+search bounds prevent missed neighbors; they still do not validate a stale
+prediction, and the wake checks remain the only guard against that.
+
+Between a hierarchical `Begin` and its `Finish` the event stays open: geometry
+solved before the gravity ladder remains valid because the hydro positions and
+coordinator-owned supports do not change inside an event, and the records the
+ladder modified (momentum, energy, gravity endpoint and rung of the active
+cells) are reimported before reconstruction. Under traditional integration
+`hopkinsPrepareGeometry` now receives the base timestep and the global flag so
+that it can select the due cells while the gravity kick runs; the subsequent
+`hopkinsKick` reimports the records whose forces changed without re-solving.
+
+Restart (checkpoint schema 6, pair-cache version 2) and migration are
+unchanged in format: checkpoint loading and gas teardown discard the resident
+records and owner mirrors through `hopkinsResetSources`, the first event after
+a restart recollects everything, and every later decision depends only on the
+checkpointed state and the event time. The sound-wave diagnostic solves all
+supports in a scratch copy of the workspace, so it no longer changes retained
+supports as a side effect.
+
+Each event prints a `Hopkins work` row beside the existing `Hopkins step` and
+`Hopkins tree` rows: `total`, `active`, `halo` (cells with geometry that are
+not active), owner records `received` and `installed` with their byte counts
+(`sizeof` of the serialized records plus local indices), tree `sources`
+refitted, `supports` (cells solved) and `supportSums` (kernel-sum evaluations),
+`geometry`, `rates` and `gradients` cells, own-list `queries`, tree
+`candidates` visited, and `pairs` opened.
+
 
 Current `g4_hydro_tree` CPU validation includes a 16-event blast with 381 real
 hydro wakes, unchanged mass, momentum error below 1.2e-18, energy error below
@@ -477,6 +579,59 @@ of this integration with current main. The historical tables, plots, audit
 scripts, and logs under `docs/hopkins_sound_wave_results_20261022/` were not
 restored here; their saved source is the third parent of stash
 `cef72fbeea6e33168c17002172f5918cb42a7df6`.
+
+### Retained-record per-event work on 2026-11-02
+
+Measured with `tests/run_hierarchical_mfm.py` in a fixed64 Hopkins CPU build
+(Release, g++ 15, FMM, expansion degree 4, hierarchical/traditional/global
+integrators) on the `mfm_retained_sources` branch. The `Hopkins work` rows of the
+MFM blast (432 gas, 16 events, end time 0.004) give, per event:
+
+| event kind | active | halo | records received | records installed | supports solved | kernel sums | geometry built | face rates | gradients | own-list queries | tree candidates | pairs opened |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| full, t=0 (first contact) | 432 | 432 | 864 | 864 | 432 | 1728 | 432 | 432 | 432 | 2160 | 769824 | 10800 |
+| full, t=0.002 (all gravity-touched) | 432 | 432 | 432 | 864 | 432 | 886 | 432 | 432 | 432 | 1318 | 449732 | 10800 |
+| fine, one due cell (7 events) | 1 | 50 | 0 | 102 | 51 | 51 to 154 | 51 | 51 | 1 | 483 to 636 | 131423 to 185409 | 50 |
+| fine, 51 due cells (6 events) | 51 | 229 | 0 | 560 | 280 | 280 to 793 | 280 | 280 | 51 | 712 to 1454 | 218480 to 474351 | 1972 |
+| wake event, t=0.00375 | 382 | 50 | 0 | 491 | 432 | 1082 | 432 | 432 | 382 | 1930 | 632086 | 10288 |
+
+Records are 592 bytes each including the local index (`sizeof(HopkinsParticle)`
+plus `sizeof(ParticleInteger)`), so the one-cell events communicate 0 bytes to
+the coordinator and 59976 bytes back; the first event communicates 511488 and
+508032 bytes. The halo is the complete neighbor set of the active cells (about
+50 per cell), so a one-cell event refreshes 51 cells and a 51-cell event 280.
+Median fine/full ratios over the fourteen partial events: records installed
+0.34, supports solved 0.38, kernel sums 0.17, geometry 0.38, face rates 0.38,
+gradients 0.06, pairs opened 0.09, own-list queries 0.39, tree candidates 0.33.
+The query and candidate ratios are the cost of the whole-gas wake scan: every
+cell's own list is rebuilt once per event (432 queries) and the active and halo
+cells are requeried after their supports move.
+
+The previous implementation at the same tip (`44ca6eaf`) collected every
+record at each gather and solved supports and geometry for all 432 cells in
+both Begin and Finish. Its `Hopkins tree` rows show 2160 to 3456 source updates
+per event, that is five to eight whole-gas gathers of 432 records (1.3 to 2.0 MB
+each way per event), and 663552 to 1157328 tree candidates per event, against
+131423 for the new one-cell event. These are counts of work items, not timings;
+no production speedup is claimed, and the remaining whole-gas scan is the
+own-list rebuild and required-rung check that keeps the wake logic intact.
+
+In the self-gravitating wave fixture (512 gas, hierarchical, CFL 0.1 to 0.025)
+every cell shares one hydro rung, so all 512 cells are active at every event and
+the fine/full ratio is 1; its rows show 0 records received except at the two
+events where the gravity ladder kicked all gas (512 records each way).
+
+Regression results on the same branch: the blast keeps 16 events, 381 real
+hydro wakes, unchanged mass, momentum error below 1.0e-18, energy error below
+2.3e-16 and an exact restart; the wave refinement errors are 4.034e-4, 1.617e-4
+and 4.699e-5 (bitwise identical to the pre-change run of this tip, whose
+direct-pair gravity bound moved them from the 1.624e-4 and 4.712e-5 recorded
+below), with identical initial synchronized energies. The FMM restart/split
+matrix passes for MFM and MFV under the traditional, hierarchical and global
+integrators, as do the individual-rung, real-wake and global-source fixtures
+of `tests/run_hopkins.py`, the `hopkins_flops_application` CTest, all 117
+Hopkins/SPH/drift/source-tree gtests, and the two SPH hierarchical CTests.
+Multi-locality runs were not repeated for this change.
 
 ### SIMD unit validation on 2026-11-02
 
