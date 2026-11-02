@@ -122,8 +122,12 @@ integration, and global integration can be enabled independently. Both PMMM opti
 to `OFF` and may be enabled together. A single eligible algorithm is
 automatically selected; multiple eligible algorithms require a CLI/INI selection.
 
-Use `gravity.method.far=fmm|pmmm`, `gravity.method.near=pp|fmm` for PMMM,
-`gravity.expansionDegree`, and `run.timeIntegrator=traditional|hierarchical|global`.
+Use `gravity.method.far=fmm|pmmm|pm|p3m`, `gravity.method.near=pp|fmm` for PMMM
+and P3M, `gravity.expansionDegree`, and
+`run.timeIntegrator=traditional|hierarchical|global`. `COSMICTIGER_ENABLE_PM`,
+`COSMICTIGER_ENABLE_P3M_PP` (PP-PM) and `COSMICTIGER_ENABLE_P3M_FMM` (FMM-PM)
+compile the scalar particle-mesh solvers with their mandatory outer PM
+interval; see [docs/p3m.md](docs/p3m.md).
 The highest compiled degree is the runtime default. Potential degree d is old
 internal order d+1, so degrees 4-6 correspond to orders 5-7. PMMM and its near FMM
 share the degree. Old checkpoint order integers retain their original meaning.
