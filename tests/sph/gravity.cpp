@@ -30,6 +30,7 @@
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
+#include <cosmictiger/gravity/timestep.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/hydro/sph/cullen_and_dehnen/particle_exchange.hpp>
 #include <cosmictiger/hydro/sph/sph.hpp>
@@ -397,15 +398,20 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f, float 
         selectedGravityKernel().supportRadiusPerEffectiveRadius;
     double const darkMatterTimestep =
         params.eta * std::sqrt(gravityEffectiveRadius / darkMatterAcceleration);
-    params.t0 = 2.2 * darkMatterTimestep;
+    // The direct-pair bound (gravity/timestep.hpp) uses the same radial coefficient
+    // gasMass * F(r/H)/H^3 that produced the acceleration; the kick takes the
+    // tighter of the two bounds, and 2.2 of that selects rung two either way.
+    double const darkMatterPairTimestep = gravity::pairTimestep<double>(
+        1.0, kGravityScale, params.eta, gasMass * inverseCube);
+    params.t0 = 2.2 * std::min(darkMatterTimestep, darkMatterPairTimestep);
     resetKickState();
     auto const cpuResult =
         kick(params, local, origin, built.id, Vector<TreeId>{built.id}, Vector<TreeId>{}, nullptr);
     requireClose("CPU kick total potential", cpuResult.pot,
         -kGravityScale * getOptions().initial.darkMatterMass * gasMass * inverseRadius, 2e-4);
     verifyKick(inverseCube, inverseRadius, separation);
-    requireClose(
-        "CPU gravity rung uses the variance smoothing length", particlesRung(darkMatterIndex), 2);
+    requireClose("CPU gravity rung uses the variance-length acceleration and direct-pair bounds",
+        particlesRung(darkMatterIndex), 2);
     verifySynchronizedDiagnostics(cpuResult);
 #ifdef USE_CUDA
     if (useCuda) {
@@ -420,7 +426,8 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f, float 
                 particlesX[kZDimension], treeData(), Vector<KickWorkitem>{item});
         requireClose("CUDA kick total potential", cudaResult.pot, cpuResult.pot, 2e-4);
         verifyKick(inverseCube, inverseRadius, separation);
-        requireClose("CUDA gravity rung uses the variance smoothing length",
+        requireClose(
+            "CUDA gravity rung uses the variance-length acceleration and direct-pair bounds",
             particlesRung(darkMatterIndex), 2);
         verifySynchronizedDiagnostics(cudaResult);
     }

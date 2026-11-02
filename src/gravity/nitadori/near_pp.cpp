@@ -15,15 +15,15 @@
 
 void pmmmNearField(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearParticle> const& sources, double cellWidth, bool doPotential,
-    std::vector<std::array<double, 4>>& fields) {
+    std::vector<std::array<double, 4>>& fields, std::vector<double>* pairCurvature) {
     std::vector<PmmmNearSourceRange> const sourceRanges(sinks.size(), {0, sources.size()});
-    pmmmNearFieldBatch(sinks, sources, sourceRanges, cellWidth, doPotential, fields);
+    pmmmNearFieldBatch(sinks, sources, sourceRanges, cellWidth, doPotential, fields, pairCurvature);
 }
 
 void pmmmNearFieldBatch(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearParticle> const& sources,
     std::vector<PmmmNearSourceRange> const& sourceRanges, double cellWidth, bool doPotential,
-    std::vector<std::array<double, 4>>& fields) {
+    std::vector<std::array<double, 4>>& fields, std::vector<double>* pairCurvature) {
     double const supportRadius = getOptions().gravity.supportRadius;
     if (!(cellWidth > 0 && cellWidth <= 1 && supportRadius > 0 && supportRadius <= 1)) {
         throw std::invalid_argument("PMMM near-field cell width/support must be in (0,1]");
@@ -42,14 +42,17 @@ void pmmmNearFieldBatch(std::vector<PmmmNearParticle> const& sinks,
         candidatePairs += std::min(count, std::numeric_limits<size_t>::max() - candidatePairs);
     }
     fields.assign(sinks.size(), {});
+    if (pairCurvature) {
+        pairCurvature->assign(sinks.size(), 0.0);
+    }
     if (candidatePairs == 0) {
         return;
     }
 #ifdef USE_CUDA
     if (getOptions().gravity.cuda &&
         pmmm::detail::shouldUsePmmmNearCuda(usefulSinkCount, candidatePairs)) {
-        pmmm::detail::pmmmNearFieldCuda(
-            sinks, sources, sourceRanges, cellWidth, supportRadius, doPotential, fields);
+        pmmm::detail::pmmmNearFieldCuda(sinks, sources, sourceRanges, cellWidth, supportRadius,
+            doPotential, fields, pairCurvature);
         return;
     }
 #endif
@@ -62,7 +65,8 @@ void pmmmNearFieldBatch(std::vector<PmmmNearParticle> const& sinks,
         auto const& range = sourceRanges[sink];
         for (size_t source = range.begin; source < range.end; ++source) {
             flops += pmmm::detail::accumulateNearPair(sinks[sink], sources[source], cellWidth,
-                inverseSupportRadius, inverseSupportRadiusCubed, doPotential, kernel, fields[sink]);
+                inverseSupportRadius, inverseSupportRadiusCubed, doPotential, kernel, fields[sink],
+                pairCurvature ? &(*pairCurvature)[sink] : nullptr);
         }
     }
     addCpuFlops(flops, FlopPrecision::Double);

@@ -142,11 +142,25 @@ steps with finite physical diagnostics. This checks distributed execution, not
 cosmological convergence or multi-rank restart equivalence.
 
 The retained close-pair stress runner `tests/run_hierarchical_sph_gravity.py`
-is an unresolved validation failure: its hierarchy energy residual is 0.09586
-against a 0.002 gate. Three global reference refinements also fail the energy
-and convergence checks (residuals 0.5009, 0.6536, and 0.1177). Its mixed-rung events
-reduce active sorting and density work, but that does not establish acceptable
-accuracy. The original parameters and strict tolerances remain in the runner.
+(512 gas particles, `units.massSolar=1e26`, `gravity.softening=0.018769884569535343`,
+end time 0.05) failed before gravity gained the direct-pair timestep bound of
+`docs/kernels.md`: the hierarchy energy residual was 0.09586 against the 0.002
+gate, and the three global reference refinements gave 0.5009, 0.6536, and 0.1177
+without converging. Full-force analysis of that failure (recorded in the earlier
+`sph_hierarchical` work) showed the acceleration criterion selecting a step of
+about 29% of a softened close pair's oscillation period, because the pair's net
+force is small near its crossing while its spatial derivative is not. With the
+bound, the same runner, parameters, and tolerances pass on CPU (2026-11-02,
+`build/validation/sph_gravity_paircap`): hierarchy peak residual 4.87e-4 with
+256 partial-active events and fine/full median sorting and density ratios 0.5;
+global residuals 6.82e-4, 4.98e-4, and 4.85e-4 at eta, eta/2, and eta/4;
+successive global refinements reduce the largest field difference from 0.003419
+to 0.001042 (velocity distribution); the hierarchy differs from the quarter-eta
+global result by at most 0.001576. The eta/4 global reference needed 151 s
+single-threaded, beyond the runner's 120 s per-process cap, so that one run was
+produced by the same `run_case` with a longer timeout and the committed runner
+compared all four with `--analyze-only`. This is a timestep-resolution result at
+fixed force settings; it is not a performance or production claim.
 
 CUDA execution, long production runs, and a performance advantage remain
 unvalidated. Compilation, CPU execution, CUDA execution, numerical convergence,

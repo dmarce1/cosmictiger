@@ -38,16 +38,19 @@ struct PmmmNearSourceRange {
 // source-cell periodic image already selected. No nearest-image wrapping is
 // performed here. Fields are overwritten as {potential, ax, ay, az}, in unit-box
 // coordinates without G. Only identical primary particle IDs are excluded.
+// Optional pairCurvature sums the positive radial force coefficients m_j F(r/H)/H^3
+// over the same nonself pairs, also without G, for the local gravitational
+// timestep bound in gravity/timestep.hpp.
 void pmmmNearField(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearParticle> const& sources, double cellWidth, bool doPotential,
-    std::vector<std::array<double, 4>>& fields);
+    std::vector<std::array<double, 4>>& fields, std::vector<double>* pairCurvature = nullptr);
 
 // Each sink uses its own half-open source range. Batching retains each sink's
 // existing source order and selected periodic image.
 void pmmmNearFieldBatch(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearParticle> const& sources,
     std::vector<PmmmNearSourceRange> const& sourceRanges, double cellWidth, bool doPotential,
-    std::vector<std::array<double, 4>>& fields);
+    std::vector<std::array<double, 4>>& fields, std::vector<double>* pairCurvature = nullptr);
 
 namespace pmmm::detail {
 
@@ -94,7 +97,7 @@ template <bool countFlops = kCountFlops, class Kernel, class Real>
 CUDA_EXPORT inline FlopCount accumulateNearPair(PmmmNearParticle const& sink,
     PmmmNearParticle const& source, Real cellWidth, Real inverseSupportRadius,
     Real inverseSupportRadiusCubed, bool doPotential, Kernel const& kernel,
-    std::array<Real, 4>& field) {
+    std::array<Real, 4>& field, Real* pairCurvature = nullptr) {
     if (source.rank == sink.rank && source.index == sink.index) {
         return 0;
     }
@@ -103,6 +106,9 @@ CUDA_EXPORT inline FlopCount accumulateNearPair(PmmmNearParticle const& sink,
     Real const dz = (Real(sink.offset[2]) - Real(source.offset[2])) * cellWidth;
     Real const q = simdSqrt(dx * dx + dy * dy + dz * dz) * inverseSupportRadius;
     Real const factor = Real(source.mass) * inverseSupportRadiusCubed * forceFactor(kernel, q);
+    if (pairCurvature) {
+        *pairCurvature += factor;
+    }
     field[1] -= factor * dx;
     field[2] -= factor * dy;
     field[3] -= factor * dz;
@@ -110,7 +116,7 @@ CUDA_EXPORT inline FlopCount accumulateNearPair(PmmmNearParticle const& sink,
         field[0] -= Real(source.mass) * inverseSupportRadius * potential(kernel, q);
     }
     if constexpr (countFlops) {
-        return nearPairFlops(kernel, q, doPotential);
+        return nearPairFlops(kernel, q, doPotential) + (pairCurvature ? 1 : 0);
     }
     return 0;
 }
@@ -119,7 +125,8 @@ CUDA_EXPORT inline FlopCount accumulateNearPair(PmmmNearParticle const& sink,
 void pmmmNearFieldCuda(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearParticle> const& sources,
     std::vector<PmmmNearSourceRange> const& sourceRanges, double cellWidth, double supportRadius,
-    bool doPotential, std::vector<std::array<double, 4>>& fields);
+    bool doPotential, std::vector<std::array<double, 4>>& fields,
+    std::vector<double>* pairCurvature = nullptr);
 
 // Call only after all PMMM batches have completed, before CUDA device teardown.
 void clearPmmmNearCudaWorkspaces();

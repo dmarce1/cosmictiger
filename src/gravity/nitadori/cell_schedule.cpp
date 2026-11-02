@@ -140,7 +140,8 @@ void computeReadyCells() {
                         field[dim + 1] += fields.acceleration[dim][compact];
                     }
                     flops += 8;    // Four float-to-double promotions and field additions.
-                    consumeField(index, field, result, flops, kickFlops);
+                    consumeField(
+                        index, field, result, flops, kickFlops, fields.pairCurvature[compact]);
                 }
             }
             if (compact != fields.particleIndices.size()) {

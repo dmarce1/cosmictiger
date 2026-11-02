@@ -95,7 +95,8 @@ Persistent region
 Reusable phase arena, sized for the largest simultaneously live set
 
 - L2L output scratch (one expansion), used before any force exists.
-- Sink-force planes gx, gy, gz, phi for `sinkCapacity` particles. They are
+- Sink-force planes gx, gy, gz, phi and the direct-pair curvature
+  (`gravity/timestep.hpp`) for `sinkCapacity` particles. They are
   initialized only after the cell interactions, so they alias the scratch.
 - Source tiles following the force planes: particle planes x, y, z (and a mass
   plane only for mixed-mass runs; equal-mass runs instantiate PP/CP without it)

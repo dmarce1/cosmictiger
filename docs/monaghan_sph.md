@@ -405,8 +405,9 @@ criterion; including it in the fractional bound would force arbitrarily short
 steps when cold gas first enters a shock. The explicit integrator retains its
 cosmological expansion limits.
 The gravity acceleration criterion uses its own effective radius, independently of
-the selected hydro family. These reference conversions do not establish equal
-timestep accuracy for every kernel shape.
+the selected hydro family, and gas also receives gravity's direct-pair bound
+(`docs/kernels.md`) through the published per-particle gravity timestep. These
+reference conversions do not establish equal timestep accuracy for every kernel shape.
 
 The `star` test's constant-α schedule (zero during relaxation, 0.05 afterward)
 sets `hydro.viscosityEvolution=none` and `viscosityBeta=2*viscosityAlpha`

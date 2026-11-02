@@ -157,36 +157,61 @@ void checkedPmmmNearField(std::vector<PmmmNearParticle> const& sinks,
 void checkedPmmmNearFieldBatch(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearParticle> const& sources,
     std::vector<PmmmNearSourceRange> const& sourceRanges, bool doPotential,
-    std::vector<std::array<double, 4>>& fields) {
+    std::vector<std::array<double, 4>>& fields, std::vector<double>& pairCurvature) {
     constexpr double kCellWidth = 0.25;
-    double const inverseRadius = 1 / getOptions().gravity.supportRadius;
+    double const support = getOptions().gravity.supportRadius;
+    double const inverseRadius = 1 / support;
     double const inverseCubed = inverseRadius * inverseRadius * inverseRadius;
     FlopCount expected = 0;
     size_t usefulSinks = 0;
     size_t candidatePairs = 0;
     std::vector<std::array<double, 4>> reference(sinks.size());
+    std::vector<double> referenceCurvature(sinks.size());
     for (size_t sink = 0; sink < sinks.size(); ++sink) {
         auto const range = sourceRanges[sink];
         usefulSinks += range.begin != range.end;
         candidatePairs += range.end - range.begin;
+        double ignoredCurvature = 0.0;
         for (size_t source = range.begin; source < range.end; ++source) {
             expected += pmmm::detail::accumulateNearPair<true>(sinks[sink], sources[source],
                 kCellWidth, inverseRadius, inverseCubed, doPotential, selectedGravityKernel(),
-                reference[sink]);
+                reference[sink], &ignoredCurvature);
+            auto const& a = sinks[sink];
+            auto const& b = sources[source];
+            if (a.rank != b.rank || a.index != b.index) {
+                // Independent scalar oracle: physical separation and source mass,
+                // with no G factor, signed force cancellation, or self subtraction.
+                double radiusSquared = 0.0;
+                for (int dimension = 0; dimension < kDimensions; ++dimension) {
+                    double const separation =
+                        kCellWidth * (a.offset[dimension] - b.offset[dimension]);
+                    radiusSquared += separation * separation;
+                }
+                referenceCurvature[sink] += b.mass *
+                    radial_kernel::forceFactor(
+                        selectedGravityKernel(), std::sqrt(radiusSquared) / support) *
+                    inverseCubed;
+            }
         }
     }
     if (candidatePairs != 0) {
         expected += 3;
     }
     resetFlops();
-    pmmmNearFieldBatch(sinks, sources, sourceRanges, kCellWidth, doPotential, fields);
+    pmmmNearFieldBatch(
+        sinks, sources, sourceRanges, kCellWidth, doPotential, fields, &pairCurvature);
     requirePmmm(readFlops() == expected, "PP batch lost or duplicated operation counts");
     bool const useCuda = getOptions().gravity.cuda &&
         pmmm::detail::shouldUsePmmmNearCuda(usefulSinks, candidatePairs);
     FlopCount const expectedGpu = useCuda && expected != 0 ? expected - 3 : 0;
     requirePmmm(getGpuFlops() == expectedGpu, "PP batch arithmetic used the wrong backend");
     requirePmmm(fields.size() == reference.size(), "PP batch retained stale sink outputs");
+    requirePmmm(pairCurvature.size() == sinks.size(), "PP batch retained stale curvature outputs");
     for (size_t sink = 0; sink < sinks.size(); ++sink) {
+        requirePmmm(std::isfinite(pairCurvature[sink]) && pairCurvature[sink] >= 0.0 &&
+                std::abs(pairCurvature[sink] - referenceCurvature[sink]) <
+                    2.0e-11 * std::max(1.0, referenceCurvature[sink]),
+            "PP batch curvature lost mass, self identity, source ranges, or device output");
         for (int component = 0; component < 4; ++component) {
             requirePmmm(std::isfinite(fields[sink][component]) &&
                     std::abs(fields[sink][component] - reference[sink][component]) <
@@ -216,6 +241,7 @@ void checkPmmmNearBatches() {
         setOptions(options);
         bool usedCuda = false;
         std::vector<std::array<double, 4>> fields{{1.0, 2.0, 3.0, 4.0}};
+        std::vector<double> pairCurvature{-1.0};
         for (auto const shape : shapes) {
             std::vector<PmmmNearParticle> sources(shape.sources);
             for (size_t source = 0; source < sources.size(); ++source) {
@@ -247,14 +273,16 @@ void checkPmmmNearBatches() {
                 sourceRanges[0] = {sources.size(), sources.size()};
             }
             for (bool doPotential : {true, false}) {
-                checkedPmmmNearFieldBatch(sinks, sources, sourceRanges, doPotential, fields);
+                checkedPmmmNearFieldBatch(
+                    sinks, sources, sourceRanges, doPotential, fields, pairCurvature);
                 usedCuda |= getGpuFlops() != 0;
             }
             if (!sinks.empty()) {
                 // A pooled buffer containing a previous field must not leak into
                 // a call whose sources are all omitted by its ranges.
                 std::fill(sourceRanges.begin(), sourceRanges.end(), PmmmNearSourceRange{});
-                checkedPmmmNearFieldBatch(sinks, sources, sourceRanges, true, fields);
+                checkedPmmmNearFieldBatch(
+                    sinks, sources, sourceRanges, true, fields, pairCurvature);
             }
         }
         requirePmmm(backend == 0 || usedCuda, "PP batch regression never exercised CUDA");

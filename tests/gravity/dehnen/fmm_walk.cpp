@@ -28,6 +28,7 @@
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_interaction_counts.hpp>
+#include <cosmictiger/gravity/timestep.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/hydro/sph/sph_particles.hpp>
@@ -175,6 +176,65 @@ TreeId fmmWalkAddNode(Vector3<Position> const& position, float radius,
         }
     }
     return TreeId{hpxRank(), int(treeAddRemote(node))};
+}
+
+// The direct-pair timestep bound (gravity/timestep.hpp): the sink's own particle
+// contributes no curvature, one neighbor inside the support radius reproduces the
+// mass-weighted radial coefficient, and the walk's global timestep selects that
+// bound, which is tighter than the acceleration criterion at this separation.
+void fmmWalkPairCurvature(bool useCuda) {
+    auto const requireRelative = [](std::string const& label, double actual, double expected) {
+        double const tolerance = expected == 0.0 ? 0.0 : 1.0e-4 * std::abs(expected);
+        if (!std::isfinite(actual) || std::abs(actual - expected) > tolerance) {
+            throw std::runtime_error(label + ": got " + std::to_string(actual) + ", expected " +
+                std::to_string(expected));
+        }
+    };
+    fmmWalkPrepareArena();
+    auto const center = fmmWalkPosition(0.3, 0.35, 0.4);
+    float const support = getOptions().gravity.supportRadius;
+    auto const neighborPosition = fmmWalkPosition(0.3 + 0.4 * support, 0.35, 0.4);
+    fmmWalkSetParticlePosition(1, neighborPosition);
+    auto const sink = fmmWalkAddNode(center, 0.0f, Pair<ParticleInteger>(0, 1), 0, true);
+    auto const neighbor =
+        fmmWalkAddNode(neighborPosition, 0.0f, Pair<ParticleInteger>(1, 2), 0, true);
+    double const q =
+        (neighborPosition[kXDimension].toDouble() - center[kXDimension].toDouble()) / support;
+    double const expectedCurvature = particlesMass(1) *
+        radial_kernel::forceFactor(selectedGravityKernel(), q) /
+        (double(support) * double(support) * double(support));
+    for (bool withNeighbor : {false, true}) {
+        Vector<TreeId> sources{sink};
+        if (withNeighbor) {
+            sources.push_back(neighbor);
+        }
+        ForceVectors direct(1);
+        direct.gx[0] = direct.gy[0] = direct.gz[0] = direct.phi[0] = 0.0f;
+        direct.pairCurvature[0] = 0.0f;
+        cpuGravityPp(direct, false, sink, sources, support);
+        requireRelative("direct pair curvature excludes only the sink itself",
+            direct.pairCurvature[0], withNeighbor ? expectedCurvature : 0.0);
+        for (int backend = 0; backend < (useCuda ? 2 : 1); ++backend) {
+            fmmWalkResetKickState();
+            gravityBeginGlobalKick();
+            auto params = fmmWalkParameters(backend != 0);
+            params.globalTimestep = true;
+            params.eta = 0.2f;
+            params.maxDt = 0.25f;
+            params.doPhi = false;
+            ExpansionBuffer local;
+            local.zero();
+            auto const result =
+                kick(params, local, center, sink, sources, Vector<TreeId>{}, nullptr);
+            double const expected = withNeighbor ?
+                gravity::pairTimestep(1.0, 1.0, double(params.eta), expectedCurvature) :
+                double(params.maxDt);
+            requireRelative(
+                std::string(backend == 0 ? "CPU" : "CUDA") + " direct-pair global timestep bound",
+                result.minimumTimestep, expected);
+        }
+    }
+    treeDestroy();
 }
 
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
@@ -1840,6 +1900,7 @@ void fmmWalkTest() {
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
         detail::fmmWalkHierarchicalGasCoupling();
 #endif
+        detail::fmmWalkPairCurvature(useCuda);
         detail::fmmWalkRejectedSourceLeaf(useCuda);
         detail::fmmWalkRepeatedSourceOpening(useCuda);
         detail::fmmWalkEmptyLocalRoot(useCuda);

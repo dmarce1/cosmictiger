@@ -61,6 +61,8 @@ PmmmDiagnostics pmmmDiagnostics();
 // Results remain valid until the next particle permutation or solve.
 Vector3<float> const& pmmmAcceleration(ParticleInteger index);
 float pmmmPotential(ParticleInteger index);
+// Direct-pair coefficient without G (gravity/timestep.hpp); zero with no near pairs.
+float pmmmPairCurvature(ParticleInteger index);
 double pmmmEffectiveRadius();
 
 // Local instrumentation hook. Set/clear only between solves; callbacks execute

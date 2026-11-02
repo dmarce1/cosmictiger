@@ -436,7 +436,8 @@ packets, and near FMM all use that same selection; an inactive slow particle
 does not enter a fast stage's force. Ascending/descending signed kicks and
 per-rung drifts are retained. In all integrators, the gravity timestep criterion uses
 the selected compact kernel's effective radius and the complete near-plus-far
-acceleration.
+acceleration, together with the direct-pair bound of `docs/kernels.md`
+accumulated by the near field (PP or near FMM) for each sink.
 
 Each hierarchical stage scales the mesh volume with its active particle fraction.
 With `N0 = gravity.meshSize`, `C = gravity.pmmmCoarseMeshSize`, and global

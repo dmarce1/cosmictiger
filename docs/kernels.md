@@ -232,7 +232,32 @@ The gravitational acceleration criterion uses the effective radius:
 \]
 
 with the existing cosmological conversions applied in the implementation.
-`gravity.timestepEta` is the prefactor `C_grav`. The Courant-viscous numerator
+`gravity.timestepEta` is the prefactor `C_grav`. A small net acceleration does
+not imply slow relative motion: at the center of a softened close encounter the
+force vanishes while its spatial derivative, and hence the oscillation
+frequency, stays large. Every direct particle-particle evaluation (FMM PP on
+CPU and CUDA, and the PMMM near field) therefore also accumulates, without G,
+
+\[
+C_i=\sum_{j\ne i} m_j\,F(r_{ij}/H)/H^3 ,
+\]
+
+the sum of the positive radial force coefficients that already multiply each
+pair displacement, and the same `C_grav` additionally limits the step to
+
+\[
+\Delta t_{\mathrm{pair}}=C_{\mathrm{grav}}\sqrt{a/(4\,G\,C_i)} .
+\]
+
+For the supported spherical, nonnegative, decreasing-density kernels a pair's
+tidal eigenvalues are `-F` and `2F - 4 pi rho`, so each pair's tidal block is
+bounded in norm by `2F`; including the diagonal and off-diagonal blocks gives
+the factor four. The bound excludes the sink itself, remains finite at a
+zero-force crossing, adds no tree traversal or sort, and does not bound the
+far-field tidal tensor of multipole interactions. Pairs at exactly zero
+fixed-point separation exert no force and are skipped for that step. See
+`cosmictiger/gravity/timestep.hpp`; `docs/hierarchical_sph.md` records the
+close-pair stress case that motivated it. The Courant-viscous numerator
 similarly uses the hydro effective radius. Equal effective radii do not guarantee
 equal timestep error for different kernel shapes; accuracy and stability still require validation for
 the selected problem and settings.

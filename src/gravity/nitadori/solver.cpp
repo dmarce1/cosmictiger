@@ -85,8 +85,10 @@ void prepare(SolveRequest const& request) {
         if (request.applyKick) {
             Vector<Vector3<float>>().swap(state.acceleration);
             Vector<float>().swap(state.potential);
+            Vector<float>().swap(state.pairCurvature);
         } else {
             state.acceleration.resize(particlesSize());
+            state.pairCurvature.assign(particlesSize(), 0.0f);
             if (request.doPotential) {
                 state.potential.assign(particlesSize(), 0.0f);
             } else {
@@ -343,6 +345,10 @@ Vector3<float> const& pmmmAcceleration(ParticleInteger index) {
 
 float pmmmPotential(ParticleInteger index) {
     return pmmm::detail::state.potential.empty() ? 0.0f : pmmm::detail::state.potential.at(index);
+}
+
+float pmmmPairCurvature(ParticleInteger index) {
+    return pmmm::detail::state.pairCurvature.at(index);
 }
 
 double pmmmEffectiveRadius() {

@@ -129,3 +129,38 @@ TEST(PmmmNearFlops, PairCountsAccumulateBeyond32Bits) {
     EXPECT_EQ(FlopCount(total), FlopCount(std::numeric_limits<uint32_t>::max()) + reported);
     EXPECT_GT(FlopCount(total), FlopCount(std::numeric_limits<uint32_t>::max()));
 }
+
+TEST(PmmmNearFlops, PairCurvatureRetainsCoincidentDistinctSourcesAndExcludesSelf) {
+    auto const table = radial_kernel::makeKernelTable({radial_kernel::Family::Ferrers, 4});
+    PmmmNearParticle const sink{{0, 0, 0}, 3, 0, 1};
+    PmmmNearParticle const source{{0, 0, 0}, 2, 0, 2};
+    std::array<double, 4> field{};
+    double pairCurvature = 0.0;
+    auto const count = pmmm::detail::accumulateNearPair<true>(
+        sink, source, 1.0, 8.0, 512.0, false, table, field, &pairCurvature);
+    EXPECT_DOUBLE_EQ(field[1], 0.0);
+    EXPECT_DOUBLE_EQ(field[2], 0.0);
+    EXPECT_DOUBLE_EQ(field[3], 0.0);
+    EXPECT_DOUBLE_EQ(pairCurvature, 2.0 * 512.0 * radial_kernel::forceFactor(table, 0.0));
+    EXPECT_EQ(count, pmmm::detail::nearPairFlops(table, 0.0, false) + 1);
+    double const before = pairCurvature;
+    EXPECT_EQ(pmmm::detail::accumulateNearPair<true>(
+                  sink, sink, 1.0, 8.0, 512.0, true, table, field, &pairCurvature),
+        0);
+    EXPECT_DOUBLE_EQ(pairCurvature, before);
+}
+
+TEST(PmmmNearFlops, PairCurvatureAddsPositiveTermsDespiteForceCancellation) {
+    auto const table = radial_kernel::makeKernelTable({radial_kernel::Family::Ferrers, 4});
+    PmmmNearParticle const sink{{0, 0, 0}, 1, 0, 1};
+    PmmmNearParticle const left{{-0.01, 0, 0}, 2, 0, 2};
+    PmmmNearParticle const right{{0.01, 0, 0}, 2, 0, 3};
+    std::array<double, 4> field{};
+    double pairCurvature = 0.0;
+    pmmm::detail::accumulateNearPair<true>(
+        sink, left, 1.0, 8.0, 512.0, false, table, field, &pairCurvature);
+    pmmm::detail::accumulateNearPair<true>(
+        sink, right, 1.0, 8.0, 512.0, false, table, field, &pairCurvature);
+    EXPECT_DOUBLE_EQ(field[1], 0.0);
+    EXPECT_DOUBLE_EQ(pairCurvature, 4.0 * 512.0 * radial_kernel::forceFactor(table, 0.08));
+}

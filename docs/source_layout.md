@@ -44,7 +44,7 @@ gravity/
 ├── sources.*, source_access.*
 ├── tree.hpp, tree_build.*, tree_arena.cpp, tree_multipole.hpp
 ├── gravity.*, gravity_cpu.hpp, gravity_cuda.hpp
-├── kick.*, kick_context.hpp, kick_walk.hpp, kick_workspace.*
+├── kick.*, kick_context.hpp, kick_walk.hpp, kick_workspace.*, timestep.hpp
 ├── kick_executor.cpp, kick_cuda*.hpp, kick_interaction_counts.*
 ├── dehnen/
 │   ├── distributed_tree.*

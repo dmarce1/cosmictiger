@@ -17,6 +17,7 @@
 #include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/gravity/nitadori/kick.hpp>
 #include <cosmictiger/gravity/nitadori/solver.hpp>
+#include <cosmictiger/gravity/timestep.hpp>
 #include <cosmictiger/hydro/hopkins/gravity_impulse.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
@@ -31,7 +32,7 @@ HPX_PLAIN_ACTION(particleMeshFinishKick, ParticleMeshFinishKickAction);
 
 KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& acceleration,
     float potential, KickParameters const& parameters, FlopCount* flopCount,
-    FlopCounts* precisionCounts) {
+    FlopCounts* precisionCounts, float pairCurvature) {
     KickReturn result;
     FlopCounter<> flops;
     FlopCounter<FlopCount> doubleFlops = 0;
@@ -95,6 +96,10 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
     };
     float const mass = particlesMass(index);
     float const oldKinetic = 0.5f * mass * sqr(vx, vy, vz);
+    // Local direct-pair bound (gravity/timestep.hpp); no bound without curvature.
+    float const pairTimestep =
+        gravity::pairTimestep(parameters.a, parameters.gm, parameters.eta, pairCurvature);
+    flops += pairCurvature > 0.0f && parameters.gm > 0.0f ? 5 : 0;
 #if COSMICTIGER_WITH_SPH
     bool const gas = options.hydro.enabled && particlesType(index) == kSphType;
     bool const mfm = gas && parameters.htime && options.hydro.method == "mfm";
@@ -113,6 +118,7 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
         for (int dim = 0; dim < kDimensions; ++dim) {
             sphParticlesGravityAcceleration(dim, gas) = acceleration[dim];
         }
+        sphParticlesGravityTimesteps[gas] = pairTimestep;
         result.kin = oldKinetic;
         result.xmom = mass * vx;
         result.ymom = mass * vy;
@@ -131,7 +137,7 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
     int proposedRung = 0;
     if (!parameters.htime || parameters.descending || deferOpening || (mfm && parameters.top)) {
         float const accelerationSquared = sqr(gx, gy, gz) + 1.0e-35f;
-        float const requiredTimestep = std::min(parameters.maxDt,
+        float const requiredTimestep = std::min(std::min(parameters.maxDt, pairTimestep),
             std::min(parameters.eta * std::sqrt(parameters.a) *
                     std::sqrt(effectiveRadius / std::sqrt(accelerationSquared)),
                 parameters.t0));
@@ -272,10 +278,16 @@ KickReturn particleMeshPrepareKick(double scale, double baseTimestep, double max
                         for (int dim = 0; dim < kDimensions; ++dim) {
                             accelerationSquared += double(acceleration[dim]) * acceleration[dim];
                         }
-                        double const timestep = std::min(maximumTimestep,
+                        // Local direct-pair bound (gravity/timestep.hpp) from the
+                        // retained near-field coefficient; none without curvature.
+                        float const pairCurvature = pmmmPairCurvature(i);
+                        double const pairTimestep = gravity::pairTimestep<double>(
+                            scale, options.gravity.gm, options.gravity.timestepEta, pairCurvature);
+                        flops += pairCurvature > 0.0f && options.gravity.gm > 0.0 ? 5 : 0;
+                        double const timestep = std::min({maximumTimestep, pairTimestep,
                             options.gravity.timestepEta *
                                 std::sqrt(scale * effectiveRadius /
-                                    std::max(std::sqrt(accelerationSquared), 1.0e-30)));
+                                    std::max(std::sqrt(accelerationSquared), 1.0e-30))});
                         if (!(timestep > 0.0) || !std::isfinite(timestep)) {
                             THROW_ERROR("Particle mesh timestep is not finite and positive\n");
                         }

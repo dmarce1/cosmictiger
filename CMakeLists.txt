@@ -285,6 +285,7 @@ set(cosmictiger_header_files
     cosmictiger/gravity/kick_cuda_launch.hpp
     cosmictiger/gravity/kick_interaction_counts.hpp
     cosmictiger/gravity/kick_walk.hpp
+    cosmictiger/gravity/timestep.hpp
     cosmictiger/gravity/kick_workspace.hpp
     cosmictiger/gravity/tree.hpp
     cosmictiger/gravity/tree_multipole.hpp

@@ -54,6 +54,7 @@ struct CudaKickData {
     float* gy;
     float* gz;
     float* pot;
+    float* pairCurvature;    // forceOnly output of the direct-pair coefficient; else nullptr
     Array<float*, kDimensions> globalAcceleration{};
     ParticleInteger const* gravitySampleIndices;
     Vector3<float>* gravitySampleAccelerations;
@@ -202,6 +203,8 @@ struct FmmForceResult {
     Vector<ParticleInteger> particleIndices;
     Vector<float> potential;
     Array<Vector<float>, kDimensions> acceleration;
+    // Direct-pair mass / length^3 coefficient; multiply by G only at consumption.
+    Vector<float> pairCurvature;
     KickInteractionCounts interactionCounts{};
 };
 
@@ -211,6 +214,7 @@ namespace detail {
 struct FmmForceOutput {
     float* potential = nullptr;
     Array<float*, kDimensions> acceleration{};
+    float* pairCurvature = nullptr;
 };
 
 }    // namespace detail

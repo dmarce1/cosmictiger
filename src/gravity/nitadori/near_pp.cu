@@ -29,18 +29,22 @@ constexpr int kNearBlockSize = 128;
 __global__ void nearKernel(PmmmNearParticle const* sinks, size_t sinkCount,
     PmmmNearParticle const* sources, PmmmNearSourceRange const* sourceRanges, double cellWidth,
     double inverseSupportRadius, double inverseSupportRadiusCubed, bool doPotential,
-    std::array<double, 4>* fields) {
+    std::array<double, 4>* fields, double* pairCurvatures) {
     FlopCounter<> flops;
     for (size_t sink = size_t(blockIdx.x) * blockDim.x + threadIdx.x; sink < sinkCount;
         sink += size_t(blockDim.x) * gridDim.x) {
         std::array<double, 4> field{};
+        double pairCurvature = 0.0;
         auto const range = sourceRanges[sink];
         for (size_t source = range.begin; source < range.end; ++source) {
-            flops +=
-                accumulateNearPair(sinks[sink], sources[source], cellWidth, inverseSupportRadius,
-                    inverseSupportRadiusCubed, doPotential, selectedGravityKernel(), field);
+            flops += accumulateNearPair(sinks[sink], sources[source], cellWidth,
+                inverseSupportRadius, inverseSupportRadiusCubed, doPotential,
+                selectedGravityKernel(), field, pairCurvatures ? &pairCurvature : nullptr);
         }
         fields[sink] = field;
+        if (pairCurvatures) {
+            pairCurvatures[sink] = pairCurvature;
+        }
     }
     addGpuFlops(flops, FlopPrecision::Double);
 }
@@ -100,6 +104,7 @@ struct NearWorkspace {
     NearDeviceBuffer<PmmmNearParticle> sources;
     NearDeviceBuffer<PmmmNearSourceRange> sourceRanges;
     NearDeviceBuffer<std::array<double, 4>> fields;
+    NearDeviceBuffer<double> pairCurvatures;
     // Declared last so failed submissions drain before any device buffer dies.
     CudaStream stream;
 
@@ -109,13 +114,17 @@ struct NearWorkspace {
       , sources(selectedDevice)
       , sourceRanges(selectedDevice)
       , fields(selectedDevice)
+      , pairCurvatures(selectedDevice)
       , stream(selectedDevice) {}
 
-    void reserve(size_t sinkCount, size_t sourceCount) {
+    void reserve(size_t sinkCount, size_t sourceCount, bool withPairCurvature) {
         sinks.reserve(sinkCount, device);
         sources.reserve(sourceCount, device);
         sourceRanges.reserve(sinkCount, device);
         fields.reserve(sinkCount, device);
+        if (withPairCurvature) {
+            pairCurvatures.reserve(sinkCount, device);
+        }
     }
 };
 
@@ -171,7 +180,7 @@ void pmmmNearFieldCuda(std::vector<PmmmNearParticle> const& sinks,
     // Only completed successful work returns to the pool; exceptions discard
     // the workspace, whose stream drains before the storage is released.
     auto workspace = acquireNearWorkspace(device);
-    workspace->reserve(sinks.size(), sources.size());
+    workspace->reserve(sinks.size(), sources.size(), pairCurvature != nullptr);
     auto& stream = workspace->stream;
     stream.copyAsync(workspace->sinks.data.get(), sinks.data(),
         sinks.size() * sizeof(PmmmNearParticle), cudaMemcpyHostToDevice);
@@ -187,10 +196,15 @@ void pmmmNearFieldCuda(std::vector<PmmmNearParticle> const& sinks,
         size_t(65535), (sinks.size() + size_t(kNearBlockSize) - 1) / size_t(kNearBlockSize)));
     nearKernel<<<blocks, kNearBlockSize, 0, stream.nativeHandle()>>>(workspace->sinks.data.get(),
         sinks.size(), workspace->sources.data.get(), workspace->sourceRanges.data.get(), cellWidth,
-        inverseSupportRadius, inverseSupportRadiusCubed, doPotential, workspace->fields.data.get());
+        inverseSupportRadius, inverseSupportRadiusCubed, doPotential, workspace->fields.data.get(),
+        pairCurvature ? workspace->pairCurvatures.data.get() : nullptr);
     stream.checkLaunch();
     stream.copyAsync(fields.data(), workspace->fields.data.get(), fields.size() * sizeof(fields[0]),
         cudaMemcpyDeviceToHost);
+    if (pairCurvature) {
+        stream.copyAsync(pairCurvature->data(), workspace->pairCurvatures.data.get(),
+            pairCurvature->size() * sizeof(double), cudaMemcpyDeviceToHost);
+    }
     stream.wait();
     releaseNearWorkspace(std::move(workspace));
 }

@@ -6,7 +6,7 @@
 namespace pmmm::detail {
 
 void consumeField(ParticleInteger index, std::array<double, 4> const& field, KickReturn& result,
-    FlopCount& doubleFlops, FlopCounts& kickFlops) {
+    FlopCount& doubleFlops, FlopCounts& kickFlops, double pairCurvature) {
     Vector3<float> acceleration;
     double const gm = getOptions().gravity.gm;
     for (int component = 0; component < 4; ++component) {
@@ -22,10 +22,11 @@ void consumeField(ParticleInteger index, std::array<double, 4> const& field, Kic
     // Each retained component is scaled in double and narrowed to float.
     doubleFlops += 2 * (kDimensions + (state.request.doPotential ? 1 : 0));
     if (state.request.applyKick) {
-        result += particleMeshApplyField(
-            index, acceleration, potential, state.request.parameters, nullptr, &kickFlops);
+        result += particleMeshApplyField(index, acceleration, potential, state.request.parameters,
+            nullptr, &kickFlops, float(pairCurvature));
     } else {
         state.acceleration[index] = acceleration;
+        state.pairCurvature[index] = float(pairCurvature);
         if (!state.potential.empty()) {
             state.potential[index] = potential;
         }
@@ -77,7 +78,9 @@ void evaluateParticles(bool doPotential) {
                 return;
             }
             std::vector<std::array<double, 4>> nearFields;
-            pmmmNearFieldBatch(sinks, batchSources, sourceRanges, h, doPotential, nearFields);
+            std::vector<double> pairCurvature;
+            pmmmNearFieldBatch(
+                sinks, batchSources, sourceRanges, h, doPotential, nearFields, &pairCurvature);
             KickReturn result;
             for (size_t cellIndex = 0; cellIndex < cells.size(); ++cellIndex) {
                 auto const& cell = cells[cellIndex];
@@ -92,7 +95,7 @@ void evaluateParticles(bool doPotential) {
                         field[component] += nearFields[sink][component];
                     }
                     flops += 4;
-                    consumeField(index, field, result, flops, kickFlops);
+                    consumeField(index, field, result, flops, kickFlops, pairCurvature[sink]);
                 }
             }
             addCpuFlops(flops + kickFlops.doublePrecision, FlopPrecision::Double);

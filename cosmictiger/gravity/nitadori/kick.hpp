@@ -21,9 +21,10 @@
 // submit a whole sink batch once; otherwise submit this particle's count here.
 // precisionCounts optionally receives the same work split by arithmetic precision.
 // Supplying either output defers global submission to the caller.
+// pairCurvature is the sink's direct-pair coefficient without G (gravity/timestep.hpp).
 KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& acceleration,
     float potential, KickParameters const& parameters, FlopCount* flopCount = nullptr,
-    FlopCounts* precisionCounts = nullptr);
+    FlopCounts* precisionCounts = nullptr, float pairCurvature = 0.0f);
 
 // PMMM integration using the total far-field and near-field force.
 // Both operations recurse over all localities. Preparation closes the previous
