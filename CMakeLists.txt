@@ -2171,6 +2171,13 @@ if(BUILD_TESTING)
 
     endif()
 
+    add_executable(vector_test tests/vector.cpp)
+    target_include_directories(vector_test PRIVATE ${PROJECT_SOURCE_DIR})
+    if(COMPILER_SUPPORTS_MARCH_NATIVE)
+        target_compile_options(vector_test PRIVATE -march=native)
+    endif()
+    cosmictiger_add_gtest(NAME vector TARGET vector_test PROPERTIES TIMEOUT 10)
+
     # Range and position arithmetic use the selected width and no GPU runtime.
     add_executable(numerical_utilities_test tests/numerical_utilities.cpp)
     target_include_directories(numerical_utilities_test PRIVATE ${PROJECT_SOURCE_DIR})

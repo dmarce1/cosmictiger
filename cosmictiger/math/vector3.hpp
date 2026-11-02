@@ -7,136 +7,36 @@
 
 #pragma once
 
-#include <cosmictiger/cuda/cuda_export.hpp>
-#include <cosmictiger/math/simd_math.hpp>
+#include <cosmictiger/math/vector.hpp>
 
-// Three-component spatial vector, modeled on Octotiger's Vector<T, N>. The element
-// type supplies the arithmetic: Vector3<float> and Vector3<double> work in host and
-// device code, and Vector3<SimdFloat> operates lane-wise on a pack of neighbors.
+// Preserve the spatial-vector interface while sharing fixed-dimensional storage
+// and arithmetic with math::Vector. Only the cross product requires three dimensions.
 template <class T>
-class Vector3 {
-    T components_[3];
+class Vector3 : public math::Vector<T, 3, Vector3<T>> {
+    using Base = math::Vector<T, 3, Vector3<T>>;
 
 public:
     CUDA_EXPORT constexpr Vector3() = default;
     CUDA_EXPORT constexpr explicit Vector3(T const& value)
-      : components_{value, value, value} {}
+      : Base(value) {}
     CUDA_EXPORT constexpr Vector3(T const& x, T const& y, T const& z)
-      : components_{x, y, z} {}
+      : Base(x, y, z) {}
     // Converts each component, for example Vector3<float> to Vector3<SimdFloat>.
     template <class U>
     CUDA_EXPORT constexpr explicit Vector3(Vector3<U> const& other)
-      : components_{T(other[0]), T(other[1]), T(other[2])} {}
-    CUDA_EXPORT static constexpr int size() {
-        return 3;
-    }
-    CUDA_EXPORT constexpr T& operator[](int dim) {
-        return components_[dim];
-    }
-    CUDA_EXPORT constexpr T const& operator[](int dim) const {
-        return components_[dim];
-    }
-    CUDA_EXPORT constexpr T* data() {
-        return components_;
-    }
-    CUDA_EXPORT constexpr T const* data() const {
-        return components_;
-    }
-    CUDA_EXPORT constexpr T* begin() {
-        return data();
-    }
-    CUDA_EXPORT constexpr T const* begin() const {
-        return data();
-    }
-    CUDA_EXPORT constexpr T* end() {
-        return data() + size();
-    }
-    CUDA_EXPORT constexpr T const* end() const {
-        return data() + size();
-    }
-    template <class Archive>
-    void serialize(Archive& archive, unsigned) {
-        for (int dim = 0; dim < size(); dim++) {
-            archive& components_[dim];
-        }
-    }
-    CUDA_EXPORT constexpr Vector3& operator+=(Vector3 const& other) {
-        for (int dim = 0; dim < 3; dim++) {
-            components_[dim] += other.components_[dim];
-        }
-        return *this;
-    }
-    CUDA_EXPORT constexpr Vector3& operator-=(Vector3 const& other) {
-        for (int dim = 0; dim < 3; dim++) {
-            components_[dim] -= other.components_[dim];
-        }
-        return *this;
-    }
-    CUDA_EXPORT constexpr Vector3& operator*=(T const& scalar) {
-        // The scalar may alias one of our components, as in v *= v[0].
-        T const value = scalar;
-        for (int dim = 0; dim < 3; dim++) {
-            components_[dim] *= value;
-        }
-        return *this;
-    }
-    CUDA_EXPORT constexpr Vector3& operator/=(T const& scalar) {
-        return *this *= T(1) / scalar;
-    }
-    CUDA_EXPORT constexpr T dot(Vector3 const& other) const {
-        return components_[0] * other.components_[0] + components_[1] * other.components_[1] +
-            components_[2] * other.components_[2];
-    }
+      : Base(static_cast<math::Vector<U, 3, Vector3<U>> const&>(other)) {}
+
     CUDA_EXPORT constexpr Vector3 cross(Vector3 const& other) const {
-        return {components_[1] * other[2] - components_[2] * other[1],
-            components_[2] * other[0] - components_[0] * other[2],
-            components_[0] * other[1] - components_[1] * other[0]};
-    }
-    CUDA_EXPORT constexpr T squaredNorm() const {
-        return dot(*this);
-    }
-    CUDA_EXPORT T norm() const {
-        return simdSqrt(squaredNorm());
-    }
-    // SIMD elements return a per-lane mask; scalar elements return bool.
-    friend CUDA_EXPORT constexpr auto operator==(Vector3 const& left, Vector3 const& right) {
-        return (left[0] == right[0]) && (left[1] == right[1]) && (left[2] == right[2]);
-    }
-    friend CUDA_EXPORT constexpr auto operator!=(Vector3 const& left, Vector3 const& right) {
-        return !(left == right);
-    }
-    friend CUDA_EXPORT constexpr Vector3 operator+(Vector3 const& value) {
-        return value;
-    }
-    friend CUDA_EXPORT constexpr Vector3 operator-(Vector3 const& value) {
-        return Vector3(-value.components_[0], -value.components_[1], -value.components_[2]);
-    }
-    friend CUDA_EXPORT constexpr Vector3 operator+(Vector3 left, Vector3 const& right) {
-        left += right;
-        return left;
-    }
-    friend CUDA_EXPORT constexpr Vector3 operator-(Vector3 left, Vector3 const& right) {
-        left -= right;
-        return left;
-    }
-    friend CUDA_EXPORT constexpr Vector3 operator*(Vector3 value, T const& scalar) {
-        value *= scalar;
-        return value;
-    }
-    friend CUDA_EXPORT constexpr Vector3 operator*(T const& scalar, Vector3 value) {
-        value *= scalar;
-        return value;
-    }
-    friend CUDA_EXPORT constexpr Vector3 operator/(Vector3 value, T const& scalar) {
-        value /= scalar;
-        return value;
+        return {(*this)[1] * other[2] - (*this)[2] * other[1],
+            (*this)[2] * other[0] - (*this)[0] * other[2],
+            (*this)[0] * other[1] - (*this)[1] * other[0]};
     }
 };
 
-// Component-wise selection; Mask is bool for scalar element types and a SIMD mask for packs.
+// Keep this exact overload: the scalar/SIMD helper also accepts arbitrary Real
+// types, so relying only on deduction through the math::Vector base is insufficient.
 template <class Mask, class T>
 CUDA_EXPORT inline Vector3<T> simdSelect(
     Mask const& mask, Vector3<T> const& yes, Vector3<T> const& no) {
-    return Vector3<T>(simdSelect(mask, yes[0], no[0]), simdSelect(mask, yes[1], no[1]),
-        simdSelect(mask, yes[2], no[2]));
+    return math::detail::selectVector<Vector3<T>>(mask, yes, no, std::make_index_sequence<3>{});
 }
