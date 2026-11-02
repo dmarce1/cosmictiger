@@ -17,6 +17,7 @@
 #include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/gravity/nitadori/kick.hpp>
 #include <cosmictiger/gravity/nitadori/solver.hpp>
+#include <cosmictiger/hydro/hopkins/gravity_impulse.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
@@ -33,6 +34,7 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
     FlopCounts* precisionCounts) {
     KickReturn result;
     FlopCounter<> flops;
+    FlopCounter<FlopCount> doubleFlops = 0;
     auto const& options = getOptions();
     auto& rung = particlesRung(index);
     bool const refreshGas =
@@ -78,7 +80,7 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
             // double precision, and narrows to float. All remaining solver
             // arithmetic in this kick uses float, including its FMA arguments.
             counts.singlePrecision = FlopCount(flops) - 1;
-            counts.doublePrecision = 3;
+            counts.doublePrecision = 3 + FlopCount(doubleFlops);
         }
         if (flopCount != nullptr) {
             *flopCount += counts.total();
@@ -94,7 +96,16 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
     float const mass = particlesMass(index);
     float const oldKinetic = 0.5f * mass * sqr(vx, vy, vz);
 #if COSMICTIGER_WITH_SPH
-    if (!parameters.htime && options.hydro.enabled && particlesType(index) == kSphType) {
+    bool const gas = options.hydro.enabled && particlesType(index) == kSphType;
+    bool const mfm = gas && parameters.htime && options.hydro.method == "mfm";
+    if (gas && parameters.top && (parameters.deferGasOpening || mfm)) {
+        ALWAYS_ASSERT(parameters.htime && parameters.top);
+        ParticleInteger const gasIndex = particlesCatIndex(index);
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            sphParticlesGravityAcceleration(dim, gasIndex) = acceleration[dim];
+        }
+    }
+    if (!parameters.htime && gas) {
         // The hydro integrator owns the gas momentum and timestep. As in the
         // ordinary FMM kick, publish the active gas force without a second
         // gravity kick or a gravity-only rung update.
@@ -112,9 +123,13 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
         submitFlops();
         return result;
     }
+#else
+    bool const gas = false;
+    bool const mfm = false;
 #endif
+    bool const deferOpening = gas && parameters.deferGasOpening;
     int proposedRung = 0;
-    if (!parameters.htime || parameters.descending) {
+    if (!parameters.htime || parameters.descending || deferOpening || (mfm && parameters.top)) {
         float const accelerationSquared = sqr(gx, gy, gz) + 1.0e-35f;
         float const requiredTimestep = std::min(parameters.maxDt,
             std::min(parameters.eta * std::sqrt(parameters.a) *
@@ -128,6 +143,11 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
             THROW_ERROR("PMMM kick timestep exceeds the available rung range\n");
         }
         proposedRung = int(requestedRung);
+#if COSMICTIGER_WITH_SPH
+        if (deferOpening || (mfm && parameters.top)) {
+            sphParticlesGravityTimesteps[particlesCatIndex(index)] = requiredTimestep;
+        }
+#endif
         // Squared acceleration, timestep bound, and division/log2/ceil rung proposal.
         flops += 15;
     }
@@ -135,11 +155,33 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
         float const sign = parameters.sign * (parameters.top ? 1.0f : -1.0f);
         float const halfStep = 0.5f * rungDt[parameters.minRung] * parameters.t0;
         flops += 3;
-        if (parameters.ascending && !parameters.firstCall) {
+        auto const applyKick = [&]() {
+#if COSMICTIGER_WITH_SPH
+            if (mfm) {
+                auto& state = sphParticlesHopkinsState(particlesCatIndex(index));
+                ALWAYS_ASSERT(state.initialized && state.hierarchicalActive);
+                ALWAYS_ASSERT(state.pendingMass == 0.0 && state.pendingEnergy == 0.0);
+                ALWAYS_ASSERT(state.pendingMomentum[0] == 0.0 && state.pendingMomentum[1] == 0.0 &&
+                    state.pendingMomentum[2] == 0.0);
+                Vector3<double> const impulse{double(sign * halfStep) * gx,
+                    double(sign * halfStep) * gy, double(sign * halfStep) * gz};
+                hopkins::applyGravityImpulse(
+                    state.mass, state.momentum, state.totalEnergy, impulse);
+                vx = state.momentum[0] / state.mass;
+                vy = state.momentum[1] / state.mass;
+                vz = state.momentum[2] / state.mass;
+                doubleFlops += 45;
+                flops += 3;
+                return;
+            }
+#endif
             vx = std::fma(sign * gx, halfStep, vx);
             vy = std::fma(sign * gy, halfStep, vy);
             vz = std::fma(sign * gz, halfStep, vz);
             flops += 3 * kDimensions;
+        };
+        if (parameters.ascending && !parameters.firstCall) {
+            applyKick();
         }
         result.kin = 0.5f * mass * sqr(vx, vy, vz);
         result.xmom = mass * vx;
@@ -147,14 +189,15 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
         result.zmom = mass * vz;
         result.nmom = mass * std::sqrt(sqr(vx, vy, vz));
         if (parameters.descending) {
-            rung = std::max(
-                parameters.minRung + int(proposedRung > parameters.minRung), int(rung) - 1);
-            result.maxRung = rung;
-            ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
-            vx = std::fma(sign * gx, halfStep, vx);
-            vy = std::fma(sign * gy, halfStep, vy);
-            vz = std::fma(sign * gz, halfStep, vz);
-            flops += 3 * kDimensions;
+            int const nextRung =
+                std::max(parameters.minRung + int(proposedRung > parameters.minRung),
+                    int(rung) - int(!gas || mfm || deferOpening));
+            result.maxRung = deferOpening ? std::max(nextRung, int(rung)) : nextRung;
+            ALWAYS_ASSERT(nextRung >= 0 && nextRung < kMaxRung);
+            if (!deferOpening) {
+                rung = nextRung;
+                applyKick();
+            }
         }
     } else {
         float const sign = parameters.sign;

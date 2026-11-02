@@ -327,7 +327,14 @@ __global__ void sphCudaHydro(
                         parameters.viscosityBeta;
                     float const one_over_δt_visc = 0.6f * (α_max * c_a + β_max * μ_max) / h_a;
                     float const one_over_δt_cv = one_over_δt_c + one_over_δt_visc;
-                    float const f_a = sqrtf(dv_a_dt.dot(dv_a_dt));
+                    auto timestepAcceleration = dv_a_dt;
+#if COSMICTIGER_WITH_GRAVITY
+                    if (parameters.excludeSelfGravity) {
+                        timestepAcceleration += gravityAcceleration;
+                        flops += 3;
+                    }
+#endif
+                    float const f_a = sqrtf(timestepAcceleration.dot(timestepAcceleration));
                     float const one_over_δt_f = parameters.courantFactor *
                         sqrtf(parameters.scaleFactor * f_a / h_a) /
                         (data.accelerationTimestepFactor * kHydroAccelerationScale);
@@ -347,12 +354,17 @@ __global__ void sphCudaHydro(
                         max(1, int(ceilf(log2f(parameters.baseTimestep / δt))));
                     int nextRung = max(max(parameters.minimumRung, previousRung - 1), hydroRung);
 #if COSMICTIGER_WITH_GRAVITY
-                    float const gravityTimestep = fminf(parameters.maximumTimestep,
+                    float gravityTimestep = fminf(parameters.maximumTimestep,
                         data.accelerationTimestepFactor *
                             sqrtf(parameters.scaleFactor * data.gravityEffectiveRadius /
                                 fmaxf(sqrtf(gravityAcceleration.dot(gravityAcceleration)),
                                     1.0e-30f)));
                     if (data.selfGravityEnabled) {
+                        if (data.sinkGravityTimestep &&
+                            data.sinkGravityTimestep[sinkIndex] > 0.0f) {
+                            gravityTimestep =
+                                fminf(gravityTimestep, data.sinkGravityTimestep[sinkIndex]);
+                        }
                         atomicMin(&reduction->minimumTimestep, gravityTimestep);
                     }
                     int const gravityRung = parameters.globalTimestep ?

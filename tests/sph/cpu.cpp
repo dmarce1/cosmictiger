@@ -1582,7 +1582,7 @@ void testRungPropagation() {
 struct VariationalReference {
     std::vector<double> density;
     std::vector<double> zeta;
-    std::vector<double> residual;    // (sum w - target)/target at the given support
+    std::vector<double> residual;                 // (sum w - target)/target at the given support
     std::vector<Vector3<double>> acceleration;    // pressure part of dv/dtau
     std::vector<double> energyRate;    // pressure work and homogeneous expansion of dE/dtau
 };
@@ -1899,8 +1899,7 @@ void testVariationalIsolatedCluster() {
     for (int k = 0; k < fixture.count_; k++) {
         int const source = fixture.sourceIndex(k);
         auto const& a = fixture.data_.sinkAccelerations[fixture.sinkIndex(k)].acceleration;
-        Vector3<double> const r{
-            fixture.data_.sourcePositionX[source].toDouble() - 0.5,
+        Vector3<double> const r{fixture.data_.sourcePositionX[source].toDouble() - 0.5,
             fixture.data_.sourcePositionY[source].toDouble() - 0.5,
             fixture.data_.sourcePositionZ[source].toDouble() - 0.5};
         Vector3<double> const moment{
@@ -2592,6 +2591,150 @@ TEST_F(SphCpuTest, DisabledGravityTimestepDiagnosticsAreExcluded) {
     EXPECT_EQ(withGravity.maximumGravityRung, 0);
     EXPECT_EQ(withoutGravity.maximumGravityRung, 0);
 #endif
+}
+
+TEST_F(SphCpuTest, HierarchicalGravityIsExcludedFromHydroButRetainedInTimestep) {
+    detail::Fixture fixture(2);
+    fixture.params_.globalTimestep = true;
+    fixture.params_.minimumRung = 0;
+    fixture.params_.phase = 1;
+    fixture.data_.selfGravityEnabled = true;
+    for (int particle = 0; particle < fixture.count_; ++particle) {
+        fixture.data_.sourceDensity[fixture.sourceIndex(particle)] = 1.0f;
+        fixture.data_.sinkGravityAccelerationX[fixture.sinkIndex(particle)] = 20.0f;
+    }
+    auto const combined = fixture.run(kSphRunHydro);
+    float const combinedAcceleration =
+        fixture.data_.sinkAccelerations[fixture.sinkIndex(0)].acceleration[kXDimension];
+    fixture.params_.excludeSelfGravity = true;
+    auto const separated = fixture.run(kSphRunHydro);
+    EXPECT_DOUBLE_EQ(separated.minimumTimestep, combined.minimumTimestep);
+    EXPECT_FLOAT_EQ(separated.inverseAccelerationTimestep, combined.inverseAccelerationTimestep);
+    EXPECT_FLOAT_EQ(
+        fixture.data_.sinkAccelerations[fixture.sinkIndex(0)].acceleration[kXDimension], 0.0f);
+#if COSMICTIGER_WITH_GRAVITY
+    EXPECT_FLOAT_EQ(combinedAcceleration, 20.0f);
+#else
+    EXPECT_FLOAT_EQ(combinedAcceleration, 0.0f);
+#endif
+}
+
+TEST_F(SphCpuTest, GravityTimestepSurvivesDeferredGasOpening) {
+    detail::Fixture fixture(2, 1, 3, 5, 7);
+    fixture.params_.minimumRung = 0;
+    fixture.params_.phase = 1;
+    fixture.params_.globalTimestep = true;
+    fixture.params_.excludeSelfGravity = true;
+    fixture.data_.selfGravityEnabled = true;
+    std::vector<float> bounds(fixture.count_ + fixture.sinkOffset_ + 3, 0.0f);
+    fixture.data_.sinkGravityTimestep = bounds.data();
+    for (int particle = 0; particle < fixture.count_; ++particle) {
+        fixture.data_.sourceDensity[fixture.sourceIndex(particle)] = 1.0f;
+    }
+    auto const uncapped = fixture.run(kSphRunHydro);
+    float const bound = float(uncapped.minimumTimestep / 16.0);
+    bounds[fixture.sinkIndex(0)] = bound;
+    auto const capped = fixture.run(kSphRunHydro);
+#if COSMICTIGER_WITH_GRAVITY
+    EXPECT_FLOAT_EQ(capped.minimumTimestep, bound);
+#else
+    EXPECT_DOUBLE_EQ(capped.minimumTimestep, uncapped.minimumTimestep);
+#endif
+    EXPECT_FLOAT_EQ(fixture.data_.sinkAccelerations[fixture.sinkIndex(0)].acceleration[0], 0.0f);
+    fixture.data_.selfGravityEnabled = false;
+    EXPECT_DOUBLE_EQ(fixture.run(kSphRunHydro).minimumTimestep, uncapped.minimumTimestep);
+}
+
+TEST_F(SphCpuTest, DensityPredictionUsesPeculiarMotionAndGradHWithoutViscosity) {
+    for (bool const freeSupport : {false, true}) {
+        detail::Fixture fixture(27, 3, 5, 3, 7);
+        detail::initializeViscosityStencil(fixture);
+        auto& data = fixture.data_;
+        std::vector<float> logDensityRate(fixture.count_ + fixture.sinkOffset_ + 3, -19.0f);
+        data.sinkLogDensityRate = logDensityRate.data();
+        if (freeSupport) {
+            fixture.solveSmoothing(0.04f, 0.45f, 0.2f);
+        } else {
+            fixture.params_.minimumSupportRadius = 0.25f;
+            fixture.params_.maximumSupportRadius = 0.25f;
+        }
+        ASSERT_FALSE(fixture.params_.balsaraSwitch);
+        ASSERT_FALSE(fixture.params_.variableViscosity);
+        ASSERT_EQ(data.sinkViscosityStates, nullptr);
+        ASSERT_EQ(data.sinkCullenDehnenStates, nullptr);
+        bool sawFreeCorrection = false;
+        for (float const scale : {1.0f, 0.4f}) {
+            for (float const compression : {0.0f, 0.5f, -0.5f}) {
+                for (float const expansion : {0.0f, 0.3f}) {
+                    fixture.params_.scaleFactor = scale;
+                    fixture.params_.expansionRate = expansion;
+                    for (int particle = 0; particle < fixture.count_; ++particle) {
+                        int const source = fixture.sourceIndex(particle);
+                        data.sourceVelocityX[source] = float(
+                            0.25 - compression * (data.sourcePositionX[source].toDouble() - 0.5));
+                        data.sourceVelocityY[source] = float(
+                            -0.5 - compression * (data.sourcePositionY[source].toDouble() - 0.5));
+                        data.sourceVelocityZ[source] = float(
+                            0.125 - compression * (data.sourcePositionZ[source].toDouble() - 0.5));
+                    }
+                    fixture.densityPass();
+                    for (int particle = 0; particle < fixture.count_; ++particle) {
+                        int const source = fixture.sourceIndex(particle);
+                        int const sink = fixture.sinkIndex(particle);
+                        double const support = data.sinkThermodynamicStates[sink].supportRadius;
+                        double density = 0.0;
+                        double numberSum = 0.0;
+                        double numberMoment = 0.0;
+                        double densityRate = 0.0;
+                        for (int neighbor = 0; neighbor < fixture.count_; ++neighbor) {
+                            int const other = fixture.sourceIndex(neighbor);
+                            std::array<double, 3> const separation{
+                                distance(data.sourcePositionX[source], data.sourcePositionX[other]),
+                                distance(data.sourcePositionY[source], data.sourcePositionY[other]),
+                                distance(
+                                    data.sourcePositionZ[source], data.sourcePositionZ[other])};
+                            double const radius = std::sqrt(separation[0] * separation[0] +
+                                separation[1] * separation[1] + separation[2] * separation[2]);
+                            double const normalizedRadius = radius / support;
+                            double const value = kernelW(normalizedRadius);
+                            double const derivative = dkernelWDq(normalizedRadius);
+                            numberSum += value;
+                            numberMoment += normalizedRadius * derivative;
+                            density += data.gasMass * value / std::pow(support, 3);
+                            if (radius > 0.0) {
+                                double const velocityDotSeparation =
+                                    (data.sourceVelocityX[source] - data.sourceVelocityX[other]) *
+                                        separation[0] +
+                                    (data.sourceVelocityY[source] - data.sourceVelocityY[other]) *
+                                        separation[1] +
+                                    (data.sourceVelocityZ[source] - data.sourceVelocityZ[other]) *
+                                        separation[2];
+                                densityRate += data.gasMass * velocityDotSeparation * derivative /
+                                    (std::pow(support, 4) * radius);
+                            }
+                        }
+                        double const omega = freeSupport ? -numberMoment / (3.0 * numberSum) : 1.0;
+                        sawFreeCorrection = sawFreeCorrection || std::abs(omega - 1.0) > 0.05;
+                        double const expected = densityRate / (scale * density * omega);
+                        EXPECT_NEAR(data.sinkLogDensityRate[sink], expected,
+                            3.0e-5 * std::max(1.0, std::abs(expected)));
+                        if (compression == 0.0f) {
+                            // A Hubble flow does not change the stored comoving density.
+                            EXPECT_FLOAT_EQ(data.sinkLogDensityRate[sink], 0.0f);
+                        }
+                    }
+                }
+            }
+        }
+        EXPECT_EQ(sawFreeCorrection, freeSupport);
+        for (int index = 0; index < fixture.sinkOffset_; ++index) {
+            EXPECT_FLOAT_EQ(logDensityRate[index], -19.0f);
+        }
+        for (size_t index = fixture.sinkIndex(fixture.count_); index < logDensityRate.size();
+            ++index) {
+            EXPECT_FLOAT_EQ(logDensityRate[index], -19.0f);
+        }
+    }
 }
 
 TEST_F(SphCpuTest, PeriodicSupport) {

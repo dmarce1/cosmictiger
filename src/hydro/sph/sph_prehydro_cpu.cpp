@@ -20,8 +20,8 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
-// Monaghan (1992), ARA&A 30, 543; cosmictiger/hydro/sph/monaghan/viscosity.hpp gives the full citation
-// and the notation. Particle a is the sink and particle b a pack of staged neighbors.
+// Monaghan (1992), ARA&A 30, 543; cosmictiger/hydro/sph/monaghan/viscosity.hpp gives the full
+// citation and the notation. Particle a is the sink and particle b a pack of staged neighbors.
 // NOLINTBEGIN(readability-identifier-naming)
 namespace detail {
 
@@ -233,6 +233,7 @@ SphRunReturn sphCpuPrehydro2(
         SimdFloat const m_b_over_H_a3(data.gasMass * one_over_H_a * one_over_H_a * one_over_H_a);
         flops += 4;    // Reciprocal and three mass/support products.
         SimdFloat ρ_a_pack(0.0f);
+        SimdFloat ρ_a_dot_pack(0.0f);
         SimdFloat ρ_a_div_v_a_pack(0.0f);
         Vector3<SimdFloat> ρ_a_curl_v_a_pack(SimdFloat(0.0f));
         cullen_and_dehnen::GradientSums<SimdFloat> gradientSums{};
@@ -267,7 +268,8 @@ SphRunReturn sphCpuPrehydro2(
             Σqdw_pack += simdSelect(inside, q_ab * dkernelWDq(q_ab), SimdFloat(0.0f));
             flops += 3 * SimdFloat::size() +
                 sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
-            if (parameters.balsaraSwitch || parameters.variableViscosity) {
+            if (parameters.balsaraSwitch || parameters.variableViscosity ||
+                data.sinkLogDensityRate) {
                 // GADGET-4 equation (72): accumulate ρ_a div(v)_a and ρ_a curl(v)_a
                 // as −Σ_b m_b v_ab·gradW_ab and Σ_b m_b v_ab×gradW_ab.
                 // Their common ρ_a cancels from f_a^AV.
@@ -278,76 +280,93 @@ SphRunReturn sphCpuPrehydro2(
                         simdSelect(contributes, radius, SimdFloat(1.0f)),
                     SimdFloat(0.0f));
                 Vector3<SimdFloat> const m_b_gradW_ab = m_b_F_a * r_ab;
-                Vector3<SimdFloat> const v_ab_physical = simdSelect(contributes,
+                Vector3<SimdFloat> const v_ab = simdSelect(contributes,
                     Vector3<SimdFloat>(SimdFloat(data.sourceVelocityX[particleIndex]),
                         SimdFloat(data.sourceVelocityY[particleIndex]),
                         SimdFloat(data.sourceVelocityZ[particleIndex])) -
                         detail::sphCpuLoad3(data.sourceVelocityX, data.sourceVelocityY,
-                            data.sourceVelocityZ, neighbors, first, 0.0f) +
-                        SimdFloat(parameters.expansionRate) * r_ab,
+                            data.sourceVelocityZ, neighbors, first, 0.0f),
                     Vector3<SimdFloat>(SimdFloat(0)));
-                ρ_a_div_v_a_pack -= v_ab_physical.dot(m_b_gradW_ab);
-                for (int dim = 0; dim < kDimensions; ++dim) {
-                    int const next = (dim + 1) % kDimensions;
-                    int const last = (dim + 2) % kDimensions;
-                    ρ_a_curl_v_a_pack[dim] += v_ab_physical[next] * m_b_gradW_ab[last] -
-                        v_ab_physical[last] * m_b_gradW_ab[next];
+                if (data.sinkLogDensityRate) {
+                    // Differentiate the comoving density with peculiar motion.
+                    // The grad-H factor and conformal-time scale are applied below.
+                    ρ_a_dot_pack += v_ab.dot(m_b_gradW_ab);
+                    flops += 6 * SimdFloat::size();
                 }
-                if (parameters.gradientSwitch()) {
-                    // Cullen & Dehnen (2010), equations (B2), (B4), (B7), (B12), which
-                    // Price et al. (2018) equations (51)-(53) also use.
-                    // Positive weights are equivalent to reversing the sign of W'/q.
-                    // B7 allows arbitrary scalar weights. Mass/kernel-gradient weights
-                    // avoid reading remote densities while this pass is updating them.
-                    SimdFloat const w_ab = -m_b_F_a;
-                    Vector3<SimdFloat> const a_ab = simdSelect(contributes,
-                        Vector3<SimdFloat>(SimdFloat(data.sourceAccelerationX[particleIndex]),
-                            SimdFloat(data.sourceAccelerationY[particleIndex]),
-                            SimdFloat(data.sourceAccelerationZ[particleIndex])) -
-                            detail::sphCpuLoad3(data.sourceAccelerationX, data.sourceAccelerationY,
-                                data.sourceAccelerationZ, neighbors, first, 0.0f),
-                        Vector3<SimdFloat>(SimdFloat(0)));
-                    for (int i = 0; i < kDimensions; ++i) {
-                        for (int j = 0; j < kDimensions; ++j) {
-                            gradientSums.moment[i][j] += w_ab * r_ab[i] * r_ab[j];
-                            gradientSums.velocity[i][j] += w_ab * v_ab_physical[i] * r_ab[j];
-                            gradientSums.acceleration[i][j] += w_ab * a_ab[i] * r_ab[j];
-                        }
+                if (parameters.balsaraSwitch || parameters.variableViscosity) {
+                    Vector3<SimdFloat> const v_ab_physical =
+                        v_ab + SimdFloat(parameters.expansionRate) * r_ab;
+                    ρ_a_div_v_a_pack -= v_ab_physical.dot(m_b_gradW_ab);
+                    for (int dim = 0; dim < kDimensions; ++dim) {
+                        int const next = (dim + 1) % kDimensions;
+                        int const last = (dim + 2) % kDimensions;
+                        ρ_a_curl_v_a_pack[dim] += v_ab_physical[next] * m_b_gradW_ab[last] -
+                            v_ab_physical[last] * m_b_gradW_ab[next];
                     }
-                    flops += 84 * SimdFloat::size();
+                    if (parameters.gradientSwitch()) {
+                        // Cullen & Dehnen (2010), equations (B2), (B4), (B7), (B12), which
+                        // Price et al. (2018) equations (51)-(53) also use.
+                        // Positive weights are equivalent to reversing the sign of W'/q.
+                        // B7 allows arbitrary scalar weights. Mass/kernel-gradient weights
+                        // avoid reading remote densities while this pass is updating them.
+                        SimdFloat const w_ab = -m_b_F_a;
+                        Vector3<SimdFloat> const a_ab = simdSelect(contributes,
+                            Vector3<SimdFloat>(SimdFloat(data.sourceAccelerationX[particleIndex]),
+                                SimdFloat(data.sourceAccelerationY[particleIndex]),
+                                SimdFloat(data.sourceAccelerationZ[particleIndex])) -
+                                detail::sphCpuLoad3(data.sourceAccelerationX,
+                                    data.sourceAccelerationY, data.sourceAccelerationZ, neighbors,
+                                    first, 0.0f),
+                            Vector3<SimdFloat>(SimdFloat(0)));
+                        for (int i = 0; i < kDimensions; ++i) {
+                            for (int j = 0; j < kDimensions; ++j) {
+                                gradientSums.moment[i][j] += w_ab * r_ab[i] * r_ab[j];
+                                gradientSums.velocity[i][j] += w_ab * v_ab_physical[i] * r_ab[j];
+                                gradientSums.acceleration[i][j] += w_ab * a_ab[i] * r_ab[j];
+                            }
+                        }
+                        flops += 84 * SimdFloat::size();
+                    }
+                    if (parameters.cullenDehnen) {
+                        // Equations (15), (17): use previous neighbor divergence signs.
+                        SimdFloat const div_v_b = detail::sphCpuLoad(
+                            data.sourceVelocityDivergence, neighbors, first, 0.0f);
+                        SimdFloat const sign_div_v_b =
+                            simdSelect(div_v_b > SimdFloat(0), SimdFloat(1),
+                                simdSelect(div_v_b < SimdFloat(0), SimdFloat(-1), SimdFloat(0)));
+                        ρ_a_R_a_pack += simdSelect(detail::sphCpuValidLanes(neighbors, first),
+                            m_b_over_H_a3 * kernelW(q_ab) * sign_div_v_b, SimdFloat(0));
+                        SimdFloat const γ_b = data.sourceAdiabaticIndex ?
+                            detail::sphCpuLoad(
+                                data.sourceAdiabaticIndex, neighbors, first, data.adiabaticIndex) :
+                            SimdFloat(data.adiabaticIndex);
+                        SimdFloat const P_over_ρu_b = data.sourcePressureEnergyRatio ?
+                            detail::sphCpuLoad(
+                                data.sourcePressureEnergyRatio, neighbors, first, 1.0f) :
+                            γ_b - SimdFloat(1);
+                        SimdFloat const c_b = simdSqrt(simdSelect(contributes, γ_b, SimdFloat(1)) *
+                            simdSelect(contributes, P_over_ρu_b, SimdFloat(1)) *
+                            simdSelect(contributes,
+                                detail::sphCpuLoad(
+                                    data.sourceInternalEnergy, neighbors, first, 1.0f),
+                                SimdFloat(1)));
+                        SimdFloat const v_ab_dot_r̂_ab =
+                            v_ab_physical.dot(r_ab) / simdSelect(contributes, radius, SimdFloat(1));
+                        v_sig_a_pack = simdMax(v_sig_a_pack,
+                            simdSelect(contributes,
+                                SimdFloat(0.5f) * (SimdFloat(c_a_switch) + c_b) -
+                                    simdMin(v_ab_dot_r̂_ab, SimdFloat(0)),
+                                SimdFloat(0)));
+                        flops += 25 * SimdFloat::size() +
+                            sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab);
+                    }
+                    flops += 33 * SimdFloat::size() +
+                        sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
+                } else {
+                    // Gradient coefficient (3), vector (3), and relative velocity (3).
+                    flops += 9 * SimdFloat::size() +
+                        sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
                 }
-                if (parameters.cullenDehnen) {
-                    // Equations (15), (17): use previous neighbor divergence signs.
-                    SimdFloat const div_v_b =
-                        detail::sphCpuLoad(data.sourceVelocityDivergence, neighbors, first, 0.0f);
-                    SimdFloat const sign_div_v_b = simdSelect(div_v_b > SimdFloat(0), SimdFloat(1),
-                        simdSelect(div_v_b < SimdFloat(0), SimdFloat(-1), SimdFloat(0)));
-                    ρ_a_R_a_pack += simdSelect(detail::sphCpuValidLanes(neighbors, first),
-                        m_b_over_H_a3 * kernelW(q_ab) * sign_div_v_b, SimdFloat(0));
-                    SimdFloat const γ_b = data.sourceAdiabaticIndex ?
-                        detail::sphCpuLoad(
-                            data.sourceAdiabaticIndex, neighbors, first, data.adiabaticIndex) :
-                        SimdFloat(data.adiabaticIndex);
-                    SimdFloat const P_over_ρu_b = data.sourcePressureEnergyRatio ?
-                        detail::sphCpuLoad(data.sourcePressureEnergyRatio, neighbors, first, 1.0f) :
-                        γ_b - SimdFloat(1);
-                    SimdFloat const c_b = simdSqrt(simdSelect(contributes, γ_b, SimdFloat(1)) *
-                        simdSelect(contributes, P_over_ρu_b, SimdFloat(1)) *
-                        simdSelect(contributes,
-                            detail::sphCpuLoad(data.sourceInternalEnergy, neighbors, first, 1.0f),
-                            SimdFloat(1)));
-                    SimdFloat const v_ab_dot_r̂_ab =
-                        v_ab_physical.dot(r_ab) / simdSelect(contributes, radius, SimdFloat(1));
-                    v_sig_a_pack = simdMax(v_sig_a_pack,
-                        simdSelect(contributes,
-                            SimdFloat(0.5f) * (SimdFloat(c_a_switch) + c_b) -
-                                simdMin(v_ab_dot_r̂_ab, SimdFloat(0)),
-                            SimdFloat(0)));
-                    flops += 25 * SimdFloat::size() +
-                        sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab);
-                }
-                flops += 33 * SimdFloat::size() +
-                    sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
             }
         }
         float const ρ_a = simdSum(ρ_a_pack);
@@ -362,6 +381,14 @@ SphRunReturn sphCpuPrehydro2(
         flops += 2 * (SimdFloat::size() - 1) + 8;
         detail::recordSphCpuGradH(gradH, H_a, ρ_a, ΣW, Σqdw, result);
         data.sinkGradHCorrection[sinkIndex] = gradH.correction.zeta;
+        if (data.sinkLogDensityRate) {
+            // Price (2012), equation (27): d rho/d tau = sum m v_ab.grad W /
+            // (a Omega). Held supports use Omega=1; no Hubble velocity belongs
+            // in the derivative of the stored comoving density.
+            data.sinkLogDensityRate[sinkIndex] =
+                simdSum(ρ_a_dot_pack) / (parameters.scaleFactor * ρ_a * gradH.correction.omega);
+            flops += SimdFloat::size() - 1 + 3;
+        }
         if (parameters.balsaraSwitch) {
             Vector3<float> const ρ_a_curl_v_a(simdSum(ρ_a_curl_v_a_pack[kXDimension]),
                 simdSum(ρ_a_curl_v_a_pack[kYDimension]), simdSum(ρ_a_curl_v_a_pack[kZDimension]));

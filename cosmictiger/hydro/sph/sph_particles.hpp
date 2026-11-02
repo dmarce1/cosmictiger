@@ -10,6 +10,7 @@
 #include <cosmictiger/chemistry/gadget4_cooling.hpp>
 #include <cosmictiger/hydro/hopkins/hopkins_state.hpp>
 #include <cosmictiger/hydro/sph/cullen_and_dehnen/state.hpp>
+#include <cosmictiger/hydro/sph/hierarchical_state.hpp>
 #include <cosmictiger/hydro/sph/viscosity_state.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
@@ -50,18 +51,23 @@ SPH_PARTICLES_EXTERN ParticleInteger* sphParticlesParticleIndices;
 // Rates used by the predictor, retained until the corrector replaces their kick.
 SPH_PARTICLES_EXTERN Array<float*, kDimensions> sphParticlesPredictedAccelerations;
 SPH_PARTICLES_EXTERN Array<float*, kDimensions> sphParticlesGravityAccelerations;
+// Derived gravity-walk timestep; rebuilt before the active hydro proposal.
+SPH_PARTICLES_EXTERN float* sphParticlesGravityTimesteps;
+// Immutable source anchors, including physical epoch and validity endpoint.
+// Only hierarchical SPH allocates these; migration and checkpoints retain them.
+SPH_PARTICLES_EXTERN sph_hierarchical::SourceState* sphParticlesHierarchicalStates;
 SPH_PARTICLES_EXTERN float* sphParticlesPredictedInternalEnergyRates;
 SPH_PARTICLES_EXTERN float* sphParticlesInternalEnergyRates;
 SPH_PARTICLES_EXTERN float* sphParticlesDensities;
 // MFV mass projection for shared gravity/output; conserved mass stays in the double state.
 SPH_PARTICLES_EXTERN float* sphParticlesMasses;
 SPH_PARTICLES_EXTERN HopkinsParticleState* sphParticlesHopkinsStates;
-// Derived during every density pass; rebuilt after restart and migration.
+// Density diagnostics are rebuilt in traditional mode; hierarchical sources retain them.
 SPH_PARTICLES_EXTERN float* sphParticlesBalsaraFactors;
 // Variational operator only: zeta_i of cosmictiger/hydro/sph/volume.hpp, written by the density
-// pass for every semiactive particle before each force pass. Neither checkpointed nor migrated:
-// sphParticlesResetConverged sets every slot to NaN when a density pass starts, so a force
-// pass can use only corrections rebuilt by the current pass.
+// pass for every semiactive particle before each force pass. Traditional passes rebuild this
+// derived array; hierarchical migration preserves it and checkpoints retain its anchor
+// value in sphParticlesHierarchicalStates.
 SPH_PARTICLES_EXTERN float* sphParticlesGradHCorrections;
 SPH_PARTICLES_EXTERN SphViscosityState* sphParticlesViscosityStates;
 SPH_PARTICLES_EXTERN SphCullenDehnenState* sphParticlesCullenDehnenStates;

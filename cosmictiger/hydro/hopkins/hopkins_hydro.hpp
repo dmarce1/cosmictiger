@@ -13,11 +13,11 @@ struct HopkinsStepResult {
 // Must precede migration and every gravity source/tree construction.
 void hopkinsPrepareGravityMasses(double time);
 
-// Create/sort the gas tree before a concurrent gravity evaluation begins.
+// Begin a geometry event; the stable-ID source tree is refitted during gathering.
 void hopkinsPrepareTree();
 // Support/geometry preparation reads no live gravity force or dark-matter rung.
 // Call only after hopkinsPrepareTree; completion is consumed by hopkinsKick.
-void hopkinsPrepareGeometry(double scale, double expansionRate);
+void hopkinsPrepareGeometry(double scale, double expansionRate, double time);
 
 // Close due/woken own intervals, reconstruct active cells, and open pair intervals.
 // Gravity accelerations must be fresh for all gas, including potential wake-ups.
@@ -25,6 +25,19 @@ void hopkinsPrepareGeometry(double scale, double expansionRate);
 HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRate, double time,
     double baseTimestep, EnergiesT& energies, bool closingOnly = false,
     double previousTimestep = 0.0, double maximumGlobalTimestep = 0.0);
+// Close cached flux/source intervals before the first signed HOLD gravity kick.
+// Shared particle rungs remain gravity-only; the returned rung is hydro-only.
+HopkinsStepResult hopkinsHierarchicalBegin(int minimumGravityRung, double scale,
+    double expansionRate, double time, double baseTimestep, EnergiesT& energies,
+    bool closingOnly = false);
+// Reconstruct after all signed gravity kicks, schedule hydro wakes, and project
+// the current hydro trajectories to the separately retained gravity endpoints.
+HopkinsStepResult hopkinsHierarchicalFinish(int minimumHydroRung, double scale,
+    double expansionRate, double time, double baseTimestep, EnergiesT& energies,
+    bool closingOnly = false);
+// Held thermal sum for cosmological expansion work after a completed ladder;
+// synchronized output diagnostics retain the pre-opening thermal snapshot.
+double hopkinsHierarchicalDriftThermalEnergy();
 // Recompute the one-dimensional sound-wave density at the final drifted positions.
 // This diagnostic does not advance the conserved state or the integration clock.
 void hopkinsSoundWaveDiagnostics(double time);

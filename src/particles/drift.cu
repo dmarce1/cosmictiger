@@ -36,7 +36,7 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
     Position* __restrict__ const z, Vector3<float>* const vels, char const* const rungs,
     char const* const types, ParticleInteger count, int rung, double a, double dt, double tau0,
     double tau1, double tauMax, bool doLc, int nside, double drag, HopkinsParticleState* meshStates,
-    ParticleInteger const* gasIndices) {
+    ParticleInteger const* gasIndices, bool hierarchicalMfm) {
     auto const& tid = threadIdx.x;
     auto const& bid = blockIdx.x;
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
@@ -58,6 +58,7 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
 #endif
     for (ParticleInteger i = begin + tid; i < end0; i += kDriftBlockSize) {
         int thisRung = -1;
+        bool driftParticle = false;
         double x0 = 0.0, y0 = 0.0, z0 = 0.0, x1 = 0.0, y1 = 0.0, z1 = 0.0;
         double displacementX = 0.0, displacementY = 0.0, displacementZ = 0.0;
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
@@ -77,28 +78,39 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                         meshState = nullptr;
                     }
                 }
+                driftParticle = !(hierarchicalMfm && meshState != nullptr);
+                if (!driftParticle) {
+                    meshState->gravityEndTime = tau1;
+                    meshState->gravityDriftScale = a;
+                }
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
-                vx = (meshState != nullptr ? meshState->driftVelocity(kXDimension, 0.5 * (tau0 + tau1)) :
-                                             double(vel[kXDimension])) *
+                vx = (meshState != nullptr ?
+                             meshState->driftVelocity(kXDimension, 0.5 * (tau0 + tau1)) :
+                             double(vel[kXDimension])) *
                     ainv;
-                vy = (meshState != nullptr ? meshState->driftVelocity(kYDimension, 0.5 * (tau0 + tau1)) :
-                                             double(vel[kYDimension])) *
+                vy = (meshState != nullptr ?
+                             meshState->driftVelocity(kYDimension, 0.5 * (tau0 + tau1)) :
+                             double(vel[kYDimension])) *
                     ainv;
-                vz = (meshState != nullptr ? meshState->driftVelocity(kZDimension, 0.5 * (tau0 + tau1)) :
-                                             double(vel[kZDimension])) *
+                vz = (meshState != nullptr ?
+                             meshState->driftVelocity(kZDimension, 0.5 * (tau0 + tau1)) :
+                             double(vel[kZDimension])) *
                     ainv;
 #endif
                 x0 = x[i].toDouble();
                 y0 = y[i].toDouble();
                 z0 = z[i].toDouble();
-                displacementX = (meshState != nullptr ? meshState->driftVelocity(kXDimension, 0.5 * (tau0 + tau1)) :
-                                                        double(vel[kXDimension])) *
+                displacementX = (meshState != nullptr ?
+                                        meshState->driftVelocity(kXDimension, 0.5 * (tau0 + tau1)) :
+                                        double(vel[kXDimension])) *
                     c1;
-                displacementY = (meshState != nullptr ? meshState->driftVelocity(kYDimension, 0.5 * (tau0 + tau1)) :
-                                                        double(vel[kYDimension])) *
+                displacementY = (meshState != nullptr ?
+                                        meshState->driftVelocity(kYDimension, 0.5 * (tau0 + tau1)) :
+                                        double(vel[kYDimension])) *
                     c1;
-                displacementZ = (meshState != nullptr ? meshState->driftVelocity(kZDimension, 0.5 * (tau0 + tau1)) :
-                                                        double(vel[kZDimension])) *
+                displacementZ = (meshState != nullptr ?
+                                        meshState->driftVelocity(kZDimension, 0.5 * (tau0 + tau1)) :
+                                        double(vel[kZDimension])) *
                     c1;
                 x1 = x0 + displacementX;
                 y1 = y0 + displacementY;
@@ -122,7 +134,7 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                     for (int zi = -1; zi <= 0; zi++) {
                         bool test = false;
                         LightconeEntry entry;
-                        if (i < end && (rung < 0 || thisRung == rung)) {
+                        if (driftParticle) {
                             x0Value[kZDimension] = z0 + (double) zi;
                             x1Value[kZDimension] = z1 + (double) zi;
                             double const dist0 = sqrt(sqr(x0Value[0], x0Value[1], x0Value[2]));
@@ -183,22 +195,26 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
             }
         }
 #endif
-        if (i < end && (rung < 0 || thisRung == rung)) {
+        if (driftParticle) {
             if constexpr (kPositionBits == 64) {
                 // Preserve sub-double motion and the original low position bits.
                 x[i] += Position(displacementX);
                 y[i] += Position(displacementY);
                 z[i] += Position(displacementZ);
             } else {
-                x[i].raw() += static_cast<PositionInteger>(llrint(remainder(displacementX, 1.0) * 0x1p32));
-                y[i].raw() += static_cast<PositionInteger>(llrint(remainder(displacementY, 1.0) * 0x1p32));
-                z[i].raw() += static_cast<PositionInteger>(llrint(remainder(displacementZ, 1.0) * 0x1p32));
+                x[i].raw() +=
+                    static_cast<PositionInteger>(llrint(remainder(displacementX, 1.0) * 0x1p32));
+                y[i].raw() +=
+                    static_cast<PositionInteger>(llrint(remainder(displacementY, 1.0) * 0x1p32));
+                z[i].raw() +=
+                    static_cast<PositionInteger>(llrint(remainder(displacementZ, 1.0) * 0x1p32));
             }
         }
     }
 }
 
-void cudaDrift(int rung, double a, double dt, double tau0, double tau1, double tauMax, double drag) {
+void cudaDrift(
+    int rung, double a, double dt, double tau0, double tau1, double tauMax, double drag) {
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
     static bool init = false;
 #endif
@@ -251,7 +267,9 @@ void cudaDrift(int rung, double a, double dt, double tau0, double tau1, double t
     CudaStream stream(cudaGetDevice());
     cudaDriftKernel<<<numberOfBlocks, kDriftBlockSize, 0, stream.nativeHandle()>>>(x, y, z, vels,
         rungs, types, cnt, rung, a, dt, tau0, tau1, tauMax, doLc, getOptions().lightcone.mapSize,
-        drag, meshStates, gasIndices);
+        drag, meshStates, gasIndices,
+        rung >= 0 && getOptions().run.hierarchicalGravity && getOptions().hydro.enabled &&
+            getOptions().hydro.method == "mfm");
     stream.checkLaunch();
     stream.wait();
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY

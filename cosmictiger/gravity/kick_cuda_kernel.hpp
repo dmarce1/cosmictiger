@@ -26,6 +26,8 @@
 #include <cosmictiger/gravity/gravity_cuda.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_cuda.hpp>
+#include <cosmictiger/hydro/hopkins/gravity_impulse.hpp>
+#include <cosmictiger/hydro/hopkins/hopkins_state.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
@@ -201,23 +203,65 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             }
             flops += 12;
         } else if (params.htime) {
+#if COSMICTIGER_WITH_SPH
+            bool const gas = data.sph && data.type[sinkIndex] == kSphType;
+            bool const mfm = gas && data.hopkinsStates != nullptr;
+            if (gas && params.top && (params.deferGasOpening || mfm)) {
+                ALWAYS_ASSERT(params.top);
+                ParticleInteger const gasIndex = data.catIndex[sinkIndex];
+                data.sphGravityAccelerationX[gasIndex] = gx;
+                data.sphGravityAccelerationY[gasIndex] = gy;
+                data.sphGravityAccelerationZ[gasIndex] = gz;
+                float const accelerationSquared = sqr(gx, gy, gz) + 1e-35f;
+                data.sphGravityTimestep[gasIndex] = fminf(params.maxDt,
+                    params.eta * sqrtf(params.a) *
+                        sqrtf(gravityEffectiveRadius / sqrtf(accelerationSquared)));
+                flops += 9;
+            }
+#else
+            bool const gas = false;
+            bool const mfm = false;
+#endif
+            bool const deferOpening = gas && params.deferGasOpening;
             float const sgn = params.sign * (params.top ? 1.f : -1.f);
             flops += 1;    // Kick direction; exclude energy and momentum diagnostics.
+            auto const applyKick = [&](float halfStep) {
+#if COSMICTIGER_WITH_SPH
+                if (mfm) {
+                    auto& state = data.hopkinsStates[data.catIndex[sinkIndex]];
+                    ALWAYS_ASSERT(state.initialized && state.hierarchicalActive);
+                    ALWAYS_ASSERT(state.pendingMass == 0.0 && state.pendingEnergy == 0.0);
+                    ALWAYS_ASSERT(state.pendingMomentum[0] == 0.0 &&
+                        state.pendingMomentum[1] == 0.0 && state.pendingMomentum[2] == 0.0);
+                    Vector3<double> const impulse{
+                        double(halfStep) * gx, double(halfStep) * gy, double(halfStep) * gz};
+                    hopkins::applyGravityImpulse(
+                        state.mass, state.momentum, state.totalEnergy, impulse);
+                    vx = state.momentum[0] / state.mass;
+                    vy = state.momentum[1] / state.mass;
+                    vz = state.momentum[2] / state.mass;
+                    doubleFlops += 45;
+                    flops += 1;
+                    return;
+                }
+#endif
+                vx = fmaf(gx, halfStep, vx);
+                vy = fmaf(gy, halfStep, vy);
+                vz = fmaf(gz, halfStep, vz);
+                flops += 7;
+            };
             if (params.ascending) {
                 dt = 0.5f * rungDt[params.minRung] * params.t0;
                 flops += 2;
                 if (!params.firstCall) {
-                    vx = fmaf(sgn * gx, dt, vx);
-                    vy = fmaf(sgn * gy, dt, vy);
-                    vz = fmaf(sgn * gz, dt, vz);
-                    flops += 9;
+                    applyKick(sgn * dt);
                 }
             }
-            kinTot += 0.5f * sqr(vx, vy, vz);
-            xmomTot += vx;
-            ymomTot += vy;
-            zmomTot += vz;
-            nmomTot += sqrtf(sqr(vx, vy, vz));
+            kinTot += 0.5f * mass * sqr(vx, vy, vz);
+            xmomTot += mass * vx;
+            ymomTot += mass * vy;
+            zmomTot += mass * vz;
+            nmomTot += mass * sqrtf(sqr(vx, vy, vz));
             if (allGx != nullptr) {
                 allGx[sinkIndex] = gx;
                 allGy[sinkIndex] = gy;
@@ -233,18 +277,18 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                     params.t0);    // 12
                 dt = fminf(params.maxDt, dt);
                 rung = rungs[sinkIndex];
-                rung =
+                int const nextRung =
                     max(params.minRung + int((int) ceilf(log2f(params.t0 / dt)) > params.minRung),
-                        rung - 1);    // 13
-                rungs[sinkIndex] = rung;
-                maxRung = max(rung, maxRung);
-                ALWAYS_ASSERT(rung >= 0);
-                ALWAYS_ASSERT(rung < kMaxRung);
-                dt = 0.5f * rungDt[params.minRung] * params.t0;    // 2
-                vx = fmaf(sgn * gx, dt, vx);                       // 3
-                vy = fmaf(sgn * gy, dt, vy);                       // 3
-                vz = fmaf(sgn * gz, dt, vz);                       // 3
-                flops += 24;
+                        rung - int(!gas || mfm || deferOpening));
+                maxRung = max(deferOpening ? max(nextRung, rung) : nextRung, maxRung);
+                ALWAYS_ASSERT(nextRung >= 0 && nextRung < kMaxRung);
+                flops += 13;
+                if (!deferOpening) {
+                    rungs[sinkIndex] = nextRung;
+                    dt = 0.5f * rungDt[params.minRung] * params.t0;
+                    applyKick(sgn * dt);
+                    flops += 2;
+                }
             }
         } else {
 #if COSMICTIGER_WITH_SPH

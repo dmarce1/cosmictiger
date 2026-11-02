@@ -138,12 +138,16 @@ void runFixedScenario() {
 #endif
     }
     state.minrung0 = std::max(state.minrung0, baseOptions.run.minRung);
-    bool const hierarchicalMesh =
-        baseOptions.run.hierarchicalGravity && baseOptions.gravity.enabled;
+    bool const hierarchical = baseOptions.run.hierarchicalGravity;
     bool const global = usesGlobalIntegration(baseOptions.run);
-    profile::profileBegin("rebound");
-    domainsRebound();
-    profile::profileEnd();
+    if (!restarting || !hierarchical) {
+        // A hierarchical checkpoint retains domain ownership and the pending
+        // rung suffix stack. A full spatial reorder here would invalidate that
+        // stack before the outstanding closing ladder consumes it.
+        profile::profileBegin("rebound");
+        domainsRebound();
+        profile::profileEnd();
+    }
     Timer checkpointTimer;
     checkpointTimer.start();
     Timer runtime;
@@ -222,7 +226,7 @@ void runFixedScenario() {
                 outputDue && errorInterval > 0 && outputStep % errorInterval == 0 ? outputStep : -1;
             ForceStepResult result;
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
-            if (hierarchicalMesh) {
+            if (hierarchical) {
                 if (minimumRung == 0) {
                     state.minrung0 = std::max(state.minrung0 - 1, baseOptions.run.minRung);
                 }
@@ -264,7 +268,7 @@ void runFixedScenario() {
                 state.tau + timestep == state.tau) {
                 THROW_ERROR("Scenario timestep cannot advance time\n");
             }
-            if (!hierarchicalMesh) {
+            if (!hierarchical) {
                 profile::profileBegin("drift");
                 drift(1.0, timestep, state.tau, state.tau + timestep, duration);
                 profile::profileEnd();
@@ -278,6 +282,12 @@ void runFixedScenario() {
             iterations++;
             if (state.itime == 0) {
                 state.step++;
+            }
+            if (hierarchical) {
+                // Retained source intervals and event times share the integer
+                // clock; repeated floating additions can overshoot an endpoint.
+                state.tau =
+                    baseTimestep * (double(state.step) + std::ldexp(double(state.itime), -64));
             }
             runtime.stop();
             state.runtime = restoredRuntime + runtime.read();
@@ -354,7 +364,7 @@ void runFixedScenario() {
         }
         setOptions(finalOptions);
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
-        if (hierarchicalMesh) {
+        if (hierarchical) {
             int activeRung = state.minrung0;
             kickStepHierarchical(activeRung, state.maxRung, 1.0, 0.0, state.tau, coarseInterval,
                 baseOptions.gravity.openingAngle, &state.energies, state.minrung0, true, nullptr,
@@ -372,7 +382,8 @@ void runFixedScenario() {
         }
         setOptions(baseOptions);
     }
-    if (completed && plan.finish != nullptr) {
+    // Scenario diagnostics require the synchronized terminal closing pass.
+    if (completed && !interrupted && iterations > 0 && plan.finish != nullptr) {
         profile::ScopedPhase phase("diagnostics.scenario");
         plan.finish(state.tau);
     }

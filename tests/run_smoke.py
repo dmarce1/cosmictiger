@@ -74,6 +74,8 @@ def main():
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--mpi-exec", default="mpiexec")
+    parser.add_argument("--threads", type=int, choices=(1, 2), default=2,
+                        help="HPX worker threads per locality")
     parser.add_argument("--cpu", action="store_true", help="run hydrodynamics on the SIMD CPU backend")
     parser.add_argument("--gravity-cuda", action="store_true",
                         help="with sph --cpu, run CUDA gravity alongside CPU hydrodynamics and drift")
@@ -101,7 +103,7 @@ def main():
     # sph_analysis runs the dark-matter-only halo finder and the lightcone with gas present.
     analysis = str(args.mode == "sph_analysis").lower()
     analysis_cuda = str(args.mode == "sph_analysis" and not args.cpu).lower()
-    command = [str(args.executable), "--hpx:threads=2", "--hpx:bind=none",
+    command = [str(args.executable), f"--hpx:threads={args.threads}", "--hpx:bind=none",
                "--initial.particlesPerDimension=8", "--analysis.views=false",
                f"--lightcone.enabled={analysis}", "--analysis.power=false",
                f"--analysis.groups={analysis}",

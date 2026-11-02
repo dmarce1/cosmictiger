@@ -345,10 +345,13 @@ mapSize = 8
                     raise RuntimeError("meshless hydrodynamics lacked the Fixed64 build restriction")
             continue
         if "hierarchical" in compiled_integrators:
-            rejected = run("hydro_method_hierarchical_" + method, method_options + [
-                "--run.timeIntegrator=hierarchical"], success=False)
-            if "run.timeIntegrator is unavailable for the selected physics" not in rejected:
-                raise RuntimeError("meshless hydrodynamics accepted the hierarchical integrator")
+            output = run("hydro_method_hierarchical_" + method, method_options + [
+                "--run.timeIntegrator=hierarchical"], success=method == "mfm")
+            if method == "mfm":
+                assertHydroMethod(output, method)
+            elif ("run.timeIntegrator is unavailable for the selected physics" not in output and
+                  "MFV requires run.timeIntegrator=traditional or global" not in output):
+                raise RuntimeError("MFV lacked the hierarchical gravity mass restriction")
         for integrator in ("traditional", "global"):
             if integrator not in compiled_integrators:
                 continue
@@ -800,30 +803,6 @@ mapSize = 8
             "--chemistry.enabled=true"], success=False)
         if sph_build_error not in rejected:
             raise RuntimeError("disabled SPH chemistry request lacked build guidance")
-    elif args.time_integrator == "hierarchical":
-        sph_integrator_error = "run.timeIntegrator"
-        for gravity_enabled in ("true", "false"):
-            rejected = run(f"hierarchical_sph_gravity_{gravity_enabled}", sph_options + [
-                "--hydro.enabled=true", f"--gravity.enabled={gravity_enabled}"], success=False)
-            if sph_integrator_error not in rejected:
-                raise RuntimeError("hierarchical SPH lacked integrator build guidance")
-        forced_sph = [option for option in metadata_options
-                      if not option.startswith("--run.test=")]
-        rejected = run("hierarchical_forced_sph_rejected", forced_sph + [
-            "--run.test=sphGravity"], success=False)
-        if sph_integrator_error not in rejected:
-            raise RuntimeError("hierarchical SPH restriction was bypassed through run.test")
-        rejected = run("hierarchical_scenario_sph_rejected", [
-            "--run.scenario=sod",
-            "--initial.particlesPerDimension=8"], success=False)
-        if sph_integrator_error not in rejected:
-            raise RuntimeError("hierarchical SPH restriction was bypassed through scenario defaults")
-        sph_config = args.workdir / "hierarchical_sph.ini"
-        sph_config.write_text("[hydro]\nenabled = true\n")
-        rejected = run("hierarchical_ini_sph_rejected", sph_options + [
-            f"--configuration={sph_config.resolve()}"], success=False)
-        if sph_integrator_error not in rejected:
-            raise RuntimeError("hierarchical SPH restriction was bypassed through an INI file")
     else:
         for gravity_enabled in ("true", "false"):
             output = run(f"sph_cli_gravity_{gravity_enabled}", sph_options + [

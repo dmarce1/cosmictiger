@@ -29,6 +29,7 @@
 #endif
 #include <cosmictiger/hydro/sph/cullen_and_dehnen/particle_exchange.hpp>
 #include <cosmictiger/hydro/sph/cullen_and_dehnen/viscosity.hpp>
+#include <cosmictiger/hydro/sph/hierarchical.hpp>
 #include <cosmictiger/hydro/sph/morris_and_monaghan/viscosity.hpp>
 #include <cosmictiger/hydro/sph/price_etal/viscosity.hpp>
 #include <cosmictiger/hydro/sph/sph.hpp>
@@ -337,11 +338,15 @@ void visitSphCheckpointArrays(Visitor&& visit, bool includeChemistry = true,
     if (includeChemistry && sphParticlesChemistryEos != nullptr) {
         visit(sphParticlesChemistryEos, count);
     }
+    if (sphParticlesHierarchicalStates != nullptr) {
+        visit(sphParticlesHierarchicalStates, count);
+    }
 }
 
 }    // namespace detail
 
 void sphParticlesSwap(ParticleInteger i, ParticleInteger j) {
+    std::swap(sphParticlesGravityTimesteps[i], sphParticlesGravityTimesteps[j]);
     if (sphParticlesBalsaraFactors != nullptr) {
         std::swap(sphParticlesBalsaraFactors[i], sphParticlesBalsaraFactors[j]);
     }
@@ -387,6 +392,9 @@ void sphParticlesArrayResize(T*& ptr, ParticleInteger newCapacity) {
 }
 
 void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticles) {
+    bool const hierarchical =
+        getOptions().run.hierarchicalGravity && getOptions().hydro.method == "sph";
+    bool const initializeHierarchical = hierarchical && sphParticlesHierarchicalStates == nullptr;
     bool const meshless = getOptions().hydro.method != "sph";
     bool const initializeHopkins = meshless && sphParticlesHopkinsStates == nullptr;
     bool const variableMass = getOptions().hydro.method == "mfv";
@@ -405,6 +413,10 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
             newCapacity = size_t(101) * newCapacity / size_t(100);
         }
         sphParticlesArrayResize(sphParticlesDensities, newCapacity);
+        sphParticlesArrayResize(sphParticlesGravityTimesteps, newCapacity);
+        if (hierarchical) {
+            sphParticlesArrayResize(sphParticlesHierarchicalStates, newCapacity);
+        }
         if (meshless) {
             sphParticlesArrayResize(sphParticlesHopkinsStates, newCapacity);
         }
@@ -439,6 +451,17 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
             sphParticlesArrayResize(sphParticlesChemistryEos, newCapacity);
         }
         capacity = newCapacity;
+    }
+    if (!hierarchical && sphParticlesHierarchicalStates != nullptr) {
+        freeManagedMemory(sphParticlesHierarchicalStates);
+        sphParticlesHierarchicalStates = nullptr;
+    } else if (hierarchical && sphParticlesHierarchicalStates == nullptr && capacity > 0) {
+        sphParticlesArrayResize(sphParticlesHierarchicalStates, capacity);
+    }
+    if (initializeHierarchical) {
+        for (ParticleInteger index = 0; index < size; ++index) {
+            sphParticlesHierarchicalStates[index] = {};
+        }
     }
     if (!meshless && sphParticlesHopkinsStates != nullptr) {
         freeManagedMemory(sphParticlesHopkinsStates);
@@ -520,6 +543,10 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         sphParticlesPredictedInternalEnergyRates[slot] = 0.0f;
         sphParticlesInternalEnergyRates[slot] = 0.0f;
         sphParticlesDensities[slot] = 0.0f;
+        sphParticlesGravityTimesteps[slot] = 0.0f;
+        if (hierarchical) {
+            sphParticlesHierarchicalStates[slot] = {};
+        }
         if (meshless) {
             sphParticlesHopkinsStates[slot] = {};
         }
@@ -562,6 +589,9 @@ void sphParticlesRemove(ParticleInteger index) {
 }
 
 void sphParticlesFree() {
+#if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL && COSMICTIGER_WITH_GRAVITY
+    sphHierarchicalResetSources();
+#endif
     if (sphParticlesBalsaraFactors != nullptr) {
         freeManagedMemory(sphParticlesBalsaraFactors);
         sphParticlesBalsaraFactors = nullptr;
@@ -570,6 +600,8 @@ void sphParticlesFree() {
         freeManagedMemory(sphParticlesGradHCorrections);
         sphParticlesGradHCorrections = nullptr;
     }
+    freeManagedMemory(sphParticlesGravityTimesteps);
+    sphParticlesGravityTimesteps = nullptr;
     detail::visitSphCheckpointArrays([](auto*& values, size_t) {
         freeManagedMemory(values);
         values = nullptr;
@@ -1053,19 +1085,23 @@ uint32_t sphCheckpointVersion() {
     // Preserve the fixed-viscosity payload version and identify optional state.
     auto const& options = getOptions();
     uint32_t const methodVersion =
-        options.hydro.method == "mfv" ? 64U : (options.hydro.method == "mfm" ? 32U : 0U);
+        options.hydro.method == "mfv" ? 2064U : (options.hydro.method == "mfm" ? 2032U : 0U);
     return (options.starFormation.enabled ? 90U : (options.chemistry.enabled ? 80U : 2U)) +
         methodVersion +
         (options.hydro.viscosityEvolution == "cullenAndDehnen" ?
                 4U :
                 (options.hydro.viscosityEvolution == "priceEtAl" ?
                         6U :
-                        (options.hydro.viscosityEvolution != "none" ? 2U : 0U)));
+                        (options.hydro.viscosityEvolution != "none" ? 2U : 0U))) +
+        (options.run.hierarchicalGravity ? 1000U : 0U);
 }
 
 }    // namespace detail
 
 void sphParticlesLoad(FILE* fp) {
+#if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL && COSMICTIGER_WITH_GRAVITY
+    sphHierarchicalResetSources();
+#endif
     uint32_t header[7];
     ParticleInteger savedCount;
     FREAD(header, sizeof(uint32_t), 7, fp);
@@ -1075,7 +1111,7 @@ void sphParticlesLoad(FILE* fp) {
         header[4] != sizeof(SphAcceleration) || header[5] != kDimensions ||
         header[6] != sizeof(float) || savedCount != sphParticlesSize()) {
         THROW_ERROR("Incompatible SPH checkpoint payload (requires matching "
-                    "viscosity/chemistry layout)\n");
+                    "integrator/viscosity/chemistry layout)\n");
     }
     detail::visitSphCheckpointArrays(
         [fp](auto* values, size_t count) {
@@ -1111,7 +1147,7 @@ void sphParticlesLoad(FILE* fp) {
 #if COSMICTIGER_ENABLE_HOPKINS
         uint32_t stateHeader[3];
         FREAD(stateHeader, sizeof(uint32_t), 3, fp);
-        if (stateHeader[0] != 0x484f5053U || stateHeader[1] != 5U ||
+        if (stateHeader[0] != 0x484f5053U || stateHeader[1] != 6U ||
             stateHeader[2] != sizeof(HopkinsParticleState)) {
             THROW_ERROR("Incompatible Hopkins particle-state checkpoint layout\n");
         }
@@ -1158,7 +1194,7 @@ void sphParticlesSave(FILE* fp) {
     }
     if (getOptions().hydro.method != "sph") {
 #if COSMICTIGER_ENABLE_HOPKINS
-        uint32_t stateHeader[3] = {0x484f5053U, 5U, sizeof(HopkinsParticleState)};
+        uint32_t stateHeader[3] = {0x484f5053U, 6U, sizeof(HopkinsParticleState)};
         FWRITE(stateHeader, sizeof(uint32_t), 3, fp);
         if (count != 0) {
             // HPX serializes members individually. Canonicalize native padding
@@ -1170,7 +1206,7 @@ void sphParticlesSave(FILE* fp) {
                 offsetof(HopkinsParticleState, predictorInitialized) + sizeof(bool);
             constexpr size_t kSupportFieldBegin = offsetof(HopkinsParticleState, supportRadius);
             constexpr size_t kStateFieldsEnd =
-                offsetof(HopkinsParticleState, supportRadius) + sizeof(double);
+                offsetof(HopkinsParticleState, hierarchicalActive) + sizeof(bool);
             for (ParticleInteger index = 0; index < count; ++index) {
                 auto* bytes = reinterpret_cast<unsigned char*>(sphParticlesHopkinsStates + index);
                 std::memset(
@@ -1190,6 +1226,9 @@ void sphParticlesSave(FILE* fp) {
 }
 
 void sphCheckpointTest() {
+    ALWAYS_ASSERT(sphParticlesSize() == 0 ||
+        (sphParticlesHierarchicalStates != nullptr) ==
+            (getOptions().run.hierarchicalGravity && getOptions().hydro.method == "sph"));
     ALWAYS_ASSERT(sphParticlesSize() == 0 ||
         (sphParticlesHopkinsStates != nullptr) == (getOptions().hydro.method != "sph"));
     ALWAYS_ASSERT(sphParticlesSize() == 0 ||

@@ -157,9 +157,15 @@ void validateHydroMethod(Options const& opts) {
             throw std::invalid_argument(
                 "Hopkins MFM/MFV requires a build with COSMICTIGER_POSITION_TYPE=fixed64");
         }
-        if (opts.run.timeIntegrator != "traditional" && opts.run.timeIntegrator != "global") {
+        if (opts.hydro.method == "mfv" && opts.run.timeIntegrator == "hierarchical") {
             throw std::invalid_argument(
-                "Hopkins MFM/MFV requires run.timeIntegrator=traditional or global");
+                "MFV requires run.timeIntegrator=traditional or global; variable masses "
+                "cannot use the held hierarchical gravity decomposition");
+        }
+        if (opts.run.timeIntegrator == "hierarchical" && opts.lightcone.enabled) {
+            throw std::invalid_argument(
+                "Hierarchical MFM requires lightcone.enabled=false until hydro trajectory "
+                "segments are emitted independently of provisional gravity endpoints");
         }
         if (opts.chemistry.enabled || opts.starFormation.enabled) {
             throw std::invalid_argument(
@@ -334,8 +340,7 @@ void setOptions(Options const& opts) {
     if (!((opts.run.timeIntegrator == "traditional" && integration::kBuildHasTraditional) ||
             (opts.run.timeIntegrator == "hierarchical" && integration::kBuildHasHierarchical) ||
             (opts.run.timeIntegrator == "global" && integration::kBuildHasGlobal)) ||
-        opts.run.hierarchicalGravity !=
-            (usesHierarchicalIntegration(opts.run) && opts.gravity.enabled)) {
+        opts.run.hierarchicalGravity != usesHierarchicalIntegration(opts.run)) {
         throw std::invalid_argument("run.timeIntegrator is unavailable or inconsistent");
     }
 #if COSMICTIGER_WITH_GRAVITY
@@ -1521,8 +1526,9 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("chemistry.enabled=true requires COSMICTIGER_ENABLE_CHEMISTRY=ON\n");
     }
 #endif
-    bool const hierarchicalEligible =
-        integration::kBuildHasHierarchical && opts.gravity.enabled && !opts.hydro.enabled;
+    bool const hierarchicalEligible = integration::kBuildHasHierarchical &&
+        COSMICTIGER_WITH_GRAVITY &&
+        (opts.gravity.enabled || (opts.hydro.enabled && opts.hydro.method != "mfv"));
     if (opts.run.timeIntegrator.empty()) {
         int const choices = int(integration::kBuildHasTraditional) + int(hierarchicalEligible) +
             int(integration::kBuildHasGlobal);
@@ -1538,9 +1544,23 @@ bool processOptions(int argc, char* argv[]) {
             (opts.run.timeIntegrator == "hierarchical" && hierarchicalEligible) ||
             (opts.run.timeIntegrator == "global" && integration::kBuildHasGlobal))) {
         THROW_ERROR("run.timeIntegrator is unavailable for the selected physics; hierarchical "
-                    "requires gravity without SPH\n");
+                    "requires a gravity-capable build and gravity, SPH, or MFM\n");
     }
     opts.run.hierarchicalGravity = usesHierarchicalIntegration(opts.run);
+    if (opts.run.hierarchicalGravity && opts.hydro.enabled) {
+        if (opts.chemistry.enabled || opts.starFormation.enabled) {
+            THROW_ERROR(
+                "Hierarchical hydro requires chemistry.enabled=false and "
+                "starFormation.enabled=false until source wake-up intervals are supported\n");
+        }
+        if (opts.hydro.method == "sph" && opts.gravity.enabled &&
+            opts.hydro.viscosityGradientSwitch()) {
+            THROW_ERROR(
+                "Hierarchical SPH with self-gravity requires hydro.viscosityEvolution=none "
+                "or morrisAndMonaghan; gradient switches need the full held gravity field\n");
+        }
+    }
+
     detail::validateCudaBackends(opts);
     detail::validateHydroMethod(opts);
     detail::validateCooling(opts);

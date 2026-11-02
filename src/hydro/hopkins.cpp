@@ -15,6 +15,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -31,11 +32,11 @@
 #include <cosmictiger/hydro/hopkins/hopkins.hpp>
 #include <cosmictiger/hydro/hopkins/hopkins_hydro.hpp>
 #include <cosmictiger/hydro/hopkins/hopkins_state.hpp>
+#include <cosmictiger/hydro/source_tree.hpp>
 #include <cosmictiger/hydro/sph/sph.hpp>
 #include <cosmictiger/hydro/sph/sph_flops.hpp>
 #include <cosmictiger/hydro/sph/sph_kernel.hpp>
 #include <cosmictiger/hydro/sph/sph_particles.hpp>
-#include <cosmictiger/hydro/sph/sph_tree.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/simd_math.hpp>
@@ -80,30 +81,20 @@ struct HopkinsParticle {
     double support = 0.0;
     double density = 0.0;
     int rung = 0;
+    int gravityRung = 0;
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & position & velocity & acceleration & state & active & mass & energy & support &
-            density & rung;
-    }
-};
-
-struct HopkinsLeaf {
-    ParticleInteger begin = 0;
-    ParticleInteger end = 0;
-    std::vector<ParticleGlobalRange> neighbors;
-    template <class Archive>
-    void serialize(Archive& archive, unsigned) {
-        archive & begin & end & neighbors;
+            density & rung & gravityRung;
     }
 };
 
 struct HopkinsBlock {
     std::vector<HopkinsParticle> particles;
-    std::vector<HopkinsLeaf> leaves;
     int darkMatterRung = 0;
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
-        archive & particles & leaves & darkMatterRung;
+        archive & particles & darkMatterRung;
     }
 };
 
@@ -145,13 +136,17 @@ using HopkinsPairKey = std::pair<uint64_t, uint64_t>;
 std::map<HopkinsPairKey, HopkinsPairRecord> hopkinsPairs;
 std::unique_ptr<HopkinsWorkspace> hopkinsPrepared;
 bool hopkinsTreePrepared = false;
+bool hopkinsHierarchyPending = false;
+size_t hopkinsHierarchyWoken = 0;
+double hopkinsHierarchyDriftThermal = 0.0;
+hydro_source::SourceTree hopkinsSourceTree;
 static_assert(kMaxRung <= std::numeric_limits<uint16_t>::digits);
 constexpr int kHopkinsTickRung = kMaxRung - 1;
 constexpr uint64_t kHopkinsTicksPerBase = uint64_t(1) << kHopkinsTickRung;
 constexpr uint64_t kHopkinsCacheMagic = 0x484f504341434845ULL;
 // The midpoint geometry differentiates the constant kernel-count constraint.
 // Solve in double precision: a float support and a loose residual can obscure
-// the 1e-6 sound-wave perturbation. Only the tree's support mirror is rounded.
+// the 1e-6 sound-wave perturbation. The output support mirror alone is rounded.
 constexpr double kHopkinsSupportTolerance = 1.0e-13;
 
 template <class Function>
@@ -304,7 +299,8 @@ HopkinsSimd hopkinsKernel(
         HopkinsSimd(hopkinsSupportVolume(support, dimensions, operations));
 }
 
-hopkins::Vector hopkinsAcceleration(ParticleInteger index, FlopCount* operations) {
+hopkins::Vector hopkinsAcceleration(
+    ParticleInteger index, Vector3<Position> const& position, FlopCount* operations) {
     auto const& options = getOptions();
     // Fixed-point conversion multiplies and imposed-force additions, plus
     // float acceleration promotions when gravity supplies the stored force.
@@ -312,12 +308,13 @@ hopkins::Vector hopkinsAcceleration(ParticleInteger index, FlopCount* operations
     hopkins::Vector acceleration{};
     hopkins::Vector displacement{};
     for (int dim = 0; dim < 3; dim++) {
-        acceleration[dim] =
-            options.gravity.enabled ? sphParticlesGravityAcceleration(dim, index) : 0.0;
-        displacement[dim] = doubleDistance(sphParticlesPosition(dim, index), Position(0.5));
+        acceleration[dim] = options.gravity.enabled && !options.run.hierarchicalGravity ?
+            sphParticlesGravityAcceleration(dim, index) :
+            0.0;
+        displacement[dim] = doubleDistance(position[dim], Position(0.5));
     }
     acceleration[1] += options.hydro.yAcceleration;
-    double const z = doubleDistance(sphParticlesPosition(2, index), Position(0.5));
+    double const z = doubleDistance(position[2], Position(0.5));
     acceleration[2] += z < 0.0 ? options.hydro.zPlaneAcceleration :
                                  (z > 0.0 ? -options.hydro.zPlaneAcceleration : 0.0);
     if (options.hydro.centralAcceleration != 0.0) {
@@ -335,7 +332,7 @@ hopkins::Vector hopkinsAcceleration(ParticleInteger index, FlopCount* operations
     return acceleration;
 }
 
-HopkinsBlock hopkinsCollect(bool countOperations, bool readForces) {
+HopkinsBlock hopkinsCollect(bool countOperations, bool readForces, double time) {
     HopkinsFlopBatch operations(countOperations);
     HopkinsBlock block;
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
@@ -358,30 +355,41 @@ HopkinsBlock hopkinsCollect(bool countOperations, bool readForces) {
         hopkins::detail::countFlops(operations, particle.state.supportRadius > 0.0 ? 0 : 1);
         particle.support = particle.state.supportRadius > 0.0 ? particle.state.supportRadius :
                                                                 sphParticlesSupportRadius(i);
-        particle.rung = sphParticlesRung(i);
-        particle.acceleration = readForces ? hopkinsAcceleration(i, operations) : hopkins::Vector{};
+        particle.gravityRung = sphParticlesRung(i);
+        bool const hierarchical = getOptions().run.hierarchicalGravity;
+        particle.rung = hierarchical && particle.state.initialized ? particle.state.hydroRung :
+                                                                     particle.gravityRung;
         for (int dim = 0; dim < 3; dim++) {
-            particle.position[dim] = sphParticlesPosition(dim, i);
+            particle.position[dim] = hierarchical && particle.state.predictorInitialized ?
+                particle.state.positionAt(dim, time) :
+                sphParticlesPosition(dim, i);
             hopkins::detail::countFlops(operations, 1);
             particle.velocity[dim] = particle.state.initialized ?
                 particle.state.momentum[dim] / particle.mass :
                 sphParticlesVelocity(dim, i);
         }
-    }
-    for (int leafIndex = 0; leafIndex < sphTreeLeaflistSize(); leafIndex++) {
-        auto const* node = sphTreeGetNode(sphTreeGetLeaf(leafIndex));
-        if (!node->isLocalHere()) {
-            continue;
-        }
-        HopkinsLeaf leaf;
-        leaf.begin = node->particleRange.first;
-        leaf.end = node->particleRange.second;
-        for (int j = node->neighborRange.first; j < node->neighborRange.second; j++) {
-            leaf.neighbors.push_back(sphTreeGetNode(sphTreeGetNeighbor(j))->globalParticleRange());
-        }
-        block.leaves.push_back(std::move(leaf));
+        particle.acceleration =
+            readForces ? hopkinsAcceleration(i, particle.position, operations) : hopkins::Vector{};
     }
     return block;
+}
+
+// Publish stable IDs before any persistent neighbor query. This operation changes
+// no conserved state, reconstruction anchor, support, velocity, or particle order.
+void hopkinsInstallIdentifiers(std::vector<uint64_t> const& identifiers) {
+    if (identifiers.size() != size_t(sphParticlesSize())) {
+        throw std::runtime_error("Hopkins identity publication changed particle membership");
+    }
+    for (size_t index = 0; index < identifiers.size(); ++index) {
+        auto const identifier = sphParticlesHopkinsState(index).identifier;
+        if (identifier != std::numeric_limits<uint64_t>::max() &&
+            identifier != identifiers[index]) {
+            throw std::runtime_error("Hopkins identity changed during source preparation");
+        }
+    }
+    for (size_t index = 0; index < identifiers.size(); ++index) {
+        sphParticlesHopkinsState(index).identifier = identifiers[index];
+    }
 }
 
 // The ordinary drifter consumes only the separately stored mesh velocity.
@@ -395,9 +403,25 @@ void hopkinsInstall(
         hopkins::detail::countFlops(operations, 2);
         sphParticlesSupportRadius(i) = particle.support;
         sphParticlesDensity(i) = particle.density;
-        if (phase == 1) {
-            sphParticlesRung(i) = particle.rung;
+        if (phase != 0) {
+            bool const hierarchical = getOptions().run.hierarchicalGravity;
+            if (!hierarchical) {
+                sphParticlesRung(i) = particle.rung;
+            }
             sphParticlesHopkinsState(i) = particle.state;
+            if (hierarchical) {
+                auto& state = sphParticlesHopkinsState(i);
+                state.hydroRung = particle.rung;
+                if (phase == 1) {
+                    state.hierarchicalActive = false;
+                    for (int dim = 0; dim < 3; ++dim) {
+                        // This future gravity coordinate is only a projection.
+                        // Every intervening hydro wake refreshes it before the
+                        // inactive prefix can enter a gravity tree again.
+                        sphParticlesPosition(dim, i) = state.positionAt(dim, state.gravityEndTime);
+                    }
+                }
+            }
             if (getOptions().hydro.method == "mfv") {
                 hopkins::detail::countFlops(operations, 1);
                 sphParticlesMfvMass(i) = particle.state.accountedMass();
@@ -434,6 +458,7 @@ void hopkinsInstallGravityMasses(std::vector<std::pair<uint64_t, double>> const&
 }    // namespace detail
 
 HPX_PLAIN_ACTION(detail::hopkinsCollect, HopkinsCollectAction);
+HPX_PLAIN_ACTION(detail::hopkinsInstallIdentifiers, HopkinsInstallIdentifiersAction);
 HPX_PLAIN_ACTION(detail::hopkinsInstall, HopkinsInstallAction);
 HPX_PLAIN_ACTION(detail::hopkinsInstallGravityMasses, HopkinsInstallGravityMassesAction);
 
@@ -462,7 +487,7 @@ void hopkinsGather(HopkinsWorkspace& workspace) {
     std::vector<hpx::future<HopkinsBlock>> pending;
     for (auto const& locality : hpxLocalities()) {
         pending.push_back(hpx::async<HopkinsCollectAction>(
-            locality, workspace.countOperations, workspace.readForces));
+            locality, workspace.countOperations, workspace.readForces, workspace.time));
     }
     std::vector<HopkinsBlock> blocks;
     workspace.particles.clear();
@@ -475,32 +500,99 @@ void hopkinsGather(HopkinsWorkspace& workspace) {
         workspace.particles.insert(workspace.particles.end(), particles.begin(), particles.end());
         workspace.offsets.push_back(workspace.particles.size());
     }
-    workspace.neighbors.clear();
-    workspace.neighbors.resize(workspace.particles.size());
-    for (size_t rank = 0; rank < blocks.size(); rank++) {
-        for (auto const& leaf : blocks[rank].leaves) {
-            for (ParticleInteger local = leaf.begin; local < leaf.end; local++) {
-                size_t const i = workspace.offsets[rank] + local;
-                auto& neighbors = workspace.neighbors[i];
-                for (auto const& range : leaf.neighbors) {
-                    for (ParticleInteger index = range.range.first; index < range.range.second;
-                        index++) {
-                        size_t const j = workspace.offsets[range.proc] + index;
-                        hopkins::detail::countFlops(operations, i != j ? 1 : 0);
-                        if (i != j &&
-                            hopkins::norm(hopkinsSeparation(workspace.particles[i],
-                                              workspace.particles[j], operations),
-                                operations) < workspace.searchSupportFactor *
-                                    std::max(workspace.particles[i].support,
-                                        workspace.particles[j].support)) {
-                            neighbors.push_back(j);
-                        }
-                    }
+    uint64_t nextId = 0;
+    for (auto const& particle : workspace.particles) {
+        if (particle.state.identifier != std::numeric_limits<uint64_t>::max()) {
+            nextId = std::max(nextId, particle.state.identifier + 1);
+        }
+    }
+    std::vector<bool> newIdentifiers(blocks.size(), false);
+    std::unordered_map<uint64_t, size_t> indices;
+    indices.reserve(workspace.particles.size());
+    for (size_t rank = 0; rank < blocks.size(); ++rank) {
+        for (size_t index = workspace.offsets[rank]; index < workspace.offsets[rank + 1]; ++index) {
+            auto& identifier = workspace.particles[index].state.identifier;
+            if (identifier == std::numeric_limits<uint64_t>::max()) {
+                if (nextId == std::numeric_limits<uint64_t>::max()) {
+                    throw std::overflow_error("Hopkins stable particle identifiers are exhausted");
                 }
-                std::sort(neighbors.begin(), neighbors.end());
-                neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
+                identifier = nextId++;
+                newIdentifiers[rank] = true;
+            }
+            if (!indices.emplace(identifier, index).second) {
+                throw std::runtime_error("Duplicate Hopkins stable particle identifier");
             }
         }
+    }
+    std::vector<hpx::future<void>> identityPublications;
+    try {
+        for (size_t rank = 0; rank < blocks.size(); ++rank) {
+            if (newIdentifiers[rank]) {
+                std::vector<uint64_t> identifiers;
+                identifiers.reserve(workspace.offsets[rank + 1] - workspace.offsets[rank]);
+                for (size_t index = workspace.offsets[rank]; index < workspace.offsets[rank + 1];
+                    ++index) {
+                    identifiers.push_back(workspace.particles[index].state.identifier);
+                }
+                identityPublications.push_back(hpx::async<HopkinsInstallIdentifiersAction>(
+                    hpxLocalities()[rank], std::move(identifiers)));
+            }
+        }
+    } catch (...) {
+        hpx::wait_all(identityPublications);
+        throw;
+    }
+    hpx::wait_all(identityPublications);
+    for (auto& publication : identityPublications) {
+        publication.get();
+    }
+    {
+        profile::ScopedPhase treePhase("hydro.hopkins.tree.refresh");
+        std::vector<hydro_source::Source> sources;
+        sources.reserve(workspace.particles.size());
+        bool rebuild = hopkinsSourceTree.size() != workspace.particles.size();
+        for (auto const& particle : workspace.particles) {
+            hydro_source::Source source;
+            source.id = particle.state.identifier;
+            source.epoch = source.validUntil = workspace.time;
+            source.rung = particle.rung;
+            // The broad phase must enclose the exact Fixed64 pair test even at
+            // periodic faces and when support solving expands the reverse stencil.
+            source.supportUpper = std::nextafter(workspace.searchSupportFactor * particle.support,
+                                      std::numeric_limits<double>::infinity()) +
+                64.0 * std::numeric_limits<double>::epsilon();
+            for (size_t dimension = 0; dimension < 3; ++dimension) {
+                source.position[dimension] = particle.position[dimension].toDouble();
+            }
+            rebuild = rebuild || !hopkinsSourceTree.contains(source.id);
+            sources.push_back(source);
+        }
+        if (rebuild) {
+            hopkinsSourceTree.reset(std::move(sources));
+        } else {
+            hopkinsSourceTree.update(sources);
+        }
+    }
+    workspace.neighbors.clear();
+    workspace.neighbors.resize(workspace.particles.size());
+    for (size_t i = 0; i < workspace.particles.size(); ++i) {
+        auto const& source = hopkinsSourceTree.source(workspace.particles[i].state.identifier);
+        hydro_source::Box const sink{source.position, source.position};
+        auto& neighbors = workspace.neighbors[i];
+        for (uint64_t identifier :
+            hopkinsSourceTree.query(sink, source.supportUpper, workspace.time)) {
+            size_t const j = indices.at(identifier);
+            hopkins::detail::countFlops(operations, i != j ? 1 : 0);
+            if (i != j &&
+                hopkins::norm(
+                    hopkinsSeparation(workspace.particles[i], workspace.particles[j], operations),
+                    operations) < workspace.searchSupportFactor *
+                        std::max(workspace.particles[i].support, workspace.particles[j].support)) {
+                neighbors.push_back(j);
+            }
+        }
+        std::sort(neighbors.begin(), neighbors.end());
+        neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
     }
     // Form the union of directed searches. This makes reciprocity explicit
     // even when rounding at a tree-box boundary includes a pair on one side.
@@ -521,33 +613,6 @@ void hopkinsGather(HopkinsWorkspace& workspace) {
             auto const rightId = workspace.particles[right].state.identifier;
             return leftId == rightId ? left < right : leftId < rightId;
         });
-    }
-}
-
-void hopkinsNeighborRefresh(bool boxes) {
-    profile::ScopedPhase profilePhase("hydro.hopkins.neighbors");
-    SphTreeNeighborParameters parameters;
-    parameters.minimumRung = 0;
-    parameters.supportRadiusMultiplier = 1.2;
-    TreeId root;
-    root.proc = 0;
-    root.index = 0;
-    if (boxes) {
-        parameters.innerSelection = kSphSetAll;
-        parameters.outerSelection = kSphSetAll;
-        parameters.runType = kSphTreeNeighborBoxes;
-        {
-            profile::ScopedPhase profilePhase("hydro.hopkins.neighbors.boxes");
-            sphTreeNeighbor(parameters, root, Vector<TreeId>()).get();
-        }
-    }
-    parameters.runType = kSphTreeNeighborNeighbors;
-    parameters.innerSelection = kSphInteractionsIJ;
-    Vector<TreeId> checklist;
-    checklist.push_back(root);
-    {
-        profile::ScopedPhase profilePhase("hydro.hopkins.neighbors.refresh");
-        sphTreeNeighbor(parameters, root, checklist).get();
     }
 }
 
@@ -604,8 +669,8 @@ void hopkinsSolveSupport(HopkinsWorkspace& workspace) {
                     next = hopkins::supportRadiusStep(support, residual, derivative, minimum,
                         maximum, lower[i], upper[i], false, operations);
                 }
-                // Retain the solved radius in the meshless sidecar; the SPH tree
-                // consumes a float mirror with its existing padded search bounds.
+                // Retain the solved double radius in the sidecar. The next gather
+                // refits the persistent tree before repeating the support query.
                 changed[i] = next != particle.support;
                 particle.support = next;
             });
@@ -620,7 +685,6 @@ void hopkinsSolveSupport(HopkinsWorkspace& workspace) {
             profile::ScopedPhase profilePhase("hydro.hopkins.caches.clear");
             sphParticlesClearCaches();
         }
-        hopkinsNeighborRefresh(true);
     }
     throw std::runtime_error("Hopkins kernel-support solve did not converge");
 }
@@ -692,7 +756,6 @@ void hopkinsGeometry(HopkinsWorkspace& workspace) {
             profile::ScopedPhase profilePhase("hydro.hopkins.caches.clear");
             sphParticlesClearCaches();
         }
-        hopkinsNeighborRefresh(true);
         hopkinsGather(workspace);
     }
     throw std::runtime_error(
@@ -1013,7 +1076,8 @@ HopkinsStepResult hopkinsSelectTimesteps(HopkinsWorkspace& workspace, int minimu
     HopkinsFlopBatch operations(workspace.countOperations);
     auto const& options = getOptions();
     double const gamma = options.hydro.gamma;
-    int maximumRung = std::max(workspace.darkMatterRung, options.run.minRung);
+    int maximumRung = std::max(
+        options.run.hierarchicalGravity ? 0 : workspace.darkMatterRung, options.run.minRung);
     bool const global = maximumGlobalTimestep > 0.0;
     double minimumTimestep = maximumGlobalTimestep;
     hopkins::detail::countFlops(operations, global ? 0 : 1);
@@ -1502,6 +1566,14 @@ void hopkinsInitialize(HopkinsWorkspace& workspace) {
             state.initialized = true;
         }
         if (!state.predictorInitialized) {
+            if (getOptions().run.hierarchicalGravity && !state.hierarchicalActive) {
+                state.positionAnchor = particle.position;
+                state.positionEpoch = workspace.time;
+                state.positionDriftScale = workspace.scale;
+                state.gravityEndTime = workspace.time;
+                state.gravityDriftScale = workspace.scale;
+                state.hydroRung = particle.rung;
+            }
             state.anchorVolume = workspace.geometry[i].volume;
             state.sourceTime = workspace.time;
             state.endTime = workspace.time;
@@ -1542,6 +1614,10 @@ void hopkinsCloseParticle(HopkinsWorkspace& workspace, size_t i) {
     state.beginTick = state.endTick = workspace.tick;
     state.expansionCoefficient = coefficient;
     state.anchorVolume = workspace.geometry[i].volume;
+    if (getOptions().run.hierarchicalGravity) {
+        state.positionAnchor = particle.position;
+        state.positionEpoch = workspace.time;
+    }
 }
 
 void hopkinsCurrentViews(HopkinsWorkspace& workspace) {
@@ -1645,24 +1721,13 @@ void hopkinsWriteSoundWave(HopkinsWorkspace const& workspace, double time) {
 
 void hopkinsSoundWaveDiagnostics(double time) {
     profile::ScopedPhase profilePhase("hydro.hopkins.diagnostics");
-    SphTreeCreateParameters treeParameters;
-    treeParameters.minimumRung = 0;
-    treeParameters.supportRadiusMultiplier = 1.2;
-    {
-        profile::ScopedPhase profilePhase("hydro.hopkins.tree.create");
-        sphTreeCreate(treeParameters);
-    }
-    detail::hopkinsNeighborRefresh(false);
     detail::HopkinsWorkspace workspace;
     workspace.countOperations = false;
+    workspace.time = time;
     workspace.dimensions = scenarios::definition(getOptions().run.scenario).hydroDimensions;
     detail::hopkinsSolveSupport(workspace);
     detail::hopkinsGeometry(workspace);
     detail::hopkinsWriteSoundWave(workspace, time);
-    {
-        profile::ScopedPhase profilePhase("hydro.hopkins.tree.destroy");
-        sphTreeDestroy();
-    }
     {
         profile::ScopedPhase profilePhase("hydro.hopkins.caches.clear");
         sphParticlesClearCaches();
@@ -1704,18 +1769,11 @@ void hopkinsPrepareTree() {
     if (detail::hopkinsTreePrepared) {
         throw std::runtime_error("Hopkins tree preparation was not consumed");
     }
-    SphTreeCreateParameters parameters;
-    parameters.minimumRung = 0;
-    parameters.supportRadiusMultiplier = 1.2;
-    {
-        profile::ScopedPhase profilePhase("hydro.hopkins.tree.create");
-        sphTreeCreate(parameters);
-    }
-    detail::hopkinsNeighborRefresh(false);
+    detail::hopkinsSourceTree.resetCounters();
     detail::hopkinsTreePrepared = true;
 }
 
-void hopkinsPrepareGeometry(double scale, double expansionRate) {
+void hopkinsPrepareGeometry(double scale, double expansionRate, double time) {
     if (!detail::hopkinsTreePrepared || detail::hopkinsPrepared) {
         throw std::runtime_error("Invalid Hopkins geometry preparation order");
     }
@@ -1723,10 +1781,94 @@ void hopkinsPrepareGeometry(double scale, double expansionRate) {
     workspace->dimensions = scenarios::definition(getOptions().run.scenario).hydroDimensions;
     workspace->scale = scale;
     workspace->expansionRate = expansionRate;
+    workspace->time = time;
     workspace->readForces = false;
     detail::hopkinsSolveSupport(*workspace);
     detail::hopkinsGeometry(*workspace);
     detail::hopkinsPrepared = std::move(workspace);
+}
+
+HopkinsStepResult hopkinsHierarchicalBegin(int minimumGravityRung, double scale,
+    double expansionRate, double time, double baseTimestep, EnergiesT& energies, bool closingOnly) {
+    profile::ScopedPhase profilePhase("hydro.hopkins.hierarchy.close");
+    if (!getOptions().run.hierarchicalGravity || getOptions().hydro.method != "mfm" ||
+        detail::hopkinsHierarchyPending || detail::hopkinsPrepared) {
+        throw std::runtime_error("Invalid MFM hierarchical begin order");
+    }
+    detail::hopkinsHierarchyWoken = 0;
+    hopkinsPrepareTree();
+    detail::HopkinsWorkspace workspace;
+    workspace.dimensions = scenarios::definition(getOptions().run.scenario).hydroDimensions;
+    workspace.scale = scale;
+    workspace.expansionRate = expansionRate;
+    workspace.time = time;
+    workspace.tickDuration = baseTimestep / double(detail::kHopkinsTicksPerBase);
+    workspace.tick = detail::hopkinsTick(time, baseTimestep, nullptr);
+    workspace.readForces = true;
+    detail::hopkinsSolveSupport(workspace);
+    detail::hopkinsGeometry(workspace);
+    detail::hopkinsInitialize(workspace);
+    size_t gravityActive = 0, hydroDue = 0, closed = 0;
+    int maximumHydroRung = getOptions().run.minRung;
+    for (auto& particle : workspace.particles) {
+        bool const gravityTouched = particle.gravityRung >= minimumGravityRung;
+        bool const due =
+            !particle.state.predictorInitialized || particle.state.endTick <= workspace.tick;
+        bool const invalidPrediction = particle.state.predictorInitialized &&
+            !hopkins::physical(detail::hopkinsPredictedPrimitive(particle, workspace, nullptr));
+        particle.active = closingOnly || gravityTouched || due || invalidPrediction;
+        particle.state.hierarchicalActive = particle.active;
+        detail::hopkinsHierarchyWoken += invalidPrediction && !gravityTouched && !due;
+        gravityActive += gravityTouched;
+        hydroDue += due;
+        maximumHydroRung = std::max(maximumHydroRung, particle.rung);
+    }
+    size_t const settled = detail::hopkinsSettlePairs(workspace, closingOnly);
+    for (size_t i = 0; i < workspace.particles.size(); ++i) {
+        if (workspace.particles[i].active) {
+            detail::hopkinsCloseParticle(workspace, i);
+            ++closed;
+        }
+    }
+    detail::hopkinsCurrentViews(workspace);
+    // Phase two publishes closed anchors before any signed gravity impulse but
+    // leaves raw coordinates at the current gravity endpoint throughout the ladder.
+    detail::hopkinsScatter(workspace, 2);
+    auto const synchronized = particlesSumEnergies();
+    // Source closure precedes every gravity impulse. The closed thermal energy
+    // is invariant under those kicks. Gravity replaces kinetic/momentum totals
+    // with its synchronized top-ladder reduction when self-gravity is enabled.
+    energies.kin = synchronized.kin / (scale * scale);
+    energies.therm = synchronized.therm / (scale * scale);
+    energies.xmom = synchronized.xmom / scale;
+    energies.ymom = synchronized.ymom / scale;
+    energies.zmom = synchronized.zmom / scale;
+    energies.nmom = synchronized.nmom / scale;
+    detail::hopkinsHierarchyPending = true;
+    terminal::detailPrint("Hopkins hierarchy begin: time=%.17g gravityMinRung=%d "
+                          "gravityActive=%zu hydroDue=%zu closed=%zu total=%zu settled=%zu "
+                          "hydroMaxRung=%d terminal=%d\n",
+        time, minimumGravityRung, gravityActive, hydroDue, closed, workspace.particles.size(),
+        settled, maximumHydroRung, int(closingOnly));
+    return {maximumHydroRung, std::ldexp(baseTimestep, -maximumHydroRung)};
+}
+
+double hopkinsHierarchicalDriftThermalEnergy() {
+    if (detail::hopkinsHierarchyPending) {
+        throw std::runtime_error("MFM drift thermal energy requires a completed gravity ladder");
+    }
+    return detail::hopkinsHierarchyDriftThermal;
+}
+
+HopkinsStepResult hopkinsHierarchicalFinish(int minimumHydroRung, double scale,
+    double expansionRate, double time, double baseTimestep, EnergiesT& energies, bool closingOnly) {
+    if (!detail::hopkinsHierarchyPending) {
+        throw std::runtime_error("MFM hierarchical finish has no matching begin");
+    }
+    auto const result = hopkinsKick(
+        minimumHydroRung, scale, expansionRate, time, baseTimestep, energies, closingOnly);
+    detail::hopkinsHierarchyPending = false;
+    return result;
 }
 
 HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRate, double time,
@@ -1734,6 +1876,7 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
     double maximumGlobalTimestep) {
     profile::ScopedPhase profilePhase("hydro.hopkins");
     bool const global = maximumGlobalTimestep > 0.0;
+    bool const hierarchical = getOptions().run.hierarchicalGravity;
     if (!(maximumGlobalTimestep >= 0.0) || !std::isfinite(maximumGlobalTimestep) ||
         (global && (!(previousTimestep >= 0.0) || !std::isfinite(previousTimestep)))) {
         throw std::invalid_argument("Hopkins global timesteps must be finite and nonnegative");
@@ -1742,7 +1885,7 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
         hopkinsPrepareTree();
     }
     if (!detail::hopkinsPrepared) {
-        hopkinsPrepareGeometry(scale, expansionRate);
+        hopkinsPrepareGeometry(scale, expansionRate, time);
     }
     auto workspaceOwner = std::move(detail::hopkinsPrepared);
     auto& workspace = *workspaceOwner;
@@ -1755,21 +1898,11 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
     // dark-matter rung reduction. Support geometry still has identical ordering.
     workspace.readForces = true;
     detail::hopkinsGather(workspace);
-    uint64_t nextId = 0;
-    for (auto const& particle : workspace.particles) {
-        if (particle.state.identifier != std::numeric_limits<uint64_t>::max()) {
-            nextId = std::max(nextId, particle.state.identifier + 1);
-        }
-    }
-    for (auto& particle : workspace.particles) {
-        if (particle.state.identifier == std::numeric_limits<uint64_t>::max()) {
-            particle.state.identifier = nextId++;
-        }
-    }
     detail::hopkinsInitialize(workspace);
-    size_t woken = 0;
+    size_t woken = hierarchical ? detail::hopkinsHierarchyWoken : 0;
     for (auto& particle : workspace.particles) {
-        particle.active = closingOnly || !particle.state.predictorInitialized ||
+        particle.active = closingOnly || particle.state.hierarchicalActive ||
+            !particle.state.predictorInitialized ||
             (global ? particle.state.endTime <= time : particle.state.endTick <= workspace.tick);
         if (!particle.active &&
             !hopkins::physical(detail::hopkinsPredictedPrimitive(particle, workspace, nullptr))) {
@@ -1780,7 +1913,7 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
     }
     std::vector<unsigned char> closed(workspace.particles.size(), 0);
     HopkinsStepResult result;
-    result.maximumRung = workspace.darkMatterRung;
+    result.maximumRung = getOptions().run.hierarchicalGravity ? 0 : workspace.darkMatterRung;
     result.minimumTimestep = maximumGlobalTimestep;
     size_t settled = 0;
     bool firstSelection = true;
@@ -1837,6 +1970,17 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
             }
             auto& state = particle.state;
             state.meshVelocity = particle.velocity;
+            if (getOptions().run.hierarchicalGravity) {
+                state.positionDriftScale = scale;
+#if COSMICTIGER_WITH_GRAVITY
+                if (getOptions().run.scenario == "cosmology") {
+                    double scaleWork = scale;
+                    double derivativeWork = expansionRate / scale;
+                    state.positionDriftScale =
+                        1.0 / cosmosAinv(derivativeWork, scaleWork, state.endTime - time);
+                }
+#endif
+            }
             for (int dim = 0; dim < 3; ++dim) {
                 state.meshAcceleration[dim] = state.sourceAcceleration[dim] -
                     workspace.gradients[i].pressure[dim] / (particle.density * scale) -
@@ -1857,22 +2001,48 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
     {
         profile::ScopedPhase energyPhase("hydro.hopkins.diagnostics.energies");
         auto const sum = particlesSumEnergies();
-        energies.kin = sum.kin / (scale * scale);
-        energies.therm = sum.therm / (scale * scale);
-        energies.xmom = sum.xmom / scale;
-        energies.ymom = sum.ymom / scale;
-        energies.zmom = sum.zmom / scale;
-        energies.nmom = sum.nmom / scale;
+        if (hierarchical) {
+            // This sum includes all descending/opening HOLD impulses. It is
+            // the drift kinetic accounting, not the synchronized diagnostic
+            // paired with the top-ladder potential evaluation.
+            energies.tckin = sum.kin;
+            detail::hopkinsHierarchyDriftThermal = sum.therm / (scale * scale);
+        } else {
+            energies.kin = sum.kin / (scale * scale);
+            energies.therm = sum.therm / (scale * scale);
+            energies.xmom = sum.xmom / scale;
+            energies.ymom = sum.ymom / scale;
+            energies.zmom = sum.zmom / scale;
+            energies.nmom = sum.nmom / scale;
+        }
     }
     terminal::detailPrint("Hopkins step: time=%.17g active=%zu total=%zu minRung=%d maxRung=%d "
                           "pairs=%zu cached=%zu refreshed=%zu woken=%zu settled=%zu terminal=%d\n",
         time, active, workspace.particles.size(), minimumGasRung, maximumGasRung, retained + opened,
         retained, opened, woken, settled, int(closingOnly));
-    {
-        profile::ScopedPhase treePhase("hydro.hopkins.tree.destroy");
-        sphTreeDestroy();
-        detail::hopkinsTreePrepared = false;
+    if (hierarchical) {
+        int minimumGravityRung = kMaxRung, maximumGravityRung = 0;
+        size_t futureProjections = 0;
+        for (auto const& particle : workspace.particles) {
+            minimumGravityRung = std::min(minimumGravityRung, particle.gravityRung);
+            maximumGravityRung = std::max(maximumGravityRung, particle.gravityRung);
+            futureProjections += particle.state.gravityEndTime > time;
+        }
+        terminal::detailPrint("Hopkins hierarchy finish: time=%.17g hydroMinRung=%d "
+                              "hydroMaxRung=%d gravityMinRung=%d gravityMaxRung=%d "
+                              "projected=%zu total=%zu terminal=%d\n",
+            time, minimumGasRung, maximumGasRung, minimumGravityRung, maximumGravityRung,
+            futureProjections, workspace.particles.size(), int(closingOnly));
     }
+    auto const treeWork = detail::hopkinsSourceTree.counters();
+    terminal::detailPrint("Hopkins tree: time=%.17g sorted=%llu updated=%llu refitted=%llu "
+                          "rebuilds=%llu candidates=%llu\n",
+        time, static_cast<unsigned long long>(treeWork.sourcesSorted),
+        static_cast<unsigned long long>(treeWork.sourcesUpdated),
+        static_cast<unsigned long long>(treeWork.nodesRefitted),
+        static_cast<unsigned long long>(treeWork.topologyRebuilds),
+        static_cast<unsigned long long>(treeWork.sourcesVisited));
+    detail::hopkinsTreePrepared = false;
     {
         profile::ScopedPhase cachePhase("hydro.hopkins.caches.clear");
         sphParticlesClearCaches();
@@ -1882,6 +2052,9 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
 }
 
 void hopkinsWriteCheckpoint(FILE* file) {
+    if (detail::hopkinsHierarchyPending) {
+        throw std::runtime_error("Cannot checkpoint an unfinished MFM gravity ladder");
+    }
     static_assert(sizeof(detail::HopkinsPairRecord) == 176);
     uint64_t header[4] = {detail::kHopkinsCacheMagic, 2, sizeof(detail::HopkinsPairRecord),
         hpxRank() == 0 ? uint64_t(detail::hopkinsPairs.size()) : 0};
@@ -1894,6 +2067,12 @@ void hopkinsWriteCheckpoint(FILE* file) {
 }
 
 void hopkinsReadCheckpoint(FILE* file) {
+    detail::hopkinsSourceTree.clear();
+    detail::hopkinsPrepared.reset();
+    detail::hopkinsTreePrepared = false;
+    detail::hopkinsHierarchyPending = false;
+    detail::hopkinsHierarchyWoken = 0;
+    detail::hopkinsHierarchyDriftThermal = 0.0;
     uint64_t header[4];
     FREAD(header, sizeof(uint64_t), 4, file);
     if (header[0] != detail::kHopkinsCacheMagic || header[1] != 2 ||

@@ -20,7 +20,7 @@ from run_checkpoint import checkManifest, fnv1a64
 from run_scenarios import check_bool, check_finite_rows, run_process, setting
 
 
-METHOD_OFFSETS = {"sph": 0, "mfm": 32, "mfv": 64}
+METHOD_OFFSETS = {"sph": 0, "mfm": 2032, "mfv": 2064}
 CASES = (("hydroWave", 0.04), ("sod", 0.02), ("gresho", 0.04), ("blast", 0.0001))
 
 
@@ -56,7 +56,8 @@ def particle_rank_state(path, method):
         raise RuntimeError(f"truncated gas header in {checkpoint}")
     header = struct.unpack_from("=7I", data, header_offset)
     expected_header = (0x43545350, prefix.gas_version + METHOD_OFFSETS[method], integer_bytes, 8, 12, 3, 4)
-    viscosity_bytes = {2: 0, 4: 8, 6: 12, 8: 12}.get(prefix.gas_version)
+    viscosity_version = prefix.gas_version - (1000 if prefix.header.flags & (1 << 6) else 0)
+    viscosity_bytes = {2: 0, 4: 8, 6: 12, 8: 12}.get(viscosity_version)
     if header != expected_header or viscosity_bytes is None or integer(header_offset + 28) != count:
         raise RuntimeError(f"unsupported {method} gas layout in {checkpoint}: {header}")
     positions_offset = start + 2 * integer_bytes
@@ -107,17 +108,18 @@ def particle_rank_state(path, method):
         if end + 12 > len(data):
             raise RuntimeError(f"missing meshless integration state in {path}")
         state_header = struct.unpack_from("=3I", data, end)
-        if state_header != (0x484f5053, 5, 400):
+        if state_header != (0x484f5053, 6, 464):
             raise RuntimeError(f"unsupported meshless integration state in {path}: {state_header}")
         state_offset = end + 12
-        cache_offset = state_offset + 400 * count
+        cache_offset = state_offset + 464 * count
         if cache_offset + 32 > len(data):
             raise RuntimeError(f"truncated meshless integration state in {path}")
         # Native AoS records have padding after each bool. Compare every named
         # field exactly without treating that padding as numerical state.
-        integration_state = [struct.unpack_from("=Q29d2Q?", data, state_offset + 400 * i) +
-                             struct.unpack_from("=15d?", data, state_offset + 400 * i + 264) +
-                             struct.unpack_from("=d", data, state_offset + 400 * i + 392)
+        integration_state = [struct.unpack_from("=Q29d2Q?", data, state_offset + 464 * i) +
+                             struct.unpack_from("=15d?", data, state_offset + 464 * i + 264) +
+                             struct.unpack_from("=d", data, state_offset + 464 * i + 392) +
+                             struct.unpack_from("=3Q4di?", data, state_offset + 464 * i + 400)
                              for i in range(count)]
         for index, state in enumerate(integration_state):
             if (not state[32] or not state[48] or
@@ -303,6 +305,13 @@ def check_conservation(initial, final, context):
 
 
 def check_activity(output, states, context, localities):
+    tree_records = [dict(re.findall(r"([A-Za-z]+)=([^\s]+)", match.group(1)))
+                    for match in re.finditer(r"Hopkins tree: ([^\n]+)", output)]
+    if len(tree_records) < 2 or not any(int(row["updated"]) > 0 and
+                                       int(row["sorted"]) == 0 and
+                                       int(row["rebuilds"]) == 0
+                                       for row in tree_records[1:]):
+        raise RuntimeError(f"{context} did not reuse persistent hydro tree topology")
     records = []
     for match in re.finditer(r"Hopkins step: ([^\n]+)", output):
         fields = dict(re.findall(r"([A-Za-z]+)=([^\s]+)", match.group(1)))
@@ -511,6 +520,7 @@ def main():
     parser.add_argument("--localities", type=int, default=1)
     parser.add_argument("--threads", type=int, choices=(1, 2), default=2,
                         help="HPX worker threads per locality")
+    parser.add_argument("--expansion-degree", type=int, default=6)
     parser.add_argument("--async-only", action="store_true",
                         help="run only the individual-rung conservation/restart fixtures")
     parser.add_argument("--wake-only", action="store_true",
@@ -523,7 +533,7 @@ def main():
                         help="restrict --matrix-only to this far-field solver")
     parser.add_argument("--near-method", choices=("pp", "fmm"),
                         help="restrict --matrix-only PMMM cases to this near-field solver")
-    parser.add_argument("--time-integrator", choices=("traditional", "global"),
+    parser.add_argument("--time-integrator", choices=("traditional", "global", "hierarchical"),
                         help="restrict --matrix-only to this integrator")
     parser.add_argument("--cuda", action="store_true",
                         help="use CUDA gravity and drift for --matrix-only; Hopkins hydro remains on the CPU")
@@ -556,7 +566,7 @@ def main():
                   "initial.particlesPerDimension": 8,
                   "hydro.enabled": "true", "gravity.enabled": "false",
                   "run.timeIntegrator": "traditional", "gravity.method.far": "fmm",
-                  "gravity.expansionDegree": 6, "starFormation.enabled": "false",
+                  "gravity.expansionDegree": args.expansion_degree, "starFormation.enabled": "false",
                   "chemistry.enabled": "false", "gravity.cuda": "false",
                   "compute.positionType": "fixed64",
                   "analysis.groups": "false", "analysis.tracers": "false",
@@ -757,6 +767,8 @@ def main():
         for far, near in solvers:
             for integrator in integrators:
                 for method in ("mfm", "mfv"):
+                    if integrator == "hierarchical" and method == "mfv":
+                        continue
                     solver = far + ("_" + near if near else "")
                     name = f"{method}_{solver}_{integrator}"
                     directory = prepare(name)
@@ -795,8 +807,8 @@ def main():
                         check_finite_rows(destination / filename)
                     states = []
                     expected_algorithms = (1, {"fmm": 1, "pmmm": 2}[far],
-                                           {None: 0, "pp": 1, "fmm": 2}[near], 7,
-                                           {"traditional": 0, "global": 2}[integrator])
+                                           {None: 0, "pp": 1, "fmm": 2}[near], args.expansion_degree + 1,
+                                           {"traditional": 0, "hierarchical": 1, "global": 2}[integrator])
                     for step in range(1, 4):
                         checkpoint = destination / f"checkpoint.{step}"
                         check_manifest(checkpoint, step, "hydroWave", values["run.endTime"],

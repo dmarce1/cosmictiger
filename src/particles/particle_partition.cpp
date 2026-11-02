@@ -4,6 +4,9 @@
 #include <type_traits>
 
 #include <cosmictiger/particles/particles.hpp>
+#if COSMICTIGER_WITH_SPH
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#endif
 
 namespace detail {
 
@@ -58,6 +61,16 @@ void particlesSwap(ParticleInteger first, ParticleInteger second) {
     if (options.hydro.enabled) {
         detail::swapParticleBytes(particlesSph[first], particlesSph[second]);
         detail::swapParticleBytes(particlesTy[first], particlesTy[second]);
+#if COSMICTIGER_WITH_SPH
+        if (usesHierarchicalIntegration(options.run)) {
+            if (particlesTy[first] == kSphType) {
+                sphParticlesParticleIndex(particlesSph[first]) = first;
+            }
+            if (particlesTy[second] == kSphType) {
+                sphParticlesParticleIndex(particlesSph[second]) = second;
+            }
+        }
+#endif
     }
     if (options.starFormation.enabled) {
         detail::swapParticleBytes(

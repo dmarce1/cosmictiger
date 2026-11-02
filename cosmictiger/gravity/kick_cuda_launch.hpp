@@ -518,11 +518,17 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
         gasKick ? &sphParticlesGravityAcceleration(kYDimension, 0) : nullptr;
     data.sphGravityAccelerationZ =
         gasKick ? &sphParticlesGravityAcceleration(kZDimension, 0) : nullptr;
+    data.sphGravityTimestep = gasKick ? sphParticlesGravityTimesteps : nullptr;
+    data.hopkinsStates = gasKick && kparams.htime && getOptions().hydro.method == "mfm" ?
+        sphParticlesHopkinsStates :
+        nullptr;
 #else
     data.catIndex = nullptr;
     data.sphGravityAccelerationX = nullptr;
     data.sphGravityAccelerationY = nullptr;
     data.sphGravityAccelerationZ = nullptr;
+    data.sphGravityTimestep = nullptr;
+    data.hopkinsStates = nullptr;
 #endif
     if (kparams.forceOnly) {
         ALWAYS_ASSERT(output.potential != nullptr && output.acceleration[kXDimension] != nullptr);

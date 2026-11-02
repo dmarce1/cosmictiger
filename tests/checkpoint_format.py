@@ -40,6 +40,28 @@ class DomainEntry(ctypes.Structure):
     _fields_ = [("key", ctypes.c_size_t), ("domain", Domain)]
 
 
+class HierarchicalSource(ctypes.Structure):
+    """Native sph_hierarchical::SourceState, including padding before epoch."""
+    _fields_ = [("id", ctypes.c_uint64)]
+    _fields_ += [(name, ctypes.c_double * 3) for name in
+                 ("position", "drift_velocity", "synchronized_velocity", "hydro_acceleration")]
+    _fields_ += [(name, ctypes.c_double) for name in
+                 ("internal_energy", "internal_energy_rate", "density", "log_density_rate",
+                  "physical_divergence", "support_radius", "minimum_support_radius",
+                  "maximum_support_radius", "grad_h_correction", "grad_h_correction_rate",
+                  "balsara_factor", "viscosity_alpha", "pressure_energy_ratio", "adiabatic_index")]
+    _fields_ += [("rung", ctypes.c_int)]
+    _fields_ += [(name, ctypes.c_double) for name in ("epoch", "valid_until", "drift_scale")]
+
+
+def hierarchical_source_values(source):
+    values = []
+    for name, layout in source._fields_:
+        value = getattr(source, name)
+        values.extend(value if issubclass(layout, ctypes.Array) else (value,))
+    return tuple(values)
+
+
 def local_domain_type(integer_bytes):
     class LocalDomain(ctypes.Structure):
         _fields_ = [("box", ctypes.c_double * 6), ("process_range", ctypes.c_int * 2),
@@ -145,7 +167,10 @@ def read_prefix(data):
         require(version == 1 and math.isfinite(result.driver.global_timestep)
                 and result.driver.global_timestep >= 0, "invalid checkpoint global timestep")
     result.particle_start = reader.offset
-    result.gas_version = (90 if stars else 80 if cooling else 2) + viscosity_offset
+    result.has_hierarchical_sph = (hydro and bool(flags & (1 << 6)) and
+                                   ((header.reserved >> 25) & 3) == 0)
+    result.gas_version = ((90 if stars else 80 if cooling else 2) + viscosity_offset
+                          + (1000 if hydro and flags & (1 << 6) else 0))
     result.reader = reader
     return result
 
@@ -169,6 +194,7 @@ def decode_checkpoint(data, ranks=1):
     result.types = reader.take("b", count) if result.hydro else (0,) * count
     result.gas_indices = reader.take(integer_code, count) if result.hydro else ()
     result.cooling, result.stars = (), ()
+    result.hierarchical_sources, result.hierarchical_bytes = (), b""
     result.gas = [() for _ in range(gas_count)]
     if result.hydro:
         result.gas_start = reader.offset
@@ -182,8 +208,15 @@ def decode_checkpoint(data, ranks=1):
         scalars = [reader.take("f", gas_count) for _ in range(3)]
         flags = [reader.take("B", gas_count) for _ in range(2)]
         vectors = [reader.take("f", gas_count) for _ in range(6)]
+        if result.has_hierarchical_sph:
+            anchor_start = reader.offset
+            result.hierarchical_sources = tuple(
+                hierarchical_source_values(reader.native(HierarchicalSource))
+                for _ in range(gas_count))
+            result.hierarchical_bytes = data[anchor_start:reader.offset]
         # Versions 2/4/6/8 and 80/82/84/86 have different fixed-state bases.
-        delta = result.gas_version - (90 if result.has_stars else 80 if result.has_cooling else 2)
+        delta = (result.gas_version - (90 if result.has_stars else 80 if result.has_cooling else 2)
+                 - (1000 if result.has_hierarchical_sph else 0))
         width = {0: 0, 2: 2, 4: 3, 6: 3}[delta]
         viscosity = reader.take("f", width * gas_count)
         if result.has_cooling:
@@ -230,7 +263,8 @@ def decode_checkpoint(data, ranks=1):
     require(not result.header.flags & (1 << 7), "lightcone checkpoint decoding is unsupported")
     require(reader.offset == len(data), "trailing unparsed checkpoint data")
     require(all(math.isfinite(value) for value in result.velocities) and
-            all(math.isfinite(value) for gas in result.gas for value in gas),
+            all(math.isfinite(value) for gas in result.gas for value in gas) and
+            all(math.isfinite(value) for source in result.hierarchical_sources for value in source),
             "nonfinite checkpoint particle state")
     result.physical = data[result.particle_start:result.particle_end]
     return result

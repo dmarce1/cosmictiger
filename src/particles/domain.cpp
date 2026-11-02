@@ -16,6 +16,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include <hpx/serialization/array.hpp>
 #include <hpx/serialization/output_archive.hpp>
 #include <hpx/threading_base/annotated_function.hpp>
 
@@ -32,6 +33,7 @@
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/particles/sph_migration.hpp>
 #endif
 
 constexpr bool kVerbose = true;
@@ -585,6 +587,8 @@ struct GasMigrationState {
     float divergence;         // Previous physical divergence for Cullen-Dehnen and Price et al.
     gadget4::State chemistry;
     Pair<float> chemistryEos;
+    sph_hierarchical::SourceState hierarchicalState;
+    float gradHCorrection, balsaraFactor;
     template <class Archive>
     void serialize(Archive& arc, unsigned) {
         arc & acceleration;
@@ -615,6 +619,11 @@ struct GasMigrationState {
         if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
             arc & chemistryEos;
         }
+        if (getOptions().run.hierarchicalGravity && getOptions().hydro.method == "sph") {
+            arc & hierarchicalState;
+            arc & gradHCorrection;
+            arc & balsaraFactor;
+        }
     }
 };
 struct SphMigrationParticle {
@@ -629,6 +638,7 @@ struct SphMigrationParticle {
     }
 };
 static Vector<SphMigrationParticle> retainedSphParticles;
+static detail::SphMigrationSuffix<ParticleInteger> hierarchicalSphMigration;
 struct SphMigrationParcel {
     int sourceRank;
     size_t sequence;
@@ -676,6 +686,12 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
         if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
             gas.chemistryEos = sphParticlesChemistryEos[i];
         }
+        if (getOptions().run.hierarchicalGravity && getOptions().hydro.method == "sph") {
+            gas.hierarchicalState = sphParticlesHierarchicalStates[i];
+            gas.gradHCorrection = sphParticlesGradHCorrections[i];
+            gas.balsaraFactor =
+                getOptions().hydro.balsaraSwitch ? sphParticlesBalsaraFactors[i] : 1.0f;
+        }
         for (int dim = 0; dim < kDimensions; dim++) {
             gas.predictedAcceleration[dim] = sphParticlesPredictedAccelerations[dim][i];
             gas.gravityAcceleration[dim] = sphParticlesGravityAccelerations[dim][i];
@@ -720,13 +736,151 @@ static void unpackSphParticle(
         if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
             sphParticlesChemistryEos[i] = gas.chemistryEos;
         }
+        if (getOptions().run.hierarchicalGravity && getOptions().hydro.method == "sph") {
+            sphParticlesHierarchicalStates[i] = gas.hierarchicalState;
+            sphParticlesGradHCorrections[i] = gas.gradHCorrection;
+            if (getOptions().hydro.balsaraSwitch) {
+                sphParticlesBalsaraFactors[i] = gas.balsaraFactor;
+            }
+        }
         for (int dim = 0; dim < kDimensions; dim++) {
             sphParticlesPredictedAccelerations[dim][i] = gas.predictedAcceleration[dim];
             sphParticlesGravityAccelerations[dim][i] = gas.gravityAcceleration[dim];
         }
     }
 }
+static void beginHierarchicalSphMigration(int rung) {
+    if (hpxSize() == 1) {
+        return;
+    }
+    auto const range = particlesCurrentRange();
+    hierarchicalSphMigration = detail::planSphMigrationSuffix(
+        range.first, range.second, particlesSize(), sphParticlesSize(), [](ParticleInteger index) {
+            if (particlesType(index) != kSphType) {
+                return kNoParticleIndex;
+            }
+            ParticleInteger const gasIndex = particlesCatIndex(index);
+            if (gasIndex < 0) {
+                throw std::logic_error("Missing gas slot in hierarchical SPH migration");
+            }
+            return gasIndex;
+        });
+    retainedSphParticles.clear();
+    Vector<hpx::future<void>> pending;
+    try {
+        for (auto const& child : hpxChildren()) {
+            pending.push_back(hpx::async<DomainsBeginAction>(child, rung));
+        }
+        auto const box = domainsFindMyBox();
+        std::unordered_map<int, Vector<SphMigrationParticle>> sends;
+        size_t parcelSequence = 0;
+        size_t const parcelCapacity = domainsMigrationParcelCapacity(true);
+        // The inactive prefix and its rung-stack offsets remain untouched.
+        // Faster particles in the suffix may already be at a later physical
+        // time, so only this completed rung is eligible to leave its domain.
+        for (ParticleInteger i = range.first; i < range.second; ++i) {
+            if (particlesType(i) == kSphType) {
+                ParticleInteger const gasIndex = particlesCatIndex(i);
+                sphParticlesParticleIndex(gasIndex) = i;
+            }
+            auto record = packSphParticle(i);
+            if (record.part.r != rung) {
+                retainedSphParticles.push_back(std::move(record));
+                continue;
+            }
+            Vector3<double> x;
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                x[dim] = positionDomainCoordinate(record.part.x[dim]);
+            }
+            if (box.contains(x)) {
+                retainedSphParticles.push_back(std::move(record));
+            } else {
+                auto const rank = findParticleDomain(x);
+                auto& send = sends[rank];
+                send.push_back(std::move(record));
+                if (send.size() >= parcelCapacity) {
+                    pending.push_back(hpx::async<ReceiveSphParticlesAction>(
+                        hpxLocalities()[rank], std::move(send), hpxRank(), parcelSequence++));
+                    send.clear();
+                }
+            }
+        }
+        for (auto& entry : sends) {
+            if (!entry.second.empty()) {
+                pending.push_back(
+                    hpx::async<ReceiveSphParticlesAction>(hpxLocalities()[entry.first],
+                        std::move(entry.second), hpxRank(), parcelSequence++));
+            }
+        }
+    } catch (...) {
+        hpx::wait_all(pending.begin(), pending.end());
+        throw;
+    }
+    hpx::wait_all(pending.begin(), pending.end());
+    for (auto& future : pending) {
+        future.get();
+    }
+}
+
+static void endHierarchicalSphMigration() {
+    if (hpxSize() == 1) {
+        return;
+    }
+    Vector<hpx::future<void>> pending;
+    try {
+        for (auto const& child : hpxChildren()) {
+            pending.push_back(hpx::async<DomainsEndAction>(child));
+        }
+        if (particlesCurrentRange().first != hierarchicalSphMigration.begin ||
+            particlesSize() != hierarchicalSphMigration.end) {
+            throw std::logic_error("Hierarchical SPH migration range changed before completion");
+        }
+        std::sort(receivedSphParticles.begin(), receivedSphParticles.end(),
+            [](auto const& first, auto const& second) {
+                return first.sourceRank < second.sourceRank ||
+                    (first.sourceRank == second.sourceRank && first.sequence < second.sequence);
+            });
+        for (auto& parcel : receivedSphParticles) {
+            for (auto& record : parcel.particles) {
+                retainedSphParticles.push_back(std::move(record));
+            }
+        }
+        receivedSphParticles.clear();
+        ParticleInteger gasCount = 0;
+        for (auto const& record : retainedSphParticles) {
+            gasCount += record.part.type == kSphType;
+        }
+        // Removing high slots first keeps every remaining old slot valid.
+        // A displaced inactive gas slot repairs its main-particle category
+        // index in sphParticlesRemove; the main inactive prefix never moves.
+        for (auto const gasIndex : hierarchicalSphMigration.gasIndices) {
+            sphParticlesRemove(gasIndex);
+        }
+        ParticleInteger gasIndex = sphParticlesSize();
+        particlesResize(hierarchicalSphMigration.begin + retainedSphParticles.size());
+        sphParticlesResize(gasIndex + gasCount, false);
+        for (size_t i = 0; i < retainedSphParticles.size(); ++i) {
+            unpackSphParticle(
+                retainedSphParticles[i], hierarchicalSphMigration.begin + i, gasIndex);
+            gasIndex += retainedSphParticles[i].part.type == kSphType;
+        }
+        hierarchicalSphMigration.gasIndices.clear();
+        retainedSphParticles.clear();
+    } catch (...) {
+        hpx::wait_all(pending.begin(), pending.end());
+        throw;
+    }
+    hpx::wait_all(pending.begin(), pending.end());
+    for (auto& future : pending) {
+        future.get();
+    }
+}
+
 static void beginSphMigration(int rung) {
+    if (usesHierarchicalIntegration(getOptions().run)) {
+        beginHierarchicalSphMigration(rung);
+        return;
+    }
     Vector<hpx::future<void>> pending;
     for (auto const& child : hpxChildren()) {
         pending.push_back(hpx::async<DomainsBeginAction>(child, rung));
@@ -768,6 +922,10 @@ static void beginSphMigration(int rung) {
     }
 }
 static void endSphMigration() {
+    if (usesHierarchicalIntegration(getOptions().run)) {
+        endHierarchicalSphMigration();
+        return;
+    }
     Vector<hpx::future<void>> pending;
     for (auto const& child : hpxChildren()) {
         pending.push_back(hpx::async<DomainsEndAction>(child));

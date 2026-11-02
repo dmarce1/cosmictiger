@@ -2014,16 +2014,18 @@ if(BUILD_TESTING)
         target_include_directories(hopkins_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_options(hopkins_test PRIVATE -fno-fast-math -ffp-contract=off)
         cosmictiger_add_gtest(NAME hopkins TARGET hopkins_test PROPERTIES TIMEOUT 30 LABELS "hopkins;cpu")
-        set(cosmictiger_hopkins_flops_integrator traditional)
-        if(NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
-            set(cosmictiger_hopkins_flops_integrator global)
+        if(COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL OR COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
+            set(cosmictiger_hopkins_flops_integrator traditional)
+            if(NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+                set(cosmictiger_hopkins_flops_integrator global)
+            endif()
+            add_test(NAME hopkins_flops_application COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_hopkins_flops.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/hopkins_flops_application
+                --time-integrator ${cosmictiger_hopkins_flops_integrator})
+            set_tests_properties(hopkins_flops_application PROPERTIES
+                TIMEOUT 180 PROCESSORS 2 LABELS "hopkins;flops;cpu")
         endif()
-        add_test(NAME hopkins_flops_application COMMAND ${Python3_EXECUTABLE}
-            ${PROJECT_SOURCE_DIR}/tests/run_hopkins_flops.py $<TARGET_FILE:cosmictiger>
-            ${PROJECT_BINARY_DIR}/tests/hopkins_flops_application
-            --time-integrator ${cosmictiger_hopkins_flops_integrator})
-        set_tests_properties(hopkins_flops_application PROPERTIES
-            TIMEOUT 180 PROCESSORS 2 LABELS "hopkins;flops;cpu")
         if(COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL AND COSMICTIGER_ENABLE_FMM AND
                 COSMICTIGER_POSITION_TYPE STREQUAL "fixed64" AND
                 COSMICTIGER_MIN_EXPANSION_DEGREE LESS_EQUAL 6 AND
@@ -2044,7 +2046,7 @@ if(BUILD_TESTING)
         if(COSMICTIGER_POSITION_TYPE STREQUAL "fixed64" AND
                 COSMICTIGER_MIN_EXPANSION_DEGREE LESS_EQUAL 6 AND
                 COSMICTIGER_MAX_EXPANSION_DEGREE GREATER_EQUAL 6)
-            foreach(hopkins_integrator IN ITEMS traditional global)
+            foreach(hopkins_integrator IN ITEMS traditional global hierarchical)
                 string(TOUPPER "${hopkins_integrator}" hopkins_integrator_feature)
                 if(NOT COSMICTIGER_ENABLE_INTEGRATOR_${hopkins_integrator_feature})
                     continue()
@@ -2810,4 +2812,66 @@ if(BUILD_TESTING)
             target_link_libraries(${test_target} PRIVATE cosmictiger_default_config)
         endif()
     endforeach()
+endif()
+
+# Motion bounds are shared by fixed-mass hydro methods and independent of HPX.
+if(BUILD_TESTING AND COSMICTIGER_WITH_SPH)
+    add_executable(hydro_source_tree_test tests/hydro_source_tree.cpp)
+    target_include_directories(hydro_source_tree_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_options(hydro_source_tree_test PRIVATE -ffast-math)
+    add_test(NAME hydro_source_tree COMMAND hydro_source_tree_test)
+    set_tests_properties(hydro_source_tree PROPERTIES TIMEOUT 30 LABELS "hydro;cpu;hierarchical")
+    if(COSMICTIGER_ENABLE_HOPKINS)
+        foreach(impulse_mode IN ITEMS strict fast)
+            set(impulse_target hopkins_gravity_impulse_${impulse_mode}_test)
+            add_executable(${impulse_target} tests/hopkins_gravity_impulse.cpp)
+            target_include_directories(${impulse_target} PRIVATE ${PROJECT_SOURCE_DIR})
+            if(impulse_mode STREQUAL "fast")
+                target_compile_options(${impulse_target} PRIVATE -ffast-math)
+            else()
+                target_compile_options(${impulse_target} PRIVATE -fno-fast-math)
+            endif()
+            add_test(NAME hopkins_gravity_impulse_${impulse_mode} COMMAND ${impulse_target})
+            set_tests_properties(hopkins_gravity_impulse_${impulse_mode} PROPERTIES
+                TIMEOUT 30 LABELS "hopkins;cpu;hierarchical")
+        endforeach()
+    endif()
+    if(COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL)
+        add_executable(sph_hierarchical_sources_test tests/sph/hierarchical_sources.cpp)
+        target_include_directories(sph_hierarchical_sources_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_options(sph_hierarchical_sources_test PRIVATE -ffast-math)
+        add_test(NAME sph_hierarchical_sources COMMAND sph_hierarchical_sources_test)
+        set_tests_properties(sph_hierarchical_sources PROPERTIES TIMEOUT 30 LABELS "sph;cpu;hierarchical")
+        add_executable(sph_migration_test tests/particles/sph_migration.cpp)
+        target_include_directories(sph_migration_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_link_libraries(sph_migration_test PRIVATE GTest::gtest_main)
+        add_test(NAME sph_migration COMMAND sph_migration_test)
+        set_tests_properties(sph_migration PROPERTIES
+            TIMEOUT 30 LABELS "sph;cpu;hierarchical")
+        if(COSMICTIGER_ENABLE_FMM AND COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
+            add_test(NAME sph_hierarchical_application COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_hierarchical_sph.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/sph_hierarchical_application --fresh-run-directory
+                --self-gravity --mass-solar 1e24 --gravity-softening 0.25
+                --reference global --refine --restart)
+            set_tests_properties(sph_hierarchical_application PROPERTIES
+                TIMEOUT 600 PROCESSORS 2 RUN_SERIAL TRUE LABELS "sph;cpu;hierarchical")
+            add_test(NAME sph_hierarchical_blast COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_hierarchical_sph.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/sph_hierarchical_blast --fresh-run-directory
+                --scenario blast --end-time 0.004 --coarse-steps 2
+                --self-gravity --mass-solar 1e24 --gravity-softening 0.25
+                --reference global --restart --require-mixed-rungs --require-work-savings)
+            set_tests_properties(sph_hierarchical_blast PROPERTIES
+                TIMEOUT 600 PROCESSORS 2 RUN_SERIAL TRUE LABELS "sph;cpu;hierarchical")
+            if(COSMICTIGER_ENABLE_HOPKINS AND COSMICTIGER_POSITION_TYPE STREQUAL "fixed64")
+                add_test(NAME hopkins_hierarchical_application COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/run_hierarchical_mfm.py $<TARGET_FILE:cosmictiger>
+                    ${PROJECT_BINARY_DIR}/tests/hopkins_hierarchical_application
+                    --fresh-run-directory)
+                set_tests_properties(hopkins_hierarchical_application PROPERTIES
+                    TIMEOUT 1200 PROCESSORS 2 RUN_SERIAL TRUE LABELS "hopkins;cpu;hierarchical")
+            endif()
+        endif()
+    endif()
 endif()

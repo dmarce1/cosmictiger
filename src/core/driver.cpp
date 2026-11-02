@@ -68,6 +68,9 @@
 #include <cosmictiger/scenarios/scenario.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/hydro/sph/sph.hpp>
+#if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
+#include <cosmictiger/hydro/sph/hierarchical.hpp>
+#endif
 #if COSMICTIGER_ENABLE_CHEMISTRY
 #include <cosmictiger/hydro/sph/sph_chemistry.hpp>
 #endif
@@ -960,7 +963,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
                         sphAdvanced = true;
                     } else {
 #if COSMICTIGER_ENABLE_HOPKINS
-                        hopkinsPrepareGeometry(scale, scaleDerivative);
+                        hopkinsPrepareGeometry(scale, scaleDerivative, time);
 #endif
                     }
                     joinGravity();
@@ -1117,8 +1120,20 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
     hpx::future<void>* lcFut, bool nocrop, double drag, int gravityErrorStep, bool closingOnly) {
     // A terminal energy evaluation consumes only the outstanding closing
     // ladder. The saved checkpoint retains the original staggered momenta.
-    nocrop = nocrop || closingOnly;
+    nocrop = nocrop || closingOnly || getOptions().hydro.enabled;
+    bool const selfGravity = getOptions().gravity.enabled;
     bool const meshGravity = usesMeshGravity(getOptions().gravity);
+    bool const hierarchicalMfm = getOptions().hydro.enabled && getOptions().hydro.method == "mfm";
+    int hydroDepth = minrung;
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_HOPKINS
+    if (hierarchicalMfm) {
+        auto const hydro =
+            hopkinsHierarchicalBegin(minrung, scale, scale * adot, tau, t0, *energies, closingOnly);
+        hydroDepth = std::max(hydroDepth, hydro.maximumRung);
+    }
+#endif
+    EnergiesT const hydroClosed = *energies;
+    int descendedDepth = minrung;
     Timer tm;
     KickReturn kr;
     //	minrung = std::max(minrung, 1);
@@ -1216,7 +1231,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
          terminal::detailPrint("drift = %e\n", tm.read());
          }*/
         int minimumTreeLevel = 0;
-        if (top && gravityErrorStep >= 0) {
+        if (selfGravity && top && gravityErrorStep >= 0) {
             profile::profileBegin("gravityError");
             gravityErrorBegin();
             profile::profileEnd();
@@ -1224,7 +1239,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         tm.reset();
         tm.start();
 #if COSMICTIGER_ENABLE_FMM
-        if (!meshGravity) {
+        if (selfGravity && !meshGravity) {
             TreeCreateParameters tparams(levels[li], theta, 0.f);
             profile::profileBegin("treeCreate");
             treeCreate(tparams);
@@ -1257,6 +1272,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         kparams.gravitySupportRadius = getOptions().gravity.supportRadius;
         kparams.a = scale;
         kparams.firstCall = tau == 0.0;
+        kparams.deferGasOpening = top && getOptions().hydro.enabled && !hierarchicalMfm;
         kparams.minRung = levels[li];
         kparams.doPhi = top && (doPhi || saveParticlePotential(getOptions().analysis));
         kparams.t0 = t0;
@@ -1285,15 +1301,18 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
 #endif
         }
         KickReturn thisKr;
+        if (!selfGravity) {
+            thisKr.maxRung = top ? 0 : maxRung;
+        }
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
-        if (meshGravity) {
+        if (selfGravity && meshGravity) {
             profile::profileBegin("pmmmKick");
             thisKr = pmmmKick(kparams);
             profile::profileEnd();
         }
 #endif
 #if COSMICTIGER_ENABLE_FMM
-        if (!meshGravity) {
+        if (selfGravity && !meshGravity) {
             profile::profileBegin("kick");
             thisKr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
             profile::profileEnd();
@@ -1304,10 +1323,50 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             setGravityCounterUse(false);
 #endif
         }
-        if (top && gravityErrorStep >= 0) {
+        if (selfGravity && top && gravityErrorStep >= 0) {
             profile::profileBegin("gravityError");
             gravityErrorFinish(gravityErrorStep, tau, scale);
             profile::profileEnd();
+        }
+#if COSMICTIGER_WITH_SPH
+        if (top && getOptions().hydro.enabled && !hierarchicalMfm) {
+            profile::ScopedPhase phase("sphHierarchical");
+            auto const hydro =
+                sphHierarchicalStep(levels[li], scale, scale * adot, tau, t0, closingOnly);
+            // Gravity retained the old gas rungs until hydro closed its interval.
+            // Only the actual proposals may determine the next suffix-stack level.
+            thisKr.maxRung = hydro.run.maximumRung;
+            energies->tckin += hydro.kineticDelta;
+            energies->heating += hydro.heating;
+            if (selfGravity) {
+                thisKr.kin += hydro.kineticDelta;
+                thisKr.xmom += hydro.xMomentumDelta;
+                thisKr.ymom += hydro.yMomentumDelta;
+                thisKr.zmom += hydro.zMomentumDelta;
+                thisKr.nmom += hydro.momentumNormDelta;
+            } else {
+                thisKr.kin = hydro.kineticEnergy;
+                thisKr.xmom = hydro.xMomentum;
+                thisKr.ymom = hydro.yMomentum;
+                thisKr.zmom = hydro.zMomentum;
+                thisKr.nmom = hydro.momentumNorm;
+            }
+            if (levels[li] == minrung0 || closingOnly) {
+                energies->therm = hydro.thermalEnergy / sqr(scale);
+                synchronizedChemistryPressure = (getOptions().hydro.gamma - 1.0) * energies->therm;
+            }
+            if (!closingOnly && selfGravity) {
+                thisKr.dkin += sphHierarchicalOpenGravity(
+                    levels[li], kparams.sign * 0.5 * rungDt[levels[li]] * t0);
+            }
+        }
+#endif
+        if (top && hierarchicalMfm && !selfGravity) {
+            thisKr.kin = hydroClosed.kin * sqr(scale);
+            thisKr.xmom = hydroClosed.xmom * scale;
+            thisKr.ymom = hydroClosed.ymom * scale;
+            thisKr.zmom = hydroClosed.zmom * scale;
+            thisKr.nmom = hydroClosed.nmom * scale;
         }
         energies->tckin += thisKr.dkin;
         tm.stop();
@@ -1326,12 +1385,15 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         }
         if (closingOnly && top) {
 #if COSMICTIGER_ENABLE_FMM
-            if (!meshGravity) {
+            if (selfGravity && !meshGravity) {
                 profile::ScopedPhase phase("kick.cleanup");
                 treeReset();
             }
 #endif
             break;
+        }
+        if (hierarchicalMfm) {
+            thisKr.maxRung = std::max(thisKr.maxRung, hydroDepth);
         }
         if (clipTop && top) {
             levels.push_back(minrung0 + 1);
@@ -1344,6 +1406,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         }
         tm.stop();
         if ((!ascending || top) && !(clipTop && top)) {
+            descendedDepth = levels[li];
             tm.reset();
             tm.start();
             double const dt = rungDt[levels[li]] * t0;
@@ -1357,6 +1420,11 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
                 double adotWork = adot;
                 a = 1.0 / cosmosAinv(adotWork, scaleWork, dt);
             }
+#if COSMICTIGER_WITH_SPH
+            if (getOptions().hydro.enabled && !hierarchicalMfm) {
+                energies->tckin += sphHierarchicalOpen(levels[li], tau, dt, a);
+            }
+#endif
             profile::profileBegin("drift");
             driftRungEverywhere(
                 a, dt, tau, tau + dt, getOptions().run.numberOfSteps * t0, levels[li], drag);
@@ -1365,7 +1433,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             // PRINT("Drift took %e\n", tm.read());
         }
 #if COSMICTIGER_ENABLE_FMM
-        if (!meshGravity) {
+        if (selfGravity && !meshGravity) {
             profile::ScopedPhase phase("kick.cleanup");
             treeReset();
             particlesCacheFree();
@@ -1376,6 +1444,28 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         }
     }
     //	PRINT("done climbing kick ladder\n");
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_HOPKINS
+    if (hierarchicalMfm) {
+        auto const hydro = hopkinsHierarchicalFinish(
+            minrung, scale, scale * adot, tau, t0, *energies, closingOnly);
+        if (!closingOnly) {
+            // Hydro owns an independent clock. Additional levels have no gravity
+            // particles, but retain the suffix-stack depth for the union clock.
+            while (descendedDepth < hydro.maximumRung) {
+                particlesPushRungs();
+                particlesSortByRung(++descendedDepth);
+            }
+            // A reduced hydro maximum may leave empty levels already opened.
+            // Keep their depth until a later aligned ascent pops them normally.
+            kr.maxRung = descendedDepth;
+        }
+    }
+#endif
+#if COSMICTIGER_WITH_SPH
+    if (getOptions().hydro.enabled && !hierarchicalMfm) {
+        sphHierarchicalReportWork(minrung, tau);
+    }
+#endif
     if (clipTop) {
         minrung++;
     }
@@ -1894,7 +1984,10 @@ void driver() {
             bool rebound = false;
             if (tau == 0.0) {
                 rebound = true;
-            } else if (minrung == 0) {
+            } else if (minrung == 0 &&
+                !(getOptions().run.hierarchicalGravity && getOptions().hydro.enabled)) {
+                // A full reorder invalidates the saved rung suffix stack. Keep
+                // the initial decomposition until a synchronized rebuild exists.
                 //				PRINT("Checking imbalance\n");
                 double imbalance = domainsGetLoadImbalance();
                 rebound = (imbalance > kMaxLoadImbalance);
@@ -1954,7 +2047,7 @@ void driver() {
             int const errorInterval = getOptions().gravity.errorInterval;
             int const gravityErrorStep =
                 outputDue && errorInterval > 0 && outputStep % errorInterval == 0 ? outputStep : -1;
-            if (!getOptions().run.hierarchicalGravity || !getOptions().gravity.enabled) {
+            if (!getOptions().run.hierarchicalGravity) {
                 tmp = advanceForces(minrung, a, a * adot, tau, t0, theta, tau == 0.0, fullEval,
                     energies, gravityErrorStep, false, params.globalTimestep, globalStepCap);
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
@@ -2010,11 +2103,18 @@ void driver() {
             // For monatomic gamma=5/3 this reduces to the historical -(K+U).
             // Peebles, Large-Scale Structure of the Universe (1980), energy
             // equation; the gas term follows directly from dU=-P dV.
+            double driftThermal = energies.therm;
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_HOPKINS
+            if (getOptions().run.hierarchicalGravity && getOptions().hydro.enabled &&
+                getOptions().hydro.method == "mfm") {
+                driftThermal = hopkinsHierarchicalDriftThermalEnergy();
+            }
+#endif
             energies.cosmic += cosmology::kineticExpansionWork(a0, a, energies.tckin) +
                 (a - a0) *
                     ((getOptions().chemistry.enabled || getOptions().starFormation.enabled) ?
-                            -energies.therm + 3.0 * synchronizedChemistryPressure :
-                            (3.0 * getOptions().hydro.gamma - 4.0) * energies.therm);
+                            -driftThermal + 3.0 * synchronizedChemistryPressure :
+                            (3.0 * getOptions().hydro.gamma - 4.0) * driftThermal);
             double const dyears =
                 physicalInterval * getOptions().units.timeSeconds / constants::kSpyr;
             auto const z0 = 1.0 / a0 - 1.0;
@@ -2042,7 +2142,7 @@ void driver() {
             //			PRINT("%e %e\n", a1, a);
             Timer dtm;
             dtm.start();
-            if (!getOptions().run.hierarchicalGravity || !getOptions().gravity.enabled) {
+            if (!getOptions().run.hierarchicalGravity) {
                 profile::profileBegin("drift");
                 drift(driftScale, dt, tau, tau + dt, tauMax);
                 profile::profileEnd();
@@ -2194,7 +2294,7 @@ void driver() {
         double const t0 = tauMax / getOptions().run.numberOfSteps;
         double const theta = getOptions().gravity.openingAngle;
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
-        if (getOptions().run.hierarchicalGravity && getOptions().gravity.enabled) {
+        if (getOptions().run.hierarchicalGravity) {
             int minimumRung = minrung0;
             kickStepHierarchical(minimumRung, maxRung, a, adot, tau, t0, theta, &finalEnergies,
                 minrung0, true, nullptr, true, 0.0, -1, true);

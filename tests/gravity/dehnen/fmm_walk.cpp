@@ -29,6 +29,9 @@
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_interaction_counts.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#if COSMICTIGER_WITH_SPH
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#endif
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/drift.hpp>
@@ -173,6 +176,153 @@ TreeId fmmWalkAddNode(Vector3<Position> const& position, float radius,
     }
     return TreeId{hpxRank(), int(treeAddRemote(node))};
 }
+
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
+void fmmWalkHierarchicalGasCoupling() {
+    auto const saved = getOptions();
+    auto options = saved;
+    options.hydro.enabled = true;
+    options.hydro.method = "sph";
+    options.hydro.viscosityEvolution = "none";
+    options.chemistry.enabled = false;
+    options.starFormation.enabled = false;
+    options.gravity.cuda = false;
+    options.run.timeIntegrator = "hierarchical";
+    options.run.hierarchicalGravity = true;
+    options.run.scenario = "hydroWave";
+    options.initial.darkMatterMass = 3.0;
+    options.initial.gasMass = 2.0;
+    setOptions(options);
+    // This fixture runs first, so particle allocation includes its gas arrays.
+    sphParticlesResize(1, false);
+    fmmWalkPrepareArena();
+    particlesType(0) = kSphType;
+    particlesCatIndex(0) = 0;
+    sphParticlesParticleIndex(0) = 0;
+    sphParticlesSupportRadius(0) = 0.01f;
+    particlesType(1) = kDarkMatterType;
+    particlesCatIndex(1) = kNoParticleIndex;
+    fmmWalkSetParticlePosition(0, fmmWalkPosition(0.25, 0.5, 0.5));
+    fmmWalkSetParticlePosition(1, fmmWalkPosition(0.5, 0.5, 0.5));
+    auto const center = fmmWalkPosition(0.375, 0.5, 0.5);
+    auto const node = fmmWalkAddNode(center, 0.125f, {0, 2}, 0, true);
+    std::array<Vector3<float>, 2> const initial{
+        Vector3<float>{0.5f, 0.25f, -0.125f}, Vector3<float>{-0.25f, 0.125f, 0.5f}};
+    std::array<double, 2> const mass{2.0, 3.0};
+    std::array<double, 2> const acceleration{48.0, -32.0};
+    for (int method = 0; method < (COSMICTIGER_ENABLE_HOPKINS ? 2 : 1); ++method) {
+        bool const mfm = method == 1;
+        options.hydro.method = mfm ? "mfm" : "sph";
+        setOptions(options);
+        sphParticlesResize(1, false);
+        for (int stage = 0; stage < 4; ++stage) {
+            // Top first call, ordinary top, terminal closing, and a finer subtraction.
+            bool const top = stage != 3;
+            bool const first = stage == 0;
+            bool const terminal = stage == 2;
+            auto parameters = fmmWalkParameters(false);
+            parameters.minRung = top ? 2 : 3;
+            parameters.t0 = 0.125f;
+            parameters.eta = 1.0e6f;
+            parameters.maxDt = 0.25f;
+            parameters.top = top;
+            parameters.firstCall = first;
+            parameters.ascending = top;
+            parameters.descending = !terminal;
+            parameters.deferGasOpening = top && !mfm;
+            for (ParticleInteger particle = 0; particle < 2; ++particle) {
+                particlesRung(particle) = particle == 0 || !top ? 4 : 3;
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    particlesVel(dim, particle) = initial[particle][dim];
+                }
+            }
+            if (mfm) {
+                auto& state = sphParticlesHopkinsState(0);
+                state = {};
+                state.initialized = state.hierarchicalActive = true;
+                state.mass = mass[0];
+                state.hydroRung = 7;
+                state.totalEnergy = 1.3 * state.mass;
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    state.momentum[dim] = state.mass * initial[0][dim];
+                    state.totalEnergy += 0.5 * state.mass * initial[0][dim] * initial[0][dim];
+                }
+            }
+            sphParticlesGravityTimesteps[0] = 123.0f;
+            ExpansionBuffer local;
+            local.zero();
+            auto const result =
+                kick(parameters, local, center, node, Vector<TreeId>{node}, {}, nullptr);
+            double const halfStep = std::ldexp(0.5 * parameters.t0, -parameters.minRung);
+            double expectedKinetic = 0.0, expectedDelta = 0.0, expectedNorm = 0.0;
+            Vector3<double> expectedMomentum{};
+            for (ParticleInteger particle = 0; particle < 2; ++particle) {
+                double speedSquared = 0.0;
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    double const force = dim == 0 ? acceleration[particle] : 0.0;
+                    double const synchronized =
+                        initial[particle][dim] + (top && !first ? halfStep * force : 0.0);
+                    double const opening = terminal || (top && particle == 0 && !mfm) ?
+                        0.0 :
+                        (top ? halfStep : -halfStep) * force;
+                    double const expected = synchronized + opening;
+                    fmmWalkRequireClose("hierarchical gas kick ownership",
+                        particlesVel(dim, particle), expected, 2.0e-6);
+                    fmmWalkRequireClose("hierarchical mixed-mass force",
+                        particlesGravityAcceleration(dim, particle), force, 2.0e-6);
+                    if (mfm && particle == 0) {
+                        fmmWalkRequireClose("MFM kick updates conserved momentum",
+                            sphParticlesHopkinsState(0).momentum[dim], mass[0] * expected, 2.0e-12);
+                    }
+                    expectedKinetic += 0.5 * mass[particle] * synchronized * synchronized;
+                    expectedMomentum[dim] += mass[particle] * synchronized;
+                    speedSquared += synchronized * synchronized;
+                    expectedDelta += 0.5 * mass[particle] *
+                        (expected * expected -
+                            double(initial[particle][dim]) * initial[particle][dim]);
+                }
+                expectedNorm += mass[particle] * std::sqrt(speedSquared);
+            }
+            fmmWalkRequireClose("gas gravity and hydro rung ownership", particlesRung(0),
+                mfm && !terminal ? 3 : 4, 0.0);
+            if (mfm) {
+                auto const& state = sphParticlesHopkinsState(0);
+                double thermal = state.totalEnergy;
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    thermal -= 0.5 * state.momentum[dim] * state.momentum[dim] / state.mass;
+                }
+                fmmWalkRequireClose("MFM signed gravity kicks preserve thermal energy", thermal,
+                    1.3 * mass[0], 2.0e-12);
+                fmmWalkRequireClose("MFM hydro clock remains independent", state.hydroRung, 7, 0.0);
+            }
+            fmmWalkRequireClose("collisionless rung still follows gravity", particlesRung(1),
+                terminal ? 3 : (top ? 2 : 3), 0.0);
+            fmmWalkRequireClose("hierarchical mass-weighted kinetic", result.kin, expectedKinetic);
+            fmmWalkRequireClose("hierarchical mass-weighted potential", result.pot, -24.0);
+            fmmWalkRequireClose(
+                "hierarchical mass-weighted kick energy", result.dkin, expectedDelta);
+            fmmWalkRequireClose(
+                "hierarchical mass-weighted x momentum", result.xmom, expectedMomentum[0]);
+            fmmWalkRequireClose(
+                "hierarchical mass-weighted y momentum", result.ymom, expectedMomentum[1]);
+            fmmWalkRequireClose(
+                "hierarchical mass-weighted z momentum", result.zmom, expectedMomentum[2]);
+            fmmWalkRequireClose(
+                "hierarchical mass-weighted momentum norm", result.nmom, expectedNorm);
+            fmmWalkRequireClose("top gas gravity timestep publication",
+                sphParticlesGravityTimesteps[0], top ? parameters.maxDt : 123.0, 0.0);
+            if (top) {
+                fmmWalkRequireClose("top gas gravity acceleration publication",
+                    sphParticlesGravityAcceleration(0, 0), acceleration[0]);
+            }
+        }
+    }
+    treeDestroy();
+    sphParticlesResize(0, false);
+    particlesResize(0);
+    setOptions(saved);
+}
+#endif
 
 void fmmWalkVerifyEwald(std::string const& label, TreeId sink, Vector<TreeId> const& checklist,
     Vector<TreeId> const& sourceLeaves, bool useCuda) {
@@ -1687,6 +1837,9 @@ void fmmWalkTest() {
     options.initial.numberOfParticles = hpxSize() == 1 ? 6 : hpxSize();
     setOptions(options);
     if (hpxSize() == 1) {
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
+        detail::fmmWalkHierarchicalGasCoupling();
+#endif
         detail::fmmWalkRejectedSourceLeaf(useCuda);
         detail::fmmWalkRepeatedSourceOpening(useCuda);
         detail::fmmWalkEmptyLocalRoot(useCuda);

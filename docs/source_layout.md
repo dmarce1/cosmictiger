@@ -166,7 +166,11 @@ Hopkins MFM/MFV geometry, reconstruction, Riemann fluxes, and double state.
 `src/core/driver.cpp` selects SPH or Hopkins for traditional and global stepping;
 `hydro.method=sph|mfm|mfv` selects the runtime method. Particle storage, drift,
 migration, gravity masses, checkpoints, and output share the existing lifecycle
-boundaries. See [Hopkins hydrodynamics](hopkins_hydro.md).
+boundaries. Both methods share the persistent geometry tree in
+`cosmictiger/hydro/source_tree.hpp`. The SPH hierarchical adapter and staged
+CPU/CUDA execution live in `src/hydro/sph/hierarchical.cpp` and `staged_run.cpp`;
+see [hierarchical SPH](hierarchical_sph.md) and
+[Hopkins hydrodynamics](hopkins_hydro.md).
 
 Exact Sod, Sedov, and hydrostatic sphere reference/initial-condition helpers live
 in `scenarios/`, alongside the scenarios that use them.

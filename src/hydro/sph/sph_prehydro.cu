@@ -172,13 +172,16 @@ __global__ void sphCudaPrehydro2(
                     workspace.particles[offset + slot] = {
                         data.sourceSupportRadius[sourceParticleIndex],
                         data.sourceRungs[sourceParticleIndex],
-                        (parameters.balsaraSwitch || parameters.variableViscosity) ?
+                        (parameters.balsaraSwitch || parameters.variableViscosity ||
+                            data.sinkLogDensityRate) ?
                             data.sourceVelocityX[sourceParticleIndex] :
                             0.0f,
-                        (parameters.balsaraSwitch || parameters.variableViscosity) ?
+                        (parameters.balsaraSwitch || parameters.variableViscosity ||
+                            data.sinkLogDensityRate) ?
                             data.sourceVelocityY[sourceParticleIndex] :
                             0.0f,
-                        (parameters.balsaraSwitch || parameters.variableViscosity) ?
+                        (parameters.balsaraSwitch || parameters.variableViscosity ||
+                            data.sinkLogDensityRate) ?
                             data.sourceVelocityZ[sourceParticleIndex] :
                             0.0f,
                         parameters.gradientSwitch() ?
@@ -268,6 +271,7 @@ __global__ void sphCudaPrehydro2(
             float const m_b_over_H_a3 = data.gasMass * one_over_H_a * one_over_H_a * one_over_H_a;
             flops += 4;    // Reciprocal support and the mass/support-cubed scale.
             float ρ_a = 0.0f;
+            float ρ_a_dot = 0.0f;
             float ρ_a_div_v_a = 0.0f;
             Vector3<float> ρ_a_curl_v_a(0.0f);
             cullen_and_dehnen::GradientSums<float> gradientSums{};
@@ -311,58 +315,68 @@ __global__ void sphCudaPrehydro2(
                     ρ_a_R_a += m_b_over_H_a3 * kernelW(q_ab) * sign_div_v_b;
                     flops += 3 + sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab);
                 }
-                if ((parameters.balsaraSwitch || parameters.variableViscosity) && radius > 0.0f &&
-                    q_ab < 1.0f) {
+                if ((parameters.balsaraSwitch || parameters.variableViscosity ||
+                        data.sinkLogDensityRate) &&
+                    radius > 0.0f && q_ab < 1.0f) {
                     // GADGET-4 equation (72): ρ_a div(v)_a and ρ_a curl(v)_a
                     // are −Σ_b m_b v_ab·gradW_ab and Σ_b m_b v_ab×gradW_ab.
                     float const m_b_F_a = m_b_over_H_a3 * one_over_H_a * dkernelWDq(q_ab) / radius;
                     Vector3<float> const m_b_gradW_ab = m_b_F_a * r_ab;
                     auto const& particle = workspace.particles[neighborIndex];
-                    Vector3<float> const v_ab_physical =
-                        Vector3<float>(data.sourceVelocityX[particleIndex],
-                            data.sourceVelocityY[particleIndex],
-                            data.sourceVelocityZ[particleIndex]) -
-                        Vector3<float>(particle.velocityX, particle.velocityY, particle.velocityZ) +
-                        parameters.expansionRate * r_ab;
-                    ρ_a_div_v_a -= v_ab_physical.dot(m_b_gradW_ab);
-                    for (int dim = 0; dim < kDimensions; ++dim) {
-                        int const next = (dim + 1) % kDimensions;
-                        int const last = (dim + 2) % kDimensions;
-                        ρ_a_curl_v_a[dim] += v_ab_physical[next] * m_b_gradW_ab[last] -
-                            v_ab_physical[last] * m_b_gradW_ab[next];
+                    Vector3<float> const v_ab = Vector3<float>(data.sourceVelocityX[particleIndex],
+                                                    data.sourceVelocityY[particleIndex],
+                                                    data.sourceVelocityZ[particleIndex]) -
+                        Vector3<float>(particle.velocityX, particle.velocityY, particle.velocityZ);
+                    if (data.sinkLogDensityRate) {
+                        ρ_a_dot += v_ab.dot(m_b_gradW_ab);
+                        flops += 6;
                     }
-                    if (parameters.gradientSwitch()) {
-                        // Cullen & Dehnen (2010), equations (B2), (B4), (B7), (B12), which
-                        // Price et al. (2018) equations (51)-(53) also use.
-                        // Equation (B7) permits mass/kernel-gradient weights, independent
-                        // of densities being updated by other MPI ranks in this pass.
-                        float const w_ab = -m_b_F_a;
-                        Vector3<float> const a_ab =
-                            Vector3<float>(data.sourceAccelerationX[particleIndex],
-                                data.sourceAccelerationY[particleIndex],
-                                data.sourceAccelerationZ[particleIndex]) -
-                            Vector3<float>(particle.accelerationX, particle.accelerationY,
-                                particle.accelerationZ);
-                        for (int i = 0; i < kDimensions; ++i) {
-                            for (int j = 0; j < kDimensions; ++j) {
-                                gradientSums.moment[i][j] += w_ab * r_ab[i] * r_ab[j];
-                                gradientSums.velocity[i][j] += w_ab * v_ab_physical[i] * r_ab[j];
-                                gradientSums.acceleration[i][j] += w_ab * a_ab[i] * r_ab[j];
-                            }
+                    if (parameters.balsaraSwitch || parameters.variableViscosity) {
+                        Vector3<float> const v_ab_physical = v_ab + parameters.expansionRate * r_ab;
+                        ρ_a_div_v_a -= v_ab_physical.dot(m_b_gradW_ab);
+                        for (int dim = 0; dim < kDimensions; ++dim) {
+                            int const next = (dim + 1) % kDimensions;
+                            int const last = (dim + 2) % kDimensions;
+                            ρ_a_curl_v_a[dim] += v_ab_physical[next] * m_b_gradW_ab[last] -
+                                v_ab_physical[last] * m_b_gradW_ab[next];
                         }
-                        flops += 84;
+                        if (parameters.gradientSwitch()) {
+                            // Cullen & Dehnen (2010), equations (B2), (B4), (B7), (B12), which
+                            // Price et al. (2018) equations (51)-(53) also use.
+                            // Equation (B7) permits mass/kernel-gradient weights, independent
+                            // of densities being updated by other MPI ranks in this pass.
+                            float const w_ab = -m_b_F_a;
+                            Vector3<float> const a_ab =
+                                Vector3<float>(data.sourceAccelerationX[particleIndex],
+                                    data.sourceAccelerationY[particleIndex],
+                                    data.sourceAccelerationZ[particleIndex]) -
+                                Vector3<float>(particle.accelerationX, particle.accelerationY,
+                                    particle.accelerationZ);
+                            for (int i = 0; i < kDimensions; ++i) {
+                                for (int j = 0; j < kDimensions; ++j) {
+                                    gradientSums.moment[i][j] += w_ab * r_ab[i] * r_ab[j];
+                                    gradientSums.velocity[i][j] +=
+                                        w_ab * v_ab_physical[i] * r_ab[j];
+                                    gradientSums.acceleration[i][j] += w_ab * a_ab[i] * r_ab[j];
+                                }
+                            }
+                            flops += 84;
+                        }
+                        if (parameters.cullenDehnen) {
+                            // Equation (15): maximum approaching-pair signal speed.
+                            float const v_ab_dot_r̂_ab = v_ab_physical.dot(r_ab) / radius;
+                            float const c_b = sqrtf(particle.adiabaticIndex *
+                                particle.pressureEnergyRatio * particle.internalEnergy);
+                            v_sig_a = fmaxf(
+                                v_sig_a, 0.5f * (c_a_switch + c_b) - fminf(v_ab_dot_r̂_ab, 0.0f));
+                            flops += 13;
+                        }
+                        flops += 33 +
+                            sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
+                    } else {
+                        flops += 9 +
+                            sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
                     }
-                    if (parameters.cullenDehnen) {
-                        // Equation (15): maximum approaching-pair signal speed.
-                        float const v_ab_dot_r̂_ab = v_ab_physical.dot(r_ab) / radius;
-                        float const c_b = sqrtf(particle.adiabaticIndex *
-                            particle.pressureEnergyRatio * particle.internalEnergy);
-                        v_sig_a =
-                            fmaxf(v_sig_a, 0.5f * (c_a_switch + c_b) - fminf(v_ab_dot_r̂_ab, 0.0f));
-                        flops += 13;
-                    }
-                    flops +=
-                        33 + sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
                 }
             }
             sharedReduceAdd<float, kPrehydro2BlockSize>(ρ_a);
@@ -370,6 +384,10 @@ __global__ void sphCudaPrehydro2(
             sharedReduceAdd<float, kPrehydro2BlockSize>(ΣW);
             sharedReduceAdd<float, kPrehydro2BlockSize>(Σqdw);
             flops += 2 * detail::sphReductionFlops<kPrehydro2BlockSize>();
+            if (data.sinkLogDensityRate) {
+                sharedReduceAdd<float, kPrehydro2BlockSize>(ρ_a_dot);
+                flops += detail::sphReductionFlops<kPrehydro2BlockSize>();
+            }
             if (parameters.balsaraSwitch || parameters.variableViscosity) {
                 sharedReduceAdd<float, kPrehydro2BlockSize>(ρ_a_div_v_a);
                 for (int dim = 0; dim < kDimensions; ++dim) {
@@ -421,6 +439,13 @@ __global__ void sphCudaPrehydro2(
                     }
                 }
                 data.sinkGradHCorrection[sinkIndex] = gradH.correction.zeta;
+                if (data.sinkLogDensityRate) {
+                    // Price (2012), equation (27), with peculiar motion only:
+                    // d log(rho_comoving)/d tau = sum m v_ab.grad W/(a rho Omega).
+                    data.sinkLogDensityRate[sinkIndex] =
+                        ρ_a_dot / (parameters.scaleFactor * ρ_a * gradH.correction.omega);
+                    flops += 3;
+                }
                 // NOLINTEND(readability-identifier-naming)
                 if (data.sinkBalsaraFactor) {
                     data.sinkBalsaraFactor[sinkIndex] = parameters.balsaraSwitch ?

@@ -38,13 +38,18 @@ struct SphRunData {
     float* sourceAccelerationZ;
     float* sourceVelocityDivergence;
     float* sourceSupportRadius;
-    // Variational operator: zeta_i of cosmictiger/hydro/sph/volume.hpp from this step's density pass.
+    // Variational operator: zeta_i of cosmictiger/hydro/sph/volume.hpp from this step's density
+    // pass.
     float* sourceGradHCorrection;
+    // Frozen before sink writes; required by prehydro and rung limiting.
     char* sourceRungs;
 
     // Local sink arrays indexed by the SPH particle index.
     float* sinkInternalEnergyRate;
     float* sinkDensity;
+    // Optional d(log rho_comoving)/d(tau), including the adaptive-support
+    // correction. Requires the source velocity arrays even with viscosity off.
+    float* sinkLogDensityRate = nullptr;
     float* sinkGradHCorrection;    // Rebuilt with the density on every preparation pass.
     float* sinkBalsaraFactor;
     SphViscosityState* sinkViscosityStates;
@@ -56,6 +61,8 @@ struct SphRunData {
     float* sinkGravityAccelerationX;
     float* sinkGravityAccelerationY;
     float* sinkGravityAccelerationZ;
+    // Optional timestep bound from the completed gravity walk.
+    float* sinkGravityTimestep = nullptr;
     ParticleInteger* sinkParticleIndices;
     char* sinkParticleRungs;    // Indexed through sinkParticleIndices into the full particle array.
 
@@ -81,8 +88,10 @@ CUDA_EXPORT inline Vector3<float> sphCompleteAcceleration(SphRunParameters const
     Vector3<float> const& gravityAcceleration, float centralAcceleration,
     float centralSupportRadius, sph_flops::Counter& flops) {
 #if COSMICTIGER_WITH_GRAVITY
-    acceleration += gravityAcceleration;
-    flops += 3;
+    if (!parameters.excludeSelfGravity) {
+        acceleration += gravityAcceleration;
+        flops += 3;
+    }
 #endif
     acceleration[kYDimension] += parameters.uniformAccelerationY;
     acceleration[kZDimension] += parameters.midplaneAccelerationZ(position[kZDimension]);

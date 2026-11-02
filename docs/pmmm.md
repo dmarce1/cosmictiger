@@ -342,10 +342,11 @@ cells remain outstanding. `storedAccelerationParticles` and
 `storedPotentialParticles` expose retained solve-result arrays: both are zero
 for the ordinary streamed kick path.
 
-PMMM supports SPH with the traditional and global integrators when
-`COSMICTIGER_ENABLE_SPH=ON`. The hierarchical integrator requires gravity without
-SPH. Set `hydro.enabled=false` explicitly for gravity-only cosmological PMMM
-runs, whose scenario otherwise enables SPH when it is compiled.
+PMMM supports SPH with traditional, global, and hierarchical integration when
+`COSMICTIGER_ENABLE_SPH=ON` and the selected integrator is compiled.
+[Hierarchical SPH](hierarchical_sph.md) currently supports adiabatic gas without
+chemistry or star formation. Set `hydro.enabled=false` explicitly for gravity-only
+cosmological PMMM runs, whose scenario otherwise enables SPH when compiled.
 Particle chemistry additionally requires `COSMICTIGER_ENABLE_CHEMISTRY=ON`
 (the default). Setting it to `OFF` retains SPH without particle chemistry;
 homogeneous cosmological recombination remains available.

@@ -279,7 +279,14 @@ SphRunReturn sphCpuHydro(
             float const one_over_δt_c = c_a / h_a;
             float const one_over_δt_visc = 0.6f * (α_max * c_a + β_max * μ_max) / h_a;
             float const one_over_δt_cv = one_over_δt_c + one_over_δt_visc;
-            float const f_a = dv_a_dt.norm();
+            auto timestepAcceleration = dv_a_dt;
+#if COSMICTIGER_WITH_GRAVITY
+            if (parameters.excludeSelfGravity) {
+                timestepAcceleration += gravityAcceleration;
+                flops += 3;
+            }
+#endif
+            float const f_a = timestepAcceleration.norm();
             float const one_over_δt_f = parameters.courantFactor *
                 std::sqrt(parameters.scaleFactor * f_a / h_a) /
                 (data.accelerationTimestepFactor * kHydroAccelerationScale);
@@ -300,11 +307,15 @@ SphRunReturn sphCpuHydro(
                 std::max(1, int(std::ceil(std::log2(parameters.baseTimestep / δt))));
             int nextRung = std::max(std::max(parameters.minimumRung, previousRung - 1), hydroRung);
 #if COSMICTIGER_WITH_GRAVITY
-            float const gravityTimestep = std::fmin(parameters.maximumTimestep,
+            float gravityTimestep = std::fmin(parameters.maximumTimestep,
                 data.accelerationTimestepFactor *
                     std::sqrt(parameters.scaleFactor * data.gravityEffectiveRadius /
                         std::fmax(gravityAcceleration.norm(), 1.0e-30f)));
             if (data.selfGravityEnabled) {
+                if (data.sinkGravityTimestep && data.sinkGravityTimestep[sinkIndex] > 0.0f) {
+                    gravityTimestep =
+                        std::fmin(gravityTimestep, data.sinkGravityTimestep[sinkIndex]);
+                }
                 result.minimumTimestep = std::min(result.minimumTimestep, double(gravityTimestep));
                 flops.doublePrecision += 1;
             }

@@ -18,6 +18,7 @@
 
 #include <cosmictiger/hydro/hopkins/hopkins.hpp>
 #include <cosmictiger/hydro/hopkins/hopkins_simd.hpp>
+#include <cosmictiger/hydro/hopkins/hopkins_state.hpp>
 
 namespace detail {
 
@@ -1611,4 +1612,66 @@ TEST(HopkinsFlops, RiemannCountsSharedScalarAndPackedArithmetic) {
     FlopCount operations = 0;
     hopkins::riemannFlux(state, state, {}, {}, 1.4, false, &operations);
     EXPECT_EQ(operations, 6);
+}
+
+TEST(HopkinsHierarchyPosition, PreservesFixedPointAnchorBitsAcrossPeriodicDrift) {
+    HopkinsParticleState state;
+    Position anchor;
+    anchor.raw() = (PositionInteger(3) << (kPositionBits - 2)) + PositionInteger(37);
+    state.positionAnchor = Vector3<Position>(anchor);
+    state.positionEpoch = 0.125;
+    state.positionDriftScale = 2.0;
+    state.meshVelocity = {1.0, -2.0, 0.0};
+    state.meshAcceleration = {0.0, 0.0, 2.0};
+    for (int dimension = 0; dimension < 3; ++dimension) {
+        EXPECT_EQ(state.positionAt(dimension, state.positionEpoch).raw(), anchor.raw());
+    }
+    // All increments are dyadic and exact in either Fixed32 or Fixed64; the
+    // fractional anchor bits must survive, including the periodic wrap.
+    EXPECT_EQ(state.positionAt(0, 1.125).raw(), (anchor + Position(0.5)).raw());
+    EXPECT_EQ(state.positionAt(1, 1.125).raw(), anchor.raw());
+    EXPECT_EQ(state.positionAt(2, 1.125).raw(), (anchor + Position(0.5)).raw());
+    if constexpr (kPositionBits == 64) {
+        EXPECT_NE(Position(anchor.toDouble()).raw(), anchor.raw());
+    }
+}
+
+TEST(HopkinsHierarchyPosition, HydroWakePreservesTrajectoryAndIndependentGravityEndpoint) {
+    HopkinsParticleState original;
+    for (int dimension = 0; dimension < 3; ++dimension) {
+        original.positionAnchor[dimension].raw() =
+            (PositionInteger(dimension + 1) << (kPositionBits - 3)) + PositionInteger(19);
+    }
+    original.meshVelocity = {0.125, -0.25, 0.5};
+    original.meshAcceleration = {0.25, 0.125, -0.5};
+    original.positionEpoch = original.sourceTime = 0.125;
+    original.positionDriftScale = 2.0;
+    original.endTime = 0.625;
+    original.gravityEndTime = 1.125;
+    original.hydroRung = 1;
+    double const wakeTime = 0.375;
+    auto refreshed = original;
+    for (int dimension = 0; dimension < 3; ++dimension) {
+        refreshed.positionAnchor[dimension] = original.positionAt(dimension, wakeTime);
+        refreshed.meshVelocity[dimension] +=
+            (wakeTime - original.positionEpoch) * original.meshAcceleration[dimension];
+    }
+    refreshed.positionEpoch = refreshed.sourceTime = wakeTime;
+    refreshed.endTime = 0.5;
+    refreshed.hydroRung = 3;
+    EXPECT_EQ(refreshed.gravityEndTime, original.gravityEndTime);
+    ASSERT_GT(refreshed.gravityEndTime, refreshed.endTime);
+    for (double time : {wakeTime, refreshed.endTime, refreshed.gravityEndTime}) {
+        for (int dimension = 0; dimension < 3; ++dimension) {
+            EXPECT_EQ(refreshed.positionAt(dimension, time).raw(),
+                original.positionAt(dimension, time).raw());
+        }
+    }
+    // A hydro-only velocity update changes the projection at the existing
+    // gravity endpoint, while the physical wake position stays continuous.
+    refreshed.meshVelocity[0] += 0.25;
+    EXPECT_EQ(refreshed.positionAt(0, wakeTime).raw(), original.positionAt(0, wakeTime).raw());
+    EXPECT_EQ(refreshed.positionAt(0, refreshed.gravityEndTime).raw(),
+        (original.positionAt(0, original.gravityEndTime) + Position(0.09375)).raw());
+    EXPECT_EQ(refreshed.gravityEndTime, original.gravityEndTime);
 }

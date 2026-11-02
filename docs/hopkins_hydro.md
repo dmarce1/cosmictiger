@@ -162,18 +162,21 @@ high-Mach robustness machinery of GIZMO.
 The restored implementation uses double-precision hydrodynamic state and
 arithmetic, and requires a build with `COSMICTIGER_POSITION_TYPE=fixed64`.
 This requirement applies to MFM/MFV; the existing SPH and gravity-only methods
-retain their supported position choices. The CPU meshless backend supports `run.timeIntegrator=traditional` and `global`. Meshless hydro
-does not support `hierarchical` integration. The gravity solver is an independent
-choice: either `gravity.method.far=fmm` or `pmmm` can accompany traditional or
-global meshless hydro. PMMM also supports hierarchical integration for gravity
-without hydrodynamics. A uniform global timestep is optional; choosing PMMM does
-not select it. Both chemistry and star formation must be disabled for MFM/MFV;
-incompatible combinations are rejected during option validation.
+retain their supported position choices. The CPU meshless backend supports
+`run.timeIntegrator=traditional` and `global` for both methods, and
+`run.timeIntegrator=hierarchical` for fixed-mass MFM. MFV remains unavailable with
+hierarchical gravity because changing source masses would require additional
+handling in the held gravity interaction. The gravity solver is an independent
+choice: `gravity.method.far=fmm` or `pmmm` can accompany the supported integrators.
+A uniform global timestep is optional; choosing PMMM does not select it. Both chemistry and star formation must be disabled for MFM/MFV;
+incompatible combinations are rejected during option validation. Hierarchical
+MFM also requires `lightcone.enabled=false` until crossings can be emitted from
+completed hydro trajectory segments instead of tentative gravity projections.
 
 `src/hydro/hopkins.cpp` is a CPU SIMD backend, including in a
-CUDA-enabled build. It gathers gas state and tree-derived neighbor ranges from
-all HPX localities onto the coordinating locality, runs CPU SIMD loops there, and
-scatters updated states to the particle owners. MPI domain ownership and
+CUDA-enabled build. It gathers gas state from all HPX localities onto the
+coordinating locality, queries a persistent hydro source tree there, runs CPU
+SIMD loops, and scatters updated states to the particle owners. MPI domain ownership and
 migration are supported, but the meshless calculation is not distributed across
 the locality CPUs: its global gas state and neighbor lists must fit in the
 coordinator's memory. Communication and coordinator memory limit scalability.
@@ -197,10 +200,25 @@ formed before conversion to double. Reductions retain their scalar particle-ID
 order, and the pair scatter retains its conservative equal-and-opposite updates.
 Final partial packs use safe inactive inputs and store only active lanes.
 
-The tree search, selected kernel, and gas particle infrastructure are reused
-from SPH. The meshless support-radius solve uses the same kernel-number-density
-equation with its own ordered scalar reduction, so sorting and MPI ownership do
-not change the accumulation order. The meshless path computes its own volume,
+SPH and MFM/MFV share the stable-ID geometry tree in
+`cosmictiger/hydro/source_tree.hpp`, along with the selected kernel and gas
+particle infrastructure. Hopkins retains the tree between events and refits its
+bounds from gathered current positions and double support radii. Unchanged
+membership requires no gas sort; adding or removing IDs rebuilds the topology.
+Ownership changes and particle permutations leave the IDs intact. Initial
+identity publication changes only the identifier fields, before the first
+neighbor query, and checkpoint reload rebuilds the derived tree.
+
+Both sides of a neighbor query carry padded support envelopes. The original
+Fixed64 pair-distance test selects the final stencil, with reciprocal neighbors
+and stable-ID reduction order. Every support solve or conditioning expansion
+refreshes the tree before querying again, including neighbors whose larger
+support reaches a smaller-support sink. This applies to fixed-mass MFM and
+variable-mass MFV because spatial indexing is independent of mass.
+
+The meshless support-radius solve uses the same kernel-number-density equation
+with its own ordered scalar reduction, so sorting and MPI ownership do not
+change the accumulation order. The meshless path computes its own volume,
 density, gradients, Riemann fluxes, and conservative update. It does not call
 the SPH support, density/viscosity, pressure/thermal-force, or predictor/corrector
 operators.
@@ -226,26 +244,87 @@ Inactive primitives, face velocities, geometry rates, and timestep signals use
 one prediction from their retained own-step anchor. Positions drift to each
 global event using the separately anchored mesh velocity and acceleration; a
 fine drift neither commits `U0 + deltaU` nor rebuilds the coarse trajectory.
-The coordinator still gathers gas and reconstructs support/geometry at every
-global event. Individual rungs save primitive reconstructions, pair Riemann
-solves, and conservative/source commits, not that global preparation work.
+The coordinator still gathers all gas and reconstructs support/geometry at
+every global event. The persistent tree removes repeated spatial sorting;
+this first integration still updates all source geometry and materializes all
+neighbor lists. Individual rungs save primitive reconstructions, pair Riemann
+solves, and conservative/source commits. They do not yet remove global gathering
+or support/geometry work. `Hopkins tree` log rows separate sorted sources,
+updated sources, refitted nodes, topology rebuilds, and visited candidates.
+The same geometry tree serves hierarchical MFM, using retained trajectories to
+obtain event-time positions even when the shared gravity coordinate is already
+at a future endpoint. Pair-flux intervals and wake-up accounting retain the
+same conservative elapsed-interval rule.
 
 A newly restrictive limit or a nonphysical primitive prediction wakes an inactive
 particle. Neighbor propagation bounds interacting timestep ratios by four.
 Before a wake commits, each incident live pair is integrated exactly once over
 its elapsed portion, using the retained linear flux representation; both signed
 transfers are deposited and the unused future tail is retired. New intervals
-open from the wake boundary. All gas accelerations are refreshed by the gravity
-pass so newly woken gas has a fresh source endpoint; source commits still occur
-only at each gas particle's own event. This correctness choice costs more gravity
-force evaluations than selecting only the current active gas sinks.
+open from the wake boundary. Under traditional integration, all gas accelerations
+are refreshed by the gravity pass so newly woken gas has a fresh source endpoint;
+source commits still occur only at each gas particle's own event. This costs more
+gravity force evaluations than selecting only the current active gas sinks.
 
 With `run.timeIntegrator=global`, all gas shares the raw global duration selected
 from its signal-speed, acceleration, expansion, gravity, and endpoint bounds.
 It is not rounded to a power of two. The same pair-open, pair-settle, and own-step
 closure sequence uses physical times; open pair intervals persist across a
-checkpoint until the next event. Both modes support a terminal closure that
-settles every elapsed pair, commits all gas, and opens no new interval.
+checkpoint until the next event. All supported modes have a terminal closure
+that settles every elapsed pair, commits all gas, and opens no new interval.
+
+Hierarchical MFM keeps an independent hydro rung in the conserved sidecar; the
+shared particle rung continues to select gravity's active suffix. Before the
+first signed gravity kick at an event, `hopkinsHierarchicalBegin` closes every
+due hydro particle and every particle touched by the gravity ladder. It settles
+all incident cached pair intervals first, including their equal and opposite
+transfers to inactive neighbors. Each gravity impulse then acts on the closed
+double-precision conserved state as `P += m*delta_v` and
+`E += delta_v dot P_old + m*|delta_v|^2/2`. Self-gravity is excluded from the
+continuous hydro source predictor, so that impulse is applied once.
+
+Only after all closing and opening gravity adjustments have completed does
+`hopkinsHierarchicalFinish` select hydro rungs, propagate hydro wake-ups, and
+open new pair-flux intervals. A hydro wake leaves the gravity rung unchanged.
+The global block clock covers the union of hydro and gravity events; empty
+suffix levels preserve the gravity stack when hydro needs a finer event.
+`Hopkins hierarchy begin` reports the gravity-active, hydro-due, and closed
+counts separately; the usual `Hopkins step` row reports hydro rungs and wakes.
+Full-synchronization diagnostics pair the top-ladder potential with kinetic
+energy and momentum before opening gravity kicks, and with the closed thermal
+state. The separate held kinetic and thermal sums feed cosmological expansion
+work during the next drift; they do not overwrite the synchronized snapshot.
+
+The MFM sidecar retains a Fixed64 position anchor, trajectory epoch, and drift
+scale separately from the saved gravity endpoint. Exact-rung gravity drifts
+record the endpoint instead of changing the gas coordinate immediately. After
+hydro reconstruction, each raw gravity coordinate is projected to its saved
+endpoint. A fine hydro wake reanchors the physical trajectory at the current
+event and replaces that future projection. It may project beyond its own hydro
+interval: this value is tentative and is refreshed at every intervening hydro
+event before the coarse particle can enter a gravity tree again. The inactive
+coarse prefix is absent from finer gravity trees. This permits hydro wake-ups
+without changing a gravity interval that is already open. It does not eliminate
+wake-ups or establish a new bound on nonlinear waves.
+
+This branch still gathers all MFM gas and solves support/geometry at each
+Begin/Finish event. Persistent sorting and independent gravity scheduling are
+implemented; sparse MFM geometry work is not. The historical validation below
+predates hierarchical MFM unless explicitly identified otherwise.
+
+Current `g4_hydro_tree` CPU validation includes a 16-event blast with 381 real
+hydro wakes, unchanged mass, momentum error below 1.2e-18, energy error below
+2.3e-16, and an exact restart. A self-gravitating wave approaches a refined
+global reference: maximum position errors fall from 4.03e-4 through 1.62e-4 to
+4.71e-5 under timestep refinement. Its initial synchronized energy agrees
+exactly across those refinements and with the global reference. Separate short
+FMM and PMMM-PP coupled runs pass exact restart checks; a two-rank FMM run does
+as well. Traditional MFM/MFV coupling and restarts still pass. These small tests
+do not establish production accuracy or a performance advantage.
+
+The changed CUDA drift, SPH, and degree-four FMM objects compile, including an
+`sm_86` device image. This is compilation coverage; GPU execution has not been
+validated for the coupled hierarchy.
 
 The validation results recorded later in this document predate this own-step
 scheduler unless explicitly identified otherwise; they do not validate the new
@@ -260,17 +339,20 @@ updates only the public mass mirror and never commits a hydro anchor. Terminal
 diagnostics first close every remaining interval.
 
 Mass, momentum, total energy, source histories, primitive/gradient anchors,
-pair fluxes, and support radii persist in double precision. Coordinates reside
-only in the shared Fixed64 particle array. Pair separations subtract the
+pair fluxes, and support radii persist in double precision. Traditional/global
+coordinates reside in the shared Fixed64 particle array; hierarchical MFM also
+retains its own Fixed64 trajectory anchor. Pair separations subtract the
 periodic fixed-point integers before converting the local displacement to
 double, preserving low coordinate bits that would be lost by first converting
 both absolute positions. Drift adds a Fixed64-encoded double displacement to
-the existing Fixed64 position; there is no double absolute-coordinate sidecar.
-Ordinary gas fields and the tree's support-radius mirror remain float
-projections. The support solve retains its double radius through neighbor-search
+the existing Fixed64 position. Rounded absolute coordinates in the derived
+neighbor tree are used only for conservative candidate searches; exact pair
+separations continue to use Fixed64 differences. Ordinary gas output fields
+retain float projections, while the persistent source tree uses double support
+bounds. The support solve retains its double radius through neighbor-search
 refreshes and targets a relative kernel-count residual of `1e-13`. These changes
 do not alter SPH's storage or numerical algorithms. Meshless checkpoint sidecars
-use particle schema 5 and pair schema 2. Earlier asynchronous state layouts are
+use particle schema 6 and pair schema 2. Earlier asynchronous state layouts are
 rejected rather than reinterpreted under the new event semantics.
 The current CPU and CUDA drift interfaces retain double timestep and scale
 arguments. CPU and CUDA coupled regression checks are described below. Ordinary particle output
@@ -287,11 +369,12 @@ here. The existing SPH CFL convention remains unchanged.
 The dedicated one-dimensional `soundWave` scenario instead uses the paper's
 `2 * supportRadius` Courant length with `hydro.cfl=0.2`.
 
-The force stage calls `hopkinsKick` after fresh gravity is available. It settles
+The traditional/global force stage calls `hopkinsKick` after fresh gravity is available. It settles
 completed or interrupted pair intervals, closes each due particle's source and
 conservative interval, and opens new intervals after active reconstruction.
 Source-independent support/geometry preparation has a separate entry point so
-it can overlap gravity evaluation after both tree-sorting phases have completed.
+it can overlap gravity evaluation after gravity has completed its particle sorting.
+Hydro tree refreshes update stable-ID geometry without reordering particle storage.
 FMM gravity runs in an HPX future while the coordinator prepares hydro geometry;
 the future is joined before importing fresh gas accelerations, closing source
 terms, choosing timesteps, or reconstructing the next interval's fluxes. The
@@ -303,7 +386,7 @@ stored potential is needed by this source integration.
 For MFV, the gravity source mass is projected from the conserved anchor, pending
 mass, and elapsed portions of live pair intervals before gravity builds its tree.
 This projection does not commit a particle or alter its reconstruction anchor.
-PMMM remains sequential because its particle ordering differs from hydro's tree.
+The PMMM and hydro force stages remain sequential in the current driver.
 Distributed CUDA FMM also remains sequential: remote GPU source staging currently
 resizes shared particle storage. Single-locality CUDA FMM and CPU FMM can overlap.
 
@@ -319,7 +402,7 @@ performs no Riemann solve or conservative update. The predictor, pending ledger,
 source moments, stable identifiers, and unexpired pair intervals persist so a
 restart may occur between coarse-particle commits.
 
-The existing tree, gas storage, domain distribution, gravity, cosmological
+The shared geometry tree, gas storage, domain distribution, gravity, cosmological
 units, scenario initialization, and output infrastructure are reused. MFV mass
 is carried with each gas particle through redistribution and checkpointing;
 restarts require the same hydrodynamic method. Cosmological conversions use
@@ -767,9 +850,9 @@ CUDA translation units were compile-checked; GPU execution was not tested.
 
 ### Own-step integration and independent backends: November 2, 2026
 
-The current revision uses conserved anchors plus pending conservative increments,
+That revision used conserved anchors plus pending conservative increments,
 retained gradients, anchored drift trajectories, and elapsed pair-flux intervals.
-Particle-state checkpoints use version 5; live pair records use version 2. Old
+Its particle-state checkpoints used version 5; live pair records used version 2. Old
 particle-state layouts are rejected. Fresh force samples and the own-step source
 anchor remain separate, including when a particle wakes before its scheduled end.
 

@@ -278,7 +278,10 @@ cosmological conversions, and deliberate implementation choices. SPH support is
 built by default; `-DCOSMICTIGER_ENABLE_SPH=OFF` excludes it. Enable gas
 explicitly with `--hydro.enabled=true`. SPH supports traditional block timesteps
 and global adaptive timesteps with FMM, either PMMM near method, or gravity
-disabled. Hierarchical hydro integration is not implemented.
+disabled. [Hierarchical SPH](docs/hierarchical_sph.md) uses a separate persistent
+neighbor tree and individual gas timesteps alongside hierarchical gravity. It
+currently supports adiabatic gas without chemistry or star formation; see the
+linked restrictions and validation coverage.
 Select SIMD CPU SPH with `--hydro.cuda=false` or CUDA SPH with `--hydro.cuda=true`.
 Particle drift selects its backend with `drift.cuda`: the CPU path uses SIMD position updates
 and HPX workers, including rung filtering, glass damping, and lightcone crossings.
@@ -299,7 +302,10 @@ For a small cosmological run using the native Einstein–Boltzmann power spectru
 Select `hydro.method=sph|mfm|mfv` to choose SPH or the restored
 [Hopkins MFM/MFV solver](docs/hopkins_hydro.md). The Hopkins implementation uses
 double precision hydrodynamic state on the CPU and supports traditional individual
-steps or global continuous steps, with FMM or PMMM gravity. It requires a Fixed64
+steps or global continuous steps, with FMM or PMMM gravity. Fixed-mass MFM also
+supports hierarchical gravity with independent hydro clocks and conservative
+pair intervals; MFV's changing masses require traditional or global integration.
+Hierarchical MFM currently requires lightcone output disabled. It requires a Fixed64
 position build, with cooling and star formation disabled. `configurations/sound_wave.ini` and
 `configurations/gresho.ini` provide meshless test problems.
 Compile the meshless methods with `-DCOSMICTIGER_ENABLE_HOPKINS=ON`;

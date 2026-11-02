@@ -29,6 +29,8 @@ static_assert(
     kMaxBucketSize >= 32 && kMaxBucketSize <= 1024 && (kMaxBucketSize & (kMaxBucketSize - 1)) == 0,
     "MAX_BUCKET_SIZE must be a power of two from 32 to 1024");
 
+struct HopkinsParticleState;
+
 struct CudaKickData {
     TreeNode* treeNodes;
     Position* x;
@@ -39,6 +41,8 @@ struct CudaKickData {
     float* sphGravityAccelerationX;
     float* sphGravityAccelerationY;
     float* sphGravityAccelerationZ;
+    float* sphGravityTimestep;
+    HopkinsParticleState* hopkinsStates;
     ParticleInteger* catIndex;
     char* type;
     bool sph;
@@ -104,6 +108,9 @@ struct KickParameters {
     bool profileCoordinator = true;
     bool globalTimestep = false;
     double previousTimestep = 0.0;
+    // Hydro closes the old interval and proposes its rung before the top
+    // hierarchical gravity opening impulse is committed.
+    bool deferGasOpening = false;
     bool htime;
     float sign;
     int minLevel{};
@@ -166,6 +173,7 @@ struct KickParameters {
         arc & profileCoordinator;
         arc & globalTimestep;
         arc & previousTimestep;
+        arc & deferGasOpening;
         arc & outputOffset;
     }
 };

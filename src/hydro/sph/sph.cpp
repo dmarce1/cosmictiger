@@ -599,6 +599,7 @@ SphRunReturn SphRunWorkspace::run(bool useCuda) {
     runData.sinkGravityAccelerationX = &sphParticlesGravityAcceleration(kXDimension, 0);
     runData.sinkGravityAccelerationY = &sphParticlesGravityAcceleration(kYDimension, 0);
     runData.sinkGravityAccelerationZ = &sphParticlesGravityAcceleration(kZDimension, 0);
+    runData.sinkGravityTimestep = sphParticlesGravityTimesteps;
     runData.gravityEffectiveRadius = getOptions().gravity.supportRadius /
         selectedGravityKernel().supportRadiusPerEffectiveRadius;
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM

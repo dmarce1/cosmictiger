@@ -139,13 +139,21 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Vector3<float>* veloc
                     size_t const particle = index + lane;
                     if (parameters.rung < 0 || rungs[particle] == parameters.rung) {
                         auto* state = meshState(particle);
+                        if (parameters.hierarchicalMfm && state != nullptr) {
+                            if (dim == 0) {
+                                state->gravityEndTime = parameters.tau1;
+                                state->gravityDriftScale = parameters.scale;
+                            }
+                            continue;
+                        }
                         if constexpr (kPositionBits == 64) {
                             // Add in fixed point so conversion of the absolute
                             // position to double cannot discard its low bits.
                             positions[dim][particle] += Position(velocity[lane] * driftFactor);
                         } else {
-                            positions[dim][particle].raw() += static_cast<PositionInteger>(
-                                std::llrint(std::remainder(velocity[lane] * driftFactor, 1.0) * 0x1p32));
+                            positions[dim][particle].raw() +=
+                                static_cast<PositionInteger>(std::llrint(
+                                    std::remainder(velocity[lane] * driftFactor, 1.0) * 0x1p32));
                         }
                         if (parameters.drag != 0.0 && state == nullptr) {
                             velocities[particle][dim] = velocity[lane] * damping;
@@ -166,6 +174,11 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Vector3<float>* veloc
         auto const driftVelocity = velocities[index];
 #endif
         auto* state = meshState(index);
+        if (parameters.hierarchicalMfm && state != nullptr) {
+            state->gravityEndTime = parameters.tau1;
+            state->gravityDriftScale = parameters.scale;
+            continue;
+        }
         for (int dim = 0; dim < kDimensions; ++dim) {
             before[dim] = positions[dim][index].toDouble();
             after[dim] = std::fma(meshDriftVelocity(index, dim), driftFactor, before[dim]);

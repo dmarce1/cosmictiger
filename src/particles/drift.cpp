@@ -54,6 +54,8 @@ void cpuDrift(int rung, double a, double dt, double tau0, double tau1, double ta
     // Match the glass damping policy in cudaDrift, including its override of drag.
     drag = getOptions().run.scenario == "glass" ? std::numbers::pi : 0.0;
     parameters.drag = drag;
+    parameters.hierarchicalMfm = rung >= 0 && getOptions().run.hierarchicalGravity &&
+        getOptions().hydro.enabled && getOptions().hydro.method == "mfm";
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
     parameters.lightcone = getOptions().lightcone.enabled && tauMax > 0.0f && tauMax - tau1 < 1.0f;
 #endif

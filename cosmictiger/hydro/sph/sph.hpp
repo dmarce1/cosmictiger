@@ -150,7 +150,10 @@ struct SphRunParameters {
     // Phase zero may publish pair rates before the fresh gravity field arrives.
     // Source acceleration is then assembled before the closing corrector.
     bool deferAccelerationSources = false;
-    bool refreshConvergedDensity = false;    // Recompute diagnostics with fixed, converged supports.
+    // Hierarchical gravity owns its kicks; its force still constrains timesteps.
+    bool excludeSelfGravity = false;
+    bool refreshConvergedDensity =
+        false;    // Recompute diagnostics with fixed, converged supports.
     float viscosityAlpha;
     float viscosityBeta;
     float viscosityEpsilon;
@@ -220,6 +223,7 @@ struct SphRunParameters {
         arc & maximumTimestep;
         arc & globalTimestep;
         arc & deferAccelerationSources;
+        arc & excludeSelfGravity;
         arc & refreshConvergedDensity;
         arc & uniformAccelerationY;
         arc & baseTimestep;

@@ -25,6 +25,7 @@ struct DriftParameters {
     double tauMax = 0.0;
     double drag = 0.0;
     bool lightcone = false;
+    bool hierarchicalMfm = false;
     int mapSize = 1;
 };
 

@@ -110,7 +110,8 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         return treeBuild({params, key, processRange, particleRange, box, depth, localRoot}, policy);
     }();
 #if COSMICTIGER_WITH_SPH
-    if (localRoot && getOptions().hydro.enabled) {
+    // Hierarchical swaps maintain inverse gas indices without scanning slow rungs.
+    if (localRoot && getOptions().hydro.enabled && !usesHierarchicalIntegration(getOptions().run)) {
         particlesResolveWithSphParticles();
     }
 #endif

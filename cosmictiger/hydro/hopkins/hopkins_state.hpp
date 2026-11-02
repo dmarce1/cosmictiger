@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <type_traits>
 
+#include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
 // Own-step conserved anchor and conservative transfers from completed pair intervals.
@@ -37,8 +38,25 @@ struct HopkinsParticleState {
     bool initialized = false;
     std::array<Vector3<double>, 5> gradients{};
     bool predictorInitialized = false;
-    // Coordinates live only in the authoritative shared Fixed64 particle array.
     double supportRadius = 0.0;
+    // Hydro reconstruction and gravity HOLD intervals have independent clocks.
+    // The shared gravity coordinate may already be at gravityEndTime while
+    // positionAnchor retains the physical trajectory at the hydro event.
+    Vector3<Position> positionAnchor{};
+    double positionEpoch = 0.0;
+    double positionDriftScale = 1.0;
+    double gravityEndTime = 0.0;
+    double gravityDriftScale = 1.0;
+    int hydroRung = 0;
+    bool hierarchicalActive = false;
+
+    CUDA_EXPORT Position positionAt(int dimension, double time) const {
+        double const duration = time - positionEpoch;
+        double const displacement = duration *
+            (meshVelocity[dimension] + 0.5 * duration * meshAcceleration[dimension]) /
+            positionDriftScale;
+        return positionAnchor[dimension] + Position(displacement);
+    }
 
     // Conserved accounting includes transfers already accepted by either endpoint.
     // Reconstruction continues to use the own-step anchor above.
@@ -64,7 +82,9 @@ struct HopkinsParticleState {
             pendingMomentum & anchorVolume & meshVelocity & meshAcceleration & sourceAcceleration &
             pendingGravityIntegral & pendingGravityWork & sourceTime & endTime &
             expansionCoefficient & beginTick & endTick & initialized & gradients &
-            predictorInitialized & supportRadius;
+            predictorInitialized & supportRadius & positionAnchor & positionEpoch &
+            positionDriftScale & gravityEndTime & gravityDriftScale & hydroRung &
+            hierarchicalActive;
     }
 };
 
