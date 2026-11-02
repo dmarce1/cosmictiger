@@ -184,38 +184,28 @@ It enables GADGET-4 equilibrium atomic cooling; see
 [the cooling options](../docs/primordial_chemistry.md). A collisionless
 cosmological run can disable both `hydro.enabled` and `chemistry.enabled`.
 
-Five cosmology presets use 32³ reference particles with a reference mass of
-`3.58e9` solar masses, CPU execution, and 100 particle snapshots at equal
-conformal intervals. The derived comoving box side is about 9.68717 Mpc/h
-for the curved ΛCDM and subcritical models, 6.58072 Mpc/h for the critical
-model, and 5.22296 Mpc/h for the closed model:
+Cosmological runs require zero spatial curvature. The application rejects a
+numeric `cosmology.omegaLambda` unless it closes the flat density budget with
+matter and radiation; `auto` derives that value. The former closed, open, and
+curved ΛCDM presets have been removed.
 
-| Preset | Background and endpoint |
-| --- | --- |
-| [closed_no_dark_energy.ini](closed_no_dark_energy.ini) | Collapsing: `Ωm=2`, `ΩΛ=0`, through turnaround to contracting `a≈1e-6`. |
-| [omega_k_negative.ini](omega_k_negative.ini) | `Ωk=-0.1`, positive spatial curvature, positive Λ; expanding to `a=10`. |
-| [omega_k_positive.ini](omega_k_positive.ini) | `Ωk=+0.1`, negative spatial curvature, positive Λ; expanding to `a=10`. |
-| [critical.ini](critical.ini) | Critical: `Ωm=1−Ωr`, `ΩΛ=Ωk=0`, expanding to `a=100`; physical `da/dt → 0`. |
-| [subcritical_no_dark_energy.ini](subcritical_no_dark_energy.ini) | Subcritical: `Ωm≈0.313466`, `ΩΛ=0`, `Ωk≈0.686442`, expanding to `a=100`; physical `da/dt → H0 sqrt(Ωk) > 0`. |
+The [critical.ini](critical.ini) preset uses 32³ reference particles with a
+reference mass of `3.58e9` solar masses, CPU execution, and 100 particle snapshots
+at equal conformal intervals. Its derived comoving box side is about
+6.58072 Mpc/h. It has `Ωm=1−Ωr`, `ΩΛ=Ωk=0`, and expands to `a=100`;
+its physical expansion speed `da/dt` approaches zero at late times.
 
-`Ωk` has the opposite sign to spatial curvature: negative `Ωk` means a closed
-geometry. The two mildly curved ΛCDM examples both keep expanding; positive
-spatial curvature alone does not guarantee recollapse. In the critical and
-subcritical no-dark-energy models, `H=adot/a` approaches zero in both cases,
-but only the critical model's physical expansion speed `adot` approaches zero.
-
-The standard, curved ΛCDM, and subcritical examples use `h=0.674`,
-`Ωb=0.0224/h²`, and `Ωc=0.12/h²`. All include photons and massless neutrinos
-with `Ωr≈9.20939e-5`; the historical massive-neutrino density is not added to
-cold matter. The curved and collapsing presets use `sigma8=0` homogeneous
-lattices because the native perturbed initial-condition solver requires
-flatness. The flat standard and critical presets use `sigma8=0.8607`.
+The `lcdm_present.ini` and `lcdm_ten_ages.ini` presets use `h=0.674`,
+`Ωb=0.0224/h²`, and `Ωc=0.12/h²`. The critical preset increases cold matter to
+close the flat density budget with zero Λ. These presets include photons and massless neutrinos with
+`Ωr≈9.20939e-5`; the historical massive-neutrino density is not added to cold
+matter. They use `sigma8=0.8607` with the native flat initial-condition solver.
 
 The optional [lcdm_ten_ages.ini](lcdm_ten_ages.ini) continues the standard model
 to ten times its present age, recalculated with the current radiation model.
 Its present age is about 13.81146 Gyr and its final scale factor is about
-1291.70. This preserves the historical future-evolution example separately
-from the five cosmology choices above.
+1291.70. It uses the same reference mass, resolution, and snapshot count as the
+critical preset, with a derived comoving box side of about 9.68717 Mpc/h.
 
 These files contain complete options and describe their assumptions in their
 headers. Their positive `run.endTime` values are **conformal code durations**,

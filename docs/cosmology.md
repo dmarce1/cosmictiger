@@ -1,15 +1,22 @@
 # Cosmological background evolution
 
+The application currently supports only spatially flat cosmologies (`Ωk=0`).
+Nonzero curvature is rejected during option validation, including homogeneous
+runs and checkpoint restarts. The standalone `FriedmannCosmology` solver retains
+its general curved-background equations and mathematical tests; those do not
+establish support for curved particle simulations.
+
 The background evolves through maximum expansion with a signed physical
 derivative, `adot = da/dt`. Conformal time obeys `dt = a dτ`; it increases
 during both expansion and contraction. Particle momenta retain the existing
-convention `p = a v_peculiar`, so a drift uses `∫dτ/a = ∫dt/a²`.
+convention `p = a v_peculiar`, so a drift uses `∫dτ/a = ∫dt/a²`. Flat models with
+negative Λ can still turn around and contract.
 
 ## Equations and adaptive integration
 
-The solver is adapted from `dmarce1/experimental` commit
+The general background solver is adapted from `dmarce1/experimental` commit
 `7ba8f1829fdede7348a1418b7cb36c0e7a955302`, with its original attribution and
-license retained. Define
+license retained. The application uses the following equations with `Ωk=0`:
 
 ```
 P(a) = Ωr + Ωm a + Ωk a² + ΩΛ a⁴
@@ -48,14 +55,15 @@ inverting a scale factor that occurs on two branches.
 ## Inputs and stopping
 
 `cosmology.omegaLambda=auto` derives `ΩΛ = 1 - Ωm - Ωr` and sets `Ωk=0`.
-Every numeric value, including `-1`, is now a literal signed dark-energy
-density. When a numeric value is supplied, curvature is derived from the density
-budget. Curvature residuals within eight machine epsilons times the largest
+Every numeric value, including `-1`, is a literal signed dark-energy density.
+A numeric value must also close the flat density budget, `Ωm + Ωr + ΩΛ = 1`.
+Curvature residuals within eight machine epsilons times the largest
 absolute density (or one, whichever is larger) are set to zero. This removes
 floating-point subtraction roundoff, so the critical preset with literal
 `ΩΛ=0` and `Ωm=1−Ωr` has exactly `Ωk=0` and retains its intended asymptotic
-behavior. Existing INIs that used negative values as the old automatic sentinel
-must replace those values with `auto`; the shipped files have been migrated.
+behavior. Any remaining nonzero curvature is rejected; it is not silently
+replaced by a flat model. Existing INIs that used negative values as the old
+automatic sentinel must replace those values with `auto`.
 
 For the cosmology scenario:
 
@@ -81,11 +89,9 @@ extra coarse step caused by accumulated floating-point additions.
 
 `cosmology.sigma8=0` generates an unperturbed particle lattice and bypasses
 the power-spectrum solver. This provides homogeneous initial conditions for
-curved and recollapsing background tests. The native **perturbed** initial
-condition solver still requires a spatially flat cosmology. Native recombination
-initialization also requires flatness; use `chemistry.enabled=false` or manual
-chemistry initialization for a curved model. Background support alone does not
-extend either of those initial-condition solvers.
+flat recollapsing background tests. It does not bypass the application's flatness
+requirement. The native perturbed initial-condition and recombination solvers
+also assume a spatially flat cosmology.
 
 The immutable background table stores adaptive dense output over the complete
 run. Lightcone particles and Rockstar metadata sample the emission epoch
@@ -113,11 +119,11 @@ headless Agg backend, so no display is required. If rendering is unavailable,
 the program reports `Unable to render cosmology.png`, retains `cosmology.txt`,
 and continues the simulation. Other scenarios do not produce these diagnostics.
 
-Halo density conventions also remain defined at turnaround. Closed models,
-negative Λ, and curved backgrounds with Λ use explicitly labelled mean-matter
-thresholds: 200 for the main halo and 200/500/2500 for the secondary mass fields.
-Their catalogue metadata and viewer labels identify that reference. Standard
-flat nonnegative-Λ and open zero-Λ models retain their existing Bryan–Norman
+Halo density conventions also remain defined at turnaround. Flat negative-Λ
+models use explicitly labelled mean-matter thresholds: 200 for the main halo
+and 200/500/2500 for the secondary mass fields.
+Their catalogue metadata and viewer labels identify that reference. Flat
+nonnegative-Λ models retain their existing Bryan–Norman
 and critical-density conventions. See [halo catalogue conventions](rockstar.md#catalogue-conventions).
 The mean-matter thresholds are measurement definitions, not a calibrated
 spherical-collapse prediction for recollapsing cosmologies.
@@ -192,16 +198,16 @@ subdivision independence, and consistent energy normalization;
 background behavior.
 
 `tests/run_cosmology.py` exercises the CPU application with homogeneous
-particles: closed-dust and negative-Λ recollapse, ordinary gravity/SPH through
+particles: flat negative-Λ recollapse, ordinary gravity/SPH through
 turnaround, checkpoint restarts during contraction and at coarse boundaries,
 completed-run restarts, a future expanding redshift endpoint, and rejection of
 an unreachable endpoint. Collisionless builds use `--collisionless-only` and
 include hierarchical integration. The checks require one final energy row and
 no duplicate on a completed restart. The script compares saved background state
 with independent analytic solutions and checks monotonic clocks. The
-initialization-output checks compare all 1025 samples with the closed-dust
-cycloid, including the signed physical derivative, and verify unchanged full
-histories on contracting and completed restarts. When Matplotlib is available,
+initialization-output checks compare all 1025 samples with an independent
+flat negative-Λ solution, including the signed physical derivative, and verify
+unchanged full histories on contracting and completed restarts. When Matplotlib is available,
 they also validate the PNG dimensions, chunk checksums, and decompressed
 scanlines after fresh initialization and regeneration over stale restart files.
 The hierarchical `fmmWalk` fixture also checks closing kicks and final energies
@@ -209,7 +215,7 @@ against independent periodic forces with nonzero velocities and mixed particle
 rungs. The `rockstar_cpu` regression
 checks actual lightcone halo metadata during contraction; invalid observer
 times beyond a future conformal boundary are also covered by the core tests.
-The options regression loads all six presets and checks their resolved
-curvature, including exact zero curvature and Λ for the critical model.
+The options regression loads the supplied flat presets, checks exact zero
+curvature and Λ for the critical model, and rejects nonflat density budgets.
 These checks do not substitute for CUDA, distributed MPI, or perturbed
 nonlinear recollapse validation.

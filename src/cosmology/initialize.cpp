@@ -257,9 +257,8 @@ void initialize(double z0) {
         }
     };
     if (getOptions().cosmology.sigma8 == 0.0) {
-        // A homogeneous lattice needs no transfer functions. This also permits
-        // curved-background evolution without applying the flat-only native
-        // Einstein-Boltzmann solver to an unsupported cosmology.
+        // A homogeneous lattice needs no transfer functions. The application
+        // still requires a spatially flat background.
         profile::ScopedPhase profilePhase("initialize.lattice");
         initX0();
         clearX0();
