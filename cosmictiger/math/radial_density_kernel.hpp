@@ -122,7 +122,8 @@ constexpr DensityKernelTable<dimension> makeDensityKernelTable(KernelSpec spec) 
                 primitive[i] = primitive[i + 1] + raw[0][i] / (currentDegree + 1);
             }
             ++currentDegree;
-            for (int i = 0; i <= currentDegree; ++i) {
+            // Copy the zero tail too, keeping the bound tied to the array capacity.
+            for (int i = 0; i <= kMaximumDegree; ++i) {
                 raw[0][i] = primitive[i];
             }
         }
