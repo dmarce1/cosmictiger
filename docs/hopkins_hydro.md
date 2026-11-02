@@ -167,8 +167,10 @@ does not support `hierarchical` integration. The gravity solver is an independen
 choice: either `gravity.method.far=fmm` or `pmmm` can accompany traditional or
 global meshless hydro. PMMM also supports hierarchical integration for gravity
 without hydrodynamics. A uniform global timestep is optional; choosing PMMM does
-not select it. Both chemistry and star formation must be disabled for MFM/MFV;
-incompatible combinations are rejected during option validation.
+not select it. MFM accepts `chemistry.enabled` and `starFormation.enabled`
+(see [Chemistry and star formation](#chemistry-and-star-formation)); both must be
+disabled for MFV, and incompatible combinations are rejected during option
+validation.
 
 `src/hydro/hopkins.cpp` is a CPU SIMD backend, including in a
 CUDA-enabled build. It gathers gas state and tree-derived neighbor ranges from
@@ -366,12 +368,42 @@ adaptive gravitational-softening correction. This integration retains the
 existing fixed gravitational softening and does not implement the Appendix H2
 adaptive-softening terms or claim full GIZMO gravity equivalence.
 
-The ideal-gas equation of state uses `hydro.gamma`. Coupling chemistry and
-star formation to the conserved meshless state requires additional
-implementation. The cosmology INI enables chemistry, so explicitly use
-`--chemistry.enabled=false --starFormation.enabled=false` when selecting a
-meshless method with that configuration. These solvers do not add GIZMO's
-MHD, feedback, particle splitting, or other optional physics.
+The ideal-gas equation of state uses `hydro.gamma`. These solvers do not add
+GIZMO's MHD, feedback, particle splitting, or other optional physics.
+
+### Chemistry and star formation
+
+MFM couples the GADGET-4 equilibrium cooling of `docs/chemistry_cpu_support.md`
+and the Springel & Hernquist star formation of `docs/star_formation.md` to its
+conserved state; `hydro.gamma=5/3` is required by cooling as for SPH. Because MFM
+exchanges no mass between cells, each cell's specific thermal energy maps
+one-to-one onto its conserved total energy, and the per-particle cooling guess
+and star-formation metadata stay with the cell. The sources are operator split
+exactly as in the SPH step: when a cell's own-step interval closes in
+`hopkinsKick`, after the pair transfers and the gravitational work of that
+interval are folded into the anchor and before the new primitives, timestep
+selection, reconstruction and pair fluxes, the combined source advances the cell
+over the duration it actually closed. An early wake-up or the terminal closure
+therefore integrates the source over the shortened interval rather than the
+scheduled rung interval. The source consumes the cell's current density
+(mass over the kernel-partition volume) and the float stored thermal energy, as
+the SPH coupling does, and applies only the resulting change to the double
+anchor, so storage rounding does not accumulate. The heating diagnostic and the
+synchronized pressure integral of the cosmological energy budget follow the SPH
+conventions.
+
+A whole-cell conversion decided at a closure keeps the cell's closing state for
+that kick: it opens no new pair interval (its old pairs were settled at the
+closure), it still participates in its neighbours' volume partition and
+gradients at that instant, and the scatter removes it from the gas set and
+registers the new star for the opening gravity half kick that
+`starFormationOpenNewStars` applies. The next kick rebuilds supports and
+geometry without it. Per-step reports include the number of conversions as
+`stars=`.
+
+MFV transfers mass between cells and would require advecting the cooling and
+star-formation state with those fluxes; it still requires
+`--chemistry.enabled=false --starFormation.enabled=false`.
 
 For example, from the repository root run the existing Sod setup with either
 meshless solver, substituting your build directory. Replace `traditional` with

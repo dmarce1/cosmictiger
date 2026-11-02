@@ -161,9 +161,12 @@ void validateHydroMethod(Options const& opts) {
             throw std::invalid_argument(
                 "Hopkins MFM/MFV requires run.timeIntegrator=traditional or global");
         }
-        if (opts.chemistry.enabled || opts.starFormation.enabled) {
+        // MFM keeps every cell's mass fixed, so the operator-split GADGET-4 sources
+        // map onto its conserved energy. MFV exchanges mass between cells and would
+        // need advected cooling and star-formation state.
+        if (opts.hydro.method == "mfv" && (opts.chemistry.enabled || opts.starFormation.enabled)) {
             throw std::invalid_argument(
-                "Hopkins MFM/MFV requires chemistry.enabled=false and starFormation.enabled=false");
+                "Hopkins MFV requires chemistry.enabled=false and starFormation.enabled=false");
         }
     }
     if (opts.run.scenario == "soundWave") {

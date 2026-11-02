@@ -300,7 +300,8 @@ Select `hydro.method=sph|mfm|mfv` to choose SPH or the restored
 [Hopkins MFM/MFV solver](docs/hopkins_hydro.md). The Hopkins implementation uses
 double precision hydrodynamic state on the CPU and supports traditional individual
 steps or global continuous steps, with FMM or PMMM gravity. It requires a Fixed64
-position build, with cooling and star formation disabled. `configurations/sound_wave.ini` and
+position build. MFM accepts cooling and star formation; MFV requires both disabled.
+`configurations/sound_wave.ini` and
 `configurations/gresho.ini` provide meshless test problems.
 Compile the meshless methods with `-DCOSMICTIGER_ENABLE_HOPKINS=ON`;
 the default SPH build omits them.

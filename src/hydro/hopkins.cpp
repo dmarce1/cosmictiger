@@ -39,7 +39,14 @@
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/simd_math.hpp>
+#include <cosmictiger/particles/star_formation_state.hpp>
 #include <cosmictiger/scenarios/scenario.hpp>
+#if COSMICTIGER_ENABLE_CHEMISTRY
+#include <cosmictiger/hydro/sph/sph_chemistry.hpp>
+#endif
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+#include <cosmictiger/hydro/sph/star_formation.hpp>
+#endif
 
 namespace detail {
 
@@ -80,10 +87,17 @@ struct HopkinsParticle {
     double support = 0.0;
     double density = 0.0;
     int rung = 0;
+    // GADGET-4 source state travels with the gathered cell; the cooling guess and
+    // the SH03 metadata are read at collection and written back at the scatter.
+    gadget4::State chemistry{};
+    StarFormationState starFormation{};
+    // A whole-cell conversion decided at this closure: the cell keeps its closing
+    // state, opens no pair interval, and leaves the gas set when it is installed.
+    bool convert = false;
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & position & velocity & acceleration & state & active & mass & energy & support &
-            density & rung;
+            density & rung & chemistry & starFormation & convert;
     }
 };
 
@@ -359,6 +373,12 @@ HopkinsBlock hopkinsCollect(bool countOperations, bool readForces) {
         particle.support = particle.state.supportRadius > 0.0 ? particle.state.supportRadius :
                                                                 sphParticlesSupportRadius(i);
         particle.rung = sphParticlesRung(i);
+        if (getOptions().chemistry.enabled) {
+            particle.chemistry = sphParticlesChemistryStates[i];
+        }
+        if (getOptions().starFormation.enabled) {
+            particle.starFormation = particlesStarFormationStates[sphParticlesParticleIndex(i)];
+        }
         particle.acceleration = readForces ? hopkinsAcceleration(i, operations) : hopkins::Vector{};
         for (int dim = 0; dim < 3; dim++) {
             particle.position[dim] = sphParticlesPosition(dim, i);
@@ -390,6 +410,7 @@ void hopkinsInstall(
     std::vector<HopkinsParticle> const& particles, int phase, bool countOperations) {
     HopkinsFlopBatch operations(countOperations);
     ALWAYS_ASSERT(particles.size() == size_t(sphParticlesSize()));
+    std::vector<ParticleInteger> converted;
     for (size_t i = 0; i < particles.size(); i++) {
         auto const& particle = particles[i];
         hopkins::detail::countFlops(operations, 2);
@@ -407,9 +428,30 @@ void hopkinsInstall(
             for (int dim = 0; dim < 3; dim++) {
                 sphParticlesVelocity(dim, i) = particle.velocity[dim];
             }
+            if (getOptions().chemistry.enabled) {
+                sphParticlesChemistryStates[i] = particle.chemistry;
+            }
+            if (getOptions().starFormation.enabled) {
+                particlesStarFormationStates[sphParticlesParticleIndex(i)] = particle.starFormation;
+                if (particle.convert) {
+                    converted.push_back(ParticleInteger(i));
+                }
+            }
         }
         sphParticlesHopkinsState(i).supportRadius = particle.support;
     }
+    if (converted.empty()) {
+        return;
+    }
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+    // Remove converted gas last and highest index first: each removal swaps the
+    // current last particle, whose installed state is already complete, into the slot.
+    for (auto index = converted.rbegin(); index != converted.rend(); ++index) {
+        starFormationConvertGas(*index, particles[*index].starFormation);
+    }
+#else
+    throw std::logic_error("Star formation requires COSMICTIGER_ENABLE_STARS=ON");
+#endif
 }
 
 void hopkinsInstallGravityMasses(std::vector<std::pair<uint64_t, double>> const& partialMasses) {
@@ -1544,6 +1586,115 @@ void hopkinsCloseParticle(HopkinsWorkspace& workspace, size_t i) {
     state.anchorVolume = workspace.geometry[i].volume;
 }
 
+// Operator-split GADGET-4 sources for cells whose own-step intervals have just closed.
+// Each cell integrates equilibrium cooling, or the combined SH03 multiphase source,
+// over exactly the duration it closed, including early wake-ups and the terminal
+// closure. The thermal change enters the conserved anchor before the new primitives,
+// timestep selection and reconstruction, mirroring the SPH step order. MFM keeps every
+// cell's mass fixed, so the specific energy maps one-to-one onto the total energy; the
+// float stored energy enters the source exactly as it does for SPH and only its change
+// is applied, so no rounding of the double anchor accumulates. A converted cell keeps
+// its closing state until the scatter removes it and opens no new pair interval.
+void hopkinsApplySources(HopkinsWorkspace& workspace, std::vector<size_t> const& closing,
+    std::vector<double> const& durations, EnergiesT& energies, size_t& converted) {
+    auto const& options = getOptions();
+    if (!options.chemistry.enabled) {
+        return;
+    }
+#if COSMICTIGER_ENABLE_CHEMISTRY
+    if (options.hydro.method != "mfm") {
+        throw std::logic_error("Hopkins thermal sources require the fixed-mass MFM scheme");
+    }
+    profile::ScopedPhase profilePhase("hydro.hopkins.sources");
+    std::vector<size_t> indices;
+    std::vector<double> intervals;
+    for (size_t k = 0; k < closing.size(); ++k) {
+        if (durations[k] > 0.0) {
+            indices.push_back(closing[k]);
+            intervals.push_back(durations[k]);
+        }
+    }
+    if (indices.empty()) {
+        return;
+    }
+    auto const storedEnergy = [](HopkinsParticle const& particle) {
+        auto const& state = particle.state;
+        double const energy = state.totalEnergy / state.mass -
+            0.5 * hopkins::dot(state.momentum, state.momentum) / (state.mass * state.mass);
+        if (!(energy > 0.0) || !std::isfinite(energy) ||
+            energy > double(std::numeric_limits<float>::max())) {
+            throw std::runtime_error("Nonphysical Hopkins cell thermal energy before sources");
+        }
+        return float(energy);
+    };
+    // The gathered cell carries no density until the primitives are rebuilt; the
+    // closure has just anchored the current kernel-partition volume.
+    auto const storedDensity = [](HopkinsParticle const& particle) {
+        auto const& state = particle.state;
+        double const density = state.mass / state.anchorVolume;
+        if (!(density > 0.0) || !std::isfinite(density)) {
+            throw std::runtime_error("Nonphysical Hopkins cell density before sources");
+        }
+        return float(density);
+    };
+    double heating = 0.0;
+    if (options.starFormation.enabled) {
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+        std::vector<star_formation_backend::Input> inputs(indices.size());
+        for (size_t k = 0; k < indices.size(); ++k) {
+            auto const& particle = workspace.particles[indices[k]];
+            auto& input = inputs[k];
+            input.state = particle.starFormation;
+            input.chemistry = particle.chemistry;
+            input.energy = storedEnergy(particle);
+            input.density = storedDensity(particle);
+            input.pressureRatio = float(gadget4::kGammaMinusOne);
+            input.rung = particle.rung;
+            for (int dim = 0; dim < 3; ++dim) {
+                input.velocity[dim] = float(particle.velocity[dim]);
+            }
+        }
+        auto const outputs = starFormationAdvanceBatch(inputs, intervals, workspace.scale);
+        for (size_t k = 0; k < indices.size(); ++k) {
+            auto& particle = workspace.particles[indices[k]];
+            auto const& output = outputs[k];
+            heating += output.value;
+            particle.starFormation = output.state;
+            if (output.convert) {
+                particle.convert = true;
+                ++converted;
+                continue;
+            }
+            particle.state.totalEnergy +=
+                particle.state.mass * (double(output.energy) - double(inputs[k].energy));
+            particle.chemistry = output.chemistry;
+        }
+#else
+        throw std::logic_error("Star formation requires COSMICTIGER_ENABLE_STARS=ON");
+#endif
+    } else {
+        std::vector<SphChemistryBatchInput> inputs(indices.size());
+        for (size_t k = 0; k < indices.size(); ++k) {
+            auto const& particle = workspace.particles[indices[k]];
+            inputs[k] = {particle.chemistry, storedEnergy(particle), storedDensity(particle),
+                sphChemistryPhysicalInterval(intervals[k], workspace.scale),
+                static_cast<long long>(particle.state.identifier)};
+        }
+        auto const results = sphChemistryAdvanceBatch(inputs, workspace.scale);
+        for (size_t k = 0; k < indices.size(); ++k) {
+            auto& particle = workspace.particles[indices[k]];
+            double const delta = double(results[k].storedEnergy) - double(inputs[k].storedEnergy);
+            heating -= particle.state.mass * delta / workspace.scale;
+            particle.state.totalEnergy += particle.state.mass * delta;
+            particle.chemistry = results[k].state;
+        }
+    }
+    energies.heating += heating;
+#else
+    throw std::logic_error("Equilibrium cooling requires COSMICTIGER_ENABLE_CHEMISTRY=ON");
+#endif
+}
+
 void hopkinsCurrentViews(HopkinsWorkspace& workspace) {
     profile::ScopedPhase profilePhase("hydro.hopkins.primitives");
     for (size_t i = 0; i < workspace.particles.size(); ++i) {
@@ -1572,6 +1723,7 @@ void hopkinsOpenPairs(HopkinsWorkspace& workspace, size_t& retained, size_t& ope
             auto const& left = workspace.particles[i];
             auto const& right = workspace.particles[j];
             if (left.state.identifier < right.state.identifier && (left.active || right.active) &&
+                !left.convert && !right.convert &&
                 !hopkinsPairs.contains({left.state.identifier, right.state.identifier})) {
                 pairs.emplace_back(i, j);
             }
@@ -1783,17 +1935,23 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
     result.maximumRung = workspace.darkMatterRung;
     result.minimumTimestep = maximumGlobalTimestep;
     size_t settled = 0;
+    size_t converted = 0;
     bool firstSelection = true;
     while (true) {
         settled += detail::hopkinsSettlePairs(workspace, closingOnly);
         {
             profile::ScopedPhase closePhase("hydro.hopkins.close");
+            std::vector<size_t> closing;
+            std::vector<double> durations;
             for (size_t i = 0; i < workspace.particles.size(); ++i) {
                 if (workspace.particles[i].active && !closed[i]) {
+                    closing.push_back(i);
+                    durations.push_back(time - workspace.particles[i].state.sourceTime);
                     detail::hopkinsCloseParticle(workspace, i);
                     closed[i] = 1;
                 }
             }
+            detail::hopkinsApplySources(workspace, closing, durations, energies, converted);
         }
         detail::hopkinsCurrentViews(workspace);
         if (closingOnly) {
@@ -1865,9 +2023,10 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
         energies.nmom = sum.nmom / scale;
     }
     terminal::detailPrint("Hopkins step: time=%.17g active=%zu total=%zu minRung=%d maxRung=%d "
-                          "pairs=%zu cached=%zu refreshed=%zu woken=%zu settled=%zu terminal=%d\n",
+                          "pairs=%zu cached=%zu refreshed=%zu woken=%zu settled=%zu stars=%zu "
+                          "terminal=%d\n",
         time, active, workspace.particles.size(), minimumGasRung, maximumGasRung, retained + opened,
-        retained, opened, woken, settled, int(closingOnly));
+        retained, opened, woken, settled, converted, int(closingOnly));
     {
         profile::ScopedPhase treePhase("hydro.hopkins.tree.destroy");
         sphTreeDestroy();
@@ -1878,6 +2037,25 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
         sphParticlesClearCaches();
         particlesCacheFree();
     }
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+    if (getOptions().starFormation.enabled) {
+        // Gas gravity belongs to the meshless momentum update, so a newborn star
+        // missed the collisionless proposal and opening half kick; the global
+        // integrator's finish kick owns both, as it does for SPH.
+        profile::ScopedPhase starPhase("hydro.hopkins.openNewStars");
+        double maximumTimestep = std::ldexp(baseTimestep, -getOptions().run.minRung);
+#if COSMICTIGER_WITH_GRAVITY
+        if (getOptions().run.scenario == "cosmology") {
+            maximumTimestep = std::min(maximumTimestep,
+                cosmology::expansionTimestep(
+                    scale, expansionRate / scale, cosmosD2adt2(scale), 0.01, nullptr));
+        }
+#endif
+        int const newStarRung = starFormationOpenNewStars(baseTimestep, scale, maximumTimestep,
+            minimumRung, getOptions().gravity.enabled && !global && !closingOnly);
+        result.maximumRung = std::max(result.maximumRung, newStarRung);
+    }
+#endif
     return result;
 }
 

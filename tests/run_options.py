@@ -355,15 +355,32 @@ mapSize = 8
             integration_options = method_options + [f"--run.timeIntegrator={integrator}"]
             output = run(f"hydro_method_enabled_{method}_{integrator}", integration_options)
             assertHydroMethod(output, method)
+            # MFM keeps cell masses fixed and accepts the GADGET-4 sources; MFV
+            # exchanges mass between cells and still rejects both of them.
             for key in ("chemistry.enabled", "starFormation.enabled"):
                 options = [option for option in integration_options if not option.startswith(f"--{key}=")]
-                rejected = run(f"hydro_method_{method}_{integrator}_{key}",
-                               options + [f"--{key}=true"], success=False)
-                diagnostic = ("COSMICTIGER_ENABLE_CHEMISTRY=ON"
-                              if key == "chemistry.enabled" and not chemistryAvailable else
-                              "Hopkins MFM/MFV requires chemistry.enabled=false and starFormation.enabled=false")
-                if diagnostic not in rejected:
+                if key == "chemistry.enabled" and not chemistryAvailable:
+                    diagnostics = ("COSMICTIGER_ENABLE_CHEMISTRY=ON",)
+                elif method == "mfv":
+                    diagnostics = ("Hopkins MFV requires chemistry.enabled=false and starFormation.enabled=false",)
+                elif key == "chemistry.enabled":
+                    diagnostics = ()
+                elif starFormationAvailable:
+                    diagnostics = ("starFormation.enabled requires chemistry.enabled=true",)
+                else:
+                    diagnostics = ("COSMICTIGER_ENABLE_STARS=ON",)
+                output = run(f"hydro_method_{method}_{integrator}_{key}",
+                             options + [f"--{key}=true"], success=not diagnostics)
+                if diagnostics and not any(diagnostic in output for diagnostic in diagnostics):
                     raise RuntimeError(f"meshless hydrodynamics lacked the {key} restriction")
+                if not diagnostics:
+                    assertHydroMethod(output, method)
+            if method == "mfm" and starFormationAvailable:
+                options = [option for option in integration_options
+                           if not option.startswith(("--chemistry.enabled=", "--starFormation.enabled="))]
+                output = run(f"hydro_method_{method}_{integrator}_sources",
+                             options + ["--chemistry.enabled=true", "--starFormation.enabled=true"])
+                assertHydroMethod(output, method)
             if "pmmm" in compiled_gravity:
                 options = [option for option in integration_options
                            if not option.startswith("--gravity.enabled=")]

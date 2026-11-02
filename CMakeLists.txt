@@ -2040,6 +2040,13 @@ if(BUILD_TESTING)
                 set_tests_properties(hopkins_global_sources PROPERTIES TIMEOUT 300 PROCESSORS 2
                     RUN_SERIAL TRUE LABELS "hopkins;cpu")
             endif()
+            if(COSMICTIGER_ENABLE_CHEMISTRY)
+                add_test(NAME hopkins_thermal_sources COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/run_hopkins.py $<TARGET_FILE:cosmictiger>
+                    ${PROJECT_BINARY_DIR}/tests/hopkins_thermal_sources --thermal-sources-only)
+                set_tests_properties(hopkins_thermal_sources PROPERTIES TIMEOUT 900 PROCESSORS 2
+                    RUN_SERIAL TRUE LABELS "hopkins;chemistry;star_formation;cpu")
+            endif()
         endif()
         if(COSMICTIGER_POSITION_TYPE STREQUAL "fixed64" AND
                 COSMICTIGER_MIN_EXPANSION_DEGREE LESS_EQUAL 6 AND

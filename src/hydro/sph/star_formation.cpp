@@ -4,6 +4,7 @@
 #include <exception>
 #include <iomanip>
 #include <limits>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -245,6 +246,48 @@ StarFormationUpdate starFormationPrepare(
     }
     return result;
 }
+void starFormationConvertGas(ParticleInteger gas, StarFormationState const& state) {
+    ParticleInteger const particle = sphParticlesParticleIndex(gas);
+    particlesStarFormationStates[particle] = state;
+    detail::NewStar star{particle, {}};
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        star.gravity[dim] =
+            getOptions().gravity.enabled ? sphParticlesGravityAcceleration(dim, gas) : 0.0f;
+    }
+    detail::newStars.push_back(star);
+    particlesConvertToStar(particle, state.formationTime);
+}
+std::vector<star_formation_backend::Output> starFormationAdvanceBatch(
+    std::vector<star_formation_backend::Input> const& inputs, std::vector<double> const& intervals,
+    double scaleFactor) {
+    if (inputs.size() != intervals.size()) {
+        throw std::invalid_argument("Star-formation batch inputs and intervals differ in size");
+    }
+    std::vector<star_formation_backend::Output> outputs(inputs.size());
+    // The backend takes one explicit interval per batch; group equal intervals so a
+    // CUDA dispatch stays batched while early closures keep their exact durations.
+    std::map<double, std::vector<size_t>> groups;
+    for (size_t index = 0; index < inputs.size(); ++index) {
+        if (!(intervals[index] > 0.0) || !std::isfinite(intervals[index])) {
+            throw std::invalid_argument("Star formation requires positive finite intervals");
+        }
+        groups[intervals[index]].push_back(index);
+    }
+    auto parameters = detail::parameters(scaleFactor);
+    for (auto const& [interval, members] : groups) {
+        parameters.baseTimestep = interval;
+        parameters.explicitTimestep = interval;
+        std::vector<detail::Input> groupInputs(members.size());
+        for (size_t k = 0; k < members.size(); ++k) {
+            groupInputs[k] = inputs[members[k]];
+        }
+        auto const groupOutputs = detail::run(detail::Operation::advance, groupInputs, parameters);
+        for (size_t k = 0; k < members.size(); ++k) {
+            outputs[members[k]] = groupOutputs[k];
+        }
+    }
+    return outputs;
+}
 void starFormationCommit() {
     std::vector<hpx::future<void>> remote;
     for (auto const& child : hpxChildren()) {
@@ -253,16 +296,10 @@ void starFormationCommit() {
     for (auto const& update : detail::pending) {
         ParticleInteger const gas = particlesCatIndex(update.particle);
         auto const& output = update.output;
-        particlesStarFormationStates[update.particle] = output.state;
         if (output.convert) {
-            detail::NewStar star{update.particle, {}};
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                star.gravity[dim] =
-                    getOptions().gravity.enabled ? sphParticlesGravityAcceleration(dim, gas) : 0.0f;
-            }
-            detail::newStars.push_back(star);
-            particlesConvertToStar(update.particle, output.state.formationTime);
+            starFormationConvertGas(gas, output.state);
         } else {
+            particlesStarFormationStates[update.particle] = output.state;
             sphParticlesInternalEnergy(gas) = output.energy;
             sphParticlesChemistryStates[gas] = output.chemistry;
         }
