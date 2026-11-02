@@ -16,14 +16,14 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/tensor.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 namespace detail {
 #if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= 3) && \
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 3)
 // FMM order 3.
 template <class T>
-CUDA_EXPORT int ewaldCorrectionDerivatives(
-    SymmetricTracelessTensor<T, 3>& d, Array<T, kDimensions> position) {
+CUDA_EXPORT int ewaldCorrectionDerivatives(SymmetricTracelessTensor<T, 3>& d, Vector3<T> position) {
     position[0] *= simdBroadcast<T>(kScaleFactor);
     position[1] *= simdBroadcast<T>(kScaleFactor);
     position[2] *= simdBroadcast<T>(kScaleFactor);
@@ -61,7 +61,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         dfour[8] = simdFma(cn, simdBroadcast<T>(d0Value[8]), dfour[8]);
         dfour[9] = simdFma(cn, simdBroadcast<T>(d0Value[9]), dfour[9]);
     }
-    Array<T, kDimensions> dx;
+    Vector3<T> dx;
     dx = position;
     {
         T r2 = simdFma(dx[0], dx[0], simdFma(dx[1], dx[1], sqr(dx[2])));
@@ -108,7 +108,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         T const dRinvPower1Order0 = radialCoefficient0 * (n8rPower1 * s1);
         T const dRinvPower1Order1 = radialCoefficient1 * s1;
         T const dRinvPower2Order0 = radialCoefficient0 * (n8rPower2 * s2);
-        Array<T, kDimensions> dxrinv;
+        Vector3<T> dxrinv;
         dxrinv[0] = dx[0] * rinv;
         dxrinv[1] = dx[1] * rinv;
         dxrinv[2] = dx[2] * rinv;
@@ -143,7 +143,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     }
     for (int i = 0; i < realsz; i++) {
         auto const n = EwaldConst::realIndex(i);
-        Array<T, kDimensions> dx;
+        Vector3<T> dx;
         for (int dim = 0; dim < kDimensions; dim++) {
             dx[dim] = position[dim] - simdBroadcast<T>(kScaleFactor) * n[dim];
         }
@@ -170,7 +170,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
             T const dRinvPower1Order0 = d1 * rinv0;
             T const dRinvPower1Order1 = d1 * rinv1;
             T const dRinvPower2Order0 = d2 * rinv0;
-            Array<T, kDimensions> dxrinv;
+            Vector3<T> dxrinv;
             dxrinv[0] = dx[0] * rinv;
             dxrinv[1] = dx[1] * rinv;
             dxrinv[2] = dx[2] * rinv;
@@ -222,8 +222,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 4)
 // FMM order 4.
 template <class T>
-CUDA_EXPORT int ewaldCorrectionDerivatives(
-    SymmetricTracelessTensor<T, 4>& d, Array<T, kDimensions> position) {
+CUDA_EXPORT int ewaldCorrectionDerivatives(SymmetricTracelessTensor<T, 4>& d, Vector3<T> position) {
     position[0] *= simdBroadcast<T>(kScaleFactor);
     position[1] *= simdBroadcast<T>(kScaleFactor);
     position[2] *= simdBroadcast<T>(kScaleFactor);
@@ -268,7 +267,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         dfour[15] = simdFma(sn, simdBroadcast<T>(d0Value[15]), dfour[15]);
         dfour[16] = simdFma(cn, simdBroadcast<T>(d0Value[16]), dfour[16]);
     }
-    Array<T, kDimensions> dx;
+    Vector3<T> dx;
     dx = position;
     {
         T r2 = simdFma(dx[0], dx[0], simdFma(dx[1], dx[1], sqr(dx[2])));
@@ -319,7 +318,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         T const dRinvPower2Order0 = radialCoefficient0 * (n8rPower2 * s2);
         T const dRinvPower2Order1 = radialCoefficient1 * (n8rPower1 * s2);
         T const dRinvPower3Order0 = radialCoefficient0 * (n8rPower3 * s3);
-        Array<T, kDimensions> dxrinv;
+        Vector3<T> dxrinv;
         dxrinv[0] = dx[0] * rinv;
         dxrinv[1] = dx[1] * rinv;
         dxrinv[2] = dx[2] * rinv;
@@ -383,7 +382,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     }
     for (int i = 0; i < realsz; i++) {
         auto const n = EwaldConst::realIndex(i);
-        Array<T, kDimensions> dx;
+        Vector3<T> dx;
         for (int dim = 0; dim < kDimensions; dim++) {
             dx[dim] = position[dim] - simdBroadcast<T>(kScaleFactor) * n[dim];
         }
@@ -414,7 +413,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
             T const dRinvPower2Order0 = d2 * rinv0;
             T const dRinvPower2Order1 = d2 * rinv1;
             T const dRinvPower3Order0 = d3 * rinv0;
-            Array<T, kDimensions> dxrinv;
+            Vector3<T> dxrinv;
             dxrinv[0] = dx[0] * rinv;
             dxrinv[1] = dx[1] * rinv;
             dxrinv[2] = dx[2] * rinv;
@@ -520,8 +519,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 5)
 // FMM order 5.
 template <class T>
-CUDA_EXPORT int ewaldCorrectionDerivatives(
-    SymmetricTracelessTensor<T, 5>& d, Array<T, kDimensions> position) {
+CUDA_EXPORT int ewaldCorrectionDerivatives(SymmetricTracelessTensor<T, 5>& d, Vector3<T> position) {
     position[0] *= simdBroadcast<T>(kScaleFactor);
     position[1] *= simdBroadcast<T>(kScaleFactor);
     position[2] *= simdBroadcast<T>(kScaleFactor);
@@ -575,7 +573,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         dfour[24] = simdFma(cn, simdBroadcast<T>(d0Value[24]), dfour[24]);
         dfour[25] = simdFma(cn, simdBroadcast<T>(d0Value[25]), dfour[25]);
     }
-    Array<T, kDimensions> dx;
+    Vector3<T> dx;
     dx = position;
     {
         T r2 = simdFma(dx[0], dx[0], simdFma(dx[1], dx[1], sqr(dx[2])));
@@ -633,7 +631,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         T const dRinvPower3Order0 = radialCoefficient0 * (n8rPower3 * s3);
         T const dRinvPower3Order1 = radialCoefficient1 * (n8rPower2 * s3);
         T const dRinvPower4Order0 = radialCoefficient0 * (n8rPower4 * s4);
-        Array<T, kDimensions> dxrinv;
+        Vector3<T> dxrinv;
         dxrinv[0] = dx[0] * rinv;
         dxrinv[1] = dx[1] * rinv;
         dxrinv[2] = dx[2] * rinv;
@@ -751,7 +749,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     }
     for (int i = 0; i < realsz; i++) {
         auto const n = EwaldConst::realIndex(i);
-        Array<T, kDimensions> dx;
+        Vector3<T> dx;
         for (int dim = 0; dim < kDimensions; dim++) {
             dx[dim] = position[dim] - simdBroadcast<T>(kScaleFactor) * n[dim];
         }
@@ -788,7 +786,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
             T const dRinvPower3Order0 = d3 * rinv0;
             T const dRinvPower3Order1 = d3 * rinv1;
             T const dRinvPower4Order0 = d4 * rinv0;
-            Array<T, kDimensions> dxrinv;
+            Vector3<T> dxrinv;
             dxrinv[0] = dx[0] * rinv;
             dxrinv[1] = dx[1] * rinv;
             dxrinv[2] = dx[2] * rinv;
@@ -1009,8 +1007,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 6)
 // FMM order 6.
 template <class T>
-CUDA_EXPORT int ewaldCorrectionDerivatives(
-    SymmetricTracelessTensor<T, 6>& d, Array<T, kDimensions> position) {
+CUDA_EXPORT int ewaldCorrectionDerivatives(SymmetricTracelessTensor<T, 6>& d, Vector3<T> position) {
     position[0] *= simdBroadcast<T>(kScaleFactor);
     position[1] *= simdBroadcast<T>(kScaleFactor);
     position[2] *= simdBroadcast<T>(kScaleFactor);
@@ -1075,7 +1072,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         dfour[35] = simdFma(sn, simdBroadcast<T>(d0Value[35]), dfour[35]);
         dfour[36] = simdFma(cn, simdBroadcast<T>(d0Value[36]), dfour[36]);
     }
-    Array<T, kDimensions> dx;
+    Vector3<T> dx;
     dx = position;
     {
         T r2 = simdFma(dx[0], dx[0], simdFma(dx[1], dx[1], sqr(dx[2])));
@@ -1138,7 +1135,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         T const dRinvPower4Order0 = radialCoefficient0 * (n8rPower4 * s4);
         T const dRinvPower4Order1 = radialCoefficient1 * (n8rPower3 * s4);
         T const dRinvPower5Order0 = radialCoefficient0 * (n8rPower5 * s5);
-        Array<T, kDimensions> dxrinv;
+        Vector3<T> dxrinv;
         dxrinv[0] = dx[0] * rinv;
         dxrinv[1] = dx[1] * rinv;
         dxrinv[2] = dx[2] * rinv;
@@ -1364,7 +1361,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     }
     for (int i = 0; i < realsz; i++) {
         auto const n = EwaldConst::realIndex(i);
-        Array<T, kDimensions> dx;
+        Vector3<T> dx;
         for (int dim = 0; dim < kDimensions; dim++) {
             dx[dim] = position[dim] - simdBroadcast<T>(kScaleFactor) * n[dim];
         }
@@ -1406,7 +1403,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
             T const dRinvPower4Order0 = d4 * rinv0;
             T const dRinvPower4Order1 = d4 * rinv1;
             T const dRinvPower5Order0 = d5 * rinv0;
-            Array<T, kDimensions> dxrinv;
+            Vector3<T> dxrinv;
             dxrinv[0] = dx[0] * rinv;
             dxrinv[1] = dx[1] * rinv;
             dxrinv[2] = dx[2] * rinv;
@@ -1841,8 +1838,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 7)
 // FMM order 7.
 template <class T>
-CUDA_EXPORT int ewaldCorrectionDerivatives(
-    SymmetricTracelessTensor<T, 7>& d, Array<T, kDimensions> position) {
+CUDA_EXPORT int ewaldCorrectionDerivatives(SymmetricTracelessTensor<T, 7>& d, Vector3<T> position) {
     position[0] *= simdBroadcast<T>(kScaleFactor);
     position[1] *= simdBroadcast<T>(kScaleFactor);
     position[2] *= simdBroadcast<T>(kScaleFactor);
@@ -1920,7 +1916,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         dfour[48] = simdFma(cn, simdBroadcast<T>(d0Value[48]), dfour[48]);
         dfour[49] = simdFma(cn, simdBroadcast<T>(d0Value[49]), dfour[49]);
     }
-    Array<T, kDimensions> dx;
+    Vector3<T> dx;
     dx = position;
     {
         T r2 = simdFma(dx[0], dx[0], simdFma(dx[1], dx[1], sqr(dx[2])));
@@ -1992,7 +1988,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         T const dRinvPower5Order0 = radialCoefficient0 * (n8rPower5 * s5);
         T const dRinvPower5Order1 = radialCoefficient1 * (n8rPower4 * s5);
         T const dRinvPower6Order0 = radialCoefficient0 * (n8rPower6 * s6);
-        Array<T, kDimensions> dxrinv;
+        Vector3<T> dxrinv;
         dxrinv[0] = dx[0] * rinv;
         dxrinv[1] = dx[1] * rinv;
         dxrinv[2] = dx[2] * rinv;
@@ -2395,7 +2391,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     }
     for (int i = 0; i < realsz; i++) {
         auto const n = EwaldConst::realIndex(i);
-        Array<T, kDimensions> dx;
+        Vector3<T> dx;
         for (int dim = 0; dim < kDimensions; dim++) {
             dx[dim] = position[dim] - simdBroadcast<T>(kScaleFactor) * n[dim];
         }
@@ -2444,7 +2440,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
             T const dRinvPower5Order0 = d5 * rinv0;
             T const dRinvPower5Order1 = d5 * rinv1;
             T const dRinvPower6Order0 = d6 * rinv0;
-            Array<T, kDimensions> dxrinv;
+            Vector3<T> dxrinv;
             dxrinv[0] = dx[0] * rinv;
             dxrinv[1] = dx[1] * rinv;
             dxrinv[2] = dx[2] * rinv;
@@ -3264,8 +3260,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 8)
 // FMM order 8.
 template <class T>
-CUDA_EXPORT int ewaldCorrectionDerivatives(
-    SymmetricTracelessTensor<T, 8>& d, Array<T, kDimensions> position) {
+CUDA_EXPORT int ewaldCorrectionDerivatives(SymmetricTracelessTensor<T, 8>& d, Vector3<T> position) {
     position[0] *= simdBroadcast<T>(kScaleFactor);
     position[1] *= simdBroadcast<T>(kScaleFactor);
     position[2] *= simdBroadcast<T>(kScaleFactor);
@@ -3358,7 +3353,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         dfour[63] = simdFma(sn, simdBroadcast<T>(d0Value[63]), dfour[63]);
         dfour[64] = simdFma(cn, simdBroadcast<T>(d0Value[64]), dfour[64]);
     }
-    Array<T, kDimensions> dx;
+    Vector3<T> dx;
     dx = position;
     {
         T r2 = simdFma(dx[0], dx[0], simdFma(dx[1], dx[1], sqr(dx[2])));
@@ -3436,7 +3431,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         T const dRinvPower6Order0 = radialCoefficient0 * (n8rPower6 * s6);
         T const dRinvPower6Order1 = radialCoefficient1 * (n8rPower5 * s6);
         T const dRinvPower7Order0 = radialCoefficient0 * (n8rPower7 * s7);
-        Array<T, kDimensions> dxrinv;
+        Vector3<T> dxrinv;
         dxrinv[0] = dx[0] * rinv;
         dxrinv[1] = dx[1] * rinv;
         dxrinv[2] = dx[2] * rinv;
@@ -4183,7 +4178,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     }
     for (int i = 0; i < realsz; i++) {
         auto const n = EwaldConst::realIndex(i);
-        Array<T, kDimensions> dx;
+        Vector3<T> dx;
         for (int dim = 0; dim < kDimensions; dim++) {
             dx[dim] = position[dim] - simdBroadcast<T>(kScaleFactor) * n[dim];
         }
@@ -4238,7 +4233,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
             T const dRinvPower6Order0 = d6 * rinv0;
             T const dRinvPower6Order1 = d6 * rinv1;
             T const dRinvPower7Order0 = d7 * rinv0;
-            Array<T, kDimensions> dxrinv;
+            Vector3<T> dxrinv;
             dxrinv[0] = dx[0] * rinv;
             dxrinv[1] = dx[1] * rinv;
             dxrinv[2] = dx[2] * rinv;
@@ -5689,8 +5684,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     (!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= 9)
 // FMM order 9.
 template <class T>
-CUDA_EXPORT int ewaldCorrectionDerivatives(
-    SymmetricTracelessTensor<T, 9>& d, Array<T, kDimensions> position) {
+CUDA_EXPORT int ewaldCorrectionDerivatives(SymmetricTracelessTensor<T, 9>& d, Vector3<T> position) {
     position[0] *= simdBroadcast<T>(kScaleFactor);
     position[1] *= simdBroadcast<T>(kScaleFactor);
     position[2] *= simdBroadcast<T>(kScaleFactor);
@@ -5800,7 +5794,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         dfour[80] = simdFma(cn, simdBroadcast<T>(d0Value[80]), dfour[80]);
         dfour[81] = simdFma(cn, simdBroadcast<T>(d0Value[81]), dfour[81]);
     }
-    Array<T, kDimensions> dx;
+    Vector3<T> dx;
     dx = position;
     {
         T r2 = simdFma(dx[0], dx[0], simdFma(dx[1], dx[1], sqr(dx[2])));
@@ -5888,7 +5882,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
         T const dRinvPower7Order0 = radialCoefficient0 * (n8rPower7 * s7);
         T const dRinvPower7Order1 = radialCoefficient1 * (n8rPower6 * s7);
         T const dRinvPower8Order0 = radialCoefficient0 * (n8rPower8 * s8);
-        Array<T, kDimensions> dxrinv;
+        Vector3<T> dxrinv;
         dxrinv[0] = dx[0] * rinv;
         dxrinv[1] = dx[1] * rinv;
         dxrinv[2] = dx[2] * rinv;
@@ -7199,7 +7193,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
     }
     for (int i = 0; i < realsz; i++) {
         auto const n = EwaldConst::realIndex(i);
-        Array<T, kDimensions> dx;
+        Vector3<T> dx;
         for (int dim = 0; dim < kDimensions; dim++) {
             dx[dim] = position[dim] - simdBroadcast<T>(kScaleFactor) * n[dim];
         }
@@ -7262,7 +7256,7 @@ CUDA_EXPORT int ewaldCorrectionDerivatives(
             T const dRinvPower7Order0 = d7 * rinv0;
             T const dRinvPower7Order1 = d7 * rinv1;
             T const dRinvPower8Order0 = d8 * rinv0;
-            Array<T, kDimensions> dxrinv;
+            Vector3<T> dxrinv;
             dxrinv[0] = dx[0] * rinv;
             dxrinv[1] = dx[1] * rinv;
             dxrinv[2] = dx[2] * rinv;

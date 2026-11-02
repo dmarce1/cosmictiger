@@ -23,6 +23,7 @@
 #define SPH_PARTICLES_CPP
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #if COSMICTIGER_ENABLE_HOPKINS
 #include <cosmictiger/hydro/hopkins/hopkins_hydro.hpp>
 #endif
@@ -42,11 +43,10 @@
 static ParticleInteger capacity = 0;
 static ParticleInteger size = 0;
 
-static Array<Position, kDimensions> const* sphParticlesCacheReadLine(detail::SphCacheLineId lineId);
+static Vector3<Position> const* sphParticlesCacheReadLine(detail::SphCacheLineId lineId);
 static Pair<float> const* sphParticlesReadThermodynamicCacheLine(detail::SphCacheLineId lineId);
 static char const* sphParticlesRungCacheReadLine(detail::SphCacheLineId lineId);
-static Array<float, kDimensions> const* sphParticlesReadVelocityCacheLine(
-    detail::SphCacheLineId lineId);
+static Vector3<float> const* sphParticlesReadVelocityCacheLine(detail::SphCacheLineId lineId);
 struct SphDensityCacheEntry {
     float density{};
     float balsaraFactor{};
@@ -66,9 +66,9 @@ static SphDensityCacheEntry const* sphParticlesReadDensityCacheLine(detail::SphC
 static Pair<float> const* sphParticlesReadChemistryEosCacheLine(detail::SphCacheLineId lineId);
 static Vector<Pair<float>> sphParticlesFetchChemistryEosCacheLine(ParticleInteger index);
 
-static Vector<Array<Position, kDimensions>> sphParticlesFetchCacheLine(ParticleInteger index);
+static Vector<Vector3<Position>> sphParticlesFetchCacheLine(ParticleInteger index);
 static Vector<char> sphParticlesFetchRungCacheLine(ParticleInteger index);
-static Vector<Array<float, kDimensions>> sphParticlesFetchVelocityCacheLine(ParticleInteger index);
+static Vector<Vector3<float>> sphParticlesFetchVelocityCacheLine(ParticleInteger index);
 static Vector<float> sphParticlesFetchMassCacheLine(ParticleInteger index);
 static Vector<SphDensityCacheEntry> sphParticlesFetchDensityCacheLine(ParticleInteger index);
 static Vector<Pair<float>> sphParticlesFetchThermodynamicCacheLine(ParticleInteger index);
@@ -88,9 +88,9 @@ HPX_PLAIN_ACTION(sphParticlesRefreshChemistryEos, SphParticlesRefreshChemistryEo
 HPX_PLAIN_ACTION(
     sphParticlesFetchChemistryEosCacheLine, SphParticlesFetchChemistryEosCacheLineAction);
 
-static Array<std::unordered_map<detail::SphCacheLineId,
-                 std::shared_ptr<hpx::shared_future<Vector<Array<Position, kDimensions>>>>,
-                 detail::SphCacheLineHashHi>,
+static Array<
+    std::unordered_map<detail::SphCacheLineId,
+        std::shared_ptr<hpx::shared_future<Vector<Vector3<Position>>>>, detail::SphCacheLineHashHi>,
     kParticleCacheSize>
     particleCache;
 static Array<
@@ -102,9 +102,9 @@ static Array<std::unordered_map<detail::SphCacheLineId,
                  std::shared_ptr<hpx::shared_future<Vector<char>>>, detail::SphCacheLineHashHi>,
     kParticleCacheSize>
     rungParticleCache;
-static Array<std::unordered_map<detail::SphCacheLineId,
-                 std::shared_ptr<hpx::shared_future<Vector<Array<float, kDimensions>>>>,
-                 detail::SphCacheLineHashHi>,
+static Array<
+    std::unordered_map<detail::SphCacheLineId,
+        std::shared_ptr<hpx::shared_future<Vector<Vector3<float>>>>, detail::SphCacheLineHashHi>,
     kParticleCacheSize>
     particleVelocityCache;
 static Array<std::unordered_map<detail::SphCacheLineId,
@@ -585,15 +585,14 @@ void sphParticlesGlobalReadPositions(
     }
 }
 
-static Array<Position, kDimensions> const* sphParticlesCacheReadLine(
-    detail::SphCacheLineId lineId) {
+static Vector3<Position> const* sphParticlesCacheReadLine(detail::SphCacheLineId lineId) {
     return detail::readSphCacheLine<SphParticlesFetchCacheLineAction>(
         lineId, particleCache, mutexes);
 }
 
-static Vector<Array<Position, kDimensions>> sphParticlesFetchCacheLine(ParticleInteger index) {
+static Vector<Vector3<Position>> sphParticlesFetchCacheLine(ParticleInteger index) {
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    Vector<Array<Position, kDimensions>> line(lineSize);
+    Vector<Vector3<Position>> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; i++) {
@@ -748,15 +747,14 @@ void sphParticlesGlobalReadVelocities(
     }
 }
 
-static Array<float, kDimensions> const* sphParticlesReadVelocityCacheLine(
-    detail::SphCacheLineId lineId) {
+static Vector3<float> const* sphParticlesReadVelocityCacheLine(detail::SphCacheLineId lineId) {
     return detail::readSphCacheLine<SphParticlesFetchVelocityCacheLineAction>(
         lineId, particleVelocityCache, velocityMutexes);
 }
 
-static Vector<Array<float, kDimensions>> sphParticlesFetchVelocityCacheLine(ParticleInteger index) {
+static Vector<Vector3<float>> sphParticlesFetchVelocityCacheLine(ParticleInteger index) {
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    Vector<Array<float, kDimensions>> line(lineSize);
+    Vector<Vector3<float>> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; i++) {

@@ -33,6 +33,7 @@ constexpr bool kVerbose = true;
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/cuda/cuda_memory_advice.hpp>
 #include <cosmictiger/io/output.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particle_partition.hpp>
 #include <cosmictiger/particles/particle_selection.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -49,7 +50,7 @@ static GroupParticle const* particlesGroupCacheReadLine(LineIdType lineId);
 void particlesGroupCacheFree();
 
 struct ParticlesCacheEntry {
-    Array<Position, kDimensions> x;
+    Vector3<Position> x;
     char type;
     float mass;
     template <class A>
@@ -66,8 +67,8 @@ static Vector<ParticlesCacheEntry> particlesFetchCacheLine(ParticleInteger index
 static ParticlesCacheEntry const* particlesCacheReadLine(LineIdType lineId);
 void particlesCacheFree();
 
-static Vector<Array<float, kDimensions>> particlesFetchCacheLineVels(ParticleInteger index);
-static Array<float, kDimensions> const* particlesCacheReadLineVels(LineIdType lineId);
+static Vector<Vector3<float>> particlesFetchCacheLineVels(ParticleInteger index);
+static Vector3<float> const* particlesCacheReadLineVels(LineIdType lineId);
 
 static Vector<char> particlesFetchCacheLineRungs(ParticleInteger index);
 static char const* particlesCacheReadLineRungs(LineIdType lineId);
@@ -298,9 +299,8 @@ static Array<
     particleRungCache;
 static Array<SpinlockType, kParticleCacheSize> mutexesRungs;
 
-static Array<
-    std::unordered_map<LineIdType,
-        std::shared_ptr<hpx::shared_future<Vector<Array<float, kDimensions>>>>, LineIdHashHi>,
+static Array<std::unordered_map<LineIdType,
+                 std::shared_ptr<hpx::shared_future<Vector<Vector3<float>>>>, LineIdHashHi>,
     kParticleCacheSize>
     particleVelocityCache;
 static Array<SpinlockType, kParticleCacheSize> velsMutexes;
@@ -392,7 +392,7 @@ Vector<OutputParticle> particlesGetSample(Range<double> const& box) {
         futs.push_back(hpx::async<ParticlesGetSampleAction>(c, box));
     }
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
-        Array<double, kDimensions> x;
+        Vector3<double> x;
         for (int dim = 0; dim < kDimensions; dim++) {
             x[dim] = positionDomainCoordinate(particlesPos(dim, i));
         }
@@ -586,8 +586,8 @@ void particlesMemadviseGpu() {
     auto const rng = particlesCurrentRange();
     auto const begin = rng.first;
     auto const count = rng.second - begin;
-    CUDA_WARN(cudaAdviseMemory(particlesVelData() + begin,
-        count * sizeof(Array<float, kDimensions>), cudaMemAdviseSetAccessedBy, deviceid));
+    CUDA_WARN(cudaAdviseMemory(particlesVelData() + begin, count * sizeof(Vector3<float>),
+        cudaMemAdviseSetAccessedBy, deviceid));
     CUDA_WARN(cudaAdviseMemory(
         &particlesRung(0) + begin, count * sizeof(char), cudaMemAdviseSetAccessedBy, deviceid));
     // The CUDA drift reads species for lightcone crossings when hydro is on.
@@ -597,8 +597,8 @@ void particlesMemadviseGpu() {
             particlesTy + begin, count * sizeof(char), cudaMemAdviseSetAccessedBy, deviceid));
     }
     undoLastMemadvise = [begin, count, deviceid, types]() {
-        CUDA_WARN(cudaAdviseMemory(particlesVelData() + begin,
-            count * sizeof(Array<float, kDimensions>), cudaMemAdviseUnsetAccessedBy, deviceid));
+        CUDA_WARN(cudaAdviseMemory(particlesVelData() + begin, count * sizeof(Vector3<float>),
+            cudaMemAdviseUnsetAccessedBy, deviceid));
         CUDA_WARN(cudaAdviseMemory(&particlesRung(0) + begin, count * sizeof(char),
             cudaMemAdviseUnsetAccessedBy, deviceid));
         if (types) {
@@ -622,9 +622,8 @@ void particlesMemadviseCpu() {
     auto const rng = particlesCurrentRange();
     auto const begin = rng.first;
     auto const count = rng.second - begin;
-    CUDA_CHECK(
-        cudaAdviseMemory(particlesVelData() + begin, count * sizeof(Array<float, kDimensions>),
-            cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
+    CUDA_CHECK(cudaAdviseMemory(particlesVelData() + begin, count * sizeof(Vector3<float>),
+        cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
     CUDA_WARN(cudaAdviseMemory(&particlesRung(0) + begin, count * sizeof(char),
         cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
     bool const types = getOptions().hydro.enabled;
@@ -633,9 +632,8 @@ void particlesMemadviseCpu() {
             cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
     }
     undoLastMemadvise = [begin, count, types]() {
-        CUDA_CHECK(
-            cudaAdviseMemory(particlesVelData() + begin, count * sizeof(Array<float, kDimensions>),
-                cudaMemAdviseUnsetPreferredLocation, cudaCpuDeviceId));
+        CUDA_CHECK(cudaAdviseMemory(particlesVelData() + begin, count * sizeof(Vector3<float>),
+            cudaMemAdviseUnsetPreferredLocation, cudaCpuDeviceId));
         CUDA_WARN(cudaAdviseMemory(&particlesRung(0) + begin, count * sizeof(char),
             cudaMemAdviseUnsetPreferredLocation, cudaCpuDeviceId));
         if (types) {
@@ -647,8 +645,8 @@ void particlesMemadviseCpu() {
     for (int dim = 0; dim < kDimensions; dim++) {
         stream.prefetchAsync(&particlesPos(dim, begin), count * sizeof(Position), cudaCpuDeviceId);
     }
-    stream.prefetchAsync(&particlesVel(kXDimension, begin),
-        count * sizeof(Array<float, kDimensions>), cudaCpuDeviceId);
+    stream.prefetchAsync(
+        &particlesVel(kXDimension, begin), count * sizeof(Vector3<float>), cudaCpuDeviceId);
     stream.prefetchAsync(&particlesRung(begin), count * sizeof(char), cudaCpuDeviceId);
     if (types) {
         stream.prefetchAsync(particlesTy + begin, count * sizeof(char), cudaCpuDeviceId);
@@ -1269,14 +1267,14 @@ void particlesGravitySamplesBegin(size_t sampleCount) {
         throw std::logic_error("Gravity sample capture requires gravity.errorInterval > 0");
     }
     if (sampleCount > size_t(std::numeric_limits<ParticleInteger>::max()) ||
-        sampleCount > std::numeric_limits<size_t>::max() / sizeof(Array<float, kDimensions>)) {
+        sampleCount > std::numeric_limits<size_t>::max() / sizeof(Vector3<float>)) {
         throw std::length_error("Gravity sample count exceeds the particle index range");
     }
     particlesEnsureGravitySampleStorage();
-    Array<float, kDimensions>* accelerations = nullptr;
+    Vector3<float>* accelerations = nullptr;
     if (sampleCount > 0) {
-        accelerations = static_cast<Array<float, kDimensions>*>(
-            allocateManagedMemory(sampleCount * sizeof(Array<float, kDimensions>)));
+        accelerations = static_cast<Vector3<float>*>(
+            allocateManagedMemory(sampleCount * sizeof(Vector3<float>)));
         if (accelerations == nullptr) {
             throw std::bad_alloc();
         }
@@ -1373,7 +1371,7 @@ void particlesRandomInit() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
-Pair<Array<double, kDimensions>, double> particlesEnclosingSphere(Pair<ParticleInteger> rng) {
+Pair<Vector3<double>, double> particlesEnclosingSphere(Pair<ParticleInteger> rng) {
     auto totRng = particlesCurrentRange();
     auto totalNumberOfParticles = totRng.second - totRng.first;
     int const numberOfThreads =
@@ -1410,7 +1408,7 @@ Pair<Array<double, kDimensions>, double> particlesEnclosingSphere(Pair<ParticleI
             box.end[dim] = std::max(box.end[dim], thisBox.end[dim]);
         }
     }
-    Array<double, kDimensions> xc;
+    Vector3<double> xc;
     for (int dim = 0; dim < kDimensions; dim++) {
         xc[dim] = 0.5 * (box.begin[dim] + box.end[dim]);
     }
@@ -1438,7 +1436,7 @@ Pair<Array<double, kDimensions>, double> particlesEnclosingSphere(Pair<ParticleI
     for (auto& fut : futs2) {
         rmax = std::max(rmax, fut.get());
     }
-    Pair<Array<double, kDimensions>, double> rc;
+    Pair<Vector3<double>, double> rc;
     rc.first = xc;
     rc.second = rmax;
     return rc;
@@ -1690,7 +1688,7 @@ void particlesLoad(FILE* fp) {
     FREAD(&particlesPos(kXDimension, 0), sizeof(Position), particlesSize(), fp);
     FREAD(&particlesPos(kYDimension, 0), sizeof(Position), particlesSize(), fp);
     FREAD(&particlesPos(kZDimension, 0), sizeof(Position), particlesSize(), fp);
-    FREAD(particlesVelData(), sizeof(Array<float, kDimensions>), particlesSize(), fp);
+    FREAD(particlesVelData(), sizeof(Vector3<float>), particlesSize(), fp);
     FREAD(&particlesRung(0), sizeof(char), particlesSize(), fp);
     if (getOptions().analysis.groups) {
         FREAD(&particlesLastgroup(0), sizeof(GroupInteger), particlesSize(), fp);
@@ -1732,7 +1730,7 @@ void particlesSave(FILE* fp) {
     fwrite(&particlesPos(kXDimension, 0), sizeof(Position), particlesSize(), fp);
     fwrite(&particlesPos(kYDimension, 0), sizeof(Position), particlesSize(), fp);
     fwrite(&particlesPos(kZDimension, 0), sizeof(Position), particlesSize(), fp);
-    fwrite(particlesVelData(), sizeof(Array<float, kDimensions>), particlesSize(), fp);
+    fwrite(particlesVelData(), sizeof(Vector3<float>), particlesSize(), fp);
     fwrite(&particlesRung(0), sizeof(char), particlesSize(), fp);
     if (getOptions().analysis.groups) {
         fwrite(&particlesLastgroup(0), sizeof(GroupInteger), particlesSize(), fp);
@@ -1858,15 +1856,15 @@ void particlesGlobalReadVels(
     }
 }
 
-static Array<float, kDimensions> const* particlesCacheReadLineVels(LineIdType lineId) {
+static Vector3<float> const* particlesCacheReadLineVels(LineIdType lineId) {
     return readParticleCacheLine<ParticlesFetchCacheLineVelsAction>(
         lineId, particleVelocityCache, velsMutexes);
 }
 
-static Vector<Array<float, kDimensions>> particlesFetchCacheLineVels(ParticleInteger index) {
+static Vector<Vector3<float>> particlesFetchCacheLineVels(ParticleInteger index) {
     static bool const sph = getOptions().hydro.enabled;
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    Vector<Array<float, kDimensions>> line(lineSize);
+    Vector<Vector3<float>> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(particlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; i++) {

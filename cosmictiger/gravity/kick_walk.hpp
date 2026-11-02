@@ -48,8 +48,8 @@ bool kickSourcesAreSingleRank(Vector<TreeId> const& checklist);
 }    // namespace detail
 
 template <int order>
-KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kDimensions> pos,
-    TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
+KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> pos, TreeId self,
+    Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
     std::shared_ptr<KickWorkspace> cudaWorkspace, KickContext const& context);
 
 #ifdef COSMICTIGER_FMM_INSTANCE_ORDER
@@ -71,6 +71,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/range.hpp>
 #include <cosmictiger/math/simd.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/hydro/sph/sph_particles.hpp>
@@ -123,8 +124,8 @@ inline void kickOpenOrDefer(bool openLargerCell, TreeNode const* sink, TreeNode 
 }    // namespace detail
 
 template <int order>
-KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kDimensions> pos,
-    TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
+KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> pos, TreeId self,
+    Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
     std::shared_ptr<KickWorkspace> cudaWorkspace, KickContext const& context) {
     using Expansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
@@ -210,12 +211,12 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
     bool const openLargerCell = params.openLargerCell;
     KickInteractionCounts counts{};
     Array<TreeNode const*, kSimdFloatSize> otherPtrs;
-    Array<float, kDimensions> ldx;
+    Vector3<float> ldx;
     SimdFloat selfRadius = selfPtr->radius;
-    Array<SimdPosition, kDimensions> selfPos{};
+    Vector3<SimdPosition> selfPos{};
     Range<SimdDouble8> selfBox{};
-    Array<SimdPosition, kDimensions> otherPos{};
-    Array<SimdFloat, kDimensions> dx{};
+    Vector3<SimdPosition> otherPos{};
+    Vector3<SimdFloat> dx{};
     SimdFloat otherRadius{};
     SimdFloat otherLeaf{};
     SimdFloat otherSupportRadius{};
@@ -397,7 +398,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Array<Position, kD
         for (ParticleInteger i = rng.first; i < rng.second; i++) {
             if (params.forceOnly || particlesRung(i) >= params.minRung) {
                 ParticleInteger const j = i - rng.first;
-                Array<float, kDimensions> dx;
+                Vector3<float> dx;
                 for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
                     dx[dim] = unwrappedDoubleDistance(particlesPos(dim, i), selfPtr->pos[dim]);
                 }

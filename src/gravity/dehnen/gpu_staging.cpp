@@ -17,6 +17,7 @@
 #include <cosmictiger/gravity/dehnen/execution.hpp>
 #include <cosmictiger/gravity/dehnen/gpu_staging.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 static void addTreeNode(std::vector<TreeId>& trees, TreeId id) {
@@ -28,9 +29,9 @@ static void addTreeNode(std::vector<TreeId>& trees, TreeId id) {
     }
 }
 
-bool mortonCompare(Array<Position, kDimensions> a, Array<Position, kDimensions> b) {
-    Array<PositionInteger, kDimensions> abits;
-    Array<PositionInteger, kDimensions> bbits;
+bool mortonCompare(Vector3<Position> a, Vector3<Position> b) {
+    Vector3<PositionInteger> abits;
+    Vector3<PositionInteger> bbits;
     for (int dim = 0; dim < kDimensions; dim++) {
         abits[dim] = a[dim].raw();
         bbits[dim] = b[dim].raw();

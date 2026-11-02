@@ -21,6 +21,7 @@
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/gravity/nitadori/cell_tree.hpp>
 #include <cosmictiger/gravity/tree_build.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/hydro/sph/sph_particles.hpp>
@@ -111,8 +112,8 @@ Range<double> treeCellBox(uint64_t key, int meshSize) {
 // The center is used both as a fixed-point record and as a floating-point M2M
 // origin. Choose a double whose conversion remains in the exact half-open cell,
 // including odd meshes and fixed64 values whose toDouble() rounds to one.
-void treeClampCellCenter(Array<double, kDimensions>& center, Array<Position, kDimensions>& position,
-    TreeCellBuild const& cellBuild) {
+void treeClampCellCenter(
+    Vector3<double>& center, Vector3<Position>& position, TreeCellBuild const& cellBuild) {
     FlopCounter<> flops;
     // Fixed64's host conversion splits the scaled value into two safe uint32
     // limbs: one scaling multiply plus two multiplies and a subtraction.

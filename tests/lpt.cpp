@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <cosmictiger/cosmology/lpt.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 namespace detail {
 
@@ -30,7 +31,7 @@ double cloudCorrection(double normalizedWavenumber) {
     return std::pow(argument / std::sin(argument), 6);
 }
 
-Hessian modeHessian(std::array<double, 3> const& wavevector, double densityAmplitude) {
+Hessian modeHessian(Vector3<double> const& wavevector, double densityAmplitude) {
     double squaredWavenumber = 0.0;
     double correction = 1.0;
     for (double const component : wavevector) {
@@ -54,7 +55,7 @@ Hessian modeHessian(std::array<double, 3> const& wavevector, double densityAmpli
 TEST(Lpt, SinglePlaneWaveHasNoSecondOrderSource) {
     // A plane wave has a rank-one Hessian, so every principal 2x2 minor vanishes.
     // The three planar directions ensure that none of xy, xz or yz is omitted.
-    std::array<std::array<double, 3>, 4> const directions = {
+    std::array<Vector3<double>, 4> const directions = {
         {{1.0, 1.0, 0.0}, {1.0, 0.0, 1.0}, {0.0, 1.0, 1.0}, {1.0, -2.0, 3.0}}};
     for (auto const& direction : directions) {
         for (double const amplitude : {-0.7, 0.0, 0.2, 1.0}) {

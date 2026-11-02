@@ -21,6 +21,7 @@
 #include <cosmictiger/gravity/gravity_cpu.hpp>
 #include <cosmictiger/gravity/kick_walk.hpp>
 #include <cosmictiger/gravity/tree_multipole.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 static_assert(COSMICTIGER_FMM_INSTANCE_ORDER >= kFmmMinOrder &&
     COSMICTIGER_FMM_INSTANCE_ORDER <= kFmmMaxOrder);
@@ -37,12 +38,12 @@ template void cpuGravityPc<COSMICTIGER_FMM_INSTANCE_ORDER>(
 
 // CPU tree walk (kick_walk.hpp).
 template KickReturn kickWalk<COSMICTIGER_FMM_INSTANCE_ORDER>(KickParameters, ExpansionBuffer,
-    Array<Position, kDimensions>, TreeId, Vector<TreeId>, Vector<TreeId>,
-    std::shared_ptr<KickWorkspace>, KickContext const&);
+    Vector3<Position>, TreeId, Vector<TreeId>, Vector<TreeId>, std::shared_ptr<KickWorkspace>,
+    KickContext const&);
 
 // Tree multipole construction (tree_multipole.hpp).
 template FlopCounts treeComputeMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(MultipoleBuffer&,
-    MultipoleBuffer const&, MultipoleBuffer const&, Array<double, kDimensions> const&,
-    Array<double, kDimensions> const&, Array<double, kDimensions> const&);
-template FlopCounts treeComputeMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(MultipoleBuffer&,
-    Pair<ParticleInteger>, Array<double, kDimensions> const&, FmmSourceView const&);
+    MultipoleBuffer const&, MultipoleBuffer const&, Vector3<double> const&, Vector3<double> const&,
+    Vector3<double> const&);
+template FlopCounts treeComputeMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(
+    MultipoleBuffer&, Pair<ParticleInteger>, Vector3<double> const&, FmmSourceView const&);

@@ -17,6 +17,7 @@
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/tensor.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 // Fills the order-dependent Ewald tables: one traceless Fourier derivative tensor
 // per reciprocal image and the real-space self derivatives d0. The image lists
@@ -35,7 +36,7 @@ void ewaldFillTables(EwaldConstants& constants) {
     static_assert(Traceless::kN_ <= kFmmMaxTracelessTensorCount);
     static_assert(Symmetric::kN_ <= kFmmMaxSymmetricTensorCount);
     for (int i = 0; i < kEwaldFourierIndexCount; i++) {
-        Array<float, kDimensions> const h = constants.fourIndices[i];
+        Vector3<float> const h = constants.fourIndices[i];
         auto d0Value = vectorToSymTensor<float, order>(h);
         float const h2 = sqr(h[0]) + sqr(h[1]) + sqr(h[2]);    // 5 OP
         float const c0 =

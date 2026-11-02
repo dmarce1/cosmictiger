@@ -15,6 +15,7 @@
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/math/math.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 // cpuGravityCc, cpuGravityCp and cpuGravityPc are order-templated; their
@@ -45,8 +46,8 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
         int const numberOfSinks = selfPtr->numberOfParticles();
         auto const range = selfPtr->particleRange;
         for (int li = 0; li < list.size(); li += kChunkSize) {
-            Array<SimdPosition, kDimensions> x{};
-            Array<SimdPosition, kDimensions> yValue{};
+            Vector3<SimdPosition> x{};
+            Vector3<SimdPosition> yValue{};
             SimdPosition srcType{};
             Array<TreeNode const*, kChunkSize> treePtrs;
             int numberOfSources = 0;
@@ -97,7 +98,7 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                         simdSetLane(yValue[kZDimension], l, srcz[j + l].raw());
                         simdSetLane(sourceWeight, l, sourceWeights[j + l]);
                     }
-                    Array<SimdFloat, kDimensions> dx{};
+                    Vector3<SimdFloat> dx{};
                     for (int dim = 0; dim < kDimensions; dim++) {
                         dx[dim] = fmmPositionDifference(
                             x[dim], yValue[dim], dim, geometry, &geometryFlops);

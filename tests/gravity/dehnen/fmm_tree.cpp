@@ -7,11 +7,14 @@
  */
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include <hpx/serialization/array.hpp>
 #include <hpx/serialization/input_archive.hpp>
 #include <hpx/serialization/output_archive.hpp>
 
@@ -22,6 +25,7 @@
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/gravity/tree_build.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
@@ -34,8 +38,8 @@ void requireFmmTree(bool condition, char const* message) {
     }
 }
 
-Array<Position, kDimensions> fmmTreePosition(int rank, int particle) {
-    Array<Position, kDimensions> position;
+Vector3<Position> fmmTreePosition(int rank, int particle) {
+    Vector3<Position> position;
     position[kXDimension] = 0.25 + 0.125 * (rank + (particle & 1)) / hpxSize();
     position[kYDimension] = 0.25 + 0.0625 * ((particle >> 1) & 1);
     position[kZDimension] = 0.25 + 0.0625 * ((particle >> 2) & 1);
@@ -43,6 +47,53 @@ Array<Position, kDimensions> fmmTreePosition(int rank, int particle) {
     position[kXDimension].raw() += 1;
     position[kZDimension].raw() += 3;
     return position;
+}
+
+template <class SpatialValue>
+std::vector<char> vectorArchiveBytes(SpatialValue const& value, uint32_t flags) {
+    std::vector<char> bytes;
+    hpx::serialization::output_archive archive(bytes, flags);
+    archive << value;
+    return bytes;
+}
+
+template <class LegacyVector, class Real>
+void verifyVectorArchiveCompatibility(Vector3<Real> const& expected, uint32_t flags) {
+    LegacyVector legacy;
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        legacy[dim] = expected[dim];
+    }
+    auto const legacyBytes = vectorArchiveBytes(legacy, flags);
+    auto const vectorBytes = vectorArchiveBytes(expected, flags);
+    requireFmmTree(legacyBytes == vectorBytes, "Vector3 changed the legacy vector archive bytes");
+    Vector3<Real> vectorFromLegacy{};
+    LegacyVector legacyFromVector{};
+    {
+        hpx::serialization::input_archive archive(legacyBytes);
+        archive >> vectorFromLegacy;
+    }
+    {
+        hpx::serialization::input_archive archive(vectorBytes);
+        archive >> legacyFromVector;
+    }
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        requireFmmTree(
+            vectorFromLegacy[dim] == expected[dim] && legacyFromVector[dim] == expected[dim],
+            "Vector3 and legacy vectors cannot deserialize each other's archives");
+    }
+}
+
+void verifyVectorArchives() {
+    Vector3<double> const values(0.125, -2.75, 19.5);
+    Vector3<Position> positions(Position(0.125), Position(0.5), Position(0.875));
+    positions[0].raw() += 1;
+    positions[2].raw() -= 1;
+    for (uint32_t flags :
+        {uint32_t(0), uint32_t(hpx::serialization::archive_flags::disable_array_optimization)}) {
+        verifyVectorArchiveCompatibility<Array<double, kDimensions>>(values, flags);
+        verifyVectorArchiveCompatibility<std::array<double, kDimensions>>(values, flags);
+        verifyVectorArchiveCompatibility<Array<Position, kDimensions>>(positions, flags);
+    }
 }
 
 void verifyTreeReturnArchive() {
@@ -142,7 +193,7 @@ void verifyRemoteMultipoleStorage() {
     // Grow past a remote chunk, then reserve fresh local allocator lines. A
     // remote record must survive both operations without sharing local slots.
     constexpr size_t kCount = 4101;
-    Array<Position, kDimensions> position{};
+    Vector3<Position> position{};
     position[0] = 0.375;
     MultipoleBuffer multipole;
     multipole.zero();
@@ -232,6 +283,7 @@ ParticleInteger setFmmTreeRegressionSupport(float supportRadius) {
 HPX_PLAIN_ACTION(setFmmTreeRegressionSupport, SetFmmTreeRegressionSupportAction);
 
 void fmmTreeTest() {
+    detail::verifyVectorArchives();
     detail::verifyTreeReturnArchive();
     auto options = getOptions();
     options.hydro.enabled = false;

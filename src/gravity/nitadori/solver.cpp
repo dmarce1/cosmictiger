@@ -2,6 +2,7 @@
 
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/gravity/nitadori/mesh_size.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include "actions.hpp"
 
 namespace pmmm::detail {
@@ -82,7 +83,7 @@ void prepare(SolveRequest const& request) {
         state.diagnostics.activeParticles = request.activeParticles;
         state.diagnostics.totalParticles = request.totalParticles;
         if (request.applyKick) {
-            Vector<Array<float, kDimensions>>().swap(state.acceleration);
+            Vector<Vector3<float>>().swap(state.acceleration);
             Vector<float>().swap(state.potential);
         } else {
             state.acceleration.resize(particlesSize());
@@ -336,7 +337,7 @@ PmmmDiagnostics pmmmDiagnostics() {
     return pmmm::detail::globalDiagnostics;
 }
 
-Array<float, kDimensions> const& pmmmAcceleration(ParticleInteger index) {
+Vector3<float> const& pmmmAcceleration(ParticleInteger index) {
     return pmmm::detail::state.acceleration.at(index);
 }
 

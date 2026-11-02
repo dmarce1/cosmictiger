@@ -14,6 +14,7 @@
 #include <gtest/gtest.h>
 
 #include <cosmictiger/analysis/lightcone.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 void cosmictigerAssert(char const* expression, bool condition, char const* file, int line) {
     if (!condition) {
@@ -42,7 +43,7 @@ void copyCudaMemory(void* destination, void const* source, size_t bytes) {
 
 namespace detail {
 
-using Position = std::array<double, kDimensions>;
+using Position = Vector3<double>;
 
 void require(bool condition, char const* message) {
     if (!condition) {

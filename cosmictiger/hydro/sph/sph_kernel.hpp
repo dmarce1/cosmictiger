@@ -16,6 +16,7 @@
 #include <cosmictiger/hydro/sph/sph_tree.hpp>
 #include <cosmictiger/hydro/sph/volume.hpp>
 #include <cosmictiger/math/kernel.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 struct SphRunData {
     // Staged source arrays, including the sources that are also local sinks.
@@ -106,7 +107,7 @@ CUDA_EXPORT inline SphGradHEvaluation sphGradHEvaluation(float supportRadius,
 // A source can reach any sink in this box through a periodic image. Expanding
 // the unwrapped interval before testing avoids inconsistent endpoint wrapping.
 CUDA_EXPORT inline bool sphSupportIntersects(Fixed32Range const& sinkBox,
-    Array<Position, kDimensions> const& sourcePosition, float sourceSupport,
+    Vector3<Position> const& sourcePosition, float sourceSupport,
     sph_flops::Counter* flops = nullptr) {
     Fixed32Range expanded = sinkBox;
     for (int dim = 0; dim < kDimensions; dim++) {

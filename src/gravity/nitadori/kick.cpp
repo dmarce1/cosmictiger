@@ -19,6 +19,7 @@
 #include <cosmictiger/gravity/nitadori/solver.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/hydro/sph/sph_particles.hpp>
@@ -27,9 +28,9 @@
 HPX_PLAIN_ACTION(particleMeshPrepareKick, ParticleMeshPrepareKickAction);
 HPX_PLAIN_ACTION(particleMeshFinishKick, ParticleMeshFinishKickAction);
 
-KickReturn particleMeshApplyField(ParticleInteger index,
-    Array<float, kDimensions> const& acceleration, float potential,
-    KickParameters const& parameters, FlopCount* flopCount, FlopCounts* precisionCounts) {
+KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& acceleration,
+    float potential, KickParameters const& parameters, FlopCount* flopCount,
+    FlopCounts* precisionCounts) {
     KickReturn result;
     FlopCounter<> flops;
     auto const& options = getOptions();

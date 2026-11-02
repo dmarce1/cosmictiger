@@ -16,6 +16,7 @@
 #include <cosmictiger/gravity/dehnen/ewald_tables.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/math/math.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 HPX_PLAIN_ACTION(EwaldConst::init, EwaldConstInitAction);
 
@@ -38,7 +39,7 @@ void EwaldConst::init() {
 
     int n2max = 12;
     int nmax = std::sqrt(n2max) + 1;
-    Array<float, kDimensions> thisH;
+    Vector3<float> thisH;
     int count = 0;
     for (int i = -nmax; i <= nmax; i++) {
         for (int j = -nmax; j <= nmax; j++) {
@@ -57,8 +58,7 @@ void EwaldConst::init() {
             }
         }
     }
-    auto const sortFunc = [](Array<float, kDimensions> const& a,
-                              Array<float, kDimensions> const& b) {
+    auto const sortFunc = [](Vector3<float> const& a, Vector3<float> const& b) {
         auto const a2 = sqr(a[0], a[1], a[2]);
         auto const b2 = sqr(b[0], b[1], b[2]);
         return a2 > b2;

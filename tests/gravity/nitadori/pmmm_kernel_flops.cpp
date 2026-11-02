@@ -14,6 +14,7 @@
 #include <cosmictiger/gravity/fmm_kernels/spherical_ewald_kernels.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/nitadori/kernels.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <tests/flop_counting_real.hpp>
 
 // The generated scalar/SIMD adapters use std math internally. Specialize only
@@ -55,7 +56,7 @@ namespace detail {
         namespace spherical = cosmictiger::gravity::spherical;
         constexpr int kDegree = order - 1;
         constexpr double kCellWidth = 0.125;
-        std::array<double, 3> const point{0.13, -0.21, 0.38};
+        Vector3<double> const point{0.13, -0.21, 0.38};
         std::array<double, (order - 1) * (order - 1)> moments{};
         std::array<Real, moments.size()> countedMoments{};
         FlopCount const momentCount = pmmm::addMoments(order, moments.data(), 0.7, point);
@@ -66,7 +67,7 @@ namespace detail {
 
         // The regular central-image series has the same source operation count
         // at zero as elsewhere; near controls only addition of the primary Green.
-        for (auto const& sample : std::array<std::array<double, 3>, 2>{{{0.0, 0.0, 0.0}, point}}) {
+        for (auto const& sample : std::array<Vector3<double>, 2>{{{0.0, 0.0, 0.0}, point}}) {
             for (bool near : {true, false}) {
                 if (!near && sample[0] == 0.0 && sample[1] == 0.0 && sample[2] == 0.0) {
                     continue;

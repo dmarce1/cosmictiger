@@ -20,8 +20,8 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/simd.hpp>
 
-int bhSort(DeviceVector<Array<float, kDimensions>>& parts, Vector<int>& sortOrder, int begin,
-    int end, float xm, int xdim) {
+int bhSort(DeviceVector<Vector3<float>>& parts, Vector<int>& sortOrder, int begin, int end,
+    float xm, int xdim) {
     int lo = begin;
     int hi = end;
     float xmid(xm);
@@ -44,12 +44,12 @@ int bhSort(DeviceVector<Array<float, kDimensions>>& parts, Vector<int>& sortOrde
 }
 
 void bhCreateTree(DeviceVector<BhTreeNode>& nodes, DeviceVector<int>& sinkBuckets, int self,
-    DeviceVector<Array<float, kDimensions>>& parts, Vector<int>& sortOrder, Range<float> box,
-    int begin, int end, int bucketSize, int depth = 0) {
+    DeviceVector<Vector3<float>>& parts, Vector<int>& sortOrder, Range<float> box, int begin,
+    int end, int bucketSize, int depth = 0) {
     ALWAYS_ASSERT(begin < end);
     // Recompute tight bounds after every split, including the count-based
     // fallback for coincident points or a midpoint rounded onto a boundary.
-    Array<double, kDimensions> sum{};
+    Vector3<double> sum{};
     for (int dim = 0; dim < kDimensions; ++dim) {
         box.begin[dim] = std::numeric_limits<float>::max();
         box.end[dim] = -std::numeric_limits<float>::max();
@@ -110,7 +110,7 @@ void bhCreateTree(DeviceVector<BhTreeNode>& nodes, DeviceVector<int>& sinkBucket
 }
 
 void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& sinkBuckets,
-    DeviceVector<float>& phi, DeviceVector<Array<float, kDimensions>>& parts, float relativeError) {
+    DeviceVector<float>& phi, DeviceVector<Vector3<float>>& parts, float relativeError) {
     float const h = getOptions().gravity.supportRadius;
     float const gm = getOptions().gravity.gm;
     float const hinv = 1.0 / h;
@@ -171,12 +171,12 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
                         sourcelist.push_back(src);
                     }
                     for (int i = myparts.first; i < myparts.second; i++) {
-                        Array<SimdFloat, kDimensions> xValue{};
+                        Vector3<SimdFloat> xValue{};
                         for (int dim = 0; dim < kDimensions; dim++) {
                             xValue[dim] = parts[i][dim];
                         }
                         for (int j = 0; j < sourcelist.size(); j += kSimdFloatSize) {
-                            Array<SimdFloat, kDimensions> yValue{};
+                            Vector3<SimdFloat> yValue{};
                             SimdFloat mValue{};
                             for (int k = 0; k < kSimdFloatSize; k++) {
                                 auto const& src = sourcelist[j + k];
@@ -185,7 +185,7 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
                                 }
                                 simdSetLane(mValue, k, src.m);
                             }
-                            Array<SimdFloat, kDimensions> dx{};
+                            Vector3<SimdFloat> dx{};
                             for (int dim = 0; dim < kDimensions; dim++) {
                                 dx[dim] = xValue[dim] - yValue[dim];    // 3
                             }
@@ -216,8 +216,8 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
     hpx::wait_all(futs.begin(), futs.end());
 }
 
-void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, kDimensions> pt,
-    float& phi, DeviceVector<Array<float, kDimensions>>& parts, float relativeError) {
+void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Vector3<float> pt, float& phi,
+    DeviceVector<Vector3<float>>& parts, float relativeError) {
     float const h = getOptions().gravity.supportRadius;
     float const gm = getOptions().gravity.gm;
     float const hinv = 1.0f / h;
@@ -266,12 +266,12 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, kDi
         }
         sourcelist.push_back(src);
     }
-    Array<SimdFloat, kDimensions> xValue{};
+    Vector3<SimdFloat> xValue{};
     for (int dim = 0; dim < kDimensions; dim++) {
         xValue[dim] = pt[dim];
     }
     for (int j = 0; j < sourcelist.size(); j += kSimdFloatSize) {
-        Array<SimdFloat, kDimensions> yValue{};
+        Vector3<SimdFloat> yValue{};
         SimdFloat mValue{};
         for (int k = 0; k < kSimdFloatSize; k++) {
             auto const& src = sourcelist[j + k];
@@ -280,7 +280,7 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, kDi
             }
             simdSetLane(mValue, k, src.m);
         }
-        Array<SimdFloat, kDimensions> dx{};
+        Vector3<SimdFloat> dx{};
         for (int dim = 0; dim < kDimensions; dim++) {
             dx[dim] = xValue[dim] - yValue[dim];    // 3
         }
@@ -305,7 +305,7 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, kDi
     phi *= gm;
 }
 
-DeviceVector<float> bhEvaluatePotential(DeviceVector<Array<float, kDimensions>>& x, bool gpu) {
+DeviceVector<float> bhEvaluatePotential(DeviceVector<Vector3<float>>& x, bool gpu) {
     gpu = gpu && getOptions().compute.cuda;
 #ifndef USE_CUDA
     gpu = false;
@@ -358,8 +358,8 @@ DeviceVector<float> bhEvaluatePotential(DeviceVector<Array<float, kDimensions>>&
     return rpot;
 }
 
-DeviceVector<float> bhEvaluatePoints(DeviceVector<Array<float, kDimensions>>& y,
-    DeviceVector<Array<float, kDimensions>>& x, bool gpu) {
+DeviceVector<float> bhEvaluatePoints(
+    DeviceVector<Vector3<float>>& y, DeviceVector<Vector3<float>>& x, bool gpu) {
     gpu = gpu && getOptions().compute.cuda;
 #ifndef USE_CUDA
     gpu = false;

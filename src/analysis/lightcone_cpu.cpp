@@ -73,7 +73,7 @@ size_t cpuLightcone(DeviceVector<LightconeTreeId> const& leaves,
             auto const& otherParticles = particleMap[other.pix];
             for (int otherIndex = other.particleRange.first;
                  otherIndex < other.particleRange.second; otherIndex++) {
-                Array<double, kDimensions> position;
+                Vector3<double> position;
                 for (int dim = 0; dim < kDimensions; dim++) {
                     position[dim] = otherParticles.pos[dim][otherIndex].toDouble();
                 }

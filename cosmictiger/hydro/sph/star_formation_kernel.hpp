@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include <cosmictiger/hydro/sph/springel_and_hernquist/cooling.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/star_formation_state.hpp>
 
 namespace star_formation_backend {
@@ -33,8 +34,8 @@ struct Parameters {
 struct Input {
     StarFormationState state;
     gadget4::State chemistry;
-    float velocity[3]{};
-    float gravity[3]{};
+    Vector3<float> velocity{};
+    Vector3<float> gravity{};
     float energy{};
     float density{};
     float pressureRatio{};
@@ -49,7 +50,7 @@ struct Output {
     double coldFraction{};
     double hotEnergy{};
     double effectiveEnergy{};
-    float velocity[3]{};
+    Vector3<float> velocity{};
     float energy{};
     float pressureRatio{};
     float signalIndex{};
@@ -121,9 +122,7 @@ namespace detail {
         output.chemistry = input.chemistry;
         output.energy = input.energy;
         output.rung = input.rung;
-        for (int dim = 0; dim < 3; ++dim) {
-            output.velocity[dim] = input.velocity[dim];
-        }
+        output.velocity = input.velocity;
         return output;
     }
     CUDA_EXPORT inline void recordPhase(

@@ -21,6 +21,7 @@
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/nitadori/kernels.hpp>
 #include <cosmictiger/gravity/nitadori/mesh_size.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 // This numerical test has no HPX runtime; fmmDispatch's failure branch still
 // needs an assertion implementation even though the public API checks orders.
@@ -35,7 +36,7 @@ namespace pmmm_test {
 namespace detail {
 
     using Complex = std::complex<double>;
-    using Point = std::array<double, 3>;
+    using Point = Vector3<double>;
 
     int index(int degree, int mode) {
         return degree * (degree + 1) + mode;

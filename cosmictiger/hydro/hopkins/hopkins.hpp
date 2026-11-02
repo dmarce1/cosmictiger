@@ -38,7 +38,7 @@ namespace detail {
 
 }    // namespace detail
 
-using Vector = std::array<double, 3>;
+using Vector = Vector3<double>;
 using Matrix = std::array<Vector, 3>;
 
 struct Primitive {
@@ -586,16 +586,11 @@ inline Primitive reconstruct(Primitive const& center, Gradient const& gradient,
 // Scalar reference and packed production use the same strict HLLC kernel.
 inline Flux riemannFlux(Primitive const& left, Primitive const& right, Vector const& area,
     Vector const& frameVelocity, double gamma, bool finiteMass, FlopCount* operations = nullptr) {
-    PrimitiveValues<double> const leftValues{
-        left.density, {left.velocity[0], left.velocity[1], left.velocity[2]}, left.pressure};
-    PrimitiveValues<double> const rightValues{
-        right.density, {right.velocity[0], right.velocity[1], right.velocity[2]}, right.pressure};
-    Vector3<double> const areaValues{area[0], area[1], area[2]};
-    Vector3<double> const frameValues{frameVelocity[0], frameVelocity[1], frameVelocity[2]};
+    PrimitiveValues<double> const leftValues{left.density, left.velocity, left.pressure};
+    PrimitiveValues<double> const rightValues{right.density, right.velocity, right.pressure};
     auto const result = riemannFluxValues(
-        leftValues, rightValues, areaValues, frameValues, gamma, finiteMass, true, operations);
-    return {result.mass, {result.momentum[0], result.momentum[1], result.momentum[2]},
-        result.energy, result.signalSpeed, result.contactSpeed};
+        leftValues, rightValues, area, frameVelocity, gamma, finiteMass, true, operations);
+    return {result.mass, result.momentum, result.energy, result.signalSpeed, result.contactSpeed};
 }
 
 }    // namespace hopkins

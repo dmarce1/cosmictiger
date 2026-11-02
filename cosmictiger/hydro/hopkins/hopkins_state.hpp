@@ -11,21 +11,23 @@
 #include <cstdint>
 #include <type_traits>
 
+#include <cosmictiger/math/vector3.hpp>
+
 // Persistent gas state for meshless kicks, independent of the positional drift.
 struct HopkinsParticleState {
     uint64_t identifier = UINT64_MAX;
     double mass = 0.0;
     double totalEnergy = 0.0;
-    std::array<double, 3> momentum{};
-    std::array<double, 3> meshVelocity{};
-    std::array<double, 3> sourceAcceleration{};
-    std::array<double, 3> pendingGravityWork{};
+    Vector3<double> momentum{};
+    Vector3<double> meshVelocity{};
+    Vector3<double> sourceAcceleration{};
+    Vector3<double> pendingGravityWork{};
     double sourceTime = 0.0;
     double expansionCoefficient = 0.0;
     bool initialized = false;
     // Primitive and gradient anchors for inactive-particle prediction: rho, P, vx, vy, vz.
     std::array<double, 5> predictor{};
-    std::array<std::array<double, 3>, 5> gradients{};
+    std::array<Vector3<double>, 5> gradients{};
     // Low 16 bits of the finest-clock tick at the primitive/gradient anchor.
     uint16_t lastKickTick = 0;
     bool predictorInitialized = false;
@@ -43,3 +45,6 @@ struct HopkinsParticleState {
 
 static_assert(std::is_trivially_copyable_v<HopkinsParticleState>);
 static_assert(std::is_standard_layout_v<HopkinsParticleState>);
+
+static_assert(sizeof(Vector3<double>) == sizeof(std::array<double, 3>));
+static_assert(alignof(Vector3<double>) == alignof(std::array<double, 3>));

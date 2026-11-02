@@ -159,7 +159,7 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
                     particlesGlobalReadPosAndGroup(otherPtr->globalParticleRange(), xValue2.data(),
                         yValue2.data(), zValue2.data(), g.data(), totalSize);
                     for (int i = totalSize; i < totalSize + otherSize; i++) {
-                        Array<double, kDimensions> x;
+                        Vector3<double> x;
                         x[kXDimension] = xValue2[i].toDouble();
                         x[kYDimension] = yValue2[i].toDouble();
                         x[kZDimension] = zValue2[i].toDouble();

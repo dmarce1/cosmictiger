@@ -12,6 +12,7 @@
 
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 KickWorkspace::KickWorkspace(
@@ -90,8 +91,8 @@ void KickWorkspace::recordProcessedParticles(
 }
 
 void KickWorkspace::addWork(std::shared_ptr<KickWorkspace> ptr, ExpansionBuffer const& l,
-    Array<Position, kDimensions> pos, TreeId self, Vector<TreeId>&& dchecks,
-    Vector<TreeId>&& echecks, FmmGeometry const& geometry, ParticleInteger outputOffset) {
+    Vector3<Position> pos, TreeId self, Vector<TreeId>&& dchecks, Vector<TreeId>&& echecks,
+    FmmGeometry const& geometry, ParticleInteger outputOffset) {
     KickWorkitem item;
     item.geometry = geometry;
     item.outputOffset = outputOffset;

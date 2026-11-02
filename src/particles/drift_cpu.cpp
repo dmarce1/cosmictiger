@@ -12,15 +12,16 @@
 #endif
 
 #include <cosmictiger/math/simd_math.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/drift_cpu.hpp>
 
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
 namespace detail {
 
-void appendDriftLightconeEntries(Array<double, kDimensions> const& before,
-    Array<double, kDimensions> const& after, Array<float, kDimensions> const& velocity,
-    Array<float, kDimensions> const& outputVelocity, char type, DriftParameters const& parameters,
-    std::vector<LightconeEntry>& entries, HopkinsParticleState const* meshState) {
+void appendDriftLightconeEntries(Vector3<double> const& before, Vector3<double> const& after,
+    Vector3<float> const& velocity, Vector3<float> const& outputVelocity, char type,
+    DriftParameters const& parameters, std::vector<LightconeEntry>& entries,
+    HopkinsParticleState const* meshState) {
     double const inverseScale = 1.0 / parameters.scale;
     double const inverseTauMax = 1.0 / parameters.tauMax;
     // CUDA uses float physical velocities for the crossing interpolation.
@@ -57,13 +58,13 @@ void appendDriftLightconeEntries(Array<double, kDimensions> const& before,
                 double const time =
                     -(linear + std::sqrt(linear * linear - 4.0 * quadratic * constant)) /
                     (2.0 * quadratic);
-                double crossing[kDimensions] = {x0 + vx * time, y0 + vy * time, z0 + vz * time};
+                Vector3<double> crossing = {x0 + vx * time, y0 + vy * time, z0 + vz * time};
                 double const radiusSquared = crossing[kXDimension] * crossing[kXDimension] +
                     crossing[kYDimension] * crossing[kYDimension] +
                     crossing[kZDimension] * crossing[kZDimension];
                 if (radiusSquared <= 1.0) {
                     long pixel;
-                    vec2pix_nest(parameters.mapSize, crossing, &pixel);
+                    vec2pix_nest(parameters.mapSize, crossing.data(), &pixel);
                     LightconeEntry entry;
                     entry.x = crossing[kXDimension];
                     entry.y = crossing[kYDimension];
@@ -86,7 +87,7 @@ void appendDriftLightconeEntries(Array<double, kDimensions> const& before,
 }    // namespace detail
 #endif
 
-void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensions>* velocities,
+void cpuDriftKernel(Position* x, Position* y, Position* z, Vector3<float>* velocities,
     char const* rungs, char const* types, size_t count, DriftParameters const& parameters,
     std::vector<LightconeEntry>* entries, HopkinsParticleState* meshStates,
     ParticleInteger const* gasIndices) {
@@ -154,9 +155,9 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Array<float, kDimensi
         if (parameters.rung >= 0 && rungs[index] != parameters.rung) {
             continue;
         }
-        Array<double, kDimensions> before;
-        Array<double, kDimensions> after;
-        Array<double, kDimensions> displacement;
+        Vector3<double> before;
+        Vector3<double> after;
+        Vector3<double> displacement;
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
         auto const driftVelocity = velocities[index];
 #endif

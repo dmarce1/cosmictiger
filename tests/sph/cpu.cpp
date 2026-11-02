@@ -23,6 +23,7 @@
 #include <gtest/gtest.h>
 
 #include <cosmictiger/hydro/sph/sph_cpu.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <tests/sph/global_timestep_cases.hpp>
 
 namespace detail {
@@ -341,7 +342,7 @@ public:
     }
 
     void checkConservation() const {
-        std::array<double, kDimensions> momentum{};
+        Vector3<double> momentum{};
         double energy = 0.0;
         double absoluteEnergy = 0.0;
         double absoluteForce = 0.0;
@@ -799,7 +800,7 @@ void initializeLattice(Fixture& fixture, int side) {
 
 void testPeriodicSupport() {
     Fixed32Range box;
-    Array<Position, kDimensions> source;
+    Vector3<Position> source;
     for (int dim = 0; dim < kDimensions; dim++) {
         box.begin[dim] = 0.49;
         box.end[dim] = 0.51;
@@ -1581,7 +1582,7 @@ struct VariationalReference {
     std::vector<double> density;
     std::vector<double> zeta;
     std::vector<double> residual;    // (sum w - target)/target at the given support
-    std::vector<std::array<double, kDimensions>> acceleration;    // pressure part of dv/dtau
+    std::vector<Vector3<double>> acceleration;    // pressure part of dv/dtau
     std::vector<double> energyRate;    // pressure work and homogeneous expansion of dE/dtau
 };
 
@@ -1591,10 +1592,10 @@ double nextDeviate(uint64_t& state) {
     return double(state >> 11) * 0x1.0p-53;
 }
 
-std::array<double, kDimensions> periodicSeparation(Fixture const& fixture, int a, int b) {
+Vector3<double> periodicSeparation(Fixture const& fixture, int a, int b) {
     Position const* positions[kDimensions] = {fixture.data_.sourcePositionX,
         fixture.data_.sourcePositionY, fixture.data_.sourcePositionZ};
-    std::array<double, kDimensions> separation{};
+    Vector3<double> separation{};
     for (int dim = 0; dim < kDimensions; dim++) {
         double const difference = positions[dim][fixture.sourceIndex(a)].toDouble() -
             positions[dim][fixture.sourceIndex(b)].toDouble();
@@ -1892,16 +1893,16 @@ void testVariationalIsolatedCluster() {
     }
     fixture.hydro();
     fixture.checkConservation();
-    std::array<double, kDimensions> torque{};
+    Vector3<double> torque{};
     double torqueScale = 0.0;
     for (int k = 0; k < fixture.count_; k++) {
         int const source = fixture.sourceIndex(k);
         auto const& a = fixture.data_.sinkAccelerations[fixture.sinkIndex(k)].acceleration;
-        std::array<double, kDimensions> const r{
+        Vector3<double> const r{
             fixture.data_.sourcePositionX[source].toDouble() - 0.5,
             fixture.data_.sourcePositionY[source].toDouble() - 0.5,
             fixture.data_.sourcePositionZ[source].toDouble() - 0.5};
-        std::array<double, kDimensions> const moment{
+        Vector3<double> const moment{
             r[1] * a[2] - r[2] * a[1], r[2] * a[0] - r[0] * a[2], r[0] * a[1] - r[1] * a[0]};
         for (int dim = 0; dim < kDimensions; dim++) {
             torque[dim] += fixture.data_.gasMass * moment[dim];
@@ -1991,7 +1992,7 @@ void testVariationalUniformLattice() {
 // dx/dtau = w/a.
 class GlobalStepper {
     Fixture& fixture_;
-    std::vector<std::array<double, kDimensions>> acceleration_;
+    std::vector<Vector3<double>> acceleration_;
     std::vector<double> energyRate_;
 
     double scaleFactor(double time) const {
@@ -2022,8 +2023,8 @@ class GlobalStepper {
     }
 
 public:
-    std::vector<std::array<double, kDimensions>> position_;
-    std::vector<std::array<double, kDimensions>> velocity_;
+    std::vector<Vector3<double>> position_;
+    std::vector<Vector3<double>> velocity_;
     std::vector<double> energy_;
     double time_;
     double initialTime_;

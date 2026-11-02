@@ -32,6 +32,7 @@
 #include <cosmictiger/hydro/sph/sph.hpp>
 #include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/hydro/sph/sph_tree.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
@@ -285,7 +286,7 @@ void softenedPairReference(double separation, double& inverseCube, double& inver
 
 void verifyBhPotentials(bool useCuda) {
     double const separation = 0.25 * getOptions().gravity.supportRadius;
-    DeviceVector<Array<float, kDimensions>> sources(2);
+    DeviceVector<Vector3<float>> sources(2);
     for (int dim = 0; dim < kDimensions; ++dim) {
         sources[0][dim] = 0.375;
         sources[1][dim] = dim == kXDimension ? 0.375 + separation : 0.375;
@@ -299,7 +300,7 @@ void verifyBhPotentials(bool useCuda) {
     for (int i = 0; i < 2; ++i) {
         requireClose("halo potential uses selected gravity kernel", potential[i], expected);
     }
-    DeviceVector<Array<float, kDimensions>> points(2);
+    DeviceVector<Vector3<float>> points(2);
     for (int dim = 0; dim < kDimensions; ++dim) {
         points[0][dim] = 0.375;
         points[1][dim] = dim == kXDimension ? float(0.375 + 0.5 * actualSeparation) : 0.375;
@@ -360,7 +361,7 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f, float 
             for (int path = 0; path < 2; path++) {
                 ExpansionBuffer local;
                 local.zero();
-                Array<float, kDimensions> dx;
+                Vector3<float> dx;
                 for (int dim = 0; dim < kDimensions; dim++) {
                     dx[dim] = distance(particlesPos(dim, sink), treeGetNode(self)->pos[dim]);
                 }
@@ -383,7 +384,7 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f, float 
     }
     ExpansionBuffer local;
     local.zero();
-    Array<Position, kDimensions> origin;
+    Vector3<Position> origin;
     for (int dim = 0; dim < kDimensions; dim++) {
         origin[dim] = 0.0;
     }
@@ -599,7 +600,7 @@ void validateSphDomainRegression() {
         requireClose("EOS cache preserves preceding destination", pressureRatio[0], 0.0);
         requireClose("EOS cache preserves following destination", adiabaticIndex[2], 0.0);
     }
-    Array<double, kDimensions> position;
+    Vector3<double> position;
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         for (int dim = 0; dim < kDimensions; dim++) {
             position[dim] = particlesPos(dim, i).toDouble();

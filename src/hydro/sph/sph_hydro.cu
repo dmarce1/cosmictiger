@@ -91,7 +91,7 @@ __global__ void sphCudaHydro(
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
                 sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
-                Array<Position, kDimensions> position;
+                Vector3<Position> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
                     position[kXDimension] = data.sourcePositionX[sourceParticleIndex];
                     position[kYDimension] = data.sourcePositionY[sourceParticleIndex];

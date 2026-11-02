@@ -17,6 +17,7 @@
 
 #include <cosmictiger/gravity/fmm_acceptance.hpp>
 #include <cosmictiger/math/range.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <tests/cuda_test.hpp>
 
 void cosmictigerAssert(char const* condition, bool value, char const* file, int line) {
@@ -56,7 +57,7 @@ struct AcceptanceResult {
 
 struct BoxInput {
     Fixed32Range box;
-    Array<Position, kDimensions> point;
+    Vector3<Position> point;
 };
 
 struct SelectionInput {

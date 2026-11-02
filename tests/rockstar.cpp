@@ -464,7 +464,7 @@ void checkRockstarSphericalOverdensities() {
         requireRockstarClose(group.mass2500, 12.0, 0.0, "critical 2500 SO shell count");
         requireRockstarClose(group.rVir, rockstarTestRadius(36, rockstarTestVirialDensity(scale)),
             2.e-6, "epoch-dependent virial radius");
-        Array<double, kDimensions> const origin{};
+        Vector3<double> const origin{};
         auto const record = rockstarMakeRecord(groups, 0, scale, origin);
         requireRockstarClose(record.mvir, 36.0, 2.e-6, "record virial mass conversion");
         requireRockstarClose(record.m200, group.mass200, 2.e-6, "record critical SO mass");
@@ -511,7 +511,7 @@ void checkRockstarHierarchyAndHistory() {
     requireRockstar(groups.size() == 2, "temporal fixture halos disappeared");
     requireRockstar(groups[0].internalParent == -1 && groups[1].internalParent == 0,
         "previous host identity lost when exclusive particle counts reverse");
-    Array<double, kDimensions> const origin{};
+    Vector3<double> const origin{};
     auto const entry = rockstarMakeGroupEntry(groups, 1, 1.0f, origin);
     requireRockstar(entry.parents.at(200) == 40, "particle overlap history was not retained");
 }
@@ -637,7 +637,7 @@ void checkRockstarTiedShellBoundary() {
             std::nextafter(float(boundary), inside ? 0.0f : std::numeric_limits<float>::infinity());
         auto group = rockstarTestGroup(12, 0.0f, 1, radius);
         Vector<Subgroup> groups{group};
-        Array<double, kDimensions> const origin{};
+        Vector3<double> const origin{};
         auto const record = rockstarMakeRecord(groups, 0, 1.0f, origin);
         requireRockstarClose(record.mvir, inside ? 12.0 : 0.0, 2.e-6,
             "tied shell must cross the SO boundary as a complete shell");
@@ -703,7 +703,7 @@ void checkRockstarScaleRadiusBounds() {
         }
         rockstarUpdateStatistics(group, 1.0f, 1.0f, 1.0f);
         Vector<Subgroup> groups{group};
-        Array<double, kDimensions> const origin{};
+        Vector3<double> const origin{};
         auto const record = rockstarMakeRecord(groups, 0, 1.0f, origin);
         double const virialRadius = rockstarTestRadius(30, rockstarTestVirialDensity(1.0));
         requireRockstarClose(record.mvir, 30.0, 2.e-6, "plateau halo virial mass");
@@ -875,7 +875,7 @@ void checkRockstarRecordInvariance() {
     }
     rockstarUpdateStatistics(group, 1.0f, 1.0f, 1.0f);
     Vector<Subgroup> groups{group};
-    Array<double, kDimensions> const origin{};
+    Vector3<double> const origin{};
     auto const record = rockstarMakeRecord(groups, 0, 1.0f, origin);
     requireRockstarClose(record.jx, 0.0, 0.0, "rotation has no Jx");
     requireRockstarClose(record.jy, 0.0, 0.0, "rotation has no Jy");
@@ -885,8 +885,8 @@ void checkRockstarRecordInvariance() {
     requireRockstarClose(std::abs(float162double(record.ax)), 0.6 / std::sqrt(3.0), 1.e-3,
         "major-axis eigenvector amplitude");
     auto shifted = group;
-    std::array<float, 3> const shift{0.125f, -0.25f, 0.0625f};
-    std::array<float, 3> const boost{0.02f, -0.01f, 0.005f};
+    Vector3<float> const shift{0.125f, -0.25f, 0.0625f};
+    Vector3<float> const boost{0.02f, -0.01f, 0.005f};
     shifted.x += shift[0];
     shifted.y += shift[1];
     shifted.z += shift[2];
@@ -1084,7 +1084,7 @@ void checkRockstarPeriodicRecord() {
     Vector<Subgroup> groups;
     groups.push_back(rockstarTestGroup(32, 0.002f, 1));
     rockstarUpdateStatistics(groups[0], 1.0f, 1.0f, 1.0f);
-    Array<double, kDimensions> origin;
+    Vector3<double> origin;
     origin[0] = 0.999;
     origin[1] = -0.1;
     origin[2] = 1.1;

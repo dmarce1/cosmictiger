@@ -29,6 +29,7 @@
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_interaction_counts.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -46,15 +47,15 @@ void fmmWalkRequireClose(
     }
 }
 
-Array<Position, kDimensions> fmmWalkPosition(double x, double y, double z) {
-    Array<Position, kDimensions> position;
+Vector3<Position> fmmWalkPosition(double x, double y, double z) {
+    Vector3<Position> position;
     position[kXDimension] = x;
     position[kYDimension] = y;
     position[kZDimension] = z;
     return position;
 }
 
-Array<Position, kDimensions> fmmWalkDistributedPosition(size_t rank) {
+Vector3<Position> fmmWalkDistributedPosition(size_t rank) {
     // Dyadic coordinates avoid fixed-point rounding, and unequal spacing keeps
     // the middle particle's force away from cancellation at float precision.
     double const offset = static_cast<double>(rank);
@@ -97,8 +98,7 @@ void fmmWalkResetKickState() {
     }
 }
 
-void fmmWalkSetParticlePosition(
-    ParticleInteger index, Array<Position, kDimensions> const& position) {
+void fmmWalkSetParticlePosition(ParticleInteger index, Vector3<Position> const& position) {
     for (int dim = 0; dim < kDimensions; dim++) {
         particlesPos(dim, index) = position[dim];
     }
@@ -115,7 +115,7 @@ void fmmWalkPrepareArena() {
     treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().gravity.supportRadius));
 }
 
-TreeId fmmWalkAddNode(Array<Position, kDimensions> const& position, float radius,
+TreeId fmmWalkAddNode(Vector3<Position> const& position, float radius,
     Pair<ParticleInteger> particleRange, int depth, bool localRoot = false,
     TreeId left = TreeId{-1, -1}, TreeId right = TreeId{-1, -1}, bool spansTwoRanks = false,
     float maxSupportRadius = 0.0f, bool tightParticleBox = false) {
@@ -143,7 +143,7 @@ TreeId fmmWalkAddNode(Array<Position, kDimensions> const& position, float radius
     fmmDispatch([&](auto order) {
         auto& moments = multipole.multipole<order.value>();
         for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
-            Array<float, kDimensions> displacement;
+            Vector3<float> displacement;
             for (int dim = 0; dim < kDimensions; dim++) {
                 displacement[dim] = distance(particlesPos(dim, i), position[dim]);
             }
@@ -178,7 +178,7 @@ void fmmWalkVerifyEwald(std::string const& label, TreeId sink, Vector<TreeId> co
     Vector<TreeId> const& sourceLeaves, bool useCuda) {
     ExpansionBuffer reference;
     reference.zero();
-    Array<float, kDimensions> displacement;
+    Vector3<float> displacement;
     for (int dim = 0; dim < kDimensions; dim++) {
         displacement[dim] = 0.0f;
     }
@@ -189,9 +189,8 @@ void fmmWalkVerifyEwald(std::string const& label, TreeId sink, Vector<TreeId> co
         cosmictiger::gravity::cartesian::L2P(field, expansion, fmmScaleDisplacement(displacement));
         return field;
     });
-    std::array<double, kDimensions> const expectedAcceleration = {
-        kScaleFactor2 * value.accelerationX(), kScaleFactor2 * value.accelerationY(),
-        kScaleFactor2 * value.accelerationZ()};
+    Vector3<double> const expectedAcceleration = {kScaleFactor2 * value.accelerationX(),
+        kScaleFactor2 * value.accelerationY(), kScaleFactor2 * value.accelerationZ()};
     double const expectedEwaldPotential = kScaleFactor1 * value.potential();
     // The call's support may differ from the defaults used to build the tree.
     float const support = 2.0f * getOptions().gravity.supportRadius;
@@ -315,7 +314,7 @@ void fmmWalkDeferredSourceHandoff(bool useCuda) {
         bool const ewald = mode != 0;
         TreeId const target = ewald ? leafSink : sink;
         auto const* sinkNode = treeGetNode(target);
-        std::array<std::array<float, kDimensions>, 2> expectedAcceleration{};
+        std::array<Vector3<float>, 2> expectedAcceleration{};
         std::array<float, 2> expectedPotential{};
         double expectedTotalPotential = 0.0;
         for (int backend = 0; backend < (useCuda ? 2 : 1); backend++) {
@@ -377,7 +376,7 @@ void fmmWalkSetHybridParticles(ParticleInteger secondParticleCount) {
 FmmInteraction fmmWalkSelectInteraction(TreeId sink, TreeId source, float support) {
     auto const* sinkNode = treeGetNode(sink);
     auto const* sourceNode = treeGetNode(source);
-    Array<float, kDimensions> displacement;
+    Vector3<float> displacement;
     for (int dim = 0; dim < kDimensions; dim++) {
         displacement[dim] = distance(sinkNode->pos[dim], sourceNode->pos[dim]);
     }
@@ -433,7 +432,7 @@ ForceVectors fmmWalkInteractionReference(
                 cpuGravityCp<order.value>(expansion, sources, sink, true);
             }
             for (ParticleInteger i = range.first; i < range.second; i++) {
-                Array<float, kDimensions> displacement;
+                Vector3<float> displacement;
                 for (int dim = 0; dim < kDimensions; dim++) {
                     displacement[dim] = distance(particlesPos(dim, i), sinkNode->pos[dim]);
                 }
@@ -506,16 +505,15 @@ void fmmWalkCompareForces(
 
 void fmmWalkRequireForceReciprocity(std::string const& label, std::array<TreeId, 2> const& sinks,
     std::array<ForceVectors const*, 2> const& forces) {
-    std::array<double, kDimensions> totalForce{};
-    std::array<double, kDimensions> absoluteForce{};
+    Vector3<double> totalForce{};
+    Vector3<double> absoluteForce{};
     double forceMagnitudeSum = 0.0;
     for (int direction = 0; direction < 2; direction++) {
         auto const range = treeGetNode(sinks[direction])->particleRange;
         auto const& values = *forces[direction];
         for (ParticleInteger i = range.first; i < range.second; i++) {
             auto const j = i - range.first;
-            std::array<double, kDimensions> const acceleration{
-                values.gx[j], values.gy[j], values.gz[j]};
+            Vector3<double> const acceleration{values.gx[j], values.gy[j], values.gz[j]};
             double forceSquared = 0.0;
             for (int dim = 0; dim < kDimensions; dim++) {
                 double const force = particlesMass(i) * acceleration[dim];
@@ -793,9 +791,9 @@ void fmmWalkCellSupportBounds(bool useCuda) {
     }};
     float const fixedSupport = 0.015625f;
     float const largeCellSupport = 0.375f;
-    std::array<Array<Position, kDimensions>, 2> const centers{
+    std::array<Vector3<Position>, 2> const centers{
         fmmWalkPosition(0.25, 0.375, 0.4375), fmmWalkPosition(0.4375, 0.375, 0.4375)};
-    std::array<Array<Position, kDimensions>, 2> const particlePositions{
+    std::array<Vector3<Position>, 2> const particlePositions{
         fmmWalkPosition(0.3125, 0.375, 0.4375), fmmWalkPosition(0.359375, 0.375, 0.4375)};
     std::array<Pair<ParticleInteger>, 2> const ranges{
         Pair<ParticleInteger>(0, 40), Pair<ParticleInteger>(40, 104)};
@@ -914,11 +912,11 @@ void fmmWalkCollectLeaves(TreeId id, Vector<TreeId>& leaves) {
 
 struct FmmWalkPeriodicField {
     double potential = 0.0;
-    std::array<double, kDimensions> acceleration{};
+    Vector3<double> acceleration{};
 };
 
-FmmWalkPeriodicField fmmWalkDirectPeriodicReference(size_t sink,
-    Vector<Array<Position, kDimensions>> const& positions, Vector<double> const& masses) {
+FmmWalkPeriodicField fmmWalkDirectPeriodicReference(
+    size_t sink, Vector<Vector3<Position>> const& positions, Vector<double> const& masses) {
     // Independently sum the zero-mean periodic Newtonian Green function.
     // These larger real/reciprocal cubes converge beyond the production
     // alpha=2 truncations without using any generated FMM coefficient.
@@ -929,7 +927,7 @@ FmmWalkPeriodicField fmmWalkDirectPeriodicReference(size_t sink,
     FmmWalkPeriodicField result;
     for (size_t source = 0; source < positions.size(); source++) {
         double const mass = masses[source];
-        std::array<double, kDimensions> separation;
+        Vector3<double> separation;
         for (int dim = 0; dim < kDimensions; dim++) {
             separation[dim] = positions[sink][dim].toDouble() - positions[source][dim].toDouble();
             separation[dim] -= std::nearbyint(separation[dim]);
@@ -944,7 +942,7 @@ FmmWalkPeriodicField fmmWalkDirectPeriodicReference(size_t sink,
             for (int y = -kCutoff; y <= kCutoff; y++) {
                 for (int z = -kCutoff; z <= kCutoff; z++) {
                     bool const origin = x == 0 && y == 0 && z == 0;
-                    std::array<double, kDimensions> const displacement{
+                    Vector3<double> const displacement{
                         separation[0] + x, separation[1] + y, separation[2] + z};
                     double const radiusSquared = displacement[0] * displacement[0] +
                         displacement[1] * displacement[1] + displacement[2] * displacement[2];
@@ -965,8 +963,7 @@ FmmWalkPeriodicField fmmWalkDirectPeriodicReference(size_t sink,
                         }
                     }
                     if (!origin) {
-                        std::array<double, kDimensions> const wave{
-                            2.0 * kPi * x, 2.0 * kPi * y, 2.0 * kPi * z};
+                        Vector3<double> const wave{2.0 * kPi * x, 2.0 * kPi * y, 2.0 * kPi * z};
                         double const waveSquared = x * x + y * y + z * z;
                         double const coefficient =
                             std::exp(-kPi * kPi * waveSquared / (kAlpha * kAlpha)) /
@@ -988,7 +985,7 @@ FmmWalkPeriodicField fmmWalkDirectPeriodicReference(size_t sink,
 
 FmmWalkPeriodicField fmmWalkDirectPeriodicReference(ParticleInteger sink) {
     auto const range = particlesCurrentRange();
-    Vector<Array<Position, kDimensions>> positions(range.second - range.first);
+    Vector<Vector3<Position>> positions(range.second - range.first);
     Vector<double> masses(positions.size());
     for (ParticleInteger source = range.first; source < range.second; source++) {
         for (int dim = 0; dim < kDimensions; dim++) {
@@ -1012,9 +1009,9 @@ void fmmWalkOrdinaryTimesteps(bool useCuda) {
     constexpr double kBaseTimestep = 0.03125;
     constexpr double kDriftTimestep = 0.0078125;
     constexpr double kKickTolerance = 5.0e-6;
-    std::array<Array<Position, kDimensions>, 3> const positions{fmmWalkDistributedPosition(0),
+    std::array<Vector3<Position>, 3> const positions{fmmWalkDistributedPosition(0),
         fmmWalkDistributedPosition(1), fmmWalkDistributedPosition(2)};
-    Vector<Array<Position, kDimensions>> referencePositions(positions.begin(), positions.end());
+    Vector<Vector3<Position>> referencePositions(positions.begin(), positions.end());
     Vector<double> masses(positions.size(), 1.0);
     std::array<FmmWalkPeriodicField, 3> references;
     for (size_t i = 0; i < positions.size(); ++i) {
@@ -1066,7 +1063,7 @@ void fmmWalkOrdinaryTimesteps(bool useCuda) {
                     throw std::runtime_error(label + " changed particle count");
                 }
                 double kinetic = 0.0, synchronizedKinetic = 0.0, potential = 0.0;
-                std::array<double, kDimensions> momentum{};
+                Vector3<double> momentum{};
                 double momentumNorm = 0.0;
                 for (size_t i = 0; i < positions.size(); ++i) {
                     size_t id = positions.size();
@@ -1135,8 +1132,8 @@ void fmmWalkOrdinaryTimesteps(bool useCuda) {
                     fullEvaluation ? momentum[2] / kScale : 15.0, kKickTolerance);
                 fmmWalkRequireClose(label + " synchronized momentum norm", energies.nmom,
                     fullEvaluation ? momentumNorm / kScale : 16.0, kKickTolerance);
-                std::array<std::array<float, kDimensions>, 3> beforeDrift;
-                std::array<Array<Position, kDimensions>, 3> beforePositions;
+                std::array<Vector3<float>, 3> beforeDrift;
+                std::array<Vector3<Position>, 3> beforePositions;
                 for (size_t i = 0; i < positions.size(); ++i) {
                     for (int dim = 0; dim < kDimensions; ++dim) {
                         beforeDrift[i][dim] = particlesVel(dim, i);
@@ -1179,11 +1176,10 @@ void fmmWalkHierarchicalTerminalEnergy(bool useCuda) {
     constexpr double kScale = 0.5;
     constexpr double kBaseTimestep = 0.03125;
     constexpr double kKickTolerance = 2.0e-5;
-    std::array<Array<Position, kDimensions>, 3> const positions{fmmWalkDistributedPosition(0),
+    std::array<Vector3<Position>, 3> const positions{fmmWalkDistributedPosition(0),
         fmmWalkDistributedPosition(1), fmmWalkDistributedPosition(2)};
-    Vector<Array<Position, kDimensions>> const allPositions(positions.begin(), positions.end());
-    Vector<Array<Position, kDimensions>> const fastPositions(
-        positions.begin() + 1, positions.end());
+    Vector<Vector3<Position>> const allPositions(positions.begin(), positions.end());
+    Vector<Vector3<Position>> const fastPositions(positions.begin() + 1, positions.end());
     Vector<double> const allMasses(positions.size(), 1.0);
     Vector<double> const fastMasses(positions.size() - 1, 1.0);
     std::array<FmmWalkPeriodicField, 3> fullReferences;
@@ -1197,11 +1193,11 @@ void fmmWalkHierarchicalTerminalEnergy(bool useCuda) {
     auto const initialVelocity = [](size_t particle, int dim) {
         return 0.125f * (particle + 1) * (dim + 1);
     };
-    std::array<std::array<double, kDimensions>, 3> synchronizedVelocity;
+    std::array<Vector3<double>, 3> synchronizedVelocity;
     double storedKinetic = 0.0;
     double synchronizedKinetic = 0.0;
     double potential = 0.0;
-    std::array<double, kDimensions> momentum{};
+    Vector3<double> momentum{};
     double momentumNorm = 0.0;
     for (size_t i = 0; i < positions.size(); ++i) {
         double speedSquared = 0.0;
@@ -1313,16 +1309,15 @@ void fmmWalkPeriodicBackground(bool useCuda) {
     constexpr float kTheta = 0.1f;
     constexpr float kUntouchedPotential = 12345.0f;
     constexpr float kUntouchedAcceleration = 6789.0f;
-    constexpr std::array<std::array<double, kDimensions>, 6> kPositions{
-        {{0.96, 0.72, 0.82}, {0.04, 0.76, 0.88}, {0.11, 0.68, 0.91}, {0.89, 0.91, 0.73},
-            {0.72, 0.62, 0.69}, {0.84, 0.84, 0.95}}};
-    std::array<double, kDimensions> const translation{0.20, 0.31, 0.17};
+    constexpr std::array<Vector3<double>, 6> kPositions{{{0.96, 0.72, 0.82}, {0.04, 0.76, 0.88},
+        {0.11, 0.68, 0.91}, {0.89, 0.91, 0.73}, {0.72, 0.62, 0.69}, {0.84, 0.84, 0.95}}};
+    Vector3<double> const translation{0.20, 0.31, 0.17};
     for (int scenario = 0; scenario < 3; scenario++) {
         bool const translated = scenario == 1;
         bool const selectedSubset = scenario == 2;
         particlesResize(kPositions.size() + (selectedSubset ? 2 : 0));
         for (size_t i = 0; i < kPositions.size(); i++) {
-            Array<Position, kDimensions> position;
+            Vector3<Position> position;
             for (int dim = 0; dim < kDimensions; dim++) {
                 double const coordinate = kPositions[i][dim] + translated * translation[dim];
                 position[dim] = coordinate - std::floor(coordinate);
@@ -1438,12 +1433,12 @@ void fmmWalkOpenLargerCell(bool useCuda) {
         bool openLargerCell;
     };
     constexpr std::array<Variant, 2> kVariants{{{"lockstep", false}, {"open-larger", true}}};
-    std::array<double, kDimensions> const clumpCenter{0.3, 0.4, 0.5};
+    Vector3<double> const clumpCenter{0.3, 0.4, 0.5};
     particlesResize(kCount);
     std::mt19937 generator(20261019u);
     std::uniform_real_distribution<double> uniform(0.0, 1.0);
     for (ParticleInteger i = 0; i < kCount; i++) {
-        std::array<double, kDimensions> coordinate;
+        Vector3<double> coordinate;
         if (i < kClumpCount) {
             double radius;
             do {
@@ -1460,7 +1455,7 @@ void fmmWalkOpenLargerCell(bool useCuda) {
         } else {
             coordinate = {uniform(generator), uniform(generator), uniform(generator)};
         }
-        Array<Position, kDimensions> position;
+        Vector3<Position> position;
         for (int dim = 0; dim < kDimensions; dim++) {
             double wrapped = coordinate[dim] - std::floor(coordinate[dim]);
             if (wrapped >= 1.0) {
@@ -1479,7 +1474,7 @@ void fmmWalkOpenLargerCell(bool useCuda) {
         throw std::runtime_error("Open-larger regression lost particles");
     }
     auto const baseOptions = getOptions();
-    using Forces = Vector<std::array<double, kDimensions>>;
+    using Forces = Vector<Vector3<double>>;
     // Runs one backend with the current options; returns the forces and the
     // net-force residual, the norm of the summed force over the sum of norms.
     auto const run = [&](bool cuda, Forces& forces) {
@@ -1490,7 +1485,7 @@ void fmmWalkOpenLargerCell(bool useCuda) {
         kick(fmmWalkParameters(cuda), local, origin, built.id, Vector<TreeId>{built.id},
             Vector<TreeId>{built.id}, nullptr);
         forces.resize(kCount);
-        std::array<double, kDimensions> total{};
+        Vector3<double> total{};
         double magnitudeSum = 0.0;
         for (ParticleInteger i = range.first; i < range.second; i++) {
             double squared = 0.0;
@@ -1645,7 +1640,7 @@ double fmmWalkVerifyDistributedPeriodicForces() {
     if (particlesSize() != 1) {
         throw std::runtime_error("Periodic FMM regression requires one particle per rank");
     }
-    Vector<Array<Position, kDimensions>> positions(hpxSize());
+    Vector<Vector3<Position>> positions(hpxSize());
     Vector<double> masses(hpxSize(), 1.0);
     size_t sink = positions.size();
     for (size_t rank = 0; rank < positions.size(); rank++) {

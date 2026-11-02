@@ -26,6 +26,7 @@
 #include <cosmictiger/gravity/nitadori/fmm_batch.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/gravity/tree_build.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 namespace detail {
@@ -108,7 +109,7 @@ KickReturn localBatchGpu(KickParameters params, Vector<KickWorkitem> workitems,
 #endif
 }
 hpx::future<KickReturn> localBatchFork(KickParameters params, ExpansionBuffer const& l,
-    Array<Position, kDimensions> pos, TreeId self, Vector<TreeId> direct, Vector<TreeId> periodic,
+    Vector3<Position> pos, TreeId self, Vector<TreeId> direct, Vector<TreeId> periodic,
     std::shared_ptr<KickWorkspace> workspace, bool threadme) {
     ALWAYS_ASSERT(self.proc == hpxRank() && periodic.empty());
     auto run = [params, l, pos, self, workspace](Vector<TreeId> direct) {

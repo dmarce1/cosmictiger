@@ -16,6 +16,7 @@
 #include <cosmictiger/gravity/fmm_kernels/spherical_ewald_kernels.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/nitadori/kernels.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 namespace pmmm {
 namespace detail {
@@ -59,7 +60,7 @@ std::vector<ContractionTerm> contractionTerms(int order) {
             int const localReal = detail::index(localRank, localMode);
             int const localImaginary = detail::index(localRank, -localMode);
             for (int sourceRank = 0; sourceRank <= std::min(sourceDegree, localDegree - localRank);
-                ++sourceRank) {
+                 ++sourceRank) {
                 for (int sourceMode = -sourceRank; sourceMode <= sourceRank; ++sourceMode) {
                     auto source = detail::harmonicParts(sourceRank, sourceMode);
                     auto const kernel =
@@ -90,7 +91,7 @@ std::vector<ContractionTerm> contractionTerms(int order) {
     return terms;
 }
 
-FlopCount addMoments(int order, double* moments, double mass, std::array<double, 3> const& offset) {
+FlopCount addMoments(int order, double* moments, double mass, Vector3<double> const& offset) {
     detail::checkOrder(order);
     FlopCount count = 0;
     fmmDispatch(order, [&](auto selectedOrder) {
@@ -102,8 +103,8 @@ FlopCount addMoments(int order, double* moments, double mass, std::array<double,
     return count;
 }
 
-FlopCount green(int order, double* coefficients, std::array<double, 3> const& boxOffset,
-    double cellWidth, bool near) {
+FlopCount green(int order, double* coefficients, Vector3<double> const& boxOffset, double cellWidth,
+    bool near) {
     detail::checkOrder(order);
     if (!(cellWidth > 0.0) || !std::isfinite(cellWidth)) {
         throw std::invalid_argument("PMMM cell width must be finite and positive");
@@ -146,7 +147,7 @@ FlopCount green(int order, double* coefficients, std::array<double, 3> const& bo
 }
 
 FlopCount evaluate(int order, std::array<double, 4>& field, double const* coefficients,
-    double localTrace, std::array<double, 3> const& cellOffset, double cellWidth) {
+    double localTrace, Vector3<double> const& cellOffset, double cellWidth) {
     detail::checkOrder(order);
     if (!(cellWidth > 0.0) || !std::isfinite(cellWidth)) {
         throw std::invalid_argument("PMMM cell width must be finite and positive");

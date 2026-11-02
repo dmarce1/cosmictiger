@@ -10,20 +10,21 @@
 #include <gtest/gtest.h>
 
 #include <cosmictiger/gravity/direct_reference.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 namespace detail {
 
 // A separate Ewald splitting and larger cubes check the converged periodic
 // field, without copying the production reference's central correction split.
-std::array<double, 3> alternateEwaldReference(
-    std::array<double, 3> const& separation, long double alpha = 2.7L, int cutoff = 5) {
+Vector3<double> alternateEwaldReference(
+    Vector3<double> const& separation, long double alpha = 2.7L, int cutoff = 5) {
     constexpr long double kPi = std::numbers::pi_v<long double>;
     long double const normalization = 2 * alpha / std::sqrt(kPi);
-    std::array<long double, 3> result{};
+    Vector3<long double> result{};
     for (int x = -cutoff; x <= cutoff; ++x) {
         for (int y = -cutoff; y <= cutoff; ++y) {
             for (int z = -cutoff; z <= cutoff; ++z) {
-                std::array<long double, 3> const image{static_cast<long double>(separation[0]) + x,
+                Vector3<long double> const image{static_cast<long double>(separation[0]) + x,
                     static_cast<long double>(separation[1]) + y,
                     static_cast<long double>(separation[2]) + z};
                 long double const squared =
@@ -37,7 +38,7 @@ std::array<double, 3> alternateEwaldReference(
                 }
                 int const waveSquared = x * x + y * y + z * z;
                 if (waveSquared != 0) {
-                    std::array<long double, 3> const wave{2 * kPi * x, 2 * kPi * y, 2 * kPi * z};
+                    Vector3<long double> const wave{2 * kPi * x, 2 * kPi * y, 2 * kPi * z};
                     long double const amplitude =
                         std::exp(-kPi * kPi * waveSquared / (alpha * alpha)) / (kPi * waveSquared) *
                         std::sin(wave[0] * separation[0] + wave[1] * separation[1] +
@@ -71,8 +72,8 @@ TEST(GravityDirectReference, AnalyticIsolatedAndSoftenedPairs) {
 }
 
 TEST(GravityDirectReference, IndependentPeriodicSplitting) {
-    for (std::array<double, 3> const separation :
-        {std::array<double, 3>{.11, -.23, .34}, {.499, -.497, .31}, {-.5, .125, -.25}}) {
+    for (Vector3<double> const separation :
+        {Vector3<double>{.11, -.23, .34}, {.499, -.497, .31}, {-.5, .125, -.25}}) {
         auto const actual =
             detail::directGravityReference(separation, detail::referenceKernel, .01);
         auto const expected = detail::alternateEwaldReference(separation);
@@ -83,7 +84,7 @@ TEST(GravityDirectReference, IndependentPeriodicSplitting) {
 }
 
 TEST(GravityDirectReference, DistributedDisplacementsAndCutoffBoundaries) {
-    auto const compare = [](std::array<double, 3> const& separation) {
+    auto const compare = [](Vector3<double> const& separation) {
         auto const actual =
             detail::directGravityReference(separation, detail::referenceKernel, .001);
         auto const expected = detail::alternateEwaldReference(separation);
@@ -104,10 +105,10 @@ TEST(GravityDirectReference, DistributedDisplacementsAndCutoffBoundaries) {
     }
     // The image shifted by +4 crosses the actual real radius at x=-0.4.
     // Also cover wrapped faces, edges, corners and exact symmetry zeros.
-    for (std::array<double, 3> const separation : {std::array<double, 3>{-.400000000001, 0, 0},
-             {-.4, 0, 0}, {-.399999999999, 0, 0}, {-.5, 0, 0}, {.5, .5, 0}, {-.5, .5, -.5},
-             {.499999999999, -.499999999999, .499999999999}, {.002, -.003, .004},
-             {67.0 / 128, 0, 0}, {67.0 / 128, -67.0 / 128, 67.0 / 128}}) {
+    for (Vector3<double> const separation :
+        {Vector3<double>{-.400000000001, 0, 0}, {-.4, 0, 0}, {-.399999999999, 0, 0}, {-.5, 0, 0},
+            {.5, .5, 0}, {-.5, .5, -.5}, {.499999999999, -.499999999999, .499999999999},
+            {.002, -.003, .004}, {67.0 / 128, 0, 0}, {67.0 / 128, -67.0 / 128, 67.0 / 128}}) {
         compare(separation);
     }
 }
@@ -217,12 +218,12 @@ TEST(GravityDirectReference, SmoothCorrectionAndCubicSymmetries) {
             EXPECT_NEAR(correction[dim], expected, 2e-15);
         }
     }
-    std::array<double, 3> const displacement{.13, .29, .47};
+    Vector3<double> const displacement{.13, .29, .47};
     auto const correction = detail::gravityReferenceCorrection(displacement, tables);
     std::array<int, 3> permutation{0, 1, 2};
     do {
         for (int signs = 0; signs < 8; ++signs) {
-            std::array<double, 3> transformed;
+            Vector3<double> transformed;
             for (int dim = 0; dim < 3; ++dim) {
                 transformed[dim] = ((signs >> dim) & 1 ? -1 : 1) * displacement[permutation[dim]];
             }
@@ -237,10 +238,10 @@ TEST(GravityDirectReference, SmoothCorrectionAndCubicSymmetries) {
 }
 
 TEST(GravityDirectReference, MixedMassPeriodicImageReciprocity) {
-    std::array<double, 3> const first{.99, .2, .4};
-    std::array<double, 3> const second{.01, .3, .6};
-    std::array<double, 3> separation;
-    std::array<double, 3> opposite;
+    Vector3<double> const first{.99, .2, .4};
+    Vector3<double> const second{.01, .3, .6};
+    Vector3<double> separation;
+    Vector3<double> opposite;
     for (int dim = 0; dim < 3; ++dim) {
         separation[dim] = first[dim] - second[dim];
         separation[dim] -= std::nearbyint(separation[dim]);

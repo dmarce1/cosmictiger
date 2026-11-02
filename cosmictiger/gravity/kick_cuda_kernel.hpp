@@ -25,6 +25,7 @@
 #include <cosmictiger/gravity/gravity_cuda.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_cuda.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 namespace detail {
@@ -75,7 +76,7 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
     FlopCounter<FlopCount> doubleFlops = 3;
     for (int i = tid; i < sinkCount; i += kWarpSize) {
         cosmictiger::gravity::Field<float> l2{};
-        Array<float, kDimensions> dx;
+        Vector3<float> dx;
         ParticleInteger sinkIndex;
         float vx;
         float vy;
@@ -399,7 +400,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
         if (sharedExpansion) {
             char* expansionBytes = shmemPtr + layout.expansionOffset;
             control.expansion = reinterpret_cast<Expansion*>(expansionBytes);
-            control.expansionPos = reinterpret_cast<Array<Position, kDimensions>*>(expansionBytes +
+            control.expansionPos = reinterpret_cast<Vector3<Position>*>(expansionBytes +
                 (kLocalExpansionBytes + alignof(Position) - 1) / alignof(Position) *
                     alignof(Position));
         } else {
@@ -426,7 +427,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
     auto& leaflist = control.leaflist;
     auto& barrier = control.barrier;
     Expansion& expansion = *control.expansion;
-    Array<Position, kDimensions>& expansionPos = *control.expansionPos;
+    Vector3<Position>& expansionPos = *control.expansionPos;
     float* scratch = control.scratchExpansion;
     auto& treeNodes = data.treeNodes;
     bool const equalMass = !COSMICTIGER_WITH_SPH || !data.sph;
@@ -480,7 +481,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
             auto const& self = treeNodes[sparams.back().self];
             switch (sparams.back().phase) {
             case 0: {
-                Array<float, kDimensions> dx;
+                Vector3<float> dx;
                 for (int dim = 0; dim < kDimensions; dim++) {
                     dx[dim] = unwrappedDistance(self.pos[dim], expansionPos[dim]);
                 }

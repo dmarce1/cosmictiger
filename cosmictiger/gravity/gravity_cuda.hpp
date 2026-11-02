@@ -20,6 +20,7 @@
 #include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick_cuda.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 // Interaction counters shared by every order (defined in kick.cu).
 extern __managed__ double iclose;
@@ -367,7 +368,7 @@ __device__ FlopCounts cudaGravityCcDirect(CudaKickData const& data,
             TreeNode const& other = treeNodes[multlist[i]];
             cosmictiger::gravity::cartesian::Multipole<float, order> const& m =
                 fmmMultiPos<order>(other.mpos).multi;
-            Array<float, kDimensions> dx;
+            Vector3<float> dx;
             for (int dim = 0; dim < kDimensions; dim++) {
                 dx[dim] = fmmPositionDifference(
                     self.mpos->pos[dim], other.mpos->pos[dim], dim, geometry, &mixedFlops);
@@ -414,7 +415,7 @@ __device__ FlopCounts cudaGravityCpDirect(CudaKickData const& data, CudaKickCont
             int const count = detail::cudaStageParticleSources<order, equalMass>(
                 data, control, partlist, i, particleRange);
             for (int j = tid; j < count; j += kWarpSize) {
-                Array<float, kDimensions> dx;
+                Vector3<float> dx;
                 dx[kXDimension] = fmmPositionDifference(
                     self.mpos->pos[kXDimension], sources.x[j], kXDimension, geometry, &mixedFlops);
                 dx[kYDimension] = fmmPositionDifference(
@@ -499,7 +500,7 @@ __device__ FlopCounts cudaGravityPcDirect(CudaKickData const& data, CudaKickCont
             // Accumulate every staged multipole in registers; write each sink once.
             for (int k = tid; k < sinkCount; k += kWarpSize) {
                 cosmictiger::gravity::Field<float> l{};
-                Array<float, kDimensions> dx;
+                Vector3<float> dx;
                 for (int j = 0; j < mend; j++) {
                     FmmMultiPos<order> const& mp =
                         detail::cudaStagedMultipole<order>(multipoles + j * kStride);

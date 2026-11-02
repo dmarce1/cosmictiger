@@ -4,6 +4,7 @@
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/range.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 // Zero meshSize preserves the ordinary FMM nearest-image geometry. A forest
 // instead fixes the source image by mesh cell, consistently through its tree.
@@ -74,7 +75,7 @@ CUDA_EXPORT inline double fmmBoundaryDifference(
 }
 
 CUDA_EXPORT inline float fmmBoxDistanceSquared(Fixed32Range const& box,
-    Array<Position, kDimensions> const& point, Array<int, kDimensions> const& image,
+    Vector3<Position> const& point, Array<int, kDimensions> const& image,
     FlopCounts* counts = nullptr) {
     float result = 0;
     for (int dim = 0; dim < kDimensions; ++dim) {
@@ -116,8 +117,7 @@ CUDA_EXPORT inline float fmmPositionDifference(Position sink, Position source, i
 }
 
 CUDA_EXPORT inline float fmmSinkBoxDistanceSquared(Fixed32Range const& box,
-    Array<Position, kDimensions> const& source, FmmGeometry const& geometry,
-    FlopCounts* counts = nullptr) {
+    Vector3<Position> const& source, FmmGeometry const& geometry, FlopCounts* counts = nullptr) {
     if (geometry.meshSize == 0) {
         detail::countPeriodicBoxDistance(box, counts);
         return boxDistanceSquared(box, source);
@@ -130,8 +130,8 @@ CUDA_EXPORT inline float fmmSinkBoxDistanceSquared(Fixed32Range const& box,
 }
 
 CUDA_EXPORT inline float fmmSourceBoxDistanceSquared(Fixed32Range const& box,
-    Array<Position, kDimensions> const& sink, Array<Position, kDimensions> const& source,
-    FmmGeometry const& geometry, FlopCounts* counts = nullptr) {
+    Vector3<Position> const& sink, Vector3<Position> const& source, FmmGeometry const& geometry,
+    FlopCounts* counts = nullptr) {
     if (geometry.meshSize == 0) {
         detail::countPeriodicBoxDistance(box, counts);
         return boxDistanceSquared(box, sink);
@@ -144,12 +144,12 @@ CUDA_EXPORT inline float fmmSourceBoxDistanceSquared(Fixed32Range const& box,
 }
 
 #ifndef __CUDACC__
-inline SimdFloat fmmPeriodicBoxDistanceSquared(Range<SimdDouble8> const& box,
-    Array<SimdPosition, kDimensions> const& point, FlopCounts* counts) {
+inline SimdFloat fmmPeriodicBoxDistanceSquared(
+    Range<SimdDouble8> const& box, Vector3<SimdPosition> const& point, FlopCounts* counts) {
     if constexpr (kPositionBits == 64) {
         return SimdFloat([&](auto lane) {
             Fixed32Range scalarBox;
-            Array<Position, kDimensions> scalarPoint;
+            Vector3<Position> scalarPoint;
             for (int dim = 0; dim < kDimensions; ++dim) {
                 scalarBox.begin[dim] = box.begin[dim][lane];
                 scalarBox.end[dim] = box.end[dim][lane];
@@ -183,14 +183,14 @@ inline SimdFloat fmmPositionDifference(SimdPosition const& sink, SimdPosition co
 }
 
 inline SimdFloat fmmSinkBoxDistanceSquared(Range<SimdDouble8> const& box,
-    Array<SimdPosition, kDimensions> const& source, FmmGeometry const& geometry,
+    Vector3<SimdPosition> const& source, FmmGeometry const& geometry,
     FlopCounts* counts = nullptr) {
     if (geometry.meshSize == 0) {
         return fmmPeriodicBoxDistanceSquared(box, source, counts);
     }
     return SimdFloat([&](auto lane) {
         Fixed32Range scalarBox;
-        Array<Position, kDimensions> point;
+        Vector3<Position> point;
         for (int dim = 0; dim < kDimensions; ++dim) {
             scalarBox.begin[dim] = box.begin[dim][lane];
             scalarBox.end[dim] = box.end[dim][lane];
@@ -202,14 +202,14 @@ inline SimdFloat fmmSinkBoxDistanceSquared(Range<SimdDouble8> const& box,
 }
 
 inline SimdFloat fmmSourceBoxDistanceSquared(Range<SimdDouble8> const& box,
-    Array<SimdPosition, kDimensions> const& sink, Array<SimdPosition, kDimensions> const& source,
+    Vector3<SimdPosition> const& sink, Vector3<SimdPosition> const& source,
     FmmGeometry const& geometry, FlopCounts* counts = nullptr) {
     if (geometry.meshSize == 0) {
         return fmmPeriodicBoxDistanceSquared(box, sink, counts);
     }
     return SimdFloat([&](auto lane) {
         Fixed32Range scalarBox;
-        Array<Position, kDimensions> a, b;
+        Vector3<Position> a, b;
         for (int dim = 0; dim < kDimensions; ++dim) {
             scalarBox.begin[dim] = box.begin[dim][lane];
             scalarBox.end[dim] = box.end[dim][lane];

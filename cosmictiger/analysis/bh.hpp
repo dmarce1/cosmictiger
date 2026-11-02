@@ -17,9 +17,10 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #include <cosmictiger/cuda/device_vector.hpp>
 #include <cosmictiger/math/fixed.hpp>
 #include <cosmictiger/math/range.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 struct BhTreeNode {
-    Array<float, kDimensions> pos;
+    Vector3<float> pos;
     Array<int, kDimensions> children;
     Pair<int> parts;
     float mass;
@@ -55,19 +56,18 @@ CUDA_EXPORT inline bool bhAcceptMonopole(float distanceSquared, BhTreeNode const
 }    // namespace detail
 
 struct BhSource {
-    Array<float, kDimensions> x;
+    Vector3<float> x;
     float m;
 };
 
-DeviceVector<float> bhEvaluatePotential(
-    DeviceVector<Array<float, kDimensions>>& x, bool gpu = false);
-DeviceVector<float> bhEvaluatePoints(DeviceVector<Array<float, kDimensions>>& y,
-    DeviceVector<Array<float, kDimensions>>& x, bool gpu = false);
+DeviceVector<float> bhEvaluatePotential(DeviceVector<Vector3<float>>& x, bool gpu = false);
+DeviceVector<float> bhEvaluatePoints(
+    DeviceVector<Vector3<float>>& y, DeviceVector<Vector3<float>>& x, bool gpu = false);
 DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& treeNodes,
-    DeviceVector<Array<float, kDimensions>> const& x, DeviceVector<int> const sinkBuckets,
-    float relativeError, float hsoft, float gm, int maximumBlockCount = 0);
+    DeviceVector<Vector3<float>> const& x, DeviceVector<int> const sinkBuckets, float relativeError,
+    float hsoft, float gm, int maximumBlockCount = 0);
 DeviceVector<float> bhEvaluatePotentialPointsGpu(DeviceVector<BhTreeNode> const& treeNodes,
-    DeviceVector<Array<float, kDimensions>> const& x,
-    DeviceVector<Array<float, kDimensions>> const& y, float relativeError, float hsoft, float gm);
+    DeviceVector<Vector3<float>> const& x, DeviceVector<Vector3<float>> const& y,
+    float relativeError, float hsoft, float gm);
 
 #endif /* BH_HPP_ */

@@ -303,7 +303,7 @@ def radialDerivatives(code, order, origin):
                     code.append(f'T const dRinvPower{degree}Order{traceCount} '
                                 f'= d{degree} * rinv{traceCount};')
                     flops += 1
-    code.append('Array<T, kDimensions> dxrinv;')
+    code.append('Vector3<T> dxrinv;')
     for axis in range(3):
         code.append(f'dxrinv[{axis}] = dx[{axis}] * rinv;')
     flops += computeDx(code, order)
@@ -317,7 +317,7 @@ def ewald(code, order):
         f'// FMM order {order}.',
         'template<class T>',
         f'CUDA_EXPORT int ewaldCorrectionDerivatives(SymmetricTracelessTensor<T, {order}> &d, '
-        'Array<T, kDimensions> position) {',
+        'Vector3<T> position) {',
         'position[0] *= simdBroadcast<T>(kScaleFactor);',
         'position[1] *= simdBroadcast<T>(kScaleFactor);',
         'position[2] *= simdBroadcast<T>(kScaleFactor);',
@@ -353,7 +353,7 @@ def ewald(code, order):
                     f'dfour[{index}]);')
     code.extend([
         '}',
-        'Array<T, kDimensions> dx;',
+        'Vector3<T> dx;',
         'dx = position;',
         '{',
         'T r2 = simdFma(dx[0], dx[0], simdFma(dx[1], dx[1], sqr(dx[2])));',
@@ -367,7 +367,7 @@ def ewald(code, order):
         '}',
         'for (int i = 0; i < realsz; i++) {',
         'auto const n = EwaldConst::realIndex(i);',
-        'Array<T, kDimensions> dx;',
+        'Vector3<T> dx;',
         'for (int dim = 0; dim < kDimensions; dim++) {',
         'dx[dim] = position[dim] - simdBroadcast<T>(kScaleFactor) * n[dim];',
         '}',
@@ -403,6 +403,7 @@ def generateEwald(minLocalDegree, maxLocalDegree):
         '#include <cosmictiger/math/math.hpp>',
         '#include <cosmictiger/math/simd_math.hpp>',
         '#include <cosmictiger/math/tensor.hpp>',
+        '#include <cosmictiger/math/vector3.hpp>',
         '',
         'namespace detail {',
     ]

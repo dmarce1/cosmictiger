@@ -16,6 +16,7 @@
 #include <cosmictiger/hydro/sph/star_formation.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #ifdef USE_CUDA
 #include <cosmictiger/hydro/sph/star_formation_cuda.hpp>
 #endif
@@ -137,7 +138,7 @@ struct Pending {
 };
 struct NewStar {
     ParticleInteger particle;
-    Array<float, kDimensions> gravity;
+    Vector3<float> gravity;
 };
 std::vector<Pending> pending;
 std::vector<NewStar> newStars;

@@ -9,6 +9,7 @@
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/math/fp16.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 // Paper references in this implementation use Behroozi, Wechsler & Wu (2013),
 // arXiv:1110.4372v3: https://arxiv.org/html/1110.4372v3
@@ -122,7 +123,7 @@ DeviceVector<RockstarParticle> rockstarGatherParticles(Vector<Subgroup> const& g
 // virialRadius, when given, receives the record's virial aperture in comoving
 // code lengths before binary16 rounding (zero for an unresolved halo).
 RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, float scale,
-    Array<double, kDimensions> const& origin, bool inclusive = true, bool periodic = false,
+    Vector3<double> const& origin, bool inclusive = true, bool periodic = false,
     double* virialRadius = nullptr);
 // Code mass (one lattice site of total matter) to solar masses/h, as used by mvir.
 double rockstarMassConversion();
@@ -136,7 +137,7 @@ double rockstarBoundedScaleRadius(double scaleRadius, double outerRadius);
 // Publish native records and an encoding sidecar after a successful close.
 void rockstarWriteCatalogue(
     std::string const& filename, RockstarRecord const* records, size_t count);
-GroupEntry rockstarMakeGroupEntry(Vector<Subgroup> const& groups, int index, float scale,
-    Array<double, kDimensions> const& origin);
+GroupEntry rockstarMakeGroupEntry(
+    Vector<Subgroup> const& groups, int index, float scale, Vector3<double> const& origin);
 // A single candidate, exposed for independent unbinding regressions.
 bool rockstarHaloBound(Subgroup& halo, Vector<RockstarParticle>& unboundParticles, float scale);

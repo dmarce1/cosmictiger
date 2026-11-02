@@ -16,6 +16,7 @@
 #include <cosmictiger/gravity/fmm_kernels/spherical_ewald_kernels.hpp>
 #include <cosmictiger/gravity/fmm_kernels/spherical_operators.hpp>
 #include <cosmictiger/math/simd_math.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 namespace counted {
 inline size_t operations = 0;
@@ -111,7 +112,7 @@ constexpr int kMaxTestDegree = kMaxCompiledDegree;
 #endif
 
 using Complex = std::complex<double>;
-using Point = std::array<double, 3>;
+using Point = Vector3<double>;
 constexpr double kPi = 3.1415926535897932384626433832795;
 size_t checks = 0;
 
@@ -362,15 +363,15 @@ template <int degree>
 void typedTraceCases() {
     using namespace cosmictiger::gravity::spherical;
     constexpr int kOrder = degree + 1;
-    Array<double, kDimensions> particleOffset{};
+    Vector3<double> particleOffset{};
     particleOffset[0] = .2;
     particleOffset[1] = -.1;
     particleOffset[2] = .4;
-    Array<double, kDimensions> displacement{};
+    Vector3<double> displacement{};
     displacement[0] = .3;
     displacement[1] = .5;
     displacement[2] = -.2;
-    Array<double, kDimensions> translatedOffset{};
+    Vector3<double> translatedOffset{};
     for (int dim = 0; dim < kDimensions; ++dim) {
         translatedOffset[dim] = particleOffset[dim] + displacement[dim];
     }

@@ -27,6 +27,7 @@
 
 #if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/analysis/lightcone.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #endif
 #include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/hpx.hpp>
@@ -135,7 +136,7 @@ int hpx_main(int argc, char* argv[]) {
                 fmmDispatch([](auto orderTag) {
                     constexpr int kOrder = decltype(orderTag)::value;
                     cosmictiger::gravity::cartesian::Green<SimdFloat, kOrder> d;
-                    Array<SimdFloat, kDimensions> xValue;
+                    Vector3<SimdFloat> xValue;
                     FILE* fp = fopen(outputPath("ewald.txt").c_str(), "wt");
                     if (fp == nullptr) {
                         THROW_ERROR("Unable to write ewald.txt\n");

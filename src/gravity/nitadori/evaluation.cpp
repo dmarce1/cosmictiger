@@ -1,12 +1,13 @@
 /* CosmicTiger - Nitadori PMMM evaluation; BSL-1.0. */
 
+#include <cosmictiger/math/vector3.hpp>
 #include "actions.hpp"
 
 namespace pmmm::detail {
 
 void consumeField(ParticleInteger index, std::array<double, 4> const& field, KickReturn& result,
     FlopCount& doubleFlops, FlopCounts& kickFlops) {
-    Array<float, kDimensions> acceleration;
+    Vector3<float> acceleration;
     double const gm = getOptions().gravity.gm;
     for (int component = 0; component < 4; ++component) {
         if (!std::isfinite(field[component]) ||

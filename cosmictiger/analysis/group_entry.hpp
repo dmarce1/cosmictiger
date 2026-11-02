@@ -15,14 +15,15 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #include <cosmictiger/analysis/group_header.hpp>
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/defs.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 using GroupInteger = long long;
 
 struct GroupEntry {
     GroupInteger id;
-    Array<double, kDimensions> com;
-    Array<float, kDimensions> vel;
-    Array<float, kDimensions> lang;
+    Vector3<double> com;
+    Vector3<float> vel;
+    Vector3<float> lang;
     float mass;
     float ekin;
     float epot;

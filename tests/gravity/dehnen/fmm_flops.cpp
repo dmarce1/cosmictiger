@@ -15,9 +15,10 @@
 #include <gtest/gtest.h>
 
 #include <cosmictiger/core/hpx.hpp>
-#include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_operators.hpp>
 #include <cosmictiger/gravity/fmm_acceptance.hpp>
+#include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_operators.hpp>
 #include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <tests/flop_counting_real.hpp>
 
 // Exercise the real tables without a distributed runtime, as in
@@ -54,7 +55,7 @@ void checkOrder() {
     cosmictiger::gravity::cartesian::Expansion<Real, order> local{};
     cosmictiger::gravity::cartesian::Green<Real, order> derivatives{};
     cosmictiger::gravity::Field<Real> field{};
-    Array<Real, kDimensions> position;
+    Vector3<Real> position;
     position[0] = .13;
     position[1] = -.21;
     position[2] = .38;
@@ -68,50 +69,58 @@ void checkOrder() {
     checkCount("P2M", [&] {
         cosmictiger::gravity::cartesian::Multipole<Real, order> result{};
         return cosmictiger::gravity::cartesian::P2M(
-                   result, Real(1), fmmScaleDisplacement(position)) + 3;
+                   result, Real(1), fmmScaleDisplacement(position)) +
+            3;
     });
     checkCount("M2M", [&] {
         cosmictiger::gravity::cartesian::Multipole<Real, order> result{};
         return cosmictiger::gravity::cartesian::M2M(
-                   result, source, fmmScaleDisplacement(position)) + 3;
+                   result, source, fmmScaleDisplacement(position)) +
+            3;
     });
     for (bool enabled : {false, true}) {
         checkCount("P2L", [&] {
             return cosmictiger::gravity::cartesian::P2L(
-                       local, Real(1), fmmScaleDisplacement(position), enabled) + 3;
+                       local, Real(1), fmmScaleDisplacement(position), enabled) +
+                3;
         });
         checkCount("M2L", [&] {
             return cosmictiger::gravity::cartesian::M2L(
-                       local, source, fmmScaleDisplacement(position), enabled) + 3;
+                       local, source, fmmScaleDisplacement(position), enabled) +
+                3;
         });
         checkCount("M2P", [&] {
             return cosmictiger::gravity::cartesian::M2P(
-                       field, source, fmmScaleDisplacement(position), enabled) + 3;
+                       field, source, fmmScaleDisplacement(position), enabled) +
+                3;
         });
         checkCount("Ewald M2L", [&] {
             return cosmictiger::gravity::cartesian::M2L(local, source, derivatives, enabled);
         });
         checkCount("Centered M2L", [&] {
             return cosmictiger::gravity::cartesian::M2L<true>(
-                       local, source, fmmScaleDisplacement(position), enabled) + 3;
+                       local, source, fmmScaleDisplacement(position), enabled) +
+                3;
         });
         checkCount("Centered M2P", [&] {
             return cosmictiger::gravity::cartesian::M2P<true>(
-                       field, source, fmmScaleDisplacement(position), enabled) + 3;
+                       field, source, fmmScaleDisplacement(position), enabled) +
+                3;
         });
         checkCount("Centered Ewald M2L", [&] {
-            return cosmictiger::gravity::cartesian::M2L<true>(
-                local, source, derivatives, enabled);
+            return cosmictiger::gravity::cartesian::M2L<true>(local, source, derivatives, enabled);
         });
         checkCount("L2L", [&] {
             cosmictiger::gravity::cartesian::Expansion<Real, order> result{};
             return cosmictiger::gravity::cartesian::L2L(
-                       result, local, fmmScaleDisplacement(position), enabled) + 3;
+                       result, local, fmmScaleDisplacement(position), enabled) +
+                3;
         });
         checkCount("L2P", [&] {
             cosmictiger::gravity::Field<Real> result{};
             return cosmictiger::gravity::cartesian::L2P(
-                       result, local, fmmScaleDisplacement(position), enabled) + 3;
+                       result, local, fmmScaleDisplacement(position), enabled) +
+                3;
         });
     }
 
@@ -120,8 +129,8 @@ void checkOrder() {
     // Different points exercise both outcomes of the real-image cutoff and
     // different accepted-image counts, including the self-origin selection.
     for (auto const& sample :
-        std::array<std::array<double, 3>, 3>{{{0., 0., 0.}, {.13, -.21, .38}, {.49, -.49, .49}}}) {
-        Array<Real, kDimensions> point;
+        std::array<Vector3<double>, 3>{{{0., 0., 0.}, {.13, -.21, .38}, {.49, -.49, .49}}}) {
+        Vector3<Real> point;
         for (int dim = 0; dim < kDimensions; ++dim) {
             point[dim] = sample[dim];
         }

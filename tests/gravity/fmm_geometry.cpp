@@ -13,6 +13,7 @@
 
 #include <cosmictiger/gravity/fmm_geometry.hpp>
 #include <cosmictiger/math/tensor.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 TEST(FmmGeometryFlops, DisplacementPrecisionTracksPeriodicAndShiftedPaths) {
     auto check = [](Position sink, Position source, FmmGeometry const& geometry, FlopCount single,
@@ -35,7 +36,7 @@ TEST(FmmGeometryFlops, DisplacementPrecisionTracksPeriodicAndShiftedPaths) {
 
 TEST(FmmGeometryFlops, BoxGeometrySeparatesDoubleCoordinatesFromFloatNorms) {
     Fixed32Range box;
-    Array<Position, kDimensions> point;
+    Vector3<Position> point;
     for (int dim = 0; dim < kDimensions; ++dim) {
         box.begin[dim] = 0.125;
         box.end[dim] = 0.25;
@@ -114,8 +115,8 @@ float referenceDifference(Position sink, Position source, int dim, FmmGeometry c
     return float(std::ldexp(static_cast<long double>(difference), -kPositionBits));
 }
 
-float referenceBox(Fixed32Range const& box, Array<Position, kDimensions> const& point,
-    Array<int, kDimensions> const& image) {
+float referenceBox(
+    Fixed32Range const& box, Vector3<Position> const& point, Array<int, kDimensions> const& image) {
     long double squared = 0;
     constexpr WideInteger kBoundaryUnit = WideInteger(1) << (kPositionBits - 29);
     for (int dim = 0; dim < kDimensions; ++dim) {
@@ -156,10 +157,10 @@ void checkDifferences(std::vector<Position> const& sinks, std::vector<Position> 
 }
 
 void checkBoxes(FmmGeometry const& geometry, std::array<Fixed32Range, kSimdFloatSize> const& boxes,
-    std::array<Array<Position, kDimensions>, kSimdFloatSize> const& sinks,
-    std::array<Array<Position, kDimensions>, kSimdFloatSize> const& sources) {
+    std::array<Vector3<Position>, kSimdFloatSize> const& sinks,
+    std::array<Vector3<Position>, kSimdFloatSize> const& sources) {
     Range<SimdDouble8> boxPack{};
-    Array<SimdPosition, kDimensions> sinkPack{}, sourcePack{};
+    Vector3<SimdPosition> sinkPack{}, sourcePack{};
     for (int lane = 0; lane < kSimdFloatSize; ++lane) {
         for (int dim = 0; dim < kDimensions; ++dim) {
             simdSetLane(boxPack.begin[dim], lane, boxes[lane].begin[dim].toDouble());
@@ -285,7 +286,7 @@ TEST(FmmGeometry, BoxImagesAgreeWithExactIntegerReference) {
         geometry.sinkCell[kYDimension] = meshSize / 2;
         geometry.sinkCell[kZDimension] = meshSize - 1;
         std::array<Fixed32Range, kSimdFloatSize> boxes;
-        std::array<Array<Position, kDimensions>, kSimdFloatSize> sinks, sources;
+        std::array<Vector3<Position>, kSimdFloatSize> sinks, sources;
         for (int lane = 0; lane < kSimdFloatSize; ++lane) {
             for (int dim = 0; dim < kDimensions; ++dim) {
                 int const sourceCell = (lane + dim) % meshSize;
@@ -307,7 +308,7 @@ TEST(FmmGeometry, BoxEndpointsKeepSubDoubleSeamDistances) {
         geometry.meshSize = 3;
         geometry.sinkCell[kXDimension] = upper ? 2 : 0;
         std::array<Fixed32Range, kSimdFloatSize> boxes;
-        std::array<Array<Position, kDimensions>, kSimdFloatSize> sinks, sources;
+        std::array<Vector3<Position>, kSimdFloatSize> sinks, sources;
         for (int lane = 0; lane < kSimdFloatSize; ++lane) {
             for (int dim = 0; dim < kDimensions; ++dim) {
                 boxes[lane].begin[dim] = boxes[lane].end[dim] = 0.0;
@@ -330,7 +331,7 @@ TEST(FmmGeometry, BoxEndpointsKeepSubDoubleSeamDistances) {
 TEST(FmmGeometry, PeriodicBoxContainmentUsesTheWrappedInterval) {
     for (double shift : {-1.0, 0.0, 1.0}) {
         Fixed32Range box;
-        Array<Position, kDimensions> point;
+        Vector3<Position> point;
         for (int dim = 0; dim < kDimensions; ++dim) {
             box.begin[dim] = -0.125 + shift;
             box.end[dim] = 0.125 + shift;
@@ -340,7 +341,7 @@ TEST(FmmGeometry, PeriodicBoxContainmentUsesTheWrappedInterval) {
         point[0] = 0.375;
         EXPECT_EQ(boxDistanceSquared(box, point), 0.0625f);
         Range<SimdDouble8> packedBox;
-        Array<SimdPosition, kDimensions> packedPoint;
+        Vector3<SimdPosition> packedPoint;
         for (int dim = 0; dim < kDimensions; ++dim) {
             packedBox.begin[dim] = simdBroadcast<SimdDouble8>(box.begin[dim].toDouble());
             packedBox.end[dim] = simdBroadcast<SimdDouble8>(box.end[dim].toDouble());

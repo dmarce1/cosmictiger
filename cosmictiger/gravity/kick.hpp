@@ -18,6 +18,7 @@
 #include <cosmictiger/gravity/kick_interaction_counts.hpp>
 #include <cosmictiger/gravity/sources.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 // Runtime compute.bucketSize is validated against this power-of-two cap. Tree
 // leaves hold between half the runtime bucket plus one and the runtime bucket
@@ -34,7 +35,7 @@ struct CudaKickData {
     Position* y;
     Position* z;
     FmmSourceView ghostSources;
-    Array<float, kDimensions>* vel;
+    Vector3<float>* vel;
     float* sphGravityAccelerationX;
     float* sphGravityAccelerationY;
     float* sphGravityAccelerationZ;
@@ -51,7 +52,7 @@ struct CudaKickData {
     float* pot;
     Array<float*, kDimensions> globalAcceleration{};
     ParticleInteger const* gravitySampleIndices;
-    Array<float, kDimensions>* gravitySampleAccelerations;
+    Vector3<float>* gravitySampleAccelerations;
 };
 
 // Host-computed byte layout of one block's dynamic shared memory.
@@ -173,7 +174,7 @@ struct KickWorkitem {
     FmmGeometry geometry{};
     ParticleInteger outputOffset = 0;
     ExpansionBuffer l;
-    Array<Position, kDimensions> pos;
+    Vector3<Position> pos;
     TreeId self;
     Vector<TreeId> dchecklist;
     Vector<TreeId> echecklist;

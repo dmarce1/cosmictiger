@@ -19,6 +19,7 @@
 #include <cosmictiger/analysis/groups_find.hpp>
 #include <cosmictiger/analysis/lightcone.hpp>
 #include <cosmictiger/analysis/power.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #endif
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/driver.hpp>
@@ -751,7 +752,7 @@ ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, doub
     kparams.theta = theta;
     ExpansionBuffer l;
     l.zero();
-    Array<Position, kDimensions> pos;
+    Vector3<Position> pos;
     for (int dim = 0; dim < kDimensions; dim++) {
         pos[dim] = 0.f;
     }
@@ -1140,7 +1141,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         kparams.theta = theta;
         ExpansionBuffer l;
         l.zero();
-        Array<Position, kDimensions> pos;
+        Vector3<Position> pos;
         for (int dim = 0; dim < kDimensions; dim++) {
             pos[dim] = 0.f;
         }

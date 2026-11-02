@@ -21,6 +21,7 @@
 #include <gtest/gtest.h>
 
 #include <cosmictiger/math/simd_backend.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/drift_cpu.hpp>
 
 void cosmictigerAssert(char const* condition, bool value, char const* file, int line) {
@@ -51,7 +52,7 @@ void requireClose(double actual, double expected, double tolerance, char const* 
 
 struct Fixture {
     std::array<std::vector<Position>, kDimensions> positions;
-    std::vector<Array<float, kDimensions>> velocities;
+    std::vector<Vector3<float>> velocities;
     std::vector<char> rungs;
 
     explicit Fixture(size_t size)

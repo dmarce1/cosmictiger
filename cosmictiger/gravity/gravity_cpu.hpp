@@ -18,6 +18,7 @@
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/math/math.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 // Definitions of the order-templated CPU gravity operators declared in
@@ -37,7 +38,7 @@ using SimdAlignedVector = Vector<T,
 template <int order>
 void gatherSourceMultipoles(Vector<TreeNode const*> const& treePtrs,
     SimdAlignedVector<cosmictiger::gravity::cartesian::Multipole<SimdFloat, order>>& mValue,
-    SimdAlignedVector<Array<SimdPosition, kDimensions>>& yValue) {
+    SimdAlignedVector<Vector3<SimdPosition>>& yValue) {
     constexpr int kMultipoleCoefficients = FmmOrder<order>::kMultipoleCoefficients_;
     int const numberOfSources = roundUp((int) treePtrs.size(), kSimdFloatSize) / kSimdFloatSize;
     mValue.resize(numberOfSources);
@@ -84,9 +85,9 @@ void cpuGravityCc(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
         static thread_local detail::SimdAlignedVector<
             cosmictiger::gravity::cartesian::Multipole<SimdFloat, order>>
             mValue;
-        static thread_local detail::SimdAlignedVector<Array<SimdPosition, kDimensions>> yValue;
+        static thread_local detail::SimdAlignedVector<Vector3<SimdPosition>> yValue;
         detail::gatherSourceMultipoles<order>(treePtrs, mValue, yValue);
-        Array<SimdPosition, kDimensions> x{};
+        Vector3<SimdPosition> x{};
         for (int dim = 0; dim < kDimensions; dim++) {
             x[dim] = simdBroadcast<SimdPosition>(selfPtr->mpos->pos[dim].raw());
         }
@@ -94,7 +95,7 @@ void cpuGravityCc(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
         l0 = simdBroadcast<SimdFloat>(0.0f);
         int directFlops = 0;
         for (int j = 0; j < numberOfSources; j++) {
-            Array<SimdFloat, kDimensions> dx{};
+            Vector3<SimdFloat> dx{};
             for (int dim = 0; dim < kDimensions; dim++) {
                 dx[dim] =
                     fmmPositionDifference(x[dim], yValue[j][dim], dim, geometry, &geometryFlops);
@@ -156,8 +157,8 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
                 srcz[i] = srcz[count - 1];
                 masses[i] = 0.0;
             }
-            Array<SimdPosition, kDimensions> x{};
-            Array<SimdPosition, kDimensions> yValue{};
+            Vector3<SimdPosition> x{};
+            Vector3<SimdPosition> yValue{};
             for (int dim = 0; dim < kDimensions; dim++) {
                 x[dim] = simdBroadcast<SimdPosition>(selfPtr->mpos->pos[dim].raw());
             }
@@ -172,7 +173,7 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::Expansion<float, order>& lVal
                     simdSetLane(yValue[kZDimension], l, srcz[j + l].raw());
                     simdSetLane(mass, l, masses[j + l]);
                 }
-                Array<SimdFloat, kDimensions> dx{};
+                Vector3<SimdFloat> dx{};
                 for (int dim = 0; dim < kDimensions; dim++) {
                     dx[dim] =
                         fmmPositionDifference(x[dim], yValue[dim], dim, geometry, &geometryFlops);
@@ -212,10 +213,10 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
         static thread_local detail::SimdAlignedVector<
             cosmictiger::gravity::cartesian::Multipole<SimdFloat, order>>
             mValue;
-        static thread_local detail::SimdAlignedVector<Array<SimdPosition, kDimensions>> yValue;
+        static thread_local detail::SimdAlignedVector<Vector3<SimdPosition>> yValue;
         detail::gatherSourceMultipoles<order>(treePtrs, mValue, yValue);
         auto const range = selfPtr->particleRange;
-        Array<SimdPosition, kDimensions> x{};
+        Vector3<SimdPosition> x{};
         int kernelFlops = 0;
         for (ParticleInteger i = range.first; i < range.second; i++) {
             cosmictiger::gravity::Field<SimdFloat> lValue2{};
@@ -226,7 +227,7 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                 x[dim] = simdBroadcast<SimdPosition>(particlesPos(dim, i).raw());
             }
             for (int j = 0; j < numberOfSources; j++) {
-                Array<SimdFloat, kDimensions> dx{};
+                Vector3<SimdFloat> dx{};
                 for (int dim = 0; dim < kDimensions; dim++) {
                     dx[dim] = fmmPositionDifference(
                         x[dim], yValue[j][dim], dim, geometry, &geometryFlops);

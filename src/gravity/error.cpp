@@ -23,6 +23,7 @@
 #include <cosmictiger/gravity/reference_table.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/kernel.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particle_selection.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
@@ -30,7 +31,7 @@ namespace detail {
 
 struct GravityErrorSample {
     size_t slot;
-    Array<Position, kDimensions> position;
+    Vector3<Position> position;
 
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
@@ -40,7 +41,7 @@ struct GravityErrorSample {
 
 struct GravityErrorCapture {
     size_t slot;
-    Array<float, kDimensions> acceleration;
+    Vector3<float> acceleration;
 
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
@@ -48,7 +49,7 @@ struct GravityErrorCapture {
     }
 };
 
-using GravityErrorAcceleration = Array<double, kDimensions>;
+using GravityErrorAcceleration = Vector3<double>;
 Vector<GravityErrorAcceleration> gravityErrorReference;
 
 size_t gravityErrorLocalCount() {
@@ -122,7 +123,7 @@ Vector<GravityErrorAcceleration> gravityErrorDirect(Vector<GravityErrorSample> c
                 for (size_t slot = begin; slot < end; ++slot) {
                     std::array<GravityReferenceSum, kDimensions> sum;
                     for (ParticleInteger source = 0; source < particlesSize(); ++source) {
-                        std::array<double, kDimensions> separation;
+                        Vector3<double> separation;
                         for (int dim = 0; dim < kDimensions; ++dim) {
                             separation[dim] = doubleDistance(
                                 samples[slot].position[dim], particlesPos(dim, source));
@@ -153,7 +154,8 @@ Vector<GravityErrorCapture> gravityErrorCollect() {
     for (ParticleInteger index = 0; index < particlesSize(); ++index) {
         ParticleInteger const slot = particlesGravitySample(index);
         if (slot >= 0) {
-            result.push_back({size_t(slot), particlesGravitySampleAccelerations[slot]});
+            auto const& acceleration = particlesGravitySampleAccelerations[slot];
+            result.push_back({size_t(slot), {acceleration[0], acceleration[1], acceleration[2]}});
         }
     }
     particlesGravitySamplesBegin(0);

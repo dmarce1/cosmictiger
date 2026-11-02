@@ -7,7 +7,6 @@
  */
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
@@ -22,7 +21,6 @@
 #include <cosmictiger/hydro/sph/monaghan/viscosity.hpp>
 #include <cosmictiger/hydro/sph/variational/equations.hpp>
 #include <cosmictiger/math/vector3.hpp>
-
 #include <tests/sph/test_helpers.hpp>
 
 namespace detail {
@@ -100,24 +98,7 @@ void testViscosity() {
     require(std::abs(closeMu) < Real(1.0e-3), "regularization limits close-pair viscosity");
 }
 
-using Vector = std::array<double, 3>;
-
-double dot(Vector const& lhs, Vector const& rhs) {
-    return lhs[0] * rhs[0] + lhs[1] * rhs[1] + lhs[2] * rhs[2];
-}
-
-Vector difference(Vector const& lhs, Vector const& rhs) {
-    return {lhs[0] - rhs[0], lhs[1] - rhs[1], lhs[2] - rhs[2]};
-}
-
-Vector scaled(Vector const& value, double factor) {
-    return {factor * value[0], factor * value[1], factor * value[2]};
-}
-
-Vector cross(Vector const& lhs, Vector const& rhs) {
-    return {lhs[1] * rhs[2] - lhs[2] * rhs[1], lhs[2] * rhs[0] - lhs[0] * rhs[2],
-        lhs[0] * rhs[1] - lhs[1] * rhs[0]};
-}
+using Vector = Vector3<double>;
 
 struct Particle {
     Vector position;
@@ -136,9 +117,9 @@ struct Rates {
 };
 
 Rates pairRates(Particle const& sink, Particle const& source, double alpha, double beta) {
-    Vector const displacement = difference(sink.position, source.position);
-    Vector const relativeVelocity = difference(sink.velocity, source.velocity);
-    double const radiusSquared = dot(displacement, displacement);
+    Vector const displacement = sink.position - source.position;
+    Vector const relativeVelocity = sink.velocity - source.velocity;
+    double const radiusSquared = displacement.squaredNorm();
     Rates result;
     if (radiusSquared == 0.0) {
         return result;
@@ -147,9 +128,9 @@ Rates pairRates(Particle const& sink, Particle const& source, double alpha, doub
     double const gradientScale = 0.5 / radius *
         (sph_kernels::kernelDerivative(radius / sink.support) / std::pow(sink.support, 4) +
             sph_kernels::kernelDerivative(radius / source.support) / std::pow(source.support, 4));
-    Vector const gradient = scaled(displacement, gradientScale);
+    Vector const gradient = gradientScale * displacement;
     double const mu = monaghan::viscosityMu(
-        radiusSquared, dot(relativeVelocity, displacement), sink.support, source.support, 0.01);
+        radiusSquared, relativeVelocity.dot(displacement), sink.support, source.support, 0.01);
     double const viscosity = monaghan::artificialViscosity(
         sink.rho, source.rho, sink.sound, source.sound, mu, alpha, beta);
     // Fixed supports use zeta = 0; each particle contributes its own pressure gradient.
@@ -164,11 +145,10 @@ Rates pairRates(Particle const& sink, Particle const& source, double alpha, doub
         (std::pow(source.support, 4) * radius);
     double const pressureForce =
         variational::pairForceFactor(coefficientI, coefficientJ, gradientI, gradientJ) / sink.mass;
-    result.acceleration =
-        scaled(displacement, -pressureForce - source.mass * viscosity * gradientScale);
-    result.viscousHeating = 0.5 * source.mass * viscosity * dot(relativeVelocity, gradient);
+    result.acceleration = (-pressureForce - source.mass * viscosity * gradientScale) * displacement;
+    result.viscousHeating = 0.5 * source.mass * viscosity * relativeVelocity.dot(gradient);
     result.energy =
-        variational::pairWork(coefficientI, gradientI, dot(relativeVelocity, displacement)) /
+        variational::pairWork(coefficientI, gradientI, relativeVelocity.dot(displacement)) /
             sink.mass +
         result.viscousHeating;
     return result;
@@ -177,16 +157,16 @@ Rates pairRates(Particle const& sink, Particle const& source, double alpha, doub
 void checkConservation(Particle const& first, Particle const& second, bool compressing) {
     Rates const rateI = pairRates(first, second, 1.0, 2.0);
     Rates const rateJ = pairRates(second, first, 1.0, 2.0);
-    Vector const forceI = scaled(rateI.acceleration, first.mass);
-    Vector const forceJ = scaled(rateJ.acceleration, second.mass);
-    Vector const torqueI = cross(first.position, forceI);
-    Vector const torqueJ = cross(second.position, forceJ);
+    Vector const forceI = first.mass * rateI.acceleration;
+    Vector const forceJ = second.mass * rateJ.acceleration;
+    Vector const torqueI = first.position.cross(forceI);
+    Vector const torqueJ = second.position.cross(forceJ);
     for (size_t dim = 0; dim < forceI.size(); dim++) {
         requireClose("pair momentum conservation", forceI[dim] + forceJ[dim], 0.0, 2.0e-13);
         requireClose(
             "pair angular momentum conservation", torqueI[dim] + torqueJ[dim], 0.0, 2.0e-13);
     }
-    double const kineticRate = dot(first.velocity, forceI) + dot(second.velocity, forceJ);
+    double const kineticRate = first.velocity.dot(forceI) + second.velocity.dot(forceJ);
     double const thermalRate = first.mass * rateI.energy + second.mass * rateJ.energy;
     requireClose("pair total energy conservation", kineticRate + thermalRate, 0.0, 2.0e-13);
     if (compressing) {
@@ -205,8 +185,7 @@ void testPairConservation() {
     Particle first{{0.3, 0.1, -0.2}, {-0.5, 0.2, 0.0}, 0.7, 2.1, 1.7, 0.65, 1.3};
     Particle second{{-0.4, -0.1, -0.1}, {0.4, -0.1, 0.1}, 1.3, 0.8, 0.4, 1.4, 0.7};
     // This pair is outside one support but inside the other. Both directions must interact.
-    double const radius = std::sqrt(dot(
-        difference(first.position, second.position), difference(first.position, second.position)));
+    double const radius = std::sqrt((first.position - second.position).squaredNorm());
     require(radius > first.support && radius < second.support, "unequal-support test geometry");
     checkConservation(first, second, true);
     Rates const original = pairRates(first, second, 1.0, 2.0);
@@ -236,17 +215,36 @@ void testPairConservation() {
     checkConservation(first, second, false);
     first.position = second.position;
     Rates const coincident = pairRates(first, second, 1.0, 2.0);
-    require(
-        coincident.energy == 0.0 && dot(coincident.acceleration, coincident.acceleration) == 0.0,
+    require(coincident.energy == 0.0 && coincident.acceleration.squaredNorm() == 0.0,
         "coincident pair has zero finite gradient");
 }
 
 void testVector3() {
+    constexpr Vector3<int> kZero{};
+    constexpr Vector3<int> kX(1, 0, 0);
+    constexpr Vector3<int> kY(0, 1, 0);
+    constexpr Vector3<int> kZ = kX.cross(kY);
+    static_assert(kZero == Vector3<int>(0));
+    static_assert(kZ == Vector3<int>(0, 0, 1));
+    static_assert(kY.cross(kX) == -kZ);
+    static_assert((kX + kY + kZ).squaredNorm() == 3);
     Vector3<double> const u(1.0, -2.0, 3.0);
     Vector3<double> const v(-0.5, 4.0, 2.0);
     requireClose("dot product", u.dot(v), -2.5, 1.0e-15);
     requireClose("squared norm", u.squaredNorm(), 14.0, 1.0e-15);
     requireClose("norm", u.norm(), std::sqrt(14.0), 1.0e-15);
+    Vector3<double> const cross = u.cross(v);
+    requireClose("cross product orthogonal to first vector", cross.dot(u), 0.0, 1.0e-15);
+    requireClose("cross product orthogonal to second vector", cross.dot(v), 0.0, 1.0e-15);
+    requireClose("cross product area", cross.squaredNorm(),
+        u.squaredNorm() * v.squaredNorm() - u.dot(v) * u.dot(v), 1.0e-15);
+    require(cross == -v.cross(u) && cross != u, "cross product antisymmetry");
+    Vector3<double> iterated{};
+    std::copy(u.begin(), u.end(), iterated.data());
+    for (double& component : iterated) {
+        component *= 2.0;
+    }
+    require(iterated == 2.0 * u, "contiguous component iteration");
     Vector3<double> w = u + v;
     w -= v;
     w = 2.0 * w;

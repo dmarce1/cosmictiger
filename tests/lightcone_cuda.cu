@@ -1,7 +1,6 @@
 /* CosmicTiger - bounded CPU/CUDA lightcone parity; BSL-1.0. */
 
 #include <algorithm>
-#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -13,6 +12,7 @@
 #include <cuda_runtime.h>
 
 #include <cosmictiger/analysis/lightcone.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include "cuda_test.hpp"
 
 void cosmictigerAssert(char const* expression, bool condition, char const* file, int line) {
@@ -58,7 +58,7 @@ int cudaSmpCount() {
 
 namespace detail {
 
-using Position = std::array<double, kDimensions>;
+using Position = Vector3<double>;
 
 struct Fixture {
     LightconeParticleMapType particles;

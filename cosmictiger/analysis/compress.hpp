@@ -2,10 +2,11 @@
 
 #include <cosmictiger/analysis/lightcone.hpp>
 #include <cosmictiger/core/containers.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 struct CompressedBlock {
-    Array<Fixed<int, 31>, kDimensions> xc;
-    Array<float, kDimensions> vc;
+    Vector3<Fixed<int, 31>> xc;
+    Vector3<float> vc;
     float xmax;
     float vmax;
     Array<Vector<unsigned short>, kDimensions> x;
@@ -16,8 +17,8 @@ struct CompressedBlock {
 
 struct CompressedParticles {
     LightconeGroup groupId;
-    Array<Fixed<int, 31>, kDimensions> xc;
-    Array<float, kDimensions> vc;
+    Vector3<Fixed<int, 31>> xc;
+    Vector3<float> vc;
     float xmax;
     float vmax;
     Vector<CompressedBlock> blocks;

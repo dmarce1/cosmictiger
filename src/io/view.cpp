@@ -40,6 +40,7 @@
 #include <cosmictiger/core/options_metadata.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/terminal.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/cosmology/cosmology.hpp>
 #endif
@@ -851,7 +852,7 @@ ViewLeafMetadata writeParticleLeaf(Vector<Range<double>> const& boxes, int cycle
         ViewParticles particles;
         auto selectParticles = [&](auto const& source, auto& selected) {
             for (auto const& particle : source) {
-                Array<double, kDimensions> position;
+                Vector3<double> position;
                 position[0] = particle.x.toDouble();
                 position[1] = particle.y.toDouble();
                 position[2] = particle.z.toDouble();
@@ -1075,7 +1076,7 @@ Vector<float> outputView(int number, double time) {
                     for (int xi = -1; xi <= 0; xi++) {
                         for (int yi = -1; yi <= 0; yi++) {
                             for (int zi = -1; zi <= 0; zi++) {
-                                double vec[kDimensions];
+                                Vector3<double> vec;
                                 long int ipix;
                                 vec[kXDimension] = particlesPos(kXDimension, i).toFloat() + xi;
                                 vec[kYDimension] = particlesPos(kYDimension, i).toFloat() + yi;
@@ -1083,7 +1084,7 @@ Vector<float> outputView(int number, double time) {
                                 float const r2 =
                                     sqr(vec[kXDimension], vec[kYDimension], vec[kZDimension]);
                                 if (r2 < 1.0 && r2 > 0.0) {
-                                    vec2pix_ring(nside, vec, &ipix);
+                                    vec2pix_ring(nside, vec.data(), &ipix);
                                     atomicAdd(values[ipix], particlesMass(i) / r2);
                                 }
                             }

@@ -15,9 +15,10 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/math/simd_math.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 struct PmmmNearParticle {
-    std::array<double, 3> offset{};
+    Vector3<double> offset{};
     double mass = 0;
     int rank = 0;
     int64_t index = 0;

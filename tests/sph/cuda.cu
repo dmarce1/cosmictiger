@@ -23,6 +23,7 @@
 
 #include <cosmictiger/hydro/sph/sph_cpu.hpp>
 #include <cosmictiger/hydro/sph/sph_cuda.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <tests/cuda_test.hpp>
 #include <tests/sph/global_timestep_cases.hpp>
 
@@ -322,7 +323,7 @@ public:
     }
 
     void checkConservation() const {
-        std::array<double, kDimensions> momentum{};
+        Vector3<double> momentum{};
         double energy = 0.0;
         double absoluteEnergy = 0.0;
         double absoluteForce = 0.0;
@@ -1105,7 +1106,7 @@ void initializeLattice(Fixture& fixture, int side) {
 
 void testPeriodicSupport() {
     Fixed32Range box;
-    Array<Position, kDimensions> source;
+    Vector3<Position> source;
     for (int dim = 0; dim < kDimensions; dim++) {
         box.begin[dim] = 0.49;
         box.end[dim] = 0.51;

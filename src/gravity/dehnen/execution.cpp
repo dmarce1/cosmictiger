@@ -30,17 +30,18 @@
 #include <cosmictiger/gravity/kick_workspace.hpp>
 #include <cosmictiger/gravity/source_access.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 HPX_PLAIN_ACTION(kick, KickAction);
 namespace detail {
-double kickBackgroundSecondMoment(Array<Position, kDimensions> center);
+double kickBackgroundSecondMoment(Vector3<Position> center);
 }
 
 HPX_PLAIN_ACTION(detail::kickBackgroundSecondMoment, KickBackgroundSecondMomentAction);
 
 namespace detail {
-double kickBackgroundSecondMoment(Array<Position, kDimensions> center) {
+double kickBackgroundSecondMoment(Vector3<Position> center) {
     Vector<hpx::future<double>> children;
     for (auto const& locality : hpxChildren()) {
         children.push_back(hpx::async<KickBackgroundSecondMomentAction>(locality, center));
@@ -112,8 +113,8 @@ KickReturn kickWaitLocalReturn() {
 }    // namespace detail
 
 hpx::future<KickReturn> kickFork(KickParameters params, ExpansionBuffer const& l,
-    Array<Position, kDimensions> pos, TreeId self, Vector<TreeId> dchecklist,
-    Vector<TreeId> echecklist, std::shared_ptr<KickWorkspace> cudaWorkspace, bool threadme) {
+    Vector3<Position> pos, TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
+    std::shared_ptr<KickWorkspace> cudaWorkspace, bool threadme) {
     static std::atomic<int> numberOfThreads(1);
     hpx::future<KickReturn> rc;
     TreeNode const* selfPtr = treeGetNode(self);
@@ -176,9 +177,8 @@ hpx::future<KickReturn> kickFork(KickParameters params, ExpansionBuffer const& l
     return rc;
 }
 
-KickReturn kick(KickParameters params, ExpansionBuffer l, Array<Position, kDimensions> pos,
-    TreeId self, Vector<TreeId> direct, Vector<TreeId> periodic,
-    std::shared_ptr<KickWorkspace> workspace) {
+KickReturn kick(KickParameters params, ExpansionBuffer l, Vector3<Position> pos, TreeId self,
+    Vector<TreeId> direct, Vector<TreeId> periodic, std::shared_ptr<KickWorkspace> workspace) {
 #if COSMICTIGER_PROFILE
     bool const coordinator = self.proc == 0 && self.index == 0 && !params.forceOnly &&
         hpxRank() == 0 && treeGetNode(self)->depth == 0;
@@ -201,7 +201,7 @@ KickReturn kick(KickParameters params, ExpansionBuffer l, Array<Position, kDimen
         // kickFork constructs a fresh context in every descendant. Only this
         // global-root context may nest phases while concurrent workers run.
         context.background = [](int order, KickParameters const& parameters,
-                                 ExpansionBuffer& expansion, Array<Position, kDimensions>& position,
+                                 ExpansionBuffer& expansion, Vector3<Position>& position,
                                  TreeId node, Vector<TreeId> const& checks) -> FlopCounts {
             profile::ScopedPhase phase("kick.background");
             return dehnenBackground(order, parameters, expansion, position, node, checks);

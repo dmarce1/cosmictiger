@@ -1,7 +1,6 @@
 /* CosmicTiger - CUDA sampled gravity reference; BSL-1.0. */
 #pragma once
 
-#include <array>
 #include <cstddef>
 #include <functional>
 #include <span>
@@ -9,11 +8,12 @@
 
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/radial_kernel.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 namespace detail {
 
-using GravityErrorPosition = std::array<Position, 3>;
-using GravityErrorForce = std::array<double, 3>;
+using GravityErrorPosition = Vector3<Position>;
+using GravityErrorForce = Vector3<double>;
 
 struct GravityErrorSource {
     GravityErrorPosition position;

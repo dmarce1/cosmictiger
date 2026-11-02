@@ -1,5 +1,6 @@
 /* CosmicTiger - Nitadori PMMM mesh exchange; BSL-1.0. */
 
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
 
 #include "actions.hpp"
@@ -25,7 +26,7 @@ std::array<int, 3> coordinates(uint64_t key) {
 // particles of any cell. The cell center identifies that locality.
 int cellOwner(uint64_t key) {
     auto const cell = coordinates(key);
-    Array<double, kDimensions> center;
+    Vector3<double> center;
     for (int axis = 0; axis < kDimensions; ++axis) {
         center[axis] = (cell[axis] + 0.5) / cache.meshSize;
     }

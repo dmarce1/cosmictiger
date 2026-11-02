@@ -49,7 +49,7 @@ __global__ void cudaLightconeKernel(LightconeParticleMapType* particleMapPtr,
                     for (int pi = other.particleRange.first; pi < other.particleRange.second;
                         pi++) {
                         auto const bValue = otherParticles.group[pi];
-                        Array<double, kDimensions> b;
+                        Vector3<double> b;
                         b[kXDimension] = otherParticles.pos[kXDimension][pi].toDouble();
                         b[kYDimension] = otherParticles.pos[kYDimension][pi].toDouble();
                         b[kZDimension] = otherParticles.pos[kZDimension][pi].toDouble();

@@ -17,6 +17,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/kick_walk.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 namespace detail {
@@ -54,8 +55,8 @@ bool kickSourcesAreSingleRank(Vector<TreeId> const& checklist) {
 
 }    // namespace detail
 
-KickReturn kickWalkDispatch(KickParameters params, ExpansionBuffer l,
-    Array<Position, kDimensions> pos, TreeId self, Vector<TreeId> direct, Vector<TreeId> periodic,
+KickReturn kickWalkDispatch(KickParameters params, ExpansionBuffer l, Vector3<Position> pos,
+    TreeId self, Vector<TreeId> direct, Vector<TreeId> periodic,
     std::shared_ptr<KickWorkspace> workspace, KickContext const& context) {
     return fmmDispatch([&](auto orderTag) {
         return kickWalk<decltype(orderTag)::value>(params, std::move(l), pos, self,

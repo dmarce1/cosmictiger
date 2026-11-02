@@ -8,10 +8,11 @@
 #pragma once
 
 #include <cosmictiger/gravity/sources.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 // Frozen source record sent once per occupied remote PMMM cell.
 struct ParticleGhost {
-    Array<Position, kDimensions> x;
+    Vector3<Position> x;
     char type = kDarkMatterType;
     char rung = 0;
     float mass = 1.0f;

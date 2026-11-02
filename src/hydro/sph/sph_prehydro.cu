@@ -66,7 +66,7 @@ __global__ void sphCudaPrehydro1(
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
                 sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
-                Array<Position, kDimensions> position;
+                Vector3<Position> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
                     position[kXDimension] = data.sourcePositionX[sourceParticleIndex];
                     position[kYDimension] = data.sourcePositionY[sourceParticleIndex];
@@ -93,7 +93,7 @@ __global__ void sphCudaPrehydro1(
             bool const active = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] >=
                 parameters.minimumRung;
             if (active && !data.sinkSmoothingConverged[sinkIndex]) {
-                Array<Position, kDimensions> position;
+                Vector3<Position> position;
                 position[kXDimension] = data.sourcePositionX[particleIndex];
                 position[kYDimension] = data.sourcePositionY[particleIndex];
                 position[kZDimension] = data.sourcePositionZ[particleIndex];
@@ -148,7 +148,7 @@ __global__ void sphCudaPrehydro2(
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
                 sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
-                Array<Position, kDimensions> position;
+                Vector3<Position> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
                     position[kXDimension] = data.sourcePositionX[sourceParticleIndex];
                     position[kYDimension] = data.sourcePositionY[sourceParticleIndex];
@@ -211,7 +211,7 @@ __global__ void sphCudaPrehydro2(
                 targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
             bool const active = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] >=
                 parameters.minimumRung;
-            Array<Position, kDimensions> position;
+            Vector3<Position> position;
             position[kXDimension] = data.sourcePositionX[particleIndex];
             position[kYDimension] = data.sourcePositionY[particleIndex];
             position[kZDimension] = data.sourcePositionZ[particleIndex];

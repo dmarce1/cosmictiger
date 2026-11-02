@@ -15,6 +15,7 @@
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/math/simd.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 template <class T>
 CUDA_EXPORT inline T sqr(T const& a) {
@@ -197,6 +198,6 @@ inline double doubleFactorial(int n) {
 
 #include <cosmictiger/core/containers.hpp>
 
-Pair<double, Array<double, kDimensions>> findEigenpair(
+Pair<double, Vector3<double>> findEigenpair(
     Array<Array<double, kDimensions>, kDimensions> const& aValue, double mu);
 #endif /* MATH_HPP_ */

@@ -3,7 +3,7 @@
 #include <cosmictiger/analysis/rockstar_properties.hpp>
 #include <cosmictiger/math/math.hpp>
 
-Pair<double, Array<double, kDimensions>> findEigenpair(
+Pair<double, Vector3<double>> findEigenpair(
     Array<Array<double, kDimensions>, kDimensions> const& matrix, double target) {
     static_assert(kDimensions == 3);
     rockstar::Matrix3 tensor;
@@ -20,7 +20,7 @@ Pair<double, Array<double, kDimensions>> findEigenpair(
             closest = axis;
         }
     }
-    Pair<double, Array<double, kDimensions>> result;
+    Pair<double, Vector3<double>> result;
     result.first = eigenpairs.values[closest];
     for (int component = 0; component < kDimensions; ++component) {
         result.second[component] = eigenpairs.vectors[closest][component];

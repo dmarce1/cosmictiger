@@ -16,6 +16,7 @@
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/sources.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 // Order-templated multipole construction for treeCreate. treeCreate stays
 // order-agnostic and dispatches to exactly one of these per node through
@@ -25,13 +26,13 @@
 // Internal node: translate the children's multipoles to `center` and sum them.
 template <int order>
 FlopCounts treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& left,
-    MultipoleBuffer const& right, Array<double, kDimensions> const& leftCenter,
-    Array<double, kDimensions> const& rightCenter, Array<double, kDimensions> const& center);
+    MultipoleBuffer const& right, Vector3<double> const& leftCenter,
+    Vector3<double> const& rightCenter, Vector3<double> const& center);
 
 // Leaf: accumulate P2M over the local particles of `particleRange` about `center`.
 template <int order>
 FlopCounts treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> particleRange,
-    Array<double, kDimensions> const& center,
+    Vector3<double> const& center,
     FmmSourceView const& sources = fmmSourceView(FmmParticleStore::Owned));
 
 #ifdef COSMICTIGER_FMM_INSTANCE_ORDER
@@ -43,10 +44,10 @@ FlopCounts treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> pa
 
 template <int order>
 FlopCounts treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& left,
-    MultipoleBuffer const& right, Array<double, kDimensions> const& leftCenter,
-    Array<double, kDimensions> const& rightCenter, Array<double, kDimensions> const& center) {
+    MultipoleBuffer const& right, Vector3<double> const& leftCenter,
+    Vector3<double> const& rightCenter, Vector3<double> const& center) {
     constexpr int kMultipoleCoefficients = FmmOrder<order>::kMultipoleCoefficients_;
-    Array<SimdDouble, kDimensions> mdx{};
+    Vector3<SimdDouble> mdx{};
     cosmictiger::gravity::cartesian::Multipole<SimdDouble, order> simdM{};
     for (int i = 0; i < kMultipoleCoefficients; i++) {
         simdSetLane(simdM[i], kLeftChild, left[i]);
@@ -74,7 +75,7 @@ FlopCounts treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& l
 
 template <int order>
 FlopCounts treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> particleRange,
-    Array<double, kDimensions> const& center, FmmSourceView const& sources) {
+    Vector3<double> const& center, FmmSourceView const& sources) {
     constexpr int kMultipoleCoefficients = FmmOrder<order>::kMultipoleCoefficients_;
     static SimdFloat const toFloatFactor = kPositionToFloat;
     cosmictiger::gravity::cartesian::Multipole<double, order> mValue;
@@ -84,12 +85,12 @@ FlopCounts treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> pa
     ParticleInteger const maxi =
         roundUp(particleRange.second - particleRange.first, (ParticleInteger) kSimdFloatSize) +
         particleRange.first;
-    Array<SimdPosition, kDimensions> y{};
+    Vector3<SimdPosition> y{};
     for (int dim = 0; dim < kDimensions; dim++) {
         y[dim] = simdBroadcast<SimdPosition>(Position(center[dim]).raw());
     }
     for (ParticleInteger i = particleRange.first; i < maxi; i += kSimdFloatSize) {
-        Array<SimdPosition, kDimensions> xValue{};
+        Vector3<SimdPosition> xValue{};
         SimdFloat mask{};
         ParticleInteger const maxj = std::min(i + kSimdFloatSize, particleRange.second);
         for (ParticleInteger j = i; j < maxj; j++) {
@@ -104,7 +105,7 @@ FlopCounts treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> pa
                 simdSetLane(xValue[dim], j - i, sources.positions[dim][maxj - 1].raw());
             }
         }
-        Array<SimdFloat, kDimensions> dx{};
+        Vector3<SimdFloat> dx{};
         for (int dim = 0; dim < kDimensions; dim++) {
             dx[dim] =
                 simdCast<SimdFloat>(simdPositionDifference(xValue[dim], y[dim])) * toFloatFactor;

@@ -3,15 +3,15 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 // Solver decisions occur once per task/node/leaf. Pair arithmetic stays in the
 // shared inlined operators; no interaction-level virtual dispatch is used.
 struct KickContext {
-    hpx::future<KickReturn> (*fork)(KickParameters, ExpansionBuffer const&,
-        Array<Position, kDimensions>, TreeId, Vector<TreeId>, Vector<TreeId>,
-        std::shared_ptr<KickWorkspace>, bool) = nullptr;
-    FlopCounts (*background)(int, KickParameters const&, ExpansionBuffer&,
-        Array<Position, kDimensions>&, TreeId, Vector<TreeId> const&) = nullptr;
+    hpx::future<KickReturn> (*fork)(KickParameters, ExpansionBuffer const&, Vector3<Position>,
+        TreeId, Vector<TreeId>, Vector<TreeId>, std::shared_ptr<KickWorkspace>, bool) = nullptr;
+    FlopCounts (*background)(int, KickParameters const&, ExpansionBuffer&, Vector3<Position>&,
+        TreeId, Vector<TreeId> const&) = nullptr;
     FlopCounts (*periodic)(int, KickParameters const&, ExpansionBuffer&, TreeId, Vector<TreeId>&,
         KickInteractionCounts&) = nullptr;
     void (*beginReturn)(ParticleInteger) = nullptr;
@@ -21,5 +21,5 @@ struct KickContext {
     void (*publishReturn)(KickReturn) = nullptr;
     KickGpuExecutor gpuExecutor = nullptr;
 };
-KickReturn kickWalkDispatch(KickParameters, ExpansionBuffer, Array<Position, kDimensions>, TreeId,
+KickReturn kickWalkDispatch(KickParameters, ExpansionBuffer, Vector3<Position>, TreeId,
     Vector<TreeId>, Vector<TreeId>, std::shared_ptr<KickWorkspace>, KickContext const&);

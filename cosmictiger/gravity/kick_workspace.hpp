@@ -19,6 +19,7 @@
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 struct KickWorkspaceTreeIdHash {
     inline size_t operator()(TreeId id) const {
@@ -56,7 +57,7 @@ public:
     template <class A>
     void serialize(A&&, unsigned) {}
     void addWork(std::shared_ptr<KickWorkspace> ptr, ExpansionBuffer const& l,
-        Array<Position, kDimensions> pos, TreeId self, Vector<TreeId>&& dchecklist,
+        Vector3<Position> pos, TreeId self, Vector<TreeId>&& dchecklist,
         Vector<TreeId>&& echecklist, FmmGeometry const& geometry, ParticleInteger outputOffset = 0);
     void recordProcessedParticles(std::shared_ptr<KickWorkspace> ptr, ParticleInteger n);
     KickReturn toGpu();

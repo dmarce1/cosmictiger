@@ -26,6 +26,7 @@
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/gravity/nitadori/mesh_size.hpp>
 #include <cosmictiger/math/math.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particle_mesh_sort.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -58,7 +59,7 @@ static Vector<ParticleInteger> freeIndices;
 static Vector<Vector<Particle>> transParticles;
 static std::unordered_map<size_t, DomainT> boxesByKey;
 
-static int findParticleDomain(Array<double, kDimensions> const& x, size_t key = 1, int depth = 0);
+static int findParticleDomain(Vector3<double> const& x, size_t key = 1, int depth = 0);
 static void domainsCheck();
 static Vector<DomainLocal> localDomains;
 
@@ -575,7 +576,7 @@ void domainsTransmitParticles(Vector<Particle> parts) {
 // Ordinary SPH timesteps migrate the complete gas state together with its
 // gravity particle. Category indices are local and are rebuilt at the receiver.
 struct GasMigrationState {
-    Array<float, kDimensions> acceleration, predictedAcceleration, gravityAcceleration;
+    Vector3<float> acceleration, predictedAcceleration, gravityAcceleration;
     float supportRadius, internalEnergy, predictedInternalEnergyRate, internalEnergyRate, density;
     float mass;
     HopkinsParticleState hopkins;
@@ -738,7 +739,7 @@ static void beginSphMigration(int rung) {
     // The ordinary integrator retains every rung in the same particle range.
     // Moving every out-of-domain particle also handles domain rebalancing.
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
-        Array<double, kDimensions> x;
+        Vector3<double> x;
         for (int dim = 0; dim < kDimensions; dim++) {
             x[dim] = positionDomainCoordinate(particlesPos(dim, i));
         }
@@ -873,7 +874,7 @@ void domainsBegin(int rung) {
                         // all particles before building their common gravity tree.
                         if (!getOptions().run.hierarchicalGravity ||
                             !getOptions().gravity.enabled || particlesRung(i) == rung) {
-                            Array<double, kDimensions> x;
+                            Vector3<double> x;
                             for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
                                 x[dim] = positionDomainCoordinate(particlesPos(dim, i));
                             }
@@ -1017,7 +1018,7 @@ Range<double> domainsFindMyBox() {
     return localDomains[hpxRank()].box;
 }
 
-int domainsFindRank(Array<double, kDimensions> const& x) {
+int domainsFindRank(Vector3<double> const& x) {
     if (hpxSize() == 1) {
         return 0;
     }
@@ -1041,7 +1042,7 @@ static void domainsCheck() {
                 ParticleInteger const end =
                     size_t(proc + 1) * (rng.second - rng.first) / numberOfThreads + rng.first;
                 for (ParticleInteger i = begin; i < end; i++) {
-                    Array<double, kDimensions> x;
+                    Vector3<double> x;
                     for (int dim = 0; dim < kDimensions; dim++) {
                         x[dim] = positionDomainCoordinate(particlesPos(dim, i));
                     }
@@ -1129,7 +1130,7 @@ static void domainsCheck() {
 
  */
 
-static int findParticleDomain(Array<double, kDimensions> const& x, size_t key, int depth) {
+static int findParticleDomain(Vector3<double> const& x, size_t key, int depth) {
     auto const& entry = boxesByKey[key];
     if (entry.rank == -1) {
         int const xdim = depth % kDimensions;

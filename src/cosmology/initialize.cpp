@@ -40,6 +40,7 @@
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
 #if COSMICTIGER_ENABLE_CHEMISTRY
@@ -494,7 +495,7 @@ void twolptCorrection2(int dim, int latticePhase) {
                                 !lpt::isNyquist(iValue2[1], n) && !lpt::isNyquist(iValue2[2], n)) {
                                 float kz = 2.f * std::numbers::pi_v<float> / boxSize * float(k);
                                 float k2 = kx * kx + ky * ky + kz * kz;
-                                float const kValue[kDimensions] = {kx, ky, kz};
+                                Vector3<float> const kValue = {kx, ky, kz};
                                 yValue[index] =
                                     -ComplexFloat(0, 1) * kValue[dim] * yValue[index] / k2;
                                 if (getOptions().initial.useGlass) {
@@ -1024,7 +1025,7 @@ static float zeldovichEnd(
                     } else {
                         int64_t indices[kDimensions] = {
                             int64_t(x0 * n), int64_t(y0 * n), int64_t(z0 * n)};
-                        double const t[kDimensions] = {
+                        Vector3<double> const t = {
                             x0 * n - indices[0], y0 * n - indices[1], z0 * n - indices[2]};
                         for (int axis = 0; axis < kDimensions; ++axis) {
                             // Only a gas offset that crosses the periodic upper edge wraps.

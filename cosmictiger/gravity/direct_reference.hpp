@@ -9,6 +9,7 @@
 
 #include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/radial_kernel.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 namespace detail {
 
@@ -33,7 +34,7 @@ public:
 };
 
 struct GravityReferenceWave {
-    double wave[3];
+    Vector3<double> wave;
     double coefficient;
 };
 
@@ -47,7 +48,7 @@ inline constexpr int kGravityReferenceWaveRadiusSquared = 16;
 // Trivially copyable storage lets CPU and CUDA evaluate the same independent
 // reference, with coefficients prepared once on the host rather than per pair.
 struct GravityReferenceTables {
-    double images[kGravityReferenceImageCount][3];
+    Vector3<double> images[kGravityReferenceImageCount];
     GravityReferenceWave waves[kGravityReferenceWaveCount];
 };
 
@@ -107,8 +108,8 @@ inline GravityReferenceTables const& gravityReferenceTables() {
 // exceed production FMM's radius 2.6 and reciprocal squared radius 8, without
 // using its tables or approximated erfc. No singular primary force is formed,
 // so this can also build a correction table accurately arbitrarily near zero.
-CUDA_EXPORT inline std::array<double, 3> gravityReferenceCorrection(
-    std::array<double, 3> const& displacement, GravityReferenceTables const& tables) {
+CUDA_EXPORT inline Vector3<double> gravityReferenceCorrection(
+    Vector3<double> const& displacement, GravityReferenceTables const& tables) {
     double const radiusSquared = displacement[0] * displacement[0] +
         displacement[1] * displacement[1] + displacement[2] * displacement[2];
     if (radiusSquared == 0.0) {
@@ -137,7 +138,7 @@ CUDA_EXPORT inline std::array<double, 3> gravityReferenceCorrection(
         result[dim].add(radial * displacement[dim]);
     }
     for (auto const& shift : tables.images) {
-        std::array<double, 3> const image{
+        Vector3<double> const image{
             displacement[0] + shift[0], displacement[1] + shift[1], displacement[2] + shift[2]};
         double const squared = image[0] * image[0] + image[1] * image[1] + image[2] * image[2];
         if (squared >= kGravityReferenceRealRadiusSquared) {
@@ -166,9 +167,9 @@ CUDA_EXPORT inline std::array<double, 3> gravityReferenceCorrection(
 
 // Unit-source acceleration with the production compact-support convention.
 // Only the nearest image is softened, even when support exceeds half a box.
-CUDA_EXPORT inline std::array<double, 3> directGravityReference(
-    std::array<double, 3> const& displacement, radial_kernel::KernelTable const& kernel,
-    double supportRadius, bool periodic, GravityReferenceTables const& tables) {
+CUDA_EXPORT inline Vector3<double> directGravityReference(Vector3<double> const& displacement,
+    radial_kernel::KernelTable const& kernel, double supportRadius, bool periodic,
+    GravityReferenceTables const& tables) {
     double const radiusSquared = displacement[0] * displacement[0] +
         displacement[1] * displacement[1] + displacement[2] * displacement[2];
     if (radiusSquared == 0.0) {
@@ -182,15 +183,15 @@ CUDA_EXPORT inline std::array<double, 3> directGravityReference(
         radial_kernel::forceFactor(kernel, radius * inverseSupport) * inverseSupport *
             inverseSupport * inverseSupport :
         1.0 / (radiusSquared * radius);
-    std::array<double, 3> result =
-        periodic ? gravityReferenceCorrection(displacement, tables) : std::array<double, 3>{};
+    Vector3<double> result =
+        periodic ? gravityReferenceCorrection(displacement, tables) : Vector3<double>{};
     for (int dim = 0; dim < 3; ++dim) {
         result[dim] -= softened * displacement[dim];
     }
     return result;
 }
 
-inline std::array<double, 3> directGravityReference(std::array<double, 3> const& displacement,
+inline Vector3<double> directGravityReference(Vector3<double> const& displacement,
     radial_kernel::KernelTable const& kernel, double supportRadius, bool periodic = true) {
     return directGravityReference(
         displacement, kernel, supportRadius, periodic, gravityReferenceTables());

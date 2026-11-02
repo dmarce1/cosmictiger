@@ -1,7 +1,6 @@
 /* CosmicTiger - symmetry-compressed periodic gravity reference; BSL-1.0. */
 #pragma once
 
-#include <array>
 #include <cmath>
 #include <cstddef>
 #include <numbers>
@@ -9,6 +8,7 @@
 
 #include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/radial_kernel.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 namespace detail {
 
@@ -29,7 +29,7 @@ static_assert(gravityReferenceTableIndex(kGravityReferenceTableMaximumIndex + 1,
 
 // Built only on first use, independently from production FMM/PMMM tables. The
 // positive halo is evaluated analytically beyond 1/2; it is never wrapped.
-std::vector<std::array<double, 3>> const& gravityReferenceCorrectionTable();
+std::vector<Vector3<double>> const& gravityReferenceCorrectionTable();
 
 template <class Value>
 CUDA_EXPORT inline void gravityReferenceTableSort(Value* coordinates, int* permutation) {
@@ -48,7 +48,7 @@ CUDA_EXPORT inline void gravityReferenceTableSort(Value* coordinates, int* permu
 }
 
 CUDA_EXPORT inline void gravityReferenceTableEqualComponents(
-    double const* coordinates, std::array<double, 3>& force) {
+    Vector3<double> const& coordinates, Vector3<double>& force) {
     if (coordinates[0] == coordinates[2]) {
         double const mean = (force[0] + force[1] + force[2]) / 3;
         force = {mean, mean, mean};
@@ -61,15 +61,15 @@ CUDA_EXPORT inline void gravityReferenceTableEqualComponents(
     }
 }
 
-CUDA_EXPORT inline std::array<double, 3> gravityReferenceTableNode(
-    int i, int j, int k, std::array<double, 3> const* values) {
+CUDA_EXPORT inline Vector3<double> gravityReferenceTableNode(
+    int i, int j, int k, Vector3<double> const* values) {
     int coordinates[3] = {i < 0 ? -i : i, j < 0 ? -j : j, k < 0 ? -k : k};
     double const signs[3] = {i < 0 ? -1.0 : 1.0, j < 0 ? -1.0 : 1.0, k < 0 ? -1.0 : 1.0};
     int permutation[3] = {0, 1, 2};
     gravityReferenceTableSort(coordinates, permutation);
     auto const& value =
         values[gravityReferenceTableIndex(coordinates[0], coordinates[1], coordinates[2])];
-    std::array<double, 3> result{};
+    Vector3<double> result{};
     for (int dim = 0; dim < 3; ++dim) {
         result[permutation[dim]] = signs[permutation[dim]] * value[dim];
     }
@@ -81,8 +81,8 @@ CUDA_EXPORT inline std::array<double, 3> gravityReferenceTableNode(
 // every stencil node also restores components when a stencil crosses a wedge
 // face. Centered degree-seven interpolation uses the analytic positive halo
 // and parity at zero, without imposing false periodicity on the correction.
-CUDA_EXPORT inline std::array<double, 3> gravityReferenceTableCorrection(
-    std::array<double, 3> const& displacement, std::array<double, 3> const* values) {
+CUDA_EXPORT inline Vector3<double> gravityReferenceTableCorrection(
+    Vector3<double> const& displacement, Vector3<double> const* values) {
     double const radiusSquared = displacement[0] * displacement[0] +
         displacement[1] * displacement[1] + displacement[2] * displacement[2];
     if (radiusSquared < 1.0e-12) {
@@ -94,10 +94,10 @@ CUDA_EXPORT inline std::array<double, 3> gravityReferenceTableCorrection(
         return {kOriginSlope * displacement[0], kOriginSlope * displacement[1],
             kOriginSlope * displacement[2]};
     }
-    double coordinates[3] = {
+    Vector3<double> coordinates{
         std::abs(displacement[0]), std::abs(displacement[1]), std::abs(displacement[2])};
     int permutation[3] = {0, 1, 2};
-    gravityReferenceTableSort(coordinates, permutation);
+    gravityReferenceTableSort(coordinates.data(), permutation);
     int starts[3];
     double weights[3][kGravityReferenceTableStencilSize];
     constexpr double kInverseDenominators[kGravityReferenceTableStencilSize] = {-1.0 / 5040,
@@ -120,17 +120,17 @@ CUDA_EXPORT inline std::array<double, 3> gravityReferenceTableCorrection(
             suffix *= offset - i;
         }
     }
-    std::array<double, 3> force{};
+    Vector3<double> force{};
 #ifdef __CUDACC__
 #pragma unroll 1
 #endif
     for (int i = 0; i < kGravityReferenceTableStencilSize; ++i) {
-        std::array<double, 3> plane{};
+        Vector3<double> plane{};
 #ifdef __CUDACC__
 #pragma unroll 1
 #endif
         for (int j = 0; j < kGravityReferenceTableStencilSize; ++j) {
-            std::array<double, 3> row{};
+            Vector3<double> row{};
 #ifdef __CUDACC__
 #pragma unroll 1
 #endif
@@ -150,7 +150,7 @@ CUDA_EXPORT inline std::array<double, 3> gravityReferenceTableCorrection(
         }
     }
     gravityReferenceTableEqualComponents(coordinates, force);
-    std::array<double, 3> result{};
+    Vector3<double> result{};
     for (int dim = 0; dim < 3; ++dim) {
         int const original = permutation[dim];
         result[original] = displacement[original] == 0 ?
@@ -163,9 +163,8 @@ CUDA_EXPORT inline std::array<double, 3> gravityReferenceTableCorrection(
 // Unit-source acceleration. The primary force uses the selected production
 // softening kernel; periodic images remain Newtonian, including when the
 // support radius exceeds half the box. Mass and G belong to the caller.
-CUDA_EXPORT inline std::array<double, 3> tabulatedGravityReference(
-    std::array<double, 3> const& displacement, radial_kernel::KernelTable const& kernel,
-    double supportRadius, std::array<double, 3> const* values) {
+CUDA_EXPORT inline Vector3<double> tabulatedGravityReference(Vector3<double> const& displacement,
+    radial_kernel::KernelTable const& kernel, double supportRadius, Vector3<double> const* values) {
     double const radiusSquared = displacement[0] * displacement[0] +
         displacement[1] * displacement[1] + displacement[2] * displacement[2];
     if (radiusSquared == 0) {

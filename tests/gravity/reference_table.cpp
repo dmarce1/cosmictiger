@@ -13,10 +13,11 @@
 
 #include <cosmictiger/gravity/direct_reference.hpp>
 #include <cosmictiger/gravity/reference_table.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 namespace detail {
 
-using ReferencePosition = std::array<double, 3>;
+using ReferencePosition = Vector3<double>;
 
 constexpr double kCorrectionTolerance = 1.0e-11;
 

@@ -26,6 +26,7 @@
 #include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/io/view.hpp>
 #include <cosmictiger/math/constants.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 namespace detail {
@@ -55,7 +56,7 @@ std::vector<int> distributedFixtureIndices(int rank, int activeRanks) {
     return indices;
 }
 
-std::array<double, 3> distributedFixturePosition(int global) {
+Vector3<double> distributedFixturePosition(int global) {
     return {0.125 + 0.25 * (global / 16), 0.125 + 0.25 * ((global / 4) % 4),
         0.125 + 0.25 * (global % 4)};
 }

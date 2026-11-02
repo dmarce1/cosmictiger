@@ -20,6 +20,7 @@
 #include <cosmictiger/gravity/sources.hpp>
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/range.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 // Tree multipoles live in an arena of build-order positioned records
@@ -27,8 +28,7 @@
 // fmmPositionedMultipoleStride(fmmOrder()) bytes apart). Nodes point at the
 // order-agnostic position header; per-order code views the moments through
 // fmmMultiPos<order>(node.mpos).
-MultipolePosition* treeAddMultipole(
-    Array<Position, kDimensions> const& pos, MultipoleBuffer const& multipole);
+MultipolePosition* treeAddMultipole(Vector3<Position> const& pos, MultipoleBuffer const& multipole);
 void treeReadMultipole(MultipolePosition const* record, MultipoleBuffer& multipole);
 
 struct TreeNode {
@@ -37,7 +37,7 @@ struct TreeNode {
     Pair<ParticleInteger> particleRange;
     FmmParticleStore sourceStore = FmmParticleStore::Owned;
     Pair<int, int> processRange;
-    Array<Position, kDimensions> pos;
+    Vector3<Position> pos;
     MultipolePosition* mpos;
     float radius;
     // Maximum actual compact gravity support among represented particles, not an
@@ -69,7 +69,7 @@ struct TreeNode {
     HPX_SERIALIZATION_SPLIT_MEMBER();
     template <class A>
     void load(A&& arc, unsigned) {
-        Array<Position, kDimensions> multipolePosition;
+        Vector3<Position> multipolePosition;
         MultipoleBuffer multipole;
         arc & multipolePosition;
         arc & multipole;
@@ -125,7 +125,7 @@ inline FmmSourceView treeSourceView(TreeNode const& node) {
 
 struct TreeCreateReturn {
     MultipoleBuffer multi;
-    Array<Position, kDimensions> pos;
+    Vector3<Position> pos;
     TreeId id;
     float radius;
     float maxGravitySupportRadius = 0.0f;

@@ -11,6 +11,7 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #include <cosmictiger/core/assert.hpp>
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/defs.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 inline double factorial(double n) {
     ASSERT(n >= 0);
@@ -274,7 +275,7 @@ public:
 
 template <class T, int pValue>
 
-SymmetricTensor<T, pValue> vectorToSymTensor(Array<T, kDimensions> const& vec) {
+SymmetricTensor<T, pValue> vectorToSymTensor(Vector3<T> const& vec) {
     SymmetricTensor<T, pValue> xValue;
     Array<int, kDimensions> n;
     T x = T(1);

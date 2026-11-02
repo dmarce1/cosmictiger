@@ -15,6 +15,7 @@
 #include <cosmictiger/gravity/fmm_kernels/spherical_types.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/math/position.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 // Order-dependent FMM value types. This header is light: it carries no
 // generated kernels, so order-agnostic code (tree nodes, work items, options)
@@ -59,13 +60,18 @@ static_assert(
 
 // Positioned multipole record. The center comes first so order-agnostic tree
 // code reads it through MultipolePosition; the per-order view adds the moments.
+static_assert(sizeof(Vector3<Position>) == kDimensions * sizeof(Position));
+static_assert(alignof(Vector3<Position>) == alignof(Position));
+static_assert(std::is_standard_layout_v<Vector3<Position>>);
+static_assert(std::is_trivially_copyable_v<Vector3<Position>>);
+
 struct MultipolePosition {
-    Array<Position, kDimensions> pos;
+    Vector3<Position> pos;
 };
 
 template <int order>
 struct FmmMultiPos {
-    Array<Position, kDimensions> pos;
+    Vector3<Position> pos;
     cosmictiger::gravity::cartesian::Multipole<float, order> multi;
 };
 

@@ -40,7 +40,7 @@ bool solveSphCpuSupportRadius(SphRunParameters const& parameters, SphRunData con
         data.targetNeighborCount > 0.0f);
     float& H_a = supportRadius;
     H_a = std::min(std::max(H_a, minimumSupportRadius), maximumSupportRadius);
-    Array<Position, kDimensions> position;
+    Vector3<Position> position;
     position[kXDimension] = data.sourcePositionX[particleIndex];
     position[kYDimension] = data.sourcePositionY[particleIndex];
     position[kZDimension] = data.sourcePositionZ[particleIndex];

@@ -22,10 +22,11 @@
 #include <cosmictiger/cuda/device_vector.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/kick.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 template <int order>
 struct CudaExpansionType {
-    Array<Position, kDimensions> pos;
+    Vector3<Position> pos;
     cosmictiger::gravity::cartesian::Expansion<float, order> expansion;
 };
 
@@ -145,7 +146,7 @@ struct CudaKickControl {
     char* multipoles;
     float* scratchExpansion;
     cosmictiger::gravity::cartesian::Expansion<float, order>* expansion;
-    Array<Position, kDimensions>* expansionPos;
+    Vector3<Position>* expansionPos;
     CudaKickForceTile forces;
     CudaKickArenaLayout layout;
 
@@ -171,7 +172,7 @@ template <int order>
 struct CudaKickParameters {
     FmmGeometry geometry;
     ParticleInteger outputOffset;
-    Array<Position, kDimensions> lpos;
+    Vector3<Position> lpos;
     cosmictiger::gravity::cartesian::Expansion<float, order> lValue;
     int self;
     int* dchecks;

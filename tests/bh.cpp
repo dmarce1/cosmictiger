@@ -13,10 +13,10 @@
 #include <cosmictiger/gravity/gravity.hpp>
 
 namespace detail {
-using BhPositions = DeviceVector<Array<float, kDimensions>>;
+using BhPositions = DeviceVector<Vector3<float>>;
 
-Array<float, kDimensions> bhPosition(float x, float y, float z) {
-    Array<float, kDimensions> position;
+Vector3<float> bhPosition(float x, float y, float z) {
+    Vector3<float> position;
     position[0] = x;
     position[1] = y;
     position[2] = z;
@@ -37,8 +37,8 @@ void requireBhClose(char const* label, double actual, double expected, double to
     }
 }
 
-double directBhPotential(Array<float, kDimensions> const& sink, BhPositions const& sources,
-    int selfIndex, bool skipCoincident) {
+double directBhPotential(
+    Vector3<float> const& sink, BhPositions const& sources, int selfIndex, bool skipCoincident) {
     auto const& options = getOptions();
     double const support = options.gravity.supportRadius;
     double potential = 0.0;

@@ -9,6 +9,7 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/gravity/kick.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 // Consume one completed, gm-scaled near+far field without retaining a force
 // array. Particle membership is fixed by the caller's current ladder stage;
@@ -20,9 +21,8 @@
 // submit a whole sink batch once; otherwise submit this particle's count here.
 // precisionCounts optionally receives the same work split by arithmetic precision.
 // Supplying either output defers global submission to the caller.
-KickReturn particleMeshApplyField(ParticleInteger index,
-    Array<float, kDimensions> const& acceleration, float potential,
-    KickParameters const& parameters, FlopCount* flopCount = nullptr,
+KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& acceleration,
+    float potential, KickParameters const& parameters, FlopCount* flopCount = nullptr,
     FlopCounts* precisionCounts = nullptr);
 
 // PMMM integration using the total far-field and near-field force.

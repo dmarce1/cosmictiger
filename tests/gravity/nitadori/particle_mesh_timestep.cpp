@@ -14,14 +14,15 @@
 #include <cosmictiger/core/time.hpp>
 #include <cosmictiger/gravity/nitadori/kick.hpp>
 #include <cosmictiger/gravity/nitadori/solver.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 namespace detail {
 
 struct MeshTimestepSample {
-    Array<float, kDimensions> acceleration{};
-    Array<float, kDimensions> velocity{};
+    Vector3<float> acceleration{};
+    Vector3<float> velocity{};
     double mass{};
     double position{};
     int rung{};
@@ -201,12 +202,12 @@ void checkMeshApplyFieldFlops() {
         {true, true, true, true, 28},
         {true, true, true, false, 37},
     }};
-    Array<float, kDimensions> acceleration;
+    Vector3<float> acceleration;
     acceleration[kXDimension] = 0.5f;
     acceleration[kYDimension] = -0.75f;
     acceleration[kZDimension] = 1.0f;
     auto const originalRung = particlesRung(0);
-    Array<float, kDimensions> originalVelocity;
+    Vector3<float> originalVelocity;
     for (int dim = 0; dim < kDimensions; ++dim) {
         originalVelocity[dim] = particlesVel(dim, 0);
     }

@@ -12,6 +12,7 @@
 #include <atomic>
 #include <cstdint>
 #include <fstream>
+#include <type_traits>
 #include <unordered_map>
 
 #include <cosmictiger/analysis/group_entry.hpp>
@@ -22,6 +23,7 @@
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/range.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particle_types.hpp>
 #include <cosmictiger/particles/star_formation_state.hpp>
 
@@ -50,8 +52,18 @@ inline constexpr GroupInteger kNoParticleGroup = static_cast<GroupInteger>(0x7FF
 #define PARTICLES_EXTERN extern
 #endif
 
+// Raw checkpoint and CUDA buffers retain the legacy three-component layout.
+static_assert(sizeof(Vector3<float>) == sizeof(Array<float, kDimensions>));
+static_assert(alignof(Vector3<float>) == alignof(Array<float, kDimensions>));
+static_assert(sizeof(Vector3<Position>) == sizeof(Array<Position, kDimensions>));
+static_assert(alignof(Vector3<Position>) == alignof(Array<Position, kDimensions>));
+static_assert(std::is_trivially_copyable_v<Vector3<float>>);
+static_assert(std::is_standard_layout_v<Vector3<float>>);
+static_assert(std::is_trivially_copyable_v<Vector3<Position>>);
+static_assert(std::is_standard_layout_v<Vector3<Position>>);
+
 struct GroupParticle {
-    Array<Position, kDimensions> x;
+    Vector3<Position> x;
     GroupInteger g;
     template <class A>
     void serialize(A&& arc, unsigned) {
@@ -61,8 +73,8 @@ struct GroupParticle {
 };
 
 struct OutputParticle {
-    Array<Position, kDimensions> x;
-    Array<float, kDimensions> v;
+    Vector3<Position> x;
+    Vector3<float> v;
     char r;
     template <class A>
     void serialize(A&& a, unsigned) {
@@ -108,8 +120,8 @@ snapshot. This can be different from npart if one is dealing with a multi-file s
 /*****************************/
 
 struct Particle {
-    Array<Position, kDimensions> x;
-    Array<float, kDimensions> v;
+    Vector3<Position> x;
+    Vector3<float> v;
     GroupInteger lg;
     ParticleInteger catIndex;
     char r;
@@ -146,8 +158,8 @@ struct Particle {
 };
 
 struct ParticleSample {
-    Array<Position, kDimensions> x;
-    Array<float, kDimensions> g;
+    Vector3<Position> x;
+    Vector3<float> g;
     float p;
     template <class A>
     void serialize(A&& a, unsigned) {
@@ -171,7 +183,7 @@ struct ParticleSample {
 #endif
 
 PARTICLES_EXTERN Array<Position*, kDimensions> particlesX;
-PARTICLES_EXTERN Array<float, kDimensions>* particlesV;
+PARTICLES_EXTERN Vector3<float>* particlesV;
 PARTICLES_EXTERN char* particlesR;
 PARTICLES_EXTERN Array<float*, kDimensions> particlesGravityAccelerations;
 PARTICLES_EXTERN float* particlesP;
@@ -187,7 +199,7 @@ PARTICLES_EXTERN char* particlesTy;
 PARTICLES_EXTERN StarFormationState* particlesStarFormationStates;
 // Transient gravity-check attributes: -1 is unselected, otherwise the global sample slot.
 PARTICLES_EXTERN ParticleInteger* particlesGravitySampleIndices;
-PARTICLES_EXTERN Array<float, kDimensions>* particlesGravitySampleAccelerations;
+PARTICLES_EXTERN Vector3<float>* particlesGravitySampleAccelerations;
 PARTICLES_EXTERN size_t particlesGlobalOffset;
 
 // MFV gas mass projection follows the gas category index, never stellar indices.
@@ -248,7 +260,7 @@ void particlesCacheFree();
 // Local half of particlesCacheFree; requires a synchronized reorder boundary.
 void particlesCacheFreeLocal();
 void particlesGroupCacheFree();
-Pair<Array<double, kDimensions>, double> particlesEnclosingSphere(Pair<ParticleInteger> rng);
+Pair<Vector3<double>, double> particlesEnclosingSphere(Pair<ParticleInteger> rng);
 Vector<OutputParticle> particlesGetSample(Range<double> const& box);
 #if COSMICTIGER_WITH_GRAVITY
 Vector<ParticleSample> particlesSample(int cnt);
@@ -323,7 +335,7 @@ inline float& particlesVel(int dim, ParticleInteger index) {
     return particlesV[index][dim];
 }
 
-inline Array<float, kDimensions>* particlesVelData() {
+inline Vector3<float>* particlesVelData() {
     return particlesV;
 }
 

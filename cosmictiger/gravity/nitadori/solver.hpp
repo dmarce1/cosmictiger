@@ -5,6 +5,7 @@
 #include <functional>
 
 #include <cosmictiger/gravity/kick.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 struct PmmmDiagnostics {
@@ -58,7 +59,7 @@ void pmmmDestroy();
 PmmmDiagnostics pmmmDiagnostics();
 
 // Results remain valid until the next particle permutation or solve.
-Array<float, kDimensions> const& pmmmAcceleration(ParticleInteger index);
+Vector3<float> const& pmmmAcceleration(ParticleInteger index);
 float pmmmPotential(ParticleInteger index);
 double pmmmEffectiveRadius();
 

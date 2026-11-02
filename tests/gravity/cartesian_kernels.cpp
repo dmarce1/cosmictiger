@@ -17,12 +17,13 @@
 #include <gtest/gtest.h>
 
 #include <cosmictiger/math/simd_math.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include "cartesian_kernel_test_helpers.hpp"
 
 namespace detail {
 
 using Index = std::array<int, 3>;
-using Position = std::array<double, 3>;
+using Position = Vector3<double>;
 using Polynomial = std::map<Index, double>;
 using Field = Coefficients<double, kFieldCount>;
 template <int order>

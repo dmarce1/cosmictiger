@@ -16,6 +16,7 @@
 #include <cosmictiger/gravity/tree_build.hpp>
 #include <cosmictiger/gravity/tree_multipole.hpp>
 #include <cosmictiger/math/math.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 constexpr bool kVerbose = true;
 
@@ -60,11 +61,11 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         params.parallelParticleThreshold = cnt;
     }
     Array<TreeId, kChildCount> children;
-    Array<Position, kDimensions>& x = rc.pos;
+    Vector3<Position>& x = rc.pos;
     MultipoleBuffer& multi = rc.multi;
     auto& rbox = rc.box;
     float& radius = rc.radius;
-    Array<double, kDimensions> xcValue;
+    Vector3<double> xcValue;
     double r;
     int const index = treeAllocateNode();
     bool isleaf = true;
@@ -110,8 +111,8 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
                 // arena slots. Retain the same kd partition but tighten its split to
                 // the occupied raw-coordinate extent, including sub-double Q64
                 // separations. Coincident positions use an equality-plane tie.
-                Array<PositionInteger, kDimensions> lower;
-                Array<PositionInteger, kDimensions> upper;
+                Vector3<PositionInteger> lower;
+                Vector3<PositionInteger> upper;
                 for (int dim = 0; dim < kDimensions; ++dim) {
                     lower[dim] = upper[dim] = sources.positions[dim][particleRange.first].raw();
                 }
@@ -187,14 +188,14 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
                 flops += 2;
             }
         }
-        Array<double, kDimensions> xlValue;
-        Array<double, kDimensions> xrValue;
+        Vector3<double> xlValue;
+        Vector3<double> xrValue;
         for (int dim = 0; dim < kDimensions; dim++) {
             xlValue[dim] = xl[dim].toDouble();
             xrValue[dim] = xr[dim].toDouble();
         }
         flops += 2 * kDimensions;
-        Array<double, kDimensions> xc1, xc2;
+        Vector3<double> xc1, xc2;
         double radius1 = 0.0, radius2;
         bool tried1 = false;
         // Global nodes have no rank-local particle range to rescan.
@@ -207,7 +208,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             for (int dim = 0; dim < kDimensions; dim++) {
                 xc1[dim] = 0.5 * (rbox.begin[dim] + rbox.end[dim]);
             }
-            Array<SimdPosition, kDimensions> xc{};
+            Vector3<SimdPosition> xc{};
             for (int dim = 0; dim < kDimensions; dim++) {
                 xc[dim] = simdBroadcast<SimdPosition>(Position(xc1[dim]).raw());
                 flops += detail::treePositionConversionExtraFlops(xc1[dim]);
@@ -217,7 +218,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             for (ParticleInteger i = particleRange.first; i < particleRange.second;
                 i += kSimdFloatSize) {
                 SimdPosition x{};
-                Array<SimdFloat, kDimensions> dx{};
+                Vector3<SimdFloat> dx{};
                 int const maxj = std::min(particleRange.second - i, kSimdFloatSize);
                 for (int dim = 0; dim < kDimensions; dim++) {
                     for (int j = 0; j < maxj; j++) {
@@ -249,7 +250,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         }
         double rr;
         double rl;
-        Array<double, kDimensions> n;
+        Vector3<double> n;
         float rValue;
         double norminv = 0.0;
         for (int dim = 0; dim < kDimensions; dim++) {
@@ -291,7 +292,9 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
                 r = rlValue * rlValue;
                 flops += 1;
             } else {
-                xc2 = rbox.begin;
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    xc2[dim] = rbox.begin[dim];
+                }
             }
         }
         radius2 = std::sqrt(r);
@@ -355,8 +358,8 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         // lengths belong only to the hydrodynamic tree and neighbor searches.
         rc.maxGravitySupportRadius = numberOfParticles > 0 ? float(h) : 0.0f;
         flops += numberOfParticles > 0 ? 1 : 0;
-        Array<double, kDimensions>& xminValue = rbox.begin;
-        Array<double, kDimensions>& xmaxValue = rbox.end;
+        auto& xminValue = rbox.begin;
+        auto& xmaxValue = rbox.end;
         for (int dim = 0; dim < kDimensions; dim++) {
             xminValue[dim] = box.end[dim];
             xmaxValue[dim] = box.begin[dim];

@@ -123,9 +123,8 @@ __device__ inline void recordSphGpuFlops(sph_flops::Counter const& flops, SphRed
 template <int blockSize>
 inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimumSupportRadius,
     float maximumSupportRadius, float targetNeighborCount,
-    DeviceVector<SphNeighborPosition> const& neighbors,
-    Array<Position, kDimensions> const& position, Fixed32Range const& neighborSearchBox,
-    sph_flops::Counter& flops) {
+    DeviceVector<SphNeighborPosition> const& neighbors, Vector3<Position> const& position,
+    Fixed32Range const& neighborSearchBox, sph_flops::Counter& flops) {
     int const threadIndex = threadIdx.x;
     int const runtimeBlockSize = blockDim.x;
     ALWAYS_ASSERT(minimumSupportRadius > 0.0f && maximumSupportRadius >= minimumSupportRadius &&

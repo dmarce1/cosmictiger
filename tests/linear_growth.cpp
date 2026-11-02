@@ -28,6 +28,7 @@
 #include <cosmictiger/gravity/dehnen/execution.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/hydro/sph/sph_particles.hpp>
@@ -35,8 +36,8 @@
 
 namespace detail {
 
-using LinearVector = std::array<double, kDimensions>;
-using LinearWave = std::array<int, kDimensions>;
+using LinearVector = Vector3<double>;
+using LinearWave = Vector3<int>;
 using LinearField = std::vector<LinearVector>;
 constexpr double kLinearFourPi = 4.0 * std::numbers::pi;
 
@@ -293,7 +294,7 @@ struct LinearExperiment {
         parameters.doPhi = true;
         ExpansionBuffer local;
         local.zero();
-        Array<Position, kDimensions> origin{};
+        Vector3<Position> origin{};
         kick(parameters, local, origin, built.id, Vector<TreeId>{built.id},
             Vector<TreeId>{built.id}, nullptr);
         LinearSample result;

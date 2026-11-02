@@ -17,6 +17,7 @@
 #include <cosmictiger/cuda/cuda_unordered_map.hpp>
 #include <cosmictiger/math/fixed.hpp>
 #include <cosmictiger/math/range.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 // HEALPix nested-scheme pixel lookup on the device (healpix.cu).
 #ifdef USE_CUDA
@@ -66,8 +67,8 @@ inline float velreal2float(LightconeVelocityReal i, float vmax) {
 using LightconeGroup = unsigned long long;
 
 struct LightconeParticle {
-    Array<LightconeReal, kDimensions> pos;
-    Array<float, kDimensions> vel;
+    Vector3<LightconeReal> pos;
+    Vector3<float> vel;
     LightconeGroup group;
     template <class A>
     void serialize(A&& arc, unsigned) {

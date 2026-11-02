@@ -27,6 +27,7 @@
 #include <cosmictiger/gravity/sources.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/math/kernel.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particle_mesh_sort.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -45,11 +46,11 @@ int pmmmFixtureParticleCount(int fixture) {
 }
 
 struct PmmmSample {
-    Array<double, kDimensions> position{};
-    Array<PositionInteger, kDimensions> rawPosition{};
-    Array<float, kDimensions> acceleration{};
-    Array<float, kDimensions> hydroAcceleration{};
-    Array<float, kDimensions> velocity{};
+    Vector3<double> position{};
+    Vector3<PositionInteger> rawPosition{};
+    Vector3<float> acceleration{};
+    Vector3<float> hydroAcceleration{};
+    Vector3<float> velocity{};
     bool gas{};
     int rung{};
     float potential{};
@@ -357,7 +358,7 @@ void checkPmmmNearEdges() {
 void initializePmmmFixture(int fixture, int ownership) {
     // The first two and the next pair share cells on the n=8 mesh. Their
     // different offsets generate dipoles and the independent radial moment.
-    std::array<std::array<double, kDimensions>, 7> const points{
+    std::array<Vector3<double>, 7> const points{
         {{0.069, 0.161, 0.326}, {0.104, 0.202, 0.295}, {0.454, 0.166, 0.329}, {0.487, 0.206, 0.287},
             {0.989, 0.171, 0.317}, {0.671, 0.839, 0.582}, {0.011, 0.986, 0.971}}};
     int const total = pmmmFixtureParticleCount(fixture);
@@ -411,7 +412,7 @@ void initializePmmmFixture(int fixture, int ownership) {
                                                               group == 3 ? 1 :
                                                                            0) :
                                                       1;
-                std::array<std::array<double, 3>, 5> const centers{{{-0.22, -0.20, -0.18},
+                std::array<Vector3<double>, 5> const centers{{{-0.22, -0.20, -0.18},
                     {0.14, 0.03, -0.06}, {0.22, 0.20, 0.18}, {0.32, 0.05, 0.09}, {0.0, 0.0, 0.0}}};
                 int const multiplier = dim == kXDimension ? 17 : dim == kYDimension ? 29 : 43;
                 double const jitter = (double((id * multiplier) % 64) + 0.5) / 64.0 - 0.5;
@@ -697,7 +698,7 @@ std::array<double, 4> directPmmmReference(size_t sink, Vector<PmmmSample> const&
     std::array<double, 4> result{};
     for (size_t source = 0; source < samples.size(); ++source) {
         double const mass = samples[source].mass * getOptions().gravity.gm;
-        std::array<double, kDimensions> separation{};
+        Vector3<double> separation{};
         for (int dim = 0; dim < kDimensions; ++dim) {
             separation[dim] = samples[sink].position[dim] - samples[source].position[dim];
             separation[dim] -= std::nearbyint(separation[dim]);
@@ -710,7 +711,7 @@ std::array<double, 4> directPmmmReference(size_t sink, Vector<PmmmSample> const&
             for (int y = -kCutoff; y <= kCutoff; ++y) {
                 for (int z = -kCutoff; z <= kCutoff; ++z) {
                     bool const origin = x == 0 && y == 0 && z == 0;
-                    std::array<double, kDimensions> const displacement{
+                    Vector3<double> const displacement{
                         separation[0] + x, separation[1] + y, separation[2] + z};
                     double const radiusSquared = displacement[0] * displacement[0] +
                         displacement[1] * displacement[1] + displacement[2] * displacement[2];
@@ -729,8 +730,7 @@ std::array<double, 4> directPmmmReference(size_t sink, Vector<PmmmSample> const&
                         }
                     }
                     if (!origin) {
-                        std::array<double, kDimensions> const wave{
-                            2.0 * kPi * x, 2.0 * kPi * y, 2.0 * kPi * z};
+                        Vector3<double> const wave{2.0 * kPi * x, 2.0 * kPi * y, 2.0 * kPi * z};
                         double const waveSquared = x * x + y * y + z * z;
                         double const coefficient =
                             std::exp(-kPi * kPi * waveSquared / (kAlpha * kAlpha)) /
@@ -766,7 +766,7 @@ std::array<double, 4> directPmmmExpansionReferenceOrder(
             int(sample.cellKey / (n * n)), int(sample.cellKey / n % n), int(sample.cellKey % n)};
     };
     auto const sinkCell = coordinates(samples[sink]);
-    std::array<double, kDimensions> sinkOffset{};
+    Vector3<double> sinkOffset{};
     for (int dim = 0; dim < kDimensions; ++dim) {
         sinkOffset[dim] = samples[sink].position[dim] - (sinkCell[dim] + 0.5) / n;
     }
@@ -775,7 +775,7 @@ std::array<double, 4> directPmmmExpansionReferenceOrder(
     double localTrace = 0.0;
     for (size_t source = 0; source < samples.size(); ++source) {
         auto const sourceCell = coordinates(samples[source]);
-        std::array<double, kDimensions> sourceOffset{}, displacement{}, pair{};
+        Vector3<double> sourceOffset{}, displacement{}, pair{};
         int cellDistance = 0;
         double sourceTrace = 0.0;
         for (int dim = 0; dim < kDimensions; ++dim) {
@@ -849,7 +849,7 @@ double verifyPmmmReference(Vector<PmmmSample> const& samples) {
     auto const budget = kTruncationBudgets[fmmOrder() - 3];
     constexpr double kNumericalTolerance = 2.0e-5;
     double maximumError = 0.0;
-    std::array<double, kDimensions> momentum{};
+    Vector3<double> momentum{};
     double forceScale = 1.0;
     for (size_t sink = 0; sink < samples.size(); ++sink) {
         auto const expected = directPmmmReference(sink, samples);

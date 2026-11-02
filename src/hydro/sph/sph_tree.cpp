@@ -21,6 +21,7 @@
 #include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/hydro/sph/sph_tree.hpp>
 #include <cosmictiger/math/math.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
@@ -301,8 +302,8 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         particleRange.second = sphParticlesSize();
     }
     Array<TreeId, kChildCount> children;
-    Array<Position, kDimensions> x;
-    Array<double, kDimensions> xc;
+    Vector3<Position> x;
+    Vector3<double> xc;
     size_t numberOfActiveParticles;
     sph_flops::Counter flops;
     double totalFlops = 0.0;
@@ -408,7 +409,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
             float const h = params.supportRadiusMultiplier * sphParticlesSupportRadius(i);
             flops.singlePrecision += 1;
-            Array<Position, kDimensions> xValue;
+            Vector3<Position> xValue;
             for (int dim = 0; dim < kDimensions; dim++) {
                 xValue[dim] = sphParticlesPosition(dim, i);
             }

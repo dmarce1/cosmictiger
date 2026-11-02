@@ -7,6 +7,7 @@
  */
 
 #include <cosmictiger/hydro/sph/sph_cuda.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 namespace detail {
 
@@ -32,7 +33,7 @@ __global__ void sphCudaRungs(
     __syncthreads();
     new (&workspace) detail::RungsWorkspace();
     sph_flops::Counter flops = 0;
-    Array<Position, kDimensions> position;
+    Vector3<Position> position;
     int changes = 0;
     while (targetNodeIndex < data.numberOfTargetNodes) {
         __syncthreads();

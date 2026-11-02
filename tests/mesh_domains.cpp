@@ -18,6 +18,7 @@
 #include <cosmictiger/core/build_config.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particle_mesh_sort.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -92,7 +93,7 @@ PositionInteger meshDomainPosition(int identity, int dim, int fixture, int phase
 
 struct MeshDomainRecord {
     Array<PositionInteger, kDimensions> raw;
-    Array<float, kDimensions> velocity;
+    Vector3<float> velocity;
     GroupInteger lastGroup;
     int rung;
     int tracer;

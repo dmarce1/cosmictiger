@@ -19,6 +19,7 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/simd.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 template <class T>
 inline Array<T, kDimensions> shiftUp(Array<T, kDimensions> i) {
@@ -170,6 +171,16 @@ struct Range {
         return r;
     }
 
+    inline Range shift(Vector3<T> const& s) const
+        requires(n == 3)
+    {
+        Array<T, n> components;
+        for (int dim = 0; dim < n; ++dim) {
+            components[dim] = s[dim];
+        }
+        return shift(components);
+    }
+
     Range(T const& sz) {
         for (int dim = 0; dim < n; dim++) {
             begin[dim] = T(0);
@@ -203,6 +214,17 @@ struct Range {
         return true;
     }
 
+    CUDA_EXPORT
+    inline bool contains(Vector3<T> const& p) const
+        requires(n == 3)
+    {
+        Array<T, n> components;
+        for (int dim = 0; dim < n; ++dim) {
+            components[dim] = p[dim];
+        }
+        return contains(components);
+    }
+
     inline bool periodicContains(Array<T, n> const& p) const {
         for (int dim = 0; dim < n; dim++) {
             if (p[dim] < begin[dim] || p[dim] >= end[dim]) {
@@ -214,6 +236,16 @@ struct Range {
             }
         }
         return true;
+    }
+
+    inline bool periodicContains(Vector3<T> const& p) const
+        requires(n == 3)
+    {
+        Array<T, n> components;
+        for (int dim = 0; dim < n; ++dim) {
+            components[dim] = p[dim];
+        }
+        return periodicContains(components);
     }
 
     inline std::string toString() const {
@@ -398,12 +430,12 @@ struct Fixed32Range : public Range<RangeFixed> {
         end = other.end;
     }
     CUDA_EXPORT
-    bool contains(Array<Position, kDimensions> const& pt, FlopCounter<>* flops = nullptr) const {
+    bool contains(Vector3<Position> const& pt, FlopCounter<>* flops = nullptr) const {
         for (int i = -1; i <= 1; i++) {
             for (int j = -1; j <= 1; j++) {
                 for (int k = -1; k <= 1; k++) {
                     bool contains = true;
-                    Array<double, kDimensions> iValue;
+                    Vector3<double> iValue;
                     iValue[0] = i;
                     iValue[1] = j;
                     iValue[2] = k;
@@ -481,8 +513,7 @@ inline float distance(Position b, RangeFixed a) {
     return -distance(a, b);
 }
 
-CUDA_EXPORT inline float boxDistanceSquared(
-    Fixed32Range const& box, Array<Position, kDimensions> const& x) {
+CUDA_EXPORT inline float boxDistanceSquared(Fixed32Range const& box, Vector3<Position> const& x) {
     float d2 = 0.0f;
     for (int dim = 0; dim < kDimensions; dim++) {
         if (box.end[dim].toDouble() - box.begin[dim].toDouble() >= 1.0) {
@@ -504,20 +535,19 @@ CUDA_EXPORT inline float boxDistanceSquared(
 }
 
 CUDA_EXPORT inline bool boxIntersectsSphere(
-    Fixed32Range const& box, Array<Position, kDimensions> const& x, float r) {
+    Fixed32Range const& box, Vector3<Position> const& x, float r) {
     return boxDistanceSquared(box, x) < sqr(r);
 }
 
 #ifndef __CUDACC__
-inline SimdFloat boxDistanceSquared(
-    Range<SimdDouble8> const& box, Array<SimdPosition, kDimensions> const& x) {
+inline SimdFloat boxDistanceSquared(Range<SimdDouble8> const& box, Vector3<SimdPosition> const& x) {
     if constexpr (kPositionBits == 64) {
         // The SIMD box endpoints originate in RangeFixed. Reuse the integer
         // comparisons and subtraction so conversion to double cannot erase
         // a particle's low bits at an endpoint.
         return SimdFloat([&](auto lane) {
             Fixed32Range scalarBox;
-            Array<Position, kDimensions> point;
+            Vector3<Position> point;
             for (int dim = 0; dim < kDimensions; ++dim) {
                 scalarBox.begin[dim] = box.begin[dim][lane];
                 scalarBox.end[dim] = box.end[dim][lane];
@@ -547,7 +577,7 @@ inline SimdFloat boxDistanceSquared(
 }
 
 inline auto boxIntersectsSphere(
-    Range<SimdDouble8> const& box, Array<SimdPosition, kDimensions> const& x, SimdFloat r) {
+    Range<SimdDouble8> const& box, Vector3<SimdPosition> const& x, SimdFloat r) {
     return boxDistanceSquared(box, x) < sqr(r);
 }
 #endif

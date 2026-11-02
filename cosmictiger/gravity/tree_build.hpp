@@ -10,6 +10,7 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 // Solver-neutral build input. Distributed domain routing and bounded-cell
 // geometry are supplied by the caller; the local kd and multipole arithmetic
@@ -31,8 +32,7 @@ struct TreeBuildPolicy {
     FlopCounts subdivisionFlops{};
     Pair<int, int> representedProcessRange;
     void* context = nullptr;
-    void (*constrainCenter)(
-        void*, Array<double, kDimensions>&, Array<Position, kDimensions>&) = nullptr;
+    void (*constrainCenter)(void*, Vector3<double>&, Vector3<Position>&) = nullptr;
     void (*splitDomains)(void*, TreeBuildRequest&, TreeBuildRequest&) = nullptr;
     hpx::future<TreeCreateReturn> (*fork)(void*, TreeBuildRequest, bool, bool) = nullptr;
 };

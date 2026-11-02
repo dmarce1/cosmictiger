@@ -5,14 +5,14 @@
 
 #include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_kernels.hpp>
 #include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 namespace cosmictiger::gravity::cartesian {
 // Ewald is evaluated on the nearest-image branch. Harmonicize it using the
 // unwrapped separation, so the removed quadratic sums to one root polynomial.
 template <class Real, int order>
-CUDA_EXPORT int evaluateEwaldGreen(Green<Real, order>& local,
-    Array<Real, kDimensions> const& wrappedPosition,
-    Array<Real, kDimensions> const& unwrappedPosition) {
+CUDA_EXPORT int evaluateEwaldGreen(Green<Real, order>& local, Vector3<Real> const& wrappedPosition,
+    Vector3<Real> const& unwrappedPosition) {
     constexpr int degree = order - 1;
     constexpr int kTensorOrder = order;
     SymmetricTracelessTensor<Real, kTensorOrder> derivatives;
@@ -44,8 +44,7 @@ CUDA_EXPORT int evaluateEwaldGreen(Green<Real, order>& local,
 }
 
 template <class Real, int order>
-CUDA_EXPORT int evaluateEwaldGreen(
-    Green<Real, order>& local, Array<Real, kDimensions> const& position) {
+CUDA_EXPORT int evaluateEwaldGreen(Green<Real, order>& local, Vector3<Real> const& position) {
     return evaluateEwaldGreen(local, position, position);
 }
 }    // namespace cosmictiger::gravity::cartesian

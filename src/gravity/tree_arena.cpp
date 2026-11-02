@@ -21,6 +21,7 @@
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/tree_build.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 constexpr bool kVerbose = true;
 
@@ -108,12 +109,13 @@ static void treeWriteMultipole(MultipolePosition* record, MultipoleBuffer const&
 }
 
 MultipolePosition* treeAddMultipole(
-    Array<Position, kDimensions> const& pos, MultipoleBuffer const& multipole) {
+    Vector3<Position> const& pos, MultipoleBuffer const& multipole) {
     bool empty = true;
     for (int dim = 0; dim < kDimensions; ++dim) {
         empty = empty && pos[dim].raw() == 0;
     }
-    for (int coefficient = 0; coefficient < fmmMultipoleCoefficientCount(fmmOrder()); ++coefficient) {
+    for (int coefficient = 0; coefficient < fmmMultipoleCoefficientCount(fmmOrder());
+        ++coefficient) {
         empty = empty && multipole[coefficient] == 0.0f;
     }
     std::lock_guard<MutexType> lock(remoteMultipoleMutex);
@@ -122,8 +124,8 @@ MultipolePosition* treeAddMultipole(
     }
     if (remoteMultipoleChunks.empty() ||
         remoteMultipoleChunks.back().used == kRemoteMultipoleChunkSize) {
-        char* data = static_cast<char*>(
-            allocateManagedMemory(kRemoteMultipoleChunkSize * multipoleStride));
+        char* data =
+            static_cast<char*>(allocateManagedMemory(kRemoteMultipoleChunkSize * multipoleStride));
         try {
             remoteMultipoleChunks.push_back({data, 0});
         } catch (...) {

@@ -407,7 +407,7 @@ void groupsReduce(double scaleFactor) {
                         if (particles.size() >= getOptions().analysis.minGroupSize) {
                             auto const halos = rockstarFindSubgroups(particles, scaleFactor);
                             size_t const haloCount = rockstarCatalogueSize(halos.size());
-                            Array<double, kDimensions> origin;
+                            Vector3<double> origin;
                             for (int dim = 0; dim < kDimensions; ++dim) {
                                 origin[dim] = particles.front().x[dim].toDouble();
                             }
@@ -426,7 +426,7 @@ void groupsReduce(double scaleFactor) {
                                 HaloAperture aperture;
                                 aperture.radius = virialRadius;
                                 aperture.rank = hpxRank();
-                                Array<double, kDimensions> peak;
+                                Vector3<double> peak;
                                 peak[0] = halo.x;
                                 peak[1] = halo.y;
                                 peak[2] = halo.z;
@@ -541,7 +541,7 @@ Vector<Pair<double>> groupsSumBaryons(Vector<HaloAperture> apertures) {
                         }
                         auto& species = type == kStarType ? star : gas;
                         double const mass = particlesMass(i);
-                        Array<double, kDimensions> position;
+                        Vector3<double> position;
                         Array<int, kDimensions> cell;
                         for (int dim = 0; dim < kDimensions; ++dim) {
                             position[dim] = particlesPos(dim, i).toDouble();

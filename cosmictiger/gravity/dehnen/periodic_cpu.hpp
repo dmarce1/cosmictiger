@@ -7,6 +7,7 @@
 #include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_operators.hpp>
 #include <cosmictiger/gravity/gravity_cpu.hpp>
 #include <cosmictiger/gravity/kick_walk.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 template <int order>
 void cpuGravityEwald(cosmictiger::gravity::cartesian::Expansion<float, order>& lValue,
@@ -25,21 +26,21 @@ void cpuGravityEwald(cosmictiger::gravity::cartesian::Expansion<float, order>& l
         static thread_local detail::SimdAlignedVector<
             cosmictiger::gravity::cartesian::Multipole<SimdFloat, order>>
             mValue;
-        static thread_local detail::SimdAlignedVector<Array<SimdPosition, kDimensions>> yValue;
+        static thread_local detail::SimdAlignedVector<Vector3<SimdPosition>> yValue;
         detail::gatherSourceMultipoles<order>(treePtrs, mValue, yValue);
-        Array<SimdPosition, kDimensions> x{};
+        Vector3<SimdPosition> x{};
         for (int dim = 0; dim < kDimensions; dim++) {
             x[dim] = simdBroadcast<SimdPosition>(selfPtr->mpos->pos[dim].raw());
         }
         cosmictiger::gravity::cartesian::Expansion<SimdFloat, order> l0;
         l0 = simdBroadcast<SimdFloat>(0.0f);
         for (int j = 0; j < numberOfSources; j++) {
-            Array<SimdFloat, kDimensions> dx{};
+            Vector3<SimdFloat> dx{};
             for (int dim = 0; dim < kDimensions; dim++) {
                 dx[dim] =
                     fmmPositionDifference(x[dim], yValue[j][dim], dim, geometry, &geometryFlops);
             }
-            Array<SimdFloat, kDimensions> unwrappedPosition{};
+            Vector3<SimdFloat> unwrappedPosition{};
             for (int lane = 0; lane < kSimdFloatSize; lane++) {
                 int const sourceIndex =
                     std::min(j * kSimdFloatSize + lane, int(treePtrs.size()) - 1);
@@ -70,7 +71,7 @@ void cpuGravityEwald(cosmictiger::gravity::cartesian::Expansion<float, order>& l
 
 template <int order>
 FlopCounts dehnenBackgroundImpl(KickParameters const& params, ExpansionBuffer& l,
-    Array<Position, kDimensions>& pos, TreeId self, Vector<TreeId> const& echecklist) {
+    Vector3<Position>& pos, TreeId self, Vector<TreeId> const& echecklist) {
     using Expansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
     constexpr int kLocalDegree = FmmOrder<order>::kLocalDegree_;
@@ -85,7 +86,7 @@ FlopCounts dehnenBackgroundImpl(KickParameters const& params, ExpansionBuffer& l
         // nearest images. Its source trace is needed only for the potential
         // gauge, so compute that scalar here instead of storing it in every
         // source multipole.
-        Array<float, kDimensions> displacement;
+        Vector3<float> displacement;
         for (int dim = 0; dim < kDimensions; dim++) {
             displacement[dim] = unwrappedDoubleDistance(selfPtr->pos[dim], pos[dim]);
         }
@@ -127,9 +128,9 @@ FlopCounts dehnenPeriodicImpl(KickParameters const& params, ExpansionBuffer& l, 
     bool const openLargerCell = params.openLargerCell;
     Array<TreeNode const*, kSimdFloatSize> otherPtrs;
     SimdFloat selfRadius = selfPtr->radius;
-    Array<SimdPosition, kDimensions> selfPos{};
-    Array<SimdPosition, kDimensions> otherPos{};
-    Array<SimdFloat, kDimensions> dx{};
+    Vector3<SimdPosition> selfPos{};
+    Vector3<SimdPosition> otherPos{};
+    Vector3<SimdFloat> dx{};
     SimdFloat otherRadius{};
     SimdFloat otherLeaf{};
     Range<SimdDouble8> otherBox{};

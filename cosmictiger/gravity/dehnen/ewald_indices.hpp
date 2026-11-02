@@ -13,6 +13,7 @@
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/math/tensor.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 inline constexpr int kEwaldRealIndexCount = 178;
 inline constexpr int kEwaldFourierIndexCount = 92;
@@ -24,8 +25,8 @@ inline constexpr int kEwaldFourierIndexCount = 92;
 // view the leading entries; they are only valid for the order the tables were
 // built for, which the generated Ewald derivative of that order guarantees.
 struct EwaldConstants {
-    Array<Array<float, kDimensions>, kEwaldRealIndexCount> realIndices;
-    Array<Array<float, kDimensions>, kEwaldFourierIndexCount> fourIndices;
+    Array<Vector3<float>, kEwaldRealIndexCount> realIndices;
+    Array<Vector3<float>, kEwaldFourierIndexCount> fourIndices;
     Array<Array<float, kFmmMaxTracelessTensorCount>, kEwaldFourierIndexCount> fourExpanse;
     Array<float, kFmmMaxSymmetricTensorCount> d0;
     int order;
@@ -53,10 +54,10 @@ struct EwaldConst {
         return ec;
 #endif
     }
-    CUDA_EXPORT static Array<float, kDimensions> const& realIndex(int i) {
+    CUDA_EXPORT static Vector3<float> const& realIndex(int i) {
         return constants().realIndices[i];
     }
-    CUDA_EXPORT static Array<float, kDimensions> const& fourIndex(int i) {
+    CUDA_EXPORT static Vector3<float> const& fourIndex(int i) {
         return constants().fourIndices[i];
     }
     template <int order>

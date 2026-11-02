@@ -41,7 +41,7 @@ inline std::vector<int> sphCpuNeighbors(SphRunData const& data, SphTreeNode cons
             if (activeOnly && data.sourceRungs[sourceIndex] < minimumRung) {
                 continue;
             }
-            Array<Position, kDimensions> position;
+            Vector3<Position> position;
             position[kXDimension] = data.sourcePositionX[sourceIndex];
             position[kYDimension] = data.sourcePositionY[sourceIndex];
             position[kZDimension] = data.sourcePositionZ[sourceIndex];

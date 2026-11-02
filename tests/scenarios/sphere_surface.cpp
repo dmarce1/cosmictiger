@@ -18,6 +18,7 @@
 #include <gtest/gtest.h>
 #include <hpx/hpx_init.hpp>
 
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/scenarios/sphere.hpp>
 
 namespace detail {
@@ -75,7 +76,7 @@ static void checkEvenSpacing(Array<Vector<float>, kDimensions> const& shell) {
     double const spacing = std::sqrt(4.0 * std::numbers::pi / n);
     double minNearest = std::numeric_limits<double>::max();
     double maxNearest = 0.0;
-    Array<double, kDimensions> centroid;
+    Vector3<double> centroid;
     for (int dim = 0; dim < kDimensions; dim++) {
         centroid[dim] = 0.0;
     }

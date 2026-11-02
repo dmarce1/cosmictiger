@@ -7,6 +7,7 @@
 
 #include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/fmm_kernels/spherical_operators.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 void cosmictigerAssert(char const*, bool condition, char const*, int) {
     if (!condition) {
@@ -24,7 +25,7 @@ using Field = cosmictiger::gravity::Field<double>;
 
 template <class Target, class Source>
 concept HasM2L = requires(Target& target, Source const& source,
-    Array<double, kDimensions> const& displacement) { M2L(target, source, displacement); };
+    Vector3<double> const& displacement) { M2L(target, source, displacement); };
 
 static_assert(!HasM2L<CartesianExpansion, SphericalMultipole>);
 static_assert(!HasM2L<SphericalExpansion, CartesianMultipole>);
@@ -34,11 +35,11 @@ static_assert(!HasM2L<cosmictiger::gravity::cartesian::Expansion<double, kDiffer
 
 template <class Multipole, class Expansion>
 void checkPointFields() {
-    std::array<std::array<double, kDimensions>, 4> const sourceCenters{
+    std::array<Vector3<double>, 4> const sourceCenters{
         {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}, {.7, -.4, 1.2}}};
-    Array<double, kDimensions> const zero{};
+    Vector3<double> const zero{};
     for (auto const& center : sourceCenters) {
-        Array<double, kDimensions> displacement{};
+        Vector3<double> displacement{};
         double radiusSquared = 0.0;
         for (int dim = 0; dim < kDimensions; ++dim) {
             displacement[dim] = -center[dim];

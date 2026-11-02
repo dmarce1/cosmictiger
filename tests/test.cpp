@@ -20,6 +20,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/core/timer.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/cosmology/initialize.hpp>
@@ -338,7 +339,7 @@ static void kickTest() {
     kparams.theta = getOptions().gravity.openingAngle;
     ExpansionBuffer l;
     l.zero();
-    Array<Position, kDimensions> pos;
+    Vector3<Position> pos;
     for (int dim = 0; dim < kDimensions; dim++) {
         pos[dim] = 0.f;
     }
@@ -388,7 +389,7 @@ static void reportKickInteractions(double theta) {
         counts.particleCell - counts.particleCellFromLeafSources);
     if (getOptions().analysis.saveForce) {
         auto const range = particlesCurrentRange();
-        std::array<double, kDimensions> total{};
+        Vector3<double> total{};
         double magnitudeSum = 0.0;
         for (ParticleInteger i = range.first; i < range.second; i++) {
             double squared = 0.0;
@@ -478,7 +479,7 @@ static void forceTest() {
         kparams.theta = thetas[iter];
         ExpansionBuffer l;
         l.zero();
-        Array<Position, kDimensions> pos;
+        Vector3<Position> pos;
         for (int dim = 0; dim < kDimensions; dim++) {
             pos[dim] = 0.f;
         }
@@ -566,7 +567,7 @@ static void bucketTest() {
             kparams.ascending = kparams.descending = false;
             ExpansionBuffer l;
             l.zero();
-            Array<Position, kDimensions> pos;
+            Vector3<Position> pos;
             for (int dim = 0; dim < kDimensions; dim++) {
                 pos[dim] = 0.f;
             }
@@ -650,7 +651,7 @@ static void speedTest() {
             kparams.theta = thetas[ci];
             ExpansionBuffer l;
             l.zero();
-            Array<Position, kDimensions> pos;
+            Vector3<Position> pos;
             for (int dim = 0; dim < kDimensions; dim++) {
                 pos[dim] = 0.f;
             }

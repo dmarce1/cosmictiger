@@ -47,6 +47,7 @@
 #include <cosmictiger/gravity/sources.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/math/kernel.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particle_mesh_sort.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/hydro/sph/sph_particles.hpp>
@@ -178,7 +179,7 @@ struct SolveState {
     std::vector<double> moments;
     double radialTrace = 0;
     std::array<double, 5> background{};
-    Vector<Array<float, kDimensions>> acceleration;
+    Vector<Vector3<float>> acceleration;
     Vector<float> potential;
     PmmmDiagnostics diagnostics;
     MutexType accumulationMutex;

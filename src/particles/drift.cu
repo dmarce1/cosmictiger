@@ -10,6 +10,7 @@
 
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/analysis/lightcone.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #endif
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/timer.hpp>
@@ -32,7 +33,7 @@ __managed__ ListType* listPtr;
 #endif
 
 __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __restrict__ const y,
-    Position* __restrict__ const z, Array<float, kDimensions>* const vels, char const* const rungs,
+    Position* __restrict__ const z, Vector3<float>* const vels, char const* const rungs,
     char const* const types, ParticleInteger count, int rung, double a, double dt, double tau0,
     double tau1, double tauMax, bool doLc, int nside, double drag, HopkinsParticleState* meshStates,
     ParticleInteger const* gasIndices) {
@@ -60,8 +61,8 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
         double x0 = 0.0, y0 = 0.0, z0 = 0.0, x1 = 0.0, y1 = 0.0, z1 = 0.0;
         double displacementX = 0.0, displacementY = 0.0, displacementZ = 0.0;
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
-        Array<double, kDimensions> x0Value;
-        Array<double, kDimensions> x1Value;
+        Vector3<double> x0Value;
+        Vector3<double> x1Value;
         float vx = 0.0f, vy = 0.0f, vz = 0.0f;
 #endif
         float* vel;
@@ -149,8 +150,8 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                                 double const r2 = sqr(x1, y1, z1);
                                 if (r2 <= 1.0) {
                                     long ipix;
-                                    double xValue[kDimensions] = {x1, y1, z1};
-                                    vec2pixNest(nside, xValue, &ipix);
+                                    Vector3<double> xValue{x1, y1, z1};
+                                    vec2pixNest(nside, xValue.data(), &ipix);
                                     entry.pix = ipix;
                                     entry.x = x1;
                                     entry.y = y1;

@@ -18,6 +18,7 @@
 
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/range.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 void cosmictigerAssert(char const* expression, bool condition, char const* file, int line) {
     if (!condition) {
@@ -91,10 +92,10 @@ void testPeriodicBoxSphere() {
         {0.70, 0.25, 0.25}, {0.50, 0.25, 0.25}};
     float const radii[8] = {0.02f, 0.02f, 0.02f, 0.02f, 0.02f, 0.06f, 0.01f, 0.01f};
     bool const expected[8] = {true, true, false, false, false, true, true, false};
-    Array<SimdPosition, kDimensions> simdPoints{};
+    Vector3<SimdPosition> simdPoints{};
     SimdFloat simdRadii{};
     for (int lane = 0; lane < kSimdFloatSize; lane++) {
-        Array<Position, kDimensions> point;
+        Vector3<Position> point;
         for (int dim = 0; dim < kDimensions; dim++) {
             point[dim] = coordinates[lane][dim];
             simdSetLane(simdPoints[dim], lane, point[dim].raw());
@@ -108,7 +109,7 @@ void testPeriodicBoxSphere() {
     for (int lane = 0; lane < kSimdFloatSize; lane++) {
         require(bool(intersections[lane]) == expected[lane],
             "SIMD box-sphere test must preserve unsigned fixed-point positions");
-        Array<Position, kDimensions> point;
+        Vector3<Position> point;
         for (int dim = 0; dim < kDimensions; dim++) {
             point[dim] = coordinates[lane][dim];
         }
@@ -119,7 +120,7 @@ void testPeriodicBoxSphere() {
     box.end[kXDimension] = 0.99;
     simdBox.begin[kXDimension] = box.begin[kXDimension].toDouble();
     simdBox.end[kXDimension] = box.end[kXDimension].toDouble();
-    Array<Position, kDimensions> point;
+    Vector3<Position> point;
     for (int dim = 0; dim < kDimensions; dim++) {
         point[dim] = dim == kXDimension ? 0.01 : 0.25;
         simdPoints[dim] = simdBroadcast<SimdPosition>(point[dim].raw());
@@ -170,7 +171,7 @@ void testPeriodicBoxSphere() {
             simdBox.begin[dim] = box.begin[dim].toDouble();
             simdBox.end[dim] = box.end[dim].toDouble();
         }
-        Array<Array<Position, kDimensions>, kSimdFloatSize> points;
+        Array<Vector3<Position>, kSimdFloatSize> points;
         for (int lane = 0; lane < kSimdFloatSize; lane++) {
             for (int dim = 0; dim < kDimensions; dim++) {
                 points[lane][dim] = ((sample * 97 + lane * 71 + dim * 83) % 1009) / 1009.0;

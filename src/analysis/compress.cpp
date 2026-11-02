@@ -2,6 +2,7 @@
 #include <cassert>
 
 #include <cosmictiger/analysis/compress.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 double CompressedParticles::compressionRatio() {
     size_t numberOfParticles = 0;
@@ -197,8 +198,8 @@ CompressedParticles compressParticles(
     }
     Vector<Array<double, 2 * kDimensions>> particles;
     particles.reserve(inputParticles.size());
-    Array<double, kDimensions> xc;
-    Array<double, kDimensions> vc;
+    Vector3<double> xc;
+    Vector3<double> vc;
     for (int dim = 0; dim < kDimensions; dim++) {
         xc[dim] = vc[dim] = 0.0;
     }

@@ -28,7 +28,7 @@ struct BhShmem {
 };
 
 __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sinkBuckets,
-    float* phi, Array<float, kDimensions> const* parts, float relativeError, float hsoft, float gm,
+    float* phi, Vector3<float> const* parts, float relativeError, float hsoft, float gm,
     int* nextSinkBucket, int numberOfSinks) {
     int const tid = threadIdx.x;
     int const bid = blockIdx.x;
@@ -189,8 +189,8 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
 }
 
 __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* phi,
-    Array<float, kDimensions> const* parts, Array<float, kDimensions> const* sinks,
-    float relativeError, float hsoft, float gm, int* nextSink, int numberOfSinks) {
+    Vector3<float> const* parts, Vector3<float> const* sinks, float relativeError, float hsoft,
+    float gm, int* nextSink, int numberOfSinks) {
     int const tid = threadIdx.x;
     int const bid = blockIdx.x;
     __shared__ int si;
@@ -201,7 +201,7 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
     __shared__ BhWorkspace ws;
     new (&ws) BhWorkspace();
     while (si < numberOfSinks) {
-        Array<float, kDimensions> const& sink = sinks[si];
+        Vector3<float> const& sink = sinks[si];
         auto& checklist = ws.checklist;
         auto& nextlist = ws.nextlist;
         auto& sourceX = ws.sourceX;
@@ -339,7 +339,7 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
 }
 
 DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& devTreeNodes,
-    DeviceVector<Array<float, kDimensions>> const& devX, DeviceVector<int> const devSinkBuckets,
+    DeviceVector<Vector3<float>> const& devX, DeviceVector<int> const devSinkBuckets,
     float relativeError, float hsoft, float gm, int maximumBlockCount) {
     BhWorkspace* workspaces;
     int* nextSinkBucket;
@@ -373,9 +373,8 @@ DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& devTr
 }
 
 DeviceVector<float> bhEvaluatePotentialPointsGpu(DeviceVector<BhTreeNode> const& devTreeNodes,
-    DeviceVector<Array<float, kDimensions>> const& devX,
-    DeviceVector<Array<float, kDimensions>> const& devY, float relativeError, float hsoft,
-    float gm) {
+    DeviceVector<Vector3<float>> const& devX, DeviceVector<Vector3<float>> const& devY,
+    float relativeError, float hsoft, float gm) {
     int* nextSink;
     int zero = 0;
     int numberOfBlocks;

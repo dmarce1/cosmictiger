@@ -22,6 +22,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/terminal.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/cosmology/cosmology.hpp>
 #include <cosmictiger/cosmology/evolution.hpp>
@@ -68,7 +69,7 @@ public:
 };
 
 struct HopkinsParticle {
-    std::array<Position, 3> position{};
+    Vector3<Position> position{};
     hopkins::Vector velocity{};
     hopkins::Vector acceleration{};
     HopkinsParticleState state{};

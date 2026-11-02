@@ -20,10 +20,11 @@
 
 #include <cosmictiger/analysis/lightcone_entry.hpp>
 #include <cosmictiger/hydro/hopkins/hopkins_state.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/drift.hpp>
 
 Array<Position*, kDimensions> particlesX;
-Array<float, kDimensions>* particlesV = nullptr;
+Vector3<float>* particlesV = nullptr;
 char* particlesR = nullptr;
 char* particlesTy = nullptr;
 ParticleInteger* particlesSph = nullptr;
@@ -54,7 +55,7 @@ void resetCapture() {
 
 struct Fixture {
     std::array<std::vector<Position>, kDimensions> positions;
-    std::vector<Array<float, kDimensions>> velocities;
+    std::vector<Vector3<float>> velocities;
     std::vector<char> rungs;
     std::vector<char> types;
     std::vector<ParticleInteger> gasIndices;
@@ -165,7 +166,7 @@ void checkMeshlessFixed64Motion(std::string const& method, int selectedRung) {
     options.hydro.method = method;
     std::array<uint64_t, kDimensions> const positions{
         0x4000000000000123ULL, 0x8000000000000321ULL, UINT64_MAX - 7};
-    std::array<double, kDimensions> const velocity{0x1p-60, -0x1p-60, 0x1p-60};
+    Vector3<double> const velocity{0x1p-60, -0x1p-60, 0x1p-60};
     for (size_t index = 0; index < kCount; ++index) {
         fixture.types[index] = kSphType;
         fixture.gasIndices[index] = kCount - 1 - index;
@@ -198,8 +199,7 @@ void checkMeshlessFixed64Motion(std::string const& method, int selectedRung) {
                 "meshless drift changed the physical fluid velocity");
         }
         require(state.mass == 1.0 && state.totalEnergy == 2.0 &&
-                state.momentum == std::array<double, 3>{0.1, -0.2, 0.3} &&
-                state.supportRadius == 0.125,
+                state.momentum == Vector3<double>{0.1, -0.2, 0.3} && state.supportRadius == 0.125,
             "meshless positional drift changed conserved or support state");
     }
 }

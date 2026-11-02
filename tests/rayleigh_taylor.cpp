@@ -22,12 +22,13 @@
 
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/scenarios/rayleigh_taylor.hpp>
 
 // Ordinary host storage lets this test call the production initializer without
 // starting HPX, allocating managed memory, or running the evolution driver.
 Array<Position*, kDimensions> particlesX;
-Array<float, kDimensions>* particlesV;
+Vector3<float>* particlesV;
 char* particlesR;
 ParticleInteger* sphParticlesParticleIndices;
 SphThermodynamicState* sphParticlesThermodynamicStates;
@@ -37,7 +38,7 @@ namespace detail {
 constexpr double kPi = 3.141592653589793238462643383279502884;
 Options options;
 std::array<std::vector<Position>, kDimensions> positions;
-std::vector<Array<float, kDimensions>> velocities;
+std::vector<Vector3<float>> velocities;
 std::vector<char> rungs;
 std::vector<ParticleInteger> indices;
 std::vector<SphThermodynamicState> thermodynamicStates;

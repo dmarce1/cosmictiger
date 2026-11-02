@@ -15,6 +15,7 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/safe_io.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
 #include <cosmictiger/gravity/nitadori/solver.hpp>
 #endif
@@ -256,7 +257,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
                 auto const myx = sphParticlesPosition(kXDimension, i);
                 auto const myy = sphParticlesPosition(kYDimension, i);
                 auto const myz = sphParticlesPosition(kZDimension, i);
-                Array<Position, kDimensions> xValue;
+                Vector3<Position> xValue;
                 xValue[kXDimension] = myx;
                 xValue[kYDimension] = myy;
                 xValue[kZDimension] = myz;

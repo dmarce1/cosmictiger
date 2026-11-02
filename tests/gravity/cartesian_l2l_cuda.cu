@@ -22,6 +22,7 @@
 
 #include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <tests/cuda_test.hpp>
 
 namespace detail {
@@ -31,7 +32,7 @@ using LocalExpansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
 constexpr int kLanes = 32;
 constexpr int kMaxWarpsPerBlock = 4;
 constexpr int kValidationSamples = 16;
-using Position = std::array<double, 3>;
+using Position = Vector3<double>;
 template <int order>
 using Canonical = std::array<double, FmmOrder<order>::kLocalCoefficients_>;
 
@@ -57,7 +58,7 @@ char const* variantName(Variant variant) {
 template <int order>
 struct Fixture {
     LocalExpansion<order> source;
-    Array<float, kDimensions> displacement;
+    Vector3<float> displacement;
 };
 
 void checkCuda(cudaError_t status) {
@@ -190,7 +191,7 @@ Canonical<order> translateReference(
 
 template <int order>
 __device__ LocalExpansion<order> warpTranslate(
-    LocalExpansion<order> const& source, Array<float, kDimensions> position, bool doPhi) {
+    LocalExpansion<order> const& source, Vector3<float> position, bool doPhi) {
     LocalExpansion<order> result{};
     auto const scaled = fmmScaleDisplacement(position);
     cosmictiger::gravity::cartesian::detail::detail::L2LWarp<order - 1, true>::translate(
@@ -242,7 +243,7 @@ __global__ void validateWarp(Fixture<order> const* input, LocalExpansion<order>*
 // may read the completed target immediately after the call.
 template <int order>
 __device__ void warpTranslateInto(LocalExpansion<order>& target,
-    LocalExpansion<order> const& source, Array<float, kDimensions> const& position, bool doPhi) {
+    LocalExpansion<order> const& source, Vector3<float> const& position, bool doPhi) {
     cosmictiger::gravity::cartesian::L2LWarpInto(
         &target[0], source, fmmScaleDisplacement(position), doPhi);
 }

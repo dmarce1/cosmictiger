@@ -21,6 +21,7 @@
 #include <cosmictiger/cosmology/cosmology.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 // ROCKSTAR section/equation references: Behroozi, Wechsler & Wu (2013),
 // https://arxiv.org/html/1110.4372v3
@@ -121,8 +122,8 @@ std::vector<double> sortedRadii(DeviceVector<RockstarParticle> const& particles,
     return radii;
 }
 
-Array<double, kDimensions> bulkVelocity(DeviceVector<RockstarParticle> const& particles) {
-    Array<double, kDimensions> result{};
+Vector3<double> bulkVelocity(DeviceVector<RockstarParticle> const& particles) {
+    Vector3<double> result{};
     if (!particles.empty()) {
         for (auto const& particle : particles) {
             for (int dim = 0; dim < kDimensions; ++dim) {
@@ -135,7 +136,7 @@ Array<double, kDimensions> bulkVelocity(DeviceVector<RockstarParticle> const& pa
 
 // Sec. III.5.1: the core-velocity aperture is 0.1 Rvir.
 void coreVelocity(Subgroup& group, DeviceVector<RockstarParticle> const& particles, double radius) {
-    Array<double, kDimensions> velocity{};
+    Vector3<double> velocity{};
     size_t count = 0;
     double nearest = std::numeric_limits<double>::max();
     size_t nearestIndex = 0;
@@ -166,9 +167,9 @@ void coreVelocity(Subgroup& group, DeviceVector<RockstarParticle> const& particl
 }
 
 DeviceVector<float> potentials(DeviceVector<RockstarParticle> const& particles) {
-    DeviceVector<Array<float, kDimensions>> positions;
+    DeviceVector<Vector3<float>> positions;
     for (auto const& particle : particles) {
-        Array<float, kDimensions> position;
+        Vector3<float> position;
         for (int dim = 0; dim < kDimensions; ++dim) {
             position[dim] = particle.xValue[dim];
         }
@@ -353,7 +354,7 @@ DeviceVector<RockstarParticle> withinRadius(
 struct Shape {
     double bOverA = 0.0;
     double cOverA = 0.0;
-    std::array<double, 3> major{};
+    Vector3<double> major{};
 };
 
 // Sec. III.5.4, Eq. (11): mass-distribution tensor; callers exclude substructure.
@@ -364,7 +365,7 @@ Shape shape(DeviceVector<RockstarParticle> const& particles, Subgroup const& gro
     }
     std::array<std::array<double, 3>, 3> moment{};
     for (auto const& particle : particles) {
-        std::array<double, 3> dx{double(particle.x) - group.x, double(particle.y) - group.y,
+        Vector3<double> dx{double(particle.x) - group.x, double(particle.y) - group.y,
             double(particle.z) - group.z};
         for (int row = 0; row < 3; ++row) {
             for (int column = 0; column < 3; ++column) {
@@ -403,7 +404,7 @@ void rockstarUpdateStatistics(
         return;
     }
     auto const velocity = detail::bulkVelocity(group.parts);
-    Array<double, kDimensions> center{};
+    Vector3<double> center{};
     for (auto const& particle : group.parts) {
         for (int dim = 0; dim < kDimensions; ++dim) {
             center[dim] += particle.xValue[dim] / double(group.parts.size());
@@ -507,7 +508,7 @@ void rockstarFinalizeSubgroups(Vector<Subgroup>& groups, float scale) {
     detail::internalHierarchy(groups);
     struct BindingSystem {
         std::unordered_map<int, double> potentials;
-        Array<double, kDimensions> velocity{};
+        Vector3<double> velocity{};
     };
     std::vector<BindingSystem> systems(groups.size());
     std::vector<int> bindingRoot(groups.size());
@@ -666,7 +667,7 @@ double rockstarMassConversion() {
 }
 
 RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, float scale,
-    Array<double, kDimensions> const& origin, bool inclusive, bool periodic, double* virialRadius) {
+    Vector3<double> const& origin, bool inclusive, bool periodic, double* virialRadius) {
     Subgroup const& group = groups[index];
     auto candidates = inclusive ? rockstarGatherParticles(groups, index) : group.parts;
     auto const density = detail::haloOverdensity(scale);
@@ -691,8 +692,8 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
     double sigmaX = 0.0;
     double sigmaCore = 0.0;
     double sigmaBulk = 0.0;
-    Array<double, kDimensions> center{};
-    Array<double, kDimensions> angular{};
+    Vector3<double> center{};
+    Vector3<double> angular{};
     for (auto const& particle : particles) {
         double const dx = double(particle.x) - group.x;
         double const dy = double(particle.y) - group.y;
@@ -843,8 +844,8 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
     return record;
 }
 
-GroupEntry rockstarMakeGroupEntry(Vector<Subgroup> const& groups, int index, float scale,
-    Array<double, kDimensions> const& origin) {
+GroupEntry rockstarMakeGroupEntry(
+    Vector<Subgroup> const& groups, int index, float scale, Vector3<double> const& origin) {
     auto const& group = groups[index];
     auto const allParticles = rockstarGatherParticles(groups, index);
     auto const candidates = detail::sortedRadii(allParticles, group);
@@ -861,7 +862,7 @@ GroupEntry rockstarMakeGroupEntry(Vector<Subgroup> const& groups, int index, flo
     Subgroup measured;
     detail::energies(measured, particles, scale);
     double const count = std::max(1, particles.size());
-    Array<double, kDimensions> center{};
+    Vector3<double> center{};
     for (auto const& particle : particles) {
         for (int dim = 0; dim < kDimensions; ++dim) {
             center[dim] += particle.xValue[dim] / count;

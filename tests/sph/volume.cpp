@@ -21,6 +21,7 @@
 #include <cosmictiger/hydro/sph/volume.hpp>
 #include <cosmictiger/math/radial_kernel.hpp>
 #include <cosmictiger/math/simd_math.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <tests/sph/test_helpers.hpp>
 
 // Double-precision references for cosmictiger/hydro/sph/volume.hpp and
@@ -29,21 +30,8 @@
 // density-energy force must be (docs/variational_sph.md).
 namespace detail {
 
-using Vector = std::array<double, 3>;
+using Vector = Vector3<double>;
 using sph_volume::SupportConstraint;
-
-Vector difference(Vector const& left, Vector const& right) {
-    return {left[0] - right[0], left[1] - right[1], left[2] - right[2]};
-}
-
-double dot(Vector const& left, Vector const& right) {
-    return left[0] * right[0] + left[1] * right[1] + left[2] * right[2];
-}
-
-Vector cross(Vector const& left, Vector const& right) {
-    return {left[1] * right[2] - left[2] * right[1], left[2] * right[0] - left[0] * right[2],
-        left[0] * right[1] - left[1] * right[0]};
-}
 
 std::vector<radial_kernel::KernelSpec> selectableKernels() {
     std::vector<radial_kernel::KernelSpec> kernels;
@@ -106,9 +94,7 @@ struct System {
     double kernelSum(int i, double supportRadius) const {
         double sum = 0.0;
         for (int j = 0; j < size(); ++j) {
-            double const q = std::sqrt(dot(difference(position[i], position[j]),
-                                 difference(position[i], position[j]))) /
-                supportRadius;
+            double const q = std::sqrt((position[i] - position[j]).squaredNorm()) / supportRadius;
             sum += q < 1.0 ? radial_kernel::value(table, q) : 0.0;
         }
         return sum;
@@ -154,9 +140,7 @@ struct System {
     sph_volume::SupportSums<double> sums(int i) const {
         auto result = sph_volume::emptySupportSums<double>();
         for (int j = 0; j < size(); ++j) {
-            double const q = std::sqrt(dot(difference(position[i], position[j]),
-                                 difference(position[i], position[j]))) /
-                support[i];
+            double const q = std::sqrt((position[i] - position[j]).squaredNorm()) / support[i];
             if (q < 1.0) {
                 sph_volume::accumulateSupportSums(result, weight[j], radial_kernel::value(table, q),
                     radial_kernel::derivative(table, q), q);
@@ -217,8 +201,8 @@ struct System {
                 if (i == j) {
                     continue;
                 }
-                Vector const separation = difference(position[i], position[j]);
-                double const radius = std::sqrt(dot(separation, separation));
+                Vector const separation = position[i] - position[j];
+                double const radius = std::sqrt(separation.squaredNorm());
                 double const gradientI = gradientFactor(radius, support[i]);
                 double const gradientJ = gradientFactor(radius, support[j]);
                 double const coefficientIJ =
@@ -230,8 +214,8 @@ struct System {
                 for (int dim = 0; dim < 3; ++dim) {
                     result.force[i][dim] -= pairForce * separation[dim];
                 }
-                result.work[i] += variational::pairWork(coefficientIJ, gradientI,
-                    dot(difference(velocity[i], velocity[j]), separation));
+                result.work[i] += variational::pairWork(
+                    coefficientIJ, gradientI, (velocity[i] - velocity[j]).dot(separation));
             }
         }
         return result;
@@ -353,9 +337,9 @@ TEST(SphVolume, WeightedVolumeAndConstraintDerivatives) {
         auto const direct = [&](double supportRadius, bool weighted) {
             double sum = 0.0;
             for (int j = 0; j < system.size(); ++j) {
-                Vector const separation = difference(system.position[i], system.position[j]);
+                Vector const separation = system.position[i] - system.position[j];
                 sum += (weighted ? system.weight[j] : 1.0) *
-                    kernel(system.table, std::sqrt(dot(separation, separation)), supportRadius);
+                    kernel(system.table, std::sqrt(separation.squaredNorm()), supportRadius);
             }
             return sum;
         };
@@ -414,8 +398,8 @@ TEST(SphVolume, EqualMassReducesToStandardGradH) {
             }
             double const omegaJ = sph_volume::omega(system.sums(j));
             double const densityJ = system.weightedDensity(j);
-            Vector const separation = difference(system.position[i], system.position[j]);
-            double const radius = std::sqrt(dot(separation, separation));
+            Vector const separation = system.position[i] - system.position[j];
+            double const radius = std::sqrt(separation.squaredNorm());
             double const pair = mass * mass *
                 (system.pressure(i) / (omegaI * densityI * densityI) *
                         system.gradientFactor(radius, system.support[i]) +
@@ -449,9 +433,9 @@ TEST(SphVolume, ConstrainedDensityDerivatives) {
                 if (j == i || (k != i && j != k)) {
                     continue;
                 }
-                Vector const separation = difference(system.position[i], system.position[j]);
-                double const gradient = system.gradientFactor(
-                    std::sqrt(dot(separation, separation)), system.support[i]);
+                Vector const separation = system.position[i] - system.position[j];
+                double const gradient =
+                    system.gradientFactor(std::sqrt(separation.squaredNorm()), system.support[i]);
                 double const sign = k == i ? 1.0 : -1.0;
                 for (int dim = 0; dim < 3; ++dim) {
                     expectedDensity[dim] +=
@@ -522,7 +506,7 @@ TEST(SphVolume, ForceIsTheGradientOfTheDiscreteThermalEnergy) {
         auto const rates = system.rates(still);
         double scale = 0.0;
         for (auto const& force : rates.force) {
-            scale = std::max(scale, std::sqrt(dot(force, force)));
+            scale = std::max(scale, std::sqrt(force.squaredNorm()));
         }
         double const step = 1.0e-6;
         for (int k = 0; k < system.size(); k += 3) {
@@ -562,13 +546,13 @@ TEST(SphVolume, PairRatesConserveMomentumAngularMomentumAndEnergy) {
         double power = 0.0;
         double scale = 0.0;
         for (int i = 0; i < system.size(); ++i) {
-            Vector const torque = cross(system.position[i], rates.force[i]);
+            Vector const torque = system.position[i].cross(rates.force[i]);
             for (int dim = 0; dim < 3; ++dim) {
                 momentum[dim] += rates.force[i][dim];
                 angularMomentum[dim] += torque[dim];
             }
-            power += dot(velocity[i], rates.force[i]) + rates.work[i];
-            scale += std::sqrt(dot(rates.force[i], rates.force[i])) + std::abs(rates.work[i]);
+            power += velocity[i].dot(rates.force[i]) + rates.work[i];
+            scale += std::sqrt(rates.force[i].squaredNorm()) + std::abs(rates.work[i]);
         }
         for (int dim = 0; dim < 3; ++dim) {
             EXPECT_NEAR(momentum[dim], 0.0, 1.0e-13 * scale);
@@ -732,8 +716,8 @@ TEST(SphVolume, SimdPacksMatchScalarAlgebra) {
         Pack q(0.0);
         for (int lane = 0; lane < 4; ++lane) {
             int const j = first + lane;
-            Vector const separation = difference(system.position[i], system.position[j]);
-            double const laneQ = std::sqrt(dot(separation, separation)) / system.support[i];
+            Vector const separation = system.position[i] - system.position[j];
+            double const laneQ = std::sqrt(separation.squaredNorm()) / system.support[i];
             if (laneQ < 1.0) {
                 simdSetLane(weight, lane, system.weight[j]);
                 simdSetLane(value, lane, radial_kernel::value(system.table, laneQ));

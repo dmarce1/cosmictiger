@@ -17,11 +17,12 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/math/range.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 struct ParticleData {
-    Array<Position, kDimensions> x;
-    Array<float, kDimensions> v;
+    Vector3<Position> x;
+    Vector3<float> v;
     GroupInteger lastGroup;
     GroupInteger identity = kNoParticleGroup;
     GroupInteger lastHost = kNoParticleGroup;
@@ -43,7 +44,7 @@ struct ParticleData {
 // and the radius in comoving code lengths, with the catalogue rank that owns
 // the record. Gas and stellar masses are summed inside it after the finder.
 struct HaloAperture {
-    Array<double, kDimensions> center;
+    Vector3<double> center;
     double radius;
     int rank;
     template <class A>

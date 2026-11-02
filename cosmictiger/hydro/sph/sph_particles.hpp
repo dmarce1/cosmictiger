@@ -12,6 +12,7 @@
 #include <cosmictiger/hydro/sph/cullen_and_dehnen/state.hpp>
 #include <cosmictiger/hydro/sph/viscosity_state.hpp>
 #include <cosmictiger/math/math.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 #ifdef SPH_PARTICLES_CPP
@@ -36,7 +37,7 @@ struct SphThermodynamicState {
 };
 
 struct SphAcceleration {
-    Array<float, kDimensions> acceleration;
+    Vector3<float> acceleration;
 };
 
 // Cooling stores only an equilibrium electron-fraction guess; hydro owns thermal energy.
@@ -57,8 +58,8 @@ SPH_PARTICLES_EXTERN float* sphParticlesMasses;
 SPH_PARTICLES_EXTERN HopkinsParticleState* sphParticlesHopkinsStates;
 // Derived during every density pass; rebuilt after restart and migration.
 SPH_PARTICLES_EXTERN float* sphParticlesBalsaraFactors;
-// Variational operator only: zeta_i of cosmictiger/hydro/sph/volume.hpp, written by the density pass
-// for every semiactive particle before each force pass. Neither checkpointed nor migrated:
+// Variational operator only: zeta_i of cosmictiger/hydro/sph/volume.hpp, written by the density
+// pass for every semiactive particle before each force pass. Neither checkpointed nor migrated:
 // sphParticlesResetConverged sets every slot to NaN when a density pass starts, so a force
 // pass can use only corrections rebuilt by the current pass.
 SPH_PARTICLES_EXTERN float* sphParticlesGradHCorrections;

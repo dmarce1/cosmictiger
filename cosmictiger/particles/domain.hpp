@@ -11,6 +11,7 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/math/range.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 // Measured serialized payload, record stride and byte-bounded send capacity.
@@ -23,7 +24,7 @@ void domainsRebound();
 Range<double> domainsFindMyBox();
 Range<double> domainsRange(size_t key);
 // Locality whose half-open domain box contains the point; every PMMM cell lies in one.
-int domainsFindRank(Array<double, kDimensions> const& x);
+int domainsFindRank(Vector3<double> const& x);
 void domainsSave(FILE* fp);
 void domainsLoad(FILE* fp);
 double domainsGetLoadImbalance();

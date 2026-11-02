@@ -25,6 +25,7 @@
 #include <cosmictiger/gravity/fmm_kernels/cartesian_ewald_kernels.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/math/simd.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 // This standalone test exercises the actual CUDA-disabled initializer without
 // starting a distributed runtime. No child locality needs initialization.
@@ -46,7 +47,7 @@ namespace detail {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
 constexpr double kAlpha = 2.;
-using Position = std::array<double, 3>;
+using Position = Vector3<double>;
 
 void requireNear(double actual, double expected, double tolerance, char const* label) {
     if (!std::isfinite(actual) || std::abs(actual - expected) > tolerance) {
@@ -202,7 +203,7 @@ void checkPeriodicField() {
         {.23, -.17, .31}, {-.23, .17, -.31}, {.499, -.497, .11}, {-.49, .48, .47}}};
     for (auto const& position : kPositions) {
         auto const expected = directEwaldCorrection(position);
-        Array<double, kDimensions> separation;
+        Vector3<double> separation;
         for (int d = 0; d < 3; ++d) {
             separation[d] = position[d];
         }
@@ -227,8 +228,8 @@ void checkFloatDerivatives() {
             {.01, .005, -.002}, {.25, .125, 0.}, {.4, -.3, .45}, {-.499, .497, -.11}, {.5, .5, .5},
             {1.e-8, 0., 0.}, {1.e-7, -2.e-8, 3.e-8}, {1.e-10, 1.e-10, 1.e-10}}};
     for (auto const& position : kPositions) {
-        Array<double, kDimensions> separation;
-        Array<SimdFloat, kDimensions> floatSeparation;
+        Vector3<double> separation;
+        Vector3<SimdFloat> floatSeparation;
         for (int d = 0; d < kDimensions; ++d) {
             float const coordinate = float(position[d]);
             separation[d] = coordinate;
@@ -268,8 +269,8 @@ void checkCubicSymmetry() {
     constexpr std::array<Position, 3> kPositions{
         {{0., 0., 0.}, {.23, -.17, .31}, {.499, -.497, .11}}};
     for (auto const& position : kPositions) {
-        Array<double, kDimensions> separation;
-        Array<double, kDimensions> exchangedSeparation;
+        Vector3<double> separation;
+        Vector3<double> exchangedSeparation;
         for (int d = 0; d < 3; ++d) {
             separation[d] = position[d];
             exchangedSeparation[d] = position[2 - d];

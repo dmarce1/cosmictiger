@@ -760,7 +760,7 @@ Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& input
     if (input.size() < kRockstarMinGroup) {
         return records;
     }
-    Array<double, kDimensions> origin{};
+    Vector3<double> origin{};
     for (auto const& particle : input) {
         origin[0] += particle.x.toDouble() / input.size();
         origin[1] += particle.y.toDouble() / input.size();
