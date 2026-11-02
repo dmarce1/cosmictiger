@@ -38,8 +38,8 @@ power-of-two locality count.
 
 Traditional and global integration support SPH and Hopkins MFM/MFV.
 Select `hydro.method=sph|mfm|mfv`; the meshless methods require Fixed64 positions,
-`COSMICTIGER_ENABLE_HOPKINS=ON` (which requires `COSMICTIGER_ENABLE_SPH=ON`),
-with cooling and star formation disabled. Hierarchical integration requires gravity
+`COSMICTIGER_ENABLE_HOPKINS=ON` (which requires `COSMICTIGER_ENABLE_SPH=ON`).
+MFM accepts cooling and star formation; MFV requires both disabled. Hierarchical integration requires gravity
 without hydro. Global integration advances all particles using the smallest
 raw allowable timestep across all particles and localities, without power-of-two
 rounding; final-time and scenario-stage boundaries can shorten that interval.

@@ -1029,6 +1029,21 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
             if (global) {
                 gravity.minimumTimestep = std::min(gravity.minimumTimestep, hydro.minimumTimestep);
             }
+            // The kick applied the sources to the closed cells; the cosmological
+            // energy budget needs the same synchronized pressure integral as SPH.
+#if COSMICTIGER_ENABLE_CHEMISTRY
+            if (!closingOnly && getOptions().chemistry.enabled &&
+                !getOptions().starFormation.enabled) {
+                profile::ScopedPhase profilePhase("chemistry.pressureIntegral");
+                synchronizedChemistryPressure = sphChemistryPressureIntegral(scale);
+            }
+#endif
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+            if (!closingOnly && getOptions().starFormation.enabled) {
+                profile::ScopedPhase profilePhase("starFormation.pressureIntegral");
+                synchronizedChemistryPressure = starFormationPressureIntegral(scale);
+            }
+#endif
             profile::profileEnd();
 #else
             THROW_ERROR("Hopkins MFM/MFV requires COSMICTIGER_ENABLE_HOPKINS=ON "

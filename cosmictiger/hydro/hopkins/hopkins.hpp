@@ -17,6 +17,7 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/hydro/hopkins/hopkins_simd.hpp>
+#include <cosmictiger/math/matrix.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
 // Hopkins (2015), MNRAS 450, 53, doi:10.1093/mnras/stv195.
@@ -39,7 +40,7 @@ namespace detail {
 }    // namespace detail
 
 using Vector = Vector3<double>;
-using Matrix = std::array<Vector, 3>;
+using Matrix = math::Matrix<double, 3>;
 
 struct Primitive {
     double density = 0.0;
@@ -70,7 +71,7 @@ struct Flux {
     Vector momentum{};
     double energy = 0.0;
     double signalSpeed = 0.0;     // Maximum wave speed relative to the input frame.
-    double contactSpeed = 0.0;    // Contact speed relative to the input frame.
+    double contactSpeed = 0.0;    // Contact, or HLL massless-face speed, in the input frame.
 };
 
 struct Conserved {
@@ -172,7 +173,9 @@ struct PairGravityWork {
     double rightEnergyRate = 0.0;
 };
 
-inline double dot(Vector const& a, Vector const& b, FlopCount* operations = nullptr) {
+template <class LeftDerived, class RightDerived>
+inline double dot(math::Vector<double, 3, LeftDerived> const& a,
+    math::Vector<double, 3, RightDerived> const& b, FlopCount* operations = nullptr) {
     detail::countFlops(operations, 5);
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
@@ -269,12 +272,106 @@ inline Conserved closeConservedInterval(Conserved const& anchor, Conserved const
         result.energy += 0.5 * result.mass * (velocity[dim] - oldVelocity[dim]) *
             (velocity[dim] + oldVelocity[dim]);
     }
-    if (!(thermal > 0.0) || !std::isfinite(result.energy)) {
-        throw std::runtime_error(
-            "Nonpositive Hopkins thermal energy at own-step closure; "
-            "reduce hydro.cfl (published pair transfers cannot be retried one-sided)");
+    if (!std::isfinite(result.energy)) {
+        throw std::runtime_error("Nonfinite Hopkins energy at own-step closure");
     }
+    // The thermal part may be nonpositive here: the caller owns the dual-energy decision.
     return result;
+}
+
+// Thermal energy recovered from the conserved total by subtracting the kinetic energy.
+inline double thermalEnergy(Conserved const& state, FlopCount* operations = nullptr) {
+    if (!(state.mass > 0.0)) {
+        throw std::invalid_argument("Hopkins thermal energy requires a positive mass");
+    }
+    detail::countFlops(operations, 3);
+    return state.energy - 0.5 * dot(state.momentum, state.momentum, operations) / state.mass;
+}
+
+// Entropic function K = P rho^-gamma = (gamma-1) u rho^(1-gamma) of a cell with specific
+// thermal energy u. It is the dual-energy auxiliary variable: an MFM cell exchanges no
+// mass, so K is constant along the cell in smooth adiabatic flow and only shocks,
+// the cosmological expansion source and the thermal sources change it. The same comoving
+// variables as the conserved state are used throughout, so a homogeneous expansion
+// scales K exactly as the closure scales the thermal energy.
+inline double entropyFunction(
+    double specificThermalEnergy, double density, double gamma, FlopCount* operations = nullptr) {
+    if (!(density > 0.0) || !std::isfinite(density) || !(gamma > 1.0) || !std::isfinite(gamma) ||
+        !std::isfinite(specificThermalEnergy)) {
+        throw std::invalid_argument("Invalid Hopkins entropic function inputs");
+    }
+    detail::countFlops(operations, 3);
+    return (gamma - 1.0) * specificThermalEnergy * std::pow(density, 1.0 - gamma);
+}
+
+// Specific thermal energy u = K rho^(gamma-1) / (gamma-1) implied by the entropic function.
+inline double thermalEnergyFromEntropy(
+    double entropy, double density, double gamma, FlopCount* operations = nullptr) {
+    if (!(density > 0.0) || !std::isfinite(density) || !(gamma > 1.0) || !std::isfinite(gamma) ||
+        !std::isfinite(entropy)) {
+        throw std::invalid_argument("Invalid Hopkins entropy thermal energy inputs");
+    }
+    detail::countFlops(operations, 3);
+    return entropy * std::pow(density, gamma - 1.0) / (gamma - 1.0);
+}
+
+struct DualEnergyClosure {
+    Conserved state;
+    bool switched = false;
+    // Energy added to the cell by replacing the total-energy thermal estimate.
+    double correction = 0.0;
+};
+
+// Dual-energy pressure switch of Bryan et al. (1995), Comput. Phys. Commun. 89, 149,
+// equation 10, with the entropic function as the auxiliary variable. While the thermal
+// energy recovered from the total energy exceeds pressureSwitch times the total energy,
+// the conservative closure stands. Otherwise the thermal energy is swamped by kinetic
+// cancellation (cold, high-Mach gas) and is replaced by the entropy estimate at the
+// closing volume; the returned correction is the resulting change of total energy,
+// which the caller books as a nonconservative source. A pressure switch of zero keeps
+// every positive total-energy estimate and still rescues a nonpositive one.
+inline DualEnergyClosure dualEnergyClosure(Conserved const& state, double entropy, double volume,
+    double gamma, double pressureSwitch, FlopCount* operations = nullptr) {
+    if (!(state.mass > 0.0) || !std::isfinite(state.mass) || !(volume > 0.0) ||
+        !std::isfinite(volume) || !(gamma > 1.0) || !std::isfinite(gamma) || !(entropy > 0.0) ||
+        !std::isfinite(entropy) || !(pressureSwitch >= 0.0) || !(pressureSwitch < 1.0)) {
+        throw std::invalid_argument("Invalid Hopkins dual-energy closure");
+    }
+    DualEnergyClosure result;
+    result.state = state;
+    detail::countFlops(operations, 3);
+    double const kinetic = 0.5 * dot(state.momentum, state.momentum, operations) / state.mass;
+    double const thermal = state.energy - kinetic;
+    if (std::isfinite(thermal) && thermal > pressureSwitch * state.energy) {
+        return result;
+    }
+    detail::countFlops(operations, 4);
+    double const replacement =
+        state.mass * thermalEnergyFromEntropy(entropy, state.mass / volume, gamma, operations);
+    if (!(replacement > 0.0) || !std::isfinite(replacement)) {
+        throw std::runtime_error(
+            "Nonpositive Hopkins thermal energy at own-step closure from both the total energy "
+            "and the entropy; reduce hydro.cfl (published pair transfers cannot be retried "
+            "one-sided)");
+    }
+    result.state.energy = kinetic + replacement;
+    result.switched = true;
+    result.correction = result.state.energy - state.energy;
+    return result;
+}
+
+// Dual-energy update switch of Bryan et al. (1995), equation 11: the auxiliary follows
+// the total-energy closure whenever the cell's thermal energy density reaches
+// updateSwitch times the largest total energy density among the cell and its neighbors,
+// so shock heating enters the entropy; a cold cell inside a hot neighborhood keeps its
+// own adiabatic entropy. A nonpositive thermal estimate is never adopted.
+inline bool entropyUpdateDue(
+    double thermalEnergyDensity, double maximumEnergyDensity, double updateSwitch) {
+    if (!(updateSwitch >= 0.0) || !std::isfinite(updateSwitch)) {
+        throw std::invalid_argument("Invalid Hopkins dual-energy update switch");
+    }
+    return thermalEnergyDensity > 0.0 && std::isfinite(thermalEnergyDensity) &&
+        thermalEnergyDensity >= updateSwitch * maximumEnergyDensity;
 }
 
 struct PairGravityWorkIntegral {
@@ -313,8 +410,9 @@ inline PairGravityWorkIntegral integratePairGravityWork(Vector const& initial,
 
 inline Vector multiply(
     Matrix const& matrix, Vector const& vector, FlopCount* operations = nullptr) {
-    return {dot(matrix[0], vector, operations), dot(matrix[1], vector, operations),
-        dot(matrix[2], vector, operations)};
+    detail::countFlops(operations, 15);
+    auto const result = matrix * vector;
+    return {result[0], result[1], result[2]};
 }
 
 // Safeguarded Newton step for the monotonically increasing kernel-count sum.
@@ -358,6 +456,73 @@ inline double supportRadiusStep(double radius, double residual, double derivativ
     return floatStorage ? double(float(next)) : next;
 }
 
+namespace detail {
+
+    template <int dimensions>
+    inline Geometry invertMoment(Geometry result, Matrix const& moment, double scale,
+        double maximumCondition, FlopCount* operations) {
+        math::SymmetricMatrix<double, dimensions> activeMoment;
+        math::SymmetricMatrix<double, dimensions> normalized;
+        for (int row = 0; row < dimensions; ++row) {
+            for (int column = 0; column <= row; ++column) {
+                activeMoment(row, column) = moment(row, column);
+                countFlops(operations, 1);
+                normalized(row, column) = moment(row, column) / scale;
+            }
+        }
+        // These leading-minor ratios are the squared Cholesky pivots. Preserve
+        // the normalized SPD rejection policy without factoring the matrix.
+        // This arithmetic is validation only, so it does not enter FLOP totals.
+        constexpr double kPivotTolerance = 64.0 * std::numeric_limits<double>::epsilon();
+        if (!(normalized(0, 0) > kPivotTolerance)) {
+            return result;
+        }
+        if constexpr (dimensions >= 2) {
+            double const minor =
+                normalized(0, 0) * normalized(1, 1) - normalized(0, 1) * normalized(0, 1);
+            if (!(minor / normalized(0, 0) > kPivotTolerance)) {
+                return result;
+            }
+        }
+        // The application SPD and condition checks own admissibility. The shared
+        // inverse still checks exact singularity and finite inputs/results.
+        math::SymmetricMatrix<double, dimensions> inverse;
+        size_t inverseOperations = 0;
+        auto const status =
+            math::tryInverse(activeMoment, inverse, math::MatrixOptions<double>{0.0, 0.0},
+                operations != nullptr ? &inverseOperations : nullptr);
+        countFlops(operations, inverseOperations);
+        if (status != math::MatrixStatus::Success) {
+            return result;
+        }
+        // Cancel the physical scale before squaring either matrix. Computing
+        // ||E||^2 ||E^-1||^2 first can overflow or underflow for a well-conditioned E.
+        countFlops(operations, dimensions * (dimensions + 1) / 2);
+        auto const normalizedInverse = inverse * scale;
+        if constexpr (dimensions == 3) {
+            // B_22 = minor_01/det(E) is the reciprocal of the final squared
+            // Cholesky pivot. Reuse it instead of evaluating the determinant twice.
+            double const inversePivot = normalizedInverse(2, 2);
+            if (!(inversePivot > 0.0 && inversePivot < 1.0 / kPivotTolerance)) {
+                return result;
+            }
+        }
+        for (int row = 0; row < dimensions; ++row) {
+            for (int column = 0; column < dimensions; ++column) {
+                result.inverseMoment(row, column) = inverse(row, column);
+            }
+        }
+        countFlops(operations, 4 * dimensions * dimensions + 3);
+        result.conditionNumber =
+            std::sqrt(math::squaredNorm(normalized) * math::squaredNorm(normalizedInverse)) /
+            double(dimensions);
+        result.valid =
+            std::isfinite(result.conditionNumber) && result.conditionNumber <= maximumCondition;
+        return result;
+    }
+
+}    // namespace detail
+
 // Equations (24)-(26), (27), and (77). kernelSum includes the self contribution;
 // kernelWeightedMoment is sum W(r,h) r tensor r, without particle-mass weighting.
 // A rejected matrix must trigger a larger neighbor search (Appendix C), never a
@@ -375,69 +540,23 @@ inline Geometry makeGeometry(double kernelSum, Matrix const& kernelWeightedMomen
     for (int i = 0; i < dimensions; i++) {
         for (int j = 0; j < dimensions; j++) {
             detail::countFlops(operations, 1);
-            moment[i][j] = kernelWeightedMoment[i][j] / kernelSum;
-            scale = std::max(scale, std::abs(moment[i][j]));
+            moment(i, j) = kernelWeightedMoment(i, j) / kernelSum;
+            if (!std::isfinite(moment(i, j))) {
+                return result;
+            }
+            scale = std::max(scale, std::abs(moment(i, j)));
         }
     }
     if (!(scale > 0.0) || !std::isfinite(scale)) {
         return result;
     }
-    Matrix lower{};
-    for (int i = 0; i < dimensions; i++) {
-        for (int j = 0; j <= i; j++) {
-            detail::countFlops(operations, 1);
-            double value = moment[i][j] / scale;
-            for (int k = 0; k < j; k++) {
-                detail::countFlops(operations, 2);
-                value -= lower[i][k] * lower[j][k];
-            }
-            if (i == j) {
-                if (!(value > 64.0 * std::numeric_limits<double>::epsilon())) {
-                    return result;
-                }
-                detail::countFlops(operations, 1);
-                lower[i][j] = std::sqrt(value);
-            } else {
-                detail::countFlops(operations, 1);
-                lower[i][j] = value / lower[j][j];
-            }
-        }
+    if (dimensions == 1) {
+        return detail::invertMoment<1>(result, moment, scale, maximumCondition, operations);
     }
-    for (int column = 0; column < dimensions; column++) {
-        Vector solution{};
-        for (int i = 0; i < dimensions; i++) {
-            double value = i == column ? 1.0 : 0.0;
-            for (int j = 0; j < i; j++) {
-                detail::countFlops(operations, 2);
-                value -= lower[i][j] * solution[j];
-            }
-            detail::countFlops(operations, 1);
-            solution[i] = value / lower[i][i];
-        }
-        for (int i = dimensions - 1; i >= 0; i--) {
-            double value = solution[i];
-            for (int j = i + 1; j < dimensions; j++) {
-                detail::countFlops(operations, 2);
-                value -= lower[j][i] * solution[j];
-            }
-            detail::countFlops(operations, 1);
-            solution[i] = value / lower[i][i];
-            detail::countFlops(operations, 1);
-            result.inverseMoment[i][column] = solution[i] / scale;
-        }
+    if (dimensions == 2) {
+        return detail::invertMoment<2>(result, moment, scale, maximumCondition, operations);
     }
-    double momentNorm = 0.0;
-    double inverseNorm = 0.0;
-    for (int i = 0; i < dimensions; i++) {
-        detail::countFlops(operations, 2);
-        momentNorm += dot(moment[i], moment[i], operations);
-        inverseNorm += dot(result.inverseMoment[i], result.inverseMoment[i], operations);
-    }
-    detail::countFlops(operations, 3);
-    result.conditionNumber = std::sqrt(momentNorm * inverseNorm) / double(dimensions);
-    result.valid =
-        std::isfinite(result.conditionNumber) && result.conditionNumber <= maximumCondition;
-    return result;
+    return detail::invertMoment<3>(result, moment, scale, maximumCondition, operations);
 }
 
 // Differentiate B = E^-1, where E is the normalized moment used by makeGeometry.
@@ -446,24 +565,8 @@ inline GeometryRate geometryRate(Geometry const& geometry, double volumeRate,
     Matrix const& momentRate, FlopCount* operations = nullptr) {
     GeometryRate result;
     result.volume = volumeRate;
-    Matrix intermediate{};
-    for (int row = 0; row < 3; row++) {
-        for (int column = 0; column < 3; column++) {
-            for (int k = 0; k < 3; k++) {
-                detail::countFlops(operations, 2);
-                intermediate[row][column] += geometry.inverseMoment[row][k] * momentRate[k][column];
-            }
-        }
-    }
-    for (int row = 0; row < 3; row++) {
-        for (int column = 0; column < 3; column++) {
-            for (int k = 0; k < 3; k++) {
-                detail::countFlops(operations, 2);
-                result.inverseMoment[row][column] -=
-                    intermediate[row][k] * geometry.inverseMoment[k][column];
-            }
-        }
-    }
+    detail::countFlops(operations, 90);
+    result.inverseMoment = -(geometry.inverseMoment * momentRate * geometry.inverseMoment);
     return result;
 }
 
@@ -650,9 +753,10 @@ inline Primitive reconstruct(Primitive const& center, Gradient const& gradient,
 
 // An outward (i -> j) flux, including |area|. Apply -dt*flux to i and +dt*flux
 // to j, once per pair. Appendix A supplies the Galilean boost/deboost. In MFM
-// the Riemann face additionally moves at S_* (section 2.6): mass flux is exactly
+// accepted HLLC uses a face moving at S_* (section 2.6): mass flux is exactly
 // zero, momentum flux is P_* n, and energy flux is P_* (S_*+v_frame dot n).
-// Scalar reference and packed production use the same strict HLLC kernel.
+// HLL fallback uses its massless-plane speed and the full moving-face flux.
+// Scalar reference and packed production share the HLLC/HLL kernel.
 inline Flux riemannFlux(Primitive const& left, Primitive const& right, Vector const& area,
     Vector const& frameVelocity, double gamma, bool finiteMass, FlopCount* operations = nullptr) {
     PrimitiveValues<double> const leftValues{left.density, left.velocity, left.pressure};

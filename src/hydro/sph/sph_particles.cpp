@@ -1150,7 +1150,7 @@ void sphParticlesLoad(FILE* fp) {
 #if COSMICTIGER_ENABLE_HOPKINS
         uint32_t stateHeader[3];
         FREAD(stateHeader, sizeof(uint32_t), 3, fp);
-        if (stateHeader[0] != 0x484f5053U || stateHeader[1] != 6U ||
+        if (stateHeader[0] != 0x484f5053U || stateHeader[1] != 7U ||
             stateHeader[2] != sizeof(HopkinsParticleState)) {
             THROW_ERROR("Incompatible Hopkins particle-state checkpoint layout\n");
         }
@@ -1197,7 +1197,7 @@ void sphParticlesSave(FILE* fp) {
     }
     if (getOptions().hydro.method != "sph") {
 #if COSMICTIGER_ENABLE_HOPKINS
-        uint32_t stateHeader[3] = {0x484f5053U, 6U, sizeof(HopkinsParticleState)};
+        uint32_t stateHeader[3] = {0x484f5053U, 7U, sizeof(HopkinsParticleState)};
         FWRITE(stateHeader, sizeof(uint32_t), 3, fp);
         if (count != 0) {
             // HPX serializes members individually. Canonicalize native padding

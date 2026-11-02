@@ -43,7 +43,7 @@ and external acceleration. If the predicted face is nonfinite or reverses
 orientation, as can occur when a pair leaves the compact kernel support, that
 pair uses a conservative first-order flux for the interval.
 The MFV face follows the interpolated particle velocity; MFM additionally
-moves the face at the Riemann contact speed, making its mass flux zero
+moves the face at the Riemann zero-mass-flux speed, making its mass flux zero
 (sections 2.4 and 2.6). The common Riemann flux supplies shock dissipation;
 the SPH artificial-viscosity controls apply to the SPH method.
 
@@ -54,9 +54,10 @@ The current geometry acceptance bound is also 100, so accepted gradients use
 the upper beta bound of 2.
 
 The numerical primitives are in `cosmictiger/hydro/hopkins/hopkins.hpp`, with the shared
-scalar/SIMD reconstruction and HLLC arithmetic in
+scalar/SIMD reconstruction and HLLC/HLL arithmetic in
 `cosmictiger/hydro/hopkins/hopkins_simd.hpp`. HLLC uses the Davis extrema of the two
-one-sided acoustic speeds. For face vector \(\boldsymbol A\) and input frame
+one-sided acoustic speeds; a rejected HLLC state falls back to HLL with those
+same speeds and reconstructed inputs. For face vector \(\boldsymbol A\) and input frame
 velocity \(\boldsymbol w\), define \(A=|\boldsymbol A|\),
 \(\boldsymbol n=\boldsymbol A/A\),
 \(\boldsymbol v_K=\boldsymbol v_K^{\rm lab}-\boldsymbol w\), and
@@ -122,6 +123,39 @@ uniform pack takes that side directly, and a mixed pack selects its state with
 a lane mask. Both then evaluate one physical flux and one correction. MFM
 instead follows the contact-moving face and uses
 \(F_{\rm MFM}=(0,P_*\boldsymbol n,P_*S_*)\), so its mass flux is exactly zero.
+
+If the HLLC contact or either conserved star state is nonphysical, the affected
+lane uses the single HLL mean and flux without changing the wave bounds:
+
+\[
+ U_H=\frac{S_RU_R-S_LU_L+F_L-F_R}{S_R-S_L},\qquad
+ F_H=\frac{S_RF_L-S_LF_R+S_LS_R(U_R-U_L)}{S_R-S_L}.
+\]
+
+MFV selects \(F_L\) when \(S_L\geq0\), \(F_R\) when \(S_R\leq0\), and
+\(F_H\) otherwise. MFM instead chooses the zero-mass-flux plane
+
+\[
+ s_H=\frac{F_{H,\rho}}{\rho_H},\qquad F_{\rm MFM,H}=F_H-s_HU_H.
+\]
+
+This conservative moving-face construction also appears in
+[Lupi (2023), equations (15)-(18)](https://arxiv.org/html/2210.05682v2#S2.SS3.SSS2).
+Its mass component is set to exact zero after forming \(s_H\); momentum and
+energy retain the full HLL moving-face flux. Neither replacing \(F_H\) by the
+EOS flux \(F(U_H)\) nor discarding only its mass component gives this result.
+The positive HLL density places the moving plane within the fan because
+\(s_H-S_L=\rho_L(u_L-S_L)/\rho_H>0\) and
+\(S_R-s_H=\rho_R(S_R-u_R)/\rho_H>0\).
+
+The HLL mean must have positive density and internal energy. Its normal
+momentum flux can nevertheless be negative: equal states with opposing
+normal velocities \((-v,+v)\) give \(s_H=0\) and
+\(F_{H,m}\cdot\boldsymbol n=P-\rho cv\). This flux is not the EOS pressure
+of the HLL mean and is not clamped. The fallback adds diffusion while retaining
+opposite pair transfers and fixed particle masses in MFM. A physical HLL mean
+alone does not establish positivity of the complete meshless timestep update.
+
 For either method, writing the selected frame flux as
 \((f_\rho,\boldsymbol f_m,f_E)\), the returned area-integrated laboratory flux is
 
@@ -132,30 +166,57 @@ For either method, writing the selected frame flux as
                      +\tfrac12|\boldsymbol w|^2 f_\rho\right).
 \]
 
-Thus MFM returns momentum flux \(AP_*\boldsymbol n\) and energy flux
+The boost always uses the original input frame \(\boldsymbol w\), including
+after the HLL moving-plane subtraction. For accepted HLLC states, MFM returns
+momentum flux \(AP_*\boldsymbol n\) and energy flux
 \(AP_*(S_*+\boldsymbol w\cdot\boldsymbol n)\).
-The reported signal speed is \(\max(|S_L|,|S_R|)\); the contact speed is \(S_*\).
+The reported signal speed is \(\max(|S_L|,|S_R|)\); the contact-speed field is
+\(S_*\) for HLLC and \(s_H\) for HLL.
 
-Inputs must be finite with \(\rho_K,P_K>0\) and \(\gamma>1\). The solver requires
-finite ordered wave bounds, \(D<0\), \(S_L<S_*<S_R\), and \(P_*>0\), together
-with finite star states, \(\rho_K^*>0\), and
-\(E_K^*-|\boldsymbol m_K^*|^2/(2\rho_K^*)>0\) on both sides. Nonfinite area
-norms or output fluxes also fail. Any failure terminates the solve with an
-exception; SIMD diagnostics identify the failing lane. There are no wave-speed
-retries, HLLE fallback, or exact-contact fallback.
+Inputs must be finite with \(\rho_K,P_K>0\) and \(\gamma>1\). Finite ordered
+wave bounds and \(D<0\) are required before the contact calculation. HLLC is
+accepted when \(S_L<S_*<S_R\) and \(P_*>0\), with finite star states,
+\(\rho_K^*>0\), and \(E_K^*-|\boldsymbol m_K^*|^2/(2\rho_K^*)>0\) on both
+sides. Otherwise that lane uses HLL. Invalid inputs, a nonphysical HLL mean,
+nonfinite area norms, or nonfinite output fluxes still throw; diagnostics
+identify the failing SIMD lane and production pair IDs. There are no wave-speed
+retries, Einfeldt-speed substitutions, or exact-contact solves.
 Ill-conditioned gradient matrices cause the actual neighbor search
 to expand, up to the configured support bound, rather than introducing an SPH
 pressure-force fallback. An invalid face-area predictor uses a conservative
 first-order face flux.
-A nonpositive mass or thermal energy at an own-step closure stops with a diagnostic
-requesting a lower `hydro.cfl`. Already published transfers cannot be retried on
-only one endpoint: there is no one-sided first-order retry or nonconservative
-mass/energy floor.
-Thermal energy is recovered by subtracting kinetic energy from the conserved
-total energy. Hopkins's Appendix D dual-energy/entropy switch is not implemented,
-so extremely high-Mach, cold flows can lose thermal accuracy through cancellation
-or fail the positive-energy check. This backend does not reproduce the full
-high-Mach robustness machinery of GIZMO.
+A nonpositive mass at an own-step closure stops with a diagnostic. Already
+published transfers cannot be retried on only one endpoint: there is no
+one-sided first-order retry or nonconservative mass floor.
+
+Thermal energy is recovered by subtracting the kinetic energy from the conserved
+total energy, which loses accuracy through cancellation in cold, high-Mach gas.
+MFM therefore carries the dual-energy formalism of Bryan et al. (1995),
+Comput. Phys. Commun. 89, 149, with the entropic function
+\(K=P\rho^{-\gamma}\) of each cell, in the code's comoving variables, as the
+auxiliary variable. A fixed-mass cell exchanges no entropy, so \(K\) is constant
+between closures except for the cosmological expansion source, which scales it
+exactly as the closure scales the thermal energy, and the thermal sources, which
+add the same specific energy to both estimates. At each own-step closure the
+entropy estimate \(u_K=K\rho^{\gamma-1}/(\gamma-1)\), evaluated at the closing
+kernel-partition volume, replaces the total-energy estimate when the latter is
+nonpositive or below `hydro.dualEnergyPressureSwitch` (default `1e-3`) times the
+cell's total energy (Bryan et al. equation 10). The energy this adds is booked in
+the heating diagnostic like a thermal source, so the energy budget stays exact,
+and the per-step report counts such cells as `switched=`. After every closure and
+source of an instant, each closed cell's entropy follows its total-energy closure
+when the cell's thermal energy density reaches `hydro.dualEnergyUpdateSwitch`
+(default `0.1`) times the largest total energy density among the cell and its
+neighbours (equation 11); otherwise it keeps its own adiabatic value. Shocks thus
+heat the entropy while a cold cell beside hot gas keeps its cold state. Both
+switches are ordinary `hydro` options with INI and command-line overrides.
+Setting the pressure switch to zero restores the strict closure, which stops
+with a diagnostic requesting a lower `hydro.cfl` when the thermal energy becomes
+nonpositive. MFV exchanges mass and would have to advect the entropy with its
+mass fluxes, so it keeps the strict total-energy closure. The entropy is stored
+with the per-particle integration state, whose checkpoint layout version is 6.
+This backend still does not reproduce the full high-Mach robustness machinery of
+GIZMO.
 
 ## Implementation scope
 
@@ -168,10 +229,13 @@ retain their supported position choices. The CPU meshless backend supports
 hierarchical gravity because changing source masses would require additional
 handling in the held gravity interaction. The gravity solver is an independent
 choice: `gravity.method.far=fmm` or `pmmm` can accompany the supported integrators.
-A uniform global timestep is optional; choosing PMMM does not select it. Both chemistry and star formation must be disabled for MFM/MFV;
-incompatible combinations are rejected during option validation. Hierarchical
-MFM also requires `lightcone.enabled=false` until crossings can be emitted from
-completed hydro trajectory segments instead of tentative gravity projections.
+A uniform global timestep is optional; choosing PMMM does not select it. MFM
+accepts `chemistry.enabled` and `starFormation.enabled` under traditional or
+global integration (see [Chemistry and star formation](#chemistry-and-star-formation));
+both must be disabled for MFV and for hierarchical hydro, and incompatible
+combinations are rejected during option validation. Hierarchical MFM also
+requires `lightcone.enabled=false` until crossings can be emitted from completed
+hydro trajectory segments instead of tentative gravity projections.
 
 `src/hydro/hopkins.cpp` is a CPU SIMD backend, including in a
 CUDA-enabled build. It gathers gas state from all HPX localities onto the
@@ -397,8 +461,8 @@ cells) are reimported before reconstruction. Under traditional integration
 that it can select the due cells while the gravity kick runs; the subsequent
 `hopkinsKick` reimports the records whose forces changed without re-solving.
 
-Restart (checkpoint schema 6, pair-cache version 2) and migration are
-unchanged in format: checkpoint loading and gas teardown discard the resident
+Restart and migration are unchanged in form (the merge with main's dual-energy
+entropy field made the state layout version 7, 472 bytes, pair-cache version 2): checkpoint loading and gas teardown discard the resident
 records and owner mirrors through `hopkinsResetSources`, the first event after
 a restart recollects everything, and every later decision depends only on the
 checkpointed state and the event time. The sound-wave diagnostic solves all
@@ -551,12 +615,43 @@ adaptive gravitational-softening correction. This integration retains the
 existing fixed gravitational softening and does not implement the Appendix H2
 adaptive-softening terms or claim full GIZMO gravity equivalence.
 
-The ideal-gas equation of state uses `hydro.gamma`. Coupling chemistry and
-star formation to the conserved meshless state requires additional
-implementation. The cosmology INI enables chemistry, so explicitly use
-`--chemistry.enabled=false --starFormation.enabled=false` when selecting a
-meshless method with that configuration. These solvers do not add GIZMO's
-MHD, feedback, particle splitting, or other optional physics.
+The ideal-gas equation of state uses `hydro.gamma`. These solvers do not add
+GIZMO's MHD, feedback, particle splitting, or other optional physics.
+
+### Chemistry and star formation
+
+MFM couples the GADGET-4 equilibrium cooling of `docs/chemistry_cpu_support.md`
+and the Springel & Hernquist star formation of `docs/star_formation.md` to its
+conserved state; `hydro.gamma=5/3` is required by cooling as for SPH. Because MFM
+exchanges no mass between cells, each cell's specific thermal energy maps
+one-to-one onto its conserved total energy, and the per-particle cooling guess
+and star-formation metadata stay with the cell. The sources are operator split
+exactly as in the SPH step: when a cell's own-step interval closes in
+`hopkinsKick`, after the pair transfers and the gravitational work of that
+interval are folded into the anchor and before the new primitives, timestep
+selection, reconstruction and pair fluxes, the combined source advances the cell
+over the duration it actually closed. An early wake-up or the terminal closure
+therefore integrates the source over the shortened interval rather than the
+scheduled rung interval. The source consumes the cell's current density
+(mass over the kernel-partition volume) and the float stored thermal energy, as
+the SPH coupling does, and applies only the resulting change to the double
+anchor, so storage rounding does not accumulate; the same specific-energy change
+enters the cell's dual-energy entropy. The heating diagnostic and the
+synchronized pressure integral of the cosmological energy budget follow the SPH
+conventions.
+
+A whole-cell conversion decided at a closure keeps the cell's closing state for
+that kick: it opens no new pair interval (its old pairs were settled at the
+closure), it still participates in its neighbours' volume partition and
+gradients at that instant, and the scatter removes it from the gas set and
+registers the new star for the opening gravity half kick that
+`starFormationOpenNewStars` applies. The next kick rebuilds supports and
+geometry without it. Per-step reports include the number of conversions as
+`stars=`.
+
+MFV transfers mass between cells and would require advecting the cooling and
+star-formation state with those fluxes; it still requires
+`--chemistry.enabled=false --starFormation.enabled=false`.
 
 For example, from the repository root run the existing Sod setup with either
 meshless solver, substituting your build directory. Replace `traditional` with
@@ -572,6 +667,32 @@ path/to/build/cosmictiger --configuration=configurations/sod.ini --hydro.method=
 ```
 
 ## Validation
+
+### Dual-energy entropy switch validation on 2026-11-02
+
+Branch `claude/hopkins_entropy_switch`, CPU Release tree (g++-15, Hopkins + SPH +
+cooling + star formation, Fixed64, FMM, traditional and global integrators).
+`hopkins_test` passes 69 unit tests, including six new ones: entropic-function
+inversion and adiabatic compression, the closure's expansion scaling against the
+entropy scaling, a warm cell left conservative, a cold supersonic cell whose swamped
+thermal energy is replaced from the entropy with the booked correction, a
+nonpositive thermal energy rescued at both switch settings, and the update-switch
+thresholds. The CTests `startup_options` (7.0 s), `hydro_methods` (23.9 s),
+`hopkins_flops_application` (3.9 s), `hopkins_application` (147.8 s),
+`hopkins_global_sources` (17.6 s), `hopkins_thermal_sources` (87.3 s),
+`hopkins_fmm_traditional_cpu` (12.4 s), `hopkins_fmm_global_cpu` (13.6 s) and
+`checkpoint_integrity` (94.4 s) passed serially; with the default switches no
+fixture took a pressure switch, so their conservation and exact-restart checks are
+unchanged. A 16^3 MFM Sod run over 40 steps took zero switches and conserved
+energy exactly. The same run with the diagnostic setting
+`--hydro.dualEnergyPressureSwitch=0.99`, which puts nearly every moving cell on
+the entropy estimate, took 640 to 1920 switches per step, kept every state
+positive, lost 0.55% of the total energy (the entropy formulation omits shock
+heating, as expected) and differed from the conservative run by a mean relative
+density of 2.6e-3 (maximum 2.6e-2) and a mean relative thermal energy of 2.0e-2
+(maximum 0.25, at the shock). Not validated: the 128^3 `lcdm.ini` cosmology with
+cooling and star formation that failed at z=6.86 was not rerun under the shared
+6-core limit.
 
 The numerical results dated 2026-10-21 and 2026-10-22 below are historical
 measurements copied with the saved implementation. They are not fresh validation
@@ -633,7 +754,31 @@ of `tests/run_hopkins.py`, the `hopkins_flops_application` CTest, all 117
 Hopkins/SPH/drift/source-tree gtests, and the two SPH hierarchical CTests.
 Multi-locality runs were not repeated for this change.
 
-### SIMD unit validation on 2026-11-02
+### Davis HLL fallback validation on 2026-11-02
+
+The CPU application and unit binary were rebuilt in `build/hopkins_sources_cpu`
+with GCC 15, Fixed64 positions, FMM expansion degree 6, and traditional/global
+integrators. All 59 Hopkins unit tests passed. The fallback coverage includes
+the captured failing pair's normal projections, extreme expansions, an
+independent conservation-jump HLL reference, rejected star energy, supersonic
+upwind selection, scalar/SIMD agreement, mixed fallback masks with NaN padding
+and zero-area faces, pair reversal, Galilean covariance, and conservative
+fixed-mass pair updates. Existing four-region HLLC and Sod checks still pass.
+
+`hopkins_application` passed in 107.76 seconds, including MFM/MFV conservation,
+individual-rung stepping, force coupling and exact restarts. `startup_options`
+and `hopkins_flops_application` also passed. The original 65,536-particle
+`release/lcdm_present.ini` failure was reproduced with CPU module overrides,
+two workers, Silo disabled and redirected output. With the fallback, this same
+setup completed two iterations successfully in 84.05 seconds. The original
+failure occurred during initial spatial reconstruction of pair `(0,18704)`.
+
+This is bounded CPU validation, not a full cosmological run, CUDA/MPI validation,
+or a performance comparison. The `release/cosmictiger` binary was not rebuilt.
+
+### Initial SIMD unit validation on 2026-11-02
+
+This historical validation predates the HLL fallback described above.
 
 The 49 tests in `tests/hopkins.cpp` pass in standalone GCC 15 C++20 builds at
 `-O2`, with fast math and contraction disabled, on both the native four-double
@@ -649,7 +794,9 @@ independent Sod evolution remains positive, conservative, and convergent.
 These unit checks do not establish application, MPI, GPU, or performance results
 for the SIMD revision.
 
-### SIMD application validation on 2026-11-02
+### Initial SIMD application validation on 2026-11-02
+
+This historical validation predates the HLL fallback described above.
 
 A fresh `build/hopkins_simd` CPU build uses GCC 15, C++20, `-O2 -march=native`,
 Fixed64 positions, FMM expansion degree 6, and traditional/global integrators.

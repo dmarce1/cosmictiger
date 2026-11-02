@@ -10,7 +10,9 @@
 
 #include <array>
 #include <cmath>
+#include <iomanip>
 #include <limits>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -75,20 +77,27 @@ namespace detail {
         return (value <= limit) && (value >= -limit);
     }
 
-    template <class Exception, class Mask>
-    inline void requireArithmetic(Mask const& failure, char const* message) {
+    template <class Exception, class Mask, class Describe>
+    inline void requireArithmetic(
+        Mask const& failure, char const* message, Describe const& describe) {
         if (simdAnyOf(failure)) {
             if constexpr (std::is_same_v<Mask, bool>) {
-                throw Exception(message);
+                throw Exception(std::string(message) + describe(0));
             } else {
                 // Scalar indexing is restricted to the exceptional diagnostic path.
                 for (size_t lane = 0; lane < Mask::size(); lane++) {
                     if (failure[lane]) {
-                        throw Exception(std::string(message) + " in lane " + std::to_string(lane));
+                        throw Exception(std::string(message) + " in lane " + std::to_string(lane) +
+                            describe(lane));
                     }
                 }
             }
         }
+    }
+
+    template <class Exception, class Mask>
+    inline void requireArithmetic(Mask const& failure, char const* message) {
+        requireArithmetic<Exception>(failure, message, [](size_t) { return std::string{}; });
     }
 
     template <class Real>
@@ -146,8 +155,12 @@ namespace detail {
         Real const& contact, Real const& starPressure, FlopCount* operations) {
         countArithmeticFlops<Real>(operations, 19);
         Real const width = waveSpeed - contact;
+        // A rejected contact's benign midpoint can round onto a wave endpoint.
+        // Such a lane is already destined for HLL; do not divide by zero while
+        // evaluating its unselected star alongside valid SIMD lanes.
+        Real const safeWidth = simdSelect(width != Real(0.0), width, Real(1.0));
         ConservedValues<Real> result;
-        result.mass = state.density * waveRelativeVelocity / width;
+        result.mass = state.density * waveRelativeVelocity / safeWidth;
         Real const velocityChange = contact - normalVelocity;
         for (int dim = 0; dim < 3; dim++) {
             Real const velocity = state.velocity[dim] + velocityChange * normal[dim];
@@ -155,15 +168,16 @@ namespace detail {
         }
         result.energy = (waveRelativeVelocity * conservedState.energy -
                             state.pressure * normalVelocity + starPressure * contact) /
-            width;
+            safeWidth;
         return result;
     }
 
     template <class Real>
     inline ArithmeticMask<Real> arithmeticPhysical(ConservedValues<Real> const& state) {
         // This energy check is validation-only; it does not contribute to FLOPs.
+        Real const safeMass = simdSelect(state.mass > Real(0.0), state.mass, Real(1.0));
         Real const internalEnergy = state.energy -
-            Real(0.5) * arithmeticDot(state.momentum, state.momentum, nullptr) / state.mass;
+            Real(0.5) * arithmeticDot(state.momentum, state.momentum, nullptr) / safeMass;
         return (state.mass > Real(0.0)) && arithmeticFinite(state.mass) &&
             arithmeticFinite(state.energy) && arithmeticFinite(state.momentum[0]) &&
             arithmeticFinite(state.momentum[1]) && arithmeticFinite(state.momentum[2]) &&
@@ -178,6 +192,21 @@ namespace detail {
         result.energy = simdSelect(mask, yes.energy, no.energy);
         for (int dim = 0; dim < 3; dim++) {
             result.momentum[dim] = simdSelect(mask, yes.momentum[dim], no.momentum[dim]);
+        }
+        return result;
+    }
+
+    template <class Real>
+    inline ConservedValues<Real> arithmeticFlux(PrimitiveValues<Real> const& primitive,
+        ConservedValues<Real> const& state, Vector3<Real> const& normal, Real const& velocity,
+        FlopCount* operations) {
+        countArithmeticFlops<Real>(operations, 12);
+        ConservedValues<Real> result;
+        result.mass = state.mass * velocity;
+        result.energy = (state.energy + primitive.pressure) * velocity;
+        for (int dim = 0; dim < 3; dim++) {
+            result.momentum[dim] =
+                state.momentum[dim] * velocity + primitive.pressure * normal[dim];
         }
         return result;
     }
@@ -217,7 +246,7 @@ inline Real pairLimiterValues(Real const& center, Real const& neighbor, Real con
 
 // Spatial reconstruction, pair limiter, and MUSCL-Hancock prediction operate on
 // independent faces in each lane. The reconstruction's existing cell-value
-// limiter is retained; the Riemann solver itself has no fallback.
+// limiter is retained independently of the Riemann solver's HLL fallback.
 template <class Real>
 inline PrimitiveValues<Real> reconstructValues(PrimitiveValues<Real> const& center,
     GradientValues<Real> const& gradient, Vector3<Real> const& offset,
@@ -259,12 +288,13 @@ inline PrimitiveValues<Real> reconstructValues(PrimitiveValues<Real> const& cent
     return detail::selectPrimitive(detail::arithmeticPhysical(result), result, center);
 }
 
-// Single-pass HLLC, using the two-sided Davis wave estimates (Toro, HLLC
+// HLLC with HLL fallback, using the two-sided Davis wave estimates (Toro, HLLC
 // lecture, equation 48): SL=min(uL-cL,uR-cR), SR=max(uL+cL,uR+cR).
 // https://www.prague-sum.com/download/2012/Toro_2-HLLC-RiemannSolver.pdf
 // Unclipped waves construct the contact/star states. Clipping only the selected
 // flux correction to min(0,SL) or max(0,SR) reduces four regions to two sides.
-// Invalid active inputs or nonphysical HLLC states are fatal to the caller.
+// Nonphysical HLLC contact/star states collapse to the HLL mean using the same
+// wave speeds. Invalid inputs or a nonphysical HLL mean remain fatal.
 template <class Real>
 inline FluxValues<Real> riemannFluxValues(PrimitiveValues<Real> left, PrimitiveValues<Real> right,
     Vector3<Real> const& inputArea, Vector3<Real> const& inputFrameVelocity, double gamma,
@@ -338,36 +368,83 @@ inline FluxValues<Real> riemannFluxValues(PrimitiveValues<Real> left, PrimitiveV
         solve && (!detail::arithmeticFinite(denominator) || !(denominator < zero)),
         "Hopkins HLLC has a degenerate contact denominator");
     detail::countArithmeticFlops<Real>(operations, 14);
-    Real const contact = (right.pressure - left.pressure + leftImpedance * leftVelocity -
-                             rightImpedance * rightVelocity) /
+    Real contact = (right.pressure - left.pressure + leftImpedance * leftVelocity -
+                       rightImpedance * rightVelocity) /
         denominator;
     Real const leftPressure = left.pressure + leftImpedance * (contact - leftVelocity);
     Real const rightPressure = right.pressure + rightImpedance * (contact - rightVelocity);
     Real const starPressure = Real(0.5) * (leftPressure + rightPressure);
-    detail::requireArithmetic<std::runtime_error>(solve &&
-            (!detail::arithmeticFinite(contact) || !(contact > leftWave) ||
-                !(contact < rightWave) || !(starPressure > zero) ||
-                !detail::arithmeticFinite(starPressure)),
-        "Hopkins HLLC has a nonphysical contact state");
+    auto const physicalContact = detail::arithmeticFinite(contact) && (contact > leftWave) &&
+        (contact < rightWave) && (starPressure > zero) && detail::arithmeticFinite(starPressure);
+    auto describeContact = [&, contact](size_t lane) {
+        // Extract and format just the rejected lane, after the failure mask
+        // is known. Successful solves retain the same packed arithmetic.
+        auto value = [lane](Real const& input) -> SimdScalar<Real> {
+            if constexpr (std::is_arithmetic_v<Real>) {
+                return input;
+            } else {
+                return input[lane];
+            }
+        };
+        auto const contactValue = value(contact);
+        auto const pressureValue = value(starPressure);
+        std::ostringstream message;
+        message << std::scientific
+                << std::setprecision(std::numeric_limits<SimdScalar<Real>>::max_digits10)
+                << " [failed:";
+        if (!std::isfinite(contactValue)) {
+            message << " finite(Sstar)";
+        }
+        if (!(contactValue > value(leftWave))) {
+            message << " Sstar>SL";
+        }
+        if (!(contactValue < value(rightWave))) {
+            message << " Sstar<SR";
+        }
+        if (!(pressureValue > SimdScalar<Real>(0.0))) {
+            message << " Pstar>0";
+        }
+        if (!std::isfinite(pressureValue)) {
+            message << " finite(Pstar)";
+        }
+        message << "; gamma=" << gamma << " rhoL=" << value(left.density)
+                << " pL=" << value(left.pressure) << " uL=" << value(leftVelocity)
+                << " cL=" << value(leftSound) << " rhoR=" << value(right.density)
+                << " pR=" << value(right.pressure) << " uR=" << value(rightVelocity)
+                << " cR=" << value(rightSound) << " SL=" << value(leftWave)
+                << " SR=" << value(rightWave) << " Sstar=" << contactValue
+                << " Pstar=" << pressureValue << "]";
+        return message.str();
+    };
     detail::countArithmeticFlops<Real>(operations, 1);
     Real const gammaMinusOne = Real(gamma) - one;
     auto const leftState = detail::arithmeticConserved(left, gammaMinusOne, operations);
     auto const rightState = detail::arithmeticConserved(right, gammaMinusOne, operations);
-    auto const leftStar = detail::arithmeticStar(left, leftState, normal, leftVelocity,
-        leftRelativeWave, leftWave, contact, starPressure, operations);
-    auto const rightStar = detail::arithmeticStar(right, rightState, normal, rightVelocity,
-        rightRelativeWave, rightWave, contact, starPressure, operations);
-    detail::requireArithmetic<std::runtime_error>(
-        solve && (!detail::arithmeticPhysical(leftStar) || !detail::arithmeticPhysical(rightStar)),
-        "Hopkins HLLC has a nonphysical star state");
+    // Rejected contact lanes must not divide by a zero star width while the
+    // remaining SIMD lanes construct their HLLC states. No scalar lane retries.
+    Real const starContact =
+        simdSelect(physicalContact, contact, Real(0.5) * leftWave + Real(0.5) * rightWave);
+    Real const safeStarPressure = simdSelect(physicalContact, starPressure, one);
+    detail::countArithmeticFlops<Real>(operations, 3);
+    auto leftStar = detail::arithmeticStar(left, leftState, normal, leftVelocity, leftRelativeWave,
+        leftWave, starContact, safeStarPressure, operations);
+    auto rightStar = detail::arithmeticStar(right, rightState, normal, rightVelocity,
+        rightRelativeWave, rightWave, starContact, safeStarPressure, operations);
+    auto const useHll = solve &&
+        (!physicalContact || !detail::arithmeticPhysical(leftStar) ||
+            !detail::arithmeticPhysical(rightStar));
+    // Keep unselected HLLC flux arithmetic finite even for rejected star states.
+    leftStar = detail::selectConserved(useHll, leftState, leftStar);
+    rightStar = detail::selectConserved(useHll, rightState, rightStar);
+    contact = simdSelect(physicalContact, contact, zero);
 
     detail::ConservedValues<Real> flux;
     if (finiteMass) {
         detail::countArithmeticFlops<Real>(operations, 4);
         for (int dim = 0; dim < 3; dim++) {
-            flux.momentum[dim] = starPressure * normal[dim];
+            flux.momentum[dim] = safeStarPressure * normal[dim];
         }
-        flux.energy = starPressure * contact;
+        flux.energy = safeStarPressure * contact;
     } else {
         auto const fromLeft = contact >= zero;
         PrimitiveValues<Real> side;
@@ -403,6 +480,57 @@ inline FluxValues<Real> riemannFluxValues(PrimitiveValues<Real> left, PrimitiveV
             flux.momentum[dim] = state.momentum[dim] * velocity + side.pressure * normal[dim] +
                 correctionWave * (star.momentum[dim] - state.momentum[dim]);
         }
+    }
+    if (simdAnyOf(useHll)) {
+        auto const leftFlux =
+            detail::arithmeticFlux(left, leftState, normal, leftVelocity, operations);
+        auto const rightFlux =
+            detail::arithmeticFlux(right, rightState, normal, rightVelocity, operations);
+        detail::countArithmeticFlops<Real>(operations, 3);
+        Real const inverseWidth = one / (rightWave - leftWave);
+        Real const waveProduct = leftWave * rightWave;
+        detail::ConservedValues<Real> mean;
+        detail::ConservedValues<Real> hllFlux;
+        // Conservation over the full wave fan. This equals the wave-width
+        // weighted mean of the two HLLC stars when that split is admissible.
+        auto collapse = [&](Real const& ul, Real const& ur, Real const& fl, Real const& fr,
+                            Real& meanValue, Real& fluxValue) {
+            detail::countArithmeticFlops<Real>(operations, 13);
+            meanValue = (rightWave * ur - leftWave * ul + fl - fr) * inverseWidth;
+            fluxValue = (rightWave * fl - leftWave * fr + waveProduct * (ur - ul)) * inverseWidth;
+        };
+        collapse(leftState.mass, rightState.mass, leftFlux.mass, rightFlux.mass, mean.mass,
+            hllFlux.mass);
+        collapse(leftState.energy, rightState.energy, leftFlux.energy, rightFlux.energy,
+            mean.energy, hllFlux.energy);
+        for (int dim = 0; dim < 3; dim++) {
+            collapse(leftState.momentum[dim], rightState.momentum[dim], leftFlux.momentum[dim],
+                rightFlux.momentum[dim], mean.momentum[dim], hllFlux.momentum[dim]);
+        }
+        detail::requireArithmetic<std::runtime_error>(useHll && !detail::arithmeticPhysical(mean),
+            "Hopkins HLL fallback has a nonphysical mean state", describeContact);
+        // HLL has no resolved contact. The mass-flux/density ratio defines the
+        // moving face which makes its ALE flux F_HLL - w U_HLL massless.
+        // Do not substitute the EOS flux F(U_HLL) or zero only the mass field.
+        detail::countArithmeticFlops<Real>(operations, 1);
+        Real const hllContact = hllFlux.mass / simdSelect(useHll, mean.mass, one);
+        detail::requireArithmetic<std::runtime_error>(useHll &&
+                (!detail::arithmeticFinite(hllContact) || !(hllContact > leftWave) ||
+                    !(hllContact < rightWave)),
+            "Hopkins HLL fallback has an invalid massless face speed", describeContact);
+        if (finiteMass) {
+            detail::countArithmeticFlops<Real>(operations, 8);
+            hllFlux.mass = zero;
+            hllFlux.energy -= hllContact * mean.energy;
+            for (int dim = 0; dim < 3; dim++) {
+                hllFlux.momentum[dim] -= hllContact * mean.momentum[dim];
+            }
+        } else {
+            hllFlux = detail::selectConserved(leftWave >= zero, leftFlux, hllFlux);
+            hllFlux = detail::selectConserved(rightWave <= zero, rightFlux, hllFlux);
+        }
+        flux = detail::selectConserved(useHll, hllFlux, flux);
+        contact = simdSelect(useHll, hllContact, contact);
     }
     detail::countArithmeticFlops<Real>(operations, 15);
     result.mass = flux.mass * areaMagnitude;

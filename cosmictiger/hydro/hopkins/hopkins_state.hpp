@@ -22,6 +22,10 @@ struct HopkinsParticleState {
     uint64_t identifier = UINT64_MAX;
     double mass = 0.0;
     double totalEnergy = 0.0;
+    // Dual-energy auxiliary: the cell's entropic function P / rho^gamma in the code's
+    // comoving variables (Bryan et al. 1995). MFM carries it unchanged between
+    // closures; the expansion source, the thermal sources and the update switch refresh it.
+    double entropy = 0.0;
     Vector3<double> momentum{};
     double pendingMass = 0.0;
     double pendingEnergy = 0.0;
@@ -80,10 +84,10 @@ struct HopkinsParticleState {
 
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
-        archive & identifier & mass & totalEnergy & momentum & pendingMass & pendingEnergy &
-            pendingMomentum & anchorVolume & meshVelocity & meshAcceleration & sourceAcceleration &
-            pendingGravityIntegral & pendingGravityWork & sourceTime & endTime &
-            expansionCoefficient & beginTick & endTick & initialized & gradients &
+        archive & identifier & mass & totalEnergy & entropy & momentum & pendingMass &
+            pendingEnergy & pendingMomentum & anchorVolume & meshVelocity & meshAcceleration &
+            sourceAcceleration & pendingGravityIntegral & pendingGravityWork & sourceTime &
+            endTime & expansionCoefficient & beginTick & endTick & initialized & gradients &
             predictorInitialized & supportRadius & positionAnchor & positionEpoch &
             positionDriftScale & gravityEndTime & gravityDriftScale & hydroRung &
             hierarchicalActive;

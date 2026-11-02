@@ -143,6 +143,18 @@ void sphChemistryInitializeParticle(long long index, double scaleFactor) {
         std::max(energy, options.chemistry.minimumSpecificEnergy), scaleFactor);
 }
 
+double sphChemistryPhysicalInterval(double interval, double scaleFactor) {
+    if (!(interval > 0.0) || !std::isfinite(interval)) {
+        throw std::invalid_argument("Cooling requires a positive completed interval");
+    }
+    auto const& options = getOptions();
+    auto const scales = units::scalesFromOptions(options);
+    units::CosmologicalContext const context(scaleFactor, options.cosmology.hubble);
+    return units::toPhysicalInterval(units::ConformalTime(interval * scales.timeScale()), context)
+        .quantity()
+        .value();
+}
+
 double sphCoolingPrepare(
     int minimumRung, double scaleFactor, double baseTimestep, double explicitTimestep);
 void sphCoolingCommit();

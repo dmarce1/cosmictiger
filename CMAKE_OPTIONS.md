@@ -18,6 +18,15 @@ build/release_cpu/cosmictiger --gravity.method.far=pmmm \
   --gravity.expansionDegree=6 --run.timeIntegrator=global --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
 ```
 
+## Small matrix algorithms
+
+The six `COSMICTIGER_MATRIX_{GENERAL,SYMMETRIC}_{INVERSE,DETERMINANT,SOLVE}_THRESHOLD`
+cache settings select the largest dimension using explicit cofactors. Defaults
+are **4 for inverse/determinant** and **3 for solve**, independently configurable
+for general and symmetric storage. Values are integers 0 through 6; 0 selects
+pivoting for every non-diagonal automatic operation. Diagonal matrices always use
+direct formulas. See [matrix algorithms and measurements](docs/matrix.md).
+
 ## Project options
 
 | Option | Fresh default | Purpose |

@@ -305,8 +305,10 @@ double precision hydrodynamic state on the CPU and supports traditional individu
 steps or global continuous steps, with FMM or PMMM gravity. Fixed-mass MFM also
 supports hierarchical gravity with independent hydro clocks and conservative
 pair intervals; MFV's changing masses require traditional or global integration.
-Hierarchical MFM currently requires lightcone output disabled. It requires a Fixed64
-position build, with cooling and star formation disabled. `configurations/sound_wave.ini` and
+It requires a Fixed64 position build. MFM accepts cooling and star formation under
+traditional or global integration; MFV and hierarchical MFM require both disabled,
+and hierarchical MFM currently requires lightcone output disabled.
+`configurations/sound_wave.ini` and
 `configurations/gresho.ini` provide meshless test problems.
 Compile the meshless methods with `-DCOSMICTIGER_ENABLE_HOPKINS=ON`;
 the default SPH build omits them.

@@ -108,33 +108,33 @@ def particle_rank_state(path, method):
         if end + 12 > len(data):
             raise RuntimeError(f"missing meshless integration state in {path}")
         state_header = struct.unpack_from("=3I", data, end)
-        if state_header != (0x484f5053, 6, 464):
+        if state_header != (0x484f5053, 7, 472):
             raise RuntimeError(f"unsupported meshless integration state in {path}: {state_header}")
         state_offset = end + 12
-        cache_offset = state_offset + 464 * count
+        cache_offset = state_offset + 472 * count
         if cache_offset + 32 > len(data):
             raise RuntimeError(f"truncated meshless integration state in {path}")
         # Native AoS records have padding after each bool. Compare every named
         # field exactly without treating that padding as numerical state.
-        integration_state = [struct.unpack_from("=Q29d2Q?", data, state_offset + 464 * i) +
-                             struct.unpack_from("=15d?", data, state_offset + 464 * i + 264) +
-                             struct.unpack_from("=d", data, state_offset + 464 * i + 392) +
-                             struct.unpack_from("=3Q4di?", data, state_offset + 464 * i + 400)
+        integration_state = [struct.unpack_from("=Q30d2Q?", data, state_offset + 472 * i) +
+                             struct.unpack_from("=15d?", data, state_offset + 472 * i + 272) +
+                             struct.unpack_from("=d", data, state_offset + 472 * i + 400) +
+                             struct.unpack_from("=3Q4di?", data, state_offset + 472 * i + 408)
                              for i in range(count)]
         for index, state in enumerate(integration_state):
-            if (not state[32] or not state[48] or
+            if (not state[33] or not state[49] or
                     any(not math.isfinite(value) for value in state[1:]) or
                     state[1] <= 0.0 or state[2] <= math.fsum(
-                        value * value for value in state[3:6]) / (2.0 * state[1]) or
-                    state[11] <= 0.0 or state[49] <= 0.0):
+                        value * value for value in state[4:7]) / (2.0 * state[1]) or
+                    state[3] <= 0.0 or state[12] <= 0.0 or state[50] <= 0.0):
                 raise RuntimeError(f"invalid conservative meshless state in {path}")
             if method == "mfm" and state[1] != fixed_mass:
                 raise RuntimeError(f"MFM changed a particle's conserved mass in {path}")
-            if struct.unpack("=f", struct.pack("=f", state[1] + state[6]))[0] != masses[index]:
+            if struct.unpack("=f", struct.pack("=f", state[1] + state[7]))[0] != masses[index]:
                 raise RuntimeError(f"conserved and public particle masses disagree in {path}")
-            if struct.unpack("=f", struct.pack("=f", state[49]))[0] != supports[index]:
+            if struct.unpack("=f", struct.pack("=f", state[50]))[0] != supports[index]:
                 raise RuntimeError(f"double and public support radii disagree in {path}")
-        pending_work = [state[24:27] for state in integration_state]
+        pending_work = [state[25:28] for state in integration_state]
         cache_header = struct.unpack_from("=4Q", data, cache_offset)
         if cache_header[:3] != (0x484f504341434845, 2, 176):
             raise RuntimeError(f"unsupported pair cache in {path}: {cache_header}")
@@ -160,11 +160,11 @@ def particle_rank_state(path, method):
                                for d in range(3))
     primitive_energy = math.fsum(masses[i] * (thermal[i] + 0.5 * math.fsum(
         value * value for value in velocities[i])) for i in range(count))
-    momentum = (tuple(math.fsum(state[3 + d] + state[8 + d] for state in integration_state) for d in range(3))
+    momentum = (tuple(math.fsum(state[4 + d] + state[9 + d] for state in integration_state) for d in range(3))
                 if method != "sph" else primitive_momentum)
-    energy = (math.fsum(state[2] + state[7] for state in integration_state)
+    energy = (math.fsum(state[2] + state[8] for state in integration_state)
               if method != "sph" else primitive_energy)
-    total_mass = (math.fsum(state[1] + state[6] for state in integration_state)
+    total_mass = (math.fsum(state[1] + state[7] for state in integration_state)
                   if method != "sph" else math.fsum(masses))
     physical_records = {}
     for i, state in enumerate(integration_state):
@@ -242,8 +242,8 @@ def particle_state(checkpoint, method):
         raise RuntimeError(f"duplicate meshless particle identifiers in {checkpoint}")
     result["identifier_ranks"] = {state[0]: rank_index for rank_index, rank in enumerate(ranks)
                                   for state in rank["integration_state"]}
-    result["predictor_anchors"] = {state[0]: state[1:6] + state[11:21] + state[27:28] + state[29:31] + state[33:48] for state in result["integration_state"]}
-    result["kick_phases"] = [state[30] for state in result["integration_state"]]
+    result["predictor_anchors"] = {state[0]: state[1:7] + state[12:22] + state[28:29] + state[30:32] + state[34:49] for state in result["integration_state"]}
+    result["kick_phases"] = [state[31] for state in result["integration_state"]]
     result["physical_records"] = {identifier: values for rank in ranks
                                   for identifier, values in rank["physical_records"].items()}
     return result
@@ -399,7 +399,7 @@ def check_uniform_acceleration(destination, mass, acceleration, context, method)
         # The position clock may be ahead of the owning conserved anchor.
         # This uniform-force fixture has a single gas rung; compare the stored
         # U at its own source clock, and the diagnostics above at physical time.
-        anchors = {record[27] for record in state["integration_state"]}
+        anchors = {record[28] for record in state["integration_state"]}
         if len(anchors) != 1:
             raise RuntimeError(f"{context} uniform-force fixture has asynchronous source anchors")
         anchor_time = anchors.pop()
@@ -425,15 +425,15 @@ def check_uniform_acceleration(destination, mass, acceleration, context, method)
 
 def pending_gravity_work_signal(state):
     """Measure source work retained in endpoint ledgers and elapsed live pairs."""
-    integrals = {entry[0]: list(entry[21:24]) for entry in state["integration_state"]}
-    moments = {entry[0]: list(entry[24:27]) for entry in state["integration_state"]}
+    integrals = {entry[0]: list(entry[22:25]) for entry in state["integration_state"]}
+    moments = {entry[0]: list(entry[25:28]) for entry in state["integration_state"]}
     anchors = {entry[0]: entry for entry in state["integration_state"]}
     time = state["clock"][0]
     for pair in state["pair_cache"]:
         interval = pair[5] - pair[4]
         elapsed = max(0.0, min(time, pair[5]) - pair[4])
         for endpoint in pair[:2]:
-            age = pair[4] - anchors[endpoint][27]
+            age = pair[4] - anchors[endpoint][28]
             for dimension in range(3):
                 initial = pair[16 + dimension]
                 slope = 2.0 * (pair[19 + dimension] - initial) / interval
@@ -443,10 +443,10 @@ def pending_gravity_work_signal(state):
                 moments[endpoint][dimension] += age * integral + first_moment
     signal = 0.0
     for identifier, entry in anchors.items():
-        force = entry[18:21]
+        force = entry[19:22]
         signal = max(signal, abs(math.fsum(integrals[identifier][d] * force[d]
                                           for d in range(3))))
-        duration = time - entry[27]
+        duration = time - entry[28]
         if duration > 0.0:
             signal = max(signal, abs(math.fsum(moments[identifier][d] * force[d]
                                               for d in range(3))) / duration)
@@ -467,7 +467,7 @@ def check_wake_transactions(output, states, context):
         before = {entry[0]: entry for entry in previous["integration_state"]}
         after = {entry[0]: entry for entry in current["integration_state"]}
         woken = {identifier for identifier in before
-                 if before[identifier][31] > tick and after[identifier][30] == tick}
+                 if before[identifier][32] > tick and after[identifier][31] == tick}
         record = next((entry for entry in records if math.isclose(float(entry["time"]), time,
                        rel_tol=1.e-13, abs_tol=1.e-15)), None)
         if record is None or int(record["woken"]) != len(woken):
@@ -498,7 +498,7 @@ def check_wake_transactions(output, states, context):
         # in U + pending, including the inactive partners of woken particles.
         for identifier in before:
             old, new = before[identifier], after[identifier]
-            for component, (anchor, pending) in enumerate(((1, 6), (3, 8), (4, 9), (5, 10), (2, 7))):
+            for component, (anchor, pending) in enumerate(((1, 7), (4, 9), (5, 10), (6, 11), (2, 8))):
                 expected = old[anchor] + old[pending] + deposits[identifier][component]
                 actual = new[anchor] + new[pending]
                 if not math.isclose(actual, expected, rel_tol=2.e-12, abs_tol=1.e-14):
@@ -527,6 +527,8 @@ def main():
                         help="check natural wake-up truncation and restart over two coarse steps")
     parser.add_argument("--global-sources-only", action="store_true",
                         help="check global uniform-source laws and forced restart with unequal final intervals")
+    parser.add_argument("--thermal-sources-only", action="store_true",
+                        help="check MFM equilibrium cooling and star formation against SPH on a homogeneous lattice")
     parser.add_argument("--matrix-only", action="store_true",
                         help="run gravity-coupled MFM/MFV evolution and restart across FMM/PMMM and traditional/global")
     parser.add_argument("--gravity-method", choices=("fmm", "pmmm"),
@@ -540,8 +542,10 @@ def main():
     args = parser.parse_args()
     if args.cuda and not args.matrix_only:
         parser.error("--cuda requires --matrix-only")
-    if sum((args.matrix_only, args.async_only, args.global_sources_only, args.wake_only)) > 1:
-        parser.error("--matrix-only, --async-only, --wake-only and --global-sources-only are mutually exclusive")
+    if sum((args.matrix_only, args.async_only, args.global_sources_only, args.wake_only,
+            args.thermal_sources_only)) > 1:
+        parser.error("--matrix-only, --async-only, --wake-only, --global-sources-only and "
+                     "--thermal-sources-only are mutually exclusive")
     if not args.matrix_only and any((args.gravity_method, args.near_method, args.time_integrator)):
         parser.error("solver/integrator selectors require --matrix-only")
     if args.localities < 1 or (args.localities > 1 and args.mpi_exec is None):
@@ -691,6 +695,156 @@ def main():
             if step > 1:
                 check_conservation(states[0], states[-1], f"{context} step {step}")
         return states
+
+    if args.thermal_sources_only:
+        # MFM couples the GADGET-4 sources to its conserved state. On a homogeneous
+        # lattice every pair flux vanishes, so MFM and SPH reduce to the same
+        # cooling history and the same stochastic conversion draws; compare them
+        # there, then check conversions leave a consistent gas set, the next kick
+        # settles the survivors' pairs, and a restart is exact.
+        help_text = subprocess.run(
+            command + ["--help"], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=60, check=True, env=dict(os.environ, CUDA_VISIBLE_DEVICES="")).stdout
+        capabilities = dict(re.findall(r"^\s*(Equilibrium cooling|Star formation): (enabled|disabled)",
+                                       help_text, re.MULTILINE))
+        if capabilities.get("Equilibrium cooling") != "enabled":
+            raise RuntimeError("thermal sources require a build with equilibrium cooling")
+        star_formation_available = capabilities.get("Star formation") == "enabled"
+        integrators = [value for value in ("traditional", "global") if re.search(
+            r"^\s*Time integrators:.*\b" + value + r"\b", help_text, re.MULTILINE)]
+        if not integrators:
+            raise RuntimeError("thermal sources require the traditional or global integrator")
+
+        def thermal_options(method, integrator, iterations, star_formation):
+            values = {"run.scenario": "cosmology", "run.timeIntegrator": integrator,
+                      "run.maxIterations": iterations, "run.numberOfSteps": 64, "run.minRung": 0,
+                      "run.verbose": "true", "hydro.enabled": "true", "hydro.method": method,
+                      "gravity.enabled": "true", "gravity.method.far": "fmm",
+                      "gravity.expansionDegree": 6, "gravity.cuda": "false", "hydro.cuda": "false",
+                      "drift.cuda": "false", "compute.positionType": "fixed64",
+                      "initial.particlesPerDimension": 8, "initial.closePack": "false",
+                      "initial.useGlass": "false", "cosmology.sigma8": 0,
+                      "cosmology.startRedshift": 49, "cosmology.endRedshift": 0,
+                      "chemistry.enabled": "true", "chemistry.initializationTemperature": 10000,
+                      "starFormation.enabled": str(star_formation).lower(),
+                      "analysis.groups": "false", "analysis.tracers": "false",
+                      "analysis.power": "false", "analysis.views": "false",
+                      "lightcone.enabled": "false", "output.silo": "false",
+                      "output.directory": "output", "checkpoint.intervalSeconds": 0}
+            if star_formation:
+                # Every lattice cell is eligible and converts with a few-percent
+                # chance per step once the saved SFR exists, leaving most gas.
+                values.update({"starFormation.criticalOverDensity": 0,
+                               "starFormation.criticalPhysicalDensity": 1.e-3,
+                               "starFormation.starFormationTimeGyr": 0.01})
+            return values
+
+        def thermal_state(path):
+            """Read the species and gas thermal arrays; the gas layout carries the method offset."""
+            data = path.read_bytes()
+            prefix = read_prefix(data)
+            reader = prefix.reader
+            integer_code = "q" if prefix.integer_bytes == 8 else "i"
+            count = reader.take(integer_code)[0]
+            gas = reader.take(integer_code)[0]
+            reader.skip(3 * prefix.position_bytes * count + 13 * count)
+            types = reader.take("b", count)
+            reader.skip(prefix.integer_bytes * count)
+            if reader.take("I", 7)[0] != 0x43545350 or reader.take(integer_code)[0] != gas:
+                raise RuntimeError(f"unexpected gas layout in {path}")
+            thermal = reader.take("f", 2 * gas)[::2]
+            if gas != types.count(1) or any(not math.isfinite(u) or u <= 0.0 for u in thermal):
+                raise RuntimeError(f"invalid gas thermal state in {path}")
+            return {"gas": gas, "stars": types.count(2), "mean": math.fsum(thermal) / gas,
+                    "physical": data[prefix.particle_start:], "prefix": data[:prefix.driver_offset]}
+
+        def thermal_states(directory, steps):
+            return [thermal_state(directory / f"output/checkpoint.{step}/checkpoint.0.dat")
+                    for step in range(1, steps + 1)]
+
+        def conversions(output):
+            return [int(fields["stars"]) for fields in (
+                dict(re.findall(r"([A-Za-z]+)=([^\s]+)", match.group(1)))
+                for match in re.finditer(r"Hopkins step: ([^\n]+)", output))]
+
+        def thermal_clock(directory):
+            # Keep the step, redshift, scale, expansion rate, timestep, years and
+            # rung columns; wall-clock columns differ between runs.
+            rows = [line.split() for line in (directory / "output/progress.txt").read_text().splitlines()]
+            return [row[1:9] for row in rows if row and row[0] != "runtime"]
+
+        def check_thermal_restart(name, values, reference, steps):
+            split_directory = prepare(name + "_split")
+            launch(split_directory, dict(values, **{"run.maxIterations": 1}))
+            directory = prepare(name + "_restart")
+            (directory / "output").mkdir()
+            shutil.copytree(split_directory / "output/checkpoint.1", directory / "output/checkpoint.1")
+            output = launch(directory, dict(values, **{"run.maxIterations": steps - 1,
+                                                       "checkpoint.readIndex": 1}))
+            if "Done reading checkpoint" not in output:
+                raise RuntimeError(f"{name} did not load its restart")
+            resumed = thermal_state(directory / f"output/checkpoint.{steps}/checkpoint.0.dat")
+            if (resumed["physical"], resumed["prefix"]) != (reference["physical"], reference["prefix"]):
+                raise RuntimeError(f"{name} restart changed the particle, source or meshless state")
+            if thermal_clock(directory)[-1] != thermal_clock(split_directory.parent / name)[-1]:
+                raise RuntimeError(f"{name} restart changed the physical clock")
+            print(f"{name}: exact restart with sources passed", flush=True)
+
+        for integrator in integrators:
+            means = {}
+            for method in ("mfm", "sph") if integrator == "traditional" else ("mfm",):
+                name = f"{method}_cooling_{integrator}"
+                directory = prepare(name)
+                output = launch(directory, thermal_options(method, integrator, 3, False))
+                check_finite_rows(directory / "output/energy.txt")
+                states = thermal_states(directory, 3)
+                if any(state["stars"] != 0 or state["gas"] != states[0]["gas"] for state in states):
+                    raise RuntimeError(f"{name} changed the gas population without star formation")
+                means[method] = [state["mean"] for state in states]
+                if method == "mfm" and any(record != 0 for record in conversions(output)):
+                    raise RuntimeError(f"{name} reported conversions without star formation")
+            # Stored a^2 u is constant under adiabatic expansion of the lattice;
+            # only the source changes it.
+            if abs(means["mfm"][-1] - means["mfm"][0]) <= 1.e-4 * means["mfm"][0]:
+                raise RuntimeError(f"MFM {integrator} cooling left the thermal energy unchanged")
+            if "sph" in means:
+                for step, (mfm, sph) in enumerate(zip(means["mfm"], means["sph"]), start=1):
+                    if abs(mfm - sph) > 1.e-3 * sph:
+                        raise RuntimeError(f"MFM and SPH cooling disagree at step {step}: {mfm} vs {sph}")
+            print(f"mfm_cooling_{integrator}: thermal energy {means['mfm'][0]:.6e} -> "
+                  f"{means['mfm'][-1]:.6e}" + (" matches SPH" if "sph" in means else ""), flush=True)
+            name = f"mfm_cooling_{integrator}"
+            check_thermal_restart(name, thermal_options("mfm", integrator, 3, False),
+                                  thermal_states(base / name, 3)[-1], 3)
+            if not star_formation_available:
+                continue
+            steps = 4
+            name = f"mfm_star_formation_{integrator}"
+            directory = prepare(name)
+            values = thermal_options("mfm", integrator, steps, True)
+            output = launch(directory, values)
+            check_finite_rows(directory / "output/energy.txt")
+            formed = conversions(output)
+            states = thermal_states(directory, steps)
+            first = next((index for index, count in enumerate(formed) if count), None)
+            if (first is None or first >= len(formed) - 1 or len(formed) < steps or
+                    states[-1]["stars"] != sum(formed) or
+                    any(state["gas"] + state["stars"] != states[0]["gas"] + states[0]["stars"]
+                        for state in states) or
+                    states[-1]["stars"] >= states[0]["gas"] // 2):
+                raise RuntimeError(f"{name} conversions {formed} disagree with the stored species")
+            if integrator == "traditional":
+                reference = prepare(f"sph_star_formation_{integrator}")
+                launch(reference, thermal_options("sph", integrator, steps, True))
+                sph_states = thermal_states(reference, steps)
+                for step, (mfm, sph) in enumerate(zip(states, sph_states), start=1):
+                    if abs(mfm["stars"] - sph["stars"]) > max(3, sph["stars"] // 10):
+                        raise RuntimeError(f"MFM formed {mfm['stars']} stars by step {step}; SPH formed {sph['stars']}")
+            check_thermal_restart(name, values, states[-1], steps)
+            print(f"{name}: {states[-1]['stars']} of {states[0]['gas']} cells converted over "
+                  f"{steps} steps ({formed})", flush=True)
+        print("Hopkins thermal-source regressions passed", flush=True)
+        return
 
     if args.global_sources_only:
         endpoints = {}

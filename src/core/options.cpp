@@ -17,6 +17,7 @@
 #include <limits>
 #include <numbers>
 #include <stdexcept>
+#include <variant>
 
 #include <hpx/modules/program_options.hpp>
 
@@ -46,8 +47,6 @@
 #if !COSMICTIGER_WITH_GRAVITY && COSMICTIGER_WITH_SPH
 #include <cosmictiger/hydro/sph/sph_tree.hpp>
 #endif
-
-#define SHOW(label, opt) show(label, opts.opt)
 
 namespace detail {
 
@@ -167,9 +166,12 @@ void validateHydroMethod(Options const& opts) {
                 "Hierarchical MFM requires lightcone.enabled=false until hydro trajectory "
                 "segments are emitted independently of provisional gravity endpoints");
         }
-        if (opts.chemistry.enabled || opts.starFormation.enabled) {
+        // MFM keeps every cell's mass fixed, so the operator-split GADGET-4 sources
+        // map onto its conserved energy. MFV exchanges mass between cells and would
+        // need advected cooling and star-formation state.
+        if (opts.hydro.method == "mfv" && (opts.chemistry.enabled || opts.starFormation.enabled)) {
             throw std::invalid_argument(
-                "Hopkins MFM/MFV requires chemistry.enabled=false and starFormation.enabled=false");
+                "Hopkins MFV requires chemistry.enabled=false and starFormation.enabled=false");
         }
     }
     if (opts.run.scenario == "soundWave") {
@@ -564,8 +566,55 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
             options.hydro.maxSupportRadius * options.initial.particlesPerDimension},
         {"hydro.neighborNumber", options.hydro.neighborNumber},
         {"hydro.cfl", options.hydro.cfl},
+        {"hydro.dualEnergyPressureSwitch", options.hydro.dualEnergyPressureSwitch},
+        {"hydro.dualEnergyUpdateSwitch", options.hydro.dualEnergyUpdateSwitch},
     };
 }
+
+namespace detail {
+
+void showResolvedOptions(
+    Options const& opts, hpx::program_options::options_description const& commandOpts) {
+    // Reuse output metadata's resolved public values, including unit conversions,
+    // aliases and automatic defaults, instead of printing the parser's input map.
+    auto entries = getOptionsMetadata(opts);
+    entries.insert(entries.end(),
+        {
+            {"help", false},
+            {"analysis.linkingLength", opts.analysis.linkingLength},
+            {"analysis.minGroupSize", opts.analysis.minGroupSize},
+            {"analysis.sliceSize", opts.analysis.sliceSize},
+            {"compute.particleCacheLineSize", opts.compute.particleCacheLineSize},
+            {"compute.treeCacheLineSize", opts.compute.treeCacheLineSize},
+            {"cosmology.omegaGamma", opts.cosmology.omegaGamma},
+            {"cosmology.omegaK", opts.cosmology.omegaK},
+            {"cosmology.omegaM", opts.cosmology.omegaM},
+            {"cosmology.omegaNu", opts.cosmology.omegaNu},
+            {"cosmology.omegaR", opts.cosmology.omegaR},
+            {"gravity.gm", opts.gravity.gm},
+            {"run.hierarchicalGravity", opts.run.hierarchicalGravity},
+            {"units.lengthCm", opts.units.lengthCm},
+            {"units.massG", opts.units.massG},
+            {"units.timeSeconds", opts.units.timeSeconds},
+        });
+    std::sort(entries.begin(), entries.end(),
+        [](auto const& left, auto const& right) { return left.name < right.name; });
+    // Keep the output and parser in lockstep when a public option is introduced.
+    // Checking the registration also covers optional values absent from the map.
+    for (auto const& option : commandOpts.options()) {
+        auto const entry = std::lower_bound(entries.begin(), entries.end(), option->long_name(),
+            [](auto const& value, auto const& name) { return value.name < name; });
+        if (entry == entries.end() || entry->name != option->long_name()) {
+            throw std::logic_error("Missing resolved option metadata: " + option->long_name());
+        }
+    }
+    terminal::section("Resolved options");
+    for (auto const& entry : entries) {
+        std::visit([&entry](auto const& value) { show(entry.name.c_str(), value); }, entry.value);
+    }
+}
+
+}    // namespace detail
 
 bool processOptions(int argc, char* argv[]) {
     Options opts{};
@@ -910,7 +959,16 @@ bool processOptions(int argc, char* argv[]) {
         po::value<double>(&opts.hydro.neighborNumber)->default_value(42),
         "kernel-weighted neighbor target within the support sphere, including self")("hydro.cfl",
         po::value<double>(&opts.hydro.cfl)->default_value(0.22821773229381923),
-        "Courant time-step factor using effective radius (2 sigma)");
+        "Courant time-step factor using effective radius (2 sigma)")(
+        "hydro.dualEnergyPressureSwitch",
+        po::value<double>(&opts.hydro.dualEnergyPressureSwitch)->default_value(1.0e-3),
+        "MFM dual-energy pressure switch: thermal fraction of the total energy below which the "
+        "entropy estimate replaces the total-energy closure; 0 keeps the strict closure")(
+        "hydro.dualEnergyUpdateSwitch",
+        po::value<double>(&opts.hydro.dualEnergyUpdateSwitch)->default_value(0.1),
+        "MFM dual-energy update switch: the entropy follows the total-energy closure when the "
+        "thermal energy density reaches this fraction of the largest neighboring total energy "
+        "density");
 
     po::options_description chemistryOpts("GADGET-4 equilibrium cooling");
     chemistryOpts.add_options()("chemistry.cuda",
@@ -1005,23 +1063,15 @@ bool processOptions(int argc, char* argv[]) {
                   << kFmmMaxOrder - 1 << "\n";
 #endif
         std::cout << "\n";
+        auto sortedOptions = commandOpts.options();
+        std::sort(
+            sortedOptions.begin(), sortedOptions.end(), [](auto const& left, auto const& right) {
+                return left->long_name() < right->long_name();
+            });
         po::options_description visibleOpts("CosmicTiger options");
-        visibleOpts.add(runOpts)
-            .add(computeOpts)
-            .add(driftOpts)
-            .add(sortOpts)
-            .add(checkpointOpts)
-            .add(initialOpts)
-            .add(outputOpts)
-            .add(analysisOpts)
-            .add(gravityOpts)
-            .add(unitsOpts)
-            .add(hydroOpts)
-            .add(chemistryOpts)
-            .add(starFormationOpts);
-#if COSMICTIGER_WITH_GRAVITY
-        visibleOpts.add(lightconeOpts).add(cosmologyOpts);
-#endif
+        for (auto const& option : sortedOptions) {
+            visibleOpts.add(option);
+        }
         std::cout << visibleOpts << "\n";
         rc = false;
     } else {
@@ -1446,6 +1496,14 @@ bool processOptions(int argc, char* argv[]) {
     if (!detail::isFiniteOption(opts.hydro.cfl) || opts.hydro.cfl <= 0.0 || opts.hydro.cfl > 1.0) {
         THROW_ERROR("hydro.cfl must be finite and in (0, 1]\n");
     }
+    if (!detail::isFiniteOption(opts.hydro.dualEnergyPressureSwitch) ||
+        opts.hydro.dualEnergyPressureSwitch < 0.0 || opts.hydro.dualEnergyPressureSwitch >= 1.0) {
+        THROW_ERROR("hydro.dualEnergyPressureSwitch must be finite and in [0, 1)\n");
+    }
+    if (!detail::isFiniteOption(opts.hydro.dualEnergyUpdateSwitch) ||
+        opts.hydro.dualEnergyUpdateSwitch < 0.0) {
+        THROW_ERROR("hydro.dualEnergyUpdateSwitch must be finite and nonnegative\n");
+    }
     if (!detail::isFiniteOption(opts.hydro.neighborNumber) ||
         opts.hydro.neighborNumber <= selfNeighborFloor) {
         THROW_ERROR("hydro.neighborNumber must be finite and greater than the selected kernel "
@@ -1778,65 +1836,6 @@ bool processOptions(int argc, char* argv[]) {
         PRINT(
             "%.*s\n", int(cosmictiger::kStartupScreen.size()), cosmictiger::kStartupScreen.data());
     }
-    if (detail::displayOptions) {
-        terminal::section("Resolved options");
-    }
-    show("build.hopkins", bool(COSMICTIGER_ENABLE_HOPKINS));
-    show("build.chemistry", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY));
-    show("build.starFormation", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION));
-    SHOW("starFormation.enabled", starFormation.enabled);
-    SHOW("starFormation.beta", starFormation.beta);
-    SHOW("starFormation.evaporationFactor", starFormation.evaporationFactor);
-    SHOW("starFormation.starFormationTimeGyr", starFormation.starFormationTimeGyr);
-    SHOW("starFormation.coldTemperature", starFormation.coldTemperature);
-    SHOW("starFormation.supernovaTemperature", starFormation.supernovaTemperature);
-    SHOW("starFormation.criticalPhysicalDensity", starFormation.criticalPhysicalDensity);
-    SHOW("starFormation.criticalOverDensity", starFormation.criticalOverDensity);
-    show("starFormation.seed", std::to_string(opts.starFormation.seed));
-    SHOW("chemistry.enabled", chemistry.enabled);
-    SHOW("chemistry.initializationTemperature", chemistry.initializationTemperature);
-    SHOW("chemistry.minimumSpecificEnergy", chemistry.minimumSpecificEnergy);
-    SHOW("hydro.enabled", hydro.enabled);
-    SHOW("hydro.method", hydro.method);
-    SHOW("gravity.enabled", gravity.enabled);
-    SHOW("gravity.errorInterval", gravity.errorInterval);
-    SHOW("gravity.errorSampleSize", gravity.errorSampleSize);
-    SHOW("run.timeIntegrator", run.timeIntegrator);
-    SHOW("gravity.method.far", gravity.method);
-    SHOW("gravity.meshSize", gravity.meshSize);
-    SHOW("gravity.pmmmCoarseMeshSize", gravity.pmmmCoarseMeshSize);
-    SHOW("gravity.pmmmNearWidth", gravity.pmmmNearWidth);
-    SHOW("gravity.method.near", gravity.pmmmNearMethod);
-    SHOW("gravity.pmmmBatchParticles", gravity.pmmmBatchParticles);
-    SHOW("run.hierarchicalGravity", run.hierarchicalGravity);
-    if (opts.hydro.enabled && opts.hydro.method == "sph") {
-        SHOW("hydro.viscosityAlpha", hydro.viscosityAlpha);
-        SHOW("hydro.viscosityBeta", hydro.viscosityBeta);
-        SHOW("hydro.viscosityEpsilon", hydro.viscosityEpsilon);
-        SHOW("hydro.balsaraSwitch", hydro.balsaraSwitch);
-        SHOW("hydro.viscosityEvolution", hydro.viscosityEvolution);
-        SHOW("hydro.viscosityAlphaMin", hydro.viscosityAlphaMin);
-        SHOW("hydro.viscosityDecay", hydro.viscosityDecay);
-        SHOW("hydro.viscosityAlphaMax", hydro.viscosityAlphaMax);
-        SHOW("hydro.viscosityDecayCD", hydro.viscosityDecayCD);
-        SHOW("hydro.viscosityAlphaMaxPrice", hydro.viscosityAlphaMaxPrice);
-        SHOW("hydro.viscosityDecayPrice", hydro.viscosityDecayPrice);
-    }
-    SHOW("hydro.gamma", hydro.gamma);
-    SHOW("hydro.yAcceleration", hydro.yAcceleration);
-    SHOW("hydro.zPlaneAcceleration", hydro.zPlaneAcceleration);
-    SHOW("hydro.neighborNumber", hydro.neighborNumber);
-    show(
-        "hydro.minSupportRadius", opts.hydro.minSupportRadius * opts.initial.particlesPerDimension);
-    show(
-        "hydro.maxSupportRadius", opts.hydro.maxSupportRadius * opts.initial.particlesPerDimension);
-    show("hydro.minEffectiveRadius",
-        opts.hydro.minSupportRadius * opts.initial.particlesPerDimension /
-            hydroTable.supportRadiusPerEffectiveRadius);
-    show("hydro.maxEffectiveRadius",
-        opts.hydro.maxSupportRadius * opts.initial.particlesPerDimension /
-            hydroTable.supportRadiusPerEffectiveRadius);
-    SHOW("hydro.cfl", hydro.cfl);
     terminal::detailPrint("Simulation Options\n");
     terminal::detailPrint("code_to_M_solar = %e\n", opts.units.massG / constants::kM0);
     terminal::detailPrint(
@@ -1867,129 +1866,7 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("gravity.openingAngle must be finite, normal, and in (0, 1]\n");
     }
 
-    SHOW("checkpoint.intervalSeconds", checkpoint.intervalSeconds);
-    show("units.massSolar", opts.units.massG / constants::kM0);
-    show("units.boxLength", opts.units.lengthCm / constants::kMpcToCm * opts.cosmology.hubble);
-    SHOW("units.lengthCm", units.lengthCm);
-    SHOW("units.massG", units.massG);
-    SHOW("units.timeSeconds", units.timeSeconds);
-    SHOW("drift.cuda", drift.cuda);
-    SHOW("sort.cuda", sort.cuda);
-    SHOW("initial.cuda", initial.cuda);
-    SHOW("analysis.power.cuda", analysis.powerCuda);
-    SHOW("analysis.groups.cuda", analysis.groupsCuda);
-    SHOW("analysis.tracers.cuda", analysis.tracersCuda);
-    SHOW("analysis.slice.cuda", analysis.sliceCuda);
-    SHOW("analysis.views.cuda", analysis.viewsCuda);
-    SHOW("lightcone.cuda", lightcone.cuda);
-    SHOW("gravity.cuda", gravity.cuda);
-    SHOW("gravity.error.cuda", gravity.errorCuda);
-    SHOW("hydro.cuda", hydro.cuda);
-    SHOW("chemistry.cuda", chemistry.cuda);
-    SHOW("starFormation.cuda", starFormation.cuda);
-    SHOW("compute.positionType", compute.positionType);
-    show("gravity.expansionDegree", opts.gravity.fmmOrder > 0 ? opts.gravity.fmmOrder - 1 : 0);
-    SHOW("gravity.cuda.kickResidency", gravity.cudaKickResidency);
-    SHOW("gravity.cuda.kickSinkTile", gravity.cudaKickSinkTile);
-    SHOW("gravity.cuda.kickParticleTile", gravity.cudaKickParticleTile);
-    SHOW("gravity.cuda.kickMultipoleTile", gravity.cudaKickMultipoleTile);
-    SHOW("gravity.cuda.kickSharedExpansion", gravity.cudaKickSharedExpansion);
-    SHOW("gravity.cuda.kickHandoffBlocks", gravity.cudaKickHandoffBlocks);
-    SHOW("gravity.cuda.kickFineHandoffBlocks", gravity.cudaKickFineHandoffBlocks);
-    SHOW("gravity.cuda.kickListReserve", gravity.cudaKickListReserve);
-    SHOW("lightcone.enabled", lightcone.enabled);
-    SHOW("lightcone.directory", lightcone.directory);
-    SHOW("analysis.groups", analysis.groups);
-    show("analysis.haloParticles", std::string("darkMatter"));
-    SHOW("analysis.power", analysis.power);
-    SHOW("analysis.slice", analysis.slice);
-    SHOW("analysis.tracers", analysis.tracers);
-    SHOW("analysis.views", analysis.views);
-    SHOW("output.silo", output.silo);
-    SHOW("output.siloInterval", output.siloInterval);
-    SHOW("output.directory", output.directory);
-    SHOW("output.units", output.units);
-    SHOW("output.frame", output.frame);
-    SHOW("output.xMin", output.xMin);
-    SHOW("output.xMax", output.xMax);
-    SHOW("output.yMin", output.yMin);
-    SHOW("output.yMax", output.yMax);
-    SHOW("output.zMin", output.zMin);
-    SHOW("output.zMax", output.zMax);
-    SHOW("gravity.timestepEta", gravity.timestepEta);
-    SHOW("gravity.gm", gravity.gm);
-    show("gravity.softening",
-        opts.gravity.supportRadius *
-            std::pow(double(opts.initial.numberOfParticles), 1.0 / kDimensions) /
-            gravityTable.supportRadiusPerEffectiveRadius);
-    show("gravity.effectiveRadius",
-        opts.gravity.supportRadius *
-            std::pow(double(opts.initial.numberOfParticles), 1.0 / kDimensions) /
-            gravityTable.supportRadiusPerEffectiveRadius);
-    show("gravity.supportRadius",
-        opts.gravity.supportRadius *
-            std::pow(double(opts.initial.numberOfParticles), 1.0 / kDimensions));
-    show("hydro.centralEffectiveRadius",
-        opts.hydro.centralSupportRadius / gravityTable.supportRadiusPerEffectiveRadius);
-    show("hydro.centralSoftening",
-        opts.hydro.centralSupportRadius / gravityTable.supportRadiusPerEffectiveRadius);
-    show("hydro.centralSupportRadius", opts.hydro.centralSupportRadius);
-    SHOW("hydro.centralAcceleration", hydro.centralAcceleration);
-    SHOW("gravity.kernelFamily", gravity.kernelFamily);
-    SHOW("gravity.kernelDegree", gravity.kernelDegree);
-    SHOW("hydro.kernelFamily", hydro.kernelFamily);
-    SHOW("hydro.kernelDegree", hydro.kernelDegree);
-    SHOW("cosmology.hubble", cosmology.hubble);
-    SHOW("lightcone.linkingLength", lightcone.linkingLength);
-    SHOW("lightcone.mapSize", lightcone.mapSize);
-    SHOW("analysis.linkingLength", analysis.linkingLength);
-    SHOW("run.maxIterations", run.maxIterations);
-    SHOW("run.treeOpeningAngle", run.treeOpeningAngle);
-    SHOW("analysis.minGroupSize", analysis.minGroupSize);
-    SHOW("cosmology.omegaB", cosmology.omegaB);
-    SHOW("cosmology.omegaC", cosmology.omegaC);
-    SHOW("cosmology.omegaGamma", cosmology.omegaGamma);
-    SHOW("cosmology.omegaLambda", cosmology.omegaLambda);
-    SHOW("cosmology.omegaM", cosmology.omegaM);
-    SHOW("cosmology.omegaNu", cosmology.omegaNu);
-    SHOW("cosmology.omegaR", cosmology.omegaR);
-    SHOW("cosmology.omegaK", cosmology.omegaK);
-    SHOW("compute.particleCacheLineSize", compute.particleCacheLineSize);
-    SHOW("initial.particlesPerDimension", initial.particlesPerDimension);
-    SHOW("initial.gadget4Restart", initial.gadget4Restart);
-    SHOW("initial.useGlass", initial.useGlass);
-    SHOW("initial.plummerRadius", initial.plummerRadius);
-    SHOW("initial.closePack", initial.closePack);
-    SHOW("checkpoint.readIndex", checkpoint.readIndex);
-    SHOW("analysis.saveForce", analysis.saveForce);
-    SHOW("analysis.saveAcceleration", analysis.saveAcceleration);
-    SHOW("analysis.savePotential", analysis.savePotential);
-    SHOW("cosmology.sigma8", cosmology.sigma8);
-    SHOW("analysis.sliceResolution", analysis.sliceResolution);
-    SHOW("analysis.sliceSize", analysis.sliceSize);
-    SHOW("cosmology.thetaCmb", cosmology.thetaCmb);
-    SHOW("gravity.openingAngle", gravity.openingAngle);
-    SHOW("gravity.openingSchedule", gravity.openingSchedule);
-    SHOW("gravity.openLargerCell", gravity.openLargerCell);
-    SHOW("analysis.tracerCount", analysis.tracerCount);
-    SHOW("compute.treeCacheLineSize", compute.treeCacheLineSize);
-    SHOW("initial.twoLpt", initial.twoLpt);
-    SHOW("analysis.viewSize", analysis.viewSize);
-    SHOW("cosmology.startRedshift", cosmology.startRedshift);
-    SHOW("cosmology.endRedshift", cosmology.endRedshift);
-
-    SHOW("cosmology.spectralIndex", cosmology.spectralIndex);
-    SHOW("cosmology.heliumFraction", cosmology.heliumFraction);
-    SHOW("cosmology.nEff", cosmology.nEff);
-    SHOW("configuration", configuration);
-    SHOW("run.test", run.test);
-    SHOW("run.verbose", run.verbose);
-    SHOW("run.scenario", run.scenario);
-    SHOW("run.endTime", run.endTime);
-    SHOW("run.numberOfSteps", run.numberOfSteps);
-    SHOW("run.minRung", run.minRung);
-    SHOW("compute.bucketSize", compute.bucketSize);
-    SHOW("compute.sphBucketSize", compute.sphBucketSize);
+    detail::showResolvedOptions(opts, commandOpts);
     setOptions(opts);
     if (opts.run.test.empty()) {
         outputPath(".");
@@ -1997,9 +1874,9 @@ bool processOptions(int argc, char* argv[]) {
     if (hpxRank() == 0 && opts.run.test.empty()) {
         detail::displayOptions = true;
         terminal::section("Run configuration");
-        SHOW("run.scenario", run.scenario);
+        show("run.scenario", opts.run.scenario);
         if (!opts.configuration.empty()) {
-            SHOW("configuration", configuration);
+            show("configuration", opts.configuration);
         }
         PRINT("%-38s: %zu\n", "initial.numberOfParticles", size_t(opts.initial.numberOfParticles));
         PRINT("%-38s: %e Mpc/h (%e Mpc comoving)\n", "units.boxLength",

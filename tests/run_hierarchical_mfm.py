@@ -93,7 +93,7 @@ def main():
             raise RuntimeError("blast did not exercise a real hydro wake")
         if not any(int(row["active"]) < int(row["total"]) and int(row["cached"]) > 0 for row in steps):
             raise RuntimeError("blast did not retain sleeping pair intervals")
-        if not any(anchor[57] != rung for state in states for anchor, rung in
+        if not any(anchor[58] != rung for state in states for anchor, rung in
                    zip(state["integration_state"], state["rungs"])):
             raise RuntimeError("hydro and gravity clocks never differed")
         if not any(int(row["sorted"]) == 0 and int(row["updated"]) > 0 for row in trees[1:]):
