@@ -34,12 +34,8 @@ SCENARIOS = (
 # These presets share cosmology dispatch; keep their inventory explicit without
 # duplicating the first-class scenario cases.
 COSMOLOGY_PRESETS = (
-    "closed_no_dark_energy",
     "critical",
     "lcdm_ten_ages",
-    "omega_k_negative",
-    "omega_k_positive",
-    "subcritical_no_dark_energy",
 )
 
 

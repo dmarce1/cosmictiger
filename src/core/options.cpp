@@ -193,6 +193,15 @@ void validateHydroMethod(Options const& opts) {
     }
 }
 
+void validateFlatCosmology(Options const& opts) {
+    if (!isFiniteOption(opts.cosmology.omegaK) || opts.cosmology.omegaK != 0.0) {
+        throw std::invalid_argument(
+            "Nonzero cosmological curvature is not supported; require "
+            "cosmology.omegaM + cosmology.omegaR + cosmology.omegaLambda = 1 "
+            "(use cosmology.omegaLambda=auto for a spatially flat universe)");
+    }
+}
+
 void validateCooling(Options const& opts) {
     if (!opts.chemistry.enabled) {
         return;
@@ -295,6 +304,7 @@ Options const& getOptions() {
 void setOptions(Options const& opts) {
     detail::validateCudaBackends(opts);
     detail::validateHydroMethod(opts);
+    detail::validateFlatCosmology(opts);
     detail::validateCooling(opts);
     detail::validateStarFormation(opts);
 #if !COSMICTIGER_WITH_GRAVITY
@@ -863,8 +873,9 @@ bool processOptions(int argc, char* argv[]) {
         "cosmology.endRedshift", po::value<double>(&opts.cosmology.endRedshift)->default_value(0.0),
         "ending redshift on the expanding branch; ignored when run.endTime is positive")(
         "cosmology.omegaLambda", po::value<std::string>(&omegaLambdaInput)->default_value("auto"),
-        "signed dark-energy density parameter; auto derives a spatially flat universe")(
-        "cosmology.omegaB", po::value<double>(&opts.cosmology.omegaB)->default_value(0.049389),
+        "signed dark-energy density parameter; must close a spatially flat density budget; "
+        "auto derives it")("cosmology.omegaB",
+        po::value<double>(&opts.cosmology.omegaB)->default_value(0.049389),
         "baryon density parameter")("cosmology.omegaC",
         po::value<double>(&opts.cosmology.omegaC)->default_value(0.26503),
         "cold-dark-matter density parameter")("cosmology.nEff",
@@ -1774,6 +1785,7 @@ bool processOptions(int argc, char* argv[]) {
             opts.cosmology.omegaK = 0.0;
         }
     }
+    detail::validateFlatCosmology(opts);
     // ROCKSTAR Sec. III.1 and Table 2: outer FOF linking length b=0.28.
     // Behroozi, Wechsler & Wu (2013), https://arxiv.org/html/1110.4372v3
     opts.analysis.linkingLength = pow(opts.initial.numberOfParticles, -1.0 / kDimensions) * 0.28;

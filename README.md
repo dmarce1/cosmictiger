@@ -37,8 +37,11 @@ In C++, each category is an ordinary public struct in `Options`: `Gravity gravit
 example `getOptions().gravity.enabled` or `options.output.directory`.
 Radius aliases resolve to canonical support radii in box units; unit conversions
 are stored as `units.massG`, `units.lengthCm`, and `units.timeSeconds`.
-Curvature `cosmology.omegaK` is derived from the density budget and is no longer an
-accepted input, since a supplied value was always overwritten.
+Cosmological simulations require a spatially flat background. Use
+`cosmology.omegaLambda=auto` to close the density budget; a numeric value must
+also give `Ωm + Ωr + ΩΛ = 1` within floating-point roundoff. Nonzero derived
+curvature is rejected. `cosmology.omegaK` remains a derived field and is not an
+accepted input. See [background evolution](docs/cosmology.md).
 
 The old ungrouped and snake_case option names have been replaced. For example,
 `--parts_dim=16 --max_iter=2 --cuda=true` is now

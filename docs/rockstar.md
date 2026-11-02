@@ -123,6 +123,11 @@ The former encoding used exponent zero and exponent 31 differently; any older
 catalogue that needs preservation must be decoded with its original codec before
 conversion, with the new finite-range checks applied.
 
+The application currently requires a spatially flat cosmology. The density
+helpers retain the general conventions below for mathematical tests and
+interpreting existing catalogue metadata; they do not enable curved simulation
+runs. See [background evolution](cosmology.md).
+
 Flat backgrounds with nonnegative Λ retain the Bryan–Norman flat fit, and open
 backgrounds with zero Λ retain its open fit. Their `so_density_reference` is
 `critical`: `m200`, `m500`, and `m2500` mean **M200c, M500c, and M2500c**.

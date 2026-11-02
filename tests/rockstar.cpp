@@ -22,6 +22,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/cosmology/background.hpp>
 #include <cosmictiger/cosmology/cosmology.hpp>
+#include <cosmictiger/cosmology/friedmann.hpp>
 #include <cosmictiger/cuda/cuda_unordered_map.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/math/constants.hpp>
@@ -937,24 +938,46 @@ void checkRockstarLightconeEpoch() {
     checkRockstarCatalogueRoundtrip(records.data(), records.size(), "lightcone catalogue");
 
     auto const original = getOptions();
+    for (double const curvature : {-0.1, 0.1, std::numeric_limits<double>::quiet_NaN()}) {
+        auto unsupported = original;
+        unsupported.cosmology.omegaK = curvature;
+        bool rejected = false;
+        try {
+            setOptions(unsupported);
+        } catch (std::invalid_argument const& error) {
+            rejected = std::string(error.what()).find("Nonzero cosmological curvature") !=
+                std::string::npos;
+        }
+        requireRockstar(rejected, "setOptions must reject unsupported curvature");
+        requireRockstar(getOptions().cosmology.omegaK == original.cosmology.omegaK,
+            "rejected curvature must not replace the active options");
+    }
     auto contracting = original;
     contracting.cosmology.omegaM = 2.0;
-    contracting.cosmology.omegaR = contracting.cosmology.omegaLambda = 0.0;
-    contracting.cosmology.omegaK = -1.0;
+    contracting.cosmology.omegaR = contracting.cosmology.omegaK = 0.0;
+    contracting.cosmology.omegaLambda = -1.0;
     contracting.cosmology.startRedshift = 0.0;
     setOptions(contracting);
     try {
-        // Starting from expanding a=1, closed dust has a=1+sin(H0*tau).
-        // H0*tau=3 lies strictly on the contracting branch.
+        // A flat matter + negative-Lambda universe recollapses at a=cbrt(2).
         double const hubble =
             units::normalizedHubble100(contracting) * contracting.cosmology.hubble;
-        for (double const phase : {1.0, 0.5 * std::numbers::pi, 3.0}) {
-            double const emissionTime = phase / hubble;
+        cosmology::FriedmannCosmology const model({hubble, 0.0, 2.0, -1.0, 0.0});
+        double const maximumScale = std::cbrt(2.0);
+        double const expandingTime = model.intervalsBetweenScales(1.0, 1.1).conformalTime;
+        double const turnaroundTime = model.intervalsBetweenScales(1.0, maximumScale).conformalTime;
+        for (int epoch = 0; epoch < 3; epoch++) {
+            double const emissionTime = epoch == 0 ? expandingTime :
+                epoch == 1                         ? turnaroundTime :
+                                                     2.0 * turnaroundTime - expandingTime;
             double const observationTime = emissionTime + particles[0].x.toDouble();
-            double const scale = 1.0 + std::sin(phase);
+            double const scale = epoch == 1 ? maximumScale : 1.1;
+            double const rate = epoch == 1 ?
+                0.0 :
+                (epoch == 0 ? 1.0 : -1.0) * std::sqrt(2.0 / scale - scale * scale);
             auto const background = cosmology::simulationBackground(observationTime);
             auto const state = background->sample(emissionTime).state;
-            requireRockstarClose(state.physicalDerivative / hubble, std::cos(phase) / scale, 2.e-9,
+            requireRockstarClose(state.physicalDerivative / hubble, rate, 2.e-9,
                 "recollapsing lightcone fixture must preserve the signed derivative", 2.e-10);
             auto const collapsedRecords = rockstarFindSubgroups(particles, observationTime);
             requireRockstar(

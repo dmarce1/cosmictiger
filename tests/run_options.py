@@ -1105,18 +1105,34 @@ mapSize = 8
         total = sum(cosmologySetting(output, key) for key in ("omegaM", "omegaR", "omegaLambda"))
         if not math.isclose(total, 1.0, rel_tol=2.e-6):
             raise RuntimeError("automatic Lambda did not preserve a flat density budget")
+        assertNumericSetting(output, "cosmology.omegaK", 0.0)
     if cosmologySetting(lambda_dense, "omegaLambda") >= 0.0:
         raise RuntimeError("automatic Lambda could not derive a negative flat-universe value")
     assertNumericSetting(lambda_auto, "cosmology.omegaLambda",
                          cosmologySetting(lambda_baseline, "omegaLambda"))
-    for value in (-1.0, -0.25, 0.0):
+    # Negligible radiation lets these literal densities close to roundoff.
+    for value in (-1.0, -0.25, 0.0, 0.7):
         output = run(f"lambda_literal_{value}", metadata_options + [
-            f"--cosmology.omegaLambda={value}"])
+            f"--cosmology.omegaLambda={value}", "--cosmology.omegaB=0.05",
+            f"--cosmology.omegaC={0.95 - value!r}", "--cosmology.thetaCmb=0.0001"])
         assertNumericSetting(output, "cosmology.omegaLambda", value)
+        assertNumericSetting(output, "cosmology.omegaK", 0.0)
     lambda_config = args.workdir / "signed_lambda.ini"
     lambda_config.write_text("[cosmology]\nomegaLambda = -0.25\n")
-    output = run("lambda_ini", metadata_options + [f"--configuration={lambda_config.resolve()}"])
+    output = run("lambda_ini", metadata_options + [f"--configuration={lambda_config.resolve()}",
+                 "--cosmology.omegaB=0.05", "--cosmology.omegaC=1.2",
+                 "--cosmology.thetaCmb=0.0001"])
     assertNumericSetting(output, "cosmology.omegaLambda", -0.25)
+    assertNumericSetting(output, "cosmology.omegaK", 0.0)
+    # Both signs are rejected even for homogeneous ICs or a restart request.
+    for name, extra in (("positive", ["--cosmology.omegaLambda=0"]),
+                        ("negative", ["--cosmology.omegaLambda=1"]),
+                        ("homogeneous", ["--cosmology.omegaLambda=0", "--cosmology.sigma8=0"]),
+                        ("restart", ["--cosmology.omegaLambda=1", "--checkpoint.readIndex=1"]),
+                        ("ini", [f"--configuration={lambda_config.resolve()}"])):
+        output = run(f"nonflat_{name}", metadata_options + extra, success=False)
+        if "Nonzero cosmological curvature is not supported" not in output:
+            raise RuntimeError(f"nonflat {name} lacked the curvature diagnostic")
     output = run("lambda_cli_override", metadata_options + [
         f"--configuration={lambda_config.resolve()}", "--cosmology.omegaLambda=auto"])
     assertNumericSetting(output, "cosmology.omegaLambda",
@@ -1351,10 +1367,7 @@ mapSize = 8
                      "hydro.centralEffectiveRadius", "hydro.centralSupportRadius",
                      "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius"}
     public_keys = set(option_names) - {"help", "configuration"}
-    preset_curvatures = {"closed_no_dark_energy.ini": -1.0000920746853525,
-                         "omega_k_negative.ini": -0.1, "omega_k_positive.ini": 0.1,
-                         "critical.ini": 0.0,
-                         "subcritical_no_dark_energy.ini": 0.6864421027750461}
+    preset_curvatures = {"critical.ini": 0.0}
     checked_presets = set()
     local_presets = {root / "configurations/lcdm_present.ini"}
     preset_paths = [root / "default.ini", *sorted((root / "configurations").rglob("*.ini"))]
@@ -1454,8 +1467,7 @@ mapSize = 8
                     raise RuntimeError(f"{relative_path} did not preserve {key}")
         if path.parent == root / "configurations" and path.name in preset_curvatures:
             assertNumericSetting(output, "cosmology.omegaK", preset_curvatures[path.name])
-            if path.name in {"closed_no_dark_energy.ini", "critical.ini",
-                             "subcritical_no_dark_energy.ini"}:
+            if path.name == "critical.ini":
                 assertNumericSetting(output, "cosmology.omegaLambda", 0.0)
             checked_presets.add(path.name)
         assertNoRadiusWarning(output)

@@ -101,7 +101,7 @@ def check_finite_progress(directory):
     rows = [[float(value) for value in line.split()] for line in path.read_text().splitlines()
             if line.strip() and line.split()[0] != "runtime"]
     require(rows, f"empty progress file in {directory}")
-    require(all(len(row) == 14 for row in rows), f"incomplete progress output in {directory}")
+    require(all(len(row) == 17 for row in rows), f"incomplete progress output in {directory}")
     require(all(math.isfinite(value) for row in rows for value in row),
             f"nonfinite progress output in {directory}")
     return rows
@@ -129,15 +129,20 @@ def check_complete_energy(directory, steps, final_scale):
     return rows
 
 
-def closed_matter_state(dimensionless_time):
-    # Omega_m=2, Omega_k=-1 has a=1-cos(theta), H0*eta=theta.
-    # The initial a=1 expanding state is theta=pi/2.
-    phase = 0.5 * math.pi + dimensionless_time
-    scale = 1.0 - math.cos(phase)
-    return scale, math.sin(phase) / scale
+def negative_lambda_state(dimensionless_time):
+    # Invert the independent analytic solution's conformal quadrature.
+    phase = math.pi / 4.0 + 1.5 * dimensionless_time
+    for _ in range(12):
+        scale = (math.sqrt(2.0) * math.sin(phase)) ** (2.0 / 3.0)
+        correction = 1.5 * scale * (negative_lambda_interval(1024, phase) - dimensionless_time)
+        phase -= correction
+        if abs(correction) < 1.e-14:
+            scale = (math.sqrt(2.0) * math.sin(phase)) ** (2.0 / 3.0)
+            return scale, math.sqrt(2.0) * math.cos(phase) / math.sqrt(scale), phase
+    raise RuntimeError("negative-Lambda reference phase failed to converge")
 
 
-def check_closed_time_table(directory, steps):
+def check_negative_lambda_time_table(directory, steps, dimensionless_interval):
     path = directory / "time.txt"
     require(path.is_file(), f"missing background time table in {directory}")
     lines = path.read_text().splitlines()
@@ -153,23 +158,20 @@ def check_closed_time_table(directory, steps):
             "physical age or conformal time stopped increasing during contraction")
     age_span = rows[-1][1] - rows[0][1]
     conformal_span = rows[-1][2] - rows[0][2]
-    # The common conversion into years cancels: the cycloid has
-    # H0*Delta(t)=pi+2 and H0*Delta(eta)=pi over this complete trajectory.
-    require_close(age_span / conformal_span, (math.pi + 2.0) / math.pi,
+    # The common conversion into years cancels. The analytic solution has
+    # H0*Delta(t)=pi/3 between its expanding and contracting a=1 states.
+    require_close(age_span / conformal_span, (math.pi / 3.0) / dimensionless_interval,
                   "physical-to-conformal elapsed-time ratio")
-    initial_phase = math.pi / 2.0
-    initial_age = initial_phase - math.sin(initial_phase)
     for index, (step, age, conformal, scale, redshift) in enumerate(rows):
         require(step == index, "background time table has an incorrect step index")
         fraction = index / steps
-        phase = initial_phase + math.pi * fraction
-        expected_scale, _ = closed_matter_state(math.pi * fraction)
+        expected_scale, _, phase = negative_lambda_state(dimensionless_interval * fraction)
         require_close(scale, expected_scale, f"time-table scale at step {index}")
         require_close(redshift, 1.0 / expected_scale - 1.0,
                       f"time-table redshift at step {index}")
         require_close((conformal - rows[0][2]) / conformal_span, fraction,
                       f"time-table conformal clock at step {index}")
-        expected_fraction = (phase - math.sin(phase) - initial_age) / (math.pi + 2.0)
+        expected_fraction = (phase - math.pi / 4.0) / (math.pi / 2.0)
         require_close((age - rows[0][1]) / age_span, expected_fraction,
                       f"time-table physical age at step {index}")
 
@@ -240,24 +242,24 @@ def check_cosmology_output(directory, duration, image_available):
     return rows
 
 
-def check_closed_cosmology_output(directory, duration, hubble, image_available):
+def check_negative_lambda_cosmology_output(directory, duration, hubble, image_available):
     rows = check_cosmology_output(directory, duration, image_available)
     require(rows[0][2] > 0.0 and rows[-1][2] < 0.0,
             "background plot lost the signed expansion/contraction derivative")
     for index, (tau, scale, derivative) in enumerate(rows):
-        expected_scale, expected_rate = closed_matter_state(hubble * tau)
-        require_close(scale, expected_scale, f"plot cycloid scale at sample {index}")
+        expected_scale, expected_rate, _ = negative_lambda_state(hubble * tau)
+        require_close(scale, expected_scale, f"plot negative-Lambda scale at sample {index}")
         require_close(derivative / hubble, expected_rate,
                       f"plot physical derivative at sample {index}")
 
 
-def negative_lambda_interval(intervals):
+def negative_lambda_interval(intervals, upper=3.0 * math.pi / 4.0):
     # Omega_m=2, Omega_Lambda=-1 has a=(sqrt(2)*sin(theta))^(2/3)
     # and d(H0*t)/dtheta=2/3. Integrate d(H0*eta)=d(H0*t)/a
     # from the expanding a=1 to the contracting a=1. The interval stays
     # away from either singularity and needs no turnaround root handling.
     lower = math.pi / 4.0
-    width = (math.pi / 2.0) / intervals
+    width = (upper - lower) / intervals
     total = 0.0
     for index in range(intervals + 1):
         phase = lower + index * width
@@ -293,6 +295,7 @@ def main():
         "gravity.cuda": "true" if args.cuda else "false", "hydro.cuda": "true" if args.cuda and not args.collisionless_only else "false", "drift.cuda": "true" if args.cuda else "false",
         "compute.positionType": args.position_type,
         "gravity.enabled": "true",
+        "gravity.openingSchedule": "0.0:0.4,-0.05:0.5,-0.15:0.6",
         "hydro.enabled": "false",
         "chemistry.enabled": "false",
         "analysis.views": "false",
@@ -308,7 +311,7 @@ def main():
         "cosmology.endRedshift": "0",
         "cosmology.omegaB": "0.05",
         "cosmology.omegaC": "1.95",
-        "cosmology.omegaLambda": "0",
+        "cosmology.omegaLambda": "-1",
         "cosmology.hubble": "0.7",
         # Nonzero temperature satisfies the physical option contract, while
         # the radiation correction is far below the analytic-test tolerance.
@@ -339,6 +342,15 @@ def main():
                                 directory, success=success, cuda=args.cuda)
         return directory, output
 
+    # Reject either sign before the sigma8=0 initial-condition shortcut can
+    # bypass a perturbation solver's more limited geometry checks.
+    for name, omega_lambda in (("closed_curvature", "0"), ("open_curvature", "-2")):
+        _, rejected = exercise(name, {"run.endTime": "1",
+                                     "cosmology.omegaLambda": omega_lambda}, success=False)
+        require("Nonzero cosmological curvature is not supported" in rejected,
+                f"{name} failed without the unsupported-curvature diagnostic")
+    print("nonzero spatial curvature: both signs rejected with sigma8=0")
+
     # The saved physical mass and particle count determine H0 in code units.
     # Calibrate from a tiny actual run instead of duplicating unit constants.
     calibration, _ = exercise("calibration", {"run.endTime": "1", "run.maxIterations": "1"})
@@ -350,52 +362,59 @@ def main():
     require(initial["omega_m"] == 2.0 and initial["omega_r"] < 1.e-16,
             "analytic fixture has unexpected matter or radiation density")
     hubble = initial["hubble"]
-    duration = math.pi / hubble
+    dimensionless_interval = negative_lambda_interval(8192)
+    require_close(dimensionless_interval, negative_lambda_interval(4096),
+                  "independent negative-Lambda quadrature", relative=2.e-13, absolute=0.0)
+    duration = dimensionless_interval / hubble
 
-    opening_schedule = "0.1:0.4,-0.25:0.5,-0.4:0.6"
+    opening_schedule = options["gravity.openingSchedule"]
     schedule_pattern = r"FMM opening schedule: z=(\S+) theta=(\S+)"
-    closed, output = exercise("closed_turnaround", {
+    negative, output = exercise("negative_lambda", {
         "run.endTime": repr(duration), "run.verbose": "true",
         "gravity.openingSchedule": opening_schedule,
     })
     schedule_updates = [(float(redshift), float(theta))
                         for redshift, theta in re.findall(schedule_pattern, output)]
     require([theta for _, theta in schedule_updates] == [0.4, 0.5, 0.6, 0.5, 0.4],
-            f"closed model did not apply the requested opening schedule: {schedule_updates}")
-    require(schedule_updates[1][0] <= -0.25 and schedule_updates[2][0] <= -0.4 and
-            schedule_updates[3][0] > -0.4 and schedule_updates[4][0] > -0.25,
+            f"flat negative-Lambda model did not apply the opening schedule: {schedule_updates}")
+    require(schedule_updates[1][0] <= -0.05 and schedule_updates[2][0] <= -0.15 and
+            schedule_updates[3][0] > -0.15 and schedule_updates[4][0] > -0.05,
             "opening schedule changed before crossing its redshift threshold")
-    require("Finished:" in output, "closed model stopped before its requested endpoint")
-    states = checkpoint_states(closed, duration)
+    require("Finished:" in output, "negative-Lambda model stopped before its requested endpoint")
+    states = checkpoint_states(negative, duration)
     require(any(state["adot"] > 0.0 for state in states) and
             any(state["adot"] < 0.0 for state in states),
-            "closed model did not cross from expansion into contraction")
-    require(max(state["a"] for state in states) > 1.99,
-            "closed model did not reach its expected maximum scale factor")
+            "negative-Lambda model did not cross from expansion into contraction")
+    require(max(state["a"] for state in states) > 1.25,
+            "negative-Lambda model did not approach its expected maximum scale factor")
     for state in states:
-        scale, rate = closed_matter_state(hubble * state["tau"])
-        require_close(state["a"], scale, "closed cycloid scale factor")
-        require_close(state["adot"] / hubble, rate, "closed cycloid signed rate")
-    check_completion(states[-1], duration)
-    check_complete_energy(closed, 32, states[-1]["a"])
-    closed_rows = check_finite_progress(closed)
+        scale, rate, _ = negative_lambda_state(hubble * state["tau"])
+        require_close(state["a"], scale, "negative-Lambda scale factor")
+        require_close(state["adot"] / hubble, rate, "negative-Lambda signed rate")
+    final = states[-1]
+    require(final["omega_lambda"] == -1.0, "numeric negative Lambda was treated as a sentinel")
+    require_close(final["a"], 1.0, "negative-Lambda final scale")
+    require_close(final["adot"] / hubble, -1.0, "negative-Lambda final signed rate")
+    check_completion(final, duration)
+    check_complete_energy(negative, 32, final["a"])
+    negative_rows = check_finite_progress(negative)
     if args.cuda:
         # gravity_cuda.hpp is the only writer of the interaction counters;
         # kick.cu reports their per-sink averages, and CPU dispatch returns zero.
-        # The final progress column combines direct and softened interactions.
-        require(any(row[4] > 0.0 and row[13] > 0.0 for row in closed_rows),
-                "expanding closed model did not execute CUDA gravity interactions")
-        require(any(row[4] < 0.0 and row[13] > 0.0 for row in closed_rows),
-                "contracting closed model did not execute CUDA gravity interactions")
-    check_closed_time_table(closed, 32)
-    check_closed_cosmology_output(closed, duration, hubble, image_available)
-    print("closed matter: expansion, turnaround, contraction, both time coordinates, and endpoint passed")
+        # GPU direct (column 13) combines direct and softened interactions.
+        require(any(row[4] > 0.0 and row[13] > 0.0 for row in negative_rows),
+                "expanding negative-Lambda model did not execute CUDA gravity interactions")
+        require(any(row[4] < 0.0 and row[13] > 0.0 for row in negative_rows),
+                "contracting negative-Lambda model did not execute CUDA gravity interactions")
+    check_negative_lambda_time_table(negative, 32, dimensionless_interval)
+    check_negative_lambda_cosmology_output(negative, duration, hubble, image_available)
+    print("flat negative Lambda: expansion, turnaround, contraction, both clocks, and endpoint passed")
 
-    # At this contracting epoch the closest schedule entry is z=-0.4,
+    # At this contracting epoch the closest schedule entry is z=-0.15,
     # theta=0.6. Replaying the expansion intervals instead restores theta=0.5
-    # until redshift rises above -0.25, when the initial theta=0.4 returns.
+    # until redshift rises above -0.05, when the initial theta=0.4 returns.
     schedule_candidates = [state for state in states[:-1] if state["adot"] < 0.0 and
-                           -0.4 < 1.0 / state["a"] - 1.0 < -0.325]
+                           -0.15 < 1.0 / state["a"] - 1.0 < -0.1]
     require(schedule_candidates, "no contracting checkpoint for opening schedule restart")
     schedule_saved = schedule_candidates[0]
     scheduled_restart, restart_output = exercise("opening_schedule_restart", {
@@ -413,28 +432,11 @@ def main():
     for name in ("a", "adot", "tau", "end"):
         require_close(scheduled_final[name], states[-1][name], f"opening schedule restarted {name}",
                       relative=2.e-12, absolute=2.e-14 * (hubble if name == "adot" else 1.0))
-    check_closed_cosmology_output(scheduled_restart, duration, hubble, image_available)
+    check_negative_lambda_cosmology_output(scheduled_restart, duration, hubble, image_available)
     require((scheduled_restart / "cosmology.txt").read_bytes() ==
-            (closed / "cosmology.txt").read_bytes(),
+            (negative / "cosmology.txt").read_bytes(),
             "contracting restart changed the full background plot history")
     print("global FMM: scheduled opening angles, reverse crossings, and contracting restart passed")
-
-    dimensionless_interval = negative_lambda_interval(8192)
-    require_close(dimensionless_interval, negative_lambda_interval(4096),
-                  "independent negative-Lambda quadrature", relative=2.e-13, absolute=0.0)
-    duration = dimensionless_interval / hubble
-    negative, output = exercise("negative_lambda", {"run.endTime": repr(duration),
-                                                    "cosmology.omegaLambda": "-1"})
-    require("Finished:" in output, "negative-Lambda model stopped before its requested endpoint")
-    states = checkpoint_states(negative, duration)
-    final = states[-1]
-    require(final["omega_lambda"] == -1.0, "numeric negative Lambda was treated as a sentinel")
-    require_close(final["a"], 1.0, "negative-Lambda final scale")
-    require_close(final["adot"] / hubble, -1.0, "negative-Lambda final signed rate")
-    check_completion(final, duration)
-    check_finite_progress(negative)
-    check_complete_energy(negative, 32, final["a"])
-    check_cosmology_output(negative, duration, image_available)
 
     candidates = [state for state in states[:-1] if state["adot"] < -0.1 * hubble]
     require(candidates, "no intermediate contracting checkpoint was published")
@@ -555,7 +557,8 @@ def main():
     require("Finished:" in output, "redshift endpoint did not complete")
     final = checkpoint_states(endpoint, 0.0)[-1]
     require_close(final["a"], 1.25, "requested redshift scale factor")
-    check_completion(final, math.asin(0.25) / hubble)
+    endpoint_phase = math.asin(1.25 ** 1.5 / math.sqrt(2.0))
+    check_completion(final, negative_lambda_interval(8192, endpoint_phase) / hubble)
     check_finite_progress(endpoint)
     check_complete_energy(endpoint, 32, final["a"])
     print("default stopping: requested future redshift determines the endpoint")
