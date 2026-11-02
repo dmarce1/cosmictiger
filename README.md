@@ -418,9 +418,9 @@ checkpoints, including their names and the conditions that create them.
 
 `COSMICTIGER_PROFILE=ON` is the CMake default for every build type and compiles
 the manual phase profiler; configure with `-DCOSMICTIGER_PROFILE=OFF` to turn
-every call into an empty inline. The driver, scenario driver, and initialization
-bracket their high-level phases with `profile::profileBegin("name")` and
-`profile::profileEnd()` from `cosmictiger/core/profiler.hpp`: initialization,
+every call into an empty inline. Coordinator code brackets phases with
+`profile::profileBegin("name")` and `profile::profileEnd()` or the exception-safe
+`profile::ScopedPhase` from `cosmictiger/core/profiler.hpp`: initialization,
 transfer functions, domains, rebound, rung sort, tree creation, kicks, mesh
 solves, hydro, chemistry, star formation, drift, checkpoints, output, lightcone,
 groups, power spectra, and gravity-error passes. Phases nest on the coordinator's
@@ -428,6 +428,22 @@ logical control flow; entering a child pauses its parent, so each name collects
 exclusive wall time and the rows sum to the instrumented total. Individual
 kernels, per-particle loops, and work on concurrent HPX tasks are deliberately
 not instrumented: the single phase stack belongs to the coordinator.
+
+The report uses dotted names for finer stages. SPH separates tree creation,
+neighbor boxes/lists, density/support solves, viscosity targets, closing/opening
+forces, predictor/corrector updates, rung limiting, sources, and cleanup.
+Hopkins MFM/MFV also separates gather/scatter, geometry, gradients, pair-flux
+solves/integration, and timestep selection. Gravity separates tree allocation
+and construction, the FMM root walk/background/result wait, PMMM
+preparation/deposition/transforms/evaluation, and cleanup. Drift separates
+CPU/CUDA execution, memory advice, and remaining remote waits.
+Domain migration, cosmological initialization, checkpoint I/O, particle output,
+group finding, lightcone processing, and power spectra have their own subphases.
+Only stages actually executed appear. A parent row (for example `hydro`) now
+contains its remaining overhead, excluding all its named children; its share
+is not the total share of that subsystem. In PMMM, the near-field pipeline can
+overlap the transform: `transform` includes that overlapping wall interval,
+and `finishNearPipeline` measures only the remaining wait.
 
 Normal driver exit and a clean first Ctrl-C print the table (phase, calls,
 total, mean, share) to the terminal and save it as `profile.txt` in the

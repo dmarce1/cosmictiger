@@ -38,6 +38,7 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/options_metadata.hpp>
+#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/cosmology/cosmology.hpp>
@@ -984,8 +985,12 @@ void writeDistributedParticleViews(int cycle, double a, double time) {
             throw std::runtime_error("Particle output generation already exists");
         }
     }
-    auto const leaves = onViewLocalities<WriteParticleLeafAction, ViewLeafMetadata>(
-        viewBoxes, cycle, a, time, generation);
+    auto const leaves = [&]() {
+        profile::ScopedPhase profilePhase("output.particles.leaves");
+        return onViewLocalities<WriteParticleLeafAction, ViewLeafMetadata>(
+            viewBoxes, cycle, a, time, generation);
+    }();
+    profile::ScopedPhase profilePhase("output.particles.master");
     for (size_t box = 0; box < viewBoxes.size(); ++box) {
         writeParticleMaster(box, cycle, a, time, leaves, generation);
     }

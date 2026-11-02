@@ -15,6 +15,7 @@
 #include <silo.h>
 
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/math.hpp>
@@ -109,12 +110,21 @@ void outputParticles(std::string const filename, Vector<OutputParticle> const& p
 
 void outputTracers(int number) {
     std::string const filename = outputPath("tracers." + std::to_string(number) + ".silo");
-    outputParticles(filename, particlesGetTracers());
+    auto const particles = []() {
+        profile::ScopedPhase profilePhase("output.tracers.gather");
+        return particlesGetTracers();
+    }();
+    profile::ScopedPhase profilePhase("output.tracers.write");
+    outputParticles(filename, particles);
 }
 
 void outputSlice(int number, double time) {
     constexpr int kNdim = 2;
-    auto pixels = outputGetSlice();
+    auto pixels = []() {
+        profile::ScopedPhase profilePhase("output.slice.gather");
+        return outputGetSlice();
+    }();
+    profile::ScopedPhase profilePhase("output.slice.write");
     int const res = getOptions().analysis.sliceResolution;
     std::string const filename = outputPath("slice." + std::to_string(number) + ".silo");
     auto file = detail::openOutputFile(filename, "Data");

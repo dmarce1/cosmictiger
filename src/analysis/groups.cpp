@@ -27,6 +27,7 @@
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/math.hpp>
@@ -97,6 +98,7 @@ void groupsInstallHistory(Vector<Pair<GroupInteger>> entries) {
 }
 
 void groupsPrepareHistory(int number) {
+    profile::ScopedPhase profilePhase("groups.history");
     // ROCKSTAR Sec. III.4: prior halo/core membership supplies temporal hosts.
     // Particle previous-halo tags move with particles. The sidecars supply the
     // corresponding previous host even after a restart or rank redistribution.
@@ -615,8 +617,15 @@ void groupsMeasureBaryons() {
         return;
     }
     ALWAYS_ASSERT(hpxRank() == 0);
-    auto const apertures = groupsGatherApertures();
-    auto const masses = groupsSumBaryons(apertures);
+    auto const apertures = []() {
+        profile::ScopedPhase profilePhase("groups.baryons.gather");
+        return groupsGatherApertures();
+    }();
+    auto const masses = [&]() {
+        profile::ScopedPhase profilePhase("groups.baryons.measure");
+        return groupsSumBaryons(apertures);
+    }();
+    profile::ScopedPhase profilePhase("groups.baryons.install");
     Vector<Vector<Pair<double>>> perRank(hpxSize());
     for (size_t i = 0; i < apertures.size(); ++i) {
         perRank[apertures[i].rank].push_back(masses[i]);

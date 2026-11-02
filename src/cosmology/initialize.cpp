@@ -121,7 +121,11 @@ PowerSpectrumFunction computePowerSpectrum() {
         PRINT("  Initializing: cosmological background and linear power spectrum\n");
     }
     ZeroOrderUniverse universe;
-    createNativeZeroOrderUniverse(&universe, std::max(1.1, 1.1 * initialScale), params);
+    {
+        profile::ScopedPhase profilePhase(
+            "initialize.transferFunctions.background", hpxRank() == 0);
+        createNativeZeroOrderUniverse(&universe, std::max(1.1, 1.1 * initialScale), params);
+    }
     terminal::detailPrint("Cosmological background ready\n");
 
     auto const [fundamental, corner] = initialWavenumberRange();
@@ -147,46 +151,50 @@ PowerSpectrumFunction computePowerSpectrum() {
         PRINT("  Einstein–Boltzmann: %zu modes (one dot per %zu completed modes)\n    ", count,
             kProgressInterval);
     }
-    try {
-        for (size_t i = 0; i < count; ++i) {
-            wavenumbers[i] = std::exp(lower + span * i / (count - 1));
-            futures.push_back(hpx::async(hpx::annotated_function(
-                [&, i]() {
-                    transfers[i] = solveBoltzmannTransfers(universe, wavenumbers[i], scales);
-                    if (showProgress) {
-                        size_t const completed =
-                            completedModes.fetch_add(1, std::memory_order_relaxed) + 1;
-                        if (completed % kProgressInterval == 0 || completed == count) {
-                            PRINT(".");
+    {
+        profile::ScopedPhase profilePhase("initialize.transferFunctions.boltzmann", hpxRank() == 0);
+        try {
+            for (size_t i = 0; i < count; ++i) {
+                wavenumbers[i] = std::exp(lower + span * i / (count - 1));
+                futures.push_back(hpx::async(hpx::annotated_function(
+                    [&, i]() {
+                        transfers[i] = solveBoltzmannTransfers(universe, wavenumbers[i], scales);
+                        if (showProgress) {
+                            size_t const completed =
+                                completedModes.fetch_add(1, std::memory_order_relaxed) + 1;
+                            if (completed % kProgressInterval == 0 || completed == count) {
+                                PRINT(".");
+                            }
                         }
-                    }
-                },
-                "cosmology.solveBoltzmannMode")));
+                    },
+                    "cosmology.solveBoltzmannMode")));
+            }
+        } catch (...) {
+            hpx::wait_all(futures.begin(), futures.end());
+            if (showProgress) {
+                PRINT(" failed\n");
+            }
+            throw;
         }
-    } catch (...) {
+        // Every task captures the background and output arrays by reference. Join
+        // all tasks before propagating any exception and destroying those locals.
         hpx::wait_all(futures.begin(), futures.end());
-        if (showProgress) {
-            PRINT(" failed\n");
+        try {
+            for (auto& future : futures) {
+                future.get();
+            }
+        } catch (...) {
+            if (showProgress) {
+                PRINT(" failed\n");
+            }
+            throw;
         }
-        throw;
-    }
-    // Every task captures the background and output arrays by reference. Join
-    // all tasks before propagating any exception and destroying those locals.
-    hpx::wait_all(futures.begin(), futures.end());
-    try {
-        for (auto& future : futures) {
-            future.get();
-        }
-    } catch (...) {
-        if (showProgress) {
-            PRINT(" failed\n");
-        }
-        throw;
     }
     if (showProgress) {
         PRINT(" done (%zu/%zu modes)\n", count, count);
     }
 
+    profile::ScopedPhase profilePhase("initialize.transferFunctions.normalize", hpxRank() == 0);
     double const baryonFraction = params.omegaB / (params.omegaB + params.omegaC);
     double const conformalHubble = initialScale *
         hubbleFunction(initialScale, params.hubble, params.omegaB + params.omegaC,
@@ -251,6 +259,7 @@ void initialize(double z0) {
         // A homogeneous lattice needs no transfer functions. This also permits
         // curved-background evolution without applying the flat-only native
         // Einstein-Boltzmann solver to an unsupported cosmology.
+        profile::ScopedPhase profilePhase("initialize.lattice");
         initX0();
         clearX0();
         return;
@@ -259,7 +268,10 @@ void initialize(double z0) {
         throw std::invalid_argument(
             "The internal Einstein-Boltzmann solver requires a flat universe");
     }
-    initX0();
+    {
+        profile::ScopedPhase profilePhase("initialize.lattice");
+        initX0();
+    }
     checkInitializationInterrupt();
     int64_t const n = getOptions().initial.fourierSize;
     float const omegaM = getOptions().cosmology.omegaM;
@@ -280,90 +292,128 @@ void initialize(double z0) {
         (getOptions().initial.closePack ? 2 : 1) * (getOptions().hydro.enabled ? 2 : 1);
     for (int dim = 0; dim < kDimensions; dim++) {
         for (int phase = 0; phase < latticePhases; ++phase) {
-            fft3dInit(n);
-            zeldovichBegin(dim, kDimensions, false, phase);
-            checkInitializationInterrupt();
-            fft3dInvExecute();
-            float const dxmax = zeldovichEnd(dim, 1.0f, 0.0f, false, phase);
-            terminal::detailPrint("Initial %c displacement maximum: %e\n", 'x' + dim, dxmax);
-            fft3dDestroy();
-            checkInitializationInterrupt();
-            fft3dInit(n);
-            zeldovichBegin(dim, kDimensions, true, phase);
-            fft3dInvExecute();
-            zeldovichEnd(dim, 1.0f, linearVelocityFactor, true, phase);
-            fft3dDestroy();
-            checkInitializationInterrupt();
+            {
+                profile::ScopedPhase profilePhase("initialize.zeldovich.displacement");
+                fft3dInit(n);
+                zeldovichBegin(dim, kDimensions, false, phase);
+                checkInitializationInterrupt();
+                fft3dInvExecute();
+                float const dxmax = zeldovichEnd(dim, 1.0f, 0.0f, false, phase);
+                terminal::detailPrint("Initial %c displacement maximum: %e\n", 'x' + dim, dxmax);
+                fft3dDestroy();
+                checkInitializationInterrupt();
+            }
+            {
+                profile::ScopedPhase profilePhase("initialize.zeldovich.velocity");
+                fft3dInit(n);
+                zeldovichBegin(dim, kDimensions, true, phase);
+                fft3dInvExecute();
+                zeldovichEnd(dim, 1.0f, linearVelocityFactor, true, phase);
+                fft3dDestroy();
+                checkInitializationInterrupt();
+            }
         }
     }
     if (getOptions().initial.twoLpt) {
+        profile::ScopedPhase profilePhase("initialize.twoLpt");
         twolptInit();
 
-        terminal::detailPrint("2LPT phase 1\n");
-        twolpt(1, 1);
-        twolptPhase(0);
-        fft3dDestroy();
-        checkInitializationInterrupt();
+        {
+            profile::ScopedPhase profilePhase("initialize.twoLpt.source");
+            terminal::detailPrint("2LPT phase 1\n");
+            twolpt(1, 1);
+            twolptPhase(0);
+            fft3dDestroy();
+            checkInitializationInterrupt();
+        }
 
-        terminal::detailPrint("2LPT phase 2\n");
-        twolpt(2, 2);
-        twolptPhase(1);
-        fft3dDestroy();
-        checkInitializationInterrupt();
+        {
+            profile::ScopedPhase profilePhase("initialize.twoLpt.source");
+            terminal::detailPrint("2LPT phase 2\n");
+            twolpt(2, 2);
+            twolptPhase(1);
+            fft3dDestroy();
+            checkInitializationInterrupt();
+        }
 
-        terminal::detailPrint("2LPT phase 3\n");
-        twolpt(0, 0);
-        twolptPhase(2);
-        fft3dDestroy();
-        checkInitializationInterrupt();
+        {
+            profile::ScopedPhase profilePhase("initialize.twoLpt.source");
+            terminal::detailPrint("2LPT phase 3\n");
+            twolpt(0, 0);
+            twolptPhase(2);
+            fft3dDestroy();
+            checkInitializationInterrupt();
+        }
 
-        terminal::detailPrint("2LPT phase 4\n");
-        twolpt(2, 2);
-        twolptPhase(3);
-        fft3dDestroy();
-        checkInitializationInterrupt();
+        {
+            profile::ScopedPhase profilePhase("initialize.twoLpt.source");
+            terminal::detailPrint("2LPT phase 4\n");
+            twolpt(2, 2);
+            twolptPhase(3);
+            fft3dDestroy();
+            checkInitializationInterrupt();
+        }
 
-        terminal::detailPrint("2LPT phase 5\n");
-        twolpt(0, 0);
-        twolptPhase(4);
-        fft3dDestroy();
-        checkInitializationInterrupt();
+        {
+            profile::ScopedPhase profilePhase("initialize.twoLpt.source");
+            terminal::detailPrint("2LPT phase 5\n");
+            twolpt(0, 0);
+            twolptPhase(4);
+            fft3dDestroy();
+            checkInitializationInterrupt();
+        }
 
-        terminal::detailPrint("2LPT phase 6\n");
-        twolpt(1, 1);
-        twolptPhase(5);
-        fft3dDestroy();
-        checkInitializationInterrupt();
+        {
+            profile::ScopedPhase profilePhase("initialize.twoLpt.source");
+            terminal::detailPrint("2LPT phase 6\n");
+            twolpt(1, 1);
+            twolptPhase(5);
+            fft3dDestroy();
+            checkInitializationInterrupt();
+        }
 
-        terminal::detailPrint("2LPT phase 7\n");
-        twolpt(0, 1);
-        twolptPhase(6);
-        fft3dDestroy();
-        checkInitializationInterrupt();
+        {
+            profile::ScopedPhase profilePhase("initialize.twoLpt.source");
+            terminal::detailPrint("2LPT phase 7\n");
+            twolpt(0, 1);
+            twolptPhase(6);
+            fft3dDestroy();
+            checkInitializationInterrupt();
+        }
 
-        terminal::detailPrint("2LPT phase 8\n");
-        twolpt(0, 2);
-        twolptPhase(7);
-        fft3dDestroy();
-        checkInitializationInterrupt();
+        {
+            profile::ScopedPhase profilePhase("initialize.twoLpt.source");
+            terminal::detailPrint("2LPT phase 8\n");
+            twolpt(0, 2);
+            twolptPhase(7);
+            fft3dDestroy();
+            checkInitializationInterrupt();
+        }
 
-        terminal::detailPrint("2LPT phase 9\n");
-        twolpt(1, 2);
-        twolptPhase(8);
-        fft3dDestroy();
-        checkInitializationInterrupt();
+        {
+            profile::ScopedPhase profilePhase("initialize.twoLpt.source");
+            terminal::detailPrint("2LPT phase 9\n");
+            twolpt(1, 2);
+            twolptPhase(8);
+            fft3dDestroy();
+            checkInitializationInterrupt();
+        }
 
-        twolptCorrection1();
-        twolptF2delta2Inv();
-        //		fft3d2silo(false);
-        //		system( "cp complex.silo complex.3.silo\n");
-        fft3dDestroy();
-        checkInitializationInterrupt();
+        {
+            profile::ScopedPhase profilePhase("initialize.twoLpt.sourceTransform");
+            twolptCorrection1();
+            twolptF2delta2Inv();
+            //		fft3d2silo(false);
+            //		system( "cp complex.silo complex.3.silo\n");
+            fft3dDestroy();
+            checkInitializationInterrupt();
+        }
 
         for (int dim = 0; dim < kDimensions; dim++) {
             terminal::detailPrint(
                 "Computing 2LPT correction to %c positions and velocities\n", 'x' + dim);
             for (int phase = 0; phase < latticePhases; ++phase) {
+                profile::ScopedPhase profilePhase("initialize.twoLpt.apply");
                 twolptCorrection2(dim, phase);
                 float const dxmax = zeldovichEnd(dim, -d2Value, prefac2, false, phase);
                 fft3dDestroy();
@@ -371,9 +421,15 @@ void initialize(double z0) {
                 terminal::detailPrint("2LPT %c displacement maximum: %e\n", 'x' + dim, dxmax);
             }
         }
-        twolptDestroy();
+        {
+            profile::ScopedPhase profilePhase("initialize.twoLpt.cleanup");
+            twolptDestroy();
+        }
     }
-    clearX0();
+    {
+        profile::ScopedPhase profilePhase("initialize.cleanup");
+        clearX0();
+    }
 }
 
 void twolptF2delta2Inv() {
@@ -477,10 +533,8 @@ void twolptGenerate(int dim1, int dim2, bool velocity = false, int latticePhase 
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     float const factor = std::pow(boxSize, -1.5) * n * n * n;
     static auto const power = []() {
-        profile::profileBegin("transferFunctions");
-        auto result = computePowerSpectrum();
-        profile::profileEnd();
-        return result;
+        profile::ScopedPhase profilePhase("initialize.transferFunctions", hpxRank() == 0);
+        return computePowerSpectrum();
     }();
     auto const box = fft3dComplexRange();
     Vector<ComplexFloat> yValue(box.volume());

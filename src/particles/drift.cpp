@@ -14,6 +14,7 @@
 #include <hpx/threading_base/annotated_function.hpp>
 
 #include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/drift_cpu.hpp>
 #if COSMICTIGER_WITH_SPH
@@ -21,6 +22,20 @@
 #endif
 
 HPX_PLAIN_ACTION(drift, DriftAction);
+
+namespace detail {
+
+bool profileDriftCoordinator() {
+    // Both drift entry paths execute locally on the driver and recurse only to
+    // child localities. CPU workers and CUDA kernels never call drift().
+#if COSMICTIGER_PROFILE
+    return hpxRank() == 0;
+#else
+    return false;
+#endif
+}
+
+}    // namespace detail
 
 void cpuDrift(int rung, double a, double dt, double tau0, double tau1, double tauMax, double drag) {
     auto const range =
@@ -87,6 +102,7 @@ void cpuDrift(int rung, double a, double dt, double tau0, double tau1, double ta
     }
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
     if (parameters.lightcone) {
+        profile::ScopedPhase profilePhase("drift.lightcone", detail::profileDriftCoordinator());
         lcAddParticles(entries, a, tau0);
     }
 #endif
@@ -103,14 +119,22 @@ void drift(
     }
 #ifdef USE_CUDA
     if (getOptions().compute.cuda) {
-        cudaDrift(rung, scale, dt, tau0, tau1, tauMax, drag);
+        {
+            profile::ScopedPhase profilePhase("drift.cuda", detail::profileDriftCoordinator());
+            cudaDrift(rung, scale, dt, tau0, tau1, tauMax, drag);
+        }
+        profile::ScopedPhase profilePhase("drift.memoryAdvice", detail::profileDriftCoordinator());
         particlesMemadviseCpu();
     } else
 #endif
     {
+        profile::ScopedPhase profilePhase("drift.cpu", detail::profileDriftCoordinator());
         cpuDrift(rung, scale, dt, tau0, tau1, tauMax, drag);
     }
-    for (auto& future : futures) {
-        future.get();
+    if (!futures.empty()) {
+        profile::ScopedPhase profilePhase("drift.wait", detail::profileDriftCoordinator());
+        for (auto& future : futures) {
+            future.get();
+        }
     }
 }

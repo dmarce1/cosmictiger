@@ -24,7 +24,7 @@
 // Manual phase profiler. COSMICTIGER_PROFILE (a CMake option, on by default)
 // compiles the instrumentation; without it every call is an empty inline.
 //
-// profileBegin/profileEnd delimit high-level phases on the coordinator's
+// profileBegin/profileEnd delimit phases on the coordinator's
 // logical control flow (driver, scenario driver, initialization). Phases nest:
 // entering a child pauses its parent, so each name accumulates exclusive wall
 // time and the rows of the report sum to the instrumented total. Do not
@@ -47,5 +47,32 @@ inline std::string profileReport() {
 }
 inline void profileOutput(std::string const&) noexcept {}
 #endif
+
+// Balance a coordinator phase on every exit path, including exceptions. Use
+// enabled only where the caller can identify a serialized coordinator entry;
+// being on rank zero alone does not make a parallel task safe to instrument.
+class ScopedPhase {
+public:
+    explicit ScopedPhase(char const* name, bool enabled = true)
+      : enabled_(enabled) {
+        if (enabled_) {
+            profileBegin(name);
+        }
+    }
+
+    ~ScopedPhase() {
+        if (enabled_) {
+            profileEnd();
+        }
+    }
+
+    ScopedPhase(ScopedPhase const&) = delete;
+    ScopedPhase& operator=(ScopedPhase const&) = delete;
+    ScopedPhase(ScopedPhase&&) = delete;
+    ScopedPhase& operator=(ScopedPhase&&) = delete;
+
+private:
+    bool enabled_;
+};
 
 }    // namespace profile

@@ -71,7 +71,10 @@ void writeScenarioDiagnostics(DriverParameters const& state) {
     fprintf(file, "%e %e %e %e %e %e %e %e %e\n", state.tau, energy.xmom, energy.ymom, energy.zmom,
         energy.kin, energy.therm, total, energy.pot, (total - state.energy0) / normalization);
     fclose(file);
-    double const maximumDensity = scenarioMaximumDensity();
+    double const maximumDensity = []() {
+        profile::ScopedPhase phase("diagnostics.maximumDensity");
+        return scenarioMaximumDensity();
+    }();
     file = fopen(outputPath("rho.dat").c_str(), "at");
     if (file == nullptr) {
         THROW_ERROR("Unable to write scenario density diagnostics\n");
@@ -129,6 +132,7 @@ void runFixedScenario() {
         particlesSetMinrung(baseOptions.run.minRung);
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION
         if (baseOptions.starFormation.enabled) {
+            profile::ScopedPhase phase("starFormation.initialize");
             starFormationInitialize();
         }
 #endif
@@ -362,10 +366,14 @@ void runFixedScenario() {
                 false, true, state.energies, -1, true, state.globalTimestep,
                 global ? coarseInterval : 0.0);
         }
-        detail::writeScenarioDiagnostics(state);
+        {
+            profile::ScopedPhase phase("diagnostics");
+            detail::writeScenarioDiagnostics(state);
+        }
         setOptions(baseOptions);
     }
     if (completed && plan.finish != nullptr) {
+        profile::ScopedPhase phase("diagnostics.scenario");
         plan.finish(state.tau);
     }
 #if COSMICTIGER_ENABLE_FMM

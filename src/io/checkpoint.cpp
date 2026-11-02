@@ -31,6 +31,7 @@
 #include <cosmictiger/core/file_handle.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/gravity/nitadori/mesh_size.hpp>
 #include <cosmictiger/io/checkpoint.hpp>
@@ -1432,24 +1433,31 @@ void writeCheckpoint(DriverParameters params) {
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<WriteCheckpointAction>(c, params));
     }
-    auto const rankPath = detail::checkpointRankFile(stagingDirectory, hpxRank());
-    detail::CheckpointFile file(fopen(rankPath.c_str(), "wb"));
-    if (!file) {
-        THROW_ERROR("Unable to open %s for writing\n", rankPath.c_str());
-    }
-    detail::writeDriverState(file.get(), params);
-    particlesSave(file.get());
-    domainsSave(file.get());
+    {
+        profile::ScopedPhase profilePhase("writeCheckpoint.local", hpxRank() == 0);
+        auto const rankPath = detail::checkpointRankFile(stagingDirectory, hpxRank());
+        detail::CheckpointFile file(fopen(rankPath.c_str(), "wb"));
+        if (!file) {
+            THROW_ERROR("Unable to open %s for writing\n", rankPath.c_str());
+        }
+        detail::writeDriverState(file.get(), params);
+        particlesSave(file.get());
+        domainsSave(file.get());
 #if COSMICTIGER_WITH_GRAVITY
-    if (getOptions().lightcone.enabled) {
-        lcSave(file.get());
-    }
+        if (getOptions().lightcone.enabled) {
+            lcSave(file.get());
+        }
 #endif
-    detail::flushAndCloseCheckpointFile(file, rankPath);
-    for (auto& future : futs) {
-        future.get();
+        detail::flushAndCloseCheckpointFile(file, rankPath);
+    }
+    {
+        profile::ScopedPhase profilePhase("writeCheckpoint.wait", hpxRank() == 0);
+        for (auto& future : futs) {
+            future.get();
+        }
     }
     if (hpxRank() == 0) {
+        profile::ScopedPhase profilePhase("writeCheckpoint.publish");
         detail::writeCheckpointScenario(stagingDirectory);
         detail::writeCheckpointManifest(stagingDirectory, params.iter);
         detail::syncDirectory(stagingDirectory);
@@ -1466,6 +1474,7 @@ DriverParameters readCheckpoint() {
     DriverParameters params{};
     if (hpxRank() == 0) {
         PRINT("Reading checkpoint\n");
+        profile::ScopedPhase profilePhase("readCheckpoint.validate");
         detail::validateCheckpointDirectory(
             detail::checkpointDirectory(getOptions().checkpoint.readIndex),
             getOptions().checkpoint.readIndex);
@@ -1474,29 +1483,36 @@ DriverParameters readCheckpoint() {
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<ReadCheckpointAction>(c));
     }
-    int const iter = getOptions().checkpoint.readIndex;
-    auto const rankPath = detail::checkpointRankFile(detail::checkpointDirectory(iter), hpxRank());
-    detail::CheckpointFile file(fopen(rankPath.c_str(), "rb"));
-    if (!file) {
-        THROW_ERROR("Unable to open %s for reading.\n", rankPath.c_str());
-    }
-    params = detail::readDriverState(file.get());
-    particlesLoad(file.get());
-    domainsLoad(file.get());
+    {
+        profile::ScopedPhase profilePhase("readCheckpoint.local", hpxRank() == 0);
+        int const iter = getOptions().checkpoint.readIndex;
+        auto const rankPath =
+            detail::checkpointRankFile(detail::checkpointDirectory(iter), hpxRank());
+        detail::CheckpointFile file(fopen(rankPath.c_str(), "rb"));
+        if (!file) {
+            THROW_ERROR("Unable to open %s for reading.\n", rankPath.c_str());
+        }
+        params = detail::readDriverState(file.get());
+        particlesLoad(file.get());
+        domainsLoad(file.get());
 #if COSMICTIGER_WITH_GRAVITY
-    if (getOptions().lightcone.enabled) {
-        lcLoad(file.get());
-    }
+        if (getOptions().lightcone.enabled) {
+            lcLoad(file.get());
+        }
 #endif
-    if (ferror(file.get()) != 0) {
-        THROW_ERROR("Unable to read checkpoint file %s\n", rankPath.c_str());
+        if (ferror(file.get()) != 0) {
+            THROW_ERROR("Unable to read checkpoint file %s\n", rankPath.c_str());
+        }
+        FILE* rawFile = file.release();
+        if (fclose(rawFile) != 0) {
+            THROW_ERROR("Unable to close checkpoint file %s\n", rankPath.c_str());
+        }
     }
-    FILE* rawFile = file.release();
-    if (fclose(rawFile) != 0) {
-        THROW_ERROR("Unable to close checkpoint file %s\n", rankPath.c_str());
-    }
-    for (auto& future : futs) {
-        future.get();
+    {
+        profile::ScopedPhase profilePhase("readCheckpoint.wait", hpxRank() == 0);
+        for (auto& future : futs) {
+            future.get();
+        }
     }
     if (hpxRank() == 0) {
         PRINT("Done reading checkpoint\n");

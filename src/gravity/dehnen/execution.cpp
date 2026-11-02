@@ -18,6 +18,7 @@
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/gravity/dehnen/execution.hpp>
 #include <cosmictiger/gravity/dehnen/gpu_staging.hpp>
 #include <cosmictiger/gravity/dehnen/particle_exchange.hpp>
@@ -178,6 +179,11 @@ hpx::future<KickReturn> kickFork(KickParameters params, ExpansionBuffer const& l
 KickReturn kick(KickParameters params, ExpansionBuffer l, Array<Position, kDimensions> pos,
     TreeId self, Vector<TreeId> direct, Vector<TreeId> periodic,
     std::shared_ptr<KickWorkspace> workspace) {
+#if COSMICTIGER_PROFILE
+    bool const coordinator = self.proc == 0 && self.index == 0 && !params.forceOnly &&
+        hpxRank() == 0 && treeGetNode(self)->depth == 0;
+    profile::ScopedPhase phase("kick.walk", coordinator);
+#endif
     params.openLargerCell = getOptions().gravity.openLargerCell;
     gravitySetRemoteSourceReader(dehnenReadSourcePositions);
     KickContext context;
@@ -190,6 +196,24 @@ KickReturn kick(KickParameters params, ExpansionBuffer l, Array<Position, kDimen
     context.waitReturn = detail::kickWaitLocalReturn;
     context.publishReturn = kickSetRc;
     context.gpuExecutor = dehnenStageGpu;
+#if COSMICTIGER_PROFILE
+    if (coordinator) {
+        // kickFork constructs a fresh context in every descendant. Only this
+        // global-root context may nest phases while concurrent workers run.
+        context.background = [](int order, KickParameters const& parameters,
+                                 ExpansionBuffer& expansion, Array<Position, kDimensions>& position,
+                                 TreeId node, Vector<TreeId> const& checks) -> FlopCounts {
+            profile::ScopedPhase phase("kick.background");
+            return dehnenBackground(order, parameters, expansion, position, node, checks);
+        };
+        context.waitReturn = []() -> KickReturn {
+            // On one locality this is the remaining local/GPU completion wait.
+            // A distributed global root waits for child results inside kick.walk.
+            profile::ScopedPhase phase("kick.waitLocalResult");
+            return detail::kickWaitLocalReturn();
+        };
+    }
+#endif
     return kickWalkDispatch(params, std::move(l), pos, self, std::move(direct), std::move(periodic),
         std::move(workspace), context);
 }

@@ -17,6 +17,7 @@
 #include <cosmictiger/analysis/power_cpu.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
@@ -54,7 +55,10 @@ PowerSpectrumT powerSpectrumFromTransform() {
         double logk = logkmin + dlogk * i;
         kbins.push_back(exp(logk));
     }
-    auto pr = powerSpectrumBin(kbins);
+    auto pr = [&]() {
+        profile::ScopedPhase profilePhase("powerSpectrum.bin");
+        return powerSpectrumBin(kbins);
+    }();
     auto const& count = pr.c;
     auto& power = pr.p;
     auto& ks = pr.k;
@@ -72,7 +76,10 @@ PowerSpectrumT powerSpectrumFromTransform() {
         ret.p[i] = power[i];
         ret.k[i] = ks[i];
     }
-    pr = powerSpectrumBinDeviation(pr, kbins);
+    {
+        profile::ScopedPhase profilePhase("powerSpectrum.variance");
+        pr = powerSpectrumBinDeviation(pr, kbins);
+    }
     for (int i = 0; i < power.size(); i++) {
         if (pr.c[i] > 0) {
             if (count[i] > 1) {
@@ -240,14 +247,26 @@ static PowerSpectrumReturn powerSpectrumBinDeviation(
 
 PowerSpectrumT powerSpectrumCompute(int m) {
     int const n = getOptions().initial.fourierSize;
-    fft3dInit(n, -1.0f);
-    computeDensityFolded(m);
-    fft3dExecute();
+    {
+        profile::ScopedPhase profilePhase("powerSpectrum.fftSetup");
+        fft3dInit(n, -1.0f);
+    }
+    {
+        profile::ScopedPhase profilePhase("powerSpectrum.density");
+        computeDensityFolded(m);
+    }
+    {
+        profile::ScopedPhase profilePhase("powerSpectrum.fft");
+        fft3dExecute();
+    }
     auto power = powerSpectrumFromTransform();
     for (int i = 0; i < power.k.size(); i++) {
         power.k[i] *= m;
     }
-    fft3dDestroy();
+    {
+        profile::ScopedPhase profilePhase("powerSpectrum.cleanup");
+        fft3dDestroy();
+    }
     return power;
 }
 

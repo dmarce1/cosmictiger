@@ -22,6 +22,7 @@
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/gravity/nitadori/mesh_size.hpp>
 #include <cosmictiger/math/math.hpp>
@@ -73,6 +74,7 @@ size_t migrationPayloadBytes(Record const& record, size_t count) {
 }
 
 Vector<size_t> countDomainSplits(Vector<double> const& bounds, int depth) {
+    profile::ScopedPhase profilePhase("domains.rebound.countSplits");
     Vector<hpx::future<Vector<size_t>>> pending;
     for (auto const& locality : hpxLocalities()) {
         pending.push_back(hpx::async<DomainsCountBelowAction>(locality, bounds, depth));
@@ -89,6 +91,7 @@ Vector<size_t> countDomainSplits(Vector<double> const& bounds, int depth) {
 
 // Sum each locality's coarse-slab histograms for the domains at this depth.
 std::vector<std::vector<size_t>> countDomainCoarseSlabs(int depth, int coarseMeshSize) {
+    profile::ScopedPhase profilePhase("domains.rebound.countSlabs");
     Vector<hpx::future<std::vector<std::vector<size_t>>>> pending;
     for (auto const& locality : hpxLocalities()) {
         pending.push_back(
@@ -416,7 +419,10 @@ void domainsReboundSort(Vector<double> bounds, int depth) {
 }
 
 void domainsRebound() {
-    domainsInitRebounds();
+    {
+        profile::ScopedPhase profilePhase("domains.rebound.initialize");
+        domainsInitRebounds();
+    }
     //	PRINT( "Starting rebound\n");
     Vector<DomainGlobal> domains(1);
     boxesByKey = decltype(boxesByKey)();
@@ -432,7 +438,11 @@ void domainsRebound() {
             gravityOptions.pmmmCoarseMeshSize, gravityOptions.pmmmNearWidth) :
         0;
     domains[0].totalCount = 0;
-    for (auto const count : domainsGetLoads()) {
+    auto const loads = []() {
+        profile::ScopedPhase profilePhase("domains.rebound.loads");
+        return domainsGetLoads();
+    }();
+    for (auto const count : loads) {
         domains[0].totalCount += count;
     }
     domains[0].midhi = 1.0;
@@ -502,12 +512,15 @@ void domainsRebound() {
         }
         // Child targets must use the count at the actual final split plane.
         counts = detail::countDomainSplits(bounds, depth);
-        Vector<hpx::future<void>> sortFuts;
-        for (int i = 0; i < hpxSize(); i++) {
-            sortFuts.push_back(
-                hpx::async<DomainsReboundSortAction>(hpxLocalities()[i], bounds, depth));
+        {
+            profile::ScopedPhase profilePhase("domains.rebound.sort");
+            Vector<hpx::future<void>> sortFuts;
+            for (int i = 0; i < hpxSize(); i++) {
+                sortFuts.push_back(
+                    hpx::async<DomainsReboundSortAction>(hpxLocalities()[i], bounds, depth));
+            }
+            hpx::wait_all(sortFuts.begin(), sortFuts.end());
         }
-        hpx::wait_all(sortFuts.begin(), sortFuts.end());
         newDomains.resize(0);
         for (int i = 0; i < domains.size(); i++) {
             if (domains[i].processRange.second - domains[i].processRange.first > 1) {
@@ -546,7 +559,10 @@ void domainsRebound() {
         }
         depth++;
     }
-    domainsTransmitBoxes(boxesByKey);
+    {
+        profile::ScopedPhase profilePhase("domains.rebound.publish");
+        domainsTransmitBoxes(boxesByKey);
+    }
 }
 
 void domainsTransmitParticles(Vector<Particle> parts) {

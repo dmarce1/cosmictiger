@@ -10,6 +10,7 @@
 
 #include <hpx/threading_base/annotated_function.hpp>
 
+#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
@@ -67,7 +68,9 @@ static hpx::future<TreeCreateReturn> treeCreateFork(TreeBuildRequest request, bo
 
 TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, int> processRange,
     Pair<ParticleInteger> particleRange, Range<double> box, int depth, bool localRoot) {
+    bool const coordinator = depth == 0 && hpxRank() == 0;
     if (depth == 0) {
+        profile::ScopedPhase phase("treeCreate.allocate", coordinator);
         treeAllocateNodes();
     }
     if (localRoot) {
@@ -101,8 +104,11 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     policy.fork = [](void*, TreeBuildRequest request, bool threadme, bool) {
         return treeCreateFork(request, threadme);
     };
-    auto result =
-        treeBuild({params, key, processRange, particleRange, box, depth, localRoot}, policy);
+    auto result = [&]() {
+        // Only the root call owns a phase; recursively forked HPX tasks share the stack.
+        profile::ScopedPhase phase("treeCreate.build", coordinator);
+        return treeBuild({params, key, processRange, particleRange, box, depth, localRoot}, policy);
+    }();
 #if COSMICTIGER_WITH_SPH
     if (localRoot && getOptions().hydro.enabled) {
         particlesResolveWithSphParticles();

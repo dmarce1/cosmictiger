@@ -512,6 +512,35 @@ if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
 endif()
 
 if(BUILD_TESTING)
+    foreach(profile_mode IN ITEMS enabled disabled)
+        add_executable(phase_profiler_${profile_mode}_test
+            tests/phase_profiler.cpp src/core/profiler.cpp)
+        target_include_directories(phase_profiler_${profile_mode}_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_features(phase_profiler_${profile_mode}_test PRIVATE cxx_std_20)
+        target_link_libraries(phase_profiler_${profile_mode}_test PRIVATE Threads::Threads)
+        target_compile_definitions(phase_profiler_${profile_mode}_test PRIVATE
+            COSMICTIGER_PROFILE=$<IF:$<STREQUAL:${profile_mode},enabled>,1,0>)
+        add_test(NAME phase_profiler_${profile_mode}
+            COMMAND phase_profiler_${profile_mode}_test
+                ${PROJECT_BINARY_DIR}/phase_profiler_${profile_mode}.txt)
+        set_tests_properties(phase_profiler_${profile_mode} PROPERTIES
+            TIMEOUT 10 PROCESSORS 1 LABELS "profiler;cpu")
+    endforeach()
+    if(COSMICTIGER_PROFILE AND COSMICTIGER_WITH_SPH AND
+            (COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL OR COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL))
+        set(cosmictiger_phase_profile_args)
+        if(COSMICTIGER_ENABLE_HOPKINS)
+            list(APPEND cosmictiger_phase_profile_args --hopkins)
+        endif()
+        if(COSMICTIGER_WITH_GRAVITY)
+            list(APPEND cosmictiger_phase_profile_args --gravity)
+        endif()
+        add_test(NAME phase_profile_application COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_phase_profile.py $<TARGET_FILE:cosmictiger>
+            ${PROJECT_BINARY_DIR}/tests/phase_profile ${cosmictiger_phase_profile_args})
+        set_tests_properties(phase_profile_application PROPERTIES
+            TIMEOUT 150 PROCESSORS 2 LABELS "profiler;cpu;application")
+    endif()
     add_test(NAME build_features COMMAND ${Python3_EXECUTABLE}
         ${PROJECT_SOURCE_DIR}/tests/check_build_features.py ${PROJECT_BINARY_DIR})
     set_tests_properties(build_features PROPERTIES TIMEOUT 30 LABELS "build")

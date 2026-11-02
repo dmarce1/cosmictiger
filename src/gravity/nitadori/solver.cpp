@@ -1,5 +1,6 @@
 /* CosmicTiger - Nitadori PMMM solver; BSL-1.0. */
 
+#include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/gravity/nitadori/mesh_size.hpp>
 #include "actions.hpp"
 
@@ -139,27 +140,33 @@ void allLocalities(Arguments... arguments) {
 
 void solve(SolveRequest request) {
     std::unique_lock<MutexType> lock(solveMutex);
+    bool const coordinator = hpxRank() == 0;
     request.generation = ++nextGeneration;
-    std::vector<hpx::future<std::array<uint64_t, 2>>> counts;
-    counts.reserve(hpxLocalities().size());
-    try {
-        for (auto const& locality : hpxLocalities()) {
-            counts.push_back(hpx::async<PmmmParticleCountsAction>(
-                locality, request.applyKick && request.parameters.htime));
+    {
+        profile::ScopedPhase phase(
+            request.applyKick ? "pmmmKick.particleCounts" : "pmmmSolve.particleCounts",
+            coordinator);
+        std::vector<hpx::future<std::array<uint64_t, 2>>> counts;
+        counts.reserve(hpxLocalities().size());
+        try {
+            for (auto const& locality : hpxLocalities()) {
+                counts.push_back(hpx::async<PmmmParticleCountsAction>(
+                    locality, request.applyKick && request.parameters.htime));
+            }
+        } catch (...) {
+            hpx::wait_all(counts);
+            throw;
         }
-    } catch (...) {
         hpx::wait_all(counts);
-        throw;
-    }
-    hpx::wait_all(counts);
-    for (auto& future : counts) {
-        auto const value = future.get();
-        if (value[0] > std::numeric_limits<uint64_t>::max() - request.activeParticles ||
-            value[1] > std::numeric_limits<uint64_t>::max() - request.totalParticles) {
-            throw std::runtime_error("PMMM global particle count overflow");
+        for (auto& future : counts) {
+            auto const value = future.get();
+            if (value[0] > std::numeric_limits<uint64_t>::max() - request.activeParticles ||
+                value[1] > std::numeric_limits<uint64_t>::max() - request.totalParticles) {
+                throw std::runtime_error("PMMM global particle count overflow");
+            }
+            request.activeParticles += value[0];
+            request.totalParticles += value[1];
         }
-        request.activeParticles += value[0];
-        request.totalParticles += value[1];
     }
     auto const& options = getOptions().gravity;
     request.meshSize = request.applyKick && request.parameters.htime ?
@@ -168,33 +175,60 @@ void solve(SolveRequest request) {
                 options.meshSize, options.pmmmCoarseMeshSize, options.pmmmNearWidth),
             request.activeParticles, request.totalParticles) :
         options.meshSize;
+    {
+        profile::ScopedPhase phase(
+            request.applyKick ? "pmmmKick.prepare" : "pmmmSolve.prepare", coordinator);
 #if COSMICTIGER_WITH_SPH
-    if (getOptions().hydro.enabled) {
-        sphParticlesClearCaches();
-    }
+        if (getOptions().hydro.enabled) {
+            sphParticlesClearCaches();
+        }
 #endif
-    allLocalities<PmmmPrepareAction>(request);
+        allLocalities<PmmmPrepareAction>(request);
+    }
     std::exception_ptr failure;
 #if COSMICTIGER_ENABLE_PMMM_FMM
     bool started = false;
 #endif
     try {
-        allLocalities<PmmmDepositAction>();
+        {
+            profile::ScopedPhase phase(
+                request.applyKick ? "pmmmKick.deposit" : "pmmmSolve.deposit", coordinator);
+            allLocalities<PmmmDepositAction>();
+        }
 #if COSMICTIGER_ENABLE_PMMM_FMM
         if (options.pmmmNearMethod == "fmm") {
-            allLocalities<PmmmPlanGhostsAction>();
+            {
+                profile::ScopedPhase phase(
+                    request.applyKick ? "pmmmKick.planGhosts" : "pmmmSolve.planGhosts",
+                    coordinator);
+                allLocalities<PmmmPlanGhostsAction>();
+            }
             started = true;
+            profile::ScopedPhase phase(
+                request.applyKick ? "pmmmKick.startNearPipeline" : "pmmmSolve.startNearPipeline",
+                coordinator);
             allLocalities<PmmmStartPipelineAction>();
         }
 #endif
-        allLocalities<PmmmTransformAction>();
+        {
+            // The FMM near-field pipeline overlaps the transform. These phases measure
+            // coordinator wall intervals; finishNearPipeline is only the remaining wait.
+            profile::ScopedPhase phase(
+                request.applyKick ? "pmmmKick.transform" : "pmmmSolve.transform", coordinator);
+            allLocalities<PmmmTransformAction>();
+        }
 #if COSMICTIGER_ENABLE_PMMM_FMM
         if (options.pmmmNearMethod == "fmm") {
+            profile::ScopedPhase phase(
+                request.applyKick ? "pmmmKick.finishNearPipeline" : "pmmmSolve.finishNearPipeline",
+                coordinator);
             allLocalities<PmmmFinishPipelineAction>();
         }
 #endif
 #if COSMICTIGER_ENABLE_PMMM_PP
         if (options.pmmmNearMethod == "pp") {
+            profile::ScopedPhase phase(
+                request.applyKick ? "pmmmKick.evaluate" : "pmmmSolve.evaluate", coordinator);
             allLocalities<PmmmEvaluateAction>(request.doPotential);
         }
 #endif
@@ -212,10 +246,14 @@ void solve(SolveRequest request) {
         }
     };
     if (failure && started) {
+        profile::ScopedPhase phase(
+            request.applyKick ? "pmmmKick.abortPipeline" : "pmmmSolve.abortPipeline", coordinator);
         cleanup([]() { allLocalities<PmmmAbortPipelineAction>(); });
         cleanup([]() { allLocalities<PmmmFinishPipelineAction>(); });
     }
     if (options.pmmmNearMethod == "fmm") {
+        profile::ScopedPhase phase(
+            request.applyKick ? "pmmmKick.cleanup" : "pmmmSolve.cleanup", coordinator);
         cleanup([]() { treeDestroy(); });
         cleanup([]() { particlesCacheFree(); });
         cleanup([]() { allLocalities<PmmmClearGhostsAction>(); });
@@ -224,6 +262,8 @@ void solve(SolveRequest request) {
     if (failure) {
         std::rethrow_exception(failure);
     }
+    profile::ScopedPhase phase(
+        request.applyKick ? "pmmmKick.diagnostics" : "pmmmSolve.diagnostics", coordinator);
     globalDiagnostics = {};
     globalDiagnostics.meshSize = request.meshSize;
     globalDiagnostics.activeParticles = request.activeParticles;

@@ -128,12 +128,18 @@ void doGroups(int number, double scale, double years) {
     terminal::detailPrint("Doing groups\n");
     Timer tm;
     tm.start();
-    groupTreeCreate();
+    {
+        profile::ScopedPhase phase("groups.treeCreate");
+        groupTreeCreate();
+    }
     tm.stop();
     terminal::detailPrint("group_tree_create = %s\n", terminal::formatDuration(tm.read()).c_str());
     tm.reset();
     tm.start();
-    particlesGroupsInit();
+    {
+        profile::ScopedPhase phase("groups.initialize");
+        particlesGroupsInit();
+    }
     tm.stop();
     terminal::detailPrint(
         "particles_group_init = %s\n", terminal::formatDuration(tm.read()).c_str());
@@ -147,61 +153,89 @@ void doGroups(int number, double scale, double years) {
         Vector<TreeId> checklist;
         checklist.push_back(rootId);
         tm.start();
-        active =
-            groupsFind(rootId, std::move(checklist), getOptions().analysis.linkingLength).get();
+        {
+            profile::ScopedPhase phase("groups.find");
+            active =
+                groupsFind(rootId, std::move(checklist), getOptions().analysis.linkingLength).get();
+        }
         tm.stop();
         terminal::detailPrint("%i groups_find = %s active = %li\n", iter,
             terminal::formatDuration(tm.read()).c_str(), active);
         tm.reset();
-        particlesIncGroupCacheEpoch();
-        groupTreeIncCacheEpoch();
+        {
+            profile::ScopedPhase phase("groups.cacheEpoch");
+            particlesIncGroupCacheEpoch();
+            groupTreeIncCacheEpoch();
+        }
         iter++;
     } while (active > 0);
     tm.start();
-    groupTreeDestroy();
+    {
+        profile::ScopedPhase phase("groups.treeDestroy");
+        groupTreeDestroy();
+    }
     tm.stop();
     terminal::detailPrint("tree cleanup = %s\n", terminal::formatDuration(tm.read()).c_str());
     Timer reduce;
     reduce.start();
     for (int wave = 0; wave < kGroupWaves; wave++) {
         tm.start();
-        groupsAddParticles(wave, scale);
+        {
+            profile::ScopedPhase phase("groups.gather");
+            groupsAddParticles(wave, scale);
+        }
         tm.stop();
         terminal::detailPrint(
             "%i groups_add_particles %s\n", wave, terminal::formatDuration(tm.read()).c_str());
         tm.reset();
         tm.start();
-        groupsReduce(scale);
+        {
+            profile::ScopedPhase phase("groups.reduce");
+            groupsReduce(scale);
+        }
         tm.stop();
         terminal::detailPrint("groups_reduce %s\n", terminal::formatDuration(tm.read()).c_str());
         tm.reset();
     }
     reduce.stop();
     tm.start();
-    groupsMeasureBaryons();
+    {
+        profile::ScopedPhase phase("groups.baryons");
+        groupsMeasureBaryons();
+    }
     tm.stop();
     terminal::detailPrint("groups_baryons %s\n", terminal::formatDuration(tm.read()).c_str());
     tm.reset();
     tm.start();
-    groupsCull();
+    {
+        profile::ScopedPhase phase("groups.cull");
+        groupsCull();
+    }
     tm.stop();
     terminal::detailPrint("groups_cull %s\n", terminal::formatDuration(tm.read()).c_str());
     tm.reset();
     tm.start();
-    auto ngroups = groupsSave(number, scale, years);
+    auto ngroups = [&]() {
+        profile::ScopedPhase phase("groups.save");
+        return groupsSave(number, scale, years);
+    }();
     tm.stop();
     terminal::detailPrint("groups_save %s\n", terminal::formatDuration(tm.read()).c_str());
     total.stop();
     terminal::detailPrint("Reduction time = %s\n", terminal::formatDuration(reduce.read()).c_str());
     terminal::detailPrint("Total time = %s\n", terminal::formatDuration(total.read()).c_str());
     terminal::detailPrint("Group count = %li of %li candidates\n", ngroups.first, ngroups.second);
-    particlesGroupsDestroy();
+    {
+        profile::ScopedPhase phase("groups.cleanup");
+        particlesGroupsDestroy();
+    }
 }
 
 #endif
 
 #if COSMICTIGER_WITH_SPH
 SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
+    profile::ScopedPhase profilePhase("hydro.tree.create");
     verbose = true;
     if (verbose) {
         terminal::detailPrint("Doing SPH step with minrung = %i\n", minrung);
@@ -231,6 +265,7 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
 SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
     EnergiesT* energies, bool verbose, int uniformMinimumRung, bool closingOnly,
     double previousTimestep, double maximumGlobalTimestep) {
+    profile::ScopedPhase profilePhase("hydro.sph");
     bool const globalTimestep = maximumGlobalTimestep > 0.0;
     double selectedTimestep = maximumGlobalTimestep;
     double const closingTimestep = globalTimestep ? previousTimestep : -1.0;
@@ -241,7 +276,10 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     if (verbose) {
         terminal::detailPrint("Doing SPH step with minrung = %i\n", minrung);
     }
-    sphParticlesApplyUpdates(minrung, 0, t0, tau, closingTimestep);
+    {
+        profile::ScopedPhase profilePhase("hydro.predictor");
+        sphParticlesApplyUpdates(minrung, 0, t0, tau, closingTimestep);
+    }
 #if COSMICTIGER_ENABLE_CHEMISTRY
     // The combined GADGET-4 source owns cooling when star formation is enabled.
     bool const chemistry = getOptions().chemistry.enabled && !getOptions().starFormation.enabled;
@@ -290,13 +328,20 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     checklist.push_back(rootId);
 
     auto prepareDensities = [&]() {
+        profile::ScopedPhase profilePhase("hydro.density");
         neighborParameters.innerSelection = kSphInteractionsI;
         neighborParameters.runType = kSphTreeNeighborNeighbors;
-        sphTreeNeighbor(neighborParameters, rootId, checklist).get();
+        {
+            profile::ScopedPhase profilePhase("hydro.neighbors.initial");
+            sphTreeNeighbor(neighborParameters, rootId, checklist).get();
+        }
 
         runParameters.phase = 0;
         int densityIterations = 0;
-        sphParticlesResetConverged();
+        {
+            profile::ScopedPhase profilePhase("hydro.density.reset");
+            sphParticlesResetConverged();
+        }
         do {
             if (++densityIterations > 256) {
                 THROW_ERROR("SPH smoothing lengths did not converge after 256 tree rebuilds\n");
@@ -305,7 +350,10 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
             runParameters.runType = kSphRunPrehydro1;
             Timer timer;
             timer.start();
-            result = sphRun(runParameters, true);
+            {
+                profile::ScopedPhase profilePhase("hydro.density.activeSolve");
+                result = sphRun(runParameters, true);
+            }
             timer.stop();
             if (verbose) {
                 terminal::detailPrint("sph_run(SPH_RUN_PREHYDRO1): tm = %s min_h = %e max_h = %e\n",
@@ -319,7 +367,10 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
             neighborParameters.outerSelection = needsNeighborRefresh ? kSphSetActive : kSphSetAll;
             neighborParameters.innerSelection = kSphSetAll;
             timer.start();
-            sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
+            {
+                profile::ScopedPhase profilePhase("hydro.neighbors.boxes");
+                sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
+            }
             timer.stop();
             terminal::detailPrint("%s\n", terminal::formatDuration(timer.read()).c_str());
             timer.reset();
@@ -327,14 +378,20 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
             neighborParameters.innerSelection =
                 needsNeighborRefresh ? kSphInteractionsI : kSphInteractionsIJ;
             neighborParameters.runType = kSphTreeNeighborNeighbors;
-            sphTreeNeighbor(neighborParameters, rootId, checklist).get();
+            {
+                profile::ScopedPhase profilePhase("hydro.neighbors.refresh");
+                sphTreeNeighbor(neighborParameters, rootId, checklist).get();
+            }
             timer.stop();
             terminal::detailPrint("%s\n", terminal::formatDuration(timer.read()).c_str());
             timer.reset();
 
             result = SphRunReturn();
         } while (needsNeighborRefresh);
-        sphParticlesResetConverged();
+        {
+            profile::ScopedPhase profilePhase("hydro.density.reset");
+            sphParticlesResetConverged();
+        }
         densityIterations = 0;
         SphRunReturn gradHDiagnostics;
         do {
@@ -345,7 +402,10 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
             runParameters.runType = kSphRunPrehydro2;
             Timer timer;
             timer.start();
-            result = sphRun(runParameters, true);
+            {
+                profile::ScopedPhase profilePhase("hydro.density.neighborSolve");
+                result = sphRun(runParameters, true);
+            }
             gradHDiagnostics += result;
             timer.stop();
             if (verbose) {
@@ -361,14 +421,20 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
             neighborParameters.outerSelection = kSphSetAll;
             neighborParameters.innerSelection = kSphSetAll;
             timer.start();
-            sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
+            {
+                profile::ScopedPhase profilePhase("hydro.neighbors.boxes");
+                sphTreeNeighbor(neighborParameters, rootId, Vector<TreeId>()).get();
+            }
             timer.stop();
             terminal::detailPrint("%s\n", terminal::formatDuration(timer.read()).c_str());
             timer.reset();
             timer.start();
             neighborParameters.innerSelection = kSphInteractionsIJ;
             neighborParameters.runType = kSphTreeNeighborNeighbors;
-            sphTreeNeighbor(neighborParameters, rootId, checklist).get();
+            {
+                profile::ScopedPhase profilePhase("hydro.neighbors.refresh");
+                sphTreeNeighbor(neighborParameters, rootId, checklist).get();
+            }
             timer.stop();
             terminal::detailPrint("%s\n", terminal::formatDuration(timer.read()).c_str());
             timer.reset();
@@ -388,13 +454,19 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     if (runParameters.gradientSwitch()) {
         // Cullen & Dehnen (2010), equation (A15), or Price et al. (2018), equation (50),
         // after density convergence.
-        sphParticlesUpdateTargetAlpha(minrung, t0, tau, closingTimestep);
+        {
+            profile::ScopedPhase profilePhase("hydro.viscosityTarget");
+            sphParticlesUpdateTargetAlpha(minrung, t0, tau, closingTimestep);
+        }
     }
     runParameters.phase = 0;
     runParameters.runType = kSphRunHydro;
     timer.reset();
     timer.start();
-    result = sphRun(runParameters, true);
+    {
+        profile::ScopedPhase profilePhase("hydro.force.close");
+        result = sphRun(runParameters, true);
+    }
     timer.stop();
     int maxRung = std::max(0, uniformMinimumRung);
     if (verbose) {
@@ -403,42 +475,56 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     }
     timer.reset();
 
-    sphParticlesApplyUpdates(minrung, 1, t0, tau, closingTimestep);
+    {
+        profile::ScopedPhase profilePhase("hydro.corrector");
+        sphParticlesApplyUpdates(minrung, 1, t0, tau, closingTimestep);
+    }
 #if COSMICTIGER_ENABLE_CHEMISTRY
     if (chemistry && tau > 0.0) {
         // Apply the full completed source interval after the hydro corrector.
-        profile::profileBegin("chemistry");
+        profile::ScopedPhase profilePhase("chemistry.close");
         energies->heating += sphChemistryClose(minrung, scale, adot, t0, closingTimestep);
-        profile::profileEnd();
     }
 #endif
 
 #if COSMICTIGER_ENABLE_STAR_FORMATION
     if (getOptions().starFormation.enabled && tau > 0.0) {
-        profile::profileBegin("starFormation");
-        StarFormationUpdate const update =
-            starFormationClose(minrung, scale, adot, t0, closingTimestep);
-        profile::profileEnd();
+        StarFormationUpdate const update = [&]() {
+            profile::ScopedPhase profilePhase("starFormation.close");
+            return starFormationClose(minrung, scale, adot, t0, closingTimestep);
+        }();
         energies->heating += update.heating;
         maxRung = std::max(maxRung, update.maximumNewStarRung);
         if (update.converted != 0 && !closingOnly) {
             // Converted stars leave every gas kernel before the next opening kick.
             // The gravity array is unchanged: stellar populations retain the gas mass.
-            sphTreeDestroy();
-            sphParticlesClearCaches();
-            sphParticlesResetSemiactive();
+            {
+                profile::ScopedPhase profilePhase("hydro.tree.destroy");
+                sphTreeDestroy();
+            }
+            {
+                profile::ScopedPhase profilePhase("hydro.caches.clear");
+                sphParticlesClearCaches();
+                sphParticlesResetSemiactive();
+            }
             sphStep1(minrung, verbose);
             prepareDensities();
             if (runParameters.gradientSwitch()) {
                 // Conversion changes gas neighbors at this same physical time.
                 // Commit the new target without decaying alpha a second time.
-                sphParticlesUpdateTargetAlpha(minrung, t0, tau, 0.0);
+                {
+                    profile::ScopedPhase profilePhase("hydro.viscosityTarget");
+                    sphParticlesUpdateTargetAlpha(minrung, t0, tau, 0.0);
+                }
             }
         }
     }
 #endif
 
-    auto eValue = particlesSumEnergies();
+    auto eValue = [&]() {
+        profile::ScopedPhase profilePhase("hydro.diagnostics.energies");
+        return particlesSumEnergies();
+    }();
     energies->kin = eValue.kin / sqr(scale);
     energies->xmom = eValue.xmom / scale;
     energies->ymom = eValue.ymom / scale;
@@ -452,35 +538,44 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     if (closingOnly) {
 #if COSMICTIGER_ENABLE_STAR_FORMATION
         if (getOptions().starFormation.enabled) {
-            profile::profileBegin("starFormation");
+            profile::ScopedPhase profilePhase("starFormation.openNewStars");
             starFormationOpenNewStars(t0, scale, runParameters.maximumTimestep, minrung, false);
-            profile::profileEnd();
         }
 #endif
         // The final measurement includes cooling of the completed interval.
-        sphParticlesClearHydroCaches();
-        sphTreeDestroy();
-        sphParticlesClearCaches();
-        sphParticlesResetSemiactive();
+        {
+            profile::ScopedPhase profilePhase("hydro.caches.clearHydro");
+            sphParticlesClearHydroCaches();
+        }
+        {
+            profile::ScopedPhase profilePhase("hydro.tree.destroy");
+            sphTreeDestroy();
+        }
+        {
+            profile::ScopedPhase profilePhase("hydro.caches.clear");
+            sphParticlesClearCaches();
+            sphParticlesResetSemiactive();
+        }
         return result;
     }
 #if COSMICTIGER_ENABLE_CHEMISTRY
     if (chemistry) {
-        profile::profileBegin("chemistry");
+        profile::ScopedPhase profilePhase("chemistry.pressureIntegral");
         synchronizedChemistryPressure = sphChemistryPressureIntegral(scale);
-        profile::profileEnd();
     }
 #endif
 #if COSMICTIGER_ENABLE_STAR_FORMATION
     if (getOptions().starFormation.enabled) {
-        profile::profileBegin("starFormation");
+        profile::ScopedPhase profilePhase("starFormation.pressureIntegral");
         synchronizedChemistryPressure = starFormationPressureIntegral(scale);
-        profile::profileEnd();
     }
 #endif
     runParameters.phase = 1;
     runParameters.runType = kSphRunHydro;
-    result = sphRun(runParameters, true);
+    {
+        profile::ScopedPhase profilePhase("hydro.force.open");
+        result = sphRun(runParameters, true);
+    }
     inverseSoundTimestep = result.inverseSoundTimestep;
     inverseViscosityTimestep = result.inverseViscosityTimestep;
     inverseAccelerationTimestep = result.inverseAccelerationTimestep;
@@ -497,39 +592,53 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     bool repeat = !globalTimestep && uniformMinimumRung < 0;
     while (repeat) {
         runParameters.runType = kSphRunRungs;
-        repeat = sphRun(runParameters, true).needsAnotherPass;
+        {
+            profile::ScopedPhase profilePhase("hydro.rungs.limit");
+            repeat = sphRun(runParameters, true).needsAnotherPass;
+        }
     }
 #if COSMICTIGER_ENABLE_STAR_FORMATION
     if (getOptions().starFormation.enabled) {
-        profile::profileBegin("starFormation");
+        profile::ScopedPhase profilePhase("starFormation.openNewStars");
         maxRung = std::max(maxRung,
             starFormationOpenNewStars(t0, scale, runParameters.maximumTimestep, minrung,
                 getOptions().gravity.enabled && !globalTimestep));
-        profile::profileEnd();
     }
 #endif
     if (!globalTimestep && uniformMinimumRung >= 0) {
         // The dark matter and hydro proposals have both been reduced globally.
         // Set every rung before either species opens its next half-step.
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
-        profile::profileBegin("particleMeshFinishKick");
+        profile::ScopedPhase profilePhase("particleMeshFinishKick");
         particleMeshFinishKick(t0, maxRung);
-        profile::profileEnd();
 #endif
     }
-    sphParticlesApplyUpdates(minrung, 2, t0, tau, globalTimestep ? selectedTimestep : -1.0);
+    {
+        profile::ScopedPhase profilePhase("hydro.kick.open");
+        sphParticlesApplyUpdates(minrung, 2, t0, tau, globalTimestep ? selectedTimestep : -1.0);
+    }
     if (verbose) {
         terminal::detailPrint("Completing SPH step with max_rungs = %i, %i\n",
             result.maximumHydroRung, result.maximumGravityRung);
     }
 
-    sphParticlesClearHydroCaches();
+    {
+        profile::ScopedPhase profilePhase("hydro.caches.clearHydro");
+        sphParticlesClearHydroCaches();
+    }
 
-    sphTreeDestroy();
-    sphParticlesClearCaches();
-    sphParticlesResetSemiactive();
+    {
+        profile::ScopedPhase profilePhase("hydro.tree.destroy");
+        sphTreeDestroy();
+    }
+    {
+        profile::ScopedPhase profilePhase("hydro.caches.clear");
+        sphParticlesClearCaches();
+        sphParticlesResetSemiactive();
+    }
     //	PRINT( "%i\n", max_rung);
 
+    profile::ScopedPhase timestepDiagnosticsPhase("hydro.diagnostics.timesteps");
     if (!std::isfinite(inverseSoundTimestep) || !std::isfinite(inverseViscosityTimestep) ||
         !std::isfinite(inverseAccelerationTimestep)) {
         THROW_ERROR("Nonfinite inverse SPH timestep: sound=%e viscosity=%e acceleration=%e\n",
@@ -574,9 +683,15 @@ ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, doub
     tm.start();
     terminal::detailPrint("domains_begin\n");
     profile::profileBegin("domains");
-    domainsBegin(minrung);
+    {
+        profile::ScopedPhase phase("domains.migrate");
+        domainsBegin(minrung);
+    }
     terminal::detailPrint("domains_end \n");
-    domainsEnd();
+    {
+        profile::ScopedPhase phase("domains.install");
+        domainsEnd();
+    }
     profile::profileEnd();
     tm.stop();
     domainTime += tm.read();
@@ -606,6 +721,7 @@ ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, doub
     kparams.globalTimestep = maximumGlobalTimestep > 0.0;
     kparams.previousTimestep = previousTimestep;
     if (kparams.globalTimestep) {
+        profile::ScopedPhase phase("kick.prepareGlobal");
         float kernelCap = static_cast<float>(maximumGlobalTimestep);
         if (double(kernelCap) < maximumGlobalTimestep) {
             kernelCap = std::nextafter(kernelCap, std::numeric_limits<float>::infinity());
@@ -651,8 +767,11 @@ ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, doub
     tm.stop();
     kickTime += tm.read();
 
-    treeDestroy();
-    particlesCacheFree();
+    {
+        profile::ScopedPhase phase("kick.cleanup");
+        treeDestroy();
+        particlesCacheFree();
+    }
     terminal::detailPrint("kick done\n");
     return kr;
 }
@@ -681,8 +800,14 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
             Timer timer;
             timer.start();
             profile::profileBegin("domains");
-            domainsBegin(0);
-            domainsEnd();
+            {
+                profile::ScopedPhase phase("domains.migrate");
+                domainsBegin(0);
+            }
+            {
+                profile::ScopedPhase phase("domains.install");
+                domainsEnd();
+            }
             profile::profileEnd();
             timer.stop();
             domainTime += timer.read();
@@ -737,8 +862,14 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
 #endif
     {
         profile::profileBegin("domains");
-        domainsBegin(minRung);
-        domainsEnd();
+        {
+            profile::ScopedPhase phase("domains.migrate");
+            domainsBegin(minRung);
+        }
+        {
+            profile::ScopedPhase phase("domains.install");
+            domainsEnd();
+        }
         profile::profileEnd();
     }
     if (global) {
@@ -804,15 +935,20 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
     if (global && !closingOnly && getOptions().gravity.enabled) {
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
         if (meshGravity) {
+            profile::ScopedPhase phase("pmmmKick.finishGlobal");
             particleMeshFinishGlobalKick(result.minimumTimestep);
         }
 #endif
 #if COSMICTIGER_ENABLE_FMM
         if (!meshGravity) {
+            profile::ScopedPhase phase("kick.finishGlobal");
             gravityFinishGlobalKick(result.minimumTimestep);
         }
 #endif
-        energies.tckin = particlesSumEnergies().kin;
+        {
+            profile::ScopedPhase phase("diagnostics.energies");
+            energies.tckin = particlesSumEnergies().kin;
+        }
     }
     if (gravityErrorStep >= 0) {
         profile::profileBegin("gravityError");
@@ -897,8 +1033,14 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             tm.reset();
             tm.start();
             profile::profileBegin("domains");
-            domainsBegin(levels[li]);
-            domainsEnd();
+            {
+                profile::ScopedPhase phase("domains.migrate");
+                domainsBegin(levels[li]);
+            }
+            {
+                profile::ScopedPhase phase("domains.install");
+                domainsEnd();
+            }
             profile::profileEnd();
             tm.stop();
             //			PRINT("Domains took %e\n", tm.read());
@@ -1058,6 +1200,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         if (closingOnly && top) {
 #if COSMICTIGER_ENABLE_FMM
             if (!meshGravity) {
+                profile::ScopedPhase phase("kick.cleanup");
                 treeReset();
             }
 #endif
@@ -1096,6 +1239,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         }
 #if COSMICTIGER_ENABLE_FMM
         if (!meshGravity) {
+            profile::ScopedPhase phase("kick.cleanup");
             treeReset();
             particlesCacheFree();
         }
@@ -1396,6 +1540,7 @@ void driver() {
         outputTimeFile(params);
     }
     if (getOptions().run.scenario == "cosmology") {
+        profile::ScopedPhase phase("output.background");
         cosmology::writeBackgroundPlot(params.tauMax);
         profile::checkForInterrupt();
     }
@@ -1446,14 +1591,23 @@ void driver() {
             tm.start();
             // Assign the buffered shell using its current inner radius, including
             // the final flush where the remaining lightcone radius is zero.
-            lcInit(tau, tauMax);
-            lcBuffer2homes();
+            {
+                profile::ScopedPhase phase("lightcone.initialize");
+                lcInit(tau, tauMax);
+            }
+            {
+                profile::ScopedPhase phase("lightcone.redistributeParticles");
+                lcBuffer2homes();
+            }
             tm.stop();
             terminal::detailPrint(
                 "lc_buffer2homes %s\n", terminal::formatDuration(tm.read()).c_str());
             tm.reset();
             tm.start();
-            lcParticleBoundaries1();
+            {
+                profile::ScopedPhase phase("lightcone.particleBoundaries");
+                lcParticleBoundaries1();
+            }
             tm.stop();
             terminal::detailPrint(
                 "lc_particles_boundaries1 %s\n", terminal::formatDuration(tm.read()).c_str());
@@ -1461,14 +1615,20 @@ void driver() {
             tm.start();
             double const linkingLength = getOptions().lightcone.linkingLength *
                 pow(getOptions().initial.numberOfParticles, -1.0 / kDimensions);
-            lcFormTrees(tau, linkingLength);
+            {
+                profile::ScopedPhase phase("lightcone.treeCreate");
+                lcFormTrees(tau, linkingLength);
+            }
             tm.stop();
             terminal::detailPrint(
                 "lc_form_trees %s\n", terminal::formatDuration(tm.read()).c_str());
             tm.reset();
             tm.start();
             size_t cnt;
-            lcFindNeighbors();
+            {
+                profile::ScopedPhase phase("lightcone.neighbors");
+                lcFindNeighbors();
+            }
             terminal::detailPrint("neighbors found\n");
             tm.stop();
             terminal::detailPrint(
@@ -1478,31 +1638,46 @@ void driver() {
             do {
                 Timer tm;
                 tm.start();
-                lcParticleBoundaries2();
+                {
+                    profile::ScopedPhase phase("lightcone.groupBoundaries");
+                    lcParticleBoundaries2();
+                }
                 tm.stop();
                 terminal::detailPrint("%s ", terminal::formatDuration(tm.read()).c_str());
                 tm.reset();
                 tm.start();
-                cnt = lcFindGroups();
+                {
+                    profile::ScopedPhase phase("lightcone.findGroups");
+                    cnt = lcFindGroups();
+                }
                 tm.stop();
                 terminal::detailPrint("%li %s\n", cnt, terminal::formatDuration(tm.read()).c_str());
             } while (cnt > 0);
             tm2.stop();
             terminal::detailPrint("loop time = %s\n", terminal::formatDuration(tm2.read()).c_str());
             tm.start();
-            lcGroups2homes();
+            {
+                profile::ScopedPhase phase("lightcone.redistributeGroups");
+                lcGroups2homes();
+            }
             tm.stop();
             terminal::detailPrint(
                 "lc_groups2homes %s\n", terminal::formatDuration(tm.read()).c_str());
             tm.reset();
             tm.start();
-            lcParts2groups(a, linkingLength, iter);
+            {
+                profile::ScopedPhase phase("lightcone.catalogue");
+                lcParts2groups(a, linkingLength, iter);
+            }
             tm.stop();
             terminal::detailPrint(
                 "lc_parts2groups %s\n", terminal::formatDuration(tm.read()).c_str());
             tm.reset();
             tm.start();
-            lcInit(tau, tauMax);
+            {
+                profile::ScopedPhase phase("lightcone.initialize");
+                lcInit(tau, tauMax);
+            }
             tm.stop();
             terminal::detailPrint("lc_init %s\n", terminal::formatDuration(tm.read()).c_str());
             tm.reset();
@@ -1601,8 +1776,14 @@ void driver() {
                 profile::profileBegin("rebound");
                 terminal::detailPrint("Doing rebound\n");
                 domainsRebound();
-                domainsBegin(0);
-                domainsEnd();
+                {
+                    profile::ScopedPhase phase("domains.migrate");
+                    domainsBegin(0);
+                }
+                {
+                    profile::ScopedPhase phase("domains.install");
+                    domainsEnd();
+                }
                 terminal::detailPrint("Rebound done\n");
                 profile::profileEnd();
             }
