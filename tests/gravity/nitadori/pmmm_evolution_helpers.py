@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Dominic C. Marcello
 # SPDX-License-Identifier: BSL-1.0
 
-"""Decode PMMM checkpoints and verify clocks, drift, and restart state for either integrator."""
+"""Decode PMMM checkpoints and verify clocks, drift, and restart state for all three integrators."""
 
 import math
 import struct
@@ -101,9 +101,9 @@ def read_checkpoint(path, ranks, time_integrator):
     minimum_rung = state.min_rung if time_integrator == "hierarchical" else 0
     require(rows and all(minimum_rung <= row["rung"] <= state.max_rung < 64 for row in rows),
             f"{path}: particle rung lies outside the timestep range")
-    if time_integrator == "traditional":
-        require(all(row["rung"] == state.max_rung for row in rows),
-                f"{path}: ordinary PMMM traditional did not synchronize every particle rung")
+    if time_integrator == "global":
+        require(all(row["rung"] == 0 for row in rows),
+                f"{path}: global PMMM did not use rung zero")
     if header.flags & 1:
         require(sum(row["type"] == 0 for row in rows) == header.particles_per_species and
                 sum(row["type"] == 1 for row in rows) == header.particles_per_species,
@@ -157,7 +157,7 @@ def check_clock(checkpoints):
                     "timestep coarsened away from an integer-clock synchronization boundary")
 
 
-def match_drift_rows(before, after, base_timestep, active_rung, global_timestep=None):
+def match_drift_rows(before, after, base_timestep, active_rung, common_timestep=None):
     """Match identities at the predicted start of each particle's scheduled drift.
 
     A crowded particle can cross a nearer neighbor during one rung step. Matching
@@ -168,8 +168,8 @@ def match_drift_rows(before, after, base_timestep, active_rung, global_timestep=
     unused = set(range(len(before)))
     for row in after:
         active = row["rung"] >= active_rung
-        timestep = (global_timestep if global_timestep is not None else
-                    math.ldexp(base_timestep, -row["rung"])) if active else 0.0
+        timestep = (common_timestep if common_timestep is not None else
+                    math.ldexp(base_timestep, -row["rung"]) if active else 0.0)
         predicted = tuple((position - timestep * velocity) % 1.0
                           for position, velocity in zip(row["x"], row["v"]))
         candidates = [index for index in unused
@@ -189,30 +189,37 @@ def check_single_drift(before, after):
     base_timestep = old_state.tau_max / header.steps
     clock_rung = (64 - (old_state.integer_time & -old_state.integer_time).bit_length() + 1
                   if old_state.integer_time else 0)
-    # Hierarchical steps drift only the active rungs. Ordinary PMMM traditional
-    # assigns every particle the common rung and drifts the entire population.
+    # Hierarchical stages drift active particles by their own rung intervals.
+    # Traditional steps kick only active particles but drift every particle by
+    # the selected finest clock interval, preserving the individual kick rungs.
     hierarchical = bool(header.flags & (1 << 6))
-    active_rung = max(clock_rung, state.min_rung) if hierarchical else 0
+    global_step = bool(header.flags & (1 << 19))
+    active_rung = (max(clock_rung, state.min_rung) if hierarchical else
+                   0 if global_step else clock_rung)
     quantum = 2.0 ** (-64 if header.flags & (1 << 15) else -32)
     signal = error = 0.0
-    global_timestep = state.global_timestep if header.flags & (1 << 19) else None
-    for old, new in match_drift_rows(old_rows, rows, base_timestep, active_rung, global_timestep):
+    common_timestep = (state.global_timestep if global_step else
+                       state.tau - old_state.tau if not hierarchical else None)
+    for old, new in match_drift_rows(old_rows, rows, base_timestep, active_rung, common_timestep):
         moved = displacement(old["x"], new["x"])
         active = old["rung"] >= active_rung
-        if global_timestep is None:
+        if not global_step:
             require(new["rung"] >= old["rung"] - 1,
                     "a particle timestep grew by more than a factor of two")
         if not active:
-            require(old["rung"] == new["rung"] and old["v"] == new["v"] and
-                    old["x"] == new["x"], "inactive slower particle changed during a fast stage")
-        timestep = (global_timestep if global_timestep is not None else
-                    math.ldexp(base_timestep, -new["rung"])) if active else 0.0
+            require(old["rung"] == new["rung"] and old["v"] == new["v"],
+                    "inactive slower particle received a kick or a new rung")
+            if hierarchical:
+                require(old["x"] == new["x"],
+                        "inactive slower particle drifted during a hierarchical stage")
+        timestep = (common_timestep if common_timestep is not None else
+                    math.ldexp(base_timestep, -new["rung"]) if active else 0.0)
         for actual, velocity in zip(moved, new["v"]):
             expected = timestep * velocity
             signal += expected * expected
             error += (actual - expected) ** 2
             require(abs(actual - expected) <= 3.0 * quantum + 2.0e-6 * abs(expected) + 1.0e-15,
-                    "particle displacement does not equal its one scheduled rung drift")
+                    "particle displacement does not equal its scheduled drift")
     require(signal > len(rows) * quantum * quantum * 100,
             "single-drift fixture has insufficient nonzero velocity")
     require(error < 0.01 * signal, "drift residual is too large")

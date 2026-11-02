@@ -48,7 +48,9 @@ struct PmmmSample {
     Array<double, kDimensions> position{};
     Array<PositionInteger, kDimensions> rawPosition{};
     Array<float, kDimensions> acceleration{};
+    Array<float, kDimensions> hydroAcceleration{};
     Array<float, kDimensions> velocity{};
+    bool gas{};
     int rung{};
     float potential{};
     float mass{};
@@ -59,7 +61,7 @@ struct PmmmSample {
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & position & rawPosition & acceleration & potential & mass & id & rank & cellKey &
-            velocity & rung;
+            velocity & rung & gas & hydroAcceleration;
     }
 };
 
@@ -495,6 +497,15 @@ Vector<PmmmSample> readPmmmKickFixture() {
         }
         sample.mass = particlesMass(i);
         sample.rung = particlesRung(i);
+#if COSMICTIGER_WITH_SPH
+        sample.gas = getOptions().hydro.enabled && particlesType(i) == kSphType;
+        if (sample.gas) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                sample.hydroAcceleration[dim] =
+                    sphParticlesGravityAcceleration(dim, particlesCatIndex(i));
+            }
+        }
+#endif
         if (saveParticlePotential(getOptions().analysis)) {
             sample.potential = particlesPot(i);
         }
@@ -1085,6 +1096,155 @@ Vector<PmmmSample> gatherPmmmKickSamples() {
         return false;
     });
     return samples;
+}
+
+void checkPmmmTraditionalKicks() {
+    auto const saved = getOptions();
+    auto options = saved;
+    options.gravity.meshSize = 8;
+    options.gravity.pmmmCoarseMeshSize = 0;
+    options.gravity.pmmmNearWidth = 2;
+    options.gravity.openingAngle = 0.02;
+    options.analysis.saveForce = true;
+    pmmmDestroy();
+    setOptions(options);
+    preparePmmmFixture(8);
+    distributePmmmFixture(8);
+    particlesSortByRung(0);
+    auto const before = gatherPmmmKickSamples();
+    Vector<PmmmSample> activeSources;
+    double totalMass = 0.0;
+    for (auto const& sample : before) {
+        totalMass += sample.mass;
+        if (sample.rung >= 2) {
+            activeSources.push_back(sample);
+        }
+    }
+    requirePmmm(
+        activeSources.size() < before.size(), "traditional fixture needs inactive force sources");
+    KickParameters parameters{};
+    parameters.htime = false;
+    parameters.ascending = parameters.descending = parameters.top = true;
+    parameters.firstCall = false;
+    parameters.minRung = 2;
+    parameters.a = parameters.t0 = parameters.maxDt = 1.0f;
+    parameters.eta = 1.0e6f;
+    parameters.gravitySupportRadius = options.gravity.supportRadius;
+    parameters.gm = options.gravity.gm;
+    parameters.theta = options.gravity.openingAngle;
+    parameters.gpu = options.compute.cuda;
+    parameters.saveForce = true;
+    parameters.doPhi = true;
+    // The traditional solver must still use every source and the base mesh
+    // even if a caller left a rung-selected range from a preceding stage.
+    particlesSortByRung(parameters.minRung);
+    auto const result = pmmmKick(parameters);
+    auto const after = gatherPmmmKickSamples();
+    auto const diagnostics = pmmmDiagnostics();
+    requirePmmm(diagnostics.activeParticles == before.size() &&
+            diagnostics.totalParticles == before.size() &&
+            diagnostics.evaluatedParticles == activeSources.size() &&
+            std::abs(diagnostics.sourceMass - totalMass) < 1.0e-6 &&
+            std::abs(diagnostics.depositedMass - totalMass) < 1.0e-6,
+        "traditional kick omitted inactive particles from its sources");
+    requirePmmm(after.size() == before.size(), "traditional kick changed the particle count");
+    bool inactiveSourceMatters = false;
+    int minimumActiveRung = kMaxRung, maximumActiveRung = 0;
+    size_t activeIndex = 0;
+    for (size_t i = 0; i < before.size(); ++i) {
+        auto const& initial = before[i];
+        bool const active = initial.rung >= parameters.minRung;
+        auto const reference = directPmmmReference(i, before);
+        auto const activeReference =
+            active ? directPmmmReference(activeIndex++, activeSources) : std::array<double, 4>{};
+        int const expectedRung =
+            active && !initial.gas ? std::max(initial.rung - 1, parameters.minRung) : initial.rung;
+        requirePmmm(after[i].rung == expectedRung,
+            "traditional kick changed an inactive/gas rung or selected a common DM rung");
+        if (active) {
+            minimumActiveRung = std::min(minimumActiveRung, after[i].rung);
+            maximumActiveRung = std::max(maximumActiveRung, after[i].rung);
+        }
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            requirePmmm(after[i].rawPosition[dim] == initial.rawPosition[dim],
+                "traditional kick changed a particle position");
+            if (active) {
+                double const field = reference[dim + 1];
+                inactiveSourceMatters |= std::abs(field - activeReference[dim + 1]) > 1.0e-3;
+                requirePmmm(std::abs(after[i].acceleration[dim] - field) <
+                        1.0e-3 * std::max(1.0, std::abs(field)),
+                    "traditional active force differs from the all-source Ewald field");
+                if (initial.gas) {
+                    requirePmmm(after[i].hydroAcceleration[dim] == after[i].acceleration[dim],
+                        "traditional gas did not receive its combined gravity acceleration");
+                }
+            } else {
+                requirePmmm(after[i].acceleration[dim] == initial.acceleration[dim],
+                    "traditional kick changed an inactive acceleration");
+            }
+            if (!active || initial.gas) {
+                requirePmmm(after[i].velocity[dim] == initial.velocity[dim],
+                    "traditional gravity kicked an inactive or hydro-owned velocity");
+            } else {
+                double const interval =
+                    std::ldexp(0.5, -initial.rung) + std::ldexp(0.5, -expectedRung);
+                double const change = interval * reference[dim + 1];
+                double const expected = initial.velocity[dim] + change;
+                requirePmmm(std::abs(after[i].velocity[dim] - expected) <
+                        2.0e-6 * std::max(1.0, std::abs(expected)) + 1.0e-3 * std::abs(change),
+                    "traditional DM kick did not use its old and new individual half-steps");
+            }
+        }
+    }
+    requirePmmm(inactiveSourceMatters,
+        "traditional fixture cannot distinguish all-particle from active-only sources");
+#if COSMICTIGER_WITH_SPH
+    requirePmmm(minimumActiveRung < maximumActiveRung && result.maxRung == maximumActiveRung,
+        "traditional kick flattened distinct active gas and DM rungs");
+#else
+    requirePmmm(result.maxRung == maximumActiveRung,
+        "traditional kick reported the wrong maximum active rung");
+#endif
+    particlesSortByRung(0);
+    // Unlike the cell-center oracle above, fixture zero puts active and
+    // inactive particles in the same source leaf. Its full solve supplies a
+    // same-order reference for the selected sink views on CPU and CUDA.
+    preparePmmmFixture(0);
+    distributePmmmFixture(0);
+    pmmmSolve(true);
+    auto const fullFields = gatherPmmmSamples();
+    particlesSortByRung(parameters.minRung);
+    pmmmKick(parameters);
+    auto const mixedSinks = gatherPmmmKickSamples();
+    size_t expectedEvaluations = 0;
+    for (auto const& reference : fullFields) {
+        if (1 + reference.id % 4 < parameters.minRung) {
+            continue;
+        }
+        ++expectedEvaluations;
+        auto const found =
+            std::find_if(mixedSinks.begin(), mixedSinks.end(), [&](auto const& sink) {
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    if (sink.rawPosition[dim] != reference.rawPosition[dim]) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+        requirePmmm(found != mixedSinks.end(), "selected mixed-leaf sink lost its identity");
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            requirePmmm(std::abs(found->acceleration[dim] - reference.acceleration[dim]) <
+                    2.0e-5 * std::max(1.0, std::abs(double(reference.acceleration[dim]))),
+                "selected mixed-leaf sink differs from the full PMMM force");
+        }
+    }
+    requirePmmm(pmmmDiagnostics().evaluatedParticles == expectedEvaluations,
+        "mixed-leaf PMMM evaluated inactive sinks");
+    particlesSortByRung(0);
+    pmmmDestroy();
+    setOptions(saved);
+    PRINT("PMMM traditional all-source forces, active-only individual kicks, and gas handoff "
+          "checks passed\n");
 }
 
 void checkPmmmPpBatchTargets() {
@@ -1885,6 +2045,7 @@ void pmmmTest() {
 #if COSMICTIGER_ENABLE_PMMM_FMM
     detail::checkPmmmFmmNear();
 #endif
+    detail::checkPmmmTraditionalKicks();
     detail::checkPmmmPpBatchTargets();
     detail::checkPmmmStreamedStages();
     detail::checkPmmmStageMeshes();

@@ -61,6 +61,30 @@ KickReturn particleMeshApplyField(ParticleInteger index,
     flops += 1;
     float const mass = particlesMass(index);
     float const oldKinetic = 0.5f * mass * sqr(vx, vy, vz);
+#if COSMICTIGER_WITH_SPH
+    if (!parameters.htime && options.hydro.enabled && particlesType(index) == kSphType) {
+        // The hydro integrator owns the gas momentum and timestep. As in the
+        // ordinary FMM kick, publish the active gas force without a second
+        // gravity kick or a gravity-only rung update.
+        ParticleInteger const gas = particlesCatIndex(index);
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            sphParticlesGravityAcceleration(dim, gas) = acceleration[dim];
+        }
+        result.kin = oldKinetic;
+        result.xmom = mass * vx;
+        result.ymom = mass * vy;
+        result.zmom = mass * vz;
+        result.nmom = mass * std::sqrt(sqr(vx, vy, vz));
+        result.pot = parameters.doPhi ? 0.5f * mass * potential : 0.0f;
+        result.maxRung = rung;
+        if (flopCount != nullptr) {
+            *flopCount += flops;
+        } else {
+            addCpuFlops(flops);
+        }
+        return result;
+    }
+#endif
     int proposedRung = 0;
     if (!parameters.htime || parameters.descending) {
         float const accelerationSquared = sqr(gx, gy, gz) + 1.0e-35f;

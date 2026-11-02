@@ -27,7 +27,8 @@ void treePrepareCellForest();
 // Local preparation before any cell build or reader starts. The supplied counts
 // include owned source particles and reserved ghost slices. No collective or
 // particle scan is performed, and arena addresses remain fixed for the epoch.
-void treePrepareCellForestLocal(size_t sourceParticleCount, size_t sourceRootCount);
+void treePrepareCellForestLocal(
+    size_t sourceParticleCount, size_t sourceRootCount, size_t sinkNodeCount = 0);
 // Each caller owns a disjoint range in the selected store until this completes.
 // The optional source box is the owner's domain; ghost roots otherwise cover
 // the full cell. The returned future/task completion publishes a read-only tree.

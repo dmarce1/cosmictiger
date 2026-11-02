@@ -99,7 +99,9 @@ void computeReadyCells() {
             // Only this bounded batch retains particle fields while the FFT or
             // remote local-expansion reads finish. Production has no N-sized
             // acceleration or potential result arrays.
-            auto fields = kickCellBatch(std::move(workitems), state.request.doPotential);
+            int const minimumRung = state.request.applyKick ? state.request.parameters.minRung : 0;
+            auto fields =
+                kickCellBatch(std::move(workitems), state.request.doPotential, minimumRung);
             bool const overlapped = state.pendingGhosts.load() != 0;
             for (size_t sink : sinks) {
                 observe(PmmmCellEvent::NearCompleted, state.cells[sink].key);
@@ -112,11 +114,17 @@ void computeReadyCells() {
             size_t compact = 0;
             for (size_t sink : sinks) {
                 auto const& cell = state.cells[sink];
+                if (compact == fields.particleIndices.size() ||
+                    fields.particleIndices[compact] >= cell.end) {
+                    continue;
+                }
                 auto const center = coordinates(cell.key);
                 auto const coefficients = localExpansion(cell.key);
-                for (ParticleInteger index = cell.begin; index < cell.end; ++index, ++compact) {
-                    if (compact >= fields.particleIndices.size() ||
-                        fields.particleIndices[compact] != index) {
+                for (; compact < fields.particleIndices.size() &&
+                    fields.particleIndices[compact] < cell.end;
+                    ++compact) {
+                    ParticleInteger const index = fields.particleIndices[compact];
+                    if (index < cell.begin) {
                         throw std::runtime_error("PMMM batch output lost its sink mapping");
                     }
                     std::array<double, 4> field{};
@@ -131,10 +139,14 @@ void computeReadyCells() {
                     consumeField(index, field, result, flops);
                 }
             }
+            if (compact != fields.particleIndices.size()) {
+                throw std::runtime_error("PMMM batch output contains an unknown sink");
+            }
             addCpuFlops(flops);
             {
                 std::lock_guard<MutexType> lock(state.queueMutex);
                 state.kickResult += result;
+                state.diagnostics.evaluatedParticles += fields.particleIndices.size();
                 auto const& counts = fields.interactionCounts;
                 state.diagnostics.nearCpuAcceptedMultipoles +=
                     counts.cellCellDirect + counts.cellParticle + counts.particleCell;

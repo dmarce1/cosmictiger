@@ -13,6 +13,9 @@
 // Consume one completed, gm-scaled near+far field without retaining a force
 // array. Particle membership is fixed by the caller's current ladder stage;
 // only this owned sink's velocity/rung and requested diagnostics are modified.
+// Traditional hydro sinks receive acceleration only; hydro owns their kicks
+// and rungs. Traditional sources must contain every owned particle even when
+// minRung selects only a subset of the sinks.
 // Accumulate source-operation counts in flopCount when supplied, so callers can
 // submit a whole sink batch once; otherwise submit this particle's count here.
 KickReturn particleMeshApplyField(ParticleInteger index,

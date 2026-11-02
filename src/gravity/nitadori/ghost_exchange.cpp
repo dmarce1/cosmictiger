@@ -135,7 +135,8 @@ void planGhosts() {
     }
     treePrepareCellForestLocal(
         size_t(state.activeRange.second - state.activeRange.first) + ghostCount,
-        state.sourceCells.size());
+        state.sourceCells.size(),
+        state.request.applyKick && !state.request.parameters.htime ? particlesOwnedSize() : 0);
 }
 
 void receiveGhostCell(size_t index) {

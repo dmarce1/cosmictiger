@@ -171,9 +171,9 @@ def main():
         require([int(path.name.split(".")[1]) for path in paths] == [1, 2, 3, 4],
                 f"{label}: expected one PMMM checkpoint per step")
         states = [read_checkpoint(path, ranks, args.time_integrator) for path in paths]
-        if args.time_integrator == "hierarchical":
+        if not hydro and args.time_integrator in ("traditional", "hierarchical"):
             require(any(len({row["rung"] for row in rows}) > 1 for _, _, rows in states),
-                    "hierarchical evolution fixture did not exercise simultaneous particle rungs")
+                    f"{args.time_integrator} evolution did not retain individual particle rungs")
         check_clock(states)
         if not hydro:
             for before, after in zip(states, states[1:]):
@@ -197,7 +197,7 @@ def main():
         compare_restart(states[-1], read_checkpoint(
             resumed / "checkpoint.4", ranks, args.time_integrator))
         if hydro:
-            print(f"{label}: four uniform steps across {len(cells)} gas cells, finite positive "
+            print(f"{label}: four steps across {len(cells)} gas cells, finite positive "
                   "gas state, particle mappings, gravity handoff, and restart state passed")
             continue
         # Historical extensions predate the coarse mesh (and version four's

@@ -405,12 +405,12 @@ communication packets, output fields, and near-field CPU/CUDA workspaces.
 independent. If several are eligible for the selected physics, choose one with
 `run.timeIntegrator`.
 
-PMMM's `traditional` path uses synchronized kick-drift-kick steps: all particles are sources and
-sinks in every mesh solve, and all particles advance on the most restrictive
-requested rung across the job. It calls `pmmmSolve(true)`, retaining acceleration
-and potential arrays for kick preparation, combines gravity and SPH bounds when
-hydro is enabled, then applies a common rung before the drift. FMM's traditional
-path retains individual block timesteps.
+PMMM's `traditional` path uses individual block timesteps, as FMM does. Every
+substep rebuilds the mesh source field from all particles, including inactive
+particles. Only sinks whose rung is active receive a gravity kick or a new rung;
+inactive sinks retain their velocities and rungs. The gas acceleration is passed
+to SPH for its own hydrodynamic update. `pmmmKick` consumes each
+completed near-plus-far field directly; no common rung is imposed.
 
 The `global` path advances every particle on one continuous timestep: the
 collective minimum of the raw enabled gravity and SPH limits, capped by the
@@ -461,7 +461,12 @@ needs less than one seventh of the base workspace, so the byte cap is not
 reached by stage meshes alone. Transient moments and FFTW's internal plan
 storage are separate from this buffer cap. Mesh switches occur only after the
 previous solve has completed. `PmmmDiagnostics` reports `meshSize`,
-`activeParticles`, and `totalParticles` for the most recent solve.
+`activeParticles`, and `totalParticles` for the most recent solve. Here
+`activeParticles` counts the selected sources (all particles for traditional
+stepping); `evaluatedParticles` counts the sinks whose near field and local
+expansion were actually evaluated. Traditional substep regressions check both
+counts, inactive-source force contributions, unchanged inactive velocities and
+rungs, and active sinks inside mixed tree leaves.
 
 The hierarchical path calls `pmmmKick`: each completed cell's combined field is
 consumed immediately for the kick and rung decision, without retaining

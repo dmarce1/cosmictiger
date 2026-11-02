@@ -25,9 +25,73 @@
 #include <cosmictiger/gravity/kick_workspace.hpp>
 #include <cosmictiger/gravity/nitadori/fmm_batch.hpp>
 #include <cosmictiger/gravity/tree.hpp>
+#include <cosmictiger/gravity/tree_build.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 namespace detail {
+Vector<KickWorkitem> selectBatchSinks(Vector<KickWorkitem> workitems, int minimumRung) {
+    if (minimumRung <= 0) {
+        return workitems;
+    }
+    Vector<KickWorkitem> selected;
+    for (auto const& item : workitems) {
+        auto const range = treeGetNode(item.self)->particleRange;
+        Vector<ParticleInteger> prefix(range.second - range.first + 1, 0);
+        for (ParticleInteger index = range.first; index < range.second; ++index) {
+            prefix[index - range.first + 1] =
+                prefix[index - range.first] + int(particlesRung(index) >= minimumRung);
+        }
+        auto append = [&](TreeId id) {
+            auto sink = item;
+            sink.self = id;
+            selected.push_back(std::move(sink));
+        };
+        Vector<TreeId> pending{item.self};
+        while (!pending.empty()) {
+            auto const id = pending.back();
+            pending.pop_back();
+            auto const* node = treeGetNode(id);
+            auto const nodeRange = node->particleRange;
+            ParticleInteger const count =
+                prefix[nodeRange.second - range.first] - prefix[nodeRange.first - range.first];
+            if (count == 0) {
+                continue;
+            }
+            if (count == node->numberOfParticles()) {
+                append(id);
+            } else if (!node->leaf) {
+                pending.push_back(node->children[kRightChild]);
+                pending.push_back(node->children[kLeftChild]);
+            } else {
+                // A mixed leaf remains an immutable source. Each active run
+                // gets a sink-only leaf with the same enclosing geometry;
+                // it never appears in a source checklist or changes a moment.
+                ParticleInteger begin = nodeRange.first;
+                while (begin < nodeRange.second) {
+                    if (particlesRung(begin) < minimumRung) {
+                        ++begin;
+                        continue;
+                    }
+                    ParticleInteger end = begin + 1;
+                    while (end < nodeRange.second && particlesRung(end) >= minimumRung) {
+                        ++end;
+                    }
+                    TreeNode sink = *node;
+                    sink.particleRange = {begin, end};
+                    sink.localRoot = false;
+                    MultipoleBuffer moments;
+                    treeReadMultipole(node->mpos, moments);
+                    int const index = treeAllocateNode();
+                    treeStoreNode(index, sink, moments);
+                    append({hpxRank(), index});
+                    begin = end;
+                }
+            }
+        }
+    }
+    return selected;
+}
+
 KickReturn localBatchGpu(KickParameters params, Vector<KickWorkitem> workitems,
     std::unordered_set<TreeId, KickWorkspaceTreeIdHash> const&, FmmForceOutput output) {
 #ifdef USE_CUDA
@@ -82,7 +146,8 @@ hpx::future<KickReturn> localBatchFork(KickParameters params, ExpansionBuffer co
     return hpx::make_ready_future(run(std::move(direct)));
 }
 }    // namespace detail
-FmmForceResult kickCellBatch(Vector<KickWorkitem> workitems, bool doPotential) {
+FmmForceResult kickCellBatch(Vector<KickWorkitem> workitems, bool doPotential, int minimumRung) {
+    workitems = detail::selectBatchSinks(std::move(workitems), minimumRung);
     ParticleInteger const ownedCount = particlesOwnedSize();
     std::sort(workitems.begin(), workitems.end(), [](auto const& left, auto const& right) {
         return treeGetNode(left.self)->particleRange.first <

@@ -285,7 +285,8 @@ void treePrepareCellForest() {
     }
 }
 
-void treePrepareCellForestLocal(size_t sourceParticleCount, size_t sourceRootCount) {
+void treePrepareCellForestLocal(
+    size_t sourceParticleCount, size_t sourceRootCount, size_t sinkNodeCount) {
     treeResetLocal();
     treeRegisterRemoteAccess(readRemoteCellNode, resetCellTreeState);
     resetCellTreeState();
@@ -309,6 +310,7 @@ void treePrepareCellForestLocal(size_t sourceParticleCount, size_t sourceRootCou
     // bound over owned and ghost cells, then allow sparse joins and allocator
     // line holes. Remote deserialized moments use their own chunked pool.
     size_t capacity = multiply(2, sourceParticleCount);
+    capacity = add(capacity, sinkNodeCount);
     capacity = add(capacity, multiply(sourceRootCount, levels + 2));
     capacity = add(capacity,
         multiply(size_t(getOptions().compute.treeAllocLineSize),

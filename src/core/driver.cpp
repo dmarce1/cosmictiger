@@ -497,8 +497,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         profile::profileBegin("starFormation");
         maxRung = std::max(maxRung,
             starFormationOpenNewStars(t0, scale, runParameters.maximumTimestep, minrung,
-                getOptions().gravity.enabled && !globalTimestep &&
-                    !usesMeshGravity(getOptions().gravity)));
+                getOptions().gravity.enabled && !globalTimestep));
         profile::profileEnd();
     }
 #endif
@@ -682,9 +681,6 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
             domainTime += timer.read();
             timer.reset();
             timer.start();
-            profile::profileBegin("pmmmSolve");
-            pmmmSolve(true);
-            profile::profileEnd();
             double maximumTimestep = global ? maximumGlobalTimestep :
                                               std::ldexp(baseTimestep, -getOptions().run.minRung);
             if (getOptions().run.scenario == "cosmology") {
@@ -692,8 +688,34 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
                     cosmology::expansionTimestep(
                         scale, scaleDerivative / scale, cosmosD2adt2(scale), kScaleTimestep));
             }
-            result = particleMeshPrepareKick(scale, baseTimestep, maximumTimestep, firstCall,
-                minRung, global ? previousTimestep : -1.0);
+            if (global) {
+                profile::profileBegin("pmmmSolve");
+                pmmmSolve(true);
+                profile::profileEnd();
+                result = particleMeshPrepareKick(
+                    scale, baseTimestep, maximumTimestep, firstCall, minRung, previousTimestep);
+            } else {
+                // Traditional PMMM retains all particles as force sources, but
+                // kicks only active sinks on their individual block timesteps.
+                KickParameters parameters;
+                parameters.htime = false;
+                parameters.ascending = parameters.descending = parameters.top = true;
+                parameters.minRung = minRung;
+                parameters.t0 = baseTimestep;
+                parameters.a = scale;
+                parameters.eta = getOptions().gravity.timestepEta;
+                parameters.gravitySupportRadius = getOptions().gravity.supportRadius;
+                parameters.gm = getOptions().gravity.gm;
+                parameters.sign = getOptions().run.scenario == "glass" ? -1.0 : 1.0;
+                parameters.firstCall = firstCall;
+                parameters.saveForce = getOptions().analysis.saveForce;
+                parameters.gpu = getOptions().compute.cuda;
+                parameters.doPhi = true;
+                parameters.maxDt = maximumTimestep;
+                profile::profileBegin("pmmmKick");
+                result = pmmmKick(parameters);
+                profile::profileEnd();
+            }
             timer.stop();
             kickTime += timer.read();
         }
@@ -719,18 +741,18 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
 #if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
         profile::profileBegin("hydro");
-        int const activeRung = meshGravity || global ? 0 : minRung;
+        int const activeRung = global ? 0 : minRung;
         sphStep1(activeRung);
-        auto const hydro = sphStep2(activeRung, scale, time, baseTimestep, 1, scaleDerivative,
-            &energies, true, meshGravity && !global ? gravity.maxRung : -1, closingOnly,
-            previousTimestep, global ? result.minimumTimestep : 0.0);
+        auto const hydro =
+            sphStep2(activeRung, scale, time, baseTimestep, 1, scaleDerivative, &energies, true, -1,
+                closingOnly, previousTimestep, global ? result.minimumTimestep : 0.0);
         profile::profileEnd();
         gravity.maxRung = std::max(gravity.maxRung, hydro.maximumRung);
         if (global) {
             gravity.minimumTimestep =
                 std::min(gravity.minimumTimestep, static_cast<double>(hydro.minimumTimestep));
         }
-        if (fullEvaluation || meshGravity) {
+        if (fullEvaluation || global) {
             energies.pot = gravity.pot / scale;
         }
         energies.kin += gravity.darkMatterKineticCorrection / sqr(scale);
@@ -745,7 +767,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
 #endif
 #if COSMICTIGER_WITH_GRAVITY
     if (getOptions().gravity.enabled && !getOptions().hydro.enabled) {
-        if (meshGravity || global || fullEvaluation) {
+        if (global || fullEvaluation) {
             energies.pot = gravity.pot / scale;
             energies.kin = gravity.kin / sqr(scale);
             energies.xmom = gravity.xmom / scale;
@@ -756,13 +778,6 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
         } else {
             energies.tckin += gravity.dkin;
         }
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
-        if (meshGravity && !global && !closingOnly) {
-            profile::profileBegin("particleMeshFinishKick");
-            energies.tckin = particleMeshFinishKick(baseTimestep, gravity.maxRung);
-            profile::profileEnd();
-        }
-#endif
     }
     if (global && !closingOnly && getOptions().gravity.enabled) {
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
@@ -1733,11 +1748,7 @@ void driver() {
                         (nextIntegerTime == 0 ? 1.0 : std::ldexp(double(nextIntegerTime), -64)));
             double const nextYears = years + dyears;
             double const outputRedshift = 1.0 / a - 1.0;
-            int const displayedMinimumRung =
-                (!getOptions().run.hierarchicalGravity || !getOptions().gravity.enabled) &&
-                    usesMeshGravity(getOptions().gravity) ?
-                maxRung :
-                minrung;
+            int const displayedMinimumRung = minrung;
             fprintf(textfp,
                 "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10i %10.3e %10.3e "
                 "%10.3e %10.3e \n",

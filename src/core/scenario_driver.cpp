@@ -241,9 +241,7 @@ void runFixedScenario() {
             double const flops = flopsPerSecond();
             state.maxRung =
                 global ? 0 : std::max({int(result.maxRung), baseOptions.run.minRung, minimumRung});
-            int const displayedMinimumRung =
-                usesMeshGravity(baseOptions.gravity) && !hierarchicalMesh ? state.maxRung :
-                                                                            minimumRung;
+            int const displayedMinimumRung = minimumRung;
             if (state.iter == 0) {
                 state.energy0 = state.energies.kin + state.energies.therm + state.energies.pot;
             }

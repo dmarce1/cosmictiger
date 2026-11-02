@@ -19,17 +19,17 @@ void observe(PmmmCellEvent event, uint64_t key) {
     }
 }
 
-Pair<ParticleInteger> selectedRange(bool applyKick) {
+Pair<ParticleInteger> selectedRange(bool rungSelected) {
     ParticleInteger const owned = particlesOwnedSize();
-    auto const range = applyKick ? particlesCurrentRange() : Pair<ParticleInteger>(0, owned);
+    auto const range = rungSelected ? particlesCurrentRange() : Pair<ParticleInteger>(0, owned);
     if (range.first < 0 || range.first > owned || range.second < range.first) {
         throw std::runtime_error("Invalid PMMM selected particle range");
     }
     return {range.first, std::min(range.second, owned)};
 }
 
-std::array<uint64_t, 2> particleCounts(bool applyKick) {
-    auto const range = selectedRange(applyKick);
+std::array<uint64_t, 2> particleCounts(bool rungSelected) {
+    auto const range = selectedRange(rungSelected);
     return {uint64_t(range.second - range.first), uint64_t(particlesOwnedSize())};
 }
 
@@ -38,7 +38,7 @@ void prepare(SolveRequest const& request) {
     initializeGreen();
     prepareCollectively([&]() {
         state.request = request;
-        state.activeRange = selectedRange(request.applyKick);
+        state.activeRange = selectedRange(request.applyKick && request.parameters.htime);
         state.cells = particleMeshSort(cache.meshSize, state.activeRange);
         state.stageRungs.resize(state.activeRange.second - state.activeRange.first);
         state.moments.assign(cache.cellCount() * cache.sourceCount, 0.0);
@@ -144,7 +144,8 @@ void solve(SolveRequest request) {
     counts.reserve(hpxLocalities().size());
     try {
         for (auto const& locality : hpxLocalities()) {
-            counts.push_back(hpx::async<PmmmParticleCountsAction>(locality, request.applyKick));
+            counts.push_back(hpx::async<PmmmParticleCountsAction>(
+                locality, request.applyKick && request.parameters.htime));
         }
     } catch (...) {
         hpx::wait_all(counts);
@@ -161,7 +162,7 @@ void solve(SolveRequest request) {
         request.totalParticles += value[1];
     }
     auto const& options = getOptions().gravity;
-    request.meshSize = request.applyKick ?
+    request.meshSize = request.applyKick && request.parameters.htime ?
         hierarchicalMeshSize(options.meshSize,
             resolvedCoarseMeshSize(
                 options.meshSize, options.pmmmCoarseMeshSize, options.pmmmNearWidth),
@@ -240,6 +241,7 @@ void solve(SolveRequest request) {
         auto const value = future.get();
         globalDiagnostics.sourceMass += value.sourceMass;
         globalDiagnostics.depositedMass += value.depositedMass;
+        globalDiagnostics.evaluatedParticles += value.evaluatedParticles;
         globalDiagnostics.nearCpuAcceptedMultipoles += value.nearCpuAcceptedMultipoles;
         globalDiagnostics.nearCpuDirectPairs += value.nearCpuDirectPairs;
         globalDiagnostics.ghostParticles += value.ghostParticles;

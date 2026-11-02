@@ -14,6 +14,8 @@ struct PmmmDiagnostics {
     uint64_t totalParticles = 0;
     double sourceMass = 0;
     double depositedMass = 0;
+    // Sinks that actually received near-field and local-expansion evaluation.
+    uint64_t evaluatedParticles = 0;
     // Current solve CPU traversal counts (CUDA work is not counted).
     uint64_t nearCpuAcceptedMultipoles = 0;
     uint64_t nearCpuDirectPairs = 0;
@@ -37,17 +39,20 @@ struct PmmmDiagnostics {
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & meshSize & activeParticles & totalParticles & sourceMass & depositedMass &
-            nearCpuAcceptedMultipoles & nearCpuDirectPairs & ghostParticles & ghostCells &
-            ghostBytes & nearRemoteTreeFetches & nearRemoteParticleFetches & nearBatches &
-            peakBatchParticles & completedWhileGhostsPending & storedAccelerationParticles &
-            storedPotentialParticles & planBuilds & greenBuilds & solveCount;
+            evaluatedParticles & nearCpuAcceptedMultipoles & nearCpuDirectPairs & ghostParticles &
+            ghostCells & ghostBytes & nearRemoteTreeFetches & nearRemoteParticleFetches &
+            nearBatches & peakBatchParticles & completedWhileGhostsPending &
+            storedAccelerationParticles & storedPotentialParticles & planBuilds & greenBuilds &
+            solveCount;
     }
 };
 
 // Root entry points. Plans, buffers and Green spectra persist between solves.
 void pmmmSolve(bool doPotential);
-// Production entry: the current rung-selected range supplies both sources and
-// sinks. Fields are consumed by the kick without full-particle result buffers.
+// Production entry: hierarchical stages use the current rung-selected range
+// for sources and sinks. Traditional steps retain every owned source and the
+// full mesh, evaluating only sinks at or above parameters.minRung. Fields are
+// consumed by the kick without full-particle result buffers.
 KickReturn pmmmKick(KickParameters const& parameters);
 void pmmmDestroy();
 PmmmDiagnostics pmmmDiagnostics();

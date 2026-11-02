@@ -97,6 +97,7 @@ void evaluateParticles(bool doPotential) {
             {
                 std::lock_guard<MutexType> lock(state.queueMutex);
                 state.kickResult += result;
+                state.diagnostics.evaluatedParticles += sinks.size();
                 ++state.diagnostics.nearBatches;
                 state.diagnostics.peakBatchParticles =
                     std::max<uint64_t>(state.diagnostics.peakBatchParticles, sinks.size());
@@ -109,6 +110,17 @@ void evaluateParticles(bool doPotential) {
         auto const [cellBegin, cellEnd] = batches[batchIndex];
         for (size_t cellIndex = cellBegin; cellIndex < cellEnd; ++cellIndex) {
             auto const& cell = state.cells[cellIndex];
+            auto active = [&](ParticleInteger index) {
+                return !state.request.applyKick ||
+                    particlesRung(index) >= state.request.parameters.minRung;
+            };
+            bool hasActive = false;
+            for (ParticleInteger i = cell.begin; i < cell.end; ++i) {
+                hasActive = hasActive || active(i);
+            }
+            if (!hasActive) {
+                continue;
+            }
             auto const center = coordinates(cell.key);
             // The slab owner serves the sink cell's local expansion; each
             // neighbor cell's owner serves that cell's particles directly.
@@ -178,8 +190,10 @@ void evaluateParticles(bool doPotential) {
             batchSources.insert(batchSources.end(), sources.begin(), sources.end());
             cells.push_back({sinks.size(), std::move(coefficients)});
             for (ParticleInteger i = cell.begin; i < cell.end; ++i) {
-                sinks.push_back(particle(i, center, flops));
-                sourceRanges.push_back(sourceRange);
+                if (active(i)) {
+                    sinks.push_back(particle(i, center, flops));
+                    sourceRanges.push_back(sourceRange);
+                }
             }
         }
         submit();
