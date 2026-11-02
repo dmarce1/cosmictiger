@@ -78,3 +78,17 @@ TEST(CosmologyEvolution, EnergyNormalizationUsesConsistentlyScaledTerms) {
     }
     EXPECT_DOUBLE_EQ(cosmology::normalizedEnergyError(0.02, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0), 0.0);
 }
+
+TEST(CosmologyEvolution, ExpansionTimestepCountsExecutedDoubleArithmetic) {
+    FlopCount operations = 0;
+    double const turnaround = cosmology::expansionTimestep(2.0, 0.0, -0.25, 0.01, &operations);
+    EXPECT_DOUBLE_EQ(turnaround, cosmology::expansionTimestep(2.0, 0.0, -0.25));
+    EXPECT_EQ(operations, 11u);
+    operations = 0;
+    EXPECT_DOUBLE_EQ(cosmology::expansionTimestep(1.0, 0.0, 0.0, 0.01, &operations), 1.0e30);
+    EXPECT_EQ(operations, 9u);
+    operations = 0;
+    double const clamped = cosmology::expansionTimestep(1.0, 1.0e-40, 0.0, 0.01, &operations);
+    EXPECT_DOUBLE_EQ(clamped, 1.0e30);
+    EXPECT_EQ(operations, 11u);
+}

@@ -1133,8 +1133,9 @@ void checkPmmmTraditionalKicks() {
     options.gravity.openingAngle = 0.02;
     options.analysis.saveForce = true;
 #if COSMICTIGER_WITH_SPH
-    if (kPositionBits == 64 && options.run.timeIntegrator != "hierarchical" &&
-        !options.chemistry.enabled && !options.starFormation.enabled) {
+    if (COSMICTIGER_ENABLE_HOPKINS && kPositionBits == 64 &&
+        options.run.timeIntegrator != "hierarchical" && !options.chemistry.enabled &&
+        !options.starFormation.enabled) {
         options.hydro.method = "mfv";
     }
 #endif
@@ -2041,8 +2042,13 @@ void pmmmTest() {
                 FlopCount const n = options.gravity.meshSize;
                 detail::requirePmmm(mesh.forwardFlops > 0 && mesh.inverseFlops > 0,
                     "FFTW plan arithmetic was not cached on the root locality");
+                // Source packing narrows every real coefficient; each Fourier term promotes
+                // four inputs and each output coefficient narrows both complex components.
+                FlopCount const meshConversions = n * n * n * mesh.sourceCount +
+                    n * n * (n / 2 + 1) * (4 * mesh.terms.size() + 2 * mesh.localCount);
                 FlopCount const expected = mesh.forwardFlops + mesh.inverseFlops + 4 * n * n * n +
-                    10 * n * n * (n / 2 + 1) * mesh.terms.size() + 5 * FlopCount(hpxSize() - 1) +
+                    10 * n * n * (n / 2 + 1) * mesh.terms.size() + meshConversions +
+                    5 * FlopCount(hpxSize() - 1) +
                     ((getOptions().gravity.pmmmNearMethod == "fmm") ? 0 : 4 * FlopCount(hpxSize()));
                 detail::requirePmmm(forceFlops == expected,
                     "empty PMMM mesh operation total is incomplete or counted more than once: " +
@@ -2079,8 +2085,9 @@ void pmmmTest() {
     // Force-only MFV: unequal gas masses must survive ownership exchange and
     // feed both the far moments and the PP/FMM near sources independently of
     // the selected evolution integrator.
-    if (kPositionBits == 64 && getOptions().run.timeIntegrator == "traditional" &&
-        !getOptions().chemistry.enabled && !getOptions().starFormation.enabled) {
+    if (COSMICTIGER_ENABLE_HOPKINS && kPositionBits == 64 &&
+        getOptions().run.timeIntegrator == "traditional" && !getOptions().chemistry.enabled &&
+        !getOptions().starFormation.enabled) {
         auto const savedMassOptions = getOptions();
         auto massOptions = savedMassOptions;
         massOptions.hydro.method = "mfv";

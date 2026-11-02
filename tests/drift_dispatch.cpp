@@ -114,6 +114,7 @@ PositionInteger referencePosition(PositionInteger raw, float velocity) {
     return displacement < 0.0L ? raw - increment : raw + increment;
 }
 
+#if COSMICTIGER_ENABLE_HOPKINS
 void checkMeshVelocity(std::string const& method, size_t count) {
     Fixture fixture(count);
     options.hydro.enabled = true;
@@ -202,6 +203,8 @@ void checkMeshlessFixed64Motion(std::string const& method, int selectedRung) {
             "meshless positional drift changed conserved or support state");
     }
 }
+
+#endif
 
 void checkDispatch(size_t count, int rung, bool glass) {
     Fixture fixture(count);
@@ -334,6 +337,7 @@ TEST(DriftDispatch, SmallRange) {
     detail::checkDispatch(37, -1, false);
 }
 
+#if COSMICTIGER_ENABLE_HOPKINS
 TEST(DriftDispatch, MeshlessVelocity) {
     for (auto const* method : {"sph", "mfm", "mfv"}) {
         detail::checkMeshVelocity(method, 37);
@@ -416,6 +420,8 @@ TEST(DriftDispatch, MeshlessLightconeMassAndFluidVelocity) {
         }
     }
 }
+
+#endif
 
 TEST(DriftDispatch, WorkerChunks) {
     detail::checkDispatch(9007, -1, false);

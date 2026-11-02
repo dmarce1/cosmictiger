@@ -2,7 +2,7 @@
 
 The progress-table rate is the sum of instrumented CPU and CUDA solver operations
 on every locality, divided by wall time between `resetFlops()` and completion of
-force advancement. It includes gravity force **and potential** kernels and SPH.
+force advancement. It includes gravity force **and potential** kernels, SPH, and Hopkins hydrodynamics.
 Energy/momentum diagnostics, diagnostic reductions, signal-speed reporting,
 assertion checks, and the counters themselves are excluded. PMMM FFT executions
 are included using their cached FFTW plan counts. Chemistry and other FFT paths
@@ -11,10 +11,47 @@ are not instrumented; their elapsed time is included if they run in this interva
 These are source-operation estimates: arithmetic, square roots, divisions and
 other elementary mathematical results cost one; FMA costs two. Comparisons,
 selection/min/max, absolute values, unary signs, integer operations and copies
-cost zero. Explicit fixed-point construction/conversion counts its floating
-scaling multiplication. Compile-time constant expressions are excluded. Compiler
+cost zero. Each conversion between floating precisions costs one operation at
+the higher precision, so both float-to-double and double-to-float count as FP64.
+Same-type copies cost zero. Explicit fixed-point construction/conversion counts
+its floating scaling multiplication. Compile-time constant expressions are excluded. Compiler
 folding, instruction fusion and library implementations need not preserve these
 source counts.
+
+## Arithmetic precision
+
+CPU worker shards, CUDA warp submissions, and HPX locality reductions retain
+separate unsigned 64-bit totals for FP32, FP64, and legacy mixed/unclassified
+arithmetic. One rate snapshot uses the same elapsed interval for all three, and
+the original total is their sum. The terminal displays all three rates plus the
+total. Existing cosmological progress fields keep their positions; precision
+rates are appended as `Tflops32`, `Tflops64`, and `TflopsMixed`.
+
+Hopkins submits double-precision operations. Cosmological background evolution,
+PMMM double-precision operators/direct pairs/mesh geometry and accumulation, and
+the double portions of its spectral work are tagged FP64. Single-precision FFTW
+execution counts are tagged FP32. Existing aggregate SPH/tree/walk counts combine
+float kernels with double coordinate and kernel-table arithmetic; they remain
+in `Mixed` until those individual contributions are split. Their counts are
+preserved, rather than being incorrectly labelled entirely FP32.
+
+## Hopkins MFM/MFV
+
+The CPU Hopkins bridge now submits FP64 counts for the branches and iterations
+actually executed: support-radius solves, neighbor geometry and moment matrices,
+reconstruction and gradient limiting, primitive prediction, HLLC/HLLE and vacuum
+Riemann paths, face motion, cached-flux integration, conservative updates, gravity
+source kicks, and timestep selection. Rejected/retried work counts because it was
+executed. Numerical helper routines accept an optional local accumulator; worker
+and action scopes submit their accumulated work once. No shared global increment
+is performed for every arithmetic operation.
+
+The physics formulas and operation order are unchanged. Diagnostic sound-wave
+reconstruction disables counting, and validation used only to throw or assert remains
+excluded. Arithmetic and precision conversions that select a retry or fallback count
+because they control the numerical algorithm. Floating precision conversions in the production bridge count as FP64,
+including narrowing writes to legacy float particle fields. The shared SPH tree
+retains its existing mixed count, separately from Hopkins' FP64 arithmetic.
 
 ## SPH audit
 

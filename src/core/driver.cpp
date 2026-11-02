@@ -69,7 +69,9 @@
 #if COSMICTIGER_ENABLE_CHEMISTRY
 #include <cosmictiger/sph/sph_chemistry.hpp>
 #endif
+#if COSMICTIGER_ENABLE_HOPKINS
 #include <cosmictiger/hydro/hopkins_driver.hpp>
+#endif
 #include <cosmictiger/sph/sph_particles.hpp>
 #if COSMICTIGER_ENABLE_STAR_FORMATION
 #include <cosmictiger/sph/star_formation.hpp>
@@ -755,6 +757,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
                     std::min(gravity.minimumTimestep, static_cast<double>(hydro.minimumTimestep));
             }
         } else {
+#if COSMICTIGER_ENABLE_HOPKINS
             auto const hydro = hopkinsKick(activeRung, scale, scaleDerivative, time, baseTimestep,
                 energies, closingOnly, previousTimestep, global ? result.minimumTimestep : 0.0);
             gravity.maxRung = std::max(gravity.maxRung, hydro.maximumRung);
@@ -762,6 +765,10 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
                 gravity.minimumTimestep = std::min(gravity.minimumTimestep, hydro.minimumTimestep);
             }
             profile::profileEnd();
+#else
+            THROW_ERROR("Hopkins MFM/MFV requires COSMICTIGER_ENABLE_HOPKINS=ON "
+                        "(and COSMICTIGER_ENABLE_SPH=ON)\n");
+#endif
         }
         if (fullEvaluation || global) {
             energies.pot = gravity.pot / scale;
@@ -1643,7 +1650,8 @@ void driver() {
             if (tau == 0.0) {
                 energies0 = energies;
             }
-            double const flops = flopsPerSecond();
+            auto const flopRates = flopRatesPerSecond();
+            double const flops = flopRates.total();
             if (om != thisMinrung) {
                 minrung0++;
             }
@@ -1747,9 +1755,11 @@ void driver() {
             direct += close;
             if (outputDue) {
                 fprintf(textfp,
-                    "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s\n",
+                    "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s "
+                    "%10s %10s\n",
                     "runtime", "i", "z", "a", "adot", "timestep", "years", "mnr", "mxr", "bs",
-                    "Tflops", "time", "GPU close", "GPU direct");
+                    "Tflops", "time", "GPU close", "GPU direct", "Tflops32", "Tflops64",
+                    "TflopsMixed");
             }
             stepTm.stop();
             TimeType const nextIntegerTime = global ? 0 : inc(itime, maxRung);
@@ -1762,24 +1772,30 @@ void driver() {
             int const displayedMinimumRung = minrung;
             fprintf(textfp,
                 "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10i %10.3e %10.3e "
-                "%10.3e %10.3e \n",
+                "%10.3e %10.3e %10.3e %10.3e %10.3e \n",
                 runtime, iter - 1, outputRedshift, a, adot, nextTau / t0, nextYears,
                 displayedMinimumRung, maxRung, bucketSize, flops * 1e-12, stepTm.read(), close,
-                direct);
+                direct, flopRates.singlePrecision * 1e-12, flopRates.doublePrecision * 1e-12,
+                flopRates.unclassified * 1e-12);
             if (progressRows == 0) {
-                PRINT("  TFLOP/s uses counted gravity and SPH operations divided by force "
-                      "advancement wall time.\n"
-                      "  Chemistry and star formation operations are excluded; their wall time "
-                      "is included.\n");
+                PRINT(
+                    "  TFLOP/s uses counted gravity, SPH, and Hopkins operations divided by force "
+                    "advancement wall time.\n"
+                    "  FP32/FP64 separate arithmetic precision; Mixed retains counts whose "
+                    "precision is not yet split.\n"
+                    "  Chemistry and star formation operations are excluded; their wall time "
+                    "is included.\n");
             }
             if (progressRows % 25 == 0) {
-                PRINT("\n%8s %10s %10s %10s %10s %7s %7s %13s %13s %10s\n", "Step", "z", "a", "tau",
-                    "dt", "MinRung", "MaxRung", "Wall", "Step time", "TFLOP/s");
+                PRINT("\n%8s %10s %10s %10s %10s %7s %7s %13s %13s %10s %10s %10s %10s\n", "Step",
+                    "z", "a", "tau", "dt", "MinRung", "MaxRung", "Wall", "Step time", "FP32 TF/s",
+                    "FP64 TF/s", "Mixed TF/s", "TFLOP/s");
             }
-            PRINT("%8i %10.3e %10.3e %10.3e %10.3e %7i %7i %13s %13s %10.3e\n", iter,
-                outputRedshift, a, nextTau / t0, dt, displayedMinimumRung, maxRung,
+            PRINT("%8i %10.3e %10.3e %10.3e %10.3e %7i %7i %13s %13s %10.3e %10.3e %10.3e %10.3e\n",
+                iter, outputRedshift, a, nextTau / t0, dt, displayedMinimumRung, maxRung,
                 terminal::formatDuration(runtime).c_str(),
-                terminal::formatDuration(stepTm.read()).c_str(), flops * 1e-12);
+                terminal::formatDuration(stepTm.read()).c_str(), flopRates.singlePrecision * 1e-12,
+                flopRates.doublePrecision * 1e-12, flopRates.unclassified * 1e-12, flops * 1e-12);
             progressRows++;
             fclose(textfp);
             totalTime.reset();

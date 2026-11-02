@@ -1430,7 +1430,7 @@ Pair<Array<double, kDimensions>, double> particlesEnclosingSphere(Pair<ParticleI
 }
 
 ParticleInteger particlesSort(Pair<ParticleInteger> rng, double xm, int xdim) {
-    addCpuFlops(1);
+    addCpuFlops(1, FlopPrecision::Double);
     return particlesPartition(rng, Position(xm), xdim);
 }
 

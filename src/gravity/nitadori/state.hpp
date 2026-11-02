@@ -220,7 +220,7 @@ void clearGhosts();
 void deposit();
 void transform();
 void consumeField(ParticleInteger index, std::array<double, 4> const& field, KickReturn& result,
-    FlopCount& flops);
+    FlopCount& doubleFlops, FlopCounts& kickFlops);
 std::vector<double> localExpansion(uint64_t key);
 void computeReadyCells();
 void startPipeline();

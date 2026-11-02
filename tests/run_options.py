@@ -20,14 +20,23 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
-    parser.add_argument("--gravity-method", choices=("fmm", "pmmm"), required=True)
+    parser.add_argument("--gravity-method", choices=("fmm", "pmmm", "none"), required=True)
     parser.add_argument("--near-method", choices=("pp", "fmm", "none"), required=True)
-    parser.add_argument("--order", type=int, choices=range(3, 10), required=True)
+    parser.add_argument("--order", type=int, choices=(0, *range(3, 10)), required=True)
     parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"), required=True)
     parser.add_argument("--without-sph", action="store_true")
     parser.add_argument("--without-chemistry", action="store_true")
     parser.add_argument("--with-star-formation", action="store_true")
+    parser.add_argument("--hydro-methods-only", action="store_true",
+                        help="Check hydrodynamics selection and build capabilities without the full option suite")
+    parser.add_argument("--startup-options-only", action="store_true",
+                        help="Check the complete option dump during normal nonverbose startup")
     args = parser.parse_args()
+    if args.gravity_method == "none":
+        if not args.startup_options_only or args.order != 0 or args.without_sph:
+            parser.error("gravity-method=none requires startup-options-only, order=0, and SPH")
+    elif args.order == 0:
+        parser.error("order=0 requires gravity-method=none")
     chemistryAvailable = not args.without_sph and not args.without_chemistry
     starFormationAvailable = not args.without_sph and args.with_star_formation
     args.workdir.mkdir(parents=True, exist_ok=True)
@@ -38,13 +47,17 @@ def main():
         if directory.exists():
             shutil.rmtree(directory)
     command = [str(args.executable.resolve()), "--hpx:threads=2", "--hpx:bind=none"]
-    environment = dict(os.environ, CUDA_VISIBLE_DEVICES="")
+    environment = dict(os.environ, CUDA_VISIBLE_DEVICES="", OMP_NUM_THREADS="1",
+                       OPENBLAS_NUM_THREADS="1")
 
     def run(name, options, success=True, pmmm_mesh=8, selectors=True):
         if selectors:
             selected = {"gravity.method.far": args.gravity_method,
-                        "gravity.expansionDegree": args.order - 1,
                         "run.timeIntegrator": args.time_integrator}
+            if args.gravity_method == "none":
+                selected["gravity.enabled"] = "false"
+            else:
+                selected["gravity.expansionDegree"] = args.order - 1
             if args.gravity_method == "pmmm":
                 selected["gravity.method.near"] = args.near_method
             options = options + [f"--{key}={value}" for key, value in selected.items()
@@ -77,6 +90,13 @@ def main():
     if not re.search(r"^\s*Star formation: " + ("enabled" if starFormationAvailable else "disabled") + r"\s*$",
                      help_text, re.MULTILINE):
         raise RuntimeError("help did not identify the compiled star formation capability")
+    hopkins_capability = re.search(r"^\s*Hopkins hydrodynamics: (enabled|disabled)\s*$",
+                                   help_text, re.MULTILINE)
+    if hopkins_capability is None:
+        raise RuntimeError("help did not identify the compiled Hopkins capability")
+    hopkins_available = hopkins_capability[1] == "enabled"
+    if hopkins_available and args.without_sph:
+        raise RuntimeError("Hopkins capability was enabled without its SPH dependency")
     option_names = set(re.findall(r"^\s+--([A-Za-z][A-Za-z0-9_.]*)", help_text, re.MULTILINE))
     required = {"help", "configuration", "run.scenario", "run.endTime", "run.verbose",
                 "initial.particlesPerDimension", "compute.cuda", "compute.bucketSize",
@@ -109,6 +129,36 @@ def main():
                      "hydro.viscosityDecayPrice"})
     if not required <= option_names:
         raise RuntimeError(f"grouped help is missing {sorted(required - option_names)}")
+
+    def assertStartupOptions(output, hydroMethod):
+        if "Resolved options" not in output:
+            raise RuntimeError("normal startup did not print its full resolved options")
+        printed = set(re.findall(r"^([A-Za-z][A-Za-z0-9_.]*)\s*:", output, re.MULTILINE))
+        missing = option_names - {"help"} - printed
+        if missing:
+            raise RuntimeError(f"normal startup omitted accepted options: {sorted(missing)}")
+        for key, value in (("run.verbose", "F"), ("hydro.method", hydroMethod)):
+            if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + value + r"\s*$",
+                             output, re.MULTILINE):
+                raise RuntimeError(f"normal startup did not print resolved {key}={value}")
+        if "Simulation Options\n" in output or "code_to_M_solar =" in output:
+            raise RuntimeError("nonverbose option dump enabled internal diagnostics")
+
+    if args.startup_options_only:
+        startupDirectory = args.workdir / "units startup"
+        hydroMethod = "sph" if args.gravity_method == "none" else "mfv"
+        startupPhysics = (["--run.scenario=hydroWave", "--hydro.enabled=true"]
+                          if args.gravity_method == "none" else ["--hydro.enabled=false"])
+        output = run("startup_options", [
+            "--run.verbose=false", "--compute.cuda=false", *startupPhysics,
+            f"--hydro.method={hydroMethod}", "--initial.particlesPerDimension=8",
+            "--cosmology.sigma8=0", "--run.maxIterations=0", "--output.silo=false",
+            "--analysis.power=false", "--analysis.groups=false", "--analysis.tracers=false",
+            "--lightcone.enabled=false", f"--output.directory={startupDirectory.resolve()}"])
+        assertStartupOptions(output, hydroMethod)
+        print("Nonverbose startup printed every accepted option, including hydro.method")
+        return
+
     removed_options = {"hydro.chemistry", "hydro.conduction", "hydro.diffusion",
                        "hydro.yReflect", "gravity.sphSmoothing", "cosmology.omegaK",
                        "initial.usePowerFile", "gravity.cloud", "gravity.method",
@@ -183,6 +233,10 @@ mapSize = 8
             raise RuntimeError(f"configured {name} did not equal {value}")
     if "Checkpoint state and mode validation passed" not in configured:
         raise RuntimeError("configuration run did not finish the checkpoint regression")
+    hopkins_metadata = re.search(r"^build\.hopkins\s*:\s*([TF])\s*$",
+                                 configured, re.MULTILINE)
+    if hopkins_metadata is None or (hopkins_metadata[1] == "T") != hopkins_available:
+        raise RuntimeError("build.hopkins metadata disagreed with the advertised capability")
 
     metadata_options = ["--run.test=checkpointState", "--compute.cuda=false",
                         "--hydro.enabled=false", "--initial.particlesPerDimension=8"]
@@ -227,6 +281,17 @@ mapSize = 8
             if "COSMICTIGER_ENABLE_SPH=ON" not in rejected:
                 raise RuntimeError("meshless hydrodynamics lacked SPH build guidance")
             continue
+        if not hopkins_available:
+            disabled_config = args.workdir / f"hydro_method_disabled_{method}.ini"
+            disabled_config.write_text(f"[hydro]\nenabled = true\nmethod = {method}\n")
+            ini_options = [option for option in meshless_options
+                           if not option.startswith("--hydro.enabled=")]
+            for label, options in (("cli", method_options),
+                                   ("ini", ini_options + [f"--configuration={disabled_config.resolve()}"])):
+                rejected = run(f"hydro_method_disabled_{method}_{label}", options, success=False)
+                if "Hopkins MFM/MFV requires COSMICTIGER_ENABLE_HOPKINS=ON" not in rejected:
+                    raise RuntimeError("meshless hydrodynamics lacked Hopkins build guidance")
+            continue
         if not fixed64_available:
             for integrator in ("traditional", "global"):
                 if integrator not in compiled_integrators:
@@ -264,6 +329,15 @@ mapSize = 8
                         "--gravity.enabled=true", "--gravity.method.far=pmmm",
                         f"--gravity.method.near={near_method}", "--gravity.meshSize=8"])
                     assertHydroMethod(output, method)
+
+    if not hopkins_available:
+        rejected = run("sound_wave_disabled", metadata_options + ["--run.scenario=soundWave"], success=False)
+        if "run.scenario=soundWave requires COSMICTIGER_ENABLE_HOPKINS=ON" not in rejected:
+            raise RuntimeError("soundWave lacked Hopkins build guidance")
+    if args.hydro_methods_only:
+        print("Hydrodynamics method and capability validation passed "
+              f"(Hopkins {'enabled' if hopkins_available else 'disabled'})")
+        return
 
     for key, value in (("gravity.method.far", "unknown"),
                        ("run.timeIntegrator", "unknown"),
@@ -336,7 +410,7 @@ mapSize = 8
     normalized = run("units_mass_inverse", normalizationOptions + [f"--units.massSolar={massSolar:.17g}"])
     assertNormalization(normalized, boxLength, massSolar)
     # A small homogeneous lattice skips the Einstein-Boltzmann solve while
-    # exercising the normal successful startup and its nonverbose summary.
+    # exercising the normal successful startup and its complete nonverbose dump.
     startupDirectory = args.workdir / "units startup"
     startupOptions = [option for option in normalizationOptions
                       if not option.startswith("--run.test=")]
@@ -347,8 +421,7 @@ mapSize = 8
         "--lightcone.enabled=false", f"--output.directory={startupDirectory.resolve()}"])
     if "Run configuration" not in startupOutput:
         raise RuntimeError("normal startup did not print its summary")
-    if "Resolved options" in startupOutput:
-        raise RuntimeError("normal unit summary unexpectedly required verbose diagnostics")
+    assertStartupOptions(startupOutput, "sph")
     assertNumericSetting(startupOutput, "units.boxLength", boxLength)
     assertNumericSetting(startupOutput, "units.massSolar", massSolar)
     assertNumericSetting(startupOutput, "initial.numberOfParticles", 8**3)
@@ -1258,6 +1331,11 @@ mapSize = 8
             preset_metadata = [option for option in metadata_options
                                if not option.startswith("--initial.particlesPerDimension=")] + [
                                    "--initial.particlesPerDimension=16"]
+            if not hopkins_available and not args.without_sph:
+                rejected = run(f"complete_{case_name}", preset_metadata + preset_options, success=False)
+                if "run.scenario=soundWave requires COSMICTIGER_ENABLE_HOPKINS=ON" not in rejected:
+                    raise RuntimeError(f"{relative_path} lacked Hopkins build guidance")
+                continue
         output = run(f"complete_{case_name}", preset_metadata + preset_options)
         if "Checkpoint state and mode validation passed" not in output:
             raise RuntimeError(f"{relative_path} did not finish metadata validation")
@@ -1268,8 +1346,13 @@ mapSize = 8
             enabled_preset = [option for option in preset_options
                               if not option.startswith("--gravity.enabled=")]
             enabled = run(f"enabled_meshless_{case_name}", enabled_metadata + enabled_preset + [
-                "--hydro.enabled=true", f"--run.timeIntegrator={integrator}"], success=fixed64_available)
-            if fixed64_available:
+                "--hydro.enabled=true", f"--run.timeIntegrator={integrator}"],
+                success=hopkins_available and fixed64_available)
+            if not hopkins_available:
+                if "Hopkins MFM/MFV requires COSMICTIGER_ENABLE_HOPKINS=ON" not in enabled:
+                    raise RuntimeError(f"{relative_path} lacked Hopkins build guidance")
+                continue
+            elif fixed64_available:
                 assertHydroMethod(enabled, ini["hydro"]["method"])
             elif "Hopkins MFM/MFV requires a build with COSMICTIGER_POSITION_TYPE=fixed64" not in enabled:
                 raise RuntimeError(f"{relative_path} lacked the Fixed64 build restriction")

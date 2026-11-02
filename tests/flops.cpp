@@ -28,6 +28,8 @@ Vector<hpx::id_type> const& hpxChildren() {
 void contributeFlops() {
     // A single contribution already exceeds both int32 and exact double range.
     addCpuFlops((FlopCount(1) << 54) + 7);
+    addCpuFlops((FlopCount(1) << 53) + 5, FlopPrecision::Single);
+    addCpuFlops((FlopCount(1) << 55) + 11, FlopPrecision::Double);
 }
 HPX_PLAIN_ACTION(contributeFlops, ContributeFlopsAction);
 
@@ -43,6 +45,22 @@ TEST(Flops, WideCounterAndDisabledCounter) {
     EXPECT_EQ(FlopCount(disabled), 0);
 }
 
+TEST(Flops, FloatingConversionsCountAtHigherPrecision) {
+    constexpr auto kWidened = floatingPointConversionFlops<float, double>();
+    constexpr auto kNarrowed = floatingPointConversionFlops<double, float>();
+    static_assert(kWidened.singlePrecision == 0 && kWidened.doublePrecision == 1);
+    static_assert(kNarrowed.singlePrecision == 0 && kNarrowed.doublePrecision == 1);
+    static_assert(floatingPointConversionFlops<float, float>().total() == 0);
+    static_assert(floatingPointConversionFlops<double const, double&>().total() == 0);
+    FlopCount const count = (FlopCount(1) << 54) + 7;
+    auto totals = floatingPointConversionFlops<float, double>(count);
+    totals += floatingPointConversionFlops<double, float>(count);
+    EXPECT_EQ(totals.singlePrecision, 0);
+    EXPECT_EQ(totals.doublePrecision, 2 * count);
+    EXPECT_EQ(totals.unclassified, 0);
+    EXPECT_EQ(totals.total(), 2 * count);
+}
+
 TEST(Flops, ConcurrentAndDistributedAggregation) {
     auto const localities = hpx::find_all_localities();
     for (int pass = 0; pass < 2; ++pass) {
@@ -53,6 +71,8 @@ TEST(Flops, ConcurrentAndDistributedAggregation) {
             workers.emplace_back([]() {
                 for (int i = 0; i < 10000; ++i) {
                     addCpuFlops(1234567);
+                    addCpuFlops(2468, FlopPrecision::Single);
+                    addCpuFlops(913, FlopPrecision::Double);
                 }
             });
         }
@@ -62,9 +82,20 @@ TEST(Flops, ConcurrentAndDistributedAggregation) {
         for (auto const& locality : localities) {
             hpx::async<ContributeFlopsAction>(locality).get();
         }
-        FlopCount const expected =
-            FlopCount(4) * 10000 * 1234567 + localities.size() * ((FlopCount(1) << 54) + 7);
-        EXPECT_EQ(readFlops(), expected);
+        FlopCounts const expected{
+            FlopCount(4) * 10000 * 2468 + localities.size() * ((FlopCount(1) << 53) + 5),
+            FlopCount(4) * 10000 * 913 + localities.size() * ((FlopCount(1) << 55) + 11),
+            FlopCount(4) * 10000 * 1234567 + localities.size() * ((FlopCount(1) << 54) + 7)};
+        auto const actual = readFlopCounts();
+        EXPECT_EQ(actual.singlePrecision, expected.singlePrecision);
+        EXPECT_EQ(actual.doublePrecision, expected.doublePrecision);
+        EXPECT_EQ(actual.unclassified, expected.unclassified);
+        EXPECT_EQ(readFlops(), expected.total());
+        auto const rates = flopRatesPerSecond();
+        EXPECT_NEAR(rates.singlePrecision / rates.doublePrecision,
+            double(expected.singlePrecision) / double(expected.doublePrecision), 1.e-15);
+        EXPECT_NEAR(rates.unclassified / rates.doublePrecision,
+            double(expected.unclassified) / double(expected.doublePrecision), 1.e-15);
         double const first = flopsPerSecond();
         double const second = flopsPerSecond();
         EXPECT_TRUE(std::isfinite(first));
@@ -75,6 +106,14 @@ TEST(Flops, ConcurrentAndDistributedAggregation) {
 
 TEST(Flops, EmptyRate) {
     resetFlops();
+    auto const counts = readFlopCounts();
+    EXPECT_EQ(counts.singlePrecision, 0);
+    EXPECT_EQ(counts.doublePrecision, 0);
+    EXPECT_EQ(counts.unclassified, 0);
+    auto const rates = flopRatesPerSecond();
+    EXPECT_EQ(rates.singlePrecision, 0.0);
+    EXPECT_EQ(rates.doublePrecision, 0.0);
+    EXPECT_EQ(rates.unclassified, 0.0);
     EXPECT_EQ(flopsPerSecond(), 0.0);
 }
 

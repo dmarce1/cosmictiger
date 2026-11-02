@@ -54,6 +54,11 @@ void addCpuFlops(FlopCount count) {
     ++detail::cosmologySubmissions;
 }
 
+void addCpuFlops(FlopCount count, FlopPrecision precision) {
+    EXPECT_EQ(precision, FlopPrecision::Double);
+    addCpuFlops(count);
+}
+
 using detail::CosmologyFlops;
 
 TEST_F(CosmologyFlops, DerivativesIncludeUnitNormalizationExactlyOnce) {

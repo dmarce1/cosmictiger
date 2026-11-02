@@ -30,6 +30,7 @@
 // Density, smoothing, forces, heating, device assertions, and allocation use the
 // production translation units. The test does not start an HPX runtime.
 void addCpuFlops(FlopCount) {}
+void addCpuFlops(FlopCount, FlopPrecision) {}
 
 Options const& getOptions() {
     static Options const options{};

@@ -53,6 +53,7 @@ PmmmNearParticle particle(ParticleInteger index, std::array<int, 3> const& cell,
         }
     }
     result.mass = particlesMass(index);
+    ++flops;    // Promote the stored float particle mass to double.
     result.rank = hpxRank();
     result.index = index;
     return result;
@@ -70,7 +71,7 @@ void accumulate(std::vector<CellData> const& cells) {
         }
         state.radialTrace += cell.radialTrace;
     }
-    addCpuFlops(FlopCount(cells.size()) * (cache.sourceCount + 1));
+    addCpuFlops(FlopCount(cells.size()) * (cache.sourceCount + 1), FlopPrecision::Double);
 }
 
 static ParticleMeshCell const* ownedCell(uint64_t generation, uint64_t key) {
@@ -113,7 +114,7 @@ std::vector<CellParticles> readCellParticles(
         }
         result.push_back(std::move(particles));
     }
-    addCpuFlops(flops);
+    addCpuFlops(flops, FlopPrecision::Double);
     return result;
 }
 
@@ -125,6 +126,7 @@ std::vector<double> readExpansion(uint64_t key) {
     std::vector<double> coefficients(cache.localCount);
     size_t const padded = ((index / n) * (2 * (n / 2 + 1)) + index % n) * cache.localCount;
     for (int component = 0; component < cache.localCount; ++component) {
+        // One float-to-double conversion and one double multiplication.
         coefficients[component] = normalization * cache.localReal[padded + component];
     }
     double const traceFactor = (4 * std::numbers::pi / 3) / (double(n) * n);
@@ -134,7 +136,7 @@ std::vector<double> readExpansion(uint64_t key) {
     coefficients[3] -= 2 * traceFactor * state.background[1];
     coefficients[1] -= 2 * traceFactor * state.background[2];
     coefficients[2] -= traceFactor * state.background[3];
-    addCpuFlops(3 + cache.localCount + 10 + (cache.order >= 4 ? 3 : 0));
+    addCpuFlops(3 + 2 * cache.localCount + 10 + (cache.order >= 4 ? 3 : 0), FlopPrecision::Double);
     return coefficients;
 }
 
@@ -163,7 +165,7 @@ void deposit() {
                 }
                 packets[cache.slabOwner[cellCoordinates[0]]].push_back(std::move(cell));
             }
-            addCpuFlops(flops);
+            addCpuFlops(flops, FlopPrecision::Double);
             std::vector<hpx::future<void>> futures;
             futures.reserve(packets.size());
             std::exception_ptr failure;

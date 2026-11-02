@@ -3,12 +3,16 @@ add_library(cosmictiger_platform INTERFACE)
 target_include_directories(cosmictiger_platform INTERFACE ${PROJECT_SOURCE_DIR})
 target_include_directories(cosmictiger_platform SYSTEM INTERFACE
     ${FFTW3F_INCLUDE_DIR} ${FFTW3F_MPI_INCLUDE_DIR}
-    ${SILO_INCLUDE_DIR} ${CHEALPIX_INCLUDE_DIR} ${HEALPIX_CXX_INCLUDE_DIR})
+    ${SILO_INCLUDE_DIR} ${CHEALPIX_INCLUDE_DIR})
 target_link_libraries(cosmictiger_platform INTERFACE
     HPX::hpx Boost::boost Boost::program_options GSL::gsl GSL::gslcblas
     ${FFTW3F_MPI_LIBRARY} ${FFTW3F_THREADS_LIBRARY} ${FFTW3F_LIBRARY}
     MPI::MPI_CXX Threads::Threads
-    ${SILO_LIBRARY} ${CHEALPIX_LIBRARY} ${HEALPIX_CXX_LIBRARY} dl quadmath)
+    ${SILO_LIBRARY} ${CHEALPIX_LIBRARY} dl quadmath)
+if(COSMICTIGER_WITH_GRAVITY)
+    target_include_directories(cosmictiger_platform SYSTEM INTERFACE ${HEALPIX_CXX_INCLUDE_DIR})
+    target_link_libraries(cosmictiger_platform INTERFACE ${HEALPIX_CXX_LIBRARY})
+endif()
 target_compile_options(cosmictiger_platform INTERFACE
     $<$<COMPILE_LANGUAGE:CXX>:-Wno-attributes;-ffast-math;-fno-finite-math-only>)
 if(COMPILER_SUPPORTS_MARCH_NATIVE)
@@ -29,7 +33,10 @@ endif()
 
 add_library(cosmictiger_core STATIC ${cosmictiger_core_source_files})
 target_link_libraries(cosmictiger_core PUBLIC cosmictiger_platform cosmictiger_recombination
-    cosmictiger_fp16 cosmictiger_profiler cosmictiger_stacktrace)
+    cosmictiger_profiler cosmictiger_stacktrace)
+if(COSMICTIGER_WITH_GRAVITY)
+    target_link_libraries(cosmictiger_core PUBLIC cosmictiger_fp16)
+endif()
 if(COSMICTIGER_WITH_CUDA)
     # Resolve device symbols when linking the final executable, alongside its
     # capability-dependent CUDA objects.
@@ -39,7 +46,7 @@ endif()
 
 # Capability definitions are shared by the executable and standalone tests.
 add_library(cosmictiger_default_config INTERFACE)
-foreach(feature IN ITEMS FMM PMMM_PP PMMM_FMM SPH
+foreach(feature IN ITEMS FMM PMMM_PP PMMM_FMM SPH HOPKINS
         INTEGRATOR_TRADITIONAL INTEGRATOR_HIERARCHICAL INTEGRATOR_GLOBAL)
     target_compile_definitions(cosmictiger_default_config INTERFACE
         COSMICTIGER_ENABLE_${feature}=$<BOOL:${COSMICTIGER_ENABLE_${feature}}>)

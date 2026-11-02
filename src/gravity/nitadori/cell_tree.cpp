@@ -104,7 +104,7 @@ Range<double> treeCellBox(uint64_t key, int meshSize) {
         box.begin[dim] = double(coordinate[dim]) / meshSize;
         box.end[dim] = double(coordinate[dim] + 1) / meshSize;
     }
-    addCpuFlops(2 * kDimensions);
+    addCpuFlops(2 * kDimensions, FlopPrecision::Double);
     return box;
 }
 
@@ -149,7 +149,7 @@ void treeClampCellCenter(Array<double, kDimensions>& center, Array<Position, kDi
             throw std::runtime_error("Tree multipole center left its mesh cell");
         }
     }
-    addCpuFlops(flops);
+    addCpuFlops(flops, FlopPrecision::Double);
 }
 
 }    // namespace detail

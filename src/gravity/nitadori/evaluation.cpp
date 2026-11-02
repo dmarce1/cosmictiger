@@ -5,7 +5,7 @@
 namespace pmmm::detail {
 
 void consumeField(ParticleInteger index, std::array<double, 4> const& field, KickReturn& result,
-    FlopCount& flops) {
+    FlopCount& doubleFlops, FlopCounts& kickFlops) {
     Array<float, kDimensions> acceleration;
     double const gm = getOptions().gravity.gm;
     for (int component = 0; component < 4; ++component) {
@@ -18,10 +18,11 @@ void consumeField(ParticleInteger index, std::array<double, 4> const& field, Kic
         }
     }
     float const potential = state.request.doPotential ? gm * field[0] : 0.0f;
-    flops += kDimensions + (state.request.doPotential ? 1 : 0);
+    // Each retained component is scaled in double and narrowed to float.
+    doubleFlops += 2 * (kDimensions + (state.request.doPotential ? 1 : 0));
     if (state.request.applyKick) {
         result += particleMeshApplyField(
-            index, acceleration, potential, state.request.parameters, &flops);
+            index, acceleration, potential, state.request.parameters, nullptr, &kickFlops);
     } else {
         state.acceleration[index] = acceleration;
         if (!state.potential.empty()) {
@@ -36,7 +37,7 @@ void evaluateParticles(bool doPotential) {
     int const width = cache.nearWidth;
     double const h = 1.0 / n;
     double const localTrace = (4 * std::numbers::pi / 3) * h * h * state.background[0];
-    addCpuFlops(4);
+    addCpuFlops(4, FlopPrecision::Double);
     // Bundle whole cells by sink count. Tiny cells share one backend submission;
     // each sink still traverses only its own cell's shifted neighbor sources.
     size_t const targetParticles = getOptions().gravity.pmmmBatchParticles;
@@ -69,6 +70,7 @@ void evaluateParticles(bool doPotential) {
         std::vector<PmmmNearParticle> batchSources;
         std::vector<PmmmNearSourceRange> sourceRanges;
         FlopCount flops = 0;
+        FlopCounts kickFlops;
         auto submit = [&]() {
             if (cells.empty()) {
                 return;
@@ -89,11 +91,13 @@ void evaluateParticles(bool doPotential) {
                         field[component] += nearFields[sink][component];
                     }
                     flops += 4;
-                    consumeField(index, field, result, flops);
+                    consumeField(index, field, result, flops, kickFlops);
                 }
             }
-            addCpuFlops(flops);
+            addCpuFlops(flops + kickFlops.doublePrecision, FlopPrecision::Double);
+            addCpuFlops(kickFlops.singlePrecision, FlopPrecision::Single);
             flops = 0;
+            kickFlops = {};
             {
                 std::lock_guard<MutexType> lock(state.queueMutex);
                 state.kickResult += result;

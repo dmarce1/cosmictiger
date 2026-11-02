@@ -12,6 +12,7 @@ showUsage() {
     printf 'Run the interactive CosmicTiger configure and build menu in a terminal.\n'
     printf 'The menu selects compiled capabilities for cosmictiger.\n'
     printf 'SPH requires traditional or global integration; gravity may be disabled.\n'
+    printf 'Hopkins MFM/MFV is optional (default OFF) and requires SPH and fixed64 positions.\n'
     printf 'Equilibrium cooling is independently selectable and requires SPH.\n'
     printf 'Stars are selectable with COSMICTIGER_ENABLE_STARS and require chemistry and SPH.\n'
     printf 'Position storage is selected for the whole build directory; fixed32 is the default.\n'
@@ -111,6 +112,7 @@ enableGlobal=OFF
 positionType=fixed32
 enableCuda=ON
 enableSph=ON
+enableHopkins=OFF
 enableChemistry=ON
 enableStars=OFF
 testSuite=OFF
@@ -375,6 +377,7 @@ showMainMenu() {
     printf ' 13) Position storage: %s\n' "$positionType"
     printf ' 14) Build equilibrium cooling (requires SPH): %s\n' "$enableChemistry"
     printf ' 15) Build stars (requires chemistry and SPH): %s\n' "$enableStars"
+    printf ' 16) Build Hopkins MFM/MFV (requires SPH and fixed64): %s\n' "$enableHopkins"
     printf '  Enter or b) Configure and build    q) Quit\n'
     printf 'Build jobs default to %s system threads, with no upper cap; MPI tests use four CPUs each.\n' "$coreCount"
 }
@@ -384,7 +387,7 @@ chooseMainMenu() {
         if ! promptValue=$(dialogChoice --title 'Build configuration' \
             --cancel-button 'Quit' --default-item "$menuChoice" --notags \
             --menu "Build jobs: default $coreCount system threads, no upper cap. Test limit: $maxTestJobs (four CPUs per MPI test)." \
-            0 0 17 \
+            0 0 18 \
             1 "Build mode: $buildMode" \
             2 "CUDA: $enableCuda" \
             3 "Build and run test suite: $testSuite" \
@@ -400,6 +403,7 @@ chooseMainMenu() {
             13 "Position storage: $positionType" \
             14 "Build equilibrium cooling (requires SPH): $enableChemistry" \
             15 "Build stars (requires chemistry and SPH): $enableStars" \
+            16 "Build Hopkins MFM/MFV (requires SPH and fixed64): $enableHopkins" \
             b 'Configure and build' q 'Quit'); then
             promptValue=q
         fi
@@ -418,6 +422,12 @@ validateFeatures() {
     fi
     if [[ $enableSph == ON && $enableTraditional != ON && $enableGlobal != ON ]]; then
         showMessage 'SPH requires traditional or global integration.'; return 1
+    fi
+    if [[ $enableHopkins == ON && $enableSph != ON ]]; then
+        showMessage 'Hopkins MFM/MFV requires SPH. Enable SPH (option 12) or disable Hopkins (option 16).'; return 1
+    fi
+    if [[ $enableHopkins == ON && $positionType != fixed64 ]]; then
+        showMessage 'Hopkins MFM/MFV requires fixed64 positions. Select fixed64 (option 13) or disable Hopkins (option 16).'; return 1
     fi
     if [[ $enableStars == ON && $enableChemistry != ON ]]; then
         showMessage 'Stars require equilibrium cooling. Enable chemistry (option 14) or disable stars (option 15).'; return 1
@@ -452,6 +462,7 @@ while true; do
         13) choosePositionType ;;
         14) chooseToggle 'Build equilibrium cooling (requires SPH)' "$enableChemistry"; enableChemistry=$promptValue ;;
         15) chooseToggle 'Build stars (requires chemistry and SPH)' "$enableStars"; enableStars=$promptValue ;;
+        16) chooseToggle 'Build Hopkins MFM/MFV (requires SPH and fixed64)' "$enableHopkins"; enableHopkins=$promptValue ;;
         *) printf 'Unknown option.\n' ;;
     esac
 done
@@ -506,6 +517,7 @@ configureCommand=(cmake -S "$rootDir" -B "$buildDir" -G 'Unix Makefiles'
     "-DCMAKE_BUILD_TYPE=$buildType"
     "-DCOSMICTIGER_WITH_CUDA=$enableCuda"
     "-DCOSMICTIGER_ENABLE_SPH=$enableSph"
+    "-DCOSMICTIGER_ENABLE_HOPKINS=$enableHopkins"
     "-DCOSMICTIGER_ENABLE_CHEMISTRY=$enableChemistry"
     "-DCOSMICTIGER_ENABLE_STARS=$enableStars"
     "-DCOSMICTIGER_ENABLE_FMM=$enableFmm"
@@ -568,6 +580,7 @@ runStage() {
 printf '\nGravity: FMM=%s PMMM PP=%s PMMM FMM=%s; potential degrees=%s\n' "$enableFmm" "$enablePmmmPp" "$enablePmmmFmm" "$expansionDegree"
 printf 'Integrators: traditional=%s hierarchical=%s global=%s\n' "$enableTraditional" "$enableHierarchical" "$enableGlobal"
 printf 'SPH support: %s\n' "$enableSph"
+printf 'Hopkins MFM/MFV: %s (requires SPH and fixed64)\n' "$enableHopkins"
 printf 'Equilibrium cooling: %s (requires SPH)\n' "$enableChemistry"
 printf 'Stars: %s (requires chemistry and SPH)\n' "$enableStars"
 printf 'Position storage: %s\n' "$positionType"

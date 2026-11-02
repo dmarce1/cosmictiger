@@ -33,6 +33,10 @@ void addCpuFlops(FlopCount count) {
     detail::submittedSphFlops += count;
 }
 
+void addCpuFlops(FlopCount count, FlopPrecision) {
+    addCpuFlops(count);
+}
+
 // The fixture owns ordinary host arrays and calls the production SIMD kernels.
 // It does not start an HPX runtime or alias staged source snapshots with sinks.
 Options const& getOptions() {

@@ -42,7 +42,7 @@ __global__ void nearKernel(PmmmNearParticle const* sinks, size_t sinkCount,
         }
         fields[sink] = field;
     }
-    addGpuFlops(flops);
+    addGpuFlops(flops, FlopPrecision::Double);
 }
 
 struct DeviceDeleter {
@@ -182,7 +182,7 @@ void pmmmNearFieldCuda(std::vector<PmmmNearParticle> const& sinks,
     double const inverseSupportRadius = 1 / supportRadius;
     double const inverseSupportRadiusCubed =
         inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
-    addCpuFlops(3);
+    addCpuFlops(3, FlopPrecision::Double);
     int const blocks = static_cast<int>(std::min(
         size_t(65535), (sinks.size() + size_t(kNearBlockSize) - 1) / size_t(kNearBlockSize)));
     nearKernel<<<blocks, kNearBlockSize, 0, stream.nativeHandle()>>>(workspace->sinks.data.get(),

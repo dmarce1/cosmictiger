@@ -238,7 +238,8 @@ void runFixedScenario() {
                                  (outputStep + 1) * baseTimestep - state.tau) :
                              0.0);
             }
-            double const flops = flopsPerSecond();
+            auto const flopRates = flopRatesPerSecond();
+            double const flops = flopRates.total();
             state.maxRung =
                 global ? 0 : std::max({int(result.maxRung), baseOptions.run.minRung, minimumRung});
             int const displayedMinimumRung = minimumRung;
@@ -294,20 +295,26 @@ void runFixedScenario() {
                 double const displayedRuntime = restoredRuntime + runtime.read();
                 runtime.start();
                 if (progressRows == 0) {
-                    PRINT("  TFLOP/s uses counted gravity and SPH operations divided by force "
+                    PRINT("  TFLOP/s uses counted gravity, SPH, and Hopkins operations divided by "
+                          "force "
                           "advancement wall time.\n"
+                          "  FP32/FP64 separate arithmetic precision; Mixed retains counts whose "
+                          "precision is not yet split.\n"
                           "  Chemistry and star formation operations are excluded; their wall "
                           "time is included.\n");
                 }
                 if (progressRows % 25 == 0) {
-                    PRINT("\n%8s %13s %13s %7s %13s %13s %13s %10s\n", "Step", "Time", "dt",
-                        "Done %", "Rung(min/max)", "Wall", "Step time", "TFLOP/s");
+                    PRINT("\n%8s %13s %13s %7s %13s %13s %13s %10s %10s %10s %10s\n", "Step",
+                        "Time", "dt", "Done %", "Rung(min/max)", "Wall", "Step time", "FP32 TF/s",
+                        "FP64 TF/s", "Mixed TF/s", "TFLOP/s");
                 }
-                PRINT("%8i %13.6e %13.6e %7.2f %6i/%-6i %13s %13s %10.3e\n", state.iter, state.tau,
-                    timestep, std::clamp(100.0 * state.tau / duration, 0.0, 100.0),
-                    displayedMinimumRung, state.maxRung,
-                    terminal::formatDuration(displayedRuntime).c_str(),
-                    terminal::formatDuration(stepTimer.read()).c_str(), flops * 1e-12);
+                PRINT("%8i %13.6e %13.6e %7.2f %6i/%-6i %13s %13s %10.3e %10.3e %10.3e %10.3e\n",
+                    state.iter, state.tau, timestep,
+                    std::clamp(100.0 * state.tau / duration, 0.0, 100.0), displayedMinimumRung,
+                    state.maxRung, terminal::formatDuration(displayedRuntime).c_str(),
+                    terminal::formatDuration(stepTimer.read()).c_str(),
+                    flopRates.singlePrecision * 1e-12, flopRates.doublePrecision * 1e-12,
+                    flopRates.unclassified * 1e-12, flops * 1e-12);
                 progressRows++;
             }
         }

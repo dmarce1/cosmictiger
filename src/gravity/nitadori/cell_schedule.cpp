@@ -110,6 +110,7 @@ void computeReadyCells() {
             double const h = 1.0 / cache.meshSize;
             double const localTrace = (4 * std::numbers::pi / 3) * h * h * state.background[0];
             FlopCount flops = 4;
+            FlopCounts kickFlops;
             KickReturn result;
             size_t compact = 0;
             for (size_t sink : sinks) {
@@ -135,14 +136,15 @@ void computeReadyCells() {
                     for (int dim = 0; dim < kDimensions; ++dim) {
                         field[dim + 1] += fields.acceleration[dim][compact];
                     }
-                    flops += 4;
-                    consumeField(index, field, result, flops);
+                    flops += 8;    // Four float-to-double promotions and field additions.
+                    consumeField(index, field, result, flops, kickFlops);
                 }
             }
             if (compact != fields.particleIndices.size()) {
                 throw std::runtime_error("PMMM batch output contains an unknown sink");
             }
-            addCpuFlops(flops);
+            addCpuFlops(flops + kickFlops.doublePrecision, FlopPrecision::Double);
+            addCpuFlops(kickFlops.singlePrecision, FlopPrecision::Single);
             {
                 std::lock_guard<MutexType> lock(state.queueMutex);
                 state.kickResult += result;

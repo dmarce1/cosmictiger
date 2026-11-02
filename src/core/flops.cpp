@@ -22,7 +22,9 @@ namespace detail {
 // make diagnostic reads/reset data-race-free (interval boundaries must still
 // wait for all producers).
 struct alignas(64) CpuFlopShard {
-    std::atomic<FlopCount> count{0};
+    std::atomic<FlopCount> singlePrecision{0};
+    std::atomic<FlopCount> doublePrecision{0};
+    std::atomic<FlopCount> unclassified{0};
 };
 
 std::mutex flopShardsMutex;
@@ -43,7 +45,7 @@ CpuFlopShard& cpuFlopShard() {
 }    // namespace detail
 
 HPX_PLAIN_ACTION(resetFlops, ResetFlopsAction);
-HPX_PLAIN_ACTION(readFlops, ReadFlopsAction);
+HPX_PLAIN_ACTION(readFlopCounts, ReadFlopCountsAction);
 
 void resetFlops() {
     Vector<hpx::future<void>> futures;
@@ -54,7 +56,9 @@ void resetFlops() {
     {
         std::lock_guard<std::mutex> lock(detail::flopShardsMutex);
         for (auto const& shard : detail::flopShards) {
-            shard->count.store(0, std::memory_order_relaxed);
+            shard->singlePrecision.store(0, std::memory_order_relaxed);
+            shard->doublePrecision.store(0, std::memory_order_relaxed);
+            shard->unclassified.store(0, std::memory_order_relaxed);
         }
     }
     for (auto& future : futures) {
@@ -63,16 +67,18 @@ void resetFlops() {
     detail::flopStart = std::chrono::steady_clock::now();
 }
 
-FlopCount readFlops() {
-    Vector<hpx::future<FlopCount>> futures;
+FlopCounts readFlopCounts() {
+    Vector<hpx::future<FlopCounts>> futures;
     for (auto const& child : hpxChildren()) {
-        futures.push_back(hpx::async<ReadFlopsAction>(child));
+        futures.push_back(hpx::async<ReadFlopCountsAction>(child));
     }
-    FlopCount result = getGpuFlops();
+    FlopCounts result = getGpuFlopCounts();
     {
         std::lock_guard<std::mutex> lock(detail::flopShardsMutex);
         for (auto const& shard : detail::flopShards) {
-            result += shard->count.load(std::memory_order_relaxed);
+            result.singlePrecision += shard->singlePrecision.load(std::memory_order_relaxed);
+            result.doublePrecision += shard->doublePrecision.load(std::memory_order_relaxed);
+            result.unclassified += shard->unclassified.load(std::memory_order_relaxed);
         }
     }
     for (auto& future : futures) {
@@ -81,19 +87,38 @@ FlopCount readFlops() {
     return result;
 }
 
-double flopsPerSecond() {
+FlopCount readFlops() {
+    return readFlopCounts().total();
+}
+
+FlopRates flopRatesPerSecond() {
     // Freeze the elapsed time before collecting remote counters so reporting
     // latency does not lower the rate. A read does not restart the clock.
     double const elapsed =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - detail::flopStart).count();
-    auto const count = readFlops();
-    return elapsed > 0.0 ? double(count) / elapsed : 0.0;
+    auto const counts = readFlopCounts();
+    if (elapsed <= 0.0) {
+        return {};
+    }
+    return {double(counts.singlePrecision) / elapsed, double(counts.doublePrecision) / elapsed,
+        double(counts.unclassified) / elapsed};
+}
+
+double flopsPerSecond() {
+    return flopRatesPerSecond().total();
 }
 
 void addCpuFlops(FlopCount count) {
+    addCpuFlops(count, FlopPrecision::Unclassified);
+}
+
+void addCpuFlops(FlopCount count, FlopPrecision precision) {
 #ifdef COUNT_FLOPS
     if (count != 0) {
-        auto& total = detail::cpuFlopShard().count;
+        auto& shard = detail::cpuFlopShard();
+        auto& total = precision == FlopPrecision::Single ? shard.singlePrecision :
+            precision == FlopPrecision::Double           ? shard.doublePrecision :
+                                                           shard.unclassified;
         // Only this OS thread writes its shard between quiescent resets.
         // Relaxed load/store avoids even an uncontended locked RMW operation.
         total.store(total.load(std::memory_order_relaxed) + count, std::memory_order_relaxed);
@@ -103,7 +128,10 @@ void addCpuFlops(FlopCount count) {
 
 #ifndef USE_CUDA
 void resetGpuFlops() {}
+FlopCounts getGpuFlopCounts() {
+    return {};
+}
 FlopCount getGpuFlops() {
-    return 0;
+    return getGpuFlopCounts().total();
 }
 #endif

@@ -57,7 +57,8 @@ double kickBackgroundSecondMoment(Array<Position, kDimensions> center) {
     for (auto& child : children) {
         secondMoment += child.get();
     }
-    addCpuFlops(FlopCount(range.second - range.first) * 17 + children.size());
+    addCpuFlops(
+        FlopCount(range.second - range.first) * 17 + children.size(), FlopPrecision::Double);
     return secondMoment;
 }
 }    // namespace detail

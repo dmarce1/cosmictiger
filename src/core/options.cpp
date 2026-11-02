@@ -104,6 +104,10 @@ void validateHydroMethod(Options const& opts) {
         throw std::invalid_argument("hydro.method must be sph, mfm, or mfv");
     }
     if (opts.hydro.enabled && opts.hydro.method != "sph") {
+#if !COSMICTIGER_ENABLE_HOPKINS
+        throw std::invalid_argument("Hopkins MFM/MFV requires COSMICTIGER_ENABLE_HOPKINS=ON "
+                                    "(and COSMICTIGER_ENABLE_SPH=ON)");
+#endif
         if constexpr (kPositionBits != 64) {
             throw std::invalid_argument(
                 "Hopkins MFM/MFV requires a build with COSMICTIGER_POSITION_TYPE=fixed64");
@@ -118,6 +122,11 @@ void validateHydroMethod(Options const& opts) {
         }
     }
     if (opts.run.scenario == "soundWave") {
+#if !COSMICTIGER_ENABLE_HOPKINS
+        throw std::invalid_argument("run.scenario=soundWave requires "
+                                    "COSMICTIGER_ENABLE_HOPKINS=ON "
+                                    "(and COSMICTIGER_ENABLE_SPH=ON)");
+#endif
         if (opts.hydro.method == "sph" || opts.hydro.kernelFamily != "spline" ||
             opts.hydro.kernelDegree != 3 || opts.hydro.gamma != 5.0 / 3.0) {
             throw std::invalid_argument(
@@ -339,6 +348,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"build.pmmm", gravity::kBuildHasPmmm},
         {"build.pmmmNearPp", gravity::kBuildHasPmmmNearPp},
         {"build.pmmmNearFmm", gravity::kBuildHasPmmmNearFmm},
+        {"build.hopkins", bool(COSMICTIGER_ENABLE_HOPKINS)},
         {"build.chemistry", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY)},
         {"build.starFormation", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION)},
         {"build.integratorTraditional", integration::kBuildHasTraditional},
@@ -510,7 +520,7 @@ bool processOptions(int argc, char* argv[]) {
         po::value<std::string>(&opts.run.test)->default_value(""),
         "name of developer regression to run (requires BUILD_TESTING=ON)")("run.verbose",
         po::value<bool>(&opts.run.verbose)->default_value(false),
-        "print all resolved options and detailed internal diagnostics")("run.scenario",
+        "print detailed internal diagnostics")("run.scenario",
         po::value<std::string>(&opts.run.scenario)->default_value("cosmology"),
         "physical scenario: plummer, sod, blast, rayleighTaylor, kelvinHelmholtz, disc, "
         "polytropicStar, hydroWave, soundWave, gresho, cosmology, glass")("run.endTime",
@@ -738,7 +748,8 @@ bool processOptions(int argc, char* argv[]) {
     hydroOpts.add_options()("hydro.enabled",
         po::value<bool>(&opts.hydro.enabled)->default_value(false), "enable gas hydrodynamics")(
         "hydro.method", po::value<std::string>(&opts.hydro.method)->default_value("sph"),
-        "hydrodynamic method: sph, mfm, or mfv")("hydro.kernelFamily",
+        "hydrodynamic method: sph, mfm, or mfv; mfm/mfv require "
+        "COSMICTIGER_ENABLE_HOPKINS=ON")("hydro.kernelFamily",
         po::value<std::string>(&opts.hydro.kernelFamily)->default_value("spline"),
         "density kernel family: spline, wendland, or ferrers")("hydro.kernelDegree",
         po::value<int>(&opts.hydro.kernelDegree)->default_value(3),
@@ -870,6 +881,8 @@ bool processOptions(int argc, char* argv[]) {
                   << (gravity::kBuildHasGravity ? "" : " none") << "\n"
                   << "  PMMM near solvers:" << (gravity::kBuildHasPmmmNearPp ? " pp" : "")
                   << (gravity::kBuildHasPmmmNearFmm ? " fmm" : "") << "\n";
+        std::cout << "  Hopkins hydrodynamics: "
+                  << (COSMICTIGER_ENABLE_HOPKINS ? "enabled" : "disabled") << "\n";
         std::cout << "  Equilibrium cooling: "
                   << (COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY ? "enabled" : "disabled")
                   << "\n";
@@ -1610,7 +1623,7 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("PMMM requires the normalized gravity.supportRadius to be no larger than "
                     "gravity.pmmmNearWidth/gravity.meshSize\n");
     }
-    detail::displayOptions = terminal::verbose() || !opts.run.test.empty();
+    detail::displayOptions = true;
     if (hpxRank() == 0 && opts.run.test.empty()) {
         PRINT(
             "%.*s\n", int(cosmictiger::kStartupScreen.size()), cosmictiger::kStartupScreen.data());
@@ -1618,6 +1631,7 @@ bool processOptions(int argc, char* argv[]) {
     if (detail::displayOptions) {
         terminal::section("Resolved options");
     }
+    show("build.hopkins", bool(COSMICTIGER_ENABLE_HOPKINS));
     show("build.chemistry", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY));
     show("build.starFormation", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION));
     SHOW("starFormation.enabled", starFormation.enabled);
@@ -1719,6 +1733,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("compute.cudaKickFineHandoffBlocks", compute.cudaKickFineHandoffBlocks);
     SHOW("compute.cudaKickListReserve", compute.cudaKickListReserve);
     SHOW("lightcone.enabled", lightcone.enabled);
+    SHOW("lightcone.directory", lightcone.directory);
     SHOW("analysis.groups", analysis.groups);
     show("analysis.haloParticles", std::string("darkMatter"));
     SHOW("analysis.power", analysis.power);
@@ -1751,7 +1766,10 @@ bool processOptions(int argc, char* argv[]) {
             std::pow(double(opts.initial.numberOfParticles), 1.0 / kDimensions));
     show("hydro.centralEffectiveRadius",
         opts.hydro.centralSupportRadius / gravityTable.supportRadiusPerEffectiveRadius);
+    show("hydro.centralSoftening",
+        opts.hydro.centralSupportRadius / gravityTable.supportRadiusPerEffectiveRadius);
     show("hydro.centralSupportRadius", opts.hydro.centralSupportRadius);
+    SHOW("hydro.centralAcceleration", hydro.centralAcceleration);
     SHOW("gravity.kernelFamily", gravity.kernelFamily);
     SHOW("gravity.kernelDegree", gravity.kernelDegree);
     SHOW("hydro.kernelFamily", hydro.kernelFamily);
@@ -1773,6 +1791,10 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("cosmology.omegaK", cosmology.omegaK);
     SHOW("compute.particleCacheLineSize", compute.particleCacheLineSize);
     SHOW("initial.particlesPerDimension", initial.particlesPerDimension);
+    SHOW("initial.gadget4Restart", initial.gadget4Restart);
+    SHOW("initial.useGlass", initial.useGlass);
+    SHOW("initial.plummerRadius", initial.plummerRadius);
+    SHOW("initial.closePack", initial.closePack);
     SHOW("checkpoint.readIndex", checkpoint.readIndex);
     SHOW("analysis.saveForce", analysis.saveForce);
     SHOW("analysis.saveAcceleration", analysis.saveAcceleration);
@@ -1783,6 +1805,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("cosmology.thetaCmb", cosmology.thetaCmb);
     SHOW("gravity.openingAngle", gravity.openingAngle);
     SHOW("gravity.openingSchedule", gravity.openingSchedule);
+    SHOW("gravity.openLargerCell", gravity.openLargerCell);
     SHOW("analysis.tracerCount", analysis.tracerCount);
     SHOW("compute.treeCacheLineSize", compute.treeCacheLineSize);
     SHOW("initial.twoLpt", initial.twoLpt);
@@ -1825,63 +1848,6 @@ bool processOptions(int argc, char* argv[]) {
         PRINT("%-38s: %e Msun\n", "units.massSolar", opts.units.massG / constants::kM0);
         PRINT("%-38s: %i localities, %zu worker threads here\n", "Runtime", hpxSize(),
             size_t(hpx::get_num_worker_threads()));
-        SHOW("compute.cuda", compute.cuda);
-        SHOW("compute.positionType", compute.positionType);
-        SHOW("run.timeIntegrator", run.timeIntegrator);
-        SHOW("gravity.enabled", gravity.enabled);
-        if (opts.gravity.enabled) {
-            SHOW("gravity.method.far", gravity.method);
-            if (opts.gravity.errorInterval > 0) {
-                SHOW("gravity.errorInterval", gravity.errorInterval);
-                SHOW("gravity.errorSampleSize", gravity.errorSampleSize);
-            }
-            if (usesMeshGravity(opts.gravity)) {
-                SHOW("gravity.meshSize", gravity.meshSize);
-                SHOW("gravity.pmmmCoarseMeshSize", gravity.pmmmCoarseMeshSize);
-                SHOW("gravity.pmmmNearWidth", gravity.pmmmNearWidth);
-                SHOW("gravity.method.near", gravity.pmmmNearMethod);
-                SHOW("gravity.pmmmBatchParticles", gravity.pmmmBatchParticles);
-                PRINT("%-38s: periodic multipole mesh, %s particle timesteps\n", "PMMM gravity",
-                    opts.run.timeIntegrator.c_str());
-            }
-            show("gravity.expansionDegree",
-                opts.gravity.fmmOrder > 0 ? opts.gravity.fmmOrder - 1 : 0);
-            SHOW("gravity.openingAngle", gravity.openingAngle);
-            if (!opts.gravity.openingSchedule.empty()) {
-                SHOW("gravity.openingSchedule", gravity.openingSchedule);
-            }
-            SHOW("gravity.kernelFamily", gravity.kernelFamily);
-            SHOW("gravity.kernelDegree", gravity.kernelDegree);
-        }
-        SHOW("hydro.enabled", hydro.enabled);
-        if (opts.hydro.enabled) {
-            SHOW("compute.sphBucketSize", compute.sphBucketSize);
-            SHOW("hydro.kernelFamily", hydro.kernelFamily);
-            SHOW("hydro.kernelDegree", hydro.kernelDegree);
-            SHOW("hydro.balsaraSwitch", hydro.balsaraSwitch);
-            SHOW("hydro.viscosityEvolution", hydro.viscosityEvolution);
-            SHOW("hydro.viscosityAlphaMin", hydro.viscosityAlphaMin);
-            SHOW("hydro.viscosityDecay", hydro.viscosityDecay);
-            SHOW("hydro.viscosityAlphaMax", hydro.viscosityAlphaMax);
-            SHOW("hydro.viscosityDecayCD", hydro.viscosityDecayCD);
-            SHOW("hydro.viscosityAlphaMaxPrice", hydro.viscosityAlphaMaxPrice);
-            SHOW("hydro.viscosityDecayPrice", hydro.viscosityDecayPrice);
-        }
-        SHOW("chemistry.enabled", chemistry.enabled);
-        if (opts.chemistry.enabled) {
-        }
-        SHOW("run.maxIterations", run.maxIterations);
-        SHOW("run.numberOfSteps", run.numberOfSteps);
-        SHOW("run.minRung", run.minRung);
-        SHOW("run.endTime", run.endTime);
-        terminal::section("Output");
-        SHOW("output.directory", output.directory);
-        SHOW("output.silo", output.silo);
-        if (opts.output.silo) {
-            SHOW("output.siloInterval", output.siloInterval);
-            PRINT("%-38s: %s, %s\n", "Silo coordinates", opts.output.units.c_str(),
-                opts.output.frame.c_str());
-        }
         PRINT("\n  Internal diagnostics: --run.verbose=true\n");
         detail::displayOptions = terminal::verbose();
     }

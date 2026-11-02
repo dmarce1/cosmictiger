@@ -34,7 +34,7 @@ CosmosAdvance cosmosAdvance(double& adot, double& a, double dt) {
         {a, adot, a * adot}, dt, cosmology::CosmologicalTime::conformal);
     a = result.state.scaleFactor;
     adot = result.state.physicalDerivative;
-    addCpuFlops(result.flops + 3);
+    addCpuFlops(result.flops + 3, FlopPrecision::Double);
     return {result.physicalTime, result.driftIntegral};
 }
 
@@ -45,7 +45,7 @@ void cosmosUpdate(double& adotdot, double& adot, double& a, double dt) {
 
 double cosmosAinv(double& adot, double& a, double dt) {
     auto const result = cosmosAdvance(adot, a, dt);
-    addCpuFlops(1);
+    addCpuFlops(1, FlopPrecision::Double);
     return dt == 0.0 ? 1.0 / a : result.driftIntegral / dt;
 }
 
@@ -60,7 +60,7 @@ double cosmosGrowthFactor(double omegaM, float a) {
 
 double cosmosDadt(double a) {
     auto const result = detail::backgroundCosmology().state(a).physicalDerivative;
-    addCpuFlops(22);
+    addCpuFlops(22, FlopPrecision::Double);
     return result;
 }
 
@@ -76,14 +76,14 @@ double cosmosD2adt2(double a) {
     if (!std::isfinite(result)) {
         throw std::overflow_error("Friedmann acceleration is outside the double-precision range");
     }
-    addCpuFlops(14);
+    addCpuFlops(14, FlopPrecision::Double);
     return result;
 }
 
 double cosmosDadtau(double a, bool countFlops) {
     double const result = detail::backgroundCosmology().state(a).conformalDerivative;
     if (countFlops) {
-        addCpuFlops(22);
+        addCpuFlops(22, FlopPrecision::Double);
     }
     return result;
 }
@@ -103,7 +103,7 @@ double cosmosTime(double a0, double a1) {
 double cosmosConformalTime(double a0, double a1, bool countFlops) {
     auto const result = detail::backgroundCosmology().intervalsBetweenScales(a0, a1);
     if (countFlops) {
-        addCpuFlops(result.flops + 2);
+        addCpuFlops(result.flops + 2, FlopPrecision::Double);
     }
     return result.conformalTime;
 }

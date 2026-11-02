@@ -702,8 +702,9 @@ void sphGravityTest() {
         runPairCase(useCuda, true, 0.001f);
         runPairCase(useCuda, true, 0.1f);
         runPairCase(useCuda, true);
-        if (kPositionBits == 64 && opts.run.timeIntegrator == "traditional" &&
-            !opts.chemistry.enabled && !opts.starFormation.enabled) {
+        if (COSMICTIGER_ENABLE_HOPKINS && kPositionBits == 64 &&
+            opts.run.timeIntegrator == "traditional" && !opts.chemistry.enabled &&
+            !opts.starFormation.enabled) {
             opts.hydro.method = "mfv";
             setOptions(opts);
             runPairCase(useCuda, false, 0.02f, 0.375f);
@@ -759,8 +760,9 @@ void sphGravityTest() {
         }
         treeDestroy(true);
     }
-    if (kPositionBits == 64 && opts.run.timeIntegrator == "traditional" &&
-        !opts.chemistry.enabled && !opts.starFormation.enabled) {
+    if (COSMICTIGER_ENABLE_HOPKINS && kPositionBits == 64 &&
+        opts.run.timeIntegrator == "traditional" && !opts.chemistry.enabled &&
+        !opts.starFormation.enabled) {
         opts.hydro.method = "mfv";
         setOptions(opts);
         pending.clear();

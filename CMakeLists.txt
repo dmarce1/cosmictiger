@@ -6,6 +6,7 @@
 
 cmake_minimum_required(VERSION 3.24)
 project(cosmictiger LANGUAGES CXX C)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/lib")
 include(CTest)
 
 # C++20 uses experimental SIMD; C++26 selects standard SIMD when available.
@@ -135,10 +136,13 @@ find_path(SILO_INCLUDE_DIR silo.h REQUIRED)
 find_library(SILO_LIBRARY NAMES siloh5 silo REQUIRED)
 find_path(CHEALPIX_INCLUDE_DIR chealpix.h REQUIRED)
 find_library(CHEALPIX_LIBRARY NAMES chealpix REQUIRED)
-find_path(HEALPIX_CXX_INCLUDE_DIR healpix_base.h PATH_SUFFIXES healpix_cxx REQUIRED)
-find_library(HEALPIX_CXX_LIBRARY NAMES healpix_cxx REQUIRED)
+if(COSMICTIGER_WITH_GRAVITY)
+    find_path(HEALPIX_CXX_INCLUDE_DIR healpix_base.h PATH_SUFFIXES healpix_cxx REQUIRED)
+    find_library(HEALPIX_CXX_LIBRARY NAMES healpix_cxx REQUIRED)
+endif()
 
 message(STATUS "cosmictiger SPH = ${COSMICTIGER_WITH_SPH}")
+message(STATUS "cosmictiger Hopkins MFM/MFV = ${COSMICTIGER_ENABLE_HOPKINS} (requires SPH and Fixed64)")
 message(STATUS "cosmictiger equilibrium cooling = ${COSMICTIGER_WITH_CHEMISTRY} (requires SPH)")
 message(STATUS "cosmictiger stars = ${COSMICTIGER_WITH_STARS} (COSMICTIGER_ENABLE_STARS; requires chemistry and SPH)")
 message(STATUS "cosmictiger position storage = ${COSMICTIGER_POSITION_TYPE}")
@@ -345,17 +349,19 @@ if(BUILD_TESTING)
         COMPILE_DEFINITIONS COSMICTIGER_BUILD_TESTING)
 endif()
 
-# Keep the C++23 standard half type in one host-only translation unit. The
-# public two-byte storage type remains usable by the C++20/CUDA application.
-add_library(cosmictiger_fp16 STATIC src/math/fp16.cpp)
-set_target_properties(cosmictiger_fp16 PROPERTIES
-    CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
-target_include_directories(cosmictiger_fp16 PUBLIC ${PROJECT_SOURCE_DIR})
-target_compile_options(cosmictiger_fp16 PRIVATE -fno-fast-math -ffp-contract=off)
+if(COSMICTIGER_WITH_GRAVITY)
+    # Keep the C++23 standard half type in one host-only translation unit. The
+    # public two-byte storage type remains usable by the C++20/CUDA application.
+    add_library(cosmictiger_fp16 STATIC src/math/fp16.cpp)
+    set_target_properties(cosmictiger_fp16 PROPERTIES
+        CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+    target_include_directories(cosmictiger_fp16 PUBLIC ${PROJECT_SOURCE_DIR})
+    target_compile_options(cosmictiger_fp16 PRIVATE -fno-fast-math -ffp-contract=off)
 
-add_executable(halo_catalog_export src/tools/halo_catalog_export.cpp)
-target_link_libraries(halo_catalog_export PRIVATE cosmictiger_fp16)
-target_compile_options(halo_catalog_export PRIVATE -fno-fast-math)
+    add_executable(halo_catalog_export src/tools/halo_catalog_export.cpp)
+    target_link_libraries(halo_catalog_export PRIVATE cosmictiger_fp16)
+    target_compile_options(halo_catalog_export PRIVATE -fno-fast-math)
+endif()
 
 # Equilibrium cooling must not inherit the application's fast-math/FTZ settings: the
 # scalar cooling arithmetic uses matching IEEE semantics on CPU and CUDA.
@@ -457,27 +463,29 @@ function(cosmictiger_use_generated_kernels target)
 endfunction()
 include(cmake/variants.cmake)
 
-add_executable(healpix2silo src/tools/healpix2silo.cpp)
-target_link_libraries(healpix2silo PRIVATE ${CHEALPIX_LIBRARY} ${SILO_LIBRARY} Boost::program_options dl)
-target_include_directories(healpix2silo PRIVATE ${PROJECT_SOURCE_DIR})
-target_include_directories(healpix2silo SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR} ${SILO_INCLUDE_DIR})
+if(COSMICTIGER_WITH_GRAVITY)
+    add_executable(healpix2silo src/tools/healpix2silo.cpp)
+    target_link_libraries(healpix2silo PRIVATE ${CHEALPIX_LIBRARY} ${SILO_LIBRARY} Boost::program_options dl)
+    target_include_directories(healpix2silo PRIVATE ${PROJECT_SOURCE_DIR})
+    target_include_directories(healpix2silo SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR} ${SILO_INCLUDE_DIR})
 
-add_hpx_executable(groups2halofunc
-    SOURCES src/core/assert.cpp src/core/hpx.cpp src/tools/groups2halofunc.cpp src/analysis/group_entry.cpp)
-target_link_libraries(groups2halofunc PUBLIC Boost::program_options PRIVATE cosmictiger_stacktrace)
-set_target_properties(groups2halofunc PROPERTIES ENABLE_EXPORTS ON)
-target_include_directories(groups2halofunc PRIVATE ${PROJECT_SOURCE_DIR})
+    add_hpx_executable(groups2halofunc
+        SOURCES src/core/assert.cpp src/core/hpx.cpp src/tools/groups2halofunc.cpp src/analysis/group_entry.cpp)
+    target_link_libraries(groups2halofunc PUBLIC Boost::program_options PRIVATE cosmictiger_stacktrace)
+    set_target_properties(groups2halofunc PROPERTIES ENABLE_EXPORTS ON)
+    target_include_directories(groups2halofunc PRIVATE ${PROJECT_SOURCE_DIR})
 
-foreach(tool_target IN ITEMS healpix2silo groups2halofunc)
-    target_compile_options(${tool_target} PRIVATE -Wno-attributes -ffast-math)
-    if(COMPILER_SUPPORTS_MARCH_NATIVE)
-        target_compile_options(${tool_target} PRIVATE -march=native)
-    endif()
-endforeach()
+    foreach(tool_target IN ITEMS healpix2silo groups2halofunc)
+        target_compile_options(${tool_target} PRIVATE -Wno-attributes -ffast-math)
+        if(COMPILER_SUPPORTS_MARCH_NATIVE)
+            target_compile_options(${tool_target} PRIVATE -march=native)
+        endif()
+    endforeach()
 
-foreach(tool_target IN ITEMS halo_catalog_export healpix2silo groups2halofunc)
-    target_link_libraries(${tool_target} PRIVATE cosmictiger_default_config)
-endforeach()
+    foreach(tool_target IN ITEMS halo_catalog_export healpix2silo groups2halofunc)
+        target_link_libraries(${tool_target} PRIVATE cosmictiger_default_config)
+    endforeach()
+endif()
 
 # Capture standalone test targets so they inherit the same capability definitions.
 get_property(cosmictiger_targets_before_tests DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
@@ -511,6 +519,20 @@ if(BUILD_TESTING)
         ${PROJECT_SOURCE_DIR}/tests/test_python_regressions.py)
     set_tests_properties(python_regressions python_regressions_optimized PROPERTIES
         TIMEOUT 60 PROCESSORS 1 LABELS "python")
+    set(cosmictiger_startup_test_args)
+    if(NOT COSMICTIGER_WITH_SPH)
+        list(APPEND cosmictiger_startup_test_args --without-sph)
+    endif()
+    add_test(NAME startup_options COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/tests/run_options.py $<TARGET_FILE:cosmictiger>
+        ${PROJECT_BINARY_DIR}/tests/startup_options --startup-options-only
+        --gravity-method ${cosmictiger_default_gravity_method}
+        --near-method ${cosmictiger_default_near_method} --order ${cosmictiger_default_fmm_order}
+        --time-integrator ${cosmictiger_default_integrator}
+        ${cosmictiger_chemistry_test_args} ${cosmictiger_star_formation_test_args}
+        ${cosmictiger_startup_test_args})
+    set_tests_properties(startup_options PROPERTIES TIMEOUT 120 PROCESSORS 2
+        LABELS "build;cpu")
     set(COSMICTIGER_TEST_CUDA_EXECUTABLE "" CACHE FILEPATH
         "Optional second CUDA-enabled build for cross-build SPH comparisons")
     if(COSMICTIGER_TEST_CUDA_EXECUTABLE AND NOT EXISTS "${COSMICTIGER_TEST_CUDA_EXECUTABLE}")
@@ -690,46 +712,7 @@ if(BUILD_TESTING)
         endif()
     endif()
 
-    # Keep each assertion group visible to CTest, with the same resource limits
-    # and compiler variants as the standalone regression executables.
-    function(cosmictiger_add_gtest)
-        cmake_parse_arguments(PARSE_ARGV 0 test "HPX_MAIN" "NAME;TARGET;WORKING_DIRECTORY;ENVIRONMENT"
-            "ARGS;PROPERTIES;LABELS")
-        if(test_HPX_MAIN)
-            target_link_libraries(${test_TARGET} PRIVATE GTest::gtest)
-        else()
-            target_link_libraries(${test_TARGET} PRIVATE GTest::gtest_main)
-        endif()
-        if(NOT test_WORKING_DIRECTORY)
-            set(test_WORKING_DIRECTORY "${PROJECT_BINARY_DIR}")
-        endif()
-        gtest_discover_tests(${test_TARGET}
-            NO_PRETTY_VALUES
-            DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 30
-            TEST_PREFIX "${test_NAME}." EXTRA_ARGS ${test_ARGS}
-            WORKING_DIRECTORY "${test_WORKING_DIRECTORY}"
-            PROPERTIES LABELS "${test_NAME}" ${test_PROPERTIES})
-        # Apply list-valued labels after discovery to retain every label.
-        string(REPLACE "\\;" ";" test_LABELS "${test_LABELS}")
-        set(labels_file "${PROJECT_BINARY_DIR}/${test_TARGET}_labels.cmake")
-        file(WRITE "${labels_file}"
-            "if(DEFINED ${test_TARGET}_TESTS)\n"
-            "    set_tests_properties(\${${test_TARGET}_TESTS} PROPERTIES\n"
-            "        LABELS [==[${test_NAME};${test_LABELS}]==])\n"
-            "endif()\n")
-        set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES "${labels_file}")
-        # GoogleTest's discovery helper expands list-valued properties. Apply
-        # environment lists after discovery so semicolons remain part of the value.
-        if(DEFINED test_ENVIRONMENT)
-            set(environment_file "${PROJECT_BINARY_DIR}/${test_TARGET}_environment.cmake")
-            file(WRITE "${environment_file}"
-                "if(DEFINED ${test_TARGET}_TESTS)\n"
-                "    set_tests_properties(\${${test_TARGET}_TESTS} PROPERTIES\n"
-                "        ENVIRONMENT [==[${test_ENVIRONMENT}]==])\n"
-                "endif()\n")
-            set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES "${environment_file}")
-        endif()
-    endfunction()
+    include(cmake/test_layout.cmake)
 
     # Exercise the actual allocator on CPU with controlled scheduling and CUDA
     # allocation failures, including in configurations without a CUDA toolkit.
@@ -844,15 +827,17 @@ if(BUILD_TESTING)
             PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
     endif()
 
-    add_executable(halo_catalog_fixture tests/halo_catalog_fixture.cpp)
-    target_link_libraries(halo_catalog_fixture PRIVATE cosmictiger_fp16)
-    target_compile_options(halo_catalog_fixture PRIVATE -fno-fast-math)
-    add_test(NAME halo_viewer COMMAND ${Python3_EXECUTABLE}
-        ${PROJECT_SOURCE_DIR}/tests/run_halo_viewer.py
-        --exporter $<TARGET_FILE:halo_catalog_export>
-        --fixture $<TARGET_FILE:halo_catalog_fixture>
-        --viewer ${PROJECT_SOURCE_DIR}/tools/halo_viewer/halo_viewer.py)
-    set_tests_properties(halo_viewer PROPERTIES TIMEOUT 180 PROCESSORS 2)
+    if(COSMICTIGER_WITH_GRAVITY)
+        add_executable(halo_catalog_fixture tests/halo_catalog_fixture.cpp)
+        target_link_libraries(halo_catalog_fixture PRIVATE cosmictiger_fp16)
+        target_compile_options(halo_catalog_fixture PRIVATE -fno-fast-math)
+        add_test(NAME halo_viewer COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_halo_viewer.py
+            --exporter $<TARGET_FILE:halo_catalog_export>
+            --fixture $<TARGET_FILE:halo_catalog_fixture>
+            --viewer ${PROJECT_SOURCE_DIR}/tools/halo_viewer/halo_viewer.py)
+        set_tests_properties(halo_viewer PROPERTIES TIMEOUT 180 PROCESSORS 2)
+    endif()
 
     if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_STAR_FORMATION)
         add_executable(springel_and_hernquist_test tests/springel_and_hernquist.cpp)
@@ -1194,13 +1179,16 @@ if(BUILD_TESTING)
         target_compile_options(sedov_test PRIVATE -fno-fast-math -ffp-contract=off)
         cosmictiger_add_gtest(NAME sedov TARGET sedov_test LABELS "scenarios;cpu" PROPERTIES TIMEOUT 30)
     endif()
-    add_executable(analysis_tools_test tests/analysis_tools.cpp src/analysis/group_entry.cpp)
-    target_include_directories(analysis_tools_test PRIVATE ${PROJECT_SOURCE_DIR}
-        ${CHEALPIX_INCLUDE_DIR} ${SILO_INCLUDE_DIR})
-    target_link_libraries(analysis_tools_test PRIVATE Boost::program_options
-        ${CHEALPIX_LIBRARY} ${SILO_LIBRARY} dl)
-    cosmictiger_add_gtest(NAME analysis_tools TARGET analysis_tools_test
-        LABELS "analysis;cpu" PROPERTIES TIMEOUT 60)
+    if(COSMICTIGER_WITH_GRAVITY)
+        add_executable(analysis_tools_test tests/analysis_tools.cpp src/analysis/group_entry.cpp)
+        target_include_directories(analysis_tools_test PRIVATE ${PROJECT_SOURCE_DIR}
+            ${CHEALPIX_INCLUDE_DIR} ${SILO_INCLUDE_DIR})
+        target_link_libraries(analysis_tools_test PRIVATE Boost::program_options
+            ${CHEALPIX_LIBRARY} ${SILO_LIBRARY} dl)
+        cosmictiger_add_gtest(NAME analysis_tools TARGET analysis_tools_test
+            LABELS "analysis;cpu" PROPERTIES TIMEOUT 60)
+    endif()
+
     foreach(boltzmann_target IN ITEMS boltzmann_test boltzmann_reference)
         if(boltzmann_target STREQUAL "boltzmann_test")
             set(boltzmann_test_source tests/boltzmann.cpp)
@@ -1257,16 +1245,18 @@ if(BUILD_TESTING)
         endforeach()
     endif()
 
-    foreach(fp16_variant IN ITEMS standard fast_math)
-        add_executable(fp16_${fp16_variant}_test tests/fp16.cpp)
-        target_include_directories(fp16_${fp16_variant}_test PRIVATE ${PROJECT_SOURCE_DIR})
-        target_link_libraries(fp16_${fp16_variant}_test PRIVATE cosmictiger_fp16)
-        if(fp16_variant STREQUAL "fast_math")
-            target_compile_options(fp16_${fp16_variant}_test PRIVATE -ffast-math)
-        endif()
-        cosmictiger_add_gtest(NAME fp16_${fp16_variant} TARGET fp16_${fp16_variant}_test
-            PROPERTIES TIMEOUT 30)
-    endforeach()
+    if(COSMICTIGER_WITH_GRAVITY)
+        foreach(fp16_variant IN ITEMS standard fast_math)
+            add_executable(fp16_${fp16_variant}_test tests/fp16.cpp)
+            target_include_directories(fp16_${fp16_variant}_test PRIVATE ${PROJECT_SOURCE_DIR})
+            target_link_libraries(fp16_${fp16_variant}_test PRIVATE cosmictiger_fp16)
+            if(fp16_variant STREQUAL "fast_math")
+                target_compile_options(fp16_${fp16_variant}_test PRIVATE -ffast-math)
+            endif()
+            cosmictiger_add_gtest(NAME fp16_${fp16_variant} TARGET fp16_${fp16_variant}_test
+                PROPERTIES TIMEOUT 30)
+        endforeach()
+    endif()
 
     foreach(fixed_variant IN ITEMS normal fast_math)
         if(fixed_variant STREQUAL "normal")
@@ -1393,6 +1383,15 @@ if(BUILD_TESTING)
             --time-integrator ${cosmictiger_default_integrator})
         # Hundreds of expected rejections each produce a symbolized stack trace.
         set_tests_properties(grouped_options PROPERTIES RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2)
+        add_test(NAME hydro_methods COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_options.py $<TARGET_FILE:cosmictiger>
+            ${PROJECT_BINARY_DIR}/tests/hydro_methods ${cosmictiger_sph_test_args}
+            ${cosmictiger_chemistry_test_args} ${cosmictiger_star_formation_test_args}
+            --gravity-method ${cosmictiger_default_gravity_method}
+            --near-method ${cosmictiger_default_near_method} --order ${cosmictiger_default_fmm_order}
+            --time-integrator ${cosmictiger_default_integrator} --hydro-methods-only)
+        set_tests_properties(hydro_methods PROPERTIES RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 2
+            LABELS "build;cpu")
     endif()
 
     if(COSMICTIGER_WITH_GRAVITY)
@@ -1578,7 +1577,7 @@ if(BUILD_TESTING)
     cosmictiger_add_gtest(NAME radial_kernel TARGET radial_kernel_test
         PROPERTIES TIMEOUT 30)
 
-    if(COSMICTIGER_WITH_GRAVITY)
+    if(COSMICTIGER_ENABLE_FMM OR COSMICTIGER_ENABLE_PMMM_FMM)
         add_executable(cartesian_kernels_test tests/gravity/cartesian_kernels.cpp)
         target_include_directories(cartesian_kernels_test PRIVATE ${PROJECT_SOURCE_DIR})
         cosmictiger_use_generated_kernels(cartesian_kernels_test)
@@ -1587,7 +1586,9 @@ if(BUILD_TESTING)
         endif()
         cosmictiger_add_gtest(NAME cartesian_kernels TARGET cartesian_kernels_test
             PROPERTIES TIMEOUT 60)
+    endif()
 
+    if(COSMICTIGER_WITH_GRAVITY)
         add_executable(fmm_api_test tests/gravity/fmm_api.cpp)
         target_include_directories(fmm_api_test PRIVATE ${PROJECT_SOURCE_DIR})
         cosmictiger_use_generated_kernels(fmm_api_test)
@@ -1681,7 +1682,7 @@ if(BUILD_TESTING)
             PROPERTIES TIMEOUT 30)
     endif()
 
-    if(COSMICTIGER_WITH_GRAVITY)
+    if(COSMICTIGER_ENABLE_FMM OR COSMICTIGER_ENABLE_PMMM_FMM)
         add_executable(fmm_acceptance_test tests/gravity/fmm_acceptance.cpp)
         target_include_directories(fmm_acceptance_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_options(fmm_acceptance_test PRIVATE -ffast-math)
@@ -1693,13 +1694,14 @@ if(BUILD_TESTING)
             PROPERTIES TIMEOUT 30)
     endif()
 
-    add_executable(mesh_domain_test tests/mesh_domain.cpp)
-    target_include_directories(mesh_domain_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_link_libraries(mesh_domain_test PRIVATE HPX::hpx Boost::boost)
-    target_compile_options(mesh_domain_test PRIVATE -fno-fast-math -ffp-contract=off)
-    cosmictiger_add_gtest(NAME mesh_domain TARGET mesh_domain_test
-        PROPERTIES TIMEOUT 30 LABELS "particle_mesh;cpu")
     if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
+        add_executable(mesh_domain_test tests/mesh_domain.cpp)
+        target_include_directories(mesh_domain_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_link_libraries(mesh_domain_test PRIVATE HPX::hpx Boost::boost)
+        target_compile_options(mesh_domain_test PRIVATE -fno-fast-math -ffp-contract=off)
+        cosmictiger_add_gtest(NAME mesh_domain TARGET mesh_domain_test
+            PROPERTIES TIMEOUT 30 LABELS "particle_mesh;cpu")
+
         add_executable(pmmm_kernels_test tests/gravity/nitadori/pmmm_kernels.cpp
             tests/gravity/nitadori/pmmm_kernel_flops.cpp src/gravity/nitadori/kernels.cpp)
         target_include_directories(pmmm_kernels_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -1889,14 +1891,21 @@ if(BUILD_TESTING)
             endif()
         endif()
     endif()
-    if(COSMICTIGER_WITH_SPH)
+    if(COSMICTIGER_ENABLE_HOPKINS)
         add_executable(hopkins_test tests/hopkins.cpp)
         target_include_directories(hopkins_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_options(hopkins_test PRIVATE -fno-fast-math -ffp-contract=off)
         cosmictiger_add_gtest(NAME hopkins TARGET hopkins_test PROPERTIES TIMEOUT 30 LABELS "hopkins;cpu")
-        add_executable(gresho_test tests/gresho.cpp)
-        target_include_directories(gresho_test PRIVATE ${PROJECT_SOURCE_DIR})
-        cosmictiger_add_gtest(NAME gresho TARGET gresho_test PROPERTIES TIMEOUT 30 LABELS "hopkins;cpu")
+        set(cosmictiger_hopkins_flops_integrator traditional)
+        if(NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+            set(cosmictiger_hopkins_flops_integrator global)
+        endif()
+        add_test(NAME hopkins_flops_application COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_hopkins_flops.py $<TARGET_FILE:cosmictiger>
+            ${PROJECT_BINARY_DIR}/tests/hopkins_flops_application
+            --time-integrator ${cosmictiger_hopkins_flops_integrator})
+        set_tests_properties(hopkins_flops_application PROPERTIES
+            TIMEOUT 180 PROCESSORS 2 LABELS "hopkins;flops;cpu")
         if(COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL AND COSMICTIGER_ENABLE_FMM AND
                 COSMICTIGER_POSITION_TYPE STREQUAL "fixed64" AND
                 COSMICTIGER_MIN_EXPANSION_DEGREE LESS_EQUAL 6 AND
@@ -1951,6 +1960,11 @@ if(BUILD_TESTING)
                 endforeach()
             endforeach()
         endif()
+    endif()
+    if(COSMICTIGER_WITH_SPH)
+        add_executable(gresho_test tests/gresho.cpp)
+        target_include_directories(gresho_test PRIVATE ${PROJECT_SOURCE_DIR})
+        cosmictiger_add_gtest(NAME gresho TARGET gresho_test PROPERTIES TIMEOUT 30 LABELS "sph;cpu")
         add_executable(radial_density_kernel_test tests/radial_density_kernel.cpp)
         target_include_directories(radial_density_kernel_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(radial_density_kernel_test PRIVATE RADIAL_KERNEL_TEST_SIMD)
@@ -2118,7 +2132,7 @@ if(BUILD_TESTING)
     cosmictiger_add_gtest(NAME numerical_utilities TARGET numerical_utilities_test
         PROPERTIES TIMEOUT 10)
 
-    if(COSMICTIGER_WITH_GRAVITY)
+    if(COSMICTIGER_ENABLE_FMM OR COSMICTIGER_ENABLE_PMMM_FMM)
         add_executable(fmm_geometry_test tests/gravity/fmm_geometry.cpp)
         target_include_directories(fmm_geometry_test PRIVATE ${PROJECT_SOURCE_DIR})
         if(COMPILER_SUPPORTS_MARCH_NATIVE)
@@ -2211,7 +2225,7 @@ if(BUILD_TESTING)
                 PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77)
         endforeach()
 
-        if(COSMICTIGER_WITH_GRAVITY)
+        if(COSMICTIGER_ENABLE_FMM OR COSMICTIGER_ENABLE_PMMM_FMM)
             add_executable(cartesian_kernels_cuda_test tests/gravity/cartesian_kernels_cuda.cu)
             target_include_directories(cartesian_kernels_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
             cosmictiger_use_generated_kernels(cartesian_kernels_cuda_test)
@@ -2271,17 +2285,19 @@ if(BUILD_TESTING)
                 PROPERTIES RUN_SERIAL TRUE TIMEOUT 120)
         endif()
 
-        # These host regressions need CUDA headers, but do not initialize or run a GPU.
-        add_executable(compression_test tests/compression.cpp src/analysis/compress.cpp)
-        foreach(test_target IN ITEMS compression_test)
-            target_include_directories(${test_target} PRIVATE ${PROJECT_SOURCE_DIR})
-            target_compile_definitions(${test_target} PRIVATE USE_CUDA)
-            target_link_libraries(${test_target} PRIVATE CUDA::cudart)
-            if(COMPILER_SUPPORTS_MARCH_NATIVE)
-                target_compile_options(${test_target} PRIVATE -march=native)
-            endif()
-        endforeach()
-        cosmictiger_add_gtest(NAME compression TARGET compression_test PROPERTIES TIMEOUT 10)
+        if(COSMICTIGER_WITH_GRAVITY)
+            # These host regressions need CUDA headers, but do not initialize or run a GPU.
+            add_executable(compression_test tests/compression.cpp src/analysis/compress.cpp)
+            foreach(test_target IN ITEMS compression_test)
+                target_include_directories(${test_target} PRIVATE ${PROJECT_SOURCE_DIR})
+                target_compile_definitions(${test_target} PRIVATE USE_CUDA)
+                target_link_libraries(${test_target} PRIVATE CUDA::cudart)
+                if(COMPILER_SUPPORTS_MARCH_NATIVE)
+                    target_compile_options(${test_target} PRIVATE -march=native)
+                endif()
+            endforeach()
+            cosmictiger_add_gtest(NAME compression TARGET compression_test PROPERTIES TIMEOUT 10)
+        endif()
 
         # Instantiate device-only template branches without requiring GPU execution.
         add_library(range_cuda_compile OBJECT tests/range_cuda_compile.cu)
@@ -2643,6 +2659,7 @@ endif()
 if(BUILD_TESTING)
     get_property(cosmictiger_targets_after_tests DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
     list(REMOVE_ITEM cosmictiger_targets_after_tests ${cosmictiger_targets_before_tests})
+    cosmictiger_finalize_test_layout(${cosmictiger_targets_after_tests})
     # These standalone tests deliberately compile both position widths, rather
     # than inheriting the configured application's position definition.
     list(REMOVE_ITEM cosmictiger_targets_after_tests

@@ -11,7 +11,7 @@ import shlex
 import sys
 
 
-FEATURES = ("FMM", "PMMM_PP", "PMMM_FMM", "SPH", "CHEMISTRY", "STARS",
+FEATURES = ("FMM", "PMMM_PP", "PMMM_FMM", "SPH", "HOPKINS", "CHEMISTRY", "STARS",
             "INTEGRATOR_TRADITIONAL", "INTEGRATOR_HIERARCHICAL", "INTEGRATOR_GLOBAL")
 FEATURE_DEFINITIONS = {"COSMICTIGER_ENABLE_" + feature for feature in FEATURES}
 FEATURE_DEFINITIONS.update({"ORDER", "FMM_MIN_ORDER", "FMM_MAX_ORDER",
@@ -85,12 +85,19 @@ def sourceSelectionErrors(sources, configuration):
         if not hasGravity(configuration):
             gravitySource = source.startswith(("src/gravity/", "tests/gravity/"))
             haloSource = re.fullmatch(
-                r"src/analysis/(?:bh|groups|group_tree|groups_find|rockstar|rockstar_catalogue|"
+                r"src/analysis/(?:bh|compress|group_entry|groups|group_tree|groups_find|healpix|rockstar|rockstar_catalogue|"
                 r"lightcone|lightcone_cpu)\.(?:cpp|cu)", source)
-            excludedTest = source in {"tests/analysis_backends.cpp", "tests/bh.cpp",
-                                      "tests/groups_catalogue.cpp", "tests/rockstar.cpp",
-                                      "tests/softening_flops.cpp", "tests/sph/gravity.cpp"}
-            if gravitySource or haloSource or excludedTest or Path(source).name.startswith("fmm_instance_"):
+            excludedSource = source in {
+                "src/tools/groups2halofunc.cpp", "src/tools/halo_catalog_export.cpp",
+                "src/tools/healpix2silo.cpp", "src/math/fp16.cpp",
+                "src/scenarios/plummer.cpp", "src/scenarios/glass.cpp",
+                "tests/analysis_backends.cpp", "tests/analysis_tools.cpp", "tests/bh.cpp",
+                "tests/compression.cpp", "tests/fp16.cpp", "tests/groups_catalogue.cpp",
+                "tests/halo_catalog_fixture.cpp", "tests/lightcone_cpu.cpp", "tests/lightcone_cuda.cu",
+                "tests/lightcone_epoch.cpp", "tests/rockstar.cpp", "tests/rockstar_core.cpp",
+                "tests/rockstar_eigenpair.cpp", "tests/rockstar_properties.cpp",
+                "tests/softening_flops.cpp", "tests/sph/gravity.cpp"}
+            if gravitySource or haloSource or excludedSource or Path(source).name.startswith("fmm_instance_"):
                 errors.append(f"gravity disabled but compiles gravity source: {source}")
         for feature, enabled, directory in (("FMM", configuration["FMM"], "dehnen"),
                                             ("PMMM", hasPmmm(configuration), "nitadori")):
@@ -102,14 +109,26 @@ def sourceSelectionErrors(sources, configuration):
                 ("PMMM_FMM", r"(?:src|tests)/gravity/nitadori/(?:cell_|ghost_|fmm_batch)[^/]*\.(?:cpp|cu)$")):
             if not configuration[feature] and re.fullmatch(pattern, source):
                 errors.append(f"{feature} disabled but compiles near solver: {source}")
+        if not hasPmmm(configuration) and source in {
+                "src/particles/particle_mesh_sort.cpp", "tests/particle_mesh_sort.cpp",
+                "tests/mesh_domain.cpp", "tests/mesh_domains.cpp"}:
+            errors.append(f"PMMM disabled but compiles solver source: {source}")
         if not hasTree(configuration) and source in {
                 "src/gravity/gravity.cpp", "src/gravity/kick.cpp", "src/gravity/kick.cu",
-                "src/gravity/tree_build.cpp", "src/gravity/tree_arena.cpp"}:
+                "src/gravity/kick_workspace.cpp", "src/gravity/kick_executor.cpp",
+                "src/gravity/kick_interaction_counts.cpp", "src/gravity/source_access.cpp",
+                "src/gravity/sources.cpp", "src/gravity/tree_build.cpp", "src/gravity/tree_arena.cpp",
+                "tests/gravity/cartesian_kernels.cpp", "tests/gravity/cartesian_kernels_cuda.cu",
+                "tests/gravity/cartesian_l2l_cuda.cu", "tests/gravity/fmm_acceptance.cpp",
+                "tests/gravity/fmm_acceptance_cuda.cu", "tests/gravity/fmm_geometry.cpp"}:
             errors.append(f"tree algorithms disabled but compiles tree source: {source}")
         if hasGravity(configuration) and source == "tests/sph/no_gravity.cpp":
             errors.append(f"gravity-enabled build compiles SPH-only diagnostic regression: {source}")
         if (not configuration["SPH"] or not configuration["FMM"]) and source == "tests/kernel_selection_cuda.cu":
             errors.append(f"unavailable SPH gravity regression's CUDA helper: {source}")
+        if not configuration["HOPKINS"] and source in {
+                "src/hydro/hopkins_driver.cpp", "src/scenarios/sound_wave.cpp", "tests/hopkins.cpp"}:
+            errors.append(f"Hopkins disabled but compiles source: {source}")
         if not hasChemistry(configuration) and source in {
                 "src/chemistry/gadget4_cooling.cpp", "src/chemistry/gadget4_cooling.cu",
                 "src/sph/sph_chemistry.cpp", "tests/sph/chemistry.cpp",
@@ -121,7 +140,9 @@ def sourceSelectionErrors(sources, configuration):
                 "tests/springel_and_hernquist.cpp", "tests/springel_and_hernquist_cuda.cu"}:
             errors.append(f"star formation disabled but compiles source: {source}")
         if not configuration["SPH"]:
-            if source.startswith(("src/sph/", "tests/sph/", "tests/scenarios/")):
+            if source.startswith(("src/sph/", "tests/sph/", "tests/scenarios/")) or source in {
+                    "tests/gresho.cpp", "tests/radial_density_kernel.cpp", "tests/rayleigh_taylor.cpp",
+                    "tests/units_output.cpp", "tests/distributed_output.cpp"}:
                 errors.append(f"SPH disabled but compiles SPH source: {source}")
             if source.startswith("src/scenarios/") and Path(source).name not in collisionlessScenarios:
                 errors.append(f"SPH disabled but compiles a hydrodynamic scenario: {source}")
@@ -129,7 +150,7 @@ def sourceSelectionErrors(sources, configuration):
 
 
 def requiredSources(configuration, cuda):
-    required = {"src/core/driver.cpp", "src/particles/particles.cpp", "src/cosmology/fft.cpp"}
+    required = {"src/core/driver.cpp", "src/core/hpx.cpp", "src/particles/particles.cpp", "src/cosmology/fft.cpp"}
     if hasGravity(configuration):
         required.update({"src/gravity/fmm_order.cpp", "src/gravity/error.cpp", "src/gravity/reference_table.cpp"})
     if configuration["FMM"]:
@@ -147,6 +168,8 @@ def requiredSources(configuration, cuda):
                          "src/sph/sph_rungs_cpu.cpp", "src/sph/sph_particles.cpp", "src/sph/sph_tree.cpp"})
         if cuda:
             required.update({"src/sph/sph.cu", "src/sph/sph_hydro.cu", "src/sph/sph_prehydro.cu", "src/sph/sph_rungs.cu"})
+    if configuration["HOPKINS"]:
+        required.update({"src/hydro/hopkins_driver.cpp", "src/scenarios/sound_wave.cpp"})
     if hasChemistry(configuration):
         required.add("src/sph/sph_chemistry.cpp")
     if hasStarFormation(configuration):
@@ -182,6 +205,10 @@ def checkBuild(buildDirectory):
     if positionType not in ("fixed32", "fixed64"):
         raise ValueError("invalid COSMICTIGER_POSITION_TYPE in CMakeCache.txt")
     bits = 32 if positionType == "fixed32" else 64
+    if configuration["HOPKINS"] and not configuration["SPH"]:
+        raise ValueError("COSMICTIGER_ENABLE_HOPKINS=ON requires COSMICTIGER_ENABLE_SPH=ON")
+    if configuration["HOPKINS"] and bits != 64:
+        raise ValueError("COSMICTIGER_ENABLE_HOPKINS=ON requires COSMICTIGER_POSITION_TYPE=fixed64")
     commands = json.loads((buildDirectory / "compile_commands.json").read_text())
     if not isinstance(commands, list) or not commands:
         raise ValueError("compile_commands.json contains no compilation entries")
@@ -192,7 +219,7 @@ def checkBuild(buildDirectory):
             source = path.relative_to(sourceDirectory).as_posix()
         except ValueError:
             source = str(path)
-        if not cuda and path.suffix == ".cu":
+        if not cuda and (path.suffix == ".cu" or source == "src/cuda/cuda_stream.cpp"):
             errors.append(f"CUDA disabled but graph compiles {source}")
         if not testing and source.startswith("tests/"):
             errors.append(f"BUILD_TESTING=OFF but graph compiles {source}")

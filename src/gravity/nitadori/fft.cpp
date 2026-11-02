@@ -353,7 +353,7 @@ void initializeGreen() {
     }
     int const n = cache.meshSize;
     double const h = 1.0 / n;
-    addCpuFlops(1);
+    addCpuFlops(1, FlopPrecision::Double);
     prepareCollectively([&]() {
         std::fill_n(cache.localReal, 2 * cache.localAllocation, 0.0f);
         parallelFor(size_t(cache.localSize) * n, "gravity.pmmm.buildGreen", [&](size_t row) {
@@ -374,15 +374,16 @@ void initializeGreen() {
                         throw std::runtime_error("PMMM Green coefficient is not representable");
                     }
                     cache.localReal[begin + component] = coefficients[component];
+                    ++flops;    // Double-to-float mesh storage conversion.
                 }
             }
-            addCpuFlops(flops);
+            addCpuFlops(flops, FlopPrecision::Double);
         });
     });
     hpx::run_as_os_thread(hpx::annotated_function([]() { fftwf_execute(cache.greenForward); },
                               "gravity.pmmm.transformGreen"))
         .get();
-    addCpuFlops(cache.greenForwardFlops);
+    addCpuFlops(cache.greenForwardFlops, FlopPrecision::Single);
     cache.greenReady = true;
     ++state.diagnostics.greenBuilds;
 }
@@ -409,7 +410,8 @@ void transform() {
         }
         background[4] = state.radialTrace;
         state.diagnostics.depositedMass = background[0];
-        addCpuFlops(4 * FlopCount(cache.cellCount()));
+        // Four background sums and one double-to-float conversion per source coefficient.
+        addCpuFlops(FlopCount(cache.cellCount()) * (4 + cache.sourceCount), FlopPrecision::Double);
     });
     hpx::run_as_os_thread(hpx::annotated_function(
                               [&]() {
@@ -420,11 +422,11 @@ void transform() {
                               },
                               "gravity.pmmm.transformSources"))
         .get();
-    addCpuFlops(cache.forwardFlops);
+    addCpuFlops(cache.forwardFlops, FlopPrecision::Single);
     // Count the logical five-component sum once across all localities. MPI's
     // internal transport/redundant reduction implementation is not measured.
     if (hpxRank() == 0) {
-        addCpuFlops(5 * FlopCount(hpxSize() - 1));
+        addCpuFlops(5 * FlopCount(hpxSize() - 1), FlopPrecision::Double);
     }
     prepareCollectively([&]() {
         size_t const modes = size_t(cache.spectralSize) * n * (n / 2 + 1);
@@ -449,12 +451,15 @@ void transform() {
                 value[1] = imaginary[component];
             }
         });
-        addCpuFlops(kFourierTermFlops * FlopCount(modes) * cache.terms.size());
+        // Each contraction promotes four FFT coefficients; each result stores two floats.
+        addCpuFlops(FlopCount(modes) *
+                ((kFourierTermFlops + 4) * cache.terms.size() + 2 * cache.localCount),
+            FlopPrecision::Double);
     });
     hpx::run_as_os_thread(hpx::annotated_function([]() { fftwf_execute(cache.inverse); },
                               "gravity.pmmm.transformLocalExpansions"))
         .get();
-    addCpuFlops(cache.inverseFlops);
+    addCpuFlops(cache.inverseFlops, FlopPrecision::Single);
     state.farPromise->set_value();
 }
 

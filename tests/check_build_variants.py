@@ -10,7 +10,8 @@ import subprocess
 import unittest
 
 from check_build_features import (FEATURES, LEGACY_DEFINITIONS, checkBuild, configurationDefinitions,
-                                  degreeRange, hasChemistry, hasTree, requiredSources)
+                                  degreeRange, hasChemistry, hasGravity, hasTree, requiredSources,
+                                  sourceSelectionErrors)
 
 
 class BuildFeaturesTest(unittest.TestCase):
@@ -36,7 +37,9 @@ class BuildFeaturesTest(unittest.TestCase):
         self.addCompilation("cosmictiger_recombination", "src/chemistry/recombination.cpp", {})
         if hasChemistry(self.features):
             self.addCompilation("cosmictiger_sph_chemistry", "src/chemistry/gadget4_cooling.cpp", {})
-        self.definitions = configurationDefinitions(self.features, 32, self.degrees)
+        bits = 64 if self.features["HOPKINS"] else 32
+        self.cache["COSMICTIGER_POSITION_TYPE"] = f"fixed{bits}"
+        self.definitions = configurationDefinitions(self.features, bits, self.degrees)
         for source in sorted(requiredSources(self.features, False)):
             self.addCompilation("cosmictiger_objects", source, self.definitions)
         if hasTree(self.features):
@@ -63,6 +66,46 @@ class BuildFeaturesTest(unittest.TestCase):
             f"{name}:STRING={value}\n" for name, value in self.cache.items()))
         (self.buildDirectory / "compile_commands.json").write_text(json.dumps(self.commands))
         return checkBuild(self.buildDirectory)
+
+    def testHopkinsCapabilityCombinations(self):
+        for sph, hopkins in ((False, False), (True, False), (True, True)):
+            with self.subTest(sph=sph, hopkins=hopkins):
+                self.configure(SPH=sph, HOPKINS=hopkins)
+                self.assertIn("Build features passed", self.check())
+                self.assertEqual(self.definitions["COSMICTIGER_ENABLE_HOPKINS"], str(int(hopkins)))
+
+    def testHopkinsRequiresSph(self):
+        self.configure(SPH=False, HOPKINS=True)
+        with self.assertRaisesRegex(ValueError, "HOPKINS=ON requires COSMICTIGER_ENABLE_SPH=ON"):
+            self.check()
+
+    def testHopkinsRequiresFixed64(self):
+        self.configure(HOPKINS=True)
+        self.cache["COSMICTIGER_POSITION_TYPE"] = "fixed32"
+        with self.assertRaisesRegex(ValueError, "HOPKINS=ON requires COSMICTIGER_POSITION_TYPE=fixed64"):
+            self.check()
+
+    def testDisabledHopkinsRejectsImplementationSources(self):
+        for source in ("src/hydro/hopkins_driver.cpp", "src/scenarios/sound_wave.cpp", "tests/hopkins.cpp"):
+            with self.subTest(source=source):
+                self.configure(HOPKINS=False)
+                self.addCompilation("unused_hopkins", source, {})
+                with self.assertRaisesRegex(ValueError, "Hopkins disabled but compiles source: " + source):
+                    self.check()
+
+    def testEnabledHopkinsRequiresRuntimeAndSharedSphSources(self):
+        for source in ("src/hydro/hopkins_driver.cpp", "src/scenarios/sound_wave.cpp",
+                       "src/sph/sph_particles.cpp", "src/sph/sph_tree.cpp"):
+            with self.subTest(source=source):
+                self.configure(HOPKINS=True)
+                self.commands = [entry for entry in self.commands if not entry["file"].endswith(source)]
+                with self.assertRaisesRegex(ValueError, "required source missing: " + source):
+                    self.check()
+
+    def testHopkinsCompilerCapabilityMustMatch(self):
+        self.commands[-1]["arguments"].append("-DCOSMICTIGER_ENABLE_HOPKINS=1")
+        with self.assertRaisesRegex(ValueError, "needs COSMICTIGER_ENABLE_HOPKINS=0"):
+            self.check()
 
     def testStarFormationCapabilityCombinations(self):
         for sph, starFormation in product((False, True), repeat=2):
@@ -216,6 +259,68 @@ class BuildFeaturesTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "gravity disabled but compiles gravity source"):
             self.check()
 
+    def testSphOnlyRejectsHaloToolsAndSupportingSources(self):
+        for source in ("src/tools/groups2halofunc.cpp", "src/tools/halo_catalog_export.cpp",
+                       "src/tools/healpix2silo.cpp", "src/analysis/group_entry.cpp",
+                       "src/analysis/compress.cpp", "src/analysis/healpix.cu", "src/math/fp16.cpp",
+                       "tests/analysis_tools.cpp", "tests/halo_catalog_fixture.cpp",
+                       "tests/compression.cpp", "tests/fp16.cpp", "tests/lightcone_cpu.cpp",
+                       "tests/lightcone_cuda.cu", "tests/lightcone_epoch.cpp", "tests/rockstar_core.cpp",
+                       "tests/rockstar_eigenpair.cpp", "tests/rockstar_properties.cpp"):
+            with self.subTest(source=source):
+                self.configure(FMM=False)
+                self.cache["BUILD_TESTING"] = "ON"
+                self.addCompilation("unused_halo", source, {})
+                with self.assertRaisesRegex(ValueError, "gravity disabled but compiles gravity source: " + source):
+                    self.check()
+
+    def testEachGravitySolverRetainsHaloToolSources(self):
+        for feature in ("FMM", "PMMM_PP", "PMMM_FMM"):
+            with self.subTest(feature=feature):
+                self.configure(**{"FMM": False, feature: True})
+                self.cache["BUILD_TESTING"] = "ON"
+                for source in ("src/tools/groups2halofunc.cpp", "src/tools/halo_catalog_export.cpp",
+                               "src/tools/healpix2silo.cpp", "src/analysis/group_entry.cpp",
+                               "src/analysis/compress.cpp", "src/math/fp16.cpp",
+                               "tests/analysis_tools.cpp", "tests/halo_catalog_fixture.cpp", "tests/fp16.cpp"):
+                    self.addCompilation("halo_tools", source, {})
+                self.assertIn("Build features passed", self.check())
+
+    def testPmmmPpRejectsTreeSourcesAndTests(self):
+        for source in ("src/gravity/kick_workspace.cpp", "src/gravity/kick_executor.cpp",
+                       "src/gravity/kick_interaction_counts.cpp", "src/gravity/source_access.cpp",
+                       "src/gravity/sources.cpp", "tests/gravity/cartesian_kernels.cpp",
+                       "tests/gravity/cartesian_kernels_cuda.cu", "tests/gravity/cartesian_l2l_cuda.cu",
+                       "tests/gravity/fmm_acceptance.cpp", "tests/gravity/fmm_acceptance_cuda.cu",
+                       "tests/gravity/fmm_geometry.cpp"):
+            with self.subTest(source=source):
+                self.configure(FMM=False, PMMM_PP=True)
+                self.cache["BUILD_TESTING"] = "ON"
+                self.addCompilation("unused_tree", source, {})
+                with self.assertRaisesRegex(ValueError, "tree algorithms disabled but compiles tree source: " + source):
+                    self.check()
+
+    def testFmmRejectsParticleMeshSourcesAndTests(self):
+        for source in ("src/particles/particle_mesh_sort.cpp", "tests/particle_mesh_sort.cpp",
+                       "tests/mesh_domain.cpp", "tests/mesh_domains.cpp"):
+            with self.subTest(source=source):
+                self.configure()
+                self.cache["BUILD_TESTING"] = "ON"
+                self.addCompilation("unused_mesh", source, {})
+                with self.assertRaisesRegex(ValueError, "PMMM disabled but compiles solver source: " + source):
+                    self.check()
+
+    def testConfiguredRuntimeMustNotMoveIntoSharedCore(self):
+        self.commands = [entry for entry in self.commands if not entry["file"].endswith("src/core/hpx.cpp")]
+        self.addCompilation("cosmictiger_core", "src/core/hpx.cpp", {})
+        with self.assertRaisesRegex(ValueError, "required source missing: src/core/hpx.cpp"):
+            self.check()
+
+    def testCpuBuildRejectsCudaStreamImplementation(self):
+        self.addCompilation("cosmictiger_core", "src/cuda/cuda_stream.cpp", {})
+        with self.assertRaisesRegex(ValueError, "CUDA disabled but graph compiles src/cuda/cuda_stream.cpp"):
+            self.check()
+
     def testTreeLeak(self):
         self.configure(FMM=False, PMMM_PP=True)
         self.addCompilation("cosmictiger_objects", "src/gravity/tree_build.cpp", self.definitions)
@@ -309,7 +414,7 @@ class BuildConfigHeaderTest(unittest.TestCase):
 
     def definitions(self):
         return {"COSMICTIGER_ENABLE_" + name: int(name == "INTEGRATOR_TRADITIONAL")
-                for name in ("SPH", "CHEMISTRY", "STARS", "STAR_FORMATION",
+                for name in ("SPH", "HOPKINS", "CHEMISTRY", "STARS", "STAR_FORMATION",
                              "INTEGRATOR_TRADITIONAL", "INTEGRATOR_HIERARCHICAL", "INTEGRATOR_GLOBAL")}
 
     def testExplicitCapabilitiesCompile(self):
@@ -325,7 +430,8 @@ class BuildConfigHeaderTest(unittest.TestCase):
                 self.assertIn("Missing CosmicTiger build capabilities", result.stderr)
 
     def testImpossibleCapabilitiesFail(self):
-        for values, diagnostic in (({"CHEMISTRY": 1}, "chemistry capability requires SPH"),
+        for values, diagnostic in (({"HOPKINS": 1}, "Hopkins capability requires SPH"),
+                ({"CHEMISTRY": 1}, "chemistry capability requires SPH"),
                 ({"STARS": 1, "STAR_FORMATION": 1}, "stars capability requires chemistry"),
                 ({"STARS": 1}, "must match"),
                 ({"INTEGRATOR_TRADITIONAL": 0}, "At least one time integrator")):
@@ -350,6 +456,7 @@ class FeatureConfigurationTest(unittest.TestCase):
                               'message(STATUS "default_near=${cosmictiger_default_near_method}")\n'
                               'message(STATUS "pmmm_pp=${COSMICTIGER_ENABLE_PMMM_PP}")\n'
                               'message(STATUS "pmmm_fmm=${COSMICTIGER_ENABLE_PMMM_FMM}")\n'
+                              'message(STATUS "hopkins=${COSMICTIGER_ENABLE_HOPKINS}")\n'
                               'message(STATUS "chemistry=${COSMICTIGER_ENABLE_CHEMISTRY}")\n'
                               'message(STATUS "effective_chemistry=${COSMICTIGER_WITH_CHEMISTRY}")\n'
                               'message(STATUS "effective_stars=${COSMICTIGER_WITH_STARS}")\n'
@@ -365,9 +472,51 @@ class FeatureConfigurationTest(unittest.TestCase):
         self.assertIn("pmmm_fmm=OFF", result.stdout)
         self.assertIn("default_gravity=fmm", result.stdout)
         self.assertIn("default_near=none", result.stdout)
+        self.assertIn("hopkins=OFF", result.stdout)
         self.assertIn("chemistry=ON", result.stdout)
         self.assertIn("stars=OFF", result.stdout)
         self.assertIn("star_formation=OFF", result.stdout)
+
+    def testHopkinsRequiresSphAndFixed64(self):
+        for sph, hopkins in product(("OFF", "ON"), repeat=2):
+            with self.subTest(sph=sph, hopkins=hopkins):
+                result = self.configure({"COSMICTIGER_ENABLE_SPH": sph,
+                                         "COSMICTIGER_ENABLE_HOPKINS": hopkins,
+                                         "COSMICTIGER_POSITION_TYPE": "fixed64"})
+                if hopkins == "ON" and sph == "OFF":
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("COSMICTIGER_ENABLE_HOPKINS=ON requires COSMICTIGER_ENABLE_SPH=ON", result.stderr)
+                else:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn("hopkins=" + hopkins, result.stdout)
+        result = self.configure({"COSMICTIGER_ENABLE_HOPKINS": "ON",
+                                 "COSMICTIGER_POSITION_TYPE": "fixed32"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("COSMICTIGER_ENABLE_HOPKINS=ON requires COSMICTIGER_POSITION_TYPE=fixed64", result.stderr)
+
+    def testHopkinsControlsActualSourcesAndRetainsSharedSph(self):
+        source = Path(__file__).resolve().parents[1]
+        for (sph, hopkins), testing, cuda in product(
+                (("OFF", "OFF"), ("ON", "OFF"), ("ON", "ON")), ("OFF", "ON"), ("OFF", "ON")):
+            with self.subTest(sph=sph, hopkins=hopkins, testing=testing, cuda=cuda), tempfile.TemporaryDirectory() as directory:
+                script = Path(directory) / "sources.cmake"
+                script.write_text(
+                    f'set(PROJECT_SOURCE_DIR "{source}")\n'
+                    f'set(COSMICTIGER_ENABLE_SPH {sph} CACHE BOOL "")\n'
+                    f'set(COSMICTIGER_ENABLE_HOPKINS {hopkins} CACHE BOOL "")\n'
+                    'set(COSMICTIGER_POSITION_TYPE fixed64 CACHE STRING "")\n'
+                    f'set(BUILD_TESTING {testing})\nset(COSMICTIGER_WITH_CUDA {cuda})\n'
+                    f'include("{source / "cmake/features.cmake"}")\n'
+                    f'include("{source / "cmake/variant_sources.cmake"}")\n'
+                    'cosmictiger_feature_sources(selected)\n'
+                    'foreach(path IN LISTS selected)\nmessage(STATUS "source=${path}")\nendforeach()\n')
+                result = subprocess.run(["cmake", "-P", str(script)], text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                for name in ("src/hydro/hopkins_driver.cpp", "src/scenarios/sound_wave.cpp"):
+                    self.assertEqual("source=" + name + "\n" in result.stdout, hopkins == "ON")
+                for name in ("src/sph/sph_particles.cpp", "src/sph/sph_tree.cpp",
+                             "src/sph/sph_hydro_cpu.cpp", "src/scenarios/gresho.cpp"):
+                    self.assertEqual("source=" + name + "\n" in result.stdout, sph == "ON")
 
     def testStarsCapabilityCombinations(self):
         for sph, stars in product(("OFF", "ON"), repeat=2):
@@ -505,6 +654,39 @@ class FeatureConfigurationTest(unittest.TestCase):
                 self.assertIn("range=" + ("5-7" if gravity else "0-0"), result.stdout)
                 self.assertIn("default_gravity=" + ("fmm" if fmm else "pmmm" if gravity else "none"), result.stdout)
                 self.assertIn("default_near=" + ("pp" if pmmmPp else "fmm" if pmmmFmm else "none"), result.stdout)
+
+    def testGravityControlsActualSourceSelection(self):
+        source = Path(__file__).resolve().parents[1]
+        for solver, testing, cuda in product((None, "FMM", "PMMM_PP", "PMMM_FMM"),
+                                              (False, True), (False, True)):
+            with self.subTest(solver=solver, testing=testing, cuda=cuda), tempfile.TemporaryDirectory() as directory:
+                configuration = {feature: feature in (solver, "SPH", "CHEMISTRY", "INTEGRATOR_TRADITIONAL")
+                                 for feature in FEATURES}
+                script = Path(directory) / "sources.cmake"
+                script.write_text(
+                    f'set(PROJECT_SOURCE_DIR "{source}")\n' +
+                    "".join(f'set(COSMICTIGER_ENABLE_{feature} {"ON" if enabled else "OFF"} CACHE BOOL "")\n'
+                            for feature, enabled in configuration.items()) +
+                    f'set(BUILD_TESTING {"ON" if testing else "OFF"})\n'
+                    f'set(COSMICTIGER_WITH_CUDA {"ON" if cuda else "OFF"})\n'
+                    f'include("{source / "cmake/features.cmake"}")\n'
+                    f'include("{source / "cmake/variant_sources.cmake"}")\n'
+                    'cosmictiger_feature_sources(selected)\n'
+                    'foreach(path IN LISTS selected)\nmessage(STATUS "source=${path}")\nendforeach()\n')
+                result = subprocess.run(["cmake", "-P", str(script)], text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                selected = {line.removeprefix("-- source=") for line in result.stdout.splitlines()
+                            if line.startswith("-- source=")}
+                self.assertEqual(sourceSelectionErrors(selected, configuration), [])
+                self.assertIn("src/core/hpx.cpp", selected)
+                self.assertNotIn("src/math/math.cpp", selected)
+                for name in ("src/analysis/group_entry.cpp", "src/analysis/compress.cpp"):
+                    self.assertEqual(name in selected, hasGravity(configuration), name)
+                self.assertEqual("src/analysis/healpix.cu" in selected, hasGravity(configuration) and cuda)
+                self.assertEqual("src/gravity/kick.cpp" in selected, hasTree(configuration))
+                self.assertEqual("tests/analysis_backends.cpp" in selected, hasGravity(configuration) and testing)
+                self.assertEqual("src/particles/particle_mesh_sort.cpp" in selected,
+                                 solver in ("PMMM_PP", "PMMM_FMM"))
 
     def testNoPhysics(self):
         result = self.configure({"COSMICTIGER_ENABLE_FMM": "OFF", "COSMICTIGER_ENABLE_SPH": "OFF"})

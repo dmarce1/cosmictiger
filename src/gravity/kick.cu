@@ -80,7 +80,8 @@ int kickBlockCount(ParticleInteger particles) {
     static int const referenceBlocks = kKickHandoffBlocksPerMultiprocessor * cudaSmpCount();
     double const scale = std::clamp(
         std::cbrt(double(particles) / kKickHandoffReferenceParticles), 1.0, kKickHandoffMaxScale);
-    addCpuFlops(4);    // Division, cube root, scaling, and rounding in automatic handoff sizing.
+    addCpuFlops(4, FlopPrecision::Double);    // Division, cube root, scaling, and rounding in
+                                              // automatic handoff sizing.
     return int(std::lround(referenceBlocks * scale));
 }
 

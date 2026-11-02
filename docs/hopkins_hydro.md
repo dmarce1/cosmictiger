@@ -3,6 +3,11 @@
 Select `hydro.method=sph|mfm|mfv` in an INI file or on the command line.
 `sph` remains the default and retains its existing numerical algorithms.
 The MFM and MFV paths share the gas particle infrastructure and kernel options.
+They are an optional build capability, disabled by default. Enable them with
+`-DCOSMICTIGER_ENABLE_HOPKINS=ON`, `-DCOSMICTIGER_ENABLE_SPH=ON`, and
+`-DCOSMICTIGER_POSITION_TYPE=fixed64`. CMake rejects Hopkins without SPH support
+or Fixed64 positions. With Hopkins disabled, its driver and sound-wave scenario
+are excluded from the build, and active MFM/MFV selections are rejected at startup.
 
 The formulation follows Philip F. Hopkins, *A new class of accurate, mesh-free
 hydrodynamic simulation methods*, MNRAS **450**, 53–110 (2015),
@@ -296,7 +301,8 @@ scaling, or cosmological production accuracy. The stopped sound-wave amplitude
 campaign was not resumed. Hydro remains on the coordinating CPU and executes
 sequentially with gravity; CPU/GPU overlap has not been implemented.
 
-For a Fixed64 build with FMM and PMMM, potential expansion degree 6, traditional
+For a Fixed64 build with `COSMICTIGER_ENABLE_HOPKINS=ON`, FMM and PMMM,
+potential expansion degree 6, traditional
 and global integration, SPH infrastructure, and testing enabled, build the application, `hopkins_test`,
 and `gresho_test`, then run the primitive and end-to-end checks:
 

@@ -136,9 +136,10 @@ void meshTimestepStep(TimeType clock, int expectedRung, bool firstCall = false) 
     auto const proposal = particleMeshPrepareKick(1.0, 1.0, 1.0, firstCall, minRung(clock));
     // One radius conversion per locality; each dark-matter particle executes
     // fourteen timestep/rung operations, nine kick operations, and optionally
-    // two operations to compute the old half-step. Diagnostics do not count.
+    // two operations to compute the old half-step. Six norm promotions and nine
+    // kick promotions/narrowings are charged to double precision. Diagnostics do not count.
     FlopCount const expectedPrepare =
-        kCountFlops ? FlopCount(hpxSize()) + before.size() * (firstCall ? 23 : 25) : 0;
+        kCountFlops ? FlopCount(hpxSize()) + before.size() * (firstCall ? 38 : 40) : 0;
     requireMeshTimestep(readFlops() - beforePrepare == expectedPrepare,
         "preparation FLOPs included diagnostics or omitted timestep/kick arithmetic");
     requireMeshTimestep(proposal.maxRung == expectedRung,
@@ -148,7 +149,8 @@ void meshTimestepStep(TimeType clock, int expectedRung, bool firstCall = false) 
     checkMeshTimestepKick(before, synchronized, expectedRung, false, firstCall);
     FlopCount const beforeFinish = readFlops();
     double const driftKinetic = particleMeshFinishKick(1.0, proposal.maxRung);
-    FlopCount const expectedFinish = kCountFlops ? 3 * FlopCount(hpxSize()) + 6 * before.size() : 0;
+    FlopCount const expectedFinish =
+        kCountFlops ? 3 * FlopCount(hpxSize()) + 15 * before.size() : 0;
     requireMeshTimestep(readFlops() - beforeFinish == expectedFinish,
         "finalization FLOPs omitted the shared half-step or particle kicks");
     auto const after = meshTimestepSamples();
@@ -181,7 +183,10 @@ void checkMeshApplyFieldFlops() {
         bool firstCall;
         FlopCount count;
     };
-    // A radius conversion costs one operation, a timestep proposal fifteen,
+    // The radius expression costs one double operation and two precision
+    // conversions; the table below retains arithmetic-only totals so its
+    // two additional conversion operations are checked separately.
+    // A timestep proposal costs fifteen operations,
     // hierarchical sign/half-step setup three, and each vector half-kick nine.
     // Nonhierarchical kicks compute their two-operation half-steps separately.
     std::array<KickCase, 10> const cases{{
@@ -206,11 +211,14 @@ void checkMeshApplyFieldFlops() {
         originalVelocity[dim] = particlesVel(dim, 0);
     }
     FlopCount const initialGlobal = readFlops();
+    FlopCounts const initialPrecisions = readFlopCounts();
     // Starting above double's exact integer range also checks that accumulation
     // remains integral and does not truncate counts to 32 bits.
     FlopCount const initialBatch = (FlopCount(1) << 54) + 7;
     FlopCount batched = initialBatch;
     FlopCount expectedBatch = initialBatch;
+    FlopCounts batchPrecisions;
+    FlopCounts expectedPrecisions;
     KickParameters parameters;
     parameters.a = 1.0f;
     parameters.t0 = 1.0f;
@@ -230,10 +238,19 @@ void checkMeshApplyFieldFlops() {
             for (bool doPhi : {false, true}) {
                 parameters.doPhi = doPhi;
                 particlesRung(0) = 2;
-                particleMeshApplyField(0, acceleration, -2.0f, parameters, &batched);
-                expectedBatch += kCountFlops ? sample.count : 0;
+                particleMeshApplyField(
+                    0, acceleration, -2.0f, parameters, &batched, &batchPrecisions);
+                expectedBatch += kCountFlops ? sample.count + 2 : 0;
+                expectedPrecisions.singlePrecision += kCountFlops ? sample.count - 1 : 0;
+                expectedPrecisions.doublePrecision += kCountFlops ? 3 : 0;
                 requireMeshTimestep(batched == expectedBatch,
                     "field kick FLOPs do not match the executed ladder branches");
+                requireMeshTimestep(
+                    batchPrecisions.singlePrecision == expectedPrecisions.singlePrecision &&
+                        batchPrecisions.doublePrecision == expectedPrecisions.doublePrecision &&
+                        batchPrecisions.unclassified == 0 &&
+                        batchPrecisions.total() == batched - initialBatch,
+                    "field kick precision counts misplaced mixed-radius conversions");
             }
         }
     }
@@ -241,17 +258,57 @@ void checkMeshApplyFieldFlops() {
         readFlops() == initialGlobal, "batched field kick submitted its FLOPs more than once");
     parameters.minRung = 3;
     particlesRung(0) = 2;
-    particleMeshApplyField(0, acceleration, -2.0f, parameters, &batched);
+    particleMeshApplyField(0, acceleration, -2.0f, parameters, &batched, &batchPrecisions);
     requireMeshTimestep(batched == expectedBatch, "inactive field kick counted arithmetic");
+    requireMeshTimestep(batchPrecisions.total() == batched - initialBatch,
+        "inactive field kick changed its precision counts");
     parameters.minRung = 1;
     parameters.htime = false;
     parameters.firstCall = false;
     particleMeshApplyField(0, acceleration, -2.0f, parameters);
-    requireMeshTimestep(readFlops() - initialGlobal == (kCountFlops ? 38 : 0),
+    requireMeshTimestep(readFlops() - initialGlobal == (kCountFlops ? 40 : 0),
         "standalone field kick did not submit its own FLOPs");
+    auto const standalonePrecisions = readFlopCounts();
+    requireMeshTimestep(standalonePrecisions.singlePrecision - initialPrecisions.singlePrecision ==
+                (kCountFlops ? 37 : 0) &&
+            standalonePrecisions.doublePrecision - initialPrecisions.doublePrecision ==
+                (kCountFlops ? 3 : 0) &&
+            standalonePrecisions.unclassified == initialPrecisions.unclassified,
+        "standalone field kick lost its arithmetic precision split");
     particlesRung(0) = originalRung;
     for (int dim = 0; dim < kDimensions; ++dim) {
         particlesVel(dim, 0) = originalVelocity[dim];
+    }
+}
+
+void checkMeshGlobalTimestepFlops() {
+    for (bool firstCall : {true, false}) {
+        auto const before = meshTimestepSamples();
+        auto const beforePrepare = readFlopCounts();
+        particleMeshPrepareKick(1.0, 1.0, 1.0, firstCall, 0, firstCall ? 0.0 : 0.125);
+        auto const afterPrepare = readFlopCounts();
+        // Twelve acceleration-norm operations/conversions, five timestep
+        // operations, one explicit half-step multiply, and eighteen kick
+        // operations/conversions. The explicit path does not propose a rung.
+        FlopCount const expectedPrepare =
+            kCountFlops ? FlopCount(hpxSize()) + 36 * before.size() : 0;
+        requireMeshTimestep(
+            afterPrepare.doublePrecision - beforePrepare.doublePrecision == expectedPrepare &&
+                afterPrepare.singlePrecision == beforePrepare.singlePrecision &&
+                afterPrepare.unclassified == beforePrepare.unclassified,
+            "explicit preparation counted skipped rung arithmetic or missed conversions");
+        auto const beforeFinish = readFlopCounts();
+        particleMeshFinishGlobalKick(0.25);
+        auto const afterFinish = readFlopCounts();
+        // Two shared multiplications and fifteen particle kick
+        // operations/conversions; there is no ldexp on this path.
+        FlopCount const expectedFinish =
+            kCountFlops ? 2 * FlopCount(hpxSize()) + 15 * before.size() : 0;
+        requireMeshTimestep(
+            afterFinish.doublePrecision - beforeFinish.doublePrecision == expectedFinish &&
+                afterFinish.singlePrecision == beforeFinish.singlePrecision &&
+                afterFinish.unclassified == beforeFinish.unclassified,
+            "explicit finalization counted ldexp or missed kick conversions");
     }
 }
 
@@ -329,6 +386,7 @@ void particleMeshTimestepTest() {
     // a factor of two; it must not jump straight from rung four to rung one.
     detail::meshTimestepStep(0, 3);
     detail::checkMeshApplyFieldFlops();
+    detail::checkMeshGlobalTimestepFlops();
     pmmmDestroy();
     PRINT("PMMM common-rung refinement, synchronization, coarsening and staged kicks "
           "passed on %i locality/localities\n",

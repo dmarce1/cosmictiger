@@ -124,6 +124,9 @@ gravity, and combined runs, including explicit chemistry source intervals.
 Set `COSMICTIGER_ENABLE_SPH=OFF` for gravity-only builds, or disable
 `COSMICTIGER_ENABLE_FMM`, `COSMICTIGER_ENABLE_PMMM_PP`, and
 `COSMICTIGER_ENABLE_PMMM_FMM` for SPH-only builds.
+`COSMICTIGER_ENABLE_HOPKINS` defaults to `OFF`. Set it to `ON` to compile
+Hopkins MFM/MFV in addition to SPH; it requires `COSMICTIGER_ENABLE_SPH=ON`
+and `COSMICTIGER_POSITION_TYPE=fixed64`.
 `COSMICTIGER_ENABLE_CHEMISTRY` defaults to `ON`; set it to `OFF` to retain SPH
 without equilibrium cooling. Equilibrium cooling is compiled only when SPH and
 chemistry are both enabled. The chemistry setting is inactive when SPH is off;
@@ -286,6 +289,8 @@ double precision hydrodynamic state on the CPU and supports traditional individu
 steps or global continuous steps, with FMM or PMMM gravity. It requires a Fixed64
 position build, with cooling and star formation disabled. `configurations/sound_wave.ini` and
 `configurations/gresho.ini` provide meshless test problems.
+Compile the meshless methods with `-DCOSMICTIGER_ENABLE_HOPKINS=ON`;
+the default SPH build omits them.
 
 The gas controls appear under `hydro.*` in `--help` and can also be
 specified in the INI configuration file. The compatibility group `chemistry.*`
@@ -362,18 +367,24 @@ factor alongside timestep and timing information. Warnings and errors remain
 visible. Plain-text output also stays readable when redirected to a log.
 
 Both progress tables include `TFLOP/s` without enabling verbose output. This is
-an estimate of instrumented gravity, SPH and tree arithmetic divided by the wall time
+an estimate of instrumented gravity, SPH, Hopkins and tree arithmetic divided by the wall time
 of force advancement, summed across CPU workers, CUDA kernels and localities.
 SPH includes neighbor geometry, each density/support-radius iteration, pressure
 and viscosity pairs, timestep/rung calculations, and predictor/corrector kicks.
 PMMM includes its spherical operators, spectral contraction, and cached FFTW
 execution counts. Chemistry, other FFT paths and other uninstrumented work are not counted;
 when they run inside force advancement their elapsed time is included. The
-cosmological `progress.txt` retains its existing `Tflops` field and layout.
+tables also separate `FP32 TF/s`, `FP64 TF/s`, and `Mixed TF/s`. Hopkins uses
+FP64; `Mixed` retains legacy counts whose arithmetic precision has not yet been
+split, rather than attributing them to the wrong precision. Cosmological
+`progress.txt` preserves its existing fields and appends `Tflops32`, `Tflops64`,
+and `TflopsMixed`.
 
 Counts use 64-bit integers until the final rate conversion. Arithmetic and
-math-function results count as one operation, FMA as two; integer operations,
-comparisons, selections and sign changes (including absolute values) are excluded.
+math-function results count as one operation, FMA as two. A conversion between
+floating precisions counts once at the higher precision (float-to-double and
+double-to-float both count as FP64). Integer operations, comparisons, selections
+and sign changes (including absolute values) are excluded.
 Force and potential kernels count; diagnostic energy/momentum bookkeeping,
 diagnostic reductions and diagnostic-only signal speeds do not. SIMD padding
 and numerical CUDA reductions count when executed. These are source-operation estimates, not
@@ -387,8 +398,8 @@ latency from the measured interval.
 See [the function-by-function FLOP audit](docs/flop_accounting.md) for the counted
 paths, diagnostic exclusions and regression coverage.
 
-Set `--run.verbose=true` to print the complete resolved options and detailed
-runtime diagnostics, including tree, gravity, SPH, and CUDA setup information.
+Startup always prints the complete resolved options. Set `--run.verbose=true`
+to print detailed runtime diagnostics, including tree, gravity, SPH, and CUDA setup information.
 The default is `false`. The equivalent INI setting is:
 
 ```ini
@@ -639,7 +650,7 @@ is best effort. This handler is adapted from OctoTiger's `stacktrace_fix` commit
 `a0720ee02feebf776b797b2fdc74edf6bcc5bd83`.
 
 Run `./build.sh` in a terminal for the interactive builder. Choose Release,
-RelWithDebInfo, Debug, or Profile (host gprof instrumentation), CUDA, SPH,
+RelWithDebInfo, Debug, or Profile (host gprof instrumentation), CUDA, SPH, Hopkins,
 equilibrium cooling, job counts, HPX prefix, CUDA architectures, additional
 dependency prefixes, enabled gravity and near methods, potential expansion degrees
 (a scalar or inclusive range),
@@ -721,6 +732,12 @@ revision when `BUILD_TESTING=ON`. For an offline build, pass
 Application checks selected by `--run.test` also report through GoogleTest in a
 testing build. Python integration runners stay registered directly with CTest;
 reference generators, plotting scripts, and benchmarks remain support tools.
+
+Application executables remain in the build root. Static libraries go in `lib/`;
+standalone test programs and support libraries go in `tests/bin/`, CTest discovery
+files in `tests/cmake/`, and default test working files in `tests/work/`.
+`BUILD_TESTING=OFF` omits the test targets. Halo tools are built only when at least
+one gravity solver is enabled.
 
 List cases with `ctest --test-dir build/release -N`, or select a family using its
 label, for example `ctest --test-dir build/release -L '^monaghan_sph$'`.

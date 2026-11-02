@@ -27,6 +27,13 @@ option(COSMICTIGER_ENABLE_FMM "Compile the global FMM gravity solver" ON)
 option(COSMICTIGER_ENABLE_PMMM_PP "Compile PMMM gravity with direct PP near interactions" OFF)
 option(COSMICTIGER_ENABLE_PMMM_FMM "Compile PMMM gravity with FMM near interactions" OFF)
 option(COSMICTIGER_ENABLE_SPH "Compile SPH hydrodynamics" ON)
+option(COSMICTIGER_ENABLE_HOPKINS "Compile Hopkins MFM/MFV hydrodynamics (requires SPH and Fixed64)" OFF)
+if(COSMICTIGER_ENABLE_HOPKINS AND NOT COSMICTIGER_ENABLE_SPH)
+    message(FATAL_ERROR "COSMICTIGER_ENABLE_HOPKINS=ON requires COSMICTIGER_ENABLE_SPH=ON")
+endif()
+if(COSMICTIGER_ENABLE_HOPKINS AND NOT COSMICTIGER_POSITION_TYPE STREQUAL "fixed64")
+    message(FATAL_ERROR "COSMICTIGER_ENABLE_HOPKINS=ON requires COSMICTIGER_POSITION_TYPE=fixed64")
+endif()
 option(COSMICTIGER_ENABLE_CHEMISTRY "Compile GADGET-4 equilibrium cooling when SPH is enabled" ON)
 # The legacy name initializes a fresh/migrated cache once. Thereafter STARS is
 # authoritative, so explicitly disabling it cannot be undone by a stale alias.

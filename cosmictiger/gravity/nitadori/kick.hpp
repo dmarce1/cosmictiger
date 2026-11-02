@@ -18,9 +18,12 @@
 // minRung selects only a subset of the sinks.
 // Accumulate source-operation counts in flopCount when supplied, so callers can
 // submit a whole sink batch once; otherwise submit this particle's count here.
+// precisionCounts optionally receives the same work split by arithmetic precision.
+// Supplying either output defers global submission to the caller.
 KickReturn particleMeshApplyField(ParticleInteger index,
     Array<float, kDimensions> const& acceleration, float potential,
-    KickParameters const& parameters, FlopCount* flopCount = nullptr);
+    KickParameters const& parameters, FlopCount* flopCount = nullptr,
+    FlopCounts* precisionCounts = nullptr);
 
 // PMMM integration using the total far-field and near-field force.
 // Both operations recurse over all localities. Preparation closes the previous

@@ -1,9 +1,6 @@
 # Select the union of enabled algorithms, keeping the shared core separate.
 function(cosmictiger_feature_sources output)
     set(cosmictiger_source_files
-        src/analysis/compress.cpp
-        src/analysis/group_entry.cpp
-        src/analysis/healpix.cu
         src/analysis/power.cpp
         src/analysis/power.cu
         src/analysis/power_cpu.cpp
@@ -14,6 +11,7 @@ function(cosmictiger_feature_sources output)
         src/core/scenario_driver.cpp
         src/core/flops.cpp
         src/core/flops.cu
+        # HPX initialization selects gravity-dependent CUDA analysis setup.
         src/core/hpx.cpp
         src/core/memused.cpp
         src/core/options.cpp
@@ -29,14 +27,12 @@ function(cosmictiger_feature_sources output)
         src/cosmology/zero_order.cpp
         src/cuda/cuda.cpp
         src/cuda/cuda_memory.cu
-        src/cuda/cuda_stream.cpp
         src/io/checkpoint.cpp
         src/io/output.cpp
         src/io/view.cpp
         src/main.cpp
         src/math/kernel.cpp
         src/math/kernel.cu
-        src/math/math.cpp
         src/particles/domain.cpp
         src/particles/drift.cpp
         src/particles/drift.cu
@@ -49,6 +45,9 @@ function(cosmictiger_feature_sources output)
 
     if(COSMICTIGER_WITH_GRAVITY)
         list(APPEND cosmictiger_source_files
+            src/analysis/compress.cpp
+            src/analysis/group_entry.cpp
+            src/analysis/healpix.cu
             src/analysis/group_tree.cpp
             src/analysis/groups.cpp
             src/analysis/groups_find.cpp
@@ -140,8 +139,6 @@ function(cosmictiger_feature_sources output)
             src/scenarios/polytropic_star.cpp
             src/scenarios/hydro_wave.cpp
             src/scenarios/gresho.cpp
-            src/scenarios/sound_wave.cpp
-            src/hydro/hopkins_driver.cpp
             src/scenarios/exact_sod.cpp
             src/scenarios/sedov.cpp
             src/sph/sph.cpp
@@ -162,6 +159,10 @@ function(cosmictiger_feature_sources output)
             src/sph/morris_and_monaghan/viscosity.cpp
             src/sph/price_etal/viscosity.cpp
         )
+        if(COSMICTIGER_ENABLE_HOPKINS)
+            list(APPEND cosmictiger_source_files
+                src/hydro/hopkins_driver.cpp src/scenarios/sound_wave.cpp)
+        endif()
         if(COSMICTIGER_ENABLE_CHEMISTRY)
             list(APPEND cosmictiger_source_files src/sph/sph_chemistry.cpp)
         endif()

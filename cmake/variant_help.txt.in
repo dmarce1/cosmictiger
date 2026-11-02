@@ -8,6 +8,7 @@ Enabled capabilities:
   PMMM PP: @COSMICTIGER_ENABLE_PMMM_PP@
   PMMM FMM: @COSMICTIGER_ENABLE_PMMM_FMM@
   SPH: @COSMICTIGER_ENABLE_SPH@
+  Hopkins MFM/MFV: @COSMICTIGER_ENABLE_HOPKINS@ (requires SPH and Fixed64)
   Equilibrium cooling: @COSMICTIGER_WITH_CHEMISTRY@ (requires SPH)
   Stars: @COSMICTIGER_WITH_STARS@ (COSMICTIGER_ENABLE_STARS; requires chemistry and SPH)
   Traditional integration: @COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL@
@@ -18,6 +19,7 @@ Enabled capabilities:
 
 Select enabled algorithms at runtime with gravity.method.far,
 gravity.method.near, and run.timeIntegrator. Select a compiled potential
-degree with gravity.expansionDegree. Run cosmictiger --help for details.
+degree with gravity.expansionDegree. Select SPH or enabled Hopkins hydrodynamics
+with hydro.method=sph|mfm|mfv. Run cosmictiger --help for details.
 Star formation uses starFormation.enabled=true with hydro.enabled=true and
 chemistry.enabled=true; see docs/star_formation.md for model assumptions.

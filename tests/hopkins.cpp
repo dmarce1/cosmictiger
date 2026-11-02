@@ -1005,3 +1005,177 @@ TEST(Hopkins, InactivePrimitivePredictionIsGalileanInvariant) {
         EXPECT_NEAR(shifted.velocity[dim], original.velocity[dim] + boost[dim], 5.0e-15);
     }
 }
+
+TEST(HopkinsFlops, CachedFluxAndSourceBranchesKeepNumericalResults) {
+    hopkins::Conserved const start{1.0, {2.0, 3.0, 4.0}, 5.0};
+    hopkins::Conserved const midpoint{2.0, {3.0, 4.0, 5.0}, 6.0};
+    FlopCount operations = 0;
+    auto const expected = hopkins::integrateFlux(start, midpoint, 1.0, 0.25, 0.5);
+    auto const actual = hopkins::integrateFlux(start, midpoint, 1.0, 0.25, 0.5, &operations);
+    EXPECT_EQ(operations, 24);
+    EXPECT_EQ(actual.mass, expected.mass);
+    EXPECT_EQ(actual.momentum, expected.momentum);
+    EXPECT_EQ(actual.energy, expected.energy);
+    operations = 0;
+    EXPECT_EQ(hopkins::integrateFlux(start, midpoint, 1.0, 0.25, 0.0, &operations).mass, 0.0);
+    EXPECT_EQ(operations, 4);
+    operations = 0;
+    EXPECT_EQ(hopkins::pairTimestep(1.0, 2, 3, &operations), 0.125);
+    EXPECT_EQ(operations, 1);
+    operations = 0;
+    EXPECT_EQ(hopkins::sourceCorrectionWeight(0.2, 0.0, &operations), 0.1);
+    EXPECT_EQ(operations, 10);
+    operations = 0;
+    EXPECT_EQ(hopkins::sourceCorrectionWeight(0.2, 3.0, &operations),
+        hopkins::sourceCorrectionWeight(0.2, 3.0));
+    EXPECT_EQ(operations, 5);
+}
+
+TEST(HopkinsFlops, GeometryCountsExecutedDimensionsAndSingularExit) {
+    hopkins::Matrix moment{};
+    for (int dim = 0; dim < 3; dim++) {
+        moment[dim][dim] = 2.0;
+    }
+    // Analytic Cholesky/triangular-solve costs, including three-component row norms.
+    std::array<FlopCount, 3> const expected{22, 60, 132};
+    for (int dimensions = 1; dimensions <= 3; dimensions++) {
+        FlopCount operations = 0;
+        auto const geometry = hopkins::makeGeometry(2.0, moment, 100.0, dimensions, &operations);
+        EXPECT_TRUE(geometry.valid);
+        EXPECT_EQ(operations, expected[dimensions - 1]);
+        EXPECT_EQ(geometry.inverseMoment,
+            hopkins::makeGeometry(2.0, moment, 100.0, dimensions).inverseMoment);
+    }
+    FlopCount operations = 0;
+    EXPECT_FALSE(hopkins::makeGeometry(0.0, moment, 100.0, 3, &operations).valid);
+    EXPECT_EQ(operations, 0);
+    EXPECT_FALSE(hopkins::makeGeometry(1.0, {}, 100.0, 3, &operations).valid);
+    EXPECT_EQ(operations, 10);
+}
+
+TEST(HopkinsFlops, GeometryAndGravityWorkPropagateNestedCounts) {
+    hopkins::Geometry geometry;
+    geometry.volume = 2.0;
+    for (int dim = 0; dim < 3; dim++) {
+        geometry.inverseMoment[dim][dim] = 1.0;
+    }
+    hopkins::Vector const displacement{1.0, 2.0, 3.0};
+    FlopCount operations = 0;
+    auto const rate = hopkins::geometryRate(geometry, 0.2, {}, &operations);
+    EXPECT_EQ(operations, 108);
+    operations = 0;
+    hopkins::faceArea(geometry, geometry, displacement, 0.5, 0.5, &operations);
+    EXPECT_EQ(operations, 51);
+    operations = 0;
+    hopkins::faceAreaRate(
+        geometry, geometry, rate, rate, displacement, {}, 0.5, 0.5, 0.1, 0.1, &operations);
+    EXPECT_EQ(operations, 135);
+    operations = 0;
+    hopkins::pairGravityWork(2.0, displacement, displacement, displacement, &operations);
+    EXPECT_EQ(operations, 16);
+    operations = 0;
+    hopkins::integratePairGravityWork(displacement, displacement, 1.0, 0.25, 0.5, &operations);
+    EXPECT_EQ(operations, 51);
+}
+
+TEST(HopkinsFlops, LimitersCountOnlyExecutedBranches) {
+    FlopCount operations = 0;
+    EXPECT_EQ(hopkins::pairLimiter(1.0, 1.0, 2.0, 0.5, &operations), 1.0);
+    EXPECT_EQ(operations, 0);
+    hopkins::pairLimiter(1.0, 2.0, 2.0, 0.5, &operations);
+    EXPECT_EQ(operations, 9);
+    operations = 0;
+    hopkins::pairLimiter(0.1, 1.0, 0.2, 0.5, &operations);
+    EXPECT_EQ(operations, 12);
+    operations = 0;
+    hopkins::pairLimiter(-1.0, -0.1, -0.2, 0.5, &operations);
+    EXPECT_EQ(operations, 12);
+    operations = 0;
+    hopkins::gradientLimiter(1.0, 0.0, 2.0, 1.0, 1.0, 1.0, &operations);
+    EXPECT_EQ(operations, 2);
+    operations = 0;
+    hopkins::gradientLimiter(1.0, 0.0, 2.0, 0.5, 1.5, 1.0, &operations);
+    EXPECT_EQ(operations, 10);
+    double lower = 0.5;
+    double upper = 2.0;
+    operations = 0;
+    EXPECT_EQ(
+        hopkins::supportRadiusStep(1.0, -0.1, 1.0, 0.1, 3.0, lower, upper, false, &operations),
+        1.1);
+    EXPECT_EQ(operations, 4);
+    lower = 0.95;
+    upper = 2.0;
+    operations = 0;
+    EXPECT_EQ(
+        hopkins::supportRadiusStep(1.0, 0.1, 0.01, 0.1, 3.0, lower, upper, false, &operations),
+        0.975);
+    EXPECT_EQ(operations, 7);
+}
+
+TEST(HopkinsFlops, ReconstructionAndPredictionIncludeNestedDotProducts) {
+    hopkins::Primitive const state{1.0, {0.1, 0.2, 0.3}, 1.0};
+    FlopCount operations = 0;
+    auto const predicted = hopkins::predictPrimitive(state, {}, 0.2, 1.4, &operations);
+    EXPECT_EQ(predicted.velocity, state.velocity);
+    EXPECT_EQ(operations, 19);
+    operations = 0;
+    auto const reconstructed =
+        hopkins::reconstruct(state, {}, {}, {}, 0.1, 1.4, &state, 0.5, &operations);
+    EXPECT_EQ(reconstructed.velocity, state.velocity);
+    EXPECT_EQ(operations, 82);
+}
+
+TEST(HopkinsFlops, FloatStorageConversionsCountAtDoublePrecision) {
+    double lower = 0.5;
+    double upper = 2.0;
+    FlopCount doubleOperations = 0;
+    FlopCount singleOperations = 0;
+    auto const radius = hopkins::supportRadiusStep(
+        1.0, -0.1, 1.0, 0.1, 3.0, lower, upper, true, &doubleOperations, &singleOperations);
+    EXPECT_EQ(radius, double(float(1.1)));
+    // Four Newton/clamp operations plus the two narrowing/promotion pairs.
+    EXPECT_EQ(doubleOperations, 8);
+    EXPECT_EQ(singleOperations, 1);
+    lower = 1.0;
+    upper = std::nextafter(1.0f, std::numeric_limits<float>::infinity());
+    doubleOperations = 0;
+    singleOperations = 0;
+    EXPECT_EQ(hopkins::supportRadiusStep(lower, -0.1, 1.0, 0.1, 3.0, lower, upper, true,
+                  &doubleOperations, &singleOperations),
+        1.0);
+    // Adjacent float endpoints return before the Newton step or output round trip.
+    EXPECT_EQ(doubleOperations, 2);
+    EXPECT_EQ(singleOperations, 1);
+}
+
+TEST(HopkinsFlops, RiemannCountsRegularVacuumAndHllePaths) {
+    hopkins::Primitive const state{1.0, {}, 1.0};
+    hopkins::Vector const area{1.0, 0.0, 0.0};
+    for (bool finiteMass : {false, true}) {
+        FlopCount operations = 0;
+        auto const actual =
+            hopkins::riemannFlux(state, state, area, {}, 1.4, finiteMass, &operations);
+        auto const expected = hopkins::riemannFlux(state, state, area, {}, 1.4, finiteMass);
+        EXPECT_FALSE(actual.usedFallback);
+        EXPECT_EQ(actual.mass, expected.mass);
+        EXPECT_EQ(actual.momentum, expected.momentum);
+        EXPECT_EQ(actual.energy, expected.energy);
+        EXPECT_EQ(operations, finiteMass ? 313 : 324);
+        hopkins::Primitive left = state;
+        hopkins::Primitive right = state;
+        left.velocity[0] = -100.0;
+        right.velocity[0] = 100.0;
+        operations = 0;
+        auto const vacuum =
+            hopkins::riemannFlux(left, right, area, {}, 1.4, finiteMass, &operations);
+        EXPECT_TRUE(vacuum.usedFallback);
+        EXPECT_EQ(operations, finiteMass ? 280 : 295);
+    }
+    FlopCount operations = 0;
+    hopkins::riemannFlux(state, state, {}, {}, 1.4, false, &operations);
+    EXPECT_EQ(operations, 6);
+    operations = 0;
+    auto const contact = hopkins::detail::exactContact(state, state, area, 1.4, &operations);
+    EXPECT_NEAR(contact[0], 1.0, 1.0e-12);
+    EXPECT_EQ(operations, 1402);
+}

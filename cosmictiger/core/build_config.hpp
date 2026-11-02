@@ -10,15 +10,19 @@
 
 // Every application and standalone consumer must receive its actual configured
 // capabilities. Missing definitions must not silently change data layouts.
-#if !defined(COSMICTIGER_ENABLE_SPH) || !defined(COSMICTIGER_ENABLE_CHEMISTRY) ||        \
-    !defined(COSMICTIGER_ENABLE_STARS) || !defined(COSMICTIGER_ENABLE_STAR_FORMATION) || \
-    !defined(COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL) ||                               \
-    !defined(COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL) ||                              \
+#if !defined(COSMICTIGER_ENABLE_SPH) || !defined(COSMICTIGER_ENABLE_HOPKINS) ||     \
+    !defined(COSMICTIGER_ENABLE_CHEMISTRY) || !defined(COSMICTIGER_ENABLE_STARS) || \
+    !defined(COSMICTIGER_ENABLE_STAR_FORMATION) ||                                  \
+    !defined(COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL) ||                          \
+    !defined(COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL) ||                         \
     !defined(COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
 #error "Missing CosmicTiger build capabilities; link cosmictiger_default_config"
 #endif
 #if COSMICTIGER_ENABLE_STARS != COSMICTIGER_ENABLE_STAR_FORMATION
 #error "COSMICTIGER_ENABLE_STARS and COSMICTIGER_ENABLE_STAR_FORMATION must match"
+#endif
+#if COSMICTIGER_ENABLE_HOPKINS && !COSMICTIGER_ENABLE_SPH
+#error "The compiled Hopkins capability requires SPH"
 #endif
 #if COSMICTIGER_ENABLE_CHEMISTRY && !COSMICTIGER_ENABLE_SPH
 #error "The compiled chemistry capability requires SPH"

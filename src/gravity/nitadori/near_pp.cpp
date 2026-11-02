@@ -65,5 +65,5 @@ void pmmmNearFieldBatch(std::vector<PmmmNearParticle> const& sinks,
                 inverseSupportRadius, inverseSupportRadiusCubed, doPotential, kernel, fields[sink]);
         }
     }
-    addCpuFlops(flops);
+    addCpuFlops(flops, FlopPrecision::Double);
 }

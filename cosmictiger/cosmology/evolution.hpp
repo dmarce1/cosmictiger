@@ -6,15 +6,21 @@
 #include <cmath>
 #include <limits>
 
+#include <cosmictiger/core/flops.hpp>
+
 namespace cosmology {
 
 // Bound the fractional change in a over a conformal step, including the
 // acceleration at a turnaround. adot and acceleration use physical time.
-inline double expansionTimestep(
-    double scale, double adot, double acceleration, double fraction = 0.01) {
+inline double expansionTimestep(double scale, double adot, double acceleration,
+    double fraction = 0.01, FlopCount* operations = nullptr) {
     double const rate = std::abs(adot);
     double const curvature = adot * adot + scale * std::abs(acceleration);
     double const denominator = rate + std::sqrt(rate * rate + 2.0 * fraction * curvature);
+    if (operations != nullptr) {
+        // Curvature: 3; denominator: 6; positive-denominator bound: 2.
+        *operations += 9 + (denominator > 0.0 ? 2 : 0);
+    }
     return denominator > 0.0 ? std::min(2.0 * fraction / denominator, 1.0e30) : 1.0e30;
 }
 

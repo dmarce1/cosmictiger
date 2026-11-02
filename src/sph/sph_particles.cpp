@@ -23,7 +23,9 @@
 #define SPH_PARTICLES_CPP
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
+#if COSMICTIGER_ENABLE_HOPKINS
 #include <cosmictiger/hydro/hopkins_driver.hpp>
+#endif
 #include <cosmictiger/sph/cullen_and_dehnen/particle_exchange.hpp>
 #include <cosmictiger/sph/cullen_and_dehnen/viscosity.hpp>
 #include <cosmictiger/sph/morris_and_monaghan/viscosity.hpp>
@@ -1055,6 +1057,7 @@ void sphParticlesLoad(FILE* fp) {
         }
     }
     if (getOptions().hydro.method != "sph") {
+#if COSMICTIGER_ENABLE_HOPKINS
         uint32_t stateHeader[3];
         FREAD(stateHeader, sizeof(uint32_t), 3, fp);
         if (stateHeader[0] != 0x484f5053U || stateHeader[1] != 4U ||
@@ -1065,6 +1068,9 @@ void sphParticlesLoad(FILE* fp) {
             FREAD(sphParticlesHopkinsStates, sizeof(HopkinsParticleState), savedCount, fp);
         }
         hopkinsReadCheckpoint(fp);
+#else
+        THROW_ERROR("Reading a Hopkins checkpoint requires COSMICTIGER_ENABLE_HOPKINS=ON\n");
+#endif
     }
 }
 
@@ -1100,6 +1106,7 @@ void sphParticlesSave(FILE* fp) {
         }
     }
     if (getOptions().hydro.method != "sph") {
+#if COSMICTIGER_ENABLE_HOPKINS
         uint32_t stateHeader[3] = {0x484f5053U, 4U, sizeof(HopkinsParticleState)};
         FWRITE(stateHeader, sizeof(uint32_t), 3, fp);
         if (count != 0) {
@@ -1125,6 +1132,9 @@ void sphParticlesSave(FILE* fp) {
             FWRITE(sphParticlesHopkinsStates, sizeof(HopkinsParticleState), count, fp);
         }
         hopkinsWriteCheckpoint(fp);
+#else
+        THROW_ERROR("Writing a Hopkins checkpoint requires COSMICTIGER_ENABLE_HOPKINS=ON\n");
+#endif
     }
 }
 
