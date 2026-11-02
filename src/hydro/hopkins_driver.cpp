@@ -13,6 +13,7 @@
 #include <map>
 #include <set>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -30,6 +31,7 @@
 #include <cosmictiger/hydro/hopkins_state.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/kernel.hpp>
+#include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/scenarios/scenario.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/sph_flops.hpp>
@@ -173,6 +175,72 @@ hopkins::Vector hopkinsSeparation(
     return separation;
 }
 
+using HopkinsSimd = NativeSimdVector<double>;
+using HopkinsSimdVector = std::array<HopkinsSimd, 3>;
+using HopkinsSimdMatrix = std::array<HopkinsSimdVector, 3>;
+
+struct HopkinsNeighborBatch {
+    std::array<size_t, HopkinsSimd::size()> indices{};
+    HopkinsSimdVector separation{};
+    HopkinsSimd radius{};
+    size_t count = 0;
+};
+
+HopkinsSimd hopkinsSimdDot(
+    HopkinsSimdVector const& left, HopkinsSimdVector const& right, FlopCount* operations) {
+    hopkins::detail::countFlops(operations, 5 * HopkinsSimd::size());
+    return left[0] * right[0] + left[1] * right[1] + left[2] * right[2];
+}
+
+template <class Function>
+HopkinsSimd hopkinsNeighborValues(HopkinsNeighborBatch const& batch, Function const& function) {
+    return HopkinsSimd([&](auto lane) { return function(batch.indices[size_t(lane)]); });
+}
+
+// SIMD lanes evaluate independent neighbors. Reduce their contributions in the
+// existing particle-ID order: support convergence, tiny sound waves and restart
+// reproducibility must not depend on the compilation target's vector width.
+template <class Function>
+void hopkinsNeighborBatches(HopkinsWorkspace const& workspace, size_t i, FlopCount* operations,
+    Function const& function, bool includeRadius = true) {
+    auto const& neighbors = workspace.neighbors[i];
+    for (size_t begin = 0; begin < neighbors.size(); begin += HopkinsSimd::size()) {
+        HopkinsNeighborBatch batch;
+        batch.count = std::min(size_t(HopkinsSimd::size()), neighbors.size() - begin);
+        for (size_t lane = 0; lane < HopkinsSimd::size(); lane++) {
+            // Padding refers to the physical center, with zero separation.
+            // No gather can read past the neighbor list or particle array.
+            batch.indices[lane] = lane < batch.count ? neighbors[begin + lane] : i;
+        }
+        for (int dim = 0; dim < 3; dim++) {
+            batch.separation[dim] = hopkinsNeighborValues(batch, [&](size_t j) {
+                // Preserve fixed-point subtraction before double conversion.
+                return doubleDistance(
+                    workspace.particles[j].position[dim], workspace.particles[i].position[dim]);
+            });
+        }
+        hopkins::detail::countFlops(operations, 3 * HopkinsSimd::size());
+        if (includeRadius) {
+            hopkins::detail::countFlops(operations, HopkinsSimd::size());
+            batch.radius = simdSqrt(hopkinsSimdDot(batch.separation, batch.separation, operations));
+        }
+        function(batch);
+    }
+}
+
+HopkinsSimdVector hopkinsRelativeVelocities(HopkinsWorkspace const& workspace, size_t i,
+    HopkinsNeighborBatch const& batch, FlopCount* operations) {
+    HopkinsSimdVector relative;
+    hopkins::detail::countFlops(operations, 6 * HopkinsSimd::size());
+    for (int dim = 0; dim < 3; dim++) {
+        relative[dim] = (hopkinsNeighborValues(batch,
+                             [&](size_t j) { return workspace.particles[j].velocity[dim]; }) -
+                            HopkinsSimd(workspace.particles[i].velocity[dim])) /
+            HopkinsSimd(workspace.scale);
+    }
+    return relative;
+}
+
 // The sound-wave validation scenario uses the normalized 1D cubic spline.
 // All other scenarios retain the original selected 3D kernel and arithmetic.
 double hopkinsKernelValue(double q, int dimensions, FlopCount* operations) {
@@ -185,6 +253,22 @@ double hopkinsKernelDerivative(double q, int dimensions, FlopCount* operations) 
     hopkins::detail::countFlops(operations,
         sph_flops::densityKernelFlops(selectedHydroKernel(), q, true) + (dimensions == 1));
     return dimensions == 1 ? (M_PI / 6.0) * dkernelWDq(q) : dkernelWDq(q);
+}
+
+HopkinsSimd hopkinsKernelValue(HopkinsSimd const& q, int dimensions, FlopCount* operations) {
+    hopkins::detail::countFlops(operations,
+        sph_flops::densityKernelFlops(selectedHydroKernel(), q) +
+            (dimensions == 1 ? HopkinsSimd::size() : 0));
+    auto const value = kernelW(q);
+    return dimensions == 1 ? HopkinsSimd(M_PI / 6.0) * value : value;
+}
+
+HopkinsSimd hopkinsKernelDerivative(HopkinsSimd const& q, int dimensions, FlopCount* operations) {
+    hopkins::detail::countFlops(operations,
+        sph_flops::densityKernelFlops(selectedHydroKernel(), q, true) +
+            (dimensions == 1 ? HopkinsSimd::size() : 0));
+    auto const derivative = dkernelWDq(q);
+    return dimensions == 1 ? HopkinsSimd(M_PI / 6.0) * derivative : derivative;
 }
 
 double hopkinsSupportVolume(double support, int dimensions, FlopCount* operations) {
@@ -203,6 +287,13 @@ double hopkinsKernel(double radius, double support, int dimensions, FlopCount* o
     return radius < support ? hopkinsKernelValue(radius / support, dimensions, operations) /
             hopkinsSupportVolume(support, dimensions, operations) :
                               0.0;
+}
+
+HopkinsSimd hopkinsKernel(
+    HopkinsSimd const& radius, double support, int dimensions, FlopCount* operations) {
+    hopkins::detail::countFlops(operations, 2 * HopkinsSimd::size());
+    return hopkinsKernelValue(radius / HopkinsSimd(support), dimensions, operations) /
+        HopkinsSimd(hopkinsSupportVolume(support, dimensions, operations));
 }
 
 hopkins::Vector hopkinsAcceleration(ParticleInteger index, FlopCount* operations) {
@@ -555,20 +646,23 @@ void hopkinsSolveSupport(HopkinsWorkspace& workspace) {
                 if (support == particle.support) {
                     double sum = hopkinsKernelValue(0.0, workspace.dimensions, operations),
                            derivative = 0.0;
-                    for (size_t j : workspace.neighbors[i]) {
-                        hopkins::detail::countFlops(operations, 1);
-                        double const q = hopkins::norm(hopkinsSeparation(particle,
-                                                           workspace.particles[j], operations),
-                                             operations) /
-                            support;
-                        if (q < 1.0) {
-                            hopkins::detail::countFlops(operations, 4);
-                            sum += hopkinsKernelValue(q, workspace.dimensions, operations);
-                            derivative -= q *
+                    hopkinsNeighborBatches(
+                        workspace, i, operations, [&](HopkinsNeighborBatch const& batch) {
+                            hopkins::detail::countFlops(operations, 3 * HopkinsSimd::size());
+                            auto const q = batch.radius / HopkinsSimd(support);
+                            auto const values =
+                                hopkinsKernelValue(q, workspace.dimensions, operations);
+                            auto const derivatives = q *
                                 hopkinsKernelDerivative(q, workspace.dimensions, operations) /
-                                support;
-                        }
-                    }
+                                HopkinsSimd(support);
+                            for (size_t lane = 0; lane < batch.count; lane++) {
+                                if (q[lane] < 1.0) {
+                                    hopkins::detail::countFlops(operations, 2);
+                                    sum += values[lane];
+                                    derivative -= derivatives[lane];
+                                }
+                            }
+                        });
                     hopkins::detail::countFlops(operations, 2);
                     double const residual = sum - target;
                     if (std::abs(residual) <= kHopkinsSupportTolerance * target ||
@@ -613,19 +707,28 @@ void hopkinsGeometry(HopkinsWorkspace& workspace) {
                 double kernelSum =
                     hopkinsKernel(0.0, particle.support, workspace.dimensions, operations);
                 hopkins::Matrix moment{};
-                for (size_t j : workspace.neighbors[i]) {
-                    auto const separation =
-                        hopkinsSeparation(particle, workspace.particles[j], operations);
-                    double const weight = hopkinsKernel(hopkins::norm(separation, operations),
-                        particle.support, workspace.dimensions, operations);
-                    hopkins::detail::countFlops(operations, 28);
-                    kernelSum += weight;
-                    for (int row = 0; row < 3; row++) {
-                        for (int column = 0; column < 3; column++) {
-                            moment[row][column] += weight * separation[row] * separation[column];
+                hopkinsNeighborBatches(
+                    workspace, i, operations, [&](HopkinsNeighborBatch const& batch) {
+                        auto const weight = hopkinsKernel(
+                            batch.radius, particle.support, workspace.dimensions, operations);
+                        HopkinsSimdMatrix contributions;
+                        hopkins::detail::countFlops(operations, 18 * HopkinsSimd::size());
+                        for (int row = 0; row < 3; row++) {
+                            for (int column = 0; column < 3; column++) {
+                                contributions[row][column] =
+                                    weight * batch.separation[row] * batch.separation[column];
+                            }
                         }
-                    }
-                }
+                        hopkins::detail::countFlops(operations, 10 * batch.count);
+                        for (size_t lane = 0; lane < batch.count; lane++) {
+                            kernelSum += weight[lane];
+                            for (int row = 0; row < 3; row++) {
+                                for (int column = 0; column < 3; column++) {
+                                    moment[row][column] += contributions[row][column][lane];
+                                }
+                            }
+                        }
+                    });
                 workspace.geometry[i] = hopkins::makeGeometry(
                     kernelSum, moment, 100.0, workspace.dimensions, operations);
             });
@@ -679,6 +782,20 @@ double hopkinsKernelRate(double radius, double radiusRate, double support, doubl
         denominator;
 }
 
+HopkinsSimd hopkinsKernelRate(HopkinsSimd const& radius, HopkinsSimd const& radiusRate,
+    double support, double supportRate, int dimensions, FlopCount* operations) {
+    hopkins::detail::countFlops(operations, 7 * HopkinsSimd::size() + (dimensions == 1 ? 2 : 4));
+    auto const q = radius / HopkinsSimd(support);
+    double const denominator =
+        dimensions == 1 ? support * support : support * support * support * support;
+    auto const rate = (hopkinsKernelDerivative(q, dimensions, operations) *
+                              (radiusRate - q * HopkinsSimd(supportRate)) -
+                          HopkinsSimd(double(dimensions) * supportRate) *
+                              hopkinsKernelValue(q, dimensions, operations)) /
+        HopkinsSimd(denominator);
+    return simdSelect(radius < HopkinsSimd(support), rate, HopkinsSimd(0.0));
+}
+
 void hopkinsGeometryRates(HopkinsWorkspace& workspace) {
     profile::ScopedPhase profilePhase("hydro.hopkins.geometryRates");
     workspace.geometryRates.resize(workspace.particles.size());
@@ -687,24 +804,24 @@ void hopkinsGeometryRates(HopkinsWorkspace& workspace) {
         HopkinsFlopBatch operations(workspace.countOperations);
         auto const& particle = workspace.particles[i];
         double radialSum = 0.0, supportSum = 0.0;
-        for (size_t j : workspace.neighbors[i]) {
-            auto const separation = hopkinsSeparation(particle, workspace.particles[j], operations);
-            double const radius = hopkins::norm(separation, operations);
-            if (radius > 0.0 && radius < particle.support) {
-                hopkins::detail::countFlops(operations, 12);
-                hopkins::Vector relative{};
-                for (int dim = 0; dim < 3; dim++) {
-                    relative[dim] =
-                        (workspace.particles[j].velocity[dim] - particle.velocity[dim]) /
-                        workspace.scale;
+        hopkinsNeighborBatches(workspace, i, operations, [&](HopkinsNeighborBatch const& batch) {
+            auto const relative = hopkinsRelativeVelocities(workspace, i, batch, operations);
+            hopkins::detail::countFlops(operations, 4 * HopkinsSimd::size());
+            auto const q = batch.radius / HopkinsSimd(particle.support);
+            auto const derivative = hopkinsKernelDerivative(q, workspace.dimensions, operations);
+            auto const safeRadius =
+                simdSelect(batch.radius > HopkinsSimd(0.0), batch.radius, HopkinsSimd(1.0));
+            auto const radialTerms =
+                derivative * hopkinsSimdDot(batch.separation, relative, operations) / safeRadius;
+            auto const supportTerms = derivative * q;
+            for (size_t lane = 0; lane < batch.count; lane++) {
+                if (batch.radius[lane] > 0.0 && batch.radius[lane] < particle.support) {
+                    hopkins::detail::countFlops(operations, 2);
+                    radialSum += radialTerms[lane];
+                    supportSum += supportTerms[lane];
                 }
-                double const q = radius / particle.support;
-                double const derivative =
-                    hopkinsKernelDerivative(q, workspace.dimensions, operations);
-                radialSum += derivative * hopkins::dot(separation, relative, operations) / radius;
-                supportSum += derivative * q;
             }
-        }
+        });
         // Differentiate the same constant kernel-number condition used by
         // the support solve: sum W(r/h) is constant along the moving points.
         hopkins::detail::countFlops(operations, supportSum != 0.0 ? 1 : 0);
@@ -730,36 +847,41 @@ void hopkinsGeometryRates(HopkinsWorkspace& workspace) {
         double kernelSumRate = hopkinsKernelRate(
             0.0, 0.0, particle.support, supportRate, workspace.dimensions, operations);
         hopkins::Matrix rawMoment{}, rawMomentRate{};
-        for (size_t j : workspace.neighbors[i]) {
-            auto const separation = hopkinsSeparation(particle, workspace.particles[j], operations);
-            double const radius = hopkins::norm(separation, operations);
-            if (radius < particle.support) {
-                hopkins::detail::countFlops(operations, 106 + (radius > 0.0 ? 1 : 0));
-                hopkins::Vector relative{};
-                for (int dim = 0; dim < 3; dim++) {
-                    relative[dim] =
-                        (workspace.particles[j].velocity[dim] - particle.velocity[dim]) /
-                        workspace.scale;
+        hopkinsNeighborBatches(workspace, i, operations, [&](HopkinsNeighborBatch const& batch) {
+            auto const& separation = batch.separation;
+            auto const relative = hopkinsRelativeVelocities(workspace, i, batch, operations);
+            auto const safeRadius =
+                simdSelect(batch.radius > HopkinsSimd(0.0), batch.radius, HopkinsSimd(1.0));
+            hopkins::detail::countFlops(operations, HopkinsSimd::size());
+            auto const radiusRate = hopkinsSimdDot(separation, relative, operations) / safeRadius;
+            auto const kernel =
+                hopkinsKernel(batch.radius, particle.support, workspace.dimensions, operations);
+            auto const kernelRate = hopkinsKernelRate(batch.radius, radiusRate, particle.support,
+                supportRate, workspace.dimensions, operations);
+            HopkinsSimdMatrix moments, momentRates;
+            hopkins::detail::countFlops(operations, 81 * HopkinsSimd::size());
+            for (int row = 0; row < 3; row++) {
+                for (int column = 0; column < 3; column++) {
+                    moments[row][column] = kernel * separation[row] * separation[column];
+                    momentRates[row][column] = kernelRate * separation[row] * separation[column] +
+                        kernel *
+                            (relative[row] * separation[column] +
+                                separation[row] * relative[column]);
                 }
-                double const radiusRate =
-                    radius > 0.0 ? hopkins::dot(separation, relative, operations) / radius : 0.0;
-                double const kernel =
-                    hopkinsKernel(radius, particle.support, workspace.dimensions, operations);
-                double const kernelRate = hopkinsKernelRate(radius, radiusRate, particle.support,
-                    supportRate, workspace.dimensions, operations);
-                kernelSumRate += kernelRate;
-                for (int row = 0; row < 3; row++) {
-                    for (int column = 0; column < 3; column++) {
-                        rawMoment[row][column] += kernel * separation[row] * separation[column];
-                        rawMomentRate[row][column] +=
-                            kernelRate * separation[row] * separation[column] +
-                            kernel *
-                                (relative[row] * separation[column] +
-                                    separation[row] * relative[column]);
+            }
+            for (size_t lane = 0; lane < batch.count; lane++) {
+                if (batch.radius[lane] < particle.support) {
+                    hopkins::detail::countFlops(operations, 19);
+                    kernelSumRate += kernelRate[lane];
+                    for (int row = 0; row < 3; row++) {
+                        for (int column = 0; column < 3; column++) {
+                            rawMoment[row][column] += moments[row][column][lane];
+                            rawMomentRate[row][column] += momentRates[row][column][lane];
+                        }
                     }
                 }
             }
-        }
+        });
         hopkins::detail::countFlops(operations, 29);
         double const volumeRate = -geometry.volume * geometry.volume * kernelSumRate;
         hopkins::Matrix momentRate{};
@@ -839,43 +961,79 @@ void hopkinsGradients(HopkinsWorkspace& workspace) {
         auto minimum = values;
         auto maximum = values;
         std::array<hopkins::Vector, 5> gradients{};
-        for (size_t j : workspace.neighbors[i]) {
-            auto const& neighbor = workspace.primitives[j];
-            auto const separation =
-                hopkinsSeparation(workspace.particles[i], workspace.particles[j], operations);
-            auto const weight = hopkins::gradientWeight(workspace.geometry[i], separation,
-                hopkinsKernel(hopkins::norm(separation, operations), workspace.particles[i].support,
-                    workspace.dimensions, operations),
-                operations);
-            hopkins::detail::countFlops(operations, 45);
-            std::array<double, 5> neighborValues{neighbor.density, neighbor.pressure,
-                neighbor.velocity[0], neighbor.velocity[1], neighbor.velocity[2]};
+        hopkinsNeighborBatches(workspace, i, operations, [&](HopkinsNeighborBatch const& batch) {
+            auto const& geometry = workspace.geometry[i];
+            auto const weightScale =
+                hopkinsKernel(batch.radius, particle.support, workspace.dimensions, operations) *
+                HopkinsSimd(geometry.volume);
+            HopkinsSimdVector weight;
+            hopkins::detail::countFlops(operations, 19 * HopkinsSimd::size());
+            for (int dim = 0; dim < 3; dim++) {
+                weight[dim] =
+                    (HopkinsSimd(geometry.inverseMoment[dim][0]) * batch.separation[0] +
+                        HopkinsSimd(geometry.inverseMoment[dim][1]) * batch.separation[1] +
+                        HopkinsSimd(geometry.inverseMoment[dim][2]) * batch.separation[2]) *
+                    weightScale;
+            }
+            std::array<HopkinsSimd, 5> neighborValues;
+            neighborValues[0] = hopkinsNeighborValues(
+                batch, [&](size_t j) { return workspace.primitives[j].density; });
+            neighborValues[1] = hopkinsNeighborValues(
+                batch, [&](size_t j) { return workspace.primitives[j].pressure; });
+            for (int dim = 0; dim < 3; dim++) {
+                neighborValues[dim + 2] = hopkinsNeighborValues(
+                    batch, [&](size_t j) { return workspace.primitives[j].velocity[dim]; });
+            }
+            std::array<HopkinsSimdVector, 5> contributions;
+            hopkins::detail::countFlops(operations, 20 * HopkinsSimd::size());
             for (int field = 0; field < 5; field++) {
-                minimum[field] = std::min(minimum[field], neighborValues[field]);
-                maximum[field] = std::max(maximum[field], neighborValues[field]);
+                auto const difference = neighborValues[field] - HopkinsSimd(values[field]);
                 for (int dim = 0; dim < 3; dim++) {
-                    gradients[field][dim] += weight[dim] * (neighborValues[field] - values[field]);
+                    contributions[field][dim] = weight[dim] * difference;
                 }
             }
-        }
+            hopkins::detail::countFlops(operations, 15 * batch.count);
+            for (size_t lane = 0; lane < batch.count; lane++) {
+                for (int field = 0; field < 5; field++) {
+                    minimum[field] = std::min(minimum[field], double(neighborValues[field][lane]));
+                    maximum[field] = std::max(maximum[field], double(neighborValues[field][lane]));
+                    for (int dim = 0; dim < 3; dim++) {
+                        gradients[field][dim] += contributions[field][dim][lane];
+                    }
+                }
+            }
+        });
         auto reconstructedMinimum = values;
         auto reconstructedMaximum = values;
-        for (size_t j : workspace.neighbors[i]) {
-            auto offset =
-                hopkinsSeparation(workspace.particles[i], workspace.particles[j], operations);
-            hopkins::detail::countFlops(operations, 10);
-            double const fraction = workspace.particles[i].support /
-                (workspace.particles[i].support + workspace.particles[j].support);
-            for (int dim = 0; dim < 3; dim++) {
-                offset[dim] *= fraction;
-            }
-            for (int field = 0; field < 5; field++) {
-                double const reconstructed =
-                    values[field] + hopkins::dot(gradients[field], offset, operations);
-                reconstructedMinimum[field] = std::min(reconstructedMinimum[field], reconstructed);
-                reconstructedMaximum[field] = std::max(reconstructedMaximum[field], reconstructed);
-            }
-        }
+        hopkinsNeighborBatches(
+            workspace, i, operations,
+            [&](HopkinsNeighborBatch const& batch) {
+                auto const supports = hopkinsNeighborValues(
+                    batch, [&](size_t j) { return workspace.particles[j].support; });
+                auto const fraction =
+                    HopkinsSimd(particle.support) / (HopkinsSimd(particle.support) + supports);
+                auto offset = batch.separation;
+                hopkins::detail::countFlops(operations, 35 * HopkinsSimd::size());
+                for (int dim = 0; dim < 3; dim++) {
+                    offset[dim] *= fraction;
+                }
+                std::array<HopkinsSimd, 5> reconstructed;
+                for (int field = 0; field < 5; field++) {
+                    reconstructed[field] = HopkinsSimd(values[field]) +
+                        (HopkinsSimd(gradients[field][0]) * offset[0] +
+                            HopkinsSimd(gradients[field][1]) * offset[1] +
+                            HopkinsSimd(gradients[field][2]) * offset[2]);
+                }
+                for (size_t lane = 0; lane < batch.count; lane++) {
+                    for (int field = 0; field < 5; field++) {
+                        reconstructedMinimum[field] = std::min(
+                            reconstructedMinimum[field], double(reconstructed[field][lane]));
+                        reconstructedMaximum[field] = std::max(
+                            reconstructedMaximum[field], double(reconstructed[field][lane]));
+                    }
+                }
+            },
+            false);
         for (int field = 0; field < 5; field++) {
             hopkins::detail::countFlops(operations, 3);
             double const limiter = hopkins::gradientLimiter(values[field], minimum[field],
@@ -944,21 +1102,28 @@ HopkinsStepResult hopkinsSelectTimesteps(HopkinsWorkspace& workspace, int minimu
             std::cbrt(3.0 * workspace.geometry[i].volume / (4.0 * M_PI));
         double const sound = std::sqrt(gamma * (gamma - 1.0) * particle.energy);
         double signal = 2.0 * sound;
-        for (size_t j : workspace.neighbors[i]) {
-            auto const& other = workspace.particles[j];
-            auto const separation = hopkinsSeparation(particle, other, operations);
-            double const length = hopkins::norm(separation, operations);
-            if (length > 0.0) {
-                hopkins::detail::countFlops(operations, 10);
-                hopkins::Vector relative{};
-                for (int dim = 0; dim < 3; dim++) {
-                    relative[dim] = other.velocity[dim] - particle.velocity[dim];
-                }
-                signal = std::max(signal,
-                    sound + std::sqrt(gamma * (gamma - 1.0) * other.energy) -
-                        std::min(0.0, hopkins::dot(relative, separation, operations) / length));
+        hopkinsNeighborBatches(workspace, i, operations, [&](HopkinsNeighborBatch const& batch) {
+            HopkinsSimdVector relative;
+            for (int dim = 0; dim < 3; dim++) {
+                relative[dim] = hopkinsNeighborValues(batch, [&](size_t j) {
+                    return workspace.particles[j].velocity[dim];
+                }) - HopkinsSimd(particle.velocity[dim]);
             }
-        }
+            auto const energy = hopkinsNeighborValues(
+                batch, [&](size_t j) { return workspace.particles[j].energy; });
+            auto const safeRadius =
+                simdSelect(batch.radius > HopkinsSimd(0.0), batch.radius, HopkinsSimd(1.0));
+            hopkins::detail::countFlops(operations, 8 * HopkinsSimd::size() + 2);
+            auto const signals = HopkinsSimd(sound) +
+                simdSqrt(HopkinsSimd(gamma * (gamma - 1.0)) * energy) -
+                simdMin(HopkinsSimd(0.0),
+                    hopkinsSimdDot(relative, batch.separation, operations) / safeRadius);
+            for (size_t lane = 0; lane < batch.count; lane++) {
+                if (batch.radius[lane] > 0.0) {
+                    signal = std::max(signal, double(signals[lane]));
+                }
+            }
+        });
         hopkins::detail::countFlops(operations, 3 + (workspace.dimensions == 1 ? 1 : 0));
         double const courantLength = workspace.dimensions == 1 ? 2.0 * particle.support : radius;
         timestep = std::min(timestep, options.hydro.cfl * workspace.scale * courantLength / signal);
@@ -1036,13 +1201,27 @@ HopkinsStepResult hopkinsSelectTimesteps(HopkinsWorkspace& workspace, int minimu
     hopkins::detail::countFlops(operations, 1);
     return {maximumRung, std::ldexp(baseTimestep, -maximumRung)};
 }
+// Keep interval ownership and fixed-point geometry preparation scalar. Independent
+// reconstructed face states and Riemann solves are evaluated together in SIMD.
+struct HopkinsPairInput {
+    HopkinsPairRecord record{};
+    size_t i = 0;
+    size_t j = 0;
+    double interval = 0.0;
+    double fraction = 0.0;
+    bool firstOrder = false;
+    hopkins::Vector separation{}, area{}, areaRate{}, frame{}, offsetLeft{}, offsetRight{};
+};
 
-HopkinsPairRecord hopkinsPair(HopkinsWorkspace const& workspace, size_t i, size_t j, uint64_t tick,
-    double tickDuration, bool firstOrder) {
+HopkinsPairInput hopkinsPreparePair(HopkinsWorkspace const& workspace, size_t i, size_t j,
+    uint64_t tick, double tickDuration, bool firstOrder) {
     HopkinsFlopBatch operations(workspace.countOperations);
     auto const& leftParticle = workspace.particles[i];
     auto const& rightParticle = workspace.particles[j];
-    HopkinsPairRecord record;
+    HopkinsPairInput input;
+    auto& record = input.record;
+    input.i = i;
+    input.j = j;
     record.leftId = leftParticle.state.identifier;
     record.rightId = rightParticle.state.identifier;
     double interval = workspace.globalTimestep;
@@ -1053,7 +1232,6 @@ HopkinsPairRecord hopkinsPair(HopkinsWorkspace const& workspace, size_t i, size_
         hopkins::detail::countFlops(operations, 1);
         interval = double(record.endTick - tick) * tickDuration;
     }
-    double const gamma = getOptions().hydro.gamma;
     auto const separation = hopkinsSeparation(leftParticle, rightParticle, operations);
     double const radius = hopkins::norm(separation, operations);
     auto const area = hopkins::faceArea(workspace.geometry[i], workspace.geometry[j], separation,
@@ -1095,73 +1273,232 @@ HopkinsPairRecord hopkinsPair(HopkinsWorkspace const& workspace, size_t i, size_
         offsetLeft[dim] = fraction * separation[dim];
         offsetRight[dim] = -(1.0 - fraction) * separation[dim];
     }
-    auto const solve = [&](double duration) {
-        auto left = workspace.primitives[i];
-        auto right = workspace.primitives[j];
+    input.interval = interval;
+    input.firstOrder = firstOrder;
+    input.separation = separation;
+    input.area = area;
+    input.areaRate = areaRate;
+    input.frame = frame;
+    input.offsetLeft = offsetLeft;
+    input.offsetRight = offsetRight;
+    input.fraction = fraction;
+    return input;
+}
+
+HopkinsSimd hopkinsSimdExp(HopkinsSimd const& value) {
+#if COSMICTIGER_SIMD_STANDARD
+    return HopkinsSimd([&](auto lane) { return std::exp(value[lane]); });
+#else
+    return std::experimental::exp(value);
+#endif
+}
+
+HopkinsSimd hopkinsSimdExpm1(HopkinsSimd const& value) {
+#if COSMICTIGER_SIMD_STANDARD
+    return HopkinsSimd([&](auto lane) { return std::expm1(value[lane]); });
+#else
+    return std::experimental::expm1(value);
+#endif
+}
+
+void hopkinsPairBatch(HopkinsWorkspace const& workspace,
+    std::vector<std::pair<size_t, size_t>> const& pairs, std::vector<size_t> const& solvePairs,
+    size_t begin, uint64_t tick, double tickDuration, bool firstOrder,
+    std::vector<HopkinsPairRecord>& records) {
+    constexpr size_t kWidth = HopkinsSimd::size();
+    size_t const count = std::min(kWidth, solvePairs.size() - begin);
+    std::array<HopkinsPairInput, kWidth> inputs;
+    for (size_t lane = 0; lane < count; lane++) {
+        auto const [i, j] = pairs[solvePairs[begin + lane]];
+        inputs[lane] = hopkinsPreparePair(workspace, i, j, tick, tickDuration, firstOrder);
+    }
+    // Duplicate a physical input in unused lanes. Only active lanes are solved/stored.
+    for (size_t lane = count; lane < kWidth; lane++) {
+        inputs[lane] = inputs[0];
+    }
+    auto gather = [&](auto const& function) {
+        return HopkinsSimd([&](auto lane) { return function(inputs[size_t(lane)]); });
+    };
+    auto const active =
+        HopkinsSimd([&](auto lane) { return double(lane); }) < HopkinsSimd(double(count));
+    auto const secondOrder = active &
+        (gather([](auto const& input) { return input.firstOrder ? 0.0 : 1.0; }) > HopkinsSimd(0.0));
+    bool const anySecondOrder = simdAnyOf(secondOrder);
+    bool const allSecondOrder = simdAllOf(!active | secondOrder);
+    HopkinsFlopBatch operations(workspace.countOperations);
+    double const gamma = getOptions().hydro.gamma;
+    HopkinsSimd const scale(workspace.scale);
+    HopkinsSimd const one(1.0);
+    HopkinsSimd const zero(0.0);
+    auto const interval = gather([](auto const& input) { return input.interval; });
+    auto const fraction = gather([](auto const& input) { return input.fraction; });
+    hopkins::PrimitiveValues<HopkinsSimd> centers[2];
+    hopkins::GradientValues<HopkinsSimd> gradients[2];
+    HopkinsSimdVector offsets[2], acceleration[2];
+    HopkinsSimd expansion[2];
+    for (int side = 0; side < 2; side++) {
+        auto endpoint = [&](HopkinsPairInput const& input) {
+            return side == 0 ? input.i : input.j;
+        };
+        centers[side].density = gather(
+            [&](auto const& input) { return workspace.primitives[endpoint(input)].density; });
+        centers[side].pressure = gather(
+            [&](auto const& input) { return workspace.primitives[endpoint(input)].pressure; });
+        expansion[side] = gather([&](auto const& input) {
+            return workspace.particles[endpoint(input)].state.expansionCoefficient;
+        });
+        for (int dim = 0; dim < 3; dim++) {
+            centers[side].velocity[dim] = gather([&](auto const& input) {
+                return workspace.primitives[endpoint(input)].velocity[dim];
+            });
+            gradients[side].density[dim] = gather([&](auto const& input) {
+                return workspace.gradients[endpoint(input)].density[dim];
+            });
+            gradients[side].pressure[dim] = gather([&](auto const& input) {
+                return workspace.gradients[endpoint(input)].pressure[dim];
+            });
+            offsets[side][dim] = gather([&](auto const& input) {
+                return side == 0 ? input.offsetLeft[dim] : input.offsetRight[dim];
+            });
+            acceleration[side][dim] = gather([&](auto const& input) {
+                return workspace.particles[endpoint(input)].state.sourceAcceleration[dim];
+            });
+            for (int component = 0; component < 3; component++) {
+                gradients[side].velocity[dim][component] = gather([&](auto const& input) {
+                    return workspace.gradients[endpoint(input)].velocity[dim][component];
+                });
+            }
+        }
+    }
+    HopkinsSimdVector area, areaRate, frame;
+    for (int dim = 0; dim < 3; dim++) {
+        area[dim] = gather([&](auto const& input) { return input.area[dim]; });
+        areaRate[dim] = gather([&](auto const& input) { return input.areaRate[dim]; });
+        frame[dim] = gather([&](auto const& input) { return input.frame[dim]; });
+    }
+    // A first-order face can have a nonfinite rejected area predictor. Mask
+    // its operands before arithmetic: zero duration alone cannot suppress 0*NaN.
+    if (!allSecondOrder) {
+        for (int side = 0; side < 2; side++) {
+            expansion[side] = simdSelect(secondOrder, expansion[side], zero);
+            for (int dim = 0; dim < 3; dim++) {
+                offsets[side][dim] = simdSelect(secondOrder, offsets[side][dim], zero);
+                acceleration[side][dim] = simdSelect(secondOrder, acceleration[side][dim], zero);
+                gradients[side].density[dim] =
+                    simdSelect(secondOrder, gradients[side].density[dim], zero);
+                gradients[side].pressure[dim] =
+                    simdSelect(secondOrder, gradients[side].pressure[dim], zero);
+                for (int component = 0; component < 3; component++) {
+                    gradients[side].velocity[dim][component] =
+                        simdSelect(secondOrder, gradients[side].velocity[dim][component], zero);
+                }
+            }
+        }
+        for (int dim = 0; dim < 3; dim++) {
+            areaRate[dim] = simdSelect(secondOrder, areaRate[dim], zero);
+        }
+    }
+    auto solve = [&](HopkinsSimd const& duration, auto const& solveMask) {
+        auto left = centers[0];
+        auto right = centers[1];
         auto predictedFrame = frame;
         auto predictedArea = area;
-        if (!firstOrder) {
-            hopkins::detail::countFlops(
-                operations, 83 + (getOptions().hydro.damping == 0.0 ? 0 : 3));
-            left = hopkins::reconstruct(left, workspace.gradients[i], offsetLeft, frame,
-                duration / workspace.scale, gamma, &workspace.primitives[j], fraction, operations);
-            right = hopkins::reconstruct(right, workspace.gradients[j], offsetRight, frame,
-                duration / workspace.scale, gamma, &workspace.primitives[i], 1.0 - fraction,
-                operations);
-            double const damping = std::exp(-getOptions().hydro.damping * duration);
-            double const impulse = getOptions().hydro.damping == 0.0 ?
-                duration :
-                -std::expm1(-getOptions().hydro.damping * duration) / getOptions().hydro.damping;
-            for (int dim = 0; dim < 3; dim++) {
-                left.velocity[dim] = damping * left.velocity[dim] +
-                    impulse * leftParticle.state.sourceAcceleration[dim];
-                right.velocity[dim] = damping * right.velocity[dim] +
-                    impulse * rightParticle.state.sourceAcceleration[dim];
-                double const hydroAcceleration =
-                    -((1.0 - fraction) * workspace.gradients[i].pressure[dim] /
-                            workspace.primitives[i].density +
-                        fraction * workspace.gradients[j].pressure[dim] /
-                            workspace.primitives[j].density) /
-                    workspace.scale;
-                predictedFrame[dim] = damping * (frame[dim] + duration * hydroAcceleration) +
-                    impulse *
-                        ((1.0 - fraction) * leftParticle.state.sourceAcceleration[dim] +
-                            fraction * rightParticle.state.sourceAcceleration[dim]);
-                predictedArea[dim] += duration * areaRate[dim];
+        if (anySecondOrder) {
+            auto const reconstructedLeft = hopkins::reconstructValues(centers[0], gradients[0],
+                offsets[0], frame, duration / scale, gamma, centers[1], fraction, operations);
+            auto const reconstructedRight = hopkins::reconstructValues(centers[1], gradients[1],
+                offsets[1], frame, duration / scale, gamma, centers[0], one - fraction, operations);
+            left = reconstructedLeft;
+            right = reconstructedRight;
+            if (!allSecondOrder) {
+                left.density = simdSelect(secondOrder, left.density, centers[0].density);
+                left.pressure = simdSelect(secondOrder, left.pressure, centers[0].pressure);
+                right.density = simdSelect(secondOrder, right.density, centers[1].density);
+                right.pressure = simdSelect(secondOrder, right.pressure, centers[1].pressure);
+                for (int dim = 0; dim < 3; dim++) {
+                    left.velocity[dim] =
+                        simdSelect(secondOrder, left.velocity[dim], centers[0].velocity[dim]);
+                    right.velocity[dim] =
+                        simdSelect(secondOrder, right.velocity[dim], centers[1].velocity[dim]);
+                }
             }
-            left.pressure *= std::exp(duration * leftParticle.state.expansionCoefficient);
-            right.pressure *= std::exp(duration * rightParticle.state.expansionCoefficient);
+            // First-order lanes have zero source-prediction duration.
+            auto const sourceDuration = simdSelect(secondOrder, duration, zero);
+            auto const damping =
+                hopkinsSimdExp(-HopkinsSimd(getOptions().hydro.damping) * sourceDuration);
+            auto const impulse = getOptions().hydro.damping == 0.0 ?
+                sourceDuration :
+                -hopkinsSimdExpm1(-HopkinsSimd(getOptions().hydro.damping) * sourceDuration) /
+                    HopkinsSimd(getOptions().hydro.damping);
+            hopkins::detail::countFlops(
+                operations, kWidth * (83 + (getOptions().hydro.damping == 0.0 ? 0 : 3)));
+            for (int dim = 0; dim < 3; dim++) {
+                left.velocity[dim] = damping * left.velocity[dim] + impulse * acceleration[0][dim];
+                right.velocity[dim] =
+                    damping * right.velocity[dim] + impulse * acceleration[1][dim];
+                auto const hydroAcceleration =
+                    -((one - fraction) * gradients[0].pressure[dim] / centers[0].density +
+                        fraction * gradients[1].pressure[dim] / centers[1].density) /
+                    scale;
+                predictedFrame[dim] = damping * (frame[dim] + sourceDuration * hydroAcceleration) +
+                    impulse *
+                        ((one - fraction) * acceleration[0][dim] + fraction * acceleration[1][dim]);
+                predictedArea[dim] += sourceDuration * areaRate[dim];
+            }
+            left.pressure *= hopkinsSimdExp(sourceDuration * expansion[0]);
+            right.pressure *= hopkinsSimdExp(sourceDuration * expansion[1]);
         }
-        return hopkins::riemannFlux(left, right, predictedArea, predictedFrame, gamma,
-            getOptions().hydro.method == "mfm", operations);
+        return hopkins::riemannFluxValues(left, right, predictedArea, predictedFrame, gamma,
+            getOptions().hydro.method == "mfm", solveMask, operations);
     };
-    auto const initial = solve(0.0);
-    hopkins::detail::countFlops(operations, firstOrder ? 0 : 1);
-    auto const midpoint = firstOrder ? initial : solve(0.5 * interval);
-    hopkins::detail::countFlops(operations, 7);
-    double const midScale = workspace.scale + 0.5 * interval * workspace.expansionRate;
-    if (!(midScale > 0.0)) {
-        throw std::runtime_error("Nonpositive scale factor in Hopkins pair prediction");
+    hopkins::FluxValues<HopkinsSimd> initial, midpoint;
+    try {
+        initial = solve(zero, active);
+        midpoint = initial;
+        if (anySecondOrder) {
+            hopkins::detail::countFlops(operations, kWidth);
+            midpoint = solve(HopkinsSimd(0.5) * interval, secondOrder);
+        }
+    } catch (std::exception const& error) {
+        std::string message = std::string(error.what()) + " [Hopkins pair IDs by SIMD lane:";
+        for (size_t lane = 0; lane < count; lane++) {
+            message += " " + std::to_string(lane) + "=" +
+                std::to_string(inputs[lane].record.leftId) + "," +
+                std::to_string(inputs[lane].record.rightId);
+        }
+        throw std::runtime_error(message + "]");
     }
-    record.initial.mass = initial.mass / workspace.scale;
-    record.initial.energy = initial.energy / workspace.scale;
-    record.midpoint.mass = midpoint.mass / (firstOrder ? workspace.scale : midScale);
-    record.midpoint.energy = midpoint.energy / (firstOrder ? workspace.scale : midScale);
-    hopkins::Vector midpointSeparation{};
-    for (int dim = 0; dim < 3; dim++) {
-        hopkins::detail::countFlops(operations, firstOrder ? 3 : 7);
-        record.initial.momentum[dim] = initial.momentum[dim] / workspace.scale;
-        record.midpoint.momentum[dim] =
-            midpoint.momentum[dim] / (firstOrder ? workspace.scale : midScale);
-        midpointSeparation[dim] = separation[dim] +
-            (firstOrder ? 0.0 :
-                          0.5 * interval / workspace.scale *
-                        (rightParticle.velocity[dim] - leftParticle.velocity[dim]));
+    for (size_t lane = 0; lane < count; lane++) {
+        auto const& input = inputs[lane];
+        auto& record = records[solvePairs[begin + lane]];
+        record = input.record;
+        double const midScale = workspace.scale + 0.5 * input.interval * workspace.expansionRate;
+        if (!(midScale > 0.0)) {
+            throw std::runtime_error("Nonpositive scale factor in Hopkins pair prediction");
+        }
+        hopkins::detail::countFlops(operations, 7);
+        auto const& middle = input.firstOrder ? initial : midpoint;
+        double const middleScale = input.firstOrder ? workspace.scale : midScale;
+        record.initial.mass = initial.mass[lane] / workspace.scale;
+        record.initial.energy = initial.energy[lane] / workspace.scale;
+        record.midpoint.mass = middle.mass[lane] / middleScale;
+        record.midpoint.energy = middle.energy[lane] / middleScale;
+        hopkins::Vector midpointSeparation{};
+        for (int dim = 0; dim < 3; dim++) {
+            hopkins::detail::countFlops(operations, input.firstOrder ? 3 : 7);
+            record.initial.momentum[dim] = initial.momentum[dim][lane] / workspace.scale;
+            record.midpoint.momentum[dim] = middle.momentum[dim][lane] / middleScale;
+            midpointSeparation[dim] = input.separation[dim] +
+                (input.firstOrder ? 0.0 :
+                                    0.5 * input.interval / workspace.scale *
+                            (workspace.particles[input.j].velocity[dim] -
+                                workspace.particles[input.i].velocity[dim]));
+        }
+        record.workInitial =
+            hopkins::pairGravityWorkVector(initial.mass[lane], input.separation, operations);
+        record.workMidpoint =
+            hopkins::pairGravityWorkVector(middle.mass[lane], midpointSeparation, operations);
     }
-    record.workInitial = hopkins::pairGravityWorkVector(initial.mass, separation, operations);
-    record.workMidpoint =
-        hopkins::pairGravityWorkVector(midpoint.mass, midpointSeparation, operations);
-    return record;
 }
 
 // These storage checks choose whether to retry at first order. Count each
@@ -1231,11 +1568,18 @@ void hopkinsAdvance(HopkinsWorkspace& workspace, uint64_t tick, uint64_t endTick
     for (int order = 2; order >= 1 && !accepted; order--) {
         {
             profile::ScopedPhase profilePhase("hydro.hopkins.flux.solve");
-            hopkinsParallel(pairs.size(), [&](size_t pair) {
+            std::vector<size_t> solvePairs;
+            solvePairs.reserve(pairs.size());
+            for (size_t pair = 0; pair < pairs.size(); pair++) {
                 if (refresh[pair] || order == 1) {
-                    auto const [i, j] = pairs[pair];
-                    records[pair] = hopkinsPair(workspace, i, j, tick, tickDuration, order == 1);
+                    solvePairs.push_back(pair);
                 }
+            }
+            size_t const batches =
+                (solvePairs.size() + HopkinsSimd::size() - 1) / HopkinsSimd::size();
+            hopkinsParallel(batches, [&](size_t batch) {
+                hopkinsPairBatch(workspace, pairs, solvePairs, batch * HopkinsSimd::size(), tick,
+                    tickDuration, order == 1, records);
             });
         }
         std::vector<hopkins::Conserved> increments(workspace.particles.size());

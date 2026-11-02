@@ -8,13 +8,16 @@
 
 #include <algorithm>
 #include <array>
+#include <cfenv>
 #include <cmath>
 #include <limits>
+#include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
 
 #include <cosmictiger/hydro/hopkins.hpp>
+#include <cosmictiger/hydro/hopkins_simd.hpp>
 
 namespace detail {
 
@@ -30,6 +33,151 @@ hopkins::Primitive boosted(hopkins::Primitive value, hopkins::Vector const& boos
         value.velocity[dim] += boost[dim];
     }
     return value;
+}
+
+struct RiemannInput {
+    hopkins::Primitive left;
+    hopkins::Primitive right;
+    hopkins::Vector area{1.0, 0.0, 0.0};
+    hopkins::Vector frame{};
+};
+
+void setPrimitiveLane(
+    hopkins::SimdPrimitive& packed, size_t lane, hopkins::Primitive const& scalar) {
+    packed.density[lane] = scalar.density;
+    packed.pressure[lane] = scalar.pressure;
+    for (int dim = 0; dim < 3; dim++) {
+        packed.velocity[dim][lane] = scalar.velocity[dim];
+    }
+}
+
+std::vector<hopkins::Flux> packedFluxes(std::vector<RiemannInput> const& inputs, bool finiteMass) {
+    using Real = hopkins::SimdReal;
+    constexpr size_t kWidth = Real::size();
+    double const invalid = std::numeric_limits<double>::quiet_NaN();
+    std::vector<hopkins::Flux> results(inputs.size());
+    for (size_t first = 0; first < inputs.size(); first += kWidth) {
+        hopkins::SimdPrimitive left{Real(invalid), {}, Real(invalid)};
+        hopkins::SimdPrimitive right = left;
+        hopkins::SimdVector3 area{};
+        hopkins::SimdVector3 frame{};
+        for (int dim = 0; dim < 3; dim++) {
+            left.velocity[dim] = right.velocity[dim] = area[dim] = frame[dim] = Real(invalid);
+        }
+        size_t const count = std::min(kWidth, inputs.size() - first);
+        for (size_t lane = 0; lane < count; lane++) {
+            auto const& input = inputs[first + lane];
+            setPrimitiveLane(left, lane, input.left);
+            setPrimitiveLane(right, lane, input.right);
+            for (int dim = 0; dim < 3; dim++) {
+                area[dim][lane] = input.area[dim];
+                frame[dim][lane] = input.frame[dim];
+            }
+        }
+        auto const active = Real([](auto lane) { return double(lane); }) < Real(double(count));
+        auto const packed =
+            hopkins::riemannFluxValues(left, right, area, frame, 1.4, finiteMass, active);
+        for (size_t lane = 0; lane < kWidth; lane++) {
+            if (lane < count) {
+                auto& result = results[first + lane];
+                result.mass = packed.mass[lane];
+                result.energy = packed.energy[lane];
+                result.signalSpeed = packed.signalSpeed[lane];
+                result.contactSpeed = packed.contactSpeed[lane];
+                for (int dim = 0; dim < 3; dim++) {
+                    result.momentum[dim] = packed.momentum[dim][lane];
+                }
+            } else {
+                EXPECT_DOUBLE_EQ(packed.mass[lane], 0.0);
+                EXPECT_DOUBLE_EQ(packed.energy[lane], 0.0);
+                EXPECT_DOUBLE_EQ(packed.signalSpeed[lane], 0.0);
+                EXPECT_DOUBLE_EQ(packed.contactSpeed[lane], 0.0);
+                for (int dim = 0; dim < 3; dim++) {
+                    EXPECT_DOUBLE_EQ(packed.momentum[dim][lane], 0.0);
+                }
+            }
+        }
+    }
+    return results;
+}
+
+void expectFluxNear(
+    hopkins::Flux const& actual, hopkins::Flux const& expected, double tolerance = 4.0e-13) {
+    auto compare = [&](double value, double reference) {
+        EXPECT_NEAR(value, reference, tolerance * std::max(1.0, std::abs(reference)));
+    };
+    compare(actual.mass, expected.mass);
+    compare(actual.energy, expected.energy);
+    compare(actual.signalSpeed, expected.signalSpeed);
+    compare(actual.contactSpeed, expected.contactSpeed);
+    for (int dim = 0; dim < 3; dim++) {
+        compare(actual.momentum[dim], expected.momentum[dim]);
+    }
+}
+
+hopkins::Flux fourRegionHllc(
+    hopkins::Primitive const& left, hopkins::Primitive const& right, int& region) {
+    // Independent textbook four-region construction in a stationary unit x-face.
+    // In particular, do not use the production clipped-speed correction formula.
+    constexpr double kGamma = 1.4;
+    double const leftSound = std::sqrt(kGamma * left.pressure / left.density);
+    double const rightSound = std::sqrt(kGamma * right.pressure / right.density);
+    double const leftSpeed = std::min(left.velocity[0] - leftSound, right.velocity[0] - rightSound);
+    double const rightSpeed =
+        std::max(left.velocity[0] + leftSound, right.velocity[0] + rightSound);
+    double const leftImpedance = left.density * (leftSpeed - left.velocity[0]);
+    double const rightImpedance = right.density * (rightSpeed - right.velocity[0]);
+    double const contact = (right.pressure - left.pressure + leftImpedance * left.velocity[0] -
+                               rightImpedance * right.velocity[0]) /
+        (leftImpedance - rightImpedance);
+    auto conserved = [&](hopkins::Primitive const& state) {
+        std::array<double, 5> result{state.density, 0.0, 0.0, 0.0, state.pressure / (kGamma - 1.0)};
+        for (int dim = 0; dim < 3; dim++) {
+            result[dim + 1] = state.density * state.velocity[dim];
+            result[4] += 0.5 * state.density * state.velocity[dim] * state.velocity[dim];
+        }
+        return result;
+    };
+    auto physicalFlux = [&](hopkins::Primitive const& state) {
+        auto result = conserved(state);
+        for (double& field : result) {
+            field *= state.velocity[0];
+        }
+        result[1] += state.pressure;
+        result[4] += state.pressure * state.velocity[0];
+        return result;
+    };
+    auto starFlux = [&](hopkins::Primitive const& state, double wave) {
+        auto const original = conserved(state);
+        double const density = state.density * (wave - state.velocity[0]) / (wave - contact);
+        std::array<double, 5> star{density, density * contact, density * state.velocity[1],
+            density * state.velocity[2],
+            density *
+                (original[4] / state.density +
+                    (contact - state.velocity[0]) *
+                        (contact + state.pressure / (state.density * (wave - state.velocity[0]))))};
+        auto result = physicalFlux(state);
+        for (size_t field = 0; field < result.size(); field++) {
+            result[field] += wave * (star[field] - original[field]);
+        }
+        return result;
+    };
+    std::array<double, 5> flux{};
+    if (leftSpeed >= 0.0) {
+        region = 0;
+        flux = physicalFlux(left);
+    } else if (contact >= 0.0) {
+        region = 1;
+        flux = starFlux(left, leftSpeed);
+    } else if (rightSpeed >= 0.0) {
+        region = 2;
+        flux = starFlux(right, rightSpeed);
+    } else {
+        region = 3;
+        flux = physicalFlux(right);
+    }
+    return {flux[0], {flux[1], flux[2], flux[3]}, flux[4],
+        std::max(std::abs(leftSpeed), std::abs(rightSpeed)), contact};
 }
 
 hopkins::Geometry geometryFromNormalizedMoment(double volume, hopkins::Matrix moment) {
@@ -628,25 +776,232 @@ TEST(Hopkins, FluxIsPairAntisymmetricAndGalileanCovariant) {
     }
 }
 
-TEST(Hopkins, ExtremeRarefactionUsesFiniteConservativeFallback) {
+TEST(Hopkins, ExtremeRarefactionFailsWithoutRiemannFallback) {
     hopkins::Primitive const left{1.0, {-8.0, 0.0, 0.0}, 1.0e-5};
     hopkins::Primitive const right{0.2, {8.0, 0.0, 0.0}, 1.0e-6};
     for (bool const finiteMass : {false, true}) {
-        auto const flux = hopkins::riemannFlux(left, right, {1, 0, 0}, {}, 1.4, finiteMass);
-        EXPECT_TRUE(flux.usedFallback);
-        EXPECT_TRUE(std::isfinite(flux.mass));
-        EXPECT_TRUE(std::isfinite(flux.energy));
-        EXPECT_TRUE(std::isfinite(flux.momentum[0]));
-        if (finiteMass) {
-            EXPECT_DOUBLE_EQ(flux.mass, 0.0);
-            EXPECT_DOUBLE_EQ(flux.momentum[0], 0.0);
-            EXPECT_DOUBLE_EQ(flux.energy, 0.0);
-        }
+        EXPECT_THROW(
+            hopkins::riemannFlux(left, right, {1, 0, 0}, {}, 1.4, finiteMass), std::runtime_error);
     }
     auto invalid = left;
     invalid.pressure = -1.0;
     EXPECT_THROW(
         hopkins::riemannFlux(invalid, right, {1, 0, 0}, {}, 1.4, true), std::invalid_argument);
+}
+
+TEST(HopkinsSimd, ClippedSpeedsMatchIndependentFourRegionHllc) {
+    hopkins::Primitive const sodLeft{1.0, {0.0, 0.2, -0.1}, 1.0};
+    hopkins::Primitive const sodRight{0.125, {0.0, -0.3, 0.4}, 0.1};
+    std::vector<detail::RiemannInput> const cases{
+        {detail::boosted(sodLeft, {4.0, 0.0, 0.0}), detail::boosted(sodRight, {4.0, 0.0, 0.0})},
+        {sodLeft, sodRight}, {sodRight, sodLeft},
+        {detail::boosted(sodLeft, {-4.0, 0.0, 0.0}), detail::boosted(sodRight, {-4.0, 0.0, 0.0})},
+        {{1.0, {}, 1.0}, {8.0, {}, 1.0}},
+        {{1.0, {-0.2, 0.1, 0.0}, 1.0}, {1.0, {0.2, -0.1, 0.0}, 1.0}},
+        {{0.9, {0.5, 0.2, 0.1}, 0.8}, {1.1, {-0.3, -0.2, 0.3}, 1.2}}};
+    auto const packed = detail::packedFluxes(cases, false);
+    std::array<bool, 4> seen{};
+    for (size_t i = 0; i < cases.size(); i++) {
+        SCOPED_TRACE(i);
+        int region = -1;
+        auto const reference = detail::fourRegionHllc(cases[i].left, cases[i].right, region);
+        seen[region] = true;
+        auto const scalar = hopkins::riemannFlux(
+            cases[i].left, cases[i].right, cases[i].area, cases[i].frame, 1.4, false);
+        detail::expectFluxNear(scalar, reference);
+        detail::expectFluxNear(packed[i], reference);
+    }
+    EXPECT_TRUE(std::all_of(seen.begin(), seen.end(), [](bool value) { return value; }));
+}
+
+TEST(HopkinsSimd, UniformAndMixedContactMasksMatchScalar) {
+    constexpr size_t kWidth = hopkins::SimdReal::size();
+    detail::RiemannInput const leftward{{0.125, {}, 0.1}, {1.0, {}, 1.0}};
+    detail::RiemannInput const rightward{leftward.right, leftward.left};
+    for (int pattern = 0; pattern < 3; pattern++) {
+        std::vector<detail::RiemannInput> cases(kWidth * 2 + 1);
+        for (size_t i = 0; i < cases.size(); i++) {
+            cases[i] = (pattern == 0 || (pattern == 2 && i % 2 == 0)) ? leftward : rightward;
+        }
+        for (bool const finiteMass : {false, true}) {
+            auto const packed = detail::packedFluxes(cases, finiteMass);
+            for (size_t i = 0; i < cases.size(); i++) {
+                SCOPED_TRACE(i);
+                auto const& input = cases[i];
+                auto const scalar = hopkins::riemannFlux(
+                    input.left, input.right, input.area, input.frame, 1.4, finiteMass);
+                detail::expectFluxNear(packed[i], scalar);
+                EXPECT_EQ(
+                    packed[i].contactSpeed < 0.0, pattern == 0 || (pattern == 2 && i % 2 == 0));
+                if (finiteMass) {
+                    EXPECT_DOUBLE_EQ(packed[i].mass, 0.0);
+                }
+            }
+        }
+    }
+}
+
+TEST(HopkinsSimd, MovingFacesPreserveReversalAndGalileanCovariance) {
+    std::vector<detail::RiemannInput> cases;
+    hopkins::Vector const boost{40.0, -20.0, 10.0};
+    constexpr size_t kCount = hopkins::SimdReal::size() + 1;
+    for (size_t i = 0; i < kCount; i++) {
+        double const index = double(i);
+        detail::RiemannInput input{{0.8 + 0.1 * index, {0.7, -0.4, 0.3}, 0.9},
+            {1.3, {-0.2, 0.8, -0.1}, 0.4 + 0.05 * index}, {0.3, -0.1, 0.2}, {0.3, 0.2, 0.1}};
+        cases.push_back(input);
+    }
+    auto reversed = cases;
+    auto shifted = cases;
+    for (size_t i = 0; i < cases.size(); i++) {
+        std::swap(reversed[i].left, reversed[i].right);
+        reversed[i].area = detail::scaled(reversed[i].area, -1.0);
+        shifted[i].left = detail::boosted(shifted[i].left, boost);
+        shifted[i].right = detail::boosted(shifted[i].right, boost);
+        for (int dim = 0; dim < 3; dim++) {
+            shifted[i].frame[dim] += boost[dim];
+        }
+    }
+    for (bool const finiteMass : {false, true}) {
+        auto const forward = detail::packedFluxes(cases, finiteMass);
+        auto const reverse = detail::packedFluxes(reversed, finiteMass);
+        auto const moving = detail::packedFluxes(shifted, finiteMass);
+        for (size_t i = 0; i < cases.size(); i++) {
+            SCOPED_TRACE(i);
+            auto const& input = cases[i];
+            detail::expectFluxNear(forward[i],
+                hopkins::riemannFlux(
+                    input.left, input.right, input.area, input.frame, 1.4, finiteMass));
+            EXPECT_NEAR(forward[i].mass, -reverse[i].mass, 2.0e-14);
+            EXPECT_NEAR(forward[i].energy, -reverse[i].energy, 2.0e-14);
+            EXPECT_NEAR(moving[i].mass, forward[i].mass, 2.0e-14);
+            for (int dim = 0; dim < 3; dim++) {
+                EXPECT_NEAR(forward[i].momentum[dim], -reverse[i].momentum[dim], 2.0e-14);
+                EXPECT_NEAR(moving[i].momentum[dim],
+                    forward[i].momentum[dim] + boost[dim] * forward[i].mass, 3.0e-12);
+            }
+            EXPECT_NEAR(moving[i].energy,
+                forward[i].energy + hopkins::dot(boost, forward[i].momentum) +
+                    0.5 * hopkins::dot(boost, boost) * forward[i].mass,
+                3.0e-11);
+            if (finiteMass) {
+                EXPECT_DOUBLE_EQ(forward[i].mass, 0.0);
+            }
+        }
+    }
+}
+
+TEST(HopkinsSimd, ZeroAreaAndInvalidTailLanesAreSafeAndProduceZeroFlux) {
+    constexpr size_t kWidth = hopkins::SimdReal::size();
+    detail::RiemannInput const regular{{1.0, {}, 1.0}, {0.125, {}, 0.1}};
+    auto zeroArea = regular;
+    zeroArea.area = {};
+    for (bool const finiteMass : {false, true}) {
+        for (size_t count = 1; count <= kWidth; count++) {
+            std::vector<detail::RiemannInput> cases(count, regular);
+            cases.back() = zeroArea;
+            std::feclearexcept(FE_ALL_EXCEPT);
+            auto const fluxes = detail::packedFluxes(cases, finiteMass);
+            EXPECT_EQ(std::fetestexcept(FE_INVALID | FE_DIVBYZERO), 0);
+            detail::expectFluxNear(fluxes.back(), {});
+            for (size_t lane = 0; lane + 1 < count; lane++) {
+                detail::expectFluxNear(fluxes[lane],
+                    hopkins::riemannFlux(
+                        regular.left, regular.right, regular.area, regular.frame, 1.4, finiteMass));
+            }
+        }
+    }
+}
+
+TEST(HopkinsSimd, FailureReportsTheActiveLaneWithoutRetrying) {
+    constexpr size_t kWidth = hopkins::SimdReal::size();
+    detail::RiemannInput const regular{{1.0, {}, 1.0}, {0.125, {}, 0.1}};
+    size_t const badLane = kWidth - 1;
+    for (bool const finiteMass : {false, true}) {
+        std::vector<detail::RiemannInput> cases(kWidth, regular);
+        cases[badLane] = {{1.0, {-8.0, 0.0, 0.0}, 1.0e-5}, {0.2, {8.0, 0.0, 0.0}, 1.0e-6}};
+        try {
+            detail::packedFluxes(cases, finiteMass);
+            FAIL() << "Nonpositive HLLC star pressure must fail";
+        } catch (std::runtime_error const& error) {
+            EXPECT_NE(std::string(error.what()).find("HLLC"), std::string::npos);
+            EXPECT_NE(std::string(error.what()).find("lane " + std::to_string(badLane)),
+                std::string::npos);
+        }
+        cases[badLane] = regular;
+        cases[badLane].left.pressure = -1.0;
+        EXPECT_THROW(detail::packedFluxes(cases, finiteMass), std::invalid_argument);
+    }
+}
+
+TEST(HopkinsSimd, PackedReconstructionMatchesScalarLimitersAndPhysicalRecovery) {
+    using Real = hopkins::SimdReal;
+    constexpr size_t kWidth = Real::size();
+    bool sawRecovery = false;
+    bool sawReconstructed = false;
+    for (size_t batch = 0; batch < 3; batch++) {
+        hopkins::SimdPrimitive centers;
+        hopkins::SimdPrimitive neighbors;
+        hopkins::SimdGradient gradients;
+        hopkins::SimdVector3 offsets{};
+        hopkins::SimdVector3 frames{};
+        Real times{};
+        Real fractions{};
+        std::array<hopkins::Primitive, kWidth> expected{};
+        for (size_t lane = 0; lane < kWidth; lane++) {
+            size_t const index = batch * kWidth + lane;
+            double const sign = index % 2 == 0 ? 1.0 : -1.0;
+            hopkins::Primitive const center{
+                1.0 + 0.1 * double(index), {sign * 0.5, 0.0, -sign * 0.3}, 0.8};
+            hopkins::Primitive neighbor{center.density + sign * 0.3,
+                {-sign * 0.8, 0.2, -sign * 0.3}, index % 3 == 0 ? 0.8 : 0.8 + sign * 0.2};
+            hopkins::Gradient gradient;
+            gradient.density = {0.7, -0.3, 0.2};
+            gradient.pressure = {0.3, 0.5, -0.1};
+            gradient.velocity = {{{0.2, 0.1, 0.3}, {-0.1, 0.4, 0.2}, {0.2, -0.3, 0.1}}};
+            hopkins::Vector const offset{0.1 * sign, -0.2, 0.3};
+            hopkins::Vector const frame{0.2, 0.1, -0.1};
+            double const halfTimestep = index % 3 == 0 ? 10.0 : 0.02;
+            double const fraction = index % 2 == 0 ? 0.25 : 0.75;
+            expected[lane] = hopkins::reconstruct(
+                center, gradient, offset, frame, halfTimestep, 1.4, &neighbor, fraction);
+            if (halfTimestep == 10.0) {
+                EXPECT_DOUBLE_EQ(expected[lane].density, center.density);
+                EXPECT_DOUBLE_EQ(expected[lane].pressure, center.pressure);
+                sawRecovery = true;
+            } else {
+                EXPECT_NE(expected[lane].density, center.density);
+                sawReconstructed = true;
+            }
+            detail::setPrimitiveLane(centers, lane, center);
+            detail::setPrimitiveLane(neighbors, lane, neighbor);
+            times[lane] = halfTimestep;
+            fractions[lane] = fraction;
+            for (int dim = 0; dim < 3; dim++) {
+                gradients.density[dim][lane] = gradient.density[dim];
+                gradients.pressure[dim][lane] = gradient.pressure[dim];
+                offsets[dim][lane] = offset[dim];
+                frames[dim][lane] = frame[dim];
+                for (int component = 0; component < 3; component++) {
+                    gradients.velocity[component][dim][lane] = gradient.velocity[component][dim];
+                }
+            }
+        }
+        FlopCount operations = 0;
+        auto const actual = hopkins::reconstructValues(
+            centers, gradients, offsets, frames, times, 1.4, neighbors, fractions, &operations);
+        EXPECT_EQ(operations, FlopCount(kWidth) * 157);
+        for (size_t lane = 0; lane < kWidth; lane++) {
+            SCOPED_TRACE(batch * kWidth + lane);
+            EXPECT_NEAR(actual.density[lane], expected[lane].density, 2.0e-14);
+            EXPECT_NEAR(actual.pressure[lane], expected[lane].pressure, 2.0e-14);
+            for (int dim = 0; dim < 3; dim++) {
+                EXPECT_NEAR(actual.velocity[dim][lane], expected[lane].velocity[dim], 2.0e-14);
+            }
+        }
+    }
+    EXPECT_TRUE(sawRecovery);
+    EXPECT_TRUE(sawReconstructed);
 }
 
 TEST(Hopkins, IndependentSodIntegrationIsAccuratePositiveAndConservative) {
@@ -1148,34 +1503,35 @@ TEST(HopkinsFlops, FloatStorageConversionsCountAtDoublePrecision) {
     EXPECT_EQ(singleOperations, 1);
 }
 
-TEST(HopkinsFlops, RiemannCountsRegularVacuumAndHllePaths) {
+TEST(HopkinsFlops, RiemannCountsSharedScalarAndPackedArithmetic) {
     hopkins::Primitive const state{1.0, {}, 1.0};
     hopkins::Vector const area{1.0, 0.0, 0.0};
-    for (bool finiteMass : {false, true}) {
+    for (bool const finiteMass : {false, true}) {
         FlopCount operations = 0;
         auto const actual =
             hopkins::riemannFlux(state, state, area, {}, 1.4, finiteMass, &operations);
         auto const expected = hopkins::riemannFlux(state, state, area, {}, 1.4, finiteMass);
-        EXPECT_FALSE(actual.usedFallback);
         EXPECT_EQ(actual.mass, expected.mass);
         EXPECT_EQ(actual.momentum, expected.momentum);
         EXPECT_EQ(actual.energy, expected.energy);
-        EXPECT_EQ(operations, finiteMass ? 313 : 324);
-        hopkins::Primitive left = state;
-        hopkins::Primitive right = state;
-        left.velocity[0] = -100.0;
-        right.velocity[0] = 100.0;
+        EXPECT_EQ(operations, finiteMass ? 146 : 169);
+        using Real = hopkins::SimdReal;
+        hopkins::SimdPrimitive const packed{Real(1.0), {}, Real(1.0)};
+        hopkins::SimdVector3 const packedArea{Real(1.0), Real(0.0), Real(0.0)};
+        // A partial pack still executes full-width arithmetic. Mask work is not
+        // counted, and inactive lanes must neither fail nor reach the output.
+        auto const active = Real([](auto lane) { return double(lane); }) < Real(1.0);
         operations = 0;
-        auto const vacuum =
-            hopkins::riemannFlux(left, right, area, {}, 1.4, finiteMass, &operations);
-        EXPECT_TRUE(vacuum.usedFallback);
-        EXPECT_EQ(operations, finiteMass ? 280 : 295);
+        auto const flux = hopkins::riemannFluxValues(packed, packed, packedArea,
+            hopkins::SimdVector3{}, 1.4, finiteMass, active, &operations);
+        EXPECT_EQ(operations, FlopCount(Real::size()) * (finiteMass ? 146 : 169));
+        EXPECT_DOUBLE_EQ(flux.momentum[0][0], 1.0);
+        operations = 0;
+        hopkins::riemannFluxValues(packed, packed, hopkins::SimdVector3{}, hopkins::SimdVector3{},
+            1.4, finiteMass, active, &operations);
+        EXPECT_EQ(operations, FlopCount(Real::size()) * 6);
     }
     FlopCount operations = 0;
     hopkins::riemannFlux(state, state, {}, {}, 1.4, false, &operations);
     EXPECT_EQ(operations, 6);
-    operations = 0;
-    auto const contact = hopkins::detail::exactContact(state, state, area, 1.4, &operations);
-    EXPECT_NEAR(contact[0], 1.0, 1.0e-12);
-    EXPECT_EQ(operations, 1402);
 }

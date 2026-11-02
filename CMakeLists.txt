@@ -194,6 +194,7 @@ set(cosmictiger_header_files
     cosmictiger/core/hpx.hpp
     cosmictiger/core/memused.hpp
     cosmictiger/hydro/hopkins.hpp
+    cosmictiger/hydro/hopkins_simd.hpp
     cosmictiger/hydro/hopkins_state.hpp
     cosmictiger/hydro/hopkins_driver.hpp
     cosmictiger/core/options.hpp

@@ -16,6 +16,7 @@
 #include <stdexcept>
 
 #include <cosmictiger/core/flops.hpp>
+#include <cosmictiger/hydro/hopkins_simd.hpp>
 
 // Hopkins (2015), MNRAS 450, 53, doi:10.1093/mnras/stv195.
 // https://arxiv.org/html/1409.7395v2
@@ -69,7 +70,6 @@ struct Flux {
     double energy = 0.0;
     double signalSpeed = 0.0;     // Maximum wave speed relative to the input frame.
     double contactSpeed = 0.0;    // Contact speed relative to the input frame.
-    bool usedFallback = false;
 };
 
 struct Conserved {
@@ -578,279 +578,18 @@ inline Primitive reconstruct(Primitive const& center, Gradient const& gradient,
     return physical(result, operations) ? result : center;
 }
 
-namespace detail {
-
-    using Conserved = hopkins::Conserved;
-
-    inline Conserved conserved(
-        Primitive const& state, double gamma, FlopCount* operations = nullptr) {
-        Conserved result;
-        countFlops(operations, 8);
-        result.mass = state.density;
-        for (int dim = 0; dim < 3; dim++) {
-            result.momentum[dim] = state.density * state.velocity[dim];
-        }
-        result.energy = state.pressure / (gamma - 1.0) +
-            0.5 * state.density * dot(state.velocity, state.velocity, operations);
-        return result;
-    }
-
-    inline Conserved physicalFlux(Primitive const& state, Vector const& normal, double gamma,
-        FlopCount* operations = nullptr) {
-        countFlops(operations, 12);
-        double const normalVelocity = dot(state.velocity, normal, operations);
-        Conserved result = conserved(state, gamma, operations);
-        result.mass *= normalVelocity;
-        for (int dim = 0; dim < 3; dim++) {
-            result.momentum[dim] =
-                result.momentum[dim] * normalVelocity + state.pressure * normal[dim];
-        }
-        result.energy = (result.energy + state.pressure) * normalVelocity;
-        return result;
-    }
-
-    inline Conserved starState(Primitive const& state, Vector const& normal, double gamma,
-        double waveSpeed, double contactSpeed, double starPressure,
-        FlopCount* operations = nullptr) {
-        double const normalVelocity = dot(state.velocity, normal, operations);
-        Conserved result;
-        countFlops(operations, 24);
-        result.mass = state.density * (waveSpeed - normalVelocity) / (waveSpeed - contactSpeed);
-        Vector velocity = state.velocity;
-        for (int dim = 0; dim < 3; dim++) {
-            velocity[dim] += (contactSpeed - normalVelocity) * normal[dim];
-            result.momentum[dim] = result.mass * velocity[dim];
-        }
-        result.energy = ((waveSpeed - normalVelocity) * conserved(state, gamma, operations).energy -
-                            state.pressure * normalVelocity + starPressure * contactSpeed) /
-            (waveSpeed - contactSpeed);
-        return result;
-    }
-
-    inline bool physical(Conserved const& state, FlopCount* operations = nullptr) {
-        if (!(state.mass > 0.0) || !std::isfinite(state.mass) || !std::isfinite(state.energy)) {
-            return false;
-        }
-        countFlops(operations, 3);
-        return state.energy - 0.5 * dot(state.momentum, state.momentum, operations) / state.mass >
-            0.0;
-    }
-
-    inline double pressureFunction(
-        double pressure, Primitive const& state, double gamma, FlopCount* operations = nullptr) {
-        countFlops(operations, 3);
-        double const sound = std::sqrt(gamma * state.pressure / state.density);
-        if (pressure > state.pressure) {
-            countFlops(operations, 12);
-            double const a = 2.0 / ((gamma + 1.0) * state.density);
-            double const b = (gamma - 1.0) / (gamma + 1.0) * state.pressure;
-            return (pressure - state.pressure) * std::sqrt(a / (pressure + b));
-        }
-        countFlops(operations, 10);
-        return 2.0 * sound / (gamma - 1.0) *
-            (std::pow(pressure / state.pressure, (gamma - 1.0) / (2.0 * gamma)) - 1.0);
-    }
-
-    // Bracketed ideal-gas exact pressure solve used only if all HLLC estimates fail
-    // in MFM. The zero-pressure vacuum solution has identically zero contact flux.
-    inline std::array<double, 2> exactContact(Primitive const& left, Primitive const& right,
-        Vector const& normal, double gamma, FlopCount* operations = nullptr) {
-        double const leftVelocity = dot(left.velocity, normal, operations);
-        double const rightVelocity = dot(right.velocity, normal, operations);
-        double const leftSound = std::sqrt(gamma * left.pressure / left.density);
-        double const rightSound = std::sqrt(gamma * right.pressure / right.density);
-        countFlops(operations, 11);
-        if (rightVelocity - leftVelocity >= 2.0 * (leftSound + rightSound) / (gamma - 1.0)) {
-            countFlops(operations, 2);
-            return {0.0, 0.5 * (leftVelocity + rightVelocity)};
-        }
-        auto residual = [&](double pressure, FlopCount* residualOperations) {
-            countFlops(residualOperations, 3);
-            return pressureFunction(pressure, left, gamma, residualOperations) +
-                pressureFunction(pressure, right, gamma, residualOperations) + rightVelocity -
-                leftVelocity;
-        };
-        double lower = 0.0;
-        double upper = std::max(left.pressure, right.pressure);
-        for (int iteration = 0; iteration < 128 && residual(upper, operations) < 0.0; iteration++) {
-            countFlops(operations, 1);
-            upper *= 2.0;
-        }
-        if (!std::isfinite(upper) || residual(upper, nullptr) < 0.0) {
-            throw std::runtime_error("Hopkins Riemann pressure could not be bracketed");
-        }
-        for (int iteration = 0; iteration < 160; iteration++) {
-            countFlops(operations, 4);
-            double const midpoint = 0.5 * (lower + upper);
-            if (residual(midpoint, operations) > 0.0) {
-                upper = midpoint;
-            } else {
-                lower = midpoint;
-            }
-            if (upper - lower <= 1.0e-12 * std::max(upper, 1.0e-100)) {
-                break;
-            }
-        }
-        countFlops(operations, 6);
-        double const pressure = 0.5 * (lower + upper);
-        double const velocity = 0.5 *
-            (leftVelocity + rightVelocity + pressureFunction(pressure, right, gamma, operations) -
-                pressureFunction(pressure, left, gamma, operations));
-        return {pressure, velocity};
-    }
-
-}    // namespace detail
-
 // An outward (i -> j) flux, including |area|. Apply -dt*flux to i and +dt*flux
 // to j, once per pair. Appendix A supplies the Galilean boost/deboost. In MFM
 // the Riemann face additionally moves at S_* (section 2.6): mass flux is exactly
 // zero, momentum flux is P_* n, and energy flux is P_* (S_*+v_frame dot n).
-inline Flux riemannFlux(Primitive left, Primitive right, Vector const& area,
+// Scalar reference and packed production use the same strict HLLC kernel.
+inline Flux riemannFlux(Primitive const& left, Primitive const& right, Vector const& area,
     Vector const& frameVelocity, double gamma, bool finiteMass, FlopCount* operations = nullptr) {
-    if (!physical(left, operations) || !physical(right, operations) || !(gamma > 1.0) ||
-        !std::isfinite(gamma)) {
-        throw std::invalid_argument("Hopkins Riemann solver requires physical ideal-gas states");
-    }
-    Flux result;
-    double const areaMagnitude = norm(area, operations);
-    if (areaMagnitude == 0.0) {
-        return result;
-    }
-    detail::countFlops(operations, 48);
-    Vector normal{};
-    for (int dim = 0; dim < 3; dim++) {
-        normal[dim] = area[dim] / areaMagnitude;
-        left.velocity[dim] -= frameVelocity[dim];
-        right.velocity[dim] -= frameVelocity[dim];
-    }
-    double const leftVelocity = dot(left.velocity, normal, operations);
-    double const rightVelocity = dot(right.velocity, normal, operations);
-    double const leftSound = std::sqrt(gamma * left.pressure / left.density);
-    double const rightSound = std::sqrt(gamma * right.pressure / right.density);
-    auto const leftState = detail::conserved(left, gamma, operations);
-    auto const rightState = detail::conserved(right, gamma, operations);
-    auto const leftFlux = detail::physicalFlux(left, normal, gamma, operations);
-    auto const rightFlux = detail::physicalFlux(right, normal, gamma, operations);
-    double const rootLeft = std::sqrt(left.density);
-    double const rootRight = std::sqrt(right.density);
-    Vector roeVelocity{};
-    for (int dim = 0; dim < 3; dim++) {
-        roeVelocity[dim] = (rootLeft * left.velocity[dim] + rootRight * right.velocity[dim]) /
-            (rootLeft + rootRight);
-    }
-    double const roeEnthalpy = ((leftState.energy + left.pressure) / rootLeft +
-                                   (rightState.energy + right.pressure) / rootRight) /
-        (rootLeft + rootRight);
-    double const roeSound = std::sqrt(std::max(
-        0.0, (gamma - 1.0) * (roeEnthalpy - 0.5 * dot(roeVelocity, roeVelocity, operations))));
-    double leftWave =
-        std::min(leftVelocity - leftSound, dot(roeVelocity, normal, operations) - roeSound);
-    double rightWave =
-        std::max(rightVelocity + rightSound, dot(roeVelocity, normal, operations) + roeSound);
-    double starPressure = 0.0;
-    double contact = 0.0;
-    detail::Conserved leftStar;
-    detail::Conserved rightStar;
-    bool good = false;
-    for (int attempt = 0; attempt < 3; attempt++) {
-        if (attempt == 1) {
-            detail::countFlops(operations, 4);
-            leftWave = std::min(leftVelocity - leftSound, rightVelocity - rightSound);
-            rightWave = std::max(leftVelocity + leftSound, rightVelocity + rightSound);
-        } else if (attempt == 2) {
-            detail::countFlops(operations, 2);
-            double const speed =
-                std::max(std::abs(leftVelocity) + leftSound, std::abs(rightVelocity) + rightSound);
-            leftWave = -speed;
-            rightWave = speed;
-        }
-        detail::countFlops(operations, 19);
-        double const leftImpedance = left.density * (leftWave - leftVelocity);
-        double const rightImpedance = right.density * (rightWave - rightVelocity);
-        contact = (right.pressure - left.pressure + leftImpedance * leftVelocity -
-                      rightImpedance * rightVelocity) /
-            (leftImpedance - rightImpedance);
-        double const leftPressure = left.pressure + leftImpedance * (contact - leftVelocity);
-        double const rightPressure = right.pressure + rightImpedance * (contact - rightVelocity);
-        starPressure = 0.5 * (leftPressure + rightPressure);
-        if (std::isfinite(contact) && contact > leftWave && contact < rightWave &&
-            starPressure > 0.0 && std::isfinite(starPressure)) {
-            leftStar =
-                detail::starState(left, normal, gamma, leftWave, contact, starPressure, operations);
-            rightStar = detail::starState(
-                right, normal, gamma, rightWave, contact, starPressure, operations);
-            good =
-                detail::physical(leftStar, operations) && detail::physical(rightStar, operations);
-        }
-        if (good) {
-            result.usedFallback = attempt != 0;
-            break;
-        }
-    }
-    result.signalSpeed = std::max(std::abs(leftWave), std::abs(rightWave));
-    detail::Conserved flux;
-    if (finiteMass) {
-        if (!good) {
-            auto const exact = detail::exactContact(left, right, normal, gamma, operations);
-            starPressure = exact[0];
-            contact = exact[1];
-            result.usedFallback = true;
-        }
-        detail::countFlops(operations, 4);
-        for (int dim = 0; dim < 3; dim++) {
-            flux.momentum[dim] = starPressure * normal[dim];
-        }
-        flux.energy = starPressure * contact;
-    } else if (leftWave >= 0.0) {
-        flux = leftFlux;
-    } else if (rightWave <= 0.0) {
-        flux = rightFlux;
-    } else if (good) {
-        auto const& state = contact >= 0.0 ? leftState : rightState;
-        auto const& star = contact >= 0.0 ? leftStar : rightStar;
-        flux = contact >= 0.0 ? leftFlux : rightFlux;
-        double const wave = contact >= 0.0 ? leftWave : rightWave;
-        detail::countFlops(operations, 15);
-        flux.mass += wave * (star.mass - state.mass);
-        flux.energy += wave * (star.energy - state.energy);
-        for (int dim = 0; dim < 3; dim++) {
-            flux.momentum[dim] += wave * (star.momentum[dim] - state.momentum[dim]);
-        }
-    } else {
-        // A positivity-preserving two-wave HLLE flux. Symmetric final waves
-        // reduce this to local Lax-Friedrichs for the pathological fallback.
-        detail::countFlops(operations, 2);
-        double const inverseWidth = 1.0 / (rightWave - leftWave);
-        auto combine = [&](double fLeft, double fRight, double uLeft, double uRight) {
-            detail::countFlops(operations, 8);
-            return (rightWave * fLeft - leftWave * fRight +
-                       leftWave * rightWave * (uRight - uLeft)) *
-                inverseWidth;
-        };
-        flux.mass = combine(leftFlux.mass, rightFlux.mass, leftState.mass, rightState.mass);
-        flux.energy =
-            combine(leftFlux.energy, rightFlux.energy, leftState.energy, rightState.energy);
-        for (int dim = 0; dim < 3; dim++) {
-            flux.momentum[dim] = combine(leftFlux.momentum[dim], rightFlux.momentum[dim],
-                leftState.momentum[dim], rightState.momentum[dim]);
-        }
-        result.usedFallback = true;
-    }
-    detail::countFlops(operations, 15);
-    result.contactSpeed = contact;
-    result.mass = flux.mass * areaMagnitude;
-    result.energy = (flux.energy + dot(frameVelocity, flux.momentum, operations) +
-                        0.5 * dot(frameVelocity, frameVelocity, operations) * flux.mass) *
-        areaMagnitude;
-    for (int dim = 0; dim < 3; dim++) {
-        result.momentum[dim] =
-            (flux.momentum[dim] + frameVelocity[dim] * flux.mass) * areaMagnitude;
-    }
-    if (!std::isfinite(result.mass) || !std::isfinite(result.energy) ||
-        !std::isfinite(norm(result.momentum))) {
-        throw std::runtime_error("Hopkins Riemann solver returned a non-finite flux");
-    }
-    return result;
+    PrimitiveValues<double> const leftValues{left.density, left.velocity, left.pressure};
+    PrimitiveValues<double> const rightValues{right.density, right.velocity, right.pressure};
+    auto const result = riemannFluxValues(
+        leftValues, rightValues, area, frameVelocity, gamma, finiteMass, true, operations);
+    return {result.mass, result.momentum, result.energy, result.signalSpeed, result.contactSpeed};
 }
 
 }    // namespace hopkins

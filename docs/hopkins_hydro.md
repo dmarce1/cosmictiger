@@ -53,14 +53,102 @@ scale 100, and the pair limiter uses `psi_1=0.5`, `psi_2=0.25` (Appendix B).
 The current geometry acceptance bound is also 100, so accepted gradients use
 the upper beta bound of 2.
 
-The numerical primitives are in `cosmictiger/hydro/hopkins.hpp`. HLLC uses
-Roe wave-speed estimates and broader-wave retries. The final fallback is HLLE
-for MFV and a bracketed ideal-gas contact solution for MFM, preserving zero MFM
-mass flux. Ill-conditioned gradient matrices cause the actual neighbor search
+The numerical primitives are in `cosmictiger/hydro/hopkins.hpp`, with the shared
+scalar/SIMD reconstruction and HLLC arithmetic in
+`cosmictiger/hydro/hopkins_simd.hpp`. HLLC uses the Davis extrema of the two
+one-sided acoustic speeds. For face vector \(\boldsymbol A\) and input frame
+velocity \(\boldsymbol w\), define \(A=|\boldsymbol A|\),
+\(\boldsymbol n=\boldsymbol A/A\),
+\(\boldsymbol v_K=\boldsymbol v_K^{\rm lab}-\boldsymbol w\), and
+\(u_K=\boldsymbol v_K\cdot\boldsymbol n\), for \(K=L,R\).
+A zero-area face returns zero flux. All following states and fluxes are in
+this moving frame until the final boost:
+
+\[
+ E_K=\frac{P_K}{\gamma-1}+\frac12\rho_K|\boldsymbol v_K|^2,\qquad
+ U_K=(\rho_K,\rho_K\boldsymbol v_K,E_K),
+\]
+\[
+ F_K=(\rho_Ku_K,\rho_Ku_K\boldsymbol v_K+P_K\boldsymbol n,(E_K+P_K)u_K).
+\]
+
+The acoustic speeds and Davis wave bounds are
+
+\[
+ S_L=\min(u_L-c_L,u_R-c_R),\qquad
+ S_R=\max(u_L+c_L,u_R+c_R),\qquad
+ c_K=\sqrt{\gamma P_K/\rho_K}.
+\]
+
+These are equation (48) in [Toro's HLLC lecture](https://www.prague-sum.com/download/2012/Toro_2-HLLC-RiemannSolver.pdf).
+They require only arithmetic, two square roots, and lane-wise
+minimum/maximum operations. There is no Roe average or iterative pressure solve.
+The contact speed and star states use these unmodified signal speeds. Define
+\(D_K=\rho_K(S_K-u_K)\) and \(D=D_L-D_R\). Then
+
+\[
+ S_* = \frac{P_R-P_L+D_Lu_L-D_Ru_R}{D},\qquad
+ P_K^*=P_K+D_K(S_*-u_K),\qquad
+ P_* = \frac12(P_L^*+P_R^*).
+\]
+
+The two star pressures agree algebraically; their average treats both sides
+symmetrically under floating-point rounding. For each side,
+
+\[
+ \rho_K^*=\frac{D_K}{S_K-S_*},\qquad
+ \boldsymbol m_K^*=\rho_K^*
+     [\boldsymbol v_K+(S_*-u_K)\boldsymbol n],
+\]
+\[
+ E_K^*=\frac{(S_K-u_K)E_K-P_Ku_K+P_*S_*}{S_K-S_*},\qquad
+ U_K^*=(\rho_K^*,\boldsymbol m_K^*,E_K^*).
+\]
+
+For MFV, the flux uses the clipped *correction* speeds:
+
+\[
+ F_{\mathrm{HLLC}}=
+ \begin{cases}
+ F_L+\min(0,S_L)(U_L^*-U_L),&S_*\geq0,\\
+ F_R+\max(0,S_R)(U_R^*-U_R),&S_*<0.
+ \end{cases}
+\]
+
+Clipping the corrections combines the usual four wave regions into two contact
+sides while retaining the physical upwind flux in a supersonic flow. The packed
+kernel first checks whether all active lanes choose the same contact side; a
+uniform pack takes that side directly, and a mixed pack selects its state with
+a lane mask. Both then evaluate one physical flux and one correction. MFM
+instead follows the contact-moving face and uses
+\(F_{\rm MFM}=(0,P_*\boldsymbol n,P_*S_*)\), so its mass flux is exactly zero.
+For either method, writing the selected frame flux as
+\((f_\rho,\boldsymbol f_m,f_E)\), the returned area-integrated laboratory flux is
+
+\[
+ \mathcal F_\rho=A f_\rho,\qquad
+ \boldsymbol{\mathcal F}_m=A(\boldsymbol f_m+\boldsymbol w f_\rho),\qquad
+ \mathcal F_E=A\left(f_E+\boldsymbol w\cdot\boldsymbol f_m
+                     +\tfrac12|\boldsymbol w|^2 f_\rho\right).
+\]
+
+Thus MFM returns momentum flux \(AP_*\boldsymbol n\) and energy flux
+\(AP_*(S_*+\boldsymbol w\cdot\boldsymbol n)\).
+The reported signal speed is \(\max(|S_L|,|S_R|)\); the contact speed is \(S_*\).
+
+Inputs must be finite with \(\rho_K,P_K>0\) and \(\gamma>1\). The solver requires
+finite ordered wave bounds, \(D<0\), \(S_L<S_*<S_R\), and \(P_*>0\), together
+with finite star states, \(\rho_K^*>0\), and
+\(E_K^*-|\boldsymbol m_K^*|^2/(2\rho_K^*)>0\) on both sides. Nonfinite area
+norms or output fluxes also fail. Any failure terminates the solve with an
+exception; SIMD diagnostics identify the failing lane. There are no wave-speed
+retries, HLLE fallback, or exact-contact fallback.
+Ill-conditioned gradient matrices cause the actual neighbor search
 to expand, up to the configured support bound, rather than introducing an SPH
 pressure-force fallback. If a second-order update produces nonpositive mass or
 thermal energy, the current elapsed interval is retried at first order, refreshing
-all its pair fluxes. A still-invalid
+all its pair fluxes. This update recovery does not catch a failed Riemann solve.
+A still-invalid
 update stops with a diagnostic requesting a lower `hydro.cfl`; there is no
 nonconservative mass or energy floor applied to accept that update.
 Thermal energy is recovered by subtracting kinetic energy from the conserved
@@ -82,15 +170,31 @@ without hydrodynamics. A uniform global timestep is optional; choosing PMMM does
 not select it. Both chemistry and star formation must be disabled for MFM/MFV;
 incompatible combinations are rejected during option validation.
 
-`src/hydro/hopkins_driver.cpp` is a host reference backend, including in a
+`src/hydro/hopkins_driver.cpp` is a CPU SIMD backend, including in a
 CUDA-enabled build. It gathers gas state and tree-derived neighbor ranges from
-all HPX localities onto the coordinating locality, runs CPU loops there, and
+all HPX localities onto the coordinating locality, runs CPU SIMD loops there, and
 scatters updated states to the particle owners. MPI domain ownership and
 migration are supported, but the meshless calculation is not distributed across
 the locality CPUs: its global gas state and neighbor lists must fit in the
 coordinator's memory. Communication and coordinator memory limit scalability.
 `compute.cuda` still selects existing CUDA-capable components such as gravity
 and particle drift; it does not move the meshless flux calculation to the GPU.
+
+The SIMD backend is `NativeSimdVector<double>` from
+`cosmictiger/math/simd_backend.hpp`, exposed to Hopkins as `hopkins::SimdReal`.
+It selects the compiler target's native double-precision width through standard
+`<simd>` when available, or `<experimental/simd>` otherwise. The repository also
+has `SimdDouble` (a fixed two-lane pack used by the tree) and `SimdDouble8` (eight
+lanes); Hopkins uses the native-width type instead of fixing its width to either.
+Hydrodynamic storage and arithmetic remain double precision.
+
+Neighbor distance/kernel evaluations, support-radius residuals and derivatives,
+geometry moments and their time derivatives, gradient contributions and extrema,
+and timestep signal estimates are computed in packs. Pair reconstruction and
+Riemann fluxes are also evaluated in packs. Fixed64 position differences are
+formed before conversion to double. Reductions retain their scalar particle-ID
+order, and the pair scatter retains its conservative equal-and-opposite updates.
+Final partial packs use safe inactive inputs and store only active lanes.
 
 The tree search, selected kernel, and gas particle infrastructure are reused
 from SPH. The meshless support-radius solve uses the same kernel-number-density
@@ -270,6 +374,52 @@ of this integration with current main. The historical tables, plots, audit
 scripts, and logs under `docs/hopkins_sound_wave_results_20261022/` were not
 restored here; their saved source is the third parent of stash
 `cef72fbeea6e33168c17002172f5918cb42a7df6`.
+
+### SIMD unit validation on 2026-11-02
+
+The 49 tests in `tests/hopkins.cpp` pass in standalone GCC 15 C++20 builds at
+`-O2`, with fast math and contraction disabled, on both the native four-double
+target and the baseline SSE2 two-double target. A C++26 native build also passes;
+the installed library still selects `<experimental/simd>` in that language
+mode, so the standard `<simd>` branch is not validated here. The tests cover an independent
+four-region HLLC reference, uniform and mixed contact masks, scalar/packed
+agreement, moving-frame covariance, pair reversal, exact zero MFM mass flux,
+every partial-pack length, zero-area faces, poisoned inactive inputs without
+invalid/divide-by-zero exceptions, active-lane fatal diagnostics, packed
+reconstruction and physical recovery, and FLOP accounting. The existing
+independent Sod evolution remains positive, conservative, and convergent.
+These unit checks do not establish application, MPI, GPU, or performance results
+for the SIMD revision.
+
+### SIMD application validation on 2026-11-02
+
+A fresh `build/hopkins_simd` CPU build uses GCC 15, C++20, `-O2 -march=native`,
+Fixed64 positions, FMM expansion degree 6, and traditional/global integrators.
+Hopkins retains `-fno-fast-math -ffp-contract=off`. The 49 unit CTests and
+`hopkins_application`, `hopkins_global_sources`,
+`hopkins_fmm_traditional_cpu`, `hopkins_fmm_global_cpu`, and
+`hopkins_flops_application` pass. These cover MFM/MFV evolution, conservation,
+individual-rung cache/wake-up behavior, exact physical restarts, source laws,
+SPH default dispatch, and live FMM coupling. The repeated FLOP fixture initially
+refused to overwrite its existing checkpoints; it passed after moving that
+prior output aside and rerunning with a fresh output directory.
+
+Both methods also completed the sound-wave campaign at `N=16,32,34,64,128`.
+The non-multiple-of-four `N=34` supplements partial-pack unit coverage.
+Density L1 errors decrease from `6.77544e-8` to `1.64421e-9` for MFM and
+from `9.33296e-8` to `2.37154e-9` for MFV between `N=16` and `128`.
+Artifacts are in `build/hopkins_simd/sound_wave_final/summary.json` and
+`build/hopkins_simd/validation/` (logs, build/source hashes, and benchmark source).
+No MPI, CUDA, PMMM, or long production run was performed for this revision.
+
+A separate one-core GCC 15 `-O3 -march=native` kernel microbenchmark uses
+16,384 varied physical faces, repeated 96 times, with uniform and mixed contact
+masks for MFM/MFV. Five-run median paired speedups over the shared scalar solver
+are 2.11–2.51 times including input gathering, and 2.31–2.84 times for prepacked
+inputs. Checksums agree to the 12 printed significant digits. This measures
+Riemann-kernel throughput, excluding production reconstruction, geometry,
+scatter and HPX overhead; concurrent compilation and unpinned execution limit
+timing precision. No end-to-end application speedup is established.
 
 ### Integration validation on 2026-11-01
 
