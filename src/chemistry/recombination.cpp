@@ -33,6 +33,7 @@
 #include <string>
 
 #include <cosmictiger/chemistry/recombination.hpp>
+#include <cosmictiger/math/matrix.hpp>
 
 // The cosmological stiff solve relies on finite checks and cancellation near
 // equilibrium, independently of the application's optional -ffast-math.
@@ -51,7 +52,8 @@ namespace detail {
         return (std::bit_cast<std::uint64_t>(value) & kExponentMask) != kExponentMask;
     }
 
-    using RecombinationVector = std::array<double, 3>;
+    using RecombinationVector = math::Vector<double, 3>;
+    using RecombinationMatrix = math::Matrix<double, 3>;
     constexpr double kPi = 3.141592653589;
     constexpr double kSpeedOfLight = 2.99792458e8;
     constexpr double kBoltzmann = 1.380658e-23;
@@ -269,50 +271,11 @@ namespace detail {
         return std::exp(0.5 * (lower + upper));
     }
 
-    bool solveLinear(std::array<RecombinationVector, 3> matrix, RecombinationVector rhs,
+    bool solveLinear(RecombinationMatrix const& matrix, RecombinationVector const& rhs,
         RecombinationVector& result) {
-        for (int row = 0; row < 3; ++row) {
-            if (!detail::isFiniteRecombination(rhs[row])) {
-                return false;
-            }
-            for (int column = 0; column < 3; ++column) {
-                if (!detail::isFiniteRecombination(matrix[row][column])) {
-                    return false;
-                }
-            }
-        }
-        for (int column = 0; column < 3; ++column) {
-            int pivot = column;
-            for (int row = column + 1; row < 3; ++row) {
-                if (std::abs(matrix[row][column]) > std::abs(matrix[pivot][column])) {
-                    pivot = row;
-                }
-            }
-            if (!detail::isFiniteRecombination(matrix[pivot][column]) ||
-                !(std::abs(matrix[pivot][column]) > 1.0e-200)) {
-                return false;
-            }
-            std::swap(matrix[column], matrix[pivot]);
-            std::swap(rhs[column], rhs[pivot]);
-            for (int row = column + 1; row < 3; ++row) {
-                double const factor = matrix[row][column] / matrix[column][column];
-                for (int j = column + 1; j < 3; ++j) {
-                    matrix[row][j] -= factor * matrix[column][j];
-                }
-                rhs[row] -= factor * rhs[column];
-            }
-        }
-        for (int row = 2; row >= 0; --row) {
-            double value = rhs[row];
-            for (int column = row + 1; column < 3; ++column) {
-                value -= matrix[row][column] * result[column];
-            }
-            result[row] = value / matrix[row][row];
-            if (!detail::isFiniteRecombination(result[row])) {
-                return false;
-            }
-        }
-        return true;
+        // Preserve the Newton solver's absolute pivot floor. Its variables have
+        // different units, so a relative cutoff on the largest entry is unsuitable.
+        return math::trySolve(matrix, rhs, result, {0.0, 1.0e-200}) == math::MatrixStatus::Success;
     }
 
     bool implicitStage(RecombinationModel const& model, RecombinationOptions const& options,
@@ -339,7 +302,7 @@ namespace detail {
             if (residualNorm < 0.02) {
                 return true;
             }
-            std::array<RecombinationVector, 3> matrix{};
+            RecombinationMatrix matrix{};
             for (int column = 0; column < 3; ++column) {
                 double const offset = 1.0e-6 * std::max(std::abs(result[column]), 1.0e-6);
                 auto plus = result;
@@ -465,7 +428,7 @@ RecombinationHistory::RecombinationHistory(
     double const finalTime = std::log(options.maxScaleFactor);
     detail::RecombinationVector state{
         model.hydrogenSaha(std::exp(time)), heliumRatio_ > 0.0 ? 0.99 : 0.0, 1.0};
-    samples_.push_back({time, state});
+    samples_.push_back({time, {state[0], state[1], state[2]}});
     double step = std::min(1.0e-4, options.maxLogStep);
     size_t attempts = 0;
     while (time < finalTime) {
@@ -518,7 +481,7 @@ RecombinationHistory::RecombinationHistory(
             if (hydrogenEquilibrium) {
                 state[0] = model.hydrogenSaha(std::exp(time));
             }
-            samples_.push_back({time, state});
+            samples_.push_back({time, {state[0], state[1], state[2]}});
         }
         double const factor = error > 0.0 && detail::isFiniteRecombination(error) ?
             std::clamp(0.85 * std::pow(error, -0.25), 0.2, 3.0) :

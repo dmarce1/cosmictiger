@@ -43,7 +43,7 @@ and external acceleration. If the predicted face is nonfinite or reverses
 orientation, as can occur when a pair leaves the compact kernel support, that
 pair uses a conservative first-order flux for the interval.
 The MFV face follows the interpolated particle velocity; MFM additionally
-moves the face at the Riemann contact speed, making its mass flux zero
+moves the face at the Riemann zero-mass-flux speed, making its mass flux zero
 (sections 2.4 and 2.6). The common Riemann flux supplies shock dissipation;
 the SPH artificial-viscosity controls apply to the SPH method.
 
@@ -54,9 +54,10 @@ The current geometry acceptance bound is also 100, so accepted gradients use
 the upper beta bound of 2.
 
 The numerical primitives are in `cosmictiger/hydro/hopkins/hopkins.hpp`, with the shared
-scalar/SIMD reconstruction and HLLC arithmetic in
+scalar/SIMD reconstruction and HLLC/HLL arithmetic in
 `cosmictiger/hydro/hopkins/hopkins_simd.hpp`. HLLC uses the Davis extrema of the two
-one-sided acoustic speeds. For face vector \(\boldsymbol A\) and input frame
+one-sided acoustic speeds; a rejected HLLC state falls back to HLL with those
+same speeds and reconstructed inputs. For face vector \(\boldsymbol A\) and input frame
 velocity \(\boldsymbol w\), define \(A=|\boldsymbol A|\),
 \(\boldsymbol n=\boldsymbol A/A\),
 \(\boldsymbol v_K=\boldsymbol v_K^{\rm lab}-\boldsymbol w\), and
@@ -122,6 +123,39 @@ uniform pack takes that side directly, and a mixed pack selects its state with
 a lane mask. Both then evaluate one physical flux and one correction. MFM
 instead follows the contact-moving face and uses
 \(F_{\rm MFM}=(0,P_*\boldsymbol n,P_*S_*)\), so its mass flux is exactly zero.
+
+If the HLLC contact or either conserved star state is nonphysical, the affected
+lane uses the single HLL mean and flux without changing the wave bounds:
+
+\[
+ U_H=\frac{S_RU_R-S_LU_L+F_L-F_R}{S_R-S_L},\qquad
+ F_H=\frac{S_RF_L-S_LF_R+S_LS_R(U_R-U_L)}{S_R-S_L}.
+\]
+
+MFV selects \(F_L\) when \(S_L\geq0\), \(F_R\) when \(S_R\leq0\), and
+\(F_H\) otherwise. MFM instead chooses the zero-mass-flux plane
+
+\[
+ s_H=\frac{F_{H,\rho}}{\rho_H},\qquad F_{\rm MFM,H}=F_H-s_HU_H.
+\]
+
+This conservative moving-face construction also appears in
+[Lupi (2023), equations (15)-(18)](https://arxiv.org/html/2210.05682v2#S2.SS3.SSS2).
+Its mass component is set to exact zero after forming \(s_H\); momentum and
+energy retain the full HLL moving-face flux. Neither replacing \(F_H\) by the
+EOS flux \(F(U_H)\) nor discarding only its mass component gives this result.
+The positive HLL density places the moving plane within the fan because
+\(s_H-S_L=\rho_L(u_L-S_L)/\rho_H>0\) and
+\(S_R-s_H=\rho_R(S_R-u_R)/\rho_H>0\).
+
+The HLL mean must have positive density and internal energy. Its normal
+momentum flux can nevertheless be negative: equal states with opposing
+normal velocities \((-v,+v)\) give \(s_H=0\) and
+\(F_{H,m}\cdot\boldsymbol n=P-\rho cv\). This flux is not the EOS pressure
+of the HLL mean and is not clamped. The fallback adds diffusion while retaining
+opposite pair transfers and fixed particle masses in MFM. A physical HLL mean
+alone does not establish positivity of the complete meshless timestep update.
+
 For either method, writing the selected frame flux as
 \((f_\rho,\boldsymbol f_m,f_E)\), the returned area-integrated laboratory flux is
 
@@ -132,17 +166,21 @@ For either method, writing the selected frame flux as
                      +\tfrac12|\boldsymbol w|^2 f_\rho\right).
 \]
 
-Thus MFM returns momentum flux \(AP_*\boldsymbol n\) and energy flux
+The boost always uses the original input frame \(\boldsymbol w\), including
+after the HLL moving-plane subtraction. For accepted HLLC states, MFM returns
+momentum flux \(AP_*\boldsymbol n\) and energy flux
 \(AP_*(S_*+\boldsymbol w\cdot\boldsymbol n)\).
-The reported signal speed is \(\max(|S_L|,|S_R|)\); the contact speed is \(S_*\).
+The reported signal speed is \(\max(|S_L|,|S_R|)\); the contact-speed field is
+\(S_*\) for HLLC and \(s_H\) for HLL.
 
-Inputs must be finite with \(\rho_K,P_K>0\) and \(\gamma>1\). The solver requires
-finite ordered wave bounds, \(D<0\), \(S_L<S_*<S_R\), and \(P_*>0\), together
-with finite star states, \(\rho_K^*>0\), and
-\(E_K^*-|\boldsymbol m_K^*|^2/(2\rho_K^*)>0\) on both sides. Nonfinite area
-norms or output fluxes also fail. Any failure terminates the solve with an
-exception; SIMD diagnostics identify the failing lane. There are no wave-speed
-retries, HLLE fallback, or exact-contact fallback.
+Inputs must be finite with \(\rho_K,P_K>0\) and \(\gamma>1\). Finite ordered
+wave bounds and \(D<0\) are required before the contact calculation. HLLC is
+accepted when \(S_L<S_*<S_R\) and \(P_*>0\), with finite star states,
+\(\rho_K^*>0\), and \(E_K^*-|\boldsymbol m_K^*|^2/(2\rho_K^*)>0\) on both
+sides. Otherwise that lane uses HLL. Invalid inputs, a nonphysical HLL mean,
+nonfinite area norms, or nonfinite output fluxes still throw; diagnostics
+identify the failing SIMD lane and production pair IDs. There are no wave-speed
+retries, Einfeldt-speed substitutions, or exact-contact solves.
 Ill-conditioned gradient matrices cause the actual neighbor search
 to expand, up to the configured support bound, rather than introducing an SPH
 pressure-force fallback. An invalid face-area predictor uses a conservative
@@ -427,7 +465,31 @@ scripts, and logs under `docs/hopkins_sound_wave_results_20261022/` were not
 restored here; their saved source is the third parent of stash
 `cef72fbeea6e33168c17002172f5918cb42a7df6`.
 
-### SIMD unit validation on 2026-11-02
+### Davis HLL fallback validation on 2026-11-02
+
+The CPU application and unit binary were rebuilt in `build/hopkins_sources_cpu`
+with GCC 15, Fixed64 positions, FMM expansion degree 6, and traditional/global
+integrators. All 59 Hopkins unit tests passed. The fallback coverage includes
+the captured failing pair's normal projections, extreme expansions, an
+independent conservation-jump HLL reference, rejected star energy, supersonic
+upwind selection, scalar/SIMD agreement, mixed fallback masks with NaN padding
+and zero-area faces, pair reversal, Galilean covariance, and conservative
+fixed-mass pair updates. Existing four-region HLLC and Sod checks still pass.
+
+`hopkins_application` passed in 107.76 seconds, including MFM/MFV conservation,
+individual-rung stepping, force coupling and exact restarts. `startup_options`
+and `hopkins_flops_application` also passed. The original 65,536-particle
+`release/lcdm_present.ini` failure was reproduced with CPU module overrides,
+two workers, Silo disabled and redirected output. With the fallback, this same
+setup completed two iterations successfully in 84.05 seconds. The original
+failure occurred during initial spatial reconstruction of pair `(0,18704)`.
+
+This is bounded CPU validation, not a full cosmological run, CUDA/MPI validation,
+or a performance comparison. The `release/cosmictiger` binary was not rebuilt.
+
+### Initial SIMD unit validation on 2026-11-02
+
+This historical validation predates the HLL fallback described above.
 
 The 49 tests in `tests/hopkins.cpp` pass in standalone GCC 15 C++20 builds at
 `-O2`, with fast math and contraction disabled, on both the native four-double
@@ -443,7 +505,9 @@ independent Sod evolution remains positive, conservative, and convergent.
 These unit checks do not establish application, MPI, GPU, or performance results
 for the SIMD revision.
 
-### SIMD application validation on 2026-11-02
+### Initial SIMD application validation on 2026-11-02
+
+This historical validation predates the HLL fallback described above.
 
 A fresh `build/hopkins_simd` CPU build uses GCC 15, C++20, `-O2 -march=native`,
 Fixed64 positions, FMM expansion degree 6, and traditional/global integrators.

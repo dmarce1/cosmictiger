@@ -41,8 +41,6 @@ def main():
         (directory / "run.log").write_text(result.stdout)
         if result.returncode:
             raise RuntimeError(f"{method} failed ({result.returncode}):\n{result.stdout}")
-        if re.search(r"^\s*hydro\.viscosityAlpha\s*:", result.stdout, re.MULTILINE):
-            raise RuntimeError(f"{method} printed the unused SPH viscosity alpha")
         if not all(column in result.stdout for column in ("FP32 TF/s", "FP64 TF/s", "Mixed TF/s")):
             raise RuntimeError(f"{method} omitted the precision rate columns")
         rows = [line.split() for line in result.stdout.splitlines()

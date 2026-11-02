@@ -12,6 +12,7 @@
 #include <limits>
 
 #include <cosmictiger/cuda/cuda_export.hpp>
+#include <cosmictiger/math/matrix_eigen.hpp>
 
 // L. Cullen and W. Dehnen, "Inviscid smoothed particle hydrodynamics",
 // MNRAS 408 (2010), 669-683, doi:10.1111/j.1365-2966.2010.17158.x.
@@ -44,111 +45,85 @@ namespace detail {
     // handles well-conditioned 3D neighborhoods; Jacobi diagonalization handles the
     // remaining cases without assigning an artificial length scale to missing axes.
     template <typename Real, typename Counter>
-    CUDA_EXPORT inline int inverseMoment(
-        Real const (&moment)[3][3], Real (&inverse)[3][3], Counter& floatingPointOperations) {
-        Real T[3][3];
+    CUDA_EXPORT inline int inverseMoment(Real const (&moment)[3][3],
+        math::SymmetricMatrix<Real, 3>& inverse, Counter& floatingPointOperations) {
+        math::SymmetricMatrix<Real, 3> T;
+        inverse = math::SymmetricMatrix<Real, 3>{};
         Real scale = Real(0);
         for (int i = 0; i < 3; ++i) {
             for (int j = 0; j < 3; ++j) {
                 Real const magnitude = std::abs(moment[i][j]);
                 scale = magnitude > scale ? magnitude : scale;
-                inverse[i][j] = Real(0);
             }
         }
-        floatingPointOperations += 9;    // Absolute values in the matrix scale.
+        floatingPointOperations += 9;
         if (!(scale > Real(0))) {
             return 0;
         }
         for (int i = 0; i < 3; ++i) {
-            for (int j = 0; j < 3; ++j) {
-                T[i][j] = (Real(0.5) * moment[i][j] + Real(0.5) * moment[j][i]) / scale;
+            for (int j = 0; j <= i; ++j) {
+                T(i, j) = (Real(0.5) * moment[i][j] + Real(0.5) * moment[j][i]) / scale;
             }
         }
-        floatingPointOperations += 36;    // Symmetrization and normalization.
-        Real C[3][3];
-        C[0][0] = T[1][1] * T[2][2] - T[1][2] * T[2][1];
-        C[0][1] = T[0][2] * T[2][1] - T[0][1] * T[2][2];
-        C[0][2] = T[0][1] * T[1][2] - T[0][2] * T[1][1];
-        C[1][0] = C[0][1];
-        C[1][1] = T[0][0] * T[2][2] - T[0][2] * T[2][0];
-        C[1][2] = T[0][2] * T[1][0] - T[0][0] * T[1][2];
-        C[2][0] = C[0][2];
-        C[2][1] = C[1][2];
-        C[2][2] = T[0][0] * T[1][1] - T[0][1] * T[1][0];
-        Real const det_T = T[0][0] * C[0][0] + T[0][1] * C[0][1] + T[0][2] * C[0][2];
+        floatingPointOperations += 24;    // Six independent symmetric entries.
+        auto const C = math::adjugate(T);
+        Real const det_T = T(0, 0) * C(0, 0) + T(0, 1) * C(0, 1) + T(0, 2) * C(0, 2);
         constexpr Real kRoundoff = std::numeric_limits<Real>::epsilon();
         constexpr Real kDeterminantTolerance = Real(128) * kRoundoff;
         constexpr Real kOffDiagonalTolerance = Real(4) * kRoundoff;
         constexpr Real kEigenvalueTolerance = Real(64) * kRoundoff;
-        floatingPointOperations += 24;    // Six cofactors, determinant, and its absolute value.
+        floatingPointOperations += 24;
         if (std::abs(det_T) > kDeterminantTolerance) {
-            for (int i = 0; i < 3; ++i) {
-                for (int j = 0; j < 3; ++j) {
-                    inverse[i][j] = (C[i][j] / det_T) / scale;
+            if constexpr (math::DefaultMatrixPolicy::kSymmetricInverseThreshold >= 3) {
+                for (int i = 0; i < 3; ++i) {
+                    for (int j = 0; j <= i; ++j) {
+                        inverse(i, j) = (C(i, j) / det_T) / scale;
+                    }
+                }
+                floatingPointOperations += 12;
+                return 3;
+            } else {
+                // Keep the physical rank gate above while honoring the build's
+                // algorithm selection for full-rank neighborhoods.
+                size_t operations = 0;
+                auto const status = math::tryInversePivoted(
+                    T, inverse, math::MatrixOptions<Real>{Real(0), Real(0)}, &operations);
+                floatingPointOperations += operations;
+                if (status == math::MatrixStatus::Success) {
+                    inverse /= scale;
+                    floatingPointOperations += 6;
+                    return 3;
                 }
             }
-            floatingPointOperations += 18;    // Two divisions per inverse entry.
-            return 3;
         }
 
-        Real Q[3][3]{};
-        for (int i = 0; i < 3; ++i) {
-            Q[i][i] = Real(1);
-        }
-        for (int sweep = 0; sweep < 8; ++sweep) {
-            for (int p = 0; p < 2; ++p) {
-                for (int q = p + 1; q < 3; ++q) {
-                    Real const T_pq = T[p][q];
-                    floatingPointOperations += 1;
-                    if (std::abs(T_pq) <= kOffDiagonalTolerance) {
-                        continue;
-                    }
-                    Real const θ = (T[q][q] - T[p][p]) / (Real(2) * T_pq);
-                    Real const t = (θ < Real(0) ? Real(-1) : Real(1)) /
-                        (std::abs(θ) + std::sqrt(Real(1) + θ * θ));
-                    Real const c = Real(1) / std::sqrt(Real(1) + t * t);
-                    Real const s = t * c;
-                    T[p][p] -= t * T_pq;
-                    T[q][q] += t * T_pq;
-                    T[p][q] = T[q][p] = Real(0);
-                    for (int k = 0; k < 3; ++k) {
-                        if (k != p && k != q) {
-                            Real const T_kp = T[k][p];
-                            Real const T_kq = T[k][q];
-                            T[k][p] = T[p][k] = c * T_kp - s * T_kq;
-                            T[k][q] = T[q][k] = s * T_kp + c * T_kq;
-                        }
-                        Real const Q_kp = Q[k][p];
-                        Real const Q_kq = Q[k][q];
-                        Q[k][p] = c * Q_kp - s * Q_kq;
-                        Q[k][q] = s * Q_kp + c * Q_kq;
-                    }
-                    // Rotation parameters (14), two diagonal updates (4),
-                    // one symmetric off-diagonal pair (6), and Q's three pairs (18).
-                    floatingPointOperations += 42;
-                }
-            }
-        }
+        math::Matrix<Real, 3> Q;
+        math::SymmetricEigenOptions<Real> options;
+        options.pivot = math::JacobiPivot::Cyclic;
+        options.maxIterations = 8;
+        options.absoluteOffDiagonalTolerance = kOffDiagonalTolerance;
+        options.relativeOffDiagonalTolerance = Real(0);
+        options.useHypot = false;
+        math::jacobiDiagonalize(T, Q, options, floatingPointOperations);
         Real λ_max = Real(0);
         for (int k = 0; k < 3; ++k) {
-            Real const magnitude = std::abs(T[k][k]);
+            Real const magnitude = std::abs(T(k, k));
             λ_max = magnitude > λ_max ? magnitude : λ_max;
         }
-        floatingPointOperations += 3;    // Eigenvalue absolute values.
+        floatingPointOperations += 3;
         int rank = 0;
         for (int k = 0; k < 3; ++k) {
-            Real const λ = T[k][k];
+            Real const λ = T(k, k);
             floatingPointOperations += 2;
             if (std::abs(λ) > kEigenvalueTolerance * λ_max) {
                 ++rank;
                 Real const inverse_λ = (Real(1) / λ) / scale;
                 for (int i = 0; i < 3; ++i) {
-                    for (int j = 0; j < 3; ++j) {
-                        inverse[i][j] += Q[i][k] * Q[j][k] * inverse_λ;
+                    for (int j = 0; j <= i; ++j) {
+                        inverse(i, j) += Q(i, k) * Q(j, k) * inverse_λ;
                     }
                 }
-                floatingPointOperations +=
-                    29;    // Reciprocal scaling and nine outer-product updates.
+                floatingPointOperations += 20;
             }
         }
         return rank;
@@ -167,21 +142,25 @@ template <typename Real, typename Counter>
 CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
     Real (&velocityGradient)[3][3], Real (&accelerationGradient)[3][3],
     Counter& floatingPointOperations) {
-    Real T_inverse[3][3];
+    math::SymmetricMatrix<Real, 3> T_inverse;
     int const rank = detail::inverseMoment(sums.moment, T_inverse, floatingPointOperations);
+    math::Matrix<Real, 3> D;
+    math::Matrix<Real, 3> C;
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
-            Real V_ij = Real(0);
-            Real G_ij = Real(0);
-            for (int k = 0; k < 3; ++k) {
-                V_ij += sums.velocity[i][k] * T_inverse[k][j];
-                G_ij += sums.acceleration[i][k] * T_inverse[k][j];
-            }
-            velocityGradient[i][j] = V_ij;
-            accelerationGradient[i][j] = G_ij;
+            D(i, j) = sums.velocity[i][j];
+            C(i, j) = sums.acceleration[i][j];
         }
     }
-    floatingPointOperations += 108;    // Two 3x3 products, with three multiply-adds per entry.
+    auto const V = D * T_inverse;
+    auto const G = C * T_inverse;
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            velocityGradient[i][j] = V(i, j);
+            accelerationGradient[i][j] = G(i, j);
+        }
+    }
+    floatingPointOperations += 90;    // Two products: three multiplies/two adds per entry.
     return rank;
 }
 
