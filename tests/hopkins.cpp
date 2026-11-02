@@ -539,6 +539,73 @@ TEST(Hopkins, SingularAndPoorlyConditionedGeometryRequiresMoreNeighbors) {
     EXPECT_FALSE(hopkins::makeGeometry(0.0, moment).valid);
 }
 
+TEST(Hopkins, TwoDimensionalGeometryInvertsOnlyActiveBlock) {
+    hopkins::Matrix const moment{{{2.0, 0.5, 10.0}, {0.5, 1.5, -8.0}, {10.0, -8.0, -1.0}}};
+    auto const geometry = hopkins::makeGeometry(4.0, moment, 100.0, 2);
+    ASSERT_TRUE(geometry.valid);
+    EXPECT_DOUBLE_EQ(geometry.volume, 0.25);
+    EXPECT_NEAR(geometry.inverseMoment(0, 0), 6.0 / 2.75, 1.0e-14);
+    EXPECT_NEAR(geometry.inverseMoment(0, 1), -2.0 / 2.75, 1.0e-14);
+    EXPECT_NEAR(geometry.inverseMoment(1, 1), 8.0 / 2.75, 1.0e-14);
+    for (int dim = 0; dim < 3; ++dim) {
+        EXPECT_DOUBLE_EQ(geometry.inverseMoment(2, dim), 0.0);
+        EXPECT_DOUBLE_EQ(geometry.inverseMoment(dim, 2), 0.0);
+    }
+}
+
+TEST(Hopkins, GeometryPreservesPositivePivotRejection) {
+    for (int pivot = 0; pivot < 3; ++pivot) {
+        hopkins::Matrix moment{{{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}}};
+        moment(pivot, pivot) = -1.0;
+        EXPECT_FALSE(hopkins::makeGeometry(1.0, moment, 1.0e30).valid);
+    }
+    for (int dimensions : {2, 3}) {
+        hopkins::Matrix moment{{{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}}};
+        moment(dimensions - 1, dimensions - 1) = 32.0 * std::numeric_limits<double>::epsilon();
+        EXPECT_FALSE(hopkins::makeGeometry(1.0, moment, 1.0e30, dimensions).valid);
+        moment(dimensions - 1, dimensions - 1) = 128.0 * std::numeric_limits<double>::epsilon();
+        EXPECT_TRUE(hopkins::makeGeometry(1.0, moment, 1.0e30, dimensions).valid);
+    }
+}
+
+TEST(Hopkins, GeometryRetainsScaleIndependentInverse) {
+    hopkins::Matrix const moment{{{2.0, 0.1, -0.2}, {0.1, 3.0, 0.4}, {-0.2, 0.4, 1.0}}};
+    auto const reference = hopkins::makeGeometry(1.0, moment);
+    ASSERT_TRUE(reference.valid);
+    for (double scale : {1.0e-300, 1.0e-200, 1.0e-150, 1.0, 1.0e150, 1.0e200, 1.0e300}) {
+        auto const geometry = hopkins::makeGeometry(1.0, moment * scale);
+        ASSERT_TRUE(geometry.valid);
+        EXPECT_NEAR(geometry.conditionNumber, reference.conditionNumber, 1.0e-14);
+        for (int row = 0; row < 3; ++row) {
+            for (int column = 0; column < 3; ++column) {
+                EXPECT_NEAR(geometry.inverseMoment(row, column) * scale,
+                    reference.inverseMoment(row, column), 1.0e-14);
+            }
+        }
+    }
+}
+
+TEST(Hopkins, GeometryRemainsFiniteWhenInverseRescalingNeedsEntrywiseDivision) {
+    // The shared cofactor multiplier 1/(det(normalized E)*scale) overflows,
+    // while multiplying each cofactor before the final division stays finite.
+    constexpr double kScale = 1.0e-308;
+    hopkins::Matrix const moment{{{1.0, 0.5, 0.5}, {0.5, 1.0, 0.5}, {0.5, 0.5, 1.0}}};
+    auto const reference = hopkins::makeGeometry(1.0, moment);
+    FlopCount operations = 0;
+    auto const geometry = hopkins::makeGeometry(1.0, moment * kScale, 100.0, 3, &operations);
+    ASSERT_TRUE(geometry.valid);
+    constexpr FlopCount kExpected =
+        math::DefaultMatrixPolicy::kSymmetricInverseThreshold >= 3 ? 109 : 128;
+    EXPECT_EQ(operations, kExpected);    // Explicit path uses six extra rescaling divisions.
+    EXPECT_NEAR(geometry.conditionNumber, reference.conditionNumber, 1.0e-14);
+    for (int row = 0; row < 3; ++row) {
+        for (int column = 0; column < 3; ++column) {
+            EXPECT_NEAR(geometry.inverseMoment(row, column) * kScale,
+                reference.inverseMoment(row, column), 1.0e-14);
+        }
+    }
+}
+
 TEST(Hopkins, FaceAreaIsAntisymmetricForUnequalVolumes) {
     hopkins::Matrix const momentLeft{{{2, 0.1, -0.2}, {0.1, 3, 0.4}, {-0.2, 0.4, 1.0}}};
     hopkins::Matrix const momentRight{{{3, 0.2, 0.1}, {0.2, 1, 0.0}, {0.1, 0.0, 2.0}}};
@@ -1784,15 +1851,27 @@ TEST(HopkinsFlops, GeometryCountsExecutedDimensionsAndSingularExit) {
     for (int dim = 0; dim < 3; dim++) {
         moment[dim][dim] = 2.0;
     }
-    // Analytic Cholesky/triangular-solve costs, including three-component row norms.
-    std::array<FlopCount, 3> const expected{22, 60, 132};
+    // Concrete operation counts for packed cofactor inversion and pivoted LU,
+    // including normalized condition estimation over the active dimensions.
+    // The separate SPD admissibility check is validation-only arithmetic.
+    std::array<FlopCount, 3> const explicitExpected{12, 44, 103};
+    // Packed pivoted inversion averages opposite off-diagonals: three FLOPs per pair.
+    std::array<FlopCount, 3> const pivotedExpected{12, 48, 128};
     for (int dimensions = 1; dimensions <= 3; dimensions++) {
         FlopCount operations = 0;
         auto const geometry = hopkins::makeGeometry(2.0, moment, 100.0, dimensions, &operations);
         EXPECT_TRUE(geometry.valid);
+        auto const& expected = dimensions <= math::DefaultMatrixPolicy::kSymmetricInverseThreshold ?
+            explicitExpected :
+            pivotedExpected;
         EXPECT_EQ(operations, expected[dimensions - 1]);
-        EXPECT_EQ(geometry.inverseMoment,
-            hopkins::makeGeometry(2.0, moment, 100.0, dimensions).inverseMoment);
+        auto const uncounted = hopkins::makeGeometry(2.0, moment, 100.0, dimensions);
+        for (int row = 0; row < 3; ++row) {
+            for (int column = 0; column < 3; ++column) {
+                EXPECT_EQ(
+                    geometry.inverseMoment(row, column), uncounted.inverseMoment(row, column));
+            }
+        }
     }
     FlopCount operations = 0;
     EXPECT_FALSE(hopkins::makeGeometry(0.0, moment, 100.0, 3, &operations).valid);
@@ -1810,7 +1889,7 @@ TEST(HopkinsFlops, GeometryAndGravityWorkPropagateNestedCounts) {
     hopkins::Vector const displacement{1.0, 2.0, 3.0};
     FlopCount operations = 0;
     auto const rate = hopkins::geometryRate(geometry, 0.2, {}, &operations);
-    EXPECT_EQ(operations, 108);
+    EXPECT_EQ(operations, 90);
     operations = 0;
     hopkins::faceArea(geometry, geometry, displacement, 0.5, 0.5, &operations);
     EXPECT_EQ(operations, 51);

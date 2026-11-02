@@ -1,0 +1,119 @@
+Start testing: Nov 02 08:58 CST
+----------------------------------------------------------
+181/203 Testing: matrix_cuda.MatrixCuda.FloatAlgorithms
+181/203 Test: matrix_cuda.MatrixCuda.FloatAlgorithms
+Command: "/tmp/cosmictiger_matrix_build_cuda/tests/bin/matrix_cuda_test" "--gtest_filter=MatrixCuda.FloatAlgorithms" "--gtest_also_run_disabled_tests"
+Directory: /tmp/cosmictiger_matrix_build_cuda/tests/work/matrix_cuda_test
+"matrix_cuda.MatrixCuda.FloatAlgorithms" start time: Nov 02 08:58 CST
+Output:
+----------------------------------------------------------
+Running main() from /home/dmarce1/workspace/cosmictiger/build/molecular_hot_cpu/_deps/googletest-src/googletest/src/gtest_main.cc
+Note: Google Test filter = MatrixCuda.FloatAlgorithms
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from MatrixCuda
+[ RUN      ] MatrixCuda.FloatAlgorithms
+[       OK ] MatrixCuda.FloatAlgorithms (322 ms)
+[----------] 1 test from MatrixCuda (322 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (322 ms total)
+[  PASSED  ] 1 test.
+<end of output>
+Test time =   0.44 sec
+----------------------------------------------------------
+Test Passed.
+"matrix_cuda.MatrixCuda.FloatAlgorithms" end time: Nov 02 08:58 CST
+"matrix_cuda.MatrixCuda.FloatAlgorithms" time elapsed: 00:00:00
+----------------------------------------------------------
+
+182/203 Testing: matrix_cuda.MatrixCuda.DoubleAlgorithms
+182/203 Test: matrix_cuda.MatrixCuda.DoubleAlgorithms
+Command: "/tmp/cosmictiger_matrix_build_cuda/tests/bin/matrix_cuda_test" "--gtest_filter=MatrixCuda.DoubleAlgorithms" "--gtest_also_run_disabled_tests"
+Directory: /tmp/cosmictiger_matrix_build_cuda/tests/work/matrix_cuda_test
+"matrix_cuda.MatrixCuda.DoubleAlgorithms" start time: Nov 02 08:58 CST
+Output:
+----------------------------------------------------------
+Running main() from /home/dmarce1/workspace/cosmictiger/build/molecular_hot_cpu/_deps/googletest-src/googletest/src/gtest_main.cc
+Note: Google Test filter = MatrixCuda.DoubleAlgorithms
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from MatrixCuda
+[ RUN      ] MatrixCuda.DoubleAlgorithms
+[       OK ] MatrixCuda.DoubleAlgorithms (186 ms)
+[----------] 1 test from MatrixCuda (186 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (186 ms total)
+[  PASSED  ] 1 test.
+<end of output>
+Test time =   0.31 sec
+----------------------------------------------------------
+Test Passed.
+"matrix_cuda.MatrixCuda.DoubleAlgorithms" end time: Nov 02 08:58 CST
+"matrix_cuda.MatrixCuda.DoubleAlgorithms" time elapsed: 00:00:00
+----------------------------------------------------------
+
+183/203 Testing: matrix_cuda.MatrixEigenCuda.FloatGradientsAndEigenpairs
+183/203 Test: matrix_cuda.MatrixEigenCuda.FloatGradientsAndEigenpairs
+Command: "/tmp/cosmictiger_matrix_build_cuda/tests/bin/matrix_cuda_test" "--gtest_filter=MatrixEigenCuda.FloatGradientsAndEigenpairs" "--gtest_also_run_disabled_tests"
+Directory: /tmp/cosmictiger_matrix_build_cuda/tests/work/matrix_cuda_test
+"matrix_cuda.MatrixEigenCuda.FloatGradientsAndEigenpairs" start time: Nov 02 08:58 CST
+Output:
+----------------------------------------------------------
+Running main() from /home/dmarce1/workspace/cosmictiger/build/molecular_hot_cpu/_deps/googletest-src/googletest/src/gtest_main.cc
+Note: Google Test filter = MatrixEigenCuda.FloatGradientsAndEigenpairs
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from MatrixEigenCuda
+[ RUN      ] MatrixEigenCuda.FloatGradientsAndEigenpairs
+[       OK ] MatrixEigenCuda.FloatGradientsAndEigenpairs (191 ms)
+[----------] 1 test from MatrixEigenCuda (191 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (191 ms total)
+[  PASSED  ] 1 test.
+<end of output>
+Test time =   0.31 sec
+----------------------------------------------------------
+Test Passed.
+"matrix_cuda.MatrixEigenCuda.FloatGradientsAndEigenpairs" end time: Nov 02 08:58 CST
+"matrix_cuda.MatrixEigenCuda.FloatGradientsAndEigenpairs" time elapsed: 00:00:00
+----------------------------------------------------------
+
+184/203 Testing: matrix_cuda.MatrixEigenCuda.DoubleGradientsAndEigenpairs
+184/203 Test: matrix_cuda.MatrixEigenCuda.DoubleGradientsAndEigenpairs
+Command: "/tmp/cosmictiger_matrix_build_cuda/tests/bin/matrix_cuda_test" "--gtest_filter=MatrixEigenCuda.DoubleGradientsAndEigenpairs" "--gtest_also_run_disabled_tests"
+Directory: /tmp/cosmictiger_matrix_build_cuda/tests/work/matrix_cuda_test
+"matrix_cuda.MatrixEigenCuda.DoubleGradientsAndEigenpairs" start time: Nov 02 08:58 CST
+Output:
+----------------------------------------------------------
+Running main() from /home/dmarce1/workspace/cosmictiger/build/molecular_hot_cpu/_deps/googletest-src/googletest/src/gtest_main.cc
+Note: Google Test filter = MatrixEigenCuda.DoubleGradientsAndEigenpairs
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from MatrixEigenCuda
+[ RUN      ] MatrixEigenCuda.DoubleGradientsAndEigenpairs
+[       OK ] MatrixEigenCuda.DoubleGradientsAndEigenpairs (181 ms)
+[----------] 1 test from MatrixEigenCuda (181 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (181 ms total)
+[  PASSED  ] 1 test.
+<end of output>
+Test time =   0.31 sec
+----------------------------------------------------------
+Test Passed.
+"matrix_cuda.MatrixEigenCuda.DoubleGradientsAndEigenpairs" end time: Nov 02 08:58 CST
+"matrix_cuda.MatrixEigenCuda.DoubleGradientsAndEigenpairs" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Nov 02 08:58 CST
+
+RESOURCE_LOCK =   1.36 sec*proc
+
+cuda =   1.36 sec*proc
+
+math =   1.36 sec*proc
+
+matrix_cuda =   1.36 sec*proc

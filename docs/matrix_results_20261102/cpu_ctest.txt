@@ -1,0 +1,177 @@
+Test project /tmp/cosmictiger_matrix_build_cpu
+      Start  41: native_recombination_reference
+ 1/79 Test  #41: native_recombination_reference ....................................................................................   Passed    1.19 sec
+      Start 102: recombination_background_standard.RecombinationBackground.Background
+ 2/79 Test #102: recombination_background_standard.RecombinationBackground.Background ..............................................   Passed    0.08 sec
+      Start 104: recombination_background_fast_math.RecombinationBackground.Background
+ 3/79 Test #104: recombination_background_fast_math.RecombinationBackground.Background .............................................   Passed    0.08 sec
+      Start 111: boltzmann.Boltzmann.InitialConditions
+ 4/79 Test #111: boltzmann.Boltzmann.InitialConditions .............................................................................   Passed    0.03 sec
+      Start 112: boltzmann.Boltzmann.Convergence
+ 5/79 Test #112: boltzmann.Boltzmann.Convergence ...................................................................................   Passed    2.43 sec
+      Start 113: boltzmann.Boltzmann.InitialTime
+ 6/79 Test #113: boltzmann.Boltzmann.InitialTime ...................................................................................   Passed    3.38 sec
+      Start 114: boltzmann.Boltzmann.InvalidInput
+ 7/79 Test #114: boltzmann.Boltzmann.InvalidInput ..................................................................................   Passed    0.03 sec
+      Start 115: boltzmann.Boltzmann.PhotonOnly
+ 8/79 Test #115: boltzmann.Boltzmann.PhotonOnly ....................................................................................   Passed    0.06 sec
+      Start 122: rockstar_properties.RockstarProperties.SphericalOverdensity
+ 9/79 Test #122: rockstar_properties.RockstarProperties.SphericalOverdensity .......................................................   Passed    0.00 sec
+      Start 123: rockstar_properties.RockstarProperties.VirialOverdensity
+10/79 Test #123: rockstar_properties.RockstarProperties.VirialOverdensity ..........................................................   Passed    0.00 sec
+      Start 124: rockstar_properties.RockstarProperties.Eigenpairs
+11/79 Test #124: rockstar_properties.RockstarProperties.Eigenpairs .................................................................   Passed    0.00 sec
+      Start 125: rockstar_properties.RockstarProperties.NfwFits
+12/79 Test #125: rockstar_properties.RockstarProperties.NfwFits ....................................................................   Passed    0.05 sec
+      Start 126: rockstar_properties.RockstarProperties.NfwScaleRadiusWindow
+13/79 Test #126: rockstar_properties.RockstarProperties.NfwScaleRadiusWindow .......................................................   Passed    0.10 sec
+      Start 127: rockstar_properties.RockstarProperties.KlypinFit
+14/79 Test #127: rockstar_properties.RockstarProperties.KlypinFit ..................................................................   Passed    0.00 sec
+      Start 128: rockstar_properties.RockstarProperties.HaloDensityConventionPreservesSupportedFamilies
+15/79 Test #128: rockstar_properties.RockstarProperties.HaloDensityConventionPreservesSupportedFamilies ............................   Passed    0.00 sec
+      Start 129: rockstar_properties.RockstarProperties.SupportedHaloThresholdsRetainCriticalReferenceAndVirialFit
+16/79 Test #129: rockstar_properties.RockstarProperties.SupportedHaloThresholdsRetainCriticalReferenceAndVirialFit .................   Passed    0.00 sec
+      Start 130: rockstar_properties.RockstarProperties.MeanReferenceRemainsFiniteAtClosedAndNegativeLambdaTurnaround
+17/79 Test #130: rockstar_properties.RockstarProperties.MeanReferenceRemainsFiniteAtClosedAndNegativeLambdaTurnaround ..............   Passed    0.00 sec
+      Start 131: rockstar_properties.RockstarProperties.CurvedLambdaCataloguesKeepOneMeanDensityConventionAtEveryEpoch
+18/79 Test #131: rockstar_properties.RockstarProperties.CurvedLambdaCataloguesKeepOneMeanDensityConventionAtEveryEpoch .............   Passed    0.00 sec
+      Start 132: rockstar_properties.RockstarProperties.InvalidHaloThresholdInputsAreRejectedBeforeFallback
+19/79 Test #132: rockstar_properties.RockstarProperties.InvalidHaloThresholdInputsAreRejectedBeforeFallback ........................   Passed    0.00 sec
+      Start 134: rockstar_properties_fast_math.RockstarProperties.SphericalOverdensity
+20/79 Test #134: rockstar_properties_fast_math.RockstarProperties.SphericalOverdensity .............................................   Passed    0.00 sec
+      Start 135: rockstar_properties_fast_math.RockstarProperties.VirialOverdensity
+21/79 Test #135: rockstar_properties_fast_math.RockstarProperties.VirialOverdensity ................................................   Passed    0.00 sec
+      Start 136: rockstar_properties_fast_math.RockstarProperties.Eigenpairs
+22/79 Test #136: rockstar_properties_fast_math.RockstarProperties.Eigenpairs .......................................................   Passed    0.00 sec
+      Start 137: rockstar_properties_fast_math.RockstarProperties.NfwFits
+23/79 Test #137: rockstar_properties_fast_math.RockstarProperties.NfwFits ..........................................................   Passed    0.05 sec
+      Start 138: rockstar_properties_fast_math.RockstarProperties.NfwScaleRadiusWindow
+24/79 Test #138: rockstar_properties_fast_math.RockstarProperties.NfwScaleRadiusWindow .............................................   Passed    0.10 sec
+      Start 139: rockstar_properties_fast_math.RockstarProperties.KlypinFit
+25/79 Test #139: rockstar_properties_fast_math.RockstarProperties.KlypinFit ........................................................   Passed    0.00 sec
+      Start 140: rockstar_properties_fast_math.RockstarProperties.HaloDensityConventionPreservesSupportedFamilies
+26/79 Test #140: rockstar_properties_fast_math.RockstarProperties.HaloDensityConventionPreservesSupportedFamilies ..................   Passed    0.00 sec
+      Start 141: rockstar_properties_fast_math.RockstarProperties.SupportedHaloThresholdsRetainCriticalReferenceAndVirialFit
+27/79 Test #141: rockstar_properties_fast_math.RockstarProperties.SupportedHaloThresholdsRetainCriticalReferenceAndVirialFit .......   Passed    0.00 sec
+      Start 142: rockstar_properties_fast_math.RockstarProperties.MeanReferenceRemainsFiniteAtClosedAndNegativeLambdaTurnaround
+28/79 Test #142: rockstar_properties_fast_math.RockstarProperties.MeanReferenceRemainsFiniteAtClosedAndNegativeLambdaTurnaround ....   Passed    0.00 sec
+      Start 143: rockstar_properties_fast_math.RockstarProperties.CurvedLambdaCataloguesKeepOneMeanDensityConventionAtEveryEpoch
+29/79 Test #143: rockstar_properties_fast_math.RockstarProperties.CurvedLambdaCataloguesKeepOneMeanDensityConventionAtEveryEpoch ...   Passed    0.00 sec
+      Start 144: rockstar_properties_fast_math.RockstarProperties.InvalidHaloThresholdInputsAreRejectedBeforeFallback
+30/79 Test #144: rockstar_properties_fast_math.RockstarProperties.InvalidHaloThresholdInputsAreRejectedBeforeFallback ..............   Passed    0.00 sec
+      Start 167: cullen_and_dehnen.CullenAndDehnen.CullenDehnenGradientsDouble
+31/79 Test #167: cullen_and_dehnen.CullenAndDehnen.CullenDehnenGradientsDouble .....................................................   Passed    0.00 sec
+      Start 168: cullen_and_dehnen.CullenAndDehnen.CullenDehnenGradientsFloat
+32/79 Test #168: cullen_and_dehnen.CullenAndDehnen.CullenDehnenGradientsFloat ......................................................   Passed    0.00 sec
+      Start 169: cullen_and_dehnen.CullenAndDehnen.CullenDehnenDiagnosticsDouble
+33/79 Test #169: cullen_and_dehnen.CullenAndDehnen.CullenDehnenDiagnosticsDouble ...................................................   Passed    0.00 sec
+      Start 170: cullen_and_dehnen.CullenAndDehnen.CullenDehnenDiagnosticsFloat
+34/79 Test #170: cullen_and_dehnen.CullenAndDehnen.CullenDehnenDiagnosticsFloat ....................................................   Passed    0.00 sec
+      Start 171: price_etal.PriceEtAl.DiagnosticsDouble
+35/79 Test #171: price_etal.PriceEtAl.DiagnosticsDouble ............................................................................   Passed    0.00 sec
+      Start 172: price_etal.PriceEtAl.DiagnosticsFloat
+36/79 Test #172: price_etal.PriceEtAl.DiagnosticsFloat .............................................................................   Passed    0.00 sec
+      Start 173: price_etal.PriceEtAl.Evolution
+37/79 Test #173: price_etal.PriceEtAl.Evolution ....................................................................................   Passed    0.00 sec
+      Start 183: matrix_standard.Matrix.RectangularProductsAndVectorOrientation
+38/79 Test #183: matrix_standard.Matrix.RectangularProductsAndVectorOrientation ....................................................   Passed    0.00 sec
+      Start 184: matrix_standard.Matrix.PackedSymmetryAndMixedProducts
+39/79 Test #184: matrix_standard.Matrix.PackedSymmetryAndMixedProducts .............................................................   Passed    0.00 sec
+      Start 185: matrix_standard.Matrix.RandomFloatSystems
+40/79 Test #185: matrix_standard.Matrix.RandomFloatSystems .........................................................................   Passed    0.00 sec
+      Start 186: matrix_standard.Matrix.RandomDoubleSystems
+41/79 Test #186: matrix_standard.Matrix.RandomDoubleSystems ........................................................................   Passed    0.00 sec
+      Start 187: matrix_standard.Matrix.PivotingMultipleRightSidesAndAliasing
+42/79 Test #187: matrix_standard.Matrix.PivotingMultipleRightSidesAndAliasing ......................................................   Passed    0.00 sec
+      Start 188: matrix_standard.Matrix.SingularAndNonFiniteLeaveOutputsUnchanged
+43/79 Test #188: matrix_standard.Matrix.SingularAndNonFiniteLeaveOutputsUnchanged ..................................................   Passed    0.00 sec
+      Start 189: matrix_standard.Matrix.ScaleRangeAndAbsolutePivotFloor
+44/79 Test #189: matrix_standard.Matrix.ScaleRangeAndAbsolutePivotFloor ............................................................   Passed    0.00 sec
+      Start 190: matrix_standard.Matrix.DiagonalAlwaysExplicitAtAnySize
+45/79 Test #190: matrix_standard.Matrix.DiagonalAlwaysExplicitAtAnySize ............................................................   Passed    0.00 sec
+      Start 191: matrix_standard.Matrix.CompileTimePolicyOverrides
+46/79 Test #191: matrix_standard.Matrix.CompileTimePolicyOverrides .................................................................   Passed    0.00 sec
+      Start 192: matrix_standard.Matrix.AutomaticSolveRetriesOverflowingCofactorIntermediate
+47/79 Test #192: matrix_standard.Matrix.AutomaticSolveRetriesOverflowingCofactorIntermediate .......................................   Passed    0.00 sec
+      Start 193: matrix_standard.Matrix.DivisionPreservesIntegersAndAliasedScalar
+48/79 Test #193: matrix_standard.Matrix.DivisionPreservesIntegersAndAliasedScalar ..................................................   Passed    0.00 sec
+      Start 194: matrix_standard.Matrix.SimdArithmeticIncludesEveryLane
+49/79 Test #194: matrix_standard.Matrix.SimdArithmeticIncludesEveryLane ............................................................   Passed    0.00 sec
+      Start 195: matrix_standard.Matrix.IllConditionedCofactorAttemptUsesPivotFallback
+50/79 Test #195: matrix_standard.Matrix.IllConditionedCofactorAttemptUsesPivotFallback .............................................   Passed    0.00 sec
+      Start 196: matrix_standard.Matrix.PivotDeterminantAvoidsIntermediateOverflow
+51/79 Test #196: matrix_standard.Matrix.PivotDeterminantAvoidsIntermediateOverflow .................................................   Passed    0.00 sec
+      Start 197: matrix_standard.Matrix.NearlyRankOneSymmetricSystems
+52/79 Test #197: matrix_standard.Matrix.NearlyRankOneSymmetricSystems ..............................................................   Passed    0.00 sec
+      Start 198: matrix_standard.Matrix.FrobeniusNormAvoidsSquaringOverflowAndUnderflow
+53/79 Test #198: matrix_standard.Matrix.FrobeniusNormAvoidsSquaringOverflowAndUnderflow ............................................   Passed    0.00 sec
+      Start 199: matrix_standard.MatrixEigen.FloatScaledIndefiniteFourDimensional
+54/79 Test #199: matrix_standard.MatrixEigen.FloatScaledIndefiniteFourDimensional ..................................................   Passed    0.00 sec
+      Start 200: matrix_standard.MatrixEigen.DoubleScaledIndefiniteFourDimensional
+55/79 Test #200: matrix_standard.MatrixEigen.DoubleScaledIndefiniteFourDimensional .................................................   Passed    0.00 sec
+      Start 201: matrix_standard.MatrixEigen.OneDimensionalAndZero
+56/79 Test #201: matrix_standard.MatrixEigen.OneDimensionalAndZero .................................................................   Passed    0.00 sec
+      Start 202: matrix_standard.MatrixEigen.NonFiniteLeavesOutputUnchanged
+57/79 Test #202: matrix_standard.MatrixEigen.NonFiniteLeavesOutputUnchanged ........................................................   Passed    0.00 sec
+      Start 203: matrix_standard.MatrixEigen.IterationBudgetAndSymmetrization
+58/79 Test #203: matrix_standard.MatrixEigen.IterationBudgetAndSymmetrization ......................................................   Passed    0.00 sec
+      Start 204: matrix_fast_math.Matrix.RectangularProductsAndVectorOrientation
+59/79 Test #204: matrix_fast_math.Matrix.RectangularProductsAndVectorOrientation ...................................................   Passed    0.00 sec
+      Start 205: matrix_fast_math.Matrix.PackedSymmetryAndMixedProducts
+60/79 Test #205: matrix_fast_math.Matrix.PackedSymmetryAndMixedProducts ............................................................   Passed    0.00 sec
+      Start 206: matrix_fast_math.Matrix.RandomFloatSystems
+61/79 Test #206: matrix_fast_math.Matrix.RandomFloatSystems ........................................................................   Passed    0.01 sec
+      Start 207: matrix_fast_math.Matrix.RandomDoubleSystems
+62/79 Test #207: matrix_fast_math.Matrix.RandomDoubleSystems .......................................................................   Passed    0.01 sec
+      Start 208: matrix_fast_math.Matrix.PivotingMultipleRightSidesAndAliasing
+63/79 Test #208: matrix_fast_math.Matrix.PivotingMultipleRightSidesAndAliasing .....................................................   Passed    0.00 sec
+      Start 209: matrix_fast_math.Matrix.SingularAndNonFiniteLeaveOutputsUnchanged
+64/79 Test #209: matrix_fast_math.Matrix.SingularAndNonFiniteLeaveOutputsUnchanged .................................................   Passed    0.00 sec
+      Start 210: matrix_fast_math.Matrix.ScaleRangeAndAbsolutePivotFloor
+65/79 Test #210: matrix_fast_math.Matrix.ScaleRangeAndAbsolutePivotFloor ...........................................................   Passed    0.00 sec
+      Start 211: matrix_fast_math.Matrix.DiagonalAlwaysExplicitAtAnySize
+66/79 Test #211: matrix_fast_math.Matrix.DiagonalAlwaysExplicitAtAnySize ...........................................................   Passed    0.00 sec
+      Start 212: matrix_fast_math.Matrix.CompileTimePolicyOverrides
+67/79 Test #212: matrix_fast_math.Matrix.CompileTimePolicyOverrides ................................................................   Passed    0.00 sec
+      Start 213: matrix_fast_math.Matrix.AutomaticSolveRetriesOverflowingCofactorIntermediate
+68/79 Test #213: matrix_fast_math.Matrix.AutomaticSolveRetriesOverflowingCofactorIntermediate ......................................   Passed    0.00 sec
+      Start 214: matrix_fast_math.Matrix.DivisionPreservesIntegersAndAliasedScalar
+69/79 Test #214: matrix_fast_math.Matrix.DivisionPreservesIntegersAndAliasedScalar .................................................   Passed    0.00 sec
+      Start 215: matrix_fast_math.Matrix.SimdArithmeticIncludesEveryLane
+70/79 Test #215: matrix_fast_math.Matrix.SimdArithmeticIncludesEveryLane ...........................................................   Passed    0.00 sec
+      Start 216: matrix_fast_math.Matrix.IllConditionedCofactorAttemptUsesPivotFallback
+71/79 Test #216: matrix_fast_math.Matrix.IllConditionedCofactorAttemptUsesPivotFallback ............................................   Passed    0.00 sec
+      Start 217: matrix_fast_math.Matrix.PivotDeterminantAvoidsIntermediateOverflow
+72/79 Test #217: matrix_fast_math.Matrix.PivotDeterminantAvoidsIntermediateOverflow ................................................   Passed    0.00 sec
+      Start 218: matrix_fast_math.Matrix.NearlyRankOneSymmetricSystems
+73/79 Test #218: matrix_fast_math.Matrix.NearlyRankOneSymmetricSystems .............................................................   Passed    0.00 sec
+      Start 219: matrix_fast_math.Matrix.FrobeniusNormAvoidsSquaringOverflowAndUnderflow
+74/79 Test #219: matrix_fast_math.Matrix.FrobeniusNormAvoidsSquaringOverflowAndUnderflow ...........................................   Passed    0.00 sec
+      Start 220: matrix_fast_math.MatrixEigen.FloatScaledIndefiniteFourDimensional
+75/79 Test #220: matrix_fast_math.MatrixEigen.FloatScaledIndefiniteFourDimensional .................................................   Passed    0.00 sec
+      Start 221: matrix_fast_math.MatrixEigen.DoubleScaledIndefiniteFourDimensional
+76/79 Test #221: matrix_fast_math.MatrixEigen.DoubleScaledIndefiniteFourDimensional ................................................   Passed    0.00 sec
+      Start 222: matrix_fast_math.MatrixEigen.OneDimensionalAndZero
+77/79 Test #222: matrix_fast_math.MatrixEigen.OneDimensionalAndZero ................................................................   Passed    0.00 sec
+      Start 223: matrix_fast_math.MatrixEigen.NonFiniteLeavesOutputUnchanged
+78/79 Test #223: matrix_fast_math.MatrixEigen.NonFiniteLeavesOutputUnchanged .......................................................   Passed    0.00 sec
+      Start 224: matrix_fast_math.MatrixEigen.IterationBudgetAndSymmetrization
+79/79 Test #224: matrix_fast_math.MatrixEigen.IterationBudgetAndSymmetrization .....................................................   Passed    0.00 sec
+
+100% tests passed, 0 tests failed out of 79
+
+Label Time Summary:
+boltzmann                             =   5.92 sec*proc (5 tests)
+cpu                                   =   0.14 sec*proc (49 tests)
+cullen_and_dehnen                     =   0.01 sec*proc (4 tests)
+math                                  =   0.12 sec*proc (42 tests)
+matrix_fast_math                      =   0.06 sec*proc (21 tests)
+matrix_standard                       =   0.06 sec*proc (21 tests)
+price_etal                            =   0.01 sec*proc (3 tests)
+recombination_background_fast_math    =   0.08 sec*proc (1 test)
+recombination_background_standard     =   0.08 sec*proc (1 test)
+rockstar_properties                   =   0.18 sec*proc (11 tests)
+rockstar_properties_fast_math         =   0.18 sec*proc (11 tests)
+sph                                   =   0.02 sec*proc (7 tests)
+
+Total Test time (real) =   7.85 sec
