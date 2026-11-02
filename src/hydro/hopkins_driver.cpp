@@ -175,8 +175,8 @@ hopkins::Vector hopkinsSeparation(
     return separation;
 }
 
-using HopkinsSimd = NativeSimdVector<double>;
-using HopkinsSimdVector = std::array<HopkinsSimd, 3>;
+using HopkinsSimd = hopkins::SimdReal;
+using HopkinsSimdVector = hopkins::SimdVector3;
 using HopkinsSimdMatrix = std::array<HopkinsSimdVector, 3>;
 
 struct HopkinsNeighborBatch {
@@ -189,7 +189,7 @@ struct HopkinsNeighborBatch {
 HopkinsSimd hopkinsSimdDot(
     HopkinsSimdVector const& left, HopkinsSimdVector const& right, FlopCount* operations) {
     hopkins::detail::countFlops(operations, 5 * HopkinsSimd::size());
-    return left[0] * right[0] + left[1] * right[1] + left[2] * right[2];
+    return left.dot(right);
 }
 
 template <class Function>

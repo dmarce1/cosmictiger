@@ -17,11 +17,9 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/math/simd_math.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 namespace hopkins {
-
-template <class Real>
-using ArithmeticVector = std::array<Real, 3>;
 
 template <class Real>
 using ArithmeticMask = decltype(Real{} > Real{});
@@ -29,21 +27,21 @@ using ArithmeticMask = decltype(Real{} > Real{});
 template <class Real>
 struct PrimitiveValues {
     Real density = Real(0.0);
-    ArithmeticVector<Real> velocity{};
+    Vector3<Real> velocity{};
     Real pressure = Real(0.0);
 };
 
 template <class Real>
 struct GradientValues {
-    ArithmeticVector<Real> density{};
-    std::array<ArithmeticVector<Real>, 3> velocity{};
-    ArithmeticVector<Real> pressure{};
+    Vector3<Real> density{};
+    std::array<Vector3<Real>, 3> velocity{};
+    Vector3<Real> pressure{};
 };
 
 template <class Real>
 struct FluxValues {
     Real mass = Real(0.0);
-    ArithmeticVector<Real> momentum{};
+    Vector3<Real> momentum{};
     Real energy = Real(0.0);
     Real signalSpeed = Real(0.0);
     Real contactSpeed = Real(0.0);
@@ -51,7 +49,7 @@ struct FluxValues {
 
 #ifndef __CUDACC__
 using SimdReal = NativeSimdVector<double>;
-using SimdVector3 = ArithmeticVector<SimdReal>;
+using SimdVector3 = Vector3<SimdReal>;
 using SimdPrimitive = PrimitiveValues<SimdReal>;
 using SimdGradient = GradientValues<SimdReal>;
 #endif
@@ -94,10 +92,10 @@ namespace detail {
     }
 
     template <class Real>
-    inline Real arithmeticDot(ArithmeticVector<Real> const& left,
-        ArithmeticVector<Real> const& right, FlopCount* operations) {
+    inline Real arithmeticDot(
+        Vector3<Real> const& left, Vector3<Real> const& right, FlopCount* operations) {
         countArithmeticFlops<Real>(operations, 5);
-        return left[0] * right[0] + left[1] * right[1] + left[2] * right[2];
+        return left.dot(right);
     }
 
     template <class Real>
@@ -123,7 +121,7 @@ namespace detail {
     template <class Real>
     struct ConservedValues {
         Real mass = Real(0.0);
-        ArithmeticVector<Real> momentum{};
+        Vector3<Real> momentum{};
         Real energy = Real(0.0);
     };
 
@@ -143,7 +141,7 @@ namespace detail {
 
     template <class Real>
     inline ConservedValues<Real> arithmeticStar(PrimitiveValues<Real> const& state,
-        ConservedValues<Real> const& conservedState, ArithmeticVector<Real> const& normal,
+        ConservedValues<Real> const& conservedState, Vector3<Real> const& normal,
         Real const& normalVelocity, Real const& waveRelativeVelocity, Real const& waveSpeed,
         Real const& contact, Real const& starPressure, FlopCount* operations) {
         countArithmeticFlops<Real>(operations, 19);
@@ -222,8 +220,8 @@ inline Real pairLimiterValues(Real const& center, Real const& neighbor, Real con
 // limiter is retained; the Riemann solver itself has no fallback.
 template <class Real>
 inline PrimitiveValues<Real> reconstructValues(PrimitiveValues<Real> const& center,
-    GradientValues<Real> const& gradient, ArithmeticVector<Real> const& offset,
-    ArithmeticVector<Real> const& frameVelocity, Real const& halfTimestep, double gamma,
+    GradientValues<Real> const& gradient, Vector3<Real> const& offset,
+    Vector3<Real> const& frameVelocity, Real const& halfTimestep, double gamma,
     PrimitiveValues<Real> const& neighbor, Real const& faceFraction,
     FlopCount* operations = nullptr) {
     detail::countArithmeticFlops<Real>(operations, 32);
@@ -241,7 +239,7 @@ inline PrimitiveValues<Real> reconstructValues(PrimitiveValues<Real> const& cent
         result.velocity[dim] = pairLimiterValues(center.velocity[dim], neighbor.velocity[dim],
             result.velocity[dim], faceFraction, operations);
     }
-    ArithmeticVector<Real> relativeVelocity{};
+    Vector3<Real> relativeVelocity{};
     Real divergence(0.0);
     for (int dim = 0; dim < 3; dim++) {
         relativeVelocity[dim] = center.velocity[dim] - frameVelocity[dim];
@@ -269,9 +267,8 @@ inline PrimitiveValues<Real> reconstructValues(PrimitiveValues<Real> const& cent
 // Invalid active inputs or nonphysical HLLC states are fatal to the caller.
 template <class Real>
 inline FluxValues<Real> riemannFluxValues(PrimitiveValues<Real> left, PrimitiveValues<Real> right,
-    ArithmeticVector<Real> const& inputArea, ArithmeticVector<Real> const& inputFrameVelocity,
-    double gamma, bool finiteMass, ArithmeticMask<Real> const& valid,
-    FlopCount* operations = nullptr) {
+    Vector3<Real> const& inputArea, Vector3<Real> const& inputFrameVelocity, double gamma,
+    bool finiteMass, ArithmeticMask<Real> const& valid, FlopCount* operations = nullptr) {
     if (!(gamma > 1.0) || !std::isfinite(gamma)) {
         throw std::invalid_argument("Hopkins HLLC requires finite gamma greater than one");
     }
@@ -284,8 +281,8 @@ inline FluxValues<Real> riemannFluxValues(PrimitiveValues<Real> left, PrimitiveV
     // must not raise FE_INVALID in an otherwise physical packed solve.
     left = detail::selectPrimitive(valid, left, benign);
     right = detail::selectPrimitive(valid, right, benign);
-    ArithmeticVector<Real> area{};
-    ArithmeticVector<Real> frameVelocity{};
+    Vector3<Real> area{};
+    Vector3<Real> frameVelocity{};
     for (int dim = 0; dim < 3; dim++) {
         area[dim] = simdSelect(valid, inputArea[dim], zero);
         frameVelocity[dim] = simdSelect(valid, inputFrameVelocity[dim], zero);
@@ -311,7 +308,7 @@ inline FluxValues<Real> riemannFluxValues(PrimitiveValues<Real> left, PrimitiveV
     // packed divisions, roots, and star-state validation.
     left = detail::selectPrimitive(solve, left, benign);
     right = detail::selectPrimitive(solve, right, benign);
-    ArithmeticVector<Real> normal{};
+    Vector3<Real> normal{};
     Real const safeAreaMagnitude = simdSelect(solve, areaMagnitude, one);
     detail::countArithmeticFlops<Real>(operations, 9);
     for (int dim = 0; dim < 3; dim++) {

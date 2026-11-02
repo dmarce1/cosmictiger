@@ -17,6 +17,7 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/hydro/hopkins_simd.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 // Hopkins (2015), MNRAS 450, 53, doi:10.1093/mnras/stv195.
 // https://arxiv.org/html/1409.7395v2
@@ -585,11 +586,16 @@ inline Primitive reconstruct(Primitive const& center, Gradient const& gradient,
 // Scalar reference and packed production use the same strict HLLC kernel.
 inline Flux riemannFlux(Primitive const& left, Primitive const& right, Vector const& area,
     Vector const& frameVelocity, double gamma, bool finiteMass, FlopCount* operations = nullptr) {
-    PrimitiveValues<double> const leftValues{left.density, left.velocity, left.pressure};
-    PrimitiveValues<double> const rightValues{right.density, right.velocity, right.pressure};
+    PrimitiveValues<double> const leftValues{
+        left.density, {left.velocity[0], left.velocity[1], left.velocity[2]}, left.pressure};
+    PrimitiveValues<double> const rightValues{
+        right.density, {right.velocity[0], right.velocity[1], right.velocity[2]}, right.pressure};
+    Vector3<double> const areaValues{area[0], area[1], area[2]};
+    Vector3<double> const frameValues{frameVelocity[0], frameVelocity[1], frameVelocity[2]};
     auto const result = riemannFluxValues(
-        leftValues, rightValues, area, frameVelocity, gamma, finiteMass, true, operations);
-    return {result.mass, result.momentum, result.energy, result.signalSpeed, result.contactSpeed};
+        leftValues, rightValues, areaValues, frameValues, gamma, finiteMass, true, operations);
+    return {result.mass, {result.momentum[0], result.momentum[1], result.momentum[2]},
+        result.energy, result.signalSpeed, result.contactSpeed};
 }
 
 }    // namespace hopkins
