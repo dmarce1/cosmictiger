@@ -82,12 +82,18 @@ The two star-forming LCDM presets use different cosmological parameters,
 coarse-step counts, and output directories; both are intentional examples.
 For older local configurations, remove the retired network, ion/molecular
 fraction, chemistry subcycling, wind, and metal options. The current cooling
-section contains only `enabled`, `initializationTemperature`, and
+section contains `enabled`, `cuda`, `initializationTemperature`, and
 `minimumSpecificEnergy`; see [cooling configuration](../docs/primordial_chemistry.md#configuration)
 and [star formation](../docs/star_formation.md). The supplied initialization
 temperature is 10000 K; zero preserves initial-condition thermal energy.
 
-Use `--compute.cuda=false` for CPU execution. HPX thread and locality options
+Each module selects CUDA independently. The default configuration uses CPU
+backends; the GPU examples enable the relevant `gravity.cuda`, `hydro.cuda`,
+`drift.cuda`, or analysis selectors explicitly. Set every enabled `.cuda` selector
+to `false` for a CPU run. Gravity tuning is under `gravity.cuda.*`.
+MFM/MFV require `hydro.cuda=false`; `sort.cuda`, `analysis.tracers.cuda`,
+`analysis.slice.cuda`, and `analysis.views.cuda` must remain `false`.
+HPX thread and locality options
 stay on the command line. The examples use nominal resolution 32, except the
 blast and disc profiles, which use 64. Override it with
 `--initial.particlesPerDimension=64`. These are starting resolutions for

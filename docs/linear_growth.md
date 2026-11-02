@@ -268,7 +268,7 @@ standard library.
 SOURCE=/path/to/cosmictiger
 COSMICTIGER_LINEAR_GROWTH_MODES='1,0,0;2,0,0;3,0,0;1,1,0;2,2,0;1,1,1;2,2,2;2,1,0' \
 "$SOURCE/build/release/cosmictiger" --run.test=linearGrowth \
-  --initial.particlesPerDimension=8 --hydro.enabled=true --compute.cuda=true \
+  --initial.particlesPerDimension=8 --hydro.enabled=true --gravity.cuda=true --hydro.cuda=true --drift.cuda=true \
   --gravity.openingAngle=0.1 --hpx:threads=4 --hpx:bind=none > run.log 2>&1
 
 python3 "$SOURCE/tests/analyze_linear_growth.py" \
@@ -278,7 +278,7 @@ python3 "$SOURCE/tests/analyze_linear_growth.py" \
 COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE=1 \
 COSMICTIGER_LINEAR_GROWTH_EVOLVE_FILE="$PWD/analysis/linear_growth_evolution_requests.csv" \
 "$SOURCE/build/release/cosmictiger" --run.test=linearGrowth \
-  --initial.particlesPerDimension=8 --hydro.enabled=true --compute.cuda=true \
+  --initial.particlesPerDimension=8 --hydro.enabled=true --gravity.cuda=true --hydro.cuda=true --drift.cuda=true \
   --gravity.openingAngle=0.1 --hpx:threads=4 --hpx:bind=none > evolution.log 2>&1
 
 python3 "$SOURCE/tests/analyze_linear_growth.py" \
@@ -292,7 +292,7 @@ lattice spacing. Set `COSMICTIGER_LINEAR_GROWTH_AMPLITUDES` to override them.
 The experiment requires one locality, a cubic lattice, and `4 <= N <= 32`;
 component Nyquist modes are rejected because the sampled sine can vanish.
 
-For a pure-DM control set `--hydro.enabled=false --compute.cuda=false`. The
+For a pure-DM control set `--hydro.enabled=false --gravity.cuda=false --hydro.cuda=false --drift.cuda=false`. The
 fixed-support mixed control uses `--gravity.softeningMode=fixed` and
 `--gravity.supportRadius=1.3997290134429932`, matching the adaptive unperturbed
 support in units of the per-species spacing. The finer-lattice control uses

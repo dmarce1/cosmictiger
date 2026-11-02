@@ -182,7 +182,7 @@ and that the new rule actually defers sources. The force sweeps:
 docs/open_larger_cell_walk_results/run_force_compare.sh plummer cosmo
 ```
 
-runs `run.test=force` with `--compute.cuda=false` for both rules on the Plummer
+runs `run.test=force` with `--gravity.cuda=false` for both rules on the Plummer
 model and on the cosmological initial condition; its analytic comparison uses
 the GPU for the direct reference sums. The count sweep
 

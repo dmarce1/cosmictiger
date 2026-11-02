@@ -230,38 +230,24 @@ SphRunReturn sphCpuHydro(
         float const β_max = parameters.betaFollowsAlpha() ? parameters.viscosityBeta * α_max :
                                                             parameters.viscosityBeta;
         float const μ_max = simdMaximum(μ_max_pack);    // max_b(−μ_ab) over approaching pairs
-        // Accelerations outside the paper: self-gravity, the optional uniform, midplane and
-        // central forces of the test problems, and velocity damping while relaxing the gas sphere.
+        // The pair calculation can overlap gravity. Only source assembly and
+        // the following corrector require the fresh endpoint acceleration.
+        Vector3<float> gravityAcceleration(0.0f);
 #if COSMICTIGER_WITH_GRAVITY
-        Vector3<float> const gravityAcceleration = data.selfGravityEnabled ?
-            Vector3<float>(data.sinkGravityAccelerationX[sinkIndex],
-                data.sinkGravityAccelerationY[sinkIndex],
-                data.sinkGravityAccelerationZ[sinkIndex]) :
-            Vector3<float>(0.0f);
-        dv_a_dt += gravityAcceleration;
-        flops += 3;
-#endif
-        dv_a_dt[kYDimension] += parameters.uniformAccelerationY;
-        dv_a_dt[kZDimension] +=
-            parameters.midplaneAccelerationZ(data.sourcePositionZ[particleIndex]);
-        flops += 2;    // Acceleration additions remain float.
-        flops.doublePrecision += sph_flops::positionConstructionFlops();
-        if (data.centralAcceleration != 0.0f) {
-            Vector3<float> const separation(
-                distance(data.sourcePositionX[particleIndex], Position(0.5)),
-                distance(data.sourcePositionY[particleIndex], Position(0.5)),
-                distance(data.sourcePositionZ[particleIndex], Position(0.5)));
-            float const radius = separation.norm();
-            float const inverseSupportRadius = 1.0f / data.centralSupportRadius;
-            float const q = radius * inverseSupportRadius;
-            float const force = data.centralAcceleration *
-                radial_kernel::forceFactor(selectedGravityKernel(), q) * inverseSupportRadius *
-                inverseSupportRadius * inverseSupportRadius;
-            dv_a_dt -= force * separation;
-            flops += 21 + sph_flops::forceKernelOperations(selectedGravityKernel(), q);
-            flops.doublePrecision += 3 * sph_flops::positionConstructionFlops();
+        if (!parameters.deferAccelerationSources && data.selfGravityEnabled) {
+            gravityAcceleration = Vector3<float>(data.sinkGravityAccelerationX[sinkIndex],
+                data.sinkGravityAccelerationY[sinkIndex], data.sinkGravityAccelerationZ[sinkIndex]);
         }
-        dv_a_dt -= parameters.velocityDampingRate * v_a;
+#endif
+        if (!parameters.deferAccelerationSources) {
+            dv_a_dt = sphCompleteAcceleration(parameters,
+                Vector3<Position>(data.sourcePositionX[particleIndex],
+                    data.sourcePositionY[particleIndex], data.sourcePositionZ[particleIndex]),
+                v_a, dv_a_dt, gravityAcceleration, data.centralAcceleration,
+                data.centralSupportRadius, flops);
+        } else {
+            ALWAYS_ASSERT(parameters.phase == 0);
+        }
         for (int dim = 0; dim < kDimensions; dim++) {
             data.sinkAccelerations[sinkIndex].acceleration[dim] = dv_a_dt[dim];
         }
@@ -277,7 +263,7 @@ SphRunReturn sphCpuHydro(
             2.0f - 3.0f * sinkPressureEnergyRatio :
             5.0f - 3.0f * adiabaticIndex;
         du_a_dt += expansionCoefficient * a_da_dt * inverseScaleFactor * u_a;
-        flops += 12;    // Six damping operations and six cosmological energy operations.
+        flops += 6;    // Homogeneous thermal expansion; force sources count separately.
         data.sinkInternalEnergyRate[sinkIndex] = du_a_dt + simdSum(viscous_heating_pack);
         flops += SimdFloat::size();
         if (parameters.phase == 1) {

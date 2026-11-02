@@ -62,7 +62,11 @@ def main():
                "--run.scenario=cosmology", "--initial.particlesPerDimension=8",
                "--hydro.enabled=true", "--chemistry.enabled=true", "--starFormation.enabled=false",
                "--chemistry.initializationTemperature=1000000", "--chemistry.minimumSpecificEnergy=0",
-               f"--compute.cuda={str(args.cuda).lower()}", "--cosmology.sigma8=0", "--output.directory=.",
+               f"--gravity.cuda={str(args.cuda).lower()}",
+               f"--hydro.cuda={str(args.cuda).lower()}",
+               f"--drift.cuda={str(args.cuda).lower()}",
+               f"--chemistry.cuda={str(args.cuda).lower()}",
+               "--cosmology.sigma8=0", "--output.directory=.",
                "--checkpoint.intervalSeconds=0", "--output.silo=false", "--analysis.views=false",
                "--analysis.power=false", "--analysis.groups=false", "--lightcone.enabled=false"]
     options += application_arguments(executable, integrator=args.time_integrator, hydro=True)
@@ -76,7 +80,7 @@ def main():
     except RuntimeError:
         output = (reference / "run.log").read_text(errors="replace")
         unavailable = ("This executable was compiled without CUDA support",
-                       "compute.cuda=true requires an available CUDA device")
+                       "Selected CUDA backends require an available CUDA device")
         if args.cuda and any(message in output for message in unavailable):
             print("SKIP: requested CUDA cooling backend is unavailable")
             return 77

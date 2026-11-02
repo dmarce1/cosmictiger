@@ -31,7 +31,7 @@ def main():
     bits = 32 if selected == "fixed32" else 64
     workdir = args.workdir.resolve()
     workdir.mkdir(parents=True, exist_ok=True)
-    common = ["--hpx:threads=2", "--hpx:bind=none", "--compute.cuda=false",
+    common = ["--hpx:threads=2", "--hpx:bind=none", "--gravity.cuda=false",
               "--hydro.enabled=false", "--chemistry.enabled=false",
               "--initial.particlesPerDimension=4", "--analysis.groups=false",
               "--analysis.tracers=false", "--analysis.views=false", "--analysis.power=false",

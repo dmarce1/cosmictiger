@@ -147,7 +147,7 @@ void checkedPmmmNearField(std::vector<PmmmNearParticle> const& sinks,
     resetFlops();
     pmmmNearField(sinks, sources, cellWidth, doPotential, fields);
     requirePmmm(readFlops() == expected, "PP backend lost or duplicated operation counts");
-    bool const useCuda = getOptions().compute.cuda &&
+    bool const useCuda = getOptions().gravity.cuda &&
         pmmm::detail::shouldUsePmmmNearCuda(
             sources.empty() ? 0 : sinks.size(), sinks.size() * sources.size());
     FlopCount const expectedGpu = useCuda && expected != 0 ? expected - 3 : 0;
@@ -181,7 +181,7 @@ void checkedPmmmNearFieldBatch(std::vector<PmmmNearParticle> const& sinks,
     resetFlops();
     pmmmNearFieldBatch(sinks, sources, sourceRanges, kCellWidth, doPotential, fields);
     requirePmmm(readFlops() == expected, "PP batch lost or duplicated operation counts");
-    bool const useCuda = getOptions().compute.cuda &&
+    bool const useCuda = getOptions().gravity.cuda &&
         pmmm::detail::shouldUsePmmmNearCuda(usefulSinks, candidatePairs);
     FlopCount const expectedGpu = useCuda && expected != 0 ? expected - 3 : 0;
     requirePmmm(getGpuFlops() == expectedGpu, "PP batch arithmetic used the wrong backend");
@@ -211,8 +211,8 @@ void checkPmmmNearBatches() {
         {{0, 129, false}, {1, 0, false}, {31, 129, false}, {127, 512, false}, {128, 511, false},
             {128, 512, false}, {129, 512, false}, {513, 257, true}, {257, 257, true},
             {513, 385, true}, {129, 1024, false}, {513, 257, true}, {33, 129, false}}};
-    for (int backend = 0; backend < (saved.compute.cuda ? 2 : 1); ++backend) {
-        options.compute.cuda = backend != 0;
+    for (int backend = 0; backend < (saved.gravity.cuda ? 2 : 1); ++backend) {
+        options.gravity.cuda = backend != 0;
         setOptions(options);
         bool usedCuda = false;
         std::vector<std::array<double, 4>> fields{{1.0, 2.0, 3.0, 4.0}};
@@ -283,7 +283,7 @@ void checkPmmmNearBatches() {
 
 void checkPmmmNearEdges() {
     auto options = getOptions();
-    bool const useCuda = options.compute.cuda;
+    bool const useCuda = options.gravity.cuda;
     double const support = 0.125;
     options.gravity.supportRadius = support;
     PmmmNearParticle const sink{{0.0, 0.0, 0.0}, 0.75, 0, 7};
@@ -293,7 +293,7 @@ void checkPmmmNearEdges() {
         {{{3.0, 0.0, 0.0}, 2.0, 0, 8}}, {}};
     std::vector<std::array<double, 4>> cpuResults;
     for (int backend = 0; backend < (useCuda ? 2 : 1); ++backend) {
-        options.compute.cuda = backend != 0;
+        options.gravity.cuda = backend != 0;
         setOptions(options);
         auto const& kernel = selectedGravityKernel();
         for (size_t example = 0; example < cases.size(); ++example) {
@@ -348,7 +348,7 @@ void checkPmmmNearEdges() {
             }
         }
     }
-    options.compute.cuda = useCuda;
+    options.gravity.cuda = useCuda;
     options.gravity.supportRadius = 0.001;
     setOptions(options);
 }
@@ -923,7 +923,7 @@ void comparePmmmSamples(
         " pmmmOrder=" + std::to_string(options.gravity.pmmmOrder) +
         " width=" + std::to_string(options.gravity.pmmmNearWidth) +
         " theta=" + std::to_string(options.gravity.openingAngle) +
-        " cuda=" + std::to_string(options.compute.cuda);
+        " cuda=" + std::to_string(options.gravity.cuda);
     requirePmmm(first.size() == second.size(), "solve changed the particle count");
     for (size_t i = 0; i < first.size(); ++i) {
         requirePmmm(first[i].id == second[i].id && first[i].mass == second[i].mass,
@@ -1165,7 +1165,7 @@ void checkPmmmTraditionalKicks() {
     parameters.gravitySupportRadius = options.gravity.supportRadius;
     parameters.gm = options.gravity.gm;
     parameters.theta = options.gravity.openingAngle;
-    parameters.gpu = options.compute.cuda;
+    parameters.gpu = options.gravity.cuda;
     parameters.saveForce = true;
     parameters.doPhi = true;
     // The traditional solver must still use every source and the base mesh
@@ -1368,7 +1368,7 @@ void checkPmmmStreamedStages() {
             parameters.sign = -1.0f;
             parameters.firstCall = false;
             parameters.saveForce = false;
-            parameters.gpu = options.compute.cuda;
+            parameters.gpu = options.gravity.cuda;
             parameters.minRung = 3;
             parameters.minLevel = 0;
             parameters.a = 1.0f;
@@ -1518,7 +1518,7 @@ void checkPmmmStageMeshes() {
     parameters.sign = 0.0f;
     parameters.firstCall = false;
     parameters.saveForce = false;
-    parameters.gpu = options.compute.cuda;
+    parameters.gpu = options.gravity.cuda;
     parameters.minLevel = 0;
     parameters.a = 1.0f;
     parameters.t0 = 1.0f;
@@ -1668,7 +1668,7 @@ void checkPmmmCoarseMeshes() {
     parameters.sign = 0.0f;
     parameters.firstCall = false;
     parameters.saveForce = false;
-    parameters.gpu = options.compute.cuda;
+    parameters.gpu = options.gravity.cuda;
     parameters.minLevel = 0;
     parameters.a = 1.0f;
     parameters.t0 = 1.0f;
@@ -1840,7 +1840,7 @@ void checkPmmmFmmNear() {
     options.gravity.pmmmOrder = options.gravity.fmmOrder;
     options.gravity.pmmmNearWidth = 1;
     options.gravity.supportRadius = 0.001;
-    if (saved.compute.cuda) {
+    if (saved.gravity.cuda) {
         setOptions(options);
         std::vector<hpx::future<void>> futures;
         for (auto const& locality : hpxLocalities()) {
@@ -1852,7 +1852,7 @@ void checkPmmmFmmNear() {
     }
     for (int side : {4, 8, 16}) {
         pmmmDestroy();
-        options.compute.cuda = saved.compute.cuda;
+        options.gravity.cuda = saved.gravity.cuda;
         options.gravity.meshSize = side;
         options.gravity.openingAngle = 1.0e-6;
         setOptions(options);
@@ -1861,7 +1861,7 @@ void checkPmmmFmmNear() {
         // The tree arena must also be allocated under the requested
         // backend before temporarily running the CPU reference on the same data.
         checkPmmmForestGeometry();
-        options.compute.cuda = false;
+        options.gravity.cuda = false;
         setOptions(options);
         pmmmSolve(true);
         // A very tight angle supplies a near-direct reference; point-sized
@@ -1934,15 +1934,15 @@ void checkPmmmFmmNear() {
         // a nearly cancelling component need not match to relative float error.
         requirePmmm(repartitionError < 5.0e-5,
             "repartitioned FMM near field differs excessively from direct pairs");
-        if (saved.compute.cuda) {
-            options.compute.cuda = true;
+        if (saved.gravity.cuda) {
+            options.gravity.cuda = true;
             setOptions(options);
             pmmmSolve(true);
             auto const cuda = gatherPmmmSamples();
             requirePmmm(pmmmFieldDifference(direct, cuda) < 5.0e-5 &&
                     pmmmFieldDifference(repartitioned, cuda) < 5.0e-5,
                 "CPU/CUDA FMM near fields disagree on dense periodic cells");
-            options.compute.cuda = false;
+            options.gravity.cuda = false;
             setOptions(options);
         }
         PRINT("PMMM FMM-near n=%i order=%i loose=%e strict=%e repartitioned=%e CPU accepted=%llu "

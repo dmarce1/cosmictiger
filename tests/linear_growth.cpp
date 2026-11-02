@@ -286,7 +286,7 @@ struct LinearExperiment {
         parameters.velInit = false;
         parameters.saveForce = true;
         parameters.firstCall = true;
-        parameters.gpu = options.compute.cuda;
+        parameters.gpu = options.gravity.cuda;
         parameters.nodeLoad = 1.0;
         parameters.ascending = true;
         parameters.descending = true;
@@ -406,7 +406,7 @@ void writeLinearMetadata(LinearExperiment const& experiment, LinearSample const&
            // Retain the historical metadata key; fixed gravity has no neighbor target.
            << "  \"neighbor_number\": 0,\n"
            << "  \"theta\": " << options.gravity.openingAngle << ",\n"
-           << "  \"backend\": \"" << (options.compute.cuda ? "cuda" : "cpu") << "\",\n"
+           << "  \"backend\": \"" << (options.gravity.cuda ? "cuda" : "cpu") << "\",\n"
            << "  \"omega_m\": " << options.cosmology.omegaM << ",\n"
            << "  \"omega_r\": " << options.cosmology.omegaR << ",\n"
            << "  \"omega_k\": " << options.cosmology.omegaK << ",\n"
@@ -893,5 +893,5 @@ void linearGrowthTest() {
         detail::evolveLinearModes(experiment, evolveFile);
     }
     PRINT("Linear growth diagnostic complete (%s, %i species, N=%i)\n",
-        options.compute.cuda ? "CUDA" : "CPU", experiment.species, experiment.side);
+        options.gravity.cuda ? "CUDA" : "CPU", experiment.species, experiment.side);
 }

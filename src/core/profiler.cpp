@@ -49,7 +49,7 @@ namespace detail {
             "kick.cpu.schedule", "kick.gpu.queueWork", "kick.wait.children", "kick.wait.result",
             "kick.gpu.groupSources", "kick.gpu.collectSources", "kick.gpu.remap",
             "kick.gpu.sortFetchWait", "kick.gpu.memoryAdvice", "kick.gpu.cleanup",
-            "kick.gpu.launchQueue", "kick.gpu.prepareLaunch", "kick.gpu.submitWait",
+            "kick.gpu.launchQueue", "kick.gpu.prepareLaunch", "kick.gpu.submitWait", "gravity.concurrentForce",
             "kick.gpu.hostToDevice", "kick.gpu.kernel", "kick.gpu.deviceToHost"}};
 
     // Keep unrelated phases on separate cache lines. Sampling touches only two

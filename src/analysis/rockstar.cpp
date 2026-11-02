@@ -250,7 +250,7 @@ float rockstarFindLinkLen(DeviceVector<RockstarTree>& trees, DeviceVector<Rockst
         for (auto& p : parts) {
             p.minDist2 = std::numeric_limits<float>::max();
         }
-        gpu = getOptions().compute.cuda && parts.size() > 4 * 1024;
+        gpu = getOptions().analysis.groupsCuda && parts.size() > 4 * 1024;
 #ifdef USE_CUDA
         if (gpu) {
             DeviceVector<int> leaves;
@@ -294,7 +294,7 @@ void rockstarFindAllLinkLens(
     }
     double maximumLinkingLength = getOptions().lightcone.linkingLength *
         pow(getOptions().initial.numberOfParticles, -1.0 / kDimensions);
-    bool gpu = getOptions().compute.cuda && parts.size() > 4 * 1024;
+    bool gpu = getOptions().analysis.groupsCuda && parts.size() > 4 * 1024;
 #ifdef USE_CUDA
     if (gpu) {
         DeviceVector<int> leaves;
@@ -434,7 +434,7 @@ void rockstarFindSubgroups(DeviceVector<RockstarTree>& trees, DeviceVector<Rocks
         trees[i].active = true;
     }
     int cnt;
-    gpu = getOptions().compute.cuda && parts.size() > 4 * 1024;
+    gpu = getOptions().analysis.groupsCuda && parts.size() > 4 * 1024;
 #ifdef USE_CUDA
     if (gpu) {
         DeviceVector<int> leaves;
@@ -752,7 +752,7 @@ Vector<Subgroup> rockstarFindSubgroups(Vector<ParticleData> const& parts, float 
     }
     int nextId = 1;
     return rockstarSeeds(
-        std::move(particles), nextId, 1.0f, 1.0f, scale, getOptions().compute.cuda);
+        std::move(particles), nextId, 1.0f, 1.0f, scale, getOptions().analysis.groupsCuda);
 }
 
 Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& input, double tauMax) {
@@ -783,8 +783,8 @@ Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& input
         particles.pushBack(particle);
     }
     int nextId = 1;
-    auto groups =
-        rockstarSeeds(std::move(particles), nextId, 1.0f, 1.0f, scale, getOptions().compute.cuda);
+    auto groups = rockstarSeeds(
+        std::move(particles), nextId, 1.0f, 1.0f, scale, getOptions().analysis.groupsCuda);
     size_t const haloCount = rockstarCatalogueSize(groups.size());
     for (size_t i = 0; i < haloCount; ++i) {
         if (groups[i].massVir >= kRockstarMinGroup) {

@@ -14,6 +14,7 @@
 #include <hpx/future.hpp>
 #include <hpx/threading_base/annotated_function.hpp>
 
+#include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/scenarios/sphere.hpp>
@@ -192,7 +193,7 @@ void solveSphereSurfaceProblemCpu(Vector<Array<Vector<float>, kDimensions>>& x) 
 
 void solveSphereSurfaceProblem(Vector<Array<Vector<float>, kDimensions>>& x) {
 #ifdef USE_CUDA
-    if (cudaEnabled()) {
+    if (getOptions().initial.cuda) {
         solveSphereSurfaceProblemCuda(x);
         return;
     }

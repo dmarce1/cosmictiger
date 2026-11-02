@@ -26,7 +26,7 @@
 
 bool cudaEnabled() {
 #ifdef USE_CUDA
-    return getOptions().compute.cuda;
+    return usesCuda(getOptions());
 #else
     return false;
 #endif

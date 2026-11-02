@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <limits>
 #include <map>
+#include <memory>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -120,6 +121,8 @@ struct HopkinsWorkspace {
     double scale = 1.0;
     double tickDuration = 0.0;
     double globalTimestep = 0.0;
+    double time = 0.0;
+    bool readForces = false;
     uint64_t tick = 0;
     double searchSupportFactor = 1.0;
     int darkMatterRung = 0;
@@ -131,6 +134,8 @@ struct HopkinsPairRecord {
     uint64_t rightId = 0;
     uint64_t beginTick = 0;
     uint64_t endTick = 0;
+    double beginTime = 0.0;
+    double endTime = 0.0;
     hopkins::Conserved initial{};
     hopkins::Conserved midpoint{};
     hopkins::Vector workInitial{};
@@ -138,6 +143,8 @@ struct HopkinsPairRecord {
 };
 using HopkinsPairKey = std::pair<uint64_t, uint64_t>;
 std::map<HopkinsPairKey, HopkinsPairRecord> hopkinsPairs;
+std::unique_ptr<HopkinsWorkspace> hopkinsPrepared;
+bool hopkinsTreePrepared = false;
 static_assert(kMaxRung <= std::numeric_limits<uint16_t>::digits);
 constexpr int kHopkinsTickRung = kMaxRung - 1;
 constexpr uint64_t kHopkinsTicksPerBase = uint64_t(1) << kHopkinsTickRung;
@@ -328,108 +335,11 @@ hopkins::Vector hopkinsAcceleration(ParticleInteger index, FlopCount* operations
     return acceleration;
 }
 
-void hopkinsSource(HopkinsParticle& particle, double duration, FlopCount* operations) {
-    auto const& options = getOptions();
-    hopkins::detail::countFlops(operations, 14 + (options.hydro.damping == 0.0 ? 0 : 3));
-    double const damping = std::exp(-options.hydro.damping * duration);
-    double const impulse = options.hydro.damping == 0.0 ?
-        duration :
-        -std::expm1(-options.hydro.damping * duration) / options.hydro.damping;
-    for (int dim = 0; dim < 3; dim++) {
-        particle.velocity[dim] =
-            damping * particle.velocity[dim] + impulse * particle.acceleration[dim];
-    }
-    // Stored velocity = a v, stored specific thermal energy = a^2 u.
-    particle.energy *= std::exp(particle.state.expansionCoefficient * duration);
-}
-
-// Physical state advances only through elapsed intervals. Gravity may be held
-// between its own active events; replace that constant-force prediction by the
-// endpoint-linear impulse when a fresh force becomes available.
-int hopkinsCorrectSources(
-    int minimumRung, double time, double scale, double expansionRate, double previousTimestep) {
-    HopkinsFlopBatch operations(true);
-    hopkins::detail::countFlops(operations, 4);
-    double const coefficient = (5.0 - 3.0 * getOptions().hydro.gamma) * expansionRate / scale;
-    int maximumRung = 0;
-    for (ParticleInteger i = 0; i < sphParticlesSize(); i++) {
-        maximumRung = std::max(maximumRung, int(sphParticlesRung(i)));
-        auto& state = sphParticlesHopkinsState(i);
-        if (!(state.supportRadius > 0.0)) {
-            hopkins::detail::countFlops(operations, 1);
-            state.supportRadius = sphParticlesSupportRadius(i);
-        }
-        auto const acceleration = hopkinsAcceleration(i, operations);
-        if (!state.initialized) {
-            // The MFM getter rounds its double constant to float before the
-            // caller promotes it; MFV reads an already stored float mass.
-            hopkins::detail::countFlops(operations, getOptions().hydro.method == "mfv" ? 1 : 2);
-            state.mass = sphParticlesMass(i);
-            double kinetic = 0.0;
-            for (int dim = 0; dim < 3; dim++) {
-                hopkins::detail::countFlops(operations, 5);
-                double const velocity = sphParticlesVelocity(dim, i);
-                state.momentum[dim] = state.mass * velocity;
-                state.meshVelocity[dim] = velocity;
-                kinetic += 0.5 * velocity * velocity;
-            }
-            hopkins::detail::countFlops(operations, 3);
-            state.totalEnergy = state.mass * (sphParticlesInternalEnergy(i) + kinetic);
-            state.sourceAcceleration = acceleration;
-            state.sourceTime = time;
-            state.expansionCoefficient = coefficient;
-            state.initialized = true;
-        } else if (sphParticlesRung(i) >= minimumRung) {
-            // Global integration closes exactly the preceding raw interval;
-            // its next selected step may differ and has not been chosen yet.
-            hopkins::detail::countFlops(operations, previousTimestep >= 0.0 ? 0 : 1);
-            double const elapsed =
-                previousTimestep >= 0.0 ? previousTimestep : time - state.sourceTime;
-            if (elapsed > 0.0) {
-                hopkins::detail::countFlops(operations, 3);
-                double thermal = state.totalEnergy -
-                    0.5 * hopkins::dot(state.momentum, state.momentum, operations) / state.mass;
-                double const weight = hopkins::sourceCorrectionWeight(
-                    elapsed, getOptions().hydro.damping, operations);
-                for (int dim = 0; dim < 3; dim++) {
-                    hopkins::detail::countFlops(operations, 7);
-                    double const change = acceleration[dim] - state.sourceAcceleration[dim];
-                    state.momentum[dim] += state.mass * weight * change;
-                    thermal += state.pendingGravityWork[dim] * change / elapsed;
-                }
-                hopkins::detail::countFlops(operations, 5);
-                thermal *= std::exp(0.5 * elapsed * (coefficient - state.expansionCoefficient));
-                hopkins::detail::countFlops(operations, 3);
-                state.totalEnergy = thermal +
-                    0.5 * hopkins::dot(state.momentum, state.momentum, operations) / state.mass;
-            }
-            state.pendingGravityWork = {};
-            state.sourceAcceleration = acceleration;
-            state.sourceTime = time;
-            state.expansionCoefficient = coefficient;
-        }
-        hopkins::detail::countFlops(operations, 5);
-        double const energy = state.totalEnergy / state.mass -
-            0.5 * hopkins::dot(state.momentum, state.momentum, operations) /
-                (state.mass * state.mass);
-        if (!(energy > 0.0) || !std::isfinite(energy)) {
-            throw std::runtime_error("Nonpositive Hopkins energy after source correction");
-        }
-        hopkins::detail::countFlops(operations, 1);
-        sphParticlesInternalEnergy(i) = energy;
-        for (int dim = 0; dim < 3; dim++) {
-            hopkins::detail::countFlops(operations, 2);
-            sphParticlesVelocity(dim, i) = state.momentum[dim] / state.mass;
-        }
-    }
-    return maximumRung;
-}
-
-HopkinsBlock hopkinsCollect(bool countOperations) {
+HopkinsBlock hopkinsCollect(bool countOperations, bool readForces) {
     HopkinsFlopBatch operations(countOperations);
     HopkinsBlock block;
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
-        if (particlesType(i) == kDarkMatterType) {
+        if (readForces && particlesType(i) == kDarkMatterType) {
             block.darkMatterRung = std::max(block.darkMatterRung, int(particlesRung(i)));
         }
     }
@@ -449,7 +359,7 @@ HopkinsBlock hopkinsCollect(bool countOperations) {
         particle.support = particle.state.supportRadius > 0.0 ? particle.state.supportRadius :
                                                                 sphParticlesSupportRadius(i);
         particle.rung = sphParticlesRung(i);
-        particle.acceleration = hopkinsAcceleration(i, operations);
+        particle.acceleration = readForces ? hopkinsAcceleration(i, operations) : hopkins::Vector{};
         for (int dim = 0; dim < 3; dim++) {
             particle.position[dim] = sphParticlesPosition(dim, i);
             hopkins::detail::countFlops(operations, 1);
@@ -485,12 +395,12 @@ void hopkinsInstall(
         hopkins::detail::countFlops(operations, 2);
         sphParticlesSupportRadius(i) = particle.support;
         sphParticlesDensity(i) = particle.density;
-        sphParticlesRung(i) = particle.rung;
         if (phase == 1) {
+            sphParticlesRung(i) = particle.rung;
             sphParticlesHopkinsState(i) = particle.state;
             if (getOptions().hydro.method == "mfv") {
                 hopkins::detail::countFlops(operations, 1);
-                sphParticlesMfvMass(i) = particle.mass;
+                sphParticlesMfvMass(i) = particle.state.accountedMass();
             }
             hopkins::detail::countFlops(operations, 4);
             sphParticlesInternalEnergy(i) = particle.energy;
@@ -502,11 +412,30 @@ void hopkinsInstall(
     }
 }
 
+void hopkinsInstallGravityMasses(std::vector<std::pair<uint64_t, double>> const& partialMasses) {
+    for (ParticleInteger i = 0; i < sphParticlesSize(); ++i) {
+        auto const& state = sphParticlesHopkinsState(i);
+        if (!state.initialized || state.identifier == std::numeric_limits<uint64_t>::max()) {
+            continue;
+        }
+        auto const found =
+            std::lower_bound(partialMasses.begin(), partialMasses.end(), state.identifier,
+                [](auto const& entry, uint64_t identifier) { return entry.first < identifier; });
+        double const partial =
+            found != partialMasses.end() && found->first == state.identifier ? found->second : 0.0;
+        double const mass = state.accountedMass() + partial;
+        if (!(mass > 0.0) || !(float(mass) > 0.0f) || !std::isfinite(float(mass))) {
+            throw std::runtime_error("Invalid Hopkins MFV gravity source mass projection");
+        }
+        sphParticlesMfvMass(i) = mass;
+    }
+}
+
 }    // namespace detail
 
-HPX_PLAIN_ACTION(detail::hopkinsCorrectSources, HopkinsCorrectSourcesAction);
 HPX_PLAIN_ACTION(detail::hopkinsCollect, HopkinsCollectAction);
 HPX_PLAIN_ACTION(detail::hopkinsInstall, HopkinsInstallAction);
+HPX_PLAIN_ACTION(detail::hopkinsInstallGravityMasses, HopkinsInstallGravityMassesAction);
 
 namespace detail {
 
@@ -532,7 +461,8 @@ void hopkinsGather(HopkinsWorkspace& workspace) {
     HopkinsFlopBatch operations(workspace.countOperations);
     std::vector<hpx::future<HopkinsBlock>> pending;
     for (auto const& locality : hpxLocalities()) {
-        pending.push_back(hpx::async<HopkinsCollectAction>(locality, workspace.countOperations));
+        pending.push_back(hpx::async<HopkinsCollectAction>(
+            locality, workspace.countOperations, workspace.readForces));
     }
     std::vector<HopkinsBlock> blocks;
     workspace.particles.clear();
@@ -910,11 +840,16 @@ hopkins::Gradient hopkinsStoredGradient(HopkinsParticleState const& state) {
 hopkins::Primitive hopkinsPredictedPrimitive(
     HopkinsParticle const& particle, HopkinsWorkspace const& workspace, FlopCount* operations) {
     auto const& state = particle.state;
-    hopkins::Primitive anchor{state.predictor[0],
-        {state.predictor[2], state.predictor[3], state.predictor[4]}, state.predictor[1]};
+    auto const anchor =
+        hopkins::primitiveFromConserved({state.mass, state.momentum, state.totalEnergy},
+            state.anchorVolume, getOptions().hydro.gamma);
     hopkins::detail::countFlops(operations, 16 + (getOptions().hydro.damping == 0.0 ? 0 : 3));
-    double const elapsed =
-        double(hopkins::elapsedTicks(workspace.tick, state.lastKickTick)) * workspace.tickDuration;
+    double const elapsed = workspace.time - state.sourceTime;
+    if (elapsed < 0.0 ||
+        workspace.time > state.endTime +
+                32.0 * std::numeric_limits<double>::epsilon() * std::max(1.0, state.endTime)) {
+        throw std::runtime_error("Hopkins primitive prediction lies outside its own interval");
+    }
     auto predicted = hopkins::predictPrimitive(anchor, hopkinsStoredGradient(state),
         elapsed / workspace.scale, getOptions().hydro.gamma, operations);
     double const dampingRate = getOptions().hydro.damping;
@@ -1053,9 +988,8 @@ void hopkinsGradients(HopkinsWorkspace& workspace) {
         // Appendix G: only a completed or explicitly woken cell replaces its
         // primitive/gradient anchor. Conserved exchanges continue accumulating
         // for sleeping cells, independently of this predictor.
-        particle.state.predictor = values;
+        particle.state.anchorVolume = workspace.geometry[i].volume;
         particle.state.gradients = gradients;
-        particle.state.lastKickTick = uint16_t(workspace.tick);
         particle.state.predictorInitialized = true;
     });
 }
@@ -1074,7 +1008,7 @@ uint64_t hopkinsTick(double time, double baseTimestep, FlopCount* operations) {
 }
 
 HopkinsStepResult hopkinsSelectTimesteps(HopkinsWorkspace& workspace, int minimumRung,
-    double baseTimestep, double maximumGlobalTimestep, size_t& woken) {
+    double baseTimestep, double maximumGlobalTimestep, size_t& woken, bool allowCoarsen = true) {
     profile::ScopedPhase profilePhase("hydro.hopkins.timesteps");
     HopkinsFlopBatch operations(workspace.countOperations);
     auto const& options = getOptions();
@@ -1095,7 +1029,6 @@ HopkinsStepResult hopkinsSelectTimesteps(HopkinsWorkspace& workspace, int minimu
 #endif
     for (size_t i = 0; i < workspace.particles.size(); i++) {
         auto& particle = workspace.particles[i];
-        particle.active = particle.rung >= minimumRung;
         double timestep = backgroundTimestep;
         hopkins::detail::countFlops(operations, workspace.dimensions == 1 ? 6 : 8);
         double const radius = workspace.dimensions == 1 ?
@@ -1147,7 +1080,7 @@ HopkinsStepResult hopkinsSelectTimesteps(HopkinsWorkspace& workspace, int minimu
         int const required =
             std::max(options.run.minRung, int(std::ceil(std::log2(baseTimestep / timestep))));
         if (particle.active) {
-            particle.rung = std::max({minimumRung, particle.rung - 1, required});
+            particle.rung = std::max({minimumRung, particle.rung - int(allowCoarsen), required});
         } else if (required > particle.rung ||
             (particle.state.predictorInitialized &&
                 !hopkins::physical(hopkinsPredictedPrimitive(particle, workspace, operations)))) {
@@ -1214,8 +1147,8 @@ struct HopkinsPairInput {
     hopkins::Vector separation{}, area{}, areaRate{}, frame{}, offsetLeft{}, offsetRight{};
 };
 
-HopkinsPairInput hopkinsPreparePair(HopkinsWorkspace const& workspace, size_t i, size_t j,
-    uint64_t tick, double tickDuration, bool firstOrder) {
+HopkinsPairInput hopkinsPreparePair(
+    HopkinsWorkspace const& workspace, size_t i, size_t j, uint64_t tick, bool firstOrder) {
     HopkinsFlopBatch operations(workspace.countOperations);
     auto const& leftParticle = workspace.particles[i];
     auto const& rightParticle = workspace.particles[j];
@@ -1225,13 +1158,13 @@ HopkinsPairInput hopkinsPreparePair(HopkinsWorkspace const& workspace, size_t i,
     input.j = j;
     record.leftId = leftParticle.state.identifier;
     record.rightId = rightParticle.state.identifier;
-    double interval = workspace.globalTimestep;
+    record.beginTick = tick;
+    record.endTick = std::min(leftParticle.state.endTick, rightParticle.state.endTick);
+    record.beginTime = workspace.time;
+    record.endTime = std::min(leftParticle.state.endTime, rightParticle.state.endTime);
+    double const interval = record.endTime - record.beginTime;
     if (!(interval > 0.0)) {
-        record.beginTick = tick;
-        record.endTick = tick +
-            (uint64_t(1) << (kHopkinsTickRung - std::max(leftParticle.rung, rightParticle.rung)));
-        hopkins::detail::countFlops(operations, 1);
-        interval = double(record.endTick - tick) * tickDuration;
+        throw std::runtime_error("Hopkins pair has no positive scheduled interval");
     }
     auto const separation = hopkinsSeparation(leftParticle, rightParticle, operations);
     double const radius = hopkins::norm(separation, operations);
@@ -1304,14 +1237,13 @@ HopkinsSimd hopkinsSimdExpm1(HopkinsSimd const& value) {
 
 void hopkinsPairBatch(HopkinsWorkspace const& workspace,
     std::vector<std::pair<size_t, size_t>> const& pairs, std::vector<size_t> const& solvePairs,
-    size_t begin, uint64_t tick, double tickDuration, bool firstOrder,
-    std::vector<HopkinsPairRecord>& records) {
+    size_t begin, uint64_t tick, bool firstOrder, std::vector<HopkinsPairRecord>& records) {
     constexpr size_t kWidth = HopkinsSimd::size();
     size_t const count = std::min(kWidth, solvePairs.size() - begin);
     std::array<HopkinsPairInput, kWidth> inputs;
     for (size_t lane = 0; lane < count; lane++) {
         auto const [i, j] = pairs[solvePairs[begin + lane]];
-        inputs[lane] = hopkinsPreparePair(workspace, i, j, tick, tickDuration, firstOrder);
+        inputs[lane] = hopkinsPreparePair(workspace, i, j, tick, firstOrder);
     }
     // Duplicate a physical input in unused lanes. Only active lanes are solved/stored.
     for (size_t lane = count; lane < kWidth; lane++) {
@@ -1502,34 +1434,146 @@ void hopkinsPairBatch(HopkinsWorkspace const& workspace,
     }
 }
 
-// These storage checks choose whether to retry at first order. Count each
-// narrowing conversion only when its short-circuit operand is evaluated.
-bool hopkinsFitsFloat(double value, FlopCount* operations) {
-    hopkins::detail::countFlops(operations, 1);
-    return std::isfinite(float(value));
+// Settle an interval only at its scheduled endpoint, or once when a wake/terminal
+// event cuts it short. Both deposits are made from the same integral.
+size_t hopkinsSettlePairs(HopkinsWorkspace& workspace, bool closingOnly) {
+    profile::ScopedPhase profilePhase("hydro.hopkins.flux.settle");
+    std::map<uint64_t, size_t> indices;
+    for (size_t i = 0; i < workspace.particles.size(); ++i) {
+        indices.emplace(workspace.particles[i].state.identifier, i);
+    }
+    size_t settled = 0;
+    for (auto iterator = hopkinsPairs.begin(); iterator != hopkinsPairs.end();) {
+        auto const& record = iterator->second;
+        auto const left = indices.find(record.leftId);
+        auto const right = indices.find(record.rightId);
+        if (left == indices.end() || right == indices.end()) {
+            throw std::runtime_error("Hopkins live pair lost an endpoint");
+        }
+        size_t const i = left->second;
+        size_t const j = right->second;
+        if (!closingOnly && record.endTime > workspace.time && !workspace.particles[i].active &&
+            !workspace.particles[j].active) {
+            ++iterator;
+            continue;
+        }
+        double const end = std::min(workspace.time, record.endTime);
+        double const interval = record.endTime - record.beginTime;
+        double const duration = end - record.beginTime;
+        auto const delta =
+            hopkins::integrateFlux(record.initial, record.midpoint, interval, 0.0, duration);
+        auto const work = hopkins::integratePairGravityWork(
+            record.workInitial, record.workMidpoint, interval, 0.0, duration);
+        for (size_t endpoint : {i, j}) {
+            auto& state = workspace.particles[endpoint].state;
+            double const sign = endpoint == i ? -1.0 : 1.0;
+            state.pendingMass += sign * delta.mass;
+            state.pendingEnergy += sign * delta.energy;
+            double const age = record.beginTime - state.sourceTime;
+            if (age < -32.0 * std::numeric_limits<double>::epsilon() *
+                    std::max(1.0, std::abs(state.sourceTime))) {
+                throw std::runtime_error("Hopkins pair predates an endpoint's source anchor");
+            }
+            for (int dim = 0; dim < 3; ++dim) {
+                state.pendingMomentum[dim] += sign * delta.momentum[dim];
+                state.pendingGravityIntegral[dim] += work.integral[dim];
+                state.pendingGravityWork[dim] += age * work.integral[dim] + work.firstMoment[dim];
+            }
+        }
+        iterator = hopkinsPairs.erase(iterator);
+        ++settled;
+    }
+    return settled;
 }
 
-void hopkinsAdvance(HopkinsWorkspace& workspace, uint64_t tick, uint64_t endTick, double time,
-    double tickDuration, size_t& cached, size_t& refreshed) {
-    profile::ScopedPhase profilePhase("hydro.hopkins.advance");
-    HopkinsFlopBatch operations(workspace.countOperations);
-    bool const global = workspace.globalTimestep > 0.0;
-    hopkins::detail::countFlops(operations, global ? 0 : 1);
-    double const duration =
-        global ? workspace.globalTimestep : double(endTick - tick) * tickDuration;
-    if (global) {
-        // Every global interval ends at the next force event. It has no cached
-        // future segment and never uses the traditional integer clock.
-        hopkinsPairs.clear();
+void hopkinsInitialize(HopkinsWorkspace& workspace) {
+    double const coefficient =
+        (5.0 - 3.0 * getOptions().hydro.gamma) * workspace.expansionRate / workspace.scale;
+    for (size_t i = 0; i < workspace.particles.size(); ++i) {
+        auto& particle = workspace.particles[i];
+        auto& state = particle.state;
+        if (!state.initialized) {
+            state.mass = particle.mass;
+            state.totalEnergy = particle.mass *
+                (particle.energy + 0.5 * hopkins::dot(particle.velocity, particle.velocity));
+            for (int dim = 0; dim < 3; ++dim) {
+                state.momentum[dim] = particle.mass * particle.velocity[dim];
+            }
+            state.initialized = true;
+        }
+        if (!state.predictorInitialized) {
+            state.anchorVolume = workspace.geometry[i].volume;
+            state.sourceTime = workspace.time;
+            state.endTime = workspace.time;
+            state.beginTick = state.endTick = workspace.tick;
+            state.sourceAcceleration = particle.acceleration;
+            state.expansionCoefficient = coefficient;
+        }
     }
+}
+
+void hopkinsCloseParticle(HopkinsWorkspace& workspace, size_t i) {
+    auto& particle = workspace.particles[i];
+    auto& state = particle.state;
+    double const duration = workspace.time - state.sourceTime;
+    double const coefficient =
+        (5.0 - 3.0 * getOptions().hydro.gamma) * workspace.expansionRate / workspace.scale;
+    double work = hopkins::dot(state.pendingGravityIntegral, state.sourceAcceleration);
+    if (duration > 0.0) {
+        for (int dim = 0; dim < 3; ++dim) {
+            work += state.pendingGravityWork[dim] *
+                (particle.acceleration[dim] - state.sourceAcceleration[dim]) / duration;
+        }
+    }
+    auto const next =
+        hopkins::closeConservedInterval({state.mass, state.momentum, state.totalEnergy},
+            {state.pendingMass, state.pendingMomentum, state.pendingEnergy},
+            state.sourceAcceleration, particle.acceleration, duration, getOptions().hydro.damping,
+            state.expansionCoefficient, coefficient, work);
+    state.mass = next.mass;
+    state.momentum = next.momentum;
+    state.totalEnergy = next.energy;
+    state.pendingMass = state.pendingEnergy = 0.0;
+    state.pendingMomentum = {};
+    state.pendingGravityIntegral = {};
+    state.pendingGravityWork = {};
+    state.sourceAcceleration = particle.acceleration;
+    state.sourceTime = state.endTime = workspace.time;
+    state.beginTick = state.endTick = workspace.tick;
+    state.expansionCoefficient = coefficient;
+    state.anchorVolume = workspace.geometry[i].volume;
+}
+
+void hopkinsCurrentViews(HopkinsWorkspace& workspace) {
+    profile::ScopedPhase profilePhase("hydro.hopkins.primitives");
+    for (size_t i = 0; i < workspace.particles.size(); ++i) {
+        auto& particle = workspace.particles[i];
+        auto const& state = particle.state;
+        auto const primitive = particle.active ?
+            hopkins::primitiveFromConserved({state.mass, state.momentum, state.totalEnergy},
+                state.anchorVolume, getOptions().hydro.gamma) :
+            hopkinsPredictedPrimitive(particle, workspace, nullptr);
+        if (!hopkins::physical(primitive)) {
+            throw std::runtime_error("Nonphysical Hopkins own-step primitive");
+        }
+        particle.mass = state.mass + state.pendingMass;
+        particle.density = primitive.density;
+        particle.velocity = primitive.velocity;
+        particle.energy =
+            primitive.pressure / ((getOptions().hydro.gamma - 1.0) * primitive.density);
+    }
+}
+
+void hopkinsOpenPairs(HopkinsWorkspace& workspace, size_t& retained, size_t& opened) {
+    profile::ScopedPhase profilePhase("hydro.hopkins.flux.open");
     std::vector<std::pair<size_t, size_t>> pairs;
-    std::set<HopkinsPairKey> present;
-    for (size_t i = 0; i < workspace.particles.size(); i++) {
+    for (size_t i = 0; i < workspace.particles.size(); ++i) {
         for (size_t j : workspace.neighbors[i]) {
-            if (workspace.particles[i].state.identifier < workspace.particles[j].state.identifier) {
+            auto const& left = workspace.particles[i];
+            auto const& right = workspace.particles[j];
+            if (left.state.identifier < right.state.identifier && (left.active || right.active) &&
+                !hopkinsPairs.contains({left.state.identifier, right.state.identifier})) {
                 pairs.emplace_back(i, j);
-                present.emplace(workspace.particles[i].state.identifier,
-                    workspace.particles[j].state.identifier);
             }
         }
     }
@@ -1540,166 +1584,23 @@ void hopkinsAdvance(HopkinsWorkspace& workspace, uint64_t tick, uint64_t endTick
         };
         return key(left) < key(right);
     });
-    // Stable IDs, not rank/local indices, own cached intervals across migration.
-    for (auto iterator = hopkinsPairs.begin(); iterator != hopkinsPairs.end();) {
-        if (!present.contains(iterator->first)) {
-            iterator = hopkinsPairs.erase(iterator);
-        } else {
-            ++iterator;
-        }
-    }
     std::vector<HopkinsPairRecord> records(pairs.size());
-    std::vector<unsigned char> refresh(pairs.size());
-    for (size_t pair = 0; pair < pairs.size(); pair++) {
-        auto const [i, j] = pairs[pair];
-        auto const key = HopkinsPairKey{
-            workspace.particles[i].state.identifier, workspace.particles[j].state.identifier};
-        auto const found = hopkinsPairs.find(key);
-        refresh[pair] = found == hopkinsPairs.end() || workspace.particles[i].active ||
-            workspace.particles[j].active || found->second.endTick <= tick;
-        if (!refresh[pair]) {
-            records[pair] = found->second;
-            if (records[pair].beginTick > tick || records[pair].endTick < endTick) {
-                throw std::runtime_error("Hopkins pair interval does not cover the global step");
-            }
+    std::vector<size_t> solvePairs(pairs.size());
+    for (size_t i = 0; i < pairs.size(); ++i) {
+        solvePairs[i] = i;
+    }
+    size_t const batches = (pairs.size() + HopkinsSimd::size() - 1) / HopkinsSimd::size();
+    hopkinsParallel(batches, [&](size_t batch) {
+        hopkinsPairBatch(workspace, pairs, solvePairs, batch * HopkinsSimd::size(), workspace.tick,
+            false, records);
+    });
+    retained = hopkinsPairs.size();
+    opened = records.size();
+    for (auto const& record : records) {
+        if (!hopkinsPairs.emplace(HopkinsPairKey{record.leftId, record.rightId}, record).second) {
+            throw std::runtime_error("Hopkins attempted to overwrite a live pair interval");
         }
     }
-    bool accepted = false;
-    std::vector<HopkinsParticle> updated;
-    for (int order = 2; order >= 1 && !accepted; order--) {
-        {
-            profile::ScopedPhase profilePhase("hydro.hopkins.flux.solve");
-            std::vector<size_t> solvePairs;
-            solvePairs.reserve(pairs.size());
-            for (size_t pair = 0; pair < pairs.size(); pair++) {
-                if (refresh[pair] || order == 1) {
-                    solvePairs.push_back(pair);
-                }
-            }
-            size_t const batches =
-                (solvePairs.size() + HopkinsSimd::size() - 1) / HopkinsSimd::size();
-            hopkinsParallel(batches, [&](size_t batch) {
-                hopkinsPairBatch(workspace, pairs, solvePairs, batch * HopkinsSimd::size(), tick,
-                    tickDuration, order == 1, records);
-            });
-        }
-        std::vector<hopkins::Conserved> increments(workspace.particles.size());
-        std::vector<double> work(workspace.particles.size(), 0.0);
-        std::vector<hopkins::Vector> pendingWork(workspace.particles.size());
-        {
-            profile::ScopedPhase profilePhase("hydro.hopkins.flux.integrate");
-            for (size_t pair = 0; pair < pairs.size(); pair++) {
-                auto const [i, j] = pairs[pair];
-                auto const& record = records[pair];
-                hopkins::detail::countFlops(operations, global ? 4 : 6);
-                double const interval =
-                    global ? duration : double(record.endTick - record.beginTick) * tickDuration;
-                double const elapsed =
-                    global ? 0.0 : double(tick - record.beginTick) * tickDuration;
-                auto const delta = hopkins::integrateFlux(
-                    record.initial, record.midpoint, interval, elapsed, duration, operations);
-                auto const pairWork = hopkins::integratePairGravityWork(record.workInitial,
-                    record.workMidpoint, interval, elapsed, duration, operations);
-                increments[i].mass -= delta.mass;
-                increments[j].mass += delta.mass;
-                increments[i].energy -= delta.energy;
-                increments[j].energy += delta.energy;
-                for (int dim = 0; dim < 3; dim++) {
-                    hopkins::detail::countFlops(operations, 14);
-                    increments[i].momentum[dim] -= delta.momentum[dim];
-                    increments[j].momentum[dim] += delta.momentum[dim];
-                    for (size_t endpoint : {i, j}) {
-                        auto const& state = workspace.particles[endpoint].state;
-                        work[endpoint] += pairWork.integral[dim] * state.sourceAcceleration[dim];
-                        double const age = time - state.sourceTime;
-                        pendingWork[endpoint][dim] +=
-                            age * pairWork.integral[dim] + pairWork.firstMoment[dim];
-                    }
-                }
-            }
-        }
-        {
-            profile::ScopedPhase profilePhase("hydro.hopkins.corrector");
-            updated = workspace.particles;
-            accepted = true;
-            for (size_t i = 0; i < updated.size(); i++) {
-                auto const& old = workspace.particles[i];
-                auto& next = updated[i];
-                // Source half steps surround the conservative hydro exchange. The
-                // old acceleration predictor is corrected at its next fresh force.
-                next.acceleration = next.state.sourceAcceleration;
-                hopkins::detail::countFlops(operations, 5);
-                hopkinsSource(next, 0.5 * duration, operations);
-                double const oldMass = next.mass;
-                double const total = oldMass *
-                    (next.energy + 0.5 * hopkins::dot(next.velocity, next.velocity, operations));
-                next.mass += increments[i].mass;
-                if (!(next.mass > 0.0) || !std::isfinite(next.mass)) {
-                    accepted = false;
-                    break;
-                }
-                hopkins::Vector velocityBefore = old.velocity;
-                for (int dim = 0; dim < 3; dim++) {
-                    hopkins::detail::countFlops(operations, 3);
-                    next.velocity[dim] =
-                        (oldMass * next.velocity[dim] + increments[i].momentum[dim]) / next.mass;
-                }
-                hopkins::detail::countFlops(operations, 6);
-                next.energy = (total + increments[i].energy + work[i]) / next.mass -
-                    0.5 * hopkins::dot(next.velocity, next.velocity, operations);
-                hopkinsSource(next, 0.5 * duration, operations);
-                if (!(next.energy > 0.0) || !std::isfinite(next.energy)) {
-                    accepted = false;
-                    break;
-                }
-                if (!global) {
-                    uint64_t const age = hopkins::elapsedTicks(endTick, next.state.lastKickTick);
-                    uint64_t const intervalTicks = uint64_t(1) << (kHopkinsTickRung - next.rung);
-                    if (age > intervalTicks || age > std::numeric_limits<uint16_t>::max()) {
-                        throw std::runtime_error("Hopkins predictor age exceeds its timestep rung");
-                    }
-                }
-                hopkins::detail::countFlops(operations, 4);
-                next.density = next.mass / workspace.geometry[i].volume;
-                next.state.mass = next.mass;
-                next.state.totalEnergy = next.mass *
-                    (next.energy + 0.5 * hopkins::dot(next.velocity, next.velocity, operations));
-                if (!std::isfinite(next.state.totalEnergy) ||
-                    !hopkinsFitsFloat(next.mass, operations) ||
-                    !hopkinsFitsFloat(next.energy, operations) ||
-                    !hopkinsFitsFloat(next.density, operations)) {
-                    accepted = false;
-                    break;
-                }
-                for (int dim = 0; dim < 3; dim++) {
-                    if (!hopkinsFitsFloat(next.velocity[dim], operations)) {
-                        accepted = false;
-                        break;
-                    }
-                    hopkins::detail::countFlops(operations, 4);
-                    next.state.momentum[dim] = next.mass * next.velocity[dim];
-                    next.state.meshVelocity[dim] = 0.5 * (velocityBefore[dim] + next.velocity[dim]);
-                    next.state.pendingGravityWork[dim] += pendingWork[i][dim];
-                }
-            }
-        }
-        if (order == 1) {
-            std::fill(refresh.begin(), refresh.end(), 1);
-        }
-    }
-    if (!accepted) {
-        throw std::runtime_error("Hopkins individual-step update violates positive mass/thermal "
-                                 "energy even at first order; reduce hydro.cfl");
-    }
-    cached = refreshed = 0;
-    for (size_t pair = 0; pair < records.size(); pair++) {
-        auto const& record = records[pair];
-        if (!global) {
-            hopkinsPairs[{record.leftId, record.rightId}] = record;
-        }
-        refresh[pair] ? refreshed++ : cached++;
-    }
-    workspace.particles = std::move(updated);
 }
 
 }    // namespace detail
@@ -1769,67 +1670,91 @@ void hopkinsSoundWaveDiagnostics(double time) {
     }
 }
 
+void hopkinsPrepareGravityMasses(double time) {
+    if (getOptions().hydro.method != "mfv") {
+        return;
+    }
+    if (!(time >= 0.0) || !std::isfinite(time)) {
+        throw std::invalid_argument("Invalid Hopkins gravity projection time");
+    }
+    std::map<uint64_t, double> partial;
+    for (auto const& [key, record] : detail::hopkinsPairs) {
+        double const interval = record.endTime - record.beginTime;
+        double const duration = std::max(0.0, std::min(time, record.endTime) - record.beginTime);
+        auto const transfer =
+            hopkins::integrateFlux(record.initial, record.midpoint, interval, 0.0, duration);
+        partial[record.leftId] -= transfer.mass;
+        partial[record.rightId] += transfer.mass;
+    }
+    std::vector<std::pair<uint64_t, double>> values(partial.begin(), partial.end());
+    std::vector<hpx::future<void>> pending;
+    for (auto const& locality : hpxLocalities()) {
+        pending.push_back(hpx::async<HopkinsInstallGravityMassesAction>(locality, values));
+    }
+    for (auto& future : pending) {
+        future.get();
+    }
+    // No force workers are live yet; invalidate source-mass projections before
+    // migration, remote source imports, or multipole/mesh construction begins.
+    sphParticlesClearCaches();
+    particlesCacheFree();
+}
+
+void hopkinsPrepareTree() {
+    if (detail::hopkinsTreePrepared) {
+        throw std::runtime_error("Hopkins tree preparation was not consumed");
+    }
+    SphTreeCreateParameters parameters;
+    parameters.minimumRung = 0;
+    parameters.supportRadiusMultiplier = 1.2;
+    {
+        profile::ScopedPhase profilePhase("hydro.hopkins.tree.create");
+        sphTreeCreate(parameters);
+    }
+    detail::hopkinsNeighborRefresh(false);
+    detail::hopkinsTreePrepared = true;
+}
+
+void hopkinsPrepareGeometry(double scale, double expansionRate) {
+    if (!detail::hopkinsTreePrepared || detail::hopkinsPrepared) {
+        throw std::runtime_error("Invalid Hopkins geometry preparation order");
+    }
+    auto workspace = std::make_unique<detail::HopkinsWorkspace>();
+    workspace->dimensions = scenarios::definition(getOptions().run.scenario).hydroDimensions;
+    workspace->scale = scale;
+    workspace->expansionRate = expansionRate;
+    workspace->readForces = false;
+    detail::hopkinsSolveSupport(*workspace);
+    detail::hopkinsGeometry(*workspace);
+    detail::hopkinsPrepared = std::move(workspace);
+}
+
 HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRate, double time,
     double baseTimestep, EnergiesT& energies, bool closingOnly, double previousTimestep,
     double maximumGlobalTimestep) {
     profile::ScopedPhase profilePhase("hydro.hopkins");
-    detail::HopkinsFlopBatch operations;
     bool const global = maximumGlobalTimestep > 0.0;
     if (!(maximumGlobalTimestep >= 0.0) || !std::isfinite(maximumGlobalTimestep) ||
         (global && (!(previousTimestep >= 0.0) || !std::isfinite(previousTimestep)))) {
         throw std::invalid_argument("Hopkins global timesteps must be finite and nonnegative");
     }
-    if (global) {
-        minimumRung = 0;
+    if (!detail::hopkinsTreePrepared) {
+        hopkinsPrepareTree();
     }
-    int maximumExistingRung = 0;
-    {
-        profile::ScopedPhase profilePhase("hydro.hopkins.sources.correct");
-        std::vector<hpx::future<int>> pending;
-        for (auto const& locality : hpxLocalities()) {
-            pending.push_back(hpx::async<HopkinsCorrectSourcesAction>(locality, minimumRung, time,
-                scale, expansionRate, global ? previousTimestep : -1.0));
-        }
-        hpx::wait_all(pending);
-        for (auto& future : pending) {
-            maximumExistingRung = std::max(maximumExistingRung, future.get());
-        }
+    if (!detail::hopkinsPrepared) {
+        hopkinsPrepareGeometry(scale, expansionRate);
     }
-    if (closingOnly) {
-        // Conservative hydro already covers the completed drift interval.
-        // Only the fresh-force source correction above is still outstanding;
-        // no pair cache, reconstruction anchor, rung, or mesh velocity changes.
-        auto const sum = [&]() {
-            profile::ScopedPhase profilePhase("hydro.hopkins.diagnostics.energies");
-            return particlesSumEnergies();
-        }();
-        energies.kin = sum.kin / (scale * scale);
-        energies.therm = sum.therm / (scale * scale);
-        energies.xmom = sum.xmom / scale;
-        energies.ymom = sum.ymom / scale;
-        energies.zmom = sum.zmom / scale;
-        energies.nmom = sum.nmom / scale;
-        return {global ? 0 : maximumExistingRung, maximumGlobalTimestep};
-    }
-    SphTreeCreateParameters treeParameters;
-    treeParameters.minimumRung = 0;
-    treeParameters.supportRadiusMultiplier = 1.2;
-    {
-        profile::ScopedPhase profilePhase("hydro.hopkins.tree.create");
-        sphTreeCreate(treeParameters);
-    }
-    detail::hopkinsNeighborRefresh(false);
-    detail::HopkinsWorkspace workspace;
-    workspace.dimensions = scenarios::definition(getOptions().run.scenario).hydroDimensions;
+    auto workspaceOwner = std::move(detail::hopkinsPrepared);
+    auto& workspace = *workspaceOwner;
     workspace.scale = scale;
     workspace.expansionRate = expansionRate;
-    if (!global) {
-        hopkins::detail::countFlops(operations, 1);
-        workspace.tickDuration = baseTimestep / double(detail::kHopkinsTicksPerBase);
-        workspace.tick = detail::hopkinsTick(time, baseTimestep, operations);
-    }
-    detail::hopkinsSolveSupport(workspace);
-    detail::hopkinsGeometry(workspace);
+    workspace.time = time;
+    workspace.tickDuration = baseTimestep / double(detail::kHopkinsTicksPerBase);
+    workspace.tick = global ? 0 : detail::hopkinsTick(time, baseTimestep, nullptr);
+    // Gravity has joined: now it is safe to import fresh accelerations and the
+    // dark-matter rung reduction. Support geometry still has identical ordering.
+    workspace.readForces = true;
+    detail::hopkinsGather(workspace);
     uint64_t nextId = 0;
     for (auto const& particle : workspace.particles) {
         if (particle.state.identifier != std::numeric_limits<uint64_t>::max()) {
@@ -1841,48 +1766,115 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
             particle.state.identifier = nextId++;
         }
     }
-    if (time == 0.0 && getOptions().run.scenario == "soundWave") {
-        detail::hopkinsWriteSoundWave(workspace, time);
-    }
+    detail::hopkinsInitialize(workspace);
     size_t woken = 0;
-    auto const result = detail::hopkinsSelectTimesteps(
-        workspace, minimumRung, baseTimestep, maximumGlobalTimestep, woken);
-    workspace.globalTimestep = global ? result.minimumTimestep : 0.0;
-    detail::hopkinsGradients(workspace);
-    detail::hopkinsGeometryRates(workspace);
-    auto const sum = [&]() {
-        profile::ScopedPhase profilePhase("hydro.hopkins.diagnostics.energies");
-        return particlesSumEnergies();
-    }();
-    energies.kin = sum.kin / (scale * scale);
-    energies.therm = sum.therm / (scale * scale);
-    energies.xmom = sum.xmom / scale;
-    energies.ymom = sum.ymom / scale;
-    energies.zmom = sum.zmom / scale;
-    energies.nmom = sum.nmom / scale;
-    uint64_t const tick = workspace.tick;
-    uint64_t const endTick =
-        global ? 0 : tick + (uint64_t(1) << (detail::kHopkinsTickRung - result.maximumRung));
-    size_t cached = 0, refreshed = 0, active = 0;
+    for (auto& particle : workspace.particles) {
+        particle.active = closingOnly || !particle.state.predictorInitialized ||
+            (global ? particle.state.endTime <= time : particle.state.endTick <= workspace.tick);
+        if (!particle.active &&
+            !hopkins::physical(detail::hopkinsPredictedPrimitive(particle, workspace, nullptr))) {
+            particle.active = true;
+            particle.rung = std::max(particle.rung, minimumRung);
+            ++woken;
+        }
+    }
+    std::vector<unsigned char> closed(workspace.particles.size(), 0);
+    HopkinsStepResult result;
+    result.maximumRung = workspace.darkMatterRung;
+    result.minimumTimestep = maximumGlobalTimestep;
+    size_t settled = 0;
+    bool firstSelection = true;
+    while (true) {
+        settled += detail::hopkinsSettlePairs(workspace, closingOnly);
+        {
+            profile::ScopedPhase closePhase("hydro.hopkins.close");
+            for (size_t i = 0; i < workspace.particles.size(); ++i) {
+                if (workspace.particles[i].active && !closed[i]) {
+                    detail::hopkinsCloseParticle(workspace, i);
+                    closed[i] = 1;
+                }
+            }
+        }
+        detail::hopkinsCurrentViews(workspace);
+        if (closingOnly) {
+            break;
+        }
+        result = detail::hopkinsSelectTimesteps(workspace, global ? 0 : minimumRung, baseTimestep,
+            maximumGlobalTimestep, woken, firstSelection);
+        firstSelection = false;
+        bool newlyWoken = false;
+        for (size_t i = 0; i < workspace.particles.size(); ++i) {
+            newlyWoken = newlyWoken || (workspace.particles[i].active && !closed[i]);
+        }
+        if (!newlyWoken) {
+            break;
+        }
+    }
+    size_t active = 0;
     int minimumGasRung = kMaxRung, maximumGasRung = 0;
-    for (auto const& particle : workspace.particles) {
+    for (auto& particle : workspace.particles) {
         active += particle.active;
         minimumGasRung = std::min(minimumGasRung, particle.rung);
         maximumGasRung = std::max(maximumGasRung, particle.rung);
+        if (particle.active && !closingOnly) {
+            double const duration =
+                global ? result.minimumTimestep : std::ldexp(baseTimestep, -particle.rung);
+            particle.state.endTime = time + duration;
+            particle.state.endTick = global ?
+                0 :
+                workspace.tick + (uint64_t(1) << (detail::kHopkinsTickRung - particle.rung));
+        }
     }
-    detail::hopkinsAdvance(
-        workspace, tick, endTick, time, workspace.tickDuration, cached, refreshed);
+    workspace.globalTimestep = global ? result.minimumTimestep : 0.0;
+    size_t retained = detail::hopkinsPairs.size(), opened = 0;
+    if (!closingOnly) {
+        detail::hopkinsGradients(workspace);
+        detail::hopkinsGeometryRates(workspace);
+        for (size_t i = 0; i < workspace.particles.size(); ++i) {
+            auto& particle = workspace.particles[i];
+            if (!particle.active) {
+                continue;
+            }
+            auto& state = particle.state;
+            state.meshVelocity = particle.velocity;
+            for (int dim = 0; dim < 3; ++dim) {
+                state.meshAcceleration[dim] = state.sourceAcceleration[dim] -
+                    workspace.gradients[i].pressure[dim] / (particle.density * scale) -
+                    getOptions().hydro.damping * particle.velocity[dim];
+            }
+        }
+        if (time == 0.0 && getOptions().run.scenario == "soundWave") {
+            detail::hopkinsWriteSoundWave(workspace, time);
+        }
+        detail::hopkinsOpenPairs(workspace, retained, opened);
+    } else {
+        result.maximumRung = std::max(result.maximumRung, maximumGasRung);
+        if (!detail::hopkinsPairs.empty()) {
+            throw std::runtime_error("Hopkins terminal closure left a live pair interval");
+        }
+    }
     detail::hopkinsScatter(workspace, 1);
-    terminal::detailPrint("Hopkins step: time=%.17g active=%zu total=%zu minRung=%d maxRung=%d "
-                          "pairs=%zu cached=%zu refreshed=%zu woken=%zu\n",
-        time, active, workspace.particles.size(), minimumGasRung, maximumGasRung,
-        cached + refreshed, cached, refreshed, woken);
     {
-        profile::ScopedPhase profilePhase("hydro.hopkins.tree.destroy");
+        profile::ScopedPhase energyPhase("hydro.hopkins.diagnostics.energies");
+        auto const sum = particlesSumEnergies();
+        energies.kin = sum.kin / (scale * scale);
+        energies.therm = sum.therm / (scale * scale);
+        energies.xmom = sum.xmom / scale;
+        energies.ymom = sum.ymom / scale;
+        energies.zmom = sum.zmom / scale;
+        energies.nmom = sum.nmom / scale;
+    }
+    terminal::detailPrint("Hopkins step: time=%.17g active=%zu total=%zu minRung=%d maxRung=%d "
+                          "pairs=%zu cached=%zu refreshed=%zu woken=%zu settled=%zu terminal=%d\n",
+        time, active, workspace.particles.size(), minimumGasRung, maximumGasRung, retained + opened,
+        retained, opened, woken, settled, int(closingOnly));
+    {
+        profile::ScopedPhase treePhase("hydro.hopkins.tree.destroy");
         sphTreeDestroy();
+        detail::hopkinsTreePrepared = false;
     }
     {
-        profile::ScopedPhase profilePhase("hydro.hopkins.caches.clear");
+        profile::ScopedPhase cachePhase("hydro.hopkins.caches.clear");
         sphParticlesClearCaches();
         particlesCacheFree();
     }
@@ -1890,8 +1882,8 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
 }
 
 void hopkinsWriteCheckpoint(FILE* file) {
-    static_assert(sizeof(detail::HopkinsPairRecord) == 160);
-    uint64_t header[4] = {detail::kHopkinsCacheMagic, 1, sizeof(detail::HopkinsPairRecord),
+    static_assert(sizeof(detail::HopkinsPairRecord) == 176);
+    uint64_t header[4] = {detail::kHopkinsCacheMagic, 2, sizeof(detail::HopkinsPairRecord),
         hpxRank() == 0 ? uint64_t(detail::hopkinsPairs.size()) : 0};
     FWRITE(header, sizeof(uint64_t), 4, file);
     if (hpxRank() == 0) {
@@ -1904,7 +1896,7 @@ void hopkinsWriteCheckpoint(FILE* file) {
 void hopkinsReadCheckpoint(FILE* file) {
     uint64_t header[4];
     FREAD(header, sizeof(uint64_t), 4, file);
-    if (header[0] != detail::kHopkinsCacheMagic || header[1] != 1 ||
+    if (header[0] != detail::kHopkinsCacheMagic || header[1] != 2 ||
         header[2] != sizeof(detail::HopkinsPairRecord) || (hpxRank() != 0 && header[3] != 0)) {
         throw std::runtime_error("Incompatible Hopkins pair-cache checkpoint");
     }
@@ -1912,7 +1904,8 @@ void hopkinsReadCheckpoint(FILE* file) {
     for (uint64_t i = 0; i < header[3]; i++) {
         detail::HopkinsPairRecord record;
         FREAD(&record, sizeof(record), 1, file);
-        if (record.leftId >= record.rightId || record.beginTick >= record.endTick ||
+        if (record.leftId >= record.rightId || !(record.beginTime < record.endTime) ||
+            !std::isfinite(record.beginTime) || !std::isfinite(record.endTime) ||
             !detail::hopkinsPairs
                 .emplace(detail::HopkinsPairKey{record.leftId, record.rightId}, record)
                 .second) {

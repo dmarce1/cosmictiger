@@ -20,6 +20,7 @@
 
 #include <cosmictiger/analysis/lightcone_entry.hpp>
 #include <cosmictiger/hydro/hopkins/hopkins_state.hpp>
+#include <cosmictiger/math/simd_backend.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/drift.hpp>
 
@@ -70,7 +71,7 @@ struct Fixture {
         particleCount = count;
         currentRange = Pair<ParticleInteger>(0, count);
         options = Options{};
-        options.compute.cuda = false;
+        options.drift.cuda = false;
         resetCapture();
         for (int dim = 0; dim < kDimensions; ++dim) {
             positions[dim].resize(count);
@@ -380,6 +381,89 @@ TEST(DriftDispatch, MeshlessPreservesDoubleTimestepAndScale) {
             for (int dim = 0; dim < kDimensions; ++dim) {
                 EXPECT_EQ(fixture.positions[dim][0].raw(), expected);
             }
+        }
+    }
+}
+
+TEST(DriftDispatch, MeshlessTrajectoryIgnoresPendingTransfersAndFineEvents) {
+    if constexpr (kPositionBits != 64) {
+        GTEST_SKIP() << "Hopkins requires Fixed64 positions";
+    } else {
+        constexpr size_t kCount = NativeSimdVector<double>::size() + 1;
+        detail::Fixture fixture(kCount);
+        detail::options.hydro.enabled = true;
+        detail::options.hydro.method = "mfv";
+        for (size_t index = 0; index < kCount; ++index) {
+            fixture.types[index] = kSphType;
+            fixture.gasIndices[index] = kCount - 1 - index;
+            auto& state = fixture.meshStates[fixture.gasIndices[index]];
+            double const factor = index + 1.0;
+            state.initialized = true;
+            state.sourceTime = index % 2 == 0 ? 0.25 : 0.5;
+            state.endTime = 1.0;
+            state.beginTick = index;
+            state.endTick = index + 32768;
+            state.meshVelocity = {0.125 * factor, -0.25 * factor, 0.5 * factor};
+            state.meshAcceleration = {0.25 * factor, 0.5 * factor, -0.125 * factor};
+            state.mass = factor;
+            state.totalEnergy = 2.0 * factor;
+            state.momentum = {factor, -factor, 0.5 * factor};
+            state.pendingMass = 0.125 * factor;
+            state.pendingMomentum = {4.0 * factor, 8.0 * factor, 16.0 * factor};
+            state.pendingEnergy = 32.0 * factor;
+            state.pendingGravityIntegral = {0.25 * factor, 0.5 * factor, factor};
+            state.pendingGravityWork = {-0.25 * factor, -0.5 * factor, -factor};
+        }
+        auto const initial = fixture.positions;
+        auto const initialStates = fixture.meshStates;
+        auto const initialVelocities = fixture.velocities;
+        drift(1.0, 0.5, 0.5, 1.0, 0.0);
+        auto const whole = fixture.positions;
+        fixture.positions = initial;
+        for (int dim = 0; dim < kDimensions; dim++) {
+            particlesX[dim] = fixture.positions[dim].data();
+        }
+        for (int step = 0; step < 4; step++) {
+            double const begin = 0.5 + step * 0.125;
+            // Fine neighbors can deposit arbitrary impulses without changing
+            // the coarse particle's own anchored trajectory.
+            for (size_t index = 0; index < kCount; ++index) {
+                fixture.meshStates[fixture.gasIndices[index]].pendingMomentum[0] += index + 1.0;
+            }
+            drift(1.0, 0.125, begin, begin + 0.125, 0.0);
+        }
+        for (size_t index = 0; index < kCount; ++index) {
+            SCOPED_TRACE(index);
+            auto const& state = fixture.meshStates[fixture.gasIndices[index]];
+            auto const& anchor = initialStates[fixture.gasIndices[index]];
+            for (int dim = 0; dim < kDimensions; dim++) {
+                // Integrate v(t) analytically, independently of the midpoint
+                // implementation. Binary inputs make all increments exact.
+                long double const beginAge = 0.5L - anchor.sourceTime;
+                long double const endAge = 1.0L - anchor.sourceTime;
+                long double const displacement = 0.5L * anchor.meshVelocity[dim] +
+                    0.5L * anchor.meshAcceleration[dim] * (endAge * endAge - beginAge * beginAge);
+                PositionInteger const expected =
+                    initial[dim][index].raw() + Position(double(displacement)).raw();
+                EXPECT_EQ(whole[dim][index].raw(), expected);
+                EXPECT_EQ(fixture.positions[dim][index].raw(), expected);
+                EXPECT_EQ(fixture.velocities[index][dim], initialVelocities[index][dim]);
+                EXPECT_EQ(state.meshVelocity[dim], anchor.meshVelocity[dim]);
+                EXPECT_EQ(state.meshAcceleration[dim], anchor.meshAcceleration[dim]);
+                EXPECT_EQ(state.momentum[dim], anchor.momentum[dim]);
+                EXPECT_EQ(state.pendingGravityIntegral[dim], anchor.pendingGravityIntegral[dim]);
+                EXPECT_EQ(state.pendingGravityWork[dim], anchor.pendingGravityWork[dim]);
+                EXPECT_EQ(state.pendingMomentum[dim],
+                    anchor.pendingMomentum[dim] + (dim == 0 ? 4.0 * (index + 1.0) : 0.0));
+            }
+            EXPECT_EQ(state.sourceTime, anchor.sourceTime);
+            EXPECT_EQ(state.endTime, anchor.endTime);
+            EXPECT_EQ(state.beginTick, anchor.beginTick);
+            EXPECT_EQ(state.endTick, anchor.endTick);
+            EXPECT_EQ(state.mass, anchor.mass);
+            EXPECT_EQ(state.totalEnergy, anchor.totalEnergy);
+            EXPECT_EQ(state.pendingMass, anchor.pendingMass);
+            EXPECT_EQ(state.pendingEnergy, anchor.pendingEnergy);
         }
     }
 }

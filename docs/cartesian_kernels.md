@@ -174,7 +174,7 @@ The float derivative regression compares every stored rank against double
 precision at ten separations, including the origin and box corner, for every
 selected order. The other periodic images retain their existing `erfc` recurrence.
 
-CPU runtime validation uses `--compute.cuda=false`. It can run in either a
+CPU runtime validation uses `--gravity.cuda=false`. It can run in either a
 CUDA-enabled application or a CPU-only build configured with
 `COSMICTIGER_WITH_CUDA=OFF`; CUDA tests require a CUDA-enabled build and device.
 

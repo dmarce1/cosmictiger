@@ -28,7 +28,7 @@ def main():
     base.mkdir(parents=True, exist_ok=True)
     environment = dict(os.environ, CUDA_VISIBLE_DEVICES="", OMP_NUM_THREADS="1",
                        OPENBLAS_NUM_THREADS="1")
-    common = ["--hpx:threads=2", "--hpx:bind=none", "--compute.cuda=false",
+    common = ["--hpx:threads=2", "--hpx:bind=none", "--gravity.cuda=false",
               "--chemistry.enabled=false", "--analysis.groups=false",
               "--analysis.views=false", "--lightcone.enabled=false",
               "--output.directory=.", "--output.silo=false",

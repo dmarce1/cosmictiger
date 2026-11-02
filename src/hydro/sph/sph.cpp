@@ -340,7 +340,7 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     }
 
     params.courantFactor = getOptions().hydro.cfl;
-    if (getOptions().compute.cuda == false) {
+    if (getOptions().hydro.cuda == false) {
         cuda = false;
     }
     SphRunReturn rc;

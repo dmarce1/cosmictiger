@@ -14,7 +14,7 @@
 
 // Spreads each shell's points evenly over the unit sphere by damped, softened
 // mutual repulsion. Entry i holds one shell; its sizes on entry are the point
-// counts. Runs on the GPU when compute.cuda=true and on the CPU otherwise.
+// counts. Runs on the GPU when initial.cuda=true and on the CPU otherwise.
 void solveSphereSurfaceProblem(Vector<Array<Vector<float>, kDimensions>>& x);
 void solveSphereSurfaceProblemCpu(Vector<Array<Vector<float>, kDimensions>>& x);
 #ifdef USE_CUDA

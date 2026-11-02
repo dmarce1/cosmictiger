@@ -70,10 +70,10 @@ CudaKickArenaLayout const& kickArenaLayout() {
 // threads alike. The divisor therefore grows as the cube root of the
 // particle count from two blocks per multiprocessor at 32,768 particles to
 // six at 884,736 and holds the endpoint values outside that range;
-// compute.cudaKickHandoffBlocks pins it for experiments. The CPU walk calls
+// gravity.cudaKickHandoffBlocks pins it for experiments. The CPU walk calls
 // this at every node, so the device query is cached.
 int kickBlockCount(ParticleInteger particles) {
-    int const handoff = getOptions().compute.cudaKickHandoffBlocks;
+    int const handoff = getOptions().gravity.cudaKickHandoffBlocks;
     if (handoff > 0) {
         return handoff;
     }
@@ -94,7 +94,7 @@ int kickBlockCount(ParticleInteger particles) {
 // 0.82x of the coarse one (docs/cuda_kick_shared_memory.md, "Where the finer
 // division loses on the lattice"). The CPU walk therefore applies this
 // divisor only to nodes without Ewald checks and kickBlockCount to the rest.
-// compute.cudaKickFineHandoffBlocks sets it; zero, or a count below
+// gravity.cudaKickFineHandoffBlocks sets it; zero, or a count below
 // kickBlockCount, leaves every node at kickBlockCount. It is off by default:
 // at 2,097,152 particles fine divisors of 656-1312 keep the lattice at the
 // coarse cut and gain 1.06-1.15x on the clustered fixture, but lose 5-14% on
@@ -102,7 +102,7 @@ int kickBlockCount(ParticleInteger particles) {
 // finer cut makes more workitems than resident blocks, and the kernel takes
 // workitems in tree order ("Ewald-aware handoff" in the same document).
 int kickFineBlockCount(ParticleInteger particles) {
-    return std::max(kickBlockCount(particles), getOptions().compute.cudaKickFineHandoffBlocks);
+    return std::max(kickBlockCount(particles), getOptions().gravity.cudaKickFineHandoffBlocks);
 }
 
 // The CUDA operators are order templates in gravity_cuda.hpp; this unit owns

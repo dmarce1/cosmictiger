@@ -74,6 +74,39 @@ struct SphRunData {
     float centralSupportRadius;    // Support radius of the selected gravity kernel.
 };
 
+// Preserve the force-source arithmetic order for both the unsplit kernels and
+// the post-gravity completion of a phase-zero pair pass.
+CUDA_EXPORT inline Vector3<float> sphCompleteAcceleration(SphRunParameters const& parameters,
+    Vector3<Position> const& position, Vector3<float> const& velocity, Vector3<float> acceleration,
+    Vector3<float> const& gravityAcceleration, float centralAcceleration,
+    float centralSupportRadius, sph_flops::Counter& flops) {
+#if COSMICTIGER_WITH_GRAVITY
+    acceleration += gravityAcceleration;
+    flops += 3;
+#endif
+    acceleration[kYDimension] += parameters.uniformAccelerationY;
+    acceleration[kZDimension] += parameters.midplaneAccelerationZ(position[kZDimension]);
+    flops += 2;
+    flops.doublePrecision += sph_flops::positionConstructionFlops();
+    if (centralAcceleration != 0.0f) {
+        Vector3<float> const separation(distance(position[kXDimension], Position(0.5)),
+            distance(position[kYDimension], Position(0.5)),
+            distance(position[kZDimension], Position(0.5)));
+        float const radius = separation.norm();
+        float const inverseSupportRadius = 1.0f / centralSupportRadius;
+        float const normalizedRadius = radius * inverseSupportRadius;
+        float const force = centralAcceleration *
+            radial_kernel::forceFactor(selectedGravityKernel(), normalizedRadius) *
+            inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
+        acceleration -= force * separation;
+        flops += 21 + sph_flops::forceKernelOperations(selectedGravityKernel(), normalizedRadius);
+        flops.doublePrecision += 3 * sph_flops::positionConstructionFlops();
+    }
+    acceleration -= parameters.velocityDampingRate * velocity;
+    flops += 6;
+    return acceleration;
+}
+
 inline constexpr int kMaxNeighborRungDifference = 1;
 inline constexpr float kSphSupportRadiusTolerance = float(1.0e-4);
 

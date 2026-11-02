@@ -86,7 +86,10 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
         float g2;
         int rung;
         sinkIndex = sinkFirst + i;
-        if (!params.forceOnly && !params.htime && rungs[sinkIndex] < params.minRung) {
+        bool const refreshGas =
+            params.refreshGasForces && data.sph && data.type[sinkIndex] == kSphType;
+        if (!params.forceOnly && !refreshGas && !params.htime &&
+            rungs[sinkIndex] < params.minRung) {
             continue;
         }
         ASSERT(sinkIndex >= 0);
@@ -125,6 +128,24 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                 data.gravitySampleAccelerations[slot][kZDimension] = gz;
             }
         }
+        if (refreshGas && rungs[sinkIndex] < params.minRung) {
+            ParticleInteger const gasIndex = data.catIndex[sinkIndex];
+            data.sphGravityAccelerationX[gasIndex] = gx;
+            data.sphGravityAccelerationY[gasIndex] = gy;
+            data.sphGravityAccelerationZ[gasIndex] = gz;
+            if (allGx != nullptr) {
+                allGx[sinkIndex] = gx;
+                allGy[sinkIndex] = gy;
+                allGz[sinkIndex] = gz;
+            }
+            if (allPhi != nullptr) {
+                allPhi[sinkIndex] = phi;
+            }
+            flops +=
+                cosmictiger::gravity::cartesian::detail::L2P<fmmLocalDegree(order), true>::kFlops_ +
+                15;
+            continue;
+        }
         vx = vels[sinkIndex][kXDimension];
         vy = vels[sinkIndex][kYDimension];
         vz = vels[sinkIndex][kZDimension];
@@ -162,7 +183,9 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                 vz = fma(double(gz), halfStep, double(vz));
                 doubleFlops += 18;    // Double half-step and three mixed-precision FMAs.
             }
-            rungs[sinkIndex] = 0;
+            if (!gas) {
+                rungs[sinkIndex] = 0;
+            }
             kinTot += 0.5f * mass * sqr(vx, vy, vz);
             xmomTot += mass * vx;
             ymomTot += mass * vy;
@@ -289,9 +312,13 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             maxRung = max(maxRung, (int) rungs[sinkIndex]);
         }
         float kin1 = 0.5 * mass * sqr(vx, vy, vz);
-        vels[sinkIndex][kXDimension] = vx;
-        vels[sinkIndex][kYDimension] = vy;
-        vels[sinkIndex][kZDimension] = vz;
+        // Traditional gas state belongs to hydro. Even writing its unchanged
+        // velocity would race with concurrent hydro preparation.
+        if (params.htime || !data.sph || data.type[sinkIndex] != kSphType) {
+            vels[sinkIndex][kXDimension] = vx;
+            vels[sinkIndex][kYDimension] = vy;
+            vels[sinkIndex][kZDimension] = vz;
+        }
         phiTot += 0.5f * mass * phi;
         dkinTot += kin1 - kin0;
         // Displacement, L2P coordinate scaling and force accumulation/scaling.

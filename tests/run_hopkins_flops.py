@@ -7,6 +7,7 @@ import math
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 
 
@@ -20,14 +21,15 @@ def main():
                        OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1")
     for method in ("mfm", "mfv"):
         directory = (args.workdir / method).resolve()
-        directory.mkdir(parents=True, exist_ok=True)
+        if directory.exists():
+            shutil.rmtree(directory)
+        directory.mkdir(parents=True)
         profile = directory / "profile.txt"
-        profile.unlink(missing_ok=True)
         command = [str(args.executable.resolve()), "--run.scenario=gresho",
                    "--hydro.enabled=true", f"--hydro.method={method}",
                    "--gravity.enabled=false", "--chemistry.enabled=false",
                    "--starFormation.enabled=false", f"--run.timeIntegrator={args.time_integrator}",
-                   "--initial.particlesPerDimension=8", "--compute.cuda=false",
+                   "--initial.particlesPerDimension=8", "--gravity.cuda=false",
                    "--run.verbose=true",
                    "--run.maxIterations=2", "--run.endTime=0.001", "--run.numberOfSteps=2",
                    "--output.silo=false", f"--output.directory={directory}",

@@ -14,6 +14,7 @@ import signal
 import subprocess
 import sys
 
+from application_selection import cpu_backend_options
 from run_checkpoint import checkManifest, hydro_particle_payload
 
 
@@ -127,7 +128,7 @@ def main():
             "configuration": str(root / "configurations" / (stem + ".ini")),
             # Solver-dispatch assertions below inspect detailed phase messages.
             "run.verbose": "true",
-            "compute.cuda": "false",
+            **cpu_backend_options(),
             "initial.particlesPerDimension": "16" if scenario == "disc" else "8",
             "run.maxIterations": "1",
             # The cold disc must support its actual configured coarse timestep.
@@ -286,7 +287,7 @@ def main():
                          ("abbreviated_rayleigh_taylor", "--run.scenario=rt"),
                          ("legacy_sod_test", "--run.test=sod")):
         directory = prepare("reject_" + name)
-        output = run_process(command + ["--compute.cuda=false", option], directory, success=False)
+        output = run_process(command + ["--gravity.cuda=false", option], directory, success=False)
         if "scenario" not in output.lower():
             raise RuntimeError(f"{name}: rejection did not explain the scenario selection")
     print("First-class scenario regressions passed")

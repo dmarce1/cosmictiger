@@ -208,6 +208,75 @@ inline PairGravityWork pairGravityWork(double massFlux, Vector const& displaceme
     return {dot(leftAcceleration, work, operations), dot(rightAcceleration, work, operations)};
 }
 
+// Integrated conserved variables require the volume at the same anchor time.
+inline Primitive primitiveFromConserved(Conserved const& state, double volume, double gamma) {
+    if (!(state.mass > 0.0) || !(volume > 0.0) || !(gamma > 1.0)) {
+        throw std::invalid_argument("Invalid Hopkins conserved primitive conversion");
+    }
+    Primitive result;
+    result.density = state.mass / volume;
+    for (int dim = 0; dim < 3; ++dim) {
+        result.velocity[dim] = state.momentum[dim] / state.mass;
+    }
+    result.pressure = (gamma - 1.0) *
+        (state.energy - 0.5 * dot(state.momentum, state.momentum) / state.mass) / volume;
+    return result;
+}
+
+// A single own-step source closure. The old-mass opening source and new-mass
+// closing source surround the accumulated conservative exchange (Appendix H1).
+inline Conserved closeConservedInterval(Conserved const& anchor, Conserved const& increment,
+    Vector const& oldAcceleration, Vector const& newAcceleration, double duration, double damping,
+    double oldExpansion, double newExpansion, double gravityWork = 0.0) {
+    if (!(duration >= 0.0) || !std::isfinite(duration) || !(anchor.mass > 0.0) ||
+        !(damping >= 0.0)) {
+        throw std::invalid_argument("Invalid Hopkins own-step source interval");
+    }
+    if (duration == 0.0 && increment.mass == 0.0 && increment.energy == 0.0 &&
+        dot(increment.momentum, increment.momentum) == 0.0 && gravityWork == 0.0) {
+        return anchor;
+    }
+    double const half = 0.5 * duration;
+    double const decay = std::exp(-damping * half);
+    double const impulse = damping == 0.0 ? half : -std::expm1(-damping * half) / damping;
+    Vector oldVelocity{}, velocity{};
+    Conserved result;
+    result.mass = anchor.mass + increment.mass;
+    if (!(result.mass > 0.0) || !std::isfinite(result.mass)) {
+        throw std::runtime_error("Nonpositive Hopkins mass at own-step closure");
+    }
+    double const initialThermal =
+        anchor.energy - 0.5 * dot(anchor.momentum, anchor.momentum) / anchor.mass;
+    double openingEnergy = anchor.energy + initialThermal * std::expm1(half * oldExpansion);
+    for (int dim = 0; dim < 3; ++dim) {
+        oldVelocity[dim] = anchor.momentum[dim] / anchor.mass;
+        double const openingMomentum =
+            decay * anchor.momentum[dim] + anchor.mass * impulse * oldAcceleration[dim];
+        velocity[dim] = openingMomentum / anchor.mass;
+        openingEnergy += 0.5 * anchor.mass * (velocity[dim] - oldVelocity[dim]) *
+            (velocity[dim] + oldVelocity[dim]);
+        result.momentum[dim] = openingMomentum + increment.momentum[dim];
+    }
+    result.energy = openingEnergy + increment.energy + gravityWork;
+    double const thermal =
+        result.energy - 0.5 * dot(result.momentum, result.momentum) / result.mass;
+    result.energy += thermal * std::expm1(half * newExpansion);
+    for (int dim = 0; dim < 3; ++dim) {
+        oldVelocity[dim] = result.momentum[dim] / result.mass;
+        result.momentum[dim] =
+            decay * result.momentum[dim] + result.mass * impulse * newAcceleration[dim];
+        velocity[dim] = result.momentum[dim] / result.mass;
+        result.energy += 0.5 * result.mass * (velocity[dim] - oldVelocity[dim]) *
+            (velocity[dim] + oldVelocity[dim]);
+    }
+    if (!(thermal > 0.0) || !std::isfinite(result.energy)) {
+        throw std::runtime_error(
+            "Nonpositive Hopkins thermal energy at own-step closure; "
+            "reduce hydro.cfl (published pair transfers cannot be retried one-sided)");
+    }
+    return result;
+}
+
 struct PairGravityWorkIntegral {
     Vector integral{};
     // First temporal moment measured from the start of the actual subinterval.

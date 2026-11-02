@@ -86,7 +86,7 @@ Persistent region
   block's region of the per-launch list slab, below), the staging barrier, and
   the resolved region pointers. 648 bytes at order 7 (528 before the slab: each
   vector carries an ownership flag and the layout two more fields).
-- The active local expansion with its position (`compute.cudaKickSharedExpansion`,
+- The active local expansion with its position (`gravity.cuda.kickSharedExpansion`,
   default on). Each node's L2L translates cooperatively into the arena scratch
   with `translateInto` (group leaders store their coefficients; no replicated
   per-lane result) and the warp copies the result back; ancestors awaiting their
@@ -128,7 +128,7 @@ a pre-existing tool interaction, not a new hazard.
 Forces for buckets larger than the sink tile are processed as consecutive
 sink tiles: forces are zeroed, PC and PP run over the full interaction lists,
 and the kick of that tile follows, so lists are built once per leaf and sources
-are re-staged per tile. `compute.cudaKickSinkTile=-1` keeps whole-bucket forces
+are re-staged per tile. `gravity.cuda.kickSinkTile=-1` keeps whole-bucket forces
 in global backing instead.
 
 ## Budget and tile selection
@@ -137,7 +137,7 @@ in global backing instead.
 shared memory with `cudaFuncGetAttributes` and the device limits (shared memory
 per SM, the 1 KB driver reservation per block, registers per SM, blocks and
 warps per SM). The register-limited residency uses the 256-register warp
-allocation granularity. For the requested residency (`compute.cudaKickResidency`,
+allocation granularity. For the requested residency (`gravity.cuda.kickResidency`,
 default: the register limit) the byte budget per block is the per-SM shared
 memory divided by the residency, minus the reservation and static shared
 memory, rounded down to the 128-byte allocation unit. The layout is then built
@@ -148,10 +148,10 @@ particles-first when the budget is exceeded) and verified with
 allocation unit until the calculator agrees. The chosen policy is printed once
 per order as `CUDA kick arena (FMM order N): ...`.
 
-Options (all default to automatic): `compute.cudaKickResidency`,
-`compute.cudaKickSinkTile`, `compute.cudaKickParticleTile`,
-`compute.cudaKickMultipoleTile`, `compute.cudaKickSharedExpansion`,
-`compute.cudaKickHandoffBlocks` (pins the CPU/GPU handoff divisor; by default
+Options (all default to automatic): `gravity.cuda.kickResidency`,
+`gravity.cuda.kickSinkTile`, `gravity.cuda.kickParticleTile`,
+`gravity.cuda.kickMultipoleTile`, `gravity.cuda.kickSharedExpansion`,
+`gravity.cuda.kickHandoffBlocks` (pins the CPU/GPU handoff divisor; by default
 `kickBlockCount()` uses two resident blocks per multiprocessor, a measured
 choice that is independent of the launch size, see the handoff sections
 below).
@@ -162,7 +162,7 @@ A block's six interaction lists, its two checklist stacks with their level
 bounds, the ancestor-expansion and search-parameter stacks and, when the
 corresponding region is not in shared memory, the active expansion and the
 whole-bucket force backing live in global memory. With
-`compute.cudaKickListReserve` above zero (default 4096 entries per list) that
+`gravity.cuda.kickListReserve` above zero (default 4096 entries per list) that
 storage is one region per block of a slab the host allocates once per order
 with `cudaMalloc`, sized for `residency` blocks per multiprocessor.
 `kickCarveListStorage<order>()` (`cosmictiger/gravity/kick_cuda.hpp`) lays the regions
@@ -178,7 +178,7 @@ default reservation a block's region is 145,792 bytes (eight 16 KB lists, the
 64-level ancestor stack of 212-byte expansions, the bounds and parameters),
 95.6 MB for 656 blocks, about what the twelve pool blocks of the earlier
 reservation occupied inside the managed-memory heap (`HEAP_SIZE`), which no
-longer has to hold them. `compute.cudaKickListReserve=0` keeps every list in
+longer has to hold them. `gravity.cuda.kickListReserve=0` keeps every list in
 the pool, grown on demand, as before.
 
 Before the slab, every block reserved its lists at launch with one
@@ -243,7 +243,7 @@ The force exports of CPU-only and CUDA runs of the same fixtures agree to about
 (`docs/cuda_kick_shared_memory_results/agreement_cpu_cuda/`). The harness's
 direct Ewald reference is only valid in CUDA-enabled runs: it is evaluated on the
 device and reads the device kernel table (self potential and softening), which
-`setKernelSelections` uploads only when `compute.cuda` is on. In a CPU-only run
+`setKernelSelections` uploads only when at least one module CUDA selector is on. In a CPU-only run
 that reference reported a spurious 1.5% potential offset; the harness now skips
 the reference there and prints `STF_WALK_REFERENCE_SKIPPED`.
 
@@ -287,7 +287,7 @@ below change that default.
 
 ### Fixed CPU/GPU handoff (`handoff_fixed_order7/`)
 
-With `compute.cudaKickHandoffBlocks=492` the arena divides work between CPU and
+With `gravity.cuda.kickHandoffBlocks=492` the arena divides work between CPU and
 GPU exactly as the baseline does. The picture is unchanged: lattice 1.027x,
 clustered 1.046x, adaptive 0.927x (0.918-0.933) for forces, 0.935x with the
 potential. The adaptive gap is therefore not the handoff threshold either.
@@ -587,7 +587,7 @@ The CPU hands a subtree to the GPU once it holds at most
 the launch size, residency times the multiprocessor count: 656 blocks for the
 arena against 492 for the baseline, so for 32,768 particles the threshold falls
 from 66 to 49 particles. The diagnostic pins the divisor with
-`compute.cudaKickHandoffBlocks=492` (the arena still launches 656 blocks) and
+`gravity.cuda.kickHandoffBlocks=492` (the arena still launches 656 blocks) and
 also tries no list reservation; two pairs of 11 samples, forces only:
 
 lattice:
@@ -618,7 +618,7 @@ the arena is 1.06x (lattice), 1.11x (clustered) and 0.98x (adaptive) at bucket
 costs 2-4% on the adaptive fixture, confirming the 4096-entry default.
 
 The residency option did not do what the earlier variants assumed: a
-`compute.cudaKickResidency=6` run printed `8 blocks/SM (register limit 8),
+`gravity.cuda.kickResidency=6` run printed `8 blocks/SM (register limit 8),
 budget 16000`, because `kickSelectLayout` computed the budget for six blocks,
 the default tiles fit in it, the occupancy calculator reported eight achievable
 blocks and the layout recorded that number as its residency, so 656 blocks were
@@ -781,7 +781,7 @@ and at 262,144 particles.
   the particles by `kKickHandoffBlocksPerMultiprocessor = 2` times the
   multiprocessor count (164 blocks on the RTX 3090, 200-particle subtrees for
   32,768 particles), the measured optimum of the adaptive fixture and within
-  10-20% of the best division of the other two; `compute.cudaKickHandoffBlocks`
+  10-20% of the best division of the other two; `gravity.cuda.kickHandoffBlocks`
   still pins it. This replaces both the arena's 656-block divisor (which lost
   the bucket-32 case 2.7x) and the baseline's 492. The sweep over thread and
   particle counts below (`handoff_threads_sizes/`) later made the divisor
@@ -1006,7 +1006,7 @@ multiprocessor, the largest measured value, so the 16,384-particle cap of
 `CUDA_KICK_PARTS_MAX` decides above about 5.4 million particles per rank.
 The thread count does not enter the rule: at 2 threads it costs the lattice
 at 262,144 particles, but production runs use the workers the node has.
-`compute.cudaKickHandoffBlocks` still pins the divisor. The sweep at 2.1
+`gravity.cuda.kickHandoffBlocks` still pins the divisor. The sweep at 2.1
 million particles below raises `kKickHandoffMaxScale` to 3 (six blocks per
 multiprocessor from 884,736 particles).
 
@@ -1221,7 +1221,7 @@ clustered fixture, which is 4% faster on average at 8 threads in the sweep,
 level in this check, and 8% faster at 12 threads. The adaptive fixture is
 the closest of the three to a clustered production volume, so the cap of 3
 stands; a run that is uniform throughout (the lattice case) can pin
-`compute.cudaKickHandoffBlocks=328` at this size.
+`gravity.cuda.kickHandoffBlocks=328` at this size.
 
 ### Where the finer division loses on the lattice (`nsys_handoff_large/`)
 
@@ -1233,7 +1233,7 @@ cell-cell interactions that the finer cut moves from the GPU to the CPU.
 Nsight Systems (`--trace=cuda,nvtx`, no CPU sampling or context-switch
 tracing) ran around the faaf984a binary of the check above
 (`cosmictiger_b1024_handoff_large_rule`, divisor pinned with
-`compute.cudaKickHandoffBlocks`) at 2,097,152 particles, bucket 128, order
+`gravity.cuda.kickHandoffBlocks`) at 2,097,152 particles, bucket 128, order
 7, 8 worker threads on CPUs 1-8, 11 samples per phase. It covered the
 lattice and the adaptive fixture at 328 and 656 blocks, three rounds with
 the order alternating, under the GPU lock and quiet gate (`nsys_run.sh`,
@@ -1368,7 +1368,7 @@ next section implements and times the first.)
 
 The verdict above proposed handing a node to the GPU at the coarse threshold
 while it still carries Ewald checks and at a finer one once it carries none.
-`compute.cudaKickFineHandoffBlocks` implements that and is off by default.
+`gravity.cuda.kickFineHandoffBlocks` implements that and is off by default.
 At the GPU branch of `kickWalk` the CPU walk compares the node's particle
 count with `N / kickBlockCount(N)` (the automatic rule: 492 blocks, 4,262
 particles at 2,097,152) while the node's Ewald checklist is non-empty, and
@@ -1537,7 +1537,7 @@ divisors cost nothing there. Where the Ewald lists resolve above the cut
 on the adaptive fixture, the closest of the three to a production volume,
 it is 5-14% slower than the rule, and its geometric mean over the fixtures
 is within 2% of the pinned 492 at both thread counts (0.980-1.019). The
-default therefore stays as it was: `compute.cudaKickFineHandoffBlocks` is 0
+default therefore stays as it was: `gravity.cuda.kickFineHandoffBlocks` is 0
 and the rule hands over 492 blocks' worth at this size. The option remains
 for experiments. Two changes could make it pay. One is to dispatch the
 workitems largest first rather than in tree order, so that the coarse
@@ -1557,7 +1557,7 @@ tables above (the handoff and opening rule moved work from the CPU to the
 GPU: at bucket 64 the adaptive kick fell from 13.8 to 12.4 ms while its
 kernel grew from 5.6 to 7.2 ms), so the slab is judged against its own head
 and, for the kernel criterion, with both arena binaries pinned to the
-baseline's work division and opening rule (`compute.cudaKickHandoffBlocks=492`,
+baseline's work division and opening rule (`gravity.cuda.kickHandoffBlocks=492`,
 `gravity.openLargerCell=false`, the "matched" policy). The policy lines are
 unchanged apart from the control block (528 to 648 bytes, dynamic shared
 7,920 to 8,048 bytes at bucket 64, same tiles) and the new slab size:
@@ -1631,7 +1631,7 @@ automatic policy, 15 samples:
 
 Host and kernel split at the baseline's work division
 (`nsys_list_slab_matched/nsys_run.sh`: the arena binaries with
-`compute.cudaKickHandoffBlocks=492` and `gravity.openLargerCell=false`, plus
+`gravity.cuda.kickHandoffBlocks=492` and `gravity.openLargerCell=false`, plus
 the three automatic-policy variants again; three rounds, medians over the
 rounds; one build of another session ran during the first 15 s and two
 round-2 host shares at bucket 128 show CPU contention, see the summary, so
@@ -1703,7 +1703,7 @@ compute-sanitizer on the CUDA `fmmWalk` regression at order 7
 clean for the slab build. racecheck reports 0 errors for every binary, and
 its warning count is a property of the binary, not of the slab: the head
 binary reports none in three runs, the slab binary reports 138 in four runs
-whether its lists use the slab or, with `compute.cudaKickListReserve=0`, the
+whether its lists use the slab or, with `gravity.cuda.kickListReserve=0`, the
 pool, and the committed log of the pre-slab arena build e2c00fdb
 (`sanitizer/racecheck_order_7.log`) reports 126. Every warning pairs a
 `cuda::memcpy_async` staging write with a later read of the staged tile (CP,
@@ -2013,7 +2013,7 @@ the CUDA `fmmWalk` regression passes at orders 3, 7 and 9, and `fmmTree` and
 the mixed-mass `sphGravity` regression pass at order 7. The order-7 policy
 line of the merged binary is the slab branch's (`policy_lines_final.txt`:
 control 648 bytes, dynamic shared 8,048 bytes at bucket 64, `list slab 145792
-bytes per block (4096 entries per list)`), and `compute.cudaKickListReserve=0`
+bytes per block (4096 entries per list)`), and `gravity.cuda.kickListReserve=0`
 still takes the pool path (`list slab 0 bytes per block`, `fmmWalk` passes).
 compute-sanitizer on `fmmWalk` at order 7 on the final head
 (`racecheck_order_7_merged.log`, `memcheck_order_7_merged.log`): memcheck 0
@@ -2123,7 +2123,7 @@ Host and kernel split of the adaptive cell at bucket 64
 (`landing_nsys_adaptive_b64/nsys_run.sh`: the two binaries under Nsight Systems
 as in the list slab sections, with the automatic policy and, as "matched", both
 pinned to the baseline's work division and opening rule with
-`compute.cudaKickHandoffBlocks=492` and `gravity.openLargerCell=false`; three
+`gravity.cuda.kickHandoffBlocks=492` and `gravity.openLargerCell=false`; three
 rounds with alternating order, 15 samples; every round clean: no other GPU
 client, no process delayed by the idle wait, one-minute load 5.2 to 5.8;
 medians over the rounds, `medians_over_rounds.md`):
@@ -2734,7 +2734,7 @@ all of them.
   (`handoff_large_sizes/`). The lattice penalty is CPU walk time, 115 of its
   124 thread-ms per kick in Ewald cell-cell interactions of the box/8 cells,
   which the finer cut takes from the GPU (`nsys_handoff_large/`). The
-  Ewald-aware handoff (`compute.cudaKickFineHandoffBlocks`, off by default)
+  Ewald-aware handoff (`gravity.cuda.kickFineHandoffBlocks`, off by default)
   removes that penalty and gains 1.06-1.15x on the clustered fixture, but
   loses 5-14% on the adaptive one: it keeps the large Ewald-carrying cells
   as workitems while the finer cut makes more workitems than resident

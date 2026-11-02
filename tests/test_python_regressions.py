@@ -271,12 +271,12 @@ class VariationalCudaTests(unittest.TestCase):
             spec = run_variational_sph.RunSpec('cuda_test', 'sod', Path('/fake/app'), backend='cuda')
             for message, expected in (
                     ('This executable was compiled without CUDA support', 'skipped'),
-                    ('compute.cuda=true requires an available CUDA device', 'skipped'),
+                    ('Selected CUDA backends require an available CUDA device', 'skipped'),
                     ('CUDA illegal memory access', 'abort')):
                 result = run_variational_sph.analyzeRun(spec, Path(directory), 1, False, 0., message)
                 self.assertEqual(result['status'], expected)
             result = run_variational_sph.analyzeRun(spec, Path(directory), None, True, 0.,
-                'compute.cuda=true requires an available CUDA device')
+                'Selected CUDA backends require an available CUDA device')
             self.assertEqual(result['status'], 'timeout')
 
 

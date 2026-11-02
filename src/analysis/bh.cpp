@@ -306,7 +306,7 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Vector3<float> p
 }
 
 DeviceVector<float> bhEvaluatePotential(DeviceVector<Vector3<float>>& x, bool gpu) {
-    gpu = gpu && getOptions().compute.cuda;
+    gpu = gpu && usesCuda(getOptions());
 #ifndef USE_CUDA
     gpu = false;
 #endif
@@ -360,7 +360,7 @@ DeviceVector<float> bhEvaluatePotential(DeviceVector<Vector3<float>>& x, bool gp
 
 DeviceVector<float> bhEvaluatePoints(
     DeviceVector<Vector3<float>>& y, DeviceVector<Vector3<float>>& x, bool gpu) {
-    gpu = gpu && getOptions().compute.cuda;
+    gpu = gpu && usesCuda(getOptions());
 #ifndef USE_CUDA
     gpu = false;
 #endif

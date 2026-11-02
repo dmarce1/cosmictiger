@@ -25,14 +25,17 @@ void appendDriftLightconeEntries(Vector3<double> const& before, Vector3<double> 
     double const inverseScale = 1.0 / parameters.scale;
     double const inverseTauMax = 1.0 / parameters.tauMax;
     // CUDA uses float physical velocities for the crossing interpolation.
-    float const vx =
-        (meshState != nullptr ? meshState->meshVelocity[kXDimension] : velocity[kXDimension]) *
+    float const vx = (meshState != nullptr ? meshState->driftVelocity(kXDimension,
+                                                 0.5 * (parameters.tau0 + parameters.tau1)) :
+                                             velocity[kXDimension]) *
         inverseScale;
-    float const vy =
-        (meshState != nullptr ? meshState->meshVelocity[kYDimension] : velocity[kYDimension]) *
+    float const vy = (meshState != nullptr ? meshState->driftVelocity(kYDimension,
+                                                 0.5 * (parameters.tau0 + parameters.tau1)) :
+                                             velocity[kYDimension]) *
         inverseScale;
-    float const vz =
-        (meshState != nullptr ? meshState->meshVelocity[kZDimension] : velocity[kZDimension]) *
+    float const vz = (meshState != nullptr ? meshState->driftVelocity(kZDimension,
+                                                 0.5 * (parameters.tau0 + parameters.tau1)) :
+                                             velocity[kZDimension]) *
         inverseScale;
     for (int imageX = -1; imageX <= 0; ++imageX) {
         double const x0 = before[kXDimension] + imageX;
@@ -75,7 +78,7 @@ void appendDriftLightconeEntries(Vector3<double> const& before, Vector3<double> 
                     entry.pix = pixel;
                     entry.type = type;
                     if (meshState != nullptr) {
-                        entry.mass = float(meshState->mass);
+                        entry.mass = float(meshState->accountedMass());
                     }
                     entries.push_back(entry);
                 }
@@ -115,8 +118,9 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Vector3<float>* veloc
     };
     auto const meshDriftVelocity = [&](size_t particle, int dimension) {
         auto const* state = meshState(particle);
-        return state != nullptr ? state->meshVelocity[dimension] :
-                                  double(velocities[particle][dimension]);
+        return state != nullptr ?
+            state->driftVelocity(dimension, 0.5 * (parameters.tau0 + parameters.tau1)) :
+            double(velocities[particle][dimension]);
     };
     Position* positions[kDimensions] = {x, y, z};
     size_t index = 0;

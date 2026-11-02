@@ -283,37 +283,21 @@ __global__ void sphCudaHydro(
                         H_a, ρ_a, ζ_a);
                     __trap();
                 }
-                // Accelerations outside the paper: self-gravity, the optional uniform, midplane
-                // and central forces of the test problems, and velocity damping while relaxing
-                // the gas sphere.
+                Vector3<float> gravityAcceleration(0.0f);
 #if COSMICTIGER_WITH_GRAVITY
-                Vector3<float> const gravityAcceleration = data.selfGravityEnabled ?
-                    Vector3<float>(data.sinkGravityAccelerationX[sinkIndex],
+                if (!parameters.deferAccelerationSources && data.selfGravityEnabled) {
+                    gravityAcceleration = Vector3<float>(data.sinkGravityAccelerationX[sinkIndex],
                         data.sinkGravityAccelerationY[sinkIndex],
-                        data.sinkGravityAccelerationZ[sinkIndex]) :
-                    Vector3<float>(0.0f);
-                dv_a_dt += gravityAcceleration;
-                flops += 3;
-#endif
-                dv_a_dt[kYDimension] += parameters.uniformAccelerationY;
-                dv_a_dt[kZDimension] += parameters.midplaneAccelerationZ(z_a);
-                flops += 2;    // Force sums are float; the midpoint is scaled in double.
-                flops.doublePrecision += sph_flops::positionConstructionFlops();
-                if (data.centralAcceleration != 0.0f) {
-                    Vector3<float> const separation(distance(x_a, Position(0.5)),
-                        distance(y_a, Position(0.5)), distance(z_a, Position(0.5)));
-                    float const radius = sqrtf(separation.dot(separation));
-                    float const inverseSupportRadius = 1.0f / data.centralSupportRadius;
-                    float const normalizedRadius = radius * inverseSupportRadius;
-                    float const force = data.centralAcceleration *
-                        radial_kernel::forceFactor(selectedGravityKernel(), normalizedRadius) *
-                        inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
-                    dv_a_dt -= force * separation;
-                    flops += 21 +
-                        sph_flops::forceKernelOperations(selectedGravityKernel(), normalizedRadius);
-                    flops.doublePrecision += 3 * sph_flops::positionConstructionFlops();
+                        data.sinkGravityAccelerationZ[sinkIndex]);
                 }
-                dv_a_dt -= parameters.velocityDampingRate * v_a;
+#endif
+                if (!parameters.deferAccelerationSources) {
+                    dv_a_dt = sphCompleteAcceleration(parameters, Vector3<Position>(x_a, y_a, z_a),
+                        v_a, dv_a_dt, gravityAcceleration, data.centralAcceleration,
+                        data.centralSupportRadius, flops);
+                } else {
+                    ALWAYS_ASSERT(parameters.phase == 0);
+                }
                 for (int dim = 0; dim < kDimensions; dim++) {
                     data.sinkAccelerations[sinkIndex].acceleration[dim] = dv_a_dt[dim];
                 }
@@ -323,7 +307,7 @@ __global__ void sphCudaHydro(
                     2.0f - 3.0f * sinkPressureEnergyRatio :
                     5.0f - 3.0f * adiabaticIndex;
                 du_a_dt += expansionCoefficient * a_da_dt * inverseScaleFactor * u_a;
-                flops += 12;    // Damping and homogeneous thermal expansion.
+                flops += 6;    // Homogeneous thermal expansion; force sources count separately.
                 data.sinkInternalEnergyRate[sinkIndex] = du_a_dt + viscous_heating;
                 flops += 1;
                 if (parameters.phase == 1) {

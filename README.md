@@ -18,7 +18,9 @@ for all options and defaults. HPX's own options retain their `--hpx:*` syntax.
 | Group | Controls |
 | --- | --- |
 | `run` | Test selection, iteration limit, time-step hierarchy, verbose diagnostics |
-| `compute` | CUDA and tree bucket size |
+| `compute` | Position representation and tree bucket sizes |
+| `drift` | Particle drift execution backend |
+| `sort` | Particle sorting execution backend |
 | `checkpoint` | Checkpoint interval and restart index |
 | `initial` | Particle lattice, glass/Plummer/Gadget input, initial power spectrum |
 | `output` | Particle Silo output, cadence, directory, unit system, frame, and selected box |
@@ -30,7 +32,7 @@ for all options and defaults. HPX's own options retain their `--hpx:*` syntax.
 | `hydro` | SPH, equation of state, smoothing radii, and artificial viscosity |
 
 In C++, each category is an ordinary public struct in `Options`: `Gravity gravity`,
-`Output output`, and likewise `Run`, `Compute`, `Checkpoint`, `Initial`, `Analysis`,
+`Output output`, and likewise `Run`, `Compute`, `Drift`, `Sort`, `Checkpoint`, `Initial`, `Analysis`,
 `Lightcone`, `Cosmology`, `Units`, and `Hydro`. Code accesses members directly, for
 example `getOptions().gravity.enabled` or `options.output.directory`.
 Radius aliases resolve to canonical support radii in box units; unit conversions
@@ -40,8 +42,19 @@ accepted input, since a supplied value was always overwritten.
 
 The old ungrouped and snake_case option names have been replaced. For example,
 `--parts_dim=16 --max_iter=2 --cuda=true` is now
-`--initial.particlesPerDimension=16 --run.maxIterations=2 --compute.cuda=true`,
+`--initial.particlesPerDimension=16 --run.maxIterations=2 --gravity.cuda=true`,
 and `--hydro.sph=true` is now `--hydro.enabled=true`.
+
+CUDA selection is independent for each module. All backend selectors default to
+`false`: `gravity.cuda`, `hydro.cuda`, `drift.cuda`, `initial.cuda`,
+`chemistry.cuda`, `starFormation.cuda`, `gravity.error.cuda`,
+`analysis.power.cuda`, `analysis.groups.cuda`, and `lightcone.cuda`.
+Gravity kernel tuning belongs under `gravity.cuda.*`, such as
+`gravity.cuda.kickResidency`. Mixed runs can enable GPU gravity while keeping
+hydrodynamics on the CPU. `hydro.cuda=true` supports SPH; MFM/MFV are CPU only.
+`sort.cuda`, `analysis.tracers.cuda`, `analysis.slice.cuda`, and
+`analysis.views.cuda` are accepted only as `false` because those CUDA paths are
+not implemented. There is no global CUDA selector.
 
 Use `--configuration=simulation.ini` to read an INI file. Both dotted keys and
 INI sections work; explicit command-line values override configuration values
@@ -100,7 +113,7 @@ cmake -S . -B build/release_cpu -DCMAKE_BUILD_TYPE=Release \
 cmake --build build/release_cpu --target cosmictiger --parallel 3
 build/release_cpu/cosmictiger --gravity.method.far=pmmm \
   --gravity.method.near=pp --gravity.meshSize=16 \
-  --run.timeIntegrator=global --compute.cuda=false
+  --run.timeIntegrator=global --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
 ```
 
 Fresh defaults enable FMM, SPH, equilibrium cooling, traditional nested integration,
@@ -266,8 +279,8 @@ built by default; `-DCOSMICTIGER_ENABLE_SPH=OFF` excludes it. Enable gas
 explicitly with `--hydro.enabled=true`. SPH supports traditional block timesteps
 and global adaptive timesteps with FMM, either PMMM near method, or gravity
 disabled. Hierarchical hydro integration is not implemented.
-Select SIMD CPU SPH with `--compute.cuda=false` or CUDA SPH with `--compute.cuda=true`.
-Particle drift also follows `compute.cuda`: the CPU path uses SIMD position updates
+Select SIMD CPU SPH with `--hydro.cuda=false` or CUDA SPH with `--hydro.cuda=true`.
+Particle drift selects its backend with `drift.cuda`: the CPU path uses SIMD position updates
 and HPX workers, including rung filtering, glass damping, and lightcone crossings.
 CPU runs can also use a build configured with `COSMICTIGER_WITH_CUDA=OFF`.
 
@@ -280,7 +293,7 @@ The power-spectrum deposition uses these masses too.
 For a small cosmological run using the native Einstein–Boltzmann power spectrum:
 
 ```sh
-./cosmictiger --hydro.enabled=true --compute.cuda=true --initial.particlesPerDimension=16 --run.maxIterations=2 --hpx:threads=4
+./cosmictiger --hydro.enabled=true --gravity.cuda=true --hydro.cuda=true --drift.cuda=true --initial.particlesPerDimension=16 --run.maxIterations=2 --hpx:threads=4
 ```
 
 Select `hydro.method=sph|mfm|mfv` to choose SPH or the restored

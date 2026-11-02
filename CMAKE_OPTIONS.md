@@ -15,7 +15,7 @@ cmake -S . -B build/release_cpu -DCMAKE_BUILD_TYPE=Release \
 cmake --build build/release_cpu --target cosmictiger --parallel 3
 build/release_cpu/cosmictiger --gravity.method.far=pmmm \
   --gravity.method.near=pp --gravity.meshSize=16 \
-  --gravity.expansionDegree=6 --run.timeIntegrator=global --compute.cuda=false
+  --gravity.expansionDegree=6 --run.timeIntegrator=global --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
 ```
 
 ## Project options

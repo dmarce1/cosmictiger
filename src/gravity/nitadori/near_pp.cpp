@@ -46,7 +46,7 @@ void pmmmNearFieldBatch(std::vector<PmmmNearParticle> const& sinks,
         return;
     }
 #ifdef USE_CUDA
-    if (getOptions().compute.cuda &&
+    if (getOptions().gravity.cuda &&
         pmmm::detail::shouldUsePmmmNearCuda(usefulSinkCount, candidatePairs)) {
         pmmm::detail::pmmmNearFieldCuda(
             sinks, sources, sourceRanges, cellWidth, supportRadius, doPotential, fields);

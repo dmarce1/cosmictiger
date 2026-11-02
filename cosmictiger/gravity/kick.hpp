@@ -98,6 +98,10 @@ struct KickParameters {
     FmmGeometry geometry{};
     ParticleInteger outputOffset = 0;
     bool forceOnly = false;
+    // Hopkins may wake a gas cell after the gravity pass. Refresh its force
+    // without advancing the cell or changing its independently owned rung.
+    bool refreshGasForces = false;
+    bool profileCoordinator = true;
     bool globalTimestep = false;
     double previousTimestep = 0.0;
     bool htime;
@@ -158,6 +162,8 @@ struct KickParameters {
         arc & openLargerCell;
         arc & geometry;
         arc & forceOnly;
+        arc & refreshGasForces;
+        arc & profileCoordinator;
         arc & globalTimestep;
         arc & previousTimestep;
         arc & outputOffset;

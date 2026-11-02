@@ -222,7 +222,7 @@ static bool setCpu = false;
 void tree2Cpu() {
     if (!setCpu) {
 #ifdef USE_CUDA
-        if (setGpu && cudaEnabled()) {
+        if (setGpu && getOptions().gravity.cuda) {
             cudaSetDevice();
             CUDA_WARN(cudaAdviseMemory(nodes, nodesSize * sizeof(TreeNode),
                 cudaMemAdviseUnsetReadMostly, cudaGetDevice()));
@@ -235,8 +235,8 @@ void tree2Cpu() {
 
 void tree2Gpu() {
 #ifdef USE_CUDA
-    if (!cudaEnabled()) {
-        THROW_ERROR("GPU tree access requires compute.cuda=true\n");
+    if (!getOptions().gravity.cuda) {
+        THROW_ERROR("GPU tree access requires gravity.cuda=true\n");
     }
     if (!setGpu) {
         cudaSetDevice();

@@ -35,7 +35,9 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
     FlopCounter<> flops;
     auto const& options = getOptions();
     auto& rung = particlesRung(index);
-    if (rung < parameters.minRung) {
+    bool const refreshGas =
+        parameters.refreshGasForces && options.hydro.enabled && particlesType(index) == kSphType;
+    if (rung < parameters.minRung && !refreshGas) {
         return result;
     }
     particlesCaptureGravitySample(
@@ -51,6 +53,15 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
     if (savePotential && parameters.doPhi) {
         particlesPot(index) = potential;
     }
+#if COSMICTIGER_WITH_SPH
+    if (rung < parameters.minRung) {
+        ParticleInteger const gasIndex = particlesCatIndex(index);
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            sphParticlesGravityAcceleration(dim, gasIndex) = acceleration[dim];
+        }
+        return result;
+    }
+#endif
     auto& vx = particlesVel(kXDimension, index);
     auto& vy = particlesVel(kYDimension, index);
     auto& vz = particlesVel(kZDimension, index);

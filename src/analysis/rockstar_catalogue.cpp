@@ -175,7 +175,8 @@ DeviceVector<float> potentials(DeviceVector<RockstarParticle> const& particles) 
         }
         positions.pushBack(position);
     }
-    return bhEvaluatePotential(positions, getOptions().compute.cuda && particles.size() > 4096);
+    return bhEvaluatePotential(
+        positions, getOptions().analysis.groupsCuda && particles.size() > 4096);
 }
 
 void energies(Subgroup& group, DeviceVector<RockstarParticle> const& particles, double scale) {

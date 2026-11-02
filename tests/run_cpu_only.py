@@ -19,7 +19,7 @@ def main():
     environment = os.environ.copy()
     environment['CUDA_VISIBLE_DEVICES'] = ''
     environment['LD_PRELOAD'] = str(args.guard.resolve())
-    command = [str(args.executable.resolve()), '--compute.cuda=false', '--hydro.enabled=true',
+    command = [str(args.executable.resolve()), '--gravity.cuda=false', '--hydro.enabled=true',
                '--initial.particlesPerDimension=8', '--analysis.views=false',
                '--analysis.power=false', '--analysis.groups=false', '--lightcone.enabled=false',
                '--hpx:threads=2', '--hpx:bind=none', '--output.directory=.']

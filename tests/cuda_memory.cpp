@@ -334,6 +334,8 @@ namespace detail {
                 cudaFree(memory);
                 memory = nullptr;
             }
+            ::detail::hostMemory = nullptr;
+            backendEnabled = true;
         }
     };
 
@@ -456,6 +458,28 @@ void* allocateManagedMemory(size_t bytes) {
 
 void freeManagedMemory(void* pointer) noexcept {
     std::free(pointer);
+}
+
+TEST(CudaMemory, HostAllocationAndReleaseBeforePoolInitialization) {
+    using namespace cuda_memory_test::detail;
+    PublishedPoolCleanup cleanup;
+    ASSERT_EQ(memory, nullptr);
+    size_t const beforeAllocations = allocationCalls;
+    size_t const beforeReleases = releaseCalls;
+    backendEnabled = false;
+    auto* host = static_cast<unsigned char*>(cudaAllocate(64));
+    ASSERT_NE(host, nullptr);
+    std::memset(host, 0x35, 64);
+    EXPECT_EQ(host[63], 0x35);
+    // Free using the allocation's provenance, even if the selected backend has
+    // changed before its pool has been initialized.
+    backendEnabled = true;
+    EXPECT_NO_THROW(cudaRelease(host));
+    EXPECT_NO_THROW(cudaRelease(nullptr));
+    EXPECT_THROW(cudaAllocate(8), std::logic_error);
+    EXPECT_EQ(allocationCalls, beforeAllocations);
+    EXPECT_EQ(releaseCalls, beforeReleases);
+    EXPECT_TRUE(allocations.empty());
 }
 
 TEST(CudaMemory, ExactFitAndFailedReservation) {

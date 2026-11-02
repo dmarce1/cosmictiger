@@ -35,7 +35,6 @@ struct Run {
 
 struct Compute {
     std::string positionType{"fixed32"};
-    bool cuda{};
     int bucketSize{};
     // Zero input derives the SPH leaf size from hydro.neighborNumber; startup
     // stores the resolved positive size independently of the gravity bucket.
@@ -43,17 +42,14 @@ struct Compute {
     int treeCacheLineSize{};
     int treeAllocLineSize{};
     int particleCacheLineSize{};
-    // CUDA kick shared-memory policy; zero selects the automatic choice.
-    int cudaKickResidency{};            // resident kick blocks per multiprocessor
-    int cudaKickSinkTile{};             // shared sink-force tile; -1 keeps forces in global memory
-    int cudaKickParticleTile{};         // staged particle sources
-    int cudaKickMultipoleTile{};        // staged positioned multipoles
-    bool cudaKickSharedExpansion{};     // keep the active local expansion in shared memory
-    int cudaKickHandoffBlocks{};        // pins the CPU/GPU handoff divisor; zero derives it
-    int cudaKickFineHandoffBlocks{};    // handoff divisor once a node carries no Ewald checks;
-                                        // zero (or below the divisor above) keeps that one
-    int cudaKickListReserve{};    // pool entries reserved per kick list at block start; zero grows
-                                  // on demand
+};
+
+struct Drift {
+    bool cuda{};
+};
+
+struct Sort {
+    bool cuda{};
 };
 
 struct Checkpoint {
@@ -62,6 +58,7 @@ struct Checkpoint {
 };
 
 struct Initial {
+    bool cuda{};
     std::string gadget4Restart{};
     bool useGlass{};
     double plummerRadius{};
@@ -90,6 +87,11 @@ struct Output {
 };
 
 struct Analysis {
+    bool powerCuda{};
+    bool groupsCuda{};
+    bool tracersCuda{};
+    bool sliceCuda{};
+    bool viewsCuda{};
     bool power{};
     bool groups{};
     bool tracers{};
@@ -117,6 +119,7 @@ inline bool saveParticlePotential(Analysis const& analysis) {
 }
 
 struct Lightcone {
+    bool cuda{};
     bool enabled{};
     std::string directory{};
     double linkingLength{};
@@ -124,6 +127,19 @@ struct Lightcone {
 };
 
 struct Gravity {
+    bool cuda{};
+    bool errorCuda{};
+    // CUDA kick shared-memory policy; zero selects the automatic choice.
+    int cudaKickResidency{};            // resident kick blocks per multiprocessor
+    int cudaKickSinkTile{};             // shared sink-force tile; -1 keeps forces in global memory
+    int cudaKickParticleTile{};         // staged particle sources
+    int cudaKickMultipoleTile{};        // staged positioned multipoles
+    bool cudaKickSharedExpansion{};     // keep the active local expansion in shared memory
+    int cudaKickHandoffBlocks{};        // pins the CPU/GPU handoff divisor; zero derives it
+    int cudaKickFineHandoffBlocks{};    // handoff divisor once a node carries no Ewald checks;
+                                        // zero (or below the divisor above) keeps that one
+    int cudaKickListReserve{};    // pool entries reserved per kick list at block start; zero grows
+                                  // on demand
     bool enabled{};
     // Coarse-step cadence for sampled direct-force comparisons; zero disables.
     int errorInterval{};
@@ -195,6 +211,7 @@ struct Units {
 };
 
 struct Hydro {
+    bool cuda{};
     bool enabled{};
     std::string method{"sph"};
     std::string kernelFamily{"spline"};
@@ -237,6 +254,7 @@ struct Hydro {
 };
 
 struct Chemistry {
+    bool cuda{};
     // Compatibility group name: GADGET-4 equilibrium atomic cooling.
     bool enabled{false};
     // GADGET-4 InitGasTemp; zero retains the initial-condition thermal energy.
@@ -246,6 +264,7 @@ struct Chemistry {
 };
 
 struct StarFormation {
+    bool cuda{};
     bool enabled{false};
     double beta{0.1};
     double evaporationFactor{1000.0};
@@ -262,6 +281,8 @@ struct Options {
     std::string configuration;
     Run run;
     Compute compute;
+    Drift drift;
+    Sort sort;
     Checkpoint checkpoint;
     Initial initial;
     Output output;
@@ -321,7 +342,7 @@ struct Options {
         arc & compute.bucketSize;
         arc & run.numberOfSteps;
         arc & initial.fourierSize;
-        arc & compute.cuda;
+        arc & gravity.cuda;
         arc & compute.positionType;
         arc & lightcone.enabled;
         arc & analysis.saveForce;
@@ -348,14 +369,14 @@ struct Options {
         arc & compute.treeCacheLineSize;
         arc & compute.treeAllocLineSize;
         arc & compute.particleCacheLineSize;
-        arc & compute.cudaKickResidency;
-        arc & compute.cudaKickSinkTile;
-        arc & compute.cudaKickParticleTile;
-        arc & compute.cudaKickMultipoleTile;
-        arc & compute.cudaKickSharedExpansion;
-        arc & compute.cudaKickHandoffBlocks;
-        arc & compute.cudaKickFineHandoffBlocks;
-        arc & compute.cudaKickListReserve;
+        arc & gravity.cudaKickResidency;
+        arc & gravity.cudaKickSinkTile;
+        arc & gravity.cudaKickParticleTile;
+        arc & gravity.cudaKickMultipoleTile;
+        arc & gravity.cudaKickSharedExpansion;
+        arc & gravity.cudaKickHandoffBlocks;
+        arc & gravity.cudaKickFineHandoffBlocks;
+        arc & gravity.cudaKickListReserve;
         arc & gravity.fmmOrder;
         arc & checkpoint.readIndex;
         arc & checkpoint.intervalSeconds;
@@ -425,8 +446,30 @@ struct Options {
         arc & starFormation.criticalPhysicalDensity;
         arc & starFormation.criticalOverDensity;
         arc & starFormation.seed;
+        arc & hydro.cuda;
+        arc & drift.cuda;
+        arc & sort.cuda;
+        arc & initial.cuda;
+        arc & gravity.errorCuda;
+        arc & analysis.powerCuda;
+        arc & analysis.groupsCuda;
+        arc & analysis.tracersCuda;
+        arc & analysis.sliceCuda;
+        arc & analysis.viewsCuda;
+        arc & lightcone.cuda;
+        arc & chemistry.cuda;
+        arc & starFormation.cuda;
     }
 };
+
+// Device resources are shared, but each module selects its own execution backend.
+inline bool usesCuda(Options const& options) {
+    return options.gravity.cuda || options.gravity.errorCuda || options.hydro.cuda ||
+        options.drift.cuda || options.sort.cuda || options.initial.cuda ||
+        options.analysis.powerCuda || options.analysis.groupsCuda || options.analysis.tracersCuda ||
+        options.analysis.sliceCuda || options.analysis.viewsCuda || options.lightcone.cuda ||
+        options.chemistry.cuda || options.starFormation.cuda;
+}
 
 bool processOptions(int argc, char* argv[]);
 Options const& getOptions();

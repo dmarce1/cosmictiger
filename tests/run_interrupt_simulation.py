@@ -10,7 +10,7 @@ import re
 import signal
 import subprocess
 
-from application_selection import application_options
+from application_selection import application_options, cpu_backend_options
 import sys
 import tempfile
 import time
@@ -123,7 +123,7 @@ def run_regression(args, directory):
     simulation = directory / "simulation"
     (directory / "apex").mkdir()
     options = {"configuration": source / "configurations" / f"{preset}.ini",
-               "compute.cuda": "false",
+               **cpu_backend_options(),
                "initial.particlesPerDimension": 8, "initial.closePack": "false",
                "initial.useGlass": "false", "chemistry.enabled": "false",
                "gravity.enabled": str(args.scenario == "plummer").lower(),

@@ -117,7 +117,9 @@ def main():
     ranks = args.ranks if args.mpi_exec else 1
     duration = 1.0e-5
     common = {"hpx:threads": 2, "hpx:bind": "none", "run.scenario": "plummer",
-              "compute.cuda": str(args.cuda).lower(), "compute.positionType": args.position_type,
+              "gravity.cuda": str(args.cuda).lower(),
+              "gravity.error.cuda": str(args.cuda).lower(),
+              "compute.positionType": args.position_type,
               "hydro.enabled": "false", "chemistry.enabled": "false", "gravity.enabled": "true",
               "initial.particlesPerDimension": 4, "initial.closePack": "false",
               "initial.useGlass": "false", "run.endTime": duration, "run.numberOfSteps": 5,

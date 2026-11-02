@@ -85,7 +85,7 @@ Vector<GravityErrorAcceleration> gravityErrorDirect(Vector<GravityErrorSample> c
     double const supportRadius = getOptions().gravity.supportRadius;
     double const gm = getOptions().gravity.gm;
 #ifdef USE_CUDA
-    if (cudaEnabled()) {
+    if (getOptions().gravity.errorCuda) {
         std::vector<GravityErrorPosition> positions(samples.size());
         for (size_t slot = 0; slot < samples.size(); ++slot) {
             for (int dim = 0; dim < kDimensions; ++dim) {
@@ -202,7 +202,7 @@ void gravityErrorBegin() {
         }
     }
     PRINT("Computing direct gravity reference for %zu of %zu particles using %s Ewald table\n",
-        sampleCount, offsets.back(), cudaEnabled() ? "CUDA" : "CPU");
+        sampleCount, offsets.back(), getOptions().gravity.errorCuda ? "CUDA" : "CPU");
     Vector<hpx::future<Vector<detail::GravityErrorAcceleration>>> references;
     for (auto const& locality : localities) {
         references.push_back(hpx::async<GravityErrorDirectAction>(locality, samples));

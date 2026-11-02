@@ -35,7 +35,7 @@ PMMM solve when the kick finishes. The direct solve uses the configured softenin
 kernel and periodic gravity convention. Comparison does not require retaining
 acceleration fields for every particle with `analysis.saveAcceleration`.
 
-The reference uses CUDA when `compute.cuda=true`, and otherwise uses HPX CPU
+The reference uses CUDA when `gravity.error.cuda=true`, and otherwise uses HPX CPU
 tasks. The startup message identifies the reference backend separately from the
 production gravity solver. CUDA distributes work across source tiles as well as
 samples, so even a small sample can use multiple blocks. Both paths retain fixed

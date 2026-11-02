@@ -9,12 +9,19 @@ struct HopkinsStepResult {
     double minimumTimestep = 0.0;
 };
 
-// Traditional integration uses individual power-of-two gas flux intervals.
-// A positive maximumGlobalTimestep instead selects one raw collective step;
-// previousTimestep supplies the elapsed source interval, including on restart.
-// All state updates occur here; drift only consumes stored mesh velocities.
-// A terminal closing-only call corrects elapsed source histories and measures
-// synchronized energies without starting another hydrodynamic interval.
+// Project MFV source masses to the force time without changing conserved anchors.
+// Must precede migration and every gravity source/tree construction.
+void hopkinsPrepareGravityMasses(double time);
+
+// Create/sort the gas tree before a concurrent gravity evaluation begins.
+void hopkinsPrepareTree();
+// Support/geometry preparation reads no live gravity force or dark-matter rung.
+// Call only after hopkinsPrepareTree; completion is consumed by hopkinsKick.
+void hopkinsPrepareGeometry(double scale, double expansionRate);
+
+// Close due/woken own intervals, reconstruct active cells, and open pair intervals.
+// Gravity accelerations must be fresh for all gas, including potential wake-ups.
+// A terminal closing-only call settles every elapsed pair and closes every cell.
 HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRate, double time,
     double baseTimestep, EnergiesT& energies, bool closingOnly = false,
     double previousTimestep = 0.0, double maximumGlobalTimestep = 0.0);

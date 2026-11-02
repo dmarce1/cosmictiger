@@ -54,7 +54,7 @@ std::vector<gadget4::Result> integrateCoolingBatch(std::vector<gadget4::Input> c
     std::vector<gadget4::Result> results(inputs.size());
     std::string error;
     bool success = true;
-    if (getOptions().compute.cuda) {
+    if (getOptions().chemistry.cuda) {
 #ifdef USE_CUDA
         cudaSetDevice();
 #endif

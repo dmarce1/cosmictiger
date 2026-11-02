@@ -429,8 +429,8 @@ void simdBenchmark() {
     if (hpxSize() != 1 || hpx::get_num_worker_threads() != 1) {
         throw std::invalid_argument("SIMD gravity benchmark requires one rank and one HPX thread");
     }
-    if (getOptions().compute.cuda) {
-        throw std::invalid_argument("SIMD gravity benchmark requires --compute.cuda=false");
+    if (getOptions().gravity.cuda) {
+        throw std::invalid_argument("SIMD gravity benchmark requires --gravity.cuda=false");
     }
     auto const settings = detail::benchmarkSettings();
     auto const cases = detail::benchmarkCases();

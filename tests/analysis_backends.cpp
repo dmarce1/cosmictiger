@@ -17,6 +17,7 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
+#include <cosmictiger/cuda/cuda_unordered_map.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
 // Exercise the production deconvolution/binning stages using an analytic
@@ -52,6 +53,21 @@ namespace detail {
 void requireAnalysis(bool condition, char const* message) {
     if (!condition) {
         throw std::runtime_error(message);
+    }
+}
+
+void analysisCheckHostContainers() {
+    // This fixture runs under the no-CUDA-runtime preload guard. Rehashing and
+    // destroying nested owners must release host allocations before any CUDA
+    // pool or managed global has been initialized.
+    CudaUnorderedMap<DeviceVector<int>> values;
+    for (int key = 0; key < 40; ++key) {
+        values[key].pushBack(key + 1);
+    }
+    requireAnalysis(values.size() == 40, "Host map growth lost an entry");
+    for (int key = 0; key < 40; ++key) {
+        requireAnalysis(values[key].size() == 1 && values[key][0] == key + 1,
+            "Host map rehash corrupted nested vector storage");
     }
 }
 
@@ -343,7 +359,8 @@ void analysisCheckSpeciesLightcone(int epoch) {
 
 void analysisBackendsTest() {
     using detail::requireAnalysis;
-    requireAnalysis(!cudaEnabled(), "analysisBackends requires compute.cuda=false");
+    requireAnalysis(!cudaEnabled(), "analysisBackends requires every module CUDA option false");
+    detail::analysisCheckHostContainers();
     requireAnalysis(getOptions().initial.particlesPerDimension == 8 &&
             !getOptions().initial.closePack && hpxSize() <= 2,
         "analysisBackends requires an 8-cubed lattice and at most two localities");

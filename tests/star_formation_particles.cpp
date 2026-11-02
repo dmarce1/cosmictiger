@@ -167,7 +167,7 @@ HPX_PLAIN_ACTION(detail::starParticleMigrationSnapshot, StarParticleMigrationSna
 
 void starFormationParticlesTest() {
     detail::requireStarParticles(getOptions().starFormation.enabled && getOptions().hydro.enabled &&
-            getOptions().chemistry.enabled && !getOptions().compute.cuda,
+            getOptions().chemistry.enabled && !getOptions().starFormation.cuda,
         "fixture requires CPU SPH star formation with particle chemistry");
     for (bool const gas : {false, true}) {
         size_t const stride = domainsMigrationRecordBytes(gas);

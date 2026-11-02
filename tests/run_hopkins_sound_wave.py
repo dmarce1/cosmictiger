@@ -31,6 +31,8 @@ import subprocess
 import sys
 import time
 
+from application_selection import cpu_backend_options
+
 from run_scenarios import setting
 
 
@@ -167,7 +169,7 @@ def validate_run(output, destination, method, count, duration):
     for key, value in expected.items():
         if setting(output, key) != value:
             raise RuntimeError(f"incorrect resolved option {key}")
-    for key in ("compute.cuda", "gravity.enabled", "chemistry.enabled", "output.silo"):
+    for key in ("gravity.cuda", "gravity.enabled", "chemistry.enabled", "output.silo"):
         if setting(output, key).lower() not in ("false", "f", "0"):
             raise RuntimeError(f"{key} was enabled in the sound-wave measurement")
     reported_duration = float(setting(output, "run.endTime"))
@@ -181,7 +183,9 @@ def validate_run(output, destination, method, count, duration):
     finished = re.findall(r"soundWave: finished at t=(\S+) after (\d+) steps", output)
     if not finished:
         raise RuntimeError("sound wave did not report completion")
-    outgoing_times = [float(value) for value in re.findall(r"Hopkins step: time=(\S+)", output)]
+    events = [dict(re.findall(r"([A-Za-z]+)=([^\s]+)", value))
+              for value in re.findall(r"Hopkins step: ([^\n]+)", output)]
+    outgoing_times = [float(event["time"]) for event in events if int(event["terminal"]) == 0]
     if not outgoing_times or any(value >= duration for value in outgoing_times):
         raise RuntimeError("sound wave omitted activity records or opened a step at/beyond its terminal time")
     rows = [line.split() for line in (destination / "progress.txt").read_text().splitlines()
@@ -390,7 +394,7 @@ def main():
         destination = directory / "output"
         settings = {"configuration": str(configuration), "hydro.method": method,
                     "initial.particlesPerDimension": number, "output.directory": str(destination),
-                    "compute.cuda": "false", "compute.positionType": "fixed64",
+                    **cpu_backend_options(), "compute.positionType": "fixed64",
                     "run.verbose": "true", "output.silo": "false",
                     "run.timeIntegrator": "traditional", "gravity.method.far": "fmm",
                     "gravity.expansionDegree": 6, "starFormation.enabled": "false",

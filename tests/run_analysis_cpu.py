@@ -43,7 +43,7 @@ def main():
             raise RuntimeError(f"CUDA runtime guard was not built: {args.guard}")
         environment["LD_PRELOAD"] = str(args.guard.resolve())
     command = [str(args.executable.resolve()), "--run.test=analysisBackends",
-               "--compute.cuda=false", f"--hydro.enabled={str(args.hydro).lower()}",
+               "--gravity.cuda=false", f"--hydro.enabled={str(args.hydro).lower()}",
                "--initial.particlesPerDimension=8", "--initial.closePack=false",
                "--analysis.views=false", "--analysis.groups=false", "--analysis.power=true",
                "--lightcone.enabled=true", f"--lightcone.directory={output}",

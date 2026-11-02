@@ -290,7 +290,7 @@ def main():
         "initial.particlesPerDimension": "8",
         "initial.closePack": "false",
         "initial.twoLpt": "false",
-        "compute.cuda": "true" if args.cuda else "false",
+        "gravity.cuda": "true" if args.cuda else "false", "hydro.cuda": "true" if args.cuda and not args.collisionless_only else "false", "drift.cuda": "true" if args.cuda else "false",
         "compute.positionType": args.position_type,
         "gravity.enabled": "true",
         "hydro.enabled": "false",

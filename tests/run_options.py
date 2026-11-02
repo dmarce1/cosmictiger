@@ -50,6 +50,14 @@ def main():
     environment = dict(os.environ, CUDA_VISIBLE_DEVICES="", OMP_NUM_THREADS="1",
                        OPENBLAS_NUM_THREADS="1")
 
+    cuda_keys = ("gravity.cuda", "gravity.error.cuda", "hydro.cuda", "drift.cuda", "sort.cuda",
+                 "initial.cuda", "analysis.power.cuda", "analysis.groups.cuda",
+                 "analysis.tracers.cuda", "analysis.slice.cuda", "analysis.views.cuda",
+                 "lightcone.cuda", "chemistry.cuda", "starFormation.cuda")
+    cuda_tunings = ("kickResidency", "kickSinkTile", "kickParticleTile", "kickMultipoleTile",
+                    "kickSharedExpansion", "kickHandoffBlocks", "kickFineHandoffBlocks",
+                    "kickListReserve")
+
     def run(name, options, success=True, pmmm_mesh=8, selectors=True):
         if selectors:
             selected = {"gravity.method.far": args.gravity_method,
@@ -99,7 +107,7 @@ def main():
         raise RuntimeError("Hopkins capability was enabled without its SPH dependency")
     option_names = set(re.findall(r"^\s+--([A-Za-z][A-Za-z0-9_.]*)", help_text, re.MULTILINE))
     required = {"help", "configuration", "run.scenario", "run.endTime", "run.verbose",
-                "initial.particlesPerDimension", "compute.cuda", "compute.bucketSize",
+                "initial.particlesPerDimension", "compute.bucketSize",
                 "compute.sphBucketSize", "compute.positionType",
                 "hydro.enabled", "hydro.method", "hydro.viscosityAlpha", "hydro.viscosityBeta",
                 "hydro.viscosityEpsilon", "hydro.balsaraSwitch",
@@ -127,16 +135,32 @@ def main():
                      "hydro.viscosityDecay", "hydro.viscosityAlphaMax",
                      "hydro.viscosityDecayCD", "hydro.viscosityAlphaMaxPrice",
                      "hydro.viscosityDecayPrice"})
+    required.update(key for key in cuda_keys if key != "lightcone.cuda" or args.gravity_method != "none")
+    required.update("gravity.cuda." + key for key in cuda_tunings)
     if not required <= option_names:
         raise RuntimeError(f"grouped help is missing {sorted(required - option_names)}")
+
+    sph_only_keys = {"hydro.viscosityAlpha", "hydro.viscosityBeta", "hydro.viscosityEpsilon",
+                     "hydro.balsaraSwitch", "hydro.viscosityEvolution", "hydro.viscosityAlphaMin",
+                     "hydro.viscosityDecay", "hydro.viscosityAlphaMax", "hydro.viscosityDecayCD",
+                     "hydro.viscosityAlphaMaxPrice", "hydro.viscosityDecayPrice"}
+    sph_controls_available = not args.without_sph and args.time_integrator != "hierarchical"
+    sph_control_options = ["--hydro.enabled=true"] if sph_controls_available else []
 
     def assertStartupOptions(output, hydroMethod):
         if "Resolved options" not in output:
             raise RuntimeError("normal startup did not print its full resolved options")
         printed = set(re.findall(r"^([A-Za-z][A-Za-z0-9_.]*)\s*:", output, re.MULTILINE))
-        missing = option_names - {"help"} - printed
+        selected_sph = hydroMethod == "sph" and re.search(
+            r"^hydro\.enabled\s*:\s*T\s*$", output, re.MULTILINE)
+        expected = option_names - {"help"}
+        if not selected_sph:
+            expected -= sph_only_keys
+            if printed & sph_only_keys:
+                raise RuntimeError("startup printed SPH viscosity controls without active SPH")
+        missing = expected - printed
         if missing:
-            raise RuntimeError(f"normal startup omitted accepted options: {sorted(missing)}")
+            raise RuntimeError(f"normal startup omitted selected physics options: {sorted(missing)}")
         for key, value in (("run.verbose", "F"), ("hydro.method", hydroMethod)):
             if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + value + r"\s*$",
                              output, re.MULTILINE):
@@ -150,16 +174,16 @@ def main():
         startupPhysics = (["--run.scenario=hydroWave", "--hydro.enabled=true"]
                           if args.gravity_method == "none" else ["--hydro.enabled=false"])
         output = run("startup_options", [
-            "--run.verbose=false", "--compute.cuda=false", *startupPhysics,
+            "--run.verbose=false", *startupPhysics,
             f"--hydro.method={hydroMethod}", "--initial.particlesPerDimension=8",
             "--cosmology.sigma8=0", "--run.maxIterations=0", "--output.silo=false",
             "--analysis.power=false", "--analysis.groups=false", "--analysis.tracers=false",
             "--lightcone.enabled=false", f"--output.directory={startupDirectory.resolve()}"])
         assertStartupOptions(output, hydroMethod)
-        print("Nonverbose startup printed every accepted option, including hydro.method")
+        print("Nonverbose startup printed common and selected physics options, including hydro.method")
         return
 
-    removed_options = {"hydro.chemistry", "hydro.conduction", "hydro.diffusion",
+    removed_options = {"compute.cuda", "hydro.chemistry", "hydro.conduction", "hydro.diffusion",
                        "hydro.yReflect", "gravity.sphSmoothing", "cosmology.omegaK",
                        "initial.usePowerFile", "gravity.cloud", "gravity.method",
                        "gravity.pmmmNearMethod", "gravity.pmmmOrder", "gravity.fmmOrder",
@@ -175,6 +199,7 @@ def main():
                        "starFormation.windMassLoading", "starFormation.windEnergyFraction",
                        "starFormation.windDecouplingMyr", "starFormation.windRecoupleDensityFraction",
                        "starFormation.windDirection"}
+    removed_options.update("compute.cuda" + key[0].upper() + key[1:] for key in cuda_tunings)
     if removed_options & option_names:
         raise RuntimeError(f"removed options remain in help: {sorted(removed_options & option_names)}")
     for name in option_names - {"help", "configuration"}:
@@ -191,7 +216,6 @@ maxIterations = 7
 [initial]
 particlesPerDimension = 8
 [compute]
-cuda = false
 bucketSize = 64
 sphBucketSize = 73
 [hydro]
@@ -215,7 +239,7 @@ cfl = 0.3
 mapSize = 8
 """)
     configured = run("config", [f"--configuration={config.resolve()}",
-                                "--run.maxIterations=3", "--hydro.viscosityAlpha=1.25"])
+                                "--run.maxIterations=3", "--hydro.viscosityAlpha=1.25"] + sph_control_options)
     expected = {"run.maxIterations": 3.0, "initial.particlesPerDimension": 8.0,
                 "analysis.tracerCount": 41.0, "hydro.viscosityAlpha": 1.25,
                 "hydro.viscosityBeta": 1.5, "hydro.viscosityEpsilon": 0.02,
@@ -228,6 +252,8 @@ mapSize = 8
                 "gravity.kernelDegree": 4.0,
                 "compute.bucketSize": 64.0, "compute.sphBucketSize": 73.0}
     for name, value in expected.items():
+        if name in sph_only_keys and not sph_controls_available:
+            continue
         match = re.search(r"^" + re.escape(name) + r"\s*:\s*(\S+)", configured, re.MULTILINE)
         if match is None or abs(float(match.group(1)) - value) > 1.0e-6:
             raise RuntimeError(f"configured {name} did not equal {value}")
@@ -238,12 +264,29 @@ mapSize = 8
     if hopkins_metadata is None or (hopkins_metadata[1] == "T") != hopkins_available:
         raise RuntimeError("build.hopkins metadata disagreed with the advertised capability")
 
-    metadata_options = ["--run.test=checkpointState", "--compute.cuda=false",
+    metadata_options = ["--run.test=checkpointState",
                         "--hydro.enabled=false", "--initial.particlesPerDimension=8"]
+
+    for key in cuda_keys:
+        if not re.search(r"^" + re.escape(key) + r"\s*:\s*F\s*$", configured, re.MULTILINE):
+            raise RuntimeError(f"{key} did not default to CPU execution")
+    for key in ("sort.cuda", "analysis.tracers.cuda", "analysis.slice.cuda", "analysis.views.cuda"):
+        rejected = run("unsupported_" + key, metadata_options + [f"--{key}=true"], success=False)
+        if key not in rejected or "not implemented" not in rejected:
+            raise RuntimeError(f"unsupported {key} did not fail explicitly")
+    for method in ("mfm", "mfv"):
+        rejected = run("unsupported_cuda_" + method, metadata_options + [
+            f"--hydro.method={method}", "--hydro.cuda=true"], success=False)
+        if "hydro.cuda=true is unavailable for MFM/MFV" not in rejected:
+            raise RuntimeError(f"{method} silently accepted CUDA hydrodynamics")
 
     def assertHydroMethod(output, method):
         if not re.search(r"^hydro\.method\s*:\s*" + method + r"\s*$", output, re.MULTILINE):
             raise RuntimeError(f"hydro.method did not resolve to {method}")
+        if method in ("mfm", "mfv"):
+            printed = set(re.findall(r"^([A-Za-z][A-Za-z0-9_.]*)\s*:", output, re.MULTILINE))
+            if printed & sph_only_keys:
+                raise RuntimeError(f"{method} printed inapplicable SPH viscosity controls")
 
     assertHydroMethod(configured, "sph")
     for method in ("sph", "mfm", "mfv"):
@@ -536,9 +579,11 @@ mapSize = 8
         "--gravity.errorInterval=0", "--gravity.errorSampleSize=0"])
     assertNumericSetting(error_disabled, "gravity.errorInterval", 0)
 
-    if not re.search(r"^hydro\.balsaraSwitch\s*:\s*F\s*$", configured, re.MULTILINE):
+    if sph_controls_available and not re.search(r"^hydro\.balsaraSwitch\s*:\s*F\s*$", configured, re.MULTILINE):
         raise RuntimeError("INI hydro.balsaraSwitch=false was not applied")
-    balsara_default = run("balsara_default", metadata_options)
+    balsara_options = ([option for option in metadata_options if not option.startswith("--hydro.enabled=")]
+                       + sph_control_options if sph_controls_available else metadata_options)
+    balsara_default = run("balsara_default", balsara_options)
     def assertCompiledSettings(output):
         for key, value in (("gravity.method.far", args.gravity_method),
                            ("gravity.method.near", args.near_method if args.gravity_method == "pmmm" else "none"),
@@ -741,7 +786,7 @@ mapSize = 8
         if sph_build_error not in rejected:
             raise RuntimeError("disabled SPH INI request lacked build guidance")
         rejected = run("disabled_sph_scenario", [
-            "--run.scenario=sod", "--compute.cuda=false", "--run.maxIterations=0",
+            "--run.scenario=sod", "--run.maxIterations=0",
             "--initial.particlesPerDimension=8"], success=False)
         if sph_build_error not in rejected:
             raise RuntimeError("disabled SPH scenario request lacked build guidance")
@@ -769,7 +814,7 @@ mapSize = 8
         if sph_integrator_error not in rejected:
             raise RuntimeError("hierarchical SPH restriction was bypassed through run.test")
         rejected = run("hierarchical_scenario_sph_rejected", [
-            "--run.scenario=sod", "--compute.cuda=false",
+            "--run.scenario=sod",
             "--initial.particlesPerDimension=8"], success=False)
         if sph_integrator_error not in rejected:
             raise RuntimeError("hierarchical SPH restriction was bypassed through scenario defaults")
@@ -794,17 +839,18 @@ mapSize = 8
         assertCompiledSettings(output)
         if not re.search(r"^hydro\.enabled\s*:\s*T\s*$", output, re.MULTILINE):
             raise RuntimeError("SPH INI request was not enabled")
-    if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_default, re.MULTILINE):
-        raise RuntimeError("Balsara switch must default to enabled")
-    balsara_override = run("balsara_cli_override", [f"--configuration={config.resolve()}",
-                                                 "--hydro.balsaraSwitch=true"])
-    if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_override, re.MULTILINE):
-        raise RuntimeError("CLI hydro.balsaraSwitch did not override INI")
+    if sph_controls_available:
+        if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_default, re.MULTILINE):
+            raise RuntimeError("Balsara switch must default to enabled")
+        balsara_override = run("balsara_cli_override", [f"--configuration={config.resolve()}",
+                                                     "--hydro.balsaraSwitch=true"] + sph_control_options)
+        if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_override, re.MULTILINE):
+            raise RuntimeError("CLI hydro.balsaraSwitch did not override INI")
 
-    for output, expected_value in ((configured, "none"), (balsara_default, "morrisAndMonaghan")):
-        if not re.search(r"^hydro\.viscosityEvolution\s*:\s*" + expected_value + r"\s*$",
-                         output, re.MULTILINE):
-            raise RuntimeError("unexpected hydro.viscosityEvolution setting")
+        for output, expected_value in ((configured, "none"), (balsara_default, "morrisAndMonaghan")):
+            if not re.search(r"^hydro\.viscosityEvolution\s*:\s*" + expected_value + r"\s*$",
+                             output, re.MULTILINE):
+                raise RuntimeError("unexpected hydro.viscosityEvolution setting")
     # Pressure is always variational; neither old selector value is accepted.
     for operator in ("monaghan", "variational"):
         rejected = run("pressure_operator_removed_cli_" + operator,
@@ -821,16 +867,17 @@ mapSize = 8
                 "initial.createGlass", "initial.plummer", "hydro.pressureOperator"):
         if re.search(r"^" + re.escape(key) + r"\s*:", balsara_default, re.MULTILINE):
             raise RuntimeError(f"removed option {key} is still reported")
-    viscosity_override = run("variable_viscosity_cli_override", [
-        f"--configuration={config.resolve()}", "--hydro.viscosityEvolution=priceEtAl",
-        "--hydro.viscosityAlphaMaxPrice=3"])
-    for key, expected_value in (("hydro.viscosityEvolution", "priceEtAl"),
-                                ("hydro.viscosityAlphaMaxPrice", "3")):
-        match = re.search(r"^" + re.escape(key) + r"\s*:\s*(\S+)",
-                          viscosity_override, re.MULTILINE)
-        if match is None or (float(match.group(1)) != 3 if expected_value == "3"
-                             else match.group(1) != expected_value):
-            raise RuntimeError(f"CLI {key} did not override INI")
+    if sph_controls_available:
+        viscosity_override = run("variable_viscosity_cli_override", [
+            f"--configuration={config.resolve()}", "--hydro.viscosityEvolution=priceEtAl",
+            "--hydro.viscosityAlphaMaxPrice=3"] + sph_control_options)
+        for key, expected_value in (("hydro.viscosityEvolution", "priceEtAl"),
+                                    ("hydro.viscosityAlphaMaxPrice", "3")):
+            match = re.search(r"^" + re.escape(key) + r"\s*:\s*(\S+)",
+                              viscosity_override, re.MULTILINE)
+            if match is None or (float(match.group(1)) != 3 if expected_value == "3"
+                                 else match.group(1) != expected_value):
+                raise RuntimeError(f"CLI {key} did not override INI")
 
     verbose_config = args.workdir / "verbose.ini"
     verbose_config.write_text("[run]\nverbose = true\n")
@@ -1067,14 +1114,15 @@ mapSize = 8
                for line in output.splitlines()):
             raise RuntimeError("a single radius representation produced a warning")
 
-    defaults = run("independent_defaults", metadata_options)
+    defaults = run("independent_defaults", balsara_options)
     for key, value in (("gravity.kernelDegree", 4),
                        ("hydro.neighborNumber", 42), ("hydro.kernelDegree", 3),
                        ("hydro.viscosityAlphaMin", 0.1), ("hydro.viscosityDecay", 0.2),
                        ("hydro.viscosityAlphaMax", 2), ("hydro.viscosityDecayCD", 0.05),
                        ("hydro.viscosityAlphaMaxPrice", 1), ("hydro.viscosityDecayPrice", 0.1),
                        ("compute.bucketSize", 128), ("compute.sphBucketSize", 106)):
-        assertNumericSetting(defaults, key, value)
+        if key not in sph_only_keys or sph_controls_available:
+            assertNumericSetting(defaults, key, value)
 
     # SPH leaf capacity follows its own explicit setting or neighbor-derived
     # automatic value, independently of the gravity bucket and its compile-time cap.
@@ -1308,7 +1356,8 @@ mapSize = 8
                 (ini["output"]["units"] != "code" or ini["output"]["frame"] != "comoving")):
             raise RuntimeError(f"{relative_path} must preserve native output defaults")
         metadata_directory = args.workdir.resolve() / "output" / "options_presets" / case_name
-        runtime_overrides = [f"--compute.positionType={position_type}",
+        runtime_overrides = [*[f"--{key}=false" for key in cuda_keys],
+                             f"--compute.positionType={position_type}",
                              f"--output.directory={metadata_directory}",
                              f"--lightcone.directory={metadata_directory / 'lightcone'}"]
         if args.gravity_method == "pmmm":
@@ -1492,7 +1541,7 @@ mapSize = 8
         for parameter in ("omegaB", "omegaC"):
             for value in ("0", "-0.1", "nan", "inf"):
                 output = run(f"invalid_class_mass_{parameter}_{value}", [
-                    "--run.test=sphGravity", "--compute.cuda=false", "--hydro.enabled=true",
+                    "--run.test=sphGravity", "--hydro.enabled=true",
                     "--initial.particlesPerDimension=8", f"--cosmology.{parameter}={value}"],
                     success=False)
                 # Negative and nonfinite densities fail the common cosmology guard;

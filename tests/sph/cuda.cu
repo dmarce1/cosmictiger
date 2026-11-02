@@ -26,6 +26,7 @@
 #include <cosmictiger/math/vector3.hpp>
 #include <tests/cuda_test.hpp>
 #include <tests/sph/global_timestep_cases.hpp>
+#include <tests/sph/source_completion_cases.hpp>
 
 // Only the options-constructor, CPU counter, and host assertion services are replaced here.
 // Density, smoothing, forces, heating, device assertions, and allocation use the
@@ -1804,4 +1805,8 @@ TEST_F(SphCudaTest, SelectedKernelsGravityTimestepsAndCpuParity) {
 
 TEST_F(SphCudaTest, GlobalRawTimestep) {
     detail::testGlobalRawTimestep<detail::Fixture>();
+}
+
+TEST_F(SphCudaTest, DeferredSourceCompletion) {
+    detail::testDeferredSourceCompletion<detail::Fixture>();
 }

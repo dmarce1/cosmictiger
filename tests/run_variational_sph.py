@@ -28,7 +28,8 @@ import sys
 import threading
 import time
 
-from application_selection import application_arguments, application_options, compiled_algorithms
+from application_selection import (application_arguments, application_options, compiled_algorithms,
+                                   cpu_backend_options)
 
 kRoot = Path(__file__).resolve().parents[1]
 kConfigurations = kRoot / "configurations"
@@ -37,6 +38,7 @@ kRunTimeout = 300
 kCosmologyTimeout = 240
 # Shared by every scenario run: text diagnostics only, no checkpoint before the end.
 kCommonOptions = {
+    **cpu_backend_options(),
     "output.directory": ".",
     "output.silo": "false",
     "analysis.views": "false",
@@ -134,7 +136,7 @@ def buildCommand(spec, launcher):
                                          hydro=True)
         options = dict(kCommonOptions)
         options.update({
-            "compute.cuda": "true" if spec.backend == "cuda" else "false",
+            "gravity.cuda": "true" if spec.backend == "cuda" else "false", "hydro.cuda": "true" if spec.backend == "cuda" else "false", "drift.cuda": "true" if spec.backend == "cuda" else "false",
             "initial.particlesPerDimension": str(spec.resolution),
         })
         options.update(spec.overrides)
@@ -227,7 +229,7 @@ def analyzeRun(spec, directory, returnCode, timedOut, wall, output):
         return result
     if returnCode != 0:
         unavailable = ("This executable was compiled without CUDA support",
-                       "compute.cuda=true requires an available CUDA device")
+                       "Selected CUDA backends require an available CUDA device")
         if spec.backend == "cuda" and any(message in output for message in unavailable):
             result.update(status="skipped", message="CUDA backend or device unavailable")
             return result
@@ -242,7 +244,7 @@ def analyzeRun(spec, directory, returnCode, timedOut, wall, output):
                 r"SPH gravity regression passed[^\n]*", output)[0])
             return result
         expected = {"run.timeIntegrator": spec.integrator,
-                    "compute.cuda": "T" if spec.backend == "cuda" else "F"}
+                    "gravity.cuda": "T" if spec.backend == "cuda" else "F", "hydro.cuda": "T" if spec.backend == "cuda" else "F", "drift.cuda": "T" if spec.backend == "cuda" else "F"}
         for key, value in expected.items():
             if setting(output, key) != value:
                 raise ValueError(f"resolved {key}={setting(output, key)}, expected {value}")
@@ -514,7 +516,7 @@ def main():
         # Mirrors the sph_migration_mpi CTest command.
         migration = [str(executable), "--run.test=sphGravity",
                      "--initial.particlesPerDimension=8", "--hydro.enabled=true",
-                     "--compute.cuda=false", "--hpx:threads=2", "--hpx:bind=none"]
+                     "--gravity.cuda=false", "--hpx:threads=2", "--hpx:bind=none"]
         migration += application_arguments(executable, far="fmm", hydro=True)
         mpiSpecs.append(RunSpec("mpi_sph_migration", None, executable,
                                 localities=2,

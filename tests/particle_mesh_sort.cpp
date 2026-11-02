@@ -242,7 +242,7 @@ void checkMeshSortFixture(int meshSize, int pattern) {
 }    // namespace detail
 
 void particleMeshSortTest() {
-    if (hpxSize() != 1 || getOptions().compute.cuda || particlesSize() != 0) {
+    if (hpxSize() != 1 || getOptions().gravity.cuda || particlesSize() != 0) {
         throw std::runtime_error("Particle mesh sort fixture requires one empty CPU locality");
     }
     detail::checkParticleMeshCoordinates<uint32_t>();

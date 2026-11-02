@@ -99,7 +99,10 @@ void computeReadyCells() {
             // Only this bounded batch retains particle fields while the FFT or
             // remote local-expansion reads finish. Production has no N-sized
             // acceleration or potential result arrays.
-            int const minimumRung = state.request.applyKick ? state.request.parameters.minRung : 0;
+            int const minimumRung =
+                state.request.applyKick && !state.request.parameters.refreshGasForces ?
+                state.request.parameters.minRung :
+                0;
             auto fields =
                 kickCellBatch(std::move(workitems), state.request.doPotential, minimumRung);
             bool const overlapped = state.pendingGhosts.load() != 0;

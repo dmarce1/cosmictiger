@@ -105,7 +105,7 @@ def main():
     integrators = [value for value in ("traditional", "global") if value in available["integrator"]]
     if not integrators:
         raise RuntimeError("star formation requires a compiled SPH-compatible integrator")
-    common = {"compute.cuda": "false", "hydro.enabled": "true",
+    common = {"gravity.cuda": "false", "hydro.cuda": "false", "drift.cuda": "false", "hydro.enabled": "true",
               "starFormation.enabled": "true", "chemistry.enabled": "true",
               "initial.particlesPerDimension": 8, "initial.closePack": "false",
               "initial.useGlass": "false", "analysis.groups": "false",

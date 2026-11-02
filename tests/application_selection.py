@@ -10,7 +10,7 @@ from functools import lru_cache
 def compiled_algorithms(executable):
     environment = dict(os.environ, CUDA_VISIBLE_DEVICES="", OMP_NUM_THREADS="1",
                        OPENBLAS_NUM_THREADS="1")
-    result = subprocess.run([str(executable), "--help", "--compute.cuda=false",
+    result = subprocess.run([str(executable), "--help", "--gravity.cuda=false",
                              "--hpx:threads=1", "--hpx:bind=none"],
                             text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             env=environment, timeout=30, check=True)
@@ -48,3 +48,12 @@ def application_options(executable, *, far=None, near=None, integrator=None, hyd
 
 def application_arguments(executable, **options):
     return [f"--{key}={value}" for key, value in application_options(executable, **options).items()]
+
+
+def cpu_backend_options():
+    """Override GPU-enabled presets without changing the selected physics."""
+    keys = ("gravity.cuda", "gravity.error.cuda", "hydro.cuda", "drift.cuda", "sort.cuda",
+            "initial.cuda", "chemistry.cuda", "starFormation.cuda", "analysis.power.cuda",
+            "analysis.groups.cuda", "analysis.tracers.cuda", "analysis.slice.cuda",
+            "analysis.views.cuda", "lightcone.cuda")
+    return {key: "false" for key in keys}

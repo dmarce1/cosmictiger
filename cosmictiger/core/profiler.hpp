@@ -59,6 +59,7 @@ enum class WorkPhase {
     KickGpuLaunchQueue,
     KickGpuPrepareLaunch,
     KickGpuSubmitWait,
+    ConcurrentGravity,
     KickGpuHostToDevice,
     KickGpuKernel,
     KickGpuDeviceToHost,

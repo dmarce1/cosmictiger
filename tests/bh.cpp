@@ -170,15 +170,15 @@ void bhPotentialTest() {
     }
     detail::compareBhSelf(
         "Coincident particles terminate and retain mutual potential", coincident, false, 3.e-5);
-    // Requesting CUDA while compute.cuda=false must still run the CPU route.
+    // Requesting CUDA while analysis.groupsCuda=false must still run the CPU route.
     detail::compareBhSelf("Runtime backend selection", extended, true, 0.04);
 #ifdef USE_CUDA
-    if (options.compute.cuda) {
+    if (options.analysis.groupsCuda) {
         detail::compareBhSelf("CUDA softened potential", softened, true, 3.e-5);
         detail::compareBhSelf("CUDA degenerate tree", coincident, true, 3.e-5);
         detail::verifyBhCudaWorkspaceReuse();
     }
 #endif
     std::printf("Barnes-Hut production potential tests passed (%s).\n",
-        options.compute.cuda ? "CPU and CUDA" : "CPU");
+        options.analysis.groupsCuda ? "CPU and CUDA" : "CPU");
 }

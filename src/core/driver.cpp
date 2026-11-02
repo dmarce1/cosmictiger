@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <functional>
 #include <limits>
 #include <numbers>
 #include <string>
@@ -265,7 +266,8 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
 
 SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
     EnergiesT* energies, bool verbose, int uniformMinimumRung, bool closingOnly,
-    double previousTimestep, double maximumGlobalTimestep) {
+    double previousTimestep, double maximumGlobalTimestep, bool predictorPrepared,
+    std::function<double()> const& joinGravity) {
     profile::ScopedPhase profilePhase("hydro.sph");
     bool const globalTimestep = maximumGlobalTimestep > 0.0;
     double selectedTimestep = maximumGlobalTimestep;
@@ -277,7 +279,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     if (verbose) {
         terminal::detailPrint("Doing SPH step with minrung = %i\n", minrung);
     }
-    {
+    if (!predictorPrepared) {
         profile::ScopedPhase profilePhase("hydro.predictor");
         sphParticlesApplyUpdates(minrung, 0, t0, tau, closingTimestep);
     }
@@ -462,6 +464,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     }
     runParameters.phase = 0;
     runParameters.runType = kSphRunHydro;
+    runParameters.deferAccelerationSources = bool(joinGravity);
     timer.reset();
     timer.start();
     {
@@ -469,6 +472,23 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         result = sphRun(runParameters, true);
     }
     timer.stop();
+    if (joinGravity) {
+        // The pair pass used immutable predicted gas states and did not read
+        // gravity. Assemble fresh source accelerations in their original order
+        // before correcting those states or selecting the next timestep.
+        double const gravityTimestep = joinGravity();
+        if (globalTimestep) {
+            selectedTimestep = std::min(selectedTimestep, gravityTimestep);
+            float kernelCap = static_cast<float>(selectedTimestep);
+            if (double(kernelCap) < selectedTimestep) {
+                kernelCap = std::nextafter(kernelCap, std::numeric_limits<float>::infinity());
+            }
+            runParameters.maximumTimestep = std::min(runParameters.maximumTimestep, kernelCap);
+        }
+        profile::ScopedPhase profilePhase("hydro.force.sources");
+        sphParticlesCompleteForces(runParameters);
+        runParameters.deferAccelerationSources = false;
+    }
     int maxRung = std::max(0, uniformMinimumRung);
     if (verbose) {
         terminal::detailPrint(
@@ -678,7 +698,9 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
 #endif
 
 #if COSMICTIGER_ENABLE_FMM
-ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, double theta,
+namespace detail {
+
+KickParameters prepareFmmKick(int minrung, double scale, double dadt, double t0, double theta,
     bool firstCall, bool fullEval, double previousTimestep, double maximumGlobalTimestep) {
     Timer tm;
     tm.start();
@@ -698,9 +720,12 @@ ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, doub
     domainTime += tm.read();
     tm.reset();
     tm.start();
-    bool const sph = getOptions().hydro.enabled;
+    // A wake-up may be discovered after the parallel geometry preparation.
+    // Sampling every gas force costs extra work but lets hydro close any such
+    // shortened step with a fresh force without replaying dark-matter kicks.
+    bool const refreshGasForces = getOptions().hydro.enabled && getOptions().hydro.method != "sph";
     // ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
-    TreeCreateParameters tparams(minrung, theta, 0.f);
+    TreeCreateParameters tparams(refreshGasForces ? 0 : minrung, theta, 0.f);
     terminal::detailPrint("Create tree %i %e\n", minrung, theta);
     profile::profileBegin("treeCreate");
     treeCreate(tparams);
@@ -713,6 +738,7 @@ ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, doub
     tm.start();
     //	PRINT("numberOfActiveParticles = %li\n", sr.numberOfActiveParticles);
     KickParameters kparams;
+    kparams.refreshGasForces = refreshGasForces;
     if (getOptions().run.scenario == "cosmology") {
         kparams.maxDt =
             cosmology::expansionTimestep(scale, dadt / scale, cosmosD2adt2(scale), kScaleTimestep);
@@ -738,7 +764,7 @@ ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, doub
     kparams.doPhi = fullEval;
     kparams.sign = getOptions().run.scenario == "glass" ? -1.0 : 1.0;
     kparams.nodeLoad = flopsPerNode / flopsPerParticle;
-    kparams.gpu = getOptions().compute.cuda;
+    kparams.gpu = getOptions().gravity.cuda;
     usedGpu = kparams.gpu;
     kparams.minLevel = tparams.minLevel;
     kparams.saveForce = getOptions().analysis.saveForce;
@@ -750,6 +776,12 @@ ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, doub
     kparams.minRung = minrung;
     kparams.t0 = t0;
     kparams.theta = theta;
+    return kparams;
+}
+
+ForceStepResult evaluateFmmKick(KickParameters parameters) {
+    Timer timer;
+    timer.start();
     ExpansionBuffer l;
     l.zero();
     Vector3<Position> pos;
@@ -762,19 +794,34 @@ ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, doub
     Vector<TreeId> checklist;
     checklist.push_back(rootId);
     terminal::detailPrint("Do kick\n");
-    profile::profileBegin("kick");
-    KickReturn kr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
-    profile::profileEnd();
-    tm.stop();
-    kickTime += tm.read();
-
-    {
-        profile::ScopedPhase phase("kick.cleanup");
-        treeDestroy();
-        particlesCacheFree();
-    }
+    profile::ScopedPhase phase("kick", parameters.profileCoordinator);
+    KickReturn result = kick(parameters, l, pos, rootId, checklist, checklist, nullptr);
+    timer.stop();
+    kickTime += timer.read();
     terminal::detailPrint("kick done\n");
-    return kr;
+    return result;
+}
+
+void finishFmmKick() {
+    profile::ScopedPhase phase("kick.cleanup");
+    treeDestroy();
+    particlesCacheFree();
+}
+
+}    // namespace detail
+
+ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, double theta,
+    bool firstCall, bool fullEval, double previousTimestep, double maximumGlobalTimestep) {
+    auto const parameters = detail::prepareFmmKick(minrung, scale, dadt, t0, theta, firstCall,
+        fullEval, previousTimestep, maximumGlobalTimestep);
+    try {
+        auto const result = detail::evaluateFmmKick(parameters);
+        detail::finishFmmKick();
+        return result;
+    } catch (...) {
+        detail::finishFmmKick();
+        throw;
+    }
 }
 
 #endif
@@ -785,10 +832,22 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
     ForceStepResult result{};
     bool const global = maximumGlobalTimestep > 0.0;
     bool const meshGravity = getOptions().gravity.enabled && usesMeshGravity(getOptions().gravity);
+#if COSMICTIGER_WITH_SPH
+    bool sphAdvanced = false;
+    SphRunReturn preparedSphResult;
+#endif
     if (global) {
         minRung = 0;
         result.minimumTimestep = maximumGlobalTimestep;
     }
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_HOPKINS
+    if (getOptions().gravity.enabled && getOptions().hydro.enabled &&
+        getOptions().hydro.method == "mfv") {
+        // Source masses are needed before migration, multipoles, or PM mesh
+        // deposition. Project elapsed live fluxes without committing anchors.
+        hopkinsPrepareGravityMasses(time);
+    }
+#endif
 #if COSMICTIGER_WITH_GRAVITY
     if (gravityErrorStep >= 0) {
         profile::profileBegin("gravityError");
@@ -798,6 +857,8 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
     if (getOptions().gravity.enabled) {
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
         if (meshGravity) {
+            // PMMM sorts particles while building its cell forest. Keep hydro
+            // serialized until this backend exposes an immutable source stage.
             Timer timer;
             timer.start();
             profile::profileBegin("domains");
@@ -832,6 +893,8 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
                 // kicks only active sinks on their individual block timesteps.
                 KickParameters parameters;
                 parameters.htime = false;
+                parameters.refreshGasForces =
+                    getOptions().hydro.enabled && getOptions().hydro.method != "sph";
                 parameters.ascending = parameters.descending = parameters.top = true;
                 parameters.minRung = minRung;
                 parameters.t0 = baseTimestep;
@@ -842,7 +905,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
                 parameters.sign = getOptions().run.scenario == "glass" ? -1.0 : 1.0;
                 parameters.firstCall = firstCall;
                 parameters.saveForce = getOptions().analysis.saveForce;
-                parameters.gpu = getOptions().compute.cuda;
+                parameters.gpu = getOptions().gravity.cuda;
                 parameters.doPhi = true;
                 parameters.maxDt = maximumTimestep;
                 profile::profileBegin("pmmmKick");
@@ -855,8 +918,68 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
 #endif
 #if COSMICTIGER_ENABLE_FMM
         if (!meshGravity) {
-            result = kickStep(minRung, scale, scaleDerivative, baseTimestep, theta, firstCall,
-                fullEvaluation, previousTimestep, maximumGlobalTimestep);
+#if COSMICTIGER_WITH_SPH
+            // Distributed CUDA staging appends remote sources to the shared
+            // particle arrays. Hydro must not read them during that resize.
+            bool const stableParticleStorage = !getOptions().gravity.cuda || hpxSize() == 1;
+            if (getOptions().hydro.enabled && !closingOnly && stableParticleStorage) {
+                auto parameters =
+                    detail::prepareFmmKick(minRung, scale, scaleDerivative, baseTimestep, theta,
+                        firstCall, fullEvaluation, previousTimestep, maximumGlobalTimestep);
+                // Both trees permute particle/category mappings. Finish both
+                // serially before a force task can read those mappings.
+                bool const sph = getOptions().hydro.method == "sph";
+                if (sph) {
+                    sphStep1(minRung);
+                    sphParticlesApplyUpdates(
+                        minRung, 0, baseTimestep, time, global ? previousTimestep : -1.0);
+                } else {
+#if COSMICTIGER_ENABLE_HOPKINS
+                    hopkinsPrepareTree();
+#endif
+                }
+                parameters.profileCoordinator = false;
+                auto gravityFuture = hpx::async([parameters] {
+                    profile::ScopedWork work(profile::WorkPhase::ConcurrentGravity);
+                    return detail::evaluateFmmKick(parameters);
+                });
+                bool joined = false;
+                auto const joinGravity = [&] {
+                    if (!joined) {
+                        result = gravityFuture.get();
+                        joined = true;
+                    }
+                    return result.minimumTimestep;
+                };
+                try {
+                    profile::ScopedPhase overlap("hydro.gravity.overlap");
+                    if (sph) {
+                        preparedSphResult = sphStep2(minRung, scale, time, baseTimestep, 1,
+                            scaleDerivative, &energies, true, -1, false, previousTimestep,
+                            maximumGlobalTimestep, true, joinGravity);
+                        sphAdvanced = true;
+                    } else {
+#if COSMICTIGER_ENABLE_HOPKINS
+                        hopkinsPrepareGeometry(scale, scaleDerivative);
+#endif
+                    }
+                    joinGravity();
+                } catch (...) {
+                    // Hydro arrays and both trees must outlive every force
+                    // worker, including when hydro preparation throws.
+                    if (gravityFuture.valid()) {
+                        gravityFuture.wait();
+                    }
+                    detail::finishFmmKick();
+                    throw;
+                }
+                detail::finishFmmKick();
+            } else
+#endif
+            {
+                result = kickStep(minRung, scale, scaleDerivative, baseTimestep, theta, firstCall,
+                    fullEvaluation, previousTimestep, maximumGlobalTimestep);
+            }
         }
 #endif
     } else
@@ -882,10 +1005,13 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
         profile::profileBegin("hydro");
         int const activeRung = global ? 0 : minRung;
         if (getOptions().hydro.method == "sph") {
-            sphStep1(activeRung);
-            auto const hydro =
-                sphStep2(activeRung, scale, time, baseTimestep, 1, scaleDerivative, &energies, true,
-                    -1, closingOnly, previousTimestep, global ? result.minimumTimestep : 0.0);
+            auto hydro = preparedSphResult;
+            if (!sphAdvanced) {
+                sphStep1(activeRung);
+                hydro = sphStep2(activeRung, scale, time, baseTimestep, 1, scaleDerivative,
+                    &energies, true, -1, closingOnly, previousTimestep,
+                    global ? result.minimumTimestep : 0.0);
+            }
             profile::profileEnd();
             gravity.maxRung = std::max(gravity.maxRung, hydro.maximumRung);
             if (global) {
@@ -1123,7 +1249,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         }
         kparams.velInit = getOptions().run.scenario == "plummer";
         kparams.nodeLoad = flopsPerNode / flopsPerParticle;
-        kparams.gpu = getOptions().compute.cuda;
+        kparams.gpu = getOptions().gravity.cuda;
         kparams.minLevel = minimumTreeLevel;
         kparams.saveForce = getOptions().analysis.saveForce;
         kparams.gm = getOptions().gravity.gm;

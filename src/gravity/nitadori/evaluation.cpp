@@ -117,7 +117,8 @@ void evaluateParticles(bool doPotential) {
             auto const& cell = state.cells[cellIndex];
             auto active = [&](ParticleInteger index) {
                 return !state.request.applyKick ||
-                    particlesRung(index) >= state.request.parameters.minRung;
+                    particlesRung(index) >= state.request.parameters.minRung ||
+                    (state.request.parameters.refreshGasForces && particlesType(index) == kSphType);
             };
             bool hasActive = false;
             for (ParticleInteger i = cell.begin; i < cell.end; ++i) {

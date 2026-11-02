@@ -194,18 +194,18 @@ inline int kickSharedBudget(KickDeviceResources const& resources, int residency)
 
 // Fill the arena for a budget; returns false when the minimum tiles do not fit.
 template <int order>
-bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int budget,
+bool kickBuildLayout(Gravity const& gravity, bool massPlane, int residency, int budget,
     CudaKickArenaLayout& layout) {
     layout = CudaKickArenaLayout{};
     layout.order = order;
     layout.residency = residency;
-    layout.listReserve = compute.cudaKickListReserve;
+    layout.listReserve = gravity.cudaKickListReserve;
     layout.budgetBytes = budget;
     layout.massPlane = massPlane;
     int const controlBytes = kickRoundUp(int(sizeof(CudaKickControl<order>)), kKickArenaAlignment);
     layout.controlOffset = 0;
     int offset = controlBytes;
-    if (compute.cudaKickSharedExpansion) {
+    if (gravity.cudaKickSharedExpansion) {
         layout.expansionOffset = offset;
         offset += kickRoundUp(
             kickRoundUp(FmmOrder<order>::kLocalExpansionBytes_, int(alignof(Position))) +
@@ -224,11 +224,11 @@ bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int 
     // Leaves never exceed the runtime bucket, which is capped by kMaxBucketSize,
     // so an automatic tile first tries to hold the whole bucket and only then
     // falls back to bounded sink tiles.
-    int const bucket = std::min(compute.bucketSize, kMaxBucketSize);
-    bool const sinkAuto = compute.cudaKickSinkTile == 0;
+    int const bucket = std::min(getOptions().compute.bucketSize, kMaxBucketSize);
+    bool const sinkAuto = gravity.cudaKickSinkTile == 0;
     int sinkCapacity = 0;
-    if (compute.cudaKickSinkTile > 0) {
-        sinkCapacity = kickRoundUp(compute.cudaKickSinkTile, kWarpSize);
+    if (gravity.cudaKickSinkTile > 0) {
+        sinkCapacity = kickRoundUp(gravity.cudaKickSinkTile, kWarpSize);
     } else if (sinkAuto) {
         sinkCapacity = kickRoundUp(bucket, kWarpSize);
     }
@@ -240,11 +240,11 @@ bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int 
         "Staged multipole records must keep the arena alignment");
     layout.multipoleStride = FmmOrder<order>::kPositionedMultipoleStride_;
     int const multipoleTarget = kKickDefaultMultipoleTile;
-    bool const particleAuto = compute.cudaKickParticleTile <= 0;
-    bool const multipoleAuto = compute.cudaKickMultipoleTile <= 0;
+    bool const particleAuto = gravity.cudaKickParticleTile <= 0;
+    bool const multipoleAuto = gravity.cudaKickMultipoleTile <= 0;
     int particleCapacity = particleAuto ? kKickDefaultParticleTile :
-                                          kickRoundUp(compute.cudaKickParticleTile, kWarpSize);
-    int multipoleCapacity = multipoleAuto ? multipoleTarget : compute.cudaKickMultipoleTile;
+                                          kickRoundUp(gravity.cudaKickParticleTile, kWarpSize);
+    int multipoleCapacity = multipoleAuto ? multipoleTarget : gravity.cudaKickMultipoleTile;
     while (true) {
         int const forceBytes = 4 * int(sizeof(float)) * sinkCapacity;
         int const particleBytes =
@@ -304,18 +304,18 @@ bool kickBuildLayout(Compute const& compute, bool massPlane, int residency, int 
 
 template <int order>
 CudaKickArenaLayout kickSelectLayout() {
-    auto const& compute = getOptions().compute;
+    auto const& gravity = getOptions().gravity;
     bool const massPlane = getOptions().hydro.enabled;
     auto const resources = kickDeviceResources<order>();
     int const registerLimit = kickRegisterResidencyLimit(resources);
-    int residency = compute.cudaKickResidency > 0 ?
-        std::min(compute.cudaKickResidency, registerLimit) :
+    int residency = gravity.cudaKickResidency > 0 ?
+        std::min(gravity.cudaKickResidency, registerLimit) :
         registerLimit;
     CudaKickArenaLayout layout{};
     while (residency >= 1) {
         int budget = kickSharedBudget(resources, residency);
         while (
-            budget > 0 && kickBuildLayout<order>(compute, massPlane, residency, budget, layout)) {
+            budget > 0 && kickBuildLayout<order>(gravity, massPlane, residency, budget, layout)) {
             if (layout.totalBytes > 48 * 1024) {
                 CUDA_CHECK(cudaFuncSetAttribute((void const*) cudaKickKernel<order>,
                     cudaFuncAttributeMaxDynamicSharedMemorySize, layout.totalBytes));
@@ -351,7 +351,7 @@ CudaKickArenaLayout kickSelectLayout() {
             // The occupancy calculator disagrees with the arithmetic budget; shrink.
             budget -= kKickSharedAllocationGranularity;
         }
-        if (compute.cudaKickResidency > 0) {
+        if (gravity.cudaKickResidency > 0) {
             break;
         }
         residency--;

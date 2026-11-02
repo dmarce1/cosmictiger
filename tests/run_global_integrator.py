@@ -52,7 +52,7 @@ def main():
     available = compiled_algorithms(str(executable))
     if not ('global' in available['integrator']):
         raise RuntimeError('global integrator is not compiled')
-    common = {"hpx:threads": 2, "hpx:bind": "none", "compute.cuda": "false",
+    common = {"hpx:threads": 2, "hpx:bind": "none", "gravity.cuda": "false",
               "initial.particlesPerDimension": 8, "initial.useGlass": "false",
               "initial.closePack": "false", "chemistry.enabled": "false",
               "analysis.groups": "false", "analysis.views": "false",

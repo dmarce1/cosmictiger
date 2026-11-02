@@ -202,7 +202,7 @@ FmmForceResult kickCellBatch(Vector<KickWorkitem> workitems, bool doPotential, i
     params.eta = params.nodeLoad = 0.0f;
     params.saveForce = false;
     params.firstCall = true;
-    params.gpu = getOptions().compute.cuda;
+    params.gpu = getOptions().gravity.cuda;
     params.ascending = params.descending = params.top = false;
     params.doPhi = doPotential;
     auto workspace =

@@ -99,7 +99,7 @@ std::vector<Output> run(
     Operation operation, std::vector<Input> const& inputs, Parameters const& parameters) {
     std::vector<Output> outputs(inputs.size());
 #ifdef USE_CUDA
-    if (getOptions().compute.cuda) {
+    if (getOptions().starFormation.cuda) {
         cudaSetDevice();
         try {
             star_formation_backend::runCuda(

@@ -570,7 +570,7 @@ ViewSnapshot collectViewParticles(double a) {
             int const index = particlesCatIndex(i);
             gas.mass = sphParticlesMass(index);
             if (getOptions().hydro.method != "sph" && sphParticlesHopkinsState(index).initialized) {
-                gas.mass = sphParticlesHopkinsState(index).mass;
+                gas.mass = sphParticlesHopkinsState(index).accountedMass();
             }
             gas.eint = sphParticlesInternalEnergy(index);
             gas.rho = sphParticlesDensity(index);

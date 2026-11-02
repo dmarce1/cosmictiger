@@ -789,7 +789,7 @@ void checkRockstarCudaConnectivity() {
     // In each leaf, both lane-zero anchors (indices 0 and 32) are isolated.
     // The old kernel fragmented every real component in all other lanes.
     int nextId = 1;
-    if (!getOptions().compute.cuda) {
+    if (!getOptions().analysis.groupsCuda) {
         auto cpuParticles = particles;
         DeviceVector<RockstarTree> cpuTrees;
         rockstarFormTree(cpuTrees, cpuParticles);
@@ -854,7 +854,7 @@ void checkRockstarFinderDegeneracies() {
         requireRockstar(retained.size() == size_t(count),
             "planar/coincident/cold CPU finder lost particles, N=" + std::to_string(count));
     }
-    requireRockstar(!getOptions().compute.cuda, "large CPU regression enabled CUDA");
+    requireRockstar(!getOptions().analysis.groupsCuda, "large CPU regression enabled CUDA");
 }
 
 void checkRockstarRecordInvariance() {
@@ -1103,7 +1103,7 @@ void checkRockstarPeriodicRecord() {
 void rockstarTest() {
     auto const original = getOptions();
     auto options = original;
-    options.compute.cuda = false;
+    options.analysis.groupsCuda = false;
     options.initial.numberOfParticles = 1000000;
     options.gravity.gm = 1.e-8;
     options.gravity.supportRadius = 1.e-4;
@@ -1136,12 +1136,12 @@ void rockstarTest() {
         detail::checkRockstarRecordInvariance();
         detail::checkRockstarLightconeEpoch();
 #ifdef USE_CUDA
-        if (original.compute.cuda) {
+        if (original.analysis.groupsCuda) {
             detail::checkRockstarCudaConnectivity();
-            options.compute.cuda = true;
+            options.analysis.groupsCuda = true;
             setOptions(options);
             detail::checkRockstarCudaConnectivity();
-            options.compute.cuda = false;
+            options.analysis.groupsCuda = false;
             setOptions(options);
         }
 #endif

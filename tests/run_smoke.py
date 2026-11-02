@@ -75,12 +75,16 @@ def main():
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--mpi-exec", default="mpiexec")
     parser.add_argument("--cpu", action="store_true", help="run hydrodynamics on the SIMD CPU backend")
+    parser.add_argument("--gravity-cuda", action="store_true",
+                        help="with sph --cpu, run CUDA gravity alongside CPU hydrodynamics and drift")
     parser.add_argument("--minimum-rung", type=int,
                         help="set and verify the minimum starting timestep rung")
     parser.add_argument("--extra-option", action="append", default=[],
                         help="forward an application argument, for example "
                              "--extra-option=--hydro.kernelFamily=wendland")
     args = parser.parse_args()
+    if args.gravity_cuda and (not args.cpu or args.mode != "sph"):
+        parser.error("--gravity-cuda requires mode sph and --cpu")
     args.workdir.mkdir(parents=True, exist_ok=True)
     # These are dedicated CTest output files; remove previous run data so a failed
     # invocation cannot accidentally pass by examining stale results.
@@ -96,10 +100,12 @@ def main():
             shutil.rmtree(checkpoint_dir)
     # sph_analysis runs the dark-matter-only halo finder and the lightcone with gas present.
     analysis = str(args.mode == "sph_analysis").lower()
+    analysis_cuda = str(args.mode == "sph_analysis" and not args.cpu).lower()
     command = [str(args.executable), "--hpx:threads=2", "--hpx:bind=none",
                "--initial.particlesPerDimension=8", "--analysis.views=false",
                f"--lightcone.enabled={analysis}", "--analysis.power=false",
-               f"--analysis.groups={analysis}"]
+               f"--analysis.groups={analysis}",
+               f"--analysis.groups.cuda={analysis_cuda}", f"--lightcone.cuda={analysis_cuda}"]
     selector_arguments = application_arguments(args.executable.resolve(), far="fmm",
         hydro=args.mode in ("sod", "sph", "sph_analysis", "sph_mpi"))
     command += [argument for argument in selector_arguments if not any(
@@ -110,23 +116,27 @@ def main():
         output_config = args.workdir / "silo.ini"
         output_config.write_text("[output]\nsilo = true\nxMax = 0.5\n"
                                  "siloInterval = 7\ndirectory = silo snapshots\n")
-        command += ["--run.scenario=sod", "--hydro.enabled=true", "--compute.cuda=true",
+        command += ["--run.scenario=sod", "--hydro.enabled=true", "--gravity.cuda=true", "--hydro.cuda=true", "--drift.cuda=true",
                     f"--configuration={output_config.resolve()}"]
     elif args.mode in ("sph", "sph_analysis"):
-        command += ["--hydro.enabled=true", "--compute.cuda=true",
+        command += ["--hydro.enabled=true", "--gravity.cuda=true", "--hydro.cuda=true", "--drift.cuda=true",
                     "--run.maxIterations=2", "--checkpoint.intervalSeconds=0"]
     elif args.mode == "sph_mpi":
-        command += ["--hydro.enabled=true", "--compute.cuda=true",
+        command += ["--hydro.enabled=true", "--gravity.cuda=true", "--hydro.cuda=true", "--drift.cuda=true",
                     "--run.maxIterations=2", "--hpx:localities=2"]
         command = [args.mpi_exec, "-n", "2"] + command
     else:
         command += ["--hydro.enabled=false", "--run.maxIterations=2",
-                    "--compute.cuda=" + str(args.mode == "dm_cuda").lower()]
+                    "--gravity.cuda=" + str(args.mode == "dm_cuda").lower(),
+                    "--drift.cuda=" + str(args.mode == "dm_cuda").lower()]
     if args.mode != "sod":
         # Keep the established checkpoint/restart fixture layout explicit.
         command += ["--output.directory=."]
     if args.cpu:
-        command = ["--compute.cuda=false" if value == "--compute.cuda=true" else value
+        command = [value.replace("=true", "=false") if value in ("--gravity.cuda=true", "--hydro.cuda=true", "--drift.cuda=true") else value
+                   for value in command]
+    if args.gravity_cuda:
+        command = ["--gravity.cuda=true" if value.startswith("--gravity.cuda=") else value
                    for value in command]
     # This regression inspects detailed Silo configuration messages.
     if not any(option.startswith("--run.verbose=") for option in args.extra_option):
@@ -134,7 +144,18 @@ def main():
     command += args.extra_option
     if args.minimum_rung is not None:
         command += [f"--run.minRung={args.minimum_rung}"]
+    def validate_mixed_backends(output_log):
+        if not args.gravity_cuda:
+            return
+        for key, expected in (("gravity.cuda", "T"), ("hydro.cuda", "F"), ("drift.cuda", "F")):
+            if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected + r"\s*$",
+                             output_log, re.MULTILINE):
+                raise RuntimeError(f"mixed SPH fixture did not retain {key}={expected}")
+        if "CUDA kick arena (FMM order" not in output_log:
+            raise RuntimeError("mixed SPH fixture did not execute the CUDA FMM arena path")
+
     run_simulation(command, args.workdir, "run.log")
+    validate_mixed_backends((args.workdir / "run.log").read_text())
     if args.mode == "sod":
         output_log = (args.workdir / "run.log").read_text()
         if "Silo particle output: x [0, 0.5], y [0, 1], z [0, 1]" not in output_log:
@@ -184,6 +205,11 @@ def main():
             raise RuntimeError(f"{args.mode} energy output is empty or nonfinite")
         print(f"{args.mode}: {len(rows)} completed steps with finite physical diagnostics")
         if args.mode == "sph_analysis":
+            backend_value = "F" if args.cpu else "T"
+            for key in ("analysis.groups.cuda", "lightcone.cuda"):
+                if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + backend_value + r"\s*$",
+                                 output_log, re.MULTILINE):
+                    raise RuntimeError(f"sph_analysis did not select {key}={analysis_cuda}")
             if "Doing groups" not in output_log:
                 raise RuntimeError("sph_analysis did not run the halo finder")
             sidecars = sorted(args.workdir.glob("groups.*/rockstar.0.dat.format"))
@@ -216,6 +242,7 @@ def main():
                                if not arg.startswith(("--run.maxIterations=", "--checkpoint.intervalSeconds="))]
             restart_command += [f"--checkpoint.readIndex={checkpoint}", "--run.maxIterations=1"]
             run_simulation(restart_command, restart_directory, "restart.log")
+            validate_mixed_backends((restart_directory / "restart.log").read_text())
             restarted = []
             for line in (restart_directory / "progress.txt").read_text().splitlines():
                 fields = line.split()

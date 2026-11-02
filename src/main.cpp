@@ -124,7 +124,7 @@ int hpx_main(int argc, char* argv[]) {
             }
 #endif
 #ifdef USE_CUDA
-            if (getOptions().compute.cuda) {
+            if (usesCuda(getOptions())) {
                 hpxInitCuda();
             }
 #endif

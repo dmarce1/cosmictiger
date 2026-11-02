@@ -163,7 +163,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
     }
     bool threadLeft = true;
 #ifdef USE_CUDA
-    if (getOptions().compute.cuda && params.gpu) {
+    if (getOptions().gravity.cuda && params.gpu) {
         if (params.gpu && cudaWorkspace == nullptr && selfPtr->isLocal()) {
             cudaWorkspace = std::make_shared<KickWorkspace>(
                 params, selfPtr->numberOfParticles(), context.gpuExecutor);
@@ -417,7 +417,12 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
         detail::kickReleaseLists(std::move(workspace));
         auto const rng = selfPtr->particleRange;
         for (ParticleInteger i = rng.first; i < rng.second; i++) {
-            if (params.forceOnly || particlesRung(i) >= params.minRung) {
+            bool refreshGas = false;
+#if COSMICTIGER_WITH_SPH
+            refreshGas = params.refreshGasForces && getOptions().hydro.enabled &&
+                particlesType(i) == kSphType;
+#endif
+            if (params.forceOnly || refreshGas || particlesRung(i) >= params.minRung) {
                 ParticleInteger const j = i - rng.first;
                 Vector3<float> dx;
                 for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
@@ -461,6 +466,18 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 if (savePotential && params.doPhi) {
                     particlesPot(i) = forces.phi[j];
                 }
+#if COSMICTIGER_WITH_SPH
+                if (refreshGas && particlesRung(i) < params.minRung) {
+                    ParticleInteger const gasIndex = particlesCatIndex(i);
+                    sphParticlesGravityAcceleration(kXDimension, gasIndex) = forces.gx[j];
+                    sphParticlesGravityAcceleration(kYDimension, gasIndex) = forces.gy[j];
+                    sphParticlesGravityAcceleration(kZDimension, gasIndex) = forces.gz[j];
+                    flops +=
+                        cosmictiger::gravity::cartesian::detail::L2P<kLocalDegree, true>::kFlops_ +
+                        15;
+                    continue;
+                }
+#endif
                 auto& vx = particlesVel(kXDimension, i);
                 auto& vy = particlesVel(kYDimension, i);
                 auto& vz = particlesVel(kZDimension, i);
@@ -504,7 +521,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     kr.nmom += mass * sqrt(sqr(vx, vy, vz));
                     kr.pot += 0.5 * mass * forces.phi[j];
                     kr.dkin += 0.5 * mass * sqr(vx, vy, vz) - oldKinetic;
-                    rung = 0;
+                    if (!gas) {
+                        rung = 0;
+                    }
                     flops += 12;
                     doubleFlops += 2;    // Float timestep and maximum widened for selection.
                 } else if (params.htime) {

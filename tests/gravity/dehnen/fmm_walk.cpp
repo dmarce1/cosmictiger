@@ -1021,7 +1021,7 @@ void fmmWalkOrdinaryTimesteps(bool useCuda) {
         return 0.125f * (particle + 1) * (dim + 1);
     };
     for (int backend = 0; backend < (useCuda ? 2 : 1); ++backend) {
-        options.compute.cuda = backend != 0;
+        options.gravity.cuda = backend != 0;
         for (bool glass : {false, true}) {
             options.run.scenario = glass ? "glass" : "plummer";
             setOptions(options);
@@ -1225,7 +1225,7 @@ void fmmWalkHierarchicalTerminalEnergy(bool useCuda) {
         throw std::runtime_error("Hierarchical terminal fixture must distinguish kick stages");
     }
     for (int backend = 0; backend < (useCuda ? 2 : 1); ++backend) {
-        options.compute.cuda = backend != 0;
+        options.gravity.cuda = backend != 0;
         setOptions(options);
         std::string const label =
             std::string("hierarchical terminal energy ") + (backend ? "CUDA" : "CPU");
@@ -1673,7 +1673,7 @@ HPX_PLAIN_ACTION(
 void fmmWalkTest() {
     auto const originalOptions = getOptions();
     auto options = originalOptions;
-    bool const useCuda = options.compute.cuda;
+    bool const useCuda = options.gravity.cuda;
     options.hydro.enabled = false;
 
     options.gravity.enabled = true;

@@ -118,7 +118,8 @@ def main():
               "gravity.meshSize": mesh_size, "gravity.pmmmNearWidth": 2,
               "gravity.method.far": "pmmm", "gravity.method.near": args.near_method,
               "gravity.expansionDegree": args.order - 1, "run.timeIntegrator": args.time_integrator,
-              "gravity.enabled": "true", "compute.cuda": str(args.cuda).lower(),
+              "gravity.enabled": "true", "gravity.cuda": str(args.cuda).lower(),
+              "drift.cuda": str(args.cuda).lower(),
               "compute.positionType": args.position_type,
               "initial.particlesPerDimension": 8, "initial.closePack": "false",
               "initial.useGlass": "false", "chemistry.enabled": "false",
@@ -144,6 +145,7 @@ def main():
     for hydro in ((True,) if args.sph_only else (False, True)):
         label = near_method + ("_mixed" if hydro else "_dark_matter")
         options = dict(common, **{"hydro.enabled": str(hydro).lower(),
+                                  "hydro.cuda": str(args.cuda and hydro and args.with_sph).lower(),
                                   "run.scenario": "cosmology" if hydro else "plummer"})
         if hydro:
             options["hydro.viscosityEvolution"] = args.viscosity_evolution

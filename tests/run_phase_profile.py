@@ -224,18 +224,32 @@ def check_sph(rows, integrator):
 
 def check_hopkins(rows, label):
     require_phases(rows, (
-        "hydro.hopkins.sources.correct", "hydro.hopkins.tree.create",
-        "hydro.hopkins.tree.destroy", "hydro.hopkins.gather", "hydro.hopkins.scatter",
+        "hydro.hopkins", "hydro.hopkins.tree.create", "hydro.hopkins.tree.destroy",
+        "hydro.hopkins.gather", "hydro.hopkins.scatter", "hydro.hopkins.caches.clear",
         "hydro.hopkins.neighbors.refresh", "hydro.hopkins.support.solve",
         "hydro.hopkins.geometry.solve", "hydro.hopkins.gradients",
-        "hydro.hopkins.geometryRates", "hydro.hopkins.timesteps", "hydro.hopkins.flux.solve",
-        "hydro.hopkins.flux.integrate", "hydro.hopkins.corrector",
-        "hydro.hopkins.diagnostics.energies", "hydro.hopkins.diagnostics.soundWave"), label)
-    require(rows["hydro.hopkins.tree.create"]["calls"] ==
-            rows["hydro.hopkins.tree.destroy"]["calls"], f"{label}: tree lifecycle counts differ")
-    require(rows["hydro.hopkins.flux.solve"]["calls"] ==
-            rows["hydro.hopkins.flux.integrate"]["calls"] ==
-            rows["hydro.hopkins.corrector"]["calls"], f"{label}: flux/corrector counts differ")
+        "hydro.hopkins.geometryRates", "hydro.hopkins.timesteps",
+        "hydro.hopkins.flux.open", "hydro.hopkins.flux.settle", "hydro.hopkins.close",
+        "hydro.hopkins.primitives", "hydro.hopkins.diagnostics.energies",
+        "hydro.hopkins.diagnostics.soundWave"), label)
+    calls = lambda name: rows[name]["calls"]
+    events = calls("hydro.hopkins")
+    openings = calls("hydro.hopkins.flux.open")
+    settlements = calls("hydro.hopkins.flux.settle")
+    require(calls("hydro.hopkins.tree.create") == calls("hydro.hopkins.tree.destroy") >= events,
+            f"{label}: tree lifecycle does not cover every force event")
+    # Every nonterminal event opens pair intervals; the final force event only
+    # settles them. Wake-up passes may settle and close again at the same time.
+    require(events == openings + 1, f"{label}: missing opening or terminal closure event")
+    require(calls("hydro.hopkins.gradients") == calls("hydro.hopkins.geometryRates") == openings,
+            f"{label}: opening reconstruction counts differ")
+    require(settlements == calls("hydro.hopkins.close") == calls("hydro.hopkins.primitives") and
+            settlements >= events,
+            f"{label}: pair settlement, own-step closure and primitive refresh counts differ")
+    require(calls("hydro.hopkins.timesteps") == settlements - 1,
+            f"{label}: timestep selection ran during terminal closure or missed a wake-up pass")
+    require(calls("hydro.hopkins.diagnostics.energies") == events,
+            f"{label}: missing post-event energy diagnostic")
 
 
 def run_case(executable, directory, options, deadline):
@@ -247,7 +261,7 @@ def run_case(executable, directory, options, deadline):
     command += [f"--{key}={value}" for key, value in options.items()]
     environment = dict(os.environ, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1",
                        MKL_NUM_THREADS="1")
-    if options.get("compute.cuda") != "true":
+    if options.get("gravity.cuda") != "true":
         environment["CUDA_VISIBLE_DEVICES"] = ""
     remaining = deadline - time.monotonic()
     require(remaining > 0.0, "phase-profile regression exceeded its total runtime budget")
@@ -269,7 +283,7 @@ def run_case(executable, directory, options, deadline):
     require(result == 0, f"fixture exited {result}; see {log_path}\n{output[-6000:]}")
     rows, detail_rows = read_profile(directory / "simulation/profile.txt", output)
     require_phases(rows, ("initialize", "writeCheckpoint", "drift"), directory.name)
-    if options.get("compute.cuda") != "true":
+    if options.get("gravity.cuda") != "true":
         require(not any("cycles" in row for row in detail_rows.values()),
                 f"{directory.name}: CPU fixture reported CUDA device cycles")
     return rows, detail_rows
@@ -292,7 +306,7 @@ def main():
     compiled = compiled_algorithms(str(executable))
     integrators = [name for name in ("traditional", "global") if name in compiled["integrator"]]
     require(bool(integrators), "phase-profile regression requires a hydro-capable integrator")
-    common = {"compute.cuda": "false", "initial.particlesPerDimension": 8,
+    common = {"gravity.cuda": "false", "initial.particlesPerDimension": 8,
               "initial.useGlass": "false", "initial.closePack": "false",
               "gravity.enabled": "false", "gravity.meshSize": 8,
               "hydro.enabled": "true", "hydro.method": "sph",
@@ -356,7 +370,7 @@ def main():
         options = dict(common, **selections)
         options.update({"run.scenario": "plummer", "gravity.enabled": "true",
                         "hydro.enabled": "false", "initial.particlesPerDimension": 8,
-                        "compute.bucketSize": 32, "compute.cuda": "true"})
+                        "compute.bucketSize": 32, "gravity.cuda": "true"})
         rows, detail_rows = run_case(executable, base / label, options, deadline)
         require_phases(rows, ("treeCreate.allocate", "treeCreate.build", "kick.walk"), label)
         require_phases(detail_rows, (

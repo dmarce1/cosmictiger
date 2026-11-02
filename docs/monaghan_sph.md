@@ -84,15 +84,25 @@ selection. See [kernel choices and length conventions](kernels.md) for the valid
 degrees, conversion factors, and migration of explicit old settings. Production
 gravity and SPH use three-dimensional tables; a separate arbitrary-dimensional
 density-table generator is available as described there. Select SIMD CPU SPH with
-`--compute.cuda=false`, or CUDA SPH with `--compute.cuda=true`. Both backends
+`--hydro.cuda=false`, or CUDA SPH with `--hydro.cuda=true`. Both backends
 implement support-radius solving, density, forces/heating, and neighbor timestep
 propagation using the same kernel selections and length conventions. CPU workers
 process separate tree leaves, with eight-lane SIMD packs over their neighbors.
 All source fields are staged before a phase updates local sinks, including sources
 fetched from other MPI ranks.
 
-Particle drift also uses the CPU when `compute.cuda=false`. The complete executable
-still requires CUDA for other initialization and analysis paths.
+Particle drift independently uses the CPU when `drift.cuda=false`. Each available
+initialization or analysis backend has its own CUDA selector. All selectors default
+to `false`; the complete executable can run without a CUDA device.
+With FMM gravity, tree sorting finishes before the gravity future starts. Density,
+support, viscosity-target preparation, and the first hydro pair-force pass can
+then run alongside gravity. That pair pass stores hydro rates without reading
+the new gravitational acceleration. After joining gravity, source assembly adds
+gravity, external acceleration, and damping in the original order before the
+corrector. The second force pass uses the corrected state and remains after the
+join. This preserves the existing SPH integration; no stale gravity substitution
+or persistent potential is needed. PMMM and distributed CUDA FMM retain serial
+execution because their current sorting/source staging can change shared storage.
 The standalone `sph_cpu_test` target can be built with
 `COSMICTIGER_WITH_CUDA=OFF` and does not call a CUDA device. The installed HPX
 library may itself link the CUDA runtime.

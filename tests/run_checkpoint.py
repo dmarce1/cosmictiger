@@ -16,6 +16,7 @@ import subprocess
 import struct
 import sys
 
+from application_selection import cpu_backend_options
 from checkpoint_format import Header, decode_checkpoint, read_header
 
 
@@ -159,7 +160,8 @@ def checkViscosityRestarts(executable, baseWorkdir):
     """Check every viscosity switch with and without the independent shear limiter."""
     configuration = Path(__file__).resolve().parents[1] / "configurations/hydro_wave.ini"
     common = [str(executable), f"--configuration={configuration}", "--hpx:threads=2",
-              "--hpx:bind=none", "--initial.particlesPerDimension=8", "--compute.cuda=false",
+              "--hpx:bind=none", "--initial.particlesPerDimension=8",
+              *[f"--{key}={value}" for key, value in cpu_backend_options().items()],
               "--run.endTime=0.00001", "--checkpoint.intervalSeconds=0",
               "--output.directory=.", "--output.silo=false", "--analysis.views=false",
               "--analysis.power=false", "--analysis.groups=false", "--lightcone.enabled=false"]
@@ -222,7 +224,8 @@ def checkVariationalPressureRestart(executable, baseWorkdir):
     """
     configuration = Path(__file__).resolve().parents[1] / "configurations/hydro_wave.ini"
     options = [str(executable), f"--configuration={configuration}", "--hpx:threads=2",
-               "--hpx:bind=none", "--initial.particlesPerDimension=8", "--compute.cuda=false",
+               "--hpx:bind=none", "--initial.particlesPerDimension=8",
+               *[f"--{key}={value}" for key, value in cpu_backend_options().items()],
                "--run.endTime=0.00001", "--checkpoint.intervalSeconds=0",
                "--output.directory=.", "--output.silo=false", "--analysis.views=false",
                "--analysis.power=false", "--analysis.groups=false", "--lightcone.enabled=false"]
@@ -287,7 +290,7 @@ def main():
     options = [str(executable), "--hpx:threads=2", "--hpx:bind=none",
                "--run.timeIntegrator=traditional", "--gravity.method.far=fmm",
                "--initial.particlesPerDimension=8", "--hydro.enabled=false",
-               "--compute.cuda=false", "--analysis.views=false",
+               "--gravity.cuda=false", "--analysis.views=false",
                "--lightcone.enabled=false", "--analysis.power=false",
                "--analysis.groups=false", "--gravity.kernelDegree=8", "--output.directory=.",
                # Checkpoint publication and integrity need no linear-power calculation.

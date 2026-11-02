@@ -1,15 +1,17 @@
 # Equilibrium cooling: CPU and CUDA support
 
 GADGET-4 equilibrium H/He cooling has CPU and CUDA batch implementations.
-`compute.cuda=false` selects CPU cooling, hydrodynamics, gravity and drift.
+`chemistry.cuda=false` selects CPU cooling. Hydrodynamics, gravity, drift, and
+star formation select their backends independently with `hydro.cuda`,
+`gravity.cuda`, `drift.cuda`, and `starFormation.cuda`. All default to `false`.
 Hydrodynamics uses fixed gamma 5/3 for cooling gas and evolves its actual
 thermal energy. The electron fraction is an equilibrium iteration guess.
 See [the cooling model and options](primordial_chemistry.md) and
 [the star-formation model](star_formation.md).
 
 `COSMICTIGER_WITH_CUDA=OFF` omits CosmicTiger's CUDA sources. A CUDA-enabled
-executable also supports `compute.cuda=false`, using host allocations and
-skipping device initialization. An external HPX installation may link CUDA
+executable also supports all CUDA selectors set to `false`, using host allocations
+and skipping device initialization. An external HPX installation may link CUDA
 libraries without using a device.
 
 Build cooling with `COSMICTIGER_ENABLE_SPH=ON` and
@@ -18,7 +20,7 @@ formation. Disabling particle cooling retains the independent homogeneous
 cosmological recombination model. With SPH disabled, cooling is inactive.
 
 A cosmological CPU run enables `hydro.enabled=true`, `chemistry.enabled=true`
-and `compute.cuda=false`. Cooling runs once for each completed selected SPH
+and leaves every CUDA selector `false`. Cooling runs once for each completed selected SPH
 interval. With star formation enabled, conversion uses the previously saved
 SFR, followed by cooling and the new SFR. There are no opening chemistry
 half-steps, outer source retries or chemistry timestep controls. State,
@@ -36,7 +38,8 @@ The Linux `cpu_only_runtime` regression hides devices and preloads the
 `no_cuda_runtime` guard to reject device/context, allocation, transfer and
 launch calls. Run it against a CUDA-enabled build to check runtime CPU
 selection. A two-locality `--run.test=sphGravity --chemistry.enabled=true
---compute.cuda=false --hpx:localities=2` invocation additionally exercises
+--chemistry.cuda=false --hydro.cuda=false --gravity.cuda=false --drift.cuda=false
+--hpx:localities=2` invocation additionally exercises
 parcel migration and remote EOS/velocity cache reads.
 
 ## Historical network validation

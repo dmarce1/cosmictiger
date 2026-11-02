@@ -1367,7 +1367,7 @@ void checkpointStateTest() {
         ALWAYS_ASSERT(previous.energies.pot == -1.0 && previous.energies.therm == 0.0);
     }
     fclose(fp);
-    if (!getOptions().hydro.enabled && !getOptions().compute.cuda) {
+    if (!getOptions().hydro.enabled && !usesCuda(getOptions())) {
         // Exercise the actual particle payload with low coordinate bits that a
         // double round trip cannot preserve in the fixed64 backend.
         fp = tmpfile();

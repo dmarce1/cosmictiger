@@ -84,7 +84,7 @@ def main():
         '--run.maxIterations=1', '--initial.particlesPerDimension=8', '--initial.useGlass=false',
         '--cosmology.sigma8=0', '--gravity.enabled=false', '--hydro.enabled=true',
         '--chemistry.enabled=true', '--starFormation.enabled=true',
-        '--chemistry.initializationTemperature=10000', '--compute.cuda=false',
+        '--chemistry.initializationTemperature=10000', '--gravity.cuda=false',
         '--analysis.groups=false', '--analysis.views=false', '--analysis.tracers=false',
         '--analysis.power=false', '--lightcone.enabled=false', '--output.silo=false',
         '--output.directory=.', '--checkpoint.intervalSeconds=0']

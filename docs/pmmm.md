@@ -48,7 +48,7 @@ threads so waiting for the shared planner lock cannot block HPX workers.
   --gravity.expansionDegree=6 --run.timeIntegrator=traditional \
   --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
   --initial.particlesPerDimension=32 --hydro.enabled=false \
-  --compute.cuda=false --hpx:threads=12
+  --gravity.cuda=false --hpx:threads=12
 ```
 
 The runtime settings can also be supplied in an INI file:
@@ -124,7 +124,7 @@ distribution. With the near FMM capability enabled:
 ./build_pmmm/cosmictiger --gravity.method.far=pmmm --gravity.method.near=fmm \
   --run.timeIntegrator=traditional --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
   --gravity.expansionDegree=6 --compute.bucketSize=32 \
-  --hydro.enabled=false --compute.cuda=false
+  --hydro.enabled=false --gravity.cuda=false
 ```
 
 The compact gravity softening support must fit inside that near region:
@@ -351,7 +351,7 @@ Particle chemistry additionally requires `COSMICTIGER_ENABLE_CHEMISTRY=ON`
 homogeneous cosmological recombination remains available.
 
 Moment formation, Green construction, FFTs, spectral contraction, and local
-expansion evaluation run on CPUs. `compute.cuda=true` selects CUDA near-field
+expansion evaluation run on CPUs. `gravity.cuda=true` selects CUDA near-field
 execution in a CUDA build and permits CUDA particle drift. For near FMM this
 uses the existing FMM CPU/CUDA work distribution. Diagnostic fields named
 `nearCpuAcceptedMultipoles` and `nearCpuDirectPairs` count CPU tree-walk work;
@@ -584,7 +584,7 @@ regression can be selected explicitly:
 ./build_pmmm/cosmictiger --run.test=pmmm --gravity.method.far=pmmm \
   --gravity.method.near=pp --run.timeIntegrator=traditional --gravity.meshSize=8 \
   --initial.particlesPerDimension=8 --hydro.enabled=false \
-  --compute.cuda=false --hpx:threads=2 --hpx:bind=none
+  --gravity.cuda=false --hpx:threads=2 --hpx:bind=none
 ```
 
 Test definitions describe coverage; successful CPU, CUDA, and MPI execution

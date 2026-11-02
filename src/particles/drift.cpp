@@ -118,7 +118,7 @@ void drift(
         }
     }
 #ifdef USE_CUDA
-    if (getOptions().compute.cuda) {
+    if (getOptions().drift.cuda) {
         {
             profile::ScopedPhase profilePhase("drift.cuda", detail::profileDriftCoordinator());
             cudaDrift(rung, scale, dt, tau0, tau1, tauMax, drag);

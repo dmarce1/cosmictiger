@@ -88,10 +88,10 @@ taskset -c 1,2 /absolute/path/to/cosmictiger_before_or_after \
   --gravity.kernelFamily=ferrers --gravity.kernelDegree=4 \
   --hpx:threads=2 --hpx:bind=none --analysis.views=false \
   --analysis.power=false --analysis.groups=false --lightcone.enabled=false \
-  --compute.cuda=false
+  --gravity.cuda=false
 ```
 
-Set `COSMICTIGER_STF_WALK_SAMPLES=15`, `OMP_NUM_THREADS=2`, `OMP_THREAD_LIMIT=2`; use `--compute.cuda=true` for CUDA. The public radius option is in initial particle-spacing units; the physical support value above comes from the benchmark configuration record. Run each process in a separate output directory.
+Set `COSMICTIGER_STF_WALK_SAMPLES=15`, `OMP_NUM_THREADS=2`, `OMP_THREAD_LIMIT=2`; use `--gravity.cuda=true` for CUDA. The public radius option is in initial particle-spacing units; the physical support value above comes from the benchmark configuration record. Run each process in a separate output directory.
 
 - [Full table and numerical comparison](leaf_cloud_benchmark_results_20261018/adaptive_suite/summary.md)
 - [All measured runs, commands and samples](leaf_cloud_benchmark_results_20261018/adaptive_suite/runs.json)

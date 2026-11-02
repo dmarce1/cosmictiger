@@ -33,6 +33,7 @@
 #include <cosmictiger/hydro/sph/price_etal/viscosity.hpp>
 #include <cosmictiger/hydro/sph/sph.hpp>
 #include <cosmictiger/hydro/sph/sph_flops.hpp>
+#include <cosmictiger/hydro/sph/sph_kernel.hpp>
 #if COSMICTIGER_ENABLE_CHEMISTRY
 #include <cosmictiger/hydro/sph/sph_chemistry.hpp>
 #endif
@@ -248,6 +249,53 @@ void sphParticlesApplyUpdates(
                              "sph.particles.unknownKickPhase")));
     }
     for (auto& future : futures) {
+        future.get();
+    }
+}
+
+HPX_PLAIN_ACTION(sphParticlesCompleteForces, SphParticlesCompleteForcesAction);
+
+void sphParticlesCompleteForces(SphRunParameters const& parameters) {
+    ALWAYS_ASSERT(parameters.phase == 0 && parameters.deferAccelerationSources);
+    Vector<hpx::future<void>> pending;
+    for (auto const& child : hpxChildren()) {
+        pending.push_back(hpx::async<SphParticlesCompleteForcesAction>(child, parameters));
+    }
+    int const workers = std::max(1, hpxHardwareConcurrency());
+    for (int worker = 0; worker < workers; ++worker) {
+        pending.push_back(hpx::async(hpx::annotated_function(
+            [parameters, workers, worker]() {
+                sph_flops::Counter flops;
+                auto const& options = getOptions();
+                ParticleInteger const begin = size_t(worker) * sphParticlesSize() / workers;
+                ParticleInteger const end = size_t(worker + 1) * sphParticlesSize() / workers;
+                for (ParticleInteger gas = begin; gas < end; ++gas) {
+                    if (sphParticlesRung(gas) < parameters.minimumRung) {
+                        continue;
+                    }
+                    Vector3<Position> position;
+                    Vector3<float> velocity;
+                    Vector3<float> gravityAcceleration(0.0f);
+                    for (int dim = 0; dim < kDimensions; ++dim) {
+                        position[dim] = sphParticlesPosition(dim, gas);
+                        velocity[dim] = sphParticlesVelocity(dim, gas);
+#if COSMICTIGER_WITH_GRAVITY
+                        if (options.gravity.enabled) {
+                            gravityAcceleration[dim] = sphParticlesGravityAcceleration(dim, gas);
+                        }
+#endif
+                    }
+                    auto& acceleration = sphParticlesAccelerationState(gas).acceleration;
+                    acceleration = sphCompleteAcceleration(parameters, position, velocity,
+                        acceleration, gravityAcceleration, options.hydro.centralAcceleration,
+                        options.hydro.centralSupportRadius, flops);
+                }
+                addCpuFlops(flops.counts());
+            },
+            "sph.particles.completeForces")));
+    }
+    hpx::wait_all(pending.begin(), pending.end());
+    for (auto& future : pending) {
         future.get();
     }
 }
@@ -1063,7 +1111,7 @@ void sphParticlesLoad(FILE* fp) {
 #if COSMICTIGER_ENABLE_HOPKINS
         uint32_t stateHeader[3];
         FREAD(stateHeader, sizeof(uint32_t), 3, fp);
-        if (stateHeader[0] != 0x484f5053U || stateHeader[1] != 4U ||
+        if (stateHeader[0] != 0x484f5053U || stateHeader[1] != 5U ||
             stateHeader[2] != sizeof(HopkinsParticleState)) {
             THROW_ERROR("Incompatible Hopkins particle-state checkpoint layout\n");
         }
@@ -1110,14 +1158,14 @@ void sphParticlesSave(FILE* fp) {
     }
     if (getOptions().hydro.method != "sph") {
 #if COSMICTIGER_ENABLE_HOPKINS
-        uint32_t stateHeader[3] = {0x484f5053U, 4U, sizeof(HopkinsParticleState)};
+        uint32_t stateHeader[3] = {0x484f5053U, 5U, sizeof(HopkinsParticleState)};
         FWRITE(stateHeader, sizeof(uint32_t), 3, fp);
         if (count != 0) {
             // HPX serializes members individually. Canonicalize native padding
             // so migration cannot change otherwise identical checkpoint bytes.
             constexpr size_t kInitialFieldsEnd =
                 offsetof(HopkinsParticleState, initialized) + sizeof(bool);
-            constexpr size_t kPredictorFieldsBegin = offsetof(HopkinsParticleState, predictor);
+            constexpr size_t kPredictorFieldsBegin = offsetof(HopkinsParticleState, gradients);
             constexpr size_t kPredictorFieldsEnd =
                 offsetof(HopkinsParticleState, predictorInitialized) + sizeof(bool);
             constexpr size_t kSupportFieldBegin = offsetof(HopkinsParticleState, supportRadius);
@@ -1157,6 +1205,17 @@ void sphCheckpointTest() {
             state.momentum = {
                 0.125 + offset * 0x1p-38, 0.375 - offset * 0x1p-39, 0.75 + offset * 0x1p-40};
             state.supportRadius = 0.125 + offset * 0x1p-37;
+            state.pendingMass = offset * 0x1p-45;
+            state.pendingEnergy = -offset * 0x1p-44;
+            state.pendingMomentum = {offset * 0x1p-42, -offset * 0x1p-43, offset * 0x1p-44};
+            state.anchorVolume = 0.25 + offset * 0x1p-36;
+            state.meshAcceleration = {0.125, -0.25, offset * 0x1p-39};
+            state.pendingGravityIntegral = {0.25, -0.125, offset * 0x1p-38};
+            state.pendingGravityWork = {-0.25, 0.125, offset * 0x1p-37};
+            state.sourceTime = 0.125;
+            state.endTime = 0.25;
+            state.beginTick = 4096 + index;
+            state.endTick = 8192 + index;
         }
     }
     Vector<float> originalMasses;
@@ -1287,9 +1346,16 @@ void sphCheckpointTest() {
                         actual.sourceTime == expected.sourceTime &&
                         actual.expansionCoefficient == expected.expansionCoefficient &&
                         actual.initialized == expected.initialized &&
-                        actual.predictor == expected.predictor &&
+                        actual.pendingMass == expected.pendingMass &&
+                        actual.pendingEnergy == expected.pendingEnergy &&
+                        actual.pendingMomentum == expected.pendingMomentum &&
+                        actual.anchorVolume == expected.anchorVolume &&
+                        actual.meshAcceleration == expected.meshAcceleration &&
+                        actual.pendingGravityIntegral == expected.pendingGravityIntegral &&
+                        actual.endTime == expected.endTime &&
+                        actual.beginTick == expected.beginTick &&
+                        actual.endTick == expected.endTick &&
                         actual.gradients == expected.gradients &&
-                        actual.lastKickTick == expected.lastKickTick &&
                         actual.predictorInitialized == expected.predictorInitialized &&
                         actual.supportRadius == expected.supportRadius);
                 }

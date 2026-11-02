@@ -322,7 +322,7 @@ void particleMeshTimestepTest() {
     options.gravity.pmmmNearWidth = 2;
     options.gravity.pmmmNearMethod = gravity::kBuildPmmmNearMethod;
     options.gravity.gm = 1.0;
-    options.compute.cuda = false;
+    options.gravity.cuda = false;
     options.hydro.enabled = false;
     options.chemistry.enabled = false;
     options.analysis.saveForce = false;

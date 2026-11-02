@@ -1015,6 +1015,83 @@ TEST(Hopkins, IndependentSodIntegrationIsAccuratePositiveAndConservative) {
     EXPECT_NEAR(fine.totalEnergy, 0.55 / 0.4, 3.0e-13);
 }
 
+TEST(Hopkins, ConservedPrimitiveConversionUsesTheAnchorVolume) {
+    hopkins::Conserved const anchor{2.0, {6.0, -2.0, 4.0}, 19.0};
+    auto const primitive = hopkins::primitiveFromConserved(anchor, 4.0, 1.4);
+    EXPECT_DOUBLE_EQ(primitive.density, 0.5);
+    EXPECT_EQ(primitive.velocity, (hopkins::Vector{3.0, -1.0, 2.0}));
+    EXPECT_NEAR(primitive.pressure, 0.5, 1.0e-15);
+    // Predicting an inactive anchor must not replace its old geometric volume
+    // with the volume obtained from the globally drifted positions.
+    auto const differentTime = hopkins::primitiveFromConserved(anchor, 2.0, 1.4);
+    EXPECT_DOUBLE_EQ(differentTime.density, 2.0 * primitive.density);
+    EXPECT_DOUBLE_EQ(differentTime.pressure, 2.0 * primitive.pressure);
+}
+
+TEST(Hopkins, OwnStepSourceClosureUsesEndpointMassesAndForces) {
+    hopkins::Conserved const anchor{2.0, {0.6, -0.4, 0.2}, 20.0};
+    hopkins::Conserved const transfer{0.3, {0.2, -0.1, 0.05}, 0.7};
+    hopkins::Vector const oldForce{0.5, -0.25, 0.1};
+    hopkins::Vector const newForce{0.8, -0.1, -0.2};
+    double const duration = 0.4;
+    auto const closed = hopkins::closeConservedInterval(
+        anchor, transfer, oldForce, newForce, duration, 0.0, 0.0, 0.0);
+    EXPECT_DOUBLE_EQ(closed.mass, anchor.mass + transfer.mass);
+    for (int dim = 0; dim < 3; ++dim) {
+        double const exact = anchor.momentum[dim] + transfer.momentum[dim] +
+            0.5 * duration * (anchor.mass * oldForce[dim] + closed.mass * newForce[dim]);
+        EXPECT_NEAR(closed.momentum[dim], exact, 2.0e-15);
+    }
+}
+
+TEST(Hopkins, PendingFineTransfersDoNotChangeTheCoarseAnchor) {
+    hopkins::Conserved coarse{2.0, {0.3, -0.2, 0.1}, 12.0};
+    hopkins::Conserved fine{1.0, {-0.1, 0.4, -0.2}, 7.0};
+    auto const totalMass = coarse.mass + fine.mass;
+    auto const totalEnergy = coarse.energy + fine.energy;
+    hopkins::Vector totalMomentum{};
+    for (int dim = 0; dim < 3; ++dim) {
+        totalMomentum[dim] = coarse.momentum[dim] + fine.momentum[dim];
+    }
+    // Two coarse intervals; a fine partner supplies two independently completed
+    // transfers per interval. Only the fine particle commits at the midpoint.
+    for (int interval = 0; interval < 2; ++interval) {
+        auto const anchorPrimitive = hopkins::primitiveFromConserved(coarse, 2.0, 1.4);
+        hopkins::Conserved pending;
+        for (int step = 0; step < 2; ++step) {
+            hopkins::Conserved const delta{0.01 * (step + 1), {0.02, -0.01, 0.03}, 0.04};
+            pending.mass += delta.mass;
+            pending.energy += delta.energy;
+            hopkins::Conserved opposite{-delta.mass, {}, -delta.energy};
+            for (int dim = 0; dim < 3; ++dim) {
+                pending.momentum[dim] += delta.momentum[dim];
+                opposite.momentum[dim] = -delta.momentum[dim];
+            }
+            fine = hopkins::closeConservedInterval(fine, opposite, {}, {}, 0.5, 0.0, 0.0, 0.0);
+            auto const stillAnchored = hopkins::primitiveFromConserved(coarse, 2.0, 1.4);
+            EXPECT_DOUBLE_EQ(stillAnchored.density, anchorPrimitive.density);
+            EXPECT_DOUBLE_EQ(stillAnchored.pressure, anchorPrimitive.pressure);
+            EXPECT_EQ(stillAnchored.velocity, anchorPrimitive.velocity);
+            EXPECT_NEAR(coarse.mass + pending.mass + fine.mass, totalMass, 1.0e-15);
+        }
+        coarse = hopkins::closeConservedInterval(coarse, pending, {}, {}, 1.0, 0.0, 0.0, 0.0);
+        EXPECT_NEAR(coarse.energy + fine.energy, totalEnergy, 8.0e-15);
+        for (int dim = 0; dim < 3; ++dim) {
+            EXPECT_NEAR(coarse.momentum[dim] + fine.momentum[dim], totalMomentum[dim], 1.0e-15);
+        }
+    }
+}
+
+TEST(Hopkins, OwnStepClosureRejectsInvalidPublishedTransfers) {
+    hopkins::Conserved const anchor{1.0, {}, 1.0};
+    EXPECT_THROW(
+        hopkins::closeConservedInterval(anchor, {-2.0, {}, 0.0}, {}, {}, 1.0, 0.0, 0.0, 0.0),
+        std::runtime_error);
+    EXPECT_THROW(
+        hopkins::closeConservedInterval(anchor, {0.0, {}, -2.0}, {}, {}, 1.0, 0.0, 0.0, 0.0),
+        std::runtime_error);
+}
+
 TEST(Hopkins, CachedFluxCompleteIntervalIsMidpointUpdate) {
     hopkins::Conserved const start{1.0, {2.0, -3.0, 4.0}, 5.0};
     hopkins::Conserved const midpoint{4.0, {6.0, -4.0, 9.0}, 12.0};

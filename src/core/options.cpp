@@ -99,6 +99,51 @@ bool isPositiveFloatOption(double value) {
     return isFiniteFloatOption(value) && value >= std::numeric_limits<float>::min();
 }
 
+void validateCudaBackends(Options const& opts) {
+    if (opts.sort.cuda) {
+        throw std::invalid_argument("sort.cuda=true is not implemented; use sort.cuda=false");
+    }
+    if (opts.analysis.tracersCuda || opts.analysis.sliceCuda || opts.analysis.viewsCuda) {
+        throw std::invalid_argument("analysis.tracers.cuda, analysis.slice.cuda and "
+                                    "analysis.views.cuda are not implemented; use false");
+    }
+    if (opts.hydro.cuda && opts.hydro.method != "sph") {
+        throw std::invalid_argument(
+            "hydro.cuda=true is unavailable for MFM/MFV; use hydro.cuda=false");
+    }
+#if !COSMICTIGER_WITH_GRAVITY
+    if (opts.gravity.cuda || opts.gravity.errorCuda || opts.analysis.powerCuda ||
+        opts.analysis.groupsCuda || opts.lightcone.cuda) {
+        throw std::invalid_argument(
+            "Gravity, force-error, power-spectrum, halo-group and lightcone "
+            "CUDA backends require a gravity-enabled build");
+    }
+#endif
+#if !COSMICTIGER_WITH_SPH
+    if (opts.hydro.cuda || opts.initial.cuda) {
+        throw std::invalid_argument(
+            "hydro.cuda and initial.cuda require COSMICTIGER_ENABLE_SPH=ON");
+    }
+#endif
+#if !COSMICTIGER_ENABLE_CHEMISTRY
+    if (opts.chemistry.cuda) {
+        throw std::invalid_argument("chemistry.cuda requires COSMICTIGER_ENABLE_CHEMISTRY=ON");
+    }
+#endif
+#if !COSMICTIGER_ENABLE_STAR_FORMATION
+    if (opts.starFormation.cuda) {
+        throw std::invalid_argument(
+            "starFormation.cuda requires COSMICTIGER_ENABLE_STAR_FORMATION=ON");
+    }
+#endif
+#ifndef USE_CUDA
+    if (usesCuda(opts)) {
+        throw std::invalid_argument(
+            "Selected CUDA backends require an executable built with CUDA support");
+    }
+#endif
+}
+
 void validateHydroMethod(Options const& opts) {
     if (opts.hydro.method != "sph" && opts.hydro.method != "mfm" && opts.hydro.method != "mfv") {
         throw std::invalid_argument("hydro.method must be sph, mfm, or mfv");
@@ -246,6 +291,7 @@ Options const& getOptions() {
 }
 
 void setOptions(Options const& opts) {
+    detail::validateCudaBackends(opts);
     detail::validateHydroMethod(opts);
     detail::validateCooling(opts);
     detail::validateStarFormation(opts);
@@ -307,16 +353,16 @@ void setOptions(Options const& opts) {
         detail::kernelSpec(opts.gravity.kernelFamily, opts.gravity.kernelDegree);
     auto const hydroSpec = detail::kernelSpec(opts.hydro.kernelFamily, opts.hydro.kernelDegree);
 #ifdef USE_CUDA
-    if (opts.compute.cuda) {
+    if (usesCuda(opts)) {
         int count = 0;
         auto const status = cudaGetDeviceCount(&count);
         if (status != cudaSuccess || count == 0) {
-            throw std::runtime_error("compute.cuda=true requires an available CUDA device");
+            throw std::runtime_error("Selected CUDA backends require an available CUDA device");
         }
         cudaSetDevice();
     }
 #endif
-    setKernelSelections(gravitySpec, hydroSpec, opts.compute.cuda);
+    setKernelSelections(gravitySpec, hydroSpec, usesCuda(opts));
     globalOpts = opts;
     setStackTraceOutputPath(outputPath("stack_trace.txt"));
     for (auto& future : futs) {
@@ -369,18 +415,31 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"run.numberOfSteps", options.run.numberOfSteps},
         {"run.minRung", options.run.minRung},
         {"run.treeOpeningAngle", options.run.treeOpeningAngle},
-        {"compute.cuda", options.compute.cuda},
+        {"drift.cuda", options.drift.cuda},
+        {"sort.cuda", options.sort.cuda},
+        {"initial.cuda", options.initial.cuda},
+        {"analysis.power.cuda", options.analysis.powerCuda},
+        {"analysis.groups.cuda", options.analysis.groupsCuda},
+        {"analysis.tracers.cuda", options.analysis.tracersCuda},
+        {"analysis.slice.cuda", options.analysis.sliceCuda},
+        {"analysis.views.cuda", options.analysis.viewsCuda},
+        {"lightcone.cuda", options.lightcone.cuda},
+        {"gravity.cuda", options.gravity.cuda},
+        {"gravity.error.cuda", options.gravity.errorCuda},
+        {"hydro.cuda", options.hydro.cuda},
+        {"chemistry.cuda", options.chemistry.cuda},
+        {"starFormation.cuda", options.starFormation.cuda},
         {"compute.positionType", options.compute.positionType},
         {"compute.bucketSize", options.compute.bucketSize},
         {"compute.sphBucketSize", options.compute.sphBucketSize},
-        {"compute.cudaKickResidency", options.compute.cudaKickResidency},
-        {"compute.cudaKickSinkTile", options.compute.cudaKickSinkTile},
-        {"compute.cudaKickParticleTile", options.compute.cudaKickParticleTile},
-        {"compute.cudaKickMultipoleTile", options.compute.cudaKickMultipoleTile},
-        {"compute.cudaKickSharedExpansion", options.compute.cudaKickSharedExpansion},
-        {"compute.cudaKickHandoffBlocks", options.compute.cudaKickHandoffBlocks},
-        {"compute.cudaKickFineHandoffBlocks", options.compute.cudaKickFineHandoffBlocks},
-        {"compute.cudaKickListReserve", options.compute.cudaKickListReserve},
+        {"gravity.cuda.kickResidency", options.gravity.cudaKickResidency},
+        {"gravity.cuda.kickSinkTile", options.gravity.cudaKickSinkTile},
+        {"gravity.cuda.kickParticleTile", options.gravity.cudaKickParticleTile},
+        {"gravity.cuda.kickMultipoleTile", options.gravity.cudaKickMultipoleTile},
+        {"gravity.cuda.kickSharedExpansion", options.gravity.cudaKickSharedExpansion},
+        {"gravity.cuda.kickHandoffBlocks", options.gravity.cudaKickHandoffBlocks},
+        {"gravity.cuda.kickFineHandoffBlocks", options.gravity.cudaKickFineHandoffBlocks},
+        {"gravity.cuda.kickListReserve", options.gravity.cudaKickListReserve},
         {"checkpoint.readIndex", options.checkpoint.readIndex},
         {"checkpoint.intervalSeconds", options.checkpoint.intervalSeconds},
         {"initial.gadget4Restart", options.initial.gadget4Restart},
@@ -550,48 +609,20 @@ bool processOptions(int argc, char* argv[]) {
         po::value<std::string>(&opts.compute.positionType)
             ->default_value(kPositionBits == 64 ? "fixed64" : "fixed32"),
         "position storage: fixed32 (Q0.32) or fixed64 (Q0.64); must match "
-        "COSMICTIGER_POSITION_TYPE at build time")
-#ifdef USE_CUDA
-        ("compute.cuda", po::value<bool>(&opts.compute.cuda)->default_value(true), "use CUDA")
-#else
-        ("compute.cuda", po::value<bool>(&opts.compute.cuda)->default_value(false),
-            "use CUDA (not enabled for this build)")
-#endif
-            ("compute.bucketSize",
-                po::value<int>(&opts.compute.bucketSize)
-                    ->default_value(std::min(128, int(MAX_BUCKET_SIZE))),
-                "gravity tree leaf bucket size")("compute.sphBucketSize",
-                po::value<int>(&opts.compute.sphBucketSize)->default_value(0),
-                "SPH tree leaf bucket size; 0 uses floor(8/pi * hydro.neighborNumber)")(
-                "compute.cudaKickResidency",
-                po::value<int>(&opts.compute.cudaKickResidency)->default_value(0),
-                "resident CUDA kick blocks per multiprocessor; 0 uses the register limit")(
-                "compute.cudaKickSinkTile",
-                po::value<int>(&opts.compute.cudaKickSinkTile)->default_value(0),
-                "CUDA kick shared sink-force tile; 0 automatic, -1 global force storage")(
-                "compute.cudaKickParticleTile",
-                po::value<int>(&opts.compute.cudaKickParticleTile)->default_value(0),
-                "CUDA kick staged particle sources per tile; 0 automatic")(
-                "compute.cudaKickMultipoleTile",
-                po::value<int>(&opts.compute.cudaKickMultipoleTile)->default_value(0),
-                "CUDA kick staged multipoles per tile; 0 automatic")(
-                "compute.cudaKickSharedExpansion",
-                po::value<bool>(&opts.compute.cudaKickSharedExpansion)->default_value(true),
-                "keep the active CUDA kick local expansion in shared memory")(
-                "compute.cudaKickHandoffBlocks",
-                po::value<int>(&opts.compute.cudaKickHandoffBlocks)->default_value(0),
-                "CUDA block count dividing the particles for the CPU/GPU handoff threshold; 0 "
-                "derives it from the particle count (two blocks per multiprocessor at 32768 "
-                "particles, growing as the cube root to six at 884736 and above)")(
-                "compute.cudaKickFineHandoffBlocks",
-                po::value<int>(&opts.compute.cudaKickFineHandoffBlocks)->default_value(0),
-                "CUDA block count dividing the particles for the handoff of a node that carries "
-                "no Ewald checks (nodes that still carry them keep the threshold of "
-                "compute.cudaKickHandoffBlocks); 0, or a count below that divisor, applies that "
-                "divisor to every node")("compute.cudaKickListReserve",
-                po::value<int>(&opts.compute.cudaKickListReserve)->default_value(4096),
-                "entries per CUDA kick interaction list in the per-launch slab handed to each "
-                "block (pool growth only on overflow); 0 grows every list from the pool");
+        "COSMICTIGER_POSITION_TYPE at build time")("compute.bucketSize",
+        po::value<int>(&opts.compute.bucketSize)
+            ->default_value(std::min(128, int(MAX_BUCKET_SIZE))),
+        "gravity tree leaf bucket size")("compute.sphBucketSize",
+        po::value<int>(&opts.compute.sphBucketSize)->default_value(0),
+        "SPH tree leaf bucket size; 0 uses floor(8/pi * hydro.neighborNumber)");
+
+    po::options_description driftOpts("Particle drift");
+    driftOpts.add_options()("drift.cuda", po::value<bool>(&opts.drift.cuda)->default_value(false),
+        "use CUDA for particle drift");
+
+    po::options_description sortOpts("Particle sorting");
+    sortOpts.add_options()("sort.cuda", po::value<bool>(&opts.sort.cuda)->default_value(false),
+        "use CUDA for particle sorting (not implemented; must be false)");
 
     po::options_description checkpointOpts("Checkpoints");
     checkpointOpts.add_options()("checkpoint.readIndex",
@@ -601,6 +632,9 @@ bool processOptions(int argc, char* argv[]) {
         "elapsed wall time between checkpoints, in seconds");
 
     po::options_description initialOpts("Initial conditions");
+    initialOpts.add_options()("initial.cuda",
+        po::value<bool>(&opts.initial.cuda)->default_value(false),
+        "use CUDA for spherical initial-condition preparation");
     initialOpts.add_options()("initial.gadget4Restart",
         po::value<std::string>(&opts.initial.gadget4Restart)->default_value(""),
         "Gadget4 input file for power-spectrum analysis")("initial.useGlass",
@@ -640,6 +674,21 @@ bool processOptions(int argc, char* argv[]) {
         "maximum z coordinate of the Silo box, in [0, 1]");
 
     po::options_description analysisOpts("Analysis");
+    analysisOpts.add_options()("analysis.views.cuda",
+        po::value<bool>(&opts.analysis.viewsCuda)->default_value(false),
+        "CUDA view output is not implemented; must be false");
+    analysisOpts.add_options()("analysis.slice.cuda",
+        po::value<bool>(&opts.analysis.sliceCuda)->default_value(false),
+        "CUDA slice output is not implemented; must be false");
+    analysisOpts.add_options()("analysis.tracers.cuda",
+        po::value<bool>(&opts.analysis.tracersCuda)->default_value(false),
+        "CUDA tracer output is not implemented; must be false");
+    analysisOpts.add_options()("analysis.groups.cuda",
+        po::value<bool>(&opts.analysis.groupsCuda)->default_value(false),
+        "use CUDA for halo-group analysis");
+    analysisOpts.add_options()("analysis.power.cuda",
+        po::value<bool>(&opts.analysis.powerCuda)->default_value(false),
+        "use CUDA for power-spectrum particle assignment");
     analysisOpts.add_options()("analysis.power",
         po::value<bool>(&opts.analysis.power)->default_value(false),
         "compute the mass power spectrum")("analysis.groups",
@@ -664,6 +713,9 @@ bool processOptions(int argc, char* argv[]) {
         "retain per-particle potential diagnostics");
 
     po::options_description lightconeOpts("Lightcone analysis");
+    lightconeOpts.add_options()("lightcone.cuda",
+        po::value<bool>(&opts.lightcone.cuda)->default_value(false),
+        "use CUDA for lightcone group analysis");
     lightconeOpts.add_options()("lightcone.enabled",
         po::value<bool>(&opts.lightcone.enabled)->default_value(false),
         "enable lightcone analysis")("lightcone.directory",
@@ -675,6 +727,40 @@ bool processOptions(int argc, char* argv[]) {
         "lightcone HEALPix Nside; -1 chooses automatically");
 
     po::options_description gravityOpts("Gravity");
+    gravityOpts.add_options()("gravity.cuda.kickResidency",
+        po::value<int>(&opts.gravity.cudaKickResidency)->default_value(0),
+        "resident CUDA kick blocks per multiprocessor; 0 uses the register limit")(
+        "gravity.cuda.kickSinkTile",
+        po::value<int>(&opts.gravity.cudaKickSinkTile)->default_value(0),
+        "CUDA kick shared sink-force tile; 0 automatic, -1 global force storage")(
+        "gravity.cuda.kickParticleTile",
+        po::value<int>(&opts.gravity.cudaKickParticleTile)->default_value(0),
+        "CUDA kick staged particle sources per tile; 0 automatic")("gravity.cuda.kickMultipoleTile",
+        po::value<int>(&opts.gravity.cudaKickMultipoleTile)->default_value(0),
+        "CUDA kick staged multipoles per tile; 0 automatic")("gravity.cuda.kickSharedExpansion",
+        po::value<bool>(&opts.gravity.cudaKickSharedExpansion)->default_value(true),
+        "keep the active CUDA kick local expansion in shared memory")(
+        "gravity.cuda.kickHandoffBlocks",
+        po::value<int>(&opts.gravity.cudaKickHandoffBlocks)->default_value(0),
+        "CUDA block count dividing the particles for the CPU/GPU handoff threshold; 0 "
+        "derives it from the particle count (two blocks per multiprocessor at 32768 "
+        "particles, growing as the cube root to six at 884736 and above)")(
+        "gravity.cuda.kickFineHandoffBlocks",
+        po::value<int>(&opts.gravity.cudaKickFineHandoffBlocks)->default_value(0),
+        "CUDA block count dividing the particles for the handoff of a node that carries "
+        "no Ewald checks (nodes that still carry them keep the threshold of "
+        "gravity.cuda.kickHandoffBlocks); 0, or a count below that divisor, applies that "
+        "divisor to every node")("gravity.cuda.kickListReserve",
+        po::value<int>(&opts.gravity.cudaKickListReserve)->default_value(4096),
+        "entries per CUDA kick interaction list in the per-launch slab handed to each "
+        "block (pool growth only on overflow); 0 grows every list from the pool");
+
+    gravityOpts.add_options()("gravity.error.cuda",
+        po::value<bool>(&opts.gravity.errorCuda)->default_value(false),
+        "use CUDA for sampled direct-force error checks");
+    gravityOpts.add_options()("gravity.cuda",
+        po::value<bool>(&opts.gravity.cuda)->default_value(false),
+        "use CUDA for gravitational forces");
     gravityOpts.add_options()("gravity.method.far",
         po::value<std::string>(&opts.gravity.method)->default_value(""),
         "far-field gravity: fmm or pmmm; required when both are compiled")("gravity.method.near",
@@ -754,6 +840,8 @@ bool processOptions(int argc, char* argv[]) {
         "comoving box side length in Mpc/h; mutually exclusive with units.massSolar");
 
     po::options_description hydroOpts("Monaghan (1992) SPH");
+    hydroOpts.add_options()("hydro.cuda", po::value<bool>(&opts.hydro.cuda)->default_value(false),
+        "use CUDA for SPH; MFM and MFV currently require false");
     hydroOpts.add_options()("hydro.enabled",
         po::value<bool>(&opts.hydro.enabled)->default_value(false), "enable gas hydrodynamics")(
         "hydro.method", po::value<std::string>(&opts.hydro.method)->default_value("sph"),
@@ -820,6 +908,9 @@ bool processOptions(int argc, char* argv[]) {
         "Courant time-step factor using effective radius (2 sigma)");
 
     po::options_description chemistryOpts("GADGET-4 equilibrium cooling");
+    chemistryOpts.add_options()("chemistry.cuda",
+        po::value<bool>(&opts.chemistry.cuda)->default_value(false),
+        "use CUDA for equilibrium cooling");
     chemistryOpts.add_options()("chemistry.enabled",
         po::value<bool>(&opts.chemistry.enabled)->default_value(false),
         "equilibrium atomic H/He cooling with fixed X=0.76; requires hydro.enabled and gamma=5/3")(
@@ -831,6 +922,9 @@ bool processOptions(int argc, char* argv[]) {
         "GADGET-4 MinEgySpec in physical erg/g; zero adds no thermal-energy floor");
 
     po::options_description starFormationOpts("GADGET-4 star formation");
+    starFormationOpts.add_options()("starFormation.cuda",
+        po::value<bool>(&opts.starFormation.cuda)->default_value(false),
+        "use CUDA for star formation");
     starFormationOpts.add_options()("starFormation.enabled",
         po::value<bool>(&opts.starFormation.enabled)->default_value(false),
         "GADGET-4 multiphase relaxation and whole-particle star conversion; requires SPH and "
@@ -861,6 +955,8 @@ bool processOptions(int argc, char* argv[]) {
     po::options_description commandOpts("CosmicTiger options");
     commandOpts.add(runOpts)
         .add(computeOpts)
+        .add(driftOpts)
+        .add(sortOpts)
         .add(checkpointOpts)
         .add(initialOpts)
         .add(outputOpts)
@@ -907,6 +1003,8 @@ bool processOptions(int argc, char* argv[]) {
         po::options_description visibleOpts("CosmicTiger options");
         visibleOpts.add(runOpts)
             .add(computeOpts)
+            .add(driftOpts)
+            .add(sortOpts)
             .add(checkpointOpts)
             .add(initialOpts)
             .add(outputOpts)
@@ -1281,12 +1379,12 @@ bool processOptions(int argc, char* argv[]) {
                     "(COSMICTIGER_WITH_MAX_BUCKET)\n",
             int(MAX_BUCKET_SIZE));
     }
-    if (opts.compute.cudaKickResidency < 0 || opts.compute.cudaKickSinkTile < -1 ||
-        opts.compute.cudaKickParticleTile < 0 || opts.compute.cudaKickMultipoleTile < 0 ||
-        opts.compute.cudaKickHandoffBlocks < 0 || opts.compute.cudaKickFineHandoffBlocks < 0 ||
-        opts.compute.cudaKickListReserve < 0) {
-        THROW_ERROR("compute.cudaKick* tile and residency options must be nonnegative "
-                    "(cudaKickSinkTile may be -1 for global force storage)\n");
+    if (opts.gravity.cudaKickResidency < 0 || opts.gravity.cudaKickSinkTile < -1 ||
+        opts.gravity.cudaKickParticleTile < 0 || opts.gravity.cudaKickMultipoleTile < 0 ||
+        opts.gravity.cudaKickHandoffBlocks < 0 || opts.gravity.cudaKickFineHandoffBlocks < 0 ||
+        opts.gravity.cudaKickListReserve < 0) {
+        THROW_ERROR("gravity.cuda.kick* tile and residency options must be nonnegative "
+                    "(gravity.cuda.kickSinkTile may be -1 for global force storage)\n");
     }
     if (!detail::isFiniteOption(opts.hydro.yAcceleration) ||
         !detail::isFiniteOption(opts.hydro.centralAcceleration) ||
@@ -1443,6 +1541,7 @@ bool processOptions(int argc, char* argv[]) {
                     "requires gravity without SPH\n");
     }
     opts.run.hierarchicalGravity = usesHierarchicalIntegration(opts.run);
+    detail::validateCudaBackends(opts);
     detail::validateHydroMethod(opts);
     detail::validateCooling(opts);
     detail::validateStarFormation(opts);
@@ -1754,17 +1853,30 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("units.lengthCm", units.lengthCm);
     SHOW("units.massG", units.massG);
     SHOW("units.timeSeconds", units.timeSeconds);
-    SHOW("compute.cuda", compute.cuda);
+    SHOW("drift.cuda", drift.cuda);
+    SHOW("sort.cuda", sort.cuda);
+    SHOW("initial.cuda", initial.cuda);
+    SHOW("analysis.power.cuda", analysis.powerCuda);
+    SHOW("analysis.groups.cuda", analysis.groupsCuda);
+    SHOW("analysis.tracers.cuda", analysis.tracersCuda);
+    SHOW("analysis.slice.cuda", analysis.sliceCuda);
+    SHOW("analysis.views.cuda", analysis.viewsCuda);
+    SHOW("lightcone.cuda", lightcone.cuda);
+    SHOW("gravity.cuda", gravity.cuda);
+    SHOW("gravity.error.cuda", gravity.errorCuda);
+    SHOW("hydro.cuda", hydro.cuda);
+    SHOW("chemistry.cuda", chemistry.cuda);
+    SHOW("starFormation.cuda", starFormation.cuda);
     SHOW("compute.positionType", compute.positionType);
     show("gravity.expansionDegree", opts.gravity.fmmOrder > 0 ? opts.gravity.fmmOrder - 1 : 0);
-    SHOW("compute.cudaKickResidency", compute.cudaKickResidency);
-    SHOW("compute.cudaKickSinkTile", compute.cudaKickSinkTile);
-    SHOW("compute.cudaKickParticleTile", compute.cudaKickParticleTile);
-    SHOW("compute.cudaKickMultipoleTile", compute.cudaKickMultipoleTile);
-    SHOW("compute.cudaKickSharedExpansion", compute.cudaKickSharedExpansion);
-    SHOW("compute.cudaKickHandoffBlocks", compute.cudaKickHandoffBlocks);
-    SHOW("compute.cudaKickFineHandoffBlocks", compute.cudaKickFineHandoffBlocks);
-    SHOW("compute.cudaKickListReserve", compute.cudaKickListReserve);
+    SHOW("gravity.cuda.kickResidency", gravity.cudaKickResidency);
+    SHOW("gravity.cuda.kickSinkTile", gravity.cudaKickSinkTile);
+    SHOW("gravity.cuda.kickParticleTile", gravity.cudaKickParticleTile);
+    SHOW("gravity.cuda.kickMultipoleTile", gravity.cudaKickMultipoleTile);
+    SHOW("gravity.cuda.kickSharedExpansion", gravity.cudaKickSharedExpansion);
+    SHOW("gravity.cuda.kickHandoffBlocks", gravity.cudaKickHandoffBlocks);
+    SHOW("gravity.cuda.kickFineHandoffBlocks", gravity.cudaKickFineHandoffBlocks);
+    SHOW("gravity.cuda.kickListReserve", gravity.cudaKickListReserve);
     SHOW("lightcone.enabled", lightcone.enabled);
     SHOW("lightcone.directory", lightcone.directory);
     SHOW("analysis.groups", analysis.groups);
@@ -1858,11 +1970,6 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("run.minRung", run.minRung);
     SHOW("compute.bucketSize", compute.bucketSize);
     SHOW("compute.sphBucketSize", compute.sphBucketSize);
-#ifndef USE_CUDA
-    if (opts.compute.cuda) {
-        THROW_ERROR("This executable was compiled without CUDA support\n");
-    }
-#endif
     setOptions(opts);
     if (opts.run.test.empty()) {
         outputPath(".");

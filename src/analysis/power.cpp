@@ -313,7 +313,7 @@ static void computeDensityFolded(int m) {
                 intbox.end[kZDimension] = std::min(l + nper, ndim) + kCloudMax;
                 Vector<float> rho;
 #ifdef USE_CUDA
-                if (cudaEnabled()) {
+                if (getOptions().analysis.powerCuda) {
                     rho = accumulateDensityCuda(m, ndim, intbox);
                 } else
 #endif

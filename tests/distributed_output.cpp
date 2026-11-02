@@ -387,7 +387,7 @@ void distributedOutputParticleFixture(int activeRanks, bool verify, bool segrega
 void distributedOutputTest() {
     auto const originalOptions = getOptions();
     auto options = originalOptions;
-    options.compute.cuda = false;
+    options.analysis.groupsCuda = false;
     options.hydro.enabled = true;
     options.chemistry.enabled = false;
     options.output.silo = true;

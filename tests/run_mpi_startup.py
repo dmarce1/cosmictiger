@@ -40,7 +40,7 @@ def run_case(args, name, *, level=None, ranks=1, target_rank=None, explicit_posi
         environment["COSMICTIGER_TEST_MPI_THREAD_LEVEL"] = level
     if target_rank is not None:
         environment["COSMICTIGER_TEST_MPI_THREAD_RANK"] = str(target_rank)
-    command = [str(args.executable.resolve()), "--help", "--compute.cuda=false",
+    command = [str(args.executable.resolve()), "--help", "--gravity.cuda=false",
                f"--hpx:threads={threads}", "--hpx:bind=none"]
     if explicit_position:
         command.append(f"--compute.positionType={args.position_type}")

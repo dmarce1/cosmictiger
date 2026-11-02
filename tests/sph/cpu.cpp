@@ -25,6 +25,7 @@
 #include <cosmictiger/hydro/sph/sph_cpu.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <tests/sph/global_timestep_cases.hpp>
+#include <tests/sph/source_completion_cases.hpp>
 
 namespace detail {
 FlopCounts submittedSphFlops;
@@ -2700,6 +2701,10 @@ TEST_F(SphCpuTest, VariationalCosmologicalExpansion) {
 
 TEST_F(SphCpuTest, GlobalRawTimestep) {
     detail::testGlobalRawTimestep<detail::Fixture>();
+}
+
+TEST_F(SphCpuTest, DeferredSourceCompletion) {
+    detail::testDeferredSourceCompletion<detail::Fixture>();
 }
 
 TEST_F(SphCpuTest, ColdShockTimestep) {

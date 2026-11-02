@@ -147,6 +147,9 @@ struct SphRunParameters {
     float zPlaneAcceleration;      // Magnitude of the force toward z = 0.5.
     float maximumTimestep = 1e30f;
     bool globalTimestep = false;
+    // Phase zero may publish pair rates before the fresh gravity field arrives.
+    // Source acceleration is then assembled before the closing corrector.
+    bool deferAccelerationSources = false;
     bool refreshConvergedDensity = false;    // Recompute diagnostics with fixed, converged supports.
     float viscosityAlpha;
     float viscosityBeta;
@@ -216,6 +219,7 @@ struct SphRunParameters {
         arc & expansionRate;
         arc & maximumTimestep;
         arc & globalTimestep;
+        arc & deferAccelerationSources;
         arc & refreshConvergedDensity;
         arc & uniformAccelerationY;
         arc & baseTimestep;
@@ -239,6 +243,7 @@ inline constexpr int kSphRunHydro = 2;
 inline constexpr int kSphRunRungs = 3;
 
 SphRunReturn sphRun(SphRunParameters params, bool cuda = false);
+void sphParticlesCompleteForces(SphRunParameters const& parameters);
 #ifndef __CUDACC__
 hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     SphTreeNeighborParameters params, TreeId self, Vector<TreeId> checklist, int level = 0);

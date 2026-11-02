@@ -660,7 +660,7 @@ size_t lcFindGroups() {
     prepareLightconeGroupIteration(leafNodes, treeMap, myPixRange);
 
 #ifdef USE_CUDA
-    if (cudaEnabled()) {
+    if (getOptions().lightcone.cuda) {
         rc = cudaLightcone(leafNodes, particleMapPtr, treeMapPtr, &groupIdCounter, linkingLength,
             hpxRank(), hpxSize());
     } else {

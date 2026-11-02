@@ -157,7 +157,7 @@ void requireCompletedSource(ChemistrySnapshot const& before, ChemistrySnapshot c
 void sphChemistryTimestepsTest() {
     using namespace detail;
     auto const& options = getOptions();
-    requireChemistry(options.hydro.enabled && options.chemistry.enabled && !options.compute.cuda,
+    requireChemistry(options.hydro.enabled && options.chemistry.enabled && !options.chemistry.cuda,
         "fixture requires CPU SPH cooling");
     double const baseTimestep = chemistryTestTimestep();
     onChemistryLocalities<InitializeChemistryFixtureAction>(false);

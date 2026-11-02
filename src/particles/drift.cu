@@ -78,26 +78,26 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                     }
                 }
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
-                vx = (meshState != nullptr ? meshState->meshVelocity[kXDimension] :
+                vx = (meshState != nullptr ? meshState->driftVelocity(kXDimension, 0.5 * (tau0 + tau1)) :
                                              double(vel[kXDimension])) *
                     ainv;
-                vy = (meshState != nullptr ? meshState->meshVelocity[kYDimension] :
+                vy = (meshState != nullptr ? meshState->driftVelocity(kYDimension, 0.5 * (tau0 + tau1)) :
                                              double(vel[kYDimension])) *
                     ainv;
-                vz = (meshState != nullptr ? meshState->meshVelocity[kZDimension] :
+                vz = (meshState != nullptr ? meshState->driftVelocity(kZDimension, 0.5 * (tau0 + tau1)) :
                                              double(vel[kZDimension])) *
                     ainv;
 #endif
                 x0 = x[i].toDouble();
                 y0 = y[i].toDouble();
                 z0 = z[i].toDouble();
-                displacementX = (meshState != nullptr ? meshState->meshVelocity[kXDimension] :
+                displacementX = (meshState != nullptr ? meshState->driftVelocity(kXDimension, 0.5 * (tau0 + tau1)) :
                                                         double(vel[kXDimension])) *
                     c1;
-                displacementY = (meshState != nullptr ? meshState->meshVelocity[kYDimension] :
+                displacementY = (meshState != nullptr ? meshState->driftVelocity(kYDimension, 0.5 * (tau0 + tau1)) :
                                                         double(vel[kYDimension])) *
                     c1;
-                displacementZ = (meshState != nullptr ? meshState->meshVelocity[kZDimension] :
+                displacementZ = (meshState != nullptr ? meshState->driftVelocity(kZDimension, 0.5 * (tau0 + tau1)) :
                                                         double(vel[kZDimension])) *
                     c1;
                 x1 = x0 + displacementX;
@@ -162,7 +162,7 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                                     entry.type =
                                         types != nullptr ? types[i] : char(kDarkMatterType);
                                     if (meshState != nullptr) {
-                                        entry.mass = float(meshState->mass);
+                                        entry.mass = float(meshState->accountedMass());
                                     }
                                     test = true;
                                 }

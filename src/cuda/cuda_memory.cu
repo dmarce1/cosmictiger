@@ -19,6 +19,10 @@ namespace detail {
 
 using CudaMemoryAtomic = cuda::atomic_ref<CudaMemoryInteger, cuda::thread_scope_system>;
 
+// Reading a __managed__ symbol can fault before CUDA initializes its storage.
+// Host allocation provenance must remain available without touching the runtime.
+CudaMemory* hostMemory = nullptr;
+
 void checkCudaMemoryAllocation(cudaError_t status, char const* operation) {
     if (status != cudaSuccess) {
         throw std::runtime_error(std::string(operation) + ": " + cudaGetErrorString(status));
@@ -185,13 +189,15 @@ CUDA_EXPORT void* cudaAllocate(size_t sz) {
     }
 #endif
 #ifdef __CUDA_ARCH__
-    ALWAYS_ASSERT(memory != nullptr);
+    CudaMemory* const pool = memory;
+    ALWAYS_ASSERT(pool != nullptr);
 #else
-    if (memory == nullptr) {
+    CudaMemory* const pool = detail::hostMemory;
+    if (pool == nullptr) {
         throw std::logic_error("CUDA memory pool must be initialized before allocation");
     }
 #endif
-    void* const pointer = memory->allocate(sz);
+    void* const pointer = pool->allocate(sz);
     if (pointer == nullptr) {
 #ifdef __CUDA_ARCH__
         PRINT("CUDA pool allocation failed for %llu bytes\n", (unsigned long long) sz);
@@ -208,14 +214,16 @@ CUDA_EXPORT void cudaRelease(void* ptr) {
         return;
     }
 #ifndef __CUDA_ARCH__
-    if (memory == nullptr || !memory->owns(ptr)) {
+    CudaMemory* const pool = detail::hostMemory;
+    if (pool == nullptr || !pool->owns(ptr)) {
         freeManagedMemory(ptr);
         return;
     }
 #else
-    ALWAYS_ASSERT(memory != nullptr && memory->owns(ptr));
+    CudaMemory* const pool = memory;
+    ALWAYS_ASSERT(pool != nullptr && pool->owns(ptr));
 #endif
-    memory->free(ptr);
+    pool->free(ptr);
 }
 
 void cudaMemoryInitialize(size_t heapSize) {
@@ -229,6 +237,7 @@ void cudaMemoryInitialize(size_t heapSize) {
         throw;
     }
     memory = allocation;
+    detail::hostMemory = allocation;
 }
 
 // Collective block copy. A plain strided copy needs no static shared barrier:

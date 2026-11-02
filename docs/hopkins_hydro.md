@@ -145,12 +145,12 @@ exception; SIMD diagnostics identify the failing lane. There are no wave-speed
 retries, HLLE fallback, or exact-contact fallback.
 Ill-conditioned gradient matrices cause the actual neighbor search
 to expand, up to the configured support bound, rather than introducing an SPH
-pressure-force fallback. If a second-order update produces nonpositive mass or
-thermal energy, the current elapsed interval is retried at first order, refreshing
-all its pair fluxes. This update recovery does not catch a failed Riemann solve.
-A still-invalid
-update stops with a diagnostic requesting a lower `hydro.cfl`; there is no
-nonconservative mass or energy floor applied to accept that update.
+pressure-force fallback. An invalid face-area predictor uses a conservative
+first-order face flux.
+A nonpositive mass or thermal energy at an own-step closure stops with a diagnostic
+requesting a lower `hydro.cfl`. Already published transfers cannot be retried on
+only one endpoint: there is no one-sided first-order retry or nonconservative
+mass/energy floor.
 Thermal energy is recovered by subtracting kinetic energy from the conserved
 total energy. Hopkins's Appendix D dual-energy/entropy switch is not implemented,
 so extremely high-Mach, cold flows can lose thermal accuracy through cancellation
@@ -177,8 +177,9 @@ scatters updated states to the particle owners. MPI domain ownership and
 migration are supported, but the meshless calculation is not distributed across
 the locality CPUs: its global gas state and neighbor lists must fit in the
 coordinator's memory. Communication and coordinator memory limit scalability.
-`compute.cuda` still selects existing CUDA-capable components such as gravity
-and particle drift; it does not move the meshless flux calculation to the GPU.
+`gravity.cuda` and `drift.cuda` independently select their CUDA-capable
+components. Set `hydro.cuda=false` for this CPU meshless backend; selecting CUDA
+for gravity or drift does not move the meshless flux calculation to the GPU.
 
 The SIMD backend is `NativeSimdVector<double>` from
 `cosmictiger/math/simd_backend.hpp`, exposed to Hopkins as `hopkins::SimdReal`.
@@ -205,50 +206,58 @@ the SPH support, density/viscosity, pressure/thermal-force, or predictor/correct
 operators.
 
 With `run.timeIntegrator=traditional`, gas particles select individual
-power-of-two timestep rungs from their local
-signal-speed, acceleration, and expansion limits. Active particles may coarsen
-by one rung at an allowed clock boundary; a newly restrictive limit wakes an
-inactive particle. Neighbor propagation prevents interacting timesteps from
-differing by more than a factor of four. `run.minRung` remains a lower bound on
-every rung and can force a uniformly fine reference calculation.
+power-of-two timestep rungs from their local signal-speed, acceleration, and
+expansion limits. A particle commits its conserved state and reconstructs its
+primitive state and gradients only at its own endpoint or an explicit wake-up.
+The persisted state consists of the conserved anchor `U0`, pending integrated
+transfers `deltaU`, the anchor volume, gradients, source and trajectory anchors,
+and explicit physical and integer beginning/end clocks. Primitive anchors are
+recovered from `U0` and its own volume, never from `U0 + deltaU` while inactive.
 
-A pair's flux interval uses the shorter endpoint timestep. The solver stores
-its beginning and midpoint fluxes and integrates the resulting linear function
-over each actual elapsed global interval. Each increment is added to one
-endpoint and subtracted from the other, including when one or both endpoints
-are inactive. Future exchanges are not booked in advance. A pair is solved again
-when an endpoint is active, its interval expires, or it enters the neighbor
-graph; other pairs reuse the cached flux. Stable particle identifiers retain
-pair ownership through sorting and MPI migration. Active particles recover
-their primitive state from the conservative state and reconstruct gradients
-using neighbors predicted to the same time. Inactive particles retain their
-primitive and gradient anchors and predict forward from the inferred anchor
-time, following Appendix G's active/inactive distinction. The coordinator still
-gathers gas state and reconstructs geometry at each global event; individual
-rungs save gradient reconstructions and pair Riemann solves, while retaining
-that global preparation work.
+Each pair opens a MUSCL–Hancock interval ending at the earlier of its endpoints'
+scheduled boundaries. The beginning and predicted midpoint fluxes are retained.
+At the pair endpoint, one integrated transfer is deposited with opposite signs
+into both particles' pending ledgers, including an inactive coarse endpoint.
+Coarse–coarse records remain untouched at intermediate fine events. They are
+not discarded merely because the pair leaves the current neighbor graph.
+Stable particle identifiers retain pair ownership through sorting and migration.
 
-The existing gas rung sets each cell's refresh interval. A 16-bit `lastKickTick`
-stores the low bits of the global finest-clock tick at its last active
-primitive/gradient reconstruction (32768 ticks per base interval). Anchor age
-is computed lazily by modular subtraction from the global clock, bounded by
-the gas-rung interval. The phase is written only when that cell is active; an
-inactive cell has no age counter to increment. Conservative quantities advance
-at every global fine step,
-including for inactive cells, so they share the global physical time and do not
-need a separate per-cell conservative clock.
+Inactive primitives, face velocities, geometry rates, and timestep signals use
+one prediction from their retained own-step anchor. Positions drift to each
+global event using the separately anchored mesh velocity and acceleration; a
+fine drift neither commits `U0 + deltaU` nor rebuilds the coarse trajectory.
+The coordinator still gathers gas and reconstructs support/geometry at every
+global event. Individual rungs save primitive reconstructions, pair Riemann
+solves, and conservative/source commits, not that global preparation work.
 
-With `run.timeIntegrator=global`, every gas particle is active at every force
-event and has rung zero. The coordinator reduces the raw signal-speed,
-acceleration, and expansion timestep limits over all gathered gas and applies
-the driver's gravity and endpoint bounds. The resulting duration is not rounded
-to a power of two. Each pair is reconstructed for that duration, evaluated at
-its midpoint, and updated conservatively over the complete interval. There are
-no inactive predictor ages or unfinished pair intervals to retain; the global
-pair cache is empty at checkpoints. Source correction uses the previous raw
-duration from the driver, independently of the newly chosen next duration.
-The driver preserves that duration for an exact restart. Both integration modes
-support a terminal source correction without opening another hydro interval.
+A newly restrictive limit or a nonphysical primitive prediction wakes an inactive
+particle. Neighbor propagation bounds interacting timestep ratios by four.
+Before a wake commits, each incident live pair is integrated exactly once over
+its elapsed portion, using the retained linear flux representation; both signed
+transfers are deposited and the unused future tail is retired. New intervals
+open from the wake boundary. All gas accelerations are refreshed by the gravity
+pass so newly woken gas has a fresh source endpoint; source commits still occur
+only at each gas particle's own event. This correctness choice costs more gravity
+force evaluations than selecting only the current active gas sinks.
+
+With `run.timeIntegrator=global`, all gas shares the raw global duration selected
+from its signal-speed, acceleration, expansion, gravity, and endpoint bounds.
+It is not rounded to a power of two. The same pair-open, pair-settle, and own-step
+closure sequence uses physical times; open pair intervals persist across a
+checkpoint until the next event. Both modes support a terminal closure that
+settles every elapsed pair, commits all gas, and opens no new interval.
+
+The validation results recorded later in this document predate this own-step
+scheduler unless explicitly identified otherwise; they do not validate the new
+wake, source, or overlap ordering.
+
+Conserved accounting includes `U0 + deltaU`. Between coarse endpoints this is an
+asynchronous ledger, not a claim that every cell's physical source terms are
+synchronized to the fine clock. Before any gravity source construction, MFV mass
+is projected to that force time from the anchor, completed pending transfers,
+and the elapsed prefixes of all live pair records. This read-only projection
+updates only the public mass mirror and never commits a hydro anchor. Terminal
+diagnostics first close every remaining interval.
 
 Mass, momentum, total energy, source histories, primitive/gradient anchors,
 pair fluxes, and support radii persist in double precision. Coordinates reside
@@ -261,7 +270,8 @@ Ordinary gas fields and the tree's support-radius mirror remain float
 projections. The support solve retains its double radius through neighbor-search
 refreshes and targets a relative kernel-count residual of `1e-13`. These changes
 do not alter SPH's storage or numerical algorithms. Meshless checkpoint sidecars
-use schema 4 and reject the historical schema 3 double-coordinate layout.
+use particle schema 5 and pair schema 2. Earlier asynchronous state layouts are
+rejected rather than reinterpreted under the new event semantics.
 The current CPU and CUDA drift interfaces retain double timestep and scale
 arguments. CPU and CUDA coupled regression checks are described below. Ordinary particle output
 fields remain limited by their float storage; conserved diagnostic reductions
@@ -277,22 +287,37 @@ here. The existing SPH CFL convention remains unchanged.
 The dedicated one-dimensional `soundWave` scenario instead uses the paper's
 `2 * supportRadius` Courant length with `hydro.cfl=0.2`.
 
-The force stage calls `hopkinsKick` to advance conservative hydrodynamics and
-source terms over the elapsed interval and store a time-centered mesh velocity.
-The ordinary CPU/CUDA drift stage only moves positions using that velocity;
-it performs no Riemann solve or hydrodynamic state update. The physical fluid
-velocity remains separate from the mesh velocity. The terminal diagnostic force
-stage corrects pending source evolution and reports synchronized energies
-without starting another flux interval or drifting particles.
+The force stage calls `hopkinsKick` after fresh gravity is available. It settles
+completed or interrupted pair intervals, closes each due particle's source and
+conservative interval, and opens new intervals after active reconstruction.
+Source-independent support/geometry preparation has a separate entry point so
+it can overlap gravity evaluation after both tree-sorting phases have completed.
+FMM gravity runs in an HPX future while the coordinator prepares hydro geometry;
+the future is joined before importing fresh gas accelerations, closing source
+terms, choosing timesteps, or reconstructing the next interval's fluxes. The
+particle's stored `sourceAcceleration` remains its old force sample while the
+gravity solver writes the new sample to the gas acceleration arrays. Neither
+sample depends on enabling the optional analysis acceleration output, and no
+stored potential is needed by this source integration.
 
-Gravity and external forces use source half steps around the conservative
-exchange. Between fresh force evaluations, source evolution uses the particle's
-stored acceleration; its next active force evaluation corrects that prediction
-using the new acceleration and the elapsed source interval. Checkpointed physical
-and conservative states are at the global step end. The source anchor, pending
-work history, primitive/gradient prediction anchors, stable identifiers, and
-unexpired pair intervals are saved so that a restart can occur between
-coarse-particle updates.
+For MFV, the gravity source mass is projected from the conserved anchor, pending
+mass, and elapsed portions of live pair intervals before gravity builds its tree.
+This projection does not commit a particle or alter its reconstruction anchor.
+PMMM remains sequential because its particle ordering differs from hydro's tree.
+Distributed CUDA FMM also remains sequential: remote GPU source staging currently
+resizes shared particle storage. Single-locality CUDA FMM and CPU FMM can overlap.
+
+Gravity and external forces use an opening source half-step with the old mass
+and old acceleration, the accumulated conservative hydro exchange, and a closing
+half-step with the new mass and fresh acceleration. These operations execute
+once at the particle's own closure. Damping uses its analytic exponential on
+each half-step; expansion evolves thermal energy with the corresponding endpoint
+coefficient. No later fine-event source correction modifies an inactive anchor.
+
+The CPU/CUDA drift stage only moves positions along the anchored trajectory; it
+performs no Riemann solve or conservative update. The predictor, pending ledger,
+source moments, stable identifiers, and unexpired pair intervals persist so a
+restart may occur between coarse-particle commits.
 
 The existing tree, gas storage, domain distribution, gravity, cosmological
 units, scenario initialization, and output infrastructure are reused. MFV mass
@@ -314,25 +339,20 @@ antisymmetric hydrodynamic energy exchange. MFM has zero mass flux and zero
 such work.
 
 The beginning and midpoint flux/separation predictions define a linear `q(t)`
-on each pair interval. For each endpoint, the advance accumulates
-`I = integral q(t) dt` and `J = integral (t - sourceTime) q(t) dt` over only the
-elapsed portion. It applies `I dot g_old` immediately, then adds
-`J dot (g_new - g_old) / T` when a fresh force closes that endpoint's source
-interval of duration `T`. Thus the combined work integrates the linear force
-interpolation over the same elapsed mass transport, including unequal cached
-subintervals. The factor `1/2` in `q` is spatial; the temporal moment supplies
-the separate time centering. Sorting, migration, and checkpoints preserve `J`,
-the source acceleration, and the source clock.
+on each pair interval. Settlement accumulates `I = integral q(t) dt` and
+`J = integral (t - sourceTime) q(t) dt` in each endpoint's own pending source
+history. At that endpoint's closure of duration `T`, the energy source includes
+`I dot g_old + J dot (g_new - g_old) / T`. This integrates the endpoint-linear
+force interpolation over the same completed mass transport, including intervals
+shortened by a wake. Sorting, migration, and checkpoints preserve both moments.
 
-With no damping, the momentum source sequence on one interval is an opening
-half kick using the old mass, a conservative exchange, and a closing half kick
-using the updated mass. Both initially use `g_old`; the subsequent correction
-adds `m_new T (g_new - g_old) / 2`. Their sum is precisely
+With no damping, the own-interval momentum source is exactly
 `T (m_old g_old + m_new g_new) / 2`, the endpoint-mass trapezoid in equation 100.
-The flux calculation and mass-flux work still require their own midpoint
-centering; the kick ordering alone does not provide it.
+The source half-steps update conserved momentum and energy directly; without
+sources, closure reduces to the single conserved addition `U0 + deltaU`.
+Flux and mass-work predictions retain their own midpoint time centering.
 
-This is the discretization implemented and tested here, rather than a claim of
+This is the chosen work normalization, rather than a claim of
 literal coefficient agreement with printed equation 101. That equation prints
 `T/2` for each temporal mass-work endpoint term, while the spatially symmetric
 work defined above uses `q = F r / 2`. The same printed factors occur in the
@@ -360,10 +380,10 @@ meshless solver, substituting your build directory. Replace `traditional` with
 ```sh
 path/to/build/cosmictiger --configuration=configurations/sod.ini --hydro.method=mfm \
   --gravity.method.far=fmm --gravity.expansionDegree=6 --run.timeIntegrator=traditional \
-  --compute.cuda=false --hpx:threads=4
+  --gravity.cuda=false --drift.cuda=false --hydro.cuda=false --hpx:threads=4
 path/to/build/cosmictiger --configuration=configurations/sod.ini --hydro.method=mfv \
   --gravity.method.far=fmm --gravity.expansionDegree=6 --run.timeIntegrator=traditional \
-  --compute.cuda=false --hpx:threads=4
+  --gravity.cuda=false --drift.cuda=false --hydro.cuda=false --hpx:threads=4
 ```
 
 ## Validation
@@ -448,8 +468,8 @@ The run logs are under the untracked local directory
 `build/hopkins_merge_20261101/`. These checks establish the tested integration
 paths, not full-duration hydrodynamic or self-gravitating convergence, CUDA/MPI
 scaling, or cosmological production accuracy. The stopped sound-wave amplitude
-campaign was not resumed. Hydro remains on the coordinating CPU and executes
-sequentially with gravity; CPU/GPU overlap has not been implemented.
+campaign was not resumed. Those historical runs executed coordinating-CPU hydro
+sequentially with gravity; they did not exercise the newer preparation overlap.
 
 For a Fixed64 build with `COSMICTIGER_ENABLE_HOPKINS=ON`, FMM and PMMM,
 potential expansion degree 6, traditional
@@ -722,7 +742,7 @@ historical shared-rung integrator exactly:
 path/to/build/cosmictiger --run.scenario=sod --hydro.method=mfm \
   --gravity.method.far=fmm --gravity.expansionDegree=6 --run.timeIntegrator=traditional \
   --initial.particlesPerDimension=8 --run.endTime=0.03 --run.numberOfSteps=32 \
-  --compute.cuda=false --gravity.enabled=false --chemistry.enabled=false \
+  --gravity.cuda=false --drift.cuda=false --hydro.cuda=false --gravity.enabled=false --chemistry.enabled=false \
   --output.silo=false --output.directory=output/sod_mfm_n8 --hpx:threads=2
 ```
 
@@ -744,3 +764,46 @@ methods with gravity and expansion enabled and chemistry disabled. With
 mass, density, thermal energy, and support radii. These are execution checks,
 not cosmological convergence or energy-conservation measurements. Affected
 CUDA translation units were compile-checked; GPU execution was not tested.
+
+### Own-step integration and independent backends: November 2, 2026
+
+The current revision uses conserved anchors plus pending conservative increments,
+retained gradients, anchored drift trajectories, and elapsed pair-flux intervals.
+Particle-state checkpoints use version 5; live pair records use version 2. Old
+particle-state layouts are rejected. Fresh force samples and the own-step source
+anchor remain separate, including when a particle wakes before its scheduled end.
+
+Fresh validation used Fixed64 positions and FMM potential degree 6 (order 7):
+
+- CPU-only and CUDA 13.1 application builds succeeded.
+- The 101-case CPU selection covering Hopkins, SPH kernels, drift dispatch, and
+  PMMM-PP/PMMM-FMM traditional/global coupling passed; all 19 CUDA SPH kernel
+  tests passed, including deferred versus unsplit acceleration-source assembly.
+- The full Hopkins application and global-source regressions passed, including
+  conservative mass/momentum/energy accounting and exact restarts.
+- Natural MFM/MFV blast fixtures completed two coarse steps with actual early
+  wakes. MFM closed 381 particles early and truncated 10,222 pair intervals;
+  MFV closed 8 early and truncated 248 pairs. The tests independently integrate
+  every retired pair prefix and compare both endpoints' deposits. Three occupied
+  bins span rungs 0 through 3; four simultaneously populated bins were not tested.
+- Two-locality CPU individual-step/wake runs and gas migration passed, including
+  exact restart immediately before wake-up.
+- CPU Hopkins with CUDA FMM gravity and drift passed traditional/global coupling
+  and exact-restart checks. CPU SPH with CUDA FMM gravity passed traditional and
+  global smoke/restart checks. These include evidence of actual CUDA force launches.
+- One-period MFM/MFV sound waves at 16, 32, and 64 particles completed. Density
+  L1 error decreased from 6.67e-8 to 6.51e-9 for MFM and from 9.27e-8 to 9.05e-9
+  for MFV. This is combined space/time refinement, not a temporal-order proof.
+
+The module-specific CLI/INI migration passed 508 grouped-options cases and the
+startup checks. CPU analysis in a CUDA-enabled executable also passed with a
+runtime-call guard after fixing host allocation release before CUDA initialization.
+Coordinator profiles and CUDA elapsed-work records do not establish a measured
+overlap speedup; no such speedup is claimed.
+
+Intermediate energy and output mass fields remain views of the asynchronous
+conserved ledger; unfinished live-pair/source intervals are not reconstructed at
+arbitrary observation times. In particular, an MFV lightcone mass is not an
+independent reconstruction at its crossing time. Terminal synchronized diagnostics
+are covered by the application tests. Large cosmological production evolution,
+CUDA MPI overlap, and long-time gravitational-energy convergence remain unvalidated.

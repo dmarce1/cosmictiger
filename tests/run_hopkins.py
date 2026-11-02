@@ -107,42 +107,43 @@ def particle_rank_state(path, method):
         if end + 12 > len(data):
             raise RuntimeError(f"missing meshless integration state in {path}")
         state_header = struct.unpack_from("=3I", data, end)
-        if state_header != (0x484f5053, 4, 320):
+        if state_header != (0x484f5053, 5, 400):
             raise RuntimeError(f"unsupported meshless integration state in {path}: {state_header}")
         state_offset = end + 12
-        cache_offset = state_offset + 320 * count
+        cache_offset = state_offset + 400 * count
         if cache_offset + 32 > len(data):
             raise RuntimeError(f"truncated meshless integration state in {path}")
         # Native AoS records have padding after each bool. Compare every named
         # field exactly without treating that padding as numerical state.
-        integration_state = [struct.unpack_from("=Q16d?", data, state_offset + 320 * i) +
-                             struct.unpack_from("=20dH?", data, state_offset + 320 * i + 144) +
-                             struct.unpack_from("=d", data, state_offset + 320 * i + 312)
+        integration_state = [struct.unpack_from("=Q29d2Q?", data, state_offset + 400 * i) +
+                             struct.unpack_from("=15d?", data, state_offset + 400 * i + 264) +
+                             struct.unpack_from("=d", data, state_offset + 400 * i + 392)
                              for i in range(count)]
         for index, state in enumerate(integration_state):
-            if (not state[17] or not state[39] or
+            if (not state[32] or not state[48] or
                     any(not math.isfinite(value) for value in state[1:]) or
                     state[1] <= 0.0 or state[2] <= math.fsum(
                         value * value for value in state[3:6]) / (2.0 * state[1]) or
-                    min(state[18:20]) <= 0.0 or state[40] <= 0.0):
+                    state[11] <= 0.0 or state[49] <= 0.0):
                 raise RuntimeError(f"invalid conservative meshless state in {path}")
             if method == "mfm" and state[1] != fixed_mass:
                 raise RuntimeError(f"MFM changed a particle's conserved mass in {path}")
-            if struct.unpack("=f", struct.pack("=f", state[1]))[0] != masses[index]:
+            if struct.unpack("=f", struct.pack("=f", state[1] + state[6]))[0] != masses[index]:
                 raise RuntimeError(f"conserved and public particle masses disagree in {path}")
-            if struct.unpack("=f", struct.pack("=f", state[40]))[0] != supports[index]:
+            if struct.unpack("=f", struct.pack("=f", state[49]))[0] != supports[index]:
                 raise RuntimeError(f"double and public support radii disagree in {path}")
-        pending_work = [state[12:15] for state in integration_state]
+        pending_work = [state[24:27] for state in integration_state]
         cache_header = struct.unpack_from("=4Q", data, cache_offset)
-        if cache_header[:3] != (0x484f504341434845, 1, 160):
+        if cache_header[:3] != (0x484f504341434845, 2, 176):
             raise RuntimeError(f"unsupported pair cache in {path}: {cache_header}")
-        cache_end = cache_offset + 32 + 160 * cache_header[3]
+        cache_end = cache_offset + 32 + 176 * cache_header[3]
         if cache_end > len(data):
             raise RuntimeError(f"truncated pair cache in {path}")
-        pair_cache = [struct.unpack_from("=4Q16d", data, cache_offset + 32 + 160 * i)
+        pair_cache = [struct.unpack_from("=4Q18d", data, cache_offset + 32 + 176 * i)
                       for i in range(cache_header[3])]
         for pair in pair_cache:
-            if (pair[0] >= pair[1] or pair[2] >= pair[3] or
+            if (pair[0] >= pair[1] or pair[4] >= pair[5] or
+                    (pair[2] >= pair[3] and (pair[2] != 0 or pair[3] != 0)) or
                     any(not math.isfinite(value) for value in pair[4:])):
                 raise RuntimeError(f"invalid cached pair interval in {path}")
     for name, values in (("mass", masses), ("density", densities),
@@ -157,11 +158,11 @@ def particle_rank_state(path, method):
                                for d in range(3))
     primitive_energy = math.fsum(masses[i] * (thermal[i] + 0.5 * math.fsum(
         value * value for value in velocities[i])) for i in range(count))
-    momentum = (tuple(math.fsum(state[3 + d] for state in integration_state) for d in range(3))
+    momentum = (tuple(math.fsum(state[3 + d] + state[8 + d] for state in integration_state) for d in range(3))
                 if method != "sph" else primitive_momentum)
-    energy = (math.fsum(state[2] for state in integration_state)
+    energy = (math.fsum(state[2] + state[7] for state in integration_state)
               if method != "sph" else primitive_energy)
-    total_mass = (math.fsum(state[1] for state in integration_state)
+    total_mass = (math.fsum(state[1] + state[6] for state in integration_state)
                   if method != "sph" else math.fsum(masses))
     physical_records = {}
     for i, state in enumerate(integration_state):
@@ -239,8 +240,8 @@ def particle_state(checkpoint, method):
         raise RuntimeError(f"duplicate meshless particle identifiers in {checkpoint}")
     result["identifier_ranks"] = {state[0]: rank_index for rank_index, rank in enumerate(ranks)
                                   for state in rank["integration_state"]}
-    result["predictor_anchors"] = {state[0]: state[18:38] for state in result["integration_state"]}
-    result["kick_phases"] = [state[38] for state in result["integration_state"]]
+    result["predictor_anchors"] = {state[0]: state[1:6] + state[11:21] + state[27:28] + state[29:31] + state[33:48] for state in result["integration_state"]}
+    result["kick_phases"] = [state[30] for state in result["integration_state"]]
     result["physical_records"] = {identifier: values for rank in ranks
                                   for identifier, values in rank["physical_records"].items()}
     return result
@@ -274,7 +275,13 @@ def check_manifest(checkpoint, iteration, scenario, duration, localities, gravit
 def check_conservation(initial, final, context):
     if initial["count"] != final["count"]:
         raise RuntimeError(f"particle count changed during {context}")
-    for prefix, tolerance in (("", 1.e-10), ("primitive_", 5.e-6)):
+    # Inactive public primitives are predicted from immutable own-step anchors;
+    # they are not a second conserved ledger. Test U_anchor + pending transfers,
+    # and separately check the float mass view used by gravity/output.
+    representations = (("", 1.e-10),) if initial["integration_state"] else (("", 1.e-10), ("primitive_", 5.e-6))
+    if abs(final["primitive_mass"] - initial["primitive_mass"]) > 5.e-6 * initial["primitive_mass"]:
+        raise RuntimeError(f"{context} float mass view lost total mass")
+    for prefix, tolerance in representations:
         relative_mass_error = abs(final[prefix + "mass"] - initial[prefix + "mass"]) / \
             initial[prefix + "mass"]
         relative_energy_error = abs(final[prefix + "energy"] - initial[prefix + "energy"]) / \
@@ -380,12 +387,21 @@ def check_uniform_acceleration(destination, mass, acceleration, context, method)
     snapshots = []
     for fields in (line.split() for line in (destination / "progress.txt").read_text().splitlines()):
         state = particle_state(destination / f"checkpoint.{fields[0]}", method)
-        snapshots.append((state["clock"][0], state))
+        # The position clock may be ahead of the owning conserved anchor.
+        # This uniform-force fixture has a single gas rung; compare the stored
+        # U at its own source clock, and the diagnostics above at physical time.
+        anchors = {record[27] for record in state["integration_state"]}
+        if len(anchors) != 1:
+            raise RuntimeError(f"{context} uniform-force fixture has asynchronous source anchors")
+        anchor_time = anchors.pop()
+        if anchor_time > state["clock"][0]:
+            raise RuntimeError(f"{context} source anchor exceeds its position clock")
+        snapshots.append((anchor_time, state))
     first_time, first = snapshots[0]
     for time, state in snapshots:
         expected_momentum = initial_momentum + mass * acceleration * time
         if abs(state["momentum"][1] - expected_momentum) > 1.e-11 * max(1.0, abs(expected_momentum)):
-            raise RuntimeError(f"{context} checkpoint momentum is not at its physical clock")
+            raise RuntimeError(f"{context} checkpoint momentum is not at its own source clock")
         elapsed = time - first_time
         expected_energy = first["energy"] + first["momentum"][1] * acceleration * elapsed + \
             0.5 * mass * (acceleration * elapsed)**2
@@ -398,6 +414,95 @@ def check_uniform_acceleration(destination, mass, acceleration, context, method)
     print(f"{context}: checkpoint momentum matches the physical clock", flush=True)
 
 
+def pending_gravity_work_signal(state):
+    """Measure source work retained in endpoint ledgers and elapsed live pairs."""
+    integrals = {entry[0]: list(entry[21:24]) for entry in state["integration_state"]}
+    moments = {entry[0]: list(entry[24:27]) for entry in state["integration_state"]}
+    anchors = {entry[0]: entry for entry in state["integration_state"]}
+    time = state["clock"][0]
+    for pair in state["pair_cache"]:
+        interval = pair[5] - pair[4]
+        elapsed = max(0.0, min(time, pair[5]) - pair[4])
+        for endpoint in pair[:2]:
+            age = pair[4] - anchors[endpoint][27]
+            for dimension in range(3):
+                initial = pair[16 + dimension]
+                slope = 2.0 * (pair[19 + dimension] - initial) / interval
+                integral = elapsed * (initial + 0.5 * elapsed * slope)
+                first_moment = elapsed * elapsed * (0.5 * initial + elapsed * slope / 3.0)
+                integrals[endpoint][dimension] += integral
+                moments[endpoint][dimension] += age * integral + first_moment
+    signal = 0.0
+    for identifier, entry in anchors.items():
+        force = entry[18:21]
+        signal = max(signal, abs(math.fsum(integrals[identifier][d] * force[d]
+                                          for d in range(3))))
+        duration = time - entry[27]
+        if duration > 0.0:
+            signal = max(signal, abs(math.fsum(moments[identifier][d] * force[d]
+                                              for d in range(3))) / duration)
+    return signal
+
+
+def check_wake_transactions(output, states, context):
+    """Check real early closures and both sides of every retired pair integral."""
+    records = [dict(re.findall(r"([A-Za-z]+)=([^\s]+)", match.group(1)))
+               for match in re.finditer(r"Hopkins step: ([^\n]+)", output)]
+    records = [record for record in records if int(record["terminal"]) == 0]
+    if not any(max(state["rungs"]) - min(state["rungs"]) >= 3 for state in states):
+        raise RuntimeError(f"{context} never spanned four rung levels")
+    first_wake = None
+    total_woken = truncated = 0
+    for step, (previous, current) in enumerate(zip(states, states[1:]), start=1):
+        time, tick = previous["clock"][0], previous["tick"]
+        before = {entry[0]: entry for entry in previous["integration_state"]}
+        after = {entry[0]: entry for entry in current["integration_state"]}
+        woken = {identifier for identifier in before
+                 if before[identifier][31] > tick and after[identifier][30] == tick}
+        record = next((entry for entry in records if math.isclose(float(entry["time"]), time,
+                       rel_tol=1.e-13, abs_tol=1.e-15)), None)
+        if record is None or int(record["woken"]) != len(woken):
+            raise RuntimeError(f"{context} wake log differs from early own-step closures")
+        if not woken:
+            continue
+        if first_wake is None:
+            first_wake = step
+        total_woken += len(woken)
+        pairs_after = {pair[:2]: pair for pair in current["pair_cache"]}
+        deposits = {identifier: [0.0] * 5 for identifier in before}
+        for pair in previous["pair_cache"]:
+            if pairs_after.get(pair[:2]) == pair:
+                if pair[0] in woken or pair[1] in woken:
+                    raise RuntimeError(f"{context} retained a pair across an endpoint wake")
+                continue
+            duration = min(time, pair[5]) - pair[4]
+            interval = pair[5] - pair[4]
+            delta = [duration * (pair[6 + component] + duration / interval *
+                     (pair[11 + component] - pair[6 + component])) for component in range(5)]
+            if pair[2] < tick < pair[3] and (pair[0] in woken or pair[1] in woken):
+                truncated += 1
+            for endpoint, sign in ((pair[0], -1.0), (pair[1], 1.0)):
+                for component in range(5):
+                    deposits[endpoint][component] += sign * delta[component]
+        # This fixture has no gravity, damping, or cosmological sources. The
+        # independently integrated old pair records must explain every change
+        # in U + pending, including the inactive partners of woken particles.
+        for identifier in before:
+            old, new = before[identifier], after[identifier]
+            for component, (anchor, pending) in enumerate(((1, 6), (3, 8), (4, 9), (5, 10), (2, 7))):
+                expected = old[anchor] + old[pending] + deposits[identifier][component]
+                actual = new[anchor] + new[pending]
+                if not math.isclose(actual, expected, rel_tol=2.e-12, abs_tol=1.e-14):
+                    raise RuntimeError(f"{context} wake changed particle {identifier} conserved "
+                                       f"component {component} outside its elapsed pair deposits")
+    if first_wake is None or truncated == 0:
+        raise RuntimeError(f"{context} never truncated a live pair at a real wake")
+    populations = max(len(set(state["rungs"])) for state in states)
+    print(f"{context}: {total_woken} early own-step closures, {truncated} truncated pairs, "
+          f"{populations} occupied rungs spanning four levels", flush=True)
+    return first_wake
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
@@ -408,6 +513,8 @@ def main():
                         help="HPX worker threads per locality")
     parser.add_argument("--async-only", action="store_true",
                         help="run only the individual-rung conservation/restart fixtures")
+    parser.add_argument("--wake-only", action="store_true",
+                        help="check natural wake-up truncation and restart over two coarse steps")
     parser.add_argument("--global-sources-only", action="store_true",
                         help="check global uniform-source laws and forced restart with unequal final intervals")
     parser.add_argument("--matrix-only", action="store_true",
@@ -423,8 +530,8 @@ def main():
     args = parser.parse_args()
     if args.cuda and not args.matrix_only:
         parser.error("--cuda requires --matrix-only")
-    if sum((args.matrix_only, args.async_only, args.global_sources_only)) > 1:
-        parser.error("--matrix-only, --async-only and --global-sources-only are mutually exclusive")
+    if sum((args.matrix_only, args.async_only, args.global_sources_only, args.wake_only)) > 1:
+        parser.error("--matrix-only, --async-only, --wake-only and --global-sources-only are mutually exclusive")
     if not args.matrix_only and any((args.gravity_method, args.near_method, args.time_integrator)):
         parser.error("solver/integrator selectors require --matrix-only")
     if args.localities < 1 or (args.localities > 1 and args.mpi_exec is None):
@@ -450,7 +557,7 @@ def main():
                   "hydro.enabled": "true", "gravity.enabled": "false",
                   "run.timeIntegrator": "traditional", "gravity.method.far": "fmm",
                   "gravity.expansionDegree": 6, "starFormation.enabled": "false",
-                  "chemistry.enabled": "false", "compute.cuda": "false",
+                  "chemistry.enabled": "false", "gravity.cuda": "false",
                   "compute.positionType": "fixed64",
                   "analysis.groups": "false", "analysis.tracers": "false",
                   "analysis.power": "false", "analysis.views": "false",
@@ -542,7 +649,7 @@ def main():
         print(f"{name}: exact physical restart passed", flush=True)
         return split_state
 
-    def checkpoint_states(destination, method, scenario, duration, steps, context):
+    def checkpoint_states(destination, method, scenario, duration, steps, context, number_of_steps=8):
         states = []
         progress = {int(fields[0]): fields for fields in (
             line.split() for line in (destination / "progress.txt").read_text().splitlines())}
@@ -555,14 +662,15 @@ def main():
             # Reconstruct the exact power-of-two time from the printed integer
             # rung; the diagnostic's decimal time has only six-place precision.
             finest_rung = int(progress[step][4])
-            timestep = math.ldexp(duration / 8, -finest_rung)
+            timestep = math.ldexp(duration / number_of_steps, -finest_rung)
             fine_ticks = 32768 >> finest_rung
             time += timestep
             tick += fine_ticks
             states[-1]["time"] = time
             states[-1]["timestep"] = timestep
             states[-1]["fine_ticks"] = fine_ticks
-            states[-1]["kick_ages"] = [(tick - phase) & 65535
+            states[-1]["tick"] = tick
+            states[-1]["kick_ages"] = [tick - phase
                                        for phase in states[-1]["kick_phases"]]
             states[-1]["predictor_ticks"] = {
                 state[0]: tick - age for state, age in zip(
@@ -601,8 +709,9 @@ def main():
             final = particle_state(destination / f"checkpoint.{steps[-1]}", method)
             if (not 2 <= len(steps) <= 3 or final["clock"][0] != endpoint or
                     not 0 < final["clock"][1] < first_timestep or
-                    any(float(match.group(1)) >= endpoint for match in re.finditer(
-                        r"Hopkins step: time=([^\s]+)", output))):
+                    any(float(record["time"]) >= endpoint and int(record["terminal"]) == 0
+                        for record in (dict(re.findall(r"([A-Za-z]+)=([^\s]+)", match.group(1)))
+                        for match in re.finditer(r"Hopkins step: ([^\n]+)", output)))):
                 raise RuntimeError(f"{name} did not finish one unequal clipped source interval")
             check_uniform_acceleration(destination, final["count"] * final["fixed_mass"],
                                        1.25, name, method)
@@ -626,11 +735,10 @@ def main():
             raise RuntimeError(f"{name} missed its endpoint")
         split = check_restart(name, "mfv", values, destination, final,
                               split_step=1, final_step=steps[-1])
-        radial_work = max(abs(math.fsum(work[d] * (position[d] - 0.5) for d in range(3)))
-                          for work, position in zip(split["pending_work"], split["positions"]))
-        if radial_work <= 1.e-14:
-            raise RuntimeError(f"{name} did not persist nonzero MFV endpoint work")
-        print(f"{name}: pending radial work coefficient {radial_work:.3e}", flush=True)
+        work_signal = pending_gravity_work_signal(split)
+        if work_signal <= 1.e-14:
+            raise RuntimeError(f"{name} did not persist nonzero MFV source work")
+        print(f"{name}: pending endpoint/live-pair source work {work_signal:.3e}", flush=True)
         print("Hopkins global source-law and forced-restart regressions passed", flush=True)
         return
 
@@ -654,14 +762,16 @@ def main():
                     directory = prepare(name)
                     values = dict(options("hydroWave", 0.2, method, 3), **{
                         "gravity.enabled": "true", "gravity.method.far": far,
-                        "compute.cuda": str(args.cuda).lower(),
+                        "gravity.cuda": str(args.cuda).lower(), "drift.cuda": str(args.cuda).lower(),
                         "gravity.meshSize": 8, "gravity.pmmmNearWidth": 2,
                         "run.timeIntegrator": integrator, "run.numberOfSteps": 1,
                         "hydro.cfl": 0.123, "run.verbose": "true"})
                     if near:
                         values["gravity.method.near"] = near
                     output = launch(directory, values)
-                    check_bool(output, "compute.cuda", args.cuda)
+                    check_bool(output, "gravity.cuda", args.cuda)
+                    check_bool(output, "drift.cuda", args.cuda)
+                    check_bool(output, "hydro.cuda", False)
                     for key, expected in (("hydro.method", method),
                                           ("gravity.method.far", far),
                                           ("run.timeIntegrator", integrator)):
@@ -670,6 +780,17 @@ def main():
                     if near and setting(output, "gravity.method.near") != near:
                         raise RuntimeError(f"{name} selected the wrong near-field solver")
                     destination = directory / "output"
+                    if args.cuda and far == "fmm":
+                        profile = destination / "profile.txt"
+                        if profile.exists():
+                            kernels = re.search(r"^kick\.gpu\.kernel\s+(\d+)\s+",
+                                                profile.read_text(), re.MULTILINE)
+                            if kernels is None or int(kernels[1]) <= 0:
+                                raise RuntimeError(f"{name} did not execute a CUDA gravity kernel")
+                        elif "CUDA kick arena (" not in output:
+                            # PROFILE=OFF builds retain the CUDA launch-arena
+                            # message, so acceleration remains observable.
+                            raise RuntimeError(f"{name} did not enter the CUDA gravity launch path")
                     for filename in ("energy.dat", "rho.dat", "progress.txt"):
                         check_finite_rows(destination / filename)
                     states = []
@@ -692,8 +813,9 @@ def main():
                             previous_time = states[-1]["clock"][0] if states else 0.0
                             if (timestep <= 0 or phase != 0 or max_rung != 0 or driver_step != step or
                                     any(state["rungs"]) or any(state["kick_phases"]) or
-                                    state["pair_cache"] or not math.isclose(
-                                        time - previous_time, timestep, rel_tol=1.e-14)):
+                                    any(pair[2] or pair[3] or not math.isclose(pair[5], time,
+                                        rel_tol=1.e-14, abs_tol=1.e-15) for pair in state["pair_cache"]) or
+                                    not math.isclose(time - previous_time, timestep, rel_tol=1.e-14)):
                                 raise RuntimeError(f"{name} retained block clocks or an incomplete pair interval")
                         initial_mass = state["fixed_mass"] * state["count"]
                         if abs(state["mass"] - initial_mass) > 1.e-10 * initial_mass:
@@ -729,11 +851,31 @@ def main():
                                                f"checkpoint.{checkpoints[-1]}", method)
                         if ended["clock"][0] != endpoint or len(checkpoints) > 3:
                             raise RuntimeError(f"{name} did not stop at the exact clipped endpoint")
-                        if any(float(match.group(1)) >= endpoint for match in re.finditer(
-                                r"Hopkins step: time=([^\s]+)", endpoint_output)):
+                        if any(float(record["time"]) >= endpoint and int(record["terminal"]) == 0
+                                for record in (dict(re.findall(r"([A-Za-z]+)=([^\s]+)", match.group(1)))
+                                for match in re.finditer(r"Hopkins step: ([^\n]+)", endpoint_output))):
                             raise RuntimeError(f"{name} opened an outgoing interval at the endpoint")
                         print(f"{name}: exact non-dyadic endpoint {endpoint:.12g}", flush=True)
         print("Hopkins gravity/integrator matrix regressions passed", flush=True)
+        return
+
+    for method in ("mfm", "mfv"):
+        name = f"{method}_wake_rungs"
+        directory = prepare(name)
+        values = dict(options("blast", 0.004, method, 16), **{"run.numberOfSteps": 2})
+        output = launch(directory, values)
+        destination = directory / "output"
+        states = checkpoint_states(destination, method, "blast", values["run.endTime"],
+                                   16, name, number_of_steps=2)
+        if states[-1]["tick"] != 2 * 32768 or not math.isclose(
+                states[-1]["clock"][0], values["run.endTime"], rel_tol=1.e-13):
+            raise RuntimeError(f"{name} did not complete two coarse steps")
+        check_activity(output, states, name, args.localities)
+        split_step = check_wake_transactions(output, states, name)
+        check_restart(name, method, values, destination, states[-1], split_step=split_step,
+                      final_step=16, require_pending_pair=True)
+    if args.wake_only:
+        print("Hopkins real-wake regressions passed", flush=True)
         return
 
     for method in ("mfm", "mfv"):
@@ -799,13 +941,12 @@ def main():
         check_finite_rows(destination / filename)
     reference = particle_state(destination / "checkpoint.4", "mfv")
     split = check_restart(name, "mfv", values, destination, reference)
-    # The central acceleration is radial; a nonzero radial projection proves
-    # that the persisted work coefficient contributes to the next source kick.
-    radial_work = max(abs(math.fsum(work[d] * (position[d] - 0.5) for d in range(3)))
-                      for work, position in zip(split["pending_work"], split["positions"]))
-    if radial_work <= 1.e-14:
+    # Work remains in live pair intervals until settlement; endpoint-only
+    # pending moments can therefore be zero at a valid interior restart.
+    work_signal = pending_gravity_work_signal(split)
+    if work_signal <= 1.e-14:
         raise RuntimeError("MFV forced restart did not exercise pending gravitational work")
-    print(f"{name}: pending radial work coefficient {radial_work:.3e}", flush=True)
+    print(f"{name}: pending endpoint/live-pair source work {work_signal:.3e}", flush=True)
 
     sph_payloads = []
     for method in (None, "sph"):

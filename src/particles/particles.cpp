@@ -1897,18 +1897,20 @@ EnergiesT particlesSumEnergies() {
                         auto const& state = sphParticlesHopkinsState(particlesCatIndex(i));
                         if (state.initialized) {
                             double momentumSquared = 0.0;
-                            for (double component : state.momentum) {
+                            for (int dim = 0; dim < kDimensions; dim++) {
+                                double const component = state.accountedMomentum(dim);
                                 momentumSquared += component * component;
                             }
-                            double const kinetic = 0.5 * momentumSquared / state.mass;
+                            double const mass = state.accountedMass();
+                            double const kinetic = 0.5 * momentumSquared / mass;
                             if (saveParticlePotential(getOptions().analysis)) {
-                                energies.pot += 0.5 * state.mass * particlesPot(i);
+                                energies.pot += 0.5 * mass * particlesPot(i);
                             }
                             energies.kin += kinetic;
-                            energies.therm += state.totalEnergy - kinetic;
-                            energies.xmom += state.momentum[0];
-                            energies.ymom += state.momentum[1];
-                            energies.zmom += state.momentum[2];
+                            energies.therm += state.accountedEnergy() - kinetic;
+                            energies.xmom += state.accountedMomentum(0);
+                            energies.ymom += state.accountedMomentum(1);
+                            energies.zmom += state.accountedMomentum(2);
                             energies.nmom += std::sqrt(momentumSquared);
                             continue;
                         }

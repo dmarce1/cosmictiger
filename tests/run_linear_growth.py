@@ -33,7 +33,7 @@ def runDiagnostic(executable, workdir):
     command = [str(executable), "--hpx:threads=2", "--hpx:bind=none",
                "--run.test=linearGrowth", "--initial.particlesPerDimension=8",
                "--initial.closePack=false", "--initial.useGlass=false",
-               "--hydro.enabled=true", "--compute.cuda=false",
+               "--hydro.enabled=true", "--gravity.cuda=false",
                "--gravity.kernelFamily=ferrers", "--gravity.kernelDegree=4",
                "--gravity.supportRadius=1.5",
                "--gravity.openingAngle=0.1", "--cosmology.omegaB=0.049389",
