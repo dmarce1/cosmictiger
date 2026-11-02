@@ -56,7 +56,7 @@ function(cosmictiger_feature_sources output)
 
     # The tree walk is shared by global FMM and PMMM's optional near-cell FMM.
     set(cosmictiger_uses_fmm OFF)
-    if(COSMICTIGER_ENABLE_FMM OR COSMICTIGER_ENABLE_PMMM_FMM)
+    if(COSMICTIGER_ENABLE_FMM OR COSMICTIGER_ENABLE_PMMM_FMM OR COSMICTIGER_ENABLE_P3M_FMM)
         set(cosmictiger_uses_fmm ON)
     endif()
     if(cosmictiger_uses_fmm)
@@ -87,13 +87,43 @@ function(cosmictiger_feature_sources output)
         )
     endif()
 
-    if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
+    # Mesh solvers share collective dispatch, the owned-particle mesh sort and
+    # the streamed field consumer that applies rung kicks.
+    if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM OR COSMICTIGER_WITH_PARTICLE_MESH)
         list(APPEND cosmictiger_source_files
             src/gravity/pm/collective_dispatch.cpp
+            src/gravity/pm/kick.cpp
+            src/particles/particle_mesh_sort.cpp
+        )
+    endif()
+    if(COSMICTIGER_WITH_PARTICLE_MESH)
+        list(APPEND cosmictiger_source_files
+            src/gravity/pm/solver.cpp
+            src/gravity/pm/interval.cpp
+        )
+        if(COSMICTIGER_ENABLE_P3M_PP OR COSMICTIGER_ENABLE_P3M_FMM)
+            list(APPEND cosmictiger_source_files
+                src/gravity/p3m/solver.cpp
+            )
+        endif()
+        if(COSMICTIGER_ENABLE_P3M_PP)
+            list(APPEND cosmictiger_source_files
+                src/gravity/p3m/pp/short_pp.cpp
+                src/gravity/p3m/pp/short_pp.cu
+            )
+        endif()
+        if(COSMICTIGER_ENABLE_P3M_FMM)
+            list(APPEND cosmictiger_source_files
+                src/gravity/p3m/fmm/short_fmm.cpp
+            )
+        endif()
+    endif()
+
+    if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
+        list(APPEND cosmictiger_source_files
             src/gravity/pmmm/kick.cpp
             src/gravity/pmmm/solver.cpp
             src/gravity/pmmm/kernels.cpp
-            src/particles/particle_mesh_sort.cpp
             src/gravity/pmmm/evaluation.cpp
             src/gravity/pmmm/fft.cpp
             src/gravity/pmmm/mesh_exchange.cpp
@@ -172,6 +202,15 @@ function(cosmictiger_feature_sources output)
                 tests/particle_mesh_sort.cpp
                 tests/gravity/pmmm/particle_mesh_timestep.cpp
                 tests/gravity/pmmm/pmmm.cpp)
+        endif()
+        if(COSMICTIGER_WITH_PARTICLE_MESH)
+            list(APPEND cosmictiger_source_files tests/gravity/pm/pm.cpp)
+            if(NOT (COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM))
+                list(APPEND cosmictiger_source_files tests/particle_mesh_sort.cpp)
+            endif()
+        endif()
+        if(COSMICTIGER_ENABLE_P3M_PP OR COSMICTIGER_ENABLE_P3M_FMM)
+            list(APPEND cosmictiger_source_files tests/gravity/p3m/p3m.cpp)
         endif()
         if(COSMICTIGER_ENABLE_FMM)
             list(APPEND cosmictiger_source_files

@@ -20,7 +20,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
-    parser.add_argument("--gravity-method", choices=("fmm", "pmmm", "none"), required=True)
+    parser.add_argument("--gravity-method", choices=("fmm", "pmmm", "pm", "p3m", "none"), required=True)
     parser.add_argument("--near-method", choices=("pp", "fmm", "none"), required=True)
     parser.add_argument("--order", type=int, choices=(0, *range(3, 10)), required=True)
     parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"), required=True)
@@ -66,15 +66,16 @@ def main():
                 selected["gravity.enabled"] = "false"
             else:
                 selected["gravity.expansionDegree"] = args.order - 1
-            if args.gravity_method == "pmmm":
+            if args.gravity_method in ("pmmm", "p3m"):
                 selected["gravity.method.near"] = args.near_method
             options = options + [f"--{key}={value}" for key, value in selected.items()
                                  if not any(option.startswith(f"--{key}=") for option in options)]
-        # Most cases inspect unrelated options; supply the required PMMM mesh.
+        # Most cases inspect unrelated options; supply the required mesh size.
         # Mesh/INI-specific cases can disable this fixture default explicitly.
-        if (args.gravity_method == "pmmm" and pmmm_mesh is not None and
+        if (args.gravity_method in ("pmmm", "pm", "p3m") and pmmm_mesh is not None and
                 not any(option.startswith("--gravity.meshSize=") for option in options)):
-            options = options + [f"--gravity.meshSize={pmmm_mesh}"]
+            # The P3M search mesh needs 32 PM cells at the default split and cutoff.
+            options = options + [f"--gravity.meshSize={32 if args.gravity_method == 'p3m' else pmmm_mesh}"]
         result = subprocess.run(command + options, cwd=args.workdir, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30,
                                 env=environment)
@@ -135,6 +136,7 @@ def main():
                 "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
                 "gravity.meshSize", "gravity.pmmmNearWidth", "gravity.pmmmCoarseMeshSize",
+                "gravity.cloud", "gravity.p3mSplitCells", "gravity.p3mCutoff",
                 "gravity.openingAngle", "gravity.openingSchedule",
                 "gravity.errorInterval", "gravity.errorSampleSize",
                 "hydro.kernelFamily", "hydro.kernelDegree",
@@ -209,7 +211,7 @@ def main():
 
     removed_options = {"compute.cuda", "hydro.chemistry", "hydro.conduction", "hydro.diffusion",
                        "hydro.yReflect", "gravity.sphSmoothing", "cosmology.omegaK",
-                       "initial.usePowerFile", "gravity.cloud", "gravity.method",
+                       "initial.usePowerFile", "gravity.method",
                        "gravity.pmmmNearMethod", "gravity.pmmmOrder", "gravity.fmmOrder",
                        "run.hierarchicalGravity", "initial.createGlass", "initial.plummer",
                        "hydro.pressureOperator", "chemistry.network", "chemistry.initialization",
@@ -436,13 +438,14 @@ mapSize = 8
     selected_options = [f"--gravity.method.far={args.gravity_method}",
                         f"--gravity.expansionDegree={args.order - 1}",
                         f"--run.timeIntegrator={args.time_integrator}"]
-    if args.gravity_method == "pmmm":
+    near_selected = args.gravity_method in ("pmmm", "p3m")
+    if near_selected:
         selected_options.append(f"--gravity.method.near={args.near_method}")
     selection_config = args.workdir / "algorithm_selection.ini"
     selection_config.write_text(
         f"[run]\ntimeIntegrator = {args.time_integrator}\n[gravity]\n"
         f"method.far = {args.gravity_method}\nexpansionDegree = {args.order - 1}\n" +
-        (f"method.near = {args.near_method}\n" if args.gravity_method == "pmmm" else ""))
+        (f"method.near = {args.near_method}\n" if near_selected else ""))
     output = run("selection_ini", metadata_options + [
         f"--configuration={selection_config.resolve()}"], selectors=False)
     assertNumericSetting(output, "gravity.expansionDegree", args.order - 1)
@@ -452,11 +455,15 @@ mapSize = 8
                  selectors=False)
     assertNumericSetting(output, "gravity.expansionDegree", int(degree_range[2]))
     for key, label, choices in (
-            ("gravity.method.far", "Gravity solvers", ("fmm", "pmmm")),
+            ("gravity.method.far", "Gravity solvers", ("fmm", "pmmm", "pm", "p3m")),
             ("run.timeIntegrator", "Time integrators", ("traditional", "hierarchical", "global")),
-            ("gravity.method.near", "PMMM near solvers", ("pp", "fmm"))):
-        if key == "gravity.method.near" and args.gravity_method != "pmmm":
+            ("gravity.method.near", "PMMM near solvers" if args.gravity_method == "pmmm"
+             else "P3M short solvers", ("pp", "fmm"))):
+        if key == "gravity.method.near" and not near_selected:
             continue
+        if key == "run.timeIntegrator" and args.gravity_method in ("pm", "p3m"):
+            # The global integrator is compiled but not eligible for pm/p3m.
+            choices = ("traditional", "hierarchical")
         compiled = re.search(r"^\s*" + label + r":([^\n]*)", help_text, re.MULTILINE)
         count = sum(choice in compiled[1].split() for choice in choices) if compiled else 0
         arguments = [option for option in selected_options if not option.startswith(f"--{key}=")]
@@ -622,7 +629,7 @@ mapSize = 8
     balsara_default = run("balsara_default", balsara_options)
     def assertCompiledSettings(output):
         for key, value in (("gravity.method.far", args.gravity_method),
-                           ("gravity.method.near", args.near_method if args.gravity_method == "pmmm" else "none"),
+                           ("gravity.method.near", args.near_method if args.gravity_method in ("pmmm", "p3m") else "none"),
                            ("run.timeIntegrator", args.time_integrator)):
             if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + value + r"\s*$",
                              output, re.MULTILINE):
@@ -676,8 +683,8 @@ mapSize = 8
         if "gravity.openingSchedule" not in rejected:
             raise RuntimeError("invalid opening schedule lacked an option-specific diagnostic")
     unsupported_schedules = [("plummer", ["--run.scenario=plummer"])]
-    if args.gravity_method == "pmmm":
-        unsupported_schedules.append(("pmmm", []))
+    if args.gravity_method in ("pmmm", "pm", "p3m"):
+        unsupported_schedules.append((args.gravity_method, []))
     for name, options in unsupported_schedules:
         rejected = run(f"opening_schedule_unsupported_{name}", metadata_options + options + [
             "--gravity.openingSchedule=49:0.41,20:0.51"], success=False)
@@ -697,6 +704,38 @@ mapSize = 8
                 assertNumericSetting(pmmm_output, key, expected)
             assertNumericSetting(pmmm_output, "gravity.openingAngle", math.sqrt(3) / (near_width + 1))
         assertNumericSetting(balsara_default, "gravity.pmmmNearWidth", 2)
+    if args.gravity_method in ("pm", "p3m"):
+        for cloud, points in (("ngp", 1), ("cic", 2), ("tsc", 3), ("pcs", 4)):
+            mesh_output = run(f"{args.gravity_method}_cloud_{cloud}", metadata_options + [
+                "--gravity.meshSize=32", f"--gravity.cloud={cloud}"])
+            assertCompiledSettings(mesh_output)
+            if not re.search(r"^gravity\.cloud\s*:\s*" + cloud + r"\s*$", mesh_output, re.MULTILINE):
+                raise RuntimeError(f"resolved options did not report gravity.cloud={cloud}")
+            assertNumericSetting(mesh_output, "gravity.meshSize", 32)
+            if args.gravity_method == "p3m":
+                # r_s = 1.25/32, cutoff 4.5 r_s = 0.1758; the search mesh with width
+                # two is 8 (2/8 >= 0.1758) and its coarse mesh resolves to the near minimum.
+                assertNumericSetting(mesh_output, "gravity.p3mSplitRadius", 1.25 / 32)
+                assertNumericSetting(mesh_output, "gravity.p3mCutoffRadius", 4.5 * 1.25 / 32)
+                assertNumericSetting(mesh_output, "gravity.p3mMeshSize", 8)
+                assertNumericSetting(mesh_output, "gravity.pmmmCoarseMeshSize", 8)
+            else:
+                assertNumericSetting(mesh_output, "gravity.p3mMeshSize", 0)
+        run(f"{args.gravity_method}_invalid_cloud", metadata_options + [
+            "--gravity.meshSize=32", "--gravity.cloud=sph"], success=False)
+        run(f"{args.gravity_method}_mesh_too_small", metadata_options + [
+            "--gravity.meshSize=3", "--gravity.cloud=pcs"], success=False, pmmm_mesh=None)
+        run(f"{args.gravity_method}_global_rejected", metadata_options + [
+            "--gravity.meshSize=32", "--run.timeIntegrator=global"], success=False)
+        # Non-power-of-two meshes are valid for the scalar PM solve.
+        odd_output = run(f"{args.gravity_method}_odd_mesh", metadata_options + ["--gravity.meshSize=36"])
+        assertNumericSetting(odd_output, "gravity.meshSize", 36)
+        if args.gravity_method == "p3m":
+            for index, invalid in enumerate((["--gravity.meshSize=32", "--gravity.p3mSplitCells=0"],
+                                             ["--gravity.meshSize=32", "--gravity.p3mCutoff=-1"],
+                                             ["--gravity.meshSize=16", "--gravity.p3mCutoff=4.5"],
+                                             ["--gravity.meshSize=32", "--gravity.supportRadius=8"])):
+                run(f"p3m_invalid_{index}", metadata_options + invalid, success=False, pmmm_mesh=None)
         assertNumericSetting(balsara_default, "gravity.pmmmBatchParticles", 4096)
         assertNumericSetting(balsara_default, "gravity.pmmmCoarseMeshSize", 8)
         assertNumericSetting(balsara_default, "gravity.openingAngle", math.sqrt(3) / 3)
@@ -1395,7 +1434,7 @@ mapSize = 8
                              f"--compute.positionType={position_type}",
                              f"--output.directory={metadata_directory}",
                              f"--lightcone.directory={metadata_directory / 'lightcone'}"]
-        if args.gravity_method == "pmmm":
+        if args.gravity_method in ("pmmm", "pm", "p3m"):
             # The metadata fixture selects the compiled solver independently of
             # a local preset's FMM-specific opening schedule.
             runtime_overrides.append("--gravity.openingSchedule=")

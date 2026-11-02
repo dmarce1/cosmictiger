@@ -990,6 +990,7 @@ void particlesDestroy() {
     }
     particlesX = decltype(particlesX)();
     particlesGravityAccelerations = decltype(particlesGravityAccelerations)();
+    particlesLongAccelerations = decltype(particlesLongAccelerations)();
     particlesV = decltype(particlesV)();
     particlesP = decltype(particlesP)();
     particlesR = decltype(particlesR)();
@@ -1092,6 +1093,11 @@ static void particlesResizeStorage(ParticleInteger sz, bool lock) {
         if (saveParticleAcceleration(getOptions().analysis)) {
             for (int dim = 0; dim < kDimensions; dim++) {
                 particlesArrayResize(particlesGravityAccelerations[dim], newCapacity, true);
+            }
+        }
+        if (particlesHasLongAcceleration(getOptions())) {
+            for (int dim = 0; dim < kDimensions; dim++) {
+                particlesArrayResize(particlesLongAccelerations[dim], newCapacity, true);
             }
         }
         if (saveParticlePotential(getOptions().analysis)) {
@@ -1313,6 +1319,12 @@ void particlesFree() {
     if (saveParticleAcceleration(getOptions().analysis)) {
         for (int dim = 0; dim < kDimensions; dim++) {
             freeManagedMemory(particlesGravityAccelerations[dim]);
+        }
+    }
+    if (particlesHasLongAcceleration(getOptions())) {
+        for (int dim = 0; dim < kDimensions; dim++) {
+            freeManagedMemory(particlesLongAccelerations[dim]);
+            particlesLongAccelerations[dim] = nullptr;
         }
     }
     if (saveParticlePotential(getOptions().analysis)) {

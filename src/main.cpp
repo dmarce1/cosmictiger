@@ -130,7 +130,8 @@ int hpx_main(int argc, char* argv[]) {
 #endif
             profile::checkForInterrupt();
 #if COSMICTIGER_ENABLE_FMM
-            if (getOptions().gravity.enabled && !usesMeshGravity(getOptions().gravity)) {
+            if (getOptions().gravity.enabled && !usesMeshGravity(getOptions().gravity) &&
+                !usesParticleMesh(getOptions().gravity)) {
                 EwaldConst::init();
                 // Debug dump of the Ewald Green's function along x for the runtime order.
                 fmmDispatch([](auto orderTag) {

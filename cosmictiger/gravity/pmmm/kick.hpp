@@ -9,21 +9,8 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/gravity/kick.hpp>
+#include <cosmictiger/gravity/pm/kick.hpp>
 #include <cosmictiger/math/vector3.hpp>
-
-// Consume one completed, gm-scaled near+far field without retaining a force
-// array. Particle membership is fixed by the caller's current ladder stage;
-// only this owned sink's velocity/rung and requested diagnostics are modified.
-// Traditional hydro sinks receive acceleration only; hydro owns their kicks
-// and rungs. Traditional sources must contain every owned particle even when
-// minRung selects only a subset of the sinks.
-// Accumulate source-operation counts in flopCount when supplied, so callers can
-// submit a whole sink batch once; otherwise submit this particle's count here.
-// precisionCounts optionally receives the same work split by arithmetic precision.
-// Supplying either output defers global submission to the caller.
-KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& acceleration,
-    float potential, KickParameters const& parameters, FlopCount* flopCount = nullptr,
-    FlopCounts* precisionCounts = nullptr);
 
 // PMMM integration using the total far-field and near-field force.
 // Both operations recurse over all localities. Preparation closes the previous

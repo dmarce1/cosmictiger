@@ -186,7 +186,7 @@ message(STATUS "cosmictiger equilibrium cooling = ${COSMICTIGER_WITH_CHEMISTRY} 
 message(STATUS "cosmictiger stars = ${COSMICTIGER_WITH_STARS} (COSMICTIGER_ENABLE_STARS; requires chemistry and SPH)")
 message(STATUS "cosmictiger position storage = ${COSMICTIGER_POSITION_TYPE}")
 message(STATUS "cosmictiger integrators: traditional=${COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL}, hierarchical=${COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL}, global=${COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL}")
-message(STATUS "cosmictiger gravity algorithms: FMM=${COSMICTIGER_ENABLE_FMM}, PMMM-PP=${COSMICTIGER_ENABLE_PMMM_PP}, PMMM-FMM=${COSMICTIGER_ENABLE_PMMM_FMM}")
+message(STATUS "cosmictiger gravity algorithms: FMM=${COSMICTIGER_ENABLE_FMM}, PMMM-PP=${COSMICTIGER_ENABLE_PMMM_PP}, PMMM-FMM=${COSMICTIGER_ENABLE_PMMM_FMM}, PM=${COSMICTIGER_ENABLE_PM}, PP-PM=${COSMICTIGER_ENABLE_P3M_PP}, FMM-PM=${COSMICTIGER_ENABLE_P3M_FMM}")
 if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
     message(STATUS "cosmictiger PMMM near solver = ${cosmictiger_default_near_method}")
 endif()
@@ -466,6 +466,14 @@ set_source_files_properties(
     src/gravity/pmmm/fmm/ghost_exchange.cpp
     src/gravity/pmmm/fmm/cell_schedule.cpp
     src/gravity/pmmm/evaluation.cpp
+    src/gravity/pm/solver.cpp
+    src/gravity/pm/kick.cpp
+    src/gravity/pm/interval.cpp
+    src/gravity/p3m/solver.cpp
+    src/gravity/p3m/pp/short_pp.cpp
+    src/gravity/p3m/fmm/short_fmm.cpp
+    tests/gravity/pm/pm.cpp
+    tests/gravity/p3m/p3m.cpp
     PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 # Domain boundary coordinates must round identically when stored and reloaded.
 set_source_files_properties(src/particles/domain.cpp tests/mesh_domains.cpp PROPERTIES
@@ -1893,6 +1901,123 @@ if(BUILD_TESTING)
         target_compile_options(pmmm_fft_flops_test PRIVATE -fno-fast-math -ffp-contract=off)
         cosmictiger_add_gtest(NAME pmmm_fft_flops TARGET pmmm_fft_flops_test
             PROPERTIES TIMEOUT 60 LABELS "pmmm;cpu;flops")
+    endif()
+
+    if(COSMICTIGER_ENABLE_PM OR COSMICTIGER_ENABLE_P3M_PP OR COSMICTIGER_ENABLE_P3M_FMM)
+        # Scalar PM and P3M regressions select their own solver variants explicitly.
+        if(COSMICTIGER_ENABLE_PM)
+            set(particle_mesh_far pm)
+            set(particle_mesh_near_args)
+        else()
+            set(particle_mesh_far p3m)
+            set(particle_mesh_near_args --gravity.method.near=${cosmictiger_default_near_method})
+        endif()
+        # The P3M search mesh must hold distinct periodic neighbor cells, which at
+        # the default split and cutoff needs at least 32 PM cells per axis.
+        set(particle_mesh_common_args --initial.particlesPerDimension=8
+            --hydro.enabled=false --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
+            --compute.positionType=${COSMICTIGER_POSITION_TYPE} --hpx:threads=2 --hpx:bind=none
+            --run.timeIntegrator=traditional)
+        set(pm_workdir "${PROJECT_BINARY_DIR}/tests/pm_cpu")
+        file(MAKE_DIRECTORY "${pm_workdir}")
+        add_test(NAME pm_cpu COMMAND $<TARGET_FILE:cosmictiger> --run.test=pm
+            --gravity.method.far=${particle_mesh_far} ${particle_mesh_near_args}
+            ${particle_mesh_common_args} --gravity.meshSize=16)
+        set_tests_properties(pm_cpu PROPERTIES TIMEOUT 600 PROCESSORS 2
+            WORKING_DIRECTORY "${pm_workdir}" LABELS "particle_mesh;pm;cpu")
+        if(COSMICTIGER_ENABLE_P3M_PP OR COSMICTIGER_ENABLE_P3M_FMM)
+            if(COSMICTIGER_ENABLE_P3M_PP)
+                set(p3m_default_near pp)
+            else()
+                set(p3m_default_near fmm)
+            endif()
+            set(p3m_workdir "${PROJECT_BINARY_DIR}/tests/p3m_cpu")
+            file(MAKE_DIRECTORY "${p3m_workdir}")
+            add_test(NAME p3m_cpu COMMAND $<TARGET_FILE:cosmictiger> --run.test=p3m
+                --gravity.method.far=p3m --gravity.method.near=${p3m_default_near}
+                ${particle_mesh_common_args} --gravity.meshSize=32)
+            set_tests_properties(p3m_cpu PROPERTIES TIMEOUT 900 PROCESSORS 2
+                WORKING_DIRECTORY "${p3m_workdir}" LABELS "particle_mesh;p3m;cpu")
+        endif()
+        set(particle_mesh_variants)
+        if(COSMICTIGER_ENABLE_PM)
+            list(APPEND particle_mesh_variants "pm:none")
+        endif()
+        if(COSMICTIGER_ENABLE_P3M_PP)
+            list(APPEND particle_mesh_variants "p3m:pp")
+        endif()
+        if(COSMICTIGER_ENABLE_P3M_FMM)
+            list(APPEND particle_mesh_variants "p3m:fmm")
+        endif()
+        set(particle_mesh_integrators traditional)
+        if(COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL)
+            list(APPEND particle_mesh_integrators hierarchical)
+        endif()
+        set(particle_mesh_sph_args)
+        if(COSMICTIGER_WITH_SPH)
+            list(APPEND particle_mesh_sph_args --with-sph)
+        endif()
+        foreach(variant IN LISTS particle_mesh_variants)
+            string(REPLACE ":" ";" variant_parts "${variant}")
+            list(GET variant_parts 0 variant_far)
+            list(GET variant_parts 1 variant_near)
+            foreach(integrator IN LISTS particle_mesh_integrators)
+                set(evolution_name pm_evolution_${variant_far}_${variant_near}_${integrator})
+                add_test(NAME ${evolution_name} COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/gravity/pm/run_pm_evolution.py $<TARGET_FILE:cosmictiger>
+                    ${PROJECT_BINARY_DIR}/tests/${evolution_name}
+                    --far-method ${variant_far} --near-method ${variant_near}
+                    --order ${cosmictiger_default_fmm_order} --time-integrator ${integrator}
+                    --position-type ${COSMICTIGER_POSITION_TYPE} ${particle_mesh_sph_args})
+                set_tests_properties(${evolution_name} PROPERTIES TIMEOUT 900 PROCESSORS 2
+                    RUN_SERIAL TRUE LABELS "particle_mesh;${variant_far};cpu")
+            endforeach()
+        endforeach()
+        if(cosmictiger_mpi_tests)
+            set(particle_mesh_launcher_args --mpi-exec=${MPIEXEC_EXECUTABLE}
+                --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG})
+            if(HPX_WITH_PARCELPORT_TCP)
+                list(APPEND particle_mesh_launcher_args --disable-tcp)
+            endif()
+            foreach(flag IN LISTS MPIEXEC_PREFLAGS)
+                list(APPEND particle_mesh_launcher_args "--mpi-preflag=${flag}")
+            endforeach()
+            foreach(flag IN LISTS MPIEXEC_POSTFLAGS)
+                list(APPEND particle_mesh_launcher_args "--mpi-postflag=${flag}")
+            endforeach()
+            set(pm_mpi_workdir "${PROJECT_BINARY_DIR}/tests/pm_mpi_2")
+            file(MAKE_DIRECTORY "${pm_mpi_workdir}")
+            add_test(NAME pm_mpi_2 COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
+                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS} --run.test=pm
+                --gravity.method.far=${particle_mesh_far} ${particle_mesh_near_args}
+                ${particle_mesh_common_args} --gravity.meshSize=16 --hpx:localities=2
+                ${cosmictiger_mpi_transport_args})
+            set_tests_properties(pm_mpi_2 PROPERTIES TIMEOUT 600 PROCESSORS 4
+                WORKING_DIRECTORY "${pm_mpi_workdir}" LABELS "particle_mesh;pm;mpi")
+            if(COSMICTIGER_ENABLE_P3M_PP OR COSMICTIGER_ENABLE_P3M_FMM)
+                set(p3m_mpi_workdir "${PROJECT_BINARY_DIR}/tests/p3m_mpi_2")
+                file(MAKE_DIRECTORY "${p3m_mpi_workdir}")
+                add_test(NAME p3m_mpi_2 COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
+                    ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS} --run.test=p3m
+                    --gravity.method.far=p3m --gravity.method.near=${p3m_default_near}
+                    ${particle_mesh_common_args} --gravity.meshSize=32 --hpx:localities=2
+                    ${cosmictiger_mpi_transport_args})
+                set_tests_properties(p3m_mpi_2 PROPERTIES TIMEOUT 900 PROCESSORS 4
+                    WORKING_DIRECTORY "${p3m_mpi_workdir}" LABELS "particle_mesh;p3m;mpi")
+            endif()
+            list(GET particle_mesh_variants 0 mpi_variant)
+            string(REPLACE ":" ";" mpi_variant_parts "${mpi_variant}")
+            list(GET mpi_variant_parts 0 mpi_variant_far)
+            list(GET mpi_variant_parts 1 mpi_variant_near)
+            add_test(NAME pm_evolution_mpi COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/gravity/pm/run_pm_evolution.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/pm_evolution_mpi ${particle_mesh_launcher_args} --ranks 2
+                --far-method ${mpi_variant_far} --near-method ${mpi_variant_near}
+                --order ${cosmictiger_default_fmm_order} --time-integrator traditional
+                --position-type ${COSMICTIGER_POSITION_TYPE} ${particle_mesh_sph_args})
+            set_tests_properties(pm_evolution_mpi PROPERTIES TIMEOUT 900 PROCESSORS 4
+                RUN_SERIAL TRUE LABELS "particle_mesh;mpi")
+        endif()
     endif()
 
     if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)

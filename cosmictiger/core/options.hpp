@@ -156,6 +156,18 @@ struct Gravity {
                                                // near fields.
     std::string pmmmNearMethod{gravity::kBuildPmmmNearMethod};
     int pmmmBatchParticles{4096};    // Target owned sink count per ready near-field batch.
+    // Particle-mesh (pm, p3m) assignment cloud: ngp, cic, tsc, or pcs.
+    std::string cloud{"pcs"};
+    // Gaussian split scale r_s in PM mesh cells and the short-range cutoff in
+    // units of r_s. Both apply only to gravity.method.far=p3m.
+    double p3mSplitCells{1.25};
+    double p3mCutoff{4.5};
+    // Derived P3M geometry in box units: the split radius, the short cutoff, and
+    // the power-of-two short-range search mesh whose pmmmNearWidth-cell cube
+    // covers the cutoff. These are resolved at startup, not configured.
+    double p3mSplitRadius{};
+    double p3mCutoffRadius{};
+    int p3mMeshSize{};
     int fmmOrder{
         gravity::kBuildFmmOrder};    // Potential expansion degree + 1; template/storage convention.
     std::string kernelFamily{"ferrers"};
@@ -173,6 +185,22 @@ struct Gravity {
 
 inline bool usesMeshGravity(Gravity const& gravityOptions) {
     return gravityOptions.method == "pmmm";
+}
+
+// Pure PM and both P3M variants: a scalar PM/FFT long force with the mandatory
+// outer PM interval; the short solver (none, pp, or fmm) runs inside it.
+inline bool usesParticleMesh(Gravity const& gravityOptions) {
+    return gravityOptions.method == "pm" || gravityOptions.method == "p3m";
+}
+
+inline bool usesSplitParticleMesh(Gravity const& gravityOptions) {
+    return gravityOptions.method == "p3m";
+}
+
+// Solvers whose short-range pair traversal requires every search-mesh cell to be
+// owned, with all its particles, by one locality (coarse-mesh-aligned domain cuts).
+inline bool usesCellOwnedShortRange(Gravity const& gravityOptions) {
+    return usesMeshGravity(gravityOptions) || usesSplitParticleMesh(gravityOptions);
 }
 
 inline bool usesHierarchicalIntegration(Run const& run) {
@@ -459,6 +487,12 @@ struct Options {
         arc & lightcone.cuda;
         arc & chemistry.cuda;
         arc & starFormation.cuda;
+        arc & gravity.cloud;
+        arc & gravity.p3mSplitCells;
+        arc & gravity.p3mCutoff;
+        arc & gravity.p3mSplitRadius;
+        arc & gravity.p3mCutoffRadius;
+        arc & gravity.p3mMeshSize;
     }
 };
 

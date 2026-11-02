@@ -723,6 +723,8 @@ void fmmTreeTest();
 void fmmWalkTest();
 void meshDomainsTest();
 void pmmmTest();
+void pmTest();
+void p3mTest();
 void particleMeshSortTest();
 void particleMeshTimestepTest();
 void particleMeshDispatchLaunchFailureTest();
@@ -774,6 +776,15 @@ ApplicationTest const applicationTests[] = {
     {"particleMeshTimestep", particleMeshTimestepTest},
     {"particleMeshDispatchLaunchFailure", particleMeshDispatchLaunchFailureTest},
     {"particleMeshDispatchAsyncFailure", particleMeshDispatchAsyncFailureTest},
+#endif
+#if COSMICTIGER_WITH_PARTICLE_MESH
+    {"pm", pmTest},
+#if !(COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM)
+    {"particleMeshSort", particleMeshSortTest},
+#endif
+#endif
+#if COSMICTIGER_WITH_P3M
+    {"p3m", p3mTest},
 #endif
 #if COSMICTIGER_WITH_SPH
     {"unitsOutput", unitsOutputTest},

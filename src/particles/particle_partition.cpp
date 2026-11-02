@@ -36,6 +36,12 @@ void particlesSwap(ParticleInteger first, ParticleInteger second) {
                 particlesGravityAccelerations[dim][second]);
         }
     }
+    if (particlesHasLongAcceleration(options)) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            detail::swapParticleBytes(
+                particlesLongAccelerations[dim][first], particlesLongAccelerations[dim][second]);
+        }
+    }
     if (saveParticlePotential(options.analysis)) {
         detail::swapParticleBytes(particlesP[first], particlesP[second]);
     }

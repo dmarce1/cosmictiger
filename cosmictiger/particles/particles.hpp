@@ -119,9 +119,15 @@ snapshot. This can be different from npart if one is dealing with a multi-file s
 };
 /*****************************/
 
+// The mesh solvers (pm, p3m) store their gm-scaled long acceleration per particle.
+inline bool particlesHasLongAcceleration(Options const& options) {
+    return options.gravity.enabled && usesParticleMesh(options.gravity);
+}
+
 struct Particle {
     Vector3<Position> x;
     Vector3<float> v;
+    Vector3<float> longAcceleration{};
     GroupInteger lg;
     ParticleInteger catIndex;
     char r;
@@ -153,6 +159,11 @@ struct Particle {
         }
         if (getOptions().starFormation.enabled) {
             a & starFormation;
+        }
+        if (particlesHasLongAcceleration(getOptions())) {
+            for (int dim = 0; dim < kDimensions; dim++) {
+                a& longAcceleration[dim];
+            }
         }
     }
 };
@@ -186,6 +197,10 @@ PARTICLES_EXTERN Array<Position*, kDimensions> particlesX;
 PARTICLES_EXTERN Vector3<float>* particlesV;
 PARTICLES_EXTERN char* particlesR;
 PARTICLES_EXTERN Array<float*, kDimensions> particlesGravityAccelerations;
+// Long-range (mesh) acceleration of the particle-mesh solvers, scaled by gm. It
+// is produced at an outer PM boundary and consumed by the next kick, so it
+// follows particle permutations and migration but is never checkpointed.
+PARTICLES_EXTERN Array<float*, kDimensions> particlesLongAccelerations;
 PARTICLES_EXTERN float* particlesP;
 PARTICLES_EXTERN std::atomic<GroupInteger>* particlesGrp
 #ifdef PARTICLES_CPP
@@ -344,6 +359,11 @@ inline char& particlesRung(ParticleInteger index) {
     return particlesR[index];
 }
 
+inline float& particlesLongAcceleration(int dim, ParticleInteger index) {
+    CHECK_PART_BOUNDS(index);
+    return particlesLongAccelerations[dim][index];
+}
+
 inline float& particlesGravityAcceleration(int dim, ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesGravityAccelerations[dim][index];
@@ -418,6 +438,11 @@ inline Particle particlesGetParticle(ParticleInteger index) {
     if (getOptions().starFormation.enabled) {
         p.starFormation = particlesStarFormationStates[index];
     }
+    if (particlesHasLongAcceleration(getOptions())) {
+        for (int dim = 0; dim < kDimensions; dim++) {
+            p.longAcceleration[dim] = particlesLongAcceleration(dim, index);
+        }
+    }
     return p;
 }
 
@@ -445,6 +470,11 @@ inline void particlesSetParticle(Particle p, ParticleInteger index) {
     }
     if (getOptions().starFormation.enabled) {
         particlesStarFormationStates[index] = p.starFormation;
+    }
+    if (particlesHasLongAcceleration(getOptions())) {
+        for (int dim = 0; dim < kDimensions; dim++) {
+            particlesLongAcceleration(dim, index) = p.longAcceleration[dim];
+        }
     }
 }
 

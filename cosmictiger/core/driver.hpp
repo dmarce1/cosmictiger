@@ -57,6 +57,13 @@ struct DriverParameters {
     TimeType itime;
     // Interval of the pending global half-step, independent of the rung clock.
     double globalTimestep{};
+    // Particle-mesh solvers: the outer PM interval whose opening long half-kick
+    // has been applied (zero before the first), the conformal time at which it
+    // started, and the number of completed outer intervals. itime is the
+    // interval-local integer phase of the inner rung integration.
+    double outerInterval{};
+    double outerStart{};
+    uint64_t outerIndex{};
     template <typename A>
     void serialize(A&& arc, unsigned) {
         arc & bucketSize;
@@ -76,7 +83,22 @@ struct DriverParameters {
         arc & itime;
         arc & years;
         arc & globalTimestep;
+        arc & outerInterval;
+        arc & outerStart;
+        arc & outerIndex;
     }
+};
+
+// Particle-mesh solvers: how a force pass at an outer PM boundary closes the
+// previous interval and opens the next. closingBaseTimestep is the previous
+// interval (zero: the substep base timestep is unchanged); the long half-kicks
+// apply the per-particle mesh acceleration; longPotentialEnergy is the
+// gm-scaled mesh potential energy added to the synchronized diagnostics.
+struct MeshKickSchedule {
+    double closingBaseTimestep = 0.0;
+    double longCloseTimestep = 0.0;
+    double longOpenTimestep = 0.0;
+    double longPotentialEnergy = 0.0;
 };
 
 #if COSMICTIGER_WITH_SPH
@@ -84,7 +106,8 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose = true);
 SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
     EnergiesT* energies, bool verbose = true, int uniformMinimumRung = -1, bool closingOnly = false,
     double previousTimestep = 0.0, double maximumGlobalTimestep = 0.0,
-    bool predictorPrepared = false, std::function<double()> const& joinGravity = {});
+    bool predictorPrepared = false, std::function<double()> const& joinGravity = {},
+    double closingTimeStepScale = 0.0);
 #endif
 #if COSMICTIGER_WITH_GRAVITY
 ForceStepResult kickStep(int minrung, double scale, double, double t0, double theta, bool firstCall,
@@ -93,7 +116,7 @@ ForceStepResult kickStep(int minrung, double scale, double, double t0, double th
 ForceStepResult kickStepHierarchical(int& minimumRung, int maximumRung, double scale,
     double scaleDerivative, double time, double baseTimestep, double theta, EnergiesT* energies,
     int minimumRungFloor, bool doPotential, hpx::future<void>* lightcone, bool keepTop, double drag,
-    int gravityErrorStep = -1, bool closingOnly = false);
+    int gravityErrorStep = -1, bool closingOnly = false, MeshKickSchedule const& schedule = {});
 #endif
 
 #endif
@@ -101,7 +124,7 @@ ForceStepResult kickStepHierarchical(int& minimumRung, int maximumRung, double s
 ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative, double time,
     double baseTimestep, double theta, bool firstCall, bool fullEvaluation, EnergiesT& energies,
     int gravityErrorStep = -1, bool closingOnly = false, double previousTimestep = 0.0,
-    double maximumGlobalTimestep = 0.0);
+    double maximumGlobalTimestep = 0.0, MeshKickSchedule const& schedule = {});
 
 void runFixedScenario();
 void driver();

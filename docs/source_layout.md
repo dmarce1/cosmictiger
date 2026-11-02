@@ -47,10 +47,12 @@ gravity/
 │   ├── distributed_tree.*, remote_cache.*, particle_exchange.*
 │   ├── execution.*, gpu_staging.*, periodic*
 │   └── ewald_indices.*, ewald_tables.hpp
-├── pm/                                    # Shared particle-mesh infrastructure
-│   ├── cloud.hpp
-│   ├── collective_dispatch.*
-│   └── fft_flops.hpp
+├── pm/                                    # Scalar PM solve and shared mesh infrastructure
+│   ├── cloud.hpp, geometry.hpp
+│   ├── collective_dispatch.*, fft_flops.hpp
+│   ├── solver.*                           # Compensated/screened scalar PM/FFT solve
+│   ├── kick.*                             # Streamed field consumer with long half-kicks
+│   └── interval.*                         # Mandatory outer PM interval selection
 ├── pmmm/
 │   ├── solver.*, kernels.*, mesh_size.hpp, fft.cpp, mesh_exchange.cpp
 │   ├── evaluation.cpp, kick.*
@@ -58,8 +60,11 @@ gravity/
 │   ├── pp/near_pp.*
 │   └── fmm/{cell_tree.*,fmm_batch.*,cell_schedule.cpp,ghost_storage.*,ghost_exchange.cpp}
 └── p3m/
-    ├── pp/kernels.hpp                     # Screened pair kernel adapter
-    └── fmm/kernels.hpp                    # Screened full Cartesian Green adapter
+    ├── short_pair.hpp                     # Softened/cutoff short pair law (CPU, CUDA)
+    ├── solver.*                           # Short solver: search mesh, ghosts, consumption
+    ├── state.hpp                          # Private source implementation header
+    ├── pp/kernels.hpp, pp/short_pp.*      # PP-PM direct pairs (CPU batch and CUDA)
+    └── fmm/kernels.hpp, fmm/short_fmm.*   # FMM-PM screened Cartesian trees and walk
 ```
 
 An asterisk denotes the applicable header, C++ implementation, and/or CUDA
@@ -73,10 +78,12 @@ PP/FMM near variants. Generic FFT accounting and collective dispatch live in
 `pm/`, available to both `pmmm/` and `p3m/`. PMMM's tensor convolution still
 belongs to PMMM; it is not a scalar PM solve merely because it uses FFTs.
 
-`p3m/` provides screened short-force adapters for the planned PP-PM and FMM-PM
-solvers. The mesh solve supplies their long force. The restored cloud weights
-are shared PM infrastructure; a pure-PM runtime and the P3M walks/integration
-are separate work, not enabled by this directory reorganization.
+`pm/` owns the scalar PM/FFT solve used by `gravity.method.far=pm` and `p3m`,
+the per-particle long acceleration consumer and the outer PM interval. `p3m/`
+owns the short-range solvers of PP-PM and FMM-PM: a power-of-two search mesh
+whose cells are wholly owned by one locality, remote cell fetches, the
+softened/cutoff pair law and the screened Cartesian tree walk. The mesh solve
+supplies their long force; see [docs/p3m.md](p3m.md).
 
 `COSMICTIGER_ENABLE_FMM=OFF` excludes the global FMM adapter;
 disabling both `COSMICTIGER_ENABLE_PMMM_PP` and
