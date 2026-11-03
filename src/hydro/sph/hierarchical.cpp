@@ -132,12 +132,30 @@ void refreshSources(int minimumRung, double time, bool storedAnchors) {
 HPX_PLAIN_ACTION(detail::refreshSources, RefreshHierarchicalSourcesAction);
 namespace detail {
 
-std::vector<SourceState> querySources(SourceBox box, double support, double time) {
+// One pass queries every sink batch of a locality at the same time. Preparing
+// the forest evaluates one envelope per tree node and one position per record,
+// while a batch visits a few dozen nodes, so preparation amortizes once the
+// pass covers more than a few percent of the retained population.
+constexpr size_t kPreparedBatchWeight = 1024;
+
+std::vector<std::vector<SourceState>> querySourceBatches(
+    std::vector<SourceBox> boxes, std::vector<double> supports, double time) {
+    if (boxes.size() != supports.size()) {
+        throw std::invalid_argument("Hierarchical SPH query batches and supports differ in count");
+    }
     std::lock_guard lock(sourceMutex);
-    return sourceForest.query(box, support, time);
+    if (!boxes.empty() && boxes.size() * kPreparedBatchWeight >= sourceForest.size()) {
+        sourceForest.prepare(time);
+    }
+    std::vector<std::vector<SourceState>> result;
+    result.reserve(boxes.size());
+    for (size_t batch = 0; batch < boxes.size(); ++batch) {
+        result.push_back(sourceForest.query(boxes[batch], supports[batch], time));
+    }
+    return result;
 }
 }    // namespace detail
-HPX_PLAIN_ACTION(detail::querySources, QueryHierarchicalSourcesAction);
+HPX_PLAIN_ACTION(detail::querySourceBatches, QueryHierarchicalSourceBatchesAction);
 namespace detail {
 
 void resetWork(int minimumRung, double time, double signalSoundFloor) {
@@ -533,6 +551,10 @@ SphRunReturn runLocal(SphRunParameters parameters, double time) {
     constexpr size_t kBatchSize = 32;
     size_t const batches = (gasIndices.size() + kBatchSize - 1) / kBatchSize;
     packed.nodes.resize(2 * batches);
+    std::vector<SourceBox> queryBoxes;
+    std::vector<double> querySupports;
+    queryBoxes.reserve(batches);
+    querySupports.reserve(batches);
     for (size_t batch = 0; batch < batches; ++batch) {
         size_t const begin = batch * kBatchSize;
         size_t const end = std::min(begin + kBatchSize, gasIndices.size());
@@ -568,25 +590,38 @@ SphRunReturn runLocal(SphRunParameters parameters, double time) {
         }
         packed.targets.push_back(batch);
         packed.neighbors.push_back(batches + batch);
+        queryBoxes.push_back(queryBox);
+        querySupports.push_back(maximumSupport);
+    }
+    // One batched query per locality per pass, indexed [locality][batch].
+    std::vector<std::vector<std::vector<SourceState>>> sources;
+    if (hpxSize() == 1) {
+        // The forest is local and the refresh has completed. Avoid scheduling
+        // an HPX action/future for the pass.
+        sources.push_back(querySourceBatches(queryBoxes, querySupports, time));
+    } else {
+        std::vector<hpx::future<std::vector<std::vector<SourceState>>>> queries;
+        for (auto const& locality : hpxLocalities()) {
+            queries.push_back(hpx::async<QueryHierarchicalSourceBatchesAction>(
+                locality, queryBoxes, querySupports, time));
+        }
+        hpx::wait_all(queries);
+        for (auto& query : queries) {
+            sources.push_back(query.get());
+        }
+    }
+    // Append each batch's rows in locality order, as the per-batch round trips
+    // did, so the packed layout and the summation order are unchanged.
+    for (size_t batch = 0; batch < batches; ++batch) {
         auto& neighbor = packed.nodes[batches + batch];
         neighbor.particleRange.first = packed.energy.size();
-        if (hpxSize() == 1) {
-            // The forest is local and the refresh has completed. Avoid a new
-            // scheduled HPX action/future for every 32-particle sink batch.
-            for (auto const& source : querySources(queryBox, maximumSupport, time)) {
+        for (auto const& locality : sources) {
+            if (locality.size() != batches) {
+                throw std::runtime_error(
+                    "Hierarchical SPH source query returned wrong batch count");
+            }
+            for (auto const& source : locality[batch]) {
                 packed.append(source);
-            }
-        } else {
-            std::vector<hpx::future<std::vector<SourceState>>> queries;
-            for (auto const& locality : hpxLocalities()) {
-                queries.push_back(hpx::async<QueryHierarchicalSourcesAction>(
-                    locality, queryBox, maximumSupport, time));
-            }
-            hpx::wait_all(queries);
-            for (auto& query : queries) {
-                for (auto const& source : query.get()) {
-                    packed.append(source);
-                }
             }
         }
         neighbor.particleRange.second = packed.energy.size();

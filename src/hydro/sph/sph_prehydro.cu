@@ -62,7 +62,7 @@ __global__ void sphCudaPrehydro1(
             auto const& neighborNode = data.treeNodes[data.neighborNodeIndices[neighborNodeIndex]];
             int const end = neighborNode.particleRange.first +
                 roundUp(neighborNode.particleRange.second - neighborNode.particleRange.first,
-                    blockSize);
+                    ParticleInteger(blockSize));
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
                 sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
@@ -144,7 +144,7 @@ __global__ void sphCudaPrehydro2(
             auto const& neighborNode = data.treeNodes[data.neighborNodeIndices[neighborNodeIndex]];
             int const end = neighborNode.particleRange.first +
                 roundUp(neighborNode.particleRange.second - neighborNode.particleRange.first,
-                    blockSize);
+                    ParticleInteger(blockSize));
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
                 sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;

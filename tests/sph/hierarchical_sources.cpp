@@ -195,6 +195,77 @@ void testBruteForceCoverage() {
     }
 }
 
+void testReciprocalBruteForceNeighbors() {
+    // Every point is both a sink and a source. The forest's exact test must
+    // agree with the symmetric criterion r_ij < max(h_i, h_j), so the predicted
+    // neighbor sets are reciprocal, differing from the brute-force sets only
+    // by pairs inside the float-staging margin at the support boundary.
+    std::mt19937_64 random(2718281);
+    std::uniform_real_distribution<double> unit(0.0, 1.0);
+    std::uniform_real_distribution<double> signedUnit(-1.0, 1.0);
+    std::vector<SourceState> points;
+    for (uint64_t index = 0; index < 331; ++index) {
+        auto point =
+            makeSource(1 + 7 * index, int(index % 3), {unit(random), unit(random), unit(random)});
+        point.supportRadius = 0.02 + 0.06 * unit(random);
+        point.logDensityRate = signedUnit(random);
+        point.driftScale = 0.5 + unit(random);
+        for (size_t dimension = 0; dimension < 3; ++dimension) {
+            point.driftVelocity[dimension] = 0.1 * signedUnit(random);
+        }
+        points.push_back(point);
+    }
+    hydro_source::Forest<SourceState, sph_hierarchical::SphSourcePolicy> forest(8);
+    forest.replaceActive(0, points);
+    constexpr double kMargin = 2.0 * sph_hierarchical::SphSourcePolicy::kQueryPadding;
+    for (double const time : {0.0, 0.37, 1.0}) {
+        std::vector<SourceState> predicted;
+        for (auto const& point : points) {
+            predicted.push_back(sph_hierarchical::predictSource(point, time));
+        }
+        auto const separation = [&](size_t first, size_t second) {
+            double squared = 0.0;
+            for (size_t dimension = 0; dimension < 3; ++dimension) {
+                double distance =
+                    predicted[first].position[dimension] - predicted[second].position[dimension];
+                distance -= std::round(distance);
+                squared += distance * distance;
+            }
+            return std::sqrt(squared);
+        };
+        std::vector<std::unordered_set<uint64_t>> neighbors(points.size());
+        size_t pairs = 0;
+        for (size_t sink = 0; sink < points.size(); ++sink) {
+            auto const& target = predicted[sink];
+            auto const found = forest.query(pointBox(target.position), target.supportRadius, time);
+            for (auto const& source : found) {
+                require(neighbors[sink].insert(source.id).second,
+                    "reciprocal query returned a source twice");
+            }
+            for (size_t other = 0; other < points.size(); ++other) {
+                double const radius =
+                    std::max(target.supportRadius, predicted[other].supportRadius);
+                double const distance = separation(sink, other);
+                bool const listed = neighbors[sink].contains(points[other].id);
+                if (distance < radius) {
+                    require(listed, "forest omitted a brute-force reciprocal neighbor");
+                } else if (distance > radius + kMargin) {
+                    require(!listed, "forest returned a pair beyond max(h_i, h_j)");
+                }
+                pairs += listed && sink != other;
+            }
+        }
+        require(pairs > 0, "reciprocity fixture produced no neighbor pairs");
+        for (size_t sink = 0; sink < points.size(); ++sink) {
+            for (size_t other = 0; other < points.size(); ++other) {
+                require(neighbors[sink].contains(points[other].id) ==
+                        neighbors[other].contains(points[sink].id),
+                    "forest neighbor sets are not reciprocal");
+            }
+        }
+    }
+}
+
 void testPermutationStableQueryOrder() {
     // Repeated coordinates exercise both splitting-plane ties and coincident
     // sources. A checkpoint restores an unrelated gas-slot permutation.
@@ -593,6 +664,7 @@ int main() {
         detail::testDerivedStatePreservation();
         detail::testPeriodicAndGrowingSupportCoverage();
         detail::testBruteForceCoverage();
+        detail::testReciprocalBruteForceNeighbors();
         detail::testPermutationStableQueryOrder();
         detail::testReplacementCostAndImmutability();
         detail::testPredictionReuseAndParticleFiltering();

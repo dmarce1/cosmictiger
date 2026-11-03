@@ -49,7 +49,7 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
     auto const& numberOfBlocks = gridDim.x;
     ParticleInteger const begin = (size_t) bid * count / numberOfBlocks;
     ParticleInteger const end = (size_t) (bid + 1) * count / numberOfBlocks;
-    ParticleInteger const end0 = roundUp(end - begin, kDriftBlockSize) + begin;
+    ParticleInteger const end0 = roundUp(end - begin, ParticleInteger(kDriftBlockSize)) + begin;
     double const c1 = dt / a;
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
     if (doLc) {
@@ -235,8 +235,8 @@ void cudaDrift(
 #else
     bool const doLc = false;
 #endif
-    numberOfBlocks =
-        std::min(numberOfBlocks, std::max((rng.second - rng.first) / kDriftBlockSize, 1));
+    numberOfBlocks = static_cast<int>(std::min<ParticleInteger>(
+        numberOfBlocks, std::max<ParticleInteger>((rng.second - rng.first) / kDriftBlockSize, 1)));
     auto cnt = rng.second - rng.first;
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
     if (doLc) {

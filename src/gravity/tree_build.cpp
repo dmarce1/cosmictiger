@@ -219,7 +219,8 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
                 i += kSimdFloatSize) {
                 SimdPosition x{};
                 Vector3<SimdFloat> dx{};
-                int const maxj = std::min(particleRange.second - i, kSimdFloatSize);
+                int const maxj =
+                    std::min<ParticleInteger>(particleRange.second - i, kSimdFloatSize);
                 for (int dim = 0; dim < kDimensions; dim++) {
                     for (int j = 0; j < maxj; j++) {
                         simdSetLane(x, j, sources.positions[dim][i + j].raw());
