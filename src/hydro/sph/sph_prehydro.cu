@@ -31,8 +31,6 @@ struct NeighborActivity {
     float accelerationZ;
     float divergence;
     float internalEnergy;
-    float pressureEnergyRatio;
-    float adiabaticIndex;
 };
 
 struct DensityWorkspace {
@@ -97,7 +95,7 @@ __global__ void sphCudaPrehydro1(
                 position[kXDimension] = data.sourcePositionX[particleIndex];
                 position[kYDimension] = data.sourcePositionY[particleIndex];
                 position[kZDimension] = data.sourcePositionZ[particleIndex];
-                float& supportRadius = data.sinkThermodynamicStates[sinkIndex].supportRadius;
+                float& supportRadius = data.sinkSupportRadius[sinkIndex];
                 bool const converged = solveSphSupportRadius<kPrehydro1BlockSize>(supportRadius,
                     parameters.minimumSupportRadius, parameters.maximumSupportRadius,
                     data.targetNeighborCount, workspace.positions, position, targetNode.outerBox,
@@ -125,7 +123,9 @@ __global__ void sphCudaPrehydro1(
 
 __global__ void sphCudaPrehydro2(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
-    sph_flops::Counter flops = 0;
+    sph_flops::Counter flops = 1;    // γ − 1.
+    float const adiabaticIndex = data.adiabaticIndex;
+    float const pressureEnergyRatio = adiabaticIndex - 1.0f;    // P/(ρu) for every particle.
     int const threadIndex = threadIdx.x;
     int const blockSize = blockDim.x;
     __shared__ int targetNodeIndex;
@@ -197,13 +197,7 @@ __global__ void sphCudaPrehydro2(
                             data.sourceVelocityDivergence[sourceParticleIndex] :
                             0.0f,
                         parameters.cullenDehnen ? data.sourceInternalEnergy[sourceParticleIndex] :
-                                                  0.0f,
-                        parameters.cullenDehnen && data.sourcePressureEnergyRatio ?
-                            data.sourcePressureEnergyRatio[sourceParticleIndex] :
-                            data.adiabaticIndex - 1.0f,
-                        parameters.cullenDehnen && data.sourceAdiabaticIndex ?
-                            data.sourceAdiabaticIndex[sourceParticleIndex] :
-                            data.adiabaticIndex};
+                                                  0.0f};
                 }
             }
         }
@@ -218,7 +212,7 @@ __global__ void sphCudaPrehydro2(
             position[kXDimension] = data.sourcePositionX[particleIndex];
             position[kYDimension] = data.sourcePositionY[particleIndex];
             position[kZDimension] = data.sourcePositionZ[particleIndex];
-            float& supportRadius = data.sinkThermodynamicStates[sinkIndex].supportRadius;
+            float& supportRadius = data.sinkSupportRadius[sinkIndex];
             int semiactive = active;
             if (!active) {
                 for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
@@ -282,13 +276,8 @@ __global__ void sphCudaPrehydro2(
             float Σqdw = 0.0f;
             float c_a_switch = 0.0f;    // Sound speed for the CD signal speed or Price target.
             if (parameters.gradientSwitch()) {
-                float const γ_a = data.sourceAdiabaticIndex ?
-                    data.sourceAdiabaticIndex[particleIndex] :
-                    data.adiabaticIndex;
-                float const P_over_ρu_a = data.sourcePressureEnergyRatio ?
-                    data.sourcePressureEnergyRatio[particleIndex] :
-                    γ_a - 1.0f;
-                c_a_switch = sqrtf(γ_a * P_over_ρu_a * data.sourceInternalEnergy[particleIndex]);
+                c_a_switch = sqrtf(adiabaticIndex * pressureEnergyRatio *
+                    data.sourceInternalEnergy[particleIndex]);
             }
             for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
                 neighborIndex += blockSize) {
@@ -365,8 +354,8 @@ __global__ void sphCudaPrehydro2(
                         if (parameters.cullenDehnen) {
                             // Equation (15): maximum approaching-pair signal speed.
                             float const v_ab_dot_r̂_ab = v_ab_physical.dot(r_ab) / radius;
-                            float const c_b = sqrtf(particle.adiabaticIndex *
-                                particle.pressureEnergyRatio * particle.internalEnergy);
+                            float const c_b = sqrtf(
+                                adiabaticIndex * pressureEnergyRatio * particle.internalEnergy);
                             v_sig_a = fmaxf(
                                 v_sig_a, 0.5f * (c_a_switch + c_b) - fminf(v_ab_dot_r̂_ab, 0.0f));
                             flops += 13;
@@ -457,14 +446,8 @@ __global__ void sphCudaPrehydro2(
                     // Morris & Monaghan (1997), equations (5), (6), (13), in conformal time.
                     // NOLINTBEGIN(readability-identifier-naming)
                     float const div_v_a = ρ_a_div_v_a / (ρ_a * parameters.scaleFactor);
-                    float const γ_a = data.sourceAdiabaticIndex ?
-                        data.sourceAdiabaticIndex[particleIndex] :
-                        data.adiabaticIndex;
-                    float const P_over_ρu_a = data.sourcePressureEnergyRatio ?
-                        data.sourcePressureEnergyRatio[particleIndex] :
-                        γ_a - 1.0f;
-                    float const c_a =
-                        sqrtf(γ_a * P_over_ρu_a * data.sourceInternalEnergy[particleIndex]);
+                    float const c_a = sqrtf(adiabaticIndex * pressureEnergyRatio *
+                        data.sourceInternalEnergy[particleIndex]);
                     float const h_a = H_a /
                         float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
                         0.9128709291752769f;

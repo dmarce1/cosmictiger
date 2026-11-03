@@ -19,16 +19,13 @@ constexpr double kChemistryTestScale = 0.02;
 struct ChemistryRecord {
     uint32_t electronFractionBits;
     uint32_t energyBits;
-    uint32_t pressureFactorBits;
-    uint32_t acousticFactorBits;
     uint64_t rung;
 
     bool operator==(ChemistryRecord const&) const = default;
 
     template <typename Archive>
     void serialize(Archive& archive, unsigned) {
-        archive & electronFractionBits & energyBits & pressureFactorBits & acousticFactorBits &
-            rung;
+        archive & electronFractionBits & energyBits & rung;
     }
 };
 using ChemistryLocalSnapshot = std::vector<ChemistryRecord>;
@@ -67,24 +64,20 @@ void initializeChemistryFixture(bool invalid) {
             particlesVel(dim, i) = 0.0f;
         }
         sphParticlesDensity(i) = density;
-        sphParticlesInternalEnergy(i) = energy;
+        sphParticlesSetInternalEnergy(i, energy);
         sphParticlesSupportRadius(i) = 0.1f;
         sphChemistryInitializeParticle(i, kChemistryTestScale);
-        sphParticlesChemistryEos[i] = {float(gadget4::kGammaMinusOne), float(gadget4::kGamma)};
     }
     if (invalid && hpxRank() == hpxSize() - 1) {
         // Last sink on the last rank fails after other ranks can prepare.
-        sphParticlesInternalEnergy(2) = -1.0f;
+        sphParticlesSetInternalEnergy(2, -1.0f);
     }
 }
 ChemistryLocalSnapshot chemistryFixtureSnapshot() {
     ChemistryLocalSnapshot records;
     for (ParticleInteger i = 0; i < 3; ++i) {
         records.push_back({std::bit_cast<uint32_t>(sphParticlesChemistryStates[i].electronFraction),
-            std::bit_cast<uint32_t>(sphParticlesInternalEnergy(i)),
-            std::bit_cast<uint32_t>(sphParticlesChemistryEos[i].first),
-            std::bit_cast<uint32_t>(sphParticlesChemistryEos[i].second),
-            uint64_t(sphParticlesRung(i))});
+            std::bit_cast<uint32_t>(sphParticlesInternalEnergy(i)), uint64_t(sphParticlesRung(i))});
     }
     return records;
 }

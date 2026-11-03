@@ -17,9 +17,6 @@
 #include <cosmictiger/scenarios/polytropic_star.hpp>
 #include <cosmictiger/scenarios/rayleigh_taylor.hpp>
 #include <cosmictiger/scenarios/sod.hpp>
-#if COSMICTIGER_ENABLE_HOPKINS
-#include <cosmictiger/scenarios/sound_wave.hpp>
-#endif
 #include <cosmictiger/hydro/sph/sph_particles.hpp>
 #endif
 
@@ -84,9 +81,6 @@ ScenarioDefinition const& definition(std::string const& name) {
         {"disc", true, true, true, 1024, initializeDisc},
         {"polytropicStar", true, true, true, 275, initializePolytropicStar},
         {"hydroWave", false, true, true, 64, initializeHydroWave},
-#if COSMICTIGER_ENABLE_HOPKINS
-        {"soundWave", false, true, true, 1, initializeSoundWave, 1},
-#endif
         {"gresho", false, true, true, 16, initializeGresho},
 #endif
 #if COSMICTIGER_WITH_GRAVITY
@@ -99,17 +93,9 @@ ScenarioDefinition const& definition(std::string const& name) {
             return scenario;
         }
     }
-#if !COSMICTIGER_ENABLE_HOPKINS
-    if (name == "soundWave") {
-        throw std::invalid_argument("run.scenario=soundWave requires "
-                                    "COSMICTIGER_ENABLE_HOPKINS=ON "
-                                    "(and COSMICTIGER_ENABLE_SPH=ON)");
-    }
-#endif
 #if !COSMICTIGER_WITH_SPH
     if (name == "sod" || name == "blast" || name == "rayleighTaylor" || name == "kelvinHelmholtz" ||
-        name == "disc" || name == "polytropicStar" || name == "hydroWave" || name == "gresho" ||
-        name == "soundWave") {
+        name == "disc" || name == "polytropicStar" || name == "hydroWave" || name == "gresho") {
         throw std::invalid_argument("run.scenario=" + name + " requires COSMICTIGER_ENABLE_SPH=ON");
     }
 #endif

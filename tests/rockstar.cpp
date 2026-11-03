@@ -821,15 +821,15 @@ Vector<ParticleData> makeRockstarSnapshot(int count, bool planar) {
     for (int i = 0; i < count; ++i) {
         auto& particle = particles[i];
         for (int dim = 0; dim < kDimensions; ++dim) {
-            particle.x[dim] = Position(0.25);
-            particle.v[dim] = 0.0f;
+            particle.position[dim] = Position(0.25);
+            particle.velocity[dim] = 0.0f;
         }
         if (planar) {
-            particle.x[0] = Position(0.25 + 0.0002 * std::sin(double(i)));
-            particle.x[1] = Position(0.25 + 0.0002 * std::cos(double(i)));
-            particle.v[0] = 1.e-6f * std::sin(1.3f * i);
-            particle.v[1] = 1.e-6f * std::cos(1.7f * i);
-            particle.v[2] = 1.e-6f * std::sin(1.9f * i);
+            particle.position[0] = Position(0.25 + 0.0002 * std::sin(double(i)));
+            particle.position[1] = Position(0.25 + 0.0002 * std::cos(double(i)));
+            particle.velocity[0] = 1.e-6f * std::sin(1.3f * i);
+            particle.velocity[1] = 1.e-6f * std::cos(1.7f * i);
+            particle.velocity[2] = 1.e-6f * std::sin(1.9f * i);
         }
         particle.index = i;
         particle.rank = 0;

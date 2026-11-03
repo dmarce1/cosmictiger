@@ -82,7 +82,7 @@ Input input(ParticleInteger gas) {
     result.chemistry = sphParticlesChemistryStates[gas];
     result.energy = sphParticlesInternalEnergy(gas);
     result.density = sphParticlesDensity(gas);
-    result.pressureRatio = sphParticlesChemistryEos[gas].first;
+    result.pressureRatio = float(gadget4::kGammaMinusOne);
     result.rung = sphParticlesRung(gas);
     for (int dim = 0; dim < kDimensions; ++dim) {
         result.velocity[dim] = particlesV[particle][dim];
@@ -140,8 +140,6 @@ struct Pending {
 struct NewStar {
     ParticleInteger particle;
     Vector3<float> gravity;
-    // The top gravity kick's bound for the deferred gas opening (no t0 cap).
-    float gravityTimestep;
 };
 std::vector<Pending> pending;
 std::vector<NewStar> newStars;
@@ -179,11 +177,6 @@ void starFormationInitialize() {
           "whole-particle conversion, equilibrium H/He cooling\n",
         model.thresholdDensity,
         model.thresholdDensity * gadget4::kHydrogenMassFraction / gadget4::kProtonMass);
-}
-void starFormationRefreshEos(double scaleFactor) {
-    // Gamma is fixed. Allocation, checkpoint loading and migration carry this
-    // invariant; production timesteps need no repeated EOS kernel or array sweep.
-    sphParticlesRefreshChemistryEos(scaleFactor);
 }
 
 StarFormationUpdate starFormationPrepare(
@@ -251,13 +244,10 @@ StarFormationUpdate starFormationPrepare(
 void starFormationConvertGas(ParticleInteger gas, StarFormationState const& state) {
     ParticleInteger const particle = sphParticlesParticleIndex(gas);
     particlesStarFormationStates[particle] = state;
-    detail::NewStar star{particle, {}, std::numeric_limits<float>::infinity()};
+    detail::NewStar star{particle, {}};
     for (int dim = 0; dim < kDimensions; ++dim) {
         star.gravity[dim] =
             getOptions().gravity.enabled ? sphParticlesGravityAcceleration(dim, gas) : 0.0f;
-    }
-    if (getOptions().gravity.enabled && sphParticlesGravityTimesteps != nullptr) {
-        star.gravityTimestep = sphParticlesGravityTimesteps[gas];
     }
     detail::newStars.push_back(star);
     particlesConvertToStar(particle, state.formationTime);
@@ -341,49 +331,11 @@ void starFormationCommitLocal() {
             starFormationConvertGas(gas, output.state);
         } else {
             particlesStarFormationStates[update.particle] = output.state;
-            sphParticlesInternalEnergy(gas) = output.energy;
+            sphParticlesSetInternalEnergy(gas, output.energy);
             sphParticlesChemistryStates[gas] = output.chemistry;
         }
     }
     detail::pending.clear();
-}
-int starFormationSelectHierarchicalRungs(int minimumRung, double baseTimestep) {
-    // The collisionless top-level selection of the gravity kick: at most one rung
-    // finer than the top rung and at most one rung coarser than before.
-    float const t0 = float(baseTimestep);
-    int maximumRung = 0;
-    for (auto const& star : detail::newStars) {
-        float const dt = std::min(star.gravityTimestep, t0);
-        if (!(dt > 0.0f)) {
-            throw std::runtime_error("Newborn star has no positive gravity timestep");
-        }
-        int const rung = particlesRung(star.particle);
-        int const nextRung =
-            std::max(minimumRung + int(int(ceilf(log2f(t0 / dt))) > minimumRung), rung - 1);
-        if (nextRung < minimumRung || nextRung >= kMaxRung) {
-            throw std::runtime_error("Newborn star rung exceeds the available rung range");
-        }
-        particlesRung(star.particle) = nextRung;
-        maximumRung = std::max(maximumRung, nextRung);
-    }
-    return maximumRung;
-}
-double starFormationKickHierarchicalNewStars(double halfTimestep) {
-    double kineticChange = 0.0;
-    double const mass = getOptions().initial.gasMass;
-    for (auto const& star : detail::newStars) {
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            float& velocity = particlesVel(dim, star.particle);
-            double const previous = velocity;
-            velocity += halfTimestep * star.gravity[dim];
-            kineticChange += 0.5 * mass * (double(velocity) * velocity - previous * previous);
-        }
-    }
-    detail::newStars.clear();
-    return kineticChange;
-}
-void starFormationClearNewStarsLocal() {
-    detail::newStars.clear();
 }
 StarFormationUpdate starFormationClose(
     int minimumRung, double scaleFactor, double, double baseTimestep, double explicitTimestep) {
@@ -468,7 +420,7 @@ double starFormationPressureIntegral(double scaleFactor) {
     }
     double sum = 0.0;
     for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
-        sum += getOptions().initial.gasMass * double(sphParticlesChemistryEos[gas].first) *
+        sum += getOptions().initial.gasMass * gadget4::kGammaMinusOne *
             sphParticlesInternalEnergy(gas) / (scaleFactor * scaleFactor);
     }
     for (auto& future : remote) {

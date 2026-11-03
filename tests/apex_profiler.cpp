@@ -53,8 +53,7 @@ std::uint64_t threadCpuNanoseconds() {
         static_cast<std::uint64_t>(value.tv_nsec);
 }
 
-// No APEX annotation: TAU attributes this ordinary function's samples to the
-// enclosing HPX task even across a suspended/resumed context.
+// No APEX annotation: an ordinary function called from the enclosing HPX task.
 #if defined(__GNUC__) || defined(__clang__)
 __attribute__((noinline))
 #endif
@@ -70,7 +69,7 @@ std::uint64_t ordinaryHotFunction(std::uint64_t value) {
     return value;
 }
 
-// Distinct sampled bodies let the TAU regression detect task-label leakage.
+// Distinct bodies keep the parent and child work separate.
 #if defined(__GNUC__) || defined(__clang__)
 __attribute__((noinline))
 #endif
@@ -262,7 +261,7 @@ int hpx_main(int, char*[]) {
     detail::require(forked.get() != 0, "fork fixture lost its nonzero state");
     detail::require(migrated.get() != 0, "migration fixture lost its nonzero state");
     if (detail::interruptExit) {
-        // The test signals this PID, not tau_exec's shell or an MPI launcher.
+        // The test signals this PID, not an MPI launcher.
         std::ofstream ready("interrupt_ready.pid");
         ready << ::getpid() << '\n';
         ready.close();

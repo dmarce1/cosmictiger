@@ -6,9 +6,9 @@
 
 A Plummer sphere on a coarse base step occupies rungs 0-3. The first three
 coarse synchronizations would merge rung 0 into 1, 1 into 2 and 2 into 3 with
-finer fractions of about 0.94, 0.71 and 0.39 of the particles on or above the
+finer fractions of about 0.98, 0.94 and 0.63 of the particles on or above the
 lowest rung. run.rungMergeFraction must merge exactly where that fraction is
-exceeded: all three at 0 and at the GADGET-4 default 1/3, the first two at 0.5,
+exceeded: all three at 0 and at the GADGET-4 default 1/3, the first two at 0.75,
 and none at 1.
 """
 
@@ -37,7 +37,7 @@ def run_case(executable, base, name, fraction):
     directory.mkdir(parents=True)
     options = dict(cpu_backend_options(), **{
         "run.scenario": "plummer",
-        "run.numberOfSteps": "4",
+        "run.numberOfSteps": "2",
         "run.endTime": "0.0016",
         "run.maxIterations": "400",
         "run.rungMergeFraction": fraction,
@@ -82,11 +82,12 @@ def main():
             f"default fraction merged rungs {default}, expected 0, 1 and 2")
     require(run_case(executable, base, "always", "0") == default,
             "fraction 0 did not reproduce the default merges")
-    half = run_case(executable, base, "half", "0.5")
-    require(half == default[:2], f"fraction 0.5 merged {half}, expected {default[:2]}")
+    three_quarters = run_case(executable, base, "three_quarters", "0.75")
+    require(three_quarters == default[:2],
+            f"fraction 0.75 merged {three_quarters}, expected {default[:2]}")
     _, _, fine, active = default[2]
-    require(not fine > 0.5 * active,
-            f"rung 2 held {fine} of {active} finer particles, above the 0.5 threshold")
+    require(not fine > 0.75 * active,
+            f"rung 2 held {fine} of {active} finer particles, above the 0.75 threshold")
     require(run_case(executable, base, "never", "1") == [], "fraction 1 merged a rung")
     for lower, upper, fine, active in default:
         print(f"rung {lower} -> {upper}: {fine}/{active} = {fine / active:.3f} on finer rungs")

@@ -41,7 +41,7 @@ CUDA_EXPORT Sample sample(int index) {
     result.values[7] = state.pressure;
     result.values[8] = state.relaxationTime;
     result.values[9] = state.specificStarFormationRate;
-    result.values[10] = sh::starFormationProbability(state, timestep);
+    result.values[10] = sh::starFormationProbability(state.specificStarFormationRate, timestep);
     result.valid = sh::clampSourceTime(parameters, 10.0 * state.starFormationTime, state);
     result.values[11] = state.specificStarFormationRate;
     return result;

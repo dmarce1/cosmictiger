@@ -174,10 +174,10 @@ static void relaxSphereSurfaceShell(SphereSurfaceShell shell) {
 
 }    // namespace detail
 
-void solveSphereSurfaceProblemCpu(Vector<Array<Vector<float>, kDimensions>>& x) {
+void solveSphereSurfaceProblemCpu(Vector<Array<Vector<float>, kDimensions>>& positions) {
     std::vector<hpx::future<void>> futs;
-    futs.reserve(x.size());
-    for (auto& shell : x) {
+    futs.reserve(positions.size());
+    for (auto& shell : positions) {
         detail::SphereSurfaceShell const points{shell[kXDimension].data(),
             shell[kYDimension].data(), shell[kZDimension].data(),
             static_cast<int>(shell[kXDimension].size()), 0.f, 0.f};
@@ -191,12 +191,12 @@ void solveSphereSurfaceProblemCpu(Vector<Array<Vector<float>, kDimensions>>& x) 
     }
 }
 
-void solveSphereSurfaceProblem(Vector<Array<Vector<float>, kDimensions>>& x) {
+void solveSphereSurfaceProblem(Vector<Array<Vector<float>, kDimensions>>& positions) {
 #ifdef USE_CUDA
     if (getOptions().initial.cuda) {
-        solveSphereSurfaceProblemCuda(x);
+        solveSphereSurfaceProblemCuda(positions);
         return;
     }
 #endif
-    solveSphereSurfaceProblemCpu(x);
+    solveSphereSurfaceProblemCpu(positions);
 }

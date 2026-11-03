@@ -61,7 +61,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         params.parallelParticleThreshold = cnt;
     }
     Array<TreeId, kChildCount> children;
-    Vector3<Position>& x = rc.pos;
+    Vector3<Position>& centerPosition = rc.pos;
     MultipoleBuffer& multi = rc.multi;
     auto& rbox = rc.box;
     float& radius = rc.radius;
@@ -217,19 +217,19 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             SimdFloat r2Max = simdBroadcast<SimdFloat>(0.0);
             for (ParticleInteger i = particleRange.first; i < particleRange.second;
                 i += kSimdFloatSize) {
-                SimdPosition x{};
+                SimdPosition position{};
                 Vector3<SimdFloat> dx{};
                 int const maxj =
                     std::min<ParticleInteger>(particleRange.second - i, kSimdFloatSize);
                 for (int dim = 0; dim < kDimensions; dim++) {
                     for (int j = 0; j < maxj; j++) {
-                        simdSetLane(x, j, sources.positions[dim][i + j].raw());
+                        simdSetLane(position, j, sources.positions[dim][i + j].raw());
                     }
                     for (int j = maxj; j < kSimdFloatSize; j++) {
-                        simdSetLane(x, j, xc[dim][0]);
+                        simdSetLane(position, j, xc[dim][0]);
                     }
-                    dx[dim] =
-                        simdCast<SimdFloat>(simdPositionDifference(x, xc[dim])) * toFloatFactor;
+                    dx[dim] = simdCast<SimdFloat>(simdPositionDifference(position, xc[dim])) *
+                        toFloatFactor;
                 }
                 auto const r2 = sqr(dx[kXDimension], dx[kYDimension], dx[kZDimension]);
                 r2Max = simdMax(r2Max, r2);
@@ -327,12 +327,12 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
 
         if (boundedGeometry) {
             // The cell adapter accounts for all of its center conversions.
-            policy.constrainCenter(policy.context, xcValue, x);
+            policy.constrainCenter(policy.context, xcValue, centerPosition);
             double leftDistanceSquared = 0.0;
             double rightDistanceSquared = 0.0;
             for (int dim = 0; dim < kDimensions; ++dim) {
-                leftDistanceSquared += sqr(unwrappedDoubleDistance(xl[dim], x[dim]));
-                rightDistanceSquared += sqr(unwrappedDoubleDistance(xr[dim], x[dim]));
+                leftDistanceSquared += sqr(unwrappedDoubleDistance(xl[dim], centerPosition[dim]));
+                rightDistanceSquared += sqr(unwrappedDoubleDistance(xr[dim], centerPosition[dim]));
             }
             // Bound the children about the actual stored center. This also
             // protects sub-double Q64 extents and center-clamping roundoff.
@@ -343,7 +343,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             singleFlops += 1;                // nextafter(float, float).
         } else {
             for (int dim = 0; dim < kDimensions; dim++) {
-                x[dim] = xcValue[dim];
+                centerPosition[dim] = xcValue[dim];
                 flops += detail::treePositionConversionExtraFlops(xcValue[dim]);
             }
             flops += 3;
@@ -396,7 +396,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             xcValue[dim] = (xmaxValue[dim] + xminValue[dim]) * 0.5;
         }
         if (boundedGeometry) {
-            policy.constrainCenter(policy.context, xcValue, x);
+            policy.constrainCenter(policy.context, xcValue, centerPosition);
         }
         r = 0.0;
         // Bounded displacement subtracts integer positions before its one
@@ -406,7 +406,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             double thisRadius = 0.0;
             for (int dim = 0; dim < kDimensions; dim++) {
                 double const delta = boundedGeometry ?
-                    unwrappedDoubleDistance(sources.positions[dim][i], x[dim]) :
+                    unwrappedDoubleDistance(sources.positions[dim][i], centerPosition[dim]) :
                     sources.positions[dim][i].toDouble() - xcValue[dim];
                 thisRadius += sqr(delta);
             }
@@ -425,7 +425,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
                 multi, particleRange, xcValue, sources);
         });
         for (int dim = 0; dim < kDimensions; dim++) {
-            x[dim] = xcValue[dim];
+            centerPosition[dim] = xcValue[dim];
             // P2M counts its own center conversion; this is the stored center.
             flops += detail::treePositionConversionExtraFlops(xcValue[dim]);
         }
@@ -438,7 +438,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     node.particleRange = particleRange;
     node.sourceStore = policy.sourceStore;
     node.processRange = policy.representedProcessRange;
-    node.pos = x;
+    node.pos = centerPosition;
     node.depth = depth;
     for (int dim = 0; dim < kDimensions; dim++) {
         node.box.begin[dim] = rbox.begin[dim];

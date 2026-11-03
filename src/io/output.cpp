@@ -76,9 +76,9 @@ void outputParticles(std::string const filename, Vector<OutputParticle> const& p
     Vector<double> y(parts.size());
     Vector<double> z(parts.size());
     for (int i = 0; i < parts.size(); i++) {
-        x[i] = parts[i].x[kXDimension].toDouble();
-        y[i] = parts[i].x[kYDimension].toDouble();
-        z[i] = parts[i].x[kZDimension].toDouble();
+        x[i] = parts[i].position[kXDimension].toDouble();
+        y[i] = parts[i].position[kYDimension].toDouble();
+        z[i] = parts[i].position[kZDimension].toDouble();
     }
     int const numberOfParticles = parts.size();
     double* coords[kDimensions] = {x.data(), y.data(), z.data()};
@@ -89,18 +89,18 @@ void outputParticles(std::string const filename, Vector<OutputParticle> const& p
     y = decltype(y)();
     z = decltype(z)();
     for (int dim = 0; dim < kDimensions; dim++) {
-        Vector<float> v(parts.size());
+        Vector<float> velocities(parts.size());
         for (int i = 0; i < parts.size(); i++) {
-            v[i] = parts[i].v[dim];
+            velocities[i] = parts[i].velocity[dim];
         }
         std::string nm = std::string() + "v_" + char('x' + char(dim));
-        detail::checkOutputWrite(DBPutPointvar1(db, nm.c_str(), "points", v.data(),
+        detail::checkOutputWrite(DBPutPointvar1(db, nm.c_str(), "points", velocities.data(),
                                      numberOfParticles, DB_FLOAT, nullptr),
             "particle velocity");
     }
     Vector<int> r(parts.size());
     for (int i = 0; i < parts.size(); i++) {
-        r[i] = parts[i].r;
+        r[i] = parts[i].rung;
     }
     detail::checkOutputWrite(
         DBPutPointvar1(db, "rung", "points", r.data(), numberOfParticles, DB_INT, nullptr),

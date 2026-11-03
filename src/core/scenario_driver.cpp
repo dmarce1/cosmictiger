@@ -33,9 +33,6 @@
 #include <cosmictiger/hydro/sph/star_formation.hpp>
 #endif
 #endif
-#if COSMICTIGER_ENABLE_HOPKINS
-#include <cosmictiger/hydro/hopkins/hopkins_hydro.hpp>
-#endif
 
 namespace detail {
 double scenarioMaximumDensity();
@@ -141,22 +138,12 @@ void runFixedScenario() {
 #endif
     }
     state.minrung0 = std::max(state.minrung0, baseOptions.run.minRung);
-    bool const hierarchical = baseOptions.run.hierarchicalGravity;
+    // Fixed-time scenarios are SPH runs, which use the traditional or global integrator.
+    ALWAYS_ASSERT(!baseOptions.run.hierarchicalGravity);
     bool const global = usesGlobalIntegration(baseOptions.run);
-    if (!restarting || !hierarchical) {
-        // A hierarchical checkpoint retains domain ownership and the pending
-        // rung suffix stack. A full spatial reorder here would invalidate that
-        // stack before the outstanding closing ladder consumes it.
-        profile::profileBegin("rebound");
-#if COSMICTIGER_ENABLE_HOPKINS
-        hopkinsAssignIdentifiers();
-#endif
-        domainsRebound();
-#if COSMICTIGER_ENABLE_HOPKINS
-        hopkinsDomainsRebound();
-#endif
-        profile::profileEnd();
-    }
+    profile::profileBegin("rebound");
+    domainsRebound();
+    profile::profileEnd();
     Timer checkpointTimer;
     checkpointTimer.start();
     Timer runtime;
@@ -233,30 +220,12 @@ void runFixedScenario() {
             int const errorInterval = baseOptions.gravity.errorInterval;
             int const gravityErrorStep =
                 outputDue && errorInterval > 0 && outputStep % errorInterval == 0 ? outputStep : -1;
-            ForceStepResult result;
-#if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
-            if (hierarchical) {
-                if (minimumRung == 0) {
-                    state.minrung0 = std::max(state.minrung0 - 1, baseOptions.run.minRung);
-                }
-                int activeRung = std::max(minimumRung, state.minrung0);
-                int const previousActiveRung = activeRung;
-                result = kickStepHierarchical(activeRung, state.maxRung, 1.0, 0.0, state.tau,
-                    baseTimestep, baseOptions.gravity.openingAngle, &state.energies, state.minrung0,
-                    fullEvaluation, nullptr, true, 0.0, gravityErrorStep);
-                if (activeRung != previousActiveRung) {
-                    ++state.minrung0;
-                }
-            } else
-#endif
-            {
-                result = advanceForces(minimumRung, 1.0, 0.0, state.tau, baseTimestep,
-                    baseOptions.gravity.openingAngle, state.iter == 0, fullEvaluation,
-                    state.energies, gravityErrorStep, false, state.globalTimestep,
-                    global ? std::min(stageEnd - state.tau,
-                                 (outputStep + 1) * baseTimestep - state.tau) :
-                             0.0);
-            }
+            ForceStepResult const result = advanceForces(minimumRung, 1.0, 0.0, state.tau,
+                baseTimestep, baseOptions.gravity.openingAngle, state.iter == 0, fullEvaluation,
+                state.energies, gravityErrorStep, false, state.globalTimestep,
+                global ?
+                    std::min(stageEnd - state.tau, (outputStep + 1) * baseTimestep - state.tau) :
+                    0.0);
             auto const flopRates = flopRatesPerSecond();
             double const flops = flopRates.total();
             state.maxRung =
@@ -277,11 +246,9 @@ void runFixedScenario() {
                 state.tau + timestep == state.tau) {
                 THROW_ERROR("Scenario timestep cannot advance time\n");
             }
-            if (!hierarchical) {
-                profile::profileBegin("drift");
-                drift(1.0, timestep, state.tau, state.tau + timestep, duration);
-                profile::profileEnd();
-            }
+            profile::profileBegin("drift");
+            drift(1.0, timestep, state.tau, state.tau + timestep, duration);
+            profile::profileEnd();
             state.tau += timestep;
             state.itime = global ? 0 : inc(state.itime, state.maxRung);
             if (global) {
@@ -291,12 +258,6 @@ void runFixedScenario() {
             iterations++;
             if (state.itime == 0) {
                 state.step++;
-            }
-            if (hierarchical) {
-                // Retained source intervals and event times share the integer
-                // clock; repeated floating additions can overshoot an endpoint.
-                state.tau =
-                    baseTimestep * (double(state.step) + std::ldexp(double(state.itime), -64));
             }
             runtime.stop();
             state.runtime = restoredRuntime + runtime.read();
@@ -320,8 +281,7 @@ void runFixedScenario() {
                 double const displayedRuntime = restoredRuntime + runtime.read();
                 runtime.start();
                 if (progressRows == 0) {
-                    PRINT("  TFLOP/s uses counted gravity, SPH, and Hopkins operations divided by "
-                          "force "
+                    PRINT("  TFLOP/s uses counted gravity and SPH operations divided by force "
                           "advancement wall time.\n"
                           "  FP32/FP64 separate arithmetic precision; Mixed is reserved for "
                           "unclassified diagnostic counts (normally zero).\n"
@@ -372,19 +332,9 @@ void runFixedScenario() {
             finalOptions.hydro.viscosityEvolution = "none";
         }
         setOptions(finalOptions);
-#if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
-        if (hierarchical) {
-            int activeRung = state.minrung0;
-            kickStepHierarchical(activeRung, state.maxRung, 1.0, 0.0, state.tau, coarseInterval,
-                baseOptions.gravity.openingAngle, &state.energies, state.minrung0, true, nullptr,
-                true, 0.0, -1, true);
-        } else
-#endif
-        {
-            advanceForces(0, 1.0, 0.0, state.tau, coarseInterval, baseOptions.gravity.openingAngle,
-                false, true, state.energies, -1, true, state.globalTimestep,
-                global ? coarseInterval : 0.0);
-        }
+        advanceForces(0, 1.0, 0.0, state.tau, coarseInterval, baseOptions.gravity.openingAngle,
+            false, true, state.energies, -1, true, state.globalTimestep,
+            global ? coarseInterval : 0.0);
         {
             profile::ScopedPhase phase("diagnostics");
             detail::writeScenarioDiagnostics(state);

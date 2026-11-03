@@ -139,7 +139,7 @@ def main():
     parser.add_argument("--mpi-arg", action="append", default=[],
                         help="extra launcher argument; use --mpi-arg=--option")
     parser.add_argument("command", nargs=argparse.REMAINDER,
-                        help="executable or scripts/profile_tau.sh followed by its arguments")
+                        help="executable followed by its arguments")
     args = parser.parse_args()
     if args.np < 1 or not args.command:
         parser.error("a positive rank count and an application command are required")

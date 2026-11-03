@@ -29,8 +29,6 @@ static_assert(
     kMaxBucketSize >= 32 && kMaxBucketSize <= 1024 && (kMaxBucketSize & (kMaxBucketSize - 1)) == 0,
     "MAX_BUCKET_SIZE must be a power of two from 32 to 1024");
 
-struct HopkinsParticleState;
-
 struct CudaKickData {
     TreeNode* treeNodes;
     Position* x;
@@ -41,8 +39,6 @@ struct CudaKickData {
     float* sphGravityAccelerationX;
     float* sphGravityAccelerationY;
     float* sphGravityAccelerationZ;
-    float* sphGravityTimestep;
-    HopkinsParticleState* hopkinsStates;
     ParticleInteger* catIndex;
     char* type;
     bool sph;
@@ -54,7 +50,6 @@ struct CudaKickData {
     float* gy;
     float* gz;
     float* pot;
-    float* pairCurvature;    // forceOnly output of the direct-pair coefficient; else nullptr
     Array<float*, kDimensions> globalAcceleration{};
     ParticleInteger const* gravitySampleIndices;
     Vector3<float>* gravitySampleAccelerations;
@@ -103,15 +98,9 @@ struct KickParameters {
     FmmGeometry geometry{};
     ParticleInteger outputOffset = 0;
     bool forceOnly = false;
-    // Hopkins may wake a gas cell after the gravity pass. Refresh its force
-    // without advancing the cell or changing its independently owned rung.
-    bool refreshGasForces = false;
     bool profileCoordinator = true;
     bool globalTimestep = false;
     double previousTimestep = 0.0;
-    // Hydro closes the old interval and proposes its rung before the top
-    // hierarchical gravity opening impulse is committed.
-    bool deferGasOpening = false;
     bool htime;
     float sign;
     int minLevel{};
@@ -176,11 +165,9 @@ struct KickParameters {
         arc & openLargerCell;
         arc & geometry;
         arc & forceOnly;
-        arc & refreshGasForces;
         arc & profileCoordinator;
         arc & globalTimestep;
         arc & previousTimestep;
-        arc & deferGasOpening;
         arc & outputOffset;
         arc & closingBaseTimestep;
         arc & longCloseTimestep;
@@ -212,8 +199,6 @@ struct FmmForceResult {
     Vector<ParticleInteger> particleIndices;
     Vector<float> potential;
     Array<Vector<float>, kDimensions> acceleration;
-    // Direct-pair mass / length^3 coefficient; multiply by G only at consumption.
-    Vector<float> pairCurvature;
     KickInteractionCounts interactionCounts{};
 };
 
@@ -223,7 +208,6 @@ namespace detail {
 struct FmmForceOutput {
     float* potential = nullptr;
     Array<float*, kDimensions> acceleration{};
-    float* pairCurvature = nullptr;
 };
 
 }    // namespace detail

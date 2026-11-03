@@ -107,10 +107,6 @@ void validateCudaBackends(Options const& opts) {
         throw std::invalid_argument("analysis.tracers.cuda, analysis.slice.cuda and "
                                     "analysis.views.cuda are not implemented; use false");
     }
-    if (opts.hydro.cuda && opts.hydro.method != "sph") {
-        throw std::invalid_argument(
-            "hydro.cuda=true is unavailable for MFM/MFV; use hydro.cuda=false");
-    }
 #if !COSMICTIGER_WITH_GRAVITY
     if (opts.gravity.cuda || opts.gravity.errorCuda || opts.analysis.powerCuda ||
         opts.analysis.groupsCuda || opts.lightcone.cuda) {
@@ -145,58 +141,8 @@ void validateCudaBackends(Options const& opts) {
 }
 
 void validateHydroMethod(Options const& opts) {
-    if (opts.hydro.method != "sph" && opts.hydro.method != "mfm" && opts.hydro.method != "mfv") {
-        throw std::invalid_argument("hydro.method must be sph, mfm, or mfv");
-    }
-    if (opts.hydro.enabled && opts.hydro.method != "sph") {
-#if !COSMICTIGER_ENABLE_HOPKINS
-        throw std::invalid_argument("Hopkins MFM/MFV requires COSMICTIGER_ENABLE_HOPKINS=ON "
-                                    "(and COSMICTIGER_ENABLE_SPH=ON)");
-#endif
-        if constexpr (kPositionBits != 64) {
-            throw std::invalid_argument(
-                "Hopkins MFM/MFV requires a build with COSMICTIGER_POSITION_TYPE=fixed64");
-        }
-        if (opts.hydro.method == "mfv" && opts.run.timeIntegrator == "hierarchical") {
-            throw std::invalid_argument(
-                "MFV requires run.timeIntegrator=traditional or global; variable masses "
-                "cannot use the held hierarchical gravity decomposition");
-        }
-        if (opts.run.timeIntegrator == "hierarchical" && opts.lightcone.enabled) {
-            throw std::invalid_argument(
-                "Hierarchical MFM requires lightcone.enabled=false until hydro trajectory "
-                "segments are emitted independently of provisional gravity endpoints");
-        }
-        // MFM keeps every cell's mass fixed, so the operator-split GADGET-4 sources
-        // map onto its conserved energy. MFV exchanges mass between cells and would
-        // need advected cooling and star-formation state.
-        if (opts.hydro.method == "mfv" && (opts.chemistry.enabled || opts.starFormation.enabled)) {
-            throw std::invalid_argument(
-                "Hopkins MFV requires chemistry.enabled=false and starFormation.enabled=false");
-        }
-    }
-    if (opts.run.scenario == "soundWave") {
-#if !COSMICTIGER_ENABLE_HOPKINS
-        throw std::invalid_argument("run.scenario=soundWave requires "
-                                    "COSMICTIGER_ENABLE_HOPKINS=ON "
-                                    "(and COSMICTIGER_ENABLE_SPH=ON)");
-#endif
-        if (opts.hydro.method == "sph" || opts.hydro.kernelFamily != "spline" ||
-            opts.hydro.kernelDegree != 3 || opts.hydro.gamma != 5.0 / 3.0) {
-            throw std::invalid_argument(
-                "run.scenario=soundWave requires hydro.method=mfm or mfv, "
-                "hydro.kernelFamily=spline, hydro.kernelDegree=3 and hydro.gamma=5/3");
-        }
-        if (opts.gravity.enabled || opts.hydro.damping != 0.0 || opts.hydro.yAcceleration != 0.0 ||
-            opts.hydro.zPlaneAcceleration != 0.0 || opts.hydro.centralAcceleration != 0.0) {
-            throw std::invalid_argument("run.scenario=soundWave requires gravity.enabled=false and "
-                                        "zero external acceleration");
-        }
-        if (opts.initial.particlesPerDimension < 16 || opts.initial.closePack) {
-            throw std::invalid_argument(
-                "run.scenario=soundWave requires initial.particlesPerDimension>=16 and "
-                "initial.closePack=false");
-        }
+    if (opts.hydro.method != "sph") {
+        throw std::invalid_argument("hydro.method must be sph");
     }
 }
 
@@ -210,6 +156,10 @@ void validateFlatCosmology(Options const& opts) {
 }
 
 void validateCooling(Options const& opts) {
+    if (opts.chemistry.enabled || opts.starFormation.enabled) {
+        throw std::invalid_argument("Chemistry and star formation are temporarily disabled "
+                                    "pending SPH entropy source conversions");
+    }
     if (!opts.chemistry.enabled) {
         return;
     }
@@ -358,7 +308,8 @@ void setOptions(Options const& opts) {
     if (!((opts.run.timeIntegrator == "traditional" && integration::kBuildHasTraditional) ||
             (opts.run.timeIntegrator == "hierarchical" && integration::kBuildHasHierarchical) ||
             (opts.run.timeIntegrator == "global" && integration::kBuildHasGlobal)) ||
-        opts.run.hierarchicalGravity != usesHierarchicalIntegration(opts.run)) {
+        opts.run.hierarchicalGravity != usesHierarchicalIntegration(opts.run) ||
+        (opts.run.hierarchicalGravity && opts.hydro.enabled)) {
         throw std::invalid_argument("run.timeIntegrator is unavailable or inconsistent");
     }
 #if COSMICTIGER_WITH_GRAVITY
@@ -424,7 +375,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"build.pm", gravity::kBuildHasPm},
         {"build.p3mPp", gravity::kBuildHasP3mPp},
         {"build.p3mFmm", gravity::kBuildHasP3mFmm},
-        {"build.hopkins", bool(COSMICTIGER_ENABLE_HOPKINS)},
         {"build.chemistry", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY)},
         {"build.starFormation", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION)},
         {"build.integratorTraditional", integration::kBuildHasTraditional},
@@ -592,9 +542,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
             options.hydro.maxSupportRadius * options.initial.particlesPerDimension},
         {"hydro.neighborNumber", options.hydro.neighborNumber},
         {"hydro.cfl", options.hydro.cfl},
-        {"hydro.dualEnergyPressureSwitch", options.hydro.dualEnergyPressureSwitch},
-        {"hydro.dualEnergyUpdateSwitch", options.hydro.dualEnergyUpdateSwitch},
-        {"hydro.treeRebuildActiveFraction", options.hydro.treeRebuildActiveFraction},
     };
 }
 
@@ -657,9 +604,9 @@ bool processOptions(int argc, char* argv[]) {
     po::options_description runOpts("Run control");
     runOpts.add_options()("run.timeIntegrator",
         po::value<std::string>(&opts.run.timeIntegrator)->default_value(""),
-        "time integrator: traditional, hierarchical, or global; required when multiple eligible "
-        "integrators are compiled")("help", "produce help message")("configuration",
-        po::value<std::string>(&opts.configuration)->default_value(""),
+        "time integrator: traditional, hierarchical (collisionless only), or global; required when "
+        "multiple eligible integrators are compiled")("help", "produce help message")(
+        "configuration", po::value<std::string>(&opts.configuration)->default_value(""),
         "INI configuration file; explicit command-line values take precedence")("run.test",
         po::value<std::string>(&opts.run.test)->default_value(""),
         "name of developer regression to run (requires BUILD_TESTING=ON)")("run.verbose",
@@ -668,10 +615,10 @@ bool processOptions(int argc, char* argv[]) {
         po::value<std::string>(&opts.run.scenario)->default_value(opts.run.scenario),
 #if COSMICTIGER_WITH_GRAVITY
         "physical scenario: plummer, sod, blast, rayleighTaylor, kelvinHelmholtz, disc, "
-        "polytropicStar, hydroWave, soundWave, gresho, cosmology, glass"
+        "polytropicStar, hydroWave, gresho, cosmology, glass"
 #else
         "physical scenario: sod, blast, rayleighTaylor, kelvinHelmholtz, disc, "
-        "polytropicStar, hydroWave, soundWave, gresho"
+        "polytropicStar, hydroWave, gresho"
 #endif
         )("run.endTime", po::value<double>(&opts.run.endTime)->default_value(0.0),
         "total evolution time (conformal code time for cosmology); positive values override "
@@ -935,13 +882,12 @@ bool processOptions(int argc, char* argv[]) {
         "comoving box side length in Mpc/h; mutually exclusive with units.massSolar");
 
     po::options_description hydroOpts("Monaghan (1992) SPH");
-    hydroOpts.add_options()("hydro.cuda", po::value<bool>(&opts.hydro.cuda)->default_value(false),
-        "use CUDA for SPH; MFM and MFV currently require false");
+    hydroOpts.add_options()(
+        "hydro.cuda", po::value<bool>(&opts.hydro.cuda)->default_value(false), "use CUDA for SPH");
     hydroOpts.add_options()("hydro.enabled",
         po::value<bool>(&opts.hydro.enabled)->default_value(false), "enable gas hydrodynamics")(
         "hydro.method", po::value<std::string>(&opts.hydro.method)->default_value("sph"),
-        "hydrodynamic method: sph, mfm, or mfv; mfm/mfv require "
-        "COSMICTIGER_ENABLE_HOPKINS=ON")("hydro.kernelFamily",
+        "hydrodynamic method: sph")("hydro.kernelFamily",
         po::value<std::string>(&opts.hydro.kernelFamily)->default_value("spline"),
         "density kernel family: spline, wendland, or ferrers")("hydro.kernelDegree",
         po::value<int>(&opts.hydro.kernelDegree)->default_value(3),
@@ -977,7 +923,8 @@ bool processOptions(int argc, char* argv[]) {
         po::value<double>(&opts.hydro.viscosityDecayPrice)->default_value(0.1),
         "Price et al. decay coefficient sigma in tau=h/(sigma c)")("hydro.gamma",
         po::value<double>(&opts.hydro.gamma)->default_value(5.0 / 3.0),
-        "ideal-gas adiabatic index")("hydro.centralAcceleration",
+        "ideal-gas adiabatic index; must be 5/3 when chemistry or star formation is enabled")(
+        "hydro.centralAcceleration",
         po::value<double>(&opts.hydro.centralAcceleration)->default_value(0.0),
         "magnitude of the central force")("hydro.centralSoftening",
         po::value<double>(&centralEffectiveRadius)->default_value(0.005477225575051661),
@@ -1000,20 +947,7 @@ bool processOptions(int argc, char* argv[]) {
         po::value<double>(&opts.hydro.neighborNumber)->default_value(42),
         "kernel-weighted neighbor target within the support sphere, including self")("hydro.cfl",
         po::value<double>(&opts.hydro.cfl)->default_value(0.22821773229381923),
-        "Courant time-step factor using effective radius (2 sigma)")(
-        "hydro.dualEnergyPressureSwitch",
-        po::value<double>(&opts.hydro.dualEnergyPressureSwitch)->default_value(1.0e-3),
-        "MFM dual-energy pressure switch: thermal fraction of the total energy below which the "
-        "entropy estimate replaces the total-energy closure; 0 keeps the strict closure")(
-        "hydro.dualEnergyUpdateSwitch",
-        po::value<double>(&opts.hydro.dualEnergyUpdateSwitch)->default_value(0.1),
-        "MFM dual-energy update switch: the entropy follows the total-energy closure when the "
-        "thermal energy density reaches this fraction of the largest neighboring total energy "
-        "density")("hydro.treeRebuildActiveFraction",
-        po::value<double>(&opts.hydro.treeRebuildActiveFraction)->default_value(1.0 / 3.0),
-        "MFM/MFV: rebuild the persistent hydro source tree at an event where at least this "
-        "fraction of the gas cells is active, and at every domain rebound; 0 rebuilds at every "
-        "event, values above 1 rebuild only at rebounds and membership changes");
+        "Courant time-step factor using effective radius (2 sigma)");
 
     po::options_description chemistryOpts("GADGET-4 equilibrium cooling");
     chemistryOpts.add_options()("chemistry.cuda",
@@ -1097,8 +1031,6 @@ bool processOptions(int argc, char* argv[]) {
                   << (gravity::kBuildHasPmmmNearFmm ? " fmm" : "") << "\n"
                   << "  P3M short solvers:" << (gravity::kBuildHasP3mPp ? " pp" : "")
                   << (gravity::kBuildHasP3mFmm ? " fmm" : "") << "\n";
-        std::cout << "  Hopkins hydrodynamics: "
-                  << (COSMICTIGER_ENABLE_HOPKINS ? "enabled" : "disabled") << "\n";
         std::cout << "  Equilibrium cooling: "
                   << (COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY ? "enabled" : "disabled")
                   << "\n";
@@ -1363,11 +1295,6 @@ bool processOptions(int argc, char* argv[]) {
         if (meshSize > maximumCells / meshSize / meshSize) {
             THROW_ERROR("gravity.meshSize cubed exceeds mesh indexing/allocation limits\n");
         }
-        if (opts.hydro.enabled && opts.hydro.method != "sph") {
-            THROW_ERROR("Hopkins MFM/MFV ties its tick clock to a fixed base interval; "
-                        "gravity.method.far=pm/p3m requires hydro.method=sph or "
-                        "hydro.enabled=false\n");
-        }
         if (usesSplitParticleMesh(opts.gravity)) {
             if (!detail::isPositiveFloatOption(opts.gravity.p3mSplitCells) ||
                 !detail::isPositiveFloatOption(opts.gravity.p3mCutoff)) {
@@ -1510,8 +1437,7 @@ bool processOptions(int argc, char* argv[]) {
         resolveSupportRadius("hydro.maxEffectiveRadius", "hydro.maxSupportRadius", nullptr,
             opts.hydro.maxSupportRadius, hydroTable.supportRadiusPerEffectiveRadius);
     double const selfNeighborFloor =
-        (scenario.hydroDimensions == 1 ? std::numbers::pi / 3.0 : 4.0 * std::numbers::pi / 3.0) *
-        radial_kernel::value(hydroTable, 0.0);
+        4.0 * std::numbers::pi / 3.0 * radial_kernel::value(hydroTable, 0.0);
     if (opts.output.siloInterval <= 0) {
         THROW_ERROR("output.siloInterval must be positive\n");
     }
@@ -1639,18 +1565,6 @@ bool processOptions(int argc, char* argv[]) {
     if (!detail::isFiniteOption(opts.hydro.cfl) || opts.hydro.cfl <= 0.0 || opts.hydro.cfl > 1.0) {
         THROW_ERROR("hydro.cfl must be finite and in (0, 1]\n");
     }
-    if (!detail::isFiniteOption(opts.hydro.dualEnergyPressureSwitch) ||
-        opts.hydro.dualEnergyPressureSwitch < 0.0 || opts.hydro.dualEnergyPressureSwitch >= 1.0) {
-        THROW_ERROR("hydro.dualEnergyPressureSwitch must be finite and in [0, 1)\n");
-    }
-    if (!detail::isFiniteOption(opts.hydro.dualEnergyUpdateSwitch) ||
-        opts.hydro.dualEnergyUpdateSwitch < 0.0) {
-        THROW_ERROR("hydro.dualEnergyUpdateSwitch must be finite and nonnegative\n");
-    }
-    if (!detail::isFiniteOption(opts.hydro.treeRebuildActiveFraction) ||
-        opts.hydro.treeRebuildActiveFraction < 0.0) {
-        THROW_ERROR("hydro.treeRebuildActiveFraction must be finite and nonnegative\n");
-    }
     if (!detail::isFiniteOption(opts.hydro.neighborNumber) ||
         opts.hydro.neighborNumber <= selfNeighborFloor) {
         THROW_ERROR("hydro.neighborNumber must be finite and greater than the selected kernel "
@@ -1731,9 +1645,10 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("chemistry.enabled=true requires COSMICTIGER_ENABLE_CHEMISTRY=ON\n");
     }
 #endif
+    // Hierarchical integration advances collisionless particles only; SPH uses
+    // the traditional or global integrator.
     bool const hierarchicalEligible = integration::kBuildHasHierarchical &&
-        COSMICTIGER_WITH_GRAVITY &&
-        (opts.gravity.enabled || (opts.hydro.enabled && opts.hydro.method != "mfv"));
+        COSMICTIGER_WITH_GRAVITY && opts.gravity.enabled && !opts.hydro.enabled;
     if (opts.run.timeIntegrator.empty()) {
         int const choices = int(integration::kBuildHasTraditional) + int(hierarchicalEligible) +
             int(integration::kBuildHasGlobal);
@@ -1749,17 +1664,9 @@ bool processOptions(int argc, char* argv[]) {
             (opts.run.timeIntegrator == "hierarchical" && hierarchicalEligible) ||
             (opts.run.timeIntegrator == "global" && integration::kBuildHasGlobal))) {
         THROW_ERROR("run.timeIntegrator is unavailable for the selected physics; hierarchical "
-                    "requires a gravity-capable build and gravity, SPH, or MFM\n");
+                    "requires a gravity-capable build, gravity, and hydro.enabled=false\n");
     }
     opts.run.hierarchicalGravity = usesHierarchicalIntegration(opts.run);
-    if (opts.run.hierarchicalGravity && opts.hydro.enabled) {
-        if (opts.hydro.method == "sph" && opts.gravity.enabled &&
-            opts.hydro.viscosityGradientSwitch()) {
-            THROW_ERROR(
-                "Hierarchical SPH with self-gravity requires hydro.viscosityEvolution=none "
-                "or morrisAndMonaghan; gradient switches need the full held gravity field\n");
-        }
-    }
 
     if (opts.gravity.enabled && usesParticleMesh(opts.gravity) &&
         opts.run.timeIntegrator == "global") {
@@ -1770,13 +1677,6 @@ bool processOptions(int argc, char* argv[]) {
     detail::validateHydroMethod(opts);
     detail::validateCooling(opts);
     detail::validateStarFormation(opts);
-    if (opts.gravity.enabled && usesParticleMesh(opts.gravity) && opts.hydro.enabled &&
-        opts.run.hierarchicalGravity) {
-        // Hierarchical hydro defers the gas opening kick to the hydro step,
-        // which does not apply the long half-kicks of an outer PM boundary.
-        THROW_ERROR(
-            "gravity.method.far=pm/p3m with hydro requires run.timeIntegrator=traditional\n");
-    }
     if (opts.hydro.enabled) {
         if (opts.run.scenario == "glass" || opts.run.scenario == "plummer" ||
             !opts.initial.gadget4Restart.empty()) {

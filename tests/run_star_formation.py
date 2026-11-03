@@ -10,7 +10,6 @@ from pathlib import Path
 import re
 import shutil
 import signal
-import struct
 import subprocess
 import sys
 
@@ -61,7 +60,6 @@ def read_particle_state(checkpoint, expected_count):
         raise RuntimeError("checkpoint did not contain the expected cooling and star population")
     types = decoded.types
     states = {}
-    expected_eos = struct.unpack("=2f", struct.pack("=2f", 2.0 / 3.0, 5.0 / 3.0))
     for index in range(expected_count):
         identity, counter, formation, rate, elapsed = decoded.stars[index]
         if identity == 0 or identity in states or not all(math.isfinite(x) for x in (formation, rate, elapsed)):
@@ -75,9 +73,9 @@ def read_particle_state(checkpoint, expected_count):
         if types[index] == 1:
             gas_index = decoded.gas_indices[index]
             cooling = decoded.cooling[gas_index]
-            energy = decoded.thermodynamic[2 * gas_index]
-            if not all(math.isfinite(x) for x in cooling) or cooling[0] < 0 or cooling[1:] != expected_eos:
-                raise RuntimeError("invalid electron guess or constant-gamma EOS")
+            energy = decoded.internal_energies[gas_index]
+            if not math.isfinite(cooling[0]) or cooling[0] < 0:
+                raise RuntimeError("invalid electron guess")
             if not math.isfinite(energy) or energy <= 0:
                 raise RuntimeError("invalid gas thermal energy")
             states[identity]["cooling"] = cooling
@@ -102,10 +100,8 @@ def main():
     base = args.workdir.resolve()
     base.mkdir(parents=True, exist_ok=True)
     available = compiled_algorithms(str(executable))
-    # Hierarchical hydro needs a compiled gravity solver, even with gravity disabled.
-    integrators = [value for value in ("traditional", "global", "hierarchical")
-                   if value in available["integrator"] and
-                   (value != "hierarchical" or any(far != "none" for far in available["far"]))]
+    integrators = [value for value in ("traditional", "global")
+                   if value in available["integrator"]]
     if not integrators:
         raise RuntimeError("star formation requires a compiled SPH-compatible integrator")
     common = {"gravity.cuda": "false", "hydro.cuda": "false", "drift.cuda": "false", "hydro.enabled": "true",

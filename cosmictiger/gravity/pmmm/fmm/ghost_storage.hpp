@@ -12,14 +12,14 @@
 
 // Frozen source record sent once per occupied remote PMMM cell.
 struct ParticleGhost {
-    Vector3<Position> x;
+    Vector3<Position> position;
     char type = kDarkMatterType;
     char rung = 0;
     float mass = 1.0f;
 
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
-        archive & x & type & rung & mass;
+        archive & position & type & rung & mass;
     }
 };
 

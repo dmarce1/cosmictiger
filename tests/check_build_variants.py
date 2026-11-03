@@ -42,8 +42,7 @@ class BuildFeaturesTest(unittest.TestCase):
             self.addCompilation("cosmictiger_power", "src/analysis/power.cpp", {})
         if hasChemistry(self.features):
             self.addCompilation("cosmictiger_sph_chemistry", "src/chemistry/gadget4_cooling.cpp", {})
-        bits = 64 if self.features["HOPKINS"] else 32
-        self.cache["COSMICTIGER_POSITION_TYPE"] = f"fixed{bits}"
+        bits = 32
         self.definitions = configurationDefinitions(self.features, bits, self.degrees)
         for source in sorted(requiredSources(self.features, False)):
             self.addCompilation("cosmictiger_objects", source, self.definitions)
@@ -75,45 +74,13 @@ class BuildFeaturesTest(unittest.TestCase):
         (self.buildDirectory / "compile_commands.json").write_text(json.dumps(self.commands))
         return checkBuild(self.buildDirectory)
 
-    def testHopkinsCapabilityCombinations(self):
-        for sph, hopkins in ((False, False), (True, False), (True, True)):
-            with self.subTest(sph=sph, hopkins=hopkins):
-                self.configure(SPH=sph, HOPKINS=hopkins)
-                self.assertIn("Build features passed", self.check())
-                self.assertEqual(self.definitions["COSMICTIGER_ENABLE_HOPKINS"], str(int(hopkins)))
-
-    def testHopkinsRequiresSph(self):
-        self.configure(SPH=False, HOPKINS=True)
-        with self.assertRaisesRegex(ValueError, "HOPKINS=ON requires COSMICTIGER_ENABLE_SPH=ON"):
-            self.check()
-
-    def testHopkinsRequiresFixed64(self):
-        self.configure(HOPKINS=True)
-        self.cache["COSMICTIGER_POSITION_TYPE"] = "fixed32"
-        with self.assertRaisesRegex(ValueError, "HOPKINS=ON requires COSMICTIGER_POSITION_TYPE=fixed64"):
-            self.check()
-
-    def testDisabledHopkinsRejectsImplementationSources(self):
-        for source in ("src/hydro/hopkins.cpp", "src/scenarios/sound_wave.cpp", "tests/hopkins.cpp"):
+    def testSphRequiresSharedSources(self):
+        for source in ("src/hydro/sph/sph_particles.cpp", "src/hydro/sph/sph_tree.cpp"):
             with self.subTest(source=source):
-                self.configure(HOPKINS=False)
-                self.addCompilation("unused_hopkins", source, {})
-                with self.assertRaisesRegex(ValueError, "Hopkins disabled but compiles source: " + source):
-                    self.check()
-
-    def testEnabledHopkinsRequiresRuntimeAndSharedSphSources(self):
-        for source in ("src/hydro/hopkins.cpp", "src/scenarios/sound_wave.cpp",
-                       "src/hydro/sph/sph_particles.cpp", "src/hydro/sph/sph_tree.cpp"):
-            with self.subTest(source=source):
-                self.configure(HOPKINS=True)
+                self.configure()
                 self.commands = [entry for entry in self.commands if not entry["file"].endswith(source)]
                 with self.assertRaisesRegex(ValueError, "required source missing: " + source):
                     self.check()
-
-    def testHopkinsCompilerCapabilityMustMatch(self):
-        self.commands[-1]["arguments"].append("-DCOSMICTIGER_ENABLE_HOPKINS=1")
-        with self.assertRaisesRegex(ValueError, "needs COSMICTIGER_ENABLE_HOPKINS=0"):
-            self.check()
 
     def testStarFormationCapabilityCombinations(self):
         for sph, starFormation in product((False, True), repeat=2):
@@ -506,7 +473,7 @@ class BuildConfigHeaderTest(unittest.TestCase):
 
     def definitions(self):
         return {"COSMICTIGER_ENABLE_" + name: int(name == "INTEGRATOR_TRADITIONAL")
-                for name in ("SPH", "HOPKINS", "CHEMISTRY", "STARS", "STAR_FORMATION",
+                for name in ("SPH", "CHEMISTRY", "STARS", "STAR_FORMATION",
                              "INTEGRATOR_TRADITIONAL", "INTEGRATOR_HIERARCHICAL", "INTEGRATOR_GLOBAL")}
 
     def testExplicitCapabilitiesCompile(self):
@@ -522,8 +489,7 @@ class BuildConfigHeaderTest(unittest.TestCase):
                 self.assertIn("Missing CosmicTiger build capabilities", result.stderr)
 
     def testImpossibleCapabilitiesFail(self):
-        for values, diagnostic in (({"HOPKINS": 1}, "Hopkins capability requires SPH"),
-                ({"CHEMISTRY": 1}, "chemistry capability requires SPH"),
+        for values, diagnostic in (({"CHEMISTRY": 1}, "chemistry capability requires SPH"),
                 ({"STARS": 1, "STAR_FORMATION": 1}, "stars capability requires chemistry"),
                 ({"STARS": 1}, "must match"),
                 ({"INTEGRATOR_TRADITIONAL": 0}, "At least one time integrator")):
@@ -548,7 +514,6 @@ class FeatureConfigurationTest(unittest.TestCase):
                               'message(STATUS "default_near=${cosmictiger_default_near_method}")\n'
                               'message(STATUS "pmmm_pp=${COSMICTIGER_ENABLE_PMMM_PP}")\n'
                               'message(STATUS "pmmm_fmm=${COSMICTIGER_ENABLE_PMMM_FMM}")\n'
-                              'message(STATUS "hopkins=${COSMICTIGER_ENABLE_HOPKINS}")\n'
                               'message(STATUS "chemistry=${COSMICTIGER_ENABLE_CHEMISTRY}")\n'
                               'message(STATUS "effective_chemistry=${COSMICTIGER_WITH_CHEMISTRY}")\n'
                               'message(STATUS "effective_stars=${COSMICTIGER_WITH_STARS}")\n'
@@ -564,39 +529,18 @@ class FeatureConfigurationTest(unittest.TestCase):
         self.assertIn("pmmm_fmm=OFF", result.stdout)
         self.assertIn("default_gravity=fmm", result.stdout)
         self.assertIn("default_near=none", result.stdout)
-        self.assertIn("hopkins=OFF", result.stdout)
         self.assertIn("chemistry=ON", result.stdout)
         self.assertIn("stars=OFF", result.stdout)
         self.assertIn("star_formation=OFF", result.stdout)
 
-    def testHopkinsRequiresSphAndFixed64(self):
-        for sph, hopkins in product(("OFF", "ON"), repeat=2):
-            with self.subTest(sph=sph, hopkins=hopkins):
-                result = self.configure({"COSMICTIGER_ENABLE_SPH": sph,
-                                         "COSMICTIGER_ENABLE_HOPKINS": hopkins,
-                                         "COSMICTIGER_POSITION_TYPE": "fixed64"})
-                if hopkins == "ON" and sph == "OFF":
-                    self.assertNotEqual(result.returncode, 0)
-                    self.assertIn("COSMICTIGER_ENABLE_HOPKINS=ON requires COSMICTIGER_ENABLE_SPH=ON", result.stderr)
-                else:
-                    self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertIn("hopkins=" + hopkins, result.stdout)
-        result = self.configure({"COSMICTIGER_ENABLE_HOPKINS": "ON",
-                                 "COSMICTIGER_POSITION_TYPE": "fixed32"})
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("COSMICTIGER_ENABLE_HOPKINS=ON requires COSMICTIGER_POSITION_TYPE=fixed64", result.stderr)
-
-    def testHopkinsControlsActualSourcesAndRetainsSharedSph(self):
+    def testSphControlsActualSources(self):
         source = Path(__file__).resolve().parents[1]
-        for (sph, hopkins), testing, cuda in product(
-                (("OFF", "OFF"), ("ON", "OFF"), ("ON", "ON")), ("OFF", "ON"), ("OFF", "ON")):
-            with self.subTest(sph=sph, hopkins=hopkins, testing=testing, cuda=cuda), tempfile.TemporaryDirectory() as directory:
+        for sph, testing, cuda in product(("OFF", "ON"), ("OFF", "ON"), ("OFF", "ON")):
+            with self.subTest(sph=sph, testing=testing, cuda=cuda), tempfile.TemporaryDirectory() as directory:
                 script = Path(directory) / "sources.cmake"
                 script.write_text(
                     f'set(PROJECT_SOURCE_DIR "{source}")\n'
                     f'set(COSMICTIGER_ENABLE_SPH {sph} CACHE BOOL "")\n'
-                    f'set(COSMICTIGER_ENABLE_HOPKINS {hopkins} CACHE BOOL "")\n'
-                    'set(COSMICTIGER_POSITION_TYPE fixed64 CACHE STRING "")\n'
                     f'set(BUILD_TESTING {testing})\nset(COSMICTIGER_WITH_CUDA {cuda})\n'
                     f'include("{source / "cmake/features.cmake"}")\n'
                     f'include("{source / "cmake/variant_sources.cmake"}")\n'
@@ -604,8 +548,6 @@ class FeatureConfigurationTest(unittest.TestCase):
                     'foreach(path IN LISTS selected)\nmessage(STATUS "source=${path}")\nendforeach()\n')
                 result = subprocess.run(["cmake", "-P", str(script)], text=True, capture_output=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                for name in ("src/hydro/hopkins.cpp", "src/scenarios/sound_wave.cpp"):
-                    self.assertEqual("source=" + name + "\n" in result.stdout, hopkins == "ON")
                 for name in ("src/hydro/sph/sph_particles.cpp", "src/hydro/sph/sph_tree.cpp",
                              "src/hydro/sph/sph_hydro_cpu.cpp", "src/scenarios/gresho.cpp"):
                     self.assertEqual("source=" + name + "\n" in result.stdout, sph == "ON")

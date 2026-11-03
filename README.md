@@ -54,7 +54,7 @@ CUDA selection is independent for each module. All backend selectors default to
 `analysis.power.cuda`, `analysis.groups.cuda`, and `lightcone.cuda`.
 Gravity kernel tuning belongs under `gravity.cuda.*`, such as
 `gravity.cuda.kickResidency`. Mixed runs can enable GPU gravity while keeping
-hydrodynamics on the CPU. `hydro.cuda=true` supports SPH; MFM/MFV are CPU only.
+hydrodynamics on the CPU.
 `sort.cuda`, `analysis.tracers.cuda`, `analysis.slice.cuda`, and
 `analysis.views.cuda` are accepted only as `false` because those CUDA paths are
 not implemented. There is no global CUDA selector.
@@ -146,9 +146,6 @@ gravity, and combined runs, including explicit chemistry source intervals.
 Set `COSMICTIGER_ENABLE_SPH=OFF` for gravity-only builds, or disable
 `COSMICTIGER_ENABLE_FMM`, `COSMICTIGER_ENABLE_PMMM_PP`, and
 `COSMICTIGER_ENABLE_PMMM_FMM` for SPH-only builds.
-`COSMICTIGER_ENABLE_HOPKINS` defaults to `OFF`. Set it to `ON` to compile
-Hopkins MFM/MFV in addition to SPH; it requires `COSMICTIGER_ENABLE_SPH=ON`
-and `COSMICTIGER_POSITION_TYPE=fixed64`.
 `COSMICTIGER_ENABLE_CHEMISTRY` defaults to `ON`; set it to `OFF` to retain SPH
 without equilibrium cooling. Equilibrium cooling is compiled only when SPH and
 chemistry are both enabled. The chemistry setting is inactive when SPH is off;
@@ -287,10 +284,7 @@ cosmological conversions, and deliberate implementation choices. SPH support is
 built by default; `-DCOSMICTIGER_ENABLE_SPH=OFF` excludes it. Enable gas
 explicitly with `--hydro.enabled=true`. SPH supports traditional block timesteps
 and global adaptive timesteps with FMM, either PMMM near method, or gravity
-disabled. [Hierarchical SPH](docs/hierarchical_sph.md) uses a separate persistent
-neighbor tree and individual gas timesteps alongside hierarchical gravity. It
-supports cooling and star formation, each applied over the interval a particle
-closes; see the linked restrictions and validation coverage.
+disabled. Hierarchical integration is collisionless only and rejects SPH.
 Select SIMD CPU SPH with `--hydro.cuda=false` or CUDA SPH with `--hydro.cuda=true`.
 Particle drift selects its backend with `drift.cuda`: the CPU path uses SIMD position updates
 and HPX workers, including rung filtering, glass damping, and lightcone crossings.
@@ -308,19 +302,9 @@ For a small cosmological run using the native Einstein–Boltzmann power spectru
 ./cosmictiger --hydro.enabled=true --gravity.cuda=true --hydro.cuda=true --drift.cuda=true --initial.particlesPerDimension=16 --run.maxIterations=2 --hpx:threads=4
 ```
 
-Select `hydro.method=sph|mfm|mfv` to choose SPH or the restored
-[Hopkins MFM/MFV solver](docs/hopkins_hydro.md). The Hopkins implementation uses
-double precision hydrodynamic state on the CPU and supports traditional individual
-steps or global continuous steps, with FMM or PMMM gravity. Fixed-mass MFM also
-supports hierarchical gravity with independent hydro clocks and conservative
-pair intervals; MFV's changing masses require traditional or global integration.
-It requires a Fixed64 position build. MFM accepts cooling and star formation under
-every supported integrator; MFV requires both disabled, and hierarchical MFM
-currently requires lightcone output disabled.
-`configurations/sound_wave.ini` and
-`configurations/gresho.ini` provide meshless test problems.
-Compile the meshless methods with `-DCOSMICTIGER_ENABLE_HOPKINS=ON`;
-the default SPH build omits them.
+`hydro.method` accepts only `sph`. The Hopkins MFM/MFV solver was removed on
+2026-11-03 and remains available in git history.
+`configurations/gresho.ini` provides a Gresho vortex test problem.
 
 The gas controls appear under `hydro.*` in `--help` and can also be
 specified in the INI configuration file. The compatibility group `chemistry.*`
@@ -397,15 +381,14 @@ factor alongside timestep and timing information. Warnings and errors remain
 visible. Plain-text output also stays readable when redirected to a log.
 
 Both progress tables include `TFLOP/s` without enabling verbose output. This is
-an estimate of instrumented gravity, SPH, Hopkins and tree arithmetic divided by the wall time
+an estimate of instrumented gravity, SPH and tree arithmetic divided by the wall time
 of force advancement, summed across CPU workers, CUDA kernels and localities.
 SPH includes neighbor geometry, each density/support-radius iteration, pressure
 and viscosity pairs, timestep/rung calculations, and predictor/corrector kicks.
 PMMM includes its spherical operators, spectral contraction, and cached FFTW
 execution counts. Chemistry, other FFT paths and other uninstrumented work are not counted;
 when they run inside force advancement their elapsed time is included. The
-tables also separate `FP32 TF/s`, `FP64 TF/s`, and `Mixed TF/s`. Hopkins uses
-FP64; `Mixed` retains legacy counts whose arithmetic precision has not yet been
+tables also separate `FP32 TF/s`, `FP64 TF/s`, and `Mixed TF/s`. `Mixed` retains legacy counts whose arithmetic precision has not yet been
 split, rather than attributing them to the wrong precision. Cosmological
 `progress.txt` preserves its existing fields and appends `Tflops32`, `Tflops64`,
 and `TflopsMixed`.
@@ -462,8 +445,7 @@ on concurrent HPX tasks: the single phase stack belongs to the coordinator.
 The report uses dotted names for finer stages. SPH separates tree creation,
 neighbor boxes/lists, density/support solves, viscosity targets, closing/opening
 forces, predictor/corrector updates, rung limiting, sources, and cleanup.
-Hopkins MFM/MFV also separates gather/scatter, geometry, gradients, pair-flux
-solves/integration, and timestep selection. Gravity separates tree allocation
+Gravity separates tree allocation
 and construction, the FMM root walk/background/result wait, PMMM
 preparation/deposition/transforms/evaluation, and cleanup. Drift separates
 CPU/CUDA execution, memory advice, and remaining remote waits.
@@ -507,7 +489,7 @@ device-to-host copy. Events are read after the existing stream completion
 wait; profiling adds no extra synchronization. Kernel time includes managed
 memory stalls, and the copy rows do not account for all managed-memory
 migration. `COSMICTIGER_PROFILE=OFF` removes the host detail timers and CUDA
-timing events. Use APEX and TAU below for broader HPX task attribution.
+timing events. Use APEX below for broader HPX task attribution.
 
 Configure a CUDA build with `-DCOSMICTIGER_PROFILE=ON` and
 `-DCOSMICTIGER_DEVICE_PROFILE=ON` to also time sections inside the fused gravity
@@ -542,7 +524,7 @@ reads, synchronization, and record transfers.
 The first Ctrl-C requests a clean stop at the next safe phase or completed
 substep. Active work finishes, the simulation's ordinary final checkpoint is
 written when a completed state is available, and HPX/MPI shutdown finalizes the
-APEX and TAU reports. Long initialization batches or force calculations must
+APEX reports. Long initialization batches or force calculations must
 finish before shutdown; the signal handler never cancels a worker or calls MPI.
 A second Ctrl-C forces immediate termination and can leave reports or
 checkpoints incomplete. A clean interrupted run exits successfully.
@@ -593,8 +575,7 @@ cmake --build build/apex --target cosmictiger --parallel 4
 
 With an APEX-enabled HPX, CosmicTiger enables `apex_profiles.csv` and
 `apex_tasktree.csv` by default, independently of `COSMICTIGER_PROFILE`.
-The detailed screen report is off by default, including through
-`scripts/profile_tau.sh`. Set `APEX_SCREEN_OUTPUT=1` to request it explicitly, or
+The detailed screen report is off by default. Set `APEX_SCREEN_OUTPUT=1` to request it explicitly, or
 `APEX_CSV_OUTPUT=0` and `APEX_TASKTREE_OUTPUT=0` to disable individual file reports.
 Existing environment settings are preserved. `APEX_OUTPUT_FILE_PATH` selects their directory;
 otherwise APEX writes to the working directory. APEX 1.11 gives an explicitly
@@ -607,108 +588,41 @@ profile's exclusive coordinator wall times.
 APEX task instrumentation alone does not establish CUDA kernel profiling;
 device activity requires a compatible GPU instrumentation backend.
 
-### Combining task context and ordinary function samples
-
-Use the TAU launcher to collect ordinary function samples under the active HPX
-task name. APEX forwards task start/resume and yield/stop events to TAU. HPX
-1.11 requires the TAU shutdown fix described below; the local Debug, Release,
-and RelWithDebInfo HPX installations already include it. Build the pinned TAU
-runtime once, then launch the application:
-
-```sh
-./scripts/build_tau.sh
-./scripts/profile_tau.sh ./build/apex/cosmictiger \
-  --configuration=configurations/lcdm_present.ini --hpx:threads=4
-```
-
-The dependency script installs TAU 2.35.2 with MPI, pthread, BFD symbol
-resolution, and libunwind into `~/local/tau`. It verifies archive checksums and
-limits build parallelism. `TAU_PREFIX`, `TAU_BUILD_ROOT`, and `TAU_BUILD_JOBS`
-override those choices. The launcher finds `tau_exec` through `TAU_EXEC`, PATH,
-or `TAU_ROOT` (default `~/local/tau`). It keeps the application's working
-directory and arguments unchanged. Prefer RelWithDebInfo for debug symbols;
-optimized/inlined code may not retain a separate sample entry for every source
-function.
-
-Each launch creates `profiles/tau-<timestamp>-<pid>/`, with TAU's combined
-`profile.<rank>.<context>.<thread>` files in `tau/` and APEX reports in `apex/`.
-Set `COSMICTIGER_PROFILE_DIR` to choose a stable output root. `PROFILEDIR` and
-`APEX_OUTPUT_FILE_PATH` can override the individual directories. For MPI, pass
-the same output root to every rank and use the Ctrl-C-aware MPI wrapper shown
-below.
-
-Open the TAU directory in ParaProf, or run `~/local/tau/x86_64/bin/pprof -a`
-from that directory. Contextual entries connect the task timer to a
-`[CONTEXT]` node (`[INTERMEDIATE]` in older releases) and then a `[SAMPLE]`
-function. These are the combined task/function profiles; `profile.txt` remains
-the separate coordinator phase report.
-
-The launcher enables `APEX_TAU=1`, TAU profiling and sampling, and disables
-TAU tracing. Defaults are function resolution, a 10 ms sampling period,
-callpaths enabled, and stack unwinding and timer throttling disabled. The
-`TAU_EBS_*`, `TAU_CALLPATH`, `TAU_THROTTLE`, and `APEX_THROTTLE_TIMERS`
-environment settings override these defaults. No stack unwinding is needed
-for the function-to-task association. `APEX_PROFILE_OUTPUT=1` alone only
-writes APEX timers in TAU format; it does not collect ordinary function samples.
-The local dependency scripts include compatibility fixes for TAU's Linux
-PIE/shared-library address resolution, APEX 1.11's HPX shutdown ordering, and
-thread-safe initialization of APEX's task-tree root.
 The dependency fixes are preserved in `cmake/patches/`. For HPX 1.11, apply
 `hpx_full_thread_descriptions.patch` from the HPX source root. Apply both
-`hpx_apex_compatibility.patch` and `hpx_apex_tau.patch` from its APEX source root
-(normally `<hpx-build>/_deps/apex-src` after configuration). Each patch records
-its source revision. Check with `git apply --check /absolute/path/to/patch`
+`hpx_apex_compatibility.patch` and `hpx_apex_reports.patch` from its APEX source
+root (normally `<hpx-build>/_deps/apex-src` after configuration). They fix GCC 15
+builds and no-BFD address resolution, initialize APEX's task-tree root
+thread-safely, and merge MPI task trees on the reporting thread without an
+additional worker pool. Check with `git apply --check /absolute/path/to/patch`
 before `git apply /absolute/path/to/patch`. Rebuild and reinstall HPX with
 `HPX_WITH_APEX=ON` and `HPX_WITH_THREAD_DESCRIPTION_FULL=ON`; rebuilding only
-APEX does not install the HPX header fixes. The local `~/scripts/build-hpx.sh`
-applies these fixes idempotently.
-APEX's synthetic root is omitted from TAU, which already supplies an application
-root. TAU's wrappers finalize after HPX workers exit, avoiding cross-thread
-timer closure during HPX teardown; still-active shutdown timers can therefore
-include teardown time. APEX's own root report and actual HPX task events are
-retained. MPI task-tree merging uses the reporting thread without creating
-an additional worker pool. The launcher
-requires active APEX instrumentation and leaves optional OS-thread lifetime
-timers disabled (`APEX_TIME_TOP_LEVEL_OS_THREADS=0`).
+APEX does not install the HPX header fixes.
+
 CosmicTiger finalizes APEX reports on HPX's native I/O pool in an early
 pre-shutdown callback. This keeps HPX workers available to deliver every
 rank's shutdown actions, including runs with one worker per rank.
-See the [APEX TAU listener](https://github.com/STEllAR-GROUP/apex/blob/hpx_v1.11.0/src/apex/tau_listener.cpp)
-and [TAU sampling options](https://www.cs.uoregon.edu/research/tau/docs/html-docs/latest/newguide/environment.html).
 
-The listener forwards active task names, not the complete asynchronous parent
-graph; keep APEX's task tree for that information. TAU timer call counts include
-resumptions, whereas APEX reports completed tasks and yields separately. Linux
-TAU timer sampling uses a wall-clock timer on every worker; the phase profile
-measures the coordinator alone. Their totals are not directly interchangeable.
-
-Ctrl-C uses the same clean HPX/MPI shutdown as a completed run. For MPI, place
-the supplied wrapper outside the launcher so terminal Ctrl-C requests shutdown
-instead of invoking Open MPI's job-abort behavior:
+Ctrl-C uses the same clean HPX/MPI shutdown as a completed run. For MPI, launch
+through the supplied wrapper so terminal Ctrl-C requests shutdown instead of
+invoking Open MPI's job-abort behavior:
 
 ```sh
-COSMICTIGER_PROFILE_DIR="$PWD/profiles/tau_mpi" \
-  ./scripts/run_mpi.py -n 2 ./scripts/profile_tau.sh ./build/apex/cosmictiger \
+APEX_OUTPUT_FILE_PATH="$PWD/profiles/apex_mpi" \
+  ./scripts/run_mpi.py -n 2 ./build/apex/cosmictiger \
     --configuration=configurations/lcdm_present.ini --hpx:threads=4
 ```
 
 The wrapper queues an early interrupt until handlers are ready and forwards a
-cooperative SIGUSR1 request. A second Ctrl-C aborts the job. It can also launch
-the application directly without TAU. This wrapper requires Linux, Open MPI,
-and a working directory visible at the same path on every host. Direct SIGINT or SIGUSR1 to an application
-rank requests a clean stop across the localities. See
+cooperative SIGUSR1 request. A second Ctrl-C aborts the job. This wrapper
+requires Linux, Open MPI, and a working directory visible at the same path on
+every host. Direct SIGINT or SIGUSR1 to an application rank requests a clean
+stop across the localities. See
 [Open MPI signal handling](https://docs.open-mpi.org/en/v5.0.10/man-openmpi/man1/mpirun.1.html#signal-handling).
 
-The `tau_profiler_default` CTest is registered when `tau_exec` is found (or set
-`COSMICTIGER_TAU_EXEC` at CMake configuration). It requires sampled ordinary
-functions to be connected to their distinct task contexts, rejects crossed
-parent/child attribution, and observes an explicit worker migration. The APEX
-tests also cover default reporting and explicit report opt-outs.
-`tau_profiler_config` checks configuration-file precedence, and
-`tau_profiler_mpi_startup` checks a two-rank application startup and shutdown
-with separate rank profiles and a bounded task-tree merge. The interrupt
-regressions check first-interrupt finalization, second-interrupt emergency
-termination, and the completed APEX, TAU, and `profile.txt` reports.
+The APEX tests cover default reporting and explicit report opt-outs. The
+interrupt regressions check first-interrupt finalization, second-interrupt
+emergency termination, and the completed APEX and `profile.txt` reports.
 
 ## Source layout
 
@@ -718,9 +632,6 @@ implementations. Gravity solver code is in `gravity/global_fmm/` for global adap
 FMM and `gravity/pmmm/` for PMMM. SPH numerical modules are in
 `hydro/sph/variational/`, `hydro/sph/monaghan/`, `hydro/sph/morris_and_monaghan/`,
 `hydro/sph/cullen_and_dehnen/`, `hydro/sph/price_etal/`, and `hydro/sph/balsara/`.
-Hopkins MFM/MFV headers live in `cosmictiger/hydro/hopkins/`;
-`src/hydro/hopkins.cpp` implements their hydrodynamic stage within the shared
-simulation driver.
 Owned particle storage stays in `particles/`; PMMM owns its
 separate ghost arena in `gravity/pmmm/`.
 
@@ -755,7 +666,7 @@ is best effort. This handler is adapted from OctoTiger's `stacktrace_fix` commit
 `a0720ee02feebf776b797b2fdc74edf6bcc5bd83`.
 
 Run `./build.sh` in a terminal for the interactive builder. Choose Release,
-RelWithDebInfo, Debug, or Profile (host gprof instrumentation), CUDA, SPH, Hopkins,
+RelWithDebInfo, Debug, or Profile (host gprof instrumentation), CUDA, SPH,
 equilibrium cooling, job counts, HPX prefix, CUDA architectures, additional
 dependency prefixes, enabled gravity and near methods, potential expansion degrees
 (a scalar or inclusive range),

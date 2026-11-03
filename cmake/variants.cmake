@@ -36,7 +36,7 @@ endif()
 
 # Capability definitions are shared by the executable and standalone tests.
 add_library(cosmictiger_default_config INTERFACE)
-foreach(feature IN ITEMS FMM PMMM_PP PMMM_FMM PM P3M_PP P3M_FMM SPH HOPKINS
+foreach(feature IN ITEMS FMM PMMM_PP PMMM_FMM PM P3M_PP P3M_FMM SPH
         INTEGRATOR_TRADITIONAL INTEGRATOR_HIERARCHICAL INTEGRATOR_GLOBAL)
     target_compile_definitions(cosmictiger_default_config INTERFACE
         COSMICTIGER_ENABLE_${feature}=$<BOOL:${COSMICTIGER_ENABLE_${feature}}>)

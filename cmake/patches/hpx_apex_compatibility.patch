@@ -1,6 +1,6 @@
 APEX hpx_v1.11.0: include fixed-width integer declarations for GCC 15
 and resolve no-BFD function names using the original runtime address.
-This complements hpx_apex_tau.patch; either patch can be applied first.
+This complements hpx_apex_reports.patch; either patch can be applied first.
 
 Base revision: 151f5535f58f94cab264bbf8af306589e418d283
 Apply from the dependency source root with git apply --check, then git apply.

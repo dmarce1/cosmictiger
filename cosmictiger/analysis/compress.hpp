@@ -9,8 +9,8 @@ struct CompressedBlock {
     Vector3<float> vc;
     float xmax;
     float vmax;
-    Array<Vector<unsigned short>, kDimensions> x;
-    Array<Vector<unsigned short>, kDimensions> v;
+    Array<Vector<unsigned short>, kDimensions> positions;
+    Array<Vector<unsigned short>, kDimensions> velocities;
     void write(FILE* fp);
     void read(FILE* fp);
 };

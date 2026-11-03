@@ -43,9 +43,9 @@ namespace detail {
             double time = endTime;
             double r = sqrt(sqr(x, y, z));
             double rmax = sqrt(1.5);
-            double d, v, p;
+            double d, velocity, p;
             int ndim = 3;
-            sedov::solution(time, r, rmax, d, v, p, ndim, getOptions().hydro.gamma);
+            sedov::solution(time, r, rmax, d, velocity, p, ndim, getOptions().hydro.gamma);
             double dif = fabs(rho - d);
             norm1 += sample.weight * d;
             norm2 += sample.weight * sqr(d);
@@ -106,7 +106,7 @@ ScenarioPlan initializeBlast() {
                 sphParticlesVelocity(kYDimension, i) = vy;
                 sphParticlesVelocity(kZDimension, i) = vz;
                 sphParticlesRung(i) = 0;
-                sphParticlesThermodynamicState(i).internalEnergy = eint;
+                sphParticlesSetInternalEnergy(i, eint);
 
                 i++;
                 x = (ix + 0.0) * dx;
@@ -129,7 +129,7 @@ ScenarioPlan initializeBlast() {
                 sphParticlesVelocity(kYDimension, i) = vy;
                 sphParticlesVelocity(kZDimension, i) = vz;
                 sphParticlesRung(i) = 0;
-                sphParticlesThermodynamicState(i).internalEnergy = eint;
+                sphParticlesSetInternalEnergy(i, eint);
 
                 i++;
             }
@@ -147,7 +147,8 @@ ScenarioPlan initializeBlast() {
         throw std::runtime_error("The blast lattice has no deposited energy");
     }
     for (ParticleInteger particle = 0; particle < sphParticlesSize(); ++particle) {
-        sphParticlesThermodynamicState(particle).internalEnergy /= depositedEnergy;
+        sphParticlesSetInternalEnergy(
+            particle, sphParticlesInternalEnergy(particle) / (depositedEnergy));
     }
     return ScenarioPlan{{{detail::kDuration, 16}}, detail::finishBlast};
 }

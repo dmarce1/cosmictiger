@@ -153,7 +153,6 @@ __device__ inline CudaKickForceTile cudaArenaForces(CudaKickControl<order> const
     forces.gy = forces.gx + layout.sinkCapacity;
     forces.gz = forces.gy + layout.sinkCapacity;
     forces.phi = forces.gz + layout.sinkCapacity;
-    forces.pairCurvature = forces.phi + layout.sinkCapacity;
     return forces;
 }
 
@@ -184,12 +183,11 @@ __device__ inline void cudaApplyPcField(
 // One sink's accumulated PP force applied to its force planes, the potential
 // only when it is computed. Called with the arena planes or the global
 // backing, so each call site keeps its address space.
-__device__ inline void cudaApplyPpForce(CudaKickForceTile const& force, int k, float fx, float fy,
-    float fz, float pot, float pairCurvature, bool doPhi) {
+__device__ inline void cudaApplyPpForce(
+    CudaKickForceTile const& force, int k, float fx, float fy, float fz, float pot, bool doPhi) {
     force.gx[k] -= fx;
     force.gy[k] -= fy;
     force.gz[k] -= fz;
-    force.pairCurvature[k] += pairCurvature;
     if (doPhi) {
         force.phi[k] += pot;
     }
@@ -231,17 +229,14 @@ __device__ inline void cudaPpInversePowers(float const (&r2)[kPairs], float h2, 
 // accumulation still runs in staged order, which keeps its forces identical
 // to the one-sink loop's bit for bit. The potential accumulates whether or not
 // it is wanted, which keeps a per-pair select out of the loop; callers store
-// it only with doPhi. The pair curvature (gravity/timestep.hpp) adds every
-// mass-weighted radial coefficient whose separation is not exactly zero: the
-// sink's own fixed-point position differs from itself by zero, and distinct
-// particles at one position exert no force and are skipped for that step only.
+// it only with doPhi.
 template <int nSinks, bool equalMass>
 __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int count,
     Position const (&sinkX)[nSinks], Position const (&sinkY)[nSinks],
     Position const (&sinkZ)[nSinks], float h2, float hinv, float h2inv, float h3inv, bool doPhi,
     float (&fx)[nSinks], float (&fy)[nSinks], float (&fz)[nSinks], float (&pot)[nSinks],
-    float (&pairCurvature)[nSinks], FlopCount& close, FlopCounter<FlopCount>& flops,
-    FmmGeometry const& geometry, FlopCounts& mixedFlops) {
+    FlopCount& close, FlopCounter<FlopCount>& flops, FmmGeometry const& geometry,
+    FlopCounts& mixedFlops) {
     constexpr int kVector = 4;
     constexpr int kPairs = kVector * nSinks;
     int j = 0;
@@ -314,7 +309,6 @@ __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int cou
                 fy[s] = fmaf(dx1[p], r3inv[p], fy[s]);    // 2
                 fz[s] = fmaf(dx2[p], r3inv[p], fz[s]);    // 2
                 pot[s] -= r1inv[p];                       // 1
-                pairCurvature[s] += r2[p] > 0.f ? r3inv[p] : 0.f;    // 1
             }
         }
     }
@@ -351,7 +345,6 @@ __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int cou
             fy[s] = fmaf(dx1[s], r3inv[s], fy[s]);
             fz[s] = fmaf(dx2[s], r3inv[s], fz[s]);
             pot[s] -= r1inv[s];
-            pairCurvature[s] += r2[s] > 0.f ? r3inv[s] : 0.f;
         }
     }
 }
@@ -562,8 +555,8 @@ __device__ FlopCounts cudaGravityPpDirect(CudaKickData const& data, CudaKickCont
     FlopCounts mixedFlops{};
     FlopCount close = 0;
     FlopCount pairs = 0;
-    constexpr FlopCount kPairFlops = equalMass ? 16 : 18;    // Geometry is counted separately.
-    FlopCount const forceAddFlops = 4 + int(doPhi);
+    constexpr FlopCount kPairFlops = equalMass ? 15 : 17;    // Geometry is counted separately.
+    FlopCount const forceAddFlops = 3 + int(doPhi);
     if (partlist.size()) {
         int i = 0;
         auto particleRange = treeNodes[partlist[0]].particleRange;
@@ -588,19 +581,17 @@ __device__ FlopCounts cudaGravityPpDirect(CudaKickData const& data, CudaKickCont
                 float fy[kPair] = {0.f, 0.f};
                 float fz[kPair] = {0.f, 0.f};
                 float pot[kPair] = {0.f, 0.f};
-                float pairCurvature[kPair] = {0.f, 0.f};
                 detail::cudaPpSinkGroup<kPair, equalMass>(sources, particleIndex, sx, sy, sz, h2,
-                    hinv, h2inv, h3inv, doPhi, fx, fy, fz, pot, pairCurvature, close, flops,
-                    geometry, mixedFlops);
+                    hinv, h2inv, h3inv, doPhi, fx, fy, fz, pot, close, flops, geometry, mixedFlops);
 #pragma unroll
                 for (int s = 0; s < kPair; s++) {
                     int const sink = k + s * kWarpSize;
                     if (sharedForces) {
                         detail::cudaApplyPpForce(
-                            arenaForce, sink, fx[s], fy[s], fz[s], pot[s], pairCurvature[s], doPhi);
+                            arenaForce, sink, fx[s], fy[s], fz[s], pot[s], doPhi);
                     } else {
-                        detail::cudaApplyPpForce(backingForce, sink, fx[s], fy[s], fz[s], pot[s],
-                            pairCurvature[s], doPhi);
+                        detail::cudaApplyPpForce(
+                            backingForce, sink, fx[s], fy[s], fz[s], pot[s], doPhi);
                     }
                 }
                 pairs += FlopCount(kPair) * particleIndex;
@@ -614,16 +605,12 @@ __device__ FlopCounts cudaGravityPpDirect(CudaKickData const& data, CudaKickCont
                 float fy[1] = {0.f};
                 float fz[1] = {0.f};
                 float pot[1] = {0.f};
-                float pairCurvature[1] = {0.f};
                 detail::cudaPpSinkGroup<1, equalMass>(sources, particleIndex, sx, sy, sz, h2, hinv,
-                    h2inv, h3inv, doPhi, fx, fy, fz, pot, pairCurvature, close, flops, geometry,
-                    mixedFlops);
+                    h2inv, h3inv, doPhi, fx, fy, fz, pot, close, flops, geometry, mixedFlops);
                 if (sharedForces) {
-                    detail::cudaApplyPpForce(
-                        arenaForce, k, fx[0], fy[0], fz[0], pot[0], pairCurvature[0], doPhi);
+                    detail::cudaApplyPpForce(arenaForce, k, fx[0], fy[0], fz[0], pot[0], doPhi);
                 } else {
-                    detail::cudaApplyPpForce(
-                        backingForce, k, fx[0], fy[0], fz[0], pot[0], pairCurvature[0], doPhi);
+                    detail::cudaApplyPpForce(backingForce, k, fx[0], fy[0], fz[0], pot[0], doPhi);
                 }
                 pairs += particleIndex;
                 flops += forceAddFlops;
@@ -635,7 +622,6 @@ __device__ FlopCounts cudaGravityPpDirect(CudaKickData const& data, CudaKickCont
                 float fy = 0.f;
                 float fz = 0.f;
                 float pot = 0.f;
-                float pairCurvature = 0.f;
                 Position const sx = sinkX[sink];
                 Position const sy = sinkY[sink];
                 Position const sz = sinkZ[sink];
@@ -659,24 +645,20 @@ __device__ FlopCounts cudaGravityPpDirect(CudaKickData const& data, CudaKickCont
                     fy = fmaf(dx1, r3inv[0], fy);    // 2
                     fz = fmaf(dx2, r3inv[0], fz);    // 2
                     pot -= r1inv[0];                 // 1
-                    pairCurvature += r2[0] > 0.f ? r3inv[0] : 0.f;    // 1
                     pairs++;
                 }
                 sharedReduceAdd(fx);
                 sharedReduceAdd(fy);
                 sharedReduceAdd(fz);
-                sharedReduceAdd(pairCurvature);
                 if (doPhi) {
                     sharedReduceAdd(pot);
                 }
                 flops += 5 * forceAddFlops;
                 if (tid == 0) {
                     if (sharedForces) {
-                        detail::cudaApplyPpForce(
-                            arenaForce, sink, fx, fy, fz, pot, pairCurvature, doPhi);
+                        detail::cudaApplyPpForce(arenaForce, sink, fx, fy, fz, pot, doPhi);
                     } else {
-                        detail::cudaApplyPpForce(
-                            backingForce, sink, fx, fy, fz, pot, pairCurvature, doPhi);
+                        detail::cudaApplyPpForce(backingForce, sink, fx, fy, fz, pot, doPhi);
                     }
                     flops += forceAddFlops;
                 }

@@ -31,7 +31,11 @@ Array<Position*, kDimensions> particlesX;
 Vector3<float>* particlesV;
 char* particlesR;
 ParticleInteger* sphParticlesParticleIndices;
-SphThermodynamicState* sphParticlesThermodynamicStates;
+float* sphParticlesEntropies;
+float* sphParticlesDensities;
+bool sphParticlesEntropyInitialized = false;
+double sphParticlesThermalScaleFactor = 1.0;
+float* sphParticlesSupportRadii;
 
 namespace detail {
 
@@ -41,7 +45,8 @@ std::array<std::vector<Position>, kDimensions> positions;
 std::vector<Vector3<float>> velocities;
 std::vector<char> rungs;
 std::vector<ParticleInteger> indices;
-std::vector<SphThermodynamicState> thermodynamicStates;
+std::vector<float> internalEnergies;
+std::vector<float> supportRadii;
 
 void require(bool condition, char const* label) {
     if (!condition) {
@@ -90,11 +95,13 @@ void sphParticlesResize(ParticleInteger count, bool) {
     detail::velocities.resize(count);
     detail::rungs.resize(count);
     detail::indices.resize(count);
-    detail::thermodynamicStates.resize(count);
+    detail::internalEnergies.resize(count);
+    detail::supportRadii.resize(count);
     particlesV = detail::velocities.data();
     particlesR = detail::rungs.data();
     sphParticlesParticleIndices = detail::indices.data();
-    sphParticlesThermodynamicStates = detail::thermodynamicStates.data();
+    sphParticlesEntropies = detail::internalEnergies.data();
+    sphParticlesSupportRadii = detail::supportRadii.data();
     for (ParticleInteger i = oldCount; i < count; i++) {
         sphParticlesParticleIndices[i] = i;
     }

@@ -62,12 +62,9 @@ std::shared_ptr<ShortTree> buildShortTree(
 // Accumulate the short field of every source tree (each with its own whole-box
 // image shift) on the particles of the sink tree. fields is indexed like the
 // sink tree's particle array and is overwritten as {potential, ax, ay, az}.
-// pairCurvature, when supplied, is overwritten with each sink's direct-pair
-// coefficient over the leaf pairs evaluated directly (short_pair.hpp).
 ShortWalkStatistics walkShortTree(ShortTree const& sinks,
     std::vector<std::pair<ShortTree const*, Vector3<double>>> const& sources,
-    ShortWalkParameters const& parameters, std::vector<std::array<double, 4>>& fields,
-    std::vector<double>* pairCurvature = nullptr);
+    ShortWalkParameters const& parameters, std::vector<std::array<double, 4>>& fields);
 
 // The screened multipole acceptance: a cell pair is accepted when the summed
 // radii stay below openingAngle times the kernel's local length, the smaller

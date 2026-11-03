@@ -825,14 +825,14 @@ void evolveLinearModes(LinearExperiment const& experiment, std::string const& fi
                 densityOutput.flush();
             }
             auto const u = experiment.project(observed.displacement, wave);
-            auto const v = experiment.project(observed.velocity, wave);
+            auto const projectedVelocity = experiment.project(observed.velocity, wave);
             for (int kind = 0; kind < experiment.species; ++kind) {
                 for (int dim = 0; dim < kDimensions; ++dim) {
                     output << label << ',' << run << ',' << step << ',' << std::exp(logScale) << ','
                            << kind << ',' << dim << ',' << experiment.side * u.sine[kind][dim]
                            << ',' << experiment.side * u.cosine[kind][dim] << ','
-                           << experiment.side * v.sine[kind][dim] << ','
-                           << experiment.side * v.cosine[kind][dim] << ','
+                           << experiment.side * projectedVelocity.sine[kind][dim] << ','
+                           << experiment.side * projectedVelocity.cosine[kind][dim] << ','
                            << experiment.side * u.residual[kind][dim] << '\n';
                 }
             }

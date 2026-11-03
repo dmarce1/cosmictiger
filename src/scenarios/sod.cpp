@@ -38,11 +38,11 @@ namespace detail {
             throw std::runtime_error("Unable to open sod.txt for writing");
         }
         for (auto const& sample : diagnosticSamples(kN)) {
-            float const x = sample.position[kXDimension];
+            float const position = sample.position[kXDimension];
             float const rho = sample.density;
             float const p = sample.pressure;
             SodStateT state;
-            float x0 = x;
+            float x0 = position;
             x0 -= 0.5;
             if (x0 > 0.25) {
                 x0 = 0.5 - x0;
@@ -56,7 +56,7 @@ namespace detail {
             l1 += sample.weight * dif;
             l2 += sample.weight * dif * dif;
             lmax = std::max(lmax, dif);
-            fprintf(fp, "%e %e %e %e %e\n", x, rho, state.rho, p, state.p);
+            fprintf(fp, "%e %e %e %e %e\n", position, rho, state.rho, p, state.p);
         }
         l1 /= norm1;
         l2 /= norm2;
@@ -124,8 +124,7 @@ ScenarioPlan initializeSod() {
                 sphParticlesVelocity(kYDimension, i) = vy0;
                 sphParticlesVelocity(kZDimension, i) = vz0;
                 sphParticlesRung(i) = 0;
-                sphParticlesThermodynamicState(i).internalEnergy =
-                    p1 / (getOptions().hydro.gamma - 1.0) / rho1;
+                sphParticlesSetInternalEnergy(i, p1 / (getOptions().hydro.gamma - 1.0) / rho1);
                 i++;
                 x = (ix + 0.5) * dx;
                 y = (iy + 0.5) * dx;
@@ -139,8 +138,7 @@ ScenarioPlan initializeSod() {
                 sphParticlesVelocity(kYDimension, i) = vy0;
                 sphParticlesVelocity(kZDimension, i) = vz0;
                 sphParticlesRung(i) = 0;
-                sphParticlesThermodynamicState(i).internalEnergy =
-                    p1 / (getOptions().hydro.gamma - 1.0) / rho1;
+                sphParticlesSetInternalEnergy(i, p1 / (getOptions().hydro.gamma - 1.0) / rho1);
                 i++;
             }
         }
@@ -167,8 +165,7 @@ ScenarioPlan initializeSod() {
                 sphParticlesVelocity(kZDimension, i) = 0;
 
                 sphParticlesRung(i) = 0;
-                sphParticlesThermodynamicState(i).internalEnergy =
-                    p0 / (getOptions().hydro.gamma - 1.0) / rho0;
+                sphParticlesSetInternalEnergy(i, p0 / (getOptions().hydro.gamma - 1.0) / rho0);
 
                 i++;
                 x = (ix + 0.5) * dx;
@@ -184,8 +181,7 @@ ScenarioPlan initializeSod() {
                 sphParticlesVelocity(kZDimension, i) = 0;
 
                 sphParticlesRung(i) = 0;
-                sphParticlesThermodynamicState(i).internalEnergy =
-                    p0 / (getOptions().hydro.gamma - 1.0) / rho0;
+                sphParticlesSetInternalEnergy(i, p0 / (getOptions().hydro.gamma - 1.0) / rho0);
 
                 i++;
             }

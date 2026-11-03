@@ -373,7 +373,7 @@ void unitsOutputParticleFixture(bool initialize) {
         sphParticlesParticleIndex(0) = 2;
         sphParticlesSupportRadius(0) = 0.03125;
         sphParticlesDensity(0) = 8.0;
-        sphParticlesThermodynamicStates[0].internalEnergy = 4.0;
+        sphParticlesEntropies[0] = 4.0;
         if (getOptions().hydro.viscosityEvolution != "none") {
             // Distinct from the scalar CLI alpha; unchanged by unit/frame conversion.
             sphParticlesViscosityStates[0] = {
@@ -404,8 +404,8 @@ void unitsOutputSourceFixture(int snapshot) {
         parameters.model.overdensityThreshold / (0.25 * 0.25 * 0.25));
     sphParticlesDensity(0) =
         float((10.0 + snapshot) * density * (0.25 * 0.25 * 0.25) / parameters.densityScale);
-    sphParticlesInternalEnergy(0) =
-        float((snapshot + 1.0) * 1.e12 * (0.25 * 0.25) / parameters.energyScale);
+    sphParticlesSetInternalEnergy(
+        0, float((snapshot + 1.0) * 1.e12 * (0.25 * 0.25) / parameters.energyScale));
     particlesStarFormationStates[2].specificStarFormationRate = 0.125 * (snapshot + 1);
     detail::requireUnitsOutput(starFormationDiagnostics(0, 0.25).starForming,
         "dense output fixture has a multiphase target");
@@ -531,40 +531,6 @@ void unitsOutputTest() {
             for (auto const* path :
                 {"cgs/comoving/", "cgs/lab/", "cosmological/comoving/", "cosmological/lab/"}) {
                 checkUnitsOutputSourceFields(file.get(), path, rank);
-            }
-        }
-    }
-#endif
-#if COSMICTIGER_ENABLE_HOPKINS
-    if constexpr (kPositionBits == 64) {
-        options.chemistry.enabled = false;
-        options.starFormation.enabled = false;
-        options.hydro.viscosityEvolution = "cullenAndDehnen";
-        int cycle = 6;
-        for (auto const* method : {"mfm", "mfv"}) {
-            options.hydro.method = method;
-            for (auto const* units : {"code", "both"}) {
-                options.output.units = units;
-                options.output.frame = "both";
-                setOptions(options);
-                unitsOutputParticleFixture(true);
-                viewOutputViews(cycle, 0.25, true, kUnitsOutputPhysicalYears);
-                for (int rank = 0; rank < hpxSize(); ++rank) {
-                    auto file = openUnitsOutput(cycle, rank);
-                    std::vector<std::string> const paths = options.output.units == "code" ?
-                        std::vector<std::string>{""} :
-                        std::vector<std::string>{"cgs/comoving/", "cgs/lab/",
-                            "cosmological/comoving/", "cosmological/lab/"};
-                    for (auto const& path : paths) {
-                        requireUnitsOutput(DBInqVarExists(file.get(), (path + "gas").c_str()),
-                            "Hopkins output retains gas fields");
-                        for (auto const* field : {"alpha", "divv", "divv_convention"}) {
-                            requireUnitsOutput(!DBInqVarExists(file.get(), (path + field).c_str()),
-                                "Hopkins output omits SPH viscosity fields");
-                        }
-                    }
-                }
-                ++cycle;
             }
         }
     }

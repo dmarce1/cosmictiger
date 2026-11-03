@@ -56,18 +56,18 @@ CUDA_EXPORT inline bool bhAcceptMonopole(float distanceSquared, BhTreeNode const
 }    // namespace detail
 
 struct BhSource {
-    Vector3<float> x;
+    Vector3<float> position;
     float m;
 };
 
-DeviceVector<float> bhEvaluatePotential(DeviceVector<Vector3<float>>& x, bool gpu = false);
+DeviceVector<float> bhEvaluatePotential(DeviceVector<Vector3<float>>& positions, bool gpu = false);
 DeviceVector<float> bhEvaluatePoints(
-    DeviceVector<Vector3<float>>& y, DeviceVector<Vector3<float>>& x, bool gpu = false);
+    DeviceVector<Vector3<float>>& y, DeviceVector<Vector3<float>>& positions, bool gpu = false);
 DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& treeNodes,
-    DeviceVector<Vector3<float>> const& x, DeviceVector<int> const sinkBuckets, float relativeError,
-    float hsoft, float gm, int maximumBlockCount = 0);
+    DeviceVector<Vector3<float>> const& positions, DeviceVector<int> const sinkBuckets,
+    float relativeError, float hsoft, float gm, int maximumBlockCount = 0);
 DeviceVector<float> bhEvaluatePotentialPointsGpu(DeviceVector<BhTreeNode> const& treeNodes,
-    DeviceVector<Vector3<float>> const& x, DeviceVector<Vector3<float>> const& y,
+    DeviceVector<Vector3<float>> const& positions, DeviceVector<Vector3<float>> const& y,
     float relativeError, float hsoft, float gm);
 
 #endif /* BH_HPP_ */

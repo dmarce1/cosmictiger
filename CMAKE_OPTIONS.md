@@ -55,13 +55,8 @@ direct formulas. See [matrix algorithms and measurements](docs/matrix.md).
 
 At least one physics component and one integrator must be enabled. The two PMMM
 options are independent; either enables PMMM, and both may be enabled together.
-SPH requires traditional/global integration, or hierarchical integration in a
-gravity-capable build. Hierarchical SPH may disable self-gravity at runtime and
-supports chemistry and star formation.
-Fixed-mass MFM also supports hierarchical integration, with a separate hydro
-clock; MFV remains limited to traditional/global integration because its mass
-transfer changes held gravity sources. Hierarchical MFM requires lightcone output
-disabled.
+SPH requires traditional or global integration; hierarchical integration is
+collisionless only.
 To build SPH only, disable `COSMICTIGER_ENABLE_FMM`,
 `COSMICTIGER_ENABLE_PMMM_PP`, and `COSMICTIGER_ENABLE_PMMM_FMM`.
 To build gravity only, disable `COSMICTIGER_ENABLE_SPH`.

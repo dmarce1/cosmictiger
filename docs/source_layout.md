@@ -2,7 +2,7 @@
 
 Public headers live under `cosmictiger/` and implementations under `src/`.
 Both trees are organized by subsystem and algorithm. A backend with one source
-file can live directly in its subsystem directory, as `src/hydro/hopkins.cpp`
+file can live directly in its subsystem directory, as `src/chemistry/recombination.cpp`
 does. Common machinery sits directly in its subsystem directory; there is no
 `shared/` layer.
 
@@ -43,7 +43,6 @@ gravity/
 ├── fmm_acceptance.hpp, fmm_geometry.hpp
 ├── sources.*, source_access.*
 ├── tree*, gravity*, kick*                  # Shared local tree/walk/CPU/CUDA execution
-├── timestep.hpp                            # Direct-pair curvature timestep bound
 ├── global_fmm/                            # Distributed global FMM and periodic corrections
 │   ├── distributed_tree.*, remote_cache.*, particle_exchange.*
 │   ├── execution.*, gpu_staging.*, periodic*
@@ -166,22 +165,6 @@ The runtime selector remains
 state allocation, migration, checkpoint identity, and output are handled at the
 existing storage and integration boundaries. Cullen–Dehnen's additional
 particle exchange is owned by its module.
-
-The separate `cosmictiger/hydro/hopkins/` directory contains `hopkins.hpp`,
-`hopkins_simd.hpp`, `hopkins_state.hpp`, and the `hopkins_hydro.hpp` interface for
-Hopkins MFM/MFV geometry, reconstruction, Riemann fluxes, and double state.
-`src/hydro/hopkins.cpp` implements their hydrodynamic stage. The shared
-`src/core/driver.cpp` selects SPH or Hopkins for traditional and global stepping;
-`hydro.method=sph|mfm|mfv` selects the runtime method. Particle storage, drift,
-migration, gravity masses, checkpoints, and output share the existing lifecycle
-boundaries. Both methods share the persistent geometry tree in
-`cosmictiger/hydro/source_tree.hpp` and the method-agnostic retained-source
-forest `hydro_source::Forest` in `cosmictiger/hydro/source_forest.hpp`, which
-`cosmictiger/hydro/sph/hierarchical_sources.hpp` instantiates for the SPH
-anchor through `SphSourcePolicy`. The SPH hierarchical adapter and staged
-CPU/CUDA execution live in `src/hydro/sph/hierarchical.cpp` and `staged_run.cpp`;
-see [hierarchical SPH](hierarchical_sph.md) and
-[Hopkins hydrodynamics](hopkins_hydro.md).
 
 Exact Sod, Sedov, and hydrostatic sphere reference/initial-condition helpers live
 in `scenarios/`, alongside the scenarios that use them.

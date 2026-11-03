@@ -11,8 +11,6 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/gravity/pm/kick.hpp>
-#include <cosmictiger/gravity/timestep.hpp>
-#include <cosmictiger/hydro/hopkins/gravity_impulse.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
@@ -53,15 +51,12 @@ LongKick readLongKick(
 
 KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& acceleration,
     float potential, KickParameters const& parameters, FlopCount* flopCount,
-    FlopCounts* precisionCounts, float pairCurvature) {
+    FlopCounts* precisionCounts) {
     KickReturn result;
     FlopCounter<> flops;
-    FlopCounter<FlopCount> doubleFlops = 0;
     auto const& options = getOptions();
     auto& rung = particlesRung(index);
-    bool const refreshGas =
-        parameters.refreshGasForces && options.hydro.enabled && particlesType(index) == kSphType;
-    if (rung < parameters.minRung && !refreshGas) {
+    if (rung < parameters.minRung) {
         return result;
     }
     LongKick const longKick = readLongKick(index, parameters, flops);
@@ -85,15 +80,6 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
     if (savePotential && parameters.doPhi) {
         particlesPot(index) = potential;
     }
-#if COSMICTIGER_WITH_SPH
-    if (rung < parameters.minRung) {
-        ParticleInteger const gasIndex = particlesCatIndex(index);
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            sphParticlesGravityAcceleration(dim, gasIndex) = acceleration[dim];
-        }
-        return result;
-    }
-#endif
     auto& vx = particlesVel(kXDimension, index);
     auto& vy = particlesVel(kYDimension, index);
     auto& vz = particlesVel(kZDimension, index);
@@ -113,7 +99,7 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
             // double precision, and narrows to float. All remaining solver
             // arithmetic in this kick uses float, including its FMA arguments.
             counts.singlePrecision = FlopCount(flops) - 1;
-            counts.doublePrecision = 3 + FlopCount(doubleFlops);
+            counts.doublePrecision = 3;
         }
         if (flopCount != nullptr) {
             *flopCount += counts.total();
@@ -136,23 +122,8 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
     };
     float const mass = particlesMass(index);
     float const oldKinetic = 0.5f * mass * sqr(vx, vy, vz);
-    // Local direct-pair bound (gravity/timestep.hpp); no bound without curvature.
-    float const pairTimestep =
-        gravity::pairTimestep(parameters.a, parameters.gm, parameters.eta, pairCurvature);
-    flops += pairCurvature > 0.0f && parameters.gm > 0.0f ? 5 : 0;
 #if COSMICTIGER_WITH_SPH
     bool const gas = options.hydro.enabled && particlesType(index) == kSphType;
-    bool const mfm = gas && parameters.htime && options.hydro.method == "mfm";
-    if (gas && parameters.top && (parameters.deferGasOpening || mfm)) {
-        ALWAYS_ASSERT(parameters.htime && parameters.top);
-        // Hierarchical hydro owns the gas opening kick; options reject it with
-        // the particle-mesh solvers, whose long half-kicks it would not apply.
-        ALWAYS_ASSERT(!longKick.active);
-        ParticleInteger const gasIndex = particlesCatIndex(index);
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            sphParticlesGravityAcceleration(dim, gasIndex) = acceleration[dim];
-        }
-    }
     if (!parameters.htime && gas) {
         // The hydro integrator owns the gas momentum and timestep. As in the
         // ordinary FMM kick, publish the active short gas force without a
@@ -163,18 +134,13 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
         for (int dim = 0; dim < kDimensions; ++dim) {
             sphParticlesGravityAcceleration(dim, gasIndex) = acceleration[dim];
         }
-        sphParticlesGravityTimesteps[gasIndex] = pairTimestep;
         if (!parameters.firstCall) {
             applyLong(parameters.sign, longKick.closeHalf);
         }
         float const closedVx = vx;
         float const closedVy = vy;
         float const closedVz = vz;
-        result.kin = 0.5f * mass * sqr(vx, vy, vz);
-        result.xmom = mass * vx;
-        result.ymom = mass * vy;
-        result.zmom = mass * vz;
-        result.nmom = mass * std::sqrt(sqr(vx, vy, vz));
+        // Hydro sums the gas energies and momenta in its kick.
         result.pot = parameters.doPhi ? 0.5f * mass * potential : 0.0f;
         result.maxRung = rung;
         applyLong(parameters.sign, longKick.openHalf);
@@ -191,17 +157,13 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
         submitFlops();
         return result;
     }
-#else
-    bool const gas = false;
-    bool const mfm = false;
 #endif
-    bool const deferOpening = gas && parameters.deferGasOpening;
     int proposedRung = 0;
-    if (!parameters.htime || parameters.descending || deferOpening || (mfm && parameters.top)) {
+    if (!parameters.htime || parameters.descending) {
         // The inner rung follows the short force at the softening scale; the
         // outer PM interval already bounds the long-force variation.
         float const accelerationSquared = sqr(gx, gy, gz) + 1.0e-35f;
-        float const requiredTimestep = std::min(std::min(parameters.maxDt, pairTimestep),
+        float const requiredTimestep = std::min(parameters.maxDt,
             std::min(parameters.eta * std::sqrt(parameters.a) *
                     std::sqrt(effectiveRadius / std::sqrt(accelerationSquared)),
                 parameters.t0));
@@ -213,11 +175,6 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
             THROW_ERROR("Mesh kick timestep exceeds the available rung range\n");
         }
         proposedRung = int(requestedRung);
-#if COSMICTIGER_WITH_SPH
-        if (deferOpening || (mfm && parameters.top)) {
-            sphParticlesGravityTimesteps[particlesCatIndex(index)] = requiredTimestep;
-        }
-#endif
         // Squared acceleration, timestep bound, and division/log2/ceil rung proposal.
         flops += 15;
     }
@@ -226,25 +183,6 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
         float const halfStep = 0.5f * rungDt[parameters.minRung] * closingBase;
         flops += 3;
         auto const applyKick = [&](float step) {
-#if COSMICTIGER_WITH_SPH
-            if (mfm) {
-                auto& state = sphParticlesHopkinsState(particlesCatIndex(index));
-                ALWAYS_ASSERT(state.initialized && state.hierarchicalActive);
-                ALWAYS_ASSERT(state.pendingMass == 0.0 && state.pendingEnergy == 0.0);
-                ALWAYS_ASSERT(state.pendingMomentum[0] == 0.0 && state.pendingMomentum[1] == 0.0 &&
-                    state.pendingMomentum[2] == 0.0);
-                Vector3<double> const impulse{
-                    double(sign * step) * gx, double(sign * step) * gy, double(sign * step) * gz};
-                hopkins::applyGravityImpulse(
-                    state.mass, state.momentum, state.totalEnergy, impulse);
-                vx = state.momentum[0] / state.mass;
-                vy = state.momentum[1] / state.mass;
-                vz = state.momentum[2] / state.mass;
-                doubleFlops += 45;
-                flops += 3;
-                return;
-            }
-#endif
             vx = std::fma(sign * gx, step, vx);
             vy = std::fma(sign * gy, step, vy);
             vz = std::fma(sign * gz, step, vz);
@@ -262,24 +200,21 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
         result.zmom = mass * vz;
         result.nmom = mass * std::sqrt(sqr(vx, vy, vz));
         if (parameters.descending) {
-            int const nextRung =
-                std::max(parameters.minRung + int(proposedRung > parameters.minRung),
-                    int(rung) - int(!gas || mfm || deferOpening));
-            result.maxRung = deferOpening ? std::max(nextRung, int(rung)) : nextRung;
+            int const nextRung = std::max(
+                parameters.minRung + int(proposedRung > parameters.minRung), int(rung) - 1);
+            result.maxRung = nextRung;
             ALWAYS_ASSERT(nextRung >= 0 && nextRung < kMaxRung);
-            if (!deferOpening) {
-                rung = nextRung;
-                // The opening half-kick uses the current (next) outer interval;
-                // only a closing outer boundary needs a second step.
-                float openStep = halfStep;
-                if (closingBase != parameters.t0) {
-                    openStep = 0.5f * rungDt[parameters.minRung] * parameters.t0;
-                    flops += 2;
-                }
-                applyKick(openStep);
-                if (parameters.top) {
-                    applyLong(parameters.sign, longKick.openHalf);
-                }
+            rung = nextRung;
+            // The opening half-kick uses the current (next) outer interval;
+            // only a closing outer boundary needs a second step.
+            float openStep = halfStep;
+            if (closingBase != parameters.t0) {
+                openStep = 0.5f * rungDt[parameters.minRung] * parameters.t0;
+                flops += 2;
+            }
+            applyKick(openStep);
+            if (parameters.top) {
+                applyLong(parameters.sign, longKick.openHalf);
             }
         }
     } else {

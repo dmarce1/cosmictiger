@@ -23,20 +23,17 @@ constexpr int kShortBlockSize = 128;
 
 __global__ void shortKernel(ShortParticle const* sinks, size_t sinkCount,
     ShortParticle const* sources, ShortSourceRange const* sourceRanges,
-    ShortPairParameters parameters, bool doPotential, std::array<double, 4>* fields,
-    double* pairCurvature) {
+    ShortPairParameters parameters, bool doPotential, std::array<double, 4>* fields) {
     FlopCounter<> flops;
     for (size_t sink = size_t(blockIdx.x) * blockDim.x + threadIdx.x; sink < sinkCount;
         sink += size_t(blockDim.x) * gridDim.x) {
         std::array<double, 4> field{};
-        double curvature = 0.0;
         auto const range = sourceRanges[sink];
         for (size_t source = range.begin; source < range.end; ++source) {
             flops += accumulateShortPair(sinks[sink], sources[source], parameters, doPotential,
-                selectedGravityKernel(), field, &curvature);
+                selectedGravityKernel(), field);
         }
         fields[sink] = field;
-        pairCurvature[sink] = curvature;
     }
     addGpuFlops(flops, FlopPrecision::Double);
 }
@@ -98,7 +95,6 @@ namespace {
         DeviceBuffer<ShortParticle> sources;
         DeviceBuffer<ShortSourceRange> sourceRanges;
         DeviceBuffer<std::array<double, 4>> fields;
-        DeviceBuffer<double> pairCurvature;
         // Declared last so failed submissions drain before any device buffer dies.
         CudaStream stream;
 
@@ -108,7 +104,6 @@ namespace {
           , sources(selectedDevice)
           , sourceRanges(selectedDevice)
           , fields(selectedDevice)
-          , pairCurvature(selectedDevice)
           , stream(selectedDevice) {}
 
         void reserve(size_t sinkCount, size_t sourceCount) {
@@ -116,7 +111,6 @@ namespace {
             sources.reserve(sourceCount, device);
             sourceRanges.reserve(sinkCount, device);
             fields.reserve(sinkCount, device);
-            pairCurvature.reserve(sinkCount, device);
         }
     };
 
@@ -166,7 +160,7 @@ void clearShortCudaWorkspaces() {
 void shortFieldCuda(std::vector<ShortParticle> const& sinks,
     std::vector<ShortParticle> const& sources, std::vector<ShortSourceRange> const& sourceRanges,
     ShortPairParameters const& parameters, bool doPotential,
-    std::vector<std::array<double, 4>>& fields, std::vector<double>& pairCurvature) {
+    std::vector<std::array<double, 4>>& fields) {
     cudaSetDevice();
     int const device = cudaGetDevice();
     auto workspace = acquireWorkspace(device);
@@ -182,12 +176,10 @@ void shortFieldCuda(std::vector<ShortParticle> const& sinks,
         size_t(65535), (sinks.size() + size_t(kShortBlockSize) - 1) / size_t(kShortBlockSize)));
     shortKernel<<<blocks, kShortBlockSize, 0, stream.nativeHandle()>>>(workspace->sinks.data.get(),
         sinks.size(), workspace->sources.data.get(), workspace->sourceRanges.data.get(), parameters,
-        doPotential, workspace->fields.data.get(), workspace->pairCurvature.data.get());
+        doPotential, workspace->fields.data.get());
     stream.checkLaunch();
     stream.copyAsync(fields.data(), workspace->fields.data.get(), fields.size() * sizeof(fields[0]),
         cudaMemcpyDeviceToHost);
-    stream.copyAsync(pairCurvature.data(), workspace->pairCurvature.data.get(),
-        pairCurvature.size() * sizeof(double), cudaMemcpyDeviceToHost);
     stream.wait();
     releaseWorkspace(std::move(workspace));
 }

@@ -185,11 +185,11 @@ ScenarioPlan initializePolytropicStar() {
             if (r < rmax) {
                 dr1 = dr2;
                 int const nValue = 4.0 * std::numbers::pi * r * r * dr2 * (d / m) + 0.5;
-                Array<Vector<float>, kDimensions> x;
+                Array<Vector<float>, kDimensions> positions;
                 for (int dim = 0; dim < kDimensions; dim++) {
-                    x[dim].resize(nValue);
+                    positions[dim].resize(nValue);
                 }
-                xValue.push_back(std::move(x));
+                xValue.push_back(std::move(positions));
                 terminal::detailPrint(
                     "Star shell %i: radius=%e particles=%i thickness=%e\n", nr, r, nValue, dr1);
                 ntot += nValue;
@@ -215,7 +215,7 @@ ScenarioPlan initializePolytropicStar() {
             sphParticlesSupportRadius(k) = h;
             double const pValue = kValue * pow(d, 1.0 + 1.0 / npoly);
             double const eint = pValue / ((opts.hydro.gamma - 1.0) * d);
-            sphParticlesThermodynamicState(k).internalEnergy = eint;
+            sphParticlesSetInternalEnergy(k, eint);
             sphParticlesVelocity(kXDimension, k) = 0;
             sphParticlesVelocity(kYDimension, k) = 0;
             sphParticlesVelocity(kZDimension, k) = 0;

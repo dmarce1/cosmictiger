@@ -52,7 +52,7 @@ void initializePlummerParticles() {
         double x = x0 + r * nx;
         double y = y0 + r * ny;
         double z = z0 + r * nz;
-        double v = sqrt(getOptions().gravity.gm * numberOfParticles /
+        double velocity = sqrt(getOptions().gravity.gm * numberOfParticles /
             sqrt(sqr(getOptions().initial.plummerRadius) + sqr(r)) / 2);
         do {
             nx = 2.0 * sampleUniform() - 1.0;
@@ -64,9 +64,9 @@ void initializePlummerParticles() {
         nx *= ninv;
         ny *= ninv;
         nz *= ninv;
-        double vx = v * nx;
-        double vy = v * ny;
-        double vz = v * nz;
+        double vx = velocity * nx;
+        double vy = velocity * ny;
+        double vz = velocity * nz;
         particlesPos(kXDimension, i) = x;
         particlesPos(kYDimension, i) = y;
         particlesPos(kZDimension, i) = z;

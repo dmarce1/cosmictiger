@@ -9,7 +9,7 @@ ADS bibcode `1992ARA&A..30..543M`
 ([open-access scan](https://articles.adsabs.harvard.edu/pdf/1992ARA%26A..30..543M)).
 Equation and printed-page references below were checked against that scan.
 
-The active fluid model uses density and specific internal energy with the
+The active fluid model uses density and entropy (with derived internal energy) with the
 [variational pressure operator](variational_sph.md), including grad-H corrections.
 It supports an ideal gas, primordial chemistry, and the SH03 star-formation
 closure. Ordinary particle advection is used; the optional XSPH variant in
@@ -95,13 +95,19 @@ Particle drift independently uses the CPU when `drift.cuda=false`. Each availabl
 initialization or analysis backend has its own CUDA selector. All selectors default
 to `false`; the complete executable can run without a CUDA device.
 With FMM gravity, tree sorting finishes before the gravity future starts. Density,
-support, viscosity-target preparation, and the first hydro pair-force pass can
-then run alongside gravity. That pair pass stores hydro rates without reading
-the new gravitational acceleration. After joining gravity, source assembly adds
-gravity, external acceleration, and damping in the original order before the
-corrector. The second force pass uses the corrected state and remains after the
-join. This preserves the existing SPH integration; no stale gravity substitution
-or persistent potential is needed. PMMM and distributed CUDA FMM retain serial
+support and viscosity-target preparation then run alongside gravity; the step joins
+gravity before its hydro pair-force pass. That single pass closes the step: it adds
+gravity, external acceleration and damping to the hydro rates, and proposes the next
+rungs. The proposals are staged in `sphParticlesProposedRungs` while the closing kick
+and the source closes integrate over the closing rung, then committed before the rung
+limiter. The opening kick reuses the pass's rates. A step whose cooling or star
+formation changed the gas repeats the pass after the sources (and after rebuilding the
+densities when gas converted to stars), so the opening kick and rungs use the sourced
+state (`docs/sph_single_pass_kick.md`). With several localities the force pass stages
+every locality before any runs its kernels, because staging predicts from the rates
+those kernels overwrite.
+The gravity walks do not sum gas energies; the opening kick sums every gas particle at
+the synchronized state, and `particlesSumEnergies(false)` adds the collisionless ones. PMMM and distributed CUDA FMM retain serial
 execution because their current sorting/source staging can change shared storage.
 The standalone `sph_cpu_test` target can be built with
 `COSMICTIGER_WITH_CUDA=OFF` and does not call a CUDA device. The installed HPX
@@ -260,8 +266,7 @@ The derivative-of-divergence indicator described after equation (72) in GADGET-4
 belongs to a later switch, not to Morris–Monaghan equation (13).
 
 α and its previous rate survive sorting, domain migration, and checkpoints. The
-existing kick predictor/corrector also retains a predicted base while closing a
-step. Density retries do not advance α, and semiactive neighbors keep the old
+Morris–Monaghan update keeps its own predicted α while closing a step. Density retries do not advance α, and semiactive neighbors keep the old
 rate needed when their own staggered step closes. Silo writes a dimensionless
 `alpha` gas field when viscosity evolution is enabled. Morris–Monaghan retains
 and writes no divergence field; Cullen–Dehnen has additional state described below.
@@ -368,8 +373,14 @@ previous divergence share the CD storage, migration, checkpoint, and Silo fields
 
 ## Time integration and cosmological variables
 
-The existing individual-rung predictor/corrector integration and particle drift
-are retained. Section 10.3, p.563, permits leapfrog and predictor/corrector methods.
+Individual-rung kick-drift-kick integration with a staged predictor is used.
+Between the predictor and the closing kick, the staging of every pass predicts each
+active particle's velocity and entropy to the end of its closing interval
+from the stored rates (`v + a Δt/2`, `A + Ȧ Δt/2`, with energy derived from predicted entropy, also for remote cache lines); the
+particle state stays at the half step. The closing kick then applies the fresh rates
+once, so no predicted rates are stored, migrated or checkpointed. Inactive neighbours
+are staged at their stored state, as before. Section 10.3, p.563, permits leapfrog
+and predictor/corrector methods.
 Neighbor rung limiting uses the union of the two supports and immutable source-rung
 snapshots during each pass; it does not wake inactive particles. The support radius
 is held fixed during drift; active particles and selected inactive neighbors solve
@@ -405,9 +416,8 @@ criterion; including it in the fractional bound would force arbitrarily short
 steps when cold gas first enters a shock. The explicit integrator retains its
 cosmological expansion limits.
 The gravity acceleration criterion uses its own effective radius, independently of
-the selected hydro family, and gas also receives gravity's direct-pair bound
-(`docs/kernels.md`) through the published per-particle gravity timestep. These
-reference conversions do not establish equal timestep accuracy for every kernel shape.
+the selected hydro family. These reference conversions do not establish equal
+timestep accuracy for every kernel shape.
 
 The `star` test's constant-α schedule (zero during relaxation, 0.05 afterward)
 sets `hydro.viscosityEvolution=none` and `viscosityBeta=2*viscosityAlpha`
@@ -423,7 +433,7 @@ diverged on the second step.
 
 CosmicTiger evolves comoving positions \(\mathbf x\), conformal time
 \(d\tau=dt/a\), stored velocity \(\mathbf w=a\mathbf v_{\rm pec}\), and stored
-specific internal energy \(E=a^2u\). Density is comoving. The driver passes
+entropy \(A=P/\rho^\gamma\); the specific internal energy \(E=a^2u\) is derived. Density is comoving. See [entropy evolution](sph_entropy_evolution.md). The driver passes
 \(a\,da/dt\) to the SPH `expansionRate` field; this differs from the driver's own physical
 \(da/dt\) field. The scaled physical relative velocity used for viscosity is
 
@@ -434,14 +444,15 @@ specific internal energy \(E=a^2u\). Density is comoving. The driver passes
 
 Peculiar velocity differences supply the pair pressure work. Physical relative
 velocities supply viscosity and its heating, so homogeneous expansion does not
-cause artificial viscosity. The homogeneous adiabatic source is
+cause artificial viscosity. The diagnostic homogeneous energy rate is
 
 \[
  \frac{dE}{d\tau}\bigg|_{\rm background}
  =(5-3\gamma)\frac{da}{dt}E,
 \]
 
-which vanishes for \(\gamma=5/3\). The pair-force and thermal-work prefactors contain
+which vanishes for \(\gamma=5/3\). This term is not integrated into entropy;
+the energy conversion already includes homogeneous adiabatic expansion. The pair-force and thermal-work prefactors contain
 \(m/a\) after converting to these stored variables. These transformations are
 repository requirements; the cited equations in the review are noncosmological.
 

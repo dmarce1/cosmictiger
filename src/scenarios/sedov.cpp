@@ -1092,7 +1092,7 @@ using MutexType = hpx::spinlock;
 
 namespace sedov {
 
-void solution(double time, double r, double rmax, double& d, double& v, double& p, int ndim,
+void solution(double time, double r, double rmax, double& d, double& velocity, double& p, int ndim,
     double gasGamma) {
     if (!(time > 0.0) || !(rmax > 0.0) || !(gasGamma > 1.0) || ndim < 1 || ndim > 3 ||
         !(r >= 0.0 && r <= rmax)) {
@@ -1174,7 +1174,7 @@ void solution(double time, double r, double rmax, double& d, double& v, double& 
 #endif
 
         FunctionType func = [spacing, den1, pres1, vel1, kBw](
-                                double r, double& d, double& v, double& p) {
+                                double r, double& d, double& velocity, double& p) {
             double const dr = spacing;
             std::array<int, 4> i;
             i[1] = (r + (kBw - 0.5) * dr) / dr;
@@ -1200,7 +1200,7 @@ void solution(double time, double r, double rmax, double& d, double& v, double& 
             };
 
             d = interp(den1);
-            v = interp(vel1);
+            velocity = interp(vel1);
             p = interp(pres1);
         };
 
@@ -1214,7 +1214,7 @@ void solution(double time, double r, double rmax, double& d, double& v, double& 
 
     auto const& func = *(ptr);
 
-    func(r, d, v, p);
+    func(r, d, velocity, p);
 }
 
 }    // namespace sedov

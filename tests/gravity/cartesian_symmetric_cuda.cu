@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
@@ -16,6 +17,14 @@
 void cosmictigerAssert(char const*, bool condition, char const*, int) {
     if (!condition) {
         std::abort();
+    }
+}
+
+__device__ void cosmictigerCudaAssert(
+    char const* condition, bool value, char const* file, int line) {
+    if (!value) {
+        printf("%s:%d: %s\n", file, line, condition);
+        asm("trap;");
     }
 }
 

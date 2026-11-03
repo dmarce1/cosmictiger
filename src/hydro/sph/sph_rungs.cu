@@ -101,8 +101,7 @@ __global__ void sphCudaRungs(
                 auto const sinkPositionX = data.sourcePositionX[particleIndex];
                 auto const sinkPositionY = data.sourcePositionY[particleIndex];
                 auto const sinkPositionZ = data.sourcePositionZ[particleIndex];
-                auto const sinkSupportRadius =
-                    data.sinkThermodynamicStates[sinkIndex].supportRadius;
+                auto const sinkSupportRadius = data.sinkSupportRadius[sinkIndex];
                 int const sinkRung = data.sourceRungs[particleIndex];
                 auto const squaredSinkSupportRadius = sqr(sinkSupportRadius);
                 flops += 1;

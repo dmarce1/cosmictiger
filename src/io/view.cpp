@@ -410,7 +410,7 @@ void writeViewSpecies(DBfile* db, ViewDirectoryMetadata& metadata, char const* m
 #if COSMICTIGER_WITH_SPH
 void writeViscosityField(
     DBfile* db, ViewDirectoryMetadata& metadata, ParticleSelection<SphParticleInfo> const& gas) {
-    if (getOptions().hydro.method == "sph" && getOptions().hydro.viscosityEvolution != "none") {
+    if (getOptions().hydro.viscosityEvolution != "none") {
         writeViewField(db, metadata, "alpha", "gas", gas, "1",
             [](SphParticleInfo const& particle) { return double(particle.alpha); });
     }
@@ -510,7 +510,7 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
         writeStarFormationGasFields(db, metadata, gas);
 #endif
         writeViscosityField(db, metadata, gas);
-        if (getOptions().hydro.method == "sph" && getOptions().hydro.viscosityGradientSwitch()) {
+        if (getOptions().hydro.viscosityGradientSwitch()) {
             writeViewField(db, metadata, "divv", "gas", gas,
                 cosmological ? "(km/s)/(Mpc/h)" : "1/s",
                 [&conversion](SphParticleInfo const& particle) {
@@ -569,18 +569,13 @@ ViewSnapshot collectViewParticles(double a) {
             static_cast<DarkMatterParticleInfo&>(gas) = info;
             int const index = particlesCatIndex(i);
             gas.mass = sphParticlesMass(index);
-            if (getOptions().hydro.method != "sph" && sphParticlesHopkinsState(index).initialized) {
-                gas.mass = sphParticlesHopkinsState(index).accountedMass();
-            }
             gas.eint = sphParticlesInternalEnergy(index);
             gas.rho = sphParticlesDensity(index);
             gas.h = sphParticlesSupportRadius(index);
-            if (getOptions().hydro.method == "sph" &&
-                getOptions().hydro.viscosityEvolution != "none") {
+            if (getOptions().hydro.viscosityEvolution != "none") {
                 gas.alpha = sphParticlesViscosityStates[index].alpha;
             }
-            if (getOptions().hydro.method == "sph" &&
-                getOptions().hydro.viscosityGradientSwitch()) {
+            if (getOptions().hydro.viscosityGradientSwitch()) {
                 gas.divergence = sphParticlesCullenDehnenStates[index].divergence;
             }
 #if COSMICTIGER_ENABLE_CHEMISTRY
@@ -824,7 +819,7 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
         writeStarFormationGasFields(db, metadata, gas);
 #endif
         writeViscosityField(db, metadata, gas);
-        if (getOptions().hydro.method == "sph" && getOptions().hydro.viscosityGradientSwitch()) {
+        if (getOptions().hydro.viscosityGradientSwitch()) {
             writeViewField(db, metadata, "divv", "gas", gas, "1/code_time",
                 [](SphParticleInfo const& particle) { return double(particle.divergence); });
             writeViewText(db, "divv_convention",

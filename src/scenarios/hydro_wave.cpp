@@ -53,7 +53,7 @@ ScenarioPlan initializeHydroWave() {
                 sphParticlesVelocity(kYDimension, i) = 0.f;
                 sphParticlesVelocity(kZDimension, i) = 0.f;
                 sphParticlesRung(i) = 0;
-                sphParticlesThermodynamicState(i).internalEnergy = eint;
+                sphParticlesSetInternalEnergy(i, eint);
                 i++;
             }
         }

@@ -2,7 +2,7 @@
 
 The progress-table rate is the sum of instrumented CPU and CUDA solver operations
 on every locality, divided by wall time between `resetFlops()` and completion of
-force advancement. It includes gravity force **and potential** kernels, SPH, and Hopkins hydrodynamics.
+force advancement. It includes gravity force **and potential** kernels and SPH.
 Energy/momentum diagnostics, diagnostic reductions, signal-speed reporting,
 assertion checks, and the counters themselves are excluded. PMMM FFT executions
 are included using their cached FFTW plan counts. Chemistry and other FFT paths
@@ -28,7 +28,7 @@ audited production paths. Existing cosmological progress fields keep their
 positions; precision rates are appended as `Tflops32`, `Tflops64`, and
 `TflopsMixed`. The reported total includes every bucket.
 
-Hopkins submits double-precision operations. Cosmological background evolution,
+Cosmological background evolution,
 PMMM double-precision operators/direct pairs/mesh geometry and accumulation, and
 the double portions of its spectral work are tagged FP64. Single-precision FFTW
 execution counts are tagged FP32. SPH and FMM submissions split their arithmetic
@@ -61,24 +61,6 @@ float promotions and narrowing stores as FP64. CPU timestep minima promote the
 selected float timestep to double; CUDA retains a float reduction. Fixed64 host
 midpoint construction also counts the arithmetic used to separate its limbs.
 
-## Hopkins MFM/MFV
-
-The CPU Hopkins bridge now submits FP64 counts for the branches and iterations
-actually executed: support-radius solves, neighbor geometry and moment matrices,
-reconstruction and gradient limiting, primitive prediction, HLLC/HLLE and vacuum
-Riemann paths, face motion, cached-flux integration, conservative updates, gravity
-source kicks, and timestep selection. Rejected/retried work counts because it was
-executed. Numerical helper routines accept an optional local accumulator; worker
-and action scopes submit their accumulated work once. No shared global increment
-is performed for every arithmetic operation.
-
-The physics formulas and operation order are unchanged. Diagnostic sound-wave
-reconstruction disables counting, and validation used only to throw or assert remains
-excluded. Arithmetic and precision conversions that select a retry or fallback count
-because they control the numerical algorithm. Floating precision conversions in the production bridge count as FP64,
-including narrowing writes to legacy float particle fields. Shared SPH tree work
-is submitted to its FP32 and FP64 buckets separately from the Hopkins bridge.
-
 ## SPH audit
 
 Before this repair, no active SPH CPU or CUDA kernel submitted operations to the
@@ -99,12 +81,12 @@ floating-precision conversions described above.
 | `solveSphSupportRadius` (CUDA) | Each iteration counts support checks and reciprocal, 10 per visited neighbor, another 4 plus density/derivative costs inside support, both block sums, residual/tolerance and the selected update. |
 | `sphCpuHasActiveNeighbor` / CUDA semiactive scan | Distance, dot product and squared support tests for the packets/pairs actually visited. |
 | `sphCpuPrehydro1`, `sphCudaPrehydro1` | Neighbor construction and every support-radius solve, including unsuccessful solves requiring a larger neighbor box. |
-| `sphCpuPrehydro2`, `sphCudaPrehydro2` | Activity scan, support solve, mass/support normalization, every density-kernel evaluation and density reduction; grad-H sums, derivative kernels, reductions and correction evaluation. |
-| `sphCpuHydro` | Scalar sink setup, including 5 for its directed pressure coefficient; `9W+1` per candidate packet; 79 per lane of interacting packets plus both derivative kernels and enabled viscosity switches; EOS fallback; four numerical sums; external accelerations, damping and cosmological thermal work; timestep/rung selection. Padded lanes count when executed. |
-| `sphCudaHydro` | Sink setup per executing thread, including 5 for its directed pressure coefficient; 8 per candidate, another 2 for nonzero separation; 79 per accepted pair plus both derivative kernels and enabled viscosity switches; actual block sums; external accelerations, damping, thermal work and timestep/rung selection. |
+| `sphCpuPrehydro2`, `sphCudaPrehydro2` | One γ − 1 per CPU call or CUDA thread; activity scan, support solve, mass/support normalization, every density-kernel evaluation and density reduction; grad-H sums, derivative kernels, reductions and correction evaluation. |
+| `sphCpuHydro` | Scalar sink setup, including 5 for its directed pressure coefficient; `9W+1` per candidate packet; 79 per lane of interacting packets plus both derivative kernels and enabled viscosity switches; one γ − 1 per call; four numerical sums; external accelerations, damping and cosmological thermal work; timestep/rung selection. Padded lanes count when executed. |
+| `sphCudaHydro` | One γ − 1 per executing thread; sink setup per executing thread, including 5 for its directed pressure coefficient; 8 per candidate, another 2 for nonzero separation; 79 per accepted pair plus both derivative kernels and enabled viscosity switches; actual block sums; external accelerations, damping, thermal work and timestep/rung selection. |
 | Hydro timestep selection | 25 per active phase-1 sink plus 13 when self-gravity constrains the rung; another 3 when the thermal limiter executes. Signal-speed reporting and gravity-only diagnostic calculations with self-gravity disabled are excluded. |
 | `sphCpuRungs`, `sphCudaRungs` | Support squares, actual distance/dot products and neighbor geometry; integer rung propagation costs zero. |
-| `sphParticlesApplyUpdates` | Half-step construction costs one FP64 operation for an explicit step, two for a rung step. An active predictor/opening kick adds 20 FP64 operations including conversions; the corrector adds 25 FP64 operations and three FP32 acceleration differences. |
+| `sphParticlesApplyUpdates` | Half-step construction costs one FP64 operation for an explicit step, two for a rung step. The predictor only opens the staged prediction; an active closing or opening kick adds 20 FP64 operations including conversions. The staged prediction of velocities and energies and the gas energy sums are not counted. |
 | `sphTreeCreate` | Local splitting, fixed-coordinate bounds, support multipliers and active support boxes. Each node submits only its own work. |
 | `sphTreeNeighbor` | Actual search intersections and refreshed support boxes. Self-box validation checks are excluded. |
 | `SphRunWorkspace::run` | Gravity effective-radius division and its narrowing store are FP64; staging/copies and dispatch have no arithmetic count. |
@@ -213,8 +195,7 @@ precision above the exact-double range, partial/divergent warps and multiple
 localities. They also require explicit precision for scalar submissions, exercise
 classified batches, and check that ordinary FP32/FP64 submissions leave the
 unclassified bucket empty. Separate explicit-unclassified fixtures preserve the
-diagnostic compatibility path. The Hopkins application regression requires a
-zero `Mixed` rate in its progress rows.
+diagnostic compatibility path.
 
 The earlier working-tree Release build passed 41 focused CTest cases, including CPU and CUDA
 production gravity walks, a three-locality gravity walk and two-locality counter
@@ -258,3 +239,10 @@ the new arena shrink/regrowth/release fixture and four cosmology accounting
 cases. Distributed arena rebuilding and CUDA runtime behavior were not retested
 in this follow-up. Logs and the before/after comparison are under
 `/tmp/cosmictiger_flops_throughput/`.
+
+Entropy evolution (November 3, 2026): production force kernels convert viscous
+heating to Adot, adding 12 FP64 source operations per active sink at gamma=5/3,
+14 otherwise, including precision conversions and elementary power results.
+The optional total-energy-rate diagnostic remains for spatial-kernel tests.
+On-demand thermodynamic conversions during staging and energy diagnostics remain
+outside the kernel counters, as staging/diagnostics were before this change.

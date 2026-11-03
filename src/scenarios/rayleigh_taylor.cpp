@@ -89,7 +89,7 @@ ScenarioPlan initializeRayleighTaylor() {
                         sphParticlesVelocity(kYDimension, index) = 0.0f;
                         sphParticlesVelocity(kZDimension, index) = side == 0 ? velocity : -velocity;
                         sphParticlesSupportRadius(index) = supportRadius;
-                        sphParticlesThermodynamicState(index).internalEnergy = internalEnergy;
+                        sphParticlesSetInternalEnergy(index, internalEnergy);
                         sphParticlesRung(index) = 0;
                         index++;
                     }

@@ -16,7 +16,7 @@ def run_case(args, name, *, level=None, ranks=1, target_rank=None, explicit_posi
     if apex_reports:
         # Exercise profiling shutdown independently of user report opt-outs.
         environment = {key: value for key, value in environment.items()
-                       if not key.startswith(("APEX_", "TAU_"))}
+                       if not key.startswith("APEX_")}
         report_directory = workdir / "apex"
         report_directory.mkdir(exist_ok=True)
         environment["APEX_OUTPUT_FILE_PATH"] = str(report_directory)

@@ -139,8 +139,9 @@ void sphChemistryInitializeParticle(long long index, double scaleFactor) {
         energy = gadget4::kBoltzmann * temperature /
             (gadget4::kGammaMinusOne * gadget4::kProtonMass * mu);
     }
-    sphParticlesInternalEnergy(index) = detail::coolingStoredEnergy(
-        std::max(energy, options.chemistry.minimumSpecificEnergy), scaleFactor);
+    sphParticlesSetInternalEnergy(index,
+        detail::coolingStoredEnergy(
+            std::max(energy, options.chemistry.minimumSpecificEnergy), scaleFactor));
 }
 
 double sphChemistryPhysicalInterval(double interval, double scaleFactor) {
@@ -251,7 +252,7 @@ void sphCoolingCommitLocal() {
     for (size_t j = 0; j < detail::pendingCoolingIndices.size(); ++j) {
         ParticleInteger const index = detail::pendingCoolingIndices[j];
         sphParticlesChemistryStates[index] = detail::pendingCoolingResults[j].state;
-        sphParticlesInternalEnergy(index) = detail::pendingCoolingResults[j].storedEnergy;
+        sphParticlesSetInternalEnergy(index, detail::pendingCoolingResults[j].storedEnergy);
     }
     detail::pendingCoolingIndices.clear();
     detail::pendingCoolingResults.clear();

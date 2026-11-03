@@ -36,12 +36,9 @@ PMMM requires an explicit valid `gravity.meshSize`: a power of two at least
 stage mesh and the granularity of PMMM particle-domain cuts; PMMM runs need a
 power-of-two locality count.
 
-Traditional and global integration support SPH and Hopkins MFM/MFV.
-Select `hydro.method=sph|mfm|mfv`; the meshless methods require Fixed64 positions,
-`COSMICTIGER_ENABLE_HOPKINS=ON` (which requires `COSMICTIGER_ENABLE_SPH=ON`).
-MFM accepts cooling and star formation; MFV requires both disabled. Hierarchical integration requires a
-gravity-capable build and advances collisionless particles, SPH and MFM, including cooling and star
-formation. Global integration advances all particles using the smallest
+Traditional and global integration support SPH; `hydro.method` accepts only `sph`.
+Hierarchical integration requires a gravity-capable build and advances collisionless
+particles only; SPH runs reject it. Global integration advances all particles using the smallest
 raw allowable timestep across all particles and localities, without power-of-two
 rounding; final-time and scenario-stage boundaries can shorten that interval.
 To run a collisionless cosmology, set
@@ -57,8 +54,7 @@ To run a collisionless cosmology, set
 | [disc.ini](disc.ini) | `disc` | Gravity and SPH | `./output/disc/` |
 | [polytropic_star.ini](polytropic_star.ini) | `polytropicStar` | Gravity and SPH | `./output/polytropicStar/` |
 | [hydro_wave.ini](hydro_wave.ini) | `hydroWave` | SPH | `./output/hydroWave/` |
-| [sound_wave.ini](sound_wave.ini) | `soundWave` | Hopkins MFM, one-dimensional linear wave | `./output/soundWave/` |
-| [gresho.ini](gresho.ini) | `gresho` | Hopkins MFM, Gresho vortex | `./output/gresho/` |
+| [gresho.ini](gresho.ini) | `gresho` | SPH, Gresho vortex | `./output/gresho/` |
 | [cosmology.ini](cosmology.ini) | `cosmology` | Gravity, SPH, and GADGET-4 equilibrium cooling | `./output/cosmology/` |
 | [glass.ini](glass.ini) | `glass` | Repulsive gravity with damping | `./output/glass/` |
 | [lcdm_present.ini](lcdm_present.ini) | `cosmology` | Gravity, SPH, equilibrium cooling, and star formation; 99 coarse intervals | `./output/lcdm_present/` |
@@ -92,7 +88,7 @@ Each module selects CUDA independently. The default configuration uses CPU
 backends; the GPU examples enable the relevant `gravity.cuda`, `hydro.cuda`,
 `drift.cuda`, or analysis selectors explicitly. Set every enabled `.cuda` selector
 to `false` for a CPU run. Gravity tuning is under `gravity.cuda.*`.
-MFM/MFV require `hydro.cuda=false`; `sort.cuda`, `analysis.tracers.cuda`,
+`sort.cuda`, `analysis.tracers.cuda`,
 `analysis.slice.cuda`, and `analysis.views.cuda` must remain `false`.
 HPX thread and locality options
 stay on the command line. The examples use nominal resolution 32, except the

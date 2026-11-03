@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <memory>
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/options.hpp>
@@ -23,19 +22,6 @@
 KickReturn cudaExecuteKicks(KickParameters params, Position* devX, Position* devY, Position* devZ,
     TreeNode* devTreeNodes, Vector<KickWorkitem> workitems, detail::FmmForceOutput output,
     float const* sourceMasses) {
-    // PMMM and direct local calls borrow owned positions. Dehnen supplies a
-    // snapshot that also covers its imported positions, whose category indices
-    // do not refer to local gas records.
-    std::unique_ptr<float, void (*)(void*)> ownedMasses(nullptr, freeManagedMemory);
-    if (sourceMasses == nullptr && getOptions().hydro.enabled &&
-        getOptions().hydro.method == "mfv") {
-        ownedMasses.reset(
-            static_cast<float*>(allocateManagedMemory(sizeof(float) * particlesSize())));
-        for (ParticleInteger i = 0; i < particlesSize(); ++i) {
-            ownedMasses.get()[i] = particlesMass(i);
-        }
-        sourceMasses = ownedMasses.get();
-    }
     return kickRunCudaLaunch([&]() {
         return fmmDispatch([&](auto order) {
             return cudaExecuteKicksImpl<order.value>(

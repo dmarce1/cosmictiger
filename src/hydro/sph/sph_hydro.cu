@@ -24,8 +24,6 @@ struct HydroNeighbor {
     float velocityZ;
     float internalEnergy;
     float density;
-    float pressureEnergyRatio;
-    float adiabaticIndex;
     float balsaraFactor;
     float viscosityAlpha;
     float gradHCorrection;    // ζ_b from the current density pass.
@@ -47,7 +45,7 @@ struct HydroWorkspace {
 // NOLINTBEGIN(readability-identifier-naming)
 __global__ void sphCudaHydro(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
-    sph_flops::Counter flops = 2;    // Inverse scale factor and gas mass scaling.
+    sph_flops::Counter flops = 3;    // Inverse scale factor, gas mass scaling and γ − 1.
     int const threadIndex = threadIdx.x;
     int const blockSize = blockDim.x;
     __shared__ int targetNodeIndex;
@@ -59,6 +57,7 @@ __global__ void sphCudaHydro(
     __syncthreads();
     float const inverseScaleFactor = 1.0f / parameters.scaleFactor;
     float const adiabaticIndex = data.adiabaticIndex;
+    float const pressureEnergyRatio = adiabaticIndex - 1.0f;    // P/(ρu) for every particle.
     // Keep the historical cubic viscosity scale while measuring every kernel
     // with the same effective width of 2 sigma: the paper smoothing length is
     // sqrt(5/6) times this width for the cubic spline.
@@ -109,7 +108,6 @@ __global__ void sphCudaHydro(
                 __syncthreads();
                 workspace.neighbors.resize(offset + total);
                 if (contains) {
-                    flops += data.sourcePressureEnergyRatio ? 0 : 1;
                     workspace.neighbors[offset + slot] = {position[kXDimension],
                         position[kYDimension], position[kZDimension],
                         data.sourceSupportRadius[sourceParticleIndex],
@@ -118,11 +116,6 @@ __global__ void sphCudaHydro(
                         data.sourceVelocityZ[sourceParticleIndex],
                         data.sourceInternalEnergy[sourceParticleIndex],
                         data.sourceDensity[sourceParticleIndex],
-                        data.sourcePressureEnergyRatio ?
-                            data.sourcePressureEnergyRatio[sourceParticleIndex] :
-                            adiabaticIndex - 1.0f,
-                        data.sourceAdiabaticIndex ? data.sourceAdiabaticIndex[sourceParticleIndex] :
-                                                    adiabaticIndex,
                         parameters.balsaraSwitch ? data.sourceBalsaraFactor[sourceParticleIndex] :
                                                    1.0f,
                         parameters.variableViscosity ?
@@ -146,21 +139,14 @@ __global__ void sphCudaHydro(
             float const sinkInternalEnergy = data.sourceInternalEnergy[particleIndex];
             ALWAYS_ASSERT(
                 sinkSupportRadius > 0.0f && sinkDensity > 0.0f && sinkInternalEnergy > 0.0f);
-            float const sinkPressureEnergyRatio = data.sourcePressureEnergyRatio ?
-                data.sourcePressureEnergyRatio[particleIndex] :
-                adiabaticIndex - 1.0f;
-            float const sinkAdiabaticIndex = data.sourceAdiabaticIndex ?
-                data.sourceAdiabaticIndex[particleIndex] :
-                adiabaticIndex;
             // Particle a. Section 3.5 leaves the equation of state free; the ideal gas gives
-            // P_a = (γ_a − 1) ρ_a u_a and c_a² = γ_a P_a/ρ_a, where the optional composition
-            // arrays replace γ_a − 1 and γ_a.
+            // P_a = (γ − 1) ρ_a u_a and c_a² = γ P_a/ρ_a with the single configured γ.
             float const H_a = sinkSupportRadius;    // support radius, 2h_a for the cubic spline
             float const ρ_a = sinkDensity;
             float const u_a = sinkInternalEnergy;
-            float const γ_a = sinkAdiabaticIndex;
-            float const P_a = sinkPressureEnergyRatio * ρ_a * u_a;
-            float const c_a = sqrtf(γ_a * sinkPressureEnergyRatio * u_a);
+            float const γ = adiabaticIndex;
+            float const P_a = pressureEnergyRatio * ρ_a * u_a;
+            float const c_a = sqrtf(γ * pressureEnergyRatio * u_a);
             Position const x_a = data.sourcePositionX[particleIndex];
             Position const y_a = data.sourcePositionY[particleIndex];
             Position const z_a = data.sourcePositionZ[particleIndex];
@@ -168,7 +154,7 @@ __global__ void sphCudaHydro(
                 data.sourceVelocityY[particleIndex], data.sourceVelocityZ[particleIndex]);
             float const one_over_H_a = 1.0f / H_a;
             float const one_over_H_a4 = sqr(sqr(one_over_H_a));    // 1/H_a⁴
-            flops += 8 + (data.sourcePressureEnergyRatio ? 0 : 1);
+            flops += 8;
             // Variational operator (cosmictiger/hydro/sph/variational/equations.hpp): every
             // gas particle has the mass m and the volume weight x = m, so y = ρ and
             // Q_ab/m_a = (P_a/ρ_a²)(m − ζ_a). Comoving Q and kernel gradients give the rates
@@ -200,9 +186,8 @@ __global__ void sphCudaHydro(
                 }
                 float const ρ_b = neighbor.density;
                 float const u_b = neighbor.internalEnergy;
-                float const γ_b = neighbor.adiabaticIndex;
-                float const P_b = neighbor.pressureEnergyRatio * ρ_b * u_b;
-                float const c_b = sqrtf(γ_b * neighbor.pressureEnergyRatio * u_b);
+                float const P_b = pressureEnergyRatio * ρ_b * u_b;
+                float const c_b = sqrtf(γ * pressureEnergyRatio * u_b);
                 float const r = sqrtf(r_ab2);    // |r_ab|
                 // Symmetric kernel of p. 554: ∇_a W̃_ab = ½[∇_a W(r_ab, h_a) + ∇_a W(r_ab, h_b)].
                 // The selected kernel is W(r, H) = w(r/H)/H³, so each gradient equals
@@ -302,14 +287,20 @@ __global__ void sphCudaHydro(
                     data.sinkAccelerations[sinkIndex].acceleration[dim] = dv_a_dt[dim];
                 }
                 // E=a^2 u and homogeneous work du/dt=-3 H P/rho give
-                // dE/dtau=(2-3 P/(rho*u)) (da/dtau)/a E.
-                float const expansionCoefficient = data.sourcePressureEnergyRatio ?
-                    2.0f - 3.0f * sinkPressureEnergyRatio :
-                    5.0f - 3.0f * adiabaticIndex;
+                // dE/dtau=(2-3 P/(rho*u)) (da/dtau)/a E = (5-3 gamma) (da/dtau)/a E.
+                float const expansionCoefficient = 5.0f - 3.0f * adiabaticIndex;
                 du_a_dt += expansionCoefficient * a_da_dt * inverseScaleFactor * u_a;
                 flops += 6;    // Homogeneous thermal expansion; force sources count separately.
-                data.sinkInternalEnergyRate[sinkIndex] = du_a_dt + viscous_heating;
-                flops += 1;
+                if (data.sinkInternalEnergyRate) {
+                    data.sinkInternalEnergyRate[sinkIndex] = du_a_dt + viscous_heating;
+                    flops += 1;
+                }
+                if (data.sinkEntropyRate) {
+                    // Reversible PdV and homogeneous expansion leave A unchanged.
+                    data.sinkEntropyRate[sinkIndex] = sph_entropy::fromStoredEnergy(
+                        viscous_heating, ρ_a, adiabaticIndex, parameters.scaleFactor);
+                    flops.doublePrecision += adiabaticIndex == float(5.0 / 3.0) ? 12 : 14;
+                }
                 if (parameters.phase == 1) {
                     // Section 10.3, p. 563:
                     //   δt_f = min_a (h_a/|f_a|),
@@ -327,14 +318,7 @@ __global__ void sphCudaHydro(
                         parameters.viscosityBeta;
                     float const one_over_δt_visc = 0.6f * (α_max * c_a + β_max * μ_max) / h_a;
                     float const one_over_δt_cv = one_over_δt_c + one_over_δt_visc;
-                    auto timestepAcceleration = dv_a_dt;
-#if COSMICTIGER_WITH_GRAVITY
-                    if (parameters.excludeSelfGravity) {
-                        timestepAcceleration += gravityAcceleration;
-                        flops += 3;
-                    }
-#endif
-                    float const f_a = sqrtf(timestepAcceleration.dot(timestepAcceleration));
+                    float const f_a = sqrtf(dv_a_dt.dot(dv_a_dt));
                     float const one_over_δt_f = parameters.courantFactor *
                         sqrtf(parameters.scaleFactor * f_a / h_a) /
                         (data.accelerationTimestepFactor * kHydroAccelerationScale);
@@ -354,17 +338,12 @@ __global__ void sphCudaHydro(
                         max(1, int(ceilf(log2f(parameters.baseTimestep / δt))));
                     int nextRung = max(max(parameters.minimumRung, previousRung - 1), hydroRung);
 #if COSMICTIGER_WITH_GRAVITY
-                    float gravityTimestep = fminf(parameters.maximumTimestep,
+                    float const gravityTimestep = fminf(parameters.maximumTimestep,
                         data.accelerationTimestepFactor *
                             sqrtf(parameters.scaleFactor * data.gravityEffectiveRadius /
                                 fmaxf(sqrtf(gravityAcceleration.dot(gravityAcceleration)),
                                     1.0e-30f)));
                     if (data.selfGravityEnabled) {
-                        if (data.sinkGravityTimestep &&
-                            data.sinkGravityTimestep[sinkIndex] > 0.0f) {
-                            gravityTimestep =
-                                fminf(gravityTimestep, data.sinkGravityTimestep[sinkIndex]);
-                        }
                         atomicMin(&reduction->minimumTimestep, gravityTimestep);
                     }
                     int const gravityRung = parameters.globalTimestep ?
@@ -403,7 +382,11 @@ __global__ void sphCudaHydro(
 #endif
                     }
                     ALWAYS_ASSERT(nextRung < kMaxRung);
-                    data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] = nextRung;
+                    if (data.sinkProposedRungs != nullptr) {
+                        data.sinkProposedRungs[sinkIndex] = nextRung;
+                    } else {
+                        data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] = nextRung;
+                    }
                     maximumHydroRung = max(maximumHydroRung, hydroRung);
                     maximumRung = max(maximumRung, nextRung);
                     maximumSignalSpeed = fmaxf(maximumSignalSpeed, one_over_δt_cv * h_a);

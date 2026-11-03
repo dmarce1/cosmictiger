@@ -11,10 +11,10 @@ typedef struct {
 } SodInitT;
 
 typedef struct {
-    double rho, v, p;
+    double rho, velocity, p;
 } SodStateT;
 
-void exactSod(SodStateT* out, SodInitT const* in, double x, double t, double dx);
+void exactSod(SodStateT* out, SodInitT const* in, double position, double t, double dx);
 
 // constexpr sod_init_t sod_init = { 1.0, 0.125, 1.0, 0.1, 7.0 / 5.0 };
 

@@ -73,18 +73,15 @@ void initializeSfFixture() {
         sphParticlesParticleIndex(index) = index;
         sphParticlesDensity(index) =
             sfStoredDensity((index == 2 ? 0.5 : 10.0) * model.thresholdDensity);
-        sphParticlesInternalEnergy(index) = sfStoredEnergy(model.parameters.coldEnergy);
+        sphParticlesSetInternalEnergy(index, sfStoredEnergy(model.parameters.coldEnergy));
         sphParticlesSupportRadius(index) = 0.125f;
-        sphParticlesInternalEnergyRate(index) = 0.0f;
-        sphParticlesPredictedInternalEnergyRate(index) = 0.0f;
+        sphParticlesEntropyRate(index) = 0.0f;
         sphParticlesChemistryStates[index] = {};
-        sphParticlesChemistryEos[index] = {float(gadget4::kGammaMinusOne), float(gadget4::kGamma)};
         for (int dim = 0; dim < kDimensions; ++dim) {
             particlesPos(dim, index) = 0.25 + index * 0.125;
             particlesVel(dim, index) = float(dim - 1) / 4.0f;
             sphParticlesAcceleration(dim, index) = 0.0f;
             sphParticlesGravityAcceleration(dim, index) = 0.0f;
-            sphParticlesPredictedAcceleration(dim, index) = 0.0f;
         }
     }
 }
@@ -253,7 +250,6 @@ void starFormationTest() {
             "conversion changed momentum");
     }
     starFormationOpenNewStars(detail::sfStep(), detail::kSfScale, detail::sfStep(), 3, false);
-    starFormationRefreshEos(detail::kSfScale);
     PRINT("GADGET-4 star formation passed: full-step event-before-cooling, saved SFR, "
           "inactive gas, electron state, energy ledger, failed-batch atomicity, "
           "checkpoint, and whole-particle conversion\n");

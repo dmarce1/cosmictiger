@@ -21,8 +21,8 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #include <cosmictiger/particles/particles.hpp>
 
 struct ParticleData {
-    Vector3<Position> x;
-    Vector3<float> v;
+    Vector3<Position> position;
+    Vector3<float> velocity;
     GroupInteger lastGroup;
     GroupInteger identity = kNoParticleGroup;
     GroupInteger lastHost = kNoParticleGroup;
@@ -30,8 +30,8 @@ struct ParticleData {
     int rank;
     template <class A>
     void serialize(A&& arc, unsigned) {
-        arc & x;
-        arc & v;
+        arc & position;
+        arc & velocity;
         arc & lastGroup;
         arc & identity;
         arc & lastHost;

@@ -27,9 +27,6 @@ struct SphRunData {
     float* sourceVelocityY;
     float* sourceVelocityZ;
     float* sourceInternalEnergy;
-    // Optional local-composition EOS. Null retains the configured ideal gas.
-    float* sourcePressureEnergyRatio;
-    float* sourceAdiabaticIndex;
     float* sourceDensity;
     float* sourceBalsaraFactor;
     float* sourceViscosityAlpha;
@@ -45,7 +42,9 @@ struct SphRunData {
     char* sourceRungs;
 
     // Local sink arrays indexed by the SPH particle index.
-    float* sinkInternalEnergyRate;
+    // Optional total dE/dtau diagnostic; it is not integrated by production kicks.
+    float* sinkInternalEnergyRate = nullptr;
+    float* sinkEntropyRate = nullptr;    // dA/dtau from irreversible heating only.
     float* sinkDensity;
     // Optional d(log rho_comoving)/d(tau), including the adaptive-support
     // correction. Requires the source velocity arrays even with viscosity off.
@@ -56,15 +55,16 @@ struct SphRunData {
     SphCullenDehnenState* sinkCullenDehnenStates;
     char* sinkSemiactive;
     char* sinkSmoothingConverged;
-    SphThermodynamicState* sinkThermodynamicStates;
+    float* sinkSupportRadius;
     SphAcceleration* sinkAccelerations;
     float* sinkGravityAccelerationX;
     float* sinkGravityAccelerationY;
     float* sinkGravityAccelerationZ;
-    // Optional timestep bound from the completed gravity walk.
-    float* sinkGravityTimestep = nullptr;
     ParticleInteger* sinkParticleIndices;
     char* sinkParticleRungs;    // Indexed through sinkParticleIndices into the full particle array.
+    // Optional: a phase-1 hydro pass writes its rung proposals here instead of into
+    // sinkParticleRungs, so the closing rung stays in place until the driver commits them.
+    char* sinkProposedRungs = nullptr;
 
     int numberOfTargetNodes;
     SphTreeNode* treeNodes;
@@ -88,10 +88,8 @@ CUDA_EXPORT inline Vector3<float> sphCompleteAcceleration(SphRunParameters const
     Vector3<float> const& gravityAcceleration, float centralAcceleration,
     float centralSupportRadius, sph_flops::Counter& flops) {
 #if COSMICTIGER_WITH_GRAVITY
-    if (!parameters.excludeSelfGravity) {
-        acceleration += gravityAcceleration;
-        flops += 3;
-    }
+    acceleration += gravityAcceleration;
+    flops += 3;
 #endif
     acceleration[kYDimension] += parameters.uniformAccelerationY;
     acceleration[kZDimension] += parameters.midplaneAccelerationZ(position[kZDimension]);

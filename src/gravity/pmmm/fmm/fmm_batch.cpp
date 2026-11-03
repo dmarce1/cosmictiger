@@ -177,7 +177,6 @@ FmmForceResult kickCellBatch(Vector<KickWorkitem> workitems, bool doPotential, i
     }
     size_t const size = particleGoal;
     result.potential.resize(size);
-    result.pairCurvature.resize(size);
     for (int dim = 0; dim < kDimensions; ++dim) {
         result.acceleration[dim].resize(size);
     }
@@ -185,11 +184,10 @@ FmmForceResult kickCellBatch(Vector<KickWorkitem> workitems, bool doPotential, i
         return result;
     }
     std::unique_ptr<float, decltype(&freeManagedMemory)> storage(
-        static_cast<float*>(allocateManagedMemory(5 * size * sizeof(float))), freeManagedMemory);
-    std::fill_n(storage.get(), 5 * size, 0.0f);
+        static_cast<float*>(allocateManagedMemory(4 * size * sizeof(float))), freeManagedMemory);
+    std::fill_n(storage.get(), 4 * size, 0.0f);
     detail::FmmForceOutput output;
     output.potential = storage.get();
-    output.pairCurvature = storage.get() + 4 * size;
     for (int dim = 0; dim < kDimensions; ++dim) {
         output.acceleration[dim] = storage.get() + (dim + 1) * size;
     }
@@ -235,7 +233,6 @@ FmmForceResult kickCellBatch(Vector<KickWorkitem> workitems, bool doPotential, i
         throw;
     }
     std::copy_n(output.potential, size, result.potential.begin());
-    std::copy_n(output.pairCurvature, size, result.pairCurvature.begin());
     for (int dim = 0; dim < kDimensions; ++dim) {
         std::copy_n(output.acceleration[dim], size, result.acceleration[dim].begin());
     }

@@ -168,7 +168,6 @@ namespace {
         ShortTree const& sinks;
         ShortWalkParameters const& parameters;
         std::vector<std::array<double, 4>>& fields;
-        std::vector<double>* pairCurvature;
         ShortWalkStatistics statistics{};
         GaussianScreening<double> screening{parameters.pair.alpha};
         FlopCount flops = 0;
@@ -238,7 +237,6 @@ namespace {
                 for (int i = sink.begin; i < sink.end; ++i) {
                     auto const& particle = sinks.particles[i];
                     auto& field = fields[i];
-                    double* curvature = pairCurvature != nullptr ? &(*pairCurvature)[i] : nullptr;
                     Vector3<double> displacement;
                     for (int axis = 0; axis < kDimensions; ++axis) {
                         displacement[axis] = particle.position[axis] - sink.center[axis];
@@ -265,7 +263,7 @@ namespace {
                                     particle.position[1] - (other.position[1] + item.shift[1]),
                                     particle.position[2] - (other.position[2] + item.shift[2]),
                                     other.mass, parameters.pair, parameters.doPotential, kernel,
-                                    field, curvature);
+                                    field);
                             ++statistics.directPairs;
                         }
                     }
@@ -304,19 +302,15 @@ std::shared_ptr<ShortTree> buildShortTree(
 
 ShortWalkStatistics walkShortTree(ShortTree const& sinks,
     std::vector<std::pair<ShortTree const*, Vector3<double>>> const& sources,
-    ShortWalkParameters const& parameters, std::vector<std::array<double, 4>>& fields,
-    std::vector<double>* pairCurvature) {
+    ShortWalkParameters const& parameters, std::vector<std::array<double, 4>>& fields) {
     fields.assign(sinks.particles.size(), {});
-    if (pairCurvature != nullptr) {
-        pairCurvature->assign(sinks.particles.size(), 0.0);
-    }
     ShortWalkStatistics statistics;
     if (sinks.particles.empty()) {
         return statistics;
     }
     fmmDispatch(sinks.order, [&](auto orderTag) {
         constexpr int kOrder = decltype(orderTag)::value;
-        Walker<kOrder> walker{sinks, parameters, fields, pairCurvature};
+        Walker<kOrder> walker{sinks, parameters, fields};
         std::vector<SourceItem> checklist;
         for (auto const& [tree, shift] : sources) {
             if (tree != nullptr && !tree->particles.empty()) {
@@ -391,9 +385,7 @@ void evaluateTrees() {
         }
         auto const& sinkTree = *state.sourceCells[state.sourceByKey.at(cell.key)].tree;
         std::vector<std::array<double, 4>> fields;
-        std::vector<double> pairCurvature;
-        auto const statistics =
-            fmm::walkShortTree(sinkTree, sources, parameters, fields, &pairCurvature);
+        auto const statistics = fmm::walkShortTree(sinkTree, sources, parameters, fields);
         KickReturn result;
         FlopCount flops = 0;
         FlopCounts kickFlops;
@@ -403,7 +395,7 @@ void evaluateTrees() {
             if (!activeSink(index)) {
                 continue;
             }
-            consumeField(index, fields[i], result, flops, kickFlops, pairCurvature[i]);
+            consumeField(index, fields[i], result, flops, kickFlops);
             ++evaluated;
         }
         addCpuFlops(flops + kickFlops.doublePrecision, FlopPrecision::Double);

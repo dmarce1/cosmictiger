@@ -70,7 +70,7 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 sphParticlesVelocity(kYDimension, i) = vy1;
                 sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
-                sphParticlesThermodynamicState(i).internalEnergy = eint;
+                sphParticlesSetInternalEnergy(i, eint);
 
                 i++;
                 x = (ix) *dx;
@@ -86,7 +86,7 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 sphParticlesVelocity(kYDimension, i) = vy1;
                 sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
-                sphParticlesThermodynamicState(i).internalEnergy = eint;
+                sphParticlesSetInternalEnergy(i, eint);
 
                 i++;
             }
@@ -114,7 +114,7 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 sphParticlesVelocity(kYDimension, i) = vy0;
                 sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
-                sphParticlesThermodynamicState(i).internalEnergy = eint;
+                sphParticlesSetInternalEnergy(i, eint);
 
                 i++;
                 x = (ix) *dx;
@@ -130,7 +130,7 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 sphParticlesVelocity(kYDimension, i) = vy0;
                 sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
-                sphParticlesThermodynamicState(i).internalEnergy = eint;
+                sphParticlesSetInternalEnergy(i, eint);
 
                 i++;
             }

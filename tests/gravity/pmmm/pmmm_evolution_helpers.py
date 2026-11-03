@@ -69,7 +69,7 @@ def read_rank(path, expected_iteration, ranks, time_integrator):
     for index, kind in enumerate(decoded.types):
         gas = decoded.gas[decoded.gas_indices[index]] if kind == 1 else ()
         if gas:
-            require(gas[0] > 0 and gas[1] > 0 and gas[7] > 0,
+            require(gas[0] > 0 and gas[1] > 0 and gas[6] > 0,
                     f"{path}: nonpositive gas energy, support radius, or density")
         rows.append({"x": tuple(decoded.positions[dim][index] / scale for dim in range(3)),
                      "v": decoded.velocities[3 * index:3 * index + 3],

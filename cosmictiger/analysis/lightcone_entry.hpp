@@ -28,8 +28,6 @@ struct LightconeEntry {
     float vx, vy, vz;
     int pix;
     char type = kDarkMatterType;
-    // A negative value retains the fixed-species convention for older callers.
-    float mass = -1.0f;
 };
 
 size_t lcAddParticles(

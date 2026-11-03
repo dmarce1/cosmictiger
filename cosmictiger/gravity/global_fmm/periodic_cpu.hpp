@@ -28,17 +28,17 @@ void cpuGravityEwald(cosmictiger::gravity::cartesian::tracefree::Expansion<float
             mValue;
         static thread_local detail::SimdAlignedVector<Vector3<SimdPosition>> yValue;
         detail::gatherSourceMultipoles<order>(treePtrs, mValue, yValue);
-        Vector3<SimdPosition> x{};
+        Vector3<SimdPosition> position{};
         for (int dim = 0; dim < kDimensions; dim++) {
-            x[dim] = simdBroadcast<SimdPosition>(selfPtr->mpos->pos[dim].raw());
+            position[dim] = simdBroadcast<SimdPosition>(selfPtr->mpos->pos[dim].raw());
         }
         cosmictiger::gravity::cartesian::tracefree::Expansion<SimdFloat, order> l0;
         l0 = simdBroadcast<SimdFloat>(0.0f);
         for (int j = 0; j < numberOfSources; j++) {
             Vector3<SimdFloat> dx{};
             for (int dim = 0; dim < kDimensions; dim++) {
-                dx[dim] =
-                    fmmPositionDifference(x[dim], yValue[j][dim], dim, geometry, &geometryFlops);
+                dx[dim] = fmmPositionDifference(
+                    position[dim], yValue[j][dim], dim, geometry, &geometryFlops);
             }
             Vector3<SimdFloat> unwrappedPosition{};
             for (int lane = 0; lane < kSimdFloatSize; lane++) {

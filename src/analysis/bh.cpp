@@ -144,13 +144,13 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
                             float const r2 = sqr(dx, dy, dz);
                             if (detail::bhAcceptMonopole(r2, node, myradius, h, relativeError)) {
                                 BhSource source;
-                                source.x = node.pos;
+                                source.position = node.pos;
                                 source.m = node.mass;
                                 sourcelist.push_back(source);
                             } else if (node.children[kLeftChild] == -1) {
                                 for (int i = node.parts.first; i < node.parts.second; i++) {
                                     BhSource source;
-                                    source.x = parts[i];
+                                    source.position = parts[i];
                                     source.m = 1.0f;
                                     sourcelist.push_back(source);
                                 }
@@ -166,7 +166,7 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
                         BhSource src;
                         src.m = 0.0f;
                         for (int dim = 0; dim < kDimensions; dim++) {
-                            src.x[dim] = 0.f;
+                            src.position[dim] = 0.f;
                         }
                         sourcelist.push_back(src);
                     }
@@ -181,7 +181,7 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
                             for (int k = 0; k < kSimdFloatSize; k++) {
                                 auto const& src = sourcelist[j + k];
                                 for (int dim = 0; dim < kDimensions; dim++) {
-                                    simdSetLane(yValue[dim], k, src.x[dim]);
+                                    simdSetLane(yValue[dim], k, src.position[dim]);
                                 }
                                 simdSetLane(mValue, k, src.m);
                             }
@@ -240,13 +240,13 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Vector3<float> p
             float const r2 = sqr(dx, dy, dz);
             if (detail::bhAcceptMonopole(r2, node, 0.0f, h, relativeError)) {
                 BhSource source;
-                source.x = node.pos;
+                source.position = node.pos;
                 source.m = node.mass;
                 sourcelist.push_back(source);
             } else if (node.children[kLeftChild] == -1) {
                 for (int i = node.parts.first; i < node.parts.second; i++) {
                     BhSource source;
-                    source.x = parts[i];
+                    source.position = parts[i];
                     source.m = 1.0f;
                     sourcelist.push_back(source);
                 }
@@ -262,7 +262,7 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Vector3<float> p
         BhSource src;
         src.m = 0.0f;
         for (int dim = 0; dim < kDimensions; dim++) {
-            src.x[dim] = 0.f;
+            src.position[dim] = 0.f;
         }
         sourcelist.push_back(src);
     }
@@ -276,7 +276,7 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Vector3<float> p
         for (int k = 0; k < kSimdFloatSize; k++) {
             auto const& src = sourcelist[j + k];
             for (int dim = 0; dim < kDimensions; dim++) {
-                simdSetLane(yValue[dim], k, src.x[dim]);
+                simdSetLane(yValue[dim], k, src.position[dim]);
             }
             simdSetLane(mValue, k, src.m);
         }
@@ -305,14 +305,14 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Vector3<float> p
     phi *= gm;
 }
 
-DeviceVector<float> bhEvaluatePotential(DeviceVector<Vector3<float>>& x, bool gpu) {
+DeviceVector<float> bhEvaluatePotential(DeviceVector<Vector3<float>>& positions, bool gpu) {
     gpu = gpu && usesCuda(getOptions());
 #ifndef USE_CUDA
     gpu = false;
 #endif
-    if (x.size() <= 1) {
-        DeviceVector<float> potential(x.size());
-        if (x.size() == 1) {
+    if (positions.size() <= 1) {
+        DeviceVector<float> potential(positions.size());
+        if (positions.size() == 1) {
             potential[0] = 0.0f;
         }
         return potential;
@@ -323,7 +323,7 @@ DeviceVector<float> bhEvaluatePotential(DeviceVector<Vector3<float>>& x, bool gp
         box.begin[dim] = std::numeric_limits<float>::max();
         box.end[dim] = -std::numeric_limits<float>::max();
     }
-    for (auto const& pos : x) {
+    for (auto const& pos : positions) {
         for (int dim = 0; dim < kDimensions; dim++) {
             auto const thisX = pos[dim];
             box.begin[dim] = std::min(box.begin[dim], thisX);
@@ -333,25 +333,27 @@ DeviceVector<float> bhEvaluatePotential(DeviceVector<Vector3<float>>& x, bool gp
     DeviceVector<float> rpot;
     DeviceVector<int> sinkBuckets;
     Vector<int> sortOrder;
-    sortOrder.reserve(x.size());
-    for (int i = 0; i < x.size(); i++) {
+    sortOrder.reserve(positions.size());
+    for (int i = 0; i < positions.size(); i++) {
         sortOrder.push_back(i);
     }
-    DeviceVector<float> pot(x.size());
-    bhCreateTree(nodes, sinkBuckets, 0, x, sortOrder, box, 0, x.size(), kBhBucketSize);
+    DeviceVector<float> pot(positions.size());
+    bhCreateTree(
+        nodes, sinkBuckets, 0, positions, sortOrder, box, 0, positions.size(), kBhBucketSize);
     if (!gpu) {
-        bhTreeEvaluate(nodes, sinkBuckets, pot, x, kBhMaximumRelativePotentialError);
+        bhTreeEvaluate(nodes, sinkBuckets, pot, positions, kBhMaximumRelativePotentialError);
     } else {
 #ifdef USE_CUDA
         Timer tm1;
         tm1.start();
-        pot = bhEvaluatePotentialGpu(nodes, x, sinkBuckets, kBhMaximumRelativePotentialError,
-            getOptions().gravity.supportRadius, getOptions().gravity.gm);
+        pot =
+            bhEvaluatePotentialGpu(nodes, positions, sinkBuckets, kBhMaximumRelativePotentialError,
+                getOptions().gravity.supportRadius, getOptions().gravity.gm);
         tm1.stop();
         //		PRINT("1 %e\n", tm1.read());
 #endif
     }
-    rpot.resize(x.size());
+    rpot.resize(positions.size());
     for (int i = 0; i < sortOrder.size(); i++) {
         rpot[sortOrder[i]] = pot[i];
     }
@@ -359,12 +361,12 @@ DeviceVector<float> bhEvaluatePotential(DeviceVector<Vector3<float>>& x, bool gp
 }
 
 DeviceVector<float> bhEvaluatePoints(
-    DeviceVector<Vector3<float>>& y, DeviceVector<Vector3<float>>& x, bool gpu) {
+    DeviceVector<Vector3<float>>& y, DeviceVector<Vector3<float>>& positions, bool gpu) {
     gpu = gpu && usesCuda(getOptions());
 #ifndef USE_CUDA
     gpu = false;
 #endif
-    if (x.size() == 0 || y.size() == 0) {
+    if (positions.size() == 0 || y.size() == 0) {
         DeviceVector<float> potential(y.size());
         for (int i = 0; i < potential.size(); ++i) {
             potential[i] = 0.0f;
@@ -377,7 +379,7 @@ DeviceVector<float> bhEvaluatePoints(
         box.begin[dim] = std::numeric_limits<float>::max();
         box.end[dim] = -std::numeric_limits<float>::max();
     }
-    for (auto const& pos : x) {
+    for (auto const& pos : positions) {
         for (int dim = 0; dim < kDimensions; dim++) {
             auto const thisX = pos[dim];
             box.begin[dim] = std::min(box.begin[dim], thisX);
@@ -387,20 +389,21 @@ DeviceVector<float> bhEvaluatePoints(
     Vector<float> rpot;
     DeviceVector<int> sinkBuckets;
     Vector<int> sortOrder;
-    sortOrder.reserve(x.size());
-    for (int i = 0; i < x.size(); i++) {
+    sortOrder.reserve(positions.size());
+    for (int i = 0; i < positions.size(); i++) {
         sortOrder.push_back(i);
     }
     DeviceVector<float> pot(y.size());
-    bhCreateTree(nodes, sinkBuckets, 0, x, sortOrder, box, 0, x.size(), kBhBucketSize);
+    bhCreateTree(
+        nodes, sinkBuckets, 0, positions, sortOrder, box, 0, positions.size(), kBhBucketSize);
     if (gpu) {
 #ifdef USE_CUDA
-        pot = bhEvaluatePotentialPointsGpu(nodes, x, y, kBhMaximumRelativePotentialError,
+        pot = bhEvaluatePotentialPointsGpu(nodes, positions, y, kBhMaximumRelativePotentialError,
             getOptions().gravity.supportRadius, getOptions().gravity.gm);
 #endif
     } else {
         for (int i = 0; i < y.size(); i++) {
-            bhTreeEvaluatePoint(nodes, y[i], pot[i], x, kBhMaximumRelativePotentialError);
+            bhTreeEvaluatePoint(nodes, y[i], pot[i], positions, kBhMaximumRelativePotentialError);
         }
     }
     return pot;

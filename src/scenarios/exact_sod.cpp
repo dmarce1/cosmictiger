@@ -18,13 +18,13 @@ static double pl, pr, rhol, rhor, cl, cr, gammaValue;
 static double func(double pm);
 static double rtbis(double x1, double x2, double xacc);
 
-void exactSod(SodStateT* out, SodInitT const* in, double x, double t, double dx) {
+void exactSod(SodStateT* out, SodInitT const* in, double position, double t, double dx) {
     if (t == 0.0) {
-        out->v = 0.0;
-        if (x + 0.5 * dx <= 0.0) {
+        out->velocity = 0.0;
+        if (position + 0.5 * dx <= 0.0) {
             out->p = in->pl;
             out->rho = in->rhol;
-        } else if (x - 0.5 * dx >= 0.0) {
+        } else if (position - 0.5 * dx >= 0.0) {
             out->p = in->pr;
             out->rho = in->rhor;
         } else {
@@ -53,39 +53,41 @@ void exactSod(SodStateT* out, SodInitT const* in, double x, double t, double dx)
         vs = vm / (1. - rhor / rhomr);
         vt = cl - vm / (1. - mu2);
 
-        if (x <= -cl * t) {
+        if (position <= -cl * t) {
             density = rhol;
-        } else if (x <= -vt * t) {
-            density = rhol * pow((-mu2 * (x / (cl * t)) + (1. - mu2)), (2. / (gammaValue - 1.)));
-        } else if (x <= vm * t) {
+        } else if (position <= -vt * t) {
+            density =
+                rhol * pow((-mu2 * (position / (cl * t)) + (1. - mu2)), (2. / (gammaValue - 1.)));
+        } else if (position <= vm * t) {
             density = rhoml;
-        } else if (x <= vs * t) {
+        } else if (position <= vs * t) {
             density = rhomr;
         } else {
             density = rhor;
         }
-        if (x <= -cl * t) {
+        if (position <= -cl * t) {
             pressure = pl;
-        } else if (x <= -vt * t) {
+        } else if (position <= -vt * t) {
             pressure = pl *
-                pow((-mu2 * (x / (cl * t)) + (1. - mu2)), (2. * gammaValue / (gammaValue - 1.)));
-        } else if (x <= vs * t) {
+                pow((-mu2 * (position / (cl * t)) + (1. - mu2)),
+                    (2. * gammaValue / (gammaValue - 1.)));
+        } else if (position <= vs * t) {
             pressure = pm;
         } else {
             pressure = pr;
         }
-        if (x <= -cl * t) {
+        if (position <= -cl * t) {
             velocity = 0.0;
-        } else if (x <= -vt * t) {
-            velocity = (1 - mu2) * (x / t + cl);
-        } else if (x <= vs * t) {
+        } else if (position <= -vt * t) {
+            velocity = (1 - mu2) * (position / t + cl);
+        } else if (position <= vs * t) {
             velocity = vm;
         } else {
             velocity = 0.0;
         }
 
         out->rho = density;
-        out->v = velocity;
+        out->velocity = velocity;
         out->p = pressure;
     }
 }

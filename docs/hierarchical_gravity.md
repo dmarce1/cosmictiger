@@ -57,8 +57,8 @@ never merges. The floor relaxes by one rung every eighth coarse step of a full
 evaluation, and no merge is considered at that step. That lets the particles
 regain the longer step once the finer rungs empty.
 
-Merging is disabled when hydro is enabled, for the terminal closing ladder,
-and in the fixed-time scenario driver (`src/core/scenario_driver.cpp`). Those
+Hierarchical integration is collisionless only. Merging is disabled for the
+terminal closing ladder and in the fixed-time scenario driver (`src/core/scenario_driver.cpp`). Those
 callers pass `nocrop`.
 
 Before November 2026 the rule was hard-coded as three times the finer count

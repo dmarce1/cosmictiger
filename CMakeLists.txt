@@ -181,7 +181,6 @@ if(COSMICTIGER_WITH_GRAVITY)
 endif()
 
 message(STATUS "cosmictiger SPH = ${COSMICTIGER_WITH_SPH}")
-message(STATUS "cosmictiger Hopkins MFM/MFV = ${COSMICTIGER_ENABLE_HOPKINS} (requires SPH and Fixed64)")
 message(STATUS "cosmictiger equilibrium cooling = ${COSMICTIGER_WITH_CHEMISTRY} (requires SPH)")
 message(STATUS "cosmictiger stars = ${COSMICTIGER_WITH_STARS} (COSMICTIGER_ENABLE_STARS; requires chemistry and SPH)")
 message(STATUS "cosmictiger position storage = ${COSMICTIGER_POSITION_TYPE}")
@@ -230,11 +229,6 @@ set(cosmictiger_header_files
     cosmictiger/core/flops.hpp
     cosmictiger/core/hpx.hpp
     cosmictiger/core/memused.hpp
-    cosmictiger/hydro/hopkins/hopkins.hpp
-    cosmictiger/hydro/hopkins/hopkins_simd.hpp
-    cosmictiger/hydro/hopkins/hopkins_state.hpp
-    cosmictiger/hydro/hopkins/hopkins_wake_sweep.hpp
-    cosmictiger/hydro/hopkins/hopkins_hydro.hpp
     cosmictiger/core/options.hpp
     cosmictiger/core/options_metadata.hpp
     cosmictiger/core/profiler.hpp
@@ -293,7 +287,6 @@ set(cosmictiger_header_files
     cosmictiger/gravity/kick_cuda_launch.hpp
     cosmictiger/gravity/kick_interaction_counts.hpp
     cosmictiger/gravity/kick_walk.hpp
-    cosmictiger/gravity/timestep.hpp
     cosmictiger/gravity/kick_workspace.hpp
     cosmictiger/gravity/tree.hpp
     cosmictiger/gravity/tree_multipole.hpp
@@ -375,6 +368,7 @@ set(cosmictiger_header_files
     cosmictiger/hydro/sph/cullen_and_dehnen/particle_exchange.hpp
     cosmictiger/hydro/sph/cullen_and_dehnen/state.hpp
     cosmictiger/hydro/sph/cullen_and_dehnen/viscosity.hpp
+    cosmictiger/hydro/sph/entropy.hpp
     cosmictiger/hydro/sph/kernels.hpp
     cosmictiger/hydro/sph/monaghan/viscosity.hpp
     cosmictiger/hydro/sph/morris_and_monaghan/viscosity.hpp
@@ -385,13 +379,15 @@ set(cosmictiger_header_files
     cosmictiger/hydro/sph/volume.hpp
 )
 
+# Source conversions to the evolved entropy variable are deliberately deferred.
+set(cosmictiger_entropy_sources_ready OFF)
 if(BUILD_TESTING)
     set(cosmictiger_star_formation_test_args)
-    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_STAR_FORMATION)
+    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_STAR_FORMATION AND cosmictiger_entropy_sources_ready)
         list(APPEND cosmictiger_star_formation_test_args --with-star-formation)
     endif()
     set(cosmictiger_chemistry_test_args)
-    if(NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_ENABLE_CHEMISTRY)
+    if(NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_ENABLE_CHEMISTRY OR NOT cosmictiger_entropy_sources_ready)
         list(APPEND cosmictiger_chemistry_test_args --without-chemistry)
     endif()
     # Only option validation and dispatch depend on test availability.
@@ -445,9 +441,6 @@ set_source_files_properties(src/hydro/sph/sph_chemistry.cpp src/io/view.cpp test
 # Star-formation device physics shares the chemistry rounding contract.
 set_source_files_properties(src/hydro/sph/star_formation_cuda.cu PROPERTIES COMPILE_OPTIONS
     "--expt-relaxed-constexpr;--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false;-Xcompiler=-fno-fast-math;-Xcompiler=-ffp-contract=off")
-# Meshless conservative updates and the small-amplitude wave retain double precision.
-set_source_files_properties(src/hydro/hopkins.cpp src/scenarios/sound_wave.cpp
-    PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 
 # The adaptive Boltzmann solve needs finite-value checks and accurate
 # cancellation in the synchronous Einstein constraints.
@@ -624,9 +617,6 @@ if(BUILD_TESTING)
     if(COSMICTIGER_PROFILE AND COSMICTIGER_WITH_SPH AND
             (COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL OR COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL))
         set(cosmictiger_phase_profile_args)
-        if(COSMICTIGER_ENABLE_HOPKINS)
-            list(APPEND cosmictiger_phase_profile_args --hopkins)
-        endif()
         if(COSMICTIGER_WITH_GRAVITY)
             list(APPEND cosmictiger_phase_profile_args --gravity)
         endif()
@@ -778,66 +768,33 @@ if(BUILD_TESTING)
                 $<TARGET_FILE:apex_profiler_test>)
             set_tests_properties(apex_interrupt PROPERTIES
                 TIMEOUT 120 PROCESSORS 2 LABELS "profiler;apex;cpu;hpx;interrupt")
-            find_program(COSMICTIGER_TAU_EXEC tau_exec
-                HINTS "$ENV{TAU_ROOT}/bin" "$ENV{TAU_ROOT}/x86_64/bin"
-                    "$ENV{TAU_ROOT}/arm64_linux/bin" "$ENV{HOME}/local/tau/bin"
-                    "$ENV{HOME}/local/tau/x86_64/bin" "$ENV{HOME}/local/tau/arm64_linux/bin")
-            if(COSMICTIGER_TAU_EXEC)
-                set(cosmictiger_profile_test_args)
-                if(NOT COSMICTIGER_PROFILE)
-                    set(cosmictiger_profile_test_args --profile-disabled)
-                endif()
-                foreach(tau_mode IN ITEMS default config interrupt interrupt_usr1)
-                    set(tau_test_args)
-                    if(tau_mode STREQUAL "config")
-                        list(APPEND tau_test_args --apex-config)
-                    elseif(tau_mode MATCHES "^interrupt")
-                        list(APPEND tau_test_args --interrupt-exit)
-                        if(tau_mode STREQUAL "interrupt_usr1")
-                            list(APPEND tau_test_args --interrupt-signal=SIGUSR1)
-                        endif()
-                    endif()
-                    add_test(NAME tau_profiler_${tau_mode} COMMAND ${Python3_EXECUTABLE}
-                        ${PROJECT_SOURCE_DIR}/tests/run_tau_profiler.py
-                        $<TARGET_FILE:apex_profiler_test>
-                        ${PROJECT_SOURCE_DIR}/scripts/profile_tau.sh ${COSMICTIGER_TAU_EXEC}
-                        ${tau_test_args})
-                    set_tests_properties(tau_profiler_${tau_mode} PROPERTIES
-                        TIMEOUT 120 PROCESSORS 2 LABELS "profiler;apex;tau;cpu;hpx")
+            set(cosmictiger_profile_test_args)
+            if(NOT COSMICTIGER_PROFILE)
+                set(cosmictiger_profile_test_args --profile-disabled)
+            endif()
+            if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+                add_test(NAME apex_interrupt_simulation_hydro COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/run_interrupt_simulation.py
+                    $<TARGET_FILE:cosmictiger> --scenario=hydroWave
+                    ${cosmictiger_profile_test_args})
+                set_tests_properties(apex_interrupt_simulation_hydro PROPERTIES TIMEOUT 240
+                    PROCESSORS 2 LABELS "profiler;apex;cpu;hpx;interrupt")
+            endif()
+            if(COSMICTIGER_WITH_GRAVITY AND cosmictiger_mpi_tests)
+                set(apex_mpi_args --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG})
+                foreach(flag IN LISTS MPIEXEC_PREFLAGS)
+                    list(APPEND apex_mpi_args --mpi-preflag=${flag})
                 endforeach()
-                if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
-                    add_test(NAME tau_interrupt_simulation_hydro COMMAND ${Python3_EXECUTABLE}
-                        ${PROJECT_SOURCE_DIR}/tests/run_interrupt_simulation.py
-                        $<TARGET_FILE:cosmictiger> --scenario=hydroWave
-                        --launcher=${PROJECT_SOURCE_DIR}/scripts/profile_tau.sh
-                        --tau-exec=${COSMICTIGER_TAU_EXEC} ${cosmictiger_profile_test_args})
-                    set_tests_properties(tau_interrupt_simulation_hydro PROPERTIES TIMEOUT 240
-                        PROCESSORS 2 LABELS "profiler;apex;tau;cpu;hpx;interrupt")
-                endif()
-                if(COSMICTIGER_WITH_GRAVITY AND cosmictiger_mpi_tests)
-                    set(tau_mpi_args --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG})
-                    foreach(flag IN LISTS MPIEXEC_PREFLAGS)
-                        list(APPEND tau_mpi_args --mpi-preflag=${flag})
-                    endforeach()
-                    foreach(flag IN LISTS MPIEXEC_POSTFLAGS)
-                        list(APPEND tau_mpi_args --mpi-postflag=${flag})
-                    endforeach()
-                    add_test(NAME tau_profiler_mpi_startup COMMAND ${Python3_EXECUTABLE}
-                        ${PROJECT_SOURCE_DIR}/tests/run_tau_mpi_startup.py
-                        $<TARGET_FILE:cosmictiger>
-                        ${PROJECT_SOURCE_DIR}/scripts/profile_tau.sh ${COSMICTIGER_TAU_EXEC}
-                        ${MPIEXEC_EXECUTABLE} ${tau_mpi_args})
-                    set_tests_properties(tau_profiler_mpi_startup PROPERTIES
-                        TIMEOUT 120 PROCESSORS 4 LABELS "profiler;apex;tau;cpu;hpx;mpi")
-                    add_test(NAME tau_interrupt_simulation_mpi_worker COMMAND ${Python3_EXECUTABLE}
-                        ${PROJECT_SOURCE_DIR}/tests/run_interrupt_simulation.py
-                        $<TARGET_FILE:cosmictiger> --scenario=plummer
-                        --mpi-exec=${MPIEXEC_EXECUTABLE} ${tau_mpi_args}
-                        --launcher=${PROJECT_SOURCE_DIR}/scripts/profile_tau.sh
-                        --tau-exec=${COSMICTIGER_TAU_EXEC} ${cosmictiger_profile_test_args})
-                    set_tests_properties(tau_interrupt_simulation_mpi_worker PROPERTIES
-                        TIMEOUT 240 PROCESSORS 4 LABELS "profiler;apex;tau;cpu;hpx;mpi;interrupt")
-                endif()
+                foreach(flag IN LISTS MPIEXEC_POSTFLAGS)
+                    list(APPEND apex_mpi_args --mpi-postflag=${flag})
+                endforeach()
+                add_test(NAME apex_interrupt_simulation_mpi_worker COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/run_interrupt_simulation.py
+                    $<TARGET_FILE:cosmictiger> --scenario=plummer
+                    --mpi-exec=${MPIEXEC_EXECUTABLE} ${apex_mpi_args}
+                    ${cosmictiger_profile_test_args})
+                set_tests_properties(apex_interrupt_simulation_mpi_worker PROPERTIES
+                    TIMEOUT 240 PROCESSORS 4 LABELS "profiler;apex;cpu;hpx;mpi;interrupt")
             endif()
         endif()
     endif()
@@ -982,7 +939,7 @@ if(BUILD_TESTING)
         set_tests_properties(halo_viewer PROPERTIES TIMEOUT 180 PROCESSORS 2)
     endif()
 
-    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_STAR_FORMATION)
+    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_STAR_FORMATION AND cosmictiger_entropy_sources_ready)
         add_executable(springel_and_hernquist_test tests/springel_and_hernquist.cpp)
         target_include_directories(springel_and_hernquist_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_link_libraries(springel_and_hernquist_test PRIVATE cosmictiger_sph_chemistry)
@@ -1087,7 +1044,7 @@ if(BUILD_TESTING)
         endif()
     endif()
 
-    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
+    if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY AND cosmictiger_entropy_sources_ready)
         add_executable(gadget4_cooling_test tests/gadget4_cooling.cpp)
         target_link_libraries(gadget4_cooling_test PRIVATE cosmictiger_sph_chemistry)
         target_compile_options(gadget4_cooling_test PRIVATE -fno-fast-math -ffp-contract=off)
@@ -1121,7 +1078,7 @@ if(BUILD_TESTING)
             endforeach()
         endif()
     endif()
-    if(COSMICTIGER_WITH_GRAVITY AND COSMICTIGER_WITH_CHEMISTRY)
+    if(COSMICTIGER_WITH_GRAVITY AND COSMICTIGER_WITH_CHEMISTRY AND cosmictiger_entropy_sources_ready)
         set(chemistry_timesteps_workdir "${PROJECT_BINARY_DIR}/tests/sph_chemistry_timesteps_cpu")
         file(MAKE_DIRECTORY "${chemistry_timesteps_workdir}")
         add_test(NAME sph_chemistry_timesteps_cpu COMMAND cosmictiger
@@ -1150,8 +1107,8 @@ if(BUILD_TESTING)
                 ENVIRONMENT "CUDA_VISIBLE_DEVICES=;OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
         endif()
     endif()
-    if(COSMICTIGER_WITH_CHEMISTRY AND COSMICTIGER_ENABLE_FMM)
-        foreach(integrator IN ITEMS traditional global hierarchical)
+    if(COSMICTIGER_WITH_CHEMISTRY AND COSMICTIGER_ENABLE_FMM AND cosmictiger_entropy_sources_ready)
+        foreach(integrator IN ITEMS traditional global)
             string(TOUPPER "${integrator}" integrator_upper)
             if(NOT COSMICTIGER_ENABLE_INTEGRATOR_${integrator_upper})
                 continue()
@@ -2201,85 +2158,6 @@ if(BUILD_TESTING)
             endif()
         endif()
     endif()
-    if(COSMICTIGER_ENABLE_HOPKINS)
-        add_executable(hopkins_test tests/hopkins.cpp)
-        target_include_directories(hopkins_test PRIVATE ${PROJECT_SOURCE_DIR})
-        target_compile_options(hopkins_test PRIVATE -fno-fast-math -ffp-contract=off)
-        cosmictiger_add_gtest(NAME hopkins TARGET hopkins_test PROPERTIES TIMEOUT 30 LABELS "hopkins;cpu")
-        if(COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL OR COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
-            set(cosmictiger_hopkins_flops_integrator traditional)
-            if(NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
-                set(cosmictiger_hopkins_flops_integrator global)
-            endif()
-            add_test(NAME hopkins_flops_application COMMAND ${Python3_EXECUTABLE}
-                ${PROJECT_SOURCE_DIR}/tests/run_hopkins_flops.py $<TARGET_FILE:cosmictiger>
-                ${PROJECT_BINARY_DIR}/tests/hopkins_flops_application
-                --time-integrator ${cosmictiger_hopkins_flops_integrator})
-            set_tests_properties(hopkins_flops_application PROPERTIES
-                TIMEOUT 180 PROCESSORS 2 LABELS "hopkins;flops;cpu")
-        endif()
-        if(COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL AND COSMICTIGER_ENABLE_FMM AND
-                COSMICTIGER_POSITION_TYPE STREQUAL "fixed64" AND
-                COSMICTIGER_MIN_EXPANSION_DEGREE LESS_EQUAL 6 AND
-                COSMICTIGER_MAX_EXPANSION_DEGREE GREATER_EQUAL 6)
-            add_test(NAME hopkins_application COMMAND ${Python3_EXECUTABLE}
-                ${PROJECT_SOURCE_DIR}/tests/run_hopkins.py $<TARGET_FILE:cosmictiger>
-                ${CMAKE_CURRENT_BINARY_DIR}/hopkins_application)
-            set_tests_properties(hopkins_application PROPERTIES TIMEOUT 600 PROCESSORS 2
-                RUN_SERIAL TRUE LABELS "hopkins;cpu")
-            if(COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
-                add_test(NAME hopkins_global_sources COMMAND ${Python3_EXECUTABLE}
-                    ${PROJECT_SOURCE_DIR}/tests/run_hopkins.py $<TARGET_FILE:cosmictiger>
-                    ${PROJECT_BINARY_DIR}/tests/hopkins_global_sources --global-sources-only)
-                set_tests_properties(hopkins_global_sources PROPERTIES TIMEOUT 300 PROCESSORS 2
-                    RUN_SERIAL TRUE LABELS "hopkins;cpu")
-            endif()
-            if(COSMICTIGER_ENABLE_CHEMISTRY)
-                add_test(NAME hopkins_thermal_sources COMMAND ${Python3_EXECUTABLE}
-                    ${PROJECT_SOURCE_DIR}/tests/run_hopkins.py $<TARGET_FILE:cosmictiger>
-                    ${PROJECT_BINARY_DIR}/tests/hopkins_thermal_sources --thermal-sources-only)
-                set_tests_properties(hopkins_thermal_sources PROPERTIES TIMEOUT 900 PROCESSORS 2
-                    RUN_SERIAL TRUE LABELS "hopkins;chemistry;star_formation;cpu")
-            endif()
-        endif()
-        if(COSMICTIGER_POSITION_TYPE STREQUAL "fixed64" AND
-                COSMICTIGER_MIN_EXPANSION_DEGREE LESS_EQUAL 6 AND
-                COSMICTIGER_MAX_EXPANSION_DEGREE GREATER_EQUAL 6)
-            foreach(hopkins_integrator IN ITEMS traditional global hierarchical)
-                string(TOUPPER "${hopkins_integrator}" hopkins_integrator_feature)
-                if(NOT COSMICTIGER_ENABLE_INTEGRATOR_${hopkins_integrator_feature})
-                    continue()
-                endif()
-                foreach(hopkins_solver IN ITEMS fmm pmmm_pp pmmm_fmm)
-                    string(TOUPPER "${hopkins_solver}" hopkins_solver_feature)
-                    if(NOT COSMICTIGER_ENABLE_${hopkins_solver_feature})
-                        continue()
-                    endif()
-                    set(hopkins_solver_args --gravity-method fmm)
-                    if(hopkins_solver MATCHES "^pmmm_(pp|fmm)$")
-                        set(hopkins_solver_args --gravity-method pmmm --near-method ${CMAKE_MATCH_1})
-                    endif()
-                    foreach(hopkins_backend IN ITEMS cpu cuda)
-                        if(hopkins_backend STREQUAL "cuda" AND NOT COSMICTIGER_WITH_CUDA)
-                            continue()
-                        endif()
-                        set(hopkins_backend_args)
-                        if(hopkins_backend STREQUAL "cuda")
-                            set(hopkins_backend_args --cuda)
-                        endif()
-                        set(hopkins_case hopkins_${hopkins_solver}_${hopkins_integrator}_${hopkins_backend})
-                        add_test(NAME ${hopkins_case} COMMAND ${Python3_EXECUTABLE}
-                            ${PROJECT_SOURCE_DIR}/tests/run_hopkins.py $<TARGET_FILE:cosmictiger>
-                            ${PROJECT_BINARY_DIR}/tests/${hopkins_case} --matrix-only
-                            --time-integrator ${hopkins_integrator} ${hopkins_solver_args}
-                            ${hopkins_backend_args})
-                        set_tests_properties(${hopkins_case} PROPERTIES TIMEOUT 600 PROCESSORS 2
-                            RUN_SERIAL TRUE LABELS "hopkins;${hopkins_backend}")
-                    endforeach()
-                endforeach()
-            endforeach()
-        endif()
-    endif()
     if(COSMICTIGER_WITH_SPH)
         add_executable(gresho_test tests/gresho.cpp)
         target_include_directories(gresho_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -2420,7 +2298,9 @@ if(BUILD_TESTING)
         # Relax sphere-surface shells on the CPU path that run.scenario=polytropicStar uses
         # without CUDA.
         add_hpx_executable(sphere_surface_test
-            SOURCES tests/scenarios/sphere_surface.cpp src/scenarios/sphere.cpp)
+            SOURCES tests/scenarios/sphere_surface.cpp src/scenarios/sphere.cpp src/core/assert.cpp
+                src/core/hpx.cpp)
+        target_link_libraries(sphere_surface_test PRIVATE cosmictiger_stacktrace)
         target_include_directories(sphere_surface_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_options(sphere_surface_test PRIVATE -ffast-math)
         if(COMPILER_SUPPORTS_MARCH_NATIVE)
@@ -3058,87 +2938,4 @@ if(BUILD_TESTING)
             target_link_libraries(${test_target} PRIVATE cosmictiger_default_config)
         endif()
     endforeach()
-endif()
-
-# Motion bounds are shared by fixed-mass hydro methods and independent of HPX.
-if(BUILD_TESTING AND COSMICTIGER_WITH_SPH)
-    add_executable(hydro_source_tree_test tests/hydro_source_tree.cpp)
-    target_include_directories(hydro_source_tree_test PRIVATE ${PROJECT_SOURCE_DIR})
-    target_compile_options(hydro_source_tree_test PRIVATE -ffast-math)
-    add_test(NAME hydro_source_tree COMMAND hydro_source_tree_test)
-    set_tests_properties(hydro_source_tree PROPERTIES TIMEOUT 30 LABELS "hydro;cpu;hierarchical")
-    if(COSMICTIGER_ENABLE_HOPKINS)
-        foreach(impulse_mode IN ITEMS strict fast)
-            set(impulse_target hopkins_gravity_impulse_${impulse_mode}_test)
-            add_executable(${impulse_target} tests/hopkins_gravity_impulse.cpp)
-            target_include_directories(${impulse_target} PRIVATE ${PROJECT_SOURCE_DIR})
-            if(impulse_mode STREQUAL "fast")
-                target_compile_options(${impulse_target} PRIVATE -ffast-math)
-            else()
-                target_compile_options(${impulse_target} PRIVATE -fno-fast-math)
-            endif()
-            add_test(NAME hopkins_gravity_impulse_${impulse_mode} COMMAND ${impulse_target})
-            set_tests_properties(hopkins_gravity_impulse_${impulse_mode} PROPERTIES
-                TIMEOUT 30 LABELS "hopkins;cpu;hierarchical")
-        endforeach()
-    endif()
-    if(COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL)
-        add_executable(sph_hierarchical_sources_test tests/sph/hierarchical_sources.cpp)
-        target_include_directories(sph_hierarchical_sources_test PRIVATE ${PROJECT_SOURCE_DIR})
-        target_compile_options(sph_hierarchical_sources_test PRIVATE -ffast-math)
-        add_test(NAME sph_hierarchical_sources COMMAND sph_hierarchical_sources_test)
-        set_tests_properties(sph_hierarchical_sources PROPERTIES TIMEOUT 30 LABELS "sph;cpu;hierarchical")
-        add_executable(sph_migration_test tests/particles/sph_migration.cpp)
-        target_include_directories(sph_migration_test PRIVATE ${PROJECT_SOURCE_DIR})
-        target_link_libraries(sph_migration_test PRIVATE GTest::gtest_main)
-        add_test(NAME sph_migration COMMAND sph_migration_test)
-        set_tests_properties(sph_migration PROPERTIES
-            TIMEOUT 30 LABELS "sph;cpu;hierarchical")
-        if(COSMICTIGER_ENABLE_FMM AND COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
-            add_test(NAME sph_hierarchical_application COMMAND ${Python3_EXECUTABLE}
-                ${PROJECT_SOURCE_DIR}/tests/run_hierarchical_sph.py $<TARGET_FILE:cosmictiger>
-                ${PROJECT_BINARY_DIR}/tests/sph_hierarchical_application --fresh-run-directory
-                --self-gravity --mass-solar 1e24 --gravity-softening 0.25
-                --reference global --refine --restart)
-            set_tests_properties(sph_hierarchical_application PROPERTIES
-                TIMEOUT 600 PROCESSORS 2 RUN_SERIAL TRUE LABELS "sph;cpu;hierarchical")
-            add_test(NAME sph_hierarchical_blast COMMAND ${Python3_EXECUTABLE}
-                ${PROJECT_SOURCE_DIR}/tests/run_hierarchical_sph.py $<TARGET_FILE:cosmictiger>
-                ${PROJECT_BINARY_DIR}/tests/sph_hierarchical_blast --fresh-run-directory
-                --scenario blast --end-time 0.004 --coarse-steps 2
-                --self-gravity --mass-solar 1e24 --gravity-softening 0.25
-                --reference global --restart --require-mixed-rungs --require-work-savings)
-            set_tests_properties(sph_hierarchical_blast PROPERTIES
-                TIMEOUT 600 PROCESSORS 2 RUN_SERIAL TRUE LABELS "sph;cpu;hierarchical")
-            if(COSMICTIGER_ENABLE_HOPKINS AND COSMICTIGER_POSITION_TYPE STREQUAL "fixed64")
-                add_test(NAME hopkins_hierarchical_application COMMAND ${Python3_EXECUTABLE}
-                    ${PROJECT_SOURCE_DIR}/tests/run_hierarchical_mfm.py $<TARGET_FILE:cosmictiger>
-                    ${PROJECT_BINARY_DIR}/tests/hopkins_hierarchical_application
-                    --fresh-run-directory)
-                set_tests_properties(hopkins_hierarchical_application PROPERTIES
-                    TIMEOUT 1200 PROCESSORS 2 RUN_SERIAL TRUE LABELS "hopkins;cpu;hierarchical")
-                if(cosmictiger_mpi_tests)
-                    # One versus two localities must agree bitwise on gravity-free
-                    # blast runs for every compiled integrator.
-                    add_test(NAME hopkins_localities_mpi COMMAND ${Python3_EXECUTABLE}
-                        ${PROJECT_SOURCE_DIR}/tests/run_hopkins_localities.py
-                        $<TARGET_FILE:cosmictiger>
-                        ${PROJECT_BINARY_DIR}/tests/hopkins_localities_mpi
-                        ${cosmictiger_python_mpi_args})
-                    set_tests_properties(hopkins_localities_mpi PROPERTIES
-                        TIMEOUT 1500 PROCESSORS 4 RUN_SERIAL TRUE LABELS "hopkins;cpu;mpi")
-                endif()
-            endif()
-        endif()
-        if(COSMICTIGER_ENABLE_FMM AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL AND
-                COSMICTIGER_ENABLE_STAR_FORMATION)
-            # Cooling and star formation on mixed rungs, for SPH and, when built,
-            # MFM, with exact restarts and the traditional integrator as reference.
-            add_test(NAME hierarchical_sources_application COMMAND ${Python3_EXECUTABLE}
-                ${PROJECT_SOURCE_DIR}/tests/run_hierarchical_sources.py $<TARGET_FILE:cosmictiger>
-                ${PROJECT_BINARY_DIR}/tests/hierarchical_sources_application --threads 4)
-            set_tests_properties(hierarchical_sources_application PROPERTIES
-                TIMEOUT 1800 PROCESSORS 4 RUN_SERIAL TRUE LABELS "sph;cpu;hierarchical;chemistry")
-        endif()
-    endif()
 endif()

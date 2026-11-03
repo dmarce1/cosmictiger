@@ -1,11 +1,19 @@
 /* CosmicTiger - CUDA FLOP aggregation regression; BSL-1.0. */
 
 #include <cstdio>
+#include <stdexcept>
+#include <string>
 
 #include <cuda_runtime.h>
 #include <gtest/gtest.h>
 
 #include <cosmictiger/core/flops.hpp>
+
+void cosmictigerAssert(char const* condition, bool value, char const* file, int line) {
+    if (!value) {
+        throw std::runtime_error(std::string(file) + ":" + std::to_string(line) + ": " + condition);
+    }
+}
 
 bool cudaEnabled() {
     return true;

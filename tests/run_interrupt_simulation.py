@@ -17,7 +17,6 @@ import time
 
 from run_apex_profiler import require
 from run_checkpoint import checkManifest, checkpoint_position_bytes, fnv1a64
-from run_tau_profiler import read_tau_profiles
 
 
 END_TIME = 0.001
@@ -83,7 +82,7 @@ def check_checkpoint(directory, iteration, scenario, ranks):
             "checkpoint scenario metadata differs from the interrupted simulation")
 
 
-def check_profiles(directory, ranks, tau, profile_disabled):
+def check_profiles(directory, ranks, profile_disabled):
     expected_ranks = {str(rank) for rank in range(ranks)}
     with (directory / "apex" / "apex_profiles.csv").open(newline="") as stream:
         rows = list(csv.DictReader(stream))
@@ -103,12 +102,6 @@ def check_profiles(directory, ranks, tau, profile_disabled):
                 f"phase profile is incomplete: {phase_profile}")
         require(re.search(r"^(kick|pmmmKick|hydro)\s+\d+\s", text, re.MULTILINE),
                 f"phase profile lost the force phases: {phase_profile}")
-    if tau:
-        profiles, rows = read_tau_profiles(directory / "tau")
-        require({path.name.split(".")[1] for path in profiles} == expected_ranks,
-                "TAU did not finalize its profiles for every interrupted rank")
-        require(any("[SAMPLE]" in row["name"] and row["calls"] > 0 for row in rows),
-                "TAU did not retain ordinary-function samples from the simulation")
 
 
 def run_regression(args, directory):
@@ -116,8 +109,6 @@ def run_regression(args, directory):
     ranks = 2 if args.mpi_exec or args.mpi_wrapper else 1
     target_rank = args.signal_rank if args.signal_rank is not None else ranks - 1
     require(0 <= target_rank < ranks, "signal rank is outside this test's MPI ranks")
-    require((args.launcher is None) == (args.tau_exec is None),
-            "TAU simulation tests require both --launcher and --tau-exec")
     source = Path(__file__).resolve().parents[1]
     preset = "hydro_wave" if args.scenario == "hydroWave" else "plummer"
     simulation = directory / "simulation"
@@ -141,8 +132,6 @@ def run_regression(args, directory):
         options["hpx:localities"] = ranks
     application = [str(args.executable.resolve())] + args.mpi_postflag + [
         f"--{key}={value}" for key, value in options.items()]
-    if args.launcher:
-        application.insert(0, str(args.launcher.resolve()))
     recorded = [sys.executable, "-c", RANK_RECORDER, str(directory),
                 "auto" if ranks > 1 else "0"] + application
     if args.mpi_wrapper:
@@ -156,14 +145,11 @@ def run_regression(args, directory):
     else:
         command = recorded
     environment = {key: value for key, value in os.environ.items()
-                   if not key.startswith(("APEX_", "TAU_"))}
+                   if not key.startswith("APEX_")}
     environment.update({"APEX_OUTPUT_FILE_PATH": str(directory / "apex"),
-                        "COSMICTIGER_PROFILE_DIR": str(directory),
-                        "PROFILEDIR": str(directory / "tau"), "APEX_THROTTLE_TIMERS": "0",
+                        "COSMICTIGER_PROFILE_DIR": str(directory), "APEX_THROTTLE_TIMERS": "0",
                         "HWLOC_COMPONENTS": "-gl", "OMP_NUM_THREADS": "1",
                         "OPENBLAS_NUM_THREADS": "1", "CUDA_VISIBLE_DEVICES": ""})
-    if args.tau_exec:
-        environment["TAU_EXEC"] = str(args.tau_exec.resolve())
     log_path = directory / "simulation.log"
     with log_path.open("w") as log:
         with subprocess.Popen(command, cwd=directory, env=environment, stdout=log,
@@ -213,7 +199,7 @@ def run_regression(args, directory):
         require(rows[-1][1] < END_TIME if args.scenario == "hydroWave" else
                 rows[-1][5] < STEP_COUNT, "simulation reached its end before interruption")
         check_checkpoint(simulation / f"checkpoint.{iteration}", iteration, args.scenario, ranks)
-        check_profiles(directory, ranks, args.launcher is not None, args.profile_disabled)
+        check_profiles(directory, ranks, args.profile_disabled)
     except Exception as exception:
         raise RuntimeError(f"{exception}\nSimulation output:\n{output[-16000:]}") from exception
     recipient = "outer MPI wrapper" if args.mpi_wrapper else f"application rank {target_rank}"
@@ -225,8 +211,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
     parser.add_argument("--scenario", choices=("plummer", "hydroWave"), required=True)
-    parser.add_argument("--launcher", type=Path, help="TAU profiling launcher")
-    parser.add_argument("--tau-exec", type=Path)
     parser.add_argument("--mpi-exec")
     parser.add_argument("--mpi-numproc-flag", default="-n")
     parser.add_argument("--mpi-preflag", action="append", default=[])

@@ -246,7 +246,7 @@ bool kickBuildLayout(Gravity const& gravity, bool massPlane, int residency, int 
                                           kickRoundUp(gravity.cudaKickParticleTile, kWarpSize);
     int multipoleCapacity = multipoleAuto ? multipoleTarget : gravity.cudaKickMultipoleTile;
     while (true) {
-        int const forceBytes = 5 * int(sizeof(float)) * sinkCapacity;
+        int const forceBytes = 4 * int(sizeof(float)) * sinkCapacity;
         int const particleBytes =
             kickRoundUp(particleBytesPerSource * particleCapacity, kKickArenaAlignment);
         int const multipoleBytes = multipoleCapacity * layout.multipoleStride;
@@ -268,7 +268,7 @@ bool kickBuildLayout(Gravity const& gravity, bool massPlane, int residency, int 
             layout.totalBytes = layout.arenaOffset + layout.arenaBytes;
             // Global list storage: one slab region per block at the reserved
             // capacities (whole-bucket force backing only without shared forces).
-            layout.forceBackingCapacity = sinkCapacity > 0 ? 0 : 5 * bucket;
+            layout.forceBackingCapacity = sinkCapacity > 0 ? 0 : 4 * bucket;
             layout.listSlabBytes = 0;
             if (layout.listReserve > 0) {
                 CudaKickListStorage<order> storage;
@@ -518,17 +518,11 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
         gasKick ? &sphParticlesGravityAcceleration(kYDimension, 0) : nullptr;
     data.sphGravityAccelerationZ =
         gasKick ? &sphParticlesGravityAcceleration(kZDimension, 0) : nullptr;
-    data.sphGravityTimestep = gasKick ? sphParticlesGravityTimesteps : nullptr;
-    data.hopkinsStates = gasKick && kparams.htime && getOptions().hydro.method == "mfm" ?
-        sphParticlesHopkinsStates :
-        nullptr;
 #else
     data.catIndex = nullptr;
     data.sphGravityAccelerationX = nullptr;
     data.sphGravityAccelerationY = nullptr;
     data.sphGravityAccelerationZ = nullptr;
-    data.sphGravityTimestep = nullptr;
-    data.hopkinsStates = nullptr;
 #endif
     if (kparams.forceOnly) {
         ALWAYS_ASSERT(output.potential != nullptr && output.acceleration[kXDimension] != nullptr);
@@ -536,7 +530,6 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
         data.gy = output.acceleration[kYDimension];
         data.gz = output.acceleration[kZDimension];
         data.pot = output.potential;
-        data.pairCurvature = output.pairCurvature;
     } else {
         bool const saveAcceleration =
             kparams.saveForce || saveParticleAcceleration(getOptions().analysis);
@@ -546,7 +539,6 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
         data.gy = saveAcceleration ? &particlesGravityAcceleration(kYDimension, 0) : nullptr;
         data.gz = saveAcceleration ? &particlesGravityAcceleration(kZDimension, 0) : nullptr;
         data.pot = savePotential && kparams.doPhi ? &particlesPot(0) : nullptr;
-        data.pairCurvature = nullptr;
     }
     ALWAYS_ASSERT(layout.massPlane == data.sph);
 

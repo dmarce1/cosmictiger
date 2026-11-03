@@ -54,8 +54,8 @@ struct LightconeTreeNode {
 using LightconeVelocityReal = __half;
 constexpr double kLcVelrealRange = 100.0;
 
-inline LightconeVelocityReal float2velreal(float v, float vmax) {
-    return __double2half(v / vmax * 10000.0);
+inline LightconeVelocityReal float2velreal(float velocity, float vmax) {
+    return __double2half(velocity / vmax * 10000.0);
 }
 
 inline float velreal2float(LightconeVelocityReal i, float vmax) {

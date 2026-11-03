@@ -69,9 +69,7 @@ void checkSplitClosure() {
         double const r = std::sqrt(r2);
         double const mass = 0.7;
         std::array<double, 4> shortField{};
-        double curvature = 0.0;
-        accumulateShortPair(
-            d[0], d[1], d[2], mass, parameters, true, kernel, shortField, &curvature);
+        accumulateShortPair(d[0], d[1], d[2], mass, parameters, true, kernel, shortField);
         auto const radial = evaluateGaussianRadial<GaussianComponent::Long, 1>(r2, screening);
         double const longFactor =
             -mass * radial.template coefficient<1, 0>() * radial.inverseRadius();
@@ -97,9 +95,6 @@ void checkSplitClosure() {
         requireP3m(std::abs(shortField[0] + longPotential - expectedPotential) <=
                 1.0e-10 * std::abs(expectedPotential),
             "short plus long potential does not close on the softened pair law");
-        // The timestep coefficient is the full softened pair's m F(r/H)/H^3.
-        requireP3m(std::abs(curvature + expectedFactor) <= 1.0e-12 * std::abs(expectedFactor),
-            "short pair curvature is not the softened pair coefficient");
     }
     // Coincident distinct particles: finite potential, zero force.
     std::array<double, 4> coincident{};
@@ -112,10 +107,8 @@ void checkSplitClosure() {
     // Beyond the cutoff nothing is accumulated.
     auto const truncated = makeShortPairParameters(splitRadius, 0.1, support);
     std::array<double, 4> beyond{};
-    double beyondCurvature = 0.0;
-    accumulateShortPair(0.2, 0.0, 0.0, 1.0, truncated, true, kernel, beyond, &beyondCurvature);
-    requireP3m(beyond[0] == 0.0 && beyond[1] == 0.0 && beyondCurvature == 0.0,
-        "pair beyond the cutoff contributed");
+    accumulateShortPair(0.2, 0.0, 0.0, 1.0, truncated, true, kernel, beyond);
+    requireP3m(beyond[0] == 0.0 && beyond[1] == 0.0, "pair beyond the cutoff contributed");
 }
 
 #if COSMICTIGER_ENABLE_P3M_FMM

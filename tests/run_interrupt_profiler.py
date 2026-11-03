@@ -56,7 +56,7 @@ def run_interrupt_fixture(command, directory, environment, interrupt_signal=sign
 def run_regression(args, directory):
     require(not any(directory.iterdir()), "interrupt regression output directory must be empty")
     environment = {key: value for key, value in os.environ.items()
-                   if not key.startswith(("APEX_", "TAU_"))}
+                   if not key.startswith("APEX_")}
     environment.update({"APEX_OUTPUT_FILE_PATH": str(directory), "APEX_THROTTLE_TIMERS": "0",
                         "HWLOC_COMPONENTS": "-gl", "OMP_NUM_THREADS": "1",
                         "OPENBLAS_NUM_THREADS": "1"})

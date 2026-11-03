@@ -1,6 +1,6 @@
-# Variational density-energy SPH with grad-H terms
+# Variational SPH pressure forces with entropy evolution
 
-All SPH runs use the compatible density-energy pressure operator derived from
+All SPH runs use the density-based variational pressure operator derived from
 the discrete SPH Lagrangian with variable supports ("grad-h" or "grad-H" terms).
 It supplies pressure forces and reversible thermal work, together with
 [Monaghan artificial viscosity](monaghan_sph.md), the support solve, the timestep
@@ -23,14 +23,13 @@ References:
 Remove the obsolete `hydro.pressureOperator` key from older INI files and command
 lines; pressure no longer has a runtime selector.
 
-The variational operator supports constant-\(\gamma\) ideal gas and the
-GADGET-4 equilibrium cooling and star-formation model on CPU and CUDA. Cooling
-gas uses fixed \(\gamma=5/3\) and its actual thermal energy; the multiphase
-closure supplies the thermal source. Both paths support every viscosity model
-(`hydro.viscosityEvolution`) and the Balsara limiter, with or without self-gravity,
-in isolated scenarios and in comoving cosmology, with the traditional and global
-time integrators. No entropy variable is stored: the operator evolves the stored
-internal energy.
+The variational pressure operator supports constant-gamma ideal gas on CPU and
+CUDA, with the traditional and global integrators. The evolved thermal variable
+is now A=P/rho^gamma; pressure work below describes the compatible diagnostic
+energy rate, not an energy kick. See [entropy evolution](sph_entropy_evolution.md)
+for initialization, cosmological scaling, prediction, and validation limits.
+Cooling and star formation are temporarily disabled pending source conversions.
+The historical validation records below concern the former energy integrator.
 
 ## Notation
 
@@ -109,23 +108,22 @@ In code, with \(x=m\) for every gas particle,
 \(Q_{ba}/m_a=(P_b/\rho_b^2)(m-\zeta_b)\); see `src/hydro/sph/sph_hydro_cpu.cpp` and
 `src/hydro/sph/sph_hydro.cu`.
 
-## Composition-dependent equations of state
+## Equation of state
 
 The reversible work uses the first law at fixed composition,
 \(du=P\,d\rho/\rho^2\) (Price 2012, equations 24–25); it does not require a
 constant \(\gamma\). Production uses the fixed volume weight \(x=m\), so chemistry
-does not enter the density sum or its grad-H correction. Both hydro backends use
-the staged ratio \(\chi_i=P_i/(\rho_i u_i)\) to form \(P_i\) in the same directed
-coefficient for force and work. The separately staged acoustic index
-\(\Gamma_{1,i}\) gives \(c_i^2=\Gamma_{1,i}\chi_i u_i\); it need not equal
-\(1+\chi_i\).
+does not enter the density sum or its grad-H correction. Every particle uses the
+single ideal-gas index `hydro.gamma`: \(P_i=(\gamma-1)\rho_i u_i\) and
+\(c_i^2=\gamma(\gamma-1)u_i\). Options require `hydro.gamma=5/3` whenever
+chemistry or star formation is enabled, so no per-particle EOS is stored, staged,
+checkpointed or migrated. The per-particle composition EOS described in the
+October 30 record below has been removed.
 
-Chemistry and SH03 source updates refresh these EOS arrays and rerun the hydro
-force with unchanged geometry. Gas-to-star conversions rebuild the tree,
-densities and corrections before the next force evaluation. Cooling, chemical
-reactions, SH03 equilibrium projection, conversion and wind feedback retain their
-existing source treatment; entropy conservation of reversible frozen-composition
-hydro does not imply entropy conservation through those source operations.
+Chemistry and star formation are currently rejected at option validation, and
+source-specific tests are disabled. Source updates must convert their energy
+changes back to entropy before these paths can be enabled again; that work is
+outside the present entropy-integration change.
 
 ## Supports at bounds
 

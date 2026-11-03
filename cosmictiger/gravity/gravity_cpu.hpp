@@ -88,9 +88,9 @@ void cpuGravityCc(cosmictiger::gravity::cartesian::tracefree::Expansion<float, o
             mValue;
         static thread_local detail::SimdAlignedVector<Vector3<SimdPosition>> yValue;
         detail::gatherSourceMultipoles<order>(treePtrs, mValue, yValue);
-        Vector3<SimdPosition> x{};
+        Vector3<SimdPosition> position{};
         for (int dim = 0; dim < kDimensions; dim++) {
-            x[dim] = simdBroadcast<SimdPosition>(selfPtr->mpos->pos[dim].raw());
+            position[dim] = simdBroadcast<SimdPosition>(selfPtr->mpos->pos[dim].raw());
         }
         cosmictiger::gravity::cartesian::tracefree::Expansion<SimdFloat, order> l0;
         l0 = simdBroadcast<SimdFloat>(0.0f);
@@ -98,8 +98,8 @@ void cpuGravityCc(cosmictiger::gravity::cartesian::tracefree::Expansion<float, o
         for (int j = 0; j < numberOfSources; j++) {
             Vector3<SimdFloat> dx{};
             for (int dim = 0; dim < kDimensions; dim++) {
-                dx[dim] =
-                    fmmPositionDifference(x[dim], yValue[j][dim], dim, geometry, &geometryFlops);
+                dx[dim] = fmmPositionDifference(
+                    position[dim], yValue[j][dim], dim, geometry, &geometryFlops);
             }
             directFlops = cosmictiger::gravity::cartesian::tracefree::M2L(
                 l0, mValue[j], fmmScaleDisplacement(dx), doPhi);
@@ -158,10 +158,10 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::tracefree::Expansion<float, o
                 srcz[i] = srcz[count - 1];
                 masses[i] = 0.0;
             }
-            Vector3<SimdPosition> x{};
+            Vector3<SimdPosition> position{};
             Vector3<SimdPosition> yValue{};
             for (int dim = 0; dim < kDimensions; dim++) {
-                x[dim] = simdBroadcast<SimdPosition>(selfPtr->mpos->pos[dim].raw());
+                position[dim] = simdBroadcast<SimdPosition>(selfPtr->mpos->pos[dim].raw());
             }
             cosmictiger::gravity::cartesian::tracefree::Expansion<SimdFloat, order> l0;
             l0 = simdBroadcast<SimdFloat>(0.0f);
@@ -176,8 +176,8 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::tracefree::Expansion<float, o
                 }
                 Vector3<SimdFloat> dx{};
                 for (int dim = 0; dim < kDimensions; dim++) {
-                    dx[dim] =
-                        fmmPositionDifference(x[dim], yValue[dim], dim, geometry, &geometryFlops);
+                    dx[dim] = fmmPositionDifference(
+                        position[dim], yValue[dim], dim, geometry, &geometryFlops);
                 }
                 cosmictiger::gravity::cartesian::tracefree::Expansion<SimdFloat, order> d;
                 d = simdBroadcast<SimdFloat>(0);
@@ -217,7 +217,7 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
         static thread_local detail::SimdAlignedVector<Vector3<SimdPosition>> yValue;
         detail::gatherSourceMultipoles<order>(treePtrs, mValue, yValue);
         auto const range = selfPtr->particleRange;
-        Vector3<SimdPosition> x{};
+        Vector3<SimdPosition> position{};
         int kernelFlops = 0;
         for (ParticleInteger i = range.first; i < range.second; i++) {
             cosmictiger::gravity::Field<SimdFloat> lValue2{};
@@ -225,13 +225,13 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                 lValue2[component] = simdBroadcast<SimdFloat>(0.0f);
             }
             for (int dim = 0; dim < kDimensions; dim++) {
-                x[dim] = simdBroadcast<SimdPosition>(particlesPos(dim, i).raw());
+                position[dim] = simdBroadcast<SimdPosition>(particlesPos(dim, i).raw());
             }
             for (int j = 0; j < numberOfSources; j++) {
                 Vector3<SimdFloat> dx{};
                 for (int dim = 0; dim < kDimensions; dim++) {
                     dx[dim] = fmmPositionDifference(
-                        x[dim], yValue[j][dim], dim, geometry, &geometryFlops);
+                        position[dim], yValue[j][dim], dim, geometry, &geometryFlops);
                 }
                 kernelFlops = cosmictiger::gravity::cartesian::tracefree::M2P(
                     lValue2, mValue[j], fmmScaleDisplacement(dx), doPhi);

@@ -157,61 +157,36 @@ void checkedPmmmNearField(std::vector<PmmmNearParticle> const& sinks,
 void checkedPmmmNearFieldBatch(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearParticle> const& sources,
     std::vector<PmmmNearSourceRange> const& sourceRanges, bool doPotential,
-    std::vector<std::array<double, 4>>& fields, std::vector<double>& pairCurvature) {
+    std::vector<std::array<double, 4>>& fields) {
     constexpr double kCellWidth = 0.25;
-    double const support = getOptions().gravity.supportRadius;
-    double const inverseRadius = 1 / support;
+    double const inverseRadius = 1 / getOptions().gravity.supportRadius;
     double const inverseCubed = inverseRadius * inverseRadius * inverseRadius;
     FlopCount expected = 0;
     size_t usefulSinks = 0;
     size_t candidatePairs = 0;
     std::vector<std::array<double, 4>> reference(sinks.size());
-    std::vector<double> referenceCurvature(sinks.size());
     for (size_t sink = 0; sink < sinks.size(); ++sink) {
         auto const range = sourceRanges[sink];
         usefulSinks += range.begin != range.end;
         candidatePairs += range.end - range.begin;
-        double ignoredCurvature = 0.0;
         for (size_t source = range.begin; source < range.end; ++source) {
             expected += pmmm::detail::accumulateNearPair<true>(sinks[sink], sources[source],
                 kCellWidth, inverseRadius, inverseCubed, doPotential, selectedGravityKernel(),
-                reference[sink], &ignoredCurvature);
-            auto const& a = sinks[sink];
-            auto const& b = sources[source];
-            if (a.rank != b.rank || a.index != b.index) {
-                // Independent scalar oracle: physical separation and source mass,
-                // with no G factor, signed force cancellation, or self subtraction.
-                double radiusSquared = 0.0;
-                for (int dimension = 0; dimension < kDimensions; ++dimension) {
-                    double const separation =
-                        kCellWidth * (a.offset[dimension] - b.offset[dimension]);
-                    radiusSquared += separation * separation;
-                }
-                referenceCurvature[sink] += b.mass *
-                    radial_kernel::forceFactor(
-                        selectedGravityKernel(), std::sqrt(radiusSquared) / support) *
-                    inverseCubed;
-            }
+                reference[sink]);
         }
     }
     if (candidatePairs != 0) {
         expected += 3;
     }
     resetFlops();
-    pmmmNearFieldBatch(
-        sinks, sources, sourceRanges, kCellWidth, doPotential, fields, &pairCurvature);
+    pmmmNearFieldBatch(sinks, sources, sourceRanges, kCellWidth, doPotential, fields);
     requirePmmm(readFlops() == expected, "PP batch lost or duplicated operation counts");
     bool const useCuda = getOptions().gravity.cuda &&
         pmmm::detail::shouldUsePmmmNearCuda(usefulSinks, candidatePairs);
     FlopCount const expectedGpu = useCuda && expected != 0 ? expected - 3 : 0;
     requirePmmm(getGpuFlops() == expectedGpu, "PP batch arithmetic used the wrong backend");
     requirePmmm(fields.size() == reference.size(), "PP batch retained stale sink outputs");
-    requirePmmm(pairCurvature.size() == sinks.size(), "PP batch retained stale curvature outputs");
     for (size_t sink = 0; sink < sinks.size(); ++sink) {
-        requirePmmm(std::isfinite(pairCurvature[sink]) && pairCurvature[sink] >= 0.0 &&
-                std::abs(pairCurvature[sink] - referenceCurvature[sink]) <
-                    2.0e-11 * std::max(1.0, referenceCurvature[sink]),
-            "PP batch curvature lost mass, self identity, source ranges, or device output");
         for (int component = 0; component < 4; ++component) {
             requirePmmm(std::isfinite(fields[sink][component]) &&
                     std::abs(fields[sink][component] - reference[sink][component]) <
@@ -241,7 +216,6 @@ void checkPmmmNearBatches() {
         setOptions(options);
         bool usedCuda = false;
         std::vector<std::array<double, 4>> fields{{1.0, 2.0, 3.0, 4.0}};
-        std::vector<double> pairCurvature{-1.0};
         for (auto const shape : shapes) {
             std::vector<PmmmNearParticle> sources(shape.sources);
             for (size_t source = 0; source < sources.size(); ++source) {
@@ -273,16 +247,14 @@ void checkPmmmNearBatches() {
                 sourceRanges[0] = {sources.size(), sources.size()};
             }
             for (bool doPotential : {true, false}) {
-                checkedPmmmNearFieldBatch(
-                    sinks, sources, sourceRanges, doPotential, fields, pairCurvature);
+                checkedPmmmNearFieldBatch(sinks, sources, sourceRanges, doPotential, fields);
                 usedCuda |= getGpuFlops() != 0;
             }
             if (!sinks.empty()) {
                 // A pooled buffer containing a previous field must not leak into
                 // a call whose sources are all omitted by its ranges.
                 std::fill(sourceRanges.begin(), sourceRanges.end(), PmmmNearSourceRange{});
-                checkedPmmmNearFieldBatch(
-                    sinks, sources, sourceRanges, true, fields, pairCurvature);
+                checkedPmmmNearFieldBatch(sinks, sources, sourceRanges, true, fields);
             }
         }
         requirePmmm(backend == 0 || usedCuda, "PP batch regression never exercised CUDA");
@@ -476,9 +448,6 @@ void initializePmmmFixture(int fixture, int ownership) {
             if (isGas) {
                 sphParticlesParticleIndex(gas) = local;
                 sphParticlesSupportRadius(gas) = 0.01f;
-                if (getOptions().hydro.method == "mfv") {
-                    sphParticlesMfvMass(gas) = 0.125f + 0.03125f * float(id + 1);
-                }
                 for (int dim = 0; dim < kDimensions; ++dim) {
                     sphParticlesGravityAcceleration(dim, gas) = 0.0f;
                 }
@@ -1160,13 +1129,6 @@ void checkPmmmTraditionalKicks() {
     options.gravity.pmmmNearWidth = 2;
     options.gravity.openingAngle = 0.02;
     options.analysis.saveForce = true;
-#if COSMICTIGER_WITH_SPH
-    if (COSMICTIGER_ENABLE_HOPKINS && kPositionBits == 64 &&
-        options.run.timeIntegrator != "hierarchical" && !options.chemistry.enabled &&
-        !options.starFormation.enabled) {
-        options.hydro.method = "mfv";
-    }
-#endif
     pmmmDestroy();
     setOptions(options);
     preparePmmmFixture(8);
@@ -2109,34 +2071,6 @@ void pmmmTest() {
         }
     }
     pmmmDestroy();
-#if COSMICTIGER_WITH_SPH
-    // Force-only MFV: unequal gas masses must survive ownership exchange and
-    // feed both the far moments and the PP/FMM near sources independently of
-    // the selected evolution integrator.
-    if (COSMICTIGER_ENABLE_HOPKINS && kPositionBits == 64 &&
-        getOptions().run.timeIntegrator == "traditional" && !getOptions().chemistry.enabled &&
-        !getOptions().starFormation.enabled) {
-        auto const savedMassOptions = getOptions();
-        auto massOptions = savedMassOptions;
-        massOptions.hydro.method = "mfv";
-        massOptions.gravity.enabled = false;
-        massOptions.run.hierarchicalGravity = false;
-        massOptions.gravity.meshSize = 8;
-        massOptions.gravity.pmmmNearWidth = 2;
-        setOptions(massOptions);
-        detail::preparePmmmFixture(0);
-        detail::distributePmmmFixture(0);
-        pmmmSolve(true);
-        auto const variableMassReference = detail::gatherPmmmSamples();
-        detail::verifyPmmmReference(variableMassReference);
-        detail::preparePmmmFixture(0, 1);
-        detail::distributePmmmFixture(0);
-        pmmmSolve(true);
-        detail::comparePmmmSamples(variableMassReference, detail::gatherPmmmSamples());
-        pmmmDestroy();
-        setOptions(savedMassOptions);
-    }
-#endif
 #if COSMICTIGER_ENABLE_PMMM_FMM
     detail::checkPmmmFmmNear();
 #endif

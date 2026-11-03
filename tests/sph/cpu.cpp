@@ -132,7 +132,7 @@ public:
         data_.sinkGravityAccelerationY = allocate<float>(sinkSize);
         data_.sinkGravityAccelerationZ = allocate<float>(sinkSize);
         data_.sinkInternalEnergyRate = allocate<float>(sinkSize);
-        data_.sinkThermodynamicStates = allocate<SphThermodynamicState>(sinkSize);
+        data_.sinkSupportRadius = allocate<float>(sinkSize);
         data_.sinkAccelerations = allocate<SphAcceleration>(sinkSize);
         data_.sinkParticleRungs = allocate<char>(particleSize);
         data_.sinkSmoothingConverged = allocate<char>(sinkSize);
@@ -173,8 +173,7 @@ public:
             data_.sinkParticleIndices[sink] = particleIndex(i);
             data_.sourceRungs[source] = data_.sinkParticleRungs[particleIndex(i)] = 1;
             data_.sourceInternalEnergy[source] = 1.0f;
-            data_.sourceSupportRadius[source] = data_.sinkThermodynamicStates[sink].supportRadius =
-                0.2f;
+            data_.sourceSupportRadius[source] = data_.sinkSupportRadius[sink] = 0.2f;
         }
         for (int tree = 0; tree < treeCount; tree++) {
             // Reverse the target order to exercise targetNodeIndices indirection.
@@ -248,15 +247,9 @@ public:
         run(kSphRunPrehydro2);
     }
 
-    void enableCompositionEos() {
-        data_.sourcePressureEnergyRatio = allocate<float>(count_ + sourceOffset_ + 3);
-        data_.sourceAdiabaticIndex = allocate<float>(count_ + sourceOffset_ + 3);
-    }
-
     void publishSupport() {
         for (int i = 0; i < count_; i++) {
-            data_.sourceSupportRadius[sourceIndex(i)] =
-                data_.sinkThermodynamicStates[sinkIndex(i)].supportRadius;
+            data_.sourceSupportRadius[sourceIndex(i)] = data_.sinkSupportRadius[sinkIndex(i)];
         }
     }
 
@@ -291,8 +284,8 @@ public:
         params_.maximumSupportRadius = maximum;
         for (int i = 0; i < count_; i++) {
             data_.sinkSmoothingConverged[sinkIndex(i)] = false;
-            data_.sourceSupportRadius[sourceIndex(i)] =
-                data_.sinkThermodynamicStates[sinkIndex(i)].supportRadius = initial;
+            data_.sourceSupportRadius[sourceIndex(i)] = data_.sinkSupportRadius[sinkIndex(i)] =
+                initial;
         }
         run(kSphRunPrehydro1);
         require(!reduction_->needsAnotherPass,
@@ -302,7 +295,7 @@ public:
                 "smoothing solve did not mark convergence");
             requireClose("smoothing preserves the staged source snapshot",
                 data_.sourceSupportRadius[sourceIndex(i)], initial, 0.0);
-            float const support = data_.sinkThermodynamicStates[sinkIndex(i)].supportRadius;
+            float const support = data_.sinkSupportRadius[sinkIndex(i)];
             require(support >= minimum && support <= maximum,
                 "smoothing solve exceeded configured bounds");
         }
@@ -380,7 +373,7 @@ void initializeViscosityStencil(Fixture& fixture) {
         data.sourcePositionX[source] = 0.5 + double(i / 9 - 1) * 0.0625;
         data.sourcePositionY[source] = 0.5 + double(i / 3 % 3 - 1) * 0.0625;
         data.sourcePositionZ[source] = 0.5 + double(i % 3 - 1) * 0.0625;
-        data.sourceSupportRadius[source] = data.sinkThermodynamicStates[sink].supportRadius = 0.25f;
+        data.sourceSupportRadius[source] = data.sinkSupportRadius[sink] = 0.25f;
         data.sourceDensity[source] = 1.0f;
         data.sourceInternalEnergy[source] = 0.9f;
         data.sinkSmoothingConverged[sink] = true;
@@ -755,7 +748,7 @@ void testCullenDehnenExcludedThermodynamics() {
         int const sink = fixture.sinkIndex(i);
         data.sourcePositionX[source] = i == 0 ? 0.1 : 0.45;
         data.sourcePositionY[source] = data.sourcePositionZ[source] = 0.5;
-        data.sourceSupportRadius[source] = data.sinkThermodynamicStates[sink].supportRadius = 0.1f;
+        data.sourceSupportRadius[source] = data.sinkSupportRadius[sink] = 0.1f;
         data.sourceDensity[source] = 1.0f;
         data.sourceRungs[source] = data.sinkParticleRungs[fixture.particleIndex(i)] =
             i == 0 ? 1 : 0;
@@ -900,8 +893,7 @@ void testUnequalSupports() {
         data.sourcePositionY[i] = data.sourcePositionZ[i] = 0.5;
         data.sinkSmoothingConverged[i] = true;
         data.sourceInternalEnergy[i] = i == 0 ? 0.7f : 1.2f;
-        data.sourceSupportRadius[i] = data.sinkThermodynamicStates[i].supportRadius =
-            i == 0 ? 0.2f : 0.45f;
+        data.sourceSupportRadius[i] = data.sinkSupportRadius[i] = i == 0 ? 0.2f : 0.45f;
         auto& node = data.treeNodes[i];
         for (int dim = 0; dim < kDimensions; dim++) {
             double const position = dim == kXDimension ? data.sourcePositionX[i].toDouble() : 0.5;
@@ -954,8 +946,7 @@ void testSelectedKernel() {
     for (int i = 0; i < 2; i++) {
         data.sourcePositionY[i] = data.sourcePositionZ[i] = 0.5;
         data.sinkSmoothingConverged[i] = true;
-        data.sourceSupportRadius[i] = data.sinkThermodynamicStates[i].supportRadius =
-            i == 0 ? 0.35f : 0.42f;
+        data.sourceSupportRadius[i] = data.sinkSupportRadius[i] = i == 0 ? 0.35f : 0.42f;
         data.sourceInternalEnergy[i] = i == 0 ? 0.7f : 1.2f;
     }
     fixture.params_.viscosityAlpha = fixture.params_.viscosityBeta = 0.0f;
@@ -996,23 +987,22 @@ void testSelectedKernel() {
     fixture.checkConservation();
 }
 
-void testCompositionEos() {
+void testUnequalPairEos() {
     Fixture fixture(2);
     fixture.params_.maximumSupportRadius = 0.49f;
-    fixture.enableCompositionEos();
 
     auto& data = fixture.data_;
+    // A non-5/3 gamma keeps the cosmological work term nonzero.
+    data.adiabaticIndex = 1.4f;
+    double const pressureEnergyRatio = data.adiabaticIndex - 1.0;
     data.sourcePositionX[0] = 0.40;
     data.sourcePositionX[1] = 0.58;
     fixture.params_.viscosityAlpha = fixture.params_.viscosityBeta = 0.0f;
     for (int i = 0; i < 2; ++i) {
         data.sourcePositionY[i] = data.sourcePositionZ[i] = 0.5;
         data.sinkSmoothingConverged[i] = true;
-        data.sourceSupportRadius[i] = data.sinkThermodynamicStates[i].supportRadius =
-            i == 0 ? 0.35f : 0.42f;
+        data.sourceSupportRadius[i] = data.sinkSupportRadius[i] = i == 0 ? 0.35f : 0.42f;
         data.sourceInternalEnergy[i] = i == 0 ? 0.7f : 1.2f;
-        data.sourcePressureEnergyRatio[i] = i == 0 ? 0.4f : 0.3f;
-        data.sourceAdiabaticIndex[i] = i == 0 ? 1.3f : 1.6f;
     }
     fixture.density();
     double const radius = std::abs(distance(data.sourcePositionX[0], data.sourcePositionX[1]));
@@ -1023,32 +1013,31 @@ void testCompositionEos() {
         double const normalizedRadius = radius / support;
         double const derivative = dkernelWDq(normalizedRadius);
         double const radialGradient = derivative / std::pow(support, 4);
-        double const pressureFactor = data.sourcePressureEnergyRatio[i] *
-            data.sourceInternalEnergy[i] / data.sourceDensity[i];
+        double const pressureFactor =
+            pressureEnergyRatio * data.sourceInternalEnergy[i] / data.sourceDensity[i];
         // Equal masses: Omega = -sum(q w') / (3 sum(w)), zeta = m (1 - 1/Omega).
         // These unequal supports give distinct, nonzero corrections and gradients.
         double const omega =
             -normalizedRadius * derivative / (3.0 * (kernelW(0.0) + kernelW(normalizedRadius)));
         double const zeta = data.gasMass * (1.0 - 1.0 / omega);
         require(std::abs(zeta) > 0.1 * data.gasMass,
-            "composition EOS exercises a nonzero grad-H correction");
-        requireClose(
-            "composition-dependent grad-H correction", data.sourceGradHCorrection[i], zeta, 8.0e-6);
+            "unequal pair exercises a nonzero grad-H correction");
+        requireClose("unequal-pair grad-H correction", data.sourceGradHCorrection[i], zeta, 8.0e-6);
         directedGradient[i] = pressureFactor * (data.gasMass - zeta) * radialGradient;
-        double const sound = std::sqrt(data.sourceAdiabaticIndex[i] *
-            data.sourcePressureEnergyRatio[i] * data.sourceInternalEnergy[i]);
+        double const sound =
+            std::sqrt(data.adiabaticIndex * pressureEnergyRatio * data.sourceInternalEnergy[i]);
         inverseCfl = std::max(
             inverseCfl, sound * selectedHydroKernel().supportRadiusPerEffectiveRadius / support);
     }
     double const pressureForce = directedGradient[0] + directedGradient[1];
     fixture.hydro(1);
     for (int i = 0; i < 2; ++i) {
-        requireClose("composition-dependent pressure force",
+        requireClose("unequal-pair pressure force",
             data.sinkAccelerations[i].acceleration[kXDimension],
             i == 0 ? pressureForce : -pressureForce, 8.0e-6);
     }
-    requireClose("composition-dependent sound speed", fixture.reduction_->inverseSoundTimestep,
-        inverseCfl, 3.0e-6);
+    requireClose(
+        "unequal-pair sound speed", fixture.reduction_->inverseSoundTimestep, inverseCfl, 3.0e-6);
     fixture.checkConservation();
 
     data.sourceVelocityX[0] = 0.1f;
@@ -1057,8 +1046,8 @@ void testCompositionEos() {
     fixture.hydro();
     for (int i = 0; i < 2; ++i) {
         double const expectedWork = -velocityDifference * directedGradient[i];
-        requireClose("composition-dependent pressure work", data.sinkInternalEnergyRate[i],
-            expectedWork, 8.0e-6);
+        requireClose(
+            "unequal-pair pressure work", data.sinkInternalEnergyRate[i], expectedWork, 8.0e-6);
     }
     fixture.checkConservation();
     for (int i = 0; i < 2; ++i) {
@@ -1068,12 +1057,11 @@ void testCompositionEos() {
     fixture.params_.expansionRate = 0.09f;
     fixture.hydro();
     for (int i = 0; i < 2; ++i) {
-        double const expected = (2.0 - 3.0 * data.sourcePressureEnergyRatio[i]) *
-            fixture.params_.expansionRate / fixture.params_.scaleFactor *
-            data.sourceInternalEnergy[i];
-        requireClose("composition-dependent cosmological work", data.sinkInternalEnergyRate[i],
-            expected, 2.0e-6);
-        requireClose("composition-dependent cosmological pressure force",
+        double const expected = (2.0 - 3.0 * pressureEnergyRatio) * fixture.params_.expansionRate /
+            fixture.params_.scaleFactor * data.sourceInternalEnergy[i];
+        requireClose(
+            "unequal-pair cosmological work", data.sinkInternalEnergyRate[i], expected, 2.0e-6);
+        requireClose("unequal-pair cosmological pressure force",
             data.sinkAccelerations[i].acceleration[kXDimension],
             (i == 0 ? pressureForce : -pressureForce) / fixture.params_.scaleFactor, 8.0e-6);
     }
@@ -1118,7 +1106,7 @@ void testFixedGravityTimestep() {
         std::max(1, int(std::ceil(std::log2(fixture.params_.baseTimestep / gravityStep))));
     require(fixture.reduction_->maximumGravityRung == expectedGravityRung,
         "gas gravity timestep must use the shared fixed gravity radius");
-    data.sourceSupportRadius[0] = data.sinkThermodynamicStates[0].supportRadius = 0.3f;
+    data.sourceSupportRadius[0] = data.sinkSupportRadius[0] = 0.3f;
     fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.3f;
     fixture.density();
     fixture.hydro(1);
@@ -1254,7 +1242,7 @@ void testDefaultThermalTimestep() {
     for (int i = 0; i < 2; i++) {
         data.sourcePositionY[i] = data.sourcePositionZ[i] = 0.5;
         data.sinkSmoothingConverged[i] = true;
-        data.sourceSupportRadius[i] = data.sinkThermodynamicStates[i].supportRadius = 0.35f;
+        data.sourceSupportRadius[i] = data.sinkSupportRadius[i] = 0.35f;
         data.sourceInternalEnergy[i] = 1.0e-6f;
         data.sourceVelocityX[i] = i == 0 ? 1.0f : -1.0f;
     }
@@ -1291,7 +1279,7 @@ void testColdShockTimestep() {
     for (int i = 0; i < 2; ++i) {
         data.sourcePositionY[i] = data.sourcePositionZ[i] = 0.5;
         data.sinkSmoothingConverged[i] = true;
-        data.sourceSupportRadius[i] = data.sinkThermodynamicStates[i].supportRadius = 0.35f;
+        data.sourceSupportRadius[i] = data.sinkSupportRadius[i] = 0.35f;
         data.sourceInternalEnergy[i] = 1.0e-20f;
         data.sourceVelocityX[i] = i == 0 ? 1.0f : -1.0f;
     }
@@ -1324,7 +1312,7 @@ void testPeriodicTailsAndOffsets() {
             data.sourceVelocityX[source] = 0.01f * std::sin(float(i));
             data.sourceVelocityY[source] = 0.02f * std::cos(float(i));
             data.sourceInternalEnergy[source] = 0.8f + 0.03f * (i % 7);
-            data.sourceSupportRadius[source] = data.sinkThermodynamicStates[sink].supportRadius =
+            data.sourceSupportRadius[source] = data.sinkSupportRadius[sink] =
                 0.14f + 0.01f * (i % 3);
             data.sinkSmoothingConverged[sink] = true;
         }
@@ -1468,7 +1456,7 @@ void testSupportRefresh() {
     data.sourcePositionX[0] = data.sourcePositionY[0] = data.sourcePositionZ[0] = 0.5;
     active.params_.minimumSupportRadius = 0.1f;
     active.params_.maximumSupportRadius = 0.3f;
-    data.sourceSupportRadius[0] = data.sinkThermodynamicStates[0].supportRadius = 0.1f;
+    data.sourceSupportRadius[0] = data.sinkSupportRadius[0] = 0.1f;
     for (int dim = 0; dim < kDimensions; dim++) {
         data.treeNodes[0].outerBox.begin[dim] = 0.39;
         data.treeNodes[0].outerBox.end[dim] = 0.61;
@@ -1476,8 +1464,8 @@ void testSupportRefresh() {
     auto result = sphCpuPrehydro1(active.params_, data, 0);
     require(result.needsAnotherPass && !data.sinkSmoothingConverged[0],
         "active smoothing requests a neighbor refresh when support grows beyond the search box");
-    require(data.sinkThermodynamicStates[0].supportRadius > 0.1f,
-        "retry retains the enlarged support for the next search");
+    require(
+        data.sinkSupportRadius[0] > 0.1f, "retry retains the enlarged support for the next search");
     requireClose(
         "retry preserves the source support snapshot", data.sourceSupportRadius[0], 0.1f, 0.0);
     for (int dim = 0; dim < kDimensions; dim++) {
@@ -1487,8 +1475,8 @@ void testSupportRefresh() {
     result = sphCpuPrehydro1(active.params_, data, 0);
     require(!result.needsAnotherPass && data.sinkSmoothingConverged[0],
         "active smoothing converges after neighbor refresh");
-    requireClose("sparse gas reaches the configured support ceiling",
-        data.sinkThermodynamicStates[0].supportRadius, 0.3f, 1.0e-7);
+    requireClose("sparse gas reaches the configured support ceiling", data.sinkSupportRadius[0],
+        0.3f, 1.0e-7);
 
     Fixture semiactive(2);
     auto& semiData = semiactive.data_;
@@ -1498,7 +1486,7 @@ void testSupportRefresh() {
     for (int i = 0; i < 2; i++) {
         semiData.sourcePositionX[i] = 0.5 + 0.05 * i;
         semiData.sourcePositionY[i] = semiData.sourcePositionZ[i] = 0.55;
-        semiData.sourceSupportRadius[i] = semiData.sinkThermodynamicStates[i].supportRadius = 0.1f;
+        semiData.sourceSupportRadius[i] = semiData.sinkSupportRadius[i] = 0.1f;
         semiData.sourceRungs[i] = semiData.sinkParticleRungs[semiactive.particleIndex(i)] =
             i == 0 ? 4 : 1;
         semiData.sinkSmoothingConverged[i] = i == 0;
@@ -1533,7 +1521,7 @@ void testRungPropagation() {
         int const sink = fixture.sinkIndex(i);
         data.sourcePositionX[source] = 0.05 + 0.1 * i;
         data.sourcePositionY[source] = data.sourcePositionZ[source] = 0.5;
-        data.sourceSupportRadius[source] = data.sinkThermodynamicStates[sink].supportRadius = 0.11f;
+        data.sourceSupportRadius[source] = data.sinkSupportRadius[sink] = 0.11f;
         data.sourceRungs[source] = data.sinkParticleRungs[fixture.particleIndex(i)] = previous[i];
     }
     int changedPasses = 0;
@@ -2018,7 +2006,6 @@ class GlobalStepper {
                 velocities[dim][source] = velocity_[i][dim];
             }
             data.sourceInternalEnergy[source] = energy_[i];
-            data.sinkThermodynamicStates[fixture_.sinkIndex(i)].internalEnergy = energy_[i];
         }
     }
 
@@ -2093,9 +2080,10 @@ public:
         }
     }
 
-    // As sphParticlesApplyUpdates: the closing half-kick is first predicted with the old
-    // rates, the velocity-dependent rates are evaluated at the predicted state, and the
-    // corrector replaces the predicted kick.
+    // The closing half-kick is first predicted with the old rates, the velocity-dependent
+    // rates are evaluated at the predicted state, and the corrector replaces the predicted
+    // kick. sphParticlesApplyUpdates reaches the same state by staging the prediction
+    // instead of applying and undoing it.
     void step(double interval) {
         double const powerBefore = expansionPower();
         kick(0.5 * interval);
@@ -2346,7 +2334,7 @@ void testVariationalStaleCorrections() {
         fixture.data_.sourcePositionY[source] = positions[i][1];
         fixture.data_.sourcePositionZ[source] = positions[i][2];
         fixture.data_.sourceSupportRadius[source] =
-            fixture.data_.sinkThermodynamicStates[fixture.sinkIndex(i)].supportRadius = 0.1f;
+            fixture.data_.sinkSupportRadius[fixture.sinkIndex(i)] = 0.1f;
         fixture.data_.sinkSmoothingConverged[fixture.sinkIndex(i)] = true;
     }
     fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.1f;
@@ -2450,8 +2438,7 @@ TEST_F(SphCpuTest, BalsaraVelocityGradients) {
                 0.25f - flow.compression * x - flow.rotation * y + flow.shear * y;
             data.sourceVelocityY[source] = -0.5f - flow.compression * y + flow.rotation * x;
             data.sourceVelocityZ[source] = 0.125f - flow.compression * z;
-            data.sourceSupportRadius[source] = data.sinkThermodynamicStates[sink].supportRadius =
-                0.25f;
+            data.sourceSupportRadius[source] = data.sinkSupportRadius[sink] = 0.25f;
             data.sinkSmoothingConverged[sink] = true;
             data.sourceBalsaraFactor[source] = -7.0f;
         }
@@ -2562,10 +2549,11 @@ TEST_F(SphCpuTest, DensityAndRungsCountPaddedPackets) {
     // reductions, and eight scalar operations for its residual and correction.
     // Each two-span density/derivative pair adds 40 table narrowing conversions
     // per packet (44 double operations including its four width subtractions).
+    // The single target node also computes gamma - 1 once.
     detail::submittedSphFlops = {};
     auto const density = fixture.run(kSphRunPrehydro2);
-    EXPECT_EQ(density.floatingPointOperations, double(fixture.count_) * (103 + 173 * width));
-    EXPECT_EQ(detail::submittedSphFlops.singlePrecision, fixture.count_ * (9 + 173 * width));
+    EXPECT_EQ(density.floatingPointOperations, double(fixture.count_) * (103 + 173 * width) + 1);
+    EXPECT_EQ(detail::submittedSphFlops.singlePrecision, fixture.count_ * (9 + 173 * width) + 1);
     EXPECT_EQ(detail::submittedSphFlops.doublePrecision, 94 * fixture.count_);
     EXPECT_EQ(detail::submittedSphFlops.unclassified, 0);
 }
@@ -2591,58 +2579,6 @@ TEST_F(SphCpuTest, DisabledGravityTimestepDiagnosticsAreExcluded) {
     EXPECT_EQ(withGravity.maximumGravityRung, 0);
     EXPECT_EQ(withoutGravity.maximumGravityRung, 0);
 #endif
-}
-
-TEST_F(SphCpuTest, HierarchicalGravityIsExcludedFromHydroButRetainedInTimestep) {
-    detail::Fixture fixture(2);
-    fixture.params_.globalTimestep = true;
-    fixture.params_.minimumRung = 0;
-    fixture.params_.phase = 1;
-    fixture.data_.selfGravityEnabled = true;
-    for (int particle = 0; particle < fixture.count_; ++particle) {
-        fixture.data_.sourceDensity[fixture.sourceIndex(particle)] = 1.0f;
-        fixture.data_.sinkGravityAccelerationX[fixture.sinkIndex(particle)] = 20.0f;
-    }
-    auto const combined = fixture.run(kSphRunHydro);
-    float const combinedAcceleration =
-        fixture.data_.sinkAccelerations[fixture.sinkIndex(0)].acceleration[kXDimension];
-    fixture.params_.excludeSelfGravity = true;
-    auto const separated = fixture.run(kSphRunHydro);
-    EXPECT_DOUBLE_EQ(separated.minimumTimestep, combined.minimumTimestep);
-    EXPECT_FLOAT_EQ(separated.inverseAccelerationTimestep, combined.inverseAccelerationTimestep);
-    EXPECT_FLOAT_EQ(
-        fixture.data_.sinkAccelerations[fixture.sinkIndex(0)].acceleration[kXDimension], 0.0f);
-#if COSMICTIGER_WITH_GRAVITY
-    EXPECT_FLOAT_EQ(combinedAcceleration, 20.0f);
-#else
-    EXPECT_FLOAT_EQ(combinedAcceleration, 0.0f);
-#endif
-}
-
-TEST_F(SphCpuTest, GravityTimestepSurvivesDeferredGasOpening) {
-    detail::Fixture fixture(2, 1, 3, 5, 7);
-    fixture.params_.minimumRung = 0;
-    fixture.params_.phase = 1;
-    fixture.params_.globalTimestep = true;
-    fixture.params_.excludeSelfGravity = true;
-    fixture.data_.selfGravityEnabled = true;
-    std::vector<float> bounds(fixture.count_ + fixture.sinkOffset_ + 3, 0.0f);
-    fixture.data_.sinkGravityTimestep = bounds.data();
-    for (int particle = 0; particle < fixture.count_; ++particle) {
-        fixture.data_.sourceDensity[fixture.sourceIndex(particle)] = 1.0f;
-    }
-    auto const uncapped = fixture.run(kSphRunHydro);
-    float const bound = float(uncapped.minimumTimestep / 16.0);
-    bounds[fixture.sinkIndex(0)] = bound;
-    auto const capped = fixture.run(kSphRunHydro);
-#if COSMICTIGER_WITH_GRAVITY
-    EXPECT_FLOAT_EQ(capped.minimumTimestep, bound);
-#else
-    EXPECT_DOUBLE_EQ(capped.minimumTimestep, uncapped.minimumTimestep);
-#endif
-    EXPECT_FLOAT_EQ(fixture.data_.sinkAccelerations[fixture.sinkIndex(0)].acceleration[0], 0.0f);
-    fixture.data_.selfGravityEnabled = false;
-    EXPECT_DOUBLE_EQ(fixture.run(kSphRunHydro).minimumTimestep, uncapped.minimumTimestep);
 }
 
 TEST_F(SphCpuTest, DensityPredictionUsesPeculiarMotionAndGradHWithoutViscosity) {
@@ -2681,7 +2617,7 @@ TEST_F(SphCpuTest, DensityPredictionUsesPeculiarMotionAndGradHWithoutViscosity) 
                     for (int particle = 0; particle < fixture.count_; ++particle) {
                         int const source = fixture.sourceIndex(particle);
                         int const sink = fixture.sinkIndex(particle);
-                        double const support = data.sinkThermodynamicStates[sink].supportRadius;
+                        double const support = data.sinkSupportRadius[sink];
                         double density = 0.0;
                         double numberSum = 0.0;
                         double numberMoment = 0.0;
@@ -2777,8 +2713,8 @@ TEST_F(SphCpuTest, DefaultThermalTimestep) {
     detail::testDefaultThermalTimestep();
 }
 
-TEST_F(SphCpuTest, CompositionEos) {
-    detail::testCompositionEos();
+TEST_F(SphCpuTest, UnequalPairEos) {
+    detail::testUnequalPairEos();
 }
 
 TEST_F(SphCpuTest, SelectedKernels) {
@@ -2862,7 +2798,7 @@ TEST_F(SphCpuTest, ColdShockThermalTimestep) {
     for (int i = 0; i < 2; ++i) {
         data.sourcePositionY[i] = data.sourcePositionZ[i] = 0.5;
         data.sinkSmoothingConverged[i] = true;
-        data.sourceSupportRadius[i] = data.sinkThermodynamicStates[i].supportRadius = 0.35f;
+        data.sourceSupportRadius[i] = data.sinkSupportRadius[i] = 0.35f;
         data.sourceInternalEnergy[i] = 1.0e-20f;
         data.sourceVelocityX[i] = i == 0 ? 1.0f : -1.0f;
     }
@@ -2883,4 +2819,62 @@ TEST_F(SphCpuTest, ColdShockThermalTimestep) {
     double const warmStep = fixture.reduction_->minimumTimestep;
     ASSERT_LE(warmStep, fixture.params_.maximumTimestep);
     EXPECT_NEAR(warmStep, coldStep, 1.0e-3 * coldStep);
+}
+
+TEST_F(SphCpuTest, EntropyThermodynamics) {
+    for (double gamma : {5.0 / 3.0, 1.4}) {
+        double const entropy = 0.7;
+        for (double scale : {0.1, 0.5, 1.0}) {
+            double const density = 2.3;
+            double const energy = sph_entropy::storedEnergy(entropy, density, gamma, scale);
+            EXPECT_NEAR(
+                sph_entropy::fromStoredEnergy(energy, density, gamma, scale), entropy, 1.e-12);
+            double const physicalDensity = density / (scale * scale * scale);
+            double const pressure = (gamma - 1) * physicalDensity * energy / (scale * scale);
+            EXPECT_NEAR(pressure / std::pow(physicalDensity, gamma), entropy, 1.e-12);
+            double const compressed = sph_entropy::storedEnergy(entropy, 8 * density, gamma, scale);
+            EXPECT_NEAR(compressed / energy, std::pow(8.0, gamma - 1), 1.e-12);
+        }
+    }
+}
+
+TEST_F(SphCpuTest, EntropyProduction) {
+    detail::Fixture fixture(2);
+    auto& data = fixture.data_;
+    std::array<float, 2> rates{};
+    data.sinkEntropyRate = rates.data();
+    data.sourcePositionX[0] = 0.4;
+    data.sourcePositionX[1] = 0.6;
+    for (int i = 0; i < 2; ++i) {
+        data.sourcePositionY[i] = data.sourcePositionZ[i] = 0.5;
+        data.sinkSmoothingConverged[i] = true;
+        data.sourceSupportRadius[i] = data.sinkSupportRadius[i] = 0.35f;
+        data.sourceInternalEnergy[i] = 1.0f;
+        data.sourceVelocityX[i] = i == 0 ? 1.0f : -1.0f;
+    }
+    fixture.params_.scaleFactor = 0.4f;
+    fixture.params_.expansionRate = 0.2f;
+    data.adiabaticIndex = 1.4f;
+    fixture.params_.viscosityAlpha = fixture.params_.viscosityBeta = 0.0f;
+    fixture.density();
+    fixture.hydro();
+    std::array<float, 2> reversible{};
+    for (int i = 0; i < 2; ++i) {
+        EXPECT_EQ(rates[i], 0.0f);    // compression and cosmological expansion conserve A
+        reversible[i] = data.sinkInternalEnergyRate[i];
+        EXPECT_NE(reversible[i], 0.0f);
+    }
+    fixture.params_.viscosityAlpha = 1.0f;
+    fixture.params_.viscosityBeta = 2.0f;
+    fixture.hydro();
+    for (int i = 0; i < 2; ++i) {
+        EXPECT_GT(rates[i], 0.0f);
+        double const heating = sph_entropy::storedEnergy(
+            rates[i], data.sourceDensity[i], data.adiabaticIndex, fixture.params_.scaleFactor);
+        EXPECT_NEAR(heating, data.sinkInternalEnergyRate[i] - reversible[i], 1.e-5 * heating);
+    }
+    // Production does not allocate the optional total-energy-rate diagnostic.
+    data.sinkInternalEnergyRate = nullptr;
+    sphCpuHydro(fixture.params_, data, 0);
+    EXPECT_GT(rates[0], 0.0f);
 }

@@ -53,12 +53,12 @@ std::vector<Particle> decode(CompressedParticles const& archive) {
     require(std::isfinite(archive.xmax) && std::isfinite(archive.vmax),
         "Archive scales must be finite");
     for (auto const& block : archive.blocks) {
-        size_t const count = block.x[0].size();
+        size_t const count = block.positions[0].size();
         require(count > 0 && count <= 64, "Compressed blocks must contain 1 to 64 particles");
         require(
             std::isfinite(block.xmax) && std::isfinite(block.vmax), "Block scales must be finite");
         for (int dim = 0; dim < kDimensions; dim++) {
-            require(block.x[dim].size() == count && block.v[dim].size() == count,
+            require(block.positions[dim].size() == count && block.velocities[dim].size() == count,
                 "Compressed block dimensions must have equal lengths");
             require(std::isfinite(archive.vc[dim]) && std::isfinite(block.vc[dim]),
                 "Compressed velocity centers must be finite");
@@ -66,8 +66,8 @@ std::vector<Particle> decode(CompressedParticles const& archive) {
         for (size_t i = 0; i < count; i++) {
             Particle particle;
             for (int dim = 0; dim < kDimensions; dim++) {
-                double const x = (block.x[dim][i] + 0.5) / (1 << 15) - 1.0;
-                double const v = (block.v[dim][i] + 0.5) / (1 << 15) - 1.0;
+                double const x = (block.positions[dim][i] + 0.5) / (1 << 15) - 1.0;
+                double const v = (block.velocities[dim][i] + 0.5) / (1 << 15) - 1.0;
                 particle[dim] = (x * block.xmax + block.xc[dim].toDouble()) * archive.xmax +
                     archive.xc[dim].toDouble();
                 particle[kDimensions + dim] =

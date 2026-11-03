@@ -20,10 +20,9 @@ def gas_state(checkpoint, expected_count=512, ranks=1):
         if not state.has_cooling or state.has_stars:
             raise RuntimeError("Expected equilibrium-cooling SPH state without star formation")
         gas_count += state.gas_count
-        for ne, pressure_ratio, gamma in state.cooling:
-            if not (math.isfinite(ne) and ne >= 0 and abs(pressure_ratio - 2 / 3) < 1e-6 and
-                    abs(gamma - 5 / 3) < 1e-6):
-                raise RuntimeError(f"Invalid equilibrium-cooling record: {(ne, pressure_ratio, gamma)}")
+        for (ne,) in state.cooling:
+            if not (math.isfinite(ne) and ne >= 0):
+                raise RuntimeError(f"Invalid equilibrium-cooling electron fraction: {ne}")
         payloads.append(data[state.gas_start:state.gas_end])
     if gas_count != expected_count:
         raise RuntimeError(f"Unexpected total gas count: {gas_count}")
@@ -46,7 +45,7 @@ def main():
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
     parser.add_argument("--time-integrator", default="traditional",
-                        choices=("traditional", "global", "hierarchical"))
+                        choices=("traditional", "global"))
     parser.add_argument("--cuda", action="store_true")
     parser.add_argument("--mpi-exec")
     parser.add_argument("--mpi-numproc-flag", default="-n")

@@ -6,7 +6,7 @@
 namespace pmmm::detail {
 
 void consumeField(ParticleInteger index, std::array<double, 4> const& field, KickReturn& result,
-    FlopCount& doubleFlops, FlopCounts& kickFlops, double pairCurvature) {
+    FlopCount& doubleFlops, FlopCounts& kickFlops) {
     Vector3<float> acceleration;
     double const gm = getOptions().gravity.gm;
     for (int component = 0; component < 4; ++component) {
@@ -22,11 +22,10 @@ void consumeField(ParticleInteger index, std::array<double, 4> const& field, Kic
     // Each retained component is scaled in double and narrowed to float.
     doubleFlops += 2 * (kDimensions + (state.request.doPotential ? 1 : 0));
     if (state.request.applyKick) {
-        result += particleMeshApplyField(index, acceleration, potential, state.request.parameters,
-            nullptr, &kickFlops, float(pairCurvature));
+        result += particleMeshApplyField(
+            index, acceleration, potential, state.request.parameters, nullptr, &kickFlops);
     } else {
         state.acceleration[index] = acceleration;
-        state.pairCurvature[index] = float(pairCurvature);
         if (!state.potential.empty()) {
             state.potential[index] = potential;
         }
@@ -78,9 +77,7 @@ void evaluateParticles(bool doPotential) {
                 return;
             }
             std::vector<std::array<double, 4>> nearFields;
-            std::vector<double> pairCurvature;
-            pmmmNearFieldBatch(
-                sinks, batchSources, sourceRanges, h, doPotential, nearFields, &pairCurvature);
+            pmmmNearFieldBatch(sinks, batchSources, sourceRanges, h, doPotential, nearFields);
             KickReturn result;
             for (size_t cellIndex = 0; cellIndex < cells.size(); ++cellIndex) {
                 auto const& cell = cells[cellIndex];
@@ -95,7 +92,7 @@ void evaluateParticles(bool doPotential) {
                         field[component] += nearFields[sink][component];
                     }
                     flops += 4;
-                    consumeField(index, field, result, flops, kickFlops, pairCurvature[sink]);
+                    consumeField(index, field, result, flops, kickFlops);
                 }
             }
             addCpuFlops(flops + kickFlops.doublePrecision, FlopPrecision::Double);
@@ -120,8 +117,7 @@ void evaluateParticles(bool doPotential) {
             auto const& cell = state.cells[cellIndex];
             auto active = [&](ParticleInteger index) {
                 return !state.request.applyKick ||
-                    particlesRung(index) >= state.request.parameters.minRung ||
-                    (state.request.parameters.refreshGasForces && particlesType(index) == kSphType);
+                    particlesRung(index) >= state.request.parameters.minRung;
             };
             bool hasActive = false;
             for (ParticleInteger i = cell.begin; i < cell.end; ++i) {

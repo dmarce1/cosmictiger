@@ -342,10 +342,9 @@ cells remain outstanding. `storedAccelerationParticles` and
 `storedPotentialParticles` expose retained solve-result arrays: both are zero
 for the ordinary streamed kick path.
 
-PMMM supports SPH with traditional, global, and hierarchical integration when
-`COSMICTIGER_ENABLE_SPH=ON` and the selected integrator is compiled.
-[Hierarchical SPH](hierarchical_sph.md) supports cooling and star formation as
-well as adiabatic gas. Set `hydro.enabled=false` explicitly for gravity-only
+PMMM supports SPH with traditional and global integration when
+`COSMICTIGER_ENABLE_SPH=ON` and the selected integrator is compiled; hierarchical
+integration is collisionless only. Set `hydro.enabled=false` explicitly for gravity-only
 cosmological PMMM runs, whose scenario otherwise enables SPH when compiled.
 Particle chemistry additionally requires `COSMICTIGER_ENABLE_CHEMISTRY=ON`
 (the default). Setting it to `OFF` retains SPH without particle chemistry;
@@ -410,7 +409,7 @@ PMMM's `traditional` path uses individual block timesteps, as FMM does. Every
 substep rebuilds the mesh source field from all particles, including inactive
 particles. Only sinks whose rung is active receive a gravity kick or a new rung;
 inactive sinks retain their velocities and rungs. The gas acceleration is passed
-to SPH or Hopkins MFM/MFV for its own hydrodynamic update. `pmmmKick` consumes each
+to SPH for its own hydrodynamic update. `pmmmKick` consumes each
 completed near-plus-far field directly; no common rung is imposed.
 
 The `global` path advances every particle on one continuous timestep: the
@@ -436,8 +435,7 @@ packets, and near FMM all use that same selection; an inactive slow particle
 does not enter a fast stage's force. Ascending/descending signed kicks and
 per-rung drifts are retained. In all integrators, the gravity timestep criterion uses
 the selected compact kernel's effective radius and the complete near-plus-far
-acceleration, together with the direct-pair bound of `docs/kernels.md`
-accumulated by the near field (PP or near FMM) for each sink.
+acceleration.
 
 Each hierarchical stage scales the mesh volume with its active particle fraction.
 With `N0 = gravity.meshSize`, `C = gravity.pmmmCoarseMeshSize`, and global

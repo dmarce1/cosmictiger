@@ -36,6 +36,7 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=None
     header = checkpoint.Header()
     header.magic, header.version, header.flags = 0x4354535048303031, 3, flags
     header.particles_per_species = 2
+    header.physics[2] = 5.0 / 3.0
     output = bytearray(bytes(header))
     offsets = {}
 
@@ -76,22 +77,24 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=None
         put('2b', 0, 1)
         put(2 * integer, -1, 0)
         offsets['gas'] = len(output)
-        version = (90 if stars else 80 if cooling else 2)
+        version = 30000 + (110 if stars else 100 if cooling else 2)
         version += 0 if viscosity is None else 2 + 2 * viscosity
-        put('7I', 0x43545350, version, integer_bytes, 8, 12, 3, 4)
+        put('7I', 0x43545350, version, integer_bytes, 4, 12, 3, 4)
         put(integer, 1)
-        put('2f', 100., .1)
+        put('I', 0)  # initial-energy state, not yet converted to entropy
+        put('d', 1.0)  # thermal scale factor
+        put('2f', 100., .1)  # initial thermal array, then support radius array
         put('3f', .1, .2, .3)
         offsets['gas_mapping'] = len(output)
         put(integer, 1)
-        put('3f', .4, .5, .6)
+        put('2f', .5, .6)  # internal-energy rate, density
         put('2B', 0, 1)
-        put('6f', .7, .8, .9, 1., 1.1, 1.2)
+        put('3f', .7, .8, .9)  # gravity acceleration
         if viscosity is not None:
             put('2f' if viscosity == 0 else '3f',
                 *([.2, .3] if viscosity == 0 else [.2, .3, .4]))
         if cooling:
-            put('3f', 1., 2. / 3., 5. / 3.)
+            put('f', 1.)  # electron fraction
     if stars:
         offsets['metadata'] = len(output)
         put('2Q', 0x4354534650415254, 2)

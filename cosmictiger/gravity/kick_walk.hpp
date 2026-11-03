@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <memory>
 
 #include <cosmictiger/core/containers.hpp>
@@ -15,9 +16,7 @@
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_context.hpp>
-#include <cosmictiger/gravity/timestep.hpp>
 #include <cosmictiger/gravity/tree.hpp>
-#include <cosmictiger/hydro/hopkins/gravity_impulse.hpp>
 #include <cosmictiger/math/position.hpp>
 
 // Shared order-templated traversal and direct interactions. KickContext supplies
@@ -267,7 +266,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
         flops += FlopCount(numberOfSelfParticles) * 2;
         for (ParticleInteger i = 0; i < numberOfSelfParticles; i++) {
             forces.gx[i] = forces.gy[i] = forces.gz[i] = 0.0f;
-            forces.pairCurvature[i] = 0.0f;
             ParticleInteger const particleIndex = selfPtr->particleRange.first + i;
             forces.phi[i] = particlesMass(particleIndex) * selfPhi() * inverseSupportRadius;
         }
@@ -421,12 +419,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
         detail::kickReleaseLists(std::move(workspace));
         auto const rng = selfPtr->particleRange;
         for (ParticleInteger i = rng.first; i < rng.second; i++) {
-            bool refreshGas = false;
-#if COSMICTIGER_WITH_SPH
-            refreshGas = params.refreshGasForces && getOptions().hydro.enabled &&
-                particlesType(i) == kSphType;
-#endif
-            if (params.forceOnly || refreshGas || particlesRung(i) >= params.minRung) {
+            if (params.forceOnly || particlesRung(i) >= params.minRung) {
                 ParticleInteger const j = i - rng.first;
                 Vector3<float> dx;
                 for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
@@ -452,9 +445,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     output.acceleration[kXDimension][outputIndex] = forces.gx[j];
                     output.acceleration[kYDimension][outputIndex] = forces.gy[j];
                     output.acceleration[kZDimension][outputIndex] = forces.gz[j];
-                    if (output.pairCurvature != nullptr) {
-                        output.pairCurvature[outputIndex] = forces.pairCurvature[j];
-                    }
                     flops += cosmictiger::gravity::cartesian::tracefree::detail::L2P<kLocalDegree,
                                  true>::kFlops_ +
                         11;
@@ -464,11 +454,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 forces.gy[j] *= gm;
                 forces.gz[j] *= gm;
                 forces.phi[j] *= gm;
-                // Local direct-pair bound (gravity/timestep.hpp); no bound without
-                // curvature. It joins every timestep selection below.
-                float const pairTimestep =
-                    gravity::pairTimestep(params.a, gm, eta, forces.pairCurvature[j]);
-                flops += forces.pairCurvature[j] > 0.0f && gm > 0.0f ? 5 : 0;
                 particlesCaptureGravitySample(i, forces.gx[j], forces.gy[j], forces.gz[j]);
                 if (saveAcceleration) {
                     particlesGravityAcceleration(kXDimension, i) = forces.gx[j];
@@ -478,18 +463,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 if (savePotential && params.doPhi) {
                     particlesPot(i) = forces.phi[j];
                 }
-#if COSMICTIGER_WITH_SPH
-                if (refreshGas && particlesRung(i) < params.minRung) {
-                    ParticleInteger const gasIndex = particlesCatIndex(i);
-                    sphParticlesGravityAcceleration(kXDimension, gasIndex) = forces.gx[j];
-                    sphParticlesGravityAcceleration(kYDimension, gasIndex) = forces.gy[j];
-                    sphParticlesGravityAcceleration(kZDimension, gasIndex) = forces.gz[j];
-                    flops += cosmictiger::gravity::cartesian::tracefree::detail::L2P<kLocalDegree,
-                                 true>::kFlops_ +
-                        15;
-                    continue;
-                }
-#endif
                 auto& vx = particlesVel(kXDimension, i);
                 auto& vy = particlesVel(kYDimension, i);
                 auto& vz = particlesVel(kZDimension, i);
@@ -497,7 +470,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 if (params.globalTimestep) {
                     float const gx = forces.gx[j], gy = forces.gy[j], gz = forces.gz[j];
                     float const accelerationSquared = sqr(gx, gy, gz) + 1e-35f;
-                    double const timestep = std::min(double(std::min(params.maxDt, pairTimestep)),
+                    double const timestep = std::min(double(params.maxDt),
                         double(eta * sqrtf(params.a) *
                             sqrtf(gravityEffectiveRadius / sqrtf(accelerationSquared))));
                     ALWAYS_ASSERT(std::isfinite(timestep) && timestep > 0.0);
@@ -525,12 +498,13 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                         vz = std::fma(gz, halfStep, vz);
                         doubleFlops +=
                             18;    // Signed double half-step and three mixed-precision FMAs.
+                        // Hydro owns the gas momentum and sums the gas energies in its kick.
+                        kr.kin += 0.5 * mass * sqr(vx, vy, vz);
+                        kr.xmom += mass * vx;
+                        kr.ymom += mass * vy;
+                        kr.zmom += mass * vz;
+                        kr.nmom += mass * sqrt(sqr(vx, vy, vz));
                     }
-                    kr.kin += 0.5 * mass * sqr(vx, vy, vz);
-                    kr.xmom += mass * vx;
-                    kr.ymom += mass * vy;
-                    kr.zmom += mass * vz;
-                    kr.nmom += mass * sqrt(sqr(vx, vy, vz));
                     kr.pot += 0.5 * mass * forces.phi[j];
                     kr.dkin += 0.5 * mass * sqr(vx, vy, vz) - oldKinetic;
                     if (!gas) {
@@ -539,53 +513,13 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     flops += 12;
                     doubleFlops += 2;    // Float timestep and maximum widened for selection.
                 } else if (params.htime) {
-#if COSMICTIGER_WITH_SPH
-                    bool const gas = getOptions().hydro.enabled && particlesType(i) == kSphType;
-                    bool const mfm = gas && getOptions().hydro.method == "mfm";
-                    if (gas && params.top && (params.deferGasOpening || mfm)) {
-                        ALWAYS_ASSERT(params.top);
-                        ParticleInteger const gasIndex = particlesCatIndex(i);
-                        sphParticlesGravityAcceleration(kXDimension, gasIndex) = forces.gx[j];
-                        sphParticlesGravityAcceleration(kYDimension, gasIndex) = forces.gy[j];
-                        sphParticlesGravityAcceleration(kZDimension, gasIndex) = forces.gz[j];
-                        float const accelerationSquared =
-                            sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;
-                        sphParticlesGravityTimesteps[gasIndex] =
-                            std::min(std::min(params.maxDt, pairTimestep),
-                                eta * sqrtf(params.a) *
-                                    sqrtf(gravityEffectiveRadius / sqrtf(accelerationSquared)));
-                        flops += 10;
-                    }
-#else
-                    bool const gas = false;
-                    bool const mfm = false;
-#endif
-                    bool const deferOpening = gas && params.deferGasOpening;
+                    // Hierarchical integration is collisionless only (no SPH gas).
                     float const mass = particlesMass(i);
                     float g2;
                     float kin0 = 0.5 * mass * sqr(vx, vy, vz);
                     float const sgn = params.sign * (params.top ? 1.f : -1.f);
                     flops += 1;
                     auto const applyKick = [&](float halfStep) {
-#if COSMICTIGER_WITH_SPH
-                        if (mfm) {
-                            auto& state = sphParticlesHopkinsState(particlesCatIndex(i));
-                            ALWAYS_ASSERT(state.initialized && state.hierarchicalActive);
-                            ALWAYS_ASSERT(state.pendingMass == 0.0 && state.pendingEnergy == 0.0);
-                            ALWAYS_ASSERT(state.pendingMomentum[0] == 0.0 &&
-                                state.pendingMomentum[1] == 0.0 && state.pendingMomentum[2] == 0.0);
-                            Vector3<double> const impulse{double(halfStep) * forces.gx[j],
-                                double(halfStep) * forces.gy[j], double(halfStep) * forces.gz[j]};
-                            hopkins::applyGravityImpulse(
-                                state.mass, state.momentum, state.totalEnergy, impulse);
-                            vx = state.momentum[0] / state.mass;
-                            vy = state.momentum[1] / state.mass;
-                            vz = state.momentum[2] / state.mass;
-                            doubleFlops += 45;
-                            flops += 1;
-                            return;
-                        }
-#endif
                         vx = fmaf(forces.gx[j], halfStep, vx);
                         vy = fmaf(forces.gy[j], halfStep, vy);
                         vz = fmaf(forces.gz[j], halfStep, vz);
@@ -608,21 +542,17 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                         float const factor = eta * sqrtf(params.a);
                         float dt = std::min(
                             factor * sqrtf(gravityEffectiveRadius / sqrtf(g2)), (float) params.t0);
-                        dt = std::min(std::min(params.maxDt, pairTimestep), dt);
+                        dt = std::min(params.maxDt, dt);
                         int const nextRung = std::max(params.minRung +
                                 int((int) ceilf(log2f(params.t0 / dt)) > params.minRung),
-                            int(rung) - int(!gas || mfm || deferOpening));
-                        kr.maxRung = std::max(
-                            deferOpening ? std::max(nextRung, int(rung)) : nextRung, kr.maxRung);
+                            int(rung) - 1);
+                        kr.maxRung = std::max(nextRung, kr.maxRung);
                         ALWAYS_ASSERT(nextRung >= 0 && nextRung < kMaxRung);
                         flops += 15;
-                        if (!deferOpening) {
-                            // SPH retains its hydro bound; MFM owns a separate hydro clock.
-                            rung = nextRung;
-                            dt = 0.5f * rungDt[params.minRung] * params.t0;
-                            applyKick(sgn * dt);
-                            flops += 2;
-                        }
+                        rung = nextRung;
+                        dt = 0.5f * rungDt[params.minRung] * params.t0;
+                        applyKick(sgn * dt);
+                        flops += 2;
                     }
                     float kin1 = 0.5 * mass * sqr(vx, vy, vz);
                     kr.pot += 0.5 * mass * forces.phi[j];
@@ -641,8 +571,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                         sphParticlesGravityAcceleration(kXDimension, k) = forces.gx[j];
                         sphParticlesGravityAcceleration(kYDimension, k) = forces.gy[j];
                         sphParticlesGravityAcceleration(kZDimension, k) = forces.gz[j];
-                        // Hydro owns the gas rung; it reads this bound with its own.
-                        sphParticlesGravityTimesteps[k] = pairTimestep;
                     }
 #endif
                     if (!gas && !params.firstCall) {
@@ -652,11 +580,14 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                         vy = fmaf(forces.gy[j], dt, vy);
                         vz = fmaf(forces.gz[j], dt, vz);
                     }
-                    kr.kin += 0.5f * mass * sqr(vx, vy, vz);
-                    kr.xmom += mass * vx;
-                    kr.ymom += mass * vy;
-                    kr.zmom += mass * vz;
-                    kr.nmom += mass * sqrt(sqr(vx, vy, vz));
+                    if (!gas) {
+                        // Hydro owns the gas momentum and sums the gas energies in its kick.
+                        kr.kin += 0.5f * mass * sqr(vx, vy, vz);
+                        kr.xmom += mass * vx;
+                        kr.ymom += mass * vy;
+                        kr.zmom += mass * vz;
+                        kr.nmom += mass * sqrt(sqr(vx, vy, vz));
+                    }
                     if (!gas) {
                         flops += 24;    // Timestep/rung selection and signed velocity kick.
                         float const syncVx = vx, syncVy = vy, syncVz = vz;
@@ -664,7 +595,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                         float dt = std::min(
                             eta * sqrtf(params.a) * sqrtf(gravityEffectiveRadius / sqrtf(g2)),
                             params.t0);
-                        dt = std::min(dt, std::min(params.maxDt, pairTimestep));
+                        dt = std::min(dt, params.maxDt);
                         rung = std::max(std::max((int) ceilf(log2f(params.t0 / dt)),
                                             std::max((int) rung - 1, params.minRung)),
                             1);

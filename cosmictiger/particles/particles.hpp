@@ -63,24 +63,24 @@ static_assert(std::is_trivially_copyable_v<Vector3<Position>>);
 static_assert(std::is_standard_layout_v<Vector3<Position>>);
 
 struct GroupParticle {
-    Vector3<Position> x;
-    GroupInteger g;
+    Vector3<Position> position;
+    GroupInteger groupNumber;
     template <class A>
     void serialize(A&& arc, unsigned) {
-        arc & x;
-        arc & g;
+        arc & position;
+        arc & groupNumber;
     }
 };
 
 struct OutputParticle {
-    Vector3<Position> x;
-    Vector3<float> v;
-    char r;
+    Vector3<Position> position;
+    Vector3<float> velocity;
+    char rung;
     template <class A>
     void serialize(A&& a, unsigned) {
-        a & x;
-        a & v;
-        a & r;
+        a & position;
+        a & velocity;
+        a & rung;
     }
 };
 
@@ -125,42 +125,43 @@ inline bool particlesHasLongAcceleration(Options const& options) {
 }
 
 struct Particle {
-    Vector3<Position> x;
-    Vector3<float> v;
-    Vector3<float> longAcceleration{};
-    GroupInteger lg;
-    ParticleInteger catIndex;
-    char r;
-    char t;
+    Vector3<Position> position;
+    Vector3<float> velocity;
+    Vector3<float> longAcceleration;
+    GroupInteger groupNumber;
+    ParticleInteger catalogIndex;
+    char rung;
+    char isTracer;
     char type;
     ParticleInteger gravitySample = -1;
     StarFormationState starFormation;
     template <class A>
     void serialize(A&& a, unsigned) {
-        static bool doGroups = getOptions().analysis.groups;
-        static bool doTracers = getOptions().analysis.tracers;
+        auto const& options = getOptions();
+        static bool doGroups = options.analysis.groups;
+        static bool doTracers = options.analysis.tracers;
         for (int dim = 0; dim < kDimensions; dim++) {
-            a& x[dim];
-            a& v[dim];
+            a& position[dim];
+            a& velocity[dim];
         }
-        a & r;
+        a & rung;
         if (doGroups) {
-            a & lg;
+            a & groupNumber;
         }
         if (doTracers) {
-            a & t;
+            a & isTracer;
         }
-        if (getOptions().gravity.errorInterval > 0) {
+        if (options.gravity.errorInterval > 0) {
             a & gravitySample;
         }
-        if (getOptions().hydro.enabled) {
-            a & catIndex;
+        if (options.hydro.enabled) {
+            a & catalogIndex;
             a & type;
         }
-        if (getOptions().starFormation.enabled) {
+        if (options.starFormation.enabled) {
             a & starFormation;
         }
-        if (particlesHasLongAcceleration(getOptions())) {
+        if (particlesHasLongAcceleration(options)) {
             for (int dim = 0; dim < kDimensions; dim++) {
                 a& longAcceleration[dim];
             }
@@ -168,17 +169,24 @@ struct Particle {
     }
 };
 
+// A randomly selected particle's position and tree-computed gravity, gathered by
+// particlesSample() for comparison against a direct-summation reference.
 struct ParticleSample {
-    Vector3<Position> x;
-    Vector3<float> g;
-    float p;
+    // Particle position.
+    Vector3<Position> position;
+    // Gravitational acceleration from the last kick; zero unless the analysis options
+    // save particle accelerations.
+    Vector3<float> acceleration;
+    // Gravitational potential from the last kick; zero unless the analysis options save
+    // particle potentials.
+    float potential;
     template <class A>
     void serialize(A&& a, unsigned) {
         for (int dim = 0; dim < kDimensions; dim++) {
-            a& x[dim];
-            a& g[dim];
+            a& position[dim];
+            a& acceleration[dim];
         }
-        a & p;
+        a & potential;
     }
 };
 
@@ -216,11 +224,6 @@ PARTICLES_EXTERN StarFormationState* particlesStarFormationStates;
 PARTICLES_EXTERN ParticleInteger* particlesGravitySampleIndices;
 PARTICLES_EXTERN Vector3<float>* particlesGravitySampleAccelerations;
 PARTICLES_EXTERN size_t particlesGlobalOffset;
-
-// MFV gas mass projection follows the gas category index, never stellar indices.
-#if COSMICTIGER_WITH_SPH
-extern float* sphParticlesMasses;
-#endif
 
 struct ParticleGlobalRange {
     int proc;
@@ -262,7 +265,7 @@ inline void particlesGlobalReadPos(
     particlesGlobalReadPos(range, x, y, z, nullptr, offset);
 }
 void particlesGlobalReadPosAndGroup(ParticleGlobalRange range, Position* x, Position* y,
-    Position* z, GroupInteger* g, ParticleInteger offset);
+    Position* z, GroupInteger* groupNumbers, ParticleInteger offset);
 ParticleInteger particlesSort(Pair<ParticleInteger> rng, double xm, int xdim);
 // Swap all attached fields without reading uninitialized saved-force values.
 void particlesSwap(ParticleInteger first, ParticleInteger second);
@@ -324,11 +327,6 @@ inline float particlesMass(ParticleInteger index) {
     float const sphMass = getOptions().initial.gasMass;
     float const darkMatterMass = getOptions().initial.darkMatterMass;
     if (particlesType(index) != kDarkMatterType) {
-#if COSMICTIGER_WITH_SPH
-        if (particlesType(index) == kSphType && getOptions().hydro.method == "mfv") {
-            return sphParticlesMasses[particlesSph[index]];
-        }
-#endif
         return sphMass;
     } else {
         return darkMatterMass;
@@ -418,22 +416,22 @@ inline Particle particlesGetParticle(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     Particle p;
     for (int dim = 0; dim < kDimensions; dim++) {
-        p.x[dim] = particlesPos(dim, index);
-        p.v[dim] = particlesVel(dim, index);
+        p.position[dim] = particlesPos(dim, index);
+        p.velocity[dim] = particlesVel(dim, index);
     }
-    p.r = particlesRung(index);
+    p.rung = particlesRung(index);
     if (doGroups) {
-        p.lg = particlesLastgroup(index);
+        p.groupNumber = particlesLastgroup(index);
     }
     if (doTracers) {
-        p.t = particlesTracer(index);
+        p.isTracer = particlesTracer(index);
     }
     if (getOptions().gravity.errorInterval > 0) {
         p.gravitySample = particlesGravitySample(index);
     }
     if (getOptions().hydro.enabled) {
         p.type = particlesType(index);
-        p.catIndex = particlesCatIndex(index);
+        p.catalogIndex = particlesCatIndex(index);
     }
     if (getOptions().starFormation.enabled) {
         p.starFormation = particlesStarFormationStates[index];
@@ -451,22 +449,22 @@ inline void particlesSetParticle(Particle p, ParticleInteger index) {
     static bool doTracers = getOptions().analysis.tracers;
     CHECK_PART_BOUNDS(index);
     for (int dim = 0; dim < kDimensions; dim++) {
-        particlesPos(dim, index) = p.x[dim];
-        particlesVel(dim, index) = p.v[dim];
+        particlesPos(dim, index) = p.position[dim];
+        particlesVel(dim, index) = p.velocity[dim];
     }
-    particlesRung(index) = p.r;
+    particlesRung(index) = p.rung;
     if (doGroups) {
-        particlesLastgroup(index) = p.lg;
+        particlesLastgroup(index) = p.groupNumber;
     }
     if (doTracers) {
-        particlesTracer(index) = p.t;
+        particlesTracer(index) = p.isTracer;
     }
     if (getOptions().gravity.errorInterval > 0) {
         particlesGravitySample(index) = p.gravitySample;
     }
     if (getOptions().hydro.enabled) {
         particlesType(index) = p.type;
-        particlesCatIndex(index) = p.catIndex;
+        particlesCatIndex(index) = p.catalogIndex;
     }
     if (getOptions().starFormation.enabled) {
         particlesStarFormationStates[index] = p.starFormation;
@@ -530,6 +528,8 @@ struct EnergiesT {
     }
 };
 
-EnergiesT particlesSumEnergies();
+// Kinetic, potential, momentum and thermal sums; includeGas=false skips SPH gas, which the
+// hydro kick sums itself.
+EnergiesT particlesSumEnergies(bool includeGas = true);
 
 #endif /* PARTICLES_HPP_ */

@@ -11,9 +11,8 @@ import shlex
 import sys
 
 
-FEATURES = ("FMM", "PMMM_PP", "PMMM_FMM", "PM", "P3M_PP", "P3M_FMM", "SPH", "HOPKINS",
-            "CHEMISTRY", "STARS", "INTEGRATOR_TRADITIONAL", "INTEGRATOR_HIERARCHICAL",
-            "INTEGRATOR_GLOBAL")
+FEATURES = ("FMM", "PMMM_PP", "PMMM_FMM", "PM", "P3M_PP", "P3M_FMM", "SPH", "CHEMISTRY",
+            "STARS", "INTEGRATOR_TRADITIONAL", "INTEGRATOR_HIERARCHICAL", "INTEGRATOR_GLOBAL")
 FEATURE_DEFINITIONS = {"COSMICTIGER_ENABLE_" + feature for feature in FEATURES}
 FEATURE_DEFINITIONS.update({"ORDER", "FMM_MIN_ORDER", "FMM_MAX_ORDER",
                             "COSMICTIGER_ENABLE_STAR_FORMATION",
@@ -185,9 +184,6 @@ def sourceSelectionErrors(sources, configuration):
             errors.append(f"gravity-enabled build compiles SPH-only diagnostic regression: {source}")
         if (not configuration["SPH"] or not configuration["FMM"]) and source == "tests/kernel_selection_cuda.cu":
             errors.append(f"unavailable SPH gravity regression's CUDA helper: {source}")
-        if not configuration["HOPKINS"] and source in {
-                "src/hydro/hopkins.cpp", "src/scenarios/sound_wave.cpp", "tests/hopkins.cpp"}:
-            errors.append(f"Hopkins disabled but compiles source: {source}")
         if not hasChemistry(configuration) and source in {
                 "src/chemistry/gadget4_cooling.cpp", "src/chemistry/gadget4_cooling.cu",
                 "src/hydro/sph/sph_chemistry.cpp", "tests/sph/chemistry.cpp",
@@ -235,8 +231,6 @@ def requiredSources(configuration, cuda):
                          "src/hydro/sph/sph_rungs_cpu.cpp", "src/hydro/sph/sph_particles.cpp", "src/hydro/sph/sph_tree.cpp"})
         if cuda:
             required.update({"src/hydro/sph/sph.cu", "src/hydro/sph/sph_hydro.cu", "src/hydro/sph/sph_prehydro.cu", "src/hydro/sph/sph_rungs.cu"})
-    if configuration["HOPKINS"]:
-        required.update({"src/hydro/hopkins.cpp", "src/scenarios/sound_wave.cpp"})
     if hasChemistry(configuration):
         required.add("src/hydro/sph/sph_chemistry.cpp")
     if hasStarFormation(configuration):
@@ -272,10 +266,6 @@ def checkBuild(buildDirectory):
     if positionType not in ("fixed32", "fixed64"):
         raise ValueError("invalid COSMICTIGER_POSITION_TYPE in CMakeCache.txt")
     bits = 32 if positionType == "fixed32" else 64
-    if configuration["HOPKINS"] and not configuration["SPH"]:
-        raise ValueError("COSMICTIGER_ENABLE_HOPKINS=ON requires COSMICTIGER_ENABLE_SPH=ON")
-    if configuration["HOPKINS"] and bits != 64:
-        raise ValueError("COSMICTIGER_ENABLE_HOPKINS=ON requires COSMICTIGER_POSITION_TYPE=fixed64")
     commands = json.loads((buildDirectory / "compile_commands.json").read_text())
     if not isinstance(commands, list) or not commands:
         raise ValueError("compile_commands.json contains no compilation entries")

@@ -16,7 +16,7 @@ namespace cosmictiger::gravity::p3m::pp {
 bool shortFieldBatch(std::vector<ShortParticle> const& sinks,
     std::vector<ShortParticle> const& sources, std::vector<ShortSourceRange> const& sourceRanges,
     ShortPairParameters const& parameters, bool doPotential,
-    std::vector<std::array<double, 4>>& fields, std::vector<double>& pairCurvature) {
+    std::vector<std::array<double, 4>>& fields) {
     if (sourceRanges.size() != sinks.size()) {
         throw std::invalid_argument("P3M short batch requires one source range per sink");
     }
@@ -31,14 +31,12 @@ bool shortFieldBatch(std::vector<ShortParticle> const& sinks,
         candidatePairs += std::min(count, std::numeric_limits<size_t>::max() - candidatePairs);
     }
     fields.assign(sinks.size(), {});
-    pairCurvature.assign(sinks.size(), 0.0);
     if (candidatePairs == 0) {
         return false;
     }
 #ifdef USE_CUDA
     if (getOptions().gravity.cuda && shouldUseShortCuda(usefulSinkCount, candidatePairs)) {
-        shortFieldCuda(
-            sinks, sources, sourceRanges, parameters, doPotential, fields, pairCurvature);
+        shortFieldCuda(sinks, sources, sourceRanges, parameters, doPotential, fields);
         return true;
     }
 #endif
@@ -47,8 +45,8 @@ bool shortFieldBatch(std::vector<ShortParticle> const& sinks,
     for (size_t sink = 0; sink < sinks.size(); ++sink) {
         auto const& range = sourceRanges[sink];
         for (size_t source = range.begin; source < range.end; ++source) {
-            flops += accumulateShortPair(sinks[sink], sources[source], parameters, doPotential,
-                kernel, fields[sink], &pairCurvature[sink]);
+            flops += accumulateShortPair(
+                sinks[sink], sources[source], parameters, doPotential, kernel, fields[sink]);
         }
     }
     addCpuFlops(flops, FlopPrecision::Double);
@@ -100,13 +98,12 @@ void evaluatePairs() {
                 return;
             }
             std::vector<std::array<double, 4>> fields;
-            std::vector<double> pairCurvature;
-            bool const device = pp::shortFieldBatch(sinks, batchSources, sourceRanges,
-                pairParameters, doPotential, fields, pairCurvature);
+            bool const device = pp::shortFieldBatch(
+                sinks, batchSources, sourceRanges, pairParameters, doPotential, fields);
             KickReturn result;
             for (size_t sink = 0; sink < sinks.size(); ++sink) {
-                consumeField(ParticleInteger(sinks[sink].index), fields[sink], result, flops,
-                    kickFlops, pairCurvature[sink]);
+                consumeField(
+                    ParticleInteger(sinks[sink].index), fields[sink], result, flops, kickFlops);
                 pairs += sourceRanges[sink].end - sourceRanges[sink].begin;
             }
             addCpuFlops(flops + kickFlops.doublePrecision, FlopPrecision::Double);

@@ -28,15 +28,12 @@ struct ForceVectors {
     Vector<float> gx;
     Vector<float> gy;
     Vector<float> gz;
-    // Direct-pair mass / length^3 coefficient (gravity/timestep.hpp), without G.
-    Vector<float> pairCurvature;
     ForceVectors() = default;
     ForceVectors(int sz) {
         phi.resize(sz);
         gx.resize(sz);
         gy.resize(sz);
         gz.resize(sz);
-        pairCurvature.resize(sz);
     }
 };
 

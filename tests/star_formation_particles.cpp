@@ -25,10 +25,6 @@ gadget4::State fixtureChemistry(int rank, int originalGasIndex) {
     return {float(0.25 + 0.125 * originalGasIndex + 0.01 * rank)};
 }
 
-Pair<float> fixtureChemistryEos(int originalGasIndex) {
-    return {0.5f + 0.0625f * originalGasIndex, 1.5f + 0.0625f * originalGasIndex};
-}
-
 void requireFixtureChemistry(ParticleInteger gasIndex, int rank, int originalGasIndex) {
     auto const expected = fixtureChemistry(rank, originalGasIndex);
     requireStarParticles(
@@ -52,11 +48,10 @@ void initializeStarParticleFixture() {
         if (index > 0) {
             ParticleInteger const gasIndex = index - 1;
             sphParticlesParticleIndex(gasIndex) = index;
-            sphParticlesInternalEnergy(gasIndex) = 1.0f + index;
+            sphParticlesSetInternalEnergy(gasIndex, 1.0f + index);
             sphParticlesSupportRadius(gasIndex) = 0.125f;
             sphParticlesDensity(gasIndex) = 2.0f + index;
             sphParticlesChemistryStates[gasIndex] = fixtureChemistry(hpxRank(), gasIndex);
-            sphParticlesChemistryEos[gasIndex] = fixtureChemistryEos(gasIndex);
         }
     }
 }
@@ -107,7 +102,6 @@ std::vector<Particle> exerciseStarParticleFixture() {
         particlesStarFormationStates[index] = {};
     }
     sphParticlesChemistryStates[0] = {};
-    sphParticlesChemistryEos[0] = {};
     std::rewind(file);
     particlesLoad(file);
     FILE* const mixedCheckpoint = file;

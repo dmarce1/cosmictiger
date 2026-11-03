@@ -125,17 +125,15 @@ void initializeMeshSortFixture(ParticleInteger count, int pattern) {
         if (i % 2 == 0) {
             ParticleInteger const gasIndex = i / 2;
             sphParticlesParticleIndex(gasIndex) = i;
-            sphParticlesInternalEnergy(gasIndex) = float(i) + 0.5f;
+            sphParticlesSetInternalEnergy(gasIndex, float(i) + 0.5f);
             sphParticlesSupportRadius(gasIndex) = float(i) + 0.75f;
             sphParticlesDensities[gasIndex] = float(i) + 1.0f;
             sphParticlesBalsaraFactors[gasIndex] = float(i) + 1.25f;
-            sphParticlesInternalEnergyRates[gasIndex] = float(i) + 1.5f;
-            sphParticlesPredictedInternalEnergyRates[gasIndex] = float(i) + 1.75f;
+            sphParticlesEntropyRates[gasIndex] = float(i) + 1.5f;
             sphParticlesConvergenceFlags[gasIndex] = i % 7;
             sphParticlesSemiactiveFlags[gasIndex] = i % 5;
             for (int dim = 0; dim < kDimensions; ++dim) {
                 sphParticlesAcceleration(dim, gasIndex) = float(i) + 2.0f + dim;
-                sphParticlesPredictedAcceleration(dim, gasIndex) = float(i) + 3.0f + dim;
                 sphParticlesGravityAcceleration(dim, gasIndex) = float(i) + 4.0f + dim;
             }
         }
@@ -202,16 +200,13 @@ void checkMeshSortFixture(int meshSize, int pattern) {
                     sphParticlesSupportRadius(gasIndex) == float(identity) + 0.75f &&
                     sphParticlesDensities[gasIndex] == float(identity) + 1.0f &&
                     sphParticlesBalsaraFactors[gasIndex] == float(identity) + 1.25f &&
-                    sphParticlesInternalEnergyRates[gasIndex] == float(identity) + 1.5f &&
-                    sphParticlesPredictedInternalEnergyRates[gasIndex] == float(identity) + 1.75f &&
+                    sphParticlesEntropyRates[gasIndex] == float(identity) + 1.5f &&
                     sphParticlesConvergenceFlags[gasIndex] == identity % 7 &&
                     sphParticlesSemiactiveFlags[gasIndex] == identity % 5,
                 "Particle mesh sort changed gas state or broke its reverse map");
             for (int dim = 0; dim < kDimensions; ++dim) {
                 requireParticleMeshSort(
                     sphParticlesAcceleration(dim, gasIndex) == float(identity) + 2.0f + dim &&
-                        sphParticlesPredictedAcceleration(dim, gasIndex) ==
-                            float(identity) + 3.0f + dim &&
                         sphParticlesGravityAcceleration(dim, gasIndex) ==
                             float(identity) + 4.0f + dim,
                     "Particle mesh sort changed a gas acceleration");

@@ -11,13 +11,12 @@ namespace cosmictiger::gravity::p3m::pp {
 
 // Each sink uses its own half-open source range. Positions are box units with
 // the periodic image already selected. Fields are overwritten as
-// {potential, ax, ay, az} without G, and pairCurvature with each sink's direct-pair
-// coefficient (short_pair.hpp). Identical primary particles are excluded.
+// {potential, ax, ay, az} without G. Identical primary particles are excluded.
 // Returns true when the batch ran on the CUDA device.
 bool shortFieldBatch(std::vector<ShortParticle> const& sinks,
     std::vector<ShortParticle> const& sources, std::vector<ShortSourceRange> const& sourceRanges,
     ShortPairParameters const& parameters, bool doPotential,
-    std::vector<std::array<double, 4>>& fields, std::vector<double>& pairCurvature);
+    std::vector<std::array<double, 4>>& fields);
 
 // Conservative launch-amortization thresholds, as for PMMM's near field.
 inline constexpr size_t kShortCudaMinimumSinks = 128;
@@ -31,7 +30,7 @@ inline constexpr bool shouldUseShortCuda(size_t usefulSinkCount, size_t candidat
 void shortFieldCuda(std::vector<ShortParticle> const& sinks,
     std::vector<ShortParticle> const& sources, std::vector<ShortSourceRange> const& sourceRanges,
     ShortPairParameters const& parameters, bool doPotential,
-    std::vector<std::array<double, 4>>& fields, std::vector<double>& pairCurvature);
+    std::vector<std::array<double, 4>>& fields);
 // Call only after all batches have completed, before CUDA device teardown.
 void clearShortCudaWorkspaces();
 #endif

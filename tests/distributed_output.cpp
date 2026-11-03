@@ -365,7 +365,7 @@ void distributedOutputParticleFixture(int activeRanks, bool verify, bool segrega
         sphParticlesParticleIndex(i) = i;
         sphParticlesSupportRadius(i) = 0.03125 + global / 4096.0;
         sphParticlesDensity(i) = 1000.0f + global;
-        sphParticlesThermodynamicStates[i].internalEnergy = 10.0f + global;
+        sphParticlesEntropies[i] = 10.0f + global;
     }
     if (!verify) {
         for (int i = 0; i < darkCount; i++) {

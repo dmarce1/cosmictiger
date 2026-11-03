@@ -41,13 +41,12 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
         FlopCounts const softeningFlops =
             detail::gravitySofteningOperations(selectedGravityKernel(), SimdFloat{}, doPhi);
         SimdFloat const one = simdBroadcast<SimdFloat>(1.0);
-        SimdFloat const zero = simdBroadcast<SimdFloat>(0.0);
         SimdFloat const tiny = simdBroadcast<SimdFloat>(1.0e-20);
         TreeNode const* selfPtr = treeGetNode(self);
         int const numberOfSinks = selfPtr->numberOfParticles();
         auto const range = selfPtr->particleRange;
         for (int li = 0; li < list.size(); li += kChunkSize) {
-            Vector3<SimdPosition> x{};
+            Vector3<SimdPosition> position{};
             Vector3<SimdPosition> yValue{};
             SimdPosition srcType{};
             Array<TreeNode const*, kChunkSize> treePtrs;
@@ -87,9 +86,8 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                 SimdFloat gy = simdBroadcast<SimdFloat>(0.0);
                 SimdFloat gz = simdBroadcast<SimdFloat>(0.0);
                 SimdFloat phi = simdBroadcast<SimdFloat>(0.0);
-                SimdFloat pairCurvature = simdBroadcast<SimdFloat>(0.0);
                 for (int dim = 0; dim < kDimensions; dim++) {
-                    x[dim] = simdBroadcast<SimdPosition>(particlesPos(dim, i).raw());
+                    position[dim] = simdBroadcast<SimdPosition>(particlesPos(dim, i).raw());
                 }
                 //					simd_float self_flags(0);
                 for (int j = 0; j < numberOfSources; j += kSimdFloatSize) {
@@ -103,7 +101,7 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                     Vector3<SimdFloat> dx{};
                     for (int dim = 0; dim < kDimensions; dim++) {
                         dx[dim] = fmmPositionDifference(
-                            x[dim], yValue[dim], dim, geometry, &geometryFlops);
+                            position[dim], yValue[dim], dim, geometry, &geometryFlops);
                     }
                     SimdFloat const r2 = sqr(dx[kXDimension], dx[kYDimension], dx[kZDimension]);
                     SimdFloat const rinv1Far =
@@ -127,11 +125,6 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                     }
                     rinv3 *= sourceWeight;
                     rinv1 *= sourceWeight;
-                    // The sink's own fixed-point position differs from itself by
-                    // exactly zero; padded lanes carry zero weight. Distinct
-                    // particles at one position exert no force and are skipped
-                    // for that step only.
-                    pairCurvature = pairCurvature + simdSelect(r2 > zero, rinv3, zero);
                     gx = simdFma(rinv3, dx[kXDimension], gx);
                     gy = simdFma(rinv3, dx[kYDimension], gy);
                     gz = simdFma(rinv3, dx[kZDimension], gz);
@@ -142,14 +135,12 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                 f.gy[j] -= simdSum(gy);
                 f.gz[j] -= simdSum(gz);
                 f.phi[j] += simdSum(phi);
-                f.pairCurvature[j] += simdSum(pairCurvature);
             }
             // Fixed work is charged once per chunk, including padded SIMD lanes.
             // Per pair: displacement 3, norm 5, sqrt/divide 2, inverse cube 2,
-            // weights 2, three FMAs 6, potential accumulation 1, and the
-            // selected curvature accumulation 1.
+            // weights 2, three FMAs 6, and potential accumulation 1.
             flops +=
-                FlopCount(numberOfSinks) * (FlopCount(numberOfSources) * 19 + 5 * kSimdFloatSize);
+                FlopCount(numberOfSinks) * (FlopCount(numberOfSources) * 18 + 4 * kSimdFloatSize);
         }
         flops += softenedPackets * softeningFlops.singlePrecision;
         doubleFlops += softenedPackets * softeningFlops.doublePrecision;

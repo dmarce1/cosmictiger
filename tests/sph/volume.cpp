@@ -537,8 +537,9 @@ TEST(SphVolume, PairRatesConserveMomentumAngularMomentumAndEnergy) {
         }
         Generator generator(99);
         std::vector<Vector> velocity(system.size());
-        for (auto& v : velocity) {
-            v = {generator.next() - 0.5, generator.next() - 0.5, generator.next() - 0.5};
+        for (auto& particleVelocity : velocity) {
+            particleVelocity = {
+                generator.next() - 0.5, generator.next() - 0.5, generator.next() - 0.5};
         }
         auto const rates = system.rates(velocity);
         Vector momentum{};
@@ -573,8 +574,9 @@ TEST(SphVolume, WorkMatchesDensityContinuityAtFixedEntropy) {
         }
         Generator generator(7);
         std::vector<Vector> velocity(system.size());
-        for (auto& v : velocity) {
-            v = {generator.next() - 0.5, generator.next() - 0.5, generator.next() - 0.5};
+        for (auto& particleVelocity : velocity) {
+            particleVelocity = {
+                generator.next() - 0.5, generator.next() - 0.5, generator.next() - 0.5};
         }
         auto const rates = system.rates(velocity);
         double const step = 1.0e-6;

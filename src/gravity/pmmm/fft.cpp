@@ -488,7 +488,6 @@ void destroy() {
     state.tasks.clear();
     state.acceleration.clear();
     state.potential.clear();
-    state.pairCurvature.clear();
 }
 
 }    // namespace pmmm::detail

@@ -41,7 +41,6 @@ struct CudaKickForceTile {
     float* gy;
     float* gz;
     float* phi;
-    float* pairCurvature;
 };
 
 // One block's global storage of the interaction lists, checklist stacks and

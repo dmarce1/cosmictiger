@@ -34,7 +34,6 @@
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/hydro/sph/sph_particles.hpp>
-#include <cosmictiger/particles/sph_migration.hpp>
 #endif
 
 constexpr bool kVerbose = true;
@@ -62,7 +61,7 @@ static Vector<ParticleInteger> freeIndices;
 static Vector<Vector<Particle>> transParticles;
 static std::unordered_map<size_t, DomainT> boxesByKey;
 
-static int findParticleDomain(Vector3<double> const& x, size_t key = 1, int depth = 0);
+static int findParticleDomain(Vector3<double> const& position, size_t key = 1, int depth = 0);
 static void domainsCheck();
 static Vector<DomainLocal> localDomains;
 
@@ -576,35 +575,22 @@ void domainsTransmitParticles(Vector<Particle> parts) {
 // Ordinary SPH timesteps migrate the complete gas state together with its
 // gravity particle. Category indices are local and are rebuilt at the receiver.
 struct GasMigrationState {
-    Vector3<float> acceleration, predictedAcceleration, gravityAcceleration;
-    float supportRadius, internalEnergy, predictedInternalEnergyRate, internalEnergyRate, density;
-    float mass;
-    HopkinsParticleState hopkins;
+    Vector3<float> acceleration, gravityAcceleration;
+    float supportRadius, entropy, entropyRate, density;
     char converged, semiactive;
     Pair<float> viscosity;    // Alpha and its previous conformal-time rate.
     float divergence;         // Previous physical divergence for Cullen-Dehnen and Price et al.
     gadget4::State chemistry;
-    Pair<float> chemistryEos;
-    sph_hierarchical::SourceState hierarchicalState;
-    float gradHCorrection, balsaraFactor;
     template <class Archive>
     void serialize(Archive& arc, unsigned) {
         arc & acceleration;
-        arc & predictedAcceleration;
         arc & gravityAcceleration;
         arc & supportRadius;
-        arc & internalEnergy;
-        arc & predictedInternalEnergyRate;
-        arc & internalEnergyRate;
+        arc & entropy;
+        arc & entropyRate;
         arc & density;
         arc & converged;
         arc & semiactive;
-        if (getOptions().hydro.method == "mfv") {
-            arc & mass;
-        }
-        if (getOptions().hydro.method != "sph") {
-            arc & hopkins;
-        }
         if (getOptions().hydro.viscosityEvolution != "none") {
             arc & viscosity;
         }
@@ -613,14 +599,6 @@ struct GasMigrationState {
         }
         if (getOptions().chemistry.enabled) {
             arc & chemistry;
-        }
-        if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
-            arc & chemistryEos;
-        }
-        if (getOptions().run.hierarchicalGravity && getOptions().hydro.method == "sph") {
-            arc & hierarchicalState;
-            arc & gradHCorrection;
-            arc & balsaraFactor;
         }
     }
 };
@@ -636,7 +614,6 @@ struct SphMigrationParticle {
     }
 };
 static Vector<SphMigrationParticle> retainedSphParticles;
-static detail::SphMigrationSuffix<ParticleInteger> hierarchicalSphMigration;
 struct SphMigrationParcel {
     int sourceRank;
     size_t sequence;
@@ -657,20 +634,13 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
     if (result.part.type == kSphType) {
         auto const i = particlesCatIndex(index);
         auto& gas = result.gas;
-        gas.supportRadius = sphParticlesThermodynamicStates[i].supportRadius;
+        gas.supportRadius = sphParticlesSupportRadii[i];
         gas.acceleration = sphParticlesAccelerationStates[i].acceleration;
-        gas.predictedInternalEnergyRate = sphParticlesPredictedInternalEnergyRates[i];
-        gas.internalEnergyRate = sphParticlesInternalEnergyRates[i];
+        gas.entropyRate = sphParticlesEntropyRates[i];
         gas.density = sphParticlesDensities[i];
         gas.converged = sphParticlesConvergenceFlags[i];
         gas.semiactive = sphParticlesSemiactiveFlags[i];
-        gas.internalEnergy = sphParticlesThermodynamicStates[i].internalEnergy;
-        if (getOptions().hydro.method == "mfv") {
-            gas.mass = sphParticlesMass(i);
-        }
-        if (getOptions().hydro.method != "sph") {
-            gas.hopkins = sphParticlesHopkinsState(i);
-        }
+        gas.entropy = sphParticlesEntropies[i];
         if (getOptions().hydro.viscosityEvolution != "none") {
             auto const& state = sphParticlesViscosityStates[i];
             gas.viscosity = {state.alpha, state.rate};
@@ -681,17 +651,7 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
         if (getOptions().chemistry.enabled) {
             gas.chemistry = sphParticlesChemistryStates[i];
         }
-        if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
-            gas.chemistryEos = sphParticlesChemistryEos[i];
-        }
-        if (getOptions().run.hierarchicalGravity && getOptions().hydro.method == "sph") {
-            gas.hierarchicalState = sphParticlesHierarchicalStates[i];
-            gas.gradHCorrection = sphParticlesGradHCorrections[i];
-            gas.balsaraFactor =
-                getOptions().hydro.balsaraSwitch ? sphParticlesBalsaraFactors[i] : 1.0f;
-        }
         for (int dim = 0; dim < kDimensions; dim++) {
-            gas.predictedAcceleration[dim] = sphParticlesPredictedAccelerations[dim][i];
             gas.gravityAcceleration[dim] = sphParticlesGravityAccelerations[dim][i];
         }
     }
@@ -700,27 +660,20 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
 static void unpackSphParticle(
     SphMigrationParticle record, ParticleInteger index, ParticleInteger gasIndex) {
     if (record.part.type == kSphType) {
-        record.part.catIndex = gasIndex;
+        record.part.catalogIndex = gasIndex;
     }
     particlesSetParticle(record.part, index);
     if (record.part.type == kSphType) {
         auto const i = gasIndex;
         auto const& gas = record.gas;
         sphParticlesParticleIndex(i) = index;
-        sphParticlesThermodynamicStates[i].supportRadius = gas.supportRadius;
+        sphParticlesSupportRadii[i] = gas.supportRadius;
         sphParticlesAccelerationStates[i].acceleration = gas.acceleration;
-        sphParticlesPredictedInternalEnergyRates[i] = gas.predictedInternalEnergyRate;
-        sphParticlesInternalEnergyRates[i] = gas.internalEnergyRate;
+        sphParticlesEntropyRates[i] = gas.entropyRate;
         sphParticlesDensities[i] = gas.density;
         sphParticlesConvergenceFlags[i] = gas.converged;
         sphParticlesSemiactiveFlags[i] = gas.semiactive;
-        sphParticlesThermodynamicStates[i].internalEnergy = gas.internalEnergy;
-        if (getOptions().hydro.method == "mfv") {
-            sphParticlesMfvMass(i) = gas.mass;
-        }
-        if (getOptions().hydro.method != "sph") {
-            sphParticlesHopkinsState(i) = gas.hopkins;
-        }
+        sphParticlesEntropies[i] = gas.entropy;
         if (getOptions().hydro.viscosityEvolution != "none") {
             sphParticlesViscosityStates[i] = {
                 gas.viscosity.first, gas.viscosity.second, gas.viscosity.first};
@@ -731,154 +684,12 @@ static void unpackSphParticle(
         if (getOptions().chemistry.enabled) {
             sphParticlesChemistryStates[i] = gas.chemistry;
         }
-        if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
-            sphParticlesChemistryEos[i] = gas.chemistryEos;
-        }
-        if (getOptions().run.hierarchicalGravity && getOptions().hydro.method == "sph") {
-            sphParticlesHierarchicalStates[i] = gas.hierarchicalState;
-            sphParticlesGradHCorrections[i] = gas.gradHCorrection;
-            if (getOptions().hydro.balsaraSwitch) {
-                sphParticlesBalsaraFactors[i] = gas.balsaraFactor;
-            }
-        }
         for (int dim = 0; dim < kDimensions; dim++) {
-            sphParticlesPredictedAccelerations[dim][i] = gas.predictedAcceleration[dim];
             sphParticlesGravityAccelerations[dim][i] = gas.gravityAcceleration[dim];
         }
     }
 }
-static void beginHierarchicalSphMigration(int rung) {
-    if (hpxSize() == 1) {
-        return;
-    }
-    auto const range = particlesCurrentRange();
-    hierarchicalSphMigration = detail::planSphMigrationSuffix(
-        range.first, range.second, particlesSize(), sphParticlesSize(), [](ParticleInteger index) {
-            if (particlesType(index) != kSphType) {
-                return kNoParticleIndex;
-            }
-            ParticleInteger const gasIndex = particlesCatIndex(index);
-            if (gasIndex < 0) {
-                throw std::logic_error("Missing gas slot in hierarchical SPH migration");
-            }
-            return gasIndex;
-        });
-    retainedSphParticles.clear();
-    Vector<hpx::future<void>> pending;
-    try {
-        for (auto const& child : hpxChildren()) {
-            pending.push_back(hpx::async<DomainsBeginAction>(child, rung));
-        }
-        auto const box = domainsFindMyBox();
-        std::unordered_map<int, Vector<SphMigrationParticle>> sends;
-        size_t parcelSequence = 0;
-        size_t const parcelCapacity = domainsMigrationParcelCapacity(true);
-        // The inactive prefix and its rung-stack offsets remain untouched.
-        // Faster particles in the suffix may already be at a later physical
-        // time, so only this completed rung is eligible to leave its domain.
-        for (ParticleInteger i = range.first; i < range.second; ++i) {
-            if (particlesType(i) == kSphType) {
-                ParticleInteger const gasIndex = particlesCatIndex(i);
-                sphParticlesParticleIndex(gasIndex) = i;
-            }
-            auto record = packSphParticle(i);
-            if (record.part.r != rung) {
-                retainedSphParticles.push_back(std::move(record));
-                continue;
-            }
-            Vector3<double> x;
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                x[dim] = positionDomainCoordinate(record.part.x[dim]);
-            }
-            if (box.contains(x)) {
-                retainedSphParticles.push_back(std::move(record));
-            } else {
-                auto const rank = findParticleDomain(x);
-                auto& send = sends[rank];
-                send.push_back(std::move(record));
-                if (send.size() >= parcelCapacity) {
-                    pending.push_back(hpx::async<ReceiveSphParticlesAction>(
-                        hpxLocalities()[rank], std::move(send), hpxRank(), parcelSequence++));
-                    send.clear();
-                }
-            }
-        }
-        for (auto& entry : sends) {
-            if (!entry.second.empty()) {
-                pending.push_back(
-                    hpx::async<ReceiveSphParticlesAction>(hpxLocalities()[entry.first],
-                        std::move(entry.second), hpxRank(), parcelSequence++));
-            }
-        }
-    } catch (...) {
-        hpx::wait_all(pending.begin(), pending.end());
-        throw;
-    }
-    hpx::wait_all(pending.begin(), pending.end());
-    for (auto& future : pending) {
-        future.get();
-    }
-}
-
-static void endHierarchicalSphMigration() {
-    if (hpxSize() == 1) {
-        return;
-    }
-    Vector<hpx::future<void>> pending;
-    try {
-        for (auto const& child : hpxChildren()) {
-            pending.push_back(hpx::async<DomainsEndAction>(child));
-        }
-        if (particlesCurrentRange().first != hierarchicalSphMigration.begin ||
-            particlesSize() != hierarchicalSphMigration.end) {
-            throw std::logic_error("Hierarchical SPH migration range changed before completion");
-        }
-        std::sort(receivedSphParticles.begin(), receivedSphParticles.end(),
-            [](auto const& first, auto const& second) {
-                return first.sourceRank < second.sourceRank ||
-                    (first.sourceRank == second.sourceRank && first.sequence < second.sequence);
-            });
-        for (auto& parcel : receivedSphParticles) {
-            for (auto& record : parcel.particles) {
-                retainedSphParticles.push_back(std::move(record));
-            }
-        }
-        receivedSphParticles.clear();
-        ParticleInteger gasCount = 0;
-        for (auto const& record : retainedSphParticles) {
-            gasCount += record.part.type == kSphType;
-        }
-        // Removing high slots first keeps every remaining old slot valid.
-        // A displaced inactive gas slot repairs its main-particle category
-        // index in sphParticlesRemove; the main inactive prefix never moves.
-        for (auto const gasIndex : hierarchicalSphMigration.gasIndices) {
-            sphParticlesRemove(gasIndex);
-        }
-        ParticleInteger gasIndex = sphParticlesSize();
-        particlesResize(hierarchicalSphMigration.begin + retainedSphParticles.size());
-        sphParticlesResize(gasIndex + gasCount, false);
-        for (size_t i = 0; i < retainedSphParticles.size(); ++i) {
-            unpackSphParticle(
-                retainedSphParticles[i], hierarchicalSphMigration.begin + i, gasIndex);
-            gasIndex += retainedSphParticles[i].part.type == kSphType;
-        }
-        hierarchicalSphMigration.gasIndices.clear();
-        retainedSphParticles.clear();
-    } catch (...) {
-        hpx::wait_all(pending.begin(), pending.end());
-        throw;
-    }
-    hpx::wait_all(pending.begin(), pending.end());
-    for (auto& future : pending) {
-        future.get();
-    }
-}
-
 static void beginSphMigration(int rung) {
-    if (usesHierarchicalIntegration(getOptions().run)) {
-        beginHierarchicalSphMigration(rung);
-        return;
-    }
     Vector<hpx::future<void>> pending;
     for (auto const& child : hpxChildren()) {
         pending.push_back(hpx::async<DomainsBeginAction>(child, rung));
@@ -891,15 +702,15 @@ static void beginSphMigration(int rung) {
     // The ordinary integrator retains every rung in the same particle range.
     // Moving every out-of-domain particle also handles domain rebalancing.
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
-        Vector3<double> x;
+        Vector3<double> position;
         for (int dim = 0; dim < kDimensions; dim++) {
-            x[dim] = positionDomainCoordinate(particlesPos(dim, i));
+            position[dim] = positionDomainCoordinate(particlesPos(dim, i));
         }
         auto record = packSphParticle(i);
-        if (box.contains(x)) {
+        if (box.contains(position)) {
             retainedSphParticles.push_back(std::move(record));
         } else {
-            auto const rank = findParticleDomain(x);
+            auto const rank = findParticleDomain(position);
             auto& send = sends[rank];
             send.push_back(std::move(record));
             if (send.size() >= parcelCapacity) {
@@ -920,10 +731,6 @@ static void beginSphMigration(int rung) {
     }
 }
 static void endSphMigration() {
-    if (usesHierarchicalIntegration(getOptions().run)) {
-        endHierarchicalSphMigration();
-        return;
-    }
     Vector<hpx::future<void>> pending;
     for (auto const& child : hpxChildren()) {
         pending.push_back(hpx::async<DomainsEndAction>(child));
@@ -1030,12 +837,12 @@ void domainsBegin(int rung) {
                         // all particles before building their common gravity tree.
                         if (!getOptions().run.hierarchicalGravity ||
                             !getOptions().gravity.enabled || particlesRung(i) == rung) {
-                            Vector3<double> x;
+                            Vector3<double> position;
                             for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
-                                x[dim] = positionDomainCoordinate(particlesPos(dim, i));
+                                position[dim] = positionDomainCoordinate(particlesPos(dim, i));
                             }
-                            if (!myDomain.contains(x)) {
-                                ParticleInteger const rank = findParticleDomain(x);
+                            if (!myDomain.contains(position)) {
+                                ParticleInteger const rank = findParticleDomain(position);
                                 auto& send = sends[rank];
                                 send.push_back(particlesGetParticle(i));
                                 if (send.size() >= parcelCapacity) {
@@ -1086,9 +893,9 @@ void domainsEnd() {
     }
     auto const particleCompare = [](Particle a, Particle b) {
         for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
-            if (a.x[dim] < b.x[dim]) {
+            if (a.position[dim] < b.position[dim]) {
                 return true;
-            } else if (a.x[dim] > b.x[dim]) {
+            } else if (a.position[dim] > b.position[dim]) {
                 return false;
             }
         }
@@ -1174,14 +981,14 @@ Range<double> domainsFindMyBox() {
     return localDomains[hpxRank()].box;
 }
 
-int domainsFindRank(Vector3<double> const& x) {
+int domainsFindRank(Vector3<double> const& position) {
     if (hpxSize() == 1) {
         return 0;
     }
     if (boxesByKey.find(1) == boxesByKey.end()) {
         throw std::runtime_error("Particle domains have not been decomposed");
     }
-    return findParticleDomain(x);
+    return findParticleDomain(position);
 }
 
 static void domainsCheck() {
@@ -1198,13 +1005,14 @@ static void domainsCheck() {
                 ParticleInteger const end =
                     size_t(proc + 1) * (rng.second - rng.first) / numberOfThreads + rng.first;
                 for (ParticleInteger i = begin; i < end; i++) {
-                    Vector3<double> x;
+                    Vector3<double> position;
                     for (int dim = 0; dim < kDimensions; dim++) {
-                        x[dim] = positionDomainCoordinate(particlesPos(dim, i));
+                        position[dim] = positionDomainCoordinate(particlesPos(dim, i));
                     }
-                    if (!myDomain.contains(x)) {
+                    if (!myDomain.contains(position)) {
                         PRINT("particle out of range %li of %li %e %e %e rung %i\n", (long long) i,
-                            (long long) particlesSize(), x[0], x[1], x[2], particlesRung(i));
+                            (long long) particlesSize(), position[0], position[1], position[2],
+                            particlesRung(i));
                         PRINT("%s\n", domainsFindMyBox().toString().c_str());
                         ALWAYS_ASSERT(false);
                         fail++;
@@ -1286,15 +1094,15 @@ static void domainsCheck() {
 
  */
 
-static int findParticleDomain(Vector3<double> const& x, size_t key, int depth) {
+static int findParticleDomain(Vector3<double> const& position, size_t key, int depth) {
     auto const& entry = boxesByKey[key];
     if (entry.rank == -1) {
         int const xdim = depth % kDimensions;
         key <<= 1;
-        if (x[xdim] >= entry.midx) {
+        if (position[xdim] >= entry.midx) {
             key += 1;
         }
-        return findParticleDomain(x, key, depth + 1);
+        return findParticleDomain(position, key, depth + 1);
     } else {
         return entry.rank;
     }

@@ -19,8 +19,6 @@
 #include <hpx/hpx_init.hpp>
 
 #include <cosmictiger/analysis/lightcone_entry.hpp>
-#include <cosmictiger/hydro/hopkins/hopkins_state.hpp>
-#include <cosmictiger/math/simd_backend.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/drift.hpp>
 
@@ -28,8 +26,6 @@ Array<Position*, kDimensions> particlesX;
 Vector3<float>* particlesV = nullptr;
 char* particlesR = nullptr;
 char* particlesTy = nullptr;
-ParticleInteger* particlesSph = nullptr;
-HopkinsParticleState* sphParticlesHopkinsStates = nullptr;
 
 namespace detail {
 
@@ -59,15 +55,11 @@ struct Fixture {
     std::vector<Vector3<float>> velocities;
     std::vector<char> rungs;
     std::vector<char> types;
-    std::vector<ParticleInteger> gasIndices;
-    std::vector<HopkinsParticleState> meshStates;
 
     explicit Fixture(size_t count)
       : velocities(count)
       , rungs(count)
-      , types(count, kDarkMatterType)
-      , gasIndices(count, kNoParticleIndex)
-      , meshStates(count) {
+      , types(count, kDarkMatterType) {
         particleCount = count;
         currentRange = Pair<ParticleInteger>(0, count);
         options = Options{};
@@ -80,8 +72,6 @@ struct Fixture {
         particlesV = velocities.data();
         particlesR = rungs.data();
         particlesTy = types.data();
-        particlesSph = gasIndices.data();
-        sphParticlesHopkinsStates = meshStates.data();
         for (size_t index = 0; index < count; ++index) {
             rungs[index] = index % 3;
             for (int dim = 0; dim < kDimensions; ++dim) {
@@ -100,8 +90,6 @@ struct Fixture {
         particlesV = nullptr;
         particlesR = nullptr;
         particlesTy = nullptr;
-        particlesSph = nullptr;
-        sphParticlesHopkinsStates = nullptr;
         particleCount = 0;
         currentRange = Pair<ParticleInteger>(0, 0);
     }
@@ -115,97 +103,6 @@ PositionInteger referencePosition(PositionInteger raw, float velocity) {
         static_cast<PositionInteger>(std::fmod(std::abs(displacement), 1.0L) * kPeriod);
     return displacement < 0.0L ? raw - increment : raw + increment;
 }
-
-#if COSMICTIGER_ENABLE_HOPKINS
-void checkMeshVelocity(std::string const& method, size_t count) {
-    Fixture fixture(count);
-    options.hydro.enabled = true;
-    options.hydro.method = method;
-    options.run.scenario = "glass";
-    for (size_t index = 0; index < count; index += 2) {
-        fixture.types[index] = kSphType;
-        fixture.gasIndices[index] = count - 1 - index;
-        auto& state = fixture.meshStates[fixture.gasIndices[index]];
-        state.initialized = index % 4 == 0;
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            state.meshVelocity[dim] = -0.5 * fixture.velocities[index][dim];
-        }
-    }
-    for (size_t index = 1; index < count; index += 4) {
-        // Stars have no gas sidecar even in a meshless run.
-        fixture.types[index] = kStarType;
-    }
-    auto const initialPositions = fixture.positions;
-    auto const initialVelocities = fixture.velocities;
-    drift(0.5, 0.125, 0.0, 0.125, 0.0);
-    double const damping = 1.0 / (1.0 + std::acos(-1.0) * 0.125);
-    for (size_t index = 0; index < count; ++index) {
-        bool const meshlessGas = fixture.types[index] == kSphType && method != "sph" &&
-            fixture.meshStates[fixture.gasIndices[index]].initialized;
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            float const driftVelocity = meshlessGas ?
-                fixture.meshStates[fixture.gasIndices[index]].meshVelocity[dim] :
-                initialVelocities[index][dim];
-            require(fixture.positions[dim][index].raw() ==
-                    referencePosition(initialPositions[dim][index].raw(), driftVelocity),
-                "drift uses the mapped mesh velocity only for meshless gas");
-            float const expectedVelocity = meshlessGas ?
-                initialVelocities[index][dim] :
-                float(initialVelocities[index][dim] * damping);
-            require(fixture.velocities[index][dim] == expectedVelocity,
-                "meshless positional drift preserves the physical fluid velocity");
-        }
-    }
-}
-
-void checkMeshlessFixed64Motion(std::string const& method, int selectedRung) {
-    constexpr size_t kCount = 37;
-    constexpr int kSteps = 32;
-    constexpr double kTimestep = 0.25;
-    Fixture fixture(kCount);
-    options.hydro.enabled = true;
-    options.hydro.method = method;
-    std::array<uint64_t, kDimensions> const positions{
-        0x4000000000000123ULL, 0x8000000000000321ULL, UINT64_MAX - 7};
-    Vector3<double> const velocity{0x1p-60, -0x1p-60, 0x1p-60};
-    for (size_t index = 0; index < kCount; ++index) {
-        fixture.types[index] = kSphType;
-        fixture.gasIndices[index] = kCount - 1 - index;
-        auto& state = fixture.meshStates[fixture.gasIndices[index]];
-        state.initialized = true;
-        state.meshVelocity = velocity;
-        state.supportRadius = 0.125;
-        state.mass = 1.0;
-        state.totalEnergy = 2.0;
-        state.momentum = {0.1, -0.2, 0.3};
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            fixture.positions[dim][index].setInteger(positions[dim]);
-            fixture.velocities[index][dim] = 0.0f;
-        }
-    }
-    for (int step = 0; step < kSteps; ++step) {
-        drift(1.0, kTimestep, step * kTimestep, (step + 1) * kTimestep, 0.0, selectedRung);
-    }
-    for (size_t index = 0; index < kCount; ++index) {
-        auto const& state = fixture.meshStates[fixture.gasIndices[index]];
-        bool const moved =
-            method != "sph" && (selectedRung < 0 || fixture.rungs[index] == selectedRung);
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            uint64_t const displacement = moved ? 4 * kSteps : 0;
-            uint64_t const expected =
-                dim == 1 ? positions[dim] - displacement : positions[dim] + displacement;
-            require(fixture.positions[dim][index].raw() == expected,
-                "meshless drift discarded Fixed64 low bits or changed an inactive position");
-            require(fixture.velocities[index][dim] == 0.0f,
-                "meshless drift changed the physical fluid velocity");
-        }
-        require(state.mass == 1.0 && state.totalEnergy == 2.0 &&
-                state.momentum == Vector3<double>{0.1, -0.2, 0.3} && state.supportRadius == 0.125,
-            "meshless positional drift changed conserved or support state");
-    }
-}
-
-#endif
 
 void checkDispatch(size_t count, int rung, bool glass) {
     Fixture fixture(count);
@@ -339,177 +236,6 @@ void particlesMemadviseCpu() {
 TEST(DriftDispatch, SmallRange) {
     detail::checkDispatch(37, -1, false);
 }
-
-#if COSMICTIGER_ENABLE_HOPKINS
-TEST(DriftDispatch, MeshlessVelocity) {
-    for (auto const* method : {"sph", "mfm", "mfv"}) {
-        detail::checkMeshVelocity(method, 37);
-        detail::checkMeshVelocity(method, 9007);
-    }
-}
-
-TEST(DriftDispatch, MeshlessFixed64PositionPreservesLowBits) {
-    if constexpr (kPositionBits != 64) {
-        GTEST_SKIP() << "Hopkins requires Fixed64 positions";
-    } else {
-        for (auto const* method : {"sph", "mfm", "mfv"}) {
-            detail::checkMeshlessFixed64Motion(method, -1);
-            detail::checkMeshlessFixed64Motion(method, 1);
-        }
-    }
-}
-
-TEST(DriftDispatch, MeshlessPreservesDoubleTimestepAndScale) {
-    if constexpr (kPositionBits != 64) {
-        GTEST_SKIP() << "Hopkins requires Fixed64 positions";
-    } else {
-        for (auto const* method : {"mfm", "mfv"}) {
-            detail::Fixture fixture(1);
-            detail::options.hydro.enabled = true;
-            detail::options.hydro.method = method;
-            fixture.types[0] = kSphType;
-            fixture.gasIndices[0] = 0;
-            auto& state = fixture.meshStates[0];
-            state.initialized = true;
-            state.meshVelocity = {0.125, 0.125, 0.125};
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                fixture.positions[dim][0].setInteger(0x4000000000000123ULL);
-            }
-            drift(0.7, 0.1, 0.0, 0.1, 0.0);
-            PositionInteger const expected =
-                0x4000000000000123ULL + Position(0.125 * (0.1 / 0.7)).raw();
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                EXPECT_EQ(fixture.positions[dim][0].raw(), expected);
-            }
-        }
-    }
-}
-
-TEST(DriftDispatch, MeshlessTrajectoryIgnoresPendingTransfersAndFineEvents) {
-    if constexpr (kPositionBits != 64) {
-        GTEST_SKIP() << "Hopkins requires Fixed64 positions";
-    } else {
-        constexpr size_t kCount = NativeSimdVector<double>::size() + 1;
-        detail::Fixture fixture(kCount);
-        detail::options.hydro.enabled = true;
-        detail::options.hydro.method = "mfv";
-        for (size_t index = 0; index < kCount; ++index) {
-            fixture.types[index] = kSphType;
-            fixture.gasIndices[index] = kCount - 1 - index;
-            auto& state = fixture.meshStates[fixture.gasIndices[index]];
-            double const factor = index + 1.0;
-            state.initialized = true;
-            state.sourceTime = index % 2 == 0 ? 0.25 : 0.5;
-            state.endTime = 1.0;
-            state.beginTick = index;
-            state.endTick = index + 32768;
-            state.meshVelocity = {0.125 * factor, -0.25 * factor, 0.5 * factor};
-            state.meshAcceleration = {0.25 * factor, 0.5 * factor, -0.125 * factor};
-            state.mass = factor;
-            state.totalEnergy = 2.0 * factor;
-            state.momentum = {factor, -factor, 0.5 * factor};
-            state.pendingMass = 0.125 * factor;
-            state.pendingMomentum = {4.0 * factor, 8.0 * factor, 16.0 * factor};
-            state.pendingEnergy = 32.0 * factor;
-            state.pendingGravityIntegral = {0.25 * factor, 0.5 * factor, factor};
-            state.pendingGravityWork = {-0.25 * factor, -0.5 * factor, -factor};
-        }
-        auto const initial = fixture.positions;
-        auto const initialStates = fixture.meshStates;
-        auto const initialVelocities = fixture.velocities;
-        drift(1.0, 0.5, 0.5, 1.0, 0.0);
-        auto const whole = fixture.positions;
-        fixture.positions = initial;
-        for (int dim = 0; dim < kDimensions; dim++) {
-            particlesX[dim] = fixture.positions[dim].data();
-        }
-        for (int step = 0; step < 4; step++) {
-            double const begin = 0.5 + step * 0.125;
-            // Fine neighbors can deposit arbitrary impulses without changing
-            // the coarse particle's own anchored trajectory.
-            for (size_t index = 0; index < kCount; ++index) {
-                fixture.meshStates[fixture.gasIndices[index]].pendingMomentum[0] += index + 1.0;
-            }
-            drift(1.0, 0.125, begin, begin + 0.125, 0.0);
-        }
-        for (size_t index = 0; index < kCount; ++index) {
-            SCOPED_TRACE(index);
-            auto const& state = fixture.meshStates[fixture.gasIndices[index]];
-            auto const& anchor = initialStates[fixture.gasIndices[index]];
-            for (int dim = 0; dim < kDimensions; dim++) {
-                // Integrate v(t) analytically, independently of the midpoint
-                // implementation. Binary inputs make all increments exact.
-                long double const beginAge = 0.5L - anchor.sourceTime;
-                long double const endAge = 1.0L - anchor.sourceTime;
-                long double const displacement = 0.5L * anchor.meshVelocity[dim] +
-                    0.5L * anchor.meshAcceleration[dim] * (endAge * endAge - beginAge * beginAge);
-                PositionInteger const expected =
-                    initial[dim][index].raw() + Position(double(displacement)).raw();
-                EXPECT_EQ(whole[dim][index].raw(), expected);
-                EXPECT_EQ(fixture.positions[dim][index].raw(), expected);
-                EXPECT_EQ(fixture.velocities[index][dim], initialVelocities[index][dim]);
-                EXPECT_EQ(state.meshVelocity[dim], anchor.meshVelocity[dim]);
-                EXPECT_EQ(state.meshAcceleration[dim], anchor.meshAcceleration[dim]);
-                EXPECT_EQ(state.momentum[dim], anchor.momentum[dim]);
-                EXPECT_EQ(state.pendingGravityIntegral[dim], anchor.pendingGravityIntegral[dim]);
-                EXPECT_EQ(state.pendingGravityWork[dim], anchor.pendingGravityWork[dim]);
-                EXPECT_EQ(state.pendingMomentum[dim],
-                    anchor.pendingMomentum[dim] + (dim == 0 ? 4.0 * (index + 1.0) : 0.0));
-            }
-            EXPECT_EQ(state.sourceTime, anchor.sourceTime);
-            EXPECT_EQ(state.endTime, anchor.endTime);
-            EXPECT_EQ(state.beginTick, anchor.beginTick);
-            EXPECT_EQ(state.endTick, anchor.endTick);
-            EXPECT_EQ(state.mass, anchor.mass);
-            EXPECT_EQ(state.totalEnergy, anchor.totalEnergy);
-            EXPECT_EQ(state.pendingMass, anchor.pendingMass);
-            EXPECT_EQ(state.pendingEnergy, anchor.pendingEnergy);
-        }
-    }
-}
-
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
-TEST(DriftDispatch, MeshlessLightconeMassAndFluidVelocity) {
-    detail::Fixture fixture(3);
-    detail::options.hydro.enabled = true;
-    detail::options.hydro.method = "mfv";
-    detail::options.lightcone.enabled = true;
-    detail::options.lightcone.mapSize = 2;
-    fixture.types = {kSphType, kStarType, kDarkMatterType};
-    particlesTy = fixture.types.data();
-    fixture.gasIndices[0] = 2;
-    auto& state = fixture.meshStates[2];
-    state.initialized = true;
-    state.meshVelocity = {0.0, 0.0, 0.0};
-    state.mass = 0.375;
-    for (size_t index = 0; index < 3; ++index) {
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            fixture.positions[dim][index] = 0.25;
-            fixture.velocities[index][dim] = index == 0 ? 0.01f * (dim + 1) : 0.0f;
-        }
-    }
-    drift(0.5, 0.125, 0.5, 0.625, 1.0);
-    ASSERT_EQ(detail::capturedEntries.size(), 3);
-    for (auto const& entry : detail::capturedEntries) {
-        EXPECT_DOUBLE_EQ(entry.x.toDouble(), 0.25);
-        EXPECT_DOUBLE_EQ(entry.y.toDouble(), 0.25);
-        EXPECT_DOUBLE_EQ(entry.z.toDouble(), 0.25);
-        if (entry.type == kSphType) {
-            EXPECT_FLOAT_EQ(entry.mass, 0.375f);
-            EXPECT_FLOAT_EQ(entry.vx, 0.01f);
-            EXPECT_FLOAT_EQ(entry.vy, 0.02f);
-            EXPECT_FLOAT_EQ(entry.vz, 0.03f);
-        } else {
-            EXPECT_FLOAT_EQ(entry.mass, -1.0f);
-            EXPECT_FLOAT_EQ(entry.vx, 0.0f);
-            EXPECT_FLOAT_EQ(entry.vy, 0.0f);
-            EXPECT_FLOAT_EQ(entry.vz, 0.0f);
-        }
-    }
-}
-#endif
-
-#endif
 
 TEST(DriftDispatch, WorkerChunks) {
     detail::checkDispatch(9007, -1, false);

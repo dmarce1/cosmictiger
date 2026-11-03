@@ -32,7 +32,7 @@ void testDeferredSourceCompletion() {
         data.sourceVelocityX[source] = i == 0 ? 0.2f : -0.2f;
         data.sourceVelocityY[source] = 0.1f;
         data.sourceVelocityZ[source] = -0.3f;
-        data.sourceSupportRadius[source] = data.sinkThermodynamicStates[sink].supportRadius = 0.35f;
+        data.sourceSupportRadius[source] = data.sinkSupportRadius[sink] = 0.35f;
         gravity[i] = Vector3<float>(3.0f + i, -4.0f + i, 2.0f - i);
         data.sinkGravityAccelerationX[sink] = gravity[i][0];
         data.sinkGravityAccelerationY[sink] = gravity[i][1];

@@ -43,7 +43,7 @@ void initializeSphTreeParticles(ParticleInteger count, int generation) {
         particlesCatIndex(i) = i;
         sphParticlesParticleIndex(i) = i;
         sphParticlesSupportRadius(i) = float(generation + 1) / 64.0f;
-        sphParticlesInternalEnergy(i) = 1.0f;
+        sphParticlesSetInternalEnergy(i, 1.0f);
     }
 }
 

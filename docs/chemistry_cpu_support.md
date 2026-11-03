@@ -21,10 +21,7 @@ cosmological recombination model. With SPH disabled, cooling is inactive.
 
 A cosmological CPU run enables `hydro.enabled=true`, `chemistry.enabled=true`
 and leaves every CUDA selector `false`. Cooling runs once for each completed selected SPH
-interval, including each particle's own interval under hierarchical integration. With `hydro.method=mfm` the same source runs once for each closed meshless
-own-step interval and its thermal change enters the conserved cell energy; see
-[Chemistry and star formation](hopkins_hydro.md#chemistry-and-star-formation) in the
-Hopkins documentation. MFV does not support cooling. With star formation enabled, conversion uses the previously saved
+interval. With star formation enabled, conversion uses the previously saved
 SFR, followed by cooling and the new SFR. There are no opening chemistry
 half-steps, outer source retries or chemistry timestep controls. State,
 reordering, migration and checkpoints carry the electron guess and hydro

@@ -69,7 +69,7 @@ struct LeafWorkspace {
     Vector<Position> xValue;
     Vector<Position> yValue;
     Vector<Position> zValue;
-    Vector<GroupInteger> g;
+    Vector<GroupInteger> groupNumbers;
 };
 
 static thread_local std::stack<LeafWorkspace> leafWorkspaces;
@@ -132,7 +132,7 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
         Vector<Position>& xValue2 = ws.xValue;
         Vector<Position>& yValue2 = ws.yValue;
         Vector<Position>& zValue2 = ws.zValue;
-        Vector<GroupInteger>& g = ws.g;
+        Vector<GroupInteger>& groupNumbers = ws.groupNumbers;
         if (leaflist.size()) {
             auto const myRng = selfPtr->particleRange;
             float const linkingLengthSquared = sqr(linkingLength);
@@ -149,7 +149,7 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
             xValue2.resize(totalSize);
             yValue2.resize(totalSize);
             zValue2.resize(totalSize);
-            g.resize(totalSize);
+            groupNumbers.resize(totalSize);
             totalSize = 0;
             for (int i = 0; i < leaflist.size(); i++) {
                 GroupTreeNode const* otherPtr = groupTreeGetNode(leaflist[i]);
@@ -157,18 +157,18 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
                     auto const& otherRng = otherPtr->particleRange;
                     int otherSize = otherRng.second - otherRng.first;
                     particlesGlobalReadPosAndGroup(otherPtr->globalParticleRange(), xValue2.data(),
-                        yValue2.data(), zValue2.data(), g.data(), totalSize);
+                        yValue2.data(), zValue2.data(), groupNumbers.data(), totalSize);
                     for (int i = totalSize; i < totalSize + otherSize; i++) {
-                        Vector3<double> x;
-                        x[kXDimension] = xValue2[i].toDouble();
-                        x[kYDimension] = yValue2[i].toDouble();
-                        x[kZDimension] = zValue2[i].toDouble();
-                        if (!selfBox.periodicContains(x)) {
+                        Vector3<double> position;
+                        position[kXDimension] = xValue2[i].toDouble();
+                        position[kYDimension] = yValue2[i].toDouble();
+                        position[kZDimension] = zValue2[i].toDouble();
+                        if (!selfBox.periodicContains(position)) {
                             int const j = totalSize + otherSize - 1;
                             xValue2[i] = xValue2[j];
                             yValue2[i] = yValue2[j];
                             zValue2[i] = zValue2[j];
-                            g[i] = g[j];
+                            groupNumbers[i] = groupNumbers[j];
                             otherSize--;
                             i--;
                         }
@@ -213,8 +213,8 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
                                 grp = particlesGroupInit(k);
                                 foundAnyLink = true;
                             }
-                            if (grp > g[l]) {
-                                grp = g[l];
+                            if (grp > groupNumbers[l]) {
+                                grp = groupNumbers[l];
                                 foundAnyLink = true;
                             }
                         }

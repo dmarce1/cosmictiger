@@ -102,9 +102,8 @@ void destroy();
 int periodicIndex(int index);
 std::array<int, 3> coordinates(uint64_t key);
 ShortParticle particle(ParticleInteger index);
-// pairCurvature is the sink's direct-pair coefficient without G (gravity/timestep.hpp).
 void consumeField(ParticleInteger index, std::array<double, 4> const& field, KickReturn& result,
-    FlopCount& doubleFlops, FlopCounts& kickFlops, double pairCurvature);
+    FlopCount& doubleFlops, FlopCounts& kickFlops);
 bool activeSink(ParticleInteger index);
 void evaluatePairs();
 void evaluateTrees();

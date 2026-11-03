@@ -240,75 +240,6 @@ void testFixed64Ticks() {
     }
 }
 
-void testHierarchicalMfmEndpoints() {
-    constexpr size_t kCount = 2 * NativeSimdVector<double>::size() + 1;
-    for (bool lightcone : {false, true}) {
-        Fixture fixture(kCount);
-        std::vector<HopkinsParticleState> states(kCount);
-        std::vector<ParticleInteger> gasIndices(kCount);
-        std::vector<char> types(kCount);
-        for (size_t particle = 0; particle < kCount; ++particle) {
-            gasIndices[particle] = kCount - 1 - particle;
-            types[particle] = particle % 3 == 0 ? kDarkMatterType : kSphType;
-            fixture.rungs[particle] = particle % 2;
-            auto& state = states[gasIndices[particle]];
-            state.initialized = true;
-            state.mass = 2.0;
-            state.totalEnergy = 7.0;
-            state.hydroRung = 6;
-            state.gravityEndTime = -0.25;
-            state.gravityDriftScale = 3.0;
-            for (int dimension = 0; dimension < kDimensions; ++dimension) {
-                state.momentum[dimension] = 0.25;
-                state.meshVelocity[dimension] = 1.0;
-                fixture.velocities[particle][dimension] = 0.25f * (dimension + 1);
-            }
-        }
-        // Force the scalar tail to exercise an active gas endpoint.
-        types.back() = kSphType;
-        fixture.rungs.back() = 0;
-        Fixture const original = fixture;
-        DriftParameters parameters;
-        parameters.rung = 0;
-        parameters.scale = 0.5;
-        parameters.timestep = 0.125;
-        parameters.tau0 = 0.25;
-        parameters.tau1 = 0.375;
-        parameters.tauMax = 1.0;
-        parameters.lightcone = lightcone;
-        parameters.hierarchicalMfm = true;
-        std::vector<LightconeEntry> entries;
-        cpuDriftKernel(fixture.positions[0].data(), fixture.positions[1].data(),
-            fixture.positions[2].data(), fixture.velocities.data(), fixture.rungs.data(),
-            types.data(), kCount, parameters, &entries, states.data(), gasIndices.data());
-        for (size_t particle = 0; particle < kCount; ++particle) {
-            bool const active = fixture.rungs[particle] == parameters.rung;
-            bool const gas = types[particle] == kSphType;
-            auto const& state = states[gasIndices[particle]];
-            require(state.gravityEndTime == (active && gas ? parameters.tau1 : -0.25),
-                "hierarchical MFM records only the selected gas endpoint");
-            require(state.gravityDriftScale == (active && gas ? parameters.scale : 3.0),
-                "hierarchical MFM saves the gravity drift factor");
-            require(state.mass == 2.0 && state.totalEnergy == 7.0 && state.hydroRung == 6,
-                "gravity endpoint recording preserves the hydro anchor and clock");
-            for (int dimension = 0; dimension < kDimensions; ++dimension) {
-                PositionInteger const increment =
-                    active && !gas ? PositionInteger(dimension + 1) << (kPositionBits - 4) : 0;
-                require(fixture.positions[dimension][particle].raw() ==
-                        original.positions[dimension][particle].raw() + increment,
-                    "MFM future projection is deferred while collisionless particles drift");
-                require(fixture.velocities[particle][dimension] ==
-                        original.velocities[particle][dimension],
-                    "endpoint recording preserves fluid velocity");
-            }
-        }
-        for (auto const& entry : entries) {
-            require(entry.type != kSphType,
-                "provisional MFM endpoint projection cannot emit gas lightcone crossings");
-        }
-    }
-}
-
 #if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
 Fixture stationaryParticle(double coordinate) {
     Fixture fixture(1);
@@ -474,10 +405,6 @@ TEST(DriftCpu, Empty) {
 
 TEST(DriftCpu, PositionsAndActivity) {
     detail::testPositionsAndActivity();
-}
-
-TEST(DriftCpu, HierarchicalMfmEndpoints) {
-    detail::testHierarchicalMfmEndpoints();
 }
 
 TEST(DriftCpu, Fixed64Ticks) {

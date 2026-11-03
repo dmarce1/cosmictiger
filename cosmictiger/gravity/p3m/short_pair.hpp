@@ -65,47 +65,34 @@ CUDA_EXPORT inline ShortPairParameters makeShortPairParameters(
 // are dropped: their short force is the documented truncation of the split.
 // Distinct coincident particles keep the finite softened-minus-long potential
 // and exert no force; identical primary particles must be excluded by the caller.
-// Optional pairCurvature sums m F(r/H)/H^3 of the full softened pair (without G)
-// for every evaluated pair inside the cutoff: the direct-pair timestep bound of
-// gravity/timestep.hpp. The short force never exceeds the softened total, so the
-// full coefficient bounds the short pair's tidal field from above.
 template <class Kernel>
 CUDA_EXPORT inline FlopCount accumulateShortPair(double dx, double dy, double dz, double mass,
     ShortPairParameters const& parameters, bool doPotential, Kernel const& kernel,
-    std::array<double, 4>& field, double* pairCurvature = nullptr) {
+    std::array<double, 4>& field) {
     double const r2 = dx * dx + dy * dy + dz * dz;
     if (r2 >= parameters.cutoffSquared) {
         return 6;
     }
-    FlopCount const curvatureFlops = pairCurvature != nullptr ? 1 : 0;
     GaussianScreening<double> const screening(parameters.alpha);
     if (r2 > parameters.supportSquared) {
         auto const radial = evaluateGaussianRadial<GaussianComponent::Short, 1>(r2, screening);
         // coefficient<1,0>() = r * A_1 with A_1 = (1/r) d/dr g, so a = -A_1 d.
         double const inward = -mass * radial.template coefficient<1, 0>() * radial.inverseRadius();
-        if (pairCurvature != nullptr) {
-            double const inverseRadius = radial.inverseRadius();
-            *pairCurvature += mass * inverseRadius * inverseRadius * inverseRadius;
-        }
         field[1] += inward * dx;
         field[2] += inward * dy;
         field[3] += inward * dz;
         if (doPotential) {
             field[0] += mass * radial.template coefficient<0, 0>();
         }
-        return 6 + radial.flops() + 8 + (doPotential ? 2 : 0) + 4 * curvatureFlops;
+        return 6 + radial.flops() + 8 + (doPotential ? 2 : 0);
     }
     if (r2 == 0.0) {
-        if (pairCurvature != nullptr) {
-            *pairCurvature +=
-                mass * parameters.inverseSupportCubed * radial_kernel::forceFactor(kernel, 0.0);
-        }
         if (doPotential) {
             double const longOrigin = -2.0 * parameters.alpha * std::numbers::inv_sqrtpi;
             field[0] += mass *
                 (-radial_kernel::potential(kernel, 0.0) * parameters.inverseSupport - longOrigin);
         }
-        return 6 + (doPotential ? 6 : 0) + 3 * curvatureFlops;
+        return 6 + (doPotential ? 6 : 0);
     }
     double const r = std::sqrt(r2);
     double const q = r * parameters.inverseSupport;
@@ -114,9 +101,6 @@ CUDA_EXPORT inline FlopCount accumulateShortPair(double dx, double dy, double dz
     auto const radial = evaluateGaussianRadial<GaussianComponent::Long, 1>(r2, screening);
     double const longFactor = mass * radial.template coefficient<1, 0>() * radial.inverseRadius();
     double const inward = -softenedFactor + longFactor;
-    if (pairCurvature != nullptr) {
-        *pairCurvature += softenedFactor;
-    }
     field[1] += inward * dx;
     field[2] += inward * dy;
     field[3] += inward * dz;
@@ -125,21 +109,21 @@ CUDA_EXPORT inline FlopCount accumulateShortPair(double dx, double dy, double dz
             (-radial_kernel::potential(kernel, q) * parameters.inverseSupport -
                 radial.template coefficient<0, 0>());
     }
-    return 6 + 4 + radial.flops() + 10 + (doPotential ? 5 : 0) + curvatureFlops;
+    return 6 + 4 + radial.flops() + 10 + (doPotential ? 5 : 0);
 }
 
 // Pair with identity exclusion; the displacement is sink minus shifted source.
 template <class Kernel>
 CUDA_EXPORT inline FlopCount accumulateShortPair(ShortParticle const& sink,
     ShortParticle const& source, ShortPairParameters const& parameters, bool doPotential,
-    Kernel const& kernel, std::array<double, 4>& field, double* pairCurvature = nullptr) {
+    Kernel const& kernel, std::array<double, 4>& field) {
     if (source.rank == sink.rank && source.index == sink.index) {
         return 0;
     }
     return 3 +
         accumulateShortPair(sink.position[0] - source.position[0],
             sink.position[1] - source.position[1], sink.position[2] - source.position[2],
-            source.mass, parameters, doPotential, kernel, field, pairCurvature);
+            source.mass, parameters, doPotential, kernel, field);
 }
 
 }    // namespace cosmictiger::gravity::p3m

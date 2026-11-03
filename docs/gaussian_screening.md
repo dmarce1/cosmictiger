@@ -16,7 +16,7 @@ timestep limit and applicable physical/end-time limits, and need not be a
 power of two. The existing constant/traditional/hierarchical integration
 selection specifies the integration **inside** that interval. Inner block
 steps are power-of-two subdivisions of the chosen outer duration. With pure
-PM gravity, inner evolution is needed only when SPH or Hopkins is active.
+PM gravity, inner evolution is needed only when SPH is active.
 
 The intended outer composition is a long-force half kick, inner evolution
 including drift and short-force/hydro updates, and a long-force half kick at

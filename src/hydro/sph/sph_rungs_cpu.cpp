@@ -23,7 +23,7 @@ SphRunReturn sphCpuRungs(
         }
         int const sinkIndex =
             targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
-        float const supportRadius = data.sinkThermodynamicStates[sinkIndex].supportRadius;
+        float const supportRadius = data.sinkSupportRadius[sinkIndex];
         SimdFloat const squaredSupportRadius(supportRadius * supportRadius);
         flops += 1;
         SimdFloat maximumNeighborRungs(0.0f);

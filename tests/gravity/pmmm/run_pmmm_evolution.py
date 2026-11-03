@@ -189,7 +189,7 @@ def main():
             cells = {tuple(min(mesh_size - 1, int(coordinate * mesh_size))
                            for coordinate in row["x"]) for row in gas}
             require(len(cells) > 8, "SPH fixture did not occupy multiple PMMM cells")
-            require(any(any(row["gas"][index] != 0.0 for index in (11, 13, 15))
+            require(any(any(row["gas"][index] != 0.0 for index in (9, 10, 11))
                         for row in gas), "PMMM did not deliver gravity acceleration to gas")
         source = baseline / "checkpoint.2"
         resumed = prepareCase(root, label + "_resumed", source)

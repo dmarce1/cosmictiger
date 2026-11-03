@@ -302,7 +302,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         particleRange.second = sphParticlesSize();
     }
     Array<TreeId, kChildCount> children;
-    Vector3<Position> x;
+    Vector3<Position> nodePosition;
     Vector3<double> xc;
     size_t numberOfActiveParticles;
     sph_flops::Counter flops;
@@ -414,14 +414,15 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
                 xValue[dim] = sphParticlesPosition(dim, i);
             }
             for (int dim = 0; dim < kDimensions; dim++) {
-                double const x = xValue[dim].toDouble();
-                innerBox.begin[dim] = std::min(innerBox.begin[dim].toDouble(), x - tiny);
-                innerBox.end[dim] = std::max(innerBox.end[dim].toDouble(), x + tiny);
+                double const position = xValue[dim].toDouble();
+                innerBox.begin[dim] = std::min(innerBox.begin[dim].toDouble(), position - tiny);
+                innerBox.end[dim] = std::max(innerBox.end[dim].toDouble(), position + tiny);
                 // Position and old-bound conversions, two offsets and two new bounds.
                 flops.doublePrecision += 7;
                 if (sphParticlesRung(i) >= params.minimumRung) {
-                    outerBox.begin[dim] = std::min(outerBox.begin[dim].toDouble(), x - h - tiny);
-                    outerBox.end[dim] = std::max(outerBox.end[dim].toDouble(), x + h + tiny);
+                    outerBox.begin[dim] =
+                        std::min(outerBox.begin[dim].toDouble(), position - h - tiny);
+                    outerBox.end[dim] = std::max(outerBox.end[dim].toDouble(), position + h + tiny);
                     flops.doublePrecision += 10;    // Includes both support promotions.
                 }
             }

@@ -40,28 +40,6 @@ class DomainEntry(ctypes.Structure):
     _fields_ = [("key", ctypes.c_size_t), ("domain", Domain)]
 
 
-class HierarchicalSource(ctypes.Structure):
-    """Native sph_hierarchical::SourceState, including padding before epoch."""
-    _fields_ = [("id", ctypes.c_uint64)]
-    _fields_ += [(name, ctypes.c_double * 3) for name in
-                 ("position", "drift_velocity", "synchronized_velocity", "hydro_acceleration")]
-    _fields_ += [(name, ctypes.c_double) for name in
-                 ("internal_energy", "internal_energy_rate", "density", "log_density_rate",
-                  "physical_divergence", "support_radius", "minimum_support_radius",
-                  "maximum_support_radius", "grad_h_correction", "grad_h_correction_rate",
-                  "balsara_factor", "viscosity_alpha", "pressure_energy_ratio", "adiabatic_index")]
-    _fields_ += [("rung", ctypes.c_int)]
-    _fields_ += [(name, ctypes.c_double) for name in ("epoch", "valid_until", "drift_scale")]
-
-
-def hierarchical_source_values(source):
-    values = []
-    for name, layout in source._fields_:
-        value = getattr(source, name)
-        values.extend(value if issubclass(layout, ctypes.Array) else (value,))
-    return tuple(values)
-
-
 def local_domain_type(integer_bytes):
     class LocalDomain(ctypes.Structure):
         _fields_ = [("box", ctypes.c_double * 6), ("process_range", ctypes.c_int * 2),
@@ -183,10 +161,9 @@ def read_prefix(data):
                 and result.driver.outer_interval >= 0 and result.driver.outer_start >= 0,
                 "invalid checkpoint particle-mesh interval extension")
     result.particle_start = reader.offset
-    result.has_hierarchical_sph = (hydro and bool(flags & (1 << 6)) and
-                                   ((header.reserved >> 25) & 3) == 0)
-    result.gas_version = ((90 if stars else 80 if cooling else 2) + viscosity_offset
-                          + (1000 if hydro and flags & (1 << 6) else 0))
+    # Gas versions from 30000 store entropies and support radii as separate arrays,
+    # no predicted rates, and only the electron fraction of the cooling state.
+    result.gas_version = 30000 + (110 if stars else 100 if cooling else 2) + viscosity_offset
     result.reader = reader
     return result
 
@@ -210,33 +187,34 @@ def decode_checkpoint(data, ranks=1):
     result.types = reader.take("b", count) if result.hydro else (0,) * count
     result.gas_indices = reader.take(integer_code, count) if result.hydro else ()
     result.cooling, result.stars = (), ()
-    result.hierarchical_sources, result.hierarchical_bytes = (), b""
     result.gas = [() for _ in range(gas_count)]
     if result.hydro:
         result.gas_start = reader.offset
         gas_header = reader.take("I", 7)
-        require(gas_header == (0x43545350, result.gas_version, result.integer_bytes, 8, 12, 3, 4),
+        require(gas_header == (0x43545350, result.gas_version, result.integer_bytes, 4, 12, 3, 4),
                 f"unsupported checkpoint gas layout: {gas_header}")
         require(reader.take(integer_code)[0] == gas_count, "checkpoint gas counts disagree")
-        result.thermodynamic = reader.take("f", 2 * gas_count)
+        result.entropy_initialized = reader.take("I")[0]
+        result.thermal_scale_factor = reader.take("d")[0]
+        require(result.entropy_initialized in (0, 1) and
+                math.isfinite(result.thermal_scale_factor) and result.thermal_scale_factor > 0,
+                "invalid entropy checkpoint context")
+        result.entropies = reader.take("f", gas_count)
+        result.support_radii = reader.take("f", gas_count)
         accelerations = reader.take("f", 3 * gas_count)
         result.gravity_indices = reader.take(integer_code, gas_count)
-        scalars = [reader.take("f", gas_count) for _ in range(3)]
+        scalars = [reader.take("f", gas_count) for _ in range(2)]
+        gamma = result.header.physics[2]
+        factor = result.thermal_scale_factor ** (5 - 3 * gamma) / (gamma - 1)
+        result.internal_energies = tuple(a * rho ** (gamma - 1) * factor
+            for a, rho in zip(result.entropies, scalars[1])) if result.entropy_initialized else result.entropies
         flags = [reader.take("B", gas_count) for _ in range(2)]
-        vectors = [reader.take("f", gas_count) for _ in range(6)]
-        if result.has_hierarchical_sph:
-            anchor_start = reader.offset
-            result.hierarchical_sources = tuple(
-                hierarchical_source_values(reader.native(HierarchicalSource))
-                for _ in range(gas_count))
-            result.hierarchical_bytes = data[anchor_start:reader.offset]
-        # Versions 2/4/6/8 and 80/82/84/86 have different fixed-state bases.
-        delta = (result.gas_version - (90 if result.has_stars else 80 if result.has_cooling else 2)
-                 - (1000 if result.has_hierarchical_sph else 0))
+        vectors = [reader.take("f", gas_count) for _ in range(3)]
+        delta = (result.gas_version - 30000 - (110 if result.has_stars else 100 if result.has_cooling else 2))
         width = {0: 0, 2: 2, 4: 3, 6: 3}[delta]
         viscosity = reader.take("f", width * gas_count)
         if result.has_cooling:
-            result.cooling = tuple(reader.take("f", 3) for _ in range(gas_count))
+            result.cooling = tuple(reader.take("f", 1) for _ in range(gas_count))
         result.gas_end = reader.offset
         require(all(kind in (0, 1, 2) for kind in result.types) and
                 result.types.count(1) == gas_count, "invalid checkpoint particle species")
@@ -245,7 +223,7 @@ def decode_checkpoint(data, ranks=1):
         for gas_index, particle in enumerate(result.gravity_indices):
             require(result.gas_indices[particle] == gas_index, "inconsistent checkpoint gas mapping")
             result.gas[gas_index] = (
-                *result.thermodynamic[2 * gas_index:2 * gas_index + 2],
+                result.entropies[gas_index], result.support_radii[gas_index],
                 *accelerations[3 * gas_index:3 * gas_index + 3],
                 *(field[gas_index] for field in scalars),
                 *(field[gas_index] for field in flags),
@@ -279,8 +257,7 @@ def decode_checkpoint(data, ranks=1):
     require(not result.header.flags & (1 << 7), "lightcone checkpoint decoding is unsupported")
     require(reader.offset == len(data), "trailing unparsed checkpoint data")
     require(all(math.isfinite(value) for value in result.velocities) and
-            all(math.isfinite(value) for gas in result.gas for value in gas) and
-            all(math.isfinite(value) for source in result.hierarchical_sources for value in source),
+            all(math.isfinite(value) for gas in result.gas for value in gas),
             "nonfinite checkpoint particle state")
     result.physical = data[result.particle_start:result.particle_end]
     return result

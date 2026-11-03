@@ -742,15 +742,15 @@ static void initX0() {
                     }
                     if (closePack) {
                         for (int dim1 = 0; dim1 < kDimensions; dim1++) {
-                            double x = iValue[dim1] * ninv;
-                            x0Value[dim1][index] = x + 0.25 * ninv;
-                            x0Value[dim1][index + 1] = x + 0.75 * ninv;
+                            double position = iValue[dim1] * ninv;
+                            x0Value[dim1][index] = position + 0.25 * ninv;
+                            x0Value[dim1][index + 1] = position + 0.75 * ninv;
                         }
                         index += 2;
                     } else {
                         for (int dim1 = 0; dim1 < kDimensions; dim1++) {
-                            double x = iValue[dim1] * ninv;
-                            x0Value[dim1][index] = x;
+                            double position = iValue[dim1] * ninv;
+                            x0Value[dim1][index] = position;
                         }
                         index++;
                     }
@@ -917,12 +917,12 @@ static void initX0() {
         for (int dim = 0; dim < kDimensions; dim++) {
             x0Value[dim].resize(2 * size_t(count));
             for (ParticleInteger i = 0; i < count; i++) {
-                double x = x0Value[dim][i].toDouble() + gasOffset;
-                if (x >= 1.0) {
-                    x -= 1.0;
+                double position = x0Value[dim][i].toDouble() + gasOffset;
+                if (position >= 1.0) {
+                    position -= 1.0;
                 }
-                x0Value[dim][count + i] = x;
-                particlesPos(dim, count + i) = x;
+                x0Value[dim][count + i] = position;
+                particlesPos(dim, count + i) = position;
                 particlesVel(dim, count + i) = 0.0;
             }
         }
@@ -947,13 +947,13 @@ static void initX0() {
             if (identify) {
                 particlesStarFormationStates[count + i].id = 2 * sourceIds[i] + 2;
             }
-            sphParticlesThermodynamicState(i).internalEnergy = storedThermalEnergy;
+            sphParticlesSetInternalEnergy(i, storedThermalEnergy);
             sphParticlesSupportRadius(i) = smoothLength;
             sphParticlesDensity(i) = density;
 #if COSMICTIGER_ENABLE_CHEMISTRY
             if (getOptions().chemistry.enabled) {
                 if (getOptions().chemistry.initializationTemperature > 0.0) {
-                    sphParticlesInternalEnergy(i) = 0.0f;
+                    sphParticlesSetInternalEnergy(i, 0.0f);
                 }
                 sphChemistryInitializeParticle(i, scale);
             }
@@ -1049,9 +1049,9 @@ static float zeldovichEnd(
                     }
                     dx *= -d1Value * boxSizeInv;
                     if (!velocityOnly) {
-                        double x = particlesPos(dim, i).toDouble() + dx;
-                        x -= std::floor(x);
-                        particlesPos(dim, i) = x;
+                        double position = particlesPos(dim, i).toDouble() + dx;
+                        position -= std::floor(position);
+                        particlesPos(dim, i) = position;
                     }
                     particlesVel(dim, i) += prefac1 * dx;
                     double const ndim =

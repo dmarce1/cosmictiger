@@ -18,6 +18,12 @@
 #include <cosmictiger/gravity/error_cuda.hpp>
 #include <cosmictiger/gravity/reference_table.hpp>
 
+void cosmictigerAssert(char const* condition, bool value, char const* file, int line) {
+    if (!value) {
+        throw std::runtime_error(std::string(file) + ":" + std::to_string(line) + ": " + condition);
+    }
+}
+
 namespace detail {
 
 void checkGravityErrorTestCuda(cudaError_t status, char const* operation) {

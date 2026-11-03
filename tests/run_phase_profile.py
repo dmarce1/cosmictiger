@@ -198,7 +198,7 @@ def check_sph(rows, integrator):
         "hydro.tree.create", "hydro.tree.destroy", "hydro.predictor", "hydro.corrector",
         "hydro.density", "hydro.density.reset", "hydro.density.activeSolve",
         "hydro.density.neighborSolve", "hydro.neighbors.initial", "hydro.neighbors.boxes",
-        "hydro.neighbors.refresh", "hydro.force.close", "hydro.force.open", "hydro.kick.open",
+        "hydro.neighbors.refresh", "hydro.force.close", "hydro.rungs.commit", "hydro.kick.open",
         "hydro.caches.clear", "hydro.caches.clearHydro", "hydro.diagnostics.energies",
         "hydro.diagnostics.timesteps"), integrator)
     calls = lambda name: rows[name]["calls"]
@@ -206,8 +206,8 @@ def check_sph(rows, integrator):
                  "hydro.neighbors.initial", "hydro.force.close", "hydro.diagnostics.energies"):
         require(calls(name) == calls("hydro.tree.create"),
                 f"{integrator}: {name} call count differs from SPH force events")
-    require(calls("hydro.force.open") == calls("hydro.kick.open"),
-            f"{integrator}: opening force/kick counts differ")
+    require(calls("hydro.rungs.commit") == calls("hydro.kick.open"),
+            f"{integrator}: rung commit/opening kick counts differ")
     require(calls("hydro.density.reset") == 2 * calls("hydro.density"),
             f"{integrator}: missing density-stage reset")
     for name in ("hydro.density.activeSolve", "hydro.density.neighborSolve"):
@@ -220,38 +220,6 @@ def check_sph(rows, integrator):
         require_phases(rows, ("hydro.rungs.limit",), integrator)
     else:
         require("hydro.rungs.limit" not in rows, "global integration unexpectedly limited rungs")
-
-
-def check_hopkins(rows, label):
-    # The retained-record pipeline keeps one persistent source tree: records are
-    # gathered as deltas, the tree is refit in place, and neighbor stencils are
-    # transient tree queries inside the support, geometry and flux phases.
-    require_phases(rows, (
-        "hydro.hopkins", "hydro.hopkins.tree.refresh", "hydro.hopkins.gather",
-        "hydro.hopkins.scatter", "hydro.hopkins.caches.clear", "hydro.hopkins.support",
-        "hydro.hopkins.support.solve", "hydro.hopkins.geometry", "hydro.hopkins.geometry.solve",
-        "hydro.hopkins.gradients", "hydro.hopkins.geometryRates", "hydro.hopkins.timesteps",
-        "hydro.hopkins.flux.open", "hydro.hopkins.flux.settle", "hydro.hopkins.close",
-        "hydro.hopkins.primitives", "hydro.hopkins.diagnostics.energies",
-        "hydro.hopkins.diagnostics.soundWave"), label)
-    calls = lambda name: rows[name]["calls"]
-    events = calls("hydro.hopkins")
-    openings = calls("hydro.hopkins.flux.open")
-    settlements = calls("hydro.hopkins.flux.settle")
-    require(calls("hydro.hopkins.tree.refresh") >= events,
-            f"{label}: persistent tree refresh does not cover every force event")
-    # Every nonterminal event opens pair intervals; the final force event only
-    # settles them. Wake-up passes may settle and close again at the same time.
-    require(events == openings + 1, f"{label}: missing opening or terminal closure event")
-    require(calls("hydro.hopkins.gradients") == calls("hydro.hopkins.geometryRates") == openings,
-            f"{label}: opening reconstruction counts differ")
-    require(settlements == calls("hydro.hopkins.close") == calls("hydro.hopkins.primitives") and
-            settlements >= events,
-            f"{label}: pair settlement, own-step closure and primitive refresh counts differ")
-    require(calls("hydro.hopkins.timesteps") == settlements - 1,
-            f"{label}: timestep selection ran during terminal closure or missed a wake-up pass")
-    require(calls("hydro.hopkins.diagnostics.energies") == events,
-            f"{label}: missing post-event energy diagnostic")
 
 
 def run_case(executable, directory, options, deadline):
@@ -295,7 +263,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
-    parser.add_argument("--hopkins", action="store_true", help="also check compiled Hopkins MFM/MFV")
     parser.add_argument("--gravity", action="store_true", help="also check available FMM/PMMM modes")
     parser.add_argument("--cuda", action="store_true", help="also check one FMM CUDA fixture")
     parser.add_argument("--device-profile", action="store_true",
@@ -328,17 +295,6 @@ def main():
         require(not detail_rows, f"{label}: gravity-disabled run reported gravity work")
         print(f"{label}: child phases, call counts, totals and terminal/file equality passed")
         count += 1
-        if args.hopkins:
-            for method in ("mfm", "mfv"):
-                label = f"{method}_{integrator}"
-                options = dict(common, **selections)
-                options.update({"run.scenario": "soundWave", "hydro.method": method,
-                                "initial.particlesPerDimension": 16, "hydro.neighborNumber": 4})
-                rows, detail_rows = run_case(executable, base / label, options, deadline)
-                check_hopkins(rows, label)
-                require(not detail_rows, f"{label}: gravity-disabled run reported gravity work")
-                print(f"{label}: Hopkins child phases and report accounting passed")
-                count += 1
     if args.gravity:
         for far in (name for name in compiled["far"] if name != "none"):
             nears = (compiled["near"] if far == "pmmm" else

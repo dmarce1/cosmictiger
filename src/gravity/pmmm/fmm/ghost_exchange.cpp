@@ -21,7 +21,7 @@ Vector<ParticleGhost> readGhostParticles(uint64_t generation, uint64_t key) {
     for (ParticleInteger i = cell.begin; i < cell.end; ++i) {
         auto& particle = result[i - cell.begin];
         for (int dim = 0; dim < kDimensions; ++dim) {
-            particle.x[dim] = particlesPos(dim, i);
+            particle.position[dim] = particlesPos(dim, i);
         }
         particle.type = getOptions().hydro.enabled ? particlesType(i) : kDarkMatterType;
         particle.rung = state.stageRungs[i - state.activeRange.first];
@@ -156,7 +156,7 @@ void receiveGhostCell(size_t index) {
         for (ParticleInteger i = cell.begin; i < cell.end; ++i) {
             auto const& particle = packet[i - cell.begin];
             for (int dim = 0; dim < kDimensions; ++dim) {
-                view.positions[dim][i] = particle.x[dim];
+                view.positions[dim][i] = particle.position[dim];
             }
             view.types[i] = particle.type;
             view.rungs[i] = particle.rung;

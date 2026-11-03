@@ -17,7 +17,6 @@
 #include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/gravity/pmmm/kick.hpp>
 #include <cosmictiger/gravity/pmmm/solver.hpp>
-#include <cosmictiger/gravity/timestep.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
@@ -58,16 +57,10 @@ KickReturn particleMeshPrepareKick(double scale, double baseTimestep, double max
                         for (int dim = 0; dim < kDimensions; ++dim) {
                             accelerationSquared += double(acceleration[dim]) * acceleration[dim];
                         }
-                        // Local direct-pair bound (gravity/timestep.hpp) from the
-                        // retained near-field coefficient; none without curvature.
-                        float const pairCurvature = pmmmPairCurvature(i);
-                        double const pairTimestep = gravity::pairTimestep<double>(
-                            scale, options.gravity.gm, options.gravity.timestepEta, pairCurvature);
-                        flops += pairCurvature > 0.0f && options.gravity.gm > 0.0 ? 5 : 0;
-                        double const timestep = std::min({maximumTimestep, pairTimestep,
+                        double const timestep = std::min(maximumTimestep,
                             options.gravity.timestepEta *
                                 std::sqrt(scale * effectiveRadius /
-                                    std::max(std::sqrt(accelerationSquared), 1.0e-30))});
+                                    std::max(std::sqrt(accelerationSquared), 1.0e-30)));
                         if (!(timestep > 0.0) || !std::isfinite(timestep)) {
                             THROW_ERROR("Particle mesh timestep is not finite and positive\n");
                         }
@@ -87,6 +80,8 @@ KickReturn particleMeshPrepareKick(double scale, double baseTimestep, double max
                         }
 #if COSMICTIGER_WITH_SPH
                         bool const gas = options.hydro.enabled && particlesType(i) == kSphType;
+#else
+                        bool const gas = false;
 #endif
                         double const oldHalfStep = previousTimestep >= 0.0 ?
                             0.5 * previousTimestep :
@@ -124,11 +119,14 @@ KickReturn particleMeshPrepareKick(double scale, double baseTimestep, double max
                             particlesPot(i) = potential;
                         }
                         result.pot += 0.5 * mass * potential;
-                        result.kin += 0.5 * mass * velocitySquared;
-                        result.xmom += mass * particlesVel(kXDimension, i);
-                        result.ymom += mass * particlesVel(kYDimension, i);
-                        result.zmom += mass * particlesVel(kZDimension, i);
-                        result.nmom += mass * std::sqrt(velocitySquared);
+                        if (!gas) {
+                            // Hydro sums the gas energies and momenta in its kick.
+                            result.kin += 0.5 * mass * velocitySquared;
+                            result.xmom += mass * particlesVel(kXDimension, i);
+                            result.ymom += mass * particlesVel(kYDimension, i);
+                            result.zmom += mass * particlesVel(kZDimension, i);
+                            result.nmom += mass * std::sqrt(velocitySquared);
+                        }
                     }
                     addCpuFlops(flops, FlopPrecision::Double);
                     return result;

@@ -25,6 +25,12 @@
 #include <cosmictiger/math/vector3.hpp>
 #include <tests/cuda_test.hpp>
 
+void cosmictigerAssert(char const* condition, bool value, char const* file, int line) {
+    if (!value) {
+        throw std::runtime_error(std::string(file) + ":" + std::to_string(line) + ": " + condition);
+    }
+}
+
 namespace detail {
 
 template <int order>

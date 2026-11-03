@@ -181,7 +181,7 @@ SphRunReturn sphCpuPrehydro1(
         bool const active =
             data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] >= parameters.minimumRung;
         if (active && !data.sinkSmoothingConverged[sinkIndex]) {
-            float& supportRadius = data.sinkThermodynamicStates[sinkIndex].supportRadius;
+            float& supportRadius = data.sinkSupportRadius[sinkIndex];
             bool const converged = detail::solveSphCpuSupportRadius(
                 parameters, data, targetNode, neighbors, particleIndex, supportRadius, flops);
             data.sinkSmoothingConverged[sinkIndex] = converged;
@@ -201,7 +201,9 @@ SphRunReturn sphCpuPrehydro1(
 SphRunReturn sphCpuPrehydro2(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
-    sph_flops::Counter flops;
+    sph_flops::Counter flops = 1;    // γ − 1.
+    float const γ = data.adiabaticIndex;
+    float const P_over_ρu = γ - 1.0f;    // P/(ρu) for every gas particle
     auto const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
     auto const neighbors = detail::sphCpuNeighbors(data, targetNode, true, flops);
     for (int particleIndex = targetNode.particleRange.first;
@@ -210,7 +212,7 @@ SphRunReturn sphCpuPrehydro2(
             targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
         bool const active =
             data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] >= parameters.minimumRung;
-        float& supportRadius = data.sinkThermodynamicStates[sinkIndex].supportRadius;
+        float& supportRadius = data.sinkSupportRadius[sinkIndex];
         bool const semiactive = active ||
             detail::sphCpuHasActiveNeighbor(
                 parameters, data, neighbors, particleIndex, supportRadius, flops);
@@ -245,12 +247,7 @@ SphRunReturn sphCpuPrehydro2(
         SimdFloat Σqdw_pack(0.0f);
         float c_a_switch = 0.0f;    // Sound speed for the CD signal speed or the Price target.
         if (parameters.gradientSwitch()) {
-            float const γ_a = data.sourceAdiabaticIndex ? data.sourceAdiabaticIndex[particleIndex] :
-                                                          data.adiabaticIndex;
-            float const P_over_ρu_a = data.sourcePressureEnergyRatio ?
-                data.sourcePressureEnergyRatio[particleIndex] :
-                γ_a - 1.0f;
-            c_a_switch = std::sqrt(γ_a * P_over_ρu_a * data.sourceInternalEnergy[particleIndex]);
+            c_a_switch = std::sqrt(γ * P_over_ρu * data.sourceInternalEnergy[particleIndex]);
         }
         for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
             Vector3<SimdFloat> const r_ab =
@@ -336,16 +333,7 @@ SphRunReturn sphCpuPrehydro2(
                                 simdSelect(div_v_b < SimdFloat(0), SimdFloat(-1), SimdFloat(0)));
                         ρ_a_R_a_pack += simdSelect(detail::sphCpuValidLanes(neighbors, first),
                             m_b_over_H_a3 * kernelW(q_ab) * sign_div_v_b, SimdFloat(0));
-                        SimdFloat const γ_b = data.sourceAdiabaticIndex ?
-                            detail::sphCpuLoad(
-                                data.sourceAdiabaticIndex, neighbors, first, data.adiabaticIndex) :
-                            SimdFloat(data.adiabaticIndex);
-                        SimdFloat const P_over_ρu_b = data.sourcePressureEnergyRatio ?
-                            detail::sphCpuLoad(
-                                data.sourcePressureEnergyRatio, neighbors, first, 1.0f) :
-                            γ_b - SimdFloat(1);
-                        SimdFloat const c_b = simdSqrt(simdSelect(contributes, γ_b, SimdFloat(1)) *
-                            simdSelect(contributes, P_over_ρu_b, SimdFloat(1)) *
+                        SimdFloat const c_b = simdSqrt(SimdFloat(γ) * SimdFloat(P_over_ρu) *
                             simdSelect(contributes,
                                 detail::sphCpuLoad(
                                     data.sourceInternalEnergy, neighbors, first, 1.0f),
@@ -402,13 +390,7 @@ SphRunReturn sphCpuPrehydro2(
             // Morris & Monaghan (1997), equations (5), (6), (13).
             // The sum/rho is a² div_phys(v); conformal-time rates divide by a.
             float const div_v_a = simdSum(ρ_a_div_v_a_pack) / (ρ_a * parameters.scaleFactor);
-            float const γ_a = data.sourceAdiabaticIndex ? data.sourceAdiabaticIndex[particleIndex] :
-                                                          data.adiabaticIndex;
-            float const P_over_ρu_a = data.sourcePressureEnergyRatio ?
-                data.sourcePressureEnergyRatio[particleIndex] :
-                γ_a - 1.0f;
-            float const c_a =
-                std::sqrt(γ_a * P_over_ρu_a * data.sourceInternalEnergy[particleIndex]);
+            float const c_a = std::sqrt(γ * P_over_ρu * data.sourceInternalEnergy[particleIndex]);
             float const h_a = H_a / float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
                 0.9128709291752769f;
             flops.doublePrecision += 1;    // Runtime kernel-table coefficient narrowing.

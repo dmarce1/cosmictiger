@@ -157,8 +157,6 @@ function(cosmictiger_feature_sources output)
             src/scenarios/gresho.cpp
             src/scenarios/exact_sod.cpp
             src/scenarios/sedov.cpp
-            src/hydro/sph/hierarchical.cpp
-            src/hydro/sph/staged_run.cpp
             src/hydro/sph/sph.cpp
             src/hydro/sph/sph.cu
             src/hydro/sph/sph_cpu.cpp
@@ -177,10 +175,6 @@ function(cosmictiger_feature_sources output)
             src/hydro/sph/morris_and_monaghan/viscosity.cpp
             src/hydro/sph/price_etal/viscosity.cpp
         )
-        if(COSMICTIGER_ENABLE_HOPKINS)
-            list(APPEND cosmictiger_source_files
-                src/hydro/hopkins.cpp src/scenarios/sound_wave.cpp)
-        endif()
         if(COSMICTIGER_ENABLE_CHEMISTRY)
             list(APPEND cosmictiger_source_files src/hydro/sph/sph_chemistry.cpp)
         endif()

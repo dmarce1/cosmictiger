@@ -740,8 +740,8 @@ Vector<Subgroup> rockstarFindSubgroups(Vector<ParticleData> const& parts, float 
     for (auto const& input : parts) {
         RockstarParticle particle{};
         for (int dim = 0; dim < kDimensions; ++dim) {
-            particle.xValue[dim] = distance(input.x[dim], parts[0].x[dim]);
-            particle.xValue[dim + kDimensions] = input.v[dim];
+            particle.xValue[dim] = distance(input.position[dim], parts[0].position[dim]);
+            particle.xValue[dim + kDimensions] = input.velocity[dim];
         }
         particle.index = input.index;
         particle.rank = input.rank;

@@ -30,13 +30,6 @@ option(COSMICTIGER_ENABLE_PM "Compile pure particle-mesh gravity with a mandator
 option(COSMICTIGER_ENABLE_P3M_PP "Compile PP-PM gravity: Gaussian-split PM plus direct short-range pairs" OFF)
 option(COSMICTIGER_ENABLE_P3M_FMM "Compile FMM-PM gravity: Gaussian-split PM plus a screened short-range FMM" OFF)
 option(COSMICTIGER_ENABLE_SPH "Compile SPH hydrodynamics" ON)
-option(COSMICTIGER_ENABLE_HOPKINS "Compile Hopkins MFM/MFV hydrodynamics (requires SPH and Fixed64)" OFF)
-if(COSMICTIGER_ENABLE_HOPKINS AND NOT COSMICTIGER_ENABLE_SPH)
-    message(FATAL_ERROR "COSMICTIGER_ENABLE_HOPKINS=ON requires COSMICTIGER_ENABLE_SPH=ON")
-endif()
-if(COSMICTIGER_ENABLE_HOPKINS AND NOT COSMICTIGER_POSITION_TYPE STREQUAL "fixed64")
-    message(FATAL_ERROR "COSMICTIGER_ENABLE_HOPKINS=ON requires COSMICTIGER_POSITION_TYPE=fixed64")
-endif()
 option(COSMICTIGER_ENABLE_CHEMISTRY "Compile GADGET-4 equilibrium cooling when SPH is enabled" ON)
 # The legacy name initializes a fresh/migrated cache once. Thereafter STARS is
 # authoritative, so explicitly disabling it cannot be undone by a stale alias.
@@ -54,7 +47,7 @@ if(COSMICTIGER_ENABLE_STARS AND NOT COSMICTIGER_ENABLE_CHEMISTRY)
     message(FATAL_ERROR "COSMICTIGER_ENABLE_STARS=ON requires COSMICTIGER_ENABLE_CHEMISTRY=ON")
 endif()
 option(COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL "Compile the traditional block-step integrator" ON)
-option(COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL "Compile hierarchical gravity with individual SPH/MFM integration" OFF)
+option(COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL "Compile hierarchical gravity for collisionless runs" OFF)
 option(COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL "Compile the global-timestep integrator" OFF)
 if(NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL AND
         NOT COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL AND
@@ -85,9 +78,8 @@ if(NOT COSMICTIGER_WITH_GRAVITY AND NOT COSMICTIGER_ENABLE_SPH)
     message(FATAL_ERROR "Enable at least one of COSMICTIGER_ENABLE_FMM, COSMICTIGER_ENABLE_PMMM_PP, COSMICTIGER_ENABLE_PMMM_FMM, COSMICTIGER_ENABLE_PM, COSMICTIGER_ENABLE_P3M_PP, COSMICTIGER_ENABLE_P3M_FMM, or COSMICTIGER_ENABLE_SPH")
 endif()
 if(COSMICTIGER_ENABLE_SPH AND NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL AND
-        NOT COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL AND
-        NOT (COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL AND COSMICTIGER_WITH_GRAVITY))
-    message(FATAL_ERROR "SPH requires traditional/global integration or a hierarchy with gravity capability")
+        NOT COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
+    message(FATAL_ERROR "SPH requires the traditional or global integrator")
 endif()
 set(COSMICTIGER_EXPANSION_DEGREE "4-6" CACHE STRING
     "Compiled maximum potential degrees: one degree or inclusive range, from 2 through 8")

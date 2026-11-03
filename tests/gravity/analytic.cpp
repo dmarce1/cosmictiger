@@ -66,9 +66,9 @@ Pair<double> analyticCompare(int numberOfSamples) {
     Vector<Position> sinky(numberOfSamples);
     Vector<Position> sinkz(numberOfSamples);
     for (int i = 0; i < numberOfSamples; i++) {
-        sinkx[i] = samples[i].x[kXDimension];
-        sinky[i] = samples[i].x[kYDimension];
-        sinkz[i] = samples[i].x[kZDimension];
+        sinkx[i] = samples[i].position[kXDimension];
+        sinky[i] = samples[i].position[kYDimension];
+        sinkz[i] = samples[i].position[kZDimension];
     }
     double const gm = getOptions().gravity.gm;
     auto results = doAnalytic(sinkx, sinky, sinkz);
@@ -77,12 +77,12 @@ Pair<double> analyticCompare(int numberOfSamples) {
         double f1 = 0.0, f2 = 0.0;
         double g1 = 0.0, g2 = 0.0;
         for (int dim = 0; dim < kDimensions; dim++) {
-            g1 += sqr(samples[i].g[dim] - gm * results.second[dim][i]);
+            g1 += sqr(samples[i].acceleration[dim] - gm * results.second[dim][i]);
             g2 += sqr(gm * results.second[dim][i]);
         }
         g1 = sqrt(g1);
         g2 = sqrt(g2);
-        f1 = samples[i].p;
+        f1 = samples[i].potential;
         f2 = gm * results.first[i];
         double const gerr =
             g2 > 0.0 ? g1 / g2 : (g1 == 0.0 ? 0.0 : std::numeric_limits<double>::infinity());

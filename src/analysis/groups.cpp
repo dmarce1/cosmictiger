@@ -409,7 +409,7 @@ void groupsReduce(double scaleFactor) {
                             size_t const haloCount = rockstarCatalogueSize(halos.size());
                             Vector3<double> origin;
                             for (int dim = 0; dim < kDimensions; ++dim) {
-                                origin[dim] = particles.front().x[dim].toDouble();
+                                origin[dim] = particles.front().position[dim].toDouble();
                             }
                             for (int i = 0; i < haloCount; ++i) {
                                 auto const& halo = halos[i];
@@ -693,8 +693,8 @@ void groupsAddParticles(int wave, double scale) {
                             auto& entry = localGroups[home][grp];
                             ParticleData part;
                             for (int dim = 0; dim < kDimensions; dim++) {
-                                part.x[dim] = particlesPos(dim, i);
-                                part.v[dim] = particlesVel(dim, i) * ainv;
+                                part.position[dim] = particlesPos(dim, i);
+                                part.velocity[dim] = particlesVel(dim, i) * ainv;
                             }
                             part.index = i;
                             part.lastGroup = particlesLastgroup(i);

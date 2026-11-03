@@ -1,6 +1,7 @@
 /* CosmicTiger - SPH-only saved-force regression; BSL-1.0. */
 
 #include <bit>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <memory>
@@ -60,13 +61,12 @@ void sphOnlyDiagnosticsTest() {
             particlesPos(dim, index) = 0.125 * index;
             particlesVel(dim, index) = 0.25f * (dim + 1);
             sphParticlesAcceleration(dim, index) = 0.5f * (dim + 1);
-            sphParticlesPredictedAcceleration(dim, index) = 0.75f * (dim + 1);
         }
         particlesRung(index) = 1;
-        sphParticlesThermodynamicState(index) = {2.0f + index, 0.25f};
+        sphParticlesSetInternalEnergy(index, 2.0f + index);
+        sphParticlesSupportRadius(index) = 0.25f;
         sphParticlesDensity(index) = 1.0f;
-        sphParticlesInternalEnergyRate(index) = 0.125f;
-        sphParticlesPredictedInternalEnergyRate(index) = 0.375f;
+        sphParticlesEntropyRate(index) = 0.125f;
     }
     UniqueFile checkpoint(std::tmpfile());
     if (checkpoint == nullptr) {
@@ -74,17 +74,52 @@ void sphOnlyDiagnosticsTest() {
     }
     particlesSave(checkpoint.get());
     poisonDiagnostics();
-    sphParticlesThermodynamicState(0).internalEnergy = 99.0f;
-    sphParticlesPredictedAcceleration(kXDimension, 0) = 99.0f;
+    sphParticlesSetInternalEnergy(0, 99.0f);
+    sphParticlesAcceleration(kXDimension, 0) = 99.0f;
     std::rewind(checkpoint.get());
     // This deliberately retains the same particle count, bypassing allocation.
     particlesLoad(checkpoint.get());
     checkDiagnostics(0, kParticleCount, "same-size checkpoint load");
     if (particlesSize() != kParticleCount || sphParticlesSize() != kParticleCount ||
-        sphParticlesInternalEnergy(0) != 2.0f ||
-        sphParticlesPredictedAcceleration(kXDimension, 0) != 0.75f) {
+        sphParticlesInternalEnergy(0) != 2.0f || sphParticlesAcceleration(kXDimension, 0) != 0.5f) {
         throw std::runtime_error("SPH-only checkpoint failed to preserve the gas payload");
     }
     sphCheckpointTest();
-    PRINT("SPH-only saved gravity diagnostics passed (allocation, reuse, and checkpoint load)\n");
+    // Exercise the actual entropy initialization, staged prediction, and both kick phases.
+    sphParticlesPrepareThermodynamics(0.5, true);
+    float const initialEntropy = sphParticlesEntropy(0);
+    float const initialEnergy = sphParticlesInternalEnergy(0);
+    sphParticlesDensity(0) *= 8.0f;
+    if (sphParticlesEntropy(0) != initialEntropy ||
+        std::abs(sphParticlesInternalEnergy(0) / initialEnergy -
+            std::pow(8.0, options.hydro.gamma - 1.0)) > 1.e-5) {
+        throw std::runtime_error("Adiabatic compression did not preserve entropy");
+    }
+    sphParticlesEntropyRate(0) = 0.25f;
+    float const velocity = sphParticlesVelocity(kXDimension, 0);
+    sphParticlesApplyUpdates(1, 0, 1.0f, 1.0f, 0.2);
+    if (sphParticlesEntropy(0) != initialEntropy ||
+        sphParticlesVelocity(kXDimension, 0) != velocity) {
+        throw std::runtime_error("Entropy predictor mutated the staggered particle state");
+    }
+    float predictedEnergy, support;
+    ParticleGlobalRange range;
+    range.proc = hpxRank();
+    range.range.first = 0;
+    range.range.second = 1;
+    sphParticlesGlobalReadInternalEnergyAndSupportRadius(range, &predictedEnergy, &support, 0);
+    double const expectedEnergy = sph_entropy::storedEnergy(
+        initialEntropy + 0.025, sphParticlesDensity(0), options.hydro.gamma, 0.5);
+    if (std::abs(predictedEnergy - expectedEnergy) > 1.e-5 * expectedEnergy) {
+        throw std::runtime_error("Staging did not derive energy from predicted entropy");
+    }
+    sphParticlesEntropyRate(0) = 0.5f;
+    sphParticlesApplyUpdates(1, 1, 1.0f, 1.0f, 0.2);
+    // Opening may use a different interval; reuse the fresh closing rate.
+    sphParticlesApplyUpdates(1, 2, 1.0f, 1.0f, 0.4);
+    if (std::abs(sphParticlesEntropy(0) - (initialEntropy + 0.15)) > 1.e-6) {
+        throw std::runtime_error("Entropy closing/opening kicks used the wrong rates or intervals");
+    }
+    sphCheckpointTest();
+    PRINT("SPH-only diagnostics and entropy lifecycle passed (prediction, kicks, checkpoint)\n");
 }

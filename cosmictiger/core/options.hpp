@@ -270,17 +270,6 @@ struct Hydro {
     }
     double gamma{};
     double cfl{};
-    // Bryan et al. (1995) dual-energy switches for the MFM own-step closure with the
-    // entropic function as auxiliary: the thermal fraction of the total energy below
-    // which the entropy estimate replaces the total-energy closure (0 restores the
-    // strict total-energy closure), and the thermal energy density fraction of the
-    // largest neighboring total energy density at which the entropy follows the closure.
-    double dualEnergyPressureSwitch{1.0e-3};
-    double dualEnergyUpdateSwitch{0.1};
-    // Rebuild the persistent hydro source tree at an event where at least this
-    // fraction of the gas cells is active (GADGET-4 rebuilds its neighbor tree at
-    // the large synchronization steps); a domain rebound also forces a rebuild.
-    double treeRebuildActiveFraction{1.0 / 3.0};
     double neighborNumber{42.0};
     // Canonical support bounds in box units, normalized from input particle spacings.
     double minSupportRadius{};

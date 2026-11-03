@@ -94,11 +94,6 @@ packed symmetric matrix and leaves the eigenvalues unsorted.
 
 ## Call sites
 
-- Hopkins: active 1D/2D/3D geometry, matrix/vector reconstruction and face geometry,
-  and inverse derivative `dB/dt = -B (dE/dt) B`. Its positive-definite pivot checks,
-  condition limit and support enlargement remain application policy. Condition
-  estimation uses normalized matrices, including scales as small/large as
-  `1e-300`/`1e300`.
 - Cullen-Dehnen viscosity and Price conductivity: shared 3x3 gradient
   reconstruction. The existing normalized determinant cutoff `128 epsilon`,
   eight cyclic Jacobi sweeps and pseudoinverse eigenvalue cutoff `64 epsilon`
@@ -150,11 +145,6 @@ bounds scale with the matrix condition; successful inversion cannot restore info
 lost from the input precision. Standard and fast-math builds exercise the production
 finite checks.
 
-The full Hopkins geometry helper was also compared against its original specialized
-Cholesky implementation. Before the final symmetric-packing guard update, default
-explicit dispatch measured about 77–81 ns/call versus 61–64 ns for the original Cholesky
-and 98–100 ns for the new pivoted path. These measurements include geometry validation
-and stable normalized conditioning, not just inversion. This refactor centralizes
-algorithms and improves edge-case handling; it is **not a demonstrated whole-application
-speedup**. GPU validation uses one block at a time while War Thunder is on, and does not
+This refactor centralizes algorithms and improves edge-case handling; it is **not a
+demonstrated whole-application speedup**. GPU validation uses one block at a time while War Thunder is on, and does not
 establish device-wide performance.

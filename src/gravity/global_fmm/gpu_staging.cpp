@@ -138,7 +138,6 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
     TreeNode* treeNodes = treeData();
     std::function<void(int, ParticleInteger)> adjustParticleReferences;
     hpx::future<void> sortFuture;
-    std::unique_ptr<float, void (*)(void*)> sourceMasses(nullptr, freeManagedMemory);
     futs0.reserve(numberOfThreads);
     futs2.reserve(std::max(numberOfThreads, int(hpxHardwareConcurrency())));
     try {
@@ -212,13 +211,6 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
         futs1.resize(0);
         numberOfThreads = std::max(1, (int) hpxHardwareConcurrency());
         futs1.reserve(particleRequests.size());
-        if (getOptions().hydro.enabled && getOptions().hydro.method == "mfv") {
-            sourceMasses.reset(
-                static_cast<float*>(allocateManagedMemory(sizeof(float) * particlesSize())));
-            for (ParticleInteger i = 0; i < originalParticleCount; ++i) {
-                sourceMasses.get()[i] = particlesMass(i);
-            }
-        }
         for (auto i = particleRequests.begin(); i != particleRequests.end(); i++) {
             int const rank = i->first;
             // Retain the predecessor if continuation attachment throws. A plain
@@ -230,7 +222,7 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
                     if (count) {
                         fut =
                             fut.then(hpx::annotated_function(
-                                         [rank, count, &particleMap, &sourceMasses, i, j](
+                                         [rank, count, &particleMap, i, j](
                                              hpx::shared_future<void> fut) {
                                              fut.get();
                                              auto const& ranges = i->second.data[j];
@@ -265,10 +257,6 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
                                                      std::memcpy(&particlesType(localRange.first),
                                                          types.data(),
                                                          numberOfParticles * sizeof(char));
-                                                     if (sourceMasses != nullptr) {
-                                                         particlesGlobalReadMasses(source,
-                                                             sourceMasses.get(), localRange.first);
-                                                     }
                                                  }
                                                  index += numberOfParticles;
                                              }
@@ -378,9 +366,9 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
         tree2Gpu();
         particlesMemadviseGpu();
         gpuPhase.stop();
-        auto const kr = cudaExecuteKicks(params, &particlesPos(kXDimension, 0),
-            &particlesPos(kYDimension, 0), &particlesPos(kZDimension, 0), treeNodes,
-            std::move(workitems), {}, sourceMasses.get());
+        auto const kr =
+            cudaExecuteKicks(params, &particlesPos(kXDimension, 0), &particlesPos(kYDimension, 0),
+                &particlesPos(kZDimension, 0), treeNodes, std::move(workitems), {});
         profile::ScopedWork cleanupPhase(profile::WorkPhase::KickGpuCleanup, profileEnabled);
         tree2Cpu();
         particlesResize(originalParticleCount);

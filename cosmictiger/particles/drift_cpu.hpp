@@ -12,7 +12,6 @@
 
 #include <cosmictiger/analysis/lightcone_entry.hpp>
 #include <cosmictiger/core/containers.hpp>
-#include <cosmictiger/hydro/hopkins/hopkins_state.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
@@ -25,7 +24,6 @@ struct DriftParameters {
     double tauMax = 0.0;
     double drag = 0.0;
     bool lightcone = false;
-    bool hierarchicalMfm = false;
     int mapSize = 1;
 };
 
@@ -34,5 +32,4 @@ struct DriftParameters {
 // A null types array means every particle is dark matter.
 void cpuDriftKernel(Position* x, Position* y, Position* z, Vector3<float>* velocities,
     char const* rungs, char const* types, size_t count, DriftParameters const& parameters,
-    std::vector<LightconeEntry>* entries = nullptr, HopkinsParticleState* meshStates = nullptr,
-    ParticleInteger const* gasIndices = nullptr);
+    std::vector<LightconeEntry>* entries = nullptr);

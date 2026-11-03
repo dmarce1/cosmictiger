@@ -56,15 +56,15 @@ ScenarioPlan initializeDisc() {
                     sphParticlesPosition(kXDimension, i) = x;
                     sphParticlesPosition(kYDimension, i) = y;
                     sphParticlesPosition(kZDimension, i) = z;
-                    double const v = sqrt(opts.hydro.centralAcceleration / r);
-                    double const vx = -(y - 0.5) / r * v;
-                    double const vy = (x - 0.5) / r * v;
+                    double const velocity = sqrt(opts.hydro.centralAcceleration / r);
+                    double const vx = -(y - 0.5) / r * velocity;
+                    double const vy = (x - 0.5) / r * velocity;
                     double const vz = 0.0;
                     sphParticlesVelocity(kXDimension, i) = vx;
                     sphParticlesVelocity(kYDimension, i) = vy;
                     sphParticlesVelocity(kZDimension, i) = vz;
                     sphParticlesRung(i) = 0;
-                    sphParticlesThermodynamicState(i).internalEnergy = internalEnergy;
+                    sphParticlesSetInternalEnergy(i, internalEnergy);
 
                     i++;
                 }

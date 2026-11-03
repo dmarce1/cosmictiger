@@ -24,14 +24,13 @@ struct MeshTimestepSample {
     Vector3<float> acceleration{};
     Vector3<float> velocity{};
     double mass{};
-    float pairCurvature{};
     double position{};
     int rung{};
     int rank{};
 
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
-        archive & acceleration & velocity & mass & pairCurvature & position & rung & rank;
+        archive & acceleration & velocity & mass & position & rung & rank;
     }
 };
 
@@ -82,7 +81,6 @@ Vector<MeshTimestepSample> readMeshTimestepFixture() {
         }
         sample.position = particlesPos(kXDimension, i).toDouble();
         sample.mass = particlesMass(i);
-        sample.pairCurvature = pmmmPairCurvature(i);
         sample.rung = particlesRung(i);
         sample.rank = hpxRank();
     }
@@ -110,15 +108,6 @@ Vector<MeshTimestepSample> meshTimestepSamples() {
         [](auto const& left, auto const& right) { return left.position < right.position; });
     requireMeshTimestep(samples.size() == 3, "fixture lost particles");
     return samples;
-}
-
-// Sinks whose retained near-field curvature imposes the direct-pair bound.
-FlopCount meshTimestepPairBounds(Vector<MeshTimestepSample> const& samples) {
-    if (!(getOptions().gravity.gm > 0.0)) {
-        return 0;
-    }
-    return FlopCount(std::count_if(samples.begin(), samples.end(),
-        [](auto const& sample) { return sample.pairCurvature > 0.0f; }));
 }
 
 void checkMeshTimestepKick(Vector<MeshTimestepSample> const& before,
@@ -149,12 +138,9 @@ void meshTimestepStep(TimeType clock, int expectedRung, bool firstCall = false) 
     // One radius conversion per locality; each dark-matter particle executes
     // fourteen timestep/rung operations, nine kick operations, and optionally
     // two operations to compute the old half-step. Six norm promotions and nine
-    // kick promotions/narrowings are charged to double precision. Each sink with
-    // direct-pair curvature adds its five-operation pair bound. Diagnostics do not count.
-    FlopCount const pairBounds = meshTimestepPairBounds(before);
-    FlopCount const expectedPrepare = kCountFlops ?
-        FlopCount(hpxSize()) + before.size() * (firstCall ? 38 : 40) + 5 * pairBounds :
-        0;
+    // kick promotions/narrowings are charged to double precision. Diagnostics do not count.
+    FlopCount const expectedPrepare =
+        kCountFlops ? FlopCount(hpxSize()) + before.size() * (firstCall ? 38 : 40) : 0;
     requireMeshTimestep(readFlops() - beforePrepare == expectedPrepare,
         "preparation FLOPs included diagnostics or omitted timestep/kick arithmetic");
     requireMeshTimestep(proposal.maxRung == expectedRung,
@@ -304,11 +290,9 @@ void checkMeshGlobalTimestepFlops() {
         auto const afterPrepare = readFlopCounts();
         // Twelve acceleration-norm operations/conversions, five timestep
         // operations, one explicit half-step multiply, and eighteen kick
-        // operations/conversions, plus five per sink with direct-pair curvature.
-        // The explicit path does not propose a rung.
-        FlopCount const expectedPrepare = kCountFlops ?
-            FlopCount(hpxSize()) + 36 * before.size() + 5 * meshTimestepPairBounds(before) :
-            0;
+        // operations/conversions. The explicit path does not propose a rung.
+        FlopCount const expectedPrepare =
+            kCountFlops ? FlopCount(hpxSize()) + 36 * before.size() : 0;
         requireMeshTimestep(
             afterPrepare.doublePrecision - beforePrepare.doublePrecision == expectedPrepare &&
                 afterPrepare.singlePrecision == beforePrepare.singlePrecision &&

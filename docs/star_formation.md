@@ -57,11 +57,6 @@ CosmicTiger follows that ordering. There are no opening source half steps,
 accumulated half-step formation optical depths, wind clocks, or source-driven
 outer-step retries.
 
-With `hydro.method=mfm`, the same source runs when a meshless cell closes its
-own-step interval, over the duration it actually closed, and a converted cell
-leaves the gas set at that kick's scatter; see
-[Chemistry and star formation](hopkins_hydro.md#chemistry-and-star-formation).
-
 For gas mass `m`, the event probability is `1-exp(-SFR dt/m)`. A successful event
 converts the whole gas particle into a star; gas mass is not continuously
 removed before the event. Position, velocity and particle mass are retained,
@@ -90,12 +85,7 @@ point trajectories or event times across decompositions.
 
 Build with `COSMICTIGER_ENABLE_SPH=ON`,
 `COSMICTIGER_ENABLE_CHEMISTRY=ON`, and `COSMICTIGER_ENABLE_STARS=ON`.
-Choose traditional, hierarchical or global integration with `hydro.method=sph` or
-`mfm` (MFM additionally needs `COSMICTIGER_ENABLE_HOPKINS=ON` and Fixed64 positions;
-MFV is not supported). Hierarchical integration applies the source when each gas
-particle's own interval closes, over that interval; see
-[hierarchical SPH](hierarchical_sph.md#cooling-and-star-formation) and
-[hierarchical MFM](hopkins_hydro.md#chemistry-and-star-formation). A starting configuration is
+Choose traditional or global integration with `hydro.method=sph`. A starting configuration is
 [`configurations/star_formation/lcdm.ini`](../configurations/star_formation/lcdm.ini).
 
 ```ini

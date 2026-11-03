@@ -18,6 +18,15 @@
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
+// This generator test has no HPX runtime; the spherical M2M operator's aliasing
+// check still needs an assertion implementation when ASSERT is enabled.
+void cosmictigerAssert(char const* condition, bool satisfied, char const* file, int line) {
+    if (!satisfied) {
+        std::fprintf(stderr, "%s:%d: assertion \"%s\" failed\n", file, line, condition);
+        throw std::runtime_error("generated spherical Ewald assertion failed");
+    }
+}
+
 namespace counted {
 inline size_t operations = 0;
 class Real {

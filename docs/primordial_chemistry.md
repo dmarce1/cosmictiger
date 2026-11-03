@@ -71,9 +71,7 @@ Cooling executes once after the completed selected SPH interval, matching the
 pinned GADGET-4 main-loop ordering. It does not add opening or closing chemical
 half steps. The local implicit solve consumes that interval; it does not change
 an already selected outer SPH step or request an outer retry. Every time integrator
-supplies the interval it actually closed; under hierarchical integration each
-particle closes its own interval (see
-[hierarchical SPH](hierarchical_sph.md#cooling-and-star-formation)).
+supplies the interval it actually closed.
 
 The bridge prepares all updated gas states, checks the results and only then
 commits them. The electron estimate follows gas particles through sorting,

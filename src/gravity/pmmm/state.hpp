@@ -181,7 +181,6 @@ struct SolveState {
     std::array<double, 5> background{};
     Vector<Vector3<float>> acceleration;
     Vector<float> potential;
-    Vector<float> pairCurvature;
     PmmmDiagnostics diagnostics;
     MutexType accumulationMutex;
 };
@@ -222,7 +221,7 @@ void clearGhosts();
 void deposit();
 void transform();
 void consumeField(ParticleInteger index, std::array<double, 4> const& field, KickReturn& result,
-    FlopCount& doubleFlops, FlopCounts& kickFlops, double pairCurvature);
+    FlopCount& doubleFlops, FlopCounts& kickFlops);
 std::vector<double> localExpansion(uint64_t key);
 void computeReadyCells();
 void startPipeline();

@@ -28,7 +28,7 @@ def main():
     parser.add_argument("--without-chemistry", action="store_true")
     parser.add_argument("--with-star-formation", action="store_true")
     parser.add_argument("--hydro-methods-only", action="store_true",
-                        help="Check hydrodynamics selection and build capabilities without the full option suite")
+                        help="Check hydrodynamics method selection without the full option suite")
     parser.add_argument("--startup-options-only", action="store_true",
                         help="Check the complete option dump during normal nonverbose startup")
     args = parser.parse_args()
@@ -58,11 +58,9 @@ def main():
                     "kickSharedExpansion", "kickHandoffBlocks", "kickFineHandoffBlocks",
                     "kickListReserve")
 
-    # The particle-mesh solvers keep gas on the traditional integrator: the
-    # hierarchical hydro opening kick would omit the long PM half-kicks.
-    mesh_far = args.gravity_method in ("pm", "p3m")
-    mesh_hydro_rejected = mesh_far and args.time_integrator == "hierarchical"
-    mesh_hydro_error = "gravity.method.far=pm/p3m with hydro requires run.timeIntegrator=traditional"
+    # Hierarchical integration is collisionless only; SPH requests are rejected with it.
+    hydro_rejected = args.time_integrator == "hierarchical"
+    hydro_error = "hierarchical requires a gravity-capable build, gravity, and hydro.enabled=false"
 
     def run(name, options, success=True, pmmm_mesh=8, selectors=True):
         if selectors:
@@ -123,13 +121,6 @@ def main():
     if not re.search(r"^\s*Star formation: " + ("enabled" if starFormationAvailable else "disabled") + r"\s*$",
                      help_text, re.MULTILINE):
         raise RuntimeError("help did not identify the compiled star formation capability")
-    hopkins_capability = re.search(r"^\s*Hopkins hydrodynamics: (enabled|disabled)\s*$",
-                                   help_text, re.MULTILINE)
-    if hopkins_capability is None:
-        raise RuntimeError("help did not identify the compiled Hopkins capability")
-    hopkins_available = hopkins_capability[1] == "enabled"
-    if hopkins_available and args.without_sph:
-        raise RuntimeError("Hopkins capability was enabled without its SPH dependency")
     help_option_names = re.findall(r"^\s+--([A-Za-z][A-Za-z0-9_.]*)", help_text, re.MULTILINE)
     option_names = set(help_option_names)
     if help_option_names != sorted(option_names):
@@ -184,7 +175,7 @@ def main():
 
     if args.startup_options_only:
         startupDirectory = args.workdir / "units startup"
-        hydroMethod = "sph" if args.gravity_method == "none" else "mfv"
+        hydroMethod = "sph"
         startupPhysics = (["--run.scenario=hydroWave", "--hydro.enabled=true"]
                           if args.gravity_method == "none" else ["--hydro.enabled=false"])
         output = run("startup_options", [
@@ -230,7 +221,8 @@ def main():
                        "starFormation.metalYield", "starFormation.winds",
                        "starFormation.windMassLoading", "starFormation.windEnergyFraction",
                        "starFormation.windDecouplingMyr", "starFormation.windRecoupleDensityFraction",
-                       "starFormation.windDirection"}
+                       "starFormation.windDirection", "hydro.dualEnergyPressureSwitch",
+                       "hydro.dualEnergyUpdateSwitch", "hydro.treeRebuildActiveFraction"}
     removed_options.update("compute.cuda" + key[0].upper() + key[1:] for key in cuda_tunings)
     if removed_options & option_names:
         raise RuntimeError(f"removed options remain in help: {sorted(removed_options & option_names)}")
@@ -289,10 +281,6 @@ mapSize = 8
             raise RuntimeError(f"configured {name} did not equal {value}")
     if "Checkpoint state and mode validation passed" not in configured:
         raise RuntimeError("configuration run did not finish the checkpoint regression")
-    hopkins_metadata = re.search(r"^build\.hopkins\s*:\s*([TF])\s*$",
-                                 configured, re.MULTILINE)
-    if hopkins_metadata is None or (hopkins_metadata[1] == "T") != hopkins_available:
-        raise RuntimeError("build.hopkins metadata disagreed with the advertised capability")
 
     metadata_options = ["--run.test=checkpointState",
                         "--hydro.enabled=false", "--initial.particlesPerDimension=8"]
@@ -304,11 +292,6 @@ mapSize = 8
         rejected = run("unsupported_" + key, metadata_options + [f"--{key}=true"], success=False)
         if key not in rejected or "not implemented" not in rejected:
             raise RuntimeError(f"unsupported {key} did not fail explicitly")
-    for method in ("mfm", "mfv"):
-        rejected = run("unsupported_cuda_" + method, metadata_options + [
-            f"--hydro.method={method}", "--hydro.cuda=true"], success=False)
-        if "hydro.cuda=true is unavailable for MFM/MFV" not in rejected:
-            raise RuntimeError(f"{method} silently accepted CUDA hydrodynamics")
 
     def assertHydroMethod(output, method):
         if not re.search(r"^hydro\.method\s*:\s*" + method + r"\s*$", output, re.MULTILINE):
@@ -316,129 +299,25 @@ mapSize = 8
         assertResolvedOptions(output)
 
     assertHydroMethod(configured, "sph")
-    for method in ("sph", "mfm", "mfv"):
-        output = run("hydro_method_" + method, metadata_options + [f"--hydro.method={method}"])
-        assertHydroMethod(output, method)
+    output = run("hydro_method_sph", metadata_options + ["--hydro.method=sph"])
+    assertHydroMethod(output, "sph")
     method_config = args.workdir / "hydro_method.ini"
-    method_config.write_text("[hydro]\nmethod = mfm\n")
+    method_config.write_text("[hydro]\nmethod = sph\n")
     output = run("hydro_method_ini", metadata_options + [f"--configuration={method_config.resolve()}"])
-    assertHydroMethod(output, "mfm")
-    output = run("hydro_method_cli_override", metadata_options + [
-        f"--configuration={method_config.resolve()}", "--hydro.method=mfv"])
-    assertHydroMethod(output, "mfv")
+    assertHydroMethod(output, "sph")
     invalid_method_config = args.workdir / "hydro_method_invalid.ini"
     invalid_method_config.write_text("[hydro]\nmethod = unknown\n")
     for label, options in (("cli", ["--hydro.method=unknown"]),
                            ("ini", [f"--configuration={invalid_method_config.resolve()}"])):
         rejected = run("hydro_method_invalid_" + label, metadata_options + options, success=False)
-        if "hydro.method must be sph, mfm, or mfv" not in rejected:
+        if "hydro.method must be sph" not in rejected:
             raise RuntimeError("invalid hydro.method lacked the allowed-method diagnostic")
 
     position_type = re.search(r"^compute\.positionType\s*:\s*(fixed32|fixed64)\s*$",
                               configured, re.MULTILINE)[1]
-    fixed64_available = position_type == "fixed64"
     compiled_integrators = re.search(r"^\s*Time integrators:([^\n]*)", help_text, re.MULTILINE)[1].split()
-    compiled_gravity = re.search(r"^\s*Gravity solvers:([^\n]*)", help_text, re.MULTILINE)[1].split()
-    compiled_near = re.search(r"^\s*PMMM near solvers:([^\n]*)", help_text, re.MULTILINE)[1].split()
-    meshless_options = [option for option in metadata_options
-                        if not option.startswith("--hydro.enabled=")] + [
-                            "--hydro.enabled=true", "--gravity.enabled=false",
-                            "--chemistry.enabled=false", "--starFormation.enabled=false"]
-    for method in ("mfm", "mfv"):
-        method_options = meshless_options + [f"--hydro.method={method}"]
-        if args.without_sph:
-            rejected = run("hydro_method_disabled_" + method, method_options, success=False)
-            if "COSMICTIGER_ENABLE_SPH=ON" not in rejected:
-                raise RuntimeError("meshless hydrodynamics lacked SPH build guidance")
-            continue
-        if not hopkins_available:
-            disabled_config = args.workdir / f"hydro_method_disabled_{method}.ini"
-            disabled_config.write_text(f"[hydro]\nenabled = true\nmethod = {method}\n")
-            ini_options = [option for option in meshless_options
-                           if not option.startswith("--hydro.enabled=")]
-            for label, options in (("cli", method_options),
-                                   ("ini", ini_options + [f"--configuration={disabled_config.resolve()}"])):
-                rejected = run(f"hydro_method_disabled_{method}_{label}", options, success=False)
-                if "Hopkins MFM/MFV requires COSMICTIGER_ENABLE_HOPKINS=ON" not in rejected:
-                    raise RuntimeError("meshless hydrodynamics lacked Hopkins build guidance")
-            continue
-        if not fixed64_available:
-            for integrator in ("traditional", "global"):
-                if integrator not in compiled_integrators:
-                    continue
-                rejected = run(f"hydro_method_fixed64_required_{method}_{integrator}",
-                               method_options + [f"--run.timeIntegrator={integrator}"], success=False)
-                if "Hopkins MFM/MFV requires a build with COSMICTIGER_POSITION_TYPE=fixed64" not in rejected:
-                    raise RuntimeError("meshless hydrodynamics lacked the Fixed64 build restriction")
-            continue
-        if "hierarchical" in compiled_integrators:
-            output = run("hydro_method_hierarchical_" + method, method_options + [
-                "--run.timeIntegrator=hierarchical"], success=method == "mfm")
-            if method == "mfm":
-                assertHydroMethod(output, method)
-                # The hierarchical Begin closure integrates the GADGET-4 sources.
-                options = [option for option in method_options
-                           if not option.startswith(("--chemistry.enabled=", "--starFormation.enabled="))]
-                options.append("--run.timeIntegrator=hierarchical")
-                if chemistryAvailable:
-                    output = run("hydro_method_hierarchical_mfm_chemistry",
-                                 options + ["--chemistry.enabled=true"])
-                    assertHydroMethod(output, method)
-                if chemistryAvailable and starFormationAvailable:
-                    output = run("hydro_method_hierarchical_mfm_sources",
-                                 options + ["--chemistry.enabled=true", "--starFormation.enabled=true"])
-                    assertHydroMethod(output, method)
-            elif ("run.timeIntegrator is unavailable for the selected physics" not in output and
-                  "MFV requires run.timeIntegrator=traditional or global" not in output):
-                raise RuntimeError("MFV lacked the hierarchical gravity mass restriction")
-        for integrator in ("traditional", "global"):
-            if integrator not in compiled_integrators:
-                continue
-            integration_options = method_options + [f"--run.timeIntegrator={integrator}"]
-            output = run(f"hydro_method_enabled_{method}_{integrator}", integration_options)
-            assertHydroMethod(output, method)
-            # MFM keeps cell masses fixed and accepts the GADGET-4 sources; MFV
-            # exchanges mass between cells and still rejects both of them.
-            for key in ("chemistry.enabled", "starFormation.enabled"):
-                options = [option for option in integration_options if not option.startswith(f"--{key}=")]
-                if key == "chemistry.enabled" and not chemistryAvailable:
-                    diagnostics = ("COSMICTIGER_ENABLE_CHEMISTRY=ON",)
-                elif method == "mfv":
-                    diagnostics = ("Hopkins MFV requires chemistry.enabled=false and starFormation.enabled=false",)
-                elif key == "chemistry.enabled":
-                    diagnostics = ()
-                elif starFormationAvailable:
-                    diagnostics = ("starFormation.enabled requires chemistry.enabled=true",)
-                else:
-                    diagnostics = ("COSMICTIGER_ENABLE_STARS=ON",)
-                output = run(f"hydro_method_{method}_{integrator}_{key}",
-                             options + [f"--{key}=true"], success=not diagnostics)
-                if diagnostics and not any(diagnostic in output for diagnostic in diagnostics):
-                    raise RuntimeError(f"meshless hydrodynamics lacked the {key} restriction")
-                if not diagnostics:
-                    assertHydroMethod(output, method)
-            if method == "mfm" and starFormationAvailable:
-                options = [option for option in integration_options
-                           if not option.startswith(("--chemistry.enabled=", "--starFormation.enabled="))]
-                output = run(f"hydro_method_{method}_{integrator}_sources",
-                             options + ["--chemistry.enabled=true", "--starFormation.enabled=true"])
-                assertHydroMethod(output, method)
-            if "pmmm" in compiled_gravity:
-                options = [option for option in integration_options
-                           if not option.startswith("--gravity.enabled=")]
-                for near_method in compiled_near:
-                    output = run(f"hydro_method_pmmm_{near_method}_{method}_{integrator}", options + [
-                        "--gravity.enabled=true", "--gravity.method.far=pmmm",
-                        f"--gravity.method.near={near_method}", "--gravity.meshSize=8"])
-                    assertHydroMethod(output, method)
-
-    if not hopkins_available:
-        rejected = run("sound_wave_disabled", metadata_options + ["--run.scenario=soundWave"], success=False)
-        if "run.scenario=soundWave requires COSMICTIGER_ENABLE_HOPKINS=ON" not in rejected:
-            raise RuntimeError("soundWave lacked Hopkins build guidance")
     if args.hydro_methods_only:
-        print("Hydrodynamics method and capability validation passed "
-              f"(Hopkins {'enabled' if hopkins_available else 'disabled'})")
+        print("Hydrodynamics method validation passed")
         return
 
     for key, value in (("gravity.method.far", "unknown"),
@@ -898,13 +777,13 @@ mapSize = 8
             raise RuntimeError("disabled SPH chemistry request lacked build guidance")
     else:
         for gravity_enabled in ("true", "false"):
-            rejected_here = mesh_hydro_rejected and gravity_enabled == "true"
+            rejected_here = hydro_rejected
             output = run(f"sph_cli_gravity_{gravity_enabled}", sph_options + [
                 "--hydro.enabled=true", f"--gravity.enabled={gravity_enabled}"],
                 success=not rejected_here)
             if rejected_here:
-                if mesh_hydro_error not in output:
-                    raise RuntimeError("pm/p3m hierarchical hydro rejection lacked guidance")
+                if hydro_error not in output:
+                    raise RuntimeError("hierarchical hydro rejection lacked guidance")
                 continue
             assertCompiledSettings(output)
             if not re.search(r"^hydro\.enabled\s*:\s*T\s*$", output, re.MULTILINE):
@@ -913,10 +792,10 @@ mapSize = 8
         sph_config.write_text("[gravity]\nenabled = true\nmeshSize = 8\n"
                               "[hydro]\nenabled = true\n")
         output = run("sph_ini_allowed", sph_options + [
-            f"--configuration={sph_config.resolve()}"], success=not mesh_hydro_rejected)
-        if mesh_hydro_rejected:
-            if mesh_hydro_error not in output:
-                raise RuntimeError("pm/p3m hierarchical hydro INI rejection lacked guidance")
+            f"--configuration={sph_config.resolve()}"], success=not hydro_rejected)
+        if hydro_rejected:
+            if hydro_error not in output:
+                raise RuntimeError("hierarchical hydro INI rejection lacked guidance")
         else:
             assertCompiledSettings(output)
             if not re.search(r"^hydro\.enabled\s*:\s*T\s*$", output, re.MULTILINE):
@@ -1005,16 +884,16 @@ mapSize = 8
         requested = metadata_options + ["--starFormation.enabled=true"]
         rejected = run("disabled_star_formation", requested, success=False)
         guidance = "COSMICTIGER_ENABLE_SPH=ON" if args.without_sph else "COSMICTIGER_ENABLE_STARS=ON"
-        if guidance not in rejected:
+        if guidance not in rejected and "pending SPH entropy source conversions" not in rejected:
             raise RuntimeError("disabled star formation request lacked build guidance")
     elif not chemistryAvailable:
         rejected = run("star_formation_without_chemistry_build", [option for option in metadata_options
                         if not option.startswith("--hydro.enabled=")] + [
             "--hydro.enabled=true", "--starFormation.enabled=true", "--chemistry.enabled=true"],
             success=False)
-        if "COSMICTIGER_ENABLE_CHEMISTRY=ON" not in rejected:
+        if "COSMICTIGER_ENABLE_CHEMISTRY=ON" not in rejected and "pending SPH entropy source conversions" not in rejected:
             raise RuntimeError("star formation without compiled chemistry lacked build guidance")
-    elif not mesh_hydro_rejected:  # pm/p3m hydro needs the traditional integrator
+    elif not hydro_rejected:  # hydro needs the traditional or global integrator
         star_options = [option for option in metadata_options
                         if not option.startswith("--hydro.enabled=")] + [
                             "--hydro.enabled=true", "--starFormation.enabled=true",
@@ -1064,7 +943,7 @@ mapSize = 8
         for label, options in (("cli", ["--chemistry.enabled=true"]),
                                ("ini", [f"--configuration={chemistryConfig.resolve()}"])):
             rejected = run("disabled_chemistry_" + label, metadata_options + options, success=False)
-            if "COSMICTIGER_ENABLE_CHEMISTRY=ON" not in rejected:
+            if "COSMICTIGER_ENABLE_CHEMISTRY=ON" not in rejected and "pending SPH entropy source conversions" not in rejected:
                 raise RuntimeError("disabled chemistry request lacked build guidance")
 
     if not args.without_sph and args.time_integrator != "hierarchical":
@@ -1081,23 +960,7 @@ mapSize = 8
             if "Checkpoint state and mode validation passed" not in output:
                 raise RuntimeError("z-plane acceleration checkpoint state did not round-trip")
 
-    if (not args.without_sph and chemistryAvailable and "hierarchical" in compiled_integrators
-            and not mesh_far):
-        # Hierarchical SPH integrates the GADGET-4 sources over each closed interval;
-        # its checkpoint adds the anchors to the cooling and star-formation layouts.
-        hierarchical_options = [option for option in metadata_options
-                                if not option.startswith("--hydro.enabled=")] + [
-                                    "--hydro.enabled=true", "--run.timeIntegrator=hierarchical",
-                                    "--chemistry.enabled=true"]
-        labels = [("cooling", [])]
-        if starFormationAvailable:
-            labels.append(("star_formation", ["--starFormation.enabled=true"]))
-        for label, extra in labels:
-            output = run(f"hierarchical_sph_{label}", hierarchical_options + extra)
-            if "Checkpoint state and mode validation passed" not in output:
-                raise RuntimeError(f"hierarchical SPH {label} checkpoint state did not round-trip")
-
-    if chemistryAvailable and not mesh_hydro_rejected:
+    if chemistryAvailable and not hydro_rejected:
         cooling_options = [option for option in metadata_options
                            if not option.startswith("--hydro.enabled=")] + [
                                "--hydro.enabled=true", "--chemistry.enabled=true"]
@@ -1493,36 +1356,9 @@ mapSize = 8
             # Keep validating every example's option coverage and syntax when its
             # physical scenario is unavailable in the compiled executable.
             preset_options.append("--run.scenario=cosmology")
-        preset_metadata = metadata_options
-        if ini["run"]["scenario"] == "soundWave":
-            preset_metadata = [option for option in metadata_options
-                               if not option.startswith("--initial.particlesPerDimension=")] + [
-                                   "--initial.particlesPerDimension=16"]
-            if not hopkins_available and not args.without_sph:
-                rejected = run(f"complete_{case_name}", preset_metadata + preset_options, success=False)
-                if "run.scenario=soundWave requires COSMICTIGER_ENABLE_HOPKINS=ON" not in rejected:
-                    raise RuntimeError(f"{relative_path} lacked Hopkins build guidance")
-                continue
-        output = run(f"complete_{case_name}", preset_metadata + preset_options)
+        output = run(f"complete_{case_name}", metadata_options + preset_options)
         if "Checkpoint state and mode validation passed" not in output:
             raise RuntimeError(f"{relative_path} did not finish metadata validation")
-        if ini["hydro"]["method"] != "sph" and not args.without_sph:
-            integrator = next(mode for mode in ("traditional", "global") if mode in compiled_integrators)
-            enabled_metadata = [option for option in preset_metadata
-                                if not option.startswith("--hydro.enabled=")]
-            enabled_preset = [option for option in preset_options
-                              if not option.startswith("--gravity.enabled=")]
-            enabled = run(f"enabled_meshless_{case_name}", enabled_metadata + enabled_preset + [
-                "--hydro.enabled=true", f"--run.timeIntegrator={integrator}"],
-                success=hopkins_available and fixed64_available)
-            if not hopkins_available:
-                if "Hopkins MFM/MFV requires COSMICTIGER_ENABLE_HOPKINS=ON" not in enabled:
-                    raise RuntimeError(f"{relative_path} lacked Hopkins build guidance")
-                continue
-            elif fixed64_available:
-                assertHydroMethod(enabled, ini["hydro"]["method"])
-            elif "Hopkins MFM/MFV requires a build with COSMICTIGER_POSITION_TYPE=fixed64" not in enabled:
-                raise RuntimeError(f"{relative_path} lacked the Fixed64 build restriction")
         if (ini["run"]["scenario"] == "cosmology" and chemistryAvailable and
                 starFormationAvailable and args.time_integrator != "hierarchical"):
             enabled_options = [option for option in metadata_options

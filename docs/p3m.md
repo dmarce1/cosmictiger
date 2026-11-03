@@ -39,10 +39,8 @@ cmake -S . -B build_p3m -DCOSMICTIGER_ENABLE_PM=ON -DCOSMICTIGER_ENABLE_P3M_PP=O
 Resolved output adds the derived `gravity.p3mSplitRadius`, `gravity.p3mCutoffRadius`
 and `gravity.p3mMeshSize` (box units and cells). `run.timeIntegrator` selects
 the inner integration: `traditional` or `hierarchical`; the `global` integrator
-is rejected for these solvers. Hopkins MFM/MFV is rejected because its tick
-clock requires a fixed base interval. SPH is supported with the `traditional`
-inner integrator only: hierarchical hydro defers the gas opening kick to the
-hydro step, which does not apply the long half-kicks. `gravity.cuda=true`
+is rejected for these solvers. SPH is supported with the `traditional`
+inner integrator only; hierarchical integration is collisionless only. `gravity.cuda=true`
 runs the PP-PM pair batches on the device; the FMM-PM walk and the mesh solve are
 CPU code. The same executable can run FMM, PMMM, PM and P3M on different runs.
 
@@ -108,11 +106,7 @@ range in hierarchical stages, as in PMMM; sinks are the active particles.
 
 PP-PM batches sink cells toward `gravity.pmmmBatchParticles` and runs the
 double-precision pair law on the CPU, or on CUDA above the same thresholds as
-PMMM's near field. Both short solvers sum each sink's direct-pair coefficient
-`m F(r/H)/H^3` of the full softened pair over the pairs evaluated directly inside
-the cutoff and pass it to the kick, which applies the direct-pair timestep bound
-of `gravity/timestep.hpp` as the other solvers do; accepted FMM-PM multipoles add
-nothing to it. FMM-PM builds one kd-tree per source cell (owned or fetched)
+PMMM's near field. FMM-PM builds one kd-tree per source cell (owned or fetched)
 with full symmetric Cartesian moments about node centers of mass at the runtime
 `gravity.expansionDegree`, then walks each owned sink cell's tree against its
 neighbor trees. A cell pair is accepted for M2L with the screened Green
@@ -236,8 +230,7 @@ worker threads; `--run.test=pm`, `--run.test=p3m` and
   the rejected `global` integrator and the complete INI presets.
 
 Limits: the FMM-PM walk is CPU only and has no CUDA counterpart; the `global`
-inner integrator, hierarchical hydro and Hopkins MFM/MFV are rejected for
-pm/p3m; no full CUDA
+inner integrator is rejected for pm/p3m, and hierarchical integration rejects SPH; no full CUDA
 application run, production cosmology or more than two localities were tried.
 Energy conservation over long evolutions and the time convergence of the outer
 interval have not been measured beyond the restart-equivalence and clock checks

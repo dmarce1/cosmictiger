@@ -187,9 +187,7 @@ size_t lcAddParticleEntries(EntryLists const& entries) {
             double const radius =
                 sqrtf(sqr(entry.x.toDouble(), entry.y.toDouble(), entry.z.toDouble()));
             ALWAYS_ASSERT(entry.pix >= 0 && size_t(entry.pix) < npix);
-            double const mass = entry.mass >= 0.0f ?
-                entry.mass :
-                (entry.type == kDarkMatterType ? darkMatterMass : gasMass);
+            double const mass = entry.type == kDarkMatterType ? darkMatterMass : gasMass;
             epochMap.add(entry.pix, mass / sqr(radius), getOptions().lightcone.mapSize);
         }
     }
@@ -1066,9 +1064,9 @@ void lcSiloOut(char const* filename, Vector<Subgroup> const& subgroups) {
         DBfile* db = DBCreateReal(outputFilename.c_str(), DB_CLOBBER, DB_LOCAL, "Meshless", DB_PDB);
         float* coords[] = {x.data(), y.data(), z.data()};
         DBPutPointmesh(db, "points", kDimensions, coords, x.size(), DB_FLOAT, NULL);
-        DBPutPointvar1(db, "vx", "points", x.data(), vx.size(), DB_FLOAT, NULL);
-        DBPutPointvar1(db, "vy", "points", y.data(), vy.size(), DB_FLOAT, NULL);
-        DBPutPointvar1(db, "vz", "points", z.data(), vz.size(), DB_FLOAT, NULL);
+        DBPutPointvar1(db, "vx", "points", vx.data(), vx.size(), DB_FLOAT, NULL);
+        DBPutPointvar1(db, "vy", "points", vy.data(), vy.size(), DB_FLOAT, NULL);
+        DBPutPointvar1(db, "vz", "points", vz.data(), vz.size(), DB_FLOAT, NULL);
         DBPutPointvar1(db, "id", "points", id.data(), id.size(), DB_INT, NULL);
         DBPutPointvar1(db, "hostid", "points", hostid.data(), hostid.size(), DB_INT, NULL);
         DBClose(db);

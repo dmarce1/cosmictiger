@@ -48,10 +48,7 @@ bool activeSink(ParticleInteger index) {
     if (!state.request.applyKick) {
         return true;
     }
-    auto const& parameters = state.request.parameters;
-    bool const refreshGas = parameters.refreshGasForces && getOptions().hydro.enabled &&
-        particlesType(index) == kSphType;
-    return particlesRung(index) >= parameters.minRung || refreshGas;
+    return particlesRung(index) >= state.request.parameters.minRung;
 }
 
 static Pair<ParticleInteger> selectedRange(bool rungSelected) {
@@ -235,7 +232,7 @@ void gatherSources() {
 }
 
 void consumeField(ParticleInteger index, std::array<double, 4> const& field, KickReturn& result,
-    FlopCount& doubleFlops, FlopCounts& kickFlops, double pairCurvature) {
+    FlopCount& doubleFlops, FlopCounts& kickFlops) {
     Vector3<float> acceleration;
     double const gm = getOptions().gravity.gm;
     for (int component = 0; component < 4; ++component) {
@@ -250,8 +247,8 @@ void consumeField(ParticleInteger index, std::array<double, 4> const& field, Kic
     float const potential = state.request.doPotential ? gm * field[0] : 0.0f;
     doubleFlops += 2 * (kDimensions + (state.request.doPotential ? 1 : 0));
     if (state.request.applyKick) {
-        result += particleMeshApplyField(index, acceleration, potential, state.request.parameters,
-            nullptr, &kickFlops, float(pairCurvature));
+        result += particleMeshApplyField(
+            index, acceleration, potential, state.request.parameters, nullptr, &kickFlops);
     } else {
         state.acceleration[index] = acceleration;
         if (!state.potential.empty()) {
