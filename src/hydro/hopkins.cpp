@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iterator>
 #include <limits>
@@ -143,8 +144,6 @@ struct HopkinsWorkspace {
     std::vector<std::vector<uint64_t>> rankIdentifiers;
     std::vector<std::vector<size_t>> rankSlots;
     std::unordered_map<uint64_t, size_t> indices;
-    std::vector<std::vector<size_t>> own;
-    std::vector<std::vector<size_t>> neighbors;
     std::vector<hopkins::Geometry> geometry;
     std::vector<hopkins::GeometryRate> geometryRates;
     std::vector<double> supportRates;
@@ -153,12 +152,14 @@ struct HopkinsWorkspace {
     std::vector<unsigned char> dirty;
     std::vector<unsigned char> solved;
     std::vector<unsigned char> built;
-    std::vector<unsigned char> listed;
     std::vector<unsigned char> touched;
     hydro_source::SourceTree tree;
     HopkinsWork work;
     uint64_t nextIdentifier = 0;
-    bool listsBuilt = false;
+    // Set once this event's first stencil query has run: from then on no
+    // resident position may change until the event closes. Neighbor sets are
+    // never stored; every consumer queries the tree when it needs them.
+    bool stencilsFrozen = false;
     bool eventOpen = false;
     double eventTime = 0.0;
     double expansionRate = 0.0;
@@ -207,6 +208,8 @@ constexpr double kHopkinsSupportTolerance = 1.0e-13;
 constexpr double kHopkinsSolveSearchFactor = 1.2;
 
 uint64_t hopkinsTick(double time, double baseTimestep, FlopCount* operations);
+void hopkinsNeighborQuery(HopkinsWorkspace const& workspace, size_t i, double factor,
+    bool symmetric, FlopCount* operations, std::vector<size_t>& neighbors);
 
 HopkinsWorkspace& hopkinsWorkspace() {
     if (!hopkinsResident) {
@@ -238,14 +241,21 @@ std::vector<size_t> hopkinsActiveSlots(HopkinsWorkspace const& workspace) {
     return slots;
 }
 
+size_t hopkinsWorkerCount(size_t count) {
+    return std::min(count, size_t(std::max(1, hpxHardwareConcurrency())));
+}
+
+// Run function(worker, i) over [0, count) on a fixed set of workers, so each
+// worker can own scratch storage that is merged in worker order afterwards.
+// No profile::ScopedPhase may be opened inside a worker: the profiler keeps a
+// single phase stack.
 template <class Function>
-void hopkinsParallel(size_t count, Function const& function) {
-    size_t const workers = std::min(count, size_t(std::max(1, hpxHardwareConcurrency())));
+void hopkinsParallelWorkers(size_t count, size_t workers, Function const& function) {
     std::vector<hpx::future<void>> pending;
     for (size_t worker = 0; worker < workers; worker++) {
         pending.push_back(hpx::async([&, worker]() {
             for (size_t i = count * worker / workers; i < count * (worker + 1) / workers; i++) {
-                function(i);
+                function(worker, i);
             }
         }));
     }
@@ -253,6 +263,12 @@ void hopkinsParallel(size_t count, Function const& function) {
     for (auto& future : pending) {
         future.get();
     }
+}
+
+template <class Function>
+void hopkinsParallel(size_t count, Function const& function) {
+    hopkinsParallelWorkers(
+        count, hopkinsWorkerCount(count), [&](size_t, size_t i) { function(i); });
 }
 
 hopkins::Vector hopkinsSeparation(
@@ -320,11 +336,15 @@ void hopkinsNeighborBatches(HopkinsWorkspace const& workspace, size_t i,
     }
 }
 
+// Transient symmetric stencil of cell i: queried from the tree for this call
+// only. Consumers that make several passes over the same cell query once and
+// use the explicit-list overload.
 template <class Function>
 void hopkinsNeighborBatches(HopkinsWorkspace const& workspace, size_t i, FlopCount* operations,
     Function const& function, bool includeRadius = true) {
-    hopkinsNeighborBatches(
-        workspace, i, workspace.neighbors[i], operations, function, includeRadius);
+    std::vector<size_t> neighbors;
+    hopkinsNeighborQuery(workspace, i, 1.0, true, operations, neighbors);
+    hopkinsNeighborBatches(workspace, i, neighbors, operations, function, includeRadius);
 }
 
 HopkinsSimdVector hopkinsRelativeVelocities(HopkinsWorkspace const& workspace, size_t i,
@@ -769,8 +789,6 @@ namespace detail {
 void hopkinsResizeSlots(HopkinsWorkspace& workspace) {
     size_t const count = workspace.particles.size();
     workspace.owners.resize(count);
-    workspace.own.assign(count, {});
-    workspace.neighbors.assign(count, {});
     workspace.geometry.assign(count, {});
     workspace.geometryRates.assign(count, {});
     workspace.supportRates.assign(count, 0.0);
@@ -779,9 +797,8 @@ void hopkinsResizeSlots(HopkinsWorkspace& workspace) {
     workspace.dirty.assign(count, 0);
     workspace.solved.assign(count, 0);
     workspace.built.assign(count, 0);
-    workspace.listed.assign(count, 0);
     workspace.touched.assign(count, 0);
-    workspace.listsBuilt = false;
+    workspace.stencilsFrozen = false;
 }
 
 void hopkinsClearResident(HopkinsWorkspace& workspace) {
@@ -976,7 +993,7 @@ bool hopkinsRefreshRecords(HopkinsWorkspace& workspace, bool readForces) {
                     record.support = resident.support;
                     record.state.supportRadius = resident.state.supportRadius;
                 }
-                if (workspace.built[slot] || workspace.listed[slot] || workspace.solved[slot]) {
+                if (workspace.stencilsFrozen || workspace.built[slot] || workspace.solved[slot]) {
                     bool moved = false;
                     for (int dim = 0; dim < 3; ++dim) {
                         moved = moved || resident.position[dim] != record.position[dim];
@@ -1083,11 +1100,49 @@ void hopkinsRebuildSources(HopkinsWorkspace& workspace) {
     workspace.work.sourcesUpdated += workspace.particles.size();
 }
 
-// Cells inside factor times this cell's own support. The symmetric neighbor
-// set is the union of own lists, because r < max(h_i, h_j) holds exactly when
-// either own test holds; the reverse members are added by symmetrization.
-std::vector<size_t> hopkinsOwnList(
-    HopkinsWorkspace& workspace, size_t i, double factor, FlopCount* operations) {
+bool hopkinsNeighborChecksEnabled() {
+    static bool const enabled = std::getenv("COSMICTIGER_HOPKINS_CHECK_NEIGHBORS") != nullptr;
+    return enabled;
+}
+
+bool hopkinsStencilMember(HopkinsWorkspace const& workspace, size_t i, size_t j, double factor,
+    bool symmetric, FlopCount* operations) {
+    auto const& particle = workspace.particles[i];
+    auto const& other = workspace.particles[j];
+    hopkins::detail::countFlops(operations, symmetric ? 2 : 1);
+    double const separation =
+        hopkins::norm(hopkinsSeparation(particle, other, operations), operations);
+    return separation < factor * particle.support || (symmetric && separation < other.support);
+}
+
+// Diagnostic cross-check against every resident record, enabled by the
+// COSMICTIGER_HOPKINS_CHECK_NEIGHBORS environment variable: a missing member
+// means the tree's supportUpper of some cell lagged behind its solved support.
+void hopkinsCheckNeighborQuery(HopkinsWorkspace const& workspace, size_t i, double factor,
+    bool symmetric, std::vector<size_t> const& neighbors) {
+    std::vector<size_t> expected;
+    for (size_t j = 0; j < workspace.particles.size(); ++j) {
+        if (j != i && hopkinsStencilMember(workspace, i, j, factor, symmetric, nullptr)) {
+            expected.push_back(j);
+        }
+    }
+    if (expected != neighbors) {
+        throw std::runtime_error("Hopkins stencil query of cell " +
+            std::to_string(workspace.particles[i].state.identifier) + " returned " +
+            std::to_string(neighbors.size()) + " members; brute force finds " +
+            std::to_string(expected.size()));
+    }
+}
+
+// Cells within factor times this cell's own support (symmetric == false), or
+// within the larger of the two supports (symmetric == true). The broad phase
+// returns every source with r <= max(radius, supportUpper_j), so one query
+// also yields the reverse members, provided the tree's supportUpper is current
+// for every cell whose support moved; the exact Fixed64 test decides membership,
+// and r < max(h_i, h_j) holds exactly when either own test holds. Nothing is
+// stored between calls; slots come back in identifier order.
+void hopkinsNeighborQuery(HopkinsWorkspace const& workspace, size_t i, double factor,
+    bool symmetric, FlopCount* operations, std::vector<size_t>& neighbors) {
     auto const& particle = workspace.particles[i];
     hydro_source::Vector point{};
     for (size_t dimension = 0; dimension < 3; ++dimension) {
@@ -1097,87 +1152,44 @@ std::vector<size_t> hopkinsOwnList(
     double const radius =
         std::nextafter(factor * particle.support, std::numeric_limits<double>::infinity()) +
         64.0 * std::numeric_limits<double>::epsilon();
-    ++workspace.work.listQueries;
-    std::vector<size_t> list;
+    neighbors.clear();
     for (uint64_t identifier : workspace.tree.query(sink, radius, workspace.time)) {
         size_t const j = workspace.indices.at(identifier);
-        if (j == i) {
-            continue;
-        }
-        hopkins::detail::countFlops(operations, 1);
-        if (hopkins::norm(hopkinsSeparation(particle, workspace.particles[j], operations),
-                operations) < factor * particle.support) {
-            list.push_back(j);
+        if (j != i && hopkinsStencilMember(workspace, i, j, factor, symmetric, operations)) {
+            neighbors.push_back(j);
         }
     }
-    std::sort(list.begin(), list.end());
-    list.erase(std::unique(list.begin(), list.end()), list.end());
-    return list;
+    std::sort(neighbors.begin(), neighbors.end());
+    neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
+    if (hopkinsNeighborChecksEnabled()) {
+        hopkinsCheckNeighborQuery(workspace, i, factor, symmetric, neighbors);
+    }
 }
 
-void hopkinsRebuildLists(HopkinsWorkspace& workspace) {
-    profile::ScopedPhase profilePhase("hydro.hopkins.lists");
-    HopkinsFlopBatch operations(workspace.countOperations);
-    size_t const count = workspace.particles.size();
-    for (size_t i = 0; i < count; ++i) {
-        workspace.own[i] = hopkinsOwnList(workspace, i, 1.0, operations);
-    }
-    std::vector<std::vector<size_t>> reverse(count);
-    for (size_t i = 0; i < count; ++i) {
-        for (size_t j : workspace.own[i]) {
-            reverse[j].push_back(i);
-        }
-    }
-    for (size_t i = 0; i < count; ++i) {
-        auto& neighbors = workspace.neighbors[i];
-        neighbors.clear();
-        std::set_union(workspace.own[i].begin(), workspace.own[i].end(), reverse[i].begin(),
-            reverse[i].end(), std::back_inserter(neighbors));
-        workspace.listed[i] = 1;
-    }
-    workspace.listsBuilt = true;
-}
-
-// Requery the own lists of cells whose support changed and repair the symmetric
-// lists of everyone they gained or lost. Other own lists are unaffected.
-void hopkinsRelist(HopkinsWorkspace& workspace, std::vector<size_t> const& slots) {
-    if (slots.empty()) {
-        return;
-    }
-    profile::ScopedPhase profilePhase("hydro.hopkins.lists");
-    HopkinsFlopBatch operations(workspace.countOperations);
-    for (size_t k : slots) {
-        auto own = hopkinsOwnList(workspace, k, 1.0, operations);
-        auto const old = workspace.neighbors[k];
-        std::vector<size_t> reverse;
-        for (size_t j : old) {
-            if (std::binary_search(workspace.own[j].begin(), workspace.own[j].end(), k)) {
-                reverse.push_back(j);
-            }
-        }
+// First-ring halo of the active cells: every inactive member of an active
+// cell's symmetric stencil. Workers collect candidates and the merge keeps slot
+// (identifier) order, so the result does not depend on the thread count.
+std::vector<size_t> hopkinsHaloOf(
+    HopkinsWorkspace const& workspace, std::vector<size_t> const& active) {
+    size_t const workers = hopkinsWorkerCount(active.size());
+    std::vector<std::vector<size_t>> found(workers);
+    hopkinsParallelWorkers(active.size(), workers, [&](size_t worker, size_t k) {
+        HopkinsFlopBatch operations(workspace.countOperations);
         std::vector<size_t> neighbors;
-        std::set_union(
-            own.begin(), own.end(), reverse.begin(), reverse.end(), std::back_inserter(neighbors));
+        hopkinsNeighborQuery(workspace, active[k], 1.0, true, operations, neighbors);
         for (size_t j : neighbors) {
-            auto& list = workspace.neighbors[j];
-            auto const location = std::lower_bound(list.begin(), list.end(), k);
-            if (location == list.end() || *location != k) {
-                list.insert(location, k);
+            if (!workspace.particles[j].active) {
+                found[worker].push_back(j);
             }
         }
-        for (size_t j : old) {
-            if (!std::binary_search(neighbors.begin(), neighbors.end(), j)) {
-                auto& list = workspace.neighbors[j];
-                auto const location = std::lower_bound(list.begin(), list.end(), k);
-                if (location != list.end() && *location == k) {
-                    list.erase(location);
-                }
-            }
+    });
+    std::vector<unsigned char> inHalo(workspace.particles.size(), 0);
+    for (auto const& list : found) {
+        for (size_t j : list) {
+            inHalo[j] = 1;
         }
-        workspace.own[k] = std::move(own);
-        workspace.neighbors[k] = std::move(neighbors);
-        workspace.listed[k] = 1;
     }
+    return hopkinsSlotsWhere(workspace, inHalo);
 }
 
 // Solve the constant kernel-number support of the given cells only. Returns
@@ -1200,11 +1212,8 @@ std::vector<size_t> hopkinsSolveSupports(
     workspace.work.supportCells += cells.size();
     std::vector<size_t> pending(cells.size());
     std::iota(pending.begin(), pending.end(), size_t(0));
-    std::vector<std::vector<size_t>> lists(cells.size());
     for (int iteration = 0; iteration < 256 && !pending.empty(); iteration++) {
-        for (size_t k : pending) {
-            lists[k] = hopkinsOwnList(workspace, cells[k], kHopkinsSolveSearchFactor, operations);
-        }
+        workspace.work.listQueries += pending.size();
         std::vector<unsigned char> changed(pending.size(), 0);
         {
             profile::ScopedPhase profilePhase("hydro.hopkins.support.solve");
@@ -1215,9 +1224,14 @@ std::vector<size_t> hopkinsSolveSupports(
                 double const support = std::clamp(particle.support, minimum, maximum);
                 double next = support;
                 if (support == particle.support) {
+                    // Own candidates at the search factor. The test is one-sided,
+                    // so no tree refit is needed between solve iterations.
+                    std::vector<size_t> candidates;
+                    hopkinsNeighborQuery(workspace, cells[k], kHopkinsSolveSearchFactor, false,
+                        operations, candidates);
                     double sum = hopkinsKernelValue(0.0, workspace.dimensions, operations),
                            derivative = 0.0;
-                    hopkinsNeighborBatches(workspace, cells[k], lists[k], operations,
+                    hopkinsNeighborBatches(workspace, cells[k], candidates, operations,
                         [&](HopkinsNeighborBatch const& batch) {
                             hopkins::detail::countFlops(operations, 3 * HopkinsSimd::size());
                             auto const q = batch.radius / HopkinsSimd(support);
@@ -1272,8 +1286,9 @@ std::vector<size_t> hopkinsSolveSupports(
 }
 
 // Build the volume partition and moment matrix of the given cells from their
-// symmetric lists. A singular matrix expands that cell's own search; the
-// expanded cells are returned so the caller can re-derive the dependency halo.
+// symmetric stencils. A singular matrix expands that cell's own search and the
+// tree is refit so later stencil queries see the new support; the expanded
+// cells are returned so the caller can re-derive the dependency halo.
 std::vector<size_t> hopkinsBuildGeometry(
     HopkinsWorkspace& workspace, std::vector<size_t> const& cells) {
     profile::ScopedPhase profilePhase("hydro.hopkins.geometry");
@@ -1281,11 +1296,7 @@ std::vector<size_t> hopkinsBuildGeometry(
     std::vector<size_t> expanded;
     std::vector<size_t> todo = cells;
     for (int attempt = 0; attempt < 16 && !todo.empty(); attempt++) {
-        for (size_t i : todo) {
-            if (!workspace.listed[i]) {
-                throw std::logic_error("Hopkins geometry requires a current neighbor list");
-            }
-        }
+        workspace.work.listQueries += todo.size();
         {
             profile::ScopedPhase profilePhase("hydro.hopkins.geometry.solve");
             hopkinsParallel(todo.size(), [&](size_t k) {
@@ -1343,7 +1354,7 @@ std::vector<size_t> hopkinsBuildGeometry(
         }
         // Appendix C: expand the actual tree search, never invert a regularized
         // singular moment or silently substitute the SPH pressure operator.
-        hopkinsRelist(workspace, invalid);
+        hopkinsUpdateSources(workspace, invalid);
         expanded.insert(expanded.end(), invalid.begin(), invalid.end());
         todo = std::move(invalid);
     }
@@ -1365,37 +1376,29 @@ std::vector<size_t> hopkinsUnflagged(HopkinsWorkspace const& workspace,
     return result;
 }
 
-// Refresh supports, lists and geometry for the active cells and the first-ring
-// halo their incident pair fluxes, gradients and face rates depend on. Every
-// cell's own list is current at this event (the wake scan needs it); supports
-// and geometry are solved at most once per cell per event.
-void hopkinsEnsureGeometry(HopkinsWorkspace& workspace) {
+// Refresh supports and geometry for the active cells and the first-ring halo
+// their incident pair fluxes, gradients and face rates depend on. Supports and
+// geometry are solved at most once per cell per event, and the tree's
+// supportUpper is refit after every solve so the symmetric stencil queries stay
+// exact. Returns the refreshed set A ∪ N(A) in slot order.
+std::vector<size_t> hopkinsEnsureGeometry(HopkinsWorkspace& workspace) {
     size_t const limit = 2 * workspace.particles.size() + 16;
     for (size_t pass = 0; pass < limit; ++pass) {
         bool progressed = false;
         auto const active = hopkinsActiveSlots(workspace);
         auto const unsolved = hopkinsUnflagged(workspace, active, workspace.solved);
         if (!unsolved.empty()) {
-            auto const moved = hopkinsSolveSupports(workspace, unsolved);
-            if (workspace.listsBuilt) {
-                hopkinsRelist(workspace, moved);
-            }
+            hopkinsUpdateSources(workspace, hopkinsSolveSupports(workspace, unsolved));
             progressed = true;
         }
-        if (!workspace.listsBuilt) {
-            hopkinsRebuildLists(workspace);
-            progressed = true;
-        }
-        std::vector<unsigned char> inHalo(workspace.particles.size(), 0);
-        for (size_t i : active) {
-            for (size_t j : workspace.neighbors[i]) {
-                inHalo[j] = !workspace.particles[j].active;
-            }
-        }
-        auto const halo = hopkinsSlotsWhere(workspace, inHalo);
+        // From the first stencil query on, no resident position may change
+        // until the event closes (hopkinsRefreshRecords enforces this).
+        workspace.stencilsFrozen = true;
+        workspace.work.listQueries += active.size();
+        auto const halo = hopkinsHaloOf(workspace, active);
         auto const unsolvedHalo = hopkinsUnflagged(workspace, halo, workspace.solved);
         if (!unsolvedHalo.empty()) {
-            hopkinsRelist(workspace, hopkinsSolveSupports(workspace, unsolvedHalo));
+            hopkinsUpdateSources(workspace, hopkinsSolveSupports(workspace, unsolvedHalo));
             progressed = true;
             continue;
         }
@@ -1408,7 +1411,7 @@ void hopkinsEnsureGeometry(HopkinsWorkspace& workspace) {
             progressed = true;
         }
         if (!progressed) {
-            return;
+            return needed;
         }
     }
     throw std::runtime_error("Hopkins retained geometry refresh did not converge");
@@ -1443,6 +1446,9 @@ void hopkinsOpenEvent(HopkinsWorkspace& workspace, double scale, double expansio
         hopkinsUpdateSources(workspace, hopkinsSlotsWhere(workspace, workspace.dirty));
     }
     std::fill(workspace.dirty.begin(), workspace.dirty.end(), 0);
+    // Every stencil query of this event is made at workspace.time: evaluate the
+    // node envelopes and source positions once; in-event refits keep them current.
+    workspace.tree.prepare(workspace.time);
 }
 
 // Return refreshed records to their owners; each owner then refreshes the
@@ -1511,6 +1517,7 @@ HopkinsSimd hopkinsKernelRate(HopkinsSimd const& radius, HopkinsSimd const& radi
 void hopkinsGeometryRates(HopkinsWorkspace& workspace, std::vector<size_t> const& cells) {
     profile::ScopedPhase profilePhase("hydro.hopkins.geometryRates");
     workspace.work.rateCells += cells.size();
+    workspace.work.listQueries += cells.size();
     hopkinsParallel(cells.size(), [&](size_t k) {
         HopkinsFlopBatch operations(workspace.countOperations);
         size_t const i = cells[k];
@@ -1518,25 +1525,30 @@ void hopkinsGeometryRates(HopkinsWorkspace& workspace, std::vector<size_t> const
             throw std::logic_error("Hopkins face rates require current geometry");
         }
         auto const& particle = workspace.particles[i];
+        // One stencil query serves both passes over this cell.
+        std::vector<size_t> neighbors;
+        hopkinsNeighborQuery(workspace, i, 1.0, true, operations, neighbors);
         double radialSum = 0.0, supportSum = 0.0;
-        hopkinsNeighborBatches(workspace, i, operations, [&](HopkinsNeighborBatch const& batch) {
-            auto const relative = hopkinsRelativeVelocities(workspace, i, batch, operations);
-            hopkins::detail::countFlops(operations, 4 * HopkinsSimd::size());
-            auto const q = batch.radius / HopkinsSimd(particle.support);
-            auto const derivative = hopkinsKernelDerivative(q, workspace.dimensions, operations);
-            auto const safeRadius =
-                simdSelect(batch.radius > HopkinsSimd(0.0), batch.radius, HopkinsSimd(1.0));
-            auto const radialTerms =
-                derivative * hopkinsSimdDot(batch.separation, relative, operations) / safeRadius;
-            auto const supportTerms = derivative * q;
-            for (size_t lane = 0; lane < batch.count; lane++) {
-                if (batch.radius[lane] > 0.0 && batch.radius[lane] < particle.support) {
-                    hopkins::detail::countFlops(operations, 2);
-                    radialSum += radialTerms[lane];
-                    supportSum += supportTerms[lane];
+        hopkinsNeighborBatches(
+            workspace, i, neighbors, operations, [&](HopkinsNeighborBatch const& batch) {
+                auto const relative = hopkinsRelativeVelocities(workspace, i, batch, operations);
+                hopkins::detail::countFlops(operations, 4 * HopkinsSimd::size());
+                auto const q = batch.radius / HopkinsSimd(particle.support);
+                auto const derivative =
+                    hopkinsKernelDerivative(q, workspace.dimensions, operations);
+                auto const safeRadius =
+                    simdSelect(batch.radius > HopkinsSimd(0.0), batch.radius, HopkinsSimd(1.0));
+                auto const radialTerms = derivative *
+                    hopkinsSimdDot(batch.separation, relative, operations) / safeRadius;
+                auto const supportTerms = derivative * q;
+                for (size_t lane = 0; lane < batch.count; lane++) {
+                    if (batch.radius[lane] > 0.0 && batch.radius[lane] < particle.support) {
+                        hopkins::detail::countFlops(operations, 2);
+                        radialSum += radialTerms[lane];
+                        supportSum += supportTerms[lane];
+                    }
                 }
-            }
-        });
+            });
         // Differentiate the same constant kernel-number condition used by
         // the support solve: sum W(r/h) is constant along the moving points.
         hopkins::detail::countFlops(operations, supportSum != 0.0 ? 1 : 0);
@@ -1562,41 +1574,44 @@ void hopkinsGeometryRates(HopkinsWorkspace& workspace, std::vector<size_t> const
         double kernelSumRate = hopkinsKernelRate(
             0.0, 0.0, particle.support, supportRate, workspace.dimensions, operations);
         hopkins::Matrix rawMoment{}, rawMomentRate{};
-        hopkinsNeighborBatches(workspace, i, operations, [&](HopkinsNeighborBatch const& batch) {
-            auto const& separation = batch.separation;
-            auto const relative = hopkinsRelativeVelocities(workspace, i, batch, operations);
-            auto const safeRadius =
-                simdSelect(batch.radius > HopkinsSimd(0.0), batch.radius, HopkinsSimd(1.0));
-            hopkins::detail::countFlops(operations, HopkinsSimd::size());
-            auto const radiusRate = hopkinsSimdDot(separation, relative, operations) / safeRadius;
-            auto const kernel =
-                hopkinsKernel(batch.radius, particle.support, workspace.dimensions, operations);
-            auto const kernelRate = hopkinsKernelRate(batch.radius, radiusRate, particle.support,
-                supportRate, workspace.dimensions, operations);
-            HopkinsSimdMatrix moments, momentRates;
-            hopkins::detail::countFlops(operations, 81 * HopkinsSimd::size());
-            for (int row = 0; row < 3; row++) {
-                for (int column = 0; column < 3; column++) {
-                    moments[row][column] = kernel * separation[row] * separation[column];
-                    momentRates[row][column] = kernelRate * separation[row] * separation[column] +
-                        kernel *
-                            (relative[row] * separation[column] +
-                                separation[row] * relative[column]);
+        hopkinsNeighborBatches(
+            workspace, i, neighbors, operations, [&](HopkinsNeighborBatch const& batch) {
+                auto const& separation = batch.separation;
+                auto const relative = hopkinsRelativeVelocities(workspace, i, batch, operations);
+                auto const safeRadius =
+                    simdSelect(batch.radius > HopkinsSimd(0.0), batch.radius, HopkinsSimd(1.0));
+                hopkins::detail::countFlops(operations, HopkinsSimd::size());
+                auto const radiusRate =
+                    hopkinsSimdDot(separation, relative, operations) / safeRadius;
+                auto const kernel =
+                    hopkinsKernel(batch.radius, particle.support, workspace.dimensions, operations);
+                auto const kernelRate = hopkinsKernelRate(batch.radius, radiusRate,
+                    particle.support, supportRate, workspace.dimensions, operations);
+                HopkinsSimdMatrix moments, momentRates;
+                hopkins::detail::countFlops(operations, 81 * HopkinsSimd::size());
+                for (int row = 0; row < 3; row++) {
+                    for (int column = 0; column < 3; column++) {
+                        moments[row][column] = kernel * separation[row] * separation[column];
+                        momentRates[row][column] =
+                            kernelRate * separation[row] * separation[column] +
+                            kernel *
+                                (relative[row] * separation[column] +
+                                    separation[row] * relative[column]);
+                    }
                 }
-            }
-            for (size_t lane = 0; lane < batch.count; lane++) {
-                if (batch.radius[lane] < particle.support) {
-                    hopkins::detail::countFlops(operations, 19);
-                    kernelSumRate += kernelRate[lane];
-                    for (int row = 0; row < 3; row++) {
-                        for (int column = 0; column < 3; column++) {
-                            rawMoment[row][column] += moments[row][column][lane];
-                            rawMomentRate[row][column] += momentRates[row][column][lane];
+                for (size_t lane = 0; lane < batch.count; lane++) {
+                    if (batch.radius[lane] < particle.support) {
+                        hopkins::detail::countFlops(operations, 19);
+                        kernelSumRate += kernelRate[lane];
+                        for (int row = 0; row < 3; row++) {
+                            for (int column = 0; column < 3; column++) {
+                                rawMoment[row][column] += moments[row][column][lane];
+                                rawMomentRate[row][column] += momentRates[row][column][lane];
+                            }
                         }
                     }
                 }
-            }
-        });
+            });
         hopkins::detail::countFlops(operations, 29);
         double const volumeRate = -geometry.volume * geometry.volume * kernelSumRate;
         hopkins::Matrix momentRate{};
@@ -1659,6 +1674,7 @@ void hopkinsGradients(HopkinsWorkspace& workspace, std::vector<size_t> const& ac
     profile::ScopedPhase profilePhase("hydro.hopkins.gradients");
     HopkinsFlopBatch operations(workspace.countOperations);
     workspace.work.gradientCells += active.size();
+    workspace.work.listQueries += active.size();
     double const gamma = getOptions().hydro.gamma;
     for (size_t i : refreshed) {
         auto const& particle = workspace.particles[i];
@@ -1688,49 +1704,55 @@ void hopkinsGradients(HopkinsWorkspace& workspace, std::vector<size_t> const& ac
         auto minimum = values;
         auto maximum = values;
         std::array<hopkins::Vector, 5> gradients{};
-        hopkinsNeighborBatches(workspace, i, operations, [&](HopkinsNeighborBatch const& batch) {
-            auto const& geometry = workspace.geometry[i];
-            auto const weightScale =
-                hopkinsKernel(batch.radius, particle.support, workspace.dimensions, operations) *
-                HopkinsSimd(geometry.volume);
-            HopkinsSimdVector weight;
-            hopkins::detail::countFlops(operations, 19 * HopkinsSimd::size());
-            auto const projected = geometry.inverseMoment * batch.separation;
-            for (int dim = 0; dim < 3; dim++) {
-                weight[dim] = projected[dim] * weightScale;
-            }
-            std::array<HopkinsSimd, 5> neighborValues;
-            neighborValues[0] = hopkinsNeighborValues(
-                batch, [&](size_t j) { return workspace.primitives[j].density; });
-            neighborValues[1] = hopkinsNeighborValues(
-                batch, [&](size_t j) { return workspace.primitives[j].pressure; });
-            for (int dim = 0; dim < 3; dim++) {
-                neighborValues[dim + 2] = hopkinsNeighborValues(
-                    batch, [&](size_t j) { return workspace.primitives[j].velocity[dim]; });
-            }
-            std::array<HopkinsSimdVector, 5> contributions;
-            hopkins::detail::countFlops(operations, 20 * HopkinsSimd::size());
-            for (int field = 0; field < 5; field++) {
-                auto const difference = neighborValues[field] - HopkinsSimd(values[field]);
+        // One stencil query serves the gradient sum and the limiter pass.
+        std::vector<size_t> neighbors;
+        hopkinsNeighborQuery(workspace, i, 1.0, true, operations, neighbors);
+        hopkinsNeighborBatches(
+            workspace, i, neighbors, operations, [&](HopkinsNeighborBatch const& batch) {
+                auto const& geometry = workspace.geometry[i];
+                auto const weightScale = hopkinsKernel(batch.radius, particle.support,
+                                             workspace.dimensions, operations) *
+                    HopkinsSimd(geometry.volume);
+                HopkinsSimdVector weight;
+                hopkins::detail::countFlops(operations, 19 * HopkinsSimd::size());
+                auto const projected = geometry.inverseMoment * batch.separation;
                 for (int dim = 0; dim < 3; dim++) {
-                    contributions[field][dim] = weight[dim] * difference;
+                    weight[dim] = projected[dim] * weightScale;
                 }
-            }
-            hopkins::detail::countFlops(operations, 15 * batch.count);
-            for (size_t lane = 0; lane < batch.count; lane++) {
+                std::array<HopkinsSimd, 5> neighborValues;
+                neighborValues[0] = hopkinsNeighborValues(
+                    batch, [&](size_t j) { return workspace.primitives[j].density; });
+                neighborValues[1] = hopkinsNeighborValues(
+                    batch, [&](size_t j) { return workspace.primitives[j].pressure; });
+                for (int dim = 0; dim < 3; dim++) {
+                    neighborValues[dim + 2] = hopkinsNeighborValues(
+                        batch, [&](size_t j) { return workspace.primitives[j].velocity[dim]; });
+                }
+                std::array<HopkinsSimdVector, 5> contributions;
+                hopkins::detail::countFlops(operations, 20 * HopkinsSimd::size());
                 for (int field = 0; field < 5; field++) {
-                    minimum[field] = std::min(minimum[field], double(neighborValues[field][lane]));
-                    maximum[field] = std::max(maximum[field], double(neighborValues[field][lane]));
+                    auto const difference = neighborValues[field] - HopkinsSimd(values[field]);
                     for (int dim = 0; dim < 3; dim++) {
-                        gradients[field][dim] += contributions[field][dim][lane];
+                        contributions[field][dim] = weight[dim] * difference;
                     }
                 }
-            }
-        });
+                hopkins::detail::countFlops(operations, 15 * batch.count);
+                for (size_t lane = 0; lane < batch.count; lane++) {
+                    for (int field = 0; field < 5; field++) {
+                        minimum[field] =
+                            std::min(minimum[field], double(neighborValues[field][lane]));
+                        maximum[field] =
+                            std::max(maximum[field], double(neighborValues[field][lane]));
+                        for (int dim = 0; dim < 3; dim++) {
+                            gradients[field][dim] += contributions[field][dim][lane];
+                        }
+                    }
+                }
+            });
         auto reconstructedMinimum = values;
         auto reconstructedMaximum = values;
         hopkinsNeighborBatches(
-            workspace, i, operations,
+            workspace, i, neighbors, operations,
             [&](HopkinsNeighborBatch const& batch) {
                 auto const supports = hopkinsNeighborValues(
                     batch, [&](size_t j) { return workspace.particles[j].support; });
@@ -1816,8 +1838,17 @@ HopkinsStepResult hopkinsSelectTimesteps(HopkinsWorkspace& workspace, int minimu
                 cosmosD2adt2(workspace.scale), 0.01, operations));
     }
 #endif
-    for (size_t i = 0; i < workspace.particles.size(); i++) {
-        auto& particle = workspace.particles[i];
+    // Pass one, in parallel and without side effects: every cell's own timestep
+    // bound from its symmetric stencil, and whether a sleeping cell's retained
+    // prediction is still physical. Pass two applies them in slot order, so the
+    // outcome does not depend on the thread count.
+    size_t const count = workspace.particles.size();
+    std::vector<double> timesteps(count, backgroundTimestep);
+    std::vector<unsigned char> invalidPrediction(count, 0);
+    workspace.work.listQueries += count;
+    hopkinsParallel(count, [&](size_t i) {
+        HopkinsFlopBatch operations(workspace.countOperations);
+        auto const& particle = workspace.particles[i];
         double timestep = backgroundTimestep;
         hopkins::detail::countFlops(operations, workspace.dimensions == 1 ? 6 : 8);
         // Active cells were just closed, so their anchor volume is the fresh
@@ -1862,6 +1893,15 @@ HopkinsStepResult hopkinsSelectTimesteps(HopkinsWorkspace& workspace, int minimu
         if (!(timestep > 0.0) || !std::isfinite(timestep)) {
             throw std::runtime_error("Invalid Hopkins particle timestep");
         }
+        timesteps[i] = timestep;
+        if (!global && !particle.active && particle.state.predictorInitialized) {
+            invalidPrediction[i] =
+                !hopkins::physical(hopkinsPredictedPrimitive(particle, workspace, operations));
+        }
+    });
+    for (size_t i = 0; i < count; i++) {
+        auto& particle = workspace.particles[i];
+        double const timestep = timesteps[i];
         if (global) {
             minimumTimestep = std::min(minimumTimestep, timestep);
             particle.active = true;
@@ -1873,9 +1913,7 @@ HopkinsStepResult hopkinsSelectTimesteps(HopkinsWorkspace& workspace, int minimu
             std::max(options.run.minRung, int(std::ceil(std::log2(baseTimestep / timestep))));
         if (particle.active) {
             particle.rung = std::max({minimumRung, particle.rung - int(allowCoarsen), required});
-        } else if (required > particle.rung ||
-            (particle.state.predictorInitialized &&
-                !hopkins::physical(hopkinsPredictedPrimitive(particle, workspace, operations)))) {
+        } else if (required > particle.rung || invalidPrediction[i]) {
             // The ledger contains only elapsed exchanges, so an early wake-up
             // never needs to remove a future exchange from either endpoint.
             particle.active = true;
@@ -1891,7 +1929,7 @@ HopkinsStepResult hopkinsSelectTimesteps(HopkinsWorkspace& workspace, int minimu
     // Propagate wake-ups in a stable order, including after an MPI restart
     // changes the local particle storage order.
     std::vector<size_t> order;
-    for (size_t i = 0; i < workspace.particles.size(); i++) {
+    for (size_t i = 0; i < count; i++) {
         order.push_back(i);
     }
     std::sort(order.begin(), order.end(), [&](size_t left, size_t right) {
@@ -1900,20 +1938,67 @@ HopkinsStepResult hopkinsSelectTimesteps(HopkinsWorkspace& workspace, int minimu
     });
     // Appendix G: prevent a timestep contrast larger than four across an
     // interacting pair. Wake sleeping neighbors onto the shorter active bin.
+    // The sweep is sequential by construction: a raise earlier in the sweep
+    // changes what a later cell raises, so cells are visited in identifier
+    // order with immediate effect, exactly as a full sweep over every cell.
+    // Two exact shortcuts remove no-op visits: a cell whose rung is below the
+    // lowest rung plus three can raise nobody, and a cell revisited with an
+    // unchanged rung can raise nobody new, because its neighbours' rungs only
+    // grew since. The stencils of the cells due in a chunk are queried in
+    // parallel; a cell that becomes due inside the chunk queries on the spot.
+    int lowestRung = kMaxRung;
+    for (auto const& particle : workspace.particles) {
+        lowestRung = std::min(lowestRung, particle.rung);
+    }
+    auto const canRaise = [&](size_t i) { return workspace.particles[i].rung >= lowestRung + 3; };
+    std::vector<int> visitedRung(count, -1);
+    constexpr size_t kWakeChunk = 4096;
+    std::vector<size_t> due;
+    std::vector<std::vector<size_t>> stencils;
     bool changed;
     do {
         changed = false;
-        for (size_t i : order) {
-            auto const rung = workspace.particles[i].rung;
-            for (size_t j : workspace.neighbors[i]) {
-                auto& neighbor = workspace.particles[j];
-                if (neighbor.rung + 2 < rung) {
-                    if (!neighbor.active) {
-                        woken++;
+        for (size_t begin = 0; begin < count; begin += kWakeChunk) {
+            size_t const end = std::min(count, begin + kWakeChunk);
+            due.clear();
+            for (size_t k = begin; k < end; ++k) {
+                size_t const i = order[k];
+                if (canRaise(i) && workspace.particles[i].rung != visitedRung[i]) {
+                    due.push_back(i);
+                }
+            }
+            stencils.assign(due.size(), {});
+            workspace.work.listQueries += due.size();
+            hopkinsParallel(due.size(), [&](size_t k) {
+                HopkinsFlopBatch operations(workspace.countOperations);
+                hopkinsNeighborQuery(workspace, due[k], 1.0, true, operations, stencils[k]);
+            });
+            size_t next = 0;
+            std::vector<size_t> fresh;
+            for (size_t k = begin; k < end; ++k) {
+                size_t const i = order[k];
+                std::vector<size_t> const* stencil = nullptr;
+                if (next < due.size() && due[next] == i) {
+                    stencil = &stencils[next++];
+                } else if (canRaise(i) && workspace.particles[i].rung != visitedRung[i]) {
+                    ++workspace.work.listQueries;
+                    hopkinsNeighborQuery(workspace, i, 1.0, true, operations, fresh);
+                    stencil = &fresh;
+                } else {
+                    continue;
+                }
+                auto const rung = workspace.particles[i].rung;
+                visitedRung[i] = rung;
+                for (size_t j : *stencil) {
+                    auto& neighbor = workspace.particles[j];
+                    if (neighbor.rung + 2 < rung) {
+                        if (!neighbor.active) {
+                            woken++;
+                        }
+                        neighbor.active = true;
+                        neighbor.rung = std::max(minimumRung, rung);
+                        changed = true;
                     }
-                    neighbor.active = true;
-                    neighbor.rung = std::max(minimumRung, rung);
-                    changed = true;
                 }
             }
         }
@@ -2523,14 +2608,20 @@ void hopkinsSynchronizeEntropy(HopkinsWorkspace& workspace, std::vector<size_t> 
         auto const& state = workspace.particles[j].state;
         return state.totalEnergy / state.anchorVolume;
     };
-    for (size_t i : closing) {
+    // Each closing cell reads its stencil and writes only its own entropy.
+    workspace.work.listQueries += closing.size();
+    hopkinsParallel(closing.size(), [&](size_t k) {
+        size_t const i = closing[k];
         auto& particle = workspace.particles[i];
         if (particle.convert) {
-            continue;
+            return;
         }
+        HopkinsFlopBatch operations(workspace.countOperations);
+        std::vector<size_t> neighbors;
+        hopkinsNeighborQuery(workspace, i, 1.0, true, operations, neighbors);
         auto& state = particle.state;
         double maximum = energyDensity(i);
-        for (size_t j : workspace.neighbors[i]) {
+        for (size_t j : neighbors) {
             maximum = std::max(maximum, energyDensity(j));
         }
         double const thermal =
@@ -2540,7 +2631,7 @@ void hopkinsSynchronizeEntropy(HopkinsWorkspace& workspace, std::vector<size_t> 
             state.entropy = hopkins::entropyFunction(
                 thermal / state.mass, state.mass / state.anchorVolume, options.hydro.gamma);
         }
-    }
+    });
 }
 
 void hopkinsCurrentViews(HopkinsWorkspace& workspace) {
@@ -2568,9 +2659,18 @@ void hopkinsCurrentViews(HopkinsWorkspace& workspace) {
 void hopkinsOpenPairs(HopkinsWorkspace& workspace, std::vector<size_t> const& active,
     size_t& retained, size_t& opened) {
     profile::ScopedPhase profilePhase("hydro.hopkins.flux.open");
-    std::vector<std::pair<size_t, size_t>> pairs;
-    for (size_t i : active) {
-        for (size_t j : workspace.neighbors[i]) {
+    // Workers enumerate the pairs of their active cells from transient stencil
+    // queries; the merged list is sorted and deduplicated, so active-active
+    // pairs seen from both sides open once and the batch order is fixed.
+    size_t const workers = hopkinsWorkerCount(active.size());
+    std::vector<std::vector<std::pair<size_t, size_t>>> found(workers);
+    workspace.work.listQueries += active.size();
+    hopkinsParallelWorkers(active.size(), workers, [&](size_t worker, size_t k) {
+        HopkinsFlopBatch operations(workspace.countOperations);
+        size_t const i = active[k];
+        std::vector<size_t> neighbors;
+        hopkinsNeighborQuery(workspace, i, 1.0, true, operations, neighbors);
+        for (size_t j : neighbors) {
             size_t const lower = std::min(i, j);
             size_t const upper = std::max(i, j);
             auto const& left = workspace.particles[lower];
@@ -2580,9 +2680,13 @@ void hopkinsOpenPairs(HopkinsWorkspace& workspace, std::vector<size_t> const& ac
             }
             if (!left.convert && !right.convert &&
                 !hopkinsPairs.contains({left.state.identifier, right.state.identifier})) {
-                pairs.emplace_back(lower, upper);
+                found[worker].emplace_back(lower, upper);
             }
         }
+    });
+    std::vector<std::pair<size_t, size_t>> pairs;
+    for (auto const& list : found) {
+        pairs.insert(pairs.end(), list.begin(), list.end());
     }
     std::sort(pairs.begin(), pairs.end());
     pairs.erase(std::unique(pairs.begin(), pairs.end()), pairs.end());
@@ -2734,6 +2838,7 @@ void hopkinsSoundWaveDiagnostics(double time) {
         particle.active = true;
     }
     detail::hopkinsRebuildSources(scratch);
+    scratch.tree.prepare(scratch.time);
     detail::hopkinsEnsureGeometry(scratch);
     detail::hopkinsWriteSoundWave(scratch, time);
     {
@@ -2904,9 +3009,12 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
     size_t settled = 0;
     size_t converted = 0;
     bool firstSelection = true;
+    // The refreshed set A ∪ N(A) of the last geometry pass: the loop below only
+    // exits once a timestep selection woke nobody, so it is still current then.
+    std::vector<size_t> refreshed;
     while (true) {
         settled += detail::hopkinsSettlePairs(workspace, closingOnly);
-        detail::hopkinsEnsureGeometry(workspace);
+        refreshed = detail::hopkinsEnsureGeometry(workspace);
         {
             profile::ScopedPhase closePhase("hydro.hopkins.close");
             std::vector<size_t> closing;
@@ -2959,16 +3067,6 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
     size_t retained = detail::hopkinsPairs.size(), opened = 0;
     if (!closingOnly) {
         auto const activeSlots = detail::hopkinsActiveSlots(workspace);
-        std::vector<unsigned char> inHalo(workspace.particles.size(), 0);
-        for (size_t i : activeSlots) {
-            for (size_t j : workspace.neighbors[i]) {
-                inHalo[j] = !workspace.particles[j].active;
-            }
-        }
-        auto const haloSlots = detail::hopkinsSlotsWhere(workspace, inHalo);
-        std::vector<size_t> refreshed;
-        std::merge(activeSlots.begin(), activeSlots.end(), haloSlots.begin(), haloSlots.end(),
-            std::back_inserter(refreshed));
         detail::hopkinsGradients(workspace, activeSlots, refreshed);
         detail::hopkinsGeometryRates(workspace, refreshed);
         for (size_t i : activeSlots) {

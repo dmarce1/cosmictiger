@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <bit>
 #include <cmath>
 #include <cstddef>
@@ -67,6 +68,52 @@ struct Counters {
 };
 
 namespace detail {
+
+    // Relaxed atomic tallies, so concurrent const queries count safely. Copies
+    // and assignments take a snapshot; the fields need no mutual ordering.
+    struct AtomicCounters {
+        std::atomic<uint64_t> sourcesSorted{0};
+        std::atomic<uint64_t> sourcesUpdated{0};
+        std::atomic<uint64_t> nodesRefitted{0};
+        std::atomic<uint64_t> topologyRebuilds{0};
+        std::atomic<uint64_t> nodesVisited{0};
+        std::atomic<uint64_t> sourcesVisited{0};
+
+        AtomicCounters() = default;
+        AtomicCounters(AtomicCounters const& other) {
+            store(other.snapshot());
+        }
+        AtomicCounters& operator=(AtomicCounters const& other) {
+            if (this != &other) {
+                store(other.snapshot());
+            }
+            return *this;
+        }
+
+        Counters snapshot() const {
+            Counters result;
+            result.sourcesSorted = sourcesSorted.load(std::memory_order_relaxed);
+            result.sourcesUpdated = sourcesUpdated.load(std::memory_order_relaxed);
+            result.nodesRefitted = nodesRefitted.load(std::memory_order_relaxed);
+            result.topologyRebuilds = topologyRebuilds.load(std::memory_order_relaxed);
+            result.nodesVisited = nodesVisited.load(std::memory_order_relaxed);
+            result.sourcesVisited = sourcesVisited.load(std::memory_order_relaxed);
+            return result;
+        }
+
+        void store(Counters const& values) {
+            sourcesSorted.store(values.sourcesSorted, std::memory_order_relaxed);
+            sourcesUpdated.store(values.sourcesUpdated, std::memory_order_relaxed);
+            nodesRefitted.store(values.nodesRefitted, std::memory_order_relaxed);
+            topologyRebuilds.store(values.topologyRebuilds, std::memory_order_relaxed);
+            nodesVisited.store(values.nodesVisited, std::memory_order_relaxed);
+            sourcesVisited.store(values.sourcesVisited, std::memory_order_relaxed);
+        }
+
+        void reset() {
+            store({});
+        }
+    };
 
     inline bool finite(double value) {
         return (std::bit_cast<uint64_t>(value) & 0x7ff0000000000000ULL) != 0x7ff0000000000000ULL;
@@ -219,7 +266,15 @@ class SourceTree {
     std::unordered_map<uint64_t, size_t> indices_;
     size_t leafCapacity_;
     double referenceTime_ = 0.0;
-    mutable Counters counters_;
+    mutable detail::AtomicCounters counters_;
+    // Node envelopes and source positions evaluated once at a prepared query
+    // time (prepare); queries at exactly that time reuse them instead of
+    // re-evaluating the interval polynomials per visited node. Refits keep the
+    // prepared values current; a rebuild discards them.
+    std::vector<Bounds> preparedBounds_;
+    std::vector<Vector> preparedPositions_;
+    double preparedTime_ = 0.0;
+    bool prepared_ = false;
 
     static Coefficients emptyCoefficients() {
         Coefficients result;
@@ -310,7 +365,7 @@ class SourceTree {
                 includeMetadata(node.metadata, metadata);
             }
         }
-        ++counters_.nodesRefitted;
+        counters_.nodesRefitted.fetch_add(1, std::memory_order_relaxed);
     }
 
     size_t buildNode(size_t begin, size_t end, size_t parent) {
@@ -413,12 +468,17 @@ class SourceTree {
 
     void queryNode(size_t index, Box const& sink, double support, double time, int maximumRung,
         std::vector<uint64_t>& result) const {
-        ++counters_.nodesVisited;
+        counters_.nodesVisited.fetch_add(1, std::memory_order_relaxed);
         auto const& node = nodes_[index];
         if (node.metadata.minRung > maximumRung) {
             return;
         }
-        auto const envelope = bounds(node, time);
+        bool const cached = prepared_ && time == preparedTime_;
+        Bounds computed;
+        if (!cached) {
+            computed = bounds(node, time);
+        }
+        Bounds const& envelope = cached ? preparedBounds_[index] : computed;
         if (!periodicIntersection(
                 sink, envelope.position, std::max(support, envelope.maxSupport))) {
             return;
@@ -428,13 +488,15 @@ class SourceTree {
             queryNode(node.right, sink, support, time, maximumRung, result);
         } else {
             for (size_t slot = node.begin; slot < node.end; ++slot) {
-                auto const& source = records_[order_[slot]].source;
+                size_t const record = order_[slot];
+                auto const& source = records_[record].source;
                 if (source.rung > maximumRung) {
                     continue;
                 }
-                ++counters_.sourcesVisited;
-                if (periodicDistance(positionUnchecked(source, time), sink) <=
-                    std::max(support, source.supportUpper)) {
+                counters_.sourcesVisited.fetch_add(1, std::memory_order_relaxed);
+                Vector const position =
+                    cached ? preparedPositions_[record] : positionUnchecked(source, time);
+                if (periodicDistance(position, sink) <= std::max(support, source.supportUpper)) {
                     detail::validateTime(source, time);
                     result.push_back(source.id);
                 }
@@ -444,7 +506,7 @@ class SourceTree {
 
     template <class Predicate, class Visitor>
     void visitNode(size_t index, double time, Predicate& predicate, Visitor& visitor) const {
-        ++counters_.nodesVisited;
+        counters_.nodesVisited.fetch_add(1, std::memory_order_relaxed);
         auto const& node = nodes_[index];
         if (!predicate(bounds(node, time))) {
             return;
@@ -455,7 +517,7 @@ class SourceTree {
         } else {
             for (size_t slot = node.begin; slot < node.end; ++slot) {
                 auto const& source = records_[order_[slot]].source;
-                ++counters_.sourcesVisited;
+                counters_.sourcesVisited.fetch_add(1, std::memory_order_relaxed);
                 detail::validateTime(source, time);
                 visitor(source, positionUnchecked(source, time), velocityUnchecked(source, time));
             }
@@ -495,8 +557,8 @@ public:
             replacement.buildNode(0, sources.size(), kNoNode_);
         }
         replacement.counters_ = counters_;
-        replacement.counters_.sourcesSorted += sources.size();
-        ++replacement.counters_.topologyRebuilds;
+        replacement.counters_.sourcesSorted.fetch_add(sources.size(), std::memory_order_relaxed);
+        replacement.counters_.topologyRebuilds.fetch_add(1, std::memory_order_relaxed);
         *this = std::move(replacement);
     }
 
@@ -572,7 +634,35 @@ public:
                 refitNode(node);
             }
         }
-        counters_.sourcesUpdated += sources.size();
+        if (prepared_) {
+            for (auto const& change : changes) {
+                preparedPositions_[change.index] =
+                    positionUnchecked(records_[change.index].source, preparedTime_);
+            }
+            for (size_t node : dirty) {
+                preparedBounds_[node] = bounds(nodes_[node], preparedTime_);
+            }
+        }
+        counters_.sourcesUpdated.fetch_add(sources.size(), std::memory_order_relaxed);
+    }
+
+    // Evaluate every node envelope and source position at this time once, so
+    // that queries at exactly this time skip the per-node interval arithmetic.
+    // Later in-place updates refresh the prepared values; a rebuild clears them.
+    void prepare(double time) {
+        if (!detail::finite(time)) {
+            throw std::invalid_argument("Nonfinite hydro source preparation time");
+        }
+        preparedTime_ = time;
+        preparedBounds_.resize(nodes_.size());
+        for (size_t index = 0; index < nodes_.size(); ++index) {
+            preparedBounds_[index] = bounds(nodes_[index], time);
+        }
+        preparedPositions_.resize(records_.size());
+        for (size_t index = 0; index < records_.size(); ++index) {
+            preparedPositions_[index] = positionUnchecked(records_[index].source, time);
+        }
+        prepared_ = true;
     }
 
     // Apply removals and upserts together, rebuilding at most once. An upsert
@@ -672,11 +762,11 @@ public:
     }
 
     Counters counters() const {
-        return counters_;
+        return counters_.snapshot();
     }
 
     void resetCounters() const {
-        counters_ = {};
+        counters_.reset();
     }
 };
 

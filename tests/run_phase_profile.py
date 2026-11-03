@@ -223,12 +223,14 @@ def check_sph(rows, integrator):
 
 
 def check_hopkins(rows, label):
+    # The retained-record pipeline keeps one persistent source tree: records are
+    # gathered as deltas, the tree is refit in place, and neighbor stencils are
+    # transient tree queries inside the support, geometry and flux phases.
     require_phases(rows, (
-        "hydro.hopkins", "hydro.hopkins.tree.create", "hydro.hopkins.tree.destroy",
-        "hydro.hopkins.gather", "hydro.hopkins.scatter", "hydro.hopkins.caches.clear",
-        "hydro.hopkins.neighbors.refresh", "hydro.hopkins.support.solve",
-        "hydro.hopkins.geometry.solve", "hydro.hopkins.gradients",
-        "hydro.hopkins.geometryRates", "hydro.hopkins.timesteps",
+        "hydro.hopkins", "hydro.hopkins.tree.refresh", "hydro.hopkins.gather",
+        "hydro.hopkins.scatter", "hydro.hopkins.caches.clear", "hydro.hopkins.support",
+        "hydro.hopkins.support.solve", "hydro.hopkins.geometry", "hydro.hopkins.geometry.solve",
+        "hydro.hopkins.gradients", "hydro.hopkins.geometryRates", "hydro.hopkins.timesteps",
         "hydro.hopkins.flux.open", "hydro.hopkins.flux.settle", "hydro.hopkins.close",
         "hydro.hopkins.primitives", "hydro.hopkins.diagnostics.energies",
         "hydro.hopkins.diagnostics.soundWave"), label)
@@ -236,8 +238,8 @@ def check_hopkins(rows, label):
     events = calls("hydro.hopkins")
     openings = calls("hydro.hopkins.flux.open")
     settlements = calls("hydro.hopkins.flux.settle")
-    require(calls("hydro.hopkins.tree.create") == calls("hydro.hopkins.tree.destroy") >= events,
-            f"{label}: tree lifecycle does not cover every force event")
+    require(calls("hydro.hopkins.tree.refresh") >= events,
+            f"{label}: persistent tree refresh does not cover every force event")
     # Every nonterminal event opens pair intervals; the final force event only
     # settles them. Wake-up passes may settle and close again at the same time.
     require(events == openings + 1, f"{label}: missing opening or terminal closure event")

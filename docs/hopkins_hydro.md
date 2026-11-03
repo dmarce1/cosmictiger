@@ -394,10 +394,11 @@ MFM no longer collects every gas particle onto the coordinator at each event.
 - A coordinator workspace that persists between events. Records sit in
   increasing identifier order, so slot order is reduction order and the
   summation order of every neighbor loop survives migration and restart. The
-  workspace also holds the owner map, the hydro source tree, the own-support and
-  symmetric neighbor lists, and the per-cell geometry, face rates, primitives
-  and gradients, together with per-event flags recording which cells were
-  solved, built, listed or touched.
+  workspace also holds the owner map, the hydro source tree and the per-cell
+  geometry, face rates, primitives and gradients, together with per-event flags
+  recording which cells were solved, built or touched. No neighbor list is
+  stored: every consumer queries the tree for the stencil it needs, when it
+  needs it.
 
 The coordinator derives the time-dependent inputs of clean records itself:
 under hierarchical gravity a sleeping record's position is its retained
@@ -416,34 +417,48 @@ topology is rebuilt only when the identifier set changes; an owner change alone
 (migration) keeps the records and the tree, and a vanished identifier resets the
 resident set and every owner mirror before recollecting.
 
-Neighbor lists are own-support lists: cell i's list is `{j : r_ij < h_i}` from
-one tree query with radius `h_i`, and the symmetric list is the union of own
-lists. Because `r < max(h_i, h_j)` holds exactly when either own test holds,
-the symmetric lists are the sets the previous gather produced, but a changed
-support now requeries only that cell and repairs the lists of the neighbors it
-gained or lost. Supports therefore no longer need any scatter/gather iteration:
-the constant kernel-number solve iterates on the coordinator with own queries at
-1.2 times the current radius, and only the cells whose radius is still changing
-are requeried.
+Neighbor stencils are transient tree queries (`hopkinsNeighborQuery`). The
+tree's broad phase accepts every source with `r <= max(radius, supportUpper_j)`,
+so one point query from cell i with radius `h_i` also returns the cells whose
+own support reaches i; the exact Fixed64 test `r < h_i || r < h_j` then yields
+the symmetric stencil `{j : r_ij < max(h_i, h_j)}` directly, which is the set
+the earlier gather and the earlier own/symmetric lists produced, in identifier
+order. The support solve uses the one-sided test at 1.2 times the current
+radius. For the symmetric test to be exact the tree's `supportUpper` must be
+current for every cell whose support moved, so the tree is refit immediately
+after each support solve and after each singular-moment expansion. Nothing is
+kept between calls; the two consumers that make several passes over a cell
+(face rates, gradients) query once and reuse the vector inside the call. The
+environment variable `COSMICTIGER_HOPKINS_CHECK_NEIGHBORS` enables a brute-force
+cross-check of every query against all resident records. Supports therefore
+need no scatter/gather iteration: the constant kernel-number solve iterates on
+the coordinator, and only the cells whose radius is still changing are requeried.
 
 Each event refreshes the active set A (due cells, gravity-touched cells, invalid
 predictions, terminal closures) and the first-ring halo N(A): both endpoints of
 every incident pair flux need current supports, volume partitions, moment
 matrices and face rates, and the active gradients need the halo primitives.
-`hopkinsEnsureGeometry` solves the active supports, builds every cell's own
-list once at the event time, solves the halo supports, repairs the lists of the
-cells whose supports moved, and builds geometry for A and N(A), repeating until
-no support, list or geometry changes. Woken cells that join A during the wake
+`hopkinsEnsureGeometry` solves the active supports, derives N(A) from the active
+cells' stencils, solves the halo supports, refits the tree after every solve,
+and builds geometry for A and N(A), repeating until no support or geometry
+changes; it returns A ∪ N(A), which the kick reuses for the gradients and face
+rates. From the first stencil query of an event on, no resident position may
+change until the event closes. Woken cells that join A during the wake
 loop extend the same flags incrementally. Cells outside A and N(A) keep their
 own-step anchors, supports, predictors and cached pair intervals untouched;
 only touched records (solved, closed, or credited by a settled pair) return to
 their owners, and each owner refreshes the predicted public density, velocity
 and internal-energy mirrors of its untouched initialized cells locally.
 
-The wake logic is unchanged in form: every cell's own list is rebuilt at each
-event from the retained tree, so the required-rung scan over predicted neighbor
-states, the invalid-prediction wake and the Appendix G rung-contrast
-propagation still examine every sleeping cell. Two inputs changed. A sleeping
+The wake logic is unchanged in form: every cell queries its symmetric stencil at
+each event, so the required-rung scan over predicted neighbor states, the
+invalid-prediction wake and the Appendix G rung-contrast propagation still
+examine every sleeping cell. The scan runs in parallel over cells and applies
+its results in identifier order; the Appendix G sweep keeps its sequential
+semantics (a raise earlier in the sweep changes what a later cell raises) but
+skips cells that cannot raise anybody and cells revisited with an unchanged
+rung, and prefetches the due cells' stencils in parallel, a bounded chunk at a
+time. Two inputs changed. A sleeping
 cell's Courant radius comes from its own-event `anchorVolume` instead of a
 fresh geometry solve (an active cell was just closed, so its anchor volume is
 the fresh geometry), which keeps the scan independent of history and exactly
@@ -474,8 +489,10 @@ Each event prints a `Hopkins work` row beside the existing `Hopkins step` and
 not active), owner records `received` and `installed` with their byte counts
 (`sizeof` of the serialized records plus local indices), tree `sources`
 refitted, `supports` (cells solved) and `supportSums` (kernel-sum evaluations),
-`geometry`, `rates` and `gradients` cells, own-list `queries`, tree
-`candidates` visited, and `pairs` opened.
+`geometry`, `rates` and `gradients` cells, stencil `queries` (every transient
+tree query made by the support solve, halo derivation, geometry, face rates,
+gradients, timestep scan, Appendix G sweep, entropy switch and pair opening),
+tree `candidates` visited, and `pairs` opened.
 
 
 Current `g4_hydro_tree` CPU validation includes a 16-event blast with 381 real
@@ -766,6 +783,69 @@ integrators and the three `run_hopkins.py` fixtures. A second tree with
 `hopkins_global_sources` and `hopkins_thermal_sources`, so gas-to-star
 conversion drops resident records and rebuilds the tree topology as intended.
 The checkpoint state layout is version 7 (472 bytes) after the merge.
+
+### List-free stencil queries on 2026-11-02
+
+The stored own and symmetric neighbor lists were removed on branch
+`hopkins_distributed_sources` (base `9009127f4`, the merge of the retained-record
+branch with main). Every consumer now makes a transient symmetric tree query,
+the tree's `supportUpper` is refit after each support solve and singular-moment
+expansion, the per-cell work of the support solve, geometry, face rates,
+gradients, halo derivation, timestep scan, entropy switch and pair opening runs
+under `hopkinsParallel`, and the Appendix G sweep keeps its sequential
+semantics with chunked parallel stencil prefetch. The `SourceTree` counters are
+relaxed atomics so concurrent queries are legal.
+
+Validation against the `9009127f4` binaries built with the same options
+(fixed64 Release trees, degree 4 without stars and degree 6 with stars):
+
+- `tests/run_hierarchical_mfm.py` (blast, blast restart, three self-gravitating
+  waves and the global reference): identical `report.json` (16 events, 381
+  wakes, exact restart; wave errors 4.0593e-4, 1.6353e-4, 5.0852e-5). All 260
+  checkpoints have byte-identical physical records, integration state, pair
+  cache, clock, positions and rungs; the only differing bytes are one 8-byte
+  prefix word of the checkpoint header (a timing field), which the manifest
+  checksum reflects. The replayed blast prints identical `Hopkins step` and
+  `Hopkins hierarchy` rows and energies with `--hpx:threads=1` and `=2`.
+- `tests/run_hopkins.py --matrix-only` for the traditional (14 checkpoints) and
+  global (18 checkpoints) integrators with FMM, MFM and MFV: payload-identical.
+- `Hopkins work` rows change only in `queries`, `candidates`, `sources` and the
+  `Hopkins tree` `updated`/`refitted` counts, because every consumer queries
+  for itself and every solve refits the tree. For the blast: the full first
+  event went from 2160 to 6049 queries (769824 to 1773294 candidates), the
+  one-cell events from 483-636 to 594-697, the 51-cell events from 712-1454 to
+  1681-2194, the wake event from 1930 to 5107, and the terminal event from 1558
+  to 3718. These are counts of parallel work items; the serial whole-gas list
+  rebuild and the per-event list storage (two index vectors per cell) are gone.
+
+The transient queries only pay off once a tree query is cheap. The first
+list-free build was no faster than the branch: each query re-evaluated every
+visited node's moving envelope from its trajectory polynomials (interval
+arithmetic with directed rounding) and every visited source's predicted
+position, about 0.2 ms per query on 32³ cells. `SourceTree::prepare(time)` now
+evaluates all node envelopes and source positions once per event
+(`hopkinsOpenEvent`), in-place refits keep them current, and queries at that
+time reuse them; the arithmetic is unchanged, so results stay bitwise identical.
+Profile of `configurations/lcdm_present.ini` with `hydro.method=mfm`, every CUDA
+backend off, `--hpx:threads=2`, ten steps, 32³ gas and dark matter (fixed64
+Release, degree 6, stars and chemistry on; the pre-merge binary is the
+`build/hopkins_sources_cpu` tree of main `01107f966`), summed exclusive
+coordinator wall time of the `hydro.hopkins*` phases and the coordinator total:
+
+| binary | `hydro.hopkins*` | coordinator total |
+|---|---|---|
+| main `01107f966` (whole-gas gather) | 204 s | 344 s |
+| merge `9009127f4` (retained records, stored lists) | 313 s | 457 s |
+| list-free, no envelope cache | 320 s | 519 s |
+| list-free with prepared envelopes | 82 s | 181 s |
+
+The merged branch was slower than main on this traditional-integrator case
+because its support solve made its own-list queries serially (`hydro.hopkins.support`
+3:34, `hydro.hopkins.lists` 1:04 of the 7:37 total). With prepared envelopes
+the largest phases are the support solve (22 s), pair opening (14 s) and the halo
+derivation inside `hydro.hopkins` (11 s); geometry, face rates, gradients, the
+timestep scan and the closing entropy switch cost 5.7 to 6.4 s each. These are
+two-thread numbers on a shared workstation, not production timings.
 
 ### Davis HLL fallback validation on 2026-11-02
 
