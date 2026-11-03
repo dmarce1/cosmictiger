@@ -1,6 +1,6 @@
 # Generated spherical Ewald kernels
 
-`tools/fmm/spherical_ewald.py` emits `cosmictiger/gravity/fmm_kernels/spherical_ewald_kernels.hpp` for the same
+`tools/fmm/spherical_ewald.py` emits `cosmictiger/gravity/kernels/spherical_ewald_kernels.hpp` for the same
 local degrees as the Cartesian and spherical generators (2 through 8,
 FMM orders 3 through 9). The source retains every order; CMake's `COSMICTIGER_EXPANSION_DEGREE` selects potential degrees, defaulting
 to 4–6 (orders 5–7); use `2-8` for every generated degree. CMake derives
@@ -112,7 +112,7 @@ The corresponding complete per-lane counts appear in each kernel's `kFlops_`.
 These are source-operation weights, not measured elapsed time or hardware
 instruction counts; float promotion does not alter the counted expression DAG.
 
-`tests/gravity/nitadori/generated_spherical_ewald.cpp` exercises every order in
+`tests/gravity/pmmm/generated_spherical_ewald.cpp` exercises every order in
 the selected compiled range, float and double, origin and near-origin,
 Cartesian axes, general positions, and box corners. It compares all coefficients to an independent complex
 recurrence, Gaussian quadrature central term, explicit finite gamma sums, and

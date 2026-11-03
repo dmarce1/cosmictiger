@@ -125,8 +125,12 @@ integration, and global integration can be enabled independently. Both PMMM opti
 to `OFF` and may be enabled together. A single eligible algorithm is
 automatically selected; multiple eligible algorithms require a CLI/INI selection.
 
-Use `gravity.method.far=fmm|pmmm`, `gravity.method.near=pp|fmm` for PMMM,
-`gravity.expansionDegree`, and `run.timeIntegrator=traditional|hierarchical|global`.
+Use `gravity.method.far=fmm|pmmm|pm|p3m`, `gravity.method.near=pp|fmm` for PMMM
+and P3M, `gravity.expansionDegree`, and
+`run.timeIntegrator=traditional|hierarchical|global`. `COSMICTIGER_ENABLE_PM`,
+`COSMICTIGER_ENABLE_P3M_PP` (PP-PM) and `COSMICTIGER_ENABLE_P3M_FMM` (FMM-PM)
+compile the scalar particle-mesh solvers with their mandatory outer PM
+interval; see [docs/p3m.md](docs/p3m.md).
 The highest compiled degree is the runtime default. Potential degree d is old
 internal order d+1, so degrees 4-6 correspond to orders 5-7. PMMM and its near FMM
 share the degree. Old checkpoint order integers retain their original meaning.
@@ -710,15 +714,15 @@ termination, and the completed APEX, TAU, and `profile.txt` reports.
 
 Common gravity and SPH machinery lives directly in each subsystem directory.
 The same subsystem organization is used beneath `cosmictiger/` for headers and `src/` for
-implementations. Gravity solver code is in `gravity/dehnen/` for global adaptive
-FMM and `gravity/nitadori/` for PMMM. SPH numerical modules are in
+implementations. Gravity solver code is in `gravity/global_fmm/` for global adaptive
+FMM and `gravity/pmmm/` for PMMM. SPH numerical modules are in
 `hydro/sph/variational/`, `hydro/sph/monaghan/`, `hydro/sph/morris_and_monaghan/`,
 `hydro/sph/cullen_and_dehnen/`, `hydro/sph/price_etal/`, and `hydro/sph/balsara/`.
 Hopkins MFM/MFV headers live in `cosmictiger/hydro/hopkins/`;
 `src/hydro/hopkins.cpp` implements their hydrodynamic stage within the shared
 simulation driver.
 Owned particle storage stays in `particles/`; PMMM owns its
-separate ghost arena in `gravity/nitadori/`.
+separate ghost arena in `gravity/pmmm/`.
 
 See [the source organization guide](docs/source_layout.md) for file responsibilities,
 dependency boundaries, and generated-code placement.

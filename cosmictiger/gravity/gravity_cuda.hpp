@@ -17,8 +17,8 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/cuda/cuda_reduce.hpp>
-#include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 #include <cosmictiger/gravity/kick_cuda.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
@@ -360,28 +360,29 @@ __device__ inline void cudaPpSinkGroup(CudaStagedSources const& sources, int cou
 
 template <int order>
 __device__ FlopCounts cudaGravityCcDirect(CudaKickData const& data,
-    cosmictiger::gravity::cartesian::Expansion<float, order>& lacc, TreeNode const& self,
+    cosmictiger::gravity::cartesian::tracefree::Expansion<float, order>& lacc, TreeNode const& self,
     DeviceVector<int> const& multlist, bool doPhi, FmmGeometry const& geometry) {
     int const& tid = threadIdx.x;
     auto const& treeNodes = data.treeNodes;
     FlopCounter<FlopCount> flops = 0;
     FlopCounts mixedFlops{};
     if (multlist.size()) {
-        cosmictiger::gravity::cartesian::Expansion<float, order> l;
+        cosmictiger::gravity::cartesian::tracefree::Expansion<float, order> l;
         for (int i = 0; i < FmmOrder<order>::kLocalCoefficients_; i++) {
             l[i] = 0.0f;
         }
         for (int i = tid; i < multlist.size(); i += kWarpSize) {
             TreeNode const& other = treeNodes[multlist[i]];
-            cosmictiger::gravity::cartesian::Multipole<float, order> const& m =
+            cosmictiger::gravity::cartesian::tracefree::Multipole<float, order> const& m =
                 fmmMultiPos<order>(other.mpos).multi;
             Vector3<float> dx;
             for (int dim = 0; dim < kDimensions; dim++) {
                 dx[dim] = fmmPositionDifference(
                     self.mpos->pos[dim], other.mpos->pos[dim], dim, geometry, &mixedFlops);
             }
-            flops +=
-                3 + cosmictiger::gravity::cartesian::M2L(l, m, fmmScaleDisplacement(dx), doPhi);
+            flops += 3 +
+                cosmictiger::gravity::cartesian::tracefree::M2L(
+                    l, m, fmmScaleDisplacement(dx), doPhi);
         }
         sharedReduceAddArray(l);
         for (int i = tid; i < FmmOrder<order>::kLocalCoefficients_; i += kWarpSize) {
@@ -400,7 +401,7 @@ __device__ FlopCounts cudaGravityCcDirect(CudaKickData const& data,
 
 template <int order, bool equalMass>
 __device__ FlopCounts cudaGravityCpDirect(CudaKickData const& data, CudaKickControl<order>& control,
-    cosmictiger::gravity::cartesian::Expansion<float, order>& lacc, TreeNode const& self,
+    cosmictiger::gravity::cartesian::tracefree::Expansion<float, order>& lacc, TreeNode const& self,
     DeviceVector<int> const& partlist, bool doPhi, FmmGeometry const& geometry) {
     int const& tid = threadIdx.x;
     auto const* treeNodes = data.treeNodes;
@@ -411,7 +412,7 @@ __device__ FlopCounts cudaGravityCpDirect(CudaKickData const& data, CudaKickCont
     FlopCounter<FlopCount> flops = 0;
     FlopCounts mixedFlops{};
     if (partlist.size()) {
-        cosmictiger::gravity::cartesian::Expansion<float, order> l;
+        cosmictiger::gravity::cartesian::tracefree::Expansion<float, order> l;
         for (int j = 0; j < FmmOrder<order>::kLocalCoefficients_; j++) {
             l[j] = 0.0;
         }
@@ -429,9 +430,10 @@ __device__ FlopCounts cudaGravityCpDirect(CudaKickData const& data, CudaKickCont
                     self.mpos->pos[kYDimension], sources.y[j], kYDimension, geometry, &mixedFlops);
                 dx[kZDimension] = fmmPositionDifference(
                     self.mpos->pos[kZDimension], sources.z[j], kZDimension, geometry, &mixedFlops);
-                cosmictiger::gravity::cartesian::Expansion<float, order> d{};
+                cosmictiger::gravity::cartesian::tracefree::Expansion<float, order> d{};
                 flops += (equalMass ? 1 : 2) * FmmOrder<order>::kLocalCoefficients_ + 3 +
-                    cosmictiger::gravity::cartesian::P2L(d, 1.0f, fmmScaleDisplacement(dx));
+                    cosmictiger::gravity::cartesian::tracefree::P2L(
+                        d, 1.0f, fmmScaleDisplacement(dx));
                 if constexpr (equalMass) {
                     for (int k = 0; k < FmmOrder<order>::kLocalCoefficients_; k++) {
                         l[k] += d[k];
@@ -518,7 +520,7 @@ __device__ FlopCounts cudaGravityPcDirect(CudaKickData const& data, CudaKickCont
                     dx[kZDimension] = fmmPositionDifference(
                         sinkZ[k], mp.pos[kZDimension], kZDimension, geometry, &mixedFlops);
                     flops += 3 +
-                        cosmictiger::gravity::cartesian::M2P(
+                        cosmictiger::gravity::cartesian::tracefree::M2P(
                             l, mp.multi, fmmScaleDisplacement(dx), doPhi);
                 }
                 if (sharedForces) {

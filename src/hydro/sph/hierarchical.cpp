@@ -18,7 +18,7 @@
 #include <cosmictiger/cosmology/cosmology.hpp>
 #include <cosmictiger/cosmology/evolution.hpp>
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
-#include <cosmictiger/gravity/nitadori/solver.hpp>
+#include <cosmictiger/gravity/pmmm/solver.hpp>
 #endif
 #include <cosmictiger/hydro/sph/cullen_and_dehnen/viscosity.hpp>
 #include <cosmictiger/hydro/sph/hierarchical.hpp>

@@ -33,7 +33,8 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/terminal.hpp>
-#include <cosmictiger/gravity/nitadori/mesh_size.hpp>
+#include <cosmictiger/gravity/pm/geometry.hpp>
+#include <cosmictiger/gravity/pmmm/mesh_size.hpp>
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/kernel.hpp>
@@ -152,6 +153,8 @@ constexpr uint32_t kStarFormation = 1U << 20;
 // Identifies full-width rung boundaries as well as the particle index width.
 // Older 64-bit-index files truncated these boundaries to sizeof(int).
 constexpr uint32_t kWideParticleIndices = 1U << 21;
+// Scalar particle-mesh solvers (pm, p3m) with the mandatory outer PM interval.
+constexpr uint32_t kParticleMeshInterval = 1U << 22;
 constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
 constexpr uint64_t kFnvPrime = 1099511628211ULL;
 
@@ -456,6 +459,7 @@ uint32_t checkpointFlags(Options const& opts) {
         (opts.hydro.enabled && opts.hydro.viscosityEvolution != "none" ? kVariableViscosity : 0U) |
         (opts.compute.positionType == "fixed64" ? kFixed64Positions : 0U) |
         (opts.gravity.enabled && opts.gravity.method == "pmmm" ? kParticleMultipoleMesh : 0U) |
+        (opts.gravity.enabled && usesParticleMesh(opts.gravity) ? kParticleMeshInterval : 0U) |
         (opts.starFormation.enabled ? kStarFormation : 0U);
 }
 
@@ -634,12 +638,45 @@ bool pmmmCheckpointCompatible(std::array<uint64_t, 11> parameters, Options const
     return parameters == expected;
 }
 
+// Particle-mesh identity: version, mesh, cloud, short solver and its geometry,
+// timestep parameters and force convention. Version one is the first layout.
+std::array<uint64_t, 12> particleMeshCheckpointParameters(Options const& opts) {
+    auto bits = [](double value) {
+        uint64_t result;
+        std::memcpy(&result, &value, sizeof(result));
+        return result;
+    };
+    bool const split = usesSplitParticleMesh(opts.gravity);
+    uint64_t const shortSolver = split ? (opts.gravity.pmmmNearMethod == "fmm" ? 2U : 1U) : 0U;
+    // Force convention 1: compensated spectral PM with exp(-k^2 r_s^2) screening
+    // for p3m, screened short pairs with the softened-minus-long interior.
+    return {1, static_cast<uint64_t>(opts.gravity.meshSize),
+        static_cast<uint64_t>(pm::cloudOrder(opts.gravity.cloud)), shortSolver,
+        static_cast<uint64_t>(split ? opts.gravity.pmmmNearWidth : 0),
+        static_cast<uint64_t>(split ? opts.gravity.pmmmCoarseMeshSize : 0),
+        split ? bits(opts.gravity.p3mSplitCells) : 0U, split ? bits(opts.gravity.p3mCutoff) : 0U,
+        bits(opts.gravity.timestepEta), static_cast<uint64_t>(opts.run.minRung),
+        static_cast<uint64_t>(split ? opts.gravity.p3mMeshSize : 0), 1};
+}
+
+std::array<uint64_t, 12> readParticleMeshCheckpointParameters(FILE* fp) {
+    std::array<uint64_t, 12> parameters{};
+    FREAD(parameters.data(), sizeof(uint64_t), parameters.size(), fp);
+    if (parameters[0] != 1) {
+        THROW_ERROR("Unsupported particle-mesh checkpoint parameter version\n");
+    }
+    return parameters;
+}
+
 // Active gravity retains its selected order; hydro-only files carry no solver.
+// Far codes: 1 fmm, 2 pmmm, 3 pm, 4 p3m. Near codes: 1 pp, 2 fmm (pmmm and p3m).
 std::array<uint64_t, 5> checkpointAlgorithms(Options const& opts) {
     bool const gravityEnabled = opts.gravity.enabled && opts.gravity.method != "none";
     bool const mesh = gravityEnabled && opts.gravity.method == "pmmm";
-    return {1, mesh ? 2U : (gravityEnabled ? 1U : 0U),
-        mesh ? (opts.gravity.pmmmNearMethod == "fmm" ? 2U : 1U) : 0U,
+    bool const split = gravityEnabled && usesSplitParticleMesh(opts.gravity);
+    bool const pure = gravityEnabled && opts.gravity.method == "pm";
+    uint64_t const far = !gravityEnabled ? 0U : (mesh ? 2U : (pure ? 3U : (split ? 4U : 1U)));
+    return {1, far, mesh || split ? (opts.gravity.pmmmNearMethod == "fmm" ? 2U : 1U) : 0U,
         static_cast<uint64_t>(gravityEnabled ? opts.gravity.fmmOrder : 0),
         usesGlobalIntegration(opts.run) ? 2U : (usesHierarchicalIntegration(opts.run) ? 1U : 0U)};
 }
@@ -647,8 +684,9 @@ std::array<uint64_t, 5> checkpointAlgorithms(Options const& opts) {
 std::array<uint64_t, 5> readCheckpointAlgorithms(FILE* fp) {
     std::array<uint64_t, 5> algorithms{};
     FREAD(algorithms.data(), sizeof(uint64_t), algorithms.size(), fp);
-    if (algorithms[0] != 1 || algorithms[1] > 2 || algorithms[2] > 2 || algorithms[3] > 9 ||
-        algorithms[4] > 2 || (algorithms[1] == 2 ? algorithms[2] == 0 : algorithms[2] != 0) ||
+    bool const nearExpected = algorithms[1] == 2 || algorithms[1] == 4;
+    if (algorithms[0] != 1 || algorithms[1] > 4 || algorithms[2] > 2 || algorithms[3] > 9 ||
+        algorithms[4] > 2 || (nearExpected ? algorithms[2] == 0 : algorithms[2] != 0) ||
         (algorithms[1] == 0 ? algorithms[3] != 0 : algorithms[3] < 3)) {
         THROW_ERROR("Invalid checkpoint algorithm selection extension\n");
     }
@@ -676,6 +714,13 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
             THROW_ERROR("Unable to write PMMM checkpoint parameters\n");
         }
     }
+    if ((header.flags & kParticleMeshInterval) != 0U) {
+        auto const parameters = particleMeshCheckpointParameters(getOptions());
+        if (fwrite(parameters.data(), sizeof(uint64_t), parameters.size(), fp) !=
+            parameters.size()) {
+            THROW_ERROR("Unable to write particle-mesh checkpoint parameters\n");
+        }
+    }
     if (getOptions().hydro.enabled) {
         auto const sphParameters = sphCheckpointParameters(getOptions());
         if (fwrite(sphParameters.data(), sizeof(double), sphParameters.size(), fp) !=
@@ -699,7 +744,7 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
     if (getOptions().chemistry.enabled) {
         auto const chemicalParameters = sphChemistryCheckpointParameters();
         if (fwrite(chemicalParameters.data(), sizeof(double), chemicalParameters.size(), fp) !=
-                chemicalParameters.size()) {
+            chemicalParameters.size()) {
             THROW_ERROR("Unable to write equilibrium-cooling checkpoint parameters\n");
         }
     }
@@ -719,6 +764,17 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
         if (fwrite(&version, sizeof(version), 1, fp) != 1 ||
             fwrite(&params.globalTimestep, sizeof(params.globalTimestep), 1, fp) != 1) {
             THROW_ERROR("Unable to write global timestep checkpoint extension\n");
+        }
+    }
+    if ((header.flags & kParticleMeshInterval) != 0U) {
+        // The outer interval whose opening long half-kick is applied, its start
+        // time and index; itime above is the interval-local phase.
+        uint64_t const version = 1;
+        if (fwrite(&version, sizeof(version), 1, fp) != 1 ||
+            fwrite(&params.outerInterval, sizeof(params.outerInterval), 1, fp) != 1 ||
+            fwrite(&params.outerStart, sizeof(params.outerStart), 1, fp) != 1 ||
+            fwrite(&params.outerIndex, sizeof(params.outerIndex), 1, fp) != 1) {
+            THROW_ERROR("Unable to write the particle-mesh interval checkpoint extension\n");
         }
     }
 }
@@ -775,6 +831,14 @@ DriverParameters readDriverState(FILE* fp) {
                     "PMMM checkpoint version, mesh size, near/far expansion orders, opening "
                     "angle, neighbor width/method, gravity.pmmmCoarseMeshSize, timestep parameters "
                     "or force convention differs from the requested run\n");
+            }
+        }
+        if ((header.flags & kParticleMeshInterval) != 0U) {
+            auto const parameters = readParticleMeshCheckpointParameters(fp);
+            if (parameters != particleMeshCheckpointParameters(getOptions())) {
+                THROW_ERROR("Particle-mesh checkpoint mesh, cloud, short solver, split/cutoff "
+                            "geometry, timestep parameters or force convention differs from the "
+                            "requested run\n");
             }
         }
         if (getOptions().hydro.enabled) {
@@ -843,6 +907,24 @@ DriverParameters readDriverState(FILE* fp) {
                 params.globalTimestep < 0.0 || params.itime != 0 ||
                 (params.iter > 0 && params.globalTimestep == 0.0)) {
                 THROW_ERROR("Invalid global timestep checkpoint extension\n");
+            }
+        }
+        if ((header.flags & kParticleMeshInterval) != 0U) {
+            uint64_t version;
+            FREAD(&version, sizeof(version), 1, fp);
+            FREAD(&params.outerInterval, sizeof(params.outerInterval), 1, fp);
+            FREAD(&params.outerStart, sizeof(params.outerStart), 1, fp);
+            FREAD(&params.outerIndex, sizeof(params.outerIndex), 1, fp);
+            auto finite = [](double value) {
+                uint64_t bits;
+                std::memcpy(&bits, &value, sizeof(bits));
+                return (bits & 0x7ff0000000000000ULL) != 0x7ff0000000000000ULL;
+            };
+            if (version != 1 || !finite(params.outerInterval) || !finite(params.outerStart) ||
+                params.outerInterval < 0.0 || params.outerStart < 0.0 ||
+                (params.iter > 0 && params.outerInterval == 0.0) ||
+                (params.itime != 0 && params.outerInterval == 0.0)) {
+                THROW_ERROR("Invalid particle-mesh interval checkpoint extension\n");
             }
         }
     } else {
@@ -916,6 +998,9 @@ CheckpointSelection readCheckpointSelection(std::string const& outputDirectory, 
             if ((header.flags & detail::kParticleMultipoleMesh) != 0U) {
                 detail::readPmmmCheckpointParameters(file.get());
             }
+            if ((header.flags & detail::kParticleMeshInterval) != 0U) {
+                detail::readParticleMeshCheckpointParameters(file.get());
+            }
             std::array<double, 13> sphParameters{};
             FREAD(sphParameters.data(), sizeof(double), sphParameters.size(), file.get());
             if (sphParameters.back() == 0.0) {
@@ -924,7 +1009,11 @@ CheckpointSelection readCheckpointSelection(std::string const& outputDirectory, 
                 algorithms[1] = algorithms[2] = algorithms[3] = 0;
             }
         }
-        return {algorithms[1] == 2 ? "pmmm" : (algorithms[1] == 1 ? "fmm" : "none"),
+        return {algorithms[1] == 4 ?
+                "p3m" :
+                (algorithms[1] == 3 ?
+                        "pm" :
+                        (algorithms[1] == 2 ? "pmmm" : (algorithms[1] == 1 ? "fmm" : "none"))),
             algorithms[2] == 2 ? "fmm" : (algorithms[2] == 1 ? "pp" : "none"),
             algorithms[4] == 2 ? "global" : (algorithms[4] == 1 ? "hierarchical" : "traditional"),
             static_cast<int>(algorithms[3])};
@@ -963,6 +1052,13 @@ void checkpointStateTest() {
     input.energies.therm = kThermal;
     input.energies.heating = kHeating;
     input.globalTimestep = usesGlobalIntegration(getOptions().run) ? 0.03125 : 0.0;
+    bool const particleMesh =
+        getOptions().gravity.enabled && usesParticleMesh(getOptions().gravity);
+    if (particleMesh) {
+        input.outerInterval = 0.0078125;
+        input.outerStart = 0.1171875;
+        input.outerIndex = 15;
+    }
     detail::writeDriverState(fp, input);
     rewind(fp);
     auto const restored = detail::readDriverState(fp);
@@ -971,7 +1067,9 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(restored.itime == input.itime && restored.maxRung == input.maxRung);
     ALWAYS_ASSERT(restored.energies.therm == kThermal && restored.energies.heating == kHeating);
     ALWAYS_ASSERT(restored.globalTimestep == input.globalTimestep);
-    if (!usesGlobalIntegration(getOptions().run)) {
+    ALWAYS_ASSERT(restored.outerInterval == input.outerInterval &&
+        restored.outerStart == input.outerStart && restored.outerIndex == input.outerIndex);
+    if (!usesGlobalIntegration(getOptions().run) && !particleMesh) {
         // Strip only the new selection extension to reconstruct the exact old
         // version-three driver payload and exercise its unchanged decoder.
         long const length = ftell(fp);

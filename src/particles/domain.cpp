@@ -25,7 +25,8 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/safe_io.hpp>
-#include <cosmictiger/gravity/nitadori/mesh_size.hpp>
+#include <cosmictiger/gravity/pm/geometry.hpp>
+#include <cosmictiger/gravity/pmmm/mesh_size.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
@@ -436,10 +437,7 @@ void domainsRebound() {
     // cuts anywhere; PMMM cuts on coarse-mesh planes so no mesh cell spans two
     // localities, choosing the admissible plane with the best particle balance.
     auto const& gravityOptions = getOptions().gravity;
-    int const coarseMeshSize = usesMeshGravity(gravityOptions) ?
-        pmmm::detail::resolvedCoarseMeshSize(gravityOptions.meshSize,
-            gravityOptions.pmmmCoarseMeshSize, gravityOptions.pmmmNearWidth) :
-        0;
+    int const coarseMeshSize = pm::coarseMeshSize(gravityOptions);
     domains[0].totalCount = 0;
     auto const loads = []() {
         profile::ScopedPhase profilePhase("domains.rebound.loads");

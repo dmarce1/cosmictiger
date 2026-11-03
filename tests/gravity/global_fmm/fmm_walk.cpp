@@ -1,0 +1,1979 @@
+/*
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2026 Dominic C. Marcello
+
+ Distributed under the Boost Software License, Version 1.0.
+ */
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <limits>
+#include <numbers>
+#include <random>
+#include <stdexcept>
+#include <string>
+
+#include <cosmictiger/core/build_config.hpp>
+#include <cosmictiger/core/driver.hpp>
+#include <cosmictiger/core/flops.hpp>
+#include <cosmictiger/core/hpx.hpp>
+#include <cosmictiger/core/options.hpp>
+#include <cosmictiger/gravity/fmm_acceptance.hpp>
+#include <cosmictiger/gravity/fmm_order.hpp>
+#include <cosmictiger/gravity/global_fmm/distributed_tree.hpp>
+#include <cosmictiger/gravity/global_fmm/execution.hpp>
+#include <cosmictiger/gravity/global_fmm/periodic.hpp>
+#include <cosmictiger/gravity/gravity.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
+#include <cosmictiger/gravity/kick.hpp>
+#include <cosmictiger/gravity/kick_interaction_counts.hpp>
+#include <cosmictiger/gravity/timestep.hpp>
+#include <cosmictiger/gravity/tree.hpp>
+#if COSMICTIGER_WITH_SPH
+#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#endif
+#include <cosmictiger/math/vector3.hpp>
+#include <cosmictiger/particles/domain.hpp>
+#include <cosmictiger/particles/drift.hpp>
+#include <cosmictiger/particles/particles.hpp>
+
+namespace detail {
+
+constexpr float kFmmWalkTheta = 0.8f;
+
+void fmmWalkRequireClose(
+    std::string const& label, double actual, double expected, double tolerance = 2.0e-4) {
+    if (!std::isfinite(actual) || !std::isfinite(expected) ||
+        std::abs(actual - expected) > tolerance * std::max(1.0, std::abs(expected))) {
+        throw std::runtime_error(
+            label + ": got " + std::to_string(actual) + ", expected " + std::to_string(expected));
+    }
+}
+
+Vector3<Position> fmmWalkPosition(double x, double y, double z) {
+    Vector3<Position> position;
+    position[kXDimension] = x;
+    position[kYDimension] = y;
+    position[kZDimension] = z;
+    return position;
+}
+
+Vector3<Position> fmmWalkDistributedPosition(size_t rank) {
+    // Dyadic coordinates avoid fixed-point rounding, and unequal spacing keeps
+    // the middle particle's force away from cancellation at float precision.
+    double const offset = static_cast<double>(rank);
+    return fmmWalkPosition(0.25 + offset / 32.0 + offset * offset / 256.0,
+        0.375 + 3.0 * offset / 128.0, 0.4375 + offset / 64.0);
+}
+
+KickParameters fmmWalkParameters(bool useCuda, float theta = kFmmWalkTheta) {
+    KickParameters params;
+    params.htime = true;
+    params.sign = 1.0f;
+    params.minLevel = 0;
+    params.minRung = 0;
+    params.a = 1.0f;
+    params.t0 = 1.0f;
+    params.theta = theta;
+    params.gravitySupportRadius = getOptions().gravity.supportRadius;
+    params.eta = getOptions().gravity.timestepEta;
+    params.gm = 1.0f;
+    params.velInit = false;
+    params.saveForce = true;
+    params.firstCall = true;
+    params.gpu = useCuda;
+    params.nodeLoad = 1.0f;
+    params.ascending = false;
+    params.descending = false;
+    params.top = true;
+    params.doPhi = true;
+    return params;
+}
+
+void fmmWalkResetKickState() {
+    for (ParticleInteger i = 0; i < particlesSize(); i++) {
+        particlesRung(i) = 1;
+        for (int dim = 0; dim < kDimensions; dim++) {
+            particlesVel(dim, i) = 0.0f;
+            particlesGravityAcceleration(dim, i) = std::numeric_limits<float>::quiet_NaN();
+        }
+        particlesPot(i) = std::numeric_limits<float>::quiet_NaN();
+    }
+}
+
+void fmmWalkSetParticlePosition(ParticleInteger index, Vector3<Position> const& position) {
+    for (int dim = 0; dim < kDimensions; dim++) {
+        particlesPos(dim, index) = position[dim];
+    }
+}
+
+void fmmWalkPrepareArena() {
+    particlesResize(6);
+    auto const center = fmmWalkPosition(0.3, 0.35, 0.4);
+    for (ParticleInteger i = 0; i < particlesSize(); i++) {
+        fmmWalkSetParticlePosition(i, center);
+    }
+    fmmWalkResetKickState();
+    particlesSortByRung(0);
+    treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().gravity.supportRadius));
+}
+
+TreeId fmmWalkAddNode(Vector3<Position> const& position, float radius,
+    Pair<ParticleInteger> particleRange, int depth, bool localRoot = false,
+    TreeId left = TreeId{-1, -1}, TreeId right = TreeId{-1, -1}, bool spansTwoRanks = false,
+    float maxSupportRadius = 0.0f, bool tightParticleBox = false) {
+    TreeNode node{};
+    node.pos = position;
+    node.radius = radius;
+    node.particleRange = particleRange;
+    node.processRange = Pair<int>(hpxRank(), hpxRank() + (spansTwoRanks ? 2 : 1));
+    node.depth = depth;
+    node.localRoot = localRoot;
+    node.leaf = left.index == -1;
+    node.children[kLeftChild] = left;
+    node.children[kRightChild] = right;
+    node.maxGravitySupportRadius = particleRange.first == particleRange.second ?
+        0.0f :
+        std::max(float(getOptions().gravity.supportRadius), maxSupportRadius);
+    if (!node.leaf) {
+        for (int child = 0; child < kChildCount; child++) {
+            node.maxGravitySupportRadius = std::max(node.maxGravitySupportRadius,
+                treeGetNode(node.children[child])->maxGravitySupportRadius);
+        }
+    }
+    MultipoleBuffer multipole;
+    multipole.zero();
+    fmmDispatch([&](auto order) {
+        auto& moments = multipole.multipole<order.value>();
+        for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
+            Vector3<float> displacement;
+            for (int dim = 0; dim < kDimensions; dim++) {
+                displacement[dim] = distance(particlesPos(dim, i), position[dim]);
+            }
+            cosmictiger::gravity::cartesian::tracefree::Multipole<float, order.value>
+                particleMultipole{};
+            cosmictiger::gravity::cartesian::tracefree::P2M(
+                particleMultipole, 1.0f, fmmScaleDisplacement(displacement));
+            for (int coefficient = 0; coefficient < FmmOrder<order.value>::kMultipoleCoefficients_;
+                coefficient++) {
+                moments[coefficient] += particlesMass(i) * particleMultipole[coefficient];
+            }
+        }
+    });
+    node.mpos = treeAddMultipole(position, multipole);
+    for (int dim = 0; dim < kDimensions; dim++) {
+        node.box.begin[dim] = std::max(0.0, position[dim].toDouble() - radius);
+        node.box.end[dim] = std::min(1.0, position[dim].toDouble() + radius);
+        if (tightParticleBox && particleRange.first != particleRange.second) {
+            node.box.begin[dim] = node.box.end[dim] =
+                particlesPos(dim, particleRange.first).toDouble();
+            for (ParticleInteger i = particleRange.first + 1; i < particleRange.second; i++) {
+                node.box.begin[dim] =
+                    std::min(node.box.begin[dim].toDouble(), particlesPos(dim, i).toDouble());
+                node.box.end[dim] =
+                    std::max(node.box.end[dim].toDouble(), particlesPos(dim, i).toDouble());
+            }
+        }
+    }
+    return TreeId{hpxRank(), int(treeAddRemote(node))};
+}
+
+// The direct-pair timestep bound (gravity/timestep.hpp): the sink's own particle
+// contributes no curvature, one neighbor inside the support radius reproduces the
+// mass-weighted radial coefficient, and the walk's global timestep selects that
+// bound, which is tighter than the acceleration criterion at this separation.
+void fmmWalkPairCurvature(bool useCuda) {
+    auto const requireRelative = [](std::string const& label, double actual, double expected) {
+        double const tolerance = expected == 0.0 ? 0.0 : 1.0e-4 * std::abs(expected);
+        if (!std::isfinite(actual) || std::abs(actual - expected) > tolerance) {
+            throw std::runtime_error(label + ": got " + std::to_string(actual) + ", expected " +
+                std::to_string(expected));
+        }
+    };
+    fmmWalkPrepareArena();
+    auto const center = fmmWalkPosition(0.3, 0.35, 0.4);
+    float const support = getOptions().gravity.supportRadius;
+    auto const neighborPosition = fmmWalkPosition(0.3 + 0.4 * support, 0.35, 0.4);
+    fmmWalkSetParticlePosition(1, neighborPosition);
+    auto const sink = fmmWalkAddNode(center, 0.0f, Pair<ParticleInteger>(0, 1), 0, true);
+    auto const neighbor =
+        fmmWalkAddNode(neighborPosition, 0.0f, Pair<ParticleInteger>(1, 2), 0, true);
+    double const q =
+        (neighborPosition[kXDimension].toDouble() - center[kXDimension].toDouble()) / support;
+    double const expectedCurvature = particlesMass(1) *
+        radial_kernel::forceFactor(selectedGravityKernel(), q) /
+        (double(support) * double(support) * double(support));
+    for (bool withNeighbor : {false, true}) {
+        Vector<TreeId> sources{sink};
+        if (withNeighbor) {
+            sources.push_back(neighbor);
+        }
+        ForceVectors direct(1);
+        direct.gx[0] = direct.gy[0] = direct.gz[0] = direct.phi[0] = 0.0f;
+        direct.pairCurvature[0] = 0.0f;
+        cpuGravityPp(direct, false, sink, sources, support);
+        requireRelative("direct pair curvature excludes only the sink itself",
+            direct.pairCurvature[0], withNeighbor ? expectedCurvature : 0.0);
+        for (int backend = 0; backend < (useCuda ? 2 : 1); ++backend) {
+            fmmWalkResetKickState();
+            gravityBeginGlobalKick();
+            auto params = fmmWalkParameters(backend != 0);
+            params.globalTimestep = true;
+            params.eta = 0.2f;
+            params.maxDt = 0.25f;
+            params.doPhi = false;
+            ExpansionBuffer local;
+            local.zero();
+            auto const result =
+                kick(params, local, center, sink, sources, Vector<TreeId>{}, nullptr);
+            double const expected = withNeighbor ?
+                gravity::pairTimestep(1.0, 1.0, double(params.eta), expectedCurvature) :
+                double(params.maxDt);
+            requireRelative(
+                std::string(backend == 0 ? "CPU" : "CUDA") + " direct-pair global timestep bound",
+                result.minimumTimestep, expected);
+        }
+    }
+    treeDestroy();
+}
+
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
+void fmmWalkHierarchicalGasCoupling() {
+    auto const saved = getOptions();
+    auto options = saved;
+    options.hydro.enabled = true;
+    options.hydro.method = "sph";
+    options.hydro.viscosityEvolution = "none";
+    options.chemistry.enabled = false;
+    options.starFormation.enabled = false;
+    options.gravity.cuda = false;
+    options.run.timeIntegrator = "hierarchical";
+    options.run.hierarchicalGravity = true;
+    options.run.scenario = "hydroWave";
+    options.initial.darkMatterMass = 3.0;
+    options.initial.gasMass = 2.0;
+    setOptions(options);
+    // This fixture runs first, so particle allocation includes its gas arrays.
+    sphParticlesResize(1, false);
+    fmmWalkPrepareArena();
+    particlesType(0) = kSphType;
+    particlesCatIndex(0) = 0;
+    sphParticlesParticleIndex(0) = 0;
+    sphParticlesSupportRadius(0) = 0.01f;
+    particlesType(1) = kDarkMatterType;
+    particlesCatIndex(1) = kNoParticleIndex;
+    fmmWalkSetParticlePosition(0, fmmWalkPosition(0.25, 0.5, 0.5));
+    fmmWalkSetParticlePosition(1, fmmWalkPosition(0.5, 0.5, 0.5));
+    auto const center = fmmWalkPosition(0.375, 0.5, 0.5);
+    auto const node = fmmWalkAddNode(center, 0.125f, {0, 2}, 0, true);
+    std::array<Vector3<float>, 2> const initial{
+        Vector3<float>{0.5f, 0.25f, -0.125f}, Vector3<float>{-0.25f, 0.125f, 0.5f}};
+    std::array<double, 2> const mass{2.0, 3.0};
+    std::array<double, 2> const acceleration{48.0, -32.0};
+    for (int method = 0; method < (COSMICTIGER_ENABLE_HOPKINS ? 2 : 1); ++method) {
+        bool const mfm = method == 1;
+        options.hydro.method = mfm ? "mfm" : "sph";
+        setOptions(options);
+        sphParticlesResize(1, false);
+        for (int stage = 0; stage < 4; ++stage) {
+            // Top first call, ordinary top, terminal closing, and a finer subtraction.
+            bool const top = stage != 3;
+            bool const first = stage == 0;
+            bool const terminal = stage == 2;
+            auto parameters = fmmWalkParameters(false);
+            parameters.minRung = top ? 2 : 3;
+            parameters.t0 = 0.125f;
+            parameters.eta = 1.0e6f;
+            parameters.maxDt = 0.25f;
+            parameters.top = top;
+            parameters.firstCall = first;
+            parameters.ascending = top;
+            parameters.descending = !terminal;
+            parameters.deferGasOpening = top && !mfm;
+            for (ParticleInteger particle = 0; particle < 2; ++particle) {
+                particlesRung(particle) = particle == 0 || !top ? 4 : 3;
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    particlesVel(dim, particle) = initial[particle][dim];
+                }
+            }
+            if (mfm) {
+                auto& state = sphParticlesHopkinsState(0);
+                state = {};
+                state.initialized = state.hierarchicalActive = true;
+                state.mass = mass[0];
+                state.hydroRung = 7;
+                state.totalEnergy = 1.3 * state.mass;
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    state.momentum[dim] = state.mass * initial[0][dim];
+                    state.totalEnergy += 0.5 * state.mass * initial[0][dim] * initial[0][dim];
+                }
+            }
+            sphParticlesGravityTimesteps[0] = 123.0f;
+            ExpansionBuffer local;
+            local.zero();
+            auto const result =
+                kick(parameters, local, center, node, Vector<TreeId>{node}, {}, nullptr);
+            double const halfStep = std::ldexp(0.5 * parameters.t0, -parameters.minRung);
+            double expectedKinetic = 0.0, expectedDelta = 0.0, expectedNorm = 0.0;
+            Vector3<double> expectedMomentum{};
+            for (ParticleInteger particle = 0; particle < 2; ++particle) {
+                double speedSquared = 0.0;
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    double const force = dim == 0 ? acceleration[particle] : 0.0;
+                    double const synchronized =
+                        initial[particle][dim] + (top && !first ? halfStep * force : 0.0);
+                    double const opening = terminal || (top && particle == 0 && !mfm) ?
+                        0.0 :
+                        (top ? halfStep : -halfStep) * force;
+                    double const expected = synchronized + opening;
+                    fmmWalkRequireClose("hierarchical gas kick ownership",
+                        particlesVel(dim, particle), expected, 2.0e-6);
+                    fmmWalkRequireClose("hierarchical mixed-mass force",
+                        particlesGravityAcceleration(dim, particle), force, 2.0e-6);
+                    if (mfm && particle == 0) {
+                        fmmWalkRequireClose("MFM kick updates conserved momentum",
+                            sphParticlesHopkinsState(0).momentum[dim], mass[0] * expected, 2.0e-12);
+                    }
+                    expectedKinetic += 0.5 * mass[particle] * synchronized * synchronized;
+                    expectedMomentum[dim] += mass[particle] * synchronized;
+                    speedSquared += synchronized * synchronized;
+                    expectedDelta += 0.5 * mass[particle] *
+                        (expected * expected -
+                            double(initial[particle][dim]) * initial[particle][dim]);
+                }
+                expectedNorm += mass[particle] * std::sqrt(speedSquared);
+            }
+            fmmWalkRequireClose("gas gravity and hydro rung ownership", particlesRung(0),
+                mfm && !terminal ? 3 : 4, 0.0);
+            if (mfm) {
+                auto const& state = sphParticlesHopkinsState(0);
+                double thermal = state.totalEnergy;
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    thermal -= 0.5 * state.momentum[dim] * state.momentum[dim] / state.mass;
+                }
+                fmmWalkRequireClose("MFM signed gravity kicks preserve thermal energy", thermal,
+                    1.3 * mass[0], 2.0e-12);
+                fmmWalkRequireClose("MFM hydro clock remains independent", state.hydroRung, 7, 0.0);
+            }
+            fmmWalkRequireClose("collisionless rung still follows gravity", particlesRung(1),
+                terminal ? 3 : (top ? 2 : 3), 0.0);
+            fmmWalkRequireClose("hierarchical mass-weighted kinetic", result.kin, expectedKinetic);
+            fmmWalkRequireClose("hierarchical mass-weighted potential", result.pot, -24.0);
+            fmmWalkRequireClose(
+                "hierarchical mass-weighted kick energy", result.dkin, expectedDelta);
+            fmmWalkRequireClose(
+                "hierarchical mass-weighted x momentum", result.xmom, expectedMomentum[0]);
+            fmmWalkRequireClose(
+                "hierarchical mass-weighted y momentum", result.ymom, expectedMomentum[1]);
+            fmmWalkRequireClose(
+                "hierarchical mass-weighted z momentum", result.zmom, expectedMomentum[2]);
+            fmmWalkRequireClose(
+                "hierarchical mass-weighted momentum norm", result.nmom, expectedNorm);
+            fmmWalkRequireClose("top gas gravity timestep publication",
+                sphParticlesGravityTimesteps[0], top ? parameters.maxDt : 123.0, 0.0);
+            if (top) {
+                fmmWalkRequireClose("top gas gravity acceleration publication",
+                    sphParticlesGravityAcceleration(0, 0), acceleration[0]);
+            }
+        }
+    }
+    treeDestroy();
+    sphParticlesResize(0, false);
+    particlesResize(0);
+    setOptions(saved);
+}
+#endif
+
+void fmmWalkVerifyEwald(std::string const& label, TreeId sink, Vector<TreeId> const& checklist,
+    Vector<TreeId> const& sourceLeaves, bool useCuda) {
+    ExpansionBuffer reference;
+    reference.zero();
+    Vector3<float> displacement;
+    for (int dim = 0; dim < kDimensions; dim++) {
+        displacement[dim] = 0.0f;
+    }
+    auto const value = fmmDispatch([&](auto order) {
+        auto& expansion = reference.expansion<order.value>();
+        cpuGravityEwald<order.value>(expansion, sourceLeaves, sink, true);
+        cosmictiger::gravity::Field<float> field{};
+        cosmictiger::gravity::cartesian::tracefree::L2P(
+            field, expansion, fmmScaleDisplacement(displacement));
+        return field;
+    });
+    Vector3<double> const expectedAcceleration = {kScaleFactor2 * value.accelerationX(),
+        kScaleFactor2 * value.accelerationY(), kScaleFactor2 * value.accelerationZ()};
+    double const expectedEwaldPotential = kScaleFactor1 * value.potential();
+    // The call's support may differ from the defaults used to build the tree.
+    float const support = 2.0f * getOptions().gravity.supportRadius;
+    double const selfPotential = selfPhi() * (1.0f / support);
+    double const expectedPotential = selfPotential + expectedEwaldPotential;
+    auto const* sinkNode = treeGetNode(sink);
+    for (int backend = 0; backend < (useCuda ? 2 : 1); backend++) {
+        for (int potentialMode = 0; potentialMode < 2; potentialMode++) {
+            std::string const path = label + (backend == 0 ? " CPU" : " CUDA") +
+                (potentialMode == 0 ? " without potential" : " with potential");
+            fmmWalkResetKickState();
+            ExpansionBuffer local;
+            local.zero();
+            auto params = fmmWalkParameters(backend != 0);
+            params.gravitySupportRadius = support;
+            params.doPhi = potentialMode != 0;
+            auto const result =
+                kick(params, local, sinkNode->pos, sink, Vector<TreeId>{}, checklist, nullptr);
+            for (ParticleInteger i = sinkNode->particleRange.first;
+                i < sinkNode->particleRange.second; i++) {
+                for (int dim = 0; dim < kDimensions; dim++) {
+                    fmmWalkRequireClose(path + " acceleration " + std::to_string(dim),
+                        particlesGravityAcceleration(dim, i), expectedAcceleration[dim]);
+                }
+                if (params.doPhi) {
+                    fmmWalkRequireClose(path + " potential", particlesPot(i), expectedPotential);
+                    fmmWalkRequireClose(path + " Ewald potential", particlesPot(i) - selfPotential,
+                        expectedEwaldPotential);
+                }
+            }
+            if (params.doPhi) {
+                fmmWalkRequireClose(path + " total potential", result.pot,
+                    0.5 * sinkNode->numberOfParticles() * expectedPotential);
+            }
+        }
+    }
+}
+
+void fmmWalkRejectedSourceLeaf(bool useCuda) {
+    fmmWalkPrepareArena();
+    auto const sinkPosition = fmmWalkPosition(0.3, 0.35, 0.4);
+    auto const sourcePosition = fmmWalkPosition(0.38, 0.42, 0.45);
+    fmmWalkSetParticlePosition(2, sourcePosition);
+    auto const left = fmmWalkAddNode(sinkPosition, 0.0f, Pair<ParticleInteger>(0, 1), 5);
+    auto const right = fmmWalkAddNode(sinkPosition, 0.0f, Pair<ParticleInteger>(1, 2), 5);
+    // Conservative radii model unequal cell sizes without relying on a particular domain split.
+    // Coincident sink centers isolate the walk from translations of nonzero local expansions.
+    auto const sink =
+        fmmWalkAddNode(sinkPosition, 0.3f, Pair<ParticleInteger>(0, 2), 4, true, left, right);
+    auto const source = fmmWalkAddNode(sourcePosition, 0.04f, Pair<ParticleInteger>(2, 3), 4);
+    fmmWalkVerifyEwald(
+        "retained source leaf", sink, Vector<TreeId>{source}, Vector<TreeId>{source}, useCuda);
+    treeDestroy();
+}
+
+void fmmWalkRepeatedSourceOpening(bool useCuda) {
+    fmmWalkPrepareArena();
+    auto const sinkPosition = fmmWalkPosition(0.3, 0.35, 0.4);
+    auto const sourcePosition = fmmWalkPosition(0.4, 0.43, 0.46);
+    Vector<TreeId> leaves;
+    for (int i = 0; i < 4; i++) {
+        auto const position = fmmWalkPosition(0.385 + 0.01 * i, 0.425 + 0.003 * i, 0.455);
+        fmmWalkSetParticlePosition(i + 1, position);
+        leaves.push_back(fmmWalkAddNode(position, 0.0f, Pair<ParticleInteger>(i + 1, i + 2), 6));
+    }
+    auto const left = fmmWalkAddNode(
+        sourcePosition, 0.3f, Pair<ParticleInteger>(1, 3), 5, false, leaves[0], leaves[1]);
+    auto const right = fmmWalkAddNode(
+        sourcePosition, 0.3f, Pair<ParticleInteger>(3, 5), 5, false, leaves[2], leaves[3]);
+    auto const source =
+        fmmWalkAddNode(sourcePosition, 0.35f, Pair<ParticleInteger>(1, 5), 4, false, left, right);
+    auto const sink = fmmWalkAddNode(sinkPosition, 0.0f, Pair<ParticleInteger>(0, 1), 4, true);
+    fmmWalkVerifyEwald("repeated source opening", sink, Vector<TreeId>{source}, leaves, useCuda);
+    treeDestroy();
+}
+
+void fmmWalkEmptyLocalRoot(bool useCuda) {
+    particlesResize(0);
+    auto const origin = fmmWalkPosition(0.3, 0.35, 0.4);
+    auto const root = fmmWalkAddNode(origin, 0.0f, Pair<ParticleInteger>(0, 0), 0, true);
+    for (int backend = 0; backend < (useCuda ? 2 : 1); backend++) {
+        ExpansionBuffer local;
+        local.zero();
+        auto const result = kick(fmmWalkParameters(backend != 0), local, origin, root,
+            Vector<TreeId>{root}, Vector<TreeId>{root}, nullptr);
+        fmmWalkRequireClose("empty local root potential", result.pot, 0.0);
+        fmmWalkRequireClose("empty local root kinetic energy", result.kin, 0.0);
+        fmmWalkRequireClose("empty local root maximum rung", result.maxRung, 0.0);
+    }
+    treeDestroy();
+}
+
+void fmmWalkDeferredSourceHandoff(bool useCuda) {
+    fmmWalkPrepareArena();
+    auto const sinkPosition = fmmWalkPosition(0.2, 0.35, 0.4);
+    auto const sourcePosition = fmmWalkPosition(0.65, 0.35, 0.4);
+    auto const leftSourcePosition = fmmWalkPosition(0.6, 0.35, 0.4);
+    auto const rightSourcePosition = fmmWalkPosition(0.7, 0.35, 0.4);
+    fmmWalkSetParticlePosition(0, sinkPosition);
+    fmmWalkSetParticlePosition(1, sinkPosition);
+    fmmWalkSetParticlePosition(2, leftSourcePosition);
+    fmmWalkSetParticlePosition(3, rightSourcePosition);
+    auto const leftSink = fmmWalkAddNode(sinkPosition, 0.0f, Pair<ParticleInteger>(0, 1), 5);
+    auto const rightSink = fmmWalkAddNode(sinkPosition, 0.0f, Pair<ParticleInteger>(1, 2), 5);
+    auto const sink = fmmWalkAddNode(
+        sinkPosition, 0.0f, Pair<ParticleInteger>(0, 2), 4, true, leftSink, rightSink);
+    auto const leafSink = fmmWalkAddNode(sinkPosition, 0.0f, Pair<ParticleInteger>(0, 1), 4, true);
+    auto const leftSource =
+        fmmWalkAddNode(leftSourcePosition, 0.0f, Pair<ParticleInteger>(2, 3), 5);
+    auto const rightSource =
+        fmmWalkAddNode(rightSourcePosition, 0.0f, Pair<ParticleInteger>(3, 4), 5);
+    // This synthetic parent has a two-rank range; its children are individually single-rank.
+    auto const source = fmmWalkAddNode(sourcePosition, 0.05f, Pair<ParticleInteger>(2, 4), 4, false,
+        leftSource, rightSource, true);
+    if (treeGetNode(source)->isLocal()) {
+        throw std::runtime_error("Deferred handoff source must span two ranks");
+    }
+    for (int mode = 0; mode < 2; mode++) {
+        // Direct mode reaches CUDA at the sink children. Ewald mode exercises the
+        // CPU-only leaf fallback and its empty GPU batch completion.
+        bool const ewald = mode != 0;
+        TreeId const target = ewald ? leafSink : sink;
+        auto const* sinkNode = treeGetNode(target);
+        std::array<Vector3<float>, 2> expectedAcceleration{};
+        std::array<float, 2> expectedPotential{};
+        double expectedTotalPotential = 0.0;
+        for (int backend = 0; backend < (useCuda ? 2 : 1); backend++) {
+            fmmWalkResetKickState();
+            ExpansionBuffer local;
+            local.zero();
+            auto const params = fmmWalkParameters(backend != 0);
+            Vector<TreeId> directSources = ewald ? Vector<TreeId>{} : Vector<TreeId>{source};
+            Vector<TreeId> ewaldSources = ewald ? Vector<TreeId>{source} : Vector<TreeId>{};
+            auto const result = kick(params, local, sinkPosition, target, std::move(directSources),
+                std::move(ewaldSources), nullptr);
+            if (backend == 0) {
+                expectedTotalPotential = result.pot;
+            } else {
+                fmmWalkRequireClose(
+                    "deferred handoff total potential", result.pot, expectedTotalPotential);
+            }
+            for (ParticleInteger i = sinkNode->particleRange.first;
+                i < sinkNode->particleRange.second; i++) {
+                for (int dim = 0; dim < kDimensions; dim++) {
+                    if (backend == 0) {
+                        expectedAcceleration[i][dim] = particlesGravityAcceleration(dim, i);
+                    } else {
+                        fmmWalkRequireClose("deferred handoff acceleration",
+                            particlesGravityAcceleration(dim, i), expectedAcceleration[i][dim]);
+                    }
+                }
+                if (backend == 0) {
+                    expectedPotential[i] = particlesPot(i);
+                } else {
+                    fmmWalkRequireClose(
+                        "deferred handoff potential", particlesPot(i), expectedPotential[i]);
+                }
+            }
+        }
+    }
+    treeDestroy();
+}
+
+void fmmWalkSetHybridParticles(ParticleInteger secondParticleCount) {
+    // Two symmetric grids have nonzero higher moments while remaining well
+    // inside the conservative radii used by the synthetic leaves below.
+    for (ParticleInteger i = 0; i < 40; i++) {
+        fmmWalkSetParticlePosition(i,
+            fmmWalkPosition(0.25 + (i % 5 - 2) / 128.0, 0.375 + ((i / 5) % 4 - 1.5) / 128.0,
+                0.4375 + (i / 20 - 0.5) / 128.0));
+    }
+    int const columns = secondParticleCount == 40 ? 5 : 4;
+    int const layers = secondParticleCount / (columns * 4);
+    for (ParticleInteger i = 0; i < secondParticleCount; i++) {
+        fmmWalkSetParticlePosition(40 + i,
+            fmmWalkPosition(0.4375 + (i % columns - (columns - 1) * 0.5) / 64.0,
+                0.375 + ((i / columns) % 4 - 1.5) / 64.0,
+                0.4375 + (i / (columns * 4) - (layers - 1) * 0.5) / 64.0));
+    }
+}
+
+// The interaction the walk selects for this pair, with the cost rule.
+FmmInteraction fmmWalkSelectInteraction(TreeId sink, TreeId source, float support) {
+    auto const* sinkNode = treeGetNode(sink);
+    auto const* sourceNode = treeGetNode(source);
+    Vector3<float> displacement;
+    for (int dim = 0; dim < kDimensions; dim++) {
+        displacement[dim] = distance(sinkNode->pos[dim], sourceNode->pos[dim]);
+    }
+    float const distanceSquared = std::fma(displacement[kXDimension], displacement[kXDimension],
+        std::fma(
+            displacement[kYDimension], displacement[kYDimension], sqr(displacement[kZDimension])));
+    float const pairSupport = fmmPairSupportRadius(
+        support, sinkNode->maxGravitySupportRadius, sourceNode->maxGravitySupportRadius);
+    auto const acceptance = computeFmmAcceptance(distanceSquared, sinkNode->radius,
+        sourceNode->radius, boxDistanceSquared(sinkNode->box, sourceNode->pos),
+        boxDistanceSquared(sourceNode->box, sinkNode->pos), pairSupport,
+        fmmInverseOpeningAngle(kFmmWalkTheta));
+    auto const hybridFlopsPerParticle =
+        fmmDispatch([](auto order) { return FmmHybridCost<order.value>::kHybridPerParticle_; });
+    auto const particlePairFlops =
+        fmmDispatch([](auto order) { return FmmHybridCost<order.value>::kParticlePair_; });
+    return selectFmmInteraction(acceptance.cellCell != 0.0f, acceptance.particleCell != 0.0f,
+        acceptance.cellParticle != 0.0f, sinkNode->leaf, sourceNode->leaf, sinkNode->radius,
+        sourceNode->radius, int(sinkNode->numberOfParticles()),
+        int(sourceNode->numberOfParticles()), hybridFlopsPerParticle, particlePairFlops);
+}
+
+void fmmWalkRequireInteraction(
+    TreeId sink, TreeId source, float support, FmmInteraction expected, std::string const& label) {
+    if (fmmWalkSelectInteraction(sink, source, support) != expected) {
+        throw std::runtime_error(label + ": synthetic geometry selected the wrong interaction");
+    }
+}
+
+ForceVectors fmmWalkInteractionReference(
+    TreeId sink, TreeId source, float support, FmmInteraction interaction) {
+    auto const* sinkNode = treeGetNode(sink);
+    auto const range = sinkNode->particleRange;
+    ForceVectors reference(sinkNode->numberOfParticles());
+    for (ParticleInteger i = range.first; i < range.second; i++) {
+        auto const j = i - range.first;
+        reference.gx[j] = reference.gy[j] = reference.gz[j] = 0.0f;
+        reference.phi[j] = particlesMass(i) * selfPhi() / support;
+    }
+    Vector<TreeId> const sources{source};
+    FlopCount const beforeFlops = readFlops();
+    if (interaction == FmmInteraction::ParticleCell) {
+        fmmDispatch([&](auto order) { cpuGravityPc<order.value>(reference, true, sink, sources); });
+    } else if (interaction == FmmInteraction::CellParticle ||
+        interaction == FmmInteraction::CellCell) {
+        ExpansionBuffer local;
+        local.zero();
+        fmmDispatch([&](auto order) {
+            auto& expansion = local.expansion<order.value>();
+            if (interaction == FmmInteraction::CellCell) {
+                cpuGravityCc<order.value>(expansion, sources, sink, true);
+            } else {
+                cpuGravityCp<order.value>(expansion, sources, sink, true);
+            }
+            for (ParticleInteger i = range.first; i < range.second; i++) {
+                Vector3<float> displacement;
+                for (int dim = 0; dim < kDimensions; dim++) {
+                    displacement[dim] = distance(particlesPos(dim, i), sinkNode->pos[dim]);
+                }
+                cosmictiger::gravity::Field<float> value{};
+                cosmictiger::gravity::cartesian::tracefree::L2P(
+                    value, expansion, fmmScaleDisplacement(displacement));
+                auto const j = i - range.first;
+                reference.gx[j] += kScaleFactor2 * value.accelerationX();
+                reference.gy[j] += kScaleFactor2 * value.accelerationY();
+                reference.gz[j] += kScaleFactor2 * value.accelerationZ();
+                reference.phi[j] += kScaleFactor1 * value.potential();
+            }
+        });
+    } else if (interaction == FmmInteraction::ParticleParticle) {
+        cpuGravityPp(reference, true, sink, sources, support);
+    }
+    if constexpr (kCountFlops) {
+        auto const afterFlops = readFlopCounts();
+        if (afterFlops.total() <= beforeFlops) {
+            throw std::runtime_error("CPU gravity interaction did not submit its FLOP count");
+        }
+        if (afterFlops.unclassified != 0) {
+            throw std::runtime_error("CPU gravity interaction submitted unclassified FLOPs");
+        }
+    }
+    return reference;
+}
+
+ForceVectors fmmWalkApplyInteraction(TreeId sink, TreeId source, float support, bool useCuda) {
+    auto const range = treeGetNode(sink)->particleRange;
+    auto const position = treeGetNode(sink)->pos;
+    fmmWalkResetKickState();
+    ExpansionBuffer local;
+    local.zero();
+    auto params = fmmWalkParameters(useCuda);
+    params.gravitySupportRadius = support;
+    FlopCount const beforeFlops = useCuda ? getGpuFlops() : readFlops();
+    kick(params, local, position, sink, Vector<TreeId>{source}, Vector<TreeId>{}, nullptr);
+    if constexpr (kCountFlops) {
+        auto const afterFlops = useCuda ? getGpuFlopCounts() : readFlopCounts();
+        if (afterFlops.total() <= beforeFlops) {
+            throw std::runtime_error(useCuda ? "CUDA gravity walk did not submit its FLOP count" :
+                                               "CPU gravity walk did not submit its FLOP count");
+        }
+        if (afterFlops.unclassified != 0) {
+            throw std::runtime_error(useCuda ? "CUDA gravity walk submitted unclassified FLOPs" :
+                                               "CPU gravity walk submitted unclassified FLOPs");
+        }
+    }
+    ForceVectors result(range.second - range.first);
+    for (ParticleInteger i = range.first; i < range.second; i++) {
+        auto const j = i - range.first;
+        result.gx[j] = particlesGravityAcceleration(kXDimension, i);
+        result.gy[j] = particlesGravityAcceleration(kYDimension, i);
+        result.gz[j] = particlesGravityAcceleration(kZDimension, i);
+        result.phi[j] = particlesPot(i);
+    }
+    return result;
+}
+
+void fmmWalkCompareForces(
+    std::string const& label, ForceVectors const& actual, ForceVectors const& expected) {
+    for (size_t i = 0; i < actual.gx.size(); i++) {
+        fmmWalkRequireClose(label + " x acceleration", actual.gx[i], expected.gx[i]);
+        fmmWalkRequireClose(label + " y acceleration", actual.gy[i], expected.gy[i]);
+        fmmWalkRequireClose(label + " z acceleration", actual.gz[i], expected.gz[i]);
+        fmmWalkRequireClose(label + " potential", actual.phi[i], expected.phi[i]);
+    }
+}
+
+void fmmWalkRequireForceReciprocity(std::string const& label, std::array<TreeId, 2> const& sinks,
+    std::array<ForceVectors const*, 2> const& forces) {
+    Vector3<double> totalForce{};
+    Vector3<double> absoluteForce{};
+    double forceMagnitudeSum = 0.0;
+    for (int direction = 0; direction < 2; direction++) {
+        auto const range = treeGetNode(sinks[direction])->particleRange;
+        auto const& values = *forces[direction];
+        for (ParticleInteger i = range.first; i < range.second; i++) {
+            auto const j = i - range.first;
+            Vector3<double> const acceleration{values.gx[j], values.gy[j], values.gz[j]};
+            double forceSquared = 0.0;
+            for (int dim = 0; dim < kDimensions; dim++) {
+                double const force = particlesMass(i) * acceleration[dim];
+                totalForce[dim] += force;
+                absoluteForce[dim] += std::abs(force);
+                forceSquared += force * force;
+            }
+            forceMagnitudeSum += std::sqrt(forceSquared);
+        }
+    }
+    double totalForceSquared = 0.0;
+    for (int dim = 0; dim < kDimensions; dim++) {
+        totalForceSquared += totalForce[dim] * totalForce[dim];
+        fmmWalkRequireClose(label + " total-force reciprocity",
+            totalForce[dim] / std::max(1.0, absoluteForce[dim]), 0.0, 2.0e-5);
+    }
+    // Normalize the norm of the net force by the sum of individual force norms.
+    double const residual = std::sqrt(totalForceSquared) / std::max(1.0, forceMagnitudeSum);
+    fmmWalkRequireClose(label + " vector total-force reciprocity", residual, 0.0, 2.0e-5);
+    PRINT("FMM %s: normalized total-force residual = %.9e\n", label.c_str(), residual);
+}
+
+void fmmWalkReciprocalHybrid(bool useCuda) {
+    struct HybridCase {
+        char const* label;
+        ParticleInteger secondParticleCount;
+        float firstRadius;
+        float secondRadius;
+        std::array<FmmInteraction, 2> interactions;
+    };
+    std::array<HybridCase, 4> const cases{{
+        // The cost rule evaluates the leaf with fewer particles explicitly.
+        {"unequal counts PC/CP", 64, 0.0625f, 0.09375f,
+            {FmmInteraction::ParticleCell, FmmInteraction::CellParticle}},
+        {"equal counts, unequal radii CP/PC", 40, 0.0625f, 0.09375f,
+            {FmmInteraction::CellParticle, FmmInteraction::ParticleCell}},
+        {"unequal counts, equal radii PC/CP", 64, 0.078125f, 0.078125f,
+            {FmmInteraction::ParticleCell, FmmInteraction::CellParticle}},
+        {"equal counts and radii PP", 40, 0.078125f, 0.078125f,
+            {FmmInteraction::ParticleParticle, FmmInteraction::ParticleParticle}},
+    }};
+    for (auto const& testCase : cases) {
+        ParticleInteger const particleCount = 40 + testCase.secondParticleCount;
+        particlesResize(particleCount);
+        fmmWalkSetHybridParticles(testCase.secondParticleCount);
+        fmmWalkResetKickState();
+        particlesSortByRung(0);
+        treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().gravity.supportRadius));
+        // The ordinary build initializes the arenas and may reorder particles.
+        // Restore the prescribed ranges before constructing the synthetic moments.
+        fmmWalkSetHybridParticles(testCase.secondParticleCount);
+        auto const first = fmmWalkAddNode(fmmWalkPosition(0.25, 0.375, 0.4375),
+            testCase.firstRadius, Pair<ParticleInteger>(0, 40), 4, true);
+        auto const second = fmmWalkAddNode(fmmWalkPosition(0.4375, 0.375, 0.4375),
+            testCase.secondRadius, Pair<ParticleInteger>(40, particleCount), 4, true);
+        std::array<TreeId, 2> const sinks{first, second};
+        int const supportModes = testCase.secondParticleCount == 64 ? 2 : 1;
+        for (int supportMode = 0; supportMode < supportModes; supportMode++) {
+            // Small support permits the prescribed hybrid/tie policy. Large
+            // support contains every cross pair and forces softened PP.
+            float const support = supportMode == 0 ? 0.015625f : 0.375f;
+            std::array<FmmInteraction, 2> const interactions = supportMode == 0 ?
+                testCase.interactions :
+                std::array<FmmInteraction, 2>{
+                    FmmInteraction::ParticleParticle, FmmInteraction::ParticleParticle};
+            std::array<ForceVectors, 2> references;
+            std::array<ForceVectors, 2> cpuForces;
+            std::string const mode = supportMode == 0 ? testCase.label : "softened PP fallback";
+            for (int direction = 0; direction < 2; direction++) {
+                fmmWalkRequireInteraction(
+                    sinks[direction], sinks[1 - direction], support, interactions[direction], mode);
+                references[direction] = fmmWalkInteractionReference(
+                    sinks[direction], sinks[1 - direction], support, interactions[direction]);
+            }
+            for (int backend = 0; backend < (useCuda ? 2 : 1); backend++) {
+                std::string const label = mode + (backend == 0 ? " CPU" : " CUDA");
+                std::array<ForceVectors, 2> backendForces;
+                for (int direction = 0; direction < 2; direction++) {
+                    auto& forces = backendForces[direction];
+                    forces = fmmWalkApplyInteraction(
+                        sinks[direction], sinks[1 - direction], support, backend != 0);
+                    fmmWalkCompareForces(
+                        label + " operator reference", forces, references[direction]);
+                    if (backend == 0) {
+                        cpuForces[direction] = forces;
+                    } else {
+                        fmmWalkCompareForces(
+                            label + " CPU agreement", forces, cpuForces[direction]);
+                    }
+                }
+                fmmWalkRequireForceReciprocity(
+                    label, sinks, {&backendForces[0], &backendForces[1]});
+                if (backend != 0) {
+                    fmmWalkRequireForceReciprocity(
+                        mode + " mixed CPU/CUDA", sinks, {&cpuForces[0], &backendForces[1]});
+                }
+            }
+        }
+        treeDestroy();
+    }
+}
+
+void fmmWalkRequireDistinctForces(std::string const& label, ForceVectors const& expected,
+    ForceVectors const& alternative, double minimumDifference = 0.01) {
+    double largestDifference = 0.0;
+    for (size_t i = 0; i < expected.gx.size(); i++) {
+        largestDifference = std::max(largestDifference,
+            std::abs(double(expected.gx[i]) - alternative.gx[i]) /
+                std::max(1.0, std::abs(double(expected.gx[i]))));
+    }
+    // An incorrect traversal must fail the actual force comparison, not just
+    // the helper-level interaction expectation.
+    if (largestDifference < minimumDifference) {
+        throw std::runtime_error(label + ": alternative forces cannot distinguish the interaction");
+    }
+}
+
+void fmmWalkInternalCloudHybrid(bool useCuda) {
+    struct HybridCase {
+        char const* label;
+        float cloudRadius;
+        float leafRadius;
+        bool tightLeafBox;
+    };
+    std::array<HybridCase, 2> const cases{{
+        {"internal cloud radial PC/CP", 0.0625f, 0.09375f, false},
+        {"internal cloud box-only PC/CP", 0.078125f, 0.125f, true},
+    }};
+    std::array<double, 7> const coordinates{
+        0.1875, 0.21875, 0.28125, 0.3125, 0.359375, 0.4375, 0.515625};
+    float const support = 0.015625f;
+    float const largeSupport = 0.375f;
+    for (auto const& testCase : cases) {
+        for (int supportMode = 0; supportMode < 3; supportMode++) {
+            bool const accepted = supportMode == 0;
+            float const cloudSupport = supportMode == 1 ? largeSupport : support;
+            float const leafSupport = supportMode == 2 ? largeSupport : support;
+            particlesResize(coordinates.size());
+            for (size_t i = 0; i < coordinates.size(); i++) {
+                fmmWalkSetParticlePosition(i, fmmWalkPosition(coordinates[i], 0.375, 0.4375));
+            }
+            fmmWalkResetKickState();
+            particlesSortByRung(0);
+            treeCreate(TreeCreateParameters(0, kFmmWalkTheta, support));
+            for (size_t i = 0; i < coordinates.size(); i++) {
+                fmmWalkSetParticlePosition(i, fmmWalkPosition(coordinates[i], 0.375, 0.4375));
+            }
+            // Both translated children must receive the parent's CP expansion.
+            // The cloud has four particles and the explicit leaf has three.
+            std::array<TreeId, 2> const children{
+                fmmWalkAddNode(fmmWalkPosition(0.203125, 0.375, 0.4375), 0.015625f,
+                    Pair<ParticleInteger>(0, 2), 5, false, TreeId{-1, -1}, TreeId{-1, -1}, false,
+                    cloudSupport),
+                fmmWalkAddNode(fmmWalkPosition(0.296875, 0.375, 0.4375), 0.015625f,
+                    Pair<ParticleInteger>(2, 4), 5, false, TreeId{-1, -1}, TreeId{-1, -1}, false,
+                    cloudSupport)};
+            auto const cloud =
+                fmmWalkAddNode(fmmWalkPosition(0.25, 0.375, 0.4375), testCase.cloudRadius,
+                    Pair<ParticleInteger>(0, 4), 4, true, children[0], children[1]);
+            auto const leaf = fmmWalkAddNode(fmmWalkPosition(0.4375, 0.375, 0.4375),
+                testCase.leafRadius, Pair<ParticleInteger>(4, 7), 4, true, TreeId{-1, -1},
+                TreeId{-1, -1}, false, leafSupport, testCase.tightLeafBox);
+            if (testCase.tightLeafBox &&
+                0.1875f > std::fma(fmmInverseOpeningAngle(kFmmWalkTheta), testCase.cloudRadius,
+                              testCase.leafRadius)) {
+                throw std::runtime_error("Internal cloud fixture must require the box shortcut");
+            }
+            std::array<TreeId, 2> const sinks{cloud, leaf};
+            std::array<FmmInteraction, 2> const interactions = accepted ?
+                std::array<FmmInteraction, 2>{
+                    FmmInteraction::CellParticle, FmmInteraction::ParticleCell} :
+                std::array<FmmInteraction, 2>{
+                    FmmInteraction::ParticleParticle, FmmInteraction::ParticleParticle};
+            std::string const mode = std::string(testCase.label) +
+                (accepted ?
+                        "" :
+                        (supportMode == 1 ? " cloud support fallback" : " leaf support fallback"));
+            std::array<ForceVectors, 2> references;
+            for (int direction = 0; direction < 2; direction++) {
+                auto const sink = sinks[direction];
+                auto const source = sinks[1 - direction];
+                fmmWalkRequireInteraction(sink, source, support, interactions[direction], mode);
+                references[direction] =
+                    fmmWalkInteractionReference(sink, source, support, interactions[direction]);
+                if (accepted) {
+                    // Prove that opening the cloud cannot accidentally satisfy
+                    // the parent-operator reference. The alternative uses the
+                    // actual interactions accepted after one level of descent.
+                    auto const range = treeGetNode(sink)->particleRange;
+                    ForceVectors opened(range.second - range.first);
+                    for (int child = 0; child < kChildCount; child++) {
+                        auto const childSink = direction == 0 ? children[child] : leaf;
+                        auto const childSource = direction == 0 ? leaf : children[child];
+                        // The left child is far enough for CC; the right child of
+                        // the tight-box case is a leaf pair handled explicitly, by
+                        // whichever of hybrid or direct summation the cost rule picks.
+                        auto const childInteraction =
+                            fmmWalkSelectInteraction(childSink, childSource, support);
+                        bool const explicitPair = testCase.tightLeafBox && child == kRightChild;
+                        if ((childInteraction == FmmInteraction::CellCell) == explicitPair) {
+                            throw std::runtime_error(
+                                mode + " opened: unexpected child interaction");
+                        }
+                        auto const childReference = fmmWalkInteractionReference(
+                            childSink, childSource, support, childInteraction);
+                        auto const childRange = treeGetNode(childSink)->particleRange;
+                        for (ParticleInteger i = childRange.first; i < childRange.second; i++) {
+                            auto const j = i - range.first;
+                            auto const k = i - childRange.first;
+                            if (direction == 0 || child == kLeftChild) {
+                                opened.gx[j] = childReference.gx[k];
+                                opened.gy[j] = childReference.gy[k];
+                                opened.gz[j] = childReference.gz[k];
+                                opened.phi[j] = childReference.phi[k];
+                            } else {
+                                opened.gx[j] += childReference.gx[k];
+                                opened.gy[j] += childReference.gy[k];
+                                opened.gz[j] += childReference.gz[k];
+                                opened.phi[j] +=
+                                    childReference.phi[k] - particlesMass(i) * selfPhi() / support;
+                            }
+                        }
+                    }
+                    fmmWalkRequireDistinctForces(
+                        mode + " premature opening", references[direction], opened, 1.0e-3);
+                }
+            }
+            std::array<ForceVectors, 2> cpuForces;
+            for (int backend = 0; backend < (useCuda ? 2 : 1); backend++) {
+                std::string const label = mode + (backend == 0 ? " CPU" : " CUDA");
+                std::array<ForceVectors, 2> backendForces;
+                for (int direction = 0; direction < 2; direction++) {
+                    auto& forces = backendForces[direction];
+                    forces = fmmWalkApplyInteraction(
+                        sinks[direction], sinks[1 - direction], support, backend != 0);
+                    fmmWalkCompareForces(
+                        label + " operator reference", forces, references[direction]);
+                    if (backend == 0) {
+                        cpuForces[direction] = forces;
+                    } else {
+                        fmmWalkCompareForces(
+                            label + " CPU agreement", forces, cpuForces[direction]);
+                    }
+                }
+                fmmWalkRequireForceReciprocity(
+                    label, sinks, {&backendForces[0], &backendForces[1]});
+                if (backend != 0) {
+                    fmmWalkRequireForceReciprocity(
+                        mode + " mixed CPU/CUDA", sinks, {&cpuForces[0], &backendForces[1]});
+                }
+            }
+            treeDestroy();
+        }
+    }
+}
+
+void fmmWalkCellSupportBounds(bool useCuda) {
+    struct SupportCase {
+        char const* label;
+        float firstRadius;
+        float secondRadius;
+        bool tightParticleBoxes;
+        bool refine;
+        std::array<FmmInteraction, 2> formerInteractions;
+    };
+    std::array<SupportCase, 4> const cases{{
+        {"cell support CC fallback", 0.0625f, 0.078125f, false, false,
+            {FmmInteraction::CellCell, FmmInteraction::CellCell}},
+        {"cell support radial hybrid fallback", 0.0625f, 0.09375f, false, false,
+            {FmmInteraction::ParticleCell, FmmInteraction::CellParticle}},
+        {"cell support box-only hybrid fallback", 0.125f, 0.078125f, true, false,
+            {FmmInteraction::ParticleCell, FmmInteraction::CellParticle}},
+        {"cell support CC refinement", 0.0625f, 0.078125f, false, true,
+            {FmmInteraction::CellCell, FmmInteraction::CellCell}},
+    }};
+    float const fixedSupport = 0.015625f;
+    float const largeCellSupport = 0.375f;
+    std::array<Vector3<Position>, 2> const centers{
+        fmmWalkPosition(0.25, 0.375, 0.4375), fmmWalkPosition(0.4375, 0.375, 0.4375)};
+    std::array<Vector3<Position>, 2> const particlePositions{
+        fmmWalkPosition(0.3125, 0.375, 0.4375), fmmWalkPosition(0.359375, 0.375, 0.4375)};
+    std::array<Pair<ParticleInteger>, 2> const ranges{
+        Pair<ParticleInteger>(0, 40), Pair<ParticleInteger>(40, 104)};
+    for (auto const& testCase : cases) {
+        particlesResize(104);
+        for (ParticleInteger i = 0; i < particlesSize(); i++) {
+            fmmWalkSetParticlePosition(i, particlePositions[i < 40 ? 0 : 1]);
+        }
+        fmmWalkResetKickState();
+        particlesSortByRung(0);
+        treeCreate(TreeCreateParameters(0, kFmmWalkTheta, fixedSupport));
+        // Concentrate each group near its facing cell edge so the omitted
+        // expansion terms remain measurable. The enclosing bounds stay valid.
+        for (ParticleInteger i = 0; i < particlesSize(); i++) {
+            fmmWalkSetParticlePosition(i, particlePositions[i < 40 ? 0 : 1]);
+        }
+        std::array<float, 2> const radii{testCase.firstRadius, testCase.secondRadius};
+        std::array<TreeId, 2> ordinary;
+        for (int side = 0; side < 2; side++) {
+            ordinary[side] = fmmWalkAddNode(centers[side], radii[side], ranges[side], 4, true,
+                TreeId{-1, -1}, TreeId{-1, -1}, false, fixedSupport, testCase.tightParticleBoxes);
+            if (testCase.tightParticleBoxes) {
+                float const centerThreshold = std::fma(fmmInverseOpeningAngle(kFmmWalkTheta),
+                    testCase.secondRadius, testCase.firstRadius);
+                if (0.1875f > centerThreshold) {
+                    throw std::runtime_error("Support fixture must require the box shortcut");
+                }
+            }
+        }
+        std::array<ForceVectors, 2> references;
+        for (int direction = 0; direction < 2; direction++) {
+            fmmWalkRequireInteraction(ordinary[direction], ordinary[1 - direction], fixedSupport,
+                testCase.formerInteractions[direction], testCase.label);
+            references[direction] = fmmWalkInteractionReference(ordinary[direction],
+                ordinary[1 - direction], fixedSupport, FmmInteraction::ParticleParticle);
+            auto const former = fmmWalkInteractionReference(ordinary[direction],
+                ordinary[1 - direction], fixedSupport, testCase.formerInteractions[direction]);
+            fmmWalkRequireDistinctForces(testCase.label, references[direction], former);
+        }
+        for (int largeSide = 0; largeSide < 2; largeSide++) {
+            std::array<TreeId, 2> sinks;
+            for (int side = 0; side < 2; side++) {
+                float const cellSupport = side == largeSide ? largeCellSupport : fixedSupport;
+                TreeId left{-1, -1};
+                TreeId right{-1, -1};
+                if (testCase.refine) {
+                    auto const midpoint = (ranges[side].first + ranges[side].second) / 2;
+                    left = fmmWalkAddNode(centers[side], radii[side],
+                        Pair<ParticleInteger>(ranges[side].first, midpoint), 5, false,
+                        TreeId{-1, -1}, TreeId{-1, -1}, false, cellSupport);
+                    right = fmmWalkAddNode(centers[side], radii[side],
+                        Pair<ParticleInteger>(midpoint, ranges[side].second), 5, false,
+                        TreeId{-1, -1}, TreeId{-1, -1}, false, cellSupport);
+                }
+                sinks[side] =
+                    fmmWalkAddNode(centers[side], radii[side], ranges[side], 4, true, left, right,
+                        false, testCase.refine ? 0.0f : cellSupport, testCase.tightParticleBoxes);
+                fmmWalkRequireClose("synthetic cell support maximum",
+                    treeGetNode(sinks[side])->maxGravitySupportRadius, cellSupport, 0.0);
+            }
+            // Only opening metadata differs. PP still uses fixedSupport; this
+            // tests conservative routing, not variable-softening PP physics.
+            std::string const mode =
+                std::string(testCase.label) + (largeSide == 0 ? " first large" : " second large");
+            std::array<ForceVectors, 2> cpuForces;
+            for (int direction = 0; direction < 2; direction++) {
+                fmmWalkRequireInteraction(sinks[direction], sinks[1 - direction], fixedSupport,
+                    FmmInteraction::ParticleParticle, mode);
+            }
+            for (int backend = 0; backend < (useCuda ? 2 : 1); backend++) {
+                std::string const label = mode + (backend == 0 ? " CPU" : " CUDA");
+                std::array<ForceVectors, 2> backendForces;
+                for (int direction = 0; direction < 2; direction++) {
+                    auto& forces = backendForces[direction];
+                    forces = fmmWalkApplyInteraction(
+                        sinks[direction], sinks[1 - direction], fixedSupport, backend != 0);
+                    fmmWalkCompareForces(
+                        label + " fixed-support PP reference", forces, references[direction]);
+                    if (backend == 0) {
+                        cpuForces[direction] = forces;
+                    } else {
+                        fmmWalkCompareForces(
+                            label + " CPU agreement", forces, cpuForces[direction]);
+                    }
+                }
+                fmmWalkRequireForceReciprocity(
+                    label, sinks, {&backendForces[0], &backendForces[1]});
+                if (backend != 0) {
+                    fmmWalkRequireForceReciprocity(
+                        mode + " mixed CPU/CUDA", sinks, {&cpuForces[0], &backendForces[1]});
+                }
+            }
+        }
+        treeDestroy();
+    }
+}
+
+void fmmWalkCollectLeaves(TreeId id, Vector<TreeId>& leaves) {
+    auto const* node = treeGetNode(id);
+    float expectedSupportRadius = 0.0f;
+    if (node->leaf) {
+        if (node->numberOfParticles()) {
+            leaves.push_back(id);
+            expectedSupportRadius = getOptions().gravity.supportRadius;
+        }
+    } else {
+        for (int child = 0; child < kChildCount; child++) {
+            fmmWalkCollectLeaves(node->children[child], leaves);
+            expectedSupportRadius = std::max(
+                expectedSupportRadius, treeGetNode(node->children[child])->maxGravitySupportRadius);
+        }
+    }
+    fmmWalkRequireClose("distributed cell support maximum", node->maxGravitySupportRadius,
+        expectedSupportRadius, 0.0);
+}
+
+struct FmmWalkPeriodicField {
+    double potential = 0.0;
+    Vector3<double> acceleration{};
+};
+
+FmmWalkPeriodicField fmmWalkDirectPeriodicReference(
+    size_t sink, Vector<Vector3<Position>> const& positions, Vector<double> const& masses) {
+    // Independently sum the zero-mean periodic Newtonian Green function.
+    // These larger real/reciprocal cubes converge beyond the production
+    // alpha=2 truncations without using any generated FMM coefficient.
+    constexpr double kPi = 3.141592653589793238462643383279502884;
+    constexpr double kAlpha = 2.0;
+    constexpr int kCutoff = 4;
+    double const inverseSqrtPi = 1.0 / std::sqrt(kPi);
+    FmmWalkPeriodicField result;
+    for (size_t source = 0; source < positions.size(); source++) {
+        double const mass = masses[source];
+        Vector3<double> separation;
+        for (int dim = 0; dim < kDimensions; dim++) {
+            separation[dim] = positions[sink][dim].toDouble() - positions[source][dim].toDouble();
+            separation[dim] -= std::nearbyint(separation[dim]);
+        }
+        result.potential += mass * kPi / (kAlpha * kAlpha);
+        if (source == sink) {
+            // The direct softened self term is canceled by the kick's self
+            // subtraction. Retain the finite periodic self-image potential.
+            result.potential += mass * 2.0 * kAlpha * inverseSqrtPi;
+        }
+        for (int x = -kCutoff; x <= kCutoff; x++) {
+            for (int y = -kCutoff; y <= kCutoff; y++) {
+                for (int z = -kCutoff; z <= kCutoff; z++) {
+                    bool const origin = x == 0 && y == 0 && z == 0;
+                    Vector3<double> const displacement{
+                        separation[0] + x, separation[1] + y, separation[2] + z};
+                    double const radiusSquared = displacement[0] * displacement[0] +
+                        displacement[1] * displacement[1] + displacement[2] * displacement[2];
+                    if (!(source == sink && origin)) {
+                        double const radius = std::sqrt(radiusSquared);
+                        if (origin && radius <= getOptions().gravity.supportRadius) {
+                            throw std::runtime_error(
+                                "Periodic FMM reference requires separated particle pairs");
+                        }
+                        double const screened = std::erfc(kAlpha * radius) / radius;
+                        double const radial = (screened +
+                                                  2.0 * kAlpha * inverseSqrtPi *
+                                                      std::exp(-kAlpha * kAlpha * radiusSquared)) /
+                            radiusSquared;
+                        result.potential -= mass * screened;
+                        for (int dim = 0; dim < kDimensions; dim++) {
+                            result.acceleration[dim] -= mass * radial * displacement[dim];
+                        }
+                    }
+                    if (!origin) {
+                        Vector3<double> const wave{2.0 * kPi * x, 2.0 * kPi * y, 2.0 * kPi * z};
+                        double const waveSquared = x * x + y * y + z * z;
+                        double const coefficient =
+                            std::exp(-kPi * kPi * waveSquared / (kAlpha * kAlpha)) /
+                            (kPi * waveSquared);
+                        double const phase = wave[0] * separation[0] + wave[1] * separation[1] +
+                            wave[2] * separation[2];
+                        result.potential -= mass * coefficient * std::cos(phase);
+                        for (int dim = 0; dim < kDimensions; dim++) {
+                            result.acceleration[dim] -=
+                                mass * coefficient * std::sin(phase) * wave[dim];
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return result;
+}
+
+FmmWalkPeriodicField fmmWalkDirectPeriodicReference(ParticleInteger sink) {
+    auto const range = particlesCurrentRange();
+    Vector<Vector3<Position>> positions(range.second - range.first);
+    Vector<double> masses(positions.size());
+    for (ParticleInteger source = range.first; source < range.second; source++) {
+        for (int dim = 0; dim < kDimensions; dim++) {
+            positions[source - range.first][dim] = particlesPos(dim, source);
+        }
+        masses[source - range.first] = particlesMass(source);
+    }
+    return fmmWalkDirectPeriodicReference(sink - range.first, positions, masses);
+}
+
+void fmmWalkOrdinaryTimesteps(bool useCuda) {
+    auto const saved = getOptions();
+    auto options = saved;
+    options.chemistry.enabled = false;
+    options.lightcone.enabled = false;
+    options.run.minRung = 2;
+    options.gravity.gm = 0.125;
+    options.gravity.timestepEta = 1.0e6;
+    options.initial.numberOfParticles = 3;
+    constexpr double kScale = 0.5;
+    constexpr double kBaseTimestep = 0.03125;
+    constexpr double kDriftTimestep = 0.0078125;
+    constexpr double kKickTolerance = 5.0e-6;
+    std::array<Vector3<Position>, 3> const positions{fmmWalkDistributedPosition(0),
+        fmmWalkDistributedPosition(1), fmmWalkDistributedPosition(2)};
+    Vector<Vector3<Position>> referencePositions(positions.begin(), positions.end());
+    Vector<double> masses(positions.size(), 1.0);
+    std::array<FmmWalkPeriodicField, 3> references;
+    for (size_t i = 0; i < positions.size(); ++i) {
+        references[i] = fmmWalkDirectPeriodicReference(i, referencePositions, masses);
+    }
+    auto const initialVelocity = [](size_t particle, int dim) {
+        return 0.125f * (particle + 1) * (dim + 1);
+    };
+    for (int backend = 0; backend < (useCuda ? 2 : 1); ++backend) {
+        options.gravity.cuda = backend != 0;
+        for (bool glass : {false, true}) {
+            options.run.scenario = glass ? "glass" : "plummer";
+            setOptions(options);
+            for (int pass = 0; pass < 3; ++pass) {
+                bool const firstCall = pass == 0;
+                bool const fullEvaluation = pass != 2;
+                int const minimumRung = fullEvaluation ? 0 : 3;
+                std::string const label = std::string("ordinary timestep ") +
+                    (backend ? "CUDA " : "CPU ") + (glass ? "glass " : "normal ") +
+                    (firstCall             ? "first" :
+                            fullEvaluation ? "followup" :
+                                             "partial");
+                particlesResize(positions.size());
+                double initialKinetic = 0.0;
+                for (size_t i = 0; i < positions.size(); ++i) {
+                    fmmWalkSetParticlePosition(i, positions[i]);
+                    particlesRung(i) = i == 0 ? 2 : 3;
+                    for (int dim = 0; dim < kDimensions; ++dim) {
+                        float const velocity = initialVelocity(i, dim);
+                        particlesVel(dim, i) = velocity;
+                        initialKinetic += 0.5 * velocity * velocity;
+                        particlesGravityAcceleration(dim, i) = 12345.0f;
+                    }
+                    particlesPot(i) = 6789.0f;
+                }
+                particlesSortByRung(0);
+                domainsRebound();
+                EnergiesT energies{};
+                energies.pot = 11.0;
+                energies.kin = 12.0;
+                energies.xmom = 13.0;
+                energies.ymom = 14.0;
+                energies.zmom = 15.0;
+                energies.nmom = 16.0;
+                energies.tckin = initialKinetic;
+                advanceForces(minimumRung, kScale, 0.0, firstCall ? 0.0 : kBaseTimestep,
+                    kBaseTimestep, 0.1, firstCall, fullEvaluation, energies);
+                if (particlesSize() != positions.size()) {
+                    throw std::runtime_error(label + " changed particle count");
+                }
+                double kinetic = 0.0, synchronizedKinetic = 0.0, potential = 0.0;
+                Vector3<double> momentum{};
+                double momentumNorm = 0.0;
+                for (size_t i = 0; i < positions.size(); ++i) {
+                    size_t id = positions.size();
+                    for (size_t candidate = 0; candidate < positions.size(); ++candidate) {
+                        bool matches = true;
+                        for (int dim = 0; dim < kDimensions; ++dim) {
+                            matches &=
+                                particlesPos(dim, i).raw() == positions[candidate][dim].raw();
+                        }
+                        if (matches) {
+                            id = candidate;
+                            break;
+                        }
+                    }
+                    if (id == positions.size()) {
+                        throw std::runtime_error(label + " changed a particle position");
+                    }
+                    int const oldRung = id == 0 ? 2 : 3;
+                    bool const active = oldRung >= minimumRung;
+                    int const newRung = active ? (fullEvaluation ? 2 : 3) : oldRung;
+                    fmmWalkRequireClose(label + " rung", particlesRung(i), newRung, 0.0);
+                    double speedSquared = 0.0;
+                    for (int dim = 0; dim < kDimensions; ++dim) {
+                        float expected = initialVelocity(id, dim);
+                        float synchronized = expected;
+                        if (active) {
+                            float const acceleration = particlesGravityAcceleration(dim, i);
+                            fmmWalkRequireClose(label + " unsigned acceleration", acceleration,
+                                options.gravity.gm * references[id].acceleration[dim]);
+                            float const sign = glass ? -1.0f : 1.0f;
+                            if (!firstCall) {
+                                synchronized = std::fma(acceleration,
+                                    sign * std::ldexp(float(0.5 * kBaseTimestep), -oldRung),
+                                    synchronized);
+                            }
+                            expected = std::fma(acceleration,
+                                sign * std::ldexp(float(0.5 * kBaseTimestep), -newRung),
+                                synchronized);
+                        }
+                        fmmWalkRequireClose(label + " signed half kicks", particlesVel(dim, i),
+                            expected, active ? kKickTolerance : 0.0);
+                        kinetic += 0.5 * double(expected) * expected;
+                        synchronizedKinetic += 0.5 * double(synchronized) * synchronized;
+                        momentum[dim] += synchronized;
+                        speedSquared += double(synchronized) * synchronized;
+                    }
+                    momentumNorm += std::sqrt(speedSquared);
+                    if (fullEvaluation) {
+                        fmmWalkRequireClose(label + " unsigned potential", particlesPot(i),
+                            options.gravity.gm * references[id].potential);
+                        potential += 0.5 * particlesPot(i);
+                    }
+                }
+                fmmWalkRequireClose(
+                    label + " actual kinetic accumulator", energies.tckin, kinetic, kKickTolerance);
+                fmmWalkRequireClose(label + " synchronized potential", energies.pot,
+                    fullEvaluation ? potential / kScale : 11.0, kKickTolerance);
+                fmmWalkRequireClose(label + " synchronized kinetic", energies.kin,
+                    fullEvaluation ? synchronizedKinetic / (kScale * kScale) : 12.0,
+                    kKickTolerance);
+                fmmWalkRequireClose(label + " synchronized x momentum", energies.xmom,
+                    fullEvaluation ? momentum[0] / kScale : 13.0, kKickTolerance);
+                fmmWalkRequireClose(label + " synchronized y momentum", energies.ymom,
+                    fullEvaluation ? momentum[1] / kScale : 14.0, kKickTolerance);
+                fmmWalkRequireClose(label + " synchronized z momentum", energies.zmom,
+                    fullEvaluation ? momentum[2] / kScale : 15.0, kKickTolerance);
+                fmmWalkRequireClose(label + " synchronized momentum norm", energies.nmom,
+                    fullEvaluation ? momentumNorm / kScale : 16.0, kKickTolerance);
+                std::array<Vector3<float>, 3> beforeDrift;
+                std::array<Vector3<Position>, 3> beforePositions;
+                for (size_t i = 0; i < positions.size(); ++i) {
+                    for (int dim = 0; dim < kDimensions; ++dim) {
+                        beforeDrift[i][dim] = particlesVel(dim, i);
+                        beforePositions[i][dim] = particlesPos(dim, i);
+                    }
+                }
+                drift(kScale, kDriftTimestep, 0.0, kDriftTimestep, 1.0);
+                double const damping =
+                    glass ? 1.0 / (1.0 + std::numbers::pi * kDriftTimestep) : 1.0;
+                double const positionTolerance = std::max(2.0 * std::ldexp(1.0, -kPositionBits),
+                    4.0 * std::numeric_limits<double>::epsilon());
+                for (size_t i = 0; i < positions.size(); ++i) {
+                    for (int dim = 0; dim < kDimensions; ++dim) {
+                        fmmWalkRequireClose(label + " drift damping", particlesVel(dim, i),
+                            beforeDrift[i][dim] * damping, kKickTolerance);
+                        double const displaced = beforePositions[i][dim].toDouble() +
+                            beforeDrift[i][dim] * (kDriftTimestep / kScale);
+                        fmmWalkRequireClose(label + " drift position",
+                            particlesPos(dim, i).toDouble(), displaced - std::floor(displaced),
+                            positionTolerance);
+                    }
+                }
+            }
+        }
+    }
+    setOptions(saved);
+}
+
+#if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
+void fmmWalkHierarchicalTerminalEnergy(bool useCuda) {
+    auto const saved = getOptions();
+    auto options = saved;
+    options.chemistry.enabled = false;
+    options.lightcone.enabled = false;
+    options.run.minRung = 2;
+    options.run.scenario = "plummer";
+    options.gravity.gm = 0.125;
+    options.gravity.timestepEta = 1.0e6;
+    options.initial.numberOfParticles = 3;
+    constexpr double kScale = 0.5;
+    constexpr double kBaseTimestep = 0.03125;
+    constexpr double kKickTolerance = 2.0e-5;
+    std::array<Vector3<Position>, 3> const positions{fmmWalkDistributedPosition(0),
+        fmmWalkDistributedPosition(1), fmmWalkDistributedPosition(2)};
+    Vector<Vector3<Position>> const allPositions(positions.begin(), positions.end());
+    Vector<Vector3<Position>> const fastPositions(positions.begin() + 1, positions.end());
+    Vector<double> const allMasses(positions.size(), 1.0);
+    Vector<double> const fastMasses(positions.size() - 1, 1.0);
+    std::array<FmmWalkPeriodicField, 3> fullReferences;
+    std::array<FmmWalkPeriodicField, 2> fastReferences;
+    for (size_t i = 0; i < fullReferences.size(); ++i) {
+        fullReferences[i] = fmmWalkDirectPeriodicReference(i, allPositions, allMasses);
+    }
+    for (size_t i = 0; i < fastReferences.size(); ++i) {
+        fastReferences[i] = fmmWalkDirectPeriodicReference(i, fastPositions, fastMasses);
+    }
+    auto const initialVelocity = [](size_t particle, int dim) {
+        return 0.125f * (particle + 1) * (dim + 1);
+    };
+    std::array<Vector3<double>, 3> synchronizedVelocity;
+    double storedKinetic = 0.0;
+    double synchronizedKinetic = 0.0;
+    double potential = 0.0;
+    Vector3<double> momentum{};
+    double momentumNorm = 0.0;
+    for (size_t i = 0; i < positions.size(); ++i) {
+        double speedSquared = 0.0;
+        potential += 0.5 * options.gravity.gm * fullReferences[i].potential;
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            double const stored = initialVelocity(i, dim);
+            // The closing HOLD ladder subtracts the fast subsystem's half kick,
+            // then adds the full system's coarse half kick at the same positions.
+            double const fastCorrection = i == 0 ? 0.0 :
+                                                   std::ldexp(0.5 * kBaseTimestep, -3) *
+                    options.gravity.gm * fastReferences[i - 1].acceleration[dim];
+            double const synchronized = stored - fastCorrection +
+                std::ldexp(0.5 * kBaseTimestep, -2) * options.gravity.gm *
+                    fullReferences[i].acceleration[dim];
+            synchronizedVelocity[i][dim] = synchronized;
+            storedKinetic += 0.5 * stored * stored;
+            synchronizedKinetic += 0.5 * synchronized * synchronized;
+            momentum[dim] += synchronized;
+            speedSquared += synchronized * synchronized;
+        }
+        momentumNorm += std::sqrt(speedSquared);
+    }
+    if (std::abs(synchronizedKinetic - storedKinetic) <
+        1.0e-3 * std::max(1.0, synchronizedKinetic)) {
+        throw std::runtime_error("Hierarchical terminal fixture must distinguish kick stages");
+    }
+    for (int backend = 0; backend < (useCuda ? 2 : 1); ++backend) {
+        options.gravity.cuda = backend != 0;
+        setOptions(options);
+        std::string const label =
+            std::string("hierarchical terminal energy ") + (backend ? "CUDA" : "CPU");
+        particlesResize(positions.size());
+        for (size_t i = 0; i < positions.size(); ++i) {
+            fmmWalkSetParticlePosition(i, positions[i]);
+            particlesRung(i) = i == 0 ? 2 : 3;
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                particlesVel(dim, i) = initialVelocity(i, dim);
+                particlesGravityAcceleration(dim, i) = 12345.0f;
+            }
+            particlesPot(i) = 6789.0f;
+        }
+        particlesSortByRung(0);
+        domainsRebound();
+        // Reproduce the range stack left after descent from rung two to three.
+        particlesSortByRung(2);
+        particlesPushRungs();
+        particlesSortByRung(3);
+        EnergiesT energies;
+        energies.tckin = storedKinetic;
+        energies.cosmic = 3.5;
+        energies.heating = 7.0;
+        energies.therm = 2.0;
+        int minimumRung = 2;
+        kickStepHierarchical(minimumRung, 3, kScale, 0.0, kBaseTimestep, kBaseTimestep, 0.1,
+            &energies, 2, true, nullptr, false, 0.0, -1, true);
+        if (particlesSize() != positions.size()) {
+            throw std::runtime_error(label + " changed particle count");
+        }
+        fmmWalkRequireClose(label + " minimum rung", minimumRung, 2, 0.0);
+        auto const range = particlesCurrentRange();
+        fmmWalkRequireClose(
+            label + " restored full range", range.second - range.first, positions.size(), 0.0);
+        std::array<bool, 3> found{};
+        for (size_t i = 0; i < positions.size(); ++i) {
+            size_t id = positions.size();
+            for (size_t candidate = 0; candidate < positions.size(); ++candidate) {
+                bool matches = true;
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    matches &= particlesPos(dim, i).raw() == positions[candidate][dim].raw();
+                }
+                if (matches) {
+                    id = candidate;
+                    break;
+                }
+            }
+            if (id == positions.size() || found[id]) {
+                throw std::runtime_error(label + " changed a particle position");
+            }
+            found[id] = true;
+            fmmWalkRequireClose(label + " unchanged rung", particlesRung(i), id == 0 ? 2 : 3, 0.0);
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                fmmWalkRequireClose(label + " closing half kicks", particlesVel(dim, i),
+                    synchronizedVelocity[id][dim], kKickTolerance);
+            }
+        }
+        fmmWalkRequireClose(label + " synchronized potential", energies.pot, potential / kScale);
+        fmmWalkRequireClose(label + " synchronized kinetic", energies.kin,
+            synchronizedKinetic / (kScale * kScale), kKickTolerance);
+        fmmWalkRequireClose(label + " canonical kinetic accumulator", energies.tckin,
+            synchronizedKinetic, kKickTolerance);
+        fmmWalkRequireClose(
+            label + " x momentum", energies.xmom, momentum[0] / kScale, kKickTolerance);
+        fmmWalkRequireClose(
+            label + " y momentum", energies.ymom, momentum[1] / kScale, kKickTolerance);
+        fmmWalkRequireClose(
+            label + " z momentum", energies.zmom, momentum[2] / kScale, kKickTolerance);
+        fmmWalkRequireClose(
+            label + " momentum norm", energies.nmom, momentumNorm / kScale, kKickTolerance);
+        fmmWalkRequireClose(label + " unchanged expansion work", energies.cosmic, 3.5, 0.0);
+        fmmWalkRequireClose(label + " unchanged source work", energies.heating, 7.0, 0.0);
+        fmmWalkRequireClose(label + " unchanged thermal energy", energies.therm, 2.0, 0.0);
+    }
+    setOptions(saved);
+}
+
+#endif
+
+void fmmWalkPeriodicBackground(bool useCuda) {
+    constexpr float kTheta = 0.1f;
+    constexpr float kUntouchedPotential = 12345.0f;
+    constexpr float kUntouchedAcceleration = 6789.0f;
+    constexpr std::array<Vector3<double>, 6> kPositions{{{0.96, 0.72, 0.82}, {0.04, 0.76, 0.88},
+        {0.11, 0.68, 0.91}, {0.89, 0.91, 0.73}, {0.72, 0.62, 0.69}, {0.84, 0.84, 0.95}}};
+    Vector3<double> const translation{0.20, 0.31, 0.17};
+    for (int scenario = 0; scenario < 3; scenario++) {
+        bool const translated = scenario == 1;
+        bool const selectedSubset = scenario == 2;
+        particlesResize(kPositions.size() + (selectedSubset ? 2 : 0));
+        for (size_t i = 0; i < kPositions.size(); i++) {
+            Vector3<Position> position;
+            for (int dim = 0; dim < kDimensions; dim++) {
+                double const coordinate = kPositions[i][dim] + translated * translation[dim];
+                position[dim] = coordinate - std::floor(coordinate);
+            }
+            fmmWalkSetParticlePosition(i, position);
+        }
+        if (selectedSubset) {
+            // HOLD trees contain only their current rung range. These two
+            // excluded sources must not enter the root potential constant.
+            fmmWalkSetParticlePosition(6, fmmWalkPosition(0.21, 0.13, 0.25));
+            fmmWalkSetParticlePosition(7, fmmWalkPosition(0.44, 0.27, 0.16));
+        }
+        fmmWalkResetKickState();
+        particlesSortByRung(0);
+        if (selectedSubset) {
+            particlesRung(6) = particlesRung(7) = 0;
+            particlesSortByRung(1);
+        }
+        auto const range = particlesCurrentRange();
+        if (range.second - range.first != kPositions.size()) {
+            throw std::runtime_error("Periodic background regression selected the wrong sources");
+        }
+        auto const built =
+            treeCreate(TreeCreateParameters(0, kTheta, getOptions().gravity.supportRadius));
+        if (built.id.proc != 0 || built.id.index != 0) {
+            throw std::runtime_error("Periodic background regression requires the global root");
+        }
+        double dipoleSquared = 0.0;
+        for (int dim = 0; dim < kDimensions; dim++) {
+            double dipole = 0.0;
+            for (ParticleInteger i = range.first; i < range.second; i++) {
+                dipole += particlesMass(i) *
+                    (particlesPos(dim, i).toDouble() - built.pos[dim].toDouble());
+            }
+            dipoleSquared += dipole * dipole;
+        }
+        if (dipoleSquared < 1.0e-4 ||
+            (translated == 0 && built.pos[kYDimension].toDouble() <= 0.5)) {
+            throw std::runtime_error("Periodic background regression lost its off-center dipole");
+        }
+        Vector<FmmWalkPeriodicField> reference(particlesSize());
+        for (ParticleInteger i = range.first; i < range.second; i++) {
+            reference[i] = fmmWalkDirectPeriodicReference(i);
+        }
+        for (int backend = 0; backend < (useCuda ? 2 : 1); backend++) {
+            for (int potentialMode = 0; potentialMode < 2; potentialMode++) {
+                std::string const label = std::string("periodic root background ") +
+                    (translated ? "translated " : (selectedSubset ? "rung subset " : "original ")) +
+                    (backend ? "CUDA " : "CPU ") + (potentialMode ? "potential" : "force only");
+                fmmWalkResetKickState();
+                // Finite sentinels remain observable under production fast-math;
+                // isnan checks may otherwise be folded away by the compiler.
+                for (ParticleInteger i = 0; i < particlesSize(); i++) {
+                    particlesPot(i) = kUntouchedPotential;
+                    for (int dim = 0; dim < kDimensions; dim++) {
+                        particlesGravityAcceleration(dim, i) = kUntouchedAcceleration;
+                    }
+                }
+                ExpansionBuffer local;
+                local.zero();
+                auto params = fmmWalkParameters(backend != 0, kTheta);
+                params.doPhi = potentialMode != 0;
+                auto const origin = fmmWalkPosition(0.0, 0.0, 0.0);
+                auto const result = kick(params, local, origin, built.id, Vector<TreeId>{built.id},
+                    Vector<TreeId>{built.id}, nullptr);
+                double totalPotential = 0.0;
+                for (ParticleInteger i = range.first; i < range.second; i++) {
+                    for (int dim = 0; dim < kDimensions; dim++) {
+                        fmmWalkRequireClose(label + " acceleration " + std::to_string(i) + ":" +
+                                std::to_string(dim),
+                            particlesGravityAcceleration(dim, i), reference[i].acceleration[dim]);
+                    }
+                    if (params.doPhi) {
+                        fmmWalkRequireClose(label + " potential " + std::to_string(i),
+                            particlesPot(i), reference[i].potential);
+                    }
+                    totalPotential += 0.5 * particlesMass(i) * reference[i].potential;
+                }
+                for (ParticleInteger i = 0; i < range.first; i++) {
+                    if (particlesPot(i) != kUntouchedPotential) {
+                        throw std::runtime_error(label + " changed an excluded particle");
+                    }
+                    for (int dim = 0; dim < kDimensions; dim++) {
+                        if (particlesGravityAcceleration(dim, i) != kUntouchedAcceleration) {
+                            throw std::runtime_error(label + " changed an excluded particle");
+                        }
+                    }
+                }
+                if (params.doPhi) {
+                    fmmWalkRequireClose(label + " total potential", result.pot, totalPotential);
+                }
+            }
+        }
+        treeDestroy();
+        particlesSortByRung(0);
+    }
+}
+
+// A dense Plummer clump beside a sparse uniform background gives same-depth
+// cells with very different radii, where the lockstep walk opens cells that
+// the open-larger rule leaves closed. Every rule variant must stay reciprocal
+// and agree with the lockstep forces to the expansion error on both backends,
+// and the open-larger variants must actually defer sources.
+void fmmWalkOpenLargerCell(bool useCuda) {
+    constexpr ParticleInteger kClumpCount = 1536;
+    constexpr ParticleInteger kBackgroundCount = 512;
+    constexpr ParticleInteger kCount = kClumpCount + kBackgroundCount;
+    constexpr double kPlummerRadius = 0.02;
+    constexpr double kClumpCutoff = 0.15;
+    constexpr double kPi = 3.141592653589793238462643383279502884;
+    struct Variant {
+        char const* label;
+        bool openLargerCell;
+    };
+    constexpr std::array<Variant, 2> kVariants{{{"lockstep", false}, {"open-larger", true}}};
+    Vector3<double> const clumpCenter{0.3, 0.4, 0.5};
+    particlesResize(kCount);
+    std::mt19937 generator(20261019u);
+    std::uniform_real_distribution<double> uniform(0.0, 1.0);
+    for (ParticleInteger i = 0; i < kCount; i++) {
+        Vector3<double> coordinate;
+        if (i < kClumpCount) {
+            double radius;
+            do {
+                // Inverse of the Plummer mass fraction; the cutoff keeps the clump compact.
+                double const fraction = std::max(uniform(generator), 1.0e-12);
+                radius = kPlummerRadius / std::sqrt(std::pow(fraction, -2.0 / 3.0) - 1.0);
+            } while (radius > kClumpCutoff);
+            double const cosine = 2.0 * uniform(generator) - 1.0;
+            double const sine = std::sqrt(std::max(0.0, 1.0 - cosine * cosine));
+            double const azimuth = 2.0 * kPi * uniform(generator);
+            coordinate = {clumpCenter[kXDimension] + radius * sine * std::cos(azimuth),
+                clumpCenter[kYDimension] + radius * sine * std::sin(azimuth),
+                clumpCenter[kZDimension] + radius * cosine};
+        } else {
+            coordinate = {uniform(generator), uniform(generator), uniform(generator)};
+        }
+        Vector3<Position> position;
+        for (int dim = 0; dim < kDimensions; dim++) {
+            double wrapped = coordinate[dim] - std::floor(coordinate[dim]);
+            if (wrapped >= 1.0) {
+                wrapped = 0.0;
+            }
+            position[dim] = wrapped;
+        }
+        fmmWalkSetParticlePosition(i, position);
+    }
+    fmmWalkResetKickState();
+    particlesSortByRung(0);
+    auto const built =
+        treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().gravity.supportRadius));
+    auto const range = particlesCurrentRange();
+    if (range.second - range.first != kCount) {
+        throw std::runtime_error("Open-larger regression lost particles");
+    }
+    auto const baseOptions = getOptions();
+    using Forces = Vector<Vector3<double>>;
+    // Runs one backend with the current options; returns the forces and the
+    // net-force residual, the norm of the summed force over the sum of norms.
+    auto const run = [&](bool cuda, Forces& forces) {
+        fmmWalkResetKickState();
+        ExpansionBuffer local;
+        local.zero();
+        auto const origin = fmmWalkPosition(0.0, 0.0, 0.0);
+        kick(fmmWalkParameters(cuda), local, origin, built.id, Vector<TreeId>{built.id},
+            Vector<TreeId>{built.id}, nullptr);
+        forces.resize(kCount);
+        Vector3<double> total{};
+        double magnitudeSum = 0.0;
+        for (ParticleInteger i = range.first; i < range.second; i++) {
+            double squared = 0.0;
+            for (int dim = 0; dim < kDimensions; dim++) {
+                double const force = particlesMass(i) * particlesGravityAcceleration(dim, i);
+                forces[i - range.first][dim] = force;
+                total[dim] += force;
+                squared += force * force;
+            }
+            magnitudeSum += std::sqrt(squared);
+        }
+        return std::sqrt(total[kXDimension] * total[kXDimension] +
+                   total[kYDimension] * total[kYDimension] +
+                   total[kZDimension] * total[kZDimension]) /
+            std::max(1.0, magnitudeSum);
+    };
+    // Rms difference over rms reference, and the largest per-particle
+    // difference normalized by the larger of the particle's reference force
+    // and the rms force, so that particles near the clump center, where the
+    // net force cancels, do not dominate.
+    auto const compare = [&](Forces const& reference, Forces const& actual, double& rms,
+                             double& maximum) {
+        double forceSquaredSum = 0.0;
+        double differenceSquaredSum = 0.0;
+        Vector<double> forceNorms(kCount);
+        Vector<double> differenceNorms(kCount);
+        for (ParticleInteger i = 0; i < kCount; i++) {
+            double forceSquared = 0.0;
+            double differenceSquared = 0.0;
+            for (int dim = 0; dim < kDimensions; dim++) {
+                double const difference = actual[i][dim] - reference[i][dim];
+                forceSquared += reference[i][dim] * reference[i][dim];
+                differenceSquared += difference * difference;
+            }
+            forceSquaredSum += forceSquared;
+            differenceSquaredSum += differenceSquared;
+            forceNorms[i] = std::sqrt(forceSquared);
+            differenceNorms[i] = std::sqrt(differenceSquared);
+        }
+        double const rmsForce = std::sqrt(forceSquaredSum / kCount);
+        rms = std::sqrt(differenceSquaredSum / kCount) / rmsForce;
+        maximum = 0.0;
+        for (ParticleInteger i = 0; i < kCount; i++) {
+            maximum = std::max(maximum, differenceNorms[i] / std::max(forceNorms[i], rmsForce));
+        }
+    };
+    Forces lockstepForces;
+    for (auto const& variant : kVariants) {
+        auto options = baseOptions;
+        options.gravity.openLargerCell = variant.openLargerCell;
+        setOptions(options);
+        kickResetInteractionCounts();
+        Forces cpuForces;
+        double const cpuResidual = run(false, cpuForces);
+        auto const c = kickInteractionCounts();
+        PRINT("FMM %s walk: tests %lld ccDirect %lld ccEwald %lld cp %lld pc %lld ppLeafPairs "
+              "%lld ppPairs %lld opened %lld deferred %lld, net-force residual %.3e\n",
+            variant.label, c.acceptanceTests, c.cellCellDirect, c.cellCellEwald, c.cellParticle,
+            c.particleCell, c.particleParticleLeafPairs, c.particleParticlePairs, c.sourceOpenings,
+            c.deferredSources, cpuResidual);
+        std::string const label = std::string("FMM ") + variant.label;
+        fmmWalkRequireClose(label + " CPU net-force reciprocity", cpuResidual, 0.0, 2.0e-5);
+        if (c.cellParticle != c.particleCell) {
+            throw std::runtime_error(label + ": CP and PC counts differ");
+        }
+        if (variant.openLargerCell ? c.deferredSources == 0 : c.deferredSources != 0) {
+            throw std::runtime_error(label + ": unexpected deferred-source count");
+        }
+        if (!variant.openLargerCell) {
+            lockstepForces = cpuForces;
+        } else {
+            double rms, maximum;
+            compare(lockstepForces, cpuForces, rms, maximum);
+            PRINT("%s versus lockstep: rms difference / rms force %.3e, maximum normalized "
+                  "difference %.3e\n",
+                label.c_str(), rms, maximum);
+            fmmWalkRequireClose(label + " versus lockstep rms force difference", rms, 0.0, 1.0e-2);
+        }
+        if (useCuda) {
+            Forces cudaForces;
+            double const cudaResidual = run(true, cudaForces);
+            double rms, maximum;
+            compare(cpuForces, cudaForces, rms, maximum);
+            PRINT("%s CUDA versus CPU: rms difference / rms force %.3e, maximum normalized "
+                  "difference %.3e, net-force residual %.3e\n",
+                label.c_str(), rms, maximum, cudaResidual);
+            fmmWalkRequireClose(label + " CUDA net-force reciprocity", cudaResidual, 0.0, 2.0e-5);
+            fmmWalkRequireClose(label + " CUDA versus CPU rms force difference", rms, 0.0, 1.0e-3);
+            fmmWalkRequireClose(
+                label + " CUDA versus CPU maximum force difference", maximum, 0.0, 1.0e-2);
+        }
+    }
+    setOptions(baseOptions);
+    treeDestroy();
+    particlesSortByRung(0);
+}
+
+}    // namespace detail
+
+void fmmWalkInitializeDistributedParticles() {
+    particlesResize(1);
+    detail::fmmWalkSetParticlePosition(0, detail::fmmWalkDistributedPosition(hpxRank()));
+    detail::fmmWalkResetKickState();
+}
+HPX_PLAIN_ACTION(
+    fmmWalkInitializeDistributedParticles, FmmWalkInitializeDistributedParticlesAction);
+
+void fmmWalkResetDistributedKick() {
+    detail::fmmWalkResetKickState();
+    for (ParticleInteger i = 0; i < particlesSize(); i++) {
+        particlesPot(i) = 12345.0f;
+        for (int dim = 0; dim < kDimensions; dim++) {
+            particlesGravityAcceleration(dim, i) = 6789.0f;
+        }
+    }
+}
+HPX_PLAIN_ACTION(fmmWalkResetDistributedKick, FmmWalkResetDistributedKickAction);
+
+double fmmWalkVerifyDistributedForces(TreeId root) {
+    if (particlesSize() != 1) {
+        throw std::runtime_error("Shallow FMM handoff regression requires one particle per rank");
+    }
+    Vector<TreeId> leaves;
+    detail::fmmWalkCollectLeaves(root, leaves);
+    TreeId sink{-1, -1};
+    Vector<TreeId> sources;
+    for (auto const id : leaves) {
+        if (treeGetNode(id)->processRange.first == hpxRank()) {
+            sink = id;
+        } else {
+            sources.push_back(id);
+        }
+    }
+    if (sink.index == -1 || sources.size() != hpxSize() - 1) {
+        throw std::runtime_error("Shallow FMM handoff regression lost a source or sink leaf");
+    }
+    ForceVectors reference(1);
+    reference.gx[0] = reference.gy[0] = reference.gz[0] = reference.phi[0] = 0.0f;
+    cpuGravityPp(reference, true, sink, sources, getOptions().gravity.supportRadius);
+    detail::fmmWalkRequireClose("distributed handoff x acceleration",
+        particlesGravityAcceleration(kXDimension, 0), reference.gx[0]);
+    detail::fmmWalkRequireClose("distributed handoff y acceleration",
+        particlesGravityAcceleration(kYDimension, 0), reference.gy[0]);
+    detail::fmmWalkRequireClose("distributed handoff z acceleration",
+        particlesGravityAcceleration(kZDimension, 0), reference.gz[0]);
+    detail::fmmWalkRequireClose("distributed handoff potential", particlesPot(0), reference.phi[0]);
+    return reference.phi[0];
+}
+HPX_PLAIN_ACTION(fmmWalkVerifyDistributedForces, FmmWalkVerifyDistributedForcesAction);
+
+double fmmWalkVerifyDistributedPeriodicForces() {
+    if (particlesSize() != 1) {
+        throw std::runtime_error("Periodic FMM regression requires one particle per rank");
+    }
+    Vector<Vector3<Position>> positions(hpxSize());
+    Vector<double> masses(hpxSize(), 1.0);
+    size_t sink = positions.size();
+    for (size_t rank = 0; rank < positions.size(); rank++) {
+        positions[rank] = detail::fmmWalkDistributedPosition(rank);
+        bool matches = true;
+        for (int dim = 0; dim < kDimensions; dim++) {
+            matches = matches && positions[rank][dim].raw() == particlesPos(dim, 0).raw();
+        }
+        if (matches) {
+            sink = rank;
+        }
+    }
+    if (sink == positions.size()) {
+        throw std::runtime_error("Distributed periodic fixture lost a particle");
+    }
+    auto const reference = detail::fmmWalkDirectPeriodicReference(sink, positions, masses);
+    for (int dim = 0; dim < kDimensions; dim++) {
+        detail::fmmWalkRequireClose("distributed periodic acceleration " + std::to_string(dim),
+            particlesGravityAcceleration(dim, 0), reference.acceleration[dim]);
+    }
+    // This close-spaced fixture has a small but nonzero source trace. Check
+    // potential tightly enough to detect omission of another rank's trace.
+    detail::fmmWalkRequireClose(
+        "distributed periodic potential", particlesPot(0), reference.potential, 2.0e-5);
+    return reference.potential;
+}
+HPX_PLAIN_ACTION(
+    fmmWalkVerifyDistributedPeriodicForces, FmmWalkVerifyDistributedPeriodicForcesAction);
+
+void fmmWalkTest() {
+    auto const originalOptions = getOptions();
+    auto options = originalOptions;
+    bool const useCuda = options.gravity.cuda;
+    options.hydro.enabled = false;
+
+    options.gravity.enabled = true;
+    options.run.hierarchicalGravity = getOptions().run.hierarchicalGravity;
+    options.analysis.saveForce = true;
+
+    options.analysis.groups = false;
+    options.analysis.tracers = false;
+    options.compute.bucketSize = 64;
+    options.gravity.supportRadius = 0.005;
+    options.initial.numberOfParticles = hpxSize() == 1 ? 6 : hpxSize();
+    setOptions(options);
+    if (hpxSize() == 1) {
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
+        detail::fmmWalkHierarchicalGasCoupling();
+#endif
+        detail::fmmWalkPairCurvature(useCuda);
+        detail::fmmWalkRejectedSourceLeaf(useCuda);
+        detail::fmmWalkRepeatedSourceOpening(useCuda);
+        detail::fmmWalkEmptyLocalRoot(useCuda);
+        detail::fmmWalkDeferredSourceHandoff(useCuda);
+        detail::fmmWalkReciprocalHybrid(useCuda);
+        detail::fmmWalkInternalCloudHybrid(useCuda);
+        detail::fmmWalkCellSupportBounds(useCuda);
+        detail::fmmWalkPeriodicBackground(useCuda);
+        if (!getOptions().run.hierarchicalGravity) {
+            detail::fmmWalkOrdinaryTimesteps(useCuda);
+        }
+#if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
+        else {
+            detail::fmmWalkHierarchicalTerminalEnergy(useCuda);
+        }
+#endif
+        detail::fmmWalkOpenLargerCell(useCuda);
+    } else {
+        Vector<hpx::future<void>> pending;
+        for (auto const& locality : hpxLocalities()) {
+            pending.push_back(hpx::async<FmmWalkInitializeDistributedParticlesAction>(locality));
+        }
+        for (auto& future : pending) {
+            future.get();
+        }
+        domainsRebound();
+        domainsBegin(0);
+        domainsEnd();
+        particlesSortByRung(0);
+        auto const built = treeCreate(TreeCreateParameters(0, 0.1, options.gravity.supportRadius));
+        // Three ranks give a one-rank left child and a global right child at the first handoff.
+        // First force nearby sources open against the direct reference, then
+        // include Ewald to exercise the distributed root-background reduction.
+        auto const* root = treeGetNode(built.id);
+        if (!treeGetNode(root->children[kLeftChild])->isLocal() ||
+            treeGetNode(root->children[kRightChild])->isLocal()) {
+            throw std::runtime_error("Shallow FMM test requires a 1-rank/2-rank root split");
+        }
+        for (int backend = 0; backend < (useCuda ? 2 : 1); backend++) {
+            for (int periodic = 0; periodic < 2; periodic++) {
+                pending.clear();
+                for (auto const& locality : hpxLocalities()) {
+                    pending.push_back(hpx::async<FmmWalkResetDistributedKickAction>(locality));
+                }
+                for (auto& future : pending) {
+                    future.get();
+                }
+                ExpansionBuffer local;
+                local.zero();
+                auto const origin = detail::fmmWalkPosition(0.0, 0.0, 0.0);
+                auto const ewaldSources = periodic ? Vector<TreeId>{built.id} : Vector<TreeId>{};
+                auto const result = kick(detail::fmmWalkParameters(backend != 0, 0.1f), local,
+                    origin, built.id, Vector<TreeId>{built.id}, ewaldSources, nullptr);
+                Vector<hpx::future<double>> references;
+                for (auto const& locality : hpxLocalities()) {
+                    references.push_back(periodic ?
+                            hpx::async<FmmWalkVerifyDistributedPeriodicForcesAction>(locality) :
+                            hpx::async<FmmWalkVerifyDistributedForcesAction>(locality, built.id));
+                }
+                double expectedPotential = 0.0;
+                for (auto& future : references) {
+                    expectedPotential += 0.5 * future.get();
+                }
+                detail::fmmWalkRequireClose(periodic ? "distributed periodic total potential" :
+                                                       "distributed handoff total potential",
+                    result.pot, expectedPotential, periodic ? 2.0e-5 : 2.0e-4);
+            }
+        }
+        treeDestroy();
+    }
+    setOptions(originalOptions);
+    PRINT("FMM walk regression passed (%s, %i rank(s))\n", useCuda ? "CPU and CUDA" : "CPU",
+        hpxSize());
+}

@@ -5,8 +5,8 @@
 
 #include <gtest/gtest.h>
 
-#include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
-#include <cosmictiger/gravity/fmm_kernels/spherical_operators.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
+#include <cosmictiger/gravity/kernels/spherical_operators.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
 void cosmictigerAssert(char const*, bool condition, char const*, int) {
@@ -17,8 +17,10 @@ void cosmictigerAssert(char const*, bool condition, char const*, int) {
 
 namespace {
 
-using CartesianMultipole = cosmictiger::gravity::cartesian::Multipole<double, kFmmDefaultOrder>;
-using CartesianExpansion = cosmictiger::gravity::cartesian::Expansion<double, kFmmDefaultOrder>;
+using CartesianMultipole =
+    cosmictiger::gravity::cartesian::tracefree::Multipole<double, kFmmDefaultOrder>;
+using CartesianExpansion =
+    cosmictiger::gravity::cartesian::tracefree::Expansion<double, kFmmDefaultOrder>;
 using SphericalMultipole = cosmictiger::gravity::spherical::Multipole<double, kFmmDefaultOrder>;
 using SphericalExpansion = cosmictiger::gravity::spherical::Expansion<double, kFmmDefaultOrder>;
 using Field = cosmictiger::gravity::Field<double>;
@@ -30,8 +32,9 @@ concept HasM2L = requires(Target& target, Source const& source,
 static_assert(!HasM2L<CartesianExpansion, SphericalMultipole>);
 static_assert(!HasM2L<SphericalExpansion, CartesianMultipole>);
 constexpr int kDifferentOrder = kFmmDefaultOrder == 9 ? 8 : kFmmDefaultOrder + 1;
-static_assert(!HasM2L<cosmictiger::gravity::cartesian::Expansion<double, kDifferentOrder>,
-    CartesianMultipole>);
+static_assert(
+    !HasM2L<cosmictiger::gravity::cartesian::tracefree::Expansion<double, kDifferentOrder>,
+        CartesianMultipole>);
 
 template <class Multipole, class Expansion>
 void checkPointFields() {

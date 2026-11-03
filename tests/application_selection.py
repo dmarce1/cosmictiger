@@ -19,7 +19,12 @@ def compiled_algorithms(executable):
         if match is None:
             raise RuntimeError(f"application help omitted compiled {label}")
         return match[1].split()
-    return {"far": choices("Gravity solvers"), "near": choices("PMMM near solvers"),
+    near = choices("PMMM near solvers")
+    try:
+        short = choices("P3M short solvers")
+    except RuntimeError:
+        short = []
+    return {"far": choices("Gravity solvers"), "near": near, "short": short,
             "integrator": choices("Time integrators")}
 
 
@@ -34,15 +39,18 @@ def application_options(executable, *, far=None, near=None, integrator=None, hyd
             if choice in available:
                 return choice
         raise RuntimeError(f"no compiled {label} supports this regression")
-    far = select(far, compiled["far"], ("fmm", "pmmm", "none"), "far solver")
+    far = select(far, compiled["far"], ("fmm", "pmmm", "p3m", "pm", "none"), "far solver")
     eligible = [value for value in compiled["integrator"]
-                if value != "hierarchical" or (not hydro and far != "none")]
+                if (value != "hierarchical" or (not hydro and far != "none"))
+                and (value != "global" or far not in ("pm", "p3m"))]
     integrator = select(integrator, eligible, ("traditional", "global", "hierarchical"), "integrator")
     result = {"run.timeIntegrator": integrator}
     if far != "none":
         result["gravity.method.far"] = far
     if far == "pmmm":
         result["gravity.method.near"] = select(near, compiled["near"], ("pp", "fmm"), "near solver")
+    if far == "p3m":
+        result["gravity.method.near"] = select(near, compiled["short"], ("pp", "fmm"), "short solver")
     return result
 
 

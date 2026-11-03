@@ -100,7 +100,7 @@ def read_header(data):
     header = Reader(data).native(Header)
     require(header.magic == 0x4354535048303031 and header.version == 3,
             "unsupported checkpoint header")
-    supported = sum(1 << bit for bit in (0, 6, 7, 8, 9, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21))
+    supported = sum(1 << bit for bit in (0, 6, 7, 8, 9, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22))
     require(not header.flags & (1 << 16), "retired particle-mesh checkpoint")
     require(not header.flags & ~supported, "unsupported checkpoint feature flags")
     return header
@@ -119,14 +119,15 @@ def read_prefix(data):
     result = SimpleNamespace(header=header, hydro=hydro, has_cooling=cooling, has_stars=stars,
                              position_bytes=8 if flags & (1 << 15) else 4,
                              integer_bytes=8 if flags & (1 << 21) else 4,
-                             algorithms=(), pmmm=(), viscosity=(), cooling_parameters=(),
-                             star_parameters=(), sph_parameters=())
+                             algorithms=(), pmmm=(), particle_mesh=(), viscosity=(),
+                             cooling_parameters=(), star_parameters=(), sph_parameters=())
     if flags & (1 << 18):
         result.algorithms = reader.take("Q", 5)
         version, far, near, degree, integrator = result.algorithms
-        require(version == 1 and far in (0, 1, 2) and near in (0, 1, 2)
+        # Far codes: 1 fmm, 2 pmmm, 3 pm, 4 p3m; near codes 1 pp, 2 fmm for pmmm and p3m.
+        require(version == 1 and far in (0, 1, 2, 3, 4) and near in (0, 1, 2)
                 and (degree == 0 if far == 0 else 3 <= degree <= 9)
-                and (near != 0 if far == 2 else near == 0) and integrator in (0, 1, 2),
+                and (near != 0 if far in (2, 4) else near == 0) and integrator in (0, 1, 2),
                 "invalid checkpoint algorithm selection")
         require((integrator == 2) == bool(flags & (1 << 19)) and
                 (integrator == 1) == bool(flags & (1 << 6)),
@@ -135,6 +136,10 @@ def read_prefix(data):
         version = reader.take("Q")[0]
         require(version in (1, 2, 3, 4, 5), "unsupported PMMM checkpoint version")
         result.pmmm = (version, *reader.take("Q", {1: 6, 2: 7, 3: 9, 4: 10, 5: 10}[version]))
+    if flags & (1 << 22):
+        result.particle_mesh = reader.take("Q", 12)
+        require(result.particle_mesh[0] == 1 and result.particle_mesh[11] == 1,
+                "unsupported particle-mesh checkpoint version or force convention")
     viscosity_offset = 0
     if hydro:
         result.sph_parameters = reader.take("d", 13)
@@ -166,6 +171,17 @@ def read_prefix(data):
         result.driver.global_timestep = reader.take("d")[0]
         require(version == 1 and math.isfinite(result.driver.global_timestep)
                 and result.driver.global_timestep >= 0, "invalid checkpoint global timestep")
+    result.driver.outer_interval = 0.0
+    result.driver.outer_start = 0.0
+    result.driver.outer_index = 0
+    if flags & (1 << 22):
+        result.driver.interval_extension_offset = reader.offset
+        version = reader.take("Q")[0]
+        result.driver.outer_interval, result.driver.outer_start = reader.take("d", 2)
+        result.driver.outer_index = reader.take("Q")[0]
+        require(version == 1 and math.isfinite(result.driver.outer_interval)
+                and result.driver.outer_interval >= 0 and result.driver.outer_start >= 0,
+                "invalid checkpoint particle-mesh interval extension")
     result.particle_start = reader.offset
     result.has_hierarchical_sph = (hydro and bool(flags & (1 << 6)) and
                                    ((header.reserved >> 25) & 3) == 0)

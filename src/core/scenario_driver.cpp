@@ -15,7 +15,7 @@
 #include <cosmictiger/core/timer.hpp>
 #if COSMICTIGER_WITH_GRAVITY
 #if COSMICTIGER_ENABLE_FMM
-#include <cosmictiger/gravity/dehnen/execution.hpp>
+#include <cosmictiger/gravity/global_fmm/execution.hpp>
 #endif
 #include <cosmictiger/gravity/kick_workspace.hpp>
 #endif

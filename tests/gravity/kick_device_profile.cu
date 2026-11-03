@@ -38,7 +38,7 @@ void cosmictigerAssert(char const* condition, bool value, char const* file, int 
 #if COSMICTIGER_ENABLE_FMM
 template <int order>
 __device__ __forceinline__ FlopCount cudaApplyPeriodicPolicy(CudaKickData const&,
-    KickParameters const&, cosmictiger::gravity::cartesian::Expansion<float, order>&,
+    KickParameters const&, cosmictiger::gravity::cartesian::tracefree::Expansion<float, order>&,
     TreeNode const&, StackVector<int>& checks, DeviceVector<int>&, DeviceVector<int>&,
     DeviceVector<int>&, DeviceVector<int>&) {
     // All positions occupy one small interior region, and the fixture asks for

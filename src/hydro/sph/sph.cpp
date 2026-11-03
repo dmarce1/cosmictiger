@@ -17,7 +17,7 @@
 #include <cosmictiger/core/safe_io.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
-#include <cosmictiger/gravity/nitadori/solver.hpp>
+#include <cosmictiger/gravity/pmmm/solver.hpp>
 #endif
 #include <cosmictiger/hydro/sph/sph.hpp>
 #include <cosmictiger/hydro/sph/sph_cpu.hpp>

@@ -11,8 +11,9 @@ import shlex
 import sys
 
 
-FEATURES = ("FMM", "PMMM_PP", "PMMM_FMM", "SPH", "HOPKINS", "CHEMISTRY", "STARS",
-            "INTEGRATOR_TRADITIONAL", "INTEGRATOR_HIERARCHICAL", "INTEGRATOR_GLOBAL")
+FEATURES = ("FMM", "PMMM_PP", "PMMM_FMM", "PM", "P3M_PP", "P3M_FMM", "SPH", "HOPKINS",
+            "CHEMISTRY", "STARS", "INTEGRATOR_TRADITIONAL", "INTEGRATOR_HIERARCHICAL",
+            "INTEGRATOR_GLOBAL")
 FEATURE_DEFINITIONS = {"COSMICTIGER_ENABLE_" + feature for feature in FEATURES}
 FEATURE_DEFINITIONS.update({"ORDER", "FMM_MIN_ORDER", "FMM_MAX_ORDER",
                             "COSMICTIGER_ENABLE_STAR_FORMATION",
@@ -77,12 +78,20 @@ def hasPmmm(configuration):
     return configuration["PMMM_PP"] or configuration["PMMM_FMM"]
 
 
+def hasP3m(configuration):
+    return configuration.get("P3M_PP", False) or configuration.get("P3M_FMM", False)
+
+
+def hasParticleMesh(configuration):
+    return configuration.get("PM", False) or hasP3m(configuration)
+
+
 def hasGravity(configuration):
-    return configuration["FMM"] or hasPmmm(configuration)
+    return configuration["FMM"] or hasPmmm(configuration) or hasParticleMesh(configuration)
 
 
 def hasTree(configuration):
-    return configuration["FMM"] or configuration["PMMM_FMM"]
+    return configuration["FMM"] or configuration["PMMM_FMM"] or configuration.get("P3M_FMM", False)
 
 
 def hasChemistry(configuration):
@@ -137,20 +146,32 @@ def sourceSelectionErrors(sources, configuration):
                 errors.append(f"gravity disabled but compiles gravity source: {source}")
             if cosmologySource:
                 errors.append(f"gravity disabled but compiles cosmology source: {source}")
-        for feature, enabled, directory in (("FMM", configuration["FMM"], "dehnen"),
-                                            ("PMMM", hasPmmm(configuration), "nitadori")):
+        for feature, enabled, directory in (("FMM", configuration["FMM"], "global_fmm"),
+                                            ("PMMM", hasPmmm(configuration), "pmmm")):
             if not enabled and source.startswith(
                     (f"src/gravity/{directory}/", f"tests/gravity/{directory}/")):
                 errors.append(f"{feature} disabled but compiles solver source: {source}")
         for feature, pattern in (
-                ("PMMM_PP", r"(?:src|tests)/gravity/nitadori/near_pp[^/]*\.(?:cpp|cu)$"),
-                ("PMMM_FMM", r"(?:src|tests)/gravity/nitadori/(?:cell_|ghost_|fmm_batch)[^/]*\.(?:cpp|cu)$")):
+                ("PMMM_PP", r"(?:src|tests)/gravity/pmmm/pp/near_pp[^/]*\.(?:cpp|cu)$"),
+                ("PMMM_FMM", r"(?:src|tests)/gravity/pmmm/fmm/(?:cell_|ghost_|fmm_batch)[^/]*\.(?:cpp|cu)$")):
             if not configuration[feature] and re.fullmatch(pattern, source):
                 errors.append(f"{feature} disabled but compiles near solver: {source}")
         if not hasPmmm(configuration) and source in {
-                "src/particles/particle_mesh_sort.cpp", "tests/particle_mesh_sort.cpp",
-                "tests/mesh_domain.cpp", "tests/mesh_domains.cpp"}:
+                "tests/gravity/pm/fft_flops.cpp", "tests/mesh_domain.cpp", "tests/mesh_domains.cpp"}:
             errors.append(f"PMMM disabled but compiles solver source: {source}")
+        if not hasPmmm(configuration) and not hasParticleMesh(configuration) and source in {
+                "src/gravity/pm/collective_dispatch.cpp", "src/gravity/pm/kick.cpp",
+                "src/particles/particle_mesh_sort.cpp", "tests/particle_mesh_sort.cpp"}:
+            errors.append(f"mesh solvers disabled but compiles mesh source: {source}")
+        if not hasParticleMesh(configuration) and (
+                source.startswith(("src/gravity/p3m/", "tests/gravity/p3m/")) or source in {
+                    "src/gravity/pm/solver.cpp", "src/gravity/pm/interval.cpp", "tests/gravity/pm/pm.cpp"}):
+            errors.append(f"particle mesh disabled but compiles solver source: {source}")
+        for feature, pattern in (
+                ("P3M_PP", r"(?:src|tests)/gravity/p3m/pp/short_pp[^/]*\.(?:cpp|cu)$"),
+                ("P3M_FMM", r"(?:src|tests)/gravity/p3m/fmm/short_fmm[^/]*\.(?:cpp|cu)$")):
+            if not configuration.get(feature, False) and re.fullmatch(pattern, source):
+                errors.append(f"{feature} disabled but compiles short solver: {source}")
         if not hasTree(configuration) and source in {
                 "src/gravity/gravity.cpp", "src/gravity/kick.cpp", "src/gravity/kick.cu",
                 "src/gravity/kick_workspace.cpp", "src/gravity/kick_executor.cpp",
@@ -192,13 +213,21 @@ def requiredSources(configuration, cuda):
     if hasGravity(configuration):
         required.update({"src/gravity/fmm_order.cpp", "src/gravity/error.cpp", "src/gravity/reference_table.cpp"})
     if configuration["FMM"]:
-        required.add("src/gravity/dehnen/execution.cpp")
+        required.add("src/gravity/global_fmm/execution.cpp")
     if hasPmmm(configuration):
-        required.update({"src/gravity/nitadori/solver.cpp", "src/gravity/nitadori/fft.cpp"})
+        required.update({"src/gravity/pmmm/solver.cpp", "src/gravity/pmmm/fft.cpp"})
         if configuration["PMMM_PP"]:
-            required.add("src/gravity/nitadori/near_pp.cpp")
+            required.add("src/gravity/pmmm/pp/near_pp.cpp")
         if configuration["PMMM_FMM"]:
-            required.add("src/gravity/nitadori/fmm_batch.cpp")
+            required.add("src/gravity/pmmm/fmm/fmm_batch.cpp")
+    if hasParticleMesh(configuration):
+        required.update({"src/gravity/pm/solver.cpp", "src/gravity/pm/interval.cpp", "src/gravity/pm/kick.cpp"})
+        if hasP3m(configuration):
+            required.add("src/gravity/p3m/solver.cpp")
+        if configuration.get("P3M_PP", False):
+            required.add("src/gravity/p3m/pp/short_pp.cpp")
+        if configuration.get("P3M_FMM", False):
+            required.add("src/gravity/p3m/fmm/short_fmm.cpp")
     if hasTree(configuration):
         required.add("src/gravity/kick.cpp")
     if configuration["SPH"]:

@@ -136,6 +136,12 @@ struct KickParameters {
     // Opening rule, stamped by kick() from the options so that the CPU walk,
     // the remote kick action and the CUDA kernel apply the same rule.
     bool openLargerCell;
+    // Mesh solvers (pm, p3m): base timestep of the substep being closed when a
+    // new outer interval changed t0, and the long half-kick durations applied
+    // from the per-particle long acceleration at an outer boundary (zero: none).
+    float closingBaseTimestep = 0.0f;
+    float longCloseTimestep = 0.0f;
+    float longOpenTimestep = 0.0f;
     KickParameters() {
         htime = true;
         openLargerCell = false;
@@ -176,6 +182,9 @@ struct KickParameters {
         arc & previousTimestep;
         arc & deferGasOpening;
         arc & outputOffset;
+        arc & closingBaseTimestep;
+        arc & longCloseTimestep;
+        arc & longOpenTimestep;
     }
 };
 

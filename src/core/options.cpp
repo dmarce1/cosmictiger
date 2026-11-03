@@ -31,8 +31,9 @@
 #include <cosmictiger/core/terminal.hpp>
 #if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/gravity/fmm_order.hpp>
-#include <cosmictiger/gravity/nitadori/mesh_size.hpp>
 #include <cosmictiger/gravity/opening_schedule.hpp>
+#include <cosmictiger/gravity/pm/geometry.hpp>
+#include <cosmictiger/gravity/pmmm/mesh_size.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #endif
 #include <cosmictiger/io/checkpoint.hpp>
@@ -340,7 +341,10 @@ void setOptions(Options const& opts) {
     }
     if ((opts.gravity.method == "fmm" && !gravity::kBuildHasFmm) ||
         (opts.gravity.method == "pmmm" && !gravity::kBuildHasPmmm) ||
+        (opts.gravity.method == "pm" && !gravity::kBuildHasPm) ||
+        (opts.gravity.method == "p3m" && !gravity::kBuildHasP3m) ||
         (opts.gravity.method != "fmm" && opts.gravity.method != "pmmm" &&
+            opts.gravity.method != "pm" && opts.gravity.method != "p3m" &&
             !(opts.gravity.method == "none" && !opts.gravity.enabled))) {
         throw std::invalid_argument("gravity.method.far is unavailable in this executable");
     }
@@ -348,6 +352,12 @@ void setOptions(Options const& opts) {
         !((opts.gravity.pmmmNearMethod == "pp" && gravity::kBuildHasPmmmNearPp) ||
             (opts.gravity.pmmmNearMethod == "fmm" && gravity::kBuildHasPmmmNearFmm))) {
         throw std::invalid_argument("gravity.method.near is unavailable in this executable");
+    }
+    if (usesSplitParticleMesh(opts.gravity) &&
+        !((opts.gravity.pmmmNearMethod == "pp" && gravity::kBuildHasP3mPp) ||
+            (opts.gravity.pmmmNearMethod == "fmm" && gravity::kBuildHasP3mFmm))) {
+        throw std::invalid_argument(
+            "gravity.method.near selects a P3M short solver absent from this executable");
     }
     if (!((opts.run.timeIntegrator == "traditional" && integration::kBuildHasTraditional) ||
             (opts.run.timeIntegrator == "hierarchical" && integration::kBuildHasHierarchical) ||
@@ -415,6 +425,9 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"build.pmmm", gravity::kBuildHasPmmm},
         {"build.pmmmNearPp", gravity::kBuildHasPmmmNearPp},
         {"build.pmmmNearFmm", gravity::kBuildHasPmmmNearFmm},
+        {"build.pm", gravity::kBuildHasPm},
+        {"build.p3mPp", gravity::kBuildHasP3mPp},
+        {"build.p3mFmm", gravity::kBuildHasP3mFmm},
         {"build.hopkins", bool(COSMICTIGER_ENABLE_HOPKINS)},
         {"build.chemistry", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY)},
         {"build.starFormation", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION)},
@@ -502,6 +515,12 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"gravity.pmmmNearWidth", options.gravity.pmmmNearWidth},
         {"gravity.method.near", options.gravity.pmmmNearMethod},
         {"gravity.pmmmBatchParticles", options.gravity.pmmmBatchParticles},
+        {"gravity.cloud", options.gravity.cloud},
+        {"gravity.p3mSplitCells", options.gravity.p3mSplitCells},
+        {"gravity.p3mCutoff", options.gravity.p3mCutoff},
+        {"gravity.p3mSplitRadius", options.gravity.p3mSplitRadius},
+        {"gravity.p3mCutoffRadius", options.gravity.p3mCutoffRadius},
+        {"gravity.p3mMeshSize", options.gravity.p3mMeshSize},
         {"gravity.expansionDegree",
             options.gravity.fmmOrder > 0 ? options.gravity.fmmOrder - 1 : 0},
         {"gravity.kernelFamily", options.gravity.kernelFamily},
@@ -833,10 +852,19 @@ bool processOptions(int argc, char* argv[]) {
         "use CUDA for gravitational forces");
     gravityOpts.add_options()("gravity.method.far",
         po::value<std::string>(&opts.gravity.method)->default_value(""),
-        "far-field gravity: fmm or pmmm; required when both are compiled")("gravity.method.near",
+        "far-field gravity: fmm, pmmm, pm, or p3m; required when several are compiled")(
+        "gravity.method.near",
         po::value<std::string>(&opts.gravity.pmmmNearMethod)->default_value(""),
-        "PMMM near field: pp or fmm; required when both are compiled")("gravity.expansionDegree",
-        po::value<int>(&expansionDegree)->default_value(expansionDegree),
+        "PMMM near field or P3M short solver: pp or fmm; required when both are compiled")(
+        "gravity.cloud", po::value<std::string>(&opts.gravity.cloud)->default_value("pcs"),
+        "pm/p3m mass assignment and force interpolation cloud: ngp, cic, tsc, or pcs")(
+        "gravity.p3mSplitCells",
+        po::value<double>(&opts.gravity.p3mSplitCells)->default_value(1.25),
+        "p3m Gaussian split radius r_s in mesh cells; the long Green function carries "
+        "exp(-k^2 r_s^2)")("gravity.p3mCutoff",
+        po::value<double>(&opts.gravity.p3mCutoff)->default_value(4.5),
+        "p3m short-range pair cutoff in units of r_s; pairs beyond it use only the mesh force")(
+        "gravity.expansionDegree", po::value<int>(&expansionDegree)->default_value(expansionDegree),
         "maximum degree of the potential expansion; must be in the compiled degree range")(
         "gravity.enabled",
         po::value<bool>(&opts.gravity.enabled)->default_value(gravity::kBuildHasGravity),
@@ -847,17 +875,17 @@ bool processOptions(int argc, char* argv[]) {
         po::value<int>(&opts.gravity.errorSampleSize)->default_value(100),
         "number of evenly spaced particles for gravity error checks (capped at particle count)")(
         "gravity.meshSize", po::value<int>(&opts.gravity.meshSize)->default_value(0),
-        "full-particle PMMM cells per axis, a power of two; required when PMMM is selected")(
-        "gravity.pmmmCoarseMeshSize",
+        "mesh cells per axis: a power of two for PMMM, at least max(2, cloud points) for "
+        "pm/p3m; required by every mesh solver")("gravity.pmmmCoarseMeshSize",
         po::value<int>(&opts.gravity.pmmmCoarseMeshSize)->default_value(0),
         "coarsest PMMM stage mesh and particle-domain cut granularity, a power of two; "
         "0 selects meshSize/8")("gravity.pmmmBatchParticles",
         po::value<int>(&opts.gravity.pmmmBatchParticles)->default_value(4096),
         "target sink particles per ready PMMM batch; oversized cells run alone")(
         "gravity.pmmmNearWidth", po::value<int>(&opts.gravity.pmmmNearWidth)->default_value(2),
-        "PMMM neighbor cube radius in cells: 1 through 4")("gravity.openingAngle",
+        "PMMM/P3M neighbor cube radius in search-mesh cells: 1 through 4")("gravity.openingAngle",
         po::value<double>(&opts.gravity.openingAngle)->default_value(0.8),
-        "global FMM opening angle; PMMM derives sqrt(3)/(pmmmNearWidth+1)")(
+        "global FMM and FMM-PM opening angle; PMMM derives sqrt(3)/(pmmmNearWidth+1)")(
         "gravity.openingSchedule",
         po::value<std::string>(&opts.gravity.openingSchedule)->default_value(""),
         "global cosmological FMM z:theta pairs, comma separated; none selects a constant angle")(
@@ -1066,10 +1094,13 @@ bool processOptions(int argc, char* argv[]) {
                   << (integration::kBuildHasHierarchical ? " hierarchical" : "")
                   << (integration::kBuildHasGlobal ? " global" : "") << "\n"
                   << "  Gravity solvers:" << (gravity::kBuildHasFmm ? " fmm" : "")
-                  << (gravity::kBuildHasPmmm ? " pmmm" : "")
+                  << (gravity::kBuildHasPmmm ? " pmmm" : "") << (gravity::kBuildHasPm ? " pm" : "")
+                  << (gravity::kBuildHasP3m ? " p3m" : "")
                   << (gravity::kBuildHasGravity ? "" : " none") << "\n"
                   << "  PMMM near solvers:" << (gravity::kBuildHasPmmmNearPp ? " pp" : "")
-                  << (gravity::kBuildHasPmmmNearFmm ? " fmm" : "") << "\n";
+                  << (gravity::kBuildHasPmmmNearFmm ? " fmm" : "") << "\n"
+                  << "  P3M short solvers:" << (gravity::kBuildHasP3mPp ? " pp" : "")
+                  << (gravity::kBuildHasP3mFmm ? " fmm" : "") << "\n";
         std::cout << "  Hopkins hydrodynamics: "
                   << (COSMICTIGER_ENABLE_HOPKINS ? "enabled" : "disabled") << "\n";
         std::cout << "  Equilibrium cooling: "
@@ -1201,7 +1232,8 @@ bool processOptions(int argc, char* argv[]) {
     bool const checkpointSelectionNeeded = !isExplicit("run.timeIntegrator") ||
         (gravity::kBuildHasGravity &&
             (!isExplicit("gravity.method.far") || !isExplicit("gravity.expansionDegree") ||
-                (opts.gravity.method == "pmmm" && !isExplicit("gravity.method.near"))));
+                ((opts.gravity.method == "pmmm" || opts.gravity.method == "p3m") &&
+                    !isExplicit("gravity.method.near"))));
     if (opts.checkpoint.readIndex >= 0 && checkpointSelectionNeeded) {
         checkpointSelection = readCheckpointSelection(
             opts.run.test.empty() ? opts.output.directory : "", opts.checkpoint.readIndex);
@@ -1219,17 +1251,22 @@ bool processOptions(int argc, char* argv[]) {
         }
     }
     if (opts.gravity.method.empty()) {
-        if (opts.gravity.enabled && gravity::kBuildHasFmm && gravity::kBuildHasPmmm) {
+        int const compiledFarSolvers = int(gravity::kBuildHasFmm) + int(gravity::kBuildHasPmmm) +
+            int(gravity::kBuildHasPm) + int(gravity::kBuildHasP3m);
+        if (opts.gravity.enabled && compiledFarSolvers > 1) {
             THROW_ERROR("Multiple far-field gravity algorithms are compiled; select "
-                        "--gravity.method.far=fmm or --gravity.method.far=pmmm\n");
+                        "--gravity.method.far=fmm, pmmm, pm, or p3m\n");
         }
         opts.gravity.method = gravity::kBuildGravityMethod;
     }
     if ((opts.gravity.method == "fmm" && !gravity::kBuildHasFmm) ||
         (opts.gravity.method == "pmmm" && !gravity::kBuildHasPmmm) ||
+        (opts.gravity.method == "pm" && !gravity::kBuildHasPm) ||
+        (opts.gravity.method == "p3m" && !gravity::kBuildHasP3m) ||
         (opts.gravity.method != "fmm" && opts.gravity.method != "pmmm" &&
+            opts.gravity.method != "pm" && opts.gravity.method != "p3m" &&
             !(opts.gravity.method == "none" && !opts.gravity.enabled))) {
-        THROW_ERROR("gravity.method.far must select a compiled fmm or pmmm solver\n");
+        THROW_ERROR("gravity.method.far must select a compiled fmm, pmmm, pm, or p3m solver\n");
     }
     if (usesMeshGravity(opts.gravity)) {
         if (opts.gravity.pmmmNearMethod.empty()) {
@@ -1244,9 +1281,22 @@ bool processOptions(int argc, char* argv[]) {
                 (opts.gravity.pmmmNearMethod == "fmm" && gravity::kBuildHasPmmmNearFmm))) {
             THROW_ERROR("gravity.method.near must select a compiled pp or fmm PMMM near solver\n");
         }
+    } else if (usesSplitParticleMesh(opts.gravity)) {
+        if (opts.gravity.pmmmNearMethod.empty()) {
+            if (opts.gravity.enabled && gravity::kBuildHasP3mPp && gravity::kBuildHasP3mFmm) {
+                THROW_ERROR("Both P3M short solvers are compiled; select "
+                            "--gravity.method.near=pp (PP-PM) or --gravity.method.near=fmm "
+                            "(FMM-PM)\n");
+            }
+            opts.gravity.pmmmNearMethod = gravity::kBuildP3mNearMethod;
+        }
+        if (!((opts.gravity.pmmmNearMethod == "pp" && gravity::kBuildHasP3mPp) ||
+                (opts.gravity.pmmmNearMethod == "fmm" && gravity::kBuildHasP3mFmm))) {
+            THROW_ERROR("gravity.method.near must select a compiled pp or fmm P3M short solver\n");
+        }
     } else {
         if (isExplicit("gravity.method.near")) {
-            THROW_ERROR("gravity.method.near applies only when gravity.method.far=pmmm\n");
+            THROW_ERROR("gravity.method.near applies only when gravity.method.far=pmmm or p3m\n");
         }
         opts.gravity.pmmmNearMethod = "none";
     }
@@ -1299,6 +1349,77 @@ bool processOptions(int argc, char* argv[]) {
             THROW_ERROR("gravity.meshSize cubed exceeds mesh indexing/allocation limits\n");
         }
     }
+    if (opts.gravity.enabled && usesParticleMesh(opts.gravity)) {
+        int const cloudPoints = [&]() {
+            try {
+                return pm::cloudOrder(opts.gravity.cloud);
+            } catch (std::exception const&) {
+                THROW_ERROR("gravity.cloud must be ngp, cic, tsc, or pcs\n");
+            }
+            return 0;
+        }();
+        if (opts.gravity.meshSize < std::max(2, cloudPoints)) {
+            THROW_ERROR("gravity.meshSize must be at least max(2, cloud points) for pm/p3m\n");
+        }
+        size_t const meshSize = static_cast<size_t>(opts.gravity.meshSize);
+        size_t const maximumCells = std::min(size_t(std::numeric_limits<ptrdiff_t>::max()),
+            std::numeric_limits<size_t>::max() / (8 * sizeof(float)));
+        if (meshSize > maximumCells / meshSize / meshSize) {
+            THROW_ERROR("gravity.meshSize cubed exceeds mesh indexing/allocation limits\n");
+        }
+        if (opts.hydro.enabled && opts.hydro.method != "sph") {
+            THROW_ERROR("Hopkins MFM/MFV ties its tick clock to a fixed base interval; "
+                        "gravity.method.far=pm/p3m requires hydro.method=sph or "
+                        "hydro.enabled=false\n");
+        }
+        if (usesSplitParticleMesh(opts.gravity)) {
+            if (!detail::isPositiveFloatOption(opts.gravity.p3mSplitCells) ||
+                !detail::isPositiveFloatOption(opts.gravity.p3mCutoff)) {
+                THROW_ERROR("gravity.p3mSplitCells and gravity.p3mCutoff must be finite and "
+                            "positive\n");
+            }
+            opts.gravity.p3mSplitRadius = pm::splitRadius(opts.gravity);
+            opts.gravity.p3mCutoffRadius = pm::cutoffRadius(opts.gravity);
+            if (opts.gravity.p3mCutoffRadius >= 0.5) {
+                THROW_ERROR("The P3M short cutoff p3mCutoff*p3mSplitCells/meshSize must stay "
+                            "below half the periodic box\n");
+            }
+            opts.gravity.p3mMeshSize = pm::shortMeshSize(opts.gravity);
+            if (opts.gravity.p3mMeshSize < 2 * opts.gravity.pmmmNearWidth + 1) {
+                THROW_ERROR("The P3M search mesh (%i cells) cannot hold distinct periodic "
+                            "neighbor cells for gravity.pmmmNearWidth=%i; reduce the cutoff "
+                            "or the near width\n",
+                    opts.gravity.p3mMeshSize, opts.gravity.pmmmNearWidth);
+            }
+            int const minimumCoarse = pmmm::detail::minimumMeshSize(opts.gravity.pmmmNearWidth);
+            opts.gravity.pmmmCoarseMeshSize =
+                pmmm::detail::resolvedCoarseMeshSize(opts.gravity.p3mMeshSize,
+                    opts.gravity.pmmmCoarseMeshSize, opts.gravity.pmmmNearWidth);
+            if (!pmmm::detail::isPowerOfTwo(opts.gravity.pmmmCoarseMeshSize) ||
+                opts.gravity.pmmmCoarseMeshSize < minimumCoarse ||
+                opts.gravity.pmmmCoarseMeshSize > opts.gravity.p3mMeshSize) {
+                THROW_ERROR("gravity.pmmmCoarseMeshSize must be a power of two between the "
+                            "smallest power of two at least 2*gravity.pmmmNearWidth+1 and the "
+                            "P3M search mesh\n");
+            }
+            if (!pmmm::detail::isPowerOfTwo(uint64_t(hpxSize()))) {
+                THROW_ERROR("gravity.method.far=p3m requires a power-of-two locality count; "
+                            "%i localities were started\n",
+                    hpxSize());
+            }
+            int const localityMinimum = pmmm::detail::minimumCoarseMeshSizeForLocalities(hpxSize());
+            if (opts.gravity.pmmmCoarseMeshSize < localityMinimum) {
+                THROW_ERROR("gravity.pmmmCoarseMeshSize=%i cannot be cut among %i localities; "
+                            "the coarse mesh needs at least %i cells per axis\n",
+                    opts.gravity.pmmmCoarseMeshSize, hpxSize(), localityMinimum);
+            }
+        } else {
+            opts.gravity.p3mSplitRadius = 0.0;
+            opts.gravity.p3mCutoffRadius = 0.0;
+            opts.gravity.p3mMeshSize = 0;
+            opts.gravity.pmmmCoarseMeshSize = 0;
+        }
+    }
 #endif
     if (opts.gravity.errorInterval > 0 && !opts.gravity.enabled) {
         THROW_ERROR("gravity.errorInterval requires gravity.enabled=true\n");
@@ -1311,7 +1432,8 @@ bool processOptions(int argc, char* argv[]) {
         }
     }
     if (!openingSchedule.empty() &&
-        (usesMeshGravity(opts.gravity) || opts.run.scenario != "cosmology")) {
+        (usesMeshGravity(opts.gravity) || usesParticleMesh(opts.gravity) ||
+            opts.run.scenario != "cosmology")) {
         THROW_ERROR("gravity.openingSchedule requires gravity.method.far=fmm and "
                     "run.scenario=cosmology\n");
     }
@@ -1648,6 +1770,18 @@ bool processOptions(int argc, char* argv[]) {
         }
     }
 
+    if (opts.gravity.enabled && usesParticleMesh(opts.gravity) &&
+        opts.run.timeIntegrator == "global") {
+        THROW_ERROR("gravity.method.far=pm/p3m currently supports run.timeIntegrator=traditional "
+                    "or hierarchical inside the outer PM interval\n");
+    }
+    if (opts.gravity.enabled && usesParticleMesh(opts.gravity) && opts.hydro.enabled &&
+        opts.run.hierarchicalGravity) {
+        // Hierarchical hydro defers the gas opening kick to the hydro step,
+        // which does not apply the long half-kicks of an outer PM boundary.
+        THROW_ERROR(
+            "gravity.method.far=pm/p3m with hydro requires run.timeIntegrator=traditional\n");
+    }
     detail::validateCudaBackends(opts);
     detail::validateHydroMethod(opts);
     detail::validateCooling(opts);
@@ -1861,6 +1995,11 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("PMMM requires the normalized gravity.supportRadius to be no larger than "
                     "gravity.pmmmNearWidth/gravity.meshSize\n");
     }
+    if (opts.gravity.enabled && usesSplitParticleMesh(opts.gravity) &&
+        opts.gravity.supportRadius > opts.gravity.p3mCutoffRadius) {
+        THROW_ERROR("P3M requires the normalized gravity.supportRadius to be no larger than the "
+                    "short cutoff p3mCutoff*p3mSplitCells/meshSize\n");
+    }
     detail::displayOptions = true;
     if (hpxRank() == 0 && opts.run.test.empty()) {
         PRINT(
@@ -1885,6 +2024,12 @@ bool processOptions(int argc, char* argv[]) {
     if (usesMeshGravity(opts.gravity)) {
         // Scenario defaults must not replace the PMMM geometry-derived angle.
         opts.gravity.openingAngle = std::sqrt(3.0) / (opts.gravity.pmmmNearWidth + 1);
+    } else if (usesSplitParticleMesh(opts.gravity)) {
+        // The screened short-range acceptance scales as theta^order; 0.35 keeps
+        // the degree-five short force near 1e-4 unless the user chooses otherwise.
+        if (vm.count("gravity.openingAngle") == 0 || vm["gravity.openingAngle"].defaulted()) {
+            opts.gravity.openingAngle = 0.35;
+        }
     } else {
         opts.gravity.openingAngle = gravity::openingScheduleInitialTheta(
             openingSchedule, opts.cosmology.startRedshift, opts.gravity.openingAngle);

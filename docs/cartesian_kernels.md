@@ -1,11 +1,11 @@
-# Cartesian gravity kernels
+# Trace-free Cartesian gravity kernels
 
-`cosmictiger::gravity::cartesian::Multipole<Real, order>` stores symmetric
-trace-free moments, and `cartesian::Expansion<Real, order>` stores local
+`cosmictiger::gravity::cartesian::tracefree::Multipole<Real, order>` stores symmetric
+trace-free moments, and `cartesian::tracefree::Expansion<Real, order>` stores local
 coefficients and a Laplacian. Their second template argument is the application
 internal FMM order: the multipole degree is `order - 2`, and the local degree is
 `order - 1`. The public potential expansion degree is `order - 1`.
-Internal `cartesian::detail::Coefficients<Real, degree, withTrace>`
+Internal `cartesian::tracefree::detail::Coefficients<Real, degree, withTrace>`
 storage and generated operator specializations retain degree-based arguments.
 The same namespace contains the generated operators `P2M`, `M2M`, `M2L`, `M2P`,
 `P2L`, `L2L`, and `L2P`; `M2LDerivatives` contracts precomputed harmonic derivatives.
@@ -46,7 +46,7 @@ performance accounting. See [the representation comparison](generated_fmm.md)
 for the weighted M2L costs including geometry.
 
 CUDA L2L has a generated cooperative schedule in `tools/cartesian/cuda.py`.
-It emits one fully specialized `cartesian::detail::L2LWarp<L, true>` for the requested local
+It emits one fully specialized `cartesian::tracefree::detail::L2LWarp<L, true>` for the requested local
 degree `L` in 2 through 11; the schedule table, the per-phase target table, the
 basis register count, the lane-group widths and the phase code are compile-time
 constants of that degree. All 32 lanes translate one expansion using aligned
@@ -117,14 +117,14 @@ cmake --build build --target generate_fmm_kernels
 ```
 
 The generator defaults to the source header directory and uses the repository's
-clang-format configuration. It emits both Cartesian and spherical families for
-FMM orders 3 through 9: one specialized kernel class per degree for local
-degrees 2 through 8 (`fmm_kernels/cartesian_config.hpp` records the available range as
+clang-format configuration. It emits full symmetric Cartesian, trace-free
+Cartesian, and spherical families for FMM orders 3 through 9: one specialized kernel class per degree for local
+degrees 2 through 8 (`kernels/cartesian_tracefree_config.hpp` records the available range as
 `kMinLocalDegree`/`kMaxLocalDegree`) and one `ewaldCorrectionDerivatives` overload
-per order in `fmm_kernels/cartesian_ewald_kernels.hpp`. The Cartesian free-space
-operators are in `fmm_kernels/cartesian_m2l.hpp` and
-`fmm_kernels/cartesian_kernels.hpp`; spherical operators are in
-`fmm_kernels/spherical_kernels.hpp` and `fmm_kernels/spherical_ewald_kernels.hpp`.
+per order in `kernels/cartesian_tracefree_ewald_kernels.hpp`. The Cartesian free-space
+operators are in `kernels/cartesian_tracefree_m2l.hpp` and
+`kernels/cartesian_tracefree_kernels.hpp`; spherical operators are in
+`kernels/spherical_kernels.hpp` and `kernels/spherical_ewald_kernels.hpp`.
 `operation_counts.json` accompanies the headers.
 The same Python entry point uses `tools/cartesian/ewald.py` for the Ewald
 derivatives, so generation does not require compiling a separate C++ tool.

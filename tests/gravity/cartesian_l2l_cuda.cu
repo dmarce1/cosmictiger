@@ -20,15 +20,15 @@
 
 #include <cuda_runtime.h>
 
-#include <cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <tests/cuda_test.hpp>
 
 namespace detail {
 
 template <int order>
-using LocalExpansion = cosmictiger::gravity::cartesian::Expansion<float, order>;
+using LocalExpansion = cosmictiger::gravity::cartesian::tracefree::Expansion<float, order>;
 constexpr int kLanes = 32;
 constexpr int kMaxWarpsPerBlock = 4;
 constexpr int kValidationSamples = 16;
@@ -194,7 +194,7 @@ __device__ LocalExpansion<order> warpTranslate(
     LocalExpansion<order> const& source, Vector3<float> position, bool doPhi) {
     LocalExpansion<order> result{};
     auto const scaled = fmmScaleDisplacement(position);
-    cosmictiger::gravity::cartesian::detail::detail::L2LWarp<order - 1, true>::translate(
+    cosmictiger::gravity::cartesian::tracefree::detail::detail::L2LWarp<order - 1, true>::translate(
         result, source, scaled[0], scaled[1], scaled[2], doPhi);
     return result;
 }
@@ -244,7 +244,7 @@ __global__ void validateWarp(Fixture<order> const* input, LocalExpansion<order>*
 template <int order>
 __device__ void warpTranslateInto(LocalExpansion<order>& target,
     LocalExpansion<order> const& source, Vector3<float> const& position, bool doPhi) {
-    cosmictiger::gravity::cartesian::L2LWarpInto(
+    cosmictiger::gravity::cartesian::tracefree::L2LWarpInto(
         &target[0], source, fmmScaleDisplacement(position), doPhi);
 }
 
@@ -373,7 +373,7 @@ void validate(Fixture<order> const* deviceInput, std::vector<Fixture<order>> con
                     if (!doPhi) {
                         translated[0] = scalar[0];
                     }
-                    cosmictiger::gravity::cartesian::L2L(
+                    cosmictiger::gravity::cartesian::tracefree::L2L(
                         translated, scalar, fmmScaleDisplacement(shift), doPhi);
                     scalar = translated;
                 }

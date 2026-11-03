@@ -12,6 +12,6 @@
 #define COSMICTIGER_FMM_INSTANCE_ORDER @FMM_INSTANCE_ORDER@
 
 #if COSMICTIGER_ENABLE_FMM
-#include <cosmictiger/gravity/dehnen/periodic_cuda.hpp>
+#include <cosmictiger/gravity/global_fmm/periodic_cuda.hpp>
 #endif
 #include <cosmictiger/gravity/kick_cuda_instances.hpp>

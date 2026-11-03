@@ -51,11 +51,11 @@ order-dependent code is instantiated per internal order from templates:
   `FmmMultiPos<order>` (tree nodes point at its order-agnostic
   `MultipolePosition` header), and the max-size transport buffers
   `ExpansionBuffer` / `MultipoleBuffer` used by order-agnostic interfaces.
-- `cosmictiger/gravity/fmm_kernels/cartesian_operators.hpp`: operator wrappers that deduce the degrees from
+- `cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp`: operator wrappers that deduce the degrees from
   their tensor arguments over the generated STF kernels.
 - Generated code: `tools/generate_fmm.py` emits one fully specialized
   kernel class per degree for local degrees 2 through 8 and one Ewald derivative
-  overload per order into the checked-in `cosmictiger/gravity/fmm_kernels/`
+  overload per order into the checked-in `cosmictiger/gravity/kernels/`
   headers. `cmake --build build --target generate_fmm_kernels` explicitly
   regenerates them; ordinary builds do not rewrite generated headers.
   The same entry point uses `tools/cartesian/ewald.py` for Cartesian Ewald derivatives.

@@ -39,16 +39,24 @@
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/cosmology/initialize.hpp>
 #if COSMICTIGER_ENABLE_FMM
-#include <cosmictiger/gravity/dehnen/distributed_tree.hpp>
-#include <cosmictiger/gravity/dehnen/execution.hpp>
+#include <cosmictiger/gravity/global_fmm/distributed_tree.hpp>
+#include <cosmictiger/gravity/global_fmm/execution.hpp>
 #endif
 #include <cosmictiger/gravity/error.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
-#include <cosmictiger/gravity/nitadori/kick.hpp>
-#include <cosmictiger/gravity/nitadori/solver.hpp>
+#include <cosmictiger/gravity/pmmm/kick.hpp>
+#include <cosmictiger/gravity/pmmm/solver.hpp>
+#endif
+#if COSMICTIGER_WITH_PARTICLE_MESH
+#include <cosmictiger/gravity/pm/interval.hpp>
+#include <cosmictiger/gravity/pm/kick.hpp>
+#include <cosmictiger/gravity/pm/solver.hpp>
+#endif
+#if COSMICTIGER_WITH_P3M
+#include <cosmictiger/gravity/p3m/solver.hpp>
 #endif
 #include <cosmictiger/gravity/opening_schedule.hpp>
 #endif
@@ -271,11 +279,13 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
 SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
     EnergiesT* energies, bool verbose, int uniformMinimumRung, bool closingOnly,
     double previousTimestep, double maximumGlobalTimestep, bool predictorPrepared,
-    std::function<double()> const& joinGravity) {
+    std::function<double()> const& joinGravity, double closingTimeStepScale) {
     profile::ScopedPhase profilePhase("hydro.sph");
     bool const globalTimestep = maximumGlobalTimestep > 0.0;
     double selectedTimestep = maximumGlobalTimestep;
     double const closingTimestep = globalTimestep ? previousTimestep : -1.0;
+    // A new outer PM interval closes the gas half-steps with the previous base.
+    double const closingScale = closingTimeStepScale > 0.0 ? closingTimeStepScale : t0;
     float inverseSoundTimestep;
     float inverseViscosityTimestep;
     float inverseAccelerationTimestep;
@@ -285,7 +295,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     }
     if (!predictorPrepared) {
         profile::ScopedPhase profilePhase("hydro.predictor");
-        sphParticlesApplyUpdates(minrung, 0, t0, tau, closingTimestep);
+        sphParticlesApplyUpdates(minrung, 0, closingScale, tau, closingTimestep);
     }
 #if COSMICTIGER_ENABLE_CHEMISTRY
     // The combined GADGET-4 source owns cooling when star formation is enabled.
@@ -463,7 +473,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         // after density convergence.
         {
             profile::ScopedPhase profilePhase("hydro.viscosityTarget");
-            sphParticlesUpdateTargetAlpha(minrung, t0, tau, closingTimestep);
+            sphParticlesUpdateTargetAlpha(minrung, closingScale, tau, closingTimestep);
         }
     }
     runParameters.phase = 0;
@@ -502,13 +512,13 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
 
     {
         profile::ScopedPhase profilePhase("hydro.corrector");
-        sphParticlesApplyUpdates(minrung, 1, t0, tau, closingTimestep);
+        sphParticlesApplyUpdates(minrung, 1, closingScale, tau, closingTimestep);
     }
 #if COSMICTIGER_ENABLE_CHEMISTRY
     if (chemistry && tau > 0.0) {
         // Apply the full completed source interval after the hydro corrector.
         profile::ScopedPhase profilePhase("chemistry.close");
-        energies->heating += sphChemistryClose(minrung, scale, adot, t0, closingTimestep);
+        energies->heating += sphChemistryClose(minrung, scale, adot, closingScale, closingTimestep);
     }
 #endif
 
@@ -516,7 +526,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     if (getOptions().starFormation.enabled && tau > 0.0) {
         StarFormationUpdate const update = [&]() {
             profile::ScopedPhase profilePhase("starFormation.close");
-            return starFormationClose(minrung, scale, adot, t0, closingTimestep);
+            return starFormationClose(minrung, scale, adot, closingScale, closingTimestep);
         }();
         energies->heating += update.heating;
         maxRung = std::max(maxRung, update.maximumNewStarRung);
@@ -832,10 +842,13 @@ ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, doub
 
 ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative, double time,
     double baseTimestep, double theta, bool firstCall, bool fullEvaluation, EnergiesT& energies,
-    int gravityErrorStep, bool closingOnly, double previousTimestep, double maximumGlobalTimestep) {
+    int gravityErrorStep, bool closingOnly, double previousTimestep, double maximumGlobalTimestep,
+    MeshKickSchedule const& schedule) {
     ForceStepResult result{};
     bool const global = maximumGlobalTimestep > 0.0;
     bool const meshGravity = getOptions().gravity.enabled && usesMeshGravity(getOptions().gravity);
+    bool const particleMesh =
+        getOptions().gravity.enabled && usesParticleMesh(getOptions().gravity);
 #if COSMICTIGER_WITH_SPH
     bool sphAdvanced = false;
     SphRunReturn preparedSphResult;
@@ -920,8 +933,77 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
             kickTime += timer.read();
         }
 #endif
+#if COSMICTIGER_WITH_PARTICLE_MESH
+        if (particleMesh) {
+            // The mesh force was solved and stored at the outer boundary. This
+            // pass evaluates the short force (none for pure PM), closes the
+            // previous substep, applies the long half-kicks requested by the
+            // schedule and opens the next substep on the inner rung clock.
+            if (global) {
+                THROW_ERROR("The global inner integrator is not available for pm/p3m\n");
+            }
+            Timer timer;
+            timer.start();
+            profile::profileBegin("domains");
+            {
+                profile::ScopedPhase phase("domains.migrate");
+                domainsBegin(0);
+            }
+            {
+                profile::ScopedPhase phase("domains.install");
+                domainsEnd();
+            }
+            profile::profileEnd();
+            timer.stop();
+            domainTime += timer.read();
+            timer.reset();
+            timer.start();
+            double maximumTimestep = std::ldexp(baseTimestep, -getOptions().run.minRung);
+            if (getOptions().run.scenario == "cosmology") {
+                maximumTimestep = std::min(maximumTimestep,
+                    cosmology::expansionTimestep(
+                        scale, scaleDerivative / scale, cosmosD2adt2(scale), kScaleTimestep));
+            }
+            KickParameters parameters;
+            parameters.htime = false;
+            parameters.refreshGasForces =
+                getOptions().hydro.enabled && getOptions().hydro.method != "sph";
+            parameters.ascending = parameters.descending = parameters.top = true;
+            parameters.minRung = minRung;
+            parameters.t0 = baseTimestep;
+            parameters.a = scale;
+            parameters.eta = getOptions().gravity.timestepEta;
+            parameters.gravitySupportRadius = getOptions().gravity.supportRadius;
+            parameters.gm = getOptions().gravity.gm;
+            parameters.sign = getOptions().run.scenario == "glass" ? -1.0 : 1.0;
+            parameters.firstCall = firstCall;
+            parameters.saveForce = getOptions().analysis.saveForce;
+            parameters.gpu = getOptions().gravity.cuda;
+            parameters.doPhi = true;
+            parameters.maxDt = maximumTimestep;
+            parameters.closingBaseTimestep = schedule.closingBaseTimestep;
+            parameters.longCloseTimestep = schedule.longCloseTimestep;
+            parameters.longOpenTimestep = closingOnly ? 0.0 : schedule.longOpenTimestep;
+            if (usesSplitParticleMesh(getOptions().gravity)) {
+#if COSMICTIGER_WITH_P3M
+                profile::profileBegin("p3mKick");
+                result = p3mKick(parameters);
+                profile::profileEnd();
+#else
+                THROW_ERROR("P3M is not compiled into this executable\n");
+#endif
+            } else {
+                profile::profileBegin("pmKick");
+                result = particleMeshZeroFieldKick(parameters);
+                profile::profileEnd();
+            }
+            result.pot += schedule.longPotentialEnergy;
+            timer.stop();
+            kickTime += timer.read();
+        }
+#endif
 #if COSMICTIGER_ENABLE_FMM
-        if (!meshGravity) {
+        if (!meshGravity && !particleMesh) {
 #if COSMICTIGER_WITH_SPH
             // Distributed CUDA staging appends remote sources to the shared
             // particle arrays. Hydro must not read them during that resize.
@@ -1014,7 +1096,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
                 sphStep1(activeRung);
                 hydro = sphStep2(activeRung, scale, time, baseTimestep, 1, scaleDerivative,
                     &energies, true, -1, closingOnly, previousTimestep,
-                    global ? result.minimumTimestep : 0.0);
+                    global ? result.minimumTimestep : 0.0, false, {}, schedule.closingBaseTimestep);
             }
             profile::profileEnd();
             gravity.maxRung = std::max(gravity.maxRung, hydro.maximumRung);
@@ -1086,7 +1168,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
         }
 #endif
 #if COSMICTIGER_ENABLE_FMM
-        if (!meshGravity) {
+        if (!meshGravity && !particleMesh) {
             profile::ScopedPhase phase("kick.finishGlobal");
             gravityFinishGlobalKick(result.minimumTimestep);
         }
@@ -1133,7 +1215,8 @@ void driftRungEverywhere(
 
 ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, double adot,
     double tau, double t0, double theta, EnergiesT* energies, int minrung0, bool doPhi,
-    hpx::future<void>* lcFut, bool nocrop, double drag, int gravityErrorStep, bool closingOnly) {
+    hpx::future<void>* lcFut, bool nocrop, double drag, int gravityErrorStep, bool closingOnly,
+    MeshKickSchedule const& schedule) {
     // A terminal energy evaluation consumes only the outstanding closing
     // ladder. The saved checkpoint retains the original staggered momenta.
     nocrop = nocrop || closingOnly || getOptions().hydro.enabled;
@@ -1150,6 +1233,8 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
 #endif
     EnergiesT const hydroClosed = *energies;
     int descendedDepth = minrung;
+    bool const particleMesh = selfGravity && usesParticleMesh(getOptions().gravity);
+    bool const treeGravity = selfGravity && !meshGravity && !particleMesh;
     Timer tm;
     KickReturn kr;
     //	minrung = std::max(minrung, 1);
@@ -1246,7 +1331,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         tm.reset();
         tm.start();
 #if COSMICTIGER_ENABLE_FMM
-        if (selfGravity && !meshGravity) {
+        if (treeGravity) {
             TreeCreateParameters tparams(levels[li], theta, 0.f);
             profile::profileBegin("treeCreate");
             treeCreate(tparams);
@@ -1288,6 +1373,13 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
                 cosmology::expansionTimestep(scale, adot, cosmosD2adt2(scale), kScaleTimestep);
         }
         kparams.theta = theta;
+        // Every ascending level closes a substep of the previous outer interval;
+        // only the top level applies the long half-kicks of the boundary.
+        kparams.closingBaseTimestep = schedule.closingBaseTimestep;
+        if (kparams.top) {
+            kparams.longCloseTimestep = schedule.longCloseTimestep;
+            kparams.longOpenTimestep = closingOnly ? 0.0 : schedule.longOpenTimestep;
+        }
         ExpansionBuffer l;
         l.zero();
         Vector3<Position> pos;
@@ -1318,8 +1410,28 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             profile::profileEnd();
         }
 #endif
+#if COSMICTIGER_WITH_PARTICLE_MESH
+        if (particleMesh) {
+            if (usesSplitParticleMesh(getOptions().gravity)) {
+#if COSMICTIGER_WITH_P3M
+                profile::profileBegin("p3mKick");
+                thisKr = p3mKick(kparams);
+                profile::profileEnd();
+#else
+                THROW_ERROR("P3M is not compiled into this executable\n");
+#endif
+            } else {
+                profile::profileBegin("pmKick");
+                thisKr = particleMeshZeroFieldKick(kparams);
+                profile::profileEnd();
+            }
+            if (top) {
+                thisKr.pot += schedule.longPotentialEnergy;
+            }
+        }
+#endif
 #if COSMICTIGER_ENABLE_FMM
-        if (selfGravity && !meshGravity) {
+        if (treeGravity) {
             profile::profileBegin("kick");
             thisKr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
             profile::profileEnd();
@@ -1392,7 +1504,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         }
         if (closingOnly && top) {
 #if COSMICTIGER_ENABLE_FMM
-            if (selfGravity && !meshGravity) {
+            if (treeGravity) {
                 profile::ScopedPhase phase("kick.cleanup");
                 treeReset();
             }
@@ -1433,14 +1545,15 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             }
 #endif
             profile::profileBegin("drift");
-            driftRungEverywhere(
-                a, dt, tau, tau + dt, getOptions().run.numberOfSteps * t0, levels[li], drag);
+            double const endTime =
+                schedule.endTime > 0.0 ? schedule.endTime : getOptions().run.numberOfSteps * t0;
+            driftRungEverywhere(a, dt, tau, tau + dt, endTime, levels[li], drag);
             profile::profileEnd();
             tm.stop();
             // PRINT("Drift took %e\n", tm.read());
         }
 #if COSMICTIGER_ENABLE_FMM
-        if (selfGravity && !meshGravity) {
+        if (treeGravity) {
             profile::ScopedPhase phase("kick.cleanup");
             treeReset();
             particlesCacheFree();
@@ -1614,6 +1727,10 @@ static void outputEnergy(double coarseTime, double scale, EnergiesT const& energ
 void driver() {
     profile::checkForInterrupt();
     bool const global = usesGlobalIntegration(getOptions().run);
+    // Particle-mesh solvers (pm, p3m): the integer rung clock subdivides the
+    // mandatory outer PM interval instead of the nominal coarse interval.
+    bool const particleMesh =
+        getOptions().gravity.enabled && usesParticleMesh(getOptions().gravity);
     if (scenarios::definition(getOptions().run.scenario).fixedTime) {
         runFixedScenario();
         return;
@@ -1639,7 +1756,23 @@ void driver() {
             params.tau > params.tauMax + endpointTolerance || params.step < 0) {
             THROW_ERROR("Checkpoint contains an invalid evolution clock\n");
         }
-        if (!global) {
+        if (particleMesh) {
+            long double const phase = std::ldexp(static_cast<long double>(params.itime), -64);
+            long double const expected = static_cast<long double>(params.outerStart) +
+                static_cast<long double>(params.outerInterval) * phase;
+            long double const clockTolerance =
+                1.0e-9L * std::max(static_cast<long double>(coarseInterval), std::abs(expected));
+            if ((params.iter > 0 && !(params.outerInterval > 0.0)) ||
+                params.outerInterval > coarseInterval * (1.0 + 1.0e-9) ||
+                (params.itime != 0 && std::abs(expected - params.tau) > clockTolerance) ||
+                (params.itime == 0 && params.iter > 0 &&
+                    std::abs(static_cast<long double>(params.outerStart) + params.outerInterval -
+                        params.tau) > clockTolerance)) {
+                THROW_ERROR("Checkpoint outer PM interval, phase and conformal time are "
+                            "inconsistent; retain the original mesh and timestep settings\n");
+            }
+            params.step = driverOutputStep(params.tau, coarseInterval);
+        } else if (!global) {
             long double const phase = std::ldexp(static_cast<long double>(params.itime), -64);
             long double const coarsePosition =
                 static_cast<long double>(params.tau) / coarseInterval - phase;
@@ -1962,10 +2095,16 @@ void driver() {
             tmr.start();
             int minrung = global ? 0 : minRung(itime);
             bool fullEval = minrung == 0;
-            int const outputStep = driverOutputStep(tau, t0);
-            bool const outputDue = fullEval && (!global || outputStep > lastOutputStep);
+            int const outputStep = driverOutputStep(tau, coarseInterval);
+            if (particleMesh) {
+                step = outputStep;
+            }
+            // Mesh intervals end on coarse boundaries, so an output is due only at
+            // the first interval of a coarse step.
+            bool const outputDue =
+                fullEval && (!(global || particleMesh) || outputStep > lastOutputStep);
             double const globalStepCap =
-                global ? std::min(tauMax - tau, (outputStep + 1) * t0 - tau) : 0.0;
+                global ? std::min(tauMax - tau, (outputStep + 1) * coarseInterval - tau) : 0.0;
             if (outputDue) {
                 lastOutputStep = outputStep;
                 profile::profileBegin("output");
@@ -2020,6 +2159,32 @@ void driver() {
                 terminal::detailPrint("Rebound done\n");
                 profile::profileEnd();
             }
+            MeshKickSchedule schedule;
+            schedule.endTime = tauMax;
+#if COSMICTIGER_WITH_PARTICLE_MESH
+            if (particleMesh && itime == 0) {
+                // Outer PM boundary: every particle is at the synchronized
+                // position. Solve the mesh with all gravitating sources, close
+                // the finished interval's long half-kick and open the next one;
+                // inner rungs never trigger another FFT.
+                profile::profileBegin("pmBoundary");
+                auto const boundary =
+                    pmOuterBoundary(a, a * adot, tau, coarseInterval, tauMax, true);
+                profile::profileEnd();
+                schedule.closingBaseTimestep = params.outerInterval;
+                schedule.longCloseTimestep = params.outerInterval;
+                schedule.longOpenTimestep = boundary.nextInterval;
+                schedule.longPotentialEnergy = boundary.potentialEnergy;
+                if (!(boundary.nextInterval > 0.0)) {
+                    THROW_ERROR("The outer PM interval must be positive before the end time\n");
+                }
+                params.outerInterval = boundary.nextInterval;
+                params.outerStart = tau;
+            }
+            if (particleMesh) {
+                t0 = params.outerInterval;
+            }
+#endif
             auto opts = getOptions();
             opts.gravity.supportRadius =
                 hsoft0;    // Fixed comoving support for every particle type.
@@ -2029,7 +2194,7 @@ void driver() {
             bucketSize = opts.compute.bucketSize;
             ForceStepResult tmp;
             bool nocrop = false;
-            if (step % 8 == 0 && fullEval) {
+            if ((particleMesh ? params.outerIndex % 8 : uint64_t(step % 8)) == 0 && fullEval) {
                 nocrop = true;
                 minrung0 = std::max(minrung0 - 1, getOptions().run.minRung);
             }
@@ -2062,11 +2227,13 @@ void driver() {
                 outputDue && errorInterval > 0 && outputStep % errorInterval == 0 ? outputStep : -1;
             if (!getOptions().run.hierarchicalGravity) {
                 tmp = advanceForces(minrung, a, a * adot, tau, t0, theta, tau == 0.0, fullEval,
-                    energies, gravityErrorStep, false, params.globalTimestep, globalStepCap);
+                    energies, gravityErrorStep, false, params.globalTimestep, globalStepCap,
+                    schedule);
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
             } else {
                 tmp = kickStepHierarchical(om, maxRung, a, adot, tau, t0, theta, &energies,
-                    minrung0, fullEval, &lcFut, nocrop, sqrt(glassError), gravityErrorStep);
+                    minrung0, fullEval, &lcFut, nocrop, sqrt(glassError), gravityErrorStep, false,
+                    schedule);
 #endif
             }
             if (tau == 0.0) {
@@ -2095,7 +2262,7 @@ void driver() {
                     glassError = fabs(energies0.pot - a * energies.pot) /
                         std::max(fabs(a * energies.pot), 1.0e-30);
                 }
-                outputEnergy(tau / t0, a, energies, energy0, glassError);
+                outputEnergy(tau / coarseInterval, a, energies, energy0, glassError);
                 energies0 = energies;
                 energies0.pot *= a;
             }
@@ -2176,8 +2343,9 @@ void driver() {
             double const numberOfParticles = getOptions().initial.numberOfParticles;
             double close = 0.0, direct = 0.0;
 #if COSMICTIGER_ENABLE_FMM || COSMICTIGER_ENABLE_PMMM_FMM
-            if (!usesMeshGravity(getOptions().gravity) ||
-                getOptions().gravity.pmmmNearMethod == "fmm") {
+            if (!usesParticleMesh(getOptions().gravity) &&
+                (!usesMeshGravity(getOptions().gravity) ||
+                    getOptions().gravity.pmmmNearMethod == "fmm")) {
                 getGravityCounters(close, direct);
             }
 #endif
@@ -2192,17 +2360,18 @@ void driver() {
             }
             stepTm.stop();
             TimeType const nextIntegerTime = global ? 0 : inc(itime, maxRung);
+            double const integerPhase =
+                nextIntegerTime == 0 ? 1.0 : std::ldexp(double(nextIntegerTime), -64);
             double const nextTau = global ? tau + dt :
-                                            t0 *
-                    (double(step) +
-                        (nextIntegerTime == 0 ? 1.0 : std::ldexp(double(nextIntegerTime), -64)));
+                                            (particleMesh ? params.outerStart + t0 * integerPhase :
+                                                            t0 * (double(step) + integerPhase));
             double const nextYears = years + dyears;
             double const outputRedshift = 1.0 / a - 1.0;
             int const displayedMinimumRung = minrung;
             fprintf(textfp,
                 "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10i %10.3e %10.3e "
                 "%10.3e %10.3e %10.3e %10.3e %10.3e \n",
-                runtime, iter - 1, outputRedshift, a, adot, nextTau / t0, nextYears,
+                runtime, iter - 1, outputRedshift, a, adot, nextTau / coarseInterval, nextYears,
                 displayedMinimumRung, maxRung, bucketSize, flops * 1e-12, stepTm.read(), close,
                 direct, flopRates.singlePrecision * 1e-12, flopRates.doublePrecision * 1e-12,
                 flopRates.unclassified * 1e-12);
@@ -2221,8 +2390,8 @@ void driver() {
                     "FP64 TF/s", "Mixed TF/s", "TFLOP/s");
             }
             PRINT("%8i %10.3e %10.3e %10.3e %10.3e %7i %7i %13s %13s %10.3e %10.3e %10.3e %10.3e\n",
-                iter, outputRedshift, a, nextTau / t0, dt, displayedMinimumRung, maxRung,
-                terminal::formatDuration(runtime).c_str(),
+                iter, outputRedshift, a, nextTau / coarseInterval, dt, displayedMinimumRung,
+                maxRung, terminal::formatDuration(runtime).c_str(),
                 terminal::formatDuration(stepTm.read()).c_str(), flopRates.singlePrecision * 1e-12,
                 flopRates.doublePrecision * 1e-12, flopRates.unclassified * 1e-12, flops * 1e-12);
             progressRows++;
@@ -2235,6 +2404,9 @@ void driver() {
             if (global) {
                 params.globalTimestep = dt;
                 ++step;
+            }
+            if (particleMesh && itime == 0) {
+                ++params.outerIndex;
             }
             domainTime = 0.0;
             sortTime = 0.0;
@@ -2304,24 +2476,40 @@ void driver() {
         // Keep the work ledger and driver state at the completed drift, and
         // leave completed-checkpoint restarts alone (thisIter == 0).
         EnergiesT finalEnergies = energies;
-        double const t0 = tauMax / getOptions().run.numberOfSteps;
+        double t0 = tauMax / getOptions().run.numberOfSteps;
         double const theta = getOptions().gravity.openingAngle;
+        MeshKickSchedule schedule;
+        schedule.endTime = tauMax;
+#if COSMICTIGER_WITH_PARTICLE_MESH
+        if (particleMesh) {
+            // The terminal boundary solves the mesh at the final positions and
+            // closes the last interval's long half-kick; nothing opens.
+            auto const boundary = pmOuterBoundary(a, a * adot, tau, coarseInterval, tauMax, true);
+            schedule.closingBaseTimestep = params.outerInterval;
+            schedule.longCloseTimestep = params.outerInterval;
+            schedule.longOpenTimestep = 0.0;
+            schedule.longPotentialEnergy = boundary.potentialEnergy;
+            t0 = params.outerInterval;
+        }
+#endif
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
         if (getOptions().run.hierarchicalGravity) {
             int minimumRung = minrung0;
             kickStepHierarchical(minimumRung, maxRung, a, adot, tau, t0, theta, &finalEnergies,
-                minrung0, true, nullptr, true, 0.0, -1, true);
+                minrung0, true, nullptr, true, 0.0, -1, true, schedule);
         } else
 #endif
         {
             // Ordinary force advancement records diagnostics between closing
             // and opening kicks. Its terminal particle state is discarded.
             advanceForces(0, a, a * adot, tau, t0, theta, false, true, finalEnergies, -1, true,
-                params.globalTimestep, global ? t0 : 0.0);
+                params.globalTimestep, global ? t0 : 0.0, schedule);
         }
         double const finalGlassError = std::abs(energies0.pot - a * finalEnergies.pot) /
             std::max(std::abs(a * finalEnergies.pot), 1.0e-30);
-        outputEnergy(tau / t0, a, finalEnergies, energy0, finalGlassError);
+        // Energy rows are labelled on the coarse output clock, not the outer interval.
+        outputEnergy(tau / (tauMax / getOptions().run.numberOfSteps), a, finalEnergies, energy0,
+            finalGlassError);
     }
     if (getOptions().lightcone.enabled) {
         particlesFree();
@@ -2330,6 +2518,16 @@ void driver() {
     kickClearBuffers();
 #endif
     evolutionTime.stop();
+#if COSMICTIGER_WITH_PARTICLE_MESH
+    if (particleMesh) {
+        // Mesh solves happen only at outer boundaries (plus the terminal energy
+        // pass); every other force pass is an inner rung step without an FFT.
+        PRINT("  Particle-mesh intervals completed: %llu; mesh solves this run: %llu; "
+              "force passes this run: %i\n",
+            static_cast<unsigned long long>(params.outerIndex),
+            static_cast<unsigned long long>(pmDiagnostics().solveCount), thisIter);
+    }
+#endif
     PRINT("  Total evolution time (this run, initialization excluded): %s\n",
         terminal::formatDuration(thisIter > 0 ? evolutionTime.read() : 0.0).c_str());
     if (getOptions().checkpoint.readIndex >= 0) {
