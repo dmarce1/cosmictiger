@@ -7,6 +7,7 @@
 """Check the grouped CLI, INI precedence, and SPH parameter rejection."""
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import configparser
 import math
 import os
@@ -14,6 +15,9 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+
+# Each case runs two HPX worker threads; ctest reserves PROCESSORS to match.
+kConcurrentCases = 4
 
 
 def main():
@@ -91,6 +95,15 @@ def main():
         if result.returncode == 0 and "--help" not in options:
             assertResolvedOptions(result.stdout)
         return result.stdout
+
+    def runAll(cases):
+        """Run independent (name, options, success) cases concurrently.
+
+        Each launch is dominated by runtime startup, so overlapping a few of them
+        shortens the suite; the outputs are returned in case order.
+        """
+        with ThreadPoolExecutor(kConcurrentCases) as pool:
+            return list(pool.map(lambda case: run(*case), cases))
 
     def assertResolvedOptions(output):
         if "Resolved options\n" not in output:
@@ -568,15 +581,18 @@ mapSize = 8
         normalized = run(f"units_{key}_cli_override", normalizationOptions + [
             f"--configuration={normalizationConfig.resolve()}", f"--units.{key}={value:.17g}"])
         assertNormalization(normalized, boxLength, massSolar)
+        invalidUnitsCases = []
         for index, invalid in enumerate(("0", "-1", "nan", "inf", "-inf")):
-            normalizationConfig.write_text(f"[units]\n{key} = {invalid}\n")
+            invalidConfig = args.workdir / f"normalization_{key}_invalid_{index}.ini"
+            invalidConfig.write_text(f"[units]\n{key} = {invalid}\n")
             for source, arguments in (
                     ("cli", [f"--units.{key}={invalid}"]),
-                    ("ini", [f"--configuration={normalizationConfig.resolve()}"])):
-                rejected = run(f"units_{key}_invalid_{source}_{index}",
-                               normalizationOptions + arguments, success=False)
-                if f"units.{key}" not in rejected:
-                    raise RuntimeError(f"invalid units.{key} lacked its option diagnostic")
+                    ("ini", [f"--configuration={invalidConfig.resolve()}"])):
+                invalidUnitsCases.append((f"units_{key}_invalid_{source}_{index}",
+                                          normalizationOptions + arguments, False))
+        for rejected in runAll(invalidUnitsCases):
+            if f"units.{key}" not in rejected:
+                raise RuntimeError(f"invalid units.{key} lacked its option diagnostic")
 
     for value in ("1e308", "1e-150"):
         rejected = run(f"units_box_out_of_range_{value}", normalizationOptions + [
@@ -992,14 +1008,13 @@ mapSize = 8
             match = re.search(r"^" + re.escape(key) + r"\s*:\s*(\S+)", output, re.MULTILINE)
             if match is None or abs(float(match.group(1)) - value) > 1.e-8:
                 raise RuntimeError(f"kernel-independent setting {key} changed meaning")
-    for index, invalid in enumerate((
+    runAll([(f"invalid_kernel_{index}", metadata_options + invalid, False) for index, invalid in enumerate((
             ["--gravity.kernelFamily=gaussian"], ["--hydro.kernelFamily=wendland", "--hydro.kernelDegree=9"],
             ["--gravity.kernelFamily=ferrers", "--gravity.kernelDegree=9"],
             ["--hydro.kernelDegree=10"], ["--gravity.kernelDegree=-1"],
             ["--gravity.kernelFamily=spline", "--gravity.kernelDegree=1"],
             ["--hydro.kernelFamily=spline", "--hydro.kernelDegree=1"],
-            ["--hydro.kernelFamily=wendland", "--hydro.kernelDegree=8", "--hydro.neighborNumber=12"])):
-        run(f"invalid_kernel_{index}", metadata_options + invalid, success=False)
+            ["--hydro.kernelFamily=wendland", "--hydro.kernelDegree=8", "--hydro.neighborNumber=12"]))])
 
     if not starFormationAvailable:
         requested = metadata_options + ["--starFormation.enabled=true"]
@@ -1145,15 +1160,15 @@ mapSize = 8
                               ("omegaR", photons + neutrinos)):
             assertNumericSetting(output, f"cosmology.{key}", expected)
 
-    for index, invalid in enumerate((
+    runAll([(f"invalid_cosmology_{index}", metadata_options + [invalid], False) for index, invalid in enumerate((
             "--cosmology.nEff=-1", "--cosmology.thetaCmb=0", "--cosmology.hubble=0",
             "--cosmology.heliumFraction=1", "--cosmology.sigma8=nan",
-            "--cosmology.sigma8=-0.1")):
-        run(f"invalid_cosmology_{index}", metadata_options + [invalid], success=False)
+            "--cosmology.sigma8=-0.1"))])
 
-    for index, value in enumerate(("-0.1", "1.5", "nan", "inf")):
-        output = run(f"invalid_rung_merge_fraction_{index}", metadata_options + [
-            f"--run.rungMergeFraction={value}"], success=False)
+    rungValues = ("-0.1", "1.5", "nan", "inf")
+    rungOutputs = runAll([(f"invalid_rung_merge_fraction_{index}", metadata_options + [
+        f"--run.rungMergeFraction={value}"], False) for index, value in enumerate(rungValues)])
+    for value, output in zip(rungValues, rungOutputs):
         if "run.rungMergeFraction must be finite and between 0 and 1" not in output:
             raise RuntimeError(f"invalid run.rungMergeFraction={value} lacked its diagnostic")
     output = run("rung_merge_fraction", metadata_options + ["--run.rungMergeFraction=0.5"])
@@ -1207,18 +1222,15 @@ mapSize = 8
         f"--configuration={lambda_config.resolve()}", "--cosmology.omegaLambda=auto"])
     assertNumericSetting(output, "cosmology.omegaLambda",
                          cosmologySetting(lambda_baseline, "omegaLambda"))
-    for index, value in enumerate(("automatic", "AUTO", "-1junk", "1.2.3", "nan", "inf",
-                                   "-inf", "1e1000")):
-        output = run(f"invalid_lambda_{index}", metadata_options + [
-            f"--cosmology.omegaLambda={value}"], success=False)
+    cosmologyCases = [(f"Lambda {value}", (f"invalid_lambda_{index}", metadata_options + [
+        f"--cosmology.omegaLambda={value}"], False)) for index, value in enumerate((
+            "automatic", "AUTO", "-1junk", "1.2.3", "nan", "inf", "-inf", "1e1000"))]
+    cosmologyCases += [(f"{key}={value}", (f"invalid_{key}_{index}", metadata_options + [
+        f"--cosmology.{key}={value}"], False)) for key in ("startRedshift", "endRedshift")
+        for index, value in enumerate(("-1", "-1.01", "nan", "inf"))]
+    for (label, _), output in zip(cosmologyCases, runAll([case for _, case in cosmologyCases])):
         if "cosmology" not in output.lower():
-            raise RuntimeError(f"invalid Lambda {value} lacked a cosmology diagnostic")
-    for key in ("startRedshift", "endRedshift"):
-        for index, value in enumerate(("-1", "-1.01", "nan", "inf")):
-            output = run(f"invalid_{key}_{index}", metadata_options + [
-                f"--cosmology.{key}={value}"], success=False)
-            if "cosmology" not in output.lower():
-                raise RuntimeError(f"invalid {key}={value} lacked a cosmology diagnostic")
+            raise RuntimeError(f"invalid {label} lacked a cosmology diagnostic")
     homogeneous = run("homogeneous_cosmology", metadata_options + ["--cosmology.sigma8=0"])
     assertNumericSetting(homogeneous, "cosmology.sigma8", 0.0)
     if "Checkpoint state and mode validation passed" not in homogeneous:
@@ -1356,10 +1368,9 @@ mapSize = 8
     # explicitly selected representations that can conflict with one another.
     output = run("radius_defaults", metadata_options)
     assertNoRadiusWarning(output)
-    for effectiveKey, supportKey, _, _ in radiusPairs:
-        for key in (effectiveKey, supportKey):
-            for value in ("0", "-1", "nan", "inf"):
-                run(f"invalid_{key}_{value}", metadata_options + [f"--{key}={value}"], success=False)
+    runAll([(f"invalid_{key}_{value}", metadata_options + [f"--{key}={value}"], False)
+            for effectiveKey, supportKey, _, _ in radiusPairs for key in (effectiveKey, supportKey)
+            for value in ("0", "-1", "nan", "inf")])
 
     def assertOutputSettings(output, outputUnits, outputFrame):
         for key, expectedValue in (("output.units", outputUnits), ("output.frame", outputFrame)):
@@ -1635,7 +1646,7 @@ mapSize = 8
         output = run(name, metadata_options + [option], success=False)
         if diagnostic not in output:
             raise RuntimeError(f"{name} failed without its expected diagnostic: {diagnostic}")
-    removed_config = args.workdir / "removed_option.ini"
+    removedCases = []
     for option in sorted(removed_options):
         value = {"cosmology.omegaK": "0.1", "gravity.cloud": "pcs",
                  "gravity.method": args.gravity_method, "gravity.pmmmNearMethod": args.near_method,
@@ -1646,14 +1657,16 @@ mapSize = 8
         # Numeric legacy booleans must not abbreviate the surviving plummerRadius option.
         values = [value, "0", "1"] if option == "initial.plummer" else [value]
         for value in values:
+            # Concurrent cases need their own INI rather than one rewritten file.
+            removed_config = args.workdir / f"removed_{option}_{value}.ini"
             removed_config.write_text(f"[{group}]\n{name} = {value}\n")
             for source, arguments in (
                     ("cli", [f"--{option}={value}"]),
                     ("ini", [f"--configuration={removed_config.resolve()}"])):
-                output = run(f"removed_{source}_{option}_{value}", arguments, success=False)
-                if option not in output or not re.search(
-                        r"unrecogni[sz]ed option|is ambiguous and matches", output):
-                    raise RuntimeError(f"removed {source} option {option} was not rejected explicitly")
+                removedCases.append((source, option, (f"removed_{source}_{option}_{value}", arguments, False)))
+    for (source, option, _), output in zip(removedCases, runAll([case for _, _, case in removedCases])):
+        if option not in output or not re.search(r"unrecogni[sz]ed option|is ambiguous and matches", output):
+            raise RuntimeError(f"removed {source} option {option} was not rejected explicitly")
     if not args.without_sph and args.gravity_method == "fmm" and args.time_integrator != "hierarchical":
         for parameter in ("omegaB", "omegaC"):
             for value in ("0", "-0.1", "nan", "inf"):

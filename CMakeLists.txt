@@ -1531,8 +1531,8 @@ if(BUILD_TESTING)
             --gravity-method ${cosmictiger_default_gravity_method}
             --near-method ${cosmictiger_default_near_method} --order ${cosmictiger_default_fmm_order}
             --time-integrator ${cosmictiger_default_integrator})
-        # Hundreds of expected rejections each produce a symbolized stack trace.
-        set_tests_properties(grouped_options PROPERTIES RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2)
+        # run_options.py overlaps four two-thread cosmictiger launches.
+        set_tests_properties(grouped_options PROPERTIES RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 8)
         add_test(NAME hydro_methods COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_options.py $<TARGET_FILE:cosmictiger>
             ${PROJECT_BINARY_DIR}/tests/hydro_methods ${cosmictiger_sph_test_args}
