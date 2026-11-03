@@ -148,6 +148,9 @@ void runFixedScenario() {
         // rung suffix stack. A full spatial reorder here would invalidate that
         // stack before the outstanding closing ladder consumes it.
         profile::profileBegin("rebound");
+#if COSMICTIGER_ENABLE_HOPKINS
+        hopkinsAssignIdentifiers();
+#endif
         domainsRebound();
 #if COSMICTIGER_ENABLE_HOPKINS
         hopkinsDomainsRebound();

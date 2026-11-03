@@ -782,8 +782,46 @@ void hopkinsInstallGravityMasses(std::vector<std::pair<uint64_t, double>> const&
     }
 }
 
+// Stable identifiers: the top 16 bits name the locality that created the cell,
+// the low 48 bits count that locality's cells in gas-index order. The next
+// counter is derived from the identifiers already present with this locality's
+// prefix, so the assignment needs no stored state and survives restarts.
+constexpr int kHopkinsIdentifierRankShift = 48;
+constexpr uint64_t kHopkinsIdentifierCounterMask = (uint64_t(1) << kHopkinsIdentifierRankShift) - 1;
+
+void hopkinsAssignIdentifiersLocal() {
+    if (hpxSize() > (1 << (64 - kHopkinsIdentifierRankShift)) - 1) {
+        throw std::runtime_error("Hopkins stable identifiers support at most 65535 localities");
+    }
+    uint64_t const prefix = uint64_t(hpxRank()) << kHopkinsIdentifierRankShift;
+    uint64_t next = 0;
+    bool any = false;
+    for (ParticleInteger i = 0; i < sphParticlesSize(); ++i) {
+        uint64_t const identifier = sphParticlesHopkinsState(i).identifier;
+        if (identifier == std::numeric_limits<uint64_t>::max()) {
+            any = true;
+        } else if ((identifier & ~kHopkinsIdentifierCounterMask) == prefix) {
+            next = std::max(next, (identifier & kHopkinsIdentifierCounterMask) + 1);
+        }
+    }
+    if (!any) {
+        return;
+    }
+    for (ParticleInteger i = 0; i < sphParticlesSize(); ++i) {
+        auto& state = sphParticlesHopkinsState(i);
+        if (state.identifier != std::numeric_limits<uint64_t>::max()) {
+            continue;
+        }
+        if (next > kHopkinsIdentifierCounterMask) {
+            throw std::overflow_error("Hopkins stable particle identifiers are exhausted");
+        }
+        state.identifier = prefix | next++;
+    }
+}
+
 }    // namespace detail
 
+HPX_PLAIN_ACTION(detail::hopkinsAssignIdentifiersLocal, HopkinsAssignIdentifiersAction);
 HPX_PLAIN_ACTION(detail::hopkinsCollectDelta, HopkinsCollectDeltaAction);
 HPX_PLAIN_ACTION(detail::hopkinsResetOwnerMirror, HopkinsResetOwnerMirrorAction);
 HPX_PLAIN_ACTION(detail::hopkinsInstallIdentifiers, HopkinsInstallIdentifiersAction);
@@ -3235,6 +3273,21 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
     }
 #endif
     return result;
+}
+
+void hopkinsAssignIdentifiers() {
+    auto const& options = getOptions();
+    if (!options.hydro.enabled || options.hydro.method == "sph") {
+        return;
+    }
+    std::vector<hpx::future<void>> pending;
+    for (auto const& locality : hpxLocalities()) {
+        pending.push_back(hpx::async<HopkinsAssignIdentifiersAction>(locality));
+    }
+    hpx::wait_all(pending);
+    for (auto& future : pending) {
+        future.get();
+    }
 }
 
 void hopkinsDomainsRebound() {

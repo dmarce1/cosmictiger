@@ -2914,6 +2914,17 @@ if(BUILD_TESTING AND COSMICTIGER_WITH_SPH)
                     --fresh-run-directory)
                 set_tests_properties(hopkins_hierarchical_application PROPERTIES
                     TIMEOUT 1200 PROCESSORS 2 RUN_SERIAL TRUE LABELS "hopkins;cpu;hierarchical")
+                if(cosmictiger_mpi_tests)
+                    # One versus two localities must agree bitwise on gravity-free
+                    # blast runs for every compiled integrator.
+                    add_test(NAME hopkins_localities_mpi COMMAND ${Python3_EXECUTABLE}
+                        ${PROJECT_SOURCE_DIR}/tests/run_hopkins_localities.py
+                        $<TARGET_FILE:cosmictiger>
+                        ${PROJECT_BINARY_DIR}/tests/hopkins_localities_mpi
+                        ${cosmictiger_python_mpi_args})
+                    set_tests_properties(hopkins_localities_mpi PROPERTIES
+                        TIMEOUT 1500 PROCESSORS 4 RUN_SERIAL TRUE LABELS "hopkins;cpu;mpi")
+                endif()
             endif()
         endif()
     endif()

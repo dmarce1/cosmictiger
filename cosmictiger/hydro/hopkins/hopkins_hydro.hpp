@@ -49,5 +49,11 @@ void hopkinsResetSources();
 // A domain rebound happened: rebuild the persistent hydro source tree at the
 // next event, as GADGET-4 rebuilds its neighbor tree with each decomposition.
 void hopkinsDomainsRebound();
+// Give every gas cell without a stable identifier the identifier
+// (rank << 48) | counter, in local gas-index order. Called before every domain
+// rebound; idempotent. Called before the first rebound, it numbers the initial
+// gas in creation order independently of the later decomposition, so the same
+// run on any number of localities uses the same identifiers.
+void hopkinsAssignIdentifiers();
 void hopkinsWriteCheckpoint(FILE* file);
 void hopkinsReadCheckpoint(FILE* file);

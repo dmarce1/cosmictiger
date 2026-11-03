@@ -2010,6 +2010,9 @@ void driver() {
             if (rebound) {
                 profile::profileBegin("rebound");
                 terminal::detailPrint("Doing rebound\n");
+#if COSMICTIGER_ENABLE_HOPKINS
+                hopkinsAssignIdentifiers();
+#endif
                 domainsRebound();
 #if COSMICTIGER_ENABLE_HOPKINS
                 hopkinsDomainsRebound();
