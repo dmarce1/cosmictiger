@@ -58,6 +58,12 @@ def main():
                     "kickSharedExpansion", "kickHandoffBlocks", "kickFineHandoffBlocks",
                     "kickListReserve")
 
+    # The particle-mesh solvers keep gas on the traditional integrator: the
+    # hierarchical hydro opening kick would omit the long PM half-kicks.
+    mesh_far = args.gravity_method in ("pm", "p3m")
+    mesh_hydro_rejected = mesh_far and args.time_integrator == "hierarchical"
+    mesh_hydro_error = "gravity.method.far=pm/p3m with hydro requires run.timeIntegrator=traditional"
+
     def run(name, options, success=True, pmmm_mesh=8, selectors=True):
         if selectors:
             selected = {"gravity.method.far": args.gravity_method,
@@ -891,11 +897,6 @@ mapSize = 8
         if sph_build_error not in rejected:
             raise RuntimeError("disabled SPH chemistry request lacked build guidance")
     else:
-        # The particle-mesh solvers keep gas on the traditional integrator: the
-        # hierarchical hydro opening kick would omit the long PM half-kicks.
-        mesh_hydro_rejected = (args.gravity_method in ("pm", "p3m") and
-                               args.time_integrator == "hierarchical")
-        mesh_hydro_error = "gravity.method.far=pm/p3m with hydro requires run.timeIntegrator=traditional"
         for gravity_enabled in ("true", "false"):
             rejected_here = mesh_hydro_rejected and gravity_enabled == "true"
             output = run(f"sph_cli_gravity_{gravity_enabled}", sph_options + [
@@ -1013,7 +1014,7 @@ mapSize = 8
             success=False)
         if "COSMICTIGER_ENABLE_CHEMISTRY=ON" not in rejected:
             raise RuntimeError("star formation without compiled chemistry lacked build guidance")
-    else:
+    elif not mesh_hydro_rejected:  # pm/p3m hydro needs the traditional integrator
         star_options = [option for option in metadata_options
                         if not option.startswith("--hydro.enabled=")] + [
                             "--hydro.enabled=true", "--starFormation.enabled=true",
@@ -1080,7 +1081,8 @@ mapSize = 8
             if "Checkpoint state and mode validation passed" not in output:
                 raise RuntimeError("z-plane acceleration checkpoint state did not round-trip")
 
-    if not args.without_sph and chemistryAvailable and "hierarchical" in compiled_integrators:
+    if (not args.without_sph and chemistryAvailable and "hierarchical" in compiled_integrators
+            and not mesh_far):
         # Hierarchical SPH integrates the GADGET-4 sources over each closed interval;
         # its checkpoint adds the anchors to the cooling and star-formation layouts.
         hierarchical_options = [option for option in metadata_options
@@ -1095,7 +1097,7 @@ mapSize = 8
             if "Checkpoint state and mode validation passed" not in output:
                 raise RuntimeError(f"hierarchical SPH {label} checkpoint state did not round-trip")
 
-    if chemistryAvailable:
+    if chemistryAvailable and not mesh_hydro_rejected:
         cooling_options = [option for option in metadata_options
                            if not option.startswith("--hydro.enabled=")] + [
                                "--hydro.enabled=true", "--chemistry.enabled=true"]

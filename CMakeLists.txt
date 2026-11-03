@@ -1544,7 +1544,9 @@ if(BUILD_TESTING)
             LABELS "build;cpu")
     endif()
 
-    if(COSMICTIGER_WITH_GRAVITY)
+    # The gravity-error and position-selection scripts exercise the FMM and PMMM solvers.
+    if(COSMICTIGER_WITH_GRAVITY AND (COSMICTIGER_ENABLE_FMM OR COSMICTIGER_ENABLE_PMMM_PP OR
+            COSMICTIGER_ENABLE_PMMM_FMM))
         set(gravity_error_name gravity_error_cpu)
         add_test(NAME ${gravity_error_name} COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_gravity_error.py $<TARGET_FILE:cosmictiger>
@@ -3023,7 +3025,9 @@ if(BUILD_TESTING)
         endif()
     endif()
 
-    if(COSMICTIGER_WITH_GRAVITY)
+    # The gravity-error and position-selection scripts exercise the FMM and PMMM solvers.
+    if(COSMICTIGER_WITH_GRAVITY AND (COSMICTIGER_ENABLE_FMM OR COSMICTIGER_ENABLE_PMMM_PP OR
+            COSMICTIGER_ENABLE_PMMM_FMM))
         set(position_selection_args)
         if(NOT COSMICTIGER_WITH_SPH)
             list(APPEND position_selection_args --without-sph)

@@ -93,7 +93,7 @@ CUDA_EXPORT inline FlopCount accumulateShortPair(double dx, double dy, double dz
         if (doPotential) {
             field[0] += mass * radial.template coefficient<0, 0>();
         }
-        return 6 + radial.flops() + 8 + (doPotential ? 2 : 0) + 3 * curvatureFlops;
+        return 6 + radial.flops() + 8 + (doPotential ? 2 : 0) + 4 * curvatureFlops;
     }
     if (r2 == 0.0) {
         if (pairCurvature != nullptr) {
@@ -105,7 +105,7 @@ CUDA_EXPORT inline FlopCount accumulateShortPair(double dx, double dy, double dz
             field[0] += mass *
                 (-radial_kernel::potential(kernel, 0.0) * parameters.inverseSupport - longOrigin);
         }
-        return 6 + (doPotential ? 6 : 0) + 2 * curvatureFlops;
+        return 6 + (doPotential ? 6 : 0) + 3 * curvatureFlops;
     }
     double const r = std::sqrt(r2);
     double const q = r * parameters.inverseSupport;
