@@ -49,7 +49,7 @@ __global__ void sphCudaRungs(
                 data.treeNodes[data.neighborNodeIndices[neighborNodeIndex]];
             int const roundedSourceEnd =
                 roundUp(neighborNode.particleRange.second - neighborNode.particleRange.first,
-                    blockSize) +
+                    ParticleInteger(blockSize)) +
                 neighborNode.particleRange.first;
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
                 sourceParticleIndex < roundedSourceEnd; sourceParticleIndex += blockSize) {
