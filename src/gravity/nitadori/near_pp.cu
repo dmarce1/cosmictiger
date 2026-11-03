@@ -173,7 +173,8 @@ void clearPmmmNearCudaWorkspaces() {
 void pmmmNearFieldCuda(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearParticle> const& sources,
     std::vector<PmmmNearSourceRange> const& sourceRanges, double cellWidth, double supportRadius,
-    bool doPotential, std::vector<std::array<double, 4>>& fields) {
+    bool doPotential, std::vector<std::array<double, 4>>& fields,
+    std::vector<double>* pairCurvature) {
     cudaSetDevice();
     int const device = cudaGetDevice();
     // A lease follows the HPX task, even if it resumes on another OS worker.
