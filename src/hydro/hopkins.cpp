@@ -37,6 +37,7 @@
 #include <cosmictiger/hydro/hopkins/hopkins.hpp>
 #include <cosmictiger/hydro/hopkins/hopkins_hydro.hpp>
 #include <cosmictiger/hydro/hopkins/hopkins_state.hpp>
+#include <cosmictiger/hydro/hopkins/hopkins_wake_sweep.hpp>
 #include <cosmictiger/hydro/source_tree.hpp>
 #include <cosmictiger/hydro/sph/sph.hpp>
 #include <cosmictiger/hydro/sph/sph_flops.hpp>
@@ -1131,6 +1132,10 @@ void hopkinsCheckNeighborQuery(HopkinsWorkspace const& workspace, size_t i, doub
             expected.push_back(j);
         }
     }
+    std::sort(expected.begin(), expected.end(), [&](size_t left, size_t right) {
+        return workspace.particles[left].state.identifier <
+            workspace.particles[right].state.identifier;
+    });
     if (expected != neighbors) {
         throw std::runtime_error("Hopkins stencil query of cell " +
             std::to_string(workspace.particles[i].state.identifier) + " returned " +
@@ -1164,7 +1169,13 @@ void hopkinsNeighborQuery(HopkinsWorkspace const& workspace, size_t i, double fa
             neighbors.push_back(j);
         }
     }
-    std::sort(neighbors.begin(), neighbors.end());
+    // Reductions follow the stable identifier order. On the coordinator slot order
+    // is identifier order; a locality holding owned cells and imported ghosts in
+    // separate slot ranges needs the identifier sort for the same arithmetic.
+    std::sort(neighbors.begin(), neighbors.end(), [&](size_t left, size_t right) {
+        return workspace.particles[left].state.identifier <
+            workspace.particles[right].state.identifier;
+    });
     neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
     if (hopkinsNeighborChecksEnabled()) {
         hopkinsCheckNeighborQuery(workspace, i, factor, symmetric, neighbors);
@@ -1963,83 +1974,45 @@ HopkinsStepResult hopkinsSelectTimesteps(HopkinsWorkspace& workspace, int minimu
         // raw minimum, already bounded by gravity and the driver's endpoint.
         return {0, minimumTimestep};
     }
-    // Propagate wake-ups in a stable order, including after an MPI restart
-    // changes the local particle storage order.
-    std::vector<size_t> order;
-    for (size_t i = 0; i < count; i++) {
-        order.push_back(i);
-    }
-    std::sort(order.begin(), order.end(), [&](size_t left, size_t right) {
-        return workspace.particles[left].state.identifier <
-            workspace.particles[right].state.identifier;
-    });
     // Appendix G: prevent a timestep contrast larger than four across an
     // interacting pair. Wake sleeping neighbors onto the shorter active bin.
-    // The sweep is sequential by construction: a raise earlier in the sweep
-    // changes what a later cell raises, so cells are visited in identifier
-    // order with immediate effect, exactly as a full sweep over every cell.
-    // Two exact shortcuts remove no-op visits: a cell whose rung is below the
-    // lowest rung plus three can raise nobody, and a cell revisited with an
-    // unchanged rung can raise nobody new, because its neighbours' rungs only
-    // grew since. The stencils of the cells due in a chunk are queried in
-    // parallel; a cell that becomes due inside the chunk queries on the spot.
+    // hopkins::WakeSweep replays the sequential identifier-order sweep exactly;
+    // here every stencil is answered locally, a prefetch window at a time, with
+    // the full symmetric stencil (valid at any rung).
     int lowestRung = kMaxRung;
     for (auto const& particle : workspace.particles) {
         lowestRung = std::min(lowestRung, particle.rung);
     }
-    auto const canRaise = [&](size_t i) { return workspace.particles[i].rung >= lowestRung + 3; };
-    std::vector<int> visitedRung(count, -1);
-    constexpr size_t kWakeChunk = 4096;
-    std::vector<size_t> due;
-    std::vector<std::vector<size_t>> stencils;
-    bool changed;
-    do {
-        changed = false;
-        for (size_t begin = 0; begin < count; begin += kWakeChunk) {
-            size_t const end = std::min(count, begin + kWakeChunk);
-            due.clear();
-            for (size_t k = begin; k < end; ++k) {
-                size_t const i = order[k];
-                if (canRaise(i) && workspace.particles[i].rung != visitedRung[i]) {
-                    due.push_back(i);
-                }
+    hopkins::WakeSweep sweep;
+    for (auto const& particle : workspace.particles) {
+        sweep.seed(particle.state.identifier, particle.rung, particle.active);
+    }
+    constexpr size_t kWakePrefetch = 4096;
+    sweep.start(lowestRung, minimumRung, kWakePrefetch);
+    for (auto requests = sweep.step(); !requests.empty(); requests = sweep.step()) {
+        std::vector<std::vector<hopkins::WakeSweep::Member>> stencils(requests.size());
+        workspace.work.listQueries += requests.size();
+        hopkinsParallel(requests.size(), [&](size_t k) {
+            HopkinsFlopBatch operations(workspace.countOperations);
+            std::vector<size_t> neighbors;
+            hopkinsNeighborQuery(
+                workspace, workspace.indices.at(requests[k]), 1.0, true, operations, neighbors);
+            stencils[k].reserve(neighbors.size());
+            for (size_t j : neighbors) {
+                auto const& neighbor = workspace.particles[j];
+                stencils[k].push_back({neighbor.state.identifier, neighbor.rung, neighbor.active});
             }
-            stencils.assign(due.size(), {});
-            workspace.work.listQueries += due.size();
-            hopkinsParallel(due.size(), [&](size_t k) {
-                HopkinsFlopBatch operations(workspace.countOperations);
-                hopkinsNeighborQuery(workspace, due[k], 1.0, true, operations, stencils[k]);
-            });
-            size_t next = 0;
-            std::vector<size_t> fresh;
-            for (size_t k = begin; k < end; ++k) {
-                size_t const i = order[k];
-                std::vector<size_t> const* stencil = nullptr;
-                if (next < due.size() && due[next] == i) {
-                    stencil = &stencils[next++];
-                } else if (canRaise(i) && workspace.particles[i].rung != visitedRung[i]) {
-                    ++workspace.work.listQueries;
-                    hopkinsNeighborQuery(workspace, i, 1.0, true, operations, fresh);
-                    stencil = &fresh;
-                } else {
-                    continue;
-                }
-                auto const rung = workspace.particles[i].rung;
-                visitedRung[i] = rung;
-                for (size_t j : *stencil) {
-                    auto& neighbor = workspace.particles[j];
-                    if (neighbor.rung + 2 < rung) {
-                        if (!neighbor.active) {
-                            woken++;
-                        }
-                        neighbor.active = true;
-                        neighbor.rung = std::max(minimumRung, rung);
-                        changed = true;
-                    }
-                }
-            }
+        });
+        for (size_t k = 0; k < requests.size(); ++k) {
+            sweep.provide(requests[k], stencils[k], hopkins::WakeSweep::kAnyRung);
         }
-    } while (changed);
+    }
+    woken += sweep.woken();
+    for (auto const& raise : sweep.raises()) {
+        auto& particle = workspace.particles[workspace.indices.at(raise.identifier)];
+        particle.rung = raise.rung;
+        particle.active = raise.active;
+    }
     for (auto const& particle : workspace.particles) {
         maximumRung = std::max(maximumRung, particle.rung);
     }
@@ -2351,12 +2324,82 @@ void hopkinsPairBatch(HopkinsWorkspace const& workspace,
     }
 }
 
+// One endpoint's share of a settled pair interval: the left endpoint receives
+// -delta and the right +delta, both receive the same gravity-work integral. A
+// record produces its two deposits together; they may be applied on different
+// localities, so a deposit carries everything its endpoint needs.
+struct HopkinsDeposit {
+    HopkinsPairKey key{};
+    uint64_t endpoint = 0;
+    bool right = false;
+    double beginTime = 0.0;
+    hopkins::Conserved delta{};
+    hopkins::Vector integral{};
+    hopkins::Vector firstMoment{};
+    template <class Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & key & endpoint & right & beginTime & delta.mass & delta.momentum & delta.energy &
+            integral & firstMoment;
+    }
+};
+
+// Integrate a live interval up to the event time (or its scheduled end) and
+// emit both endpoints' deposits.
+void hopkinsSettleRecord(
+    HopkinsPairRecord const& record, double time, std::vector<HopkinsDeposit>& deposits) {
+    double const end = std::min(time, record.endTime);
+    double const interval = record.endTime - record.beginTime;
+    double const duration = end - record.beginTime;
+    auto const delta =
+        hopkins::integrateFlux(record.initial, record.midpoint, interval, 0.0, duration);
+    auto const work = hopkins::integratePairGravityWork(
+        record.workInitial, record.workMidpoint, interval, 0.0, duration);
+    HopkinsPairKey const key{record.leftId, record.rightId};
+    deposits.push_back(
+        {key, record.leftId, false, record.beginTime, delta, work.integral, work.firstMoment});
+    deposits.push_back(
+        {key, record.rightId, true, record.beginTime, delta, work.integral, work.firstMoment});
+}
+
+// Apply deposits in (leftId, rightId, left before right) order. Each endpoint
+// then accumulates its shares in the key order of the pair map, exactly as a
+// single walk over the map would, wherever the records were integrated.
+void hopkinsApplyDeposits(HopkinsWorkspace& workspace, std::vector<HopkinsDeposit>& deposits) {
+    std::sort(deposits.begin(), deposits.end(), [](auto const& left, auto const& right) {
+        return left.key != right.key ? left.key < right.key : left.right < right.right;
+    });
+    for (auto const& deposit : deposits) {
+        auto const found = workspace.indices.find(deposit.endpoint);
+        if (found == workspace.indices.end()) {
+            throw std::runtime_error("Hopkins live pair lost an endpoint");
+        }
+        size_t const endpoint = found->second;
+        auto& state = workspace.particles[endpoint].state;
+        workspace.touched[endpoint] = 1;
+        double const sign = deposit.right ? 1.0 : -1.0;
+        state.pendingMass += sign * deposit.delta.mass;
+        state.pendingEnergy += sign * deposit.delta.energy;
+        double const age = deposit.beginTime - state.sourceTime;
+        if (age < -32.0 * std::numeric_limits<double>::epsilon() *
+                std::max(1.0, std::abs(state.sourceTime))) {
+            throw std::runtime_error("Hopkins pair predates an endpoint's source anchor");
+        }
+        for (int dim = 0; dim < 3; ++dim) {
+            state.pendingMomentum[dim] += sign * deposit.delta.momentum[dim];
+            state.pendingGravityIntegral[dim] += deposit.integral[dim];
+            state.pendingGravityWork[dim] += age * deposit.integral[dim] + deposit.firstMoment[dim];
+        }
+    }
+    deposits.clear();
+}
+
 // Settle an interval only at its scheduled endpoint, or once when a wake/terminal
 // event cuts it short. Both deposits are made from the same integral.
 size_t hopkinsSettlePairs(HopkinsWorkspace& workspace, bool closingOnly) {
     profile::ScopedPhase profilePhase("hydro.hopkins.flux.settle");
     auto const& indices = workspace.indices;
     size_t settled = 0;
+    std::vector<HopkinsDeposit> deposits;
     for (auto iterator = hopkinsPairs.begin(); iterator != hopkinsPairs.end();) {
         auto const& record = iterator->second;
         auto const left = indices.find(record.leftId);
@@ -2364,40 +2407,17 @@ size_t hopkinsSettlePairs(HopkinsWorkspace& workspace, bool closingOnly) {
         if (left == indices.end() || right == indices.end()) {
             throw std::runtime_error("Hopkins live pair lost an endpoint");
         }
-        size_t const i = left->second;
-        size_t const j = right->second;
-        if (!closingOnly && record.endTime > workspace.time && !workspace.particles[i].active &&
-            !workspace.particles[j].active) {
+        if (!closingOnly && record.endTime > workspace.time &&
+            !workspace.particles[left->second].active &&
+            !workspace.particles[right->second].active) {
             ++iterator;
             continue;
         }
-        double const end = std::min(workspace.time, record.endTime);
-        double const interval = record.endTime - record.beginTime;
-        double const duration = end - record.beginTime;
-        auto const delta =
-            hopkins::integrateFlux(record.initial, record.midpoint, interval, 0.0, duration);
-        auto const work = hopkins::integratePairGravityWork(
-            record.workInitial, record.workMidpoint, interval, 0.0, duration);
-        for (size_t endpoint : {i, j}) {
-            auto& state = workspace.particles[endpoint].state;
-            workspace.touched[endpoint] = 1;
-            double const sign = endpoint == i ? -1.0 : 1.0;
-            state.pendingMass += sign * delta.mass;
-            state.pendingEnergy += sign * delta.energy;
-            double const age = record.beginTime - state.sourceTime;
-            if (age < -32.0 * std::numeric_limits<double>::epsilon() *
-                    std::max(1.0, std::abs(state.sourceTime))) {
-                throw std::runtime_error("Hopkins pair predates an endpoint's source anchor");
-            }
-            for (int dim = 0; dim < 3; ++dim) {
-                state.pendingMomentum[dim] += sign * delta.momentum[dim];
-                state.pendingGravityIntegral[dim] += work.integral[dim];
-                state.pendingGravityWork[dim] += age * work.integral[dim] + work.firstMoment[dim];
-            }
-        }
+        hopkinsSettleRecord(record, workspace.time, deposits);
         iterator = hopkinsPairs.erase(iterator);
         ++settled;
     }
+    hopkinsApplyDeposits(workspace, deposits);
     return settled;
 }
 
@@ -2693,8 +2713,9 @@ void hopkinsCurrentViews(HopkinsWorkspace& workspace) {
     }
 }
 
-// Open every pair incident on an active cell that has no live interval. Slots
-// are in identifier order, so the lower slot is the lower identifier.
+// Open every pair incident on an active cell that has no live interval. The left
+// endpoint of a pair is the lower identifier, which need not be the lower slot
+// once owned cells and ghosts occupy separate slot ranges.
 void hopkinsOpenPairs(HopkinsWorkspace& workspace, std::vector<size_t> const& active,
     size_t& retained, size_t& opened) {
     profile::ScopedPhase profilePhase("hydro.hopkins.flux.open");
@@ -2710,8 +2731,10 @@ void hopkinsOpenPairs(HopkinsWorkspace& workspace, std::vector<size_t> const& ac
         std::vector<size_t> neighbors;
         hopkinsNeighborQuery(workspace, i, 1.0, true, operations, neighbors);
         for (size_t j : neighbors) {
-            size_t const lower = std::min(i, j);
-            size_t const upper = std::max(i, j);
+            bool const ordered =
+                workspace.particles[i].state.identifier < workspace.particles[j].state.identifier;
+            size_t const lower = ordered ? i : j;
+            size_t const upper = ordered ? j : i;
             auto const& left = workspace.particles[lower];
             auto const& right = workspace.particles[upper];
             if (!workspace.built[lower] || !workspace.built[upper]) {
@@ -2727,7 +2750,12 @@ void hopkinsOpenPairs(HopkinsWorkspace& workspace, std::vector<size_t> const& ac
     for (auto const& list : found) {
         pairs.insert(pairs.end(), list.begin(), list.end());
     }
-    std::sort(pairs.begin(), pairs.end());
+    auto const keyOf = [&](std::pair<size_t, size_t> const& pair) {
+        return HopkinsPairKey{workspace.particles[pair.first].state.identifier,
+            workspace.particles[pair.second].state.identifier};
+    };
+    std::sort(pairs.begin(), pairs.end(),
+        [&](auto const& left, auto const& right) { return keyOf(left) < keyOf(right); });
     pairs.erase(std::unique(pairs.begin(), pairs.end()), pairs.end());
     workspace.work.pairsSolved += pairs.size();
     std::vector<HopkinsPairRecord> records(pairs.size());

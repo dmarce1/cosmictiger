@@ -233,6 +233,7 @@ set(cosmictiger_header_files
     cosmictiger/hydro/hopkins/hopkins.hpp
     cosmictiger/hydro/hopkins/hopkins_simd.hpp
     cosmictiger/hydro/hopkins/hopkins_state.hpp
+    cosmictiger/hydro/hopkins/hopkins_wake_sweep.hpp
     cosmictiger/hydro/hopkins/hopkins_hydro.hpp
     cosmictiger/core/options.hpp
     cosmictiger/core/options_metadata.hpp

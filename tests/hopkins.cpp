@@ -10,7 +10,11 @@
 #include <array>
 #include <cfenv>
 #include <cmath>
+#include <cstdint>
 #include <limits>
+#include <map>
+#include <random>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -19,6 +23,7 @@
 #include <cosmictiger/hydro/hopkins/hopkins.hpp>
 #include <cosmictiger/hydro/hopkins/hopkins_simd.hpp>
 #include <cosmictiger/hydro/hopkins/hopkins_state.hpp>
+#include <cosmictiger/hydro/hopkins/hopkins_wake_sweep.hpp>
 
 namespace detail {
 
@@ -2178,4 +2183,164 @@ TEST(HopkinsHierarchyPosition, HydroWakePreservesTrajectoryAndIndependentGravity
     EXPECT_EQ(refreshed.positionAt(0, refreshed.gravityEndTime).raw(),
         (original.positionAt(0, original.gravityEndTime) + Position(0.09375)).raw());
     EXPECT_EQ(refreshed.gravityEndTime, original.gravityEndTime);
+}
+
+namespace {
+
+struct WakeGraph {
+    std::vector<uint64_t> identifiers;
+    std::vector<int> rungs;
+    std::vector<bool> active;
+    std::vector<std::vector<size_t>> stencils;    // symmetric, by cell index
+};
+
+// Random symmetric graph with identifiers in a shuffled, non-contiguous order.
+WakeGraph randomWakeGraph(unsigned seed, size_t count, double degree) {
+    std::mt19937_64 generator(seed);
+    WakeGraph graph;
+    std::set<uint64_t> used;
+    while (graph.identifiers.size() < count) {
+        uint64_t const identifier = generator() % (16 * count);
+        if (used.insert(identifier).second) {
+            graph.identifiers.push_back(identifier);
+        }
+    }
+    std::uniform_int_distribution<int> rung(0, 7);
+    std::bernoulli_distribution activity(0.3);
+    std::bernoulli_distribution edge(degree / double(count));
+    graph.stencils.resize(count);
+    for (size_t i = 0; i < count; ++i) {
+        graph.rungs.push_back(rung(generator));
+        graph.active.push_back(activity(generator));
+        for (size_t j = 0; j < i; ++j) {
+            if (edge(generator)) {
+                graph.stencils[i].push_back(j);
+                graph.stencils[j].push_back(i);
+            }
+        }
+    }
+    for (auto& stencil : graph.stencils) {
+        std::sort(stencil.begin(), stencil.end(), [&](size_t left, size_t right) {
+            return graph.identifiers[left] < graph.identifiers[right];
+        });
+    }
+    return graph;
+}
+
+// The direct sweep the coordinator ran before WakeSweep: every cell in
+// identifier order, repeated until a pass raises nobody.
+size_t directWakeSweep(WakeGraph& graph, int minimumRung) {
+    std::vector<size_t> order(graph.identifiers.size());
+    for (size_t i = 0; i < order.size(); ++i) {
+        order[i] = i;
+    }
+    std::sort(order.begin(), order.end(), [&](size_t left, size_t right) {
+        return graph.identifiers[left] < graph.identifiers[right];
+    });
+    size_t woken = 0;
+    bool changed;
+    do {
+        changed = false;
+        for (size_t i : order) {
+            int const rung = graph.rungs[i];
+            for (size_t j : graph.stencils[i]) {
+                if (graph.rungs[j] + 2 < rung) {
+                    woken += !graph.active[j];
+                    graph.active[j] = true;
+                    graph.rungs[j] = std::max(minimumRung, rung);
+                    changed = true;
+                }
+            }
+        }
+    } while (changed);
+    return woken;
+}
+
+// Drive WakeSweep. filtered == false answers with full stencils; filtered ==
+// true seeds only the cells that can raise somebody and answers with the
+// members crossing the contrast at the cell's current rung, as an owner that
+// sees only current rungs would.
+size_t machineWakeSweep(WakeGraph& graph, int minimumRung, size_t prefetch, bool filtered) {
+    int lowestRung = std::numeric_limits<int>::max();
+    for (int rung : graph.rungs) {
+        lowestRung = std::min(lowestRung, rung);
+    }
+    std::map<uint64_t, size_t> index;
+    for (size_t i = 0; i < graph.identifiers.size(); ++i) {
+        index[graph.identifiers[i]] = i;
+    }
+    hopkins::WakeSweep sweep;
+    for (size_t i = 0; i < graph.identifiers.size(); ++i) {
+        if (!filtered || graph.rungs[i] >= lowestRung + 3) {
+            sweep.seed(graph.identifiers[i], graph.rungs[i], graph.active[i]);
+        }
+    }
+    sweep.start(lowestRung, minimumRung, prefetch);
+    for (auto requests = sweep.step(); !requests.empty(); requests = sweep.step()) {
+        for (uint64_t identifier : requests) {
+            size_t const i = index.at(identifier);
+            int const rung = sweep.rung(identifier);
+            std::vector<hopkins::WakeSweep::Member> members;
+            for (size_t j : graph.stencils[i]) {
+                // The owner side of the replay: rungs the sweep already raised
+                // are known to it, the others are the graph's initial values.
+                int memberRung = graph.rungs[j];
+                bool memberActive = graph.active[j];
+                for (auto const& raise : sweep.raises()) {
+                    if (raise.identifier == graph.identifiers[j]) {
+                        memberRung = raise.rung;
+                        memberActive = raise.active;
+                    }
+                }
+                if (!filtered || memberRung + 2 < rung) {
+                    members.push_back({graph.identifiers[j], memberRung, memberActive});
+                }
+            }
+            sweep.provide(identifier, members, filtered ? rung : hopkins::WakeSweep::kAnyRung);
+        }
+    }
+    for (auto const& raise : sweep.raises()) {
+        size_t const i = index.at(raise.identifier);
+        graph.rungs[i] = raise.rung;
+        graph.active[i] = raise.active;
+    }
+    return sweep.woken();
+}
+
+}    // namespace
+
+TEST(HopkinsWakeSweep, VisitOrderDecidesTheRaisedRung) {
+    // Chain a-b-c with rungs 3, 0, 4: visiting a first lifts b to 3, after which
+    // c (rung 4) no longer sees a contrast; visiting c first lifts b to 4.
+    for (bool cFirst : {false, true}) {
+        WakeGraph graph;
+        graph.identifiers =
+            cFirst ? std::vector<uint64_t>{9, 5, 1} : std::vector<uint64_t>{1, 5, 9};
+        graph.rungs = {3, 0, 4};
+        graph.active = {true, false, true};
+        graph.stencils = {{1}, {0, 2}, {1}};
+        auto reference = graph;
+        size_t const expectedWoken = directWakeSweep(reference, 0);
+        size_t const woken = machineWakeSweep(graph, 0, 1, false);
+        EXPECT_EQ(woken, expectedWoken);
+        EXPECT_EQ(graph.rungs, reference.rungs);
+        EXPECT_EQ(graph.rungs[1], cFirst ? 4 : 3);
+    }
+}
+
+TEST(HopkinsWakeSweep, ReplaysTheDirectSweepOnRandomGraphs) {
+    for (unsigned seed = 1; seed <= 40; ++seed) {
+        for (bool filtered : {false, true}) {
+            for (size_t prefetch : {size_t(1), size_t(3), size_t(1000)}) {
+                auto graph = randomWakeGraph(seed, 60 + 7 * seed, 4.0 + seed % 5);
+                auto reference = graph;
+                int const minimumRung = int(seed % 3);
+                size_t const expectedWoken = directWakeSweep(reference, minimumRung);
+                size_t const woken = machineWakeSweep(graph, minimumRung, prefetch, filtered);
+                ASSERT_EQ(woken, expectedWoken) << "seed " << seed << " filtered " << filtered;
+                ASSERT_EQ(graph.rungs, reference.rungs) << "seed " << seed;
+                ASSERT_EQ(graph.active, reference.active) << "seed " << seed;
+            }
+        }
+    }
 }
