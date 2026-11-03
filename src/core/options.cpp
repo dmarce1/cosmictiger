@@ -245,10 +245,6 @@ void validateStarFormation(Options const& opts) {
     if (!opts.chemistry.enabled) {
         throw std::invalid_argument("starFormation.enabled requires chemistry.enabled=true");
     }
-    if (opts.run.timeIntegrator != "traditional" && opts.run.timeIntegrator != "global") {
-        throw std::invalid_argument(
-            "Star formation requires the traditional or global time integrator");
-    }
     if (!isFiniteOption(settings.beta) || settings.beta <= 0.0 || settings.beta >= 1.0 ||
         !isPositiveFloatOption(settings.evaporationFactor) ||
         !isPositiveFloatOption(settings.starFormationTimeGyr) ||
@@ -1635,11 +1631,6 @@ bool processOptions(int argc, char* argv[]) {
     }
     opts.run.hierarchicalGravity = usesHierarchicalIntegration(opts.run);
     if (opts.run.hierarchicalGravity && opts.hydro.enabled) {
-        if (opts.chemistry.enabled || opts.starFormation.enabled) {
-            THROW_ERROR(
-                "Hierarchical hydro requires chemistry.enabled=false and "
-                "starFormation.enabled=false until source wake-up intervals are supported\n");
-        }
         if (opts.hydro.method == "sph" && opts.gravity.enabled &&
             opts.hydro.viscosityGradientSwitch()) {
             THROW_ERROR(

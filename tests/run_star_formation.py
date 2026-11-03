@@ -102,7 +102,10 @@ def main():
     base = args.workdir.resolve()
     base.mkdir(parents=True, exist_ok=True)
     available = compiled_algorithms(str(executable))
-    integrators = [value for value in ("traditional", "global") if value in available["integrator"]]
+    # Hierarchical hydro needs a compiled gravity solver, even with gravity disabled.
+    integrators = [value for value in ("traditional", "global", "hierarchical")
+                   if value in available["integrator"] and
+                   (value != "hierarchical" or any(far != "none" for far in available["far"]))]
     if not integrators:
         raise RuntimeError("star formation requires a compiled SPH-compatible integrator")
     common = {"gravity.cuda": "false", "hydro.cuda": "false", "drift.cuda": "false", "hydro.enabled": "true",

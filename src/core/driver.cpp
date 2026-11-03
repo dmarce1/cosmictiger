@@ -1360,7 +1360,6 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             }
             if (levels[li] == minrung0 || closingOnly) {
                 energies->therm = hydro.thermalEnergy / sqr(scale);
-                synchronizedChemistryPressure = (getOptions().hydro.gamma - 1.0) * energies->therm;
             }
             if (!closingOnly && selfGravity) {
                 thisKr.dkin += sphHierarchicalOpenGravity(
@@ -2117,17 +2116,30 @@ void driver() {
             // Peebles, Large-Scale Structure of the Universe (1980), energy
             // equation; the gas term follows directly from dU=-P dV.
             double driftThermal = energies.therm;
+#if COSMICTIGER_WITH_SPH && COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
+            if (getOptions().run.hierarchicalGravity && getOptions().hydro.enabled &&
+                getOptions().hydro.method == "sph" && a != a0) {
+                // The synchronized sum is refreshed only at full synchronization, while
+                // each event closes, sources and reopens its active gas.
+                driftThermal = sphHierarchicalThermalEnergy() / sqr(a0);
+            }
+#endif
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_HOPKINS
             if (getOptions().run.hierarchicalGravity && getOptions().hydro.enabled &&
                 getOptions().hydro.method == "mfm") {
                 driftThermal = hopkinsHierarchicalDriftThermalEnergy();
             }
 #endif
+            // Hierarchical integration pairs the gamma-law pressure (cooling requires
+            // gamma=5/3) with this same thermal sum. Its events do not refresh the
+            // synchronized integral, which checkpoints do not retain either.
+            bool const sourcePressure =
+                (getOptions().chemistry.enabled || getOptions().starFormation.enabled) &&
+                !getOptions().run.hierarchicalGravity;
             energies.cosmic += cosmology::kineticExpansionWork(a0, a, energies.tckin) +
                 (a - a0) *
-                    ((getOptions().chemistry.enabled || getOptions().starFormation.enabled) ?
-                            -driftThermal + 3.0 * synchronizedChemistryPressure :
-                            (3.0 * getOptions().hydro.gamma - 4.0) * driftThermal);
+                    (sourcePressure ? -driftThermal + 3.0 * synchronizedChemistryPressure :
+                                      (3.0 * getOptions().hydro.gamma - 4.0) * driftThermal);
             double const dyears =
                 physicalInterval * getOptions().units.timeSeconds / constants::kSpyr;
             auto const z0 = 1.0 / a0 - 1.0;

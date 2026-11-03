@@ -45,7 +45,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
-    parser.add_argument("--time-integrator", default="traditional", choices=("traditional", "global"))
+    parser.add_argument("--time-integrator", default="traditional",
+                        choices=("traditional", "global", "hierarchical"))
     parser.add_argument("--cuda", action="store_true")
     parser.add_argument("--mpi-exec")
     parser.add_argument("--mpi-numproc-flag", default="-n")

@@ -230,10 +230,10 @@ hierarchical gravity because changing source masses would require additional
 handling in the held gravity interaction. The gravity solver is an independent
 choice: `gravity.method.far=fmm` or `pmmm` can accompany the supported integrators.
 A uniform global timestep is optional; choosing PMMM does not select it. MFM
-accepts `chemistry.enabled` and `starFormation.enabled` under traditional or
-global integration (see [Chemistry and star formation](#chemistry-and-star-formation));
-both must be disabled for MFV and for hierarchical hydro, and incompatible
-combinations are rejected during option validation. Hierarchical MFM also
+accepts `chemistry.enabled` and `starFormation.enabled` under every supported
+integrator (see [Chemistry and star formation](#chemistry-and-star-formation));
+both must be disabled for MFV, and incompatible combinations are rejected during
+option validation. Hierarchical MFM also
 requires `lightcone.enabled=false` until crossings can be emitted from completed
 hydro trajectory segments instead of tentative gravity projections.
 
@@ -483,7 +483,9 @@ prediction, and the wake checks remain the only guard against that.
 
 Between a hierarchical `Begin` and its `Finish` the event stays open: geometry
 solved before the gravity ladder remains valid because the hydro positions and
-coordinator-owned supports do not change inside an event, and the records the
+coordinator-owned supports do not change inside an event (unless `Begin` converted
+cells to stars, after which `Finish` re-solves them; see
+[Chemistry and star formation](#chemistry-and-star-formation)), and the records the
 ladder modified (momentum, energy, gravity endpoint and rung of the active
 cells) are reimported before reconstruction. Under traditional integration
 `hopkinsPrepareGeometry` now receives the base timestep and the global flag so
@@ -721,14 +723,34 @@ enters the cell's dual-energy entropy. The heating diagnostic and the
 synchronized pressure integral of the cosmological energy budget follow the SPH
 conventions.
 
-A whole-cell conversion decided at a closure keeps the cell's closing state for
-that kick: it opens no new pair interval (its old pairs were settled at the
+Under traditional or global integration, a whole-cell conversion decided at a
+closure keeps the cell's closing state for that kick: it opens no new pair interval (its old pairs were settled at the
 closure), it still participates in its neighbours' volume partition and
 gradients at that instant, and the scatter removes it from the gas set and
 registers the new star for the opening gravity half kick that
 `starFormationOpenNewStars` applies. The next kick rebuilds supports and
 geometry without it. Per-step reports include the number of conversions as
 `stars=`.
+
+Under hierarchical integration, `hopkinsHierarchicalBegin` closes every hydro-due
+cell and every cell whose gravity interval ends at the event. A cell on a finer
+gravity rung than its hydro rung is therefore closed early at each of its gravity
+events. The sources run right after these closures, before any signed gravity
+impulse, over exactly the duration each cell closed, including those early
+closures; the Finish re-closure of the same cells has zero duration and adds no
+source. Cells first woken at Finish receive their sources there, as above. The
+thermal change does not interact with the gravity impulses, which change only the
+kinetic part of the conserved energy. A cell converted at Begin leaves the gas set
+at Begin's install and enters the gravity ladder as a collisionless star; Finish
+then re-solves supports and geometry for every needed cell, because Begin solved
+them with the converted cell present. A converted cell's gravity coordinate is
+reset to the star's ballistic drift from the closure to the end of its open gravity
+interval, replacing the projected hydro trajectory. No newborn star receives an
+opening kick from `starFormationOpenNewStars` under hierarchy: a star born at Begin
+takes its kicks in the ladder, and a star born at a Finish wake keeps the gravity
+interval its gas cell already opened. `Hopkins hierarchy begin` rows report Begin
+conversions as `stars=`; `Hopkins step` rows report those of Finish wakes. The
+validation record is in [hierarchical SPH](hierarchical_sph.md#validation-status).
 
 MFV transfers mass between cells and would require advecting the cooling and
 star-formation state with those fluxes; it still requires

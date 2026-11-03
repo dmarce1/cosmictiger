@@ -26,10 +26,6 @@ enabled = true
 method = sph
 [gravity]
 enabled = false
-[chemistry]
-enabled = false
-[starFormation]
-enabled = false
 ```
 
 With self-gravity enabled, FMM and PMMM use the same hydro scheduling interface.
@@ -37,8 +33,8 @@ Viscosity evolution must be `none` or `morrisAndMonaghan`: the
 `cullenAndDehnen` and `priceEtAl` switches require the full material acceleration
 gradient, while a fine hierarchical gravity walk supplies only its active
 subset field. Those switches remain available with self-gravity disabled.
-Chemistry and star formation are currently rejected for hierarchical hydro;
-their heating and conversion events need separate source synchronization.
+Cooling and star formation are supported; see
+[Cooling and star formation](#cooling-and-star-formation).
 
 ## Tree and particle lifetime
 
@@ -103,6 +99,38 @@ reciprocal kicks to sleeping gas, so exact pairwise momentum or energy
 conservation across different rungs is not guaranteed. Accuracy and conservation
 must be measured at the selected timestep resolution.
 
+## Cooling and star formation
+
+`chemistry.enabled` (GADGET-4 equilibrium cooling, `docs/primordial_chemistry.md`) and
+`starFormation.enabled` (Springel & Hernquist multiphase star formation,
+`docs/star_formation.md`) act as in the traditional SPH step: the source runs once
+on each gas particle when its interval closes, after the closing corrector and
+before the opening force selects the next rung. Each particle integrates the
+source over the anchor interval its hydro closure has just completed
+(`validUntil - epoch`), so particles on different rungs cool and form stars over
+their own durations. Sleeping particles receive no source between their events;
+neighbours see their predicted, unsourced state, as under traditional individual
+timesteps. Every locality stages its results before any locality commits them.
+
+A conversion removes the gas particle at that closure. The step rebuilds its
+active work list, because conversions move gas slots, and re-solves the active
+supports and densities without the new star before the opening force; the
+refresh preceding each pass drops the star from the retained sources. The top
+gravity kick deferred the particle's opening while it was gas, so the star takes
+the collisionless top opening instead: its rung follows the kick's top selection
+from the gravity timestep the kick stored for it, and it receives the top half
+kick together with the gas. The terminal energy evaluation applies sources and
+conversions over the outstanding intervals but opens nothing.
+
+The heating diagnostic and the `SPH hierarchy sources` log row report the energy
+the sources removed and the conversions at each event. Events between full
+synchronizations change only their active gas, so the cosmological expansion
+work uses the current thermal energy of all gas, summed after each step.
+
+Hierarchical SPH has no wake-up path. A source that heats a particle does not
+shorten an interval a sleeping neighbour has already selected; the signal bound
+applies only to rungs selected afterwards.
+
 ## Incoming signals and work counters
 
 The source tree supplies the nonlocal signal-travel timestep bound of GADGET-4
@@ -161,6 +189,27 @@ single-threaded, beyond the runner's 120 s per-process cap, so that one run was
 produced by the same `run_case` with a longer timeout and the committed runner
 compared all four with `--analyze-only`. This is a timestep-resolution result at
 fixed force settings; it is not a performance or production claim.
+
+Cooling and star formation (CPU, Release, Fixed64, FMM, 2026-11-03): on the
+homogeneous 8³ lattice the hierarchical and traditional integrators give the same
+conversions and mean thermal energy for SPH and for MFM (`hopkins_thermal_sources`,
+`star_formation_application`, and `gadget4_cooling_integration_hierarchical_cpu` and
+its two-locality `_mpi` twin, all with exact restarts).
+`hierarchical_sources_application` runs a 16³ cosmology from redshift 4 with
+forced star-formation thresholds. Its SPH case closes part of the gas at 65 events,
+forms 5 stars, restarts byte-exactly from a mid-step checkpoint taken after the first
+conversion, and at the first full synchronization matches the traditional
+integrator's 4 stars and mean stored thermal energy to 6e-5, with energy residuals of
+-6.5e-5 and -7.1e-5. Its MFM case forms 6 stars, closes cells at gravity events before
+their hydro endpoints, restarts exactly, and matches the traditional star count;
+the mean thermal energy differs by 5.8%, within the 6.8% by which the two MFM
+integrators already differ without sources. In a similar 16³ run that reaches two
+synchronizations, the hierarchical SPH residual with sources was -2.3e-4 and -4.0e-4
+while the expansion work used the synchronized thermal energy, and -4.4e-6 and 5.5e-7
+with the all-gas sum (traditional: -9.7e-6 and -1.0e-5). A 32³ run of `configurations/star_formation/lcdm.ini` completed 18 hierarchical steps
+with sources in a CPU build that disables the traditional and global integrators.
+These cases exercise the coupling and its bookkeeping; they do not establish
+converged star-formation histories.
 
 CUDA execution, long production runs, and a performance advantage remain
 unvalidated. Compilation, CPU execution, CUDA execution, numerical convergence,
