@@ -167,7 +167,10 @@ Hopkins MFM/MFV geometry, reconstruction, Riemann fluxes, and double state.
 `hydro.method=sph|mfm|mfv` selects the runtime method. Particle storage, drift,
 migration, gravity masses, checkpoints, and output share the existing lifecycle
 boundaries. Both methods share the persistent geometry tree in
-`cosmictiger/hydro/source_tree.hpp`. The SPH hierarchical adapter and staged
+`cosmictiger/hydro/source_tree.hpp` and the method-agnostic retained-source
+forest `hydro_source::Forest` in `cosmictiger/hydro/source_forest.hpp`, which
+`cosmictiger/hydro/sph/hierarchical_sources.hpp` instantiates for the SPH
+anchor through `SphSourcePolicy`. The SPH hierarchical adapter and staged
 CPU/CUDA execution live in `src/hydro/sph/hierarchical.cpp` and `staged_run.cpp`;
 see [hierarchical SPH](hierarchical_sph.md) and
 [Hopkins hydrodynamics](hopkins_hydro.md).
