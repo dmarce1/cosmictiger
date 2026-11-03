@@ -171,12 +171,8 @@ double sphCoolingPrepare(
     double heating = 0.0;
     std::exception_ptr failure;
     try {
-        auto const& options = getOptions();
-        auto const scales = units::scalesFromOptions(options);
-        units::CosmologicalContext const context(scaleFactor, options.cosmology.hubble);
-        std::vector<SphChemistryBatchInput> inputs;
-        detail::pendingCoolingIndices.clear();
-        detail::pendingCoolingResults.clear();
+        std::vector<ParticleInteger> indices;
+        std::vector<double> intervals;
         for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
             int const rung = sphParticlesRung(index);
             if (rung < minimumRung) {
@@ -185,25 +181,11 @@ double sphCoolingPrepare(
             if (rung < 0 || rung >= kMaxRung) {
                 throw std::runtime_error("Cooling received an unsupported SPH rung");
             }
-            double const interval =
-                explicitTimestep >= 0.0 ? explicitTimestep : std::ldexp(baseTimestep, -rung);
-            if (!(interval > 0.0) || !std::isfinite(interval)) {
-                throw std::runtime_error("Cooling requires a positive completed SPH interval");
-            }
-            double const seconds = units::toPhysicalInterval(
-                units::ConformalTime(interval * scales.timeScale()), context)
-                                       .quantity()
-                                       .value();
-            inputs.push_back({sphParticlesChemistryStates[index], sphParticlesInternalEnergy(index),
-                sphParticlesDensity(index), seconds, index});
-            detail::pendingCoolingIndices.push_back(index);
+            indices.push_back(index);
+            intervals.push_back(
+                explicitTimestep >= 0.0 ? explicitTimestep : std::ldexp(baseTimestep, -rung));
         }
-        detail::pendingCoolingResults = sphChemistryAdvanceBatch(inputs, scaleFactor);
-        for (size_t j = 0; j < inputs.size(); ++j) {
-            heating -= options.initial.gasMass *
-                double(detail::pendingCoolingResults[j].storedEnergy - inputs[j].storedEnergy) /
-                scaleFactor;
-        }
+        heating = sphCoolingPrepareLocal(indices, intervals, scaleFactor);
     } catch (...) {
         failure = std::current_exception();
     }
@@ -226,6 +208,46 @@ void sphCoolingCommit() {
     for (auto const& child : hpxChildren()) {
         remote.push_back(hpx::async<SphCoolingCommitAction>(child));
     }
+    sphCoolingCommitLocal();
+    for (auto& future : remote) {
+        future.get();
+    }
+}
+double sphCoolingPrepareLocal(std::vector<ParticleInteger> const& indices,
+    std::vector<double> const& intervals, double scaleFactor) {
+    if (indices.size() != intervals.size()) {
+        throw std::invalid_argument("Cooling slots and intervals differ in count");
+    }
+    auto const& options = getOptions();
+    auto const scales = units::scalesFromOptions(options);
+    units::CosmologicalContext const context(scaleFactor, options.cosmology.hubble);
+    std::vector<SphChemistryBatchInput> inputs;
+    detail::pendingCoolingIndices.clear();
+    detail::pendingCoolingResults.clear();
+    for (size_t j = 0; j < indices.size(); ++j) {
+        ParticleInteger const index = indices[j];
+        double const interval = intervals[j];
+        if (!(interval > 0.0) || !std::isfinite(interval)) {
+            throw std::runtime_error("Cooling requires a positive completed SPH interval");
+        }
+        double const seconds =
+            units::toPhysicalInterval(units::ConformalTime(interval * scales.timeScale()), context)
+                .quantity()
+                .value();
+        inputs.push_back({sphParticlesChemistryStates[index], sphParticlesInternalEnergy(index),
+            sphParticlesDensity(index), seconds, index});
+    }
+    auto results = sphChemistryAdvanceBatch(inputs, scaleFactor);
+    double heating = 0.0;
+    for (size_t j = 0; j < inputs.size(); ++j) {
+        heating -= options.initial.gasMass *
+            double(results[j].storedEnergy - inputs[j].storedEnergy) / scaleFactor;
+    }
+    detail::pendingCoolingIndices = indices;
+    detail::pendingCoolingResults = std::move(results);
+    return heating;
+}
+void sphCoolingCommitLocal() {
     for (size_t j = 0; j < detail::pendingCoolingIndices.size(); ++j) {
         ParticleInteger const index = detail::pendingCoolingIndices[j];
         sphParticlesChemistryStates[index] = detail::pendingCoolingResults[j].state;
@@ -233,9 +255,6 @@ void sphCoolingCommit() {
     }
     detail::pendingCoolingIndices.clear();
     detail::pendingCoolingResults.clear();
-    for (auto& future : remote) {
-        future.get();
-    }
 }
 double sphChemistryClose(
     int minimumRung, double scaleFactor, double, double baseTimestep, double explicitTimestep) {

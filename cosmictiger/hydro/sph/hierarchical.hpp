@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include <cosmictiger/hydro/sph/sph.hpp>
 
 struct HierarchicalSphResult {
@@ -16,7 +18,9 @@ struct HierarchicalSphResult {
     double zMomentum = 0.0;
     double momentumNorm = 0.0;
     double thermalEnergy = 0.0;
+    // Energy the GADGET-4 sources removed from the closed gas, and its conversions.
     double heating = 0.0;
+    uint64_t converted = 0;
 };
 
 // Called once at the top of the gravity ladder, after its closing kick and
@@ -29,5 +33,7 @@ HierarchicalSphResult sphHierarchicalStep(int minimumRung, double scaleFactor, d
 double sphHierarchicalOpen(int rung, double time, double timestep, double driftScale);
 double sphHierarchicalOpenGravity(int minimumRung, double halfTimestep);
 void sphHierarchicalReportWork(int minimumRung, double time);
+// Sum of m*u over all gas, including the inactive particles between their events.
+double sphHierarchicalThermalEnergy();
 // Rank-local lifetime hook; callers have already joined all SPH work.
 void sphHierarchicalResetSources();

@@ -38,5 +38,18 @@ void starFormationConvertGas(ParticleInteger gas, StarFormationState const& stat
 // exactly the opening gravity half kick; global/mesh finish routines own theirs.
 int starFormationOpenNewStars(double baseTimestep, double scaleFactor, double maximumTimestep,
     int minimumRung, bool kickGravity);
+// Rank-local source of the listed gas slots, each over its own completed code-time
+// interval. Prepare stages the outcome; commit converts or updates the particles and
+// registers newborn stars. Callers run every locality's prepare before any commit.
+StarFormationUpdate starFormationPrepareLocal(std::vector<ParticleInteger> const& gasIndices,
+    std::vector<double> const& intervals, double scaleFactor);
+void starFormationCommitLocal();
+// Hierarchical SPH defers every gas opening at the top gravity level, so newborn stars
+// take the collisionless top opening instead. Select their rungs from the captured gravity
+// timestep (returns the largest), then apply the top half kick and clear the list (returns
+// the kinetic change). Clear the list without a kick when no opening follows.
+int starFormationSelectHierarchicalRungs(int minimumRung, double baseTimestep);
+double starFormationKickHierarchicalNewStars(double halfTimestep);
+void starFormationClearNewStarsLocal();
 uint64_t starFormationRandomBits(uint64_t identity, uint64_t event, uint64_t stream);
 double starFormationUniform(uint64_t identity, uint64_t event, uint64_t stream);

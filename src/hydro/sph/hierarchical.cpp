@@ -27,6 +27,12 @@
 #include <cosmictiger/hydro/sph/price_etal/viscosity.hpp>
 #include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/hydro/sph/staged_run.hpp>
+#if COSMICTIGER_ENABLE_CHEMISTRY
+#include <cosmictiger/hydro/sph/sph_chemistry.hpp>
+#endif
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+#include <cosmictiger/hydro/sph/star_formation.hpp>
+#endif
 
 // Runtime hierarchy is unavailable in hydro-only builds. Keep the lifetime hook
 // linkable for the shared particle storage without introducing cosmology symbols.
@@ -158,11 +164,9 @@ std::vector<std::vector<SourceState>> querySourceBatches(
 HPX_PLAIN_ACTION(detail::querySourceBatches, QueryHierarchicalSourceBatchesAction);
 namespace detail {
 
-void resetWork(int minimumRung, double time, double signalSoundFloor) {
-    std::lock_guard lock(sourceMutex);
-    initializeSources(time);
-    sourceForest.resetCounters();
-    sourceForest.setSignalSoundFloor(signalSoundFloor);
+// Active gas slots of this step in Morton order. Star formation removes gas slots by
+// swapping, so the list is rebuilt after conversions; the work counters stay.
+void orderStepGas(int minimumRung) {
     stepGasIndices = activeGas(minimumRung);
     std::vector<std::pair<uint64_t, ParticleInteger>> ordered;
     ordered.reserve(stepGasIndices.size());
@@ -179,6 +183,14 @@ void resetWork(int minimumRung, double time, double signalSoundFloor) {
     for (size_t index = 0; index < ordered.size(); ++index) {
         stepGasIndices[index] = ordered[index].second;
     }
+}
+
+void resetWork(int minimumRung, double time, double signalSoundFloor) {
+    std::lock_guard lock(sourceMutex);
+    initializeSources(time);
+    sourceForest.resetCounters();
+    sourceForest.setSignalSoundFloor(signalSoundFloor);
+    orderStepGas(minimumRung);
     activeCount = stepGasIndices.size();
     densityCount = forceCount = 0;
 }
@@ -293,8 +305,18 @@ GasDiagnostics gasDiagnosticsLocal(int minimumRung) {
     }
     return result;
 }
+
+double gasThermalLocal() {
+    double thermal = 0.0;
+    for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
+        thermal +=
+            double(particlesMass(sphParticlesParticleIndex(gas))) * sphParticlesInternalEnergy(gas);
+    }
+    return thermal;
+}
 }    // namespace detail
 HPX_PLAIN_ACTION(detail::gasDiagnosticsLocal, HierarchicalGasDiagnosticsAction);
+HPX_PLAIN_ACTION(detail::gasThermalLocal, HierarchicalGasThermalAction);
 namespace detail {
 
 GasDiagnostics gasDiagnosticsEverywhere(int minimumRung) {
@@ -393,6 +415,9 @@ void updateActive(int minimumRung, int phase, double time) {
             }
         } else if (phase == 3) {
             anchor = liveSource(gas, time);
+        } else if (phase == 5) {
+            // Star formation removed gas after these supports converged.
+            sphParticlesConverged(gas) = false;
         } else if ((phase == 2 || phase == 4) && options.hydro.viscosityGradientSwitch()) {
             auto& state = sphParticlesCullenDehnenStates[gas];
             auto& viscosity = sphParticlesViscosityStates[gas];
@@ -413,6 +438,82 @@ void updateActive(int minimumRung, int phase, double time) {
 }
 }    // namespace detail
 HPX_PLAIN_ACTION(detail::updateActive, UpdateHierarchicalGasAction);
+namespace detail {
+
+struct SourceResult {
+    double heating = 0.0;
+    uint64_t converted = 0;
+
+    template <typename Archive>
+    void serialize(Archive&& archive, unsigned) {
+        archive & heating;
+        archive & converted;
+    }
+};
+
+// Operator-split GADGET-4 sources for the gas closing at this event, as sphStep2
+// applies them after the corrector. Each particle integrates the source over the
+// anchor interval its hydro closure just integrated. Every locality stages its
+// results before any commits them, so a failed source commits nothing.
+SourceResult prepareSourcesLocal(int minimumRung, double scaleFactor) {
+    std::vector<ParticleInteger> gasIndices;
+    std::vector<double> intervals;
+    for (auto gas : activeGas(minimumRung)) {
+        auto const& anchor = sphParticlesHierarchicalStates[gas];
+        gasIndices.push_back(gas);
+        intervals.push_back(anchor.validUntil - anchor.epoch);
+    }
+    SourceResult result;
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+    if (getOptions().starFormation.enabled) {
+        // The combined SH03 source owns cooling, as in sphStep2.
+        auto const update = starFormationPrepareLocal(gasIndices, intervals, scaleFactor);
+        result.heating = update.heating;
+        result.converted = update.converted;
+        return result;
+    }
+#endif
+#if COSMICTIGER_ENABLE_CHEMISTRY
+    if (getOptions().chemistry.enabled) {
+        result.heating = sphCoolingPrepareLocal(gasIndices, intervals, scaleFactor);
+        return result;
+    }
+#endif
+    throw std::logic_error("Hierarchical SPH sources require chemistry or star formation");
+}
+}    // namespace detail
+HPX_PLAIN_ACTION(detail::prepareSourcesLocal, PrepareHierarchicalSourcesAction);
+namespace detail {
+
+// Conversions swap gas slots, so the step's work list is rebuilt after them. Newborn
+// stars select their collisionless top rungs when the gravity opening follows and
+// otherwise leave no pending opening behind.
+void commitSourcesLocal(int minimumRung, double baseTimestep, bool converted, bool openStars) {
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+    if (getOptions().starFormation.enabled) {
+        starFormationCommitLocal();
+        if (converted) {
+            std::lock_guard lock(sourceMutex);
+            orderStepGas(minimumRung);
+        }
+        if (openStars) {
+            starFormationSelectHierarchicalRungs(minimumRung, baseTimestep);
+        } else {
+            starFormationClearNewStarsLocal();
+        }
+        return;
+    }
+#endif
+#if COSMICTIGER_ENABLE_CHEMISTRY
+    if (getOptions().chemistry.enabled) {
+        sphCoolingCommitLocal();
+        return;
+    }
+#endif
+    throw std::logic_error("Hierarchical SPH sources require chemistry or star formation");
+}
+}    // namespace detail
+HPX_PLAIN_ACTION(detail::commitSourcesLocal, CommitHierarchicalSourcesAction);
 namespace detail {
 
 // Each batch has compact sink arrays and independent source rows. Inactive
@@ -737,7 +838,34 @@ double openGravityLocal(int minimumRung, double halfTimestep) {
                 (double(velocity) * velocity - previous * previous);
         }
     }
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+    if (getOptions().starFormation.enabled) {
+        // Stars born at this event were gas when the top kick deferred their opening.
+        kineticChange += starFormationKickHierarchicalNewStars(halfTimestep);
+    }
+#endif
     return kineticChange;
+}
+
+SourceResult sourcesEverywhere(int minimumRung, double scaleFactor) {
+    std::vector<hpx::future<SourceResult>> pending;
+    try {
+        for (auto const& locality : hpxLocalities()) {
+            pending.push_back(
+                hpx::async<PrepareHierarchicalSourcesAction>(locality, minimumRung, scaleFactor));
+        }
+    } catch (...) {
+        hpx::wait_all(pending);
+        throw;
+    }
+    hpx::wait_all(pending);
+    SourceResult result;
+    for (auto& future : pending) {
+        auto const local = future.get();
+        result.heating += local.heating;
+        result.converted += local.converted;
+    }
+    return result;
 }
 }    // namespace detail
 HPX_PLAIN_ACTION(detail::openGravityLocal, OpenHierarchicalGasGravityAction);
@@ -765,24 +893,46 @@ HierarchicalSphResult sphHierarchicalStep(int minimumRung, double scaleFactor, d
     detail::everywhere<ResetHierarchicalSphWorkAction>(minimumRung, time, 0.0);
     auto const before = detail::gasDiagnosticsEverywhere(minimumRung);
     detail::everywhere<UpdateHierarchicalGasAction>(minimumRung, 0, time);
-    parameters.runType = kSphRunPrehydro1;
     HierarchicalSphResult output;
     auto& result = output.run;
-    for (int pass = 0;; ++pass) {
-        if (pass == 256) {
-            throw std::runtime_error("Hierarchical SPH supports failed to converge");
+    auto const solveDensities = [&]() {
+        parameters.runType = kSphRunPrehydro1;
+        for (int pass = 0;; ++pass) {
+            if (pass == 256) {
+                throw std::runtime_error("Hierarchical SPH supports failed to converge");
+            }
+            result = detail::runEverywhere(parameters, time);
+            if (!result.needsAnotherPass) {
+                break;
+            }
         }
+        parameters.runType = kSphRunPrehydro2;
         result = detail::runEverywhere(parameters, time);
-        if (!result.needsAnotherPass) {
-            break;
-        }
-    }
-    parameters.runType = kSphRunPrehydro2;
-    result = detail::runEverywhere(parameters, time);
+    };
+    solveDensities();
     detail::everywhere<UpdateHierarchicalGasAction>(minimumRung, 2, time);
     parameters.runType = kSphRunHydro;
     result = detail::runEverywhere(parameters, time);
     detail::everywhere<UpdateHierarchicalGasAction>(minimumRung, 1, time);
+    if (time > 0.0 && (getOptions().chemistry.enabled || getOptions().starFormation.enabled)) {
+        auto const sources = detail::sourcesEverywhere(minimumRung, scaleFactor);
+        output.heating = sources.heating;
+        output.converted = sources.converted;
+        bool const openStars = !closingOnly && getOptions().gravity.enabled;
+        detail::everywhere<CommitHierarchicalSourcesAction>(
+            minimumRung, baseTimestep, sources.converted != 0, openStars);
+        if (sources.converted != 0 && !closingOnly) {
+            // Converted stars leave every gas kernel before the opening force. The
+            // refresh preceding each pass drops them from the retained sources.
+            detail::everywhere<UpdateHierarchicalGasAction>(minimumRung, 5, time);
+            solveDensities();
+            detail::everywhere<UpdateHierarchicalGasAction>(minimumRung, 4, time);
+        }
+        terminal::detailPrint("SPH hierarchy sources: time=%.17e minimum_rung=%i heating=%.17e "
+                              "stars=%llu terminal=%d\n",
+            time, minimumRung, sources.heating, (unsigned long long) sources.converted,
+            int(closingOnly));
+    }
     auto const after = detail::gasDiagnosticsEverywhere(minimumRung);
     output.kineticDelta = after.kinetic - before.kinetic;
     output.xMomentumDelta = after.xMomentum - before.xMomentum;
@@ -845,6 +995,19 @@ double sphHierarchicalOpen(int rung, double time, double timestep, double driftS
         kineticChange += future.get();
     }
     return kineticChange;
+}
+
+double sphHierarchicalThermalEnergy() {
+    std::vector<hpx::future<double>> pending;
+    for (auto const& locality : hpxLocalities()) {
+        pending.push_back(hpx::async<HierarchicalGasThermalAction>(locality));
+    }
+    hpx::wait_all(pending);
+    double thermal = 0.0;
+    for (auto& future : pending) {
+        thermal += future.get();
+    }
+    return thermal;
 }
 
 void sphHierarchicalResetSources() {

@@ -140,6 +140,8 @@ struct Pending {
 struct NewStar {
     ParticleInteger particle;
     Vector3<float> gravity;
+    // The top gravity kick's bound for the deferred gas opening (no t0 cap).
+    float gravityTimestep;
 };
 std::vector<Pending> pending;
 std::vector<NewStar> newStars;
@@ -249,10 +251,13 @@ StarFormationUpdate starFormationPrepare(
 void starFormationConvertGas(ParticleInteger gas, StarFormationState const& state) {
     ParticleInteger const particle = sphParticlesParticleIndex(gas);
     particlesStarFormationStates[particle] = state;
-    detail::NewStar star{particle, {}};
+    detail::NewStar star{particle, {}, std::numeric_limits<float>::infinity()};
     for (int dim = 0; dim < kDimensions; ++dim) {
         star.gravity[dim] =
             getOptions().gravity.enabled ? sphParticlesGravityAcceleration(dim, gas) : 0.0f;
+    }
+    if (getOptions().gravity.enabled && sphParticlesGravityTimesteps != nullptr) {
+        star.gravityTimestep = sphParticlesGravityTimesteps[gas];
     }
     detail::newStars.push_back(star);
     particlesConvertToStar(particle, state.formationTime);
@@ -293,6 +298,42 @@ void starFormationCommit() {
     for (auto const& child : hpxChildren()) {
         remote.push_back(hpx::async<StarFormationCommitAction>(child));
     }
+    starFormationCommitLocal();
+    for (auto& future : remote) {
+        future.get();
+    }
+}
+StarFormationUpdate starFormationPrepareLocal(std::vector<ParticleInteger> const& gasIndices,
+    std::vector<double> const& intervals, double scaleFactor) {
+    if (gasIndices.size() != intervals.size()) {
+        throw std::invalid_argument("Star-formation slots and intervals differ in count");
+    }
+    detail::pending.clear();
+    std::vector<detail::Input> inputs;
+    inputs.reserve(gasIndices.size());
+    for (auto const gas : gasIndices) {
+        inputs.push_back(detail::input(gas));
+    }
+    auto const outputs = starFormationAdvanceBatch(inputs, intervals, scaleFactor);
+    StarFormationUpdate result;
+    std::vector<detail::Pending> staged;
+    staged.reserve(outputs.size());
+    for (size_t index = 0; index < outputs.size(); ++index) {
+        auto const gas = gasIndices[index];
+        auto const& output = outputs[index];
+        // Commit order follows these main-particle indices, which conversions keep.
+        staged.push_back({sphParticlesParticleIndex(gas), output});
+        result.heating += output.value;
+        if (output.convert) {
+            ++result.converted;
+            result.maximumNewStarRung =
+                std::max(result.maximumNewStarRung, int(sphParticlesRung(gas)));
+        }
+    }
+    detail::pending = std::move(staged);
+    return result;
+}
+void starFormationCommitLocal() {
     for (auto const& update : detail::pending) {
         ParticleInteger const gas = particlesCatIndex(update.particle);
         auto const& output = update.output;
@@ -305,9 +346,44 @@ void starFormationCommit() {
         }
     }
     detail::pending.clear();
-    for (auto& future : remote) {
-        future.get();
+}
+int starFormationSelectHierarchicalRungs(int minimumRung, double baseTimestep) {
+    // The collisionless top-level selection of the gravity kick: at most one rung
+    // finer than the top rung and at most one rung coarser than before.
+    float const t0 = float(baseTimestep);
+    int maximumRung = 0;
+    for (auto const& star : detail::newStars) {
+        float const dt = std::min(star.gravityTimestep, t0);
+        if (!(dt > 0.0f)) {
+            throw std::runtime_error("Newborn star has no positive gravity timestep");
+        }
+        int const rung = particlesRung(star.particle);
+        int const nextRung =
+            std::max(minimumRung + int(int(ceilf(log2f(t0 / dt))) > minimumRung), rung - 1);
+        if (nextRung < minimumRung || nextRung >= kMaxRung) {
+            throw std::runtime_error("Newborn star rung exceeds the available rung range");
+        }
+        particlesRung(star.particle) = nextRung;
+        maximumRung = std::max(maximumRung, nextRung);
     }
+    return maximumRung;
+}
+double starFormationKickHierarchicalNewStars(double halfTimestep) {
+    double kineticChange = 0.0;
+    double const mass = getOptions().initial.gasMass;
+    for (auto const& star : detail::newStars) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            float& velocity = particlesVel(dim, star.particle);
+            double const previous = velocity;
+            velocity += halfTimestep * star.gravity[dim];
+            kineticChange += 0.5 * mass * (double(velocity) * velocity - previous * previous);
+        }
+    }
+    detail::newStars.clear();
+    return kineticChange;
+}
+void starFormationClearNewStarsLocal() {
+    detail::newStars.clear();
 }
 StarFormationUpdate starFormationClose(
     int minimumRung, double scaleFactor, double, double baseTimestep, double explicitTimestep) {

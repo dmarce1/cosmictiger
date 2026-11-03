@@ -718,10 +718,13 @@ def main():
         if capabilities.get("Equilibrium cooling") != "enabled":
             raise RuntimeError("thermal sources require a build with equilibrium cooling")
         star_formation_available = capabilities.get("Star formation") == "enabled"
-        integrators = [value for value in ("traditional", "global") if re.search(
+        integrators = [value for value in ("traditional", "global", "hierarchical") if re.search(
             r"^\s*Time integrators:.*\b" + value + r"\b", help_text, re.MULTILINE)]
         if not integrators:
-            raise RuntimeError("thermal sources require the traditional or global integrator")
+            raise RuntimeError("thermal sources require a compiled time integrator")
+        # Both hydro methods couple the sources under traditional and hierarchical
+        # integration; global integration is covered for MFM alone.
+        compared = ("traditional", "hierarchical")
 
         def thermal_options(method, integrator, iterations, star_formation):
             values = {"run.scenario": "cosmology", "run.timeIntegrator": integrator,
@@ -771,9 +774,16 @@ def main():
                     for step in range(1, steps + 1)]
 
         def conversions(output):
-            return [int(fields["stars"]) for fields in (
-                dict(re.findall(r"([A-Za-z]+)=([^\s]+)", match.group(1)))
-                for match in re.finditer(r"Hopkins step: ([^\n]+)", output))]
+            # A hierarchical event converts at its Begin closure and at Finish wakes.
+            counts, pending = [], 0
+            for match in re.finditer(r"Hopkins (hierarchy begin|step): ([^\n]+)", output):
+                fields = dict(re.findall(r"([A-Za-z]+)=([^\s]+)", match.group(2)))
+                if match.group(1) == "step":
+                    counts.append(pending + int(fields["stars"]))
+                    pending = 0
+                else:
+                    pending += int(fields["stars"])
+            return counts
 
         def thermal_clock(directory):
             # Keep the step, redshift, scale, expansion rate, timestep, years and
@@ -800,7 +810,7 @@ def main():
 
         for integrator in integrators:
             means = {}
-            for method in ("mfm", "sph") if integrator == "traditional" else ("mfm",):
+            for method in ("mfm", "sph") if integrator in compared else ("mfm",):
                 name = f"{method}_cooling_{integrator}"
                 directory = prepare(name)
                 output = launch(directory, thermal_options(method, integrator, 3, False))
@@ -841,7 +851,7 @@ def main():
                         for state in states) or
                     states[-1]["stars"] >= states[0]["gas"] // 2):
                 raise RuntimeError(f"{name} conversions {formed} disagree with the stored species")
-            if integrator == "traditional":
+            if integrator in compared:
                 reference = prepare(f"sph_star_formation_{integrator}")
                 launch(reference, thermal_options("sph", integrator, steps, True))
                 sph_states = thermal_states(reference, steps)

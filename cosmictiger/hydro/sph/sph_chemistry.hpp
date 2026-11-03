@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <cosmictiger/chemistry/gadget4_cooling.hpp>
+#include <cosmictiger/particles/particles.hpp>
 
 struct SphChemistryBatchInput {
     gadget4::State state{};
@@ -28,6 +29,12 @@ double sphChemistryPhysicalInterval(double interval, double scaleFactor);
 // One full source at each completed SPH step, matching the pinned GADGET-4 run loop.
 double sphChemistryClose(int minimumRung, double scaleFactor, double scaleDerivative,
     double baseTimestep, double explicitTimestep = -1.0);
+// Rank-local cooling of the listed gas slots, each over its own completed code-time
+// interval. Prepare stages the results and returns the heating diagnostic; commit
+// writes them. Callers run every locality's prepare before any commit.
+double sphCoolingPrepareLocal(std::vector<ParticleInteger> const& indices,
+    std::vector<double> const& intervals, double scaleFactor);
+void sphCoolingCommitLocal();
 std::array<double, 6> sphChemistryCheckpointParameters();
 // Equilibrium H,H+,He,He+,He++,e per H nucleus, then T,mu,gamma.
 std::array<float, 9> sphChemistryOutput(

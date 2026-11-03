@@ -278,6 +278,8 @@ bool hopkinsEventPrepared = false;
 bool hopkinsRebuildOnNextEvent = false;
 bool hopkinsHierarchyPending = false;
 size_t hopkinsHierarchyWoken = 0;
+// Cells the hierarchical Begin converted to stars; Finish then re-solves geometry.
+size_t hopkinsHierarchyConverted = 0;
 double hopkinsHierarchyDriftThermal = 0.0;
 static_assert(kMaxRung <= std::numeric_limits<uint16_t>::digits);
 constexpr int kHopkinsTickRung = kMaxRung - 1;
@@ -715,7 +717,7 @@ hopkins::Primitive hopkinsPredictedPrimitive(
 // Physical mass, momentum and energy are never temporarily overwritten by it.
 void hopkinsInstallSparse(std::vector<ParticleInteger> const& indices,
     std::vector<HopkinsParticle> const& particles, int phase, double time, double scale,
-    bool countOperations) {
+    double expansionRate, bool countOperations) {
     HopkinsFlopBatch operations(countOperations);
     ALWAYS_ASSERT(indices.size() == particles.size());
     bool const hierarchical = getOptions().run.hierarchicalGravity;
@@ -810,7 +812,28 @@ void hopkinsInstallSparse(std::vector<ParticleInteger> const& indices,
     // and the coordinator drops the vanished identifiers and rebuilds its topology.
     std::sort(converted.begin(), converted.end());
     for (auto entry = converted.rbegin(); entry != converted.rend(); ++entry) {
-        starFormationConvertGas(entry->first, particles[entry->second].starFormation);
+        ParticleInteger const i = entry->first;
+        if (hierarchical) {
+            // A star drifts ballistically from this closure to the end of its open
+            // gravity interval, as a collisionless drift over that remainder would;
+            // the projected hydro trajectory carries an acceleration the star no
+            // longer feels. The closure anchored the trajectory at this time.
+            auto const& state = sphParticlesHopkinsState(i);
+            double const remaining = std::max(0.0, state.gravityEndTime - time);
+            double driftScale = scale;
+#if COSMICTIGER_WITH_GRAVITY
+            if (getOptions().run.scenario == "cosmology" && remaining > 0.0) {
+                double scaleWork = scale;
+                double derivativeWork = expansionRate / scale;
+                driftScale = 1.0 / cosmosAinv(derivativeWork, scaleWork, remaining);
+            }
+#endif
+            for (int dim = 0; dim < 3; ++dim) {
+                sphParticlesPosition(dim, i) = state.positionAnchor[dim] +
+                    Position(remaining * sphParticlesVelocity(dim, i) / driftScale);
+            }
+        }
+        starFormationConvertGas(i, particles[entry->second].starFormation);
     }
 #else
     throw std::logic_error("Star formation requires COSMICTIGER_ENABLE_STARS=ON");
@@ -1792,8 +1815,8 @@ void hopkinsInstallTouched(HopkinsWorkspace& workspace, int phase) {
     workspace.work.recordsInstalled += records.size();
     workspace.work.bytesInstalled +=
         records.size() * (sizeof(HopkinsParticle) + sizeof(ParticleInteger));
-    hopkinsInstallSparse(
-        indices, records, phase, workspace.time, workspace.scale, workspace.countOperations);
+    hopkinsInstallSparse(indices, records, phase, workspace.time, workspace.scale,
+        workspace.expansionRate, workspace.countOperations);
 }
 
 double hopkinsKernelRate(double radius, double radiusRate, double support, double supportRate,
@@ -3490,6 +3513,7 @@ enum class HopkinsPhase : int {
     Settle,
     BeginMark,
     BeginClose,
+    InvalidateGeometry,
     CloseActive,
     EntropyViews,
     Timesteps,
@@ -3749,13 +3773,27 @@ HopkinsPhaseResult hopkinsRunPhase(HopkinsPhaseParameters const& parameters) {
             particle.state.hierarchicalActive = particle.active;
         }
         break;
-    case HopkinsPhase::BeginClose:
+    case HopkinsPhase::BeginClose: {
+        hopkinsSetEventScalars(workspace, parameters);
+        workspace.closing.clear();
+        std::vector<double> durations;
         for (size_t slot = 0; slot < workspace.ownedCount; ++slot) {
             if (workspace.particles[slot].active) {
+                workspace.closing.push_back(slot);
+                durations.push_back(workspace.time - workspace.particles[slot].state.sourceTime);
                 hopkinsCloseParticle(workspace, slot);
                 ++result.count;
             }
         }
+        // These closures end each cell's source interval, including the early ones a
+        // finer gravity rung forces, so the sources integrate exactly those durations
+        // before any gravity impulse. A converted cell leaves the gas set at the install
+        // below and enters the gravity ladder as a star.
+        EnergiesT sourced{};
+        size_t converted = 0;
+        hopkinsApplySources(workspace, workspace.closing, durations, sourced, converted);
+        result.converted = converted;
+        result.heating = sourced.heating;
         hopkinsCurrentViews(workspace);
         // Phase two publishes closed anchors before any signed gravity impulse
         // but leaves raw coordinates at the current gravity endpoint throughout
@@ -3763,6 +3801,13 @@ HopkinsPhaseResult hopkinsRunPhase(HopkinsPhaseParameters const& parameters) {
         hopkinsDropGhosts(workspace);
         hopkinsInstallTouched(workspace, 2);
         result.total = workspace.ownedCount;
+        break;
+    }
+    case HopkinsPhase::InvalidateGeometry:
+        // Begin converted cells after this event's supports and geometry were solved
+        // with them present. Re-solve every needed cell without them.
+        std::fill(workspace.solved.begin(), workspace.solved.end(), 0);
+        std::fill(workspace.built.begin(), workspace.built.end(), 0);
         break;
     case HopkinsPhase::CloseActive: {
         profile::ScopedPhase closePhase("hydro.hopkins.close");
@@ -4177,7 +4222,10 @@ HopkinsStepResult hopkinsHierarchicalBegin(int minimumGravityRung, double scale,
     detail::hopkinsPhase(detail::HopkinsPhase::Initialize, parameters);
     detail::hopkinsPhase(detail::HopkinsPhase::BeginMark, parameters);
     size_t const settled = detail::hopkinsPhase(detail::HopkinsPhase::Settle, parameters).count;
-    size_t const closed = detail::hopkinsPhase(detail::HopkinsPhase::BeginClose, parameters).count;
+    auto const closure = detail::hopkinsPhase(detail::HopkinsPhase::BeginClose, parameters);
+    size_t const closed = closure.count;
+    detail::hopkinsHierarchyConverted = closure.converted;
+    energies.heating += closure.heating;
     auto const synchronized = particlesSumEnergies();
     // Source closure precedes every gravity impulse. The closed thermal energy
     // is invariant under those kicks. Gravity replaces kinetic/momentum totals
@@ -4192,9 +4240,10 @@ HopkinsStepResult hopkinsHierarchicalBegin(int minimumGravityRung, double scale,
     detail::hopkinsEventPrepared = true;
     terminal::detailPrint("Hopkins hierarchy begin: time=%.17g gravityMinRung=%d "
                           "gravityActive=%zu hydroDue=%zu closed=%zu total=%zu settled=%zu "
-                          "hydroMaxRung=%d terminal=%d\n",
+                          "stars=%zu hydroMaxRung=%d terminal=%d\n",
         time, minimumGravityRung, size_t(opened.gravityActive), size_t(opened.hydroDue), closed,
-        size_t(opened.total), settled, maximumHydroRung, int(closingOnly));
+        size_t(opened.total), settled, size_t(closure.converted), maximumHydroRung,
+        int(closingOnly));
     return {maximumHydroRung, std::ldexp(baseTimestep, -maximumHydroRung)};
 }
 
@@ -4235,7 +4284,8 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
     auto parameters =
         detail::hopkinsEventParameters(scale, expansionRate, time, baseTimestep, global);
     // Gravity has joined: now it is safe to import fresh accelerations and the
-    // dark-matter rung reduction. Geometry solved before the kick stays valid.
+    // dark-matter rung reduction. Geometry solved before the kick stays valid
+    // unless a hierarchical Begin converted cells to stars.
     parameters.readForces = true;
     parameters.closingOnly = closingOnly;
     parameters.minimumRung = global ? 0 : minimumRung;
@@ -4244,6 +4294,10 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
     parameters.readForces = false;
     uint64_t const total = opened.total;
     size_t woken = (hierarchical ? detail::hopkinsHierarchyWoken : 0) + opened.woken;
+    if (hierarchical && detail::hopkinsHierarchyConverted != 0) {
+        hopkinsPhase(HopkinsPhase::InvalidateGeometry, parameters);
+        detail::hopkinsHierarchyConverted = 0;
+    }
     detail::hopkinsEnsureEverywhere(parameters, total);
     hopkinsPhase(HopkinsPhase::Initialize, parameters);
     int const darkMatterRung = hierarchical ? 0 : detail::hopkinsGlobalDarkMatterRung;
@@ -4363,7 +4417,9 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
     if (getOptions().starFormation.enabled) {
         // Gas gravity belongs to the meshless momentum update, so a newborn star
         // missed the collisionless proposal and opening half kick; the global
-        // integrator's finish kick owns both, as it does for SPH.
+        // integrator's finish kick owns both, as it does for SPH. Under hierarchy a
+        // star born at Begin enters the gravity ladder as a star, and one born at a
+        // Finish wake keeps the gravity interval its gas cell already opened.
         profile::ScopedPhase starPhase("hydro.hopkins.openNewStars");
         double maximumTimestep = std::ldexp(baseTimestep, -getOptions().run.minRung);
 #if COSMICTIGER_WITH_GRAVITY
@@ -4374,7 +4430,7 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
         }
 #endif
         int const newStarRung = starFormationOpenNewStars(baseTimestep, scale, maximumTimestep,
-            minimumRung, getOptions().gravity.enabled && !global && !closingOnly);
+            minimumRung, getOptions().gravity.enabled && !global && !closingOnly && !hierarchical);
         result.maximumRung = std::max(result.maximumRung, newStarRung);
     }
 #endif
@@ -4418,6 +4474,7 @@ void hopkinsResetSources() {
     detail::hopkinsEventPrepared = false;
     detail::hopkinsHierarchyPending = false;
     detail::hopkinsHierarchyWoken = 0;
+    detail::hopkinsHierarchyConverted = 0;
     detail::hopkinsHierarchyDriftThermal = 0.0;
 }
 

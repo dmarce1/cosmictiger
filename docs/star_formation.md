@@ -90,9 +90,12 @@ point trajectories or event times across decompositions.
 
 Build with `COSMICTIGER_ENABLE_SPH=ON`,
 `COSMICTIGER_ENABLE_CHEMISTRY=ON`, and `COSMICTIGER_ENABLE_STARS=ON`.
-Choose traditional or global integration with `hydro.method=sph` or `mfm`
-(MFM additionally needs `COSMICTIGER_ENABLE_HOPKINS=ON` and Fixed64 positions;
-MFV is not supported). A starting configuration is
+Choose traditional, hierarchical or global integration with `hydro.method=sph` or
+`mfm` (MFM additionally needs `COSMICTIGER_ENABLE_HOPKINS=ON` and Fixed64 positions;
+MFV is not supported). Hierarchical integration applies the source when each gas
+particle's own interval closes, over that interval; see
+[hierarchical SPH](hierarchical_sph.md#cooling-and-star-formation) and
+[hierarchical MFM](hopkins_hydro.md#chemistry-and-star-formation). A starting configuration is
 [`configurations/star_formation/lcdm.ini`](../configurations/star_formation/lcdm.ini).
 
 ```ini

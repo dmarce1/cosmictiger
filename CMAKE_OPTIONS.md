@@ -56,8 +56,8 @@ direct formulas. See [matrix algorithms and measurements](docs/matrix.md).
 At least one physics component and one integrator must be enabled. The two PMMM
 options are independent; either enables PMMM, and both may be enabled together.
 SPH requires traditional/global integration, or hierarchical integration in a
-gravity-capable build. Hierarchical SPH may disable self-gravity at runtime;
-chemistry and star formation are not supported on that path.
+gravity-capable build. Hierarchical SPH may disable self-gravity at runtime and
+supports chemistry and star formation.
 Fixed-mass MFM also supports hierarchical integration, with a separate hydro
 clock; MFV remains limited to traditional/global integration because its mass
 transfer changes held gravity sources. Hierarchical MFM requires lightcone output
@@ -77,8 +77,8 @@ Star formation requires `COSMICTIGER_ENABLE_STARS=ON`,
 Configuration rejects stars enabled with chemistry disabled. With SPH disabled,
 the stars and chemistry settings remain cached but their sources and tests
 are excluded. Runtime `starFormation.enabled=true` requires
-`hydro.enabled=true`, `chemistry.enabled=true` with `hydro.gamma=5/3`,
-and traditional or global integration. See [the model documentation](docs/star_formation.md) for the
+`hydro.enabled=true` and `chemistry.enabled=true` with `hydro.gamma=5/3`; any
+compiled integrator may advance it. See [the model documentation](docs/star_formation.md) for the
 equilibrium cooling assumptions, configuration example, and validation targets.
 
 The former `COSMICTIGER_ENABLE_STAR_FORMATION` name initializes `STARS` when

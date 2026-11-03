@@ -40,9 +40,13 @@ def application_options(executable, *, far=None, near=None, integrator=None, hyd
                 return choice
         raise RuntimeError(f"no compiled {label} supports this regression")
     far = select(far, compiled["far"], ("fmm", "pmmm", "p3m", "pm", "none"), "far solver")
+    # Hydro runners use hierarchical integration only when they request it;
+    # the particle-mesh solvers keep hydro on the traditional integrator.
+    mesh = far in ("pm", "p3m")
     eligible = [value for value in compiled["integrator"]
-                if (value != "hierarchical" or (not hydro and far != "none"))
-                and (value != "global" or far not in ("pm", "p3m"))]
+                if (value != "hierarchical" or
+                    (far != "none" and (not hydro or (integrator == "hierarchical" and not mesh))))
+                and (value != "global" or not mesh)]
     integrator = select(integrator, eligible, ("traditional", "global", "hierarchical"), "integrator")
     result = {"run.timeIntegrator": integrator}
     if far != "none":

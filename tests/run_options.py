@@ -370,6 +370,18 @@ mapSize = 8
                 "--run.timeIntegrator=hierarchical"], success=method == "mfm")
             if method == "mfm":
                 assertHydroMethod(output, method)
+                # The hierarchical Begin closure integrates the GADGET-4 sources.
+                options = [option for option in method_options
+                           if not option.startswith(("--chemistry.enabled=", "--starFormation.enabled="))]
+                options.append("--run.timeIntegrator=hierarchical")
+                if chemistryAvailable:
+                    output = run("hydro_method_hierarchical_mfm_chemistry",
+                                 options + ["--chemistry.enabled=true"])
+                    assertHydroMethod(output, method)
+                if chemistryAvailable and starFormationAvailable:
+                    output = run("hydro_method_hierarchical_mfm_sources",
+                                 options + ["--chemistry.enabled=true", "--starFormation.enabled=true"])
+                    assertHydroMethod(output, method)
             elif ("run.timeIntegrator is unavailable for the selected physics" not in output and
                   "MFV requires run.timeIntegrator=traditional or global" not in output):
                 raise RuntimeError("MFV lacked the hierarchical gravity mass restriction")
@@ -1001,7 +1013,7 @@ mapSize = 8
             success=False)
         if "COSMICTIGER_ENABLE_CHEMISTRY=ON" not in rejected:
             raise RuntimeError("star formation without compiled chemistry lacked build guidance")
-    elif args.time_integrator != "hierarchical":
+    else:
         star_options = [option for option in metadata_options
                         if not option.startswith("--hydro.enabled=")] + [
                             "--hydro.enabled=true", "--starFormation.enabled=true",
@@ -1068,7 +1080,22 @@ mapSize = 8
             if "Checkpoint state and mode validation passed" not in output:
                 raise RuntimeError("z-plane acceleration checkpoint state did not round-trip")
 
-    if chemistryAvailable and args.time_integrator != "hierarchical":
+    if not args.without_sph and chemistryAvailable and "hierarchical" in compiled_integrators:
+        # Hierarchical SPH integrates the GADGET-4 sources over each closed interval;
+        # its checkpoint adds the anchors to the cooling and star-formation layouts.
+        hierarchical_options = [option for option in metadata_options
+                                if not option.startswith("--hydro.enabled=")] + [
+                                    "--hydro.enabled=true", "--run.timeIntegrator=hierarchical",
+                                    "--chemistry.enabled=true"]
+        labels = [("cooling", [])]
+        if starFormationAvailable:
+            labels.append(("star_formation", ["--starFormation.enabled=true"]))
+        for label, extra in labels:
+            output = run(f"hierarchical_sph_{label}", hierarchical_options + extra)
+            if "Checkpoint state and mode validation passed" not in output:
+                raise RuntimeError(f"hierarchical SPH {label} checkpoint state did not round-trip")
+
+    if chemistryAvailable:
         cooling_options = [option for option in metadata_options
                            if not option.startswith("--hydro.enabled=")] + [
                                "--hydro.enabled=true", "--chemistry.enabled=true"]
