@@ -1775,6 +1775,10 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR("gravity.method.far=pm/p3m currently supports run.timeIntegrator=traditional "
                     "or hierarchical inside the outer PM interval\n");
     }
+    detail::validateCudaBackends(opts);
+    detail::validateHydroMethod(opts);
+    detail::validateCooling(opts);
+    detail::validateStarFormation(opts);
     if (opts.gravity.enabled && usesParticleMesh(opts.gravity) && opts.hydro.enabled &&
         opts.run.hierarchicalGravity) {
         // Hierarchical hydro defers the gas opening kick to the hydro step,
@@ -1782,10 +1786,6 @@ bool processOptions(int argc, char* argv[]) {
         THROW_ERROR(
             "gravity.method.far=pm/p3m with hydro requires run.timeIntegrator=traditional\n");
     }
-    detail::validateCudaBackends(opts);
-    detail::validateHydroMethod(opts);
-    detail::validateCooling(opts);
-    detail::validateStarFormation(opts);
     if (opts.hydro.enabled) {
         if (opts.run.scenario == "glass" || opts.run.scenario == "plummer" ||
             !opts.initial.gadget4Restart.empty()) {

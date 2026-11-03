@@ -3,6 +3,7 @@
 """Ensure capability graph checks catch missing sources and disabled algorithms."""
 
 import json
+import re
 from itertools import product
 from pathlib import Path
 import tempfile
@@ -390,7 +391,10 @@ class BuildFeaturesTest(unittest.TestCase):
                 self.configure()
                 self.cache["BUILD_TESTING"] = "ON"
                 self.addCompilation("unused_mesh", source, {})
-                with self.assertRaisesRegex(ValueError, "PMMM disabled but compiles solver source: " + source):
+                # Sources shared with PM/P3M report the broader mesh-solver diagnostic.
+                with self.assertRaisesRegex(ValueError, "(PMMM disabled but compiles solver|"
+                                            "mesh solvers disabled but compiles mesh) source: " +
+                                            re.escape(source)):
                     self.check()
 
     def testFmmAllowsSharedParticleMeshCloud(self):

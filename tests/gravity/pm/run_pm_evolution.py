@@ -193,7 +193,9 @@ def main():
         options = dict(common, **{"hydro.enabled": str(hydro).lower(),
                                   "run.scenario": "cosmology" if hydro else "plummer"})
         # Short-range rungs subdivide a P3M interval into tens of substeps.
-        iterations = 80 if split else 6
+        # The direct-pair timestep bound puts the softened Plummer core on rung 7
+        # (128 passes per outer interval); the run must cross one more boundary.
+        iterations = 300 if split else 6
         baseline = prepareCase(root, name + "_baseline")
         log = run(baseline, dict(options, **{"run.maxIterations": iterations}))
         for key, expected in (("run.timeIntegrator", args.time_integrator),

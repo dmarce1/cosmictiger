@@ -341,7 +341,9 @@ def main():
                 count += 1
     if args.gravity:
         for far in (name for name in compiled["far"] if name != "none"):
-            for near in (compiled["near"] if far == "pmmm" else [None]):
+            nears = (compiled["near"] if far == "pmmm" else
+                     compiled["short"] if far == "p3m" else [None])
+            for near in nears:
                 label = far + (f"_{near}" if near is not None else "")
                 selections = application_options(executable, far=far, near=near,
                                                   integrator=integrators[0])
@@ -350,6 +352,9 @@ def main():
                                 "hydro.enabled": "false", "initial.particlesPerDimension": 4})
                 if far == "fmm":
                     options.update({"initial.particlesPerDimension": 8, "compute.bucketSize": 32})
+                if far == "p3m":
+                    # The P3M search mesh needs 32 PM cells at the default split and cutoff.
+                    options["gravity.meshSize"] = 32
                 rows, detail_rows = run_case(executable, base / label, options, deadline)
                 if far == "fmm":
                     require_phases(rows, ("treeCreate.allocate", "treeCreate.build",
@@ -358,6 +363,13 @@ def main():
                         "kick.cpu.prepare", "kick.cpu.traversal", "kick.cpu.M2L", "kick.cpu.P2L",
                         "kick.cpu.M2P", "kick.cpu.P2P", "kick.cpu.leafKick",
                         "kick.wait.children"), label)
+                elif far in ("pm", "p3m"):
+                    # Particle-mesh solves happen only at outer PM boundaries.
+                    phases = ["pmBoundary.domains", "pmBoundary.solve"]
+                    if far == "p3m":
+                        phases += [f"p3mKick.{name}" for name in
+                                   ("prepare", "gather", "evaluate", "diagnostics")]
+                    require_phases(rows, phases, label)
                 else:
                     prefix = "pmmmSolve" if integrators[0] == "global" else "pmmmKick"
                     phases = ["particleCounts", "prepare", "deposit", "transform", "diagnostics"]
