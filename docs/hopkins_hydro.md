@@ -417,6 +417,23 @@ topology is rebuilt only when the identifier set changes; an owner change alone
 (migration) keeps the records and the tree, and a vanished identifier resets the
 resident set and every owner mirror before recollecting.
 
+The tree topology follows GADGET-4's practice for its neighbor tree, which is
+rebuilt with every domain decomposition and otherwise only drifted in place:
+`hopkinsRebuildForActivity` rebuilds the topology once per event when at least
+`hydro.treeRebuildActiveFraction` of the cells is active (default one third,
+the paper's `N1 > N0/3` rule for merging the first time bin into the top one)
+or when a domain rebound happened since the last event (`hopkinsDomainsRebound`,
+called by the drivers after `domainsRebound`); every other event refits the
+touched cells' leaves and ancestors. Membership changes still rebuild. The
+decision uses the active set as first marked at the event (due, gravity-touched,
+invalid-prediction and terminal cells), before the timestep scan wakes further
+cells: in the hierarchical blast fixture the event at t = 0.00375 starts with one
+due cell and wakes 381 more, and keeps the topology. The fully active events at
+t = 0, 0.002 and 0.004 rebuild. Because
+the stencil sets come from the exact Fixed64 pair test, the topology never
+changes a result; it only bounds the envelope inflation of long-lived leaves
+and the number of leaves a query visits (`Hopkins tree: candidates`).
+
 Neighbor stencils are transient tree queries (`hopkinsNeighborQuery`). The
 tree's broad phase accepts every source with `r <= max(radius, supportUpper_j)`,
 so one point query from cell i with radius `h_i` also returns the cells whose

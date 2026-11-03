@@ -33,6 +33,9 @@
 #include <cosmictiger/hydro/sph/star_formation.hpp>
 #endif
 #endif
+#if COSMICTIGER_ENABLE_HOPKINS
+#include <cosmictiger/hydro/hopkins/hopkins_hydro.hpp>
+#endif
 
 namespace detail {
 double scenarioMaximumDensity();
@@ -146,6 +149,9 @@ void runFixedScenario() {
         // stack before the outstanding closing ladder consumes it.
         profile::profileBegin("rebound");
         domainsRebound();
+#if COSMICTIGER_ENABLE_HOPKINS
+        hopkinsDomainsRebound();
+#endif
         profile::profileEnd();
     }
     Timer checkpointTimer;

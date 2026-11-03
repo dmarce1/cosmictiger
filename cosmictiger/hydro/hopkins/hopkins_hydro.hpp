@@ -46,5 +46,8 @@ void hopkinsSoundWaveDiagnostics(double time);
 // Discard the retained coordinator records and owner mirrors; cached pair
 // intervals are kept. Gas teardown and checkpoint loading call this.
 void hopkinsResetSources();
+// A domain rebound happened: rebuild the persistent hydro source tree at the
+// next event, as GADGET-4 rebuilds its neighbor tree with each decomposition.
+void hopkinsDomainsRebound();
 void hopkinsWriteCheckpoint(FILE* file);
 void hopkinsReadCheckpoint(FILE* file);

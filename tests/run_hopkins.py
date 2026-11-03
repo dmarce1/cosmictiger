@@ -307,11 +307,8 @@ def check_conservation(initial, final, context):
 def check_activity(output, states, context, localities):
     tree_records = [dict(re.findall(r"([A-Za-z]+)=([^\s]+)", match.group(1)))
                     for match in re.finditer(r"Hopkins tree: ([^\n]+)", output)]
-    if len(tree_records) < 2 or not any(int(row["updated"]) > 0 and
-                                       int(row["sorted"]) == 0 and
-                                       int(row["rebuilds"]) == 0
-                                       for row in tree_records[1:]):
-        raise RuntimeError(f"{context} did not reuse persistent hydro tree topology")
+    if len(tree_records) < 2:
+        raise RuntimeError(f"{context} printed fewer than two hydro tree rows")
     records = []
     for match in re.finditer(r"Hopkins step: ([^\n]+)", output):
         fields = dict(re.findall(r"([A-Za-z]+)=([^\s]+)", match.group(1)))
@@ -330,6 +327,17 @@ def check_activity(output, states, context, localities):
         records.append(record)
     if len(records) < len(states):
         raise RuntimeError(f"{context} omitted per-step Hopkins activity records")
+    # The tree is rebuilt at events with at least hydro.treeRebuildActiveFraction
+    # (default one third, GADGET-4's N1 > N0/3) of the cells active and refit in
+    # place otherwise; events below that fraction must therefore reuse the
+    # persistent topology. Tree rows and step rows are printed once per event in
+    # the same order.
+    quiet = [index for index, record in enumerate(records)
+             if index >= 1 and index < len(tree_records) and 3 * record["active"] < record["total"]]
+    if quiet and not any(int(tree_records[index]["updated"]) > 0 and
+                         int(tree_records[index]["sorted"]) == 0 and
+                         int(tree_records[index]["rebuilds"]) == 0 for index in quiet):
+        raise RuntimeError(f"{context} did not reuse persistent hydro tree topology")
     if not any(len(set(state["rungs"])) > 1 for state in states):
         raise RuntimeError(f"{context} never stored distinct gas rungs")
     if not any(record["active"] < record["total"] and record["cached"] > 0 and

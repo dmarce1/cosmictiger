@@ -245,6 +245,10 @@ struct Hydro {
     // largest neighboring total energy density at which the entropy follows the closure.
     double dualEnergyPressureSwitch{1.0e-3};
     double dualEnergyUpdateSwitch{0.1};
+    // Rebuild the persistent hydro source tree at an event where at least this
+    // fraction of the gas cells is active (GADGET-4 rebuilds its neighbor tree at
+    // the large synchronization steps); a domain rebound also forces a rebuild.
+    double treeRebuildActiveFraction{1.0 / 3.0};
     double neighborNumber{42.0};
     // Canonical support bounds in box units, normalized from input particle spacings.
     double minSupportRadius{};

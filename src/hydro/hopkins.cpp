@@ -160,6 +160,9 @@ struct HopkinsWorkspace {
     // resident position may change until the event closes. Neighbor sets are
     // never stored; every consumer queries the tree when it needs them.
     bool stencilsFrozen = false;
+    // The tree topology decision (rebuild or keep) is made once per event, at
+    // the first marking of the active set.
+    bool rebuildDecided = false;
     bool eventOpen = false;
     double eventTime = 0.0;
     double expansionRate = 0.0;
@@ -193,6 +196,8 @@ std::map<HopkinsPairKey, HopkinsPairRecord> hopkinsPairs;
 std::unique_ptr<HopkinsWorkspace> hopkinsResident;
 bool hopkinsTreePrepared = false;
 bool hopkinsEventPrepared = false;
+// A domain rebound happened since the last event: rebuild the tree topology.
+bool hopkinsRebuildOnNextEvent = false;
 bool hopkinsHierarchyPending = false;
 size_t hopkinsHierarchyWoken = 0;
 double hopkinsHierarchyDriftThermal = 0.0;
@@ -1213,7 +1218,12 @@ std::vector<size_t> hopkinsSolveSupports(
     std::vector<size_t> pending(cells.size());
     std::iota(pending.begin(), pending.end(), size_t(0));
     for (int iteration = 0; iteration < 256 && !pending.empty(); iteration++) {
-        workspace.work.listQueries += pending.size();
+        for (size_t k : pending) {
+            auto const& particle = workspace.particles[cells[k]];
+            // Only cells inside the bounds query; a clamped cell just moves.
+            workspace.work.listQueries +=
+                std::clamp(particle.support, minimum, maximum) == particle.support;
+        }
         std::vector<unsigned char> changed(pending.size(), 0);
         {
             profile::ScopedPhase profilePhase("hydro.hopkins.support.solve");
@@ -1437,17 +1447,44 @@ void hopkinsOpenEvent(HopkinsWorkspace& workspace, double scale, double expansio
         workspace.switchedEnergy = 0.0;
         workspace.eventOpen = true;
         workspace.eventTime = time;
+        workspace.rebuildDecided = false;
     }
     bool const rebuilt = hopkinsRefreshRecords(workspace, readForces);
     hopkinsDeriveRecords(workspace);
     if (rebuilt || workspace.tree.size() != workspace.particles.size()) {
         hopkinsRebuildSources(workspace);
+        workspace.rebuildDecided = true;
+        hopkinsRebuildOnNextEvent = false;
     } else {
         hopkinsUpdateSources(workspace, hopkinsSlotsWhere(workspace, workspace.dirty));
     }
     std::fill(workspace.dirty.begin(), workspace.dirty.end(), 0);
     // Every stencil query of this event is made at workspace.time: evaluate the
     // node envelopes and source positions once; in-event refits keep them current.
+    workspace.tree.prepare(workspace.time);
+}
+
+// GADGET-4 rebuilds its neighbor tree with every domain decomposition, which
+// its active-particle fraction triggers. Do the same once per event: rebuild the
+// topology when a rebound happened or when at least hydro.treeRebuildActiveFraction
+// of the cells is active; otherwise keep refitting it in place. The stencil sets
+// come from the exact pair test, so the topology never changes a result.
+void hopkinsRebuildForActivity(HopkinsWorkspace& workspace) {
+    if (workspace.rebuildDecided) {
+        return;
+    }
+    workspace.rebuildDecided = true;
+    size_t active = 0;
+    for (auto const& particle : workspace.particles) {
+        active += particle.active;
+    }
+    double const fraction = getOptions().hydro.treeRebuildActiveFraction;
+    bool const crowded = double(active) >= fraction * double(workspace.particles.size());
+    if (!hopkinsRebuildOnNextEvent && !crowded) {
+        return;
+    }
+    hopkinsRebuildOnNextEvent = false;
+    hopkinsRebuildSources(workspace);
     workspace.tree.prepare(workspace.time);
 }
 
@@ -2609,7 +2646,9 @@ void hopkinsSynchronizeEntropy(HopkinsWorkspace& workspace, std::vector<size_t> 
         return state.totalEnergy / state.anchorVolume;
     };
     // Each closing cell reads its stencil and writes only its own entropy.
-    workspace.work.listQueries += closing.size();
+    for (size_t i : closing) {
+        workspace.work.listQueries += !workspace.particles[i].convert;
+    }
     hopkinsParallel(closing.size(), [&](size_t k) {
         size_t const i = closing[k];
         auto& particle = workspace.particles[i];
@@ -2897,6 +2936,7 @@ void hopkinsPrepareGeometry(
     detail::hopkinsOpenEvent(workspace, scale, expansionRate, time, baseTimestep, global, false);
     // Wake rungs are assigned by hopkinsKick; here the set only selects geometry.
     detail::hopkinsMarkActive(workspace, global, false, 0);
+    detail::hopkinsRebuildForActivity(workspace);
     detail::hopkinsEnsureGeometry(workspace);
     detail::hopkinsEventPrepared = true;
 }
@@ -2926,6 +2966,7 @@ HopkinsStepResult hopkinsHierarchicalBegin(int minimumGravityRung, double scale,
         hydroDue += due;
         maximumHydroRung = std::max(maximumHydroRung, particle.rung);
     }
+    detail::hopkinsRebuildForActivity(workspace);
     detail::hopkinsEnsureGeometry(workspace);
     detail::hopkinsInitialize(workspace);
     for (auto& particle : workspace.particles) {
@@ -3000,6 +3041,7 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
     detail::hopkinsOpenEvent(workspace, scale, expansionRate, time, baseTimestep, global, true);
     size_t woken = hierarchical ? detail::hopkinsHierarchyWoken : 0;
     woken += detail::hopkinsMarkActive(workspace, global, closingOnly, global ? 0 : minimumRung);
+    detail::hopkinsRebuildForActivity(workspace);
     detail::hopkinsEnsureGeometry(workspace);
     detail::hopkinsInitialize(workspace);
     std::vector<unsigned char> closed(workspace.particles.size(), 0);
@@ -3167,9 +3209,14 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
     return result;
 }
 
+void hopkinsDomainsRebound() {
+    detail::hopkinsRebuildOnNextEvent = true;
+}
+
 void hopkinsResetSources() {
     detail::hopkinsResident.reset();
     detail::hopkinsResetOwnerMirror();
+    detail::hopkinsRebuildOnNextEvent = false;
     detail::hopkinsTreePrepared = false;
     detail::hopkinsEventPrepared = false;
     detail::hopkinsHierarchyPending = false;

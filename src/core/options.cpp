@@ -578,6 +578,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"hydro.cfl", options.hydro.cfl},
         {"hydro.dualEnergyPressureSwitch", options.hydro.dualEnergyPressureSwitch},
         {"hydro.dualEnergyUpdateSwitch", options.hydro.dualEnergyUpdateSwitch},
+        {"hydro.treeRebuildActiveFraction", options.hydro.treeRebuildActiveFraction},
     };
 }
 
@@ -979,7 +980,11 @@ bool processOptions(int argc, char* argv[]) {
         po::value<double>(&opts.hydro.dualEnergyUpdateSwitch)->default_value(0.1),
         "MFM dual-energy update switch: the entropy follows the total-energy closure when the "
         "thermal energy density reaches this fraction of the largest neighboring total energy "
-        "density");
+        "density")("hydro.treeRebuildActiveFraction",
+        po::value<double>(&opts.hydro.treeRebuildActiveFraction)->default_value(1.0 / 3.0),
+        "MFM/MFV: rebuild the persistent hydro source tree at an event where at least this "
+        "fraction of the gas cells is active, and at every domain rebound; 0 rebuilds at every "
+        "event, values above 1 rebuild only at rebounds and membership changes");
 
     po::options_description chemistryOpts("GADGET-4 equilibrium cooling");
     chemistryOpts.add_options()("chemistry.cuda",
@@ -1514,6 +1519,10 @@ bool processOptions(int argc, char* argv[]) {
     if (!detail::isFiniteOption(opts.hydro.dualEnergyUpdateSwitch) ||
         opts.hydro.dualEnergyUpdateSwitch < 0.0) {
         THROW_ERROR("hydro.dualEnergyUpdateSwitch must be finite and nonnegative\n");
+    }
+    if (!detail::isFiniteOption(opts.hydro.treeRebuildActiveFraction) ||
+        opts.hydro.treeRebuildActiveFraction < 0.0) {
+        THROW_ERROR("hydro.treeRebuildActiveFraction must be finite and nonnegative\n");
     }
     if (!detail::isFiniteOption(opts.hydro.neighborNumber) ||
         opts.hydro.neighborNumber <= selfNeighborFloor) {

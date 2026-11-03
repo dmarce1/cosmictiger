@@ -2011,6 +2011,9 @@ void driver() {
                 profile::profileBegin("rebound");
                 terminal::detailPrint("Doing rebound\n");
                 domainsRebound();
+#if COSMICTIGER_ENABLE_HOPKINS
+                hopkinsDomainsRebound();
+#endif
                 {
                     profile::ScopedPhase phase("domains.migrate");
                     domainsBegin(0);
