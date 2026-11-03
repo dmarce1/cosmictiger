@@ -10,8 +10,10 @@
 #include <bit>
 #include <charconv>
 #include <cmath>
+#include <cstdarg>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -53,6 +55,24 @@ namespace detail {
 
 static std::vector<std::string> commandLineArguments;
 static bool displayOptions = false;
+
+// Invalid options are user errors, not program faults: hpx_main reports the
+// exception and finalizes, skipping THROW_ERROR's symbolized stack trace and abort.
+[[noreturn]] __attribute__((format(printf, 1, 2))) void throwOptionError(char const* format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    va_list measured;
+    va_copy(measured, arguments);
+    int const length = std::vsnprintf(nullptr, 0, format, measured);
+    va_end(measured);
+    std::string message(std::max(length, 0), '\0');
+    std::vsnprintf(message.data(), message.size() + 1, format, arguments);
+    va_end(arguments);
+    while (!message.empty() && message.back() == '\n') {
+        message.pop_back();
+    }
+    throw std::invalid_argument(message);
+}
 
 std::uint64_t parseStarFormationSeed(std::string const& input) {
     std::uint64_t value = 0;
@@ -1061,7 +1081,8 @@ bool processOptions(int argc, char* argv[]) {
                 po::store(po::parse_config_file(cfgFs, commandOpts), vm);
                 rc = true;
             } else {
-                THROW_ERROR("Cannot open configuration file %s\n", opts.configuration.c_str());
+                detail::throwOptionError(
+                    "Cannot open configuration file %s\n", opts.configuration.c_str());
             }
         } else {
             rc = true;
@@ -1076,59 +1097,59 @@ bool processOptions(int argc, char* argv[]) {
     }
 #ifndef COSMICTIGER_BUILD_TESTING
     if (!opts.run.test.empty()) {
-        THROW_ERROR("run.test requires a build configured with BUILD_TESTING=ON\n");
+        detail::throwOptionError("run.test requires a build configured with BUILD_TESTING=ON\n");
     }
 #endif
     terminal::setVerbose(opts.run.verbose);
     auto const isExplicit = [&](char const* key) { return vm.count(key) && !vm[key].defaulted(); };
     bool const hasBoxLength = isExplicit("units.boxLength");
     if (hasBoxLength && isExplicit("units.massSolar")) {
-        THROW_ERROR("Set either units.massSolar or units.boxLength, not both\n");
+        detail::throwOptionError("Set either units.massSolar or units.boxLength, not both\n");
     }
     if (hasBoxLength) {
         if (!detail::isFiniteOption(boxLength) || boxLength <= 0.0) {
-            THROW_ERROR("units.boxLength must be finite and positive\n");
+            detail::throwOptionError("units.boxLength must be finite and positive\n");
         }
     } else if (!detail::isFiniteOption(opts.units.massG) || opts.units.massG <= 0.0) {
-        THROW_ERROR("units.massSolar must be finite and positive\n");
+        detail::throwOptionError("units.massSolar must be finite and positive\n");
     }
     opts.starFormation.seed = detail::parseStarFormationSeed(starFormationSeedInput);
     if (opts.gravity.errorInterval < 0) {
-        THROW_ERROR("gravity.errorInterval must be nonnegative\n");
+        detail::throwOptionError("gravity.errorInterval must be nonnegative\n");
     }
     if (opts.gravity.errorInterval > 0 && opts.gravity.errorSampleSize <= 0) {
-        THROW_ERROR(
+        detail::throwOptionError(
             "gravity.errorSampleSize must be positive when gravity.errorInterval is enabled\n");
     }
     if (opts.gravity.meshSize < 0) {
-        THROW_ERROR("gravity.meshSize must be nonnegative\n");
+        detail::throwOptionError("gravity.meshSize must be nonnegative\n");
     }
     if (opts.gravity.pmmmCoarseMeshSize < 0) {
-        THROW_ERROR("gravity.pmmmCoarseMeshSize must be nonnegative\n");
+        detail::throwOptionError("gravity.pmmmCoarseMeshSize must be nonnegative\n");
     }
     if (opts.gravity.pmmmBatchParticles <= 0) {
-        THROW_ERROR("gravity.pmmmBatchParticles must be positive\n");
+        detail::throwOptionError("gravity.pmmmBatchParticles must be positive\n");
     }
     if (opts.gravity.pmmmNearWidth < 1 || opts.gravity.pmmmNearWidth > 4) {
-        THROW_ERROR("gravity.pmmmNearWidth must be between 1 and 4\n");
+        detail::throwOptionError("gravity.pmmmNearWidth must be between 1 and 4\n");
     }
 #if !COSMICTIGER_WITH_GRAVITY
     if (opts.gravity.enabled) {
-        THROW_ERROR("gravity.enabled=true requires a gravity-enabled build; "
-                    "this executable has no enabled gravity solver\n");
+        detail::throwOptionError("gravity.enabled=true requires a gravity-enabled build; "
+                                 "this executable has no enabled gravity solver\n");
     }
     if (opts.run.scenario == "plummer" || opts.run.scenario == "glass") {
-        THROW_ERROR(
+        detail::throwOptionError(
             "run.scenario=%s requires a gravity-enabled build\n", opts.run.scenario.c_str());
     }
     if (opts.run.scenario == "cosmology") {
-        THROW_ERROR("This build does not include run.scenario=cosmology\n");
+        detail::throwOptionError("This build does not include run.scenario=cosmology\n");
     }
     if (opts.analysis.power) {
-        THROW_ERROR("analysis.power requires a gravity-enabled build\n");
+        detail::throwOptionError("analysis.power requires a gravity-enabled build\n");
     }
     if (opts.analysis.groups || opts.lightcone.enabled) {
-        THROW_ERROR("Halo groups and lightcones require a gravity-enabled build\n");
+        detail::throwOptionError("Halo groups and lightcones require a gravity-enabled build\n");
     }
 #endif
     auto const& scenario = scenarios::definition(opts.run.scenario);
@@ -1140,15 +1161,17 @@ bool processOptions(int argc, char* argv[]) {
             opts.hydro.enabled = scenario.hydro;
         }
         if (scenario.fixedTime && !opts.hydro.enabled) {
-            THROW_ERROR("run.scenario=%s requires hydro.enabled=true\n", scenario.name);
+            detail::throwOptionError(
+                "run.scenario=%s requires hydro.enabled=true\n", scenario.name);
         }
         if (scenario.fixedTime && (opts.analysis.groups || opts.lightcone.enabled)) {
-            THROW_ERROR("run.scenario=%s has no dark matter; halo groups and lightcones need a "
-                        "cosmological scenario\n",
+            detail::throwOptionError(
+                "run.scenario=%s has no dark matter; halo groups and lightcones need a "
+                "cosmological scenario\n",
                 scenario.name);
         }
         if (!opts.gravity.enabled && !opts.hydro.enabled) {
-            THROW_ERROR("A scenario requires gravity.enabled and/or hydro.enabled\n");
+            detail::throwOptionError("A scenario requires gravity.enabled and/or hydro.enabled\n");
         }
         if (!isExplicit("run.numberOfSteps")) {
             opts.run.numberOfSteps = scenario.numberOfSteps;
@@ -1182,8 +1205,8 @@ bool processOptions(int argc, char* argv[]) {
         int const compiledFarSolvers = int(gravity::kBuildHasFmm) + int(gravity::kBuildHasPmmm) +
             int(gravity::kBuildHasPm) + int(gravity::kBuildHasP3m);
         if (opts.gravity.enabled && compiledFarSolvers > 1) {
-            THROW_ERROR("Multiple far-field gravity algorithms are compiled; select "
-                        "--gravity.method.far=fmm, pmmm, pm, or p3m\n");
+            detail::throwOptionError("Multiple far-field gravity algorithms are compiled; select "
+                                     "--gravity.method.far=fmm, pmmm, pm, or p3m\n");
         }
         opts.gravity.method = gravity::kBuildGravityMethod;
     }
@@ -1194,49 +1217,55 @@ bool processOptions(int argc, char* argv[]) {
         (opts.gravity.method != "fmm" && opts.gravity.method != "pmmm" &&
             opts.gravity.method != "pm" && opts.gravity.method != "p3m" &&
             !(opts.gravity.method == "none" && !opts.gravity.enabled))) {
-        THROW_ERROR("gravity.method.far must select a compiled fmm, pmmm, pm, or p3m solver\n");
+        detail::throwOptionError(
+            "gravity.method.far must select a compiled fmm, pmmm, pm, or p3m solver\n");
     }
     if (usesMeshGravity(opts.gravity)) {
         if (opts.gravity.pmmmNearMethod.empty()) {
             if (opts.gravity.enabled && gravity::kBuildHasPmmmNearPp &&
                 gravity::kBuildHasPmmmNearFmm) {
-                THROW_ERROR("Multiple PMMM near-field algorithms are compiled; select "
-                            "--gravity.method.near=pp or --gravity.method.near=fmm\n");
+                detail::throwOptionError("Multiple PMMM near-field algorithms are compiled; select "
+                                         "--gravity.method.near=pp or --gravity.method.near=fmm\n");
             }
             opts.gravity.pmmmNearMethod = gravity::kBuildPmmmNearMethod;
         }
         if (!((opts.gravity.pmmmNearMethod == "pp" && gravity::kBuildHasPmmmNearPp) ||
                 (opts.gravity.pmmmNearMethod == "fmm" && gravity::kBuildHasPmmmNearFmm))) {
-            THROW_ERROR("gravity.method.near must select a compiled pp or fmm PMMM near solver\n");
+            detail::throwOptionError(
+                "gravity.method.near must select a compiled pp or fmm PMMM near solver\n");
         }
     } else if (usesSplitParticleMesh(opts.gravity)) {
         if (opts.gravity.pmmmNearMethod.empty()) {
             if (opts.gravity.enabled && gravity::kBuildHasP3mPp && gravity::kBuildHasP3mFmm) {
-                THROW_ERROR("Both P3M short solvers are compiled; select "
-                            "--gravity.method.near=pp (PP-PM) or --gravity.method.near=fmm "
-                            "(FMM-PM)\n");
+                detail::throwOptionError(
+                    "Both P3M short solvers are compiled; select "
+                    "--gravity.method.near=pp (PP-PM) or --gravity.method.near=fmm "
+                    "(FMM-PM)\n");
             }
             opts.gravity.pmmmNearMethod = gravity::kBuildP3mNearMethod;
         }
         if (!((opts.gravity.pmmmNearMethod == "pp" && gravity::kBuildHasP3mPp) ||
                 (opts.gravity.pmmmNearMethod == "fmm" && gravity::kBuildHasP3mFmm))) {
-            THROW_ERROR("gravity.method.near must select a compiled pp or fmm P3M short solver\n");
+            detail::throwOptionError(
+                "gravity.method.near must select a compiled pp or fmm P3M short solver\n");
         }
     } else {
         if (isExplicit("gravity.method.near")) {
-            THROW_ERROR("gravity.method.near applies only when gravity.method.far=pmmm or p3m\n");
+            detail::throwOptionError(
+                "gravity.method.near applies only when gravity.method.far=pmmm or p3m\n");
         }
         opts.gravity.pmmmNearMethod = "none";
     }
 #if COSMICTIGER_WITH_GRAVITY
     if (expansionDegree < kFmmMinOrder - 1 || expansionDegree > kFmmMaxOrder - 1) {
-        THROW_ERROR("gravity.expansionDegree must be in this build's compiled range [%i,%i]\n",
+        detail::throwOptionError(
+            "gravity.expansionDegree must be in this build's compiled range [%i,%i]\n",
             kFmmMinOrder - 1, kFmmMaxOrder - 1);
     }
     opts.gravity.fmmOrder = opts.gravity.pmmmOrder = expansionDegree + 1;
 #else
     if (isExplicit("gravity.expansionDegree")) {
-        THROW_ERROR("gravity.expansionDegree requires a gravity-enabled build\n");
+        detail::throwOptionError("gravity.expansionDegree requires a gravity-enabled build\n");
     }
     opts.gravity.fmmOrder = opts.gravity.pmmmOrder = 0;
 #endif
@@ -1244,11 +1273,12 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.gravity.enabled && usesMeshGravity(opts.gravity)) {
         opts.gravity.openingAngle = std::sqrt(3.0) / (opts.gravity.pmmmNearWidth + 1);
         if (opts.gravity.meshSize < 2 * opts.gravity.pmmmNearWidth + 1) {
-            THROW_ERROR("gravity.meshSize must be at least 2*gravity.pmmmNearWidth+1 "
-                        "when gravity.method.far=pmmm\n");
+            detail::throwOptionError("gravity.meshSize must be at least 2*gravity.pmmmNearWidth+1 "
+                                     "when gravity.method.far=pmmm\n");
         }
         if (!pmmm::detail::isPowerOfTwo(opts.gravity.meshSize)) {
-            THROW_ERROR("gravity.meshSize must be a power of two when gravity.method.far=pmmm\n");
+            detail::throwOptionError(
+                "gravity.meshSize must be a power of two when gravity.method.far=pmmm\n");
         }
         int const minimumCoarse = pmmm::detail::minimumMeshSize(opts.gravity.pmmmNearWidth);
         opts.gravity.pmmmCoarseMeshSize = pmmm::detail::resolvedCoarseMeshSize(
@@ -1256,25 +1286,29 @@ bool processOptions(int argc, char* argv[]) {
         if (!pmmm::detail::isPowerOfTwo(opts.gravity.pmmmCoarseMeshSize) ||
             opts.gravity.pmmmCoarseMeshSize < minimumCoarse ||
             opts.gravity.pmmmCoarseMeshSize > opts.gravity.meshSize) {
-            THROW_ERROR("gravity.pmmmCoarseMeshSize must be a power of two between the smallest "
-                        "power of two at least 2*gravity.pmmmNearWidth+1 and gravity.meshSize\n");
+            detail::throwOptionError(
+                "gravity.pmmmCoarseMeshSize must be a power of two between the smallest "
+                "power of two at least 2*gravity.pmmmNearWidth+1 and gravity.meshSize\n");
         }
         if (!pmmm::detail::isPowerOfTwo(uint64_t(hpxSize()))) {
-            THROW_ERROR("gravity.method.far=pmmm requires a power-of-two locality count; "
-                        "%i localities were started\n",
+            detail::throwOptionError(
+                "gravity.method.far=pmmm requires a power-of-two locality count; "
+                "%i localities were started\n",
                 hpxSize());
         }
         int const localityMinimum = pmmm::detail::minimumCoarseMeshSizeForLocalities(hpxSize());
         if (opts.gravity.pmmmCoarseMeshSize < localityMinimum) {
-            THROW_ERROR("gravity.pmmmCoarseMeshSize=%i cannot be cut among %i localities; the "
-                        "coarse mesh needs at least %i cells per axis\n",
+            detail::throwOptionError(
+                "gravity.pmmmCoarseMeshSize=%i cannot be cut among %i localities; the "
+                "coarse mesh needs at least %i cells per axis\n",
                 opts.gravity.pmmmCoarseMeshSize, hpxSize(), localityMinimum);
         }
         size_t const meshSize = static_cast<size_t>(opts.gravity.meshSize);
         size_t const maximumCells = std::min(size_t(std::numeric_limits<ptrdiff_t>::max()),
             std::numeric_limits<size_t>::max() / (8 * sizeof(float)));
         if (meshSize > maximumCells / meshSize / meshSize) {
-            THROW_ERROR("gravity.meshSize cubed exceeds mesh indexing/allocation limits\n");
+            detail::throwOptionError(
+                "gravity.meshSize cubed exceeds mesh indexing/allocation limits\n");
         }
     }
     if (opts.gravity.enabled && usesParticleMesh(opts.gravity)) {
@@ -1282,36 +1316,41 @@ bool processOptions(int argc, char* argv[]) {
             try {
                 return pm::cloudOrder(opts.gravity.cloud);
             } catch (std::exception const&) {
-                THROW_ERROR("gravity.cloud must be ngp, cic, tsc, or pcs\n");
+                detail::throwOptionError("gravity.cloud must be ngp, cic, tsc, or pcs\n");
             }
             return 0;
         }();
         if (opts.gravity.meshSize < std::max(2, cloudPoints)) {
-            THROW_ERROR("gravity.meshSize must be at least max(2, cloud points) for pm/p3m\n");
+            detail::throwOptionError(
+                "gravity.meshSize must be at least max(2, cloud points) for pm/p3m\n");
         }
         size_t const meshSize = static_cast<size_t>(opts.gravity.meshSize);
         size_t const maximumCells = std::min(size_t(std::numeric_limits<ptrdiff_t>::max()),
             std::numeric_limits<size_t>::max() / (8 * sizeof(float)));
         if (meshSize > maximumCells / meshSize / meshSize) {
-            THROW_ERROR("gravity.meshSize cubed exceeds mesh indexing/allocation limits\n");
+            detail::throwOptionError(
+                "gravity.meshSize cubed exceeds mesh indexing/allocation limits\n");
         }
         if (usesSplitParticleMesh(opts.gravity)) {
             if (!detail::isPositiveFloatOption(opts.gravity.p3mSplitCells) ||
                 !detail::isPositiveFloatOption(opts.gravity.p3mCutoff)) {
-                THROW_ERROR("gravity.p3mSplitCells and gravity.p3mCutoff must be finite and "
-                            "positive\n");
+                detail::throwOptionError(
+                    "gravity.p3mSplitCells and gravity.p3mCutoff must be finite and "
+                    "positive\n");
             }
             opts.gravity.p3mSplitRadius = pm::splitRadius(opts.gravity);
             opts.gravity.p3mCutoffRadius = pm::cutoffRadius(opts.gravity);
             if (opts.gravity.p3mCutoffRadius >= 0.5) {
-                THROW_ERROR("The P3M short cutoff p3mCutoff*p3mSplitCells/meshSize must stay "
-                            "below half the periodic box\n");
+                detail::throwOptionError(
+                    "The P3M short cutoff p3mCutoff*p3mSplitCells/meshSize must stay "
+                    "below half the periodic box\n");
             }
             opts.gravity.p3mMeshSize = pm::shortMeshSize(opts.gravity);
             if (opts.gravity.p3mMeshSize < 2 * opts.gravity.pmmmNearWidth + 1) {
-                THROW_ERROR("The P3M search mesh (%i cells) cannot hold distinct periodic "
-                            "neighbor cells for gravity.pmmmNearWidth=%i; reduce the cutoff "
-                            "or the near width\n",
+                detail::throwOptionError(
+                    "The P3M search mesh (%i cells) cannot hold distinct periodic "
+                    "neighbor cells for gravity.pmmmNearWidth=%i; reduce the cutoff "
+                    "or the near width\n",
                     opts.gravity.p3mMeshSize, opts.gravity.pmmmNearWidth);
             }
             int const minimumCoarse = pmmm::detail::minimumMeshSize(opts.gravity.pmmmNearWidth);
@@ -1321,19 +1360,22 @@ bool processOptions(int argc, char* argv[]) {
             if (!pmmm::detail::isPowerOfTwo(opts.gravity.pmmmCoarseMeshSize) ||
                 opts.gravity.pmmmCoarseMeshSize < minimumCoarse ||
                 opts.gravity.pmmmCoarseMeshSize > opts.gravity.p3mMeshSize) {
-                THROW_ERROR("gravity.pmmmCoarseMeshSize must be a power of two between the "
-                            "smallest power of two at least 2*gravity.pmmmNearWidth+1 and the "
-                            "P3M search mesh\n");
+                detail::throwOptionError(
+                    "gravity.pmmmCoarseMeshSize must be a power of two between the "
+                    "smallest power of two at least 2*gravity.pmmmNearWidth+1 and the "
+                    "P3M search mesh\n");
             }
             if (!pmmm::detail::isPowerOfTwo(uint64_t(hpxSize()))) {
-                THROW_ERROR("gravity.method.far=p3m requires a power-of-two locality count; "
-                            "%i localities were started\n",
+                detail::throwOptionError(
+                    "gravity.method.far=p3m requires a power-of-two locality count; "
+                    "%i localities were started\n",
                     hpxSize());
             }
             int const localityMinimum = pmmm::detail::minimumCoarseMeshSizeForLocalities(hpxSize());
             if (opts.gravity.pmmmCoarseMeshSize < localityMinimum) {
-                THROW_ERROR("gravity.pmmmCoarseMeshSize=%i cannot be cut among %i localities; "
-                            "the coarse mesh needs at least %i cells per axis\n",
+                detail::throwOptionError(
+                    "gravity.pmmmCoarseMeshSize=%i cannot be cut among %i localities; "
+                    "the coarse mesh needs at least %i cells per axis\n",
                     opts.gravity.pmmmCoarseMeshSize, hpxSize(), localityMinimum);
             }
         } else {
@@ -1345,24 +1387,24 @@ bool processOptions(int argc, char* argv[]) {
     }
 #endif
     if (opts.gravity.errorInterval > 0 && !opts.gravity.enabled) {
-        THROW_ERROR("gravity.errorInterval requires gravity.enabled=true\n");
+        detail::throwOptionError("gravity.errorInterval requires gravity.enabled=true\n");
     }
 #if COSMICTIGER_WITH_GRAVITY
     auto const openingSchedule = gravity::parseOpeningSchedule(opts.gravity.openingSchedule);
     for (auto const& point : openingSchedule) {
         if (point.theta > 1.0) {
-            THROW_ERROR("gravity.openingSchedule theta must be at most 1\n");
+            detail::throwOptionError("gravity.openingSchedule theta must be at most 1\n");
         }
     }
     if (!openingSchedule.empty() &&
         (usesMeshGravity(opts.gravity) || usesParticleMesh(opts.gravity) ||
             opts.run.scenario != "cosmology")) {
-        THROW_ERROR("gravity.openingSchedule requires gravity.method.far=fmm and "
-                    "run.scenario=cosmology\n");
+        detail::throwOptionError("gravity.openingSchedule requires gravity.method.far=fmm and "
+                                 "run.scenario=cosmology\n");
     }
 #else
     if (!opts.gravity.openingSchedule.empty()) {
-        THROW_ERROR("gravity.openingSchedule requires an FMM build\n");
+        detail::throwOptionError("gravity.openingSchedule requires an FMM build\n");
     }
 #endif
     bool const automaticLambda = omegaLambdaInput == "auto";
@@ -1374,7 +1416,8 @@ bool processOptions(int argc, char* argv[]) {
                 throw std::invalid_argument("trailing input");
             }
         } catch (std::exception const&) {
-            THROW_ERROR("cosmology.omegaLambda must be a finite signed number or auto\n");
+            detail::throwOptionError(
+                "cosmology.omegaLambda must be a finite signed number or auto\n");
         }
     }
     if (!isExplicit("lightcone.directory")) {
@@ -1382,11 +1425,12 @@ bool processOptions(int argc, char* argv[]) {
     }
     if (!detail::isFiniteOption(opts.run.endTime) || opts.run.endTime < 0.0 ||
         opts.run.maxIterations < 0) {
-        THROW_ERROR("run.endTime and run.maxIterations must be finite and nonnegative\n");
+        detail::throwOptionError(
+            "run.endTime and run.maxIterations must be finite and nonnegative\n");
     }
     if (scenario.fixedTime && isExplicit("run.scenario") && !opts.run.test.empty() &&
         opts.run.test != "checkpointState") {
-        THROW_ERROR("run.scenario and run.test select separate execution modes\n");
+        detail::throwOptionError("run.scenario and run.test select separate execution modes\n");
     }
     auto const gravityTable = radial_kernel::makeKernelTable(
         detail::kernelSpec(opts.gravity.kernelFamily, opts.gravity.kernelDegree));
@@ -1417,8 +1461,8 @@ bool processOptions(int argc, char* argv[]) {
             supportRadius = vm[supportKey].as<double>();
         }
         if (!detail::isFiniteOption(supportRadius) || supportRadius <= 0.0) {
-            THROW_ERROR("%s / %s%s%s must give a finite positive support radius\n", effectiveKey,
-                supportKey, legacyKey ? " / " : "", legacyKey ? legacyKey : "");
+            detail::throwOptionError("%s / %s%s%s must give a finite positive support radius\n",
+                effectiveKey, supportKey, legacyKey ? " / " : "", legacyKey ? legacyKey : "");
         }
         return supportRadius;
     };
@@ -1439,23 +1483,24 @@ bool processOptions(int argc, char* argv[]) {
     double const selfNeighborFloor =
         4.0 * std::numbers::pi / 3.0 * radial_kernel::value(hydroTable, 0.0);
     if (opts.output.siloInterval <= 0) {
-        THROW_ERROR("output.siloInterval must be positive\n");
+        detail::throwOptionError("output.siloInterval must be positive\n");
     }
     if (opts.output.directory.empty()) {
-        THROW_ERROR("output.directory must not be empty\n");
+        detail::throwOptionError("output.directory must not be empty\n");
     }
     if (opts.output.units != "code" && opts.output.units != "cgs" &&
         opts.output.units != "cosmological" && opts.output.units != "both") {
-        THROW_ERROR("output.units must be code, cgs, cosmological, or both\n");
+        detail::throwOptionError("output.units must be code, cgs, cosmological, or both\n");
     }
     if (opts.output.frame != "comoving" && opts.output.frame != "lab" &&
         opts.output.frame != "both") {
-        THROW_ERROR("output.frame must be comoving, lab, or both\n");
+        detail::throwOptionError("output.frame must be comoving, lab, or both\n");
     }
     if (opts.output.units == "code" && opts.output.frame != "comoving") {
-        THROW_ERROR("output.units=code requires output.frame=comoving because native fields "
-                    "retain their evolution normalization; choose output.units=cgs, "
-                    "cosmological, or both for lab-frame output\n");
+        detail::throwOptionError(
+            "output.units=code requires output.frame=comoving because native fields "
+            "retain their evolution normalization; choose output.units=cgs, "
+            "cosmological, or both for lab-frame output\n");
     }
     double const outputMin[] = {opts.output.xMin, opts.output.yMin, opts.output.zMin};
     double const outputMax[] = {opts.output.xMax, opts.output.yMax, opts.output.zMax};
@@ -1463,155 +1508,172 @@ bool processOptions(int argc, char* argv[]) {
     for (int dim = 0; dim < kDimensions; dim++) {
         if (!detail::isFiniteOption(outputMin[dim]) || !detail::isFiniteOption(outputMax[dim]) ||
             outputMin[dim] < 0.0 || outputMax[dim] > 1.0 || outputMin[dim] >= outputMax[dim]) {
-            THROW_ERROR("output.%sMin and output.%sMax must be finite and satisfy "
-                        "0 <= min < max <= 1\n",
+            detail::throwOptionError("output.%sMin and output.%sMax must be finite and satisfy "
+                                     "0 <= min < max <= 1\n",
                 outputAxes[dim], outputAxes[dim]);
         }
     }
     if (opts.analysis.tracers && opts.analysis.tracerCount <= 0) {
-        THROW_ERROR("analysis.tracerCount must be positive when analysis.tracers is enabled\n");
+        detail::throwOptionError(
+            "analysis.tracerCount must be positive when analysis.tracers is enabled\n");
     }
     if (opts.initial.particlesPerDimension <= 0) {
-        THROW_ERROR("initial.particlesPerDimension must be positive\n");
+        detail::throwOptionError("initial.particlesPerDimension must be positive\n");
     }
     if (opts.run.minRung < 0 ||
         (!usesGlobalIntegration(opts.run) && opts.run.minRung >= kMaxRung)) {
-        THROW_ERROR(
+        detail::throwOptionError(
             "run.minRung must be nonnegative and less than %i for rung integrators\n", kMaxRung);
     }
     if (!detail::isFiniteOption(opts.run.rungMergeFraction) || opts.run.rungMergeFraction < 0.0 ||
         opts.run.rungMergeFraction > 1.0) {
-        THROW_ERROR("run.rungMergeFraction must be finite and between 0 and 1\n");
+        detail::throwOptionError("run.rungMergeFraction must be finite and between 0 and 1\n");
     }
     if (opts.run.numberOfSteps <= 0) {
-        THROW_ERROR("run.numberOfSteps must be positive\n");
+        detail::throwOptionError("run.numberOfSteps must be positive\n");
     }
     if (opts.compute.positionType != "fixed32" && opts.compute.positionType != "fixed64") {
-        THROW_ERROR("compute.positionType must be fixed32 or fixed64\n");
+        detail::throwOptionError("compute.positionType must be fixed32 or fixed64\n");
     }
     if (opts.compute.positionType != (kPositionBits == 64 ? "fixed64" : "fixed32")) {
-        THROW_ERROR("compute.positionType differs from the selected application backend\n");
+        detail::throwOptionError(
+            "compute.positionType differs from the selected application backend\n");
     }
     if (opts.compute.bucketSize <= 0) {
-        THROW_ERROR("compute.bucketSize must be positive\n");
+        detail::throwOptionError("compute.bucketSize must be positive\n");
     }
     if (opts.compute.sphBucketSize < 0) {
-        THROW_ERROR("compute.sphBucketSize must be nonnegative (0 selects automatic sizing)\n");
+        detail::throwOptionError(
+            "compute.sphBucketSize must be nonnegative (0 selects automatic sizing)\n");
     }
     if (opts.compute.bucketSize > MAX_BUCKET_SIZE) {
-        THROW_ERROR("compute.bucketSize must not exceed the compile-time maximum %i "
-                    "(COSMICTIGER_WITH_MAX_BUCKET)\n",
+        detail::throwOptionError("compute.bucketSize must not exceed the compile-time maximum %i "
+                                 "(COSMICTIGER_WITH_MAX_BUCKET)\n",
             int(MAX_BUCKET_SIZE));
     }
     if (opts.gravity.cudaKickResidency < 0 || opts.gravity.cudaKickSinkTile < -1 ||
         opts.gravity.cudaKickParticleTile < 0 || opts.gravity.cudaKickMultipoleTile < 0 ||
         opts.gravity.cudaKickHandoffBlocks < 0 || opts.gravity.cudaKickFineHandoffBlocks < 0 ||
         opts.gravity.cudaKickListReserve < 0) {
-        THROW_ERROR("gravity.cuda.kick* tile and residency options must be nonnegative "
-                    "(gravity.cuda.kickSinkTile may be -1 for global force storage)\n");
+        detail::throwOptionError(
+            "gravity.cuda.kick* tile and residency options must be nonnegative "
+            "(gravity.cuda.kickSinkTile may be -1 for global force storage)\n");
     }
     if (!detail::isFiniteOption(opts.hydro.yAcceleration) ||
         !detail::isFiniteOption(opts.hydro.centralAcceleration) ||
         !detail::isFiniteOption(opts.hydro.centralSupportRadius) ||
         opts.hydro.centralSupportRadius <= 0.0) {
-        THROW_ERROR("hydro.yAcceleration and hydro.centralAcceleration must be finite; "
-                    "hydro.centralSoftening must be finite and positive\n");
+        detail::throwOptionError(
+            "hydro.yAcceleration and hydro.centralAcceleration must be finite; "
+            "hydro.centralSoftening must be finite and positive\n");
     }
     if (!detail::isFiniteOption(opts.hydro.zPlaneAcceleration) ||
         opts.hydro.zPlaneAcceleration < 0.0) {
-        THROW_ERROR("hydro.zPlaneAcceleration must be finite and nonnegative\n");
+        detail::throwOptionError("hydro.zPlaneAcceleration must be finite and nonnegative\n");
     }
     if (!detail::isFiniteOption(opts.hydro.viscosityAlpha) || opts.hydro.viscosityAlpha < 0.0 ||
         !detail::isFiniteOption(opts.hydro.viscosityBeta) || opts.hydro.viscosityBeta < 0.0 ||
         !detail::isFiniteOption(opts.hydro.viscosityEpsilon) ||
         opts.hydro.viscosityEpsilon <= 0.0) {
-        THROW_ERROR("hydro.viscosityAlpha and hydro.viscosityBeta must be finite and nonnegative; "
-                    "hydro.viscosityEpsilon must be finite and positive\n");
+        detail::throwOptionError(
+            "hydro.viscosityAlpha and hydro.viscosityBeta must be finite and nonnegative; "
+            "hydro.viscosityEpsilon must be finite and positive\n");
     }
     if (opts.hydro.viscosityEvolution != "none" &&
         opts.hydro.viscosityEvolution != "morrisAndMonaghan" &&
         opts.hydro.viscosityEvolution != "cullenAndDehnen" &&
         opts.hydro.viscosityEvolution != "priceEtAl") {
-        THROW_ERROR("hydro.viscosityEvolution must be none, morrisAndMonaghan, cullenAndDehnen, "
-                    "or priceEtAl\n");
+        detail::throwOptionError(
+            "hydro.viscosityEvolution must be none, morrisAndMonaghan, cullenAndDehnen, "
+            "or priceEtAl\n");
     }
     if (!detail::isPositiveFloatOption(opts.hydro.viscosityAlphaMin) ||
         !detail::isPositiveFloatOption(opts.hydro.viscosityDecay)) {
-        THROW_ERROR("hydro.viscosityAlphaMin and hydro.viscosityDecay must be finite and positive "
-                    "in single precision\n");
+        detail::throwOptionError(
+            "hydro.viscosityAlphaMin and hydro.viscosityDecay must be finite and positive "
+            "in single precision\n");
     }
     if (!detail::isPositiveFloatOption(opts.hydro.viscosityAlphaMax) ||
         !detail::isPositiveFloatOption(opts.hydro.viscosityDecayCD)) {
-        THROW_ERROR(
+        detail::throwOptionError(
             "hydro.viscosityAlphaMax and hydro.viscosityDecayCD must be finite and positive "
             "in single precision\n");
     }
     if (!detail::isPositiveFloatOption(opts.hydro.viscosityAlphaMaxPrice) ||
         !detail::isPositiveFloatOption(opts.hydro.viscosityDecayPrice)) {
-        THROW_ERROR("hydro.viscosityAlphaMaxPrice and hydro.viscosityDecayPrice must be finite "
-                    "and positive in single precision\n");
+        detail::throwOptionError(
+            "hydro.viscosityAlphaMaxPrice and hydro.viscosityDecayPrice must be finite "
+            "and positive in single precision\n");
     }
     if (opts.hydro.viscosityBetaFollowsAlpha() &&
         !detail::isFiniteFloatOption(opts.hydro.viscosityBeta *
             (opts.hydro.viscosityEvolution == "morrisAndMonaghan" ?
                     opts.hydro.viscosityAlphaMin :
                     opts.hydro.viscosityAlphaMax))) {
-        THROW_ERROR("the initial quadratic viscosity coefficient must be finite in single "
-                    "precision\n");
+        detail::throwOptionError(
+            "the initial quadratic viscosity coefficient must be finite in single "
+            "precision\n");
     }
     if (!detail::isFiniteOption(opts.hydro.gamma) || opts.hydro.gamma <= 1.0) {
-        THROW_ERROR("hydro.gamma must be finite and greater than one\n");
+        detail::throwOptionError("hydro.gamma must be finite and greater than one\n");
     }
     if (!detail::isFiniteOption(opts.hydro.cfl) || opts.hydro.cfl <= 0.0 || opts.hydro.cfl > 1.0) {
-        THROW_ERROR("hydro.cfl must be finite and in (0, 1]\n");
+        detail::throwOptionError("hydro.cfl must be finite and in (0, 1]\n");
     }
     if (!detail::isFiniteOption(opts.hydro.neighborNumber) ||
         opts.hydro.neighborNumber <= selfNeighborFloor) {
-        THROW_ERROR("hydro.neighborNumber must be finite and greater than the selected kernel "
-                    "self-neighbor floor\n");
+        detail::throwOptionError(
+            "hydro.neighborNumber must be finite and greater than the selected kernel "
+            "self-neighbor floor\n");
     }
     if (!detail::isFiniteOption(opts.hydro.minSupportRadius) ||
         !detail::isFiniteOption(opts.hydro.maxSupportRadius) ||
         opts.hydro.minSupportRadius <= 0.0 ||
         opts.hydro.maxSupportRadius < opts.hydro.minSupportRadius) {
-        THROW_ERROR(
+        detail::throwOptionError(
             "hydro support radii must be finite with 0 < minSupportRadius <= maxSupportRadius\n");
     }
     if (!detail::isFiniteFloatOption(opts.hydro.viscosityAlpha) ||
         !detail::isFiniteFloatOption(opts.hydro.viscosityBeta) ||
         !detail::isPositiveFloatOption(opts.hydro.viscosityEpsilon)) {
-        THROW_ERROR("hydro.viscosityAlpha, hydro.viscosityBeta and hydro.viscosityEpsilon must "
-                    "be representable in single precision, with positive viscosityEpsilon\n");
+        detail::throwOptionError(
+            "hydro.viscosityAlpha, hydro.viscosityBeta and hydro.viscosityEpsilon must "
+            "be representable in single precision, with positive viscosityEpsilon\n");
     }
     if (!detail::isFiniteFloatOption(opts.hydro.gamma) ||
         static_cast<float>(opts.hydro.gamma) <= 1.0f) {
-        THROW_ERROR("hydro.gamma must remain finite and greater than one in single precision\n");
+        detail::throwOptionError(
+            "hydro.gamma must remain finite and greater than one in single precision\n");
     }
     if (!detail::isPositiveFloatOption(opts.hydro.cfl)) {
-        THROW_ERROR("hydro.cfl must remain finite and positive in single precision\n");
+        detail::throwOptionError("hydro.cfl must remain finite and positive in single precision\n");
     }
     if (!detail::isFiniteFloatOption(opts.hydro.neighborNumber) ||
         static_cast<float>(opts.hydro.neighborNumber) <= static_cast<float>(selfNeighborFloor)) {
-        THROW_ERROR("hydro.neighborNumber must remain finite and above the selected kernel "
-                    "self-neighbor floor in single precision\n");
+        detail::throwOptionError(
+            "hydro.neighborNumber must remain finite and above the selected kernel "
+            "self-neighbor floor in single precision\n");
     }
     if (!detail::isFiniteFloatOption(opts.hydro.yAcceleration) ||
         !detail::isFiniteFloatOption(opts.hydro.centralAcceleration) ||
         !detail::isPositiveFloatOption(opts.hydro.centralSupportRadius)) {
-        THROW_ERROR("hydro.yAcceleration, hydro.centralAcceleration and hydro.centralSoftening "
-                    "must be representable in single precision, with positive centralSoftening\n");
+        detail::throwOptionError(
+            "hydro.yAcceleration, hydro.centralAcceleration and hydro.centralSoftening "
+            "must be representable in single precision, with positive centralSoftening\n");
     }
     if (opts.hydro.zPlaneAcceleration != 0.0 &&
         !detail::isPositiveFloatOption(opts.hydro.zPlaneAcceleration)) {
-        THROW_ERROR("nonzero hydro.zPlaneAcceleration must remain finite and positive in "
-                    "single precision\n");
+        detail::throwOptionError(
+            "nonzero hydro.zPlaneAcceleration must remain finite and positive in "
+            "single precision\n");
     }
     if (!detail::isPositiveFloatOption(
             opts.hydro.minSupportRadius / opts.initial.particlesPerDimension) ||
         !detail::isPositiveFloatOption(
             std::min(opts.hydro.maxSupportRadius / opts.initial.particlesPerDimension, 0.5))) {
-        THROW_ERROR("hydro support radii must remain finite and positive in single precision "
-                    "after normalization by initial.particlesPerDimension\n");
+        detail::throwOptionError(
+            "hydro support radii must remain finite and positive in single precision "
+            "after normalization by initial.particlesPerDimension\n");
     }
     opts.hydro.damping = 0.0;
     if (opts.compute.sphBucketSize == 0) {
@@ -1619,8 +1681,9 @@ bool processOptions(int argc, char* argv[]) {
         // neighbor target rather than the independently tuned gravity bucket.
         double const bucketSize = 8.0 / std::numbers::pi * opts.hydro.neighborNumber;
         if (bucketSize > std::numeric_limits<int>::max()) {
-            THROW_ERROR("compute.sphBucketSize automatic value exceeds the integer range; "
-                        "set a positive compute.sphBucketSize\n");
+            detail::throwOptionError(
+                "compute.sphBucketSize automatic value exceeds the integer range; "
+                "set a positive compute.sphBucketSize\n");
         }
         opts.compute.sphBucketSize = std::max(1, static_cast<int>(bucketSize));
     }
@@ -1628,21 +1691,22 @@ bool processOptions(int argc, char* argv[]) {
     opts.hydro.maxSupportRadius =
         std::min(opts.hydro.maxSupportRadius / opts.initial.particlesPerDimension, 0.5);
     if (opts.hydro.minSupportRadius > 0.5) {
-        THROW_ERROR("hydro.minSupportRadius cannot exceed half the periodic box after "
-                    "normalization by initial.particlesPerDimension\n");
+        detail::throwOptionError("hydro.minSupportRadius cannot exceed half the periodic box after "
+                                 "normalization by initial.particlesPerDimension\n");
     }
     if (opts.run.test == "sphGravity") {
         opts.hydro.enabled = true;
     }
 #if !COSMICTIGER_WITH_SPH
     if (opts.hydro.enabled || opts.chemistry.enabled) {
-        THROW_ERROR("hydro.enabled=true or chemistry.enabled=true requires "
-                    "COSMICTIGER_ENABLE_SPH=ON\n");
+        detail::throwOptionError("hydro.enabled=true or chemistry.enabled=true requires "
+                                 "COSMICTIGER_ENABLE_SPH=ON\n");
     }
 #endif
 #if !COSMICTIGER_ENABLE_CHEMISTRY
     if (opts.chemistry.enabled) {
-        THROW_ERROR("chemistry.enabled=true requires COSMICTIGER_ENABLE_CHEMISTRY=ON\n");
+        detail::throwOptionError(
+            "chemistry.enabled=true requires COSMICTIGER_ENABLE_CHEMISTRY=ON\n");
     }
 #endif
     // Hierarchical integration advances collisionless particles only; SPH uses
@@ -1653,8 +1717,9 @@ bool processOptions(int argc, char* argv[]) {
         int const choices = int(integration::kBuildHasTraditional) + int(hierarchicalEligible) +
             int(integration::kBuildHasGlobal);
         if (choices != 1) {
-            THROW_ERROR("Select --run.timeIntegrator=traditional, hierarchical, or global from "
-                        "the compiled integrators eligible for this physics\n");
+            detail::throwOptionError(
+                "Select --run.timeIntegrator=traditional, hierarchical, or global from "
+                "the compiled integrators eligible for this physics\n");
         }
         opts.run.timeIntegrator = integration::kBuildHasTraditional ?
             "traditional" :
@@ -1663,15 +1728,17 @@ bool processOptions(int argc, char* argv[]) {
     if (!((opts.run.timeIntegrator == "traditional" && integration::kBuildHasTraditional) ||
             (opts.run.timeIntegrator == "hierarchical" && hierarchicalEligible) ||
             (opts.run.timeIntegrator == "global" && integration::kBuildHasGlobal))) {
-        THROW_ERROR("run.timeIntegrator is unavailable for the selected physics; hierarchical "
-                    "requires a gravity-capable build, gravity, and hydro.enabled=false\n");
+        detail::throwOptionError(
+            "run.timeIntegrator is unavailable for the selected physics; hierarchical "
+            "requires a gravity-capable build, gravity, and hydro.enabled=false\n");
     }
     opts.run.hierarchicalGravity = usesHierarchicalIntegration(opts.run);
 
     if (opts.gravity.enabled && usesParticleMesh(opts.gravity) &&
         opts.run.timeIntegrator == "global") {
-        THROW_ERROR("gravity.method.far=pm/p3m currently supports run.timeIntegrator=traditional "
-                    "or hierarchical inside the outer PM interval\n");
+        detail::throwOptionError(
+            "gravity.method.far=pm/p3m currently supports run.timeIntegrator=traditional "
+            "or hierarchical inside the outer PM interval\n");
     }
     detail::validateCudaBackends(opts);
     detail::validateHydroMethod(opts);
@@ -1680,28 +1747,31 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.hydro.enabled) {
         if (opts.run.scenario == "glass" || opts.run.scenario == "plummer" ||
             !opts.initial.gadget4Restart.empty()) {
-            THROW_ERROR("SPH cannot use the dark-matter-only glass, Plummer or Gadget loaders\n");
+            detail::throwOptionError(
+                "SPH cannot use the dark-matter-only glass, Plummer or Gadget loaders\n");
         }
         // Halo and lightcone finders link the equal-mass dark matter only
         // (analysis.haloParticles metadata); maps and spectra weight all species.
     }
     if (!detail::isPositiveFloatOption(opts.hydro.centralSupportRadius)) {
-        THROW_ERROR(
+        detail::throwOptionError(
             "hydro.centralSoftening support must remain finite and positive in single precision\n");
     }
     if (!detail::isPositiveFloatOption(opts.gravity.timestepEta)) {
-        THROW_ERROR("gravity.timestepEta must remain finite and positive in single precision "
-                    "after normalization\n");
+        detail::throwOptionError(
+            "gravity.timestepEta must remain finite and positive in single precision "
+            "after normalization\n");
     }
     if (opts.initial.useGlass && opts.initial.closePack) {
-        THROW_ERROR("initial.useGlass cannot be combined with initial.closePack; "
-                    "glass files already define the particle lattice\n");
+        detail::throwOptionError("initial.useGlass cannot be combined with initial.closePack; "
+                                 "glass files already define the particle lattice\n");
     }
     size_t const particlesPerDimension = size_t(opts.initial.particlesPerDimension);
     size_t const latticeMultiplicity = opts.initial.closePack ? 2 : 1;
     if (particlesPerDimension > std::numeric_limits<size_t>::max() / particlesPerDimension /
             particlesPerDimension / latticeMultiplicity) {
-        THROW_ERROR("initial.particlesPerDimension exceeds the particle-count range\n");
+        detail::throwOptionError(
+            "initial.particlesPerDimension exceeds the particle-count range\n");
     }
     opts.initial.numberOfParticles =
         particlesPerDimension * particlesPerDimension * particlesPerDimension;
@@ -1712,7 +1782,7 @@ bool processOptions(int argc, char* argv[]) {
     }
     if (!opts.initial.gadget4Restart.empty()) {
         if (hasBoxLength) {
-            THROW_ERROR(
+            detail::throwOptionError(
                 "initial.gadget4Restart supplies its own units; do not set units.boxLength\n");
         }
         auto const header = particlesReadGadget4Header(opts.initial.gadget4Restart);
@@ -1746,9 +1816,10 @@ bool processOptions(int argc, char* argv[]) {
         !detail::isFiniteOption(opts.cosmology.startRedshift) ||
         opts.cosmology.startRedshift <= -1.0 ||
         !detail::isFiniteOption(opts.cosmology.endRedshift) || opts.cosmology.endRedshift <= -1.0) {
-        THROW_ERROR("Invalid cosmology: densities and nEff must be nonnegative, total matter, "
-                    "temperature and Hubble rate positive, sigma8 nonnegative, redshifts "
-                    "finite and greater than -1, and heliumFraction in [0,1)\n");
+        detail::throwOptionError(
+            "Invalid cosmology: densities and nEff must be nonnegative, total matter, "
+            "temperature and Hubble rate positive, sigma8 nonnegative, redshifts "
+            "finite and greater than -1, and heliumFraction in [0,1)\n");
     }
     opts.cosmology.omegaM = opts.cosmology.omegaB + opts.cosmology.omegaC;
     opts.initial.darkMatterMass =
@@ -1759,14 +1830,16 @@ bool processOptions(int argc, char* argv[]) {
             (!detail::isPositiveFloatOption(opts.initial.gasMass) ||
                 !detail::isPositiveFloatOption(opts.cosmology.omegaB) ||
                 !detail::isPositiveFloatOption(opts.cosmology.omegaC)))) {
-        THROW_ERROR("hydro.enabled requires finite positive gas and dark-matter class masses "
-                    "from cosmology.omegaB and cosmology.omegaC\n");
+        detail::throwOptionError(
+            "hydro.enabled requires finite positive gas and dark-matter class masses "
+            "from cosmology.omegaB and cosmology.omegaC\n");
     }
 
     if (hasBoxLength) {
         if (opts.run.scenario == "glass" || !opts.initial.gadget4Restart.empty()) {
-            THROW_ERROR("units.boxLength cannot be used with glass generation or Gadget4 input, "
-                        "which supply their own length scale\n");
+            detail::throwOptionError(
+                "units.boxLength cannot be used with glass generation or Gadget4 input, "
+                "which supply their own length scale\n");
         }
         // Extended intermediates allow range checks before conversion to code units.
         long double const lengthCm =
@@ -1787,7 +1860,7 @@ bool processOptions(int argc, char* argv[]) {
         };
         if (!fitsCodeUnits(lengthCm) || !fitsCodeUnits(massG) || !fitsCodeUnits(timeSeconds) ||
             !fitsCodeUnits(gm)) {
-            THROW_ERROR("units.boxLength produces out-of-range simulation units\n");
+            detail::throwOptionError("units.boxLength produces out-of-range simulation units\n");
         }
         opts.units.lengthCm = double(lengthCm);
         opts.units.massG = double(massG);
@@ -1820,7 +1893,7 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.lightcone.enabled &&
         (opts.lightcone.mapSize < 1 || opts.lightcone.mapSize > 8192 ||
             (opts.lightcone.mapSize & (opts.lightcone.mapSize - 1)) != 0)) {
-        THROW_ERROR("lightcone.mapSize must be a power of two in [1, 8192]\n");
+        detail::throwOptionError("lightcone.mapSize must be a power of two in [1, 8192]\n");
     }
     terminal::detailPrint("lc map size = %e\n", nside1);
 
@@ -1859,7 +1932,7 @@ bool processOptions(int argc, char* argv[]) {
         opts.cosmology.hubble = 1.0;
     }
     if (opts.initial.particlesPerDimension % 2 == 1) {
-        THROW_ERROR("initial.particlesPerDimension must be an even number\n");
+        detail::throwOptionError("initial.particlesPerDimension must be an even number\n");
     }
     opts.gravity.supportRadius *= pow(opts.initial.numberOfParticles, -1.0 / kDimensions);
     bool const explicitGravityRadius =
@@ -1874,22 +1947,26 @@ bool processOptions(int argc, char* argv[]) {
                 1.0 / 3.0);
     }
     if (opts.gravity.enabled && !detail::isPositiveFloatOption(opts.gravity.supportRadius)) {
-        THROW_ERROR("gravity.effectiveRadius / gravity.supportRadius (gravity.softening) must "
-                    "remain finite and positive in single precision "
-                    "after normalization when gravity.enabled is true\n");
+        detail::throwOptionError(
+            "gravity.effectiveRadius / gravity.supportRadius (gravity.softening) must "
+            "remain finite and positive in single precision "
+            "after normalization when gravity.enabled is true\n");
     }
     if (opts.gravity.enabled && opts.gravity.supportRadius >= 0.5) {
-        THROW_ERROR("Periodic gravity requires normalized gravity.supportRadius below 0.5\n");
+        detail::throwOptionError(
+            "Periodic gravity requires normalized gravity.supportRadius below 0.5\n");
     }
     if (usesMeshGravity(opts.gravity) && opts.gravity.meshSize > 0 &&
         opts.gravity.supportRadius > double(opts.gravity.pmmmNearWidth) / opts.gravity.meshSize) {
-        THROW_ERROR("PMMM requires the normalized gravity.supportRadius to be no larger than "
-                    "gravity.pmmmNearWidth/gravity.meshSize\n");
+        detail::throwOptionError(
+            "PMMM requires the normalized gravity.supportRadius to be no larger than "
+            "gravity.pmmmNearWidth/gravity.meshSize\n");
     }
     if (opts.gravity.enabled && usesSplitParticleMesh(opts.gravity) &&
         opts.gravity.supportRadius > opts.gravity.p3mCutoffRadius) {
-        THROW_ERROR("P3M requires the normalized gravity.supportRadius to be no larger than the "
-                    "short cutoff p3mCutoff*p3mSplitCells/meshSize\n");
+        detail::throwOptionError(
+            "P3M requires the normalized gravity.supportRadius to be no larger than the "
+            "short cutoff p3mCutoff*p3mSplitCells/meshSize\n");
     }
     detail::displayOptions = true;
     if (hpxRank() == 0 && opts.run.test.empty()) {
@@ -1929,7 +2006,7 @@ bool processOptions(int argc, char* argv[]) {
 
     if (!detail::isPositiveFloatOption(opts.gravity.openingAngle) ||
         opts.gravity.openingAngle > 1.0) {
-        THROW_ERROR("gravity.openingAngle must be finite, normal, and in (0, 1]\n");
+        detail::throwOptionError("gravity.openingAngle must be finite, normal, and in (0, 1]\n");
     }
 
     detail::showResolvedOptions(opts, commandOpts);
