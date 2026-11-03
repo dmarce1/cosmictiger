@@ -25,6 +25,10 @@ struct Run {
     int maxIterations{};
     int numberOfSteps{};
     int minRung{};
+    // Hierarchical gravity merges its lowest occupied rung into the next one when
+    // the finer rungs hold more than this fraction of the coarse solve set
+    // (GADGET-4: N1 > N0/3; see docs/hierarchical_gravity.md).
+    double rungMergeFraction{1.0 / 3.0};
     // run.test=force: build the tree once at this opening angle and sweep only
     // the kick's angle upward from it; zero rebuilds the tree at every angle.
     double treeOpeningAngle{};

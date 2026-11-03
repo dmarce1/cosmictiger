@@ -133,6 +133,8 @@ share the degree. Old checkpoint order integers retain their original meaning.
 
 Traditional integration uses individual nested block timesteps. Hierarchical
 integration uses a Hamiltonian split and currently supports collisionless runs.
+It merges its lowest rung into the next by the GADGET-4 rule `run.rungMergeFraction`
+([hierarchical gravity](docs/hierarchical_gravity.md)).
 Global integration advances every particle with the minimum raw allowed timestep
 across all particles and ranks, without power-of-two rounding. It supports SPH,
 gravity, and combined runs, including explicit chemistry source intervals.

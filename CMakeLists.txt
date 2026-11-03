@@ -880,6 +880,10 @@ if(BUILD_TESTING)
     target_include_directories(terminal_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_options(terminal_test PRIVATE -ffast-math)
     cosmictiger_add_gtest(NAME terminal TARGET terminal_test PROPERTIES TIMEOUT 10)
+    add_executable(rung_merge_test tests/rung_merge.cpp)
+    target_include_directories(rung_merge_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_options(rung_merge_test PRIVATE -ffast-math)
+    cosmictiger_add_gtest(NAME rung_merge TARGET rung_merge_test PROPERTIES TIMEOUT 10)
     # The collisionless checks also exercise terminal hierarchy synchronization.
     # The gas evolution fixture uses the traditional integrator with SPH.
     if(COSMICTIGER_ENABLE_FMM)
@@ -905,6 +909,13 @@ if(BUILD_TESTING)
             set_tests_properties(${cosmology_integration_name}
                 PROPERTIES RUN_SERIAL TRUE TIMEOUT 1200 PROCESSORS 2 LABELS "cosmology;${cosmology_backend}")
         endforeach()
+        if(COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL)
+            add_test(NAME rung_merge_application COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_rung_merge.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/rung_merge_application)
+            set_tests_properties(rung_merge_application
+                PROPERTIES TIMEOUT 300 PROCESSORS 2 LABELS "gravity;cpu;hierarchical")
+        endif()
     endif()
 
     if(COSMICTIGER_WITH_GRAVITY)
