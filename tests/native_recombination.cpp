@@ -279,7 +279,8 @@ void testBackgroundAdapter(
             kH0 / cosmic_constants::kH0;
         requireClose(universe.sigmaT.values[index], kC * kSigmaT * electrons / hubble, 2.0e-11, 0.0,
             "Native Thomson opacity uses the same electron history");
-        require(isFinite(universe.cs2.values[index]) && universe.cs2.values[index] > 0.0,
+        require(isFinite(universe.soundSpeedSquared.values[index]) &&
+                universe.soundSpeedSquared.values[index] > 0.0,
             "Native background sound speed is positive");
     }
 }

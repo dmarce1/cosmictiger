@@ -1,3 +1,38 @@
+# Concurrent implementation and branch coordination
+
+User standing rule, November 2, 2026:
+
+- Work on `main` by default. For N simultaneous implementation conversations in
+  the same repository, including Claude, use N - 1 active implementation branches
+  in addition to `main`: the first conversation may stay on `main`, and each
+  additional implementation uses its own branch and worktree. Research-only or
+  read-only conversations do not count as implementations.
+- Tell the user when concurrent implementation occurs and suggest descriptive
+  snake_case branch names (for example, `codex/matrix_algebra`). If overlapping
+  changes would make merging complex, suggest serializing the implementations.
+- Check current ownership before editing. Do not switch a shared dirty checkout
+  out from under another conversation, move unrelated edits, or rename historical
+  branches just to enforce this rule. Coordinate through the handoff files.
+
+# War Thunder resource limit
+
+User report, November 2, 2026, 22:07 America/Chicago:
+**current reported status: OFF** ("war thunder off"). This supersedes the 21:39
+ON report. The usual aggregate local limit of 12 CPU cores applies.
+
+- While OFF, the usual aggregate local limit of 12 CPU cores applies. The
+  War Thunder-specific GPU ceiling is lifted; continue coordinating shared use.
+
+- While ON, all conversations, agents, and Claude share a combined ceiling of
+  **6 CPU cores and one quarter (25%) of GPU compute capacity**. These are total
+  budgets, not per-conversation allowances. This overrides the usual 12-core
+  local limit and the older War Thunder GPU ceiling of less than half.
+- Coordinate allocations before launching builds, tests, simulations, or CUDA
+  work; include concurrent helpers, MPI ranks, and nested worker pools. If GPU
+  work cannot be kept within the shared quarter-GPU budget, defer it.
+- Use the latest explicit user ON/OFF report; do not infer status from processes.
+  Keep these limits until the user reports OFF or explicitly changes the budget.
+
 # Naming conventions
 
 These naming rules come from the conversation titled "standing orders".
@@ -31,26 +66,30 @@ group includes as standard headers, dependencies, then project headers, with
 blank lines between groups. Do not apply project naming changes to third-party
 code.
 
-# Paper-notation exception
+# Agent handoffs
 
-The SPH computation code that transcribes Monaghan (1992), ARA&A 30, 543 names its
-local variables with the paper's symbols instead of camelCase:
-`cosmictiger/sph/monaghan/viscosity.hpp` and `cosmictiger/sph/kernels.hpp`, plus the pair, density, and support-radius loops
-in `src/sph/sph_hydro_cpu.cpp`,
-`src/sph/sph_hydro.cu`, `src/sph/sph_prehydro_cpu.cpp`, `src/sph/sph_prehydro.cu`, and
-`cosmictiger/sph/sph_cuda.hpp`. Those regions use the Unicode letters the compilers accept
-(`ρ_a`, `P_b`, `Π_ab`, `μ_ab`, `h_ab`, `gradW̃_ab`, `δt_cv`, `ΣW`) and cite the equation
-they implement; function parameters, data fields, and everything outside them keep the
-descriptive names above. Fence such regions with
-`NOLINTBEGIN/NOLINTEND(readability-identifier-naming)`. GCC 13 and CUDA 12.8 reject `∇`,
-`∂`, and superscript digits in identifiers; write `gradW̃_ab`, `r_ab2`, and `η2` instead.
-The fenced formula transcriptions in `cosmictiger/sph/balsara/shear_limiter.hpp`,
-`cosmictiger/sph/morris_and_monaghan/viscosity.hpp`, and
-`cosmictiger/sph/cullen_and_dehnen/viscosity.hpp` follow the same exception using
-the symbols of their cited papers. See `docs/monaghan_sph.md` for the symbol table.
+At the start of future CosmicTiger work, read `handoff/claude2openai.md` if it
+exists for Claude's latest handoff to OpenAI. OpenAI's notes to Claude belong in
+`handoff/openai2claude.md`. Each handoff should state the period it covers and
+distinguish completed work, validation limits, and remaining work. Check current
+repository state before relying on an older handoff.
+Keep both handoff files untracked and unstaged; never include them in commits.
+Use them for coordination at task boundaries, overlapping work, milestones, and
+blockers. Each agent writes its own outgoing file and reads the other's as
+context; handoff requests do not replace user authorization.
 
-The fenced equilibrium formula transcriptions in
-`cosmictiger/sph/springel_and_hernquist/equations.hpp` also follow this exception,
-using Greek identifiers and adjacent equation citations from Springel & Hernquist
-(2003), MNRAS 339, 289. Integration state and public APIs retain the standard
-descriptive naming rules. See `docs/star_formation.md` for units and assumptions.
+# Equations and descriptive identifiers
+
+User instruction, November 3, 2026, supersedes the former paper-notation exception:
+
+- Use descriptive camelCase identifiers in equation implementations, including SPH.
+- Immediately above the relevant code, include a comment block with Unicode equations
+  matching the paper or text notation as closely as possible, equation numbers and
+  source citations, followed by a symbol-to-code-name directory.
+- Label locally derived formulas and conversions as derived; do not invent source
+  equation numbers. Explain differences in normalization, units, or discretization.
+- For artificial viscosity, α is `bulkViscosityCoefficient` and β is
+  `vonNeumannRichtmyerCoefficient`; use descriptive prefixes for neighbor, pair,
+  target, minimum and maximum values. The spelling is von Neumann–Richtmyer.
+- Keep public configuration keys and serialized layouts stable when renaming code.
+- Do not use naming-rule suppression fences for mathematical identifiers.

@@ -248,25 +248,29 @@ struct Hydro {
     std::string method{"sph"};
     std::string kernelFamily{"spline"};
     int kernelDegree{3};
-    double viscosityAlpha{};
-    double viscosityBeta{};
+    double bulkViscosityCoefficient{};
+    double vonNeumannRichtmyerCoefficient{};
     double viscosityEpsilon{};
     bool balsaraSwitch{true};
     std::string viscosityEvolution{"morrisAndMonaghan"};
-    double viscosityAlphaMin{0.1};
+    double minimumBulkViscosityCoefficient{0.1};
     double viscosityDecay{0.2};
-    double viscosityAlphaMax{2.0};
+    double maximumBulkViscosityCoefficient{2.0};
     double viscosityDecayCD{0.05};
-    double viscosityAlphaMaxPrice{1.0};
+    double maximumBulkViscosityCoefficientPrice{1.0};
     double viscosityDecayPrice{0.1};
-    // Cullen-Dehnen and Price et al. share the gradient-based shock detector and its state.
+    double maximumBulkViscosityCoefficientHu{1.0};
+    double viscosityDecayHu{0.05};
+    // Cullen-Dehnen, Hu, and Price et al. share gradient reconstruction and its state.
     bool viscosityGradientSwitch() const {
-        return viscosityEvolution == "cullenAndDehnen" || viscosityEvolution == "priceEtAl";
+        return viscosityEvolution == "cullenAndDehnen" || viscosityEvolution == "priceEtAl" ||
+            viscosityEvolution == "hu_etal";
     }
-    // Morris-Monaghan and Cullen-Dehnen use beta_ij = viscosityBeta alpha_ij; the fixed
+    // Morris-Monaghan, Cullen-Dehnen, and Hu et al. use beta_ij = viscosityBeta alpha_ij; the fixed
     // Monaghan coefficients and Price et al. use beta_ij = viscosityBeta.
     bool viscosityBetaFollowsAlpha() const {
-        return viscosityEvolution == "morrisAndMonaghan" || viscosityEvolution == "cullenAndDehnen";
+        return viscosityEvolution == "morrisAndMonaghan" ||
+            viscosityEvolution == "cullenAndDehnen" || viscosityEvolution == "hu_etal";
     }
     double gamma{};
     double cfl{};
@@ -338,17 +342,19 @@ struct Options {
         arc & hydro.enabled;
         arc & gravity.enabled;
         arc & compute.sphBucketSize;
-        arc & hydro.viscosityAlpha;
-        arc & hydro.viscosityBeta;
+        arc & hydro.bulkViscosityCoefficient;
+        arc & hydro.vonNeumannRichtmyerCoefficient;
         arc & hydro.viscosityEpsilon;
         arc & hydro.balsaraSwitch;
         arc & hydro.viscosityEvolution;
-        arc & hydro.viscosityAlphaMin;
+        arc & hydro.minimumBulkViscosityCoefficient;
         arc & hydro.viscosityDecay;
-        arc & hydro.viscosityAlphaMax;
+        arc & hydro.maximumBulkViscosityCoefficient;
         arc & hydro.viscosityDecayCD;
-        arc & hydro.viscosityAlphaMaxPrice;
+        arc & hydro.maximumBulkViscosityCoefficientPrice;
         arc & hydro.viscosityDecayPrice;
+        arc & hydro.maximumBulkViscosityCoefficientHu;
+        arc & hydro.viscosityDecayHu;
         arc & hydro.neighborNumber;
         arc & hydro.minSupportRadius;
         arc & hydro.maxSupportRadius;

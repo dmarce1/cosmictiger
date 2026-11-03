@@ -4,6 +4,8 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <format>
+#include <iostream>
 #include <numbers>
 #include <random>
 #include <stdexcept>
@@ -182,11 +184,12 @@ void checkScreenedWalk() {
             maximumPotentialError = std::max(maximumPotentialError,
                 std::abs(fields[i][0] - direct[i][0]) / std::max(std::abs(direct[i][0]), 1.0e-30));
         }
-        PRINT("Screened walk theta=%.2f: %llu multipoles, %llu pairs, maximum relative force "
-              "error %e, potential error %e\n",
-            theta, static_cast<unsigned long long>(statistics.acceptedMultipoles),
-            static_cast<unsigned long long>(statistics.directPairs), maximumForceError,
-            maximumPotentialError);
+        std::cout << std::format("Screened walk theta={:.2f}: {:d} multipoles, {:d} pairs, maximum "
+                                 "relative force error {:e}, potential error {:e}\n",
+                         theta, static_cast<unsigned long long>(statistics.acceptedMultipoles),
+                         static_cast<unsigned long long>(statistics.directPairs), maximumForceError,
+                         maximumPotentialError)
+                  << std::flush;
         // The acceptance scales as theta^order for the screened kernel: about a
         // percent at theta=0.5 and below 1e-4 at theta=0.35 for degree five.
         if (theta == 0.5) {
@@ -390,10 +393,11 @@ double compareWithReference(
         compared += i % stride == 0;
     }
     rms = std::sqrt(rms / (3.0 * compared)) / scale;
-    PRINT("%s: %zu particles (%zu compared), maximum relative force error %e, rms %e, "
-          "momentum/sum|m a| (%e %e %e)\n",
-        label, samples.size(), compared, maximumError, rms, momentum[0] / momentumNorm,
-        momentum[1] / momentumNorm, momentum[2] / momentumNorm);
+    std::cout << std::format("{:s}: {:d} particles ({:d} compared), maximum relative force error "
+                             "{:e}, rms {:e}, momentum/sum|m a| ({:e} {:e} {:e})\n",
+                     label, samples.size(), compared, maximumError, rms, momentum[0] / momentumNorm,
+                     momentum[1] / momentumNorm, momentum[2] / momentumNorm)
+              << std::flush;
     for (int dim = 0; dim < kDimensions; ++dim) {
         requireP3m(std::abs(momentum[dim]) < 1.0e-4 * momentumNorm, "total P3M force is not zero");
     }
@@ -466,13 +470,14 @@ void p3mTest() {
         detail::requireP3m(
             denseError < 2.0e-2, "clustered P3M total force differs from the periodic reference");
         auto const denseDiagnostics = p3mDiagnostics();
-        PRINT("%s clustered: %llu direct pairs, %llu accepted multipoles, %llu cutoff rejections, "
-              "%llu of %llu batches on CUDA\n",
-            label, static_cast<unsigned long long>(denseDiagnostics.directPairs),
-            static_cast<unsigned long long>(denseDiagnostics.acceptedMultipoles),
-            static_cast<unsigned long long>(denseDiagnostics.cutoffRejections),
-            static_cast<unsigned long long>(denseDiagnostics.cudaBatches),
-            static_cast<unsigned long long>(denseDiagnostics.batches));
+        std::cout << std::format("{:s} clustered: {:d} direct pairs, {:d} accepted multipoles, "
+                                 "{:d} cutoff rejections, {:d} of {:d} batches on CUDA\n",
+                         label, static_cast<unsigned long long>(denseDiagnostics.directPairs),
+                         static_cast<unsigned long long>(denseDiagnostics.acceptedMultipoles),
+                         static_cast<unsigned long long>(denseDiagnostics.cutoffRejections),
+                         static_cast<unsigned long long>(denseDiagnostics.cudaBatches),
+                         static_cast<unsigned long long>(denseDiagnostics.batches))
+                  << std::flush;
         if (near == "pp" && getOptions().gravity.cuda) {
             detail::requireP3m(denseDiagnostics.cudaBatches > 0,
                 "CUDA was requested but no PP-PM batch ran on the device");
@@ -505,8 +510,10 @@ void p3mTest() {
                 "PP-PM and FMM-PM received different mesh forces");
         }
         rms = std::sqrt(rms / (3.0 * first.size())) / scale;
-        PRINT("PP-PM versus FMM-PM short force (%s): maximum relative difference %e, rms %e\n",
-            label, maximumError, rms);
+        std::cout << std::format("PP-PM versus FMM-PM short force ({:s}): maximum relative "
+                                 "difference {:e}, rms {:e}\n",
+                         label, maximumError, rms)
+                  << std::flush;
         return maximumError;
     };
     if (results.size() == 2) {
@@ -517,5 +524,6 @@ void p3mTest() {
     }
     pmDestroy();
     p3mDestroy();
-    PRINT("P3M split closure, short solver and periodic reference checks passed\n");
+    std::cout << "P3M split closure, short solver and periodic reference checks passed\n"
+              << std::flush;
 }

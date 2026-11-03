@@ -5,6 +5,8 @@
  Distributed under the Boost Software License, Version 1.0.
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
+#include <format>
+#include <iostream>
 #include <memory>
 #include <numbers>
 #include <vector>
@@ -70,7 +72,7 @@ std::pair<Vector<double>, Array<Vector<double>, kDimensions>> gravityAnalyticCal
         // ordering, so all shared inputs must be ready before their launches.
         copies.wait();
     }
-    PRINT("%li free\n", cudaFreeMemory());
+    std::cout << std::format("{:d} free\n", cudaFreeMemory()) << std::flush;
     size_t const particlesPerLoop =
         (size_t) cudaFreeMemory() / (kDimensions * sizeof(Position)) * 85 / 100;
     int occupancy;
@@ -82,7 +84,9 @@ std::pair<Vector<double>, Array<Vector<double>, kDimensions>> gravityAnalyticCal
     for (int i = 0; i < numberOfKernels; i++) {
         streams.push_back(std::make_unique<CudaStream>(cudaGetDevice()));
     }
-    PRINT("%li particles per loop, %li kernels\n", particlesPerLoop, numberOfKernels);
+    std::cout << std::format(
+                     "{:d} particles per loop, {:d} kernels\n", particlesPerLoop, numberOfKernels)
+              << std::flush;
     for (size_t i = 0; i < particlesSize(); i += particlesPerLoop) {
         int const totalSize =
             std::min(size_t(particlesSize()), size_t(i) + size_t(particlesPerLoop)) - size_t(i);

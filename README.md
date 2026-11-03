@@ -119,8 +119,8 @@ build/release_cpu/cosmictiger --gravity.method.far=pmmm \
   --run.timeIntegrator=global --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
 ```
 
-Fresh defaults enable FMM, SPH, equilibrium cooling, traditional nested integration,
-and potential expansion degrees 4-6. PMMM with PP or FMM near fields, hierarchical
+Fresh defaults enable FMM, SPH, equilibrium cooling, ROCKSTAR, traditional nested
+integration, and potential expansion degrees 4-6. PMMM with PP or FMM near fields, hierarchical
 integration, and global integration can be enabled independently. Both PMMM options default
 to `OFF` and may be enabled together. A single eligible algorithm is
 automatically selected; multiple eligible algorithms require a CLI/INI selection.
@@ -150,6 +150,14 @@ Set `COSMICTIGER_ENABLE_SPH=OFF` for gravity-only builds, or disable
 without equilibrium cooling. Equilibrium cooling is compiled only when SPH and
 chemistry are both enabled. The chemistry setting is inactive when SPH is off;
 homogeneous cosmological recombination remains available in every configuration.
+
+`COSMICTIGER_ENABLE_ROCKSTAR` defaults to `ON` and requires an enabled gravity
+solver. Configure with `-DCOSMICTIGER_ENABLE_ROCKSTAR=OFF` to exclude the snapshot
+FOF/ROCKSTAR halo finder, its internal Barnes–Hut solver, the coupled lightcone
+analysis pipeline, and catalogue tools and tests. Gravity and power spectra remain
+available. The setting is inactive in gravity-free builds; see
+[ROCKSTAR](docs/rockstar.md).
+
 Disabled physics and its test problems are excluded from compilation and test
 registration. Coupled tests require both. Shared sources compile once, while
 selected degrees keep separate CPU/CUDA instantiation units.
@@ -249,10 +257,13 @@ owned particles independently; the master is published after all particle files
 are closed. Open the master in VisIt, and keep its `.silo.data` directory beside
 it when copying or moving a snapshot.
 
-Gas and dark-matter particles are written as Silo point meshes named `gas` and
-`dark_matter`. Their fields are node-centered point variables, with one value per
-particle. The gas `kernel_support_radius` scalar retains the SPH support radius;
-positions and support radii follow the selected output units and frame.
+Particle views use species directories `gas/`, `dark_matter/`, and (when present)
+`stars/`, each with a point mesh named `mesh` and fields such as `vx` and `rung`.
+Gas exports the entropy tracer `A` and kernel support radius `r`; its `mass` is a
+constant field expression with one shared mass value, rather than a particle
+array. Positions and support radii follow the selected output units and frame.
+The viscosity field stays `alpha` because Silo rejects Unicode object names.
+See [units and output fields](docs/units.md) for paths and conventions.
 
 Particle positions retain the fixed-point representation used by the solver and
 checkpoints. Set `output.units=cgs` for CGS quantities or
@@ -277,8 +288,9 @@ The conversion utilities use the same grouping style:
 
 The gas solver evolves density and internal energy, using the
 [variational pressure operator](docs/variational_sph.md) with grad-H corrections
-for all SPH runs. It uses Monaghan artificial viscosity, FMM or PMMM gravity, and
-shared particle storage. See
+for all SPH runs. It uses Monaghan artificial viscosity, or Phantom's directed
+viscous-pressure force with `hydro.viscosityEvolution=priceEtAl`, alongside FMM or
+PMMM gravity and shared particle storage. See
 [the kernel, viscosity, and paper references](docs/monaghan_sph.md) for the equations,
 cosmological conversions, and deliberate implementation choices. SPH support is
 built by default; `-DCOSMICTIGER_ENABLE_SPH=OFF` excludes it. Enable gas
@@ -653,7 +665,9 @@ Debian/Ubuntu, FFTW3, GSL and HEALPix are provided by `libfftw3-dev`,
 alongside the development package for the selected MPI implementation. CMake
 finds system installations automatically and verifies that the single-precision
 FFTW MPI API links with the selected MPI library. The build links the installed
-HEALPix C++ library.
+HEALPix C++ library when ROCKSTAR and its coupled lightcone analysis are enabled.
+Disabling `COSMICTIGER_ENABLE_ROCKSTAR` removes the HEALPix C++ dependency;
+gravity builds still use the HEALPix C library for views and `healpix2silo`.
 
 Fatal signals (`SIGABRT`, `SIGSEGV`, `SIGBUS`, `SIGFPE`, and `SIGILL`) report the
 host, process ID, HPX locality, and faulting thread's stack to stderr and append
@@ -667,14 +681,15 @@ is best effort. This handler is adapted from OctoTiger's `stacktrace_fix` commit
 
 Run `./build.sh` in a terminal for the interactive builder. Choose Release,
 RelWithDebInfo, Debug, or Profile (host gprof instrumentation), CUDA, SPH,
-equilibrium cooling, job counts, HPX prefix, CUDA architectures, additional
-dependency prefixes, enabled gravity and near methods, potential expansion degrees
+equilibrium cooling, ROCKSTAR halo and lightcone analysis, job counts, HPX prefix,
+CUDA architectures, additional dependency prefixes, enabled gravity and near
+methods, potential expansion degrees
 (a scalar or inclusive range),
 enabled time integrators, and fixed32 or fixed64 position storage.
 Builds use `build/<mode>_<cuda|cpu>` (for example `build/release_cuda`), with live
 output and a `builder.*.log`. The default builds `cosmictiger` with FMM, SPH,
-equilibrium cooling, traditional integration, potential degrees 4–6, and fixed32
-positions. Building and running the test suite is opt-in. Build concurrency
+equilibrium cooling, ROCKSTAR, traditional integration, potential degrees 4–6,
+and fixed32 positions. Building and running the test suite is opt-in. Build concurrency
 defaults to the detected system thread count, with no upper cap. Use `./build.sh -j 4` to select a count,
 or `./build.sh -j` (also `-j max`) to select the detected thread count.
 Builds show full compiler and linker commands using CMake's `--verbose` option
@@ -688,7 +703,9 @@ outside those paths. The builder refreshes cached GSL and HEALPix locations when
 configuring, so old temporary installations do not override newly installed
 system packages. It reuses CUDA architectures from this checkout's CMake build
 caches, with a menu override or `CUDAARCHS` for explicit selection. Without a
-cached or explicit CUDA architecture, it uses `native`. For a manual build:
+cached or explicit CUDA architecture, it uses `native`. It also reuses the
+requested ROCKSTAR switch from this checkout's build caches, defaulting to `ON`
+when no cached selection exists. For a manual build:
 
 ```sh
 cmake -S . -B build/release -DCMAKE_BUILD_TYPE=Release \

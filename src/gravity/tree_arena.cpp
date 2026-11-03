@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
+#include <iostream>
 #include <limits>
 #include <mutex>
 #include <stdexcept>
@@ -203,7 +204,7 @@ TreeCreateParameters::TreeCreateParameters(int minimumRung, double openingAngle,
 size_t treeAddRemote(TreeNode const& remote) {
     int const treeAllocLineSize = getOptions().compute.treeAllocLineSize;
     if (nextId + treeAllocLineSize >= nodesSize) {
-        PRINT("TREE ALLOCATION EXCEEDED\n");
+        std::cout << "TREE ALLOCATION EXCEEDED\n" << std::flush;
         abort();
     }
     size_t index = nextId++ + treeAllocLineSize;

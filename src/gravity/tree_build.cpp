@@ -247,7 +247,6 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
                 flops += 2;    // Float argument widened before a double square root.
             }
             radius1 = sqrt(r2);
-            //	PRINT("%e\n", radius);
         }
         double rr;
         double rl;

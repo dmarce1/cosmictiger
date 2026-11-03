@@ -7,7 +7,7 @@
 
 #include <cmath>
 
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
 #include <chealpix.h>
 #endif
 
@@ -15,7 +15,7 @@
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/drift_cpu.hpp>
 
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
 namespace detail {
 
 void appendDriftLightconeEntries(Vector3<double> const& before, Vector3<double> const& after,
@@ -83,7 +83,7 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Vector3<float>* veloc
     if (count == 0) {
         return;
     }
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
     bool const lightcone = entries != nullptr && parameters.lightcone && parameters.tauMax > 0.0 &&
         parameters.tauMax - parameters.tau1 < 1.0;
 #else
@@ -134,7 +134,7 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Vector3<float>* veloc
         Vector3<double> before;
         Vector3<double> after;
         Vector3<double> displacement;
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
         auto const driftVelocity = velocities[index];
 #endif
         for (int dim = 0; dim < kDimensions; ++dim) {
@@ -146,7 +146,7 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Vector3<float>* veloc
                 velocities[index][dim] *= damping;
             }
         }
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
         if (lightcone) {
             char const type = types != nullptr ? types[index] : char(kDarkMatterType);
             detail::appendDriftLightconeEntries(

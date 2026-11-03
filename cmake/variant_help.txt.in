@@ -13,6 +13,7 @@ Enabled capabilities:
   SPH: @COSMICTIGER_ENABLE_SPH@
   Equilibrium cooling: @COSMICTIGER_WITH_CHEMISTRY@ (requires SPH)
   Stars: @COSMICTIGER_WITH_STARS@ (COSMICTIGER_ENABLE_STARS; requires chemistry and SPH)
+  ROCKSTAR halo and lightcone analysis: @COSMICTIGER_WITH_ROCKSTAR@ (COSMICTIGER_ENABLE_ROCKSTAR; requires gravity)
   Traditional integration: @COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL@
   Hierarchical integration: @COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL@
   Global integration: @COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL@

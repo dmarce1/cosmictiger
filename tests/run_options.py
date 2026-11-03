@@ -31,6 +31,7 @@ def main():
     parser.add_argument("--without-sph", action="store_true")
     parser.add_argument("--without-chemistry", action="store_true")
     parser.add_argument("--with-star-formation", action="store_true")
+    parser.add_argument("--without-rockstar", action="store_true")
     parser.add_argument("--hydro-methods-only", action="store_true",
                         help="Check hydrodynamics method selection without the full option suite")
     parser.add_argument("--startup-options-only", action="store_true",
@@ -167,7 +168,7 @@ def main():
                      "gravity.expansionDegree", "hydro.viscosityEvolution", "hydro.viscosityAlphaMin",
                      "hydro.viscosityDecay", "hydro.viscosityAlphaMax",
                      "hydro.viscosityDecayCD", "hydro.viscosityAlphaMaxPrice",
-                     "hydro.viscosityDecayPrice"})
+                     "hydro.viscosityDecayPrice", "hydro.viscosityAlphaMaxHu", "hydro.viscosityDecayHu"})
     required.update(cuda_keys)
     required.update({"cosmology.omegaLambda", "cosmology.startRedshift", "lightcone.enabled"})
     required.update("gravity.cuda." + key for key in cuda_tunings)
@@ -268,6 +269,8 @@ viscosityAlphaMax = 1.5
 viscosityDecayCD = 0.1
 viscosityAlphaMaxPrice = 0.8
 viscosityDecayPrice = 0.15
+viscosityAlphaMaxHu = 0.9
+viscosityDecayHu = 0.07
 zPlaneAcceleration = 0.25
 gamma = 1.4
 neighborNumber = 48
@@ -283,6 +286,7 @@ mapSize = 8
                 "hydro.viscosityAlphaMin": 0.15, "hydro.viscosityDecay": 0.3,
                 "hydro.viscosityAlphaMax": 1.5, "hydro.viscosityDecayCD": 0.1,
                 "hydro.viscosityAlphaMaxPrice": 0.8, "hydro.viscosityDecayPrice": 0.15,
+                "hydro.viscosityAlphaMaxHu": 0.9, "hydro.viscosityDecayHu": 0.07,
                 "hydro.gamma": 1.4, "hydro.neighborNumber": 48.0,
                 "hydro.cfl": 0.3, "hydro.zPlaneAcceleration": 0.25, "lightcone.mapSize": 8.0,
                 "hydro.minSupportRadius": 1.0e-6, "hydro.maxSupportRadius": 4.0,
@@ -856,6 +860,22 @@ mapSize = 8
                                  else match.group(1) != expected_value):
                 raise RuntimeError(f"CLI {key} did not override INI")
 
+    if sph_controls_available:
+        hu_override = run("hu_viscosity_cli_override", [
+            f"--configuration={config.resolve()}", "--hydro.viscosityEvolution=hu_etal",
+            "--hydro.viscosityAlphaMaxHu=1.2", "--hydro.viscosityDecayHu=0.08"] + sph_control_options)
+        for key, value in (("hydro.viscosityEvolution", "hu_etal"),
+                           ("hydro.viscosityAlphaMaxHu", "1.2"), ("hydro.viscosityDecayHu", "0.08")):
+            match = re.search(r"^" + re.escape(key) + r"\s*:\s*(\S+)", hu_override, re.MULTILINE)
+            if match is None or (match[1] != value if key == "hydro.viscosityEvolution"
+                                 else float(match[1]) != float(value)):
+                raise RuntimeError(f"Hu CLI {key} did not override INI")
+        hu_config = args.workdir / "hu_viscosity.ini"
+        hu_config.write_text("[hydro]\nviscosityEvolution = hu_etal\n")
+        hu_ini = run("hu_viscosity_ini", [f"--configuration={hu_config.resolve()}"] + sph_control_options)
+        if not re.search(r"^hydro\.viscosityEvolution\s*:\s*hu_etal\s*$", hu_ini, re.MULTILINE):
+            raise RuntimeError("Hu viscosity INI selector was not applied")
+
     verbose_config = args.workdir / "verbose.ini"
     verbose_config.write_text("[run]\nverbose = true\n")
     verbose_output = run("verbose_ini", metadata_options + [
@@ -1117,6 +1137,7 @@ mapSize = 8
                        ("hydro.viscosityAlphaMin", 0.1), ("hydro.viscosityDecay", 0.2),
                        ("hydro.viscosityAlphaMax", 2), ("hydro.viscosityDecayCD", 0.05),
                        ("hydro.viscosityAlphaMaxPrice", 1), ("hydro.viscosityDecayPrice", 0.1),
+                       ("hydro.viscosityAlphaMaxHu", 1), ("hydro.viscosityDecayHu", 0.05),
                        ("compute.bucketSize", 128), ("compute.sphBucketSize", 106)):
         assertNumericSetting(defaults, key, value)
 
@@ -1352,6 +1373,8 @@ mapSize = 8
                              f"--compute.positionType={position_type}",
                              f"--output.directory={metadata_directory}",
                              f"--lightcone.directory={metadata_directory / 'lightcone'}"]
+        if args.without_rockstar:
+            runtime_overrides.extend(["--analysis.groups=false", "--lightcone.enabled=false"])
         if args.gravity_method in ("pmmm", "pm", "p3m"):
             # The metadata fixture selects the compiled solver independently of
             # a local preset's FMM-specific opening schedule.
@@ -1450,6 +1473,8 @@ mapSize = 8
         ("neighbors_rounding", "--hydro.neighborNumber=10.66666667", "single precision"),
         ("cfl_underflow", "--hydro.cfl=1e-100", "single precision"),
         ("support_underflow", "--hydro.minSupportRadius=1e-100", "single precision"),
+        ("viscosity_alpha_max_hu", "--hydro.viscosityAlphaMaxHu=0", "hydro.viscosityAlphaMaxHu"),
+        ("viscosity_decay_hu", "--hydro.viscosityDecayHu=0", "hydro.viscosityDecayHu"),
         ("viscosity_evolution", "--hydro.viscosityEvolution=unknown", "hydro.viscosityEvolution"),
         ("viscosity_alpha_max", "--hydro.viscosityAlphaMax=0", "hydro.viscosityAlphaMax"),
         ("viscosity_decay_cd", "--hydro.viscosityDecayCD=0", "hydro.viscosityDecayCD"),

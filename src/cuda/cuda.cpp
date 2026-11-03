@@ -8,6 +8,8 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <format>
+#include <iostream>
 #include <mutex>
 #include <new>
 #include <stdexcept>
@@ -145,9 +147,10 @@ void cudaAllocate(void** ptr, size_t size, char const* file, int line) {
     double freeMem = cudaFreeMemory();
     double totalMem = cudaTotalMemory();
     if ((freeMem - (double) size) / totalMem < 0.15) {
-        PRINT("Attempt to allocate %li bytes on rank %i in %s on line %i leaves less than 15%% "
-              "memory\n",
-            size, hpxRank(), file, line);
+        std::cout << std::format("Attempt to allocate {:d} bytes on rank {:d} in {:s} on line {:d} "
+                                 "leaves less than 15% memory\n",
+                         size, hpxRank(), file, line)
+                  << std::flush;
         abort();
     }
     CUDA_CHECK(cudaMalloc(ptr, size));
@@ -203,10 +206,12 @@ void cudaInit() {
         int visibleDevices = 0;
         CUDA_CHECK(cudaGetDeviceCount(&visibleDevices));
         if (visibleDevices > 1) {
-            PRINT("CUDA: locality %i selects GPU %i using node-local rank %i. "
-                  "Bind each locality to one visible GPU with CUDA_VISIBLE_DEVICES "
-                  "to keep the HPX event pool from opening contexts on every GPU.\n",
-                hpxRank(), cudaGetDevice(), hpxLocalRank());
+            std::cout << std::format(
+                             "CUDA: locality {:d} selects GPU {:d} using node-local rank {:d}. "
+                             "Bind each locality to one visible GPU with CUDA_VISIBLE_DEVICES to "
+                             "keep the HPX event pool from opening contexts on every GPU.\n",
+                             hpxRank(), cudaGetDevice(), hpxLocalRank())
+                      << std::flush;
         }
         if (detail::cudaStreamEventsInitialized()) {
             throw std::logic_error("CUDA initialization must precede HPX CUDA stream use");

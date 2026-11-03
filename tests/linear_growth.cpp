@@ -10,8 +10,10 @@
 #include <complex>
 #include <cstdint>
 #include <cstdlib>
+#include <format>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <limits>
 #include <map>
 #include <numbers>
@@ -31,7 +33,7 @@
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 #endif
 
 namespace detail {
@@ -485,8 +487,9 @@ void measureLinearResponse(LinearExperiment const& experiment, LinearSample cons
     for (auto const& wave : waves) {
         auto const background = experiment.project(baseline.acceleration, wave);
         for (double amplitude : amplitudes) {
-            PRINT("Linear response mode=(%i,%i,%i) amplitude=%g cells\n", wave[0], wave[1], wave[2],
-                amplitude);
+            std::cout << std::format("Linear response mode=({:d},{:d},{:d}) amplitude={:g} cells\n",
+                             wave[0], wave[1], wave[2], amplitude)
+                      << std::flush;
             for (int inputKind = 0; inputKind < experiment.species; ++inputKind) {
                 for (int inputAxis = 0; inputAxis < kDimensions; ++inputAxis) {
                     std::array<LinearVector, 2> coefficients{};
@@ -762,8 +765,9 @@ void evolveLinearModes(LinearExperiment const& experiment, std::string const& fi
                 LinearField(experiment.reference.size())});
         }
         double const stepSize = std::log(final / initial) / steps;
-        PRINT("Linear growth evolution %s mode=(%i,%i,%i), %i steps\n", label.c_str(), wave[0],
-            wave[1], wave[2], steps);
+        std::cout << std::format("Linear growth evolution {:s} mode=({:d},{:d},{:d}), {:d} steps\n",
+                         label.c_str(), wave[0], wave[1], wave[2], steps)
+                  << std::flush;
         for (int step = 0; step <= steps; ++step) {
             double const logScale = std::log(initial) + step * stepSize;
             if (particleOutputEnabled) {
@@ -892,6 +896,7 @@ void linearGrowthTest() {
     if (!evolveFile.empty()) {
         detail::evolveLinearModes(experiment, evolveFile);
     }
-    PRINT("Linear growth diagnostic complete (%s, %i species, N=%i)\n",
-        options.gravity.cuda ? "CUDA" : "CPU", experiment.species, experiment.side);
+    std::cout << std::format("Linear growth diagnostic complete ({:s}, {:d} species, N={:d})\n",
+                     options.gravity.cuda ? "CUDA" : "CPU", experiment.species, experiment.side)
+              << std::flush;
 }

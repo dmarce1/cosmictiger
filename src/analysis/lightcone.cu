@@ -6,6 +6,8 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <format>
+#include <iostream>
 #include <memory>
 #include <stdexcept>
 
@@ -148,11 +150,9 @@ __global__ void cudaLightconeKernel(LightconeParticleMapType* particleMapPtr,
         }
         if (tid == 0) {
             index = atomicAdd(indexPtr, 1);
-            //	PRINT( "%i %i\n", index, N);
         }
         __syncwarp();
     }
-    //	PRINT( "! %lli\n", *rc_ptr);
 }
 
 size_t cudaLightcone(DeviceVector<LightconeTreeId> const& leaves,
@@ -192,7 +192,8 @@ size_t cudaLightcone(DeviceVector<LightconeTreeId> const& leaves,
         linkingLength, ranks, rank);
     stream.checkLaunch();
     stream.wait();
-    PRINT("lc blocks = %i next id = %lli\n", numberOfBlocks, *nextIdPtr);
+    std::cout << std::format("lc blocks = {:d} next id = {:d}\n", numberOfBlocks, *nextIdPtr)
+              << std::flush;
     size_t rc = *rcPtr;
     *nextIdValue = *nextIdPtr;
     return rc;

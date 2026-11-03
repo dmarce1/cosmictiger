@@ -300,7 +300,7 @@ GroupTreeNode const* groupTreeGetNode(TreeId id) {
     GroupTreeNode const* ptr;
     if (id.proc == hpxRank()) {
         ptr = &nodes[id.index];
-        //		PRINT( "%i %i\n", id.index, ptr->children[LEFT].index);
+
     } else {
         ptr = groupTreeCacheRead(id);
     }

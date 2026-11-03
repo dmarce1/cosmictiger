@@ -9,17 +9,19 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <format>
+#include <iostream>
 #include <numbers>
 #include <stdexcept>
 #include <utility>
 
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/terminal.hpp>
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/diagnostics.hpp>
 #include <cosmictiger/scenarios/polytropic_star.hpp>
 #include <cosmictiger/scenarios/sphere.hpp>
+#include <cosmictiger/sph/particles.hpp>
 
 namespace scenarios {
 
@@ -144,7 +146,7 @@ namespace detail {
         }
         l2 /= norm;
         l2 = sqrt(l2);
-        PRINT("L2 Error = %e\n", l2);
+        std::cout << std::format("L2 Error = {:e}\n", l2) << std::flush;
     }
 
 }    // namespace detail
@@ -157,7 +159,7 @@ ScenarioPlan initializePolytropicStar() {
     if (!opts.gravity.enabled) {
         throw std::invalid_argument("The polytropicStar scenario requires gravity.enabled=true");
     }
-    PRINT("  Initializing: polytropic star and particle shells\n");
+    std::cout << "  Initializing: polytropic star and particle shells\n" << std::flush;
     opts.initial.gasMass = 203. / nValue / (r0 * r0 * r0) / 5.99071;
     double const m = opts.initial.gasMass;
     setOptions(opts);

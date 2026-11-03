@@ -6,7 +6,7 @@
 #include <cmath>
 #include <stdexcept>
 
-#include <cosmictiger/hydro/sph/sph_kernel.hpp>
+#include <cosmictiger/sph/run_data.hpp>
 
 namespace detail {
 
@@ -44,7 +44,7 @@ void testDeferredSourceCompletion() {
     std::array<float, 2> expectedHeating;
     for (int i = 0; i < 2; ++i) {
         int const sink = fixture.sinkIndex(i);
-        expectedAcceleration[i] = data.sinkAccelerations[sink].acceleration;
+        expectedAcceleration[i] = data.sinkAccelerations[sink];
         expectedHeating[i] = data.sinkInternalEnergyRate[sink];
     }
     // No gravity buffer is readable while the pair pass is in flight. A stale
@@ -63,7 +63,7 @@ void testDeferredSourceCompletion() {
                 data.sourcePositionZ[source]),
             Vector3<float>(data.sourceVelocityX[source], data.sourceVelocityY[source],
                 data.sourceVelocityZ[source]),
-            data.sinkAccelerations[sink].acceleration, gravity[i], data.centralAcceleration,
+            data.sinkAccelerations[sink], gravity[i], data.centralAcceleration,
             data.centralSupportRadius, flops);
         for (int dim = 0; dim < kDimensions; ++dim) {
             if (std::abs(completed[dim] - expectedAcceleration[i][dim]) >

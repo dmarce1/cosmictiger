@@ -9,6 +9,8 @@
 #include <bit>
 #include <cmath>
 #include <cstdint>
+#include <format>
+#include <iostream>
 #include <numbers>
 #include <stdexcept>
 #include <vector>
@@ -180,17 +182,18 @@ void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(dou
     std::vector<double> thomson(nValue + 1);
     std::vector<double> soundSpeed2(nValue + 1);
 
-    PRINT("    Parameters:\n");
-    PRINT("      h                 = %f\n", littleh);
-    PRINT("      Ω_m               = %f\n", omegaM);
-    PRINT("      Ω_r               = %f\n", omegaR);
-    PRINT("      Ω_Λ               = %f\n", 1 - omegaR - omegaM);
-    PRINT("      Ω_b               = %f\n", omegaB);
-    PRINT("      Ω_c               = %f\n", omegaC);
-    PRINT("      Ω_γ               = %f\n", omegaGam);
-    PRINT("      Ω_ν               = %f\n", omegaNu);
-    PRINT("      N_eff             = %f\n", neff);
-    PRINT("      temperature today = %f K\n\n", 2.73 * theta);
+    std::cout << "    Parameters:\n" << std::flush;
+    std::cout << std::format("      h                 = {:f}\n", littleh) << std::flush;
+    std::cout << std::format("      \u03a9_m               = {:f}\n", omegaM) << std::flush;
+    std::cout << std::format("      \u03a9_r               = {:f}\n", omegaR) << std::flush;
+    std::cout << std::format("      \u03a9_\u039b               = {:f}\n", 1 - omegaR - omegaM)
+              << std::flush;
+    std::cout << std::format("      \u03a9_b               = {:f}\n", omegaB) << std::flush;
+    std::cout << std::format("      \u03a9_c               = {:f}\n", omegaC) << std::flush;
+    std::cout << std::format("      \u03a9_\u03b3               = {:f}\n", omegaGam) << std::flush;
+    std::cout << std::format("      \u03a9_\u03bd               = {:f}\n", omegaNu) << std::flush;
+    std::cout << std::format("      N_eff             = {:f}\n", neff) << std::flush;
+    std::cout << std::format("      temperature today = {:f} K\n\n", 2.73 * theta) << std::flush;
 
     dloga = (logamax - logamin) / nValue;
     auto const cosmicHubble = [=](double a) {
@@ -204,7 +207,7 @@ void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(dou
 
     auto const rhoBaryon = [=](double a) {
         using namespace constants;
-        //		PRINT( "%e\n", omega_b);
+
         return 3.0 * pow(littleh * kH0, 2) / (8.0 * std::numbers::pi * kG) * omegaB / (a * a * a);
     };
 
@@ -248,18 +251,13 @@ void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(dou
     }
     a = exp(logamin);
     //	print_time(t);
-    //	PRINT(
-    //			", redshift %.0f: Big Bang nucleosynthesis has ended. The Universe is dominated by
-    // radiation at a temperature of %8.2e K." 					" \n   Its total matter density is
-    // %.1f \% times the density of air at sea level.\n", 1 / a - 1, 			Trad, 100 * rho_b *
-    // omega_m / omega_b / 1.274e-3);
     double sigmaC =
         recombination::comptonTemperatureCoupling(a, omegaGam, omegaB, nH, nHe, ne, hubble);
     double sigmaT = kC * kSigmaT * ne / hubble;
     thomson[0] = sigmaT;
     double p1, p2;
     double rho1, rho2;
-    double cs2;
+    double soundSpeedSquared;
     p1 = p2 = p;
     rho1 = rho2 = rhoB;
     k[0] = p / std::pow(rhoB, 5.0 / 3.0);
@@ -268,7 +266,7 @@ void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(dou
         loga = logamin + i * dloga;
         a = exp(loga);
         a1 = exp(loga + dloga);
-        //		PRINT("%e %e %e %e %e %e\n", a, nH, nHp, nHe, nHep, nHepp);
+
         p2 = p1;
         p1 = p;
         rho2 = rho1;
@@ -313,11 +311,11 @@ void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(dou
         sigmaT = kC * kSigmaT * ne / hubble;
         t += dt;
         if (i == 1) {
-            cs2 = (p - p1) / (rhoB - rho1);
+            soundSpeedSquared = (p - p1) / (rhoB - rho1);
         } else {
-            cs2 = (p - p2) / (rhoB - rho2);
+            soundSpeedSquared = (p - p2) / (rhoB - rho2);
         }
-        soundSpeed2[i - 1] = cs2 / (kC * kC);
+        soundSpeed2[i - 1] = soundSpeedSquared / (kC * kC);
         thomson[i] = sigmaT;
         k[i] = p / std::pow(rhoB, 5.0 / 3.0);
 
@@ -326,15 +324,15 @@ void createZeroOrderUniverse(ZeroOrderUniverse* uniPtr, std::function<double(dou
             //		break;
         }
     }
-    cs2 = (p - p1) / (rhoB - rho1);
+    soundSpeedSquared = (p - p1) / (rhoB - rho1);
     // Complete the final endpoint with a one-sided derivative in units of c^2;
     // the loop already supplied the centered derivative at nValue - 1.
-    soundSpeed2[nValue] = cs2 / (kC * kC);
+    soundSpeed2[nValue] = soundSpeedSquared / (kC * kC);
     //	print_time(t);
     uni.amin = amin;
     uni.amax = amax;
     buildInterpolationFunction(&uni.k, k, (double) amin, (double) amax);
     buildInterpolationFunction(&uni.sigmaT, thomson, (double) amin, (double) amax);
-    buildInterpolationFunction(&uni.cs2, soundSpeed2, (double) amin, (double) amax);
+    buildInterpolationFunction(&uni.soundSpeedSquared, soundSpeed2, (double) amin, (double) amax);
     //	uni.hubble = std::move(cosmic_hubble);
 }

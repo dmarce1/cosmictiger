@@ -93,26 +93,41 @@ private:
         return result;
     }
 
-    CUDA_EXPORT static Integer floatingBits(double number) {
+    template <class FloatingPoint>
+    CUDA_EXPORT static Integer floatingBits(FloatingPoint number) {
+        static_assert(std::is_floating_point_v<FloatingPoint>);
         // Reduce before scaling: casting a negative number or exactly 2^64 to
         // an unsigned integer is undefined. Keeping the sign separate also
         // retains tiny negative displacements that would vanish in 1 + number.
-        double const period = detail::fixedPowerOfTwo(kStorageBits_ - fractionBits);
-        double const reduced =
-            number > -period && number < period ? number : ::fmod(number, period);
-        bool const negative = reduced < 0.0;
-        double const magnitude = negative ? -reduced : reduced;
-        double const scaled = magnitude * detail::fixedPowerOfTwo(fractionBits);
+        // Derived conversion: bits = trunc(|x mod 2ʷ⁻ᶠ| × 2ᶠ), with
+        // the sign restored modulo 2ʷ. Here w is kStorageBits_, f is
+        // fractionBits, and x is number. Power-of-two scaling preserves
+        // the input significand, so float inputs need no double promotion.
+        FloatingPoint const period =
+            FloatingPoint(detail::fixedPowerOfTwo(kStorageBits_ - fractionBits));
+        FloatingPoint reduced = number;
+        if (!(number > -period && number < period)) {
+            if constexpr (std::is_same_v<FloatingPoint, float>) {
+                reduced = ::fmodf(number, period);
+            } else {
+                reduced = ::fmod(number, period);
+            }
+        }
+        bool const negative = reduced < FloatingPoint(0);
+        FloatingPoint const magnitude = negative ? -reduced : reduced;
+        FloatingPoint const scaled =
+            magnitude * FloatingPoint(detail::fixedPowerOfTwo(fractionBits));
         UnsignedInteger bits;
 #ifndef __CUDA_ARCH__
         if constexpr (sizeof(UnsignedInteger) == sizeof(uint64_t)) {
-            // GCC can lower double-to-uint64_t to a signed conversion followed
+            // GCC can lower floating-to-uint64_t to a signed conversion followed
             // by a correction. For valid values >= 2^63 that first conversion
             // raises FE_INVALID when floating-point traps are enabled. Each
             // limb stays below 2^32, so both conversions are safe even if the
             // compiler speculates instructions across a range check.
-            uint32_t const high = static_cast<uint32_t>(scaled * 0x1p-32);
-            uint32_t const low = static_cast<uint32_t>(scaled - double(high) * 0x1p32);
+            uint32_t const high = static_cast<uint32_t>(scaled * FloatingPoint(0x1p-32));
+            uint32_t const low =
+                static_cast<uint32_t>(scaled - FloatingPoint(high) * FloatingPoint(0x1p32));
             bits = (uint64_t(high) << 32) | low;
         } else
 #endif
@@ -163,11 +178,17 @@ public:
         return *this;
     }
 
+    template <class FloatingPoint, std::enable_if_t<std::is_same_v<FloatingPoint, float>, int> = 0>
+    CUDA_EXPORT Fixed& operator=(FloatingPoint number) {
+        i_ = floatingBits(number);
+        return *this;
+    }
+
     CUDA_EXPORT Fixed(float number)
       : i_(floatingBits(number)) {}
 
     CUDA_EXPORT Fixed(int number)
-      : i_(floatingBits(number)) {}
+      : i_(floatingBits(double(number))) {}
 
     CUDA_EXPORT Fixed(double number)
       : i_(floatingBits(number)) {}

@@ -8,7 +8,7 @@
 #include <cuda_runtime.h>
 #include <gtest/gtest.h>
 
-#include <cosmictiger/hydro/sph/star_formation_cuda.hpp>
+#include <cosmictiger/stars/star_formation_cuda.hpp>
 
 namespace {
 namespace sf = star_formation_backend;
@@ -57,7 +57,7 @@ void compare(sf::Output const& actual, sf::Output const& expected) {
     close(actual.energy, expected.energy);
     close(actual.pressureRatio, expected.pressureRatio);
     close(actual.signalIndex, expected.signalIndex);
-    close(actual.chemistry.electronFraction, expected.chemistry.electronFraction);
+    close(actual.electronFraction, expected.electronFraction);
     close(actual.coldFraction, expected.coldFraction);
     close(actual.hotEnergy, expected.hotEnergy);
     close(actual.effectiveEnergy, expected.effectiveEnergy);
@@ -112,7 +112,7 @@ TEST(StarFormationCuda, RejectsInvalidSourceBeforeCommit) {
         outputs[index].state.id = 700 + index;
         outputs[index].state.eventCounter = 900 + index;
         outputs[index].energy = -100.0f - float(index);
-        outputs[index].chemistry.electronFraction = -200.0f - float(index);
+        outputs[index].electronFraction = -200.0f - float(index);
         outputs[index].status = -17;
     }
     auto const original = outputs;
@@ -129,8 +129,7 @@ TEST(StarFormationCuda, RejectsInvalidSourceBeforeCommit) {
     for (size_t index = 0; index < outputs.size(); ++index) {
         EXPECT_EQ(outputs[index].state, original[index].state);
         EXPECT_EQ(outputs[index].energy, original[index].energy);
-        EXPECT_EQ(
-            outputs[index].chemistry.electronFraction, original[index].chemistry.electronFraction);
+        EXPECT_EQ(outputs[index].electronFraction, original[index].electronFraction);
         EXPECT_EQ(outputs[index].status, original[index].status);
     }
 }

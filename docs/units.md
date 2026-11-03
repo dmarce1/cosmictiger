@@ -81,27 +81,62 @@ selects CGS and cosmological output together. `output.frame` accepts `comoving`,
 
 Either selector can use `both` while the other selects one value. Each view
 contains gas and dark-matter point meshes with node-centered point variables,
-including the gas `kernel_support_radius` scalar. Positions and support radii
+including the gas kernel support radius `gas/r`. Positions and support radii
 use the selected units and frame. Converted floating-point arrays use double
 precision. The directories above are in the master Silo file, whose
 multimeshes and multivariables reference locality files under the sibling
 `.silo.data` directory. Each locality stores its views below `/locality_<rank>`;
 keep the master and its `.silo.data` directory together when moving a snapshot.
 Metadata records the selected units, frame, scale factor, Hubble parameter,
-and the peculiar-velocity convention. Mesh time and `time` metadata retain the
+and the peculiar-velocity convention.
+
+Each view contains separate `gas/`, `dark_matter/`, and (when present) `stars/`
+directories. Each species has a point mesh named `mesh` and unprefixed fields
+`vx`, `vy`, `vz`, and `rung`. Thus gas velocity is `gas/vx` and dark-matter
+velocity is `dark_matter/vx`; converted views add their unit/frame prefix.
+`rung` is the committed integration rung. Gas uses the stricter enabled
+hydrodynamic and gravitational requirements together with step and neighbor
+limits, rather than keeping two separately integrated rung fields.
+
+Gas fields include `rho`, entropy tracer `A`, and kernel support radius `r`.
+For freely converged supports, the solver enforces
+`rho = 3 * neighborNumber * particle_mass / (4*pi*r^3)` to its support tolerance.
+`rho` remains a stored field because support-radius bounds can break that relation.
+`A = P_physical / rho_physical^gamma` is the stored entropic function, not
+internal or total energy. Its conversion factor is
+`(lengthCm/timeSeconds)^2 * (massG/lengthCm^3)^(1-gamma)` in CGS;
+cosmological output expresses the same quantity in
+`(km/s)^2 / ((Msun/h)/(Mpc/h)^3)^(gamma-1)`. It has no additional scale-factor
+or lab/comoving-frame factor. Metadata records the adiabatic index.
+Viscosity remains `alpha`: Silo restricts object names to ASCII alphanumerics
+and underscores and rejects Greek alpha.
+
+`gas/mass` is a Silo scalar expression,
+`nodal_constant(<gas/mesh>, particle_mass)`, with the fully qualified mesh path
+for that view. Only one mass literal is stored per expression, with no
+per-particle mass array or mass multivariable. The master expression operates
+on the gas multimesh, including empty-locality blocks. `gas/mass_unit` records
+its units. Expressions use VisIt's
+[`nodal_constant` function](https://visit-sphinx-github-user-manual.readthedocs.io/en/develop/using_visit/Quantitative/Expressions.html)
+and Silo's
+[`DBPutDefvars` definitions](https://silo.readthedocs.io/latest/objects.html#dbputdefvars).
+
+This layout replaces the former flat `hydro_*`, `star_*`, `eint`, and
+`kernel_support_radius` output fields. Saved visualization sessions and scripts
+using those paths need updating. Mesh time and `time` metadata retain the
 existing cosmological-age convention in Gyr (`time_unit=Gyr`,
 `time_convention=cosmological_age`); this is not elapsed standalone hydro time.
 
 The output cadence selects coarse output epochs; it does not synchronize the
 individual-rung particle fields. Converted views record
-`integration_state=stored_staggered`: their velocities and gas energies are
+`integration_state=stored_staggered`: their velocities and the gas entropy tracer are
 converted from the stored integration stages, and gas density retains the last
 SPH density evaluation. Positions are at the output epoch. These views should
 not be treated as a newly reconstructed common-time state. Unit conversion
 leaves the solver's staggered state and integration behavior intact.
 
 The defaults are `output.units=code` and `output.frame=comoving`. They retain
-the existing root-level mesh names and raw evolution fields. `code` cannot be
+raw evolution units, with the species directories described above. `code` cannot be
 combined with `lab` or `both`: choose a converted unit system for those frames.
 The selectors affect particle Silo output; they do not change the integration
 scheme, the restart format, or the units of separate analysis products.

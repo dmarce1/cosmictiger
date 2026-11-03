@@ -9,68 +9,66 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #ifndef SAFE_IO_HPP_
 #define SAFE_IO_HPP_
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
+#include <stdexcept>
+#include <string>
 
 #include <cosmictiger/core/assert.hpp>
 
-#define PRINT(...) print(__VA_ARGS__)
-
-#define PRINT_BOTH(fp, ...) printBoth(fp, __VA_ARGS__)
-
 #define THROW_ERROR(...) throwError(__FILE__, __LINE__, __VA_ARGS__)
 
-template <class... Args>
-#ifdef __CUDA_ARCH__
-__device__
-#endif
-    inline void print(char const* fmt, Args... args) {
-    printf(fmt, args...);
 #ifndef __CUDA_ARCH__
-    fflush(stdout);
-#endif
+namespace detail {
+
+[[noreturn]] inline void throwRuntimeError(char const* file, int line, std::string message) {
+    if (!message.empty() && message.back() != '\n') {
+        message += '\n';
+    }
+    message += "Error in ";
+    message += file;
+    message += " on line ";
+    message += std::to_string(line);
+    throw std::runtime_error(message);
 }
 
-template <class... Args>
-inline void printBoth(FILE* fp, char const* fmt, Args... args) {
-    printf(fmt, args...);
-    fprintf(fp, fmt, args...);
-    fflush(stdout);
-    fflush(fp);
-}
+}    // namespace detail
+#endif
 
-#ifdef __CUDA_ARCH__
-__device__
-#endif
-    inline void print(char const* str) {
-    printf("%s", str);
-#ifndef __CUDA_ARCH__
-    fflush(stdout);
-#endif
-}
+// CUDA device code cannot throw C++ exceptions; retain its diagnostic and trap.
 template <class... Args>
+[[noreturn]]
 #ifdef __CUDA_ARCH__
 __device__
 #endif
     inline void throwError(char const* file, int line, char const* fmt, Args... args) {
+#ifdef __CUDA_ARCH__
     printf(fmt, args...);
     printf("Error in %s on line %i\n", file, line);
-#ifndef __CUDA_ARCH__
-    fflush(stdout);
-    ALWAYS_ASSERT(false);
-#else
     __trap();
+#else
+    int const length = std::snprintf(nullptr, 0, fmt, args...);
+    if (length < 0) {
+        detail::throwRuntimeError(file, line, "Unable to format error message");
+    }
+    std::string message(static_cast<size_t>(length) + 1, '\0');
+    std::snprintf(message.data(), message.size(), fmt, args...);
+    message.resize(static_cast<size_t>(length));
+    detail::throwRuntimeError(file, line, message);
 #endif
 }
 
-inline void throwError(char const* file, int line, char const* str) {
+[[noreturn]]
+#ifdef __CUDA_ARCH__
+__device__
+#endif
+    inline void throwError(char const* file, int line, char const* str) {
+#ifdef __CUDA_ARCH__
     printf("%s", str);
     printf("Error in %s on line %i\n", file, line);
-#ifndef __CUDA_ARCH__
-    fflush(stdout);
-    ALWAYS_ASSERT(false);
-#else
     __trap();
+#else
+    detail::throwRuntimeError(file, line, str);
 #endif
 }
 
@@ -80,20 +78,19 @@ inline void throwError(char const* file, int line, char const* str) {
 static void safeFread(void* src, size_t size, size_t count, FILE* fp, int line, char const* file) {
     auto read = fread(src, size, count, fp);
     if (read != count) {
-        PRINT("Attempt to read %li elements of size %li in %s on line %i failed - only %li "
-              "elements read.\n",
-            count, size, file, line, read);
-        abort();
+        throwError(file, line,
+            "Attempt to read %zu elements of size %zu failed - only %zu elements read.\n", count,
+            size, read);
     }
 }
 
-static void safeFwrite(void const* src, size_t size, size_t count, FILE* fp, int line, char const* file) {
+static void safeFwrite(
+    void const* src, size_t size, size_t count, FILE* fp, int line, char const* file) {
     auto write = fwrite(src, size, count, fp);
     if (write != count) {
-        PRINT("Attempt to write %li elements of size %li in %s on line %i failed - only %li "
-              "elements written.\n",
-            count, size, file, line, write);
-        abort();
+        throwError(file, line,
+            "Attempt to write %zu elements of size %zu failed - only %zu elements written.\n",
+            count, size, write);
     }
 }
 

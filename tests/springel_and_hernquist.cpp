@@ -3,7 +3,7 @@
 
 #include <gtest/gtest.h>
 
-#include <cosmictiger/hydro/sph/star_formation_kernel.hpp>
+#include <cosmictiger/stars/star_formation_kernel.hpp>
 
 namespace {
 namespace sh = springel_and_hernquist;
@@ -28,8 +28,8 @@ sf::Input input(sf::Parameters const& p, double factor = 10.0) {
     result.state.id = 1;
     result.density = float(factor * p.model.thresholdDensity);
     result.rung = 3;
-    result.chemistry.electronFraction = 1.0f;
-    double electrons = result.chemistry.electronFraction;
+    result.electronFraction = 1.0f;
+    double electrons = result.electronFraction;
     sh::Equilibrium phase;
     EXPECT_TRUE(sh::evaluateEquilibrium(p.model, p.cooling, result.density, electrons, phase));
     result.energy = float(0.5 * phase.effectiveEnergy);
@@ -44,7 +44,8 @@ TEST(SpringelAndHernquist, OfficialCalibrationUsesApproximateHotEnergyAndIonized
     double const hot = p.supernovaEnergy / p.evaporationFactor;
     double const x = (hot - p.warmEnergy) / (hot - p.coldEnergy);
     double const expected = x / std::pow(1.0 - x, 2) *
-        (p.beta * p.supernovaEnergy - (1.0 - p.beta) * p.coldEnergy) /
+        (p.supernovaMassFraction * p.supernovaEnergy -
+            (1.0 - p.supernovaMassFraction) * p.coldEnergy) /
         (p.starFormationTime * coefficient);
     relativeNear(model.thresholdDensity, expected);
     double const mu = 4.0 / (8.0 - 5.0 * (1.0 - 0.76));
@@ -78,15 +79,15 @@ TEST(SpringelAndHernquist, EquilibriumMatchesOfficialAlgebraAndClampOrder) {
         ASSERT_TRUE(sh::clampSourceTime(p.model.parameters, 10.0 * time, phase));
         EXPECT_EQ(phase.coldFraction, x);
         relativeNear(phase.starFormationTime, 10.0 * time);
-        relativeNear(
-            phase.specificStarFormationRate, (1.0 - p.model.parameters.beta) * x / (10.0 * time));
+        relativeNear(phase.specificStarFormationRate,
+            (1.0 - p.model.parameters.supernovaMassFraction) * x / (10.0 * time));
     }
 }
 
 TEST(SpringelAndHernquist, DenseRelaxationKeepsThermalHistoryAndHotElectronGuess) {
     auto const p = parameters();
     auto const old = input(p);
-    double electrons = old.chemistry.electronFraction;
+    double electrons = old.electronFraction;
     sh::Equilibrium phase;
     ASSERT_TRUE(sh::evaluateEquilibrium(p.model, p.cooling, old.density, electrons, phase));
     ASSERT_TRUE(sh::clampSourceTime(p.model.parameters, p.explicitTimestep, phase));
@@ -98,7 +99,7 @@ TEST(SpringelAndHernquist, DenseRelaxationKeepsThermalHistoryAndHotElectronGuess
     EXPECT_FALSE(result.convert);
     EXPECT_EQ(result.energy, float(energy));
     EXPECT_NE(result.energy, float(phase.effectiveEnergy));
-    EXPECT_EQ(result.chemistry.electronFraction, float(electrons));
+    EXPECT_EQ(result.electronFraction, float(electrons));
     relativeNear(result.state.specificStarFormationRate, phase.specificStarFormationRate);
     relativeNear(result.value, -p.gasMass * (double(result.energy) - old.energy));
 }
@@ -106,7 +107,7 @@ TEST(SpringelAndHernquist, DenseRelaxationKeepsThermalHistoryAndHotElectronGuess
 TEST(SpringelAndHernquist, DenseAboveTargetCoolsWithFloorAndTemperatureGate) {
     auto p = parameters();
     auto old = input(p);
-    double hotElectrons = old.chemistry.electronFraction;
+    double hotElectrons = old.electronFraction;
     sh::Equilibrium phase;
     ASSERT_TRUE(sh::evaluateEquilibrium(p.model, p.cooling, old.density, hotElectrons, phase));
     old.energy = float(10.0 * phase.effectiveEnergy);
@@ -121,7 +122,7 @@ TEST(SpringelAndHernquist, DenseAboveTargetCoolsWithFloorAndTemperatureGate) {
         auto const result = sf::advance(old, p);
         ASSERT_EQ(result.status, 0);
         EXPECT_EQ(result.energy, float(expected));
-        EXPECT_EQ(result.chemistry.electronFraction, float(hotElectrons));
+        EXPECT_EQ(result.electronFraction, float(hotElectrons));
         if (expected > 1.01 * phase.effectiveEnergy) {
             EXPECT_EQ(result.state.specificStarFormationRate, 0.0);
         } else {
@@ -141,7 +142,7 @@ TEST(SpringelAndHernquist, SavedRateIsSampledBeforeCoolingAndInitialRateIsZero) 
     old.state.specificStarFormationRate = 1.0;
     // A converted particle is not passed through cooling, even if its unused
     // gas thermochemistry is invalid: this distinguishes event-first ordering.
-    old.chemistry.electronFraction = -1.0f;
+    old.electronFraction = -1.0f;
     old.density = -1.0f;
     auto const second = sf::advance(old, p);
     ASSERT_EQ(second.status, 0);
@@ -190,7 +191,7 @@ TEST(SpringelAndHernquist, InvalidSourceLeavesInputUntouched) {
     EXPECT_NE(sf::advance(old, p).status, 0);
     EXPECT_EQ(old.state, before.state);
     EXPECT_EQ(old.energy, before.energy);
-    EXPECT_EQ(old.chemistry.electronFraction, before.chemistry.electronFraction);
+    EXPECT_EQ(old.electronFraction, before.electronFraction);
 }
 
 TEST(SpringelAndHernquist, WholeParticleProbability) {

@@ -13,6 +13,8 @@ constexpr bool kVerbose = true;
 #include <cmath>
 #include <cstring>
 #include <exception>
+#include <format>
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <random>
@@ -38,7 +40,7 @@ constexpr bool kVerbose = true;
 #include <cosmictiger/particles/particle_selection.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 #endif
 
 struct LineIdType;
@@ -1056,7 +1058,6 @@ static void particlesClearGravityDiagnostics(ParticleInteger begin, ParticleInte
 #endif
 
 static void particlesResizeStorage(ParticleInteger sz, bool lock) {
-    //	PRINT( "Resizing particles to %i\n", sz);
     if (sz > capacity) {
         if (lock) {
             sharedMutex.lock();
@@ -1065,8 +1066,7 @@ static void particlesResizeStorage(ParticleInteger sz, bool lock) {
         while (newCapacity < sz) {
             newCapacity = size_t(105) * newCapacity / size_t(100);
         }
-        //		PRINT("%i: Resizing particles to %li from %li\n", hpx_rank(), new_capacity,
-        // capacity);
+
         for (int dim = 0; dim < kDimensions; dim++) {
             particlesArrayResize(particlesX[dim], newCapacity, true);
         }
@@ -1574,7 +1574,7 @@ Vector<ParticleSample> particlesSample(int cnt) {
     int const seed = 4321 * hpxRank() + 42;
     gsl_rng* rndgen = gsl_rng_alloc(gsl_rng_taus);
     gsl_rng_set(rndgen, seed);
-    PRINT("Selecting %i particles\n", cnt);
+    std::cout << std::format("Selecting {:d} particles\n", cnt) << std::flush;
     for (ParticleInteger i = 0; i < cnt; i++) {
         ParticleSample sample{};
         ParticleInteger const index =
@@ -1593,7 +1593,7 @@ Vector<ParticleSample> particlesSample(int cnt) {
         parts.push_back(sample);
     }
     gsl_rng_free(rndgen);
-    PRINT("Done\n");
+    std::cout << "Done\n" << std::flush;
     for (auto& f : futs) {
         auto const theseParticles = f.get();
         parts.insert(parts.end(), theseParticles.begin(), theseParticles.end());
@@ -1669,7 +1669,8 @@ void particlesLoad(FILE* fp) {
     if (getOptions().hydro.enabled) {
         ParticleInteger sphSize = 0;
         FREAD(&sphSize, sizeof(ParticleInteger), 1, fp);
-        PRINT("Reading %i total particles %i sph\n", size, sphSize);
+        std::cout << std::format("Reading {:d} total particles {:d} sph\n", size, sphSize)
+                  << std::flush;
         if (sphSize < 0 || sphSize > size) {
             THROW_ERROR("Invalid gas count in checkpoint\n");
         }
@@ -1678,13 +1679,13 @@ void particlesLoad(FILE* fp) {
     } else
 #endif
     {
-        PRINT("Reading %i total particles.\n", size);
+        std::cout << std::format("Reading {:d} total particles.\n", size) << std::flush;
         particlesResize(size);
     }
     // Sample identities and captured forces describe only an in-progress force pass.
     // They are intentionally absent from checkpoints, including same-process reloads.
     particlesGravitySamplesBegin(0);
-    PRINT("particles_size  = %i\n", particlesSize());
+    std::cout << std::format("particles_size  = {:d}\n", particlesSize()) << std::flush;
     FREAD(&particlesPos(kXDimension, 0), sizeof(Position), particlesSize(), fp);
     FREAD(&particlesPos(kYDimension, 0), sizeof(Position), particlesSize(), fp);
     FREAD(&particlesPos(kZDimension, 0), sizeof(Position), particlesSize(), fp);
@@ -2017,7 +2018,7 @@ GadgetIoHeader particlesReadGadget4Header(std::string const& filenameBase) {
 HPX_PLAIN_ACTION(particlesReadGadget4, ParticlesReadGadget4Action);
 
 GadgetIoHeader particlesReadGadget4(std::string fnameBase) {
-    PRINT("Reading gadget4 file\n");
+    std::cout << "Reading gadget4 file\n" << std::flush;
     Vector<hpx::future<void>> futs;
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<ParticlesReadGadget4Action>(c, fnameBase));
@@ -2063,8 +2064,6 @@ GadgetIoHeader particlesReadGadget4(std::string fnameBase) {
     }
     auto const a = 1.0 / (header.redshift + 1.0);
     for (ParticleInteger i = 0; i < numberOfParticles; i++) {
-        //	PRINT( "%e %e %e\n", particles_pos(XDIM,i).to_double(),
-        // particles_pos(YDIM,i).to_double(), particles_pos(ZDIM,i).to_double());
         for (int dim = 0; dim < kDimensions; dim++) {
             particlesVel(dim, i) *=
                 sqrt(a) * a * 1e5 * getOptions().units.timeSeconds / getOptions().units.lengthCm;

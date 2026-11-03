@@ -8,6 +8,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <format>
+#include <iostream>
 #include <limits>
 #include <stdexcept>
 
@@ -61,7 +63,7 @@ Pair<double> analyticCompare(int numberOfSamples) {
     tm.start();
     auto samples = particlesSample(numberOfSamples);
     tm.stop();
-    PRINT("particles_sample: %e\n", tm.read());
+    std::cout << std::format("particles_sample: {:e}\n", tm.read()) << std::flush;
     Vector<Position> sinkx(numberOfSamples);
     Vector<Position> sinky(numberOfSamples);
     Vector<Position> sinkz(numberOfSamples);
@@ -104,10 +106,10 @@ Pair<double> analyticCompare(int numberOfSamples) {
     double force50 = gerrs[(numberOfSamples - 1) / 2] + gerrs[numberOfSamples / 2];
     phi50 *= 0.5;
     force50 *= 0.5;
-    PRINT("Force 50  Error     = %e\n", force50);
-    PRINT("Force 99  Error     = %e\n", force100);
-    PRINT("Potential 50  Error = %e\n", phi50);
-    PRINT("Potential 99  Error = %e\n", phi100);
+    std::cout << std::format("Force 50  Error     = {:e}\n", force50) << std::flush;
+    std::cout << std::format("Force 99  Error     = {:e}\n", force100) << std::flush;
+    std::cout << std::format("Potential 50  Error = {:e}\n", phi50) << std::flush;
+    std::cout << std::format("Potential 99  Error = {:e}\n", phi100) << std::flush;
     Pair<double> rc;
     rc.first = force50;
     rc.second = force100;

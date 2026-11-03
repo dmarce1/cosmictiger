@@ -5,6 +5,8 @@
 #include <cmath>
 #include <complex>
 #include <cstdint>
+#include <format>
+#include <iostream>
 #include <limits>
 #include <numbers>
 #include <stdexcept>
@@ -19,7 +21,7 @@
 #include <cosmictiger/gravity/pm/solver.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 #endif
 
 namespace detail {
@@ -373,8 +375,10 @@ void pmTest() {
                     if (fixture < 2 || fixture == 4) {
                         double const error =
                             detail::verifyPmDirectFourier(samples, side, order, splitRadius);
-                        PRINT("%s Fourier oracle n=%i cloud=%s rs=%e relative force error=%e\n",
-                            method.c_str(), side, cloud, splitRadius, error);
+                        std::cout << std::format("{:s} Fourier oracle n={:d} cloud={:s} rs={:e} "
+                                                 "relative force error={:e}\n",
+                                         method.c_str(), side, cloud, splitRadius, error)
+                                  << std::flush;
                     } else if (fixture == 2) {
                         for (auto const& sample : samples) {
                             for (float acceleration : sample.acceleration) {
@@ -408,6 +412,7 @@ void pmTest() {
         }
     }
     pmDestroy();
-    PRINT("Particle mesh Fourier, screening, mass, self-force, translation and interval "
-          "checks passed\n");
+    std::cout << "Particle mesh Fourier, screening, mass, self-force, translation and interval "
+                 "checks passed\n"
+              << std::flush;
 }

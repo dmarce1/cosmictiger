@@ -9,7 +9,7 @@ struct EvolutionStage {
     double duration;
     int numberOfSteps;
     double damping{0.0};
-    double viscosityAlpha{-1.0};
+    double bulkViscosityCoefficient{-1.0};
 };
 
 struct ScenarioPlan {

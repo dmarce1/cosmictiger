@@ -12,6 +12,8 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <format>
+#include <iostream>
 #include <map>
 #include <memory>
 #include <set>
@@ -23,11 +25,11 @@
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/io/view.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 
 namespace detail {
 
@@ -96,7 +98,7 @@ struct DistributedOutputScales {
     double length = 1.0;
     double density = 1.0;
     double velocity = 1.0;
-    double energy = 1.0;
+    double entropy = 1.0;
     double mass = 1.0;
 };
 
@@ -109,12 +111,36 @@ DistributedOutputScales distributedOutputScales(bool cosmological, bool lab) {
     DistributedOutputScales scales;
     scales.length = length * (lab ? a : 1.0) * (cosmological ? hubble / constants::kMpcToCm : 1.0);
     scales.velocity = length / time / a * (cosmological ? 1e-5 : 1.0);
-    scales.energy = length * length / (time * time * a * a) * (cosmological ? 1e-10 : 1.0);
+
     scales.mass = mass * (cosmological ? hubble / constants::kM0 : 1.0);
     scales.density = mass / (length * length * length) / (lab ? a * a * a : 1.0) *
         (cosmological ? std::pow(constants::kMpcToCm, 3) / (constants::kM0 * hubble * hubble) :
                         1.0);
+    scales.entropy = length * length / (time * time) * (cosmological ? 1e-10 : 1.0) *
+        std::pow(scales.density * (lab ? a * a * a : 1.0), 1.0 - getOptions().hydro.gamma);
     return scales;
+}
+
+double checkDistributedMassExpression(DBfile* file, std::string const& path, double expected) {
+    requireDistributedOutput(!DBInqVarExists(file, (path + "mass").c_str()),
+        "mass has no per-particle array or multivar");
+    std::unique_ptr<DBdefvars, decltype(&DBFreeDefvars)> definition(
+        DBGetDefvars(file, (path + "mass_expression").c_str()), DBFreeDefvars);
+    char directory[4096];
+    requireDistributedOutput(DBGetDir(file, directory) >= 0, "read species directory");
+    std::string const base = std::string(directory + 1);
+    std::string const fullPath = base + (base.empty() ? "" : "/") + path;
+    requireDistributedOutput(definition && definition->ndefs == 1 &&
+            definition->types[0] == DB_VARTYPE_SCALAR &&
+            std::string(definition->names[0]) == fullPath + "mass",
+        "single mass expression with the full species name");
+    std::string const expression(definition->defns[0]);
+    std::string const begin = "nodal_constant(<" + fullPath + "mesh>, ";
+    requireDistributedOutput(expression.starts_with(begin) && expression.ends_with(")"),
+        "mass expression references its species mesh");
+    double const mass = std::stod(expression.substr(begin.size()));
+    nearDistributedOutput(mass, expected, "shared mass value follows unit conversion");
+    return mass;
 }
 
 std::string checkDistributedOutput(int cycle, std::string const& prefix, int activeRanks,
@@ -129,28 +155,28 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
             generation.back() == '\0',
         "read immutable leaf generation");
     DistributedOutputMultimesh multimesh(
-        DBGetMultimesh(master.get(), (prefix + "gas").c_str()), DBFreeMultimesh);
+        DBGetMultimesh(master.get(), (prefix + "gas/mesh").c_str()), DBFreeMultimesh);
     requireDistributedOutput(
         multimesh && multimesh->nblocks == hpxSize(), "gas multimesh has one block per locality");
     std::unique_ptr<int, decltype(&std::free)> masterCycle(
-        static_cast<int*>(DBGetComponent(master.get(), (prefix + "gas").c_str(), "cycle")),
+        static_cast<int*>(DBGetComponent(master.get(), (prefix + "gas/mesh").c_str(), "cycle")),
         &std::free);
     std::unique_ptr<double, decltype(&std::free)> masterTime(
-        static_cast<double*>(DBGetComponent(master.get(), (prefix + "gas").c_str(), "dtime")),
+        static_cast<double*>(DBGetComponent(master.get(), (prefix + "gas/mesh").c_str(), "dtime")),
         &std::free);
     requireDistributedOutput(
         masterCycle && *masterCycle == cycle && masterTime && *masterTime > 0.0,
         "master carries cycle and time");
-    std::vector<std::string> const fields = {"rho", "eint", "hydro_vx", "hydro_vy", "hydro_vz",
-        "hydro_rung", "hydro_mass", "kernel_support_radius"};
+    std::vector<std::string> const fields = {"rho", "A", "vx", "vy", "vz", "rung", "r"};
+    checkDistributedMassExpression(master.get(), prefix + "gas/", 0.25 * scales.mass);
     std::vector<DistributedOutputMultivar> multivars;
     for (auto const& field : fields) {
         multivars.emplace_back(
-            DBGetMultivar(master.get(), (prefix + field).c_str()), DBFreeMultivar);
+            DBGetMultivar(master.get(), (prefix + "gas/" + field).c_str()), DBFreeMultivar);
         requireDistributedOutput(multivars.back() && multivars.back()->nvars == hpxSize(),
             "multivar exists for " + prefix + field);
         requireDistributedOutput(multivars.back()->mmesh_name &&
-                std::filesystem::path(multivars.back()->mmesh_name).filename() == "gas",
+                std::filesystem::path(multivars.back()->mmesh_name).filename() == "mesh",
             "gas multivar attaches to the gas multimesh: " + field);
     }
     double totalMass = 0.0;
@@ -163,7 +189,7 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
         auto const leafPath = std::filesystem::path(masterPath.string() + ".data") /
             generation.data() / ("locality_" + std::to_string(rank) + ".silo");
         requireDistributedOutput(std::filesystem::exists(leafPath), "one Silo file per locality");
-        std::string const directory = "/locality_" + std::to_string(rank) + "/" + prefix;
+        std::string const directory = "/locality_" + std::to_string(rank) + "/" + prefix + "gas/";
         std::string const meshReference(multimesh->meshnames[rank]);
         if (localGlobals.empty()) {
             requireDistributedOutput(meshReference == "EMPTY", "empty gas locality marked EMPTY");
@@ -179,14 +205,14 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
             (masterPath.parent_path() / meshReference.substr(0, colon)).lexically_normal();
         requireDistributedOutput(referencedFile == leafPath.lexically_normal(),
             "mesh reference names correct locality file");
-        requireDistributedOutput(meshReference.substr(colon + 1) == directory + "gas",
+        requireDistributedOutput(meshReference.substr(colon + 1) == directory + "mesh",
             "mesh reference names locality and unit subdirectories");
         requireDistributedOutput(
             multimesh->meshtypes[rank] == DB_POINTMESH, "gas block is a particle point mesh");
         DistributedOutputFile leaf(DBOpen(leafPath.c_str(), DB_UNKNOWN, DB_READ), DBClose);
         requireDistributedOutput(bool(leaf) && DBSetDir(leaf.get(), directory.c_str()) >= 0,
             "open locality output subdirectory");
-        DistributedOutputMesh mesh(DBGetPointmesh(leaf.get(), "gas"), DBFreePointmesh);
+        DistributedOutputMesh mesh(DBGetPointmesh(leaf.get(), "mesh"), DBFreePointmesh);
         int const count = int(localGlobals.size());
         requireDistributedOutput(mesh && mesh->datatype == DB_DOUBLE && mesh->ndims == 3 &&
                 mesh->nels == count && mesh->coords[0] && mesh->coords[1] && mesh->coords[2],
@@ -205,10 +231,12 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
                 DBGetPointvar(leaf.get(), name.c_str()), DBFreePointvar);
             requireDistributedOutput(variable && variable->nels == count && variable->nvals == 1 &&
                     variable->datatype == DB_DOUBLE && variable->meshname &&
-                    std::filesystem::path(variable->meshname).filename() == "gas",
+                    std::filesystem::path(variable->meshname).filename() == "mesh",
                 "field attaches to gas particles: " + name);
             variables.emplace(name, std::move(variable));
         }
+        double const particleMass =
+            checkDistributedMassExpression(leaf.get(), "", 0.25 * scales.mass) / scales.mass;
         for (int point = 0; point < count; point++) {
             auto const value = [&](char const* name) {
                 return distributedNumericValue(variables.at(name).get(), point);
@@ -230,18 +258,15 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
             nearDistributedOutput(
                 value("rho"), (1000.0 + global) * scales.density, "SPH density association");
             nearDistributedOutput(
-                value("eint"), (10.0 + global) * scales.energy, "internal energy association");
-            nearDistributedOutput(value("hydro_vx"), (0.125 + global / 256.0) * scales.velocity,
-                "velocity association");
+                value("A"), (10.0 + global) * scales.entropy, "entropy tracer association");
             nearDistributedOutput(
-                value("hydro_vy"), -0.25 * scales.velocity, "y velocity conversion");
-            nearDistributedOutput(
-                value("hydro_vz"), 0.5 * scales.velocity, "z velocity conversion");
-            nearDistributedOutput(value("hydro_rung"), global % 5, "rung association");
+                value("vx"), (0.125 + global / 256.0) * scales.velocity, "velocity association");
+            nearDistributedOutput(value("vy"), -0.25 * scales.velocity, "y velocity conversion");
+            nearDistributedOutput(value("vz"), 0.5 * scales.velocity, "z velocity conversion");
+            nearDistributedOutput(value("rung"), global % 5, "rung association");
             double const supportRadius = (0.03125 + global / 4096.0) * scales.length;
-            nearDistributedOutput(value("kernel_support_radius"), supportRadius,
-                "SPH support radius remains a field");
-            double const mass = value("hydro_mass") / scales.mass;
+            nearDistributedOutput(value("r"), supportRadius, "SPH support radius remains a field");
+            double const mass = particleMass;
             nearDistributedOutput(mass, 0.25, "each output particle retains its full mass");
             totalMass += mass;
         }
@@ -250,15 +275,17 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
     requireDistributedOutput(representedParticles.size() == (cropped ? 16 : 64),
         "all selected particles represented exactly once");
     if (cropped) {
-        requireDistributedOutput(!DBInqVarExists(master.get(), (prefix + "dark_matter").c_str()),
+        requireDistributedOutput(
+            !DBInqVarExists(master.get(), (prefix + "dark_matter/mesh").c_str()),
             "species outside crop is omitted from master");
         for (char const* name : {"vx", "vy", "vz", "rung"}) {
-            requireDistributedOutput(!DBInqVarExists(master.get(), (prefix + name).c_str()),
+            requireDistributedOutput(
+                !DBInqVarExists(master.get(), (prefix + "dark_matter/" + name).c_str()),
                 "cropped-out dark matter contributes no multivars");
         }
     } else {
         DistributedOutputMultimesh darkMatter(
-            DBGetMultimesh(master.get(), (prefix + "dark_matter").c_str()), DBFreeMultimesh);
+            DBGetMultimesh(master.get(), (prefix + "dark_matter/mesh").c_str()), DBFreeMultimesh);
         requireDistributedOutput(
             darkMatter && darkMatter->nblocks == hpxSize(), "dark matter multimesh");
         std::vector<std::string> darkFields = {"vx", "vy", "vz", "rung"};
@@ -271,29 +298,34 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
             auto const colon = meshReference.find(':');
             auto const leafPath = std::filesystem::path(masterPath.string() + ".data") /
                 generation.data() / ("locality_" + std::to_string(rank) + ".silo");
-            std::string const directory = "/locality_" + std::to_string(rank) + "/" + prefix;
+            std::string const directory =
+                "/locality_" + std::to_string(rank) + "/" + prefix + "dark_matter/";
             if (empty) {
                 requireDistributedOutput(
                     meshReference == "EMPTY", "empty dark-matter locality marked EMPTY");
             } else {
                 requireDistributedOutput(darkMatter->meshtypes[rank] == DB_POINTMESH &&
                         colon != std::string::npos &&
-                        meshReference.substr(colon + 1) == directory + "dark_matter",
+                        meshReference.substr(colon + 1) == directory + "mesh",
                     "dark matter references its own point mesh");
             }
             DistributedOutputFile leaf(DBOpen(leafPath.c_str(), DB_UNKNOWN, DB_READ), DBClose);
-            requireDistributedOutput(leaf && DBSetDir(leaf.get(), directory.c_str()) >= 0,
+            requireDistributedOutput(leaf &&
+                    DBSetDir(leaf.get(),
+                        (empty ? "/locality_" + std::to_string(rank) + "/" + prefix : directory)
+                            .c_str()) >= 0,
                 "open dark matter locality directory");
             for (auto const& name : darkFields) {
                 DistributedOutputMultivar variable(
-                    DBGetMultivar(master.get(), (prefix + name).c_str()), DBFreeMultivar);
+                    DBGetMultivar(master.get(), (prefix + "dark_matter/" + name).c_str()),
+                    DBFreeMultivar);
                 requireDistributedOutput(variable && variable->nvars == hpxSize() &&
                         variable->mmesh_name &&
-                        std::filesystem::path(variable->mmesh_name).filename() == "dark_matter",
+                        std::filesystem::path(variable->mmesh_name).filename() == "mesh",
                     "dark matter field attaches to its own multimesh: " + name);
                 if (empty) {
                     requireDistributedOutput(std::string(variable->varnames[rank]) == "EMPTY" &&
-                            !DBInqVarExists(leaf.get(), name.c_str()),
+                            !DBInqVarExists(leaf.get(), ("dark_matter/" + name).c_str()),
                         "missing dark matter has no local fields");
                 } else {
                     std::string const expectedReference =
@@ -304,7 +336,7 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
                     DistributedOutputVariable field(
                         DBGetPointvar(leaf.get(), name.c_str()), DBFreePointvar);
                     requireDistributedOutput(field && field->nels == 2 && field->meshname &&
-                            std::filesystem::path(field->meshname).filename() == "dark_matter",
+                            std::filesystem::path(field->meshname).filename() == "mesh",
                         "dark matter leaf field attaches to its own particles");
                     for (int point = 0; point < field->nels; point++) {
                         double const expected = name == "mass" ? 0.75 * scales.mass : 0.0;
@@ -315,7 +347,8 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
             }
             if (segregated && rank > 0) {
                 for (auto const& name : fields) {
-                    requireDistributedOutput(!DBInqVarExists(leaf.get(), name.c_str()),
+                    requireDistributedOutput(
+                        !DBInqVarExists(leaf.get(), ("../gas/" + name).c_str()),
                         "dark-matter-only locality has no gas fields");
                 }
             }
@@ -341,6 +374,8 @@ void distributedOutputParticleFixture(int activeRanks, bool verify, bool segrega
     if (!verify) {
         particlesResize(gasCount + darkCount);
         sphParticlesResize(gasCount, false);
+        sphParticlesEntropyInitialized = true;
+        sphParticlesThermalScaleFactor = 0.25;
     }
     for (int i = 0; i < gasCount; i++) {
         int const global = globals[i];
@@ -351,7 +386,7 @@ void distributedOutputParticleFixture(int activeRanks, bool verify, bool segrega
                     "output leaves physical particle coordinates unchanged");
             }
             detail::requireDistributedOutput(sphParticlesDensity(i) == 1000.0f + global &&
-                    sphParticlesInternalEnergy(i) == 10.0f + global,
+                    sphParticlesEntropy(i) == 10.0f + global,
                 "output leaves gas state unchanged");
             continue;
         }
@@ -365,7 +400,7 @@ void distributedOutputParticleFixture(int activeRanks, bool verify, bool segrega
         sphParticlesParticleIndex(i) = i;
         sphParticlesSupportRadius(i) = 0.03125 + global / 4096.0;
         sphParticlesDensity(i) = 1000.0f + global;
-        sphParticlesEntropies[i] = 10.0f + global;
+        sphParticlesEntropy(i) = 10.0f + global;
     }
     if (!verify) {
         for (int i = 0; i < darkCount; i++) {
@@ -386,6 +421,8 @@ void distributedOutputParticleFixture(int activeRanks, bool verify, bool segrega
 
 void distributedOutputTest() {
     auto const originalOptions = getOptions();
+    bool const originalEntropyInitialized = sphParticlesEntropyInitialized;
+    double const originalThermalScaleFactor = sphParticlesThermalScaleFactor;
     auto options = originalOptions;
     options.analysis.groupsCuda = false;
     options.hydro.enabled = true;
@@ -465,7 +502,7 @@ void distributedOutputTest() {
         detail::DistributedOutputFile master(
             DBOpen(masterPath.c_str(), DB_UNKNOWN, DB_READ), DBClose);
         std::unique_ptr<double, decltype(&std::free)> time(
-            static_cast<double*>(DBGetComponent(master.get(), "gas", "dtime")), &std::free);
+            static_cast<double*>(DBGetComponent(master.get(), "gas/mesh", "dtime")), &std::free);
         detail::requireDistributedOutput(bool(time), "explicit cosmological age is present");
         detail::nearDistributedOutput(*time, 4.2, "explicit cosmological age survives contraction");
     }
@@ -484,8 +521,8 @@ void distributedOutputTest() {
         auto const masterPath = detail::distributedMasterPath(9);
         detail::DistributedOutputFile master(
             DBOpen(masterPath.c_str(), DB_UNKNOWN, DB_READ), DBClose);
-        detail::requireDistributedOutput(master && !DBInqVarExists(master.get(), "gas") &&
-                !DBInqVarExists(master.get(), "dark_matter"),
+        detail::requireDistributedOutput(master && !DBInqVarExists(master.get(), "gas/mesh") &&
+                !DBInqVarExists(master.get(), "dark_matter/mesh"),
             "view containing no particle centers publishes an empty master");
     }
     if (hpxSize() > 1) {
@@ -498,7 +535,11 @@ void distributedOutputTest() {
         detail::checkDistributedOutput(12, "", 1, false, {}, true);
         distributedOutputParticleFixture(1, true, true);
     }
+    sphParticlesEntropyInitialized = originalEntropyInitialized;
+    sphParticlesThermalScaleFactor = originalThermalScaleFactor;
     setOptions(originalOptions);
     viewConfigure();
-    PRINT("Distributed particle Silo output checks passed (%i localities)\n", hpxSize());
+    std::cout << std::format("Distributed particle Silo output checks passed ({:d} localities)\n",
+                     hpxSize())
+              << std::flush;
 }

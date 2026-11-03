@@ -7,6 +7,8 @@
  */
 #include <cstdio>
 #include <cstring>
+#include <format>
+#include <iostream>
 #include <new>
 #include <stdexcept>
 #include <string>
@@ -49,7 +51,11 @@ void CudaMemory::push(int bin, char* ptr) {
                 return;
             }
         } else if (difference < 0) {
-            PRINT("cuda memory queue full for bin %i\n", bin);
+#ifdef __CUDA_ARCH__
+            printf("cuda memory queue full for bin %i\n", bin);
+#else
+            std::cout << std::format("cuda memory queue full for bin {:d}\n", bin) << std::flush;
+#endif
             ALWAYS_ASSERT(false);
             return;
         } else {
@@ -200,7 +206,7 @@ CUDA_EXPORT void* cudaAllocate(size_t sz) {
     void* const pointer = pool->allocate(sz);
     if (pointer == nullptr) {
 #ifdef __CUDA_ARCH__
-        PRINT("CUDA pool allocation failed for %llu bytes\n", (unsigned long long) sz);
+        printf("CUDA pool allocation failed for %llu bytes\n", (unsigned long long) sz);
         ALWAYS_ASSERT(false);
 #else
         throw std::bad_alloc();

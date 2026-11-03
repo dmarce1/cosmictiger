@@ -11,7 +11,7 @@ import shlex
 import sys
 
 
-FEATURES = ("FMM", "PMMM_PP", "PMMM_FMM", "PM", "P3M_PP", "P3M_FMM", "SPH", "CHEMISTRY",
+FEATURES = ("FMM", "PMMM_PP", "PMMM_FMM", "PM", "P3M_PP", "P3M_FMM", "ROCKSTAR", "SPH", "CHEMISTRY",
             "STARS", "INTEGRATOR_TRADITIONAL", "INTEGRATOR_HIERARCHICAL", "INTEGRATOR_GLOBAL")
 FEATURE_DEFINITIONS = {"COSMICTIGER_ENABLE_" + feature for feature in FEATURES}
 FEATURE_DEFINITIONS.update({"ORDER", "FMM_MIN_ORDER", "FMM_MAX_ORDER",
@@ -25,6 +25,19 @@ TARGET_PATTERN = re.compile(r"CMakeFiles[/\\]([^/\\]+)\.dir(?:[/\\]|$)", re.MULT
 COSMOLOGY_NAME_PATTERN = re.compile(
     r"(?:^|_)(?:cosmology|boltzmann|recombination|friedmann|fft(?:w|[0-9]+)?|"
     r"linear_power|linear_growth|lpt|power)(?:_|$)")
+ROCKSTAR_NAME_PATTERN = re.compile(
+    r"(?:^|_)(?:rockstar|lightcone|bhPotential|groupsCatalogue|halo|compression|fp16)(?:_|$)|"
+    r"^(?:groups2halofunc|analysis_tools|analysis_backends|analysis_cpu)(?:_|$)")
+ROCKSTAR_SOURCE_PATTERN = re.compile(
+    r"src/analysis/(?:bh|compress|group_entry|group_tree|groups|groups_find|healpix|rockstar|"
+    r"rockstar_catalogue|lightcone|lightcone_cpu)\.(?:cpp|cu)")
+ROCKSTAR_SOURCES = {
+    "src/tools/groups2halofunc.cpp", "src/tools/halo_catalog_export.cpp", "src/math/fp16.cpp",
+    "tests/analysis_backends.cpp", "tests/analysis_tools.cpp", "tests/bh.cpp", "tests/compression.cpp",
+    "tests/fp16.cpp", "tests/groups_catalogue.cpp", "tests/halo_catalog_fixture.cpp",
+    "tests/lightcone_cpu.cpp", "tests/lightcone_cuda.cu", "tests/lightcone_epoch.cpp",
+    "tests/rockstar.cpp", "tests/rockstar_core.cpp", "tests/rockstar_eigenpair.cpp",
+    "tests/rockstar_properties.cpp"}
 
 
 def registeredTestNames(buildDirectory):
@@ -93,6 +106,10 @@ def hasTree(configuration):
     return configuration["FMM"] or configuration["PMMM_FMM"] or configuration.get("P3M_FMM", False)
 
 
+def hasRockstar(configuration):
+    return configuration["ROCKSTAR"] and hasGravity(configuration)
+
+
 def hasChemistry(configuration):
     return configuration["SPH"] and configuration["CHEMISTRY"]
 
@@ -106,6 +123,7 @@ def configurationDefinitions(configuration, bits, degrees):
     if not hasGravity(configuration):
         low = high = -1
     definitions = {"COSMICTIGER_ENABLE_" + key: str(int(configuration[key])) for key in FEATURES}
+    definitions["COSMICTIGER_ENABLE_ROCKSTAR"] = str(int(hasRockstar(configuration)))
     definitions["COSMICTIGER_ENABLE_CHEMISTRY"] = str(int(hasChemistry(configuration)))
     definitions["COSMICTIGER_ENABLE_STARS"] = str(int(hasStarFormation(configuration)))
     definitions["COSMICTIGER_ENABLE_STAR_FORMATION"] = str(int(hasStarFormation(configuration)))
@@ -120,6 +138,9 @@ def sourceSelectionErrors(sources, configuration):
     errors = []
     collisionlessScenarios = {"scenario.cpp", "cosmology.cpp", "plummer.cpp", "glass.cpp"}
     for source in sorted(sources):
+        if not hasRockstar(configuration) and (
+                ROCKSTAR_SOURCE_PATTERN.fullmatch(source) or source in ROCKSTAR_SOURCES):
+            errors.append(f"ROCKSTAR disabled but compiles source: {source}")
         if not hasGravity(configuration):
             gravitySource = source.startswith(("src/gravity/", "tests/gravity/"))
             cosmologySource = source.startswith(("src/cosmology/", "tests/cosmology/")) or source in {
@@ -186,16 +207,16 @@ def sourceSelectionErrors(sources, configuration):
             errors.append(f"unavailable SPH gravity regression's CUDA helper: {source}")
         if not hasChemistry(configuration) and source in {
                 "src/chemistry/gadget4_cooling.cpp", "src/chemistry/gadget4_cooling.cu",
-                "src/hydro/sph/sph_chemistry.cpp", "tests/sph/chemistry.cpp",
+                "src/chemistry/sph.cpp", "tests/sph/chemistry.cpp",
                 "tests/gadget4_cooling.cpp"}:
             errors.append(f"equilibrium cooling disabled but compiles source: {source}")
         if not hasStarFormation(configuration) and source in {
-                "src/hydro/sph/star_formation.cpp", "src/hydro/sph/star_formation_cuda.cu",
+                "src/stars/star_formation.cpp", "src/stars/star_formation_cuda.cu",
                 "tests/sph/star_formation_cuda.cu", "tests/sph/star_formation.cpp", "tests/star_formation_particles.cpp",
                 "tests/springel_and_hernquist.cpp", "tests/springel_and_hernquist_cuda.cu"}:
             errors.append(f"star formation disabled but compiles source: {source}")
         if not configuration["SPH"]:
-            if source.startswith(("src/hydro/sph/", "tests/sph/", "tests/scenarios/")) or source in {
+            if source.startswith(("src/sph/", "src/stars/", "tests/sph/", "tests/scenarios/")) or source in {
                     "tests/gresho.cpp", "tests/radial_density_kernel.cpp", "tests/rayleigh_taylor.cpp",
                     "tests/units_output.cpp", "tests/distributed_output.cpp"}:
                 errors.append(f"SPH disabled but compiles SPH source: {source}")
@@ -208,6 +229,14 @@ def requiredSources(configuration, cuda):
     required = {"src/core/driver.cpp", "src/core/hpx.cpp", "src/particles/particles.cpp"}
     if hasGravity(configuration):
         required.update({"src/gravity/fmm_order.cpp", "src/gravity/error.cpp", "src/gravity/reference_table.cpp"})
+    if hasRockstar(configuration):
+        required.update({"src/analysis/bh.cpp", "src/analysis/compress.cpp", "src/analysis/group_entry.cpp",
+                         "src/analysis/group_tree.cpp", "src/analysis/groups.cpp", "src/analysis/groups_find.cpp",
+                         "src/analysis/lightcone.cpp", "src/analysis/lightcone_cpu.cpp", "src/analysis/rockstar.cpp",
+                         "src/analysis/rockstar_catalogue.cpp"})
+        if cuda:
+            required.update({"src/analysis/bh.cu", "src/analysis/healpix.cu", "src/analysis/lightcone.cu",
+                             "src/analysis/rockstar.cu"})
     if configuration["FMM"]:
         required.add("src/gravity/global_fmm/execution.cpp")
     if hasPmmm(configuration):
@@ -223,20 +252,20 @@ def requiredSources(configuration, cuda):
         if configuration.get("P3M_PP", False):
             required.add("src/gravity/p3m/pp/short_pp.cpp")
         if configuration.get("P3M_FMM", False):
-            required.add("src/gravity/p3m/fmm/short_fmm.cpp")
+            required.add("src/gravity/p3m/fmm_short_fmm.cpp")
     if hasTree(configuration):
         required.add("src/gravity/kick.cpp")
     if configuration["SPH"]:
-        required.update({"src/hydro/sph/sph.cpp", "src/hydro/sph/sph_hydro_cpu.cpp", "src/hydro/sph/sph_prehydro_cpu.cpp",
-                         "src/hydro/sph/sph_rungs_cpu.cpp", "src/hydro/sph/sph_particles.cpp", "src/hydro/sph/sph_tree.cpp"})
+        required.update({"src/sph/sph.cpp", "src/sph/hydro_cpu.cpp", "src/sph/prehydro_cpu.cpp",
+                         "src/sph/rungs_cpu.cpp", "src/sph/particles.cpp", "src/sph/tree.cpp"})
         if cuda:
-            required.update({"src/hydro/sph/sph.cu", "src/hydro/sph/sph_hydro.cu", "src/hydro/sph/sph_prehydro.cu", "src/hydro/sph/sph_rungs.cu"})
+            required.update({"src/sph/cuda.cu", "src/sph/hydro.cu", "src/sph/prehydro.cu", "src/sph/rungs.cu"})
     if hasChemistry(configuration):
-        required.add("src/hydro/sph/sph_chemistry.cpp")
+        required.add("src/chemistry/sph.cpp")
     if hasStarFormation(configuration):
-        required.update({"src/hydro/sph/star_formation.cpp"})
+        required.update({"src/stars/star_formation.cpp"})
         if cuda:
-            required.add("src/hydro/sph/star_formation_cuda.cu")
+            required.add("src/stars/star_formation_cuda.cu")
     if cuda:
         required.add("src/particles/drift.cu")
         if hasGravity(configuration):
@@ -303,18 +332,23 @@ def checkBuild(buildDirectory):
             errors.append(f"{target}: {source} needs COSMICTIGER_POSITION_BITS={expectedBits}, found {sorted(foundBits or set())}")
         for error in sourceSelectionErrors({source}, configuration):
             errors.append(f"{target}: {error}")
-    if not hasGravity(configuration):
+    if not hasGravity(configuration) or not hasRockstar(configuration):
         targets = set(sourcesByTarget)
         targetDirectories = buildDirectory / "CMakeFiles/TargetDirectories.txt"
         if targetDirectories.exists():
             targets.update(match[1] for match in TARGET_PATTERN.finditer(targetDirectories.read_text()))
         for target in sorted(targets):
-            if COSMOLOGY_NAME_PATTERN.search(target):
+            if not hasGravity(configuration) and COSMOLOGY_NAME_PATTERN.search(target):
                 errors.append(f"gravity disabled but configures cosmology target: {target}")
+            if not hasRockstar(configuration) and ROCKSTAR_NAME_PATTERN.search(target):
+                errors.append(f"ROCKSTAR disabled but configures target: {target}")
         if testing:
             for name in sorted(registeredTestNames(buildDirectory)):
-                if COSMOLOGY_NAME_PATTERN.search(name):
+                if not hasGravity(configuration) and COSMOLOGY_NAME_PATTERN.search(name):
                     errors.append(f"gravity disabled but registers cosmology test: {name}")
+                if (not hasRockstar(configuration) and name != "rockstar_capability" and
+                        ROCKSTAR_NAME_PATTERN.search(name)):
+                    errors.append(f"ROCKSTAR disabled but registers test: {name}")
     coreSources = set(sourcesByTarget.get("cosmictiger_core", {}))
     if not coreSources:
         errors.append("shared cosmictiger_core library has no compilation entries")
@@ -326,6 +360,12 @@ def checkBuild(buildDirectory):
                 ("cosmictiger_recombination", "src/chemistry/recombination.cpp")):
             if source not in sourcesByTarget.get(target, {}):
                 errors.append(f"{target}: required library source missing: {source}")
+    if hasRockstar(configuration):
+        for target, source in (("cosmictiger_fp16", "src/math/fp16.cpp"),
+                               ("groups2halofunc", "src/tools/groups2halofunc.cpp"),
+                               ("halo_catalog_export", "src/tools/halo_catalog_export.cpp")):
+            if source not in sourcesByTarget.get(target, {}):
+                errors.append(f"{target}: required ROCKSTAR source missing: {source}")
     for source in sorted(coreSources):
         if source.startswith(("src/cosmology/", "src/analysis/")) or source == "src/chemistry/recombination.cpp":
             errors.append(f"shared core compiles physics library source: {source}")
@@ -349,7 +389,7 @@ def checkBuild(buildDirectory):
     expectedDefinitions = configurationDefinitions(configuration, bits, degrees)
     starCudaSources = set(sourcesByTarget.get("cosmictiger_star_formation_cuda", {}))
     if cuda and hasStarFormation(configuration):
-        if sourcesByTarget.get("cosmictiger_star_formation_cuda", {}) != Counter({"src/hydro/sph/star_formation_cuda.cu": 1}):
+        if sourcesByTarget.get("cosmictiger_star_formation_cuda", {}) != Counter({"src/stars/star_formation_cuda.cu": 1}):
             errors.append("strict star-formation CUDA target must compile its production source once")
         for source, definitions in definitionsByTarget.get("cosmictiger_star_formation_cuda", []):
             for name, value in expectedDefinitions.items():

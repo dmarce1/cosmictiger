@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <limits>
 #include <map>
 #include <memory>
@@ -1173,5 +1174,5 @@ void rockstarTest() {
         throw;
     }
     setOptions(original);
-    PRINT("ROCKSTAR production integration regressions passed\n");
+    std::cout << "ROCKSTAR production integration regressions passed\n" << std::flush;
 }

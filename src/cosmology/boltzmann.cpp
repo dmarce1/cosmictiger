@@ -84,7 +84,7 @@ class BoltzmannIntegrator {
         bg.eps = k_ / bg.expansion;
         universe_.computeMatterFractions(bg.cdm, bg.baryon, a);
         universe_.computeRadiationFractions(bg.photon, bg.neutrino, a);
-        bg.soundSpeed2 = universe_.cs2(a);
+        bg.soundSpeed2 = universe_.soundSpeedSquared(a);
         bg.opacity = universe_.sigmaT(a);
         double const ratio = 4.0 * universe_.params.omegaGam / (3.0 * universe_.params.omegaB * a);
         bg.baryonWeight = 1.0 / (1.0 + ratio);
@@ -442,7 +442,7 @@ std::vector<BoltzmannTransfer> solveBoltzmannTransfers(ZeroOrderUniverse const& 
         return std::all_of(table.values.begin(), table.values.end(),
             [](double value) { return std::isfinite(value) && value >= 0.0; });
     };
-    if (!validTable(universe.sigmaT) || !validTable(universe.cs2)) {
+    if (!validTable(universe.sigmaT) || !validTable(universe.soundSpeedSquared)) {
         throw std::invalid_argument("Invalid Boltzmann background interpolation table");
     }
     if (!(options.relativeTolerance > 0.0) || !(options.absoluteTolerance > 0.0) ||

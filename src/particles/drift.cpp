@@ -51,7 +51,7 @@ void cpuDrift(int rung, double a, double dt, double tau0, double tau1, double ta
     // Match the glass damping policy in cudaDrift, including its override of drag.
     drag = getOptions().run.scenario == "glass" ? std::numbers::pi : 0.0;
     parameters.drag = drag;
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
     parameters.lightcone = getOptions().lightcone.enabled && tauMax > 0.0f && tauMax - tau1 < 1.0f;
 #endif
     parameters.mapSize = getOptions().lightcone.mapSize;
@@ -88,7 +88,7 @@ void cpuDrift(int rung, double a, double dt, double tau0, double tau1, double ta
             future.get();
         }
     }
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
     if (parameters.lightcone) {
         profile::ScopedPhase profilePhase("drift.lightcone", detail::profileDriftCoordinator());
         lcAddParticles(entries, a, tau0);

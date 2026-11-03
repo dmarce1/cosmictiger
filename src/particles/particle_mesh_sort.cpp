@@ -15,7 +15,7 @@
 
 #include <cosmictiger/particles/particle_mesh_sort.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 #endif
 
 namespace detail {

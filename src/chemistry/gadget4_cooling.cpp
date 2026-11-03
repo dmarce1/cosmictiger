@@ -13,7 +13,7 @@ namespace detail {
     void failedBatch(Input const* inputs, Result* results, size_t count, Status status) {
         if (inputs != nullptr && results != nullptr) {
             for (size_t index = 0; index < count; ++index) {
-                results[index].state = inputs[index].state;
+                results[index].electronFraction = inputs[index].electronFraction;
                 results[index].specificEnergy = inputs[index].specificEnergy;
                 results[index].status = status;
             }

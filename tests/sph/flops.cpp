@@ -4,8 +4,8 @@
 
 #include <gtest/gtest.h>
 
-#include <cosmictiger/hydro/sph/monaghan/viscosity.hpp>
-#include <cosmictiger/hydro/sph/sph_flops.hpp>
+#include <cosmictiger/sph/flops.hpp>
+#include <cosmictiger/sph/viscosity/monaghan.hpp>
 
 #include <tests/flop_counting_real.hpp>
 

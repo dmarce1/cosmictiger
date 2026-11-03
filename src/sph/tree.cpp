@@ -1,0 +1,657 @@
+/*
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2026  Dominic C. Marcello
+
+ Distributed under the Boost Software License, Version 1.0.
+ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
+ */
+
+#include <array>
+#include <exception>
+#include <memory>
+#include <mutex>
+#include <shared_mutex>
+#include <stdexcept>
+#include <unordered_map>
+#include <unordered_set>
+
+#include <hpx/threading_base/annotated_function.hpp>
+
+#include <cosmictiger/core/flops.hpp>
+#include <cosmictiger/core/safe_io.hpp>
+#include <cosmictiger/math/math.hpp>
+#include <cosmictiger/math/vector3.hpp>
+#include <cosmictiger/particles/domain.hpp>
+#include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/sph/flops.hpp>
+#include <cosmictiger/sph/particles.hpp>
+#include <cosmictiger/sph/sph.hpp>
+#include <cosmictiger/sph/tree.hpp>
+
+constexpr bool kVerbose = true;
+
+static Vector<SphTreeNode> sphTreeFetchCacheLine(int);
+static void sphTreeAllocateNodes();
+
+HPX_PLAIN_ACTION(sphTreeAllocateNodes, SphTreeAllocateNodesAction);
+HPX_PLAIN_ACTION(sphTreeCreate, SphTreeCreateAction);
+HPX_PLAIN_ACTION(sphTreeDestroy, SphTreeDestroyAction);
+HPX_PLAIN_ACTION(sphTreeCacheClear, SphTreeCacheClearAction);
+HPX_PLAIN_ACTION(sphTreeFetchCacheLine, SphTreeFetchCacheLineAction);
+HPX_PLAIN_ACTION(sphTreeFreeNeighborList, SphTreeFreeNeighborListAction);
+
+class SphTreeAllocator {
+    int next_;
+    int last_;
+
+public:
+    bool ready_;
+    void reset();
+    bool isReady();
+    SphTreeAllocator();
+    ~SphTreeAllocator();
+    SphTreeAllocator(SphTreeAllocator const&) = default;
+    SphTreeAllocator& operator=(SphTreeAllocator const&) = default;
+    SphTreeAllocator(SphTreeAllocator&&) = default;
+    SphTreeAllocator& operator=(SphTreeAllocator&&) = default;
+    int allocate();
+};
+
+static Vector<SphTreeAllocator*> allocatorList;
+static thread_local SphTreeAllocator allocator;
+static Vector<SphTreeNode> nodes;
+static std::atomic<int> treeThreadCount(0);
+static std::atomic<int> nextId;
+static Array<std::unordered_map<TreeId, std::shared_ptr<hpx::shared_future<Vector<SphTreeNode>>>,
+                 TreeIdHashHi>,
+    kSphTreeCacheSize>
+    treeCache;
+static Array<SpinlockType, kSphTreeCacheSize> mutex;
+static std::atomic<int> allocatorMtx(0);
+static Vector<Pair<ParticleInteger>> leafParticleRanges;
+static MutexType leafParticleRangeMutex;
+static Vector<TreeId> neighborList;
+static Vector<int> leaflist;
+static MutexType leaflistMutex;
+static MutexType neighborListMutex;
+
+void sphTreeSetNeighborRange(TreeId id, Pair<int, int> rng) {
+    nodes[id.index].neighborRange = rng;
+}
+
+void sphTreeClearNeighborRanges() {
+    for (int i = 0; i < leaflist.size(); i++) {
+        nodes[leaflist[i]].neighborRange.first = -1;
+        nodes[leaflist[i]].neighborRange.second = -1;
+    }
+}
+
+int sphTreeLeaflistSize() {
+    return leaflist.size();
+}
+
+TreeId const sphTreeGetLeaf(int i) {
+    TreeId id;
+    id.index = leaflist[i];
+    id.proc = hpxRank();
+    return id;
+}
+
+void sphTreeFreeNeighborList() {
+    neighborList.resize(0);
+}
+
+int sphTreeAllocateNeighborList(Vector<TreeId> const& values) {
+    std::lock_guard<MutexType> lock(neighborListMutex);
+    if (values.size()) {
+        int i = neighborList.size();
+        neighborList.resize(i + values.size());
+        memcpy(&neighborList[i], values.data(), sizeof(TreeId) * values.size());
+        return i;
+    } else {
+        return 0;
+    }
+}
+
+TreeId& sphTreeGetNeighbor(int i) {
+    return neighborList[i];
+}
+
+long long sphTreeNodesSize() {
+    return nodes.size();
+}
+
+struct LastCacheEntryT;
+
+static std::unordered_set<LastCacheEntryT*> lastCacheEntries;
+static std::atomic<int> lastCacheEntryMtx(0);
+
+struct LastCacheEntryT {
+    TreeId line;
+    SphTreeNode const* ptr;
+    void reset() {
+        line.proc = line.index = -1;
+        ptr = nullptr;
+    }
+    LastCacheEntryT() {
+        line.proc = line.index = -1;
+        ptr = nullptr;
+        while (lastCacheEntryMtx++ != 0) {
+            lastCacheEntryMtx--;
+        }
+        lastCacheEntries.insert(this);
+        lastCacheEntryMtx--;
+    }
+    ~LastCacheEntryT() {
+        while (lastCacheEntryMtx++ != 0) {
+            lastCacheEntryMtx--;
+        }
+        lastCacheEntries.erase(this);
+        lastCacheEntryMtx--;
+    }
+};
+
+static thread_local LastCacheEntryT lastCacheEntry;
+
+static void resetLastCacheEntries() {
+    while (lastCacheEntryMtx++ != 0) {
+        lastCacheEntryMtx--;
+    }
+    for (auto* entry : lastCacheEntries) {
+        entry->reset();
+    }
+    lastCacheEntryMtx--;
+}
+
+void sphTreeCacheClear() {
+    Vector<hpx::future<void>> futures;
+    for (auto const& child : hpxChildren()) {
+        futures.push_back(hpx::async<SphTreeCacheClearAction>(child));
+    }
+    treeCache = decltype(treeCache)();
+    resetLastCacheEntries();
+    for (auto& future : futures) {
+        future.get();
+    }
+}
+
+static SphTreeNode const* treeCacheRead(TreeId id);
+
+void SphTreeAllocator::reset() {
+    int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
+    next_ = (nextId += treeCacheLineSize);
+    last_ = std::min(next_ + treeCacheLineSize, (int) nodes.size());
+    if (next_ >= nodes.size()) {
+        THROW_ERROR("%s\n", "Tree arena full");
+    }
+}
+
+SphTreeAllocator::SphTreeAllocator() {
+    ready_ = false;
+    while (allocatorMtx++ != 0) {
+        allocatorMtx--;
+    }
+    allocatorList.push_back(this);
+    allocatorMtx--;
+}
+
+int SphTreeAllocator::allocate() {
+    if (next_ == last_) {
+        reset();
+    }
+    ASSERT(next_ < nodes.size());
+    return next_++;
+}
+
+SphTreeAllocator::~SphTreeAllocator() {
+    while (allocatorMtx++ != 0) {
+        allocatorMtx--;
+    }
+    for (int i = 0; i < allocatorList.size(); i++) {
+        if (allocatorList[i] == this) {
+            allocatorList[i] = allocatorList.back();
+            allocatorList.pop_back();
+            break;
+        }
+    }
+    allocatorMtx--;
+}
+
+hpx::future<SphTreeCreateReturn> sphTreeCreateFork(SphTreeCreateParameters params, size_t key,
+    Pair<int, int> const& processRange, Pair<ParticleInteger> const& particleRange,
+    Range<double> const& box, int const depth, bool const localRoot, bool threadme) {
+    static std::atomic<int> numberOfThreads(0);
+    hpx::future<SphTreeCreateReturn> rc;
+    bool remote = false;
+    if (processRange.first != hpxRank()) {
+        threadme = true;
+        remote = true;
+    } else if (threadme) {
+        threadme = particleRange.second - particleRange.first > kMinSortThreadParts;
+        if (threadme) {
+            if (numberOfThreads++ < kSortOversubscription * hpx::thread::hardware_concurrency() ||
+                processRange.second - processRange.first > 1) {
+                threadme = true;
+            } else {
+                threadme = false;
+                numberOfThreads--;
+            }
+        }
+    }
+    if (!threadme) {
+        try {
+            rc = hpx::make_ready_future(
+                sphTreeCreate(params, key, processRange, particleRange, box, depth, localRoot));
+        } catch (...) {
+            rc = hpx::make_exceptional_future<SphTreeCreateReturn>(std::current_exception());
+        }
+    } else if (remote) {
+        rc = hpx::async<SphTreeCreateAction>(hpxLocalities()[processRange.first], params, key,
+            processRange, particleRange, box, depth, localRoot);
+    } else {
+        rc = hpx::async(hpx::annotated_function(
+            [params, processRange, key, particleRange, depth, localRoot, box]() {
+                try {
+                    auto rc = sphTreeCreate(
+                        params, key, processRange, particleRange, box, depth, localRoot);
+                    numberOfThreads--;
+                    return rc;
+                } catch (...) {
+                    numberOfThreads--;
+                    throw;
+                }
+            },
+            "sph.tree.create"));
+    }
+    return rc;
+}
+
+static void sphTreeAllocateNodes() {
+    int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
+    int const bucketSize = getOptions().compute.sphBucketSize;
+    Vector<hpx::future<void>> futs;
+    for (auto const& c : hpxChildren()) {
+        futs.push_back(hpx::async<SphTreeAllocateNodesAction>(c));
+    }
+    size_t const requiredNodes =
+        std::max(size_t(size_t(kSphTreeNodeAllocationSize) * sphParticlesSize() / bucketSize),
+            (size_t) kMinSphTrees);
+    // Rebuilds reuse the constructed arena. Grow only at this completed-work
+    // boundary, before any tree tasks can retain pointers into the vector.
+    if (requiredNodes > nodes.size()) {
+        nodes.resize(requiredNodes);
+    }
+    // Each OS worker must acquire a fresh allocation chunk for this tree,
+    // even when the underlying storage did not move or change size.
+    nextId = -treeCacheLineSize;
+    while (allocatorMtx++ != 0) {
+        allocatorMtx--;
+    }
+    for (int i = 0; i < allocatorList.size(); i++) {
+        allocatorList[i]->ready_ = false;
+    }
+    allocatorMtx--;
+    for (auto& future : futs) {
+        future.get();
+    }
+}
+
+SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
+    Pair<int, int> processRange, Pair<ParticleInteger> particleRange, Range<double> box, int depth,
+    bool localRoot) {
+    int const bucketSize = getOptions().compute.sphBucketSize;
+    SphTreeCreateReturn rc;
+    if (depth < 0 || depth > SphTreeNode::kMaximumDepth) {
+        throw std::out_of_range("SPH tree depth must be between 0 and 15");
+    }
+    if (depth == 0) {
+        sphTreeAllocateNodes();
+    }
+    if (localRoot) {
+        leaflist.resize(0);
+        particleRange.first = 0;
+        particleRange.second = sphParticlesSize();
+    }
+    Array<TreeId, kSphChildCount> children;
+    for (auto& child : children) {
+        child = TreeId{-1, -1};
+    }
+    Vector3<Position> nodePosition;
+    Vector3<double> xc;
+    size_t numberOfActiveParticles;
+    sph_flops::Counter flops;
+    double totalFlops = 0.0;
+    float radius;
+    double r;
+    int minDepth = depth;
+    int maxDepth = depth;
+    if (!allocator.ready_) {
+        allocator.reset();
+        allocator.ready_ = true;
+    }
+    size_t nodeCount;
+    size_t activeNodes = 0;
+    size_t leafNodes = 0;
+    size_t activeLeafNodes = 0;
+    int const index = allocator.allocate();
+    Fixed32Range innerBox;
+    Fixed32Range outerBox;
+    if (processRange.second - processRange.first > 1 ||
+        particleRange.second - particleRange.first > bucketSize) {
+        if (depth == SphTreeNode::kMaximumDepth) {
+            throw std::out_of_range("SPH octree subdivision would require depth 16");
+        }
+        std::array<hpx::future<SphTreeCreateReturn>, kSphChildCount> childFutures;
+        if (processRange.second - processRange.first > 1) {
+            // Rank ownership still follows the domain decomposition's binary keys.
+            // Only the spatial particle trees below these routing nodes are octrees.
+            int const middleRank = (processRange.first + processRange.second) / 2;
+            for (int childIndex = 0; childIndex < 2; ++childIndex) {
+                size_t const childKey = (key << 1) + childIndex;
+                Pair<int> const childRanks = childIndex == 0 ?
+                    Pair<int>(processRange.first, middleRank) :
+                    Pair<int>(middleRank, processRange.second);
+                childFutures[childIndex] = sphTreeCreateFork(params, childKey, childRanks,
+                    particleRange, domainsRange(childKey), depth + 1,
+                    childRanks.second - childRanks.first == 1, true);
+            }
+        } else {
+            // Octant bit d selects the upper half along dimension d. Partition
+            // z, then y, then x so occupied octants have contiguous index ranges.
+            // Derived geometric split: m_d = (b_d + e_d)/2.
+            // b_d -> box.begin[dim], e_d -> box.end[dim], m_d -> midpoint[dim].
+            std::array<Pair<ParticleInteger>, kSphChildCount> childParticleRanges;
+            childParticleRanges[0] = particleRange;
+            Vector3<double> midpoint;
+            for (int dim = kDimensions - 1; dim >= 0; --dim) {
+                midpoint[dim] = 0.5 * (box.begin[dim] + box.end[dim]);
+                Position const splitPosition(midpoint[dim]);
+                flops.doublePrecision += 2 + sph_flops::positionConstructionFlops();
+                int const upperBit = 1 << dim;
+                for (int childIndex = 0; childIndex < kSphChildCount; childIndex += 2 * upperBit) {
+                    auto& lowerRange = childParticleRanges[childIndex];
+                    ParticleInteger const split = sphParticlesSort(lowerRange, splitPosition, dim);
+                    childParticleRanges[childIndex + upperBit] =
+                        Pair<ParticleInteger>(split, lowerRange.second);
+                    lowerRange.second = split;
+                }
+            }
+            for (int childIndex = kSphChildCount - 1; childIndex >= 0; --childIndex) {
+                auto const childRange = childParticleRanges[childIndex];
+                if (childRange.first == childRange.second) {
+                    continue;
+                }
+                auto childBox = box;
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    if ((childIndex & (1 << dim)) != 0) {
+                        childBox.begin[dim] = midpoint[dim];
+                    } else {
+                        childBox.end[dim] = midpoint[dim];
+                    }
+                }
+                childFutures[childIndex] = sphTreeCreateFork(params, key, processRange, childRange,
+                    childBox, depth + 1, false, childIndex != 0);
+            }
+        }
+        // Finish every child before propagating an exception: callers may tear
+        // down the tree arena as soon as this build returns or throws.
+        for (auto& future : childFutures) {
+            if (future.valid()) {
+                future.wait();
+            }
+        }
+        nodeCount = 1;
+        numberOfActiveParticles = 0;
+        bool firstChild = true;
+        for (int childIndex = 0; childIndex < kSphChildCount; ++childIndex) {
+            if (!childFutures[childIndex].valid()) {
+                continue;
+            }
+            auto const child = childFutures[childIndex].get();
+            children[childIndex] = child.id;
+            nodeCount += child.nodeCount;
+            leafNodes += child.leafNodes;
+            activeLeafNodes += child.activeLeafNodes;
+            activeNodes += child.activeNodes;
+            numberOfActiveParticles += child.numberOfActiveParticles;
+            totalFlops += child.floatingPointOperations;
+            if (firstChild) {
+                innerBox = child.innerBox;
+                outerBox = child.outerBox;
+                minDepth = child.minDepth;
+                maxDepth = child.maxDepth;
+                firstChild = false;
+            } else {
+                minDepth = std::min(minDepth, child.minDepth);
+                maxDepth = std::max(maxDepth, child.maxDepth);
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    innerBox.begin[dim] = std::min(innerBox.begin[dim], child.innerBox.begin[dim]);
+                    innerBox.end[dim] = std::max(innerBox.end[dim], child.innerBox.end[dim]);
+                    outerBox.begin[dim] = std::min(outerBox.begin[dim], child.outerBox.begin[dim]);
+                    outerBox.end[dim] = std::max(outerBox.end[dim], child.outerBox.end[dim]);
+                }
+            }
+        }
+        activeNodes += numberOfActiveParticles != 0;
+    } else {
+        numberOfActiveParticles = 0;
+        innerBox = emptySphBounds();
+        outerBox = emptySphBounds();
+        auto const tiny = 2.0 * RangeFixed::min().toDouble();
+        flops.doublePrecision += 4 * kDimensions + 2;
+        for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
+            float const h = params.supportRadiusMultiplier * sphParticlesSupportRadius(i);
+            flops.singlePrecision += 1;
+            Vector3<Position> xValue;
+            for (int dim = 0; dim < kDimensions; dim++) {
+                xValue[dim] = sphParticlesPosition(dim, i);
+            }
+            for (int dim = 0; dim < kDimensions; dim++) {
+                double const position = xValue[dim].toDouble();
+                innerBox.begin[dim] = std::min(innerBox.begin[dim].toDouble(), position - tiny);
+                innerBox.end[dim] = std::max(innerBox.end[dim].toDouble(), position + tiny);
+                // Position and old-bound conversions, two offsets and two new bounds.
+                flops.doublePrecision += 7;
+                if (sphParticlesRung(i) >= params.minimumRung) {
+                    outerBox.begin[dim] =
+                        std::min(outerBox.begin[dim].toDouble(), position - h - tiny);
+                    outerBox.end[dim] = std::max(outerBox.end[dim].toDouble(), position + h + tiny);
+                    flops.doublePrecision += 10;    // Includes both support promotions.
+                }
+            }
+            if (sphParticlesRung(i) >= params.minimumRung) {
+                numberOfActiveParticles++;
+            }
+        }
+
+        /*	double small_span = 1e30;
+         double hmax = 0.0;
+         for( int dim = 0; dim < NDIM; dim++) {
+         double span = box.end[dim] - box.begin[dim];
+         small_span = std::min(small_span, span);
+         hmax += sqr(span);
+         }
+         //	hmax += 12.0 * sqr(small_span);
+         hmax = 1.5 * sqrt(hmax + 3.0 * sqr(small_span));
+         for( int dim = 0; dim < NDIM; dim++) {
+         inner_box.begin[dim] = box.begin[dim];
+         inner_box.end[dim] = box.end[dim];
+         outer_box.begin[dim] = box.begin[dim] - hmax;
+         outer_box.end[dim] = box.begin[dim] + hmax;
+         }*/
+
+        nodeCount = 1;
+        leafNodes = 1;
+        if (numberOfActiveParticles) {
+            activeLeafNodes++;
+            activeNodes++;
+        }
+        std::lock_guard<MutexType> lock(leaflistMutex);
+        leaflist.push_back(index);
+    }
+    // Initialize only nodes used by this build. Retained slots can contain the
+    // previous tree's convergence flags, particle ranges and neighbor indices.
+    SphTreeNode node;
+    node.nodeCount = nodeCount;
+    node.innerBox = innerBox;
+    node.outerBox = outerBox;
+
+    node.children = children;
+    node.localRoot = localRoot;
+    node.particleRange = particleRange;
+    node.processRange = processRange;
+    node.numberOfActiveParticles = numberOfActiveParticles;
+    node.activeNodes = activeNodes;
+    node.neighborRange.first = -1;
+    node.neighborRange.second = -1;
+    node.depth = depth;
+    node.sinkParticleRange = particleRange;
+    ParticleInteger const numberOfParticles = particleRange.second - particleRange.first;
+    bool const global = processRange.second - processRange.first > 1;
+    node.leaf = !global && (numberOfParticles <= bucketSize);
+    /*	if ( BUCKET_SIZE <= get_options().sph_bucket_size) {
+     if (node.leaf) {
+     std::lock_guard<mutex_type> lock(leaf_part_range_mutex);
+     leaf_part_ranges.push_back(part_range);
+     }
+     }*/
+    if (index >= nodes.size()) {
+        THROW_ERROR("%s\n", "Tree arena full\n");
+    }
+    rc.activeNodes = activeNodes;
+    rc.id.index = index;
+    rc.id.proc = hpxRank();
+    rc.innerBox = node.innerBox;
+    rc.outerBox = node.outerBox;
+    for (int dim = 0; dim < kDimensions; dim++) {
+        node.box.begin[dim] = box.begin[dim];
+        node.box.end[dim] = box.end[dim];    // == 1.0 ? fixed32::max() : fixed32(box.end[dim]);
+    }
+    nodes[index] = node;
+    rc.leafNodes = leafNodes;
+    rc.activeLeafNodes = activeLeafNodes;
+    rc.nodeCount = node.nodeCount;
+    rc.numberOfActiveParticles = numberOfActiveParticles;
+    flops.doublePrecision +=
+        2 * kDimensions;    // Store the double spatial box as fixed-point bounds.
+    addCpuFlops(
+        flops.counts());    // Children submit their own work; do not submit their totals twice.
+    totalFlops += FlopCount(flops);
+    rc.floatingPointOperations = totalFlops;
+    rc.minDepth = minDepth;
+    rc.maxDepth = maxDepth;
+    if (localRoot) {
+        sphParticlesResolveWithParticles();
+    }
+    return rc;
+}
+
+void sphTreeDestroy(bool freeSphTree) {
+    Vector<hpx::future<void>> futs;
+    auto const children = hpxChildren();
+    for (auto const& c : children) {
+        futs.push_back(hpx::async<SphTreeDestroyAction>(c, freeSphTree));
+    }
+    if (freeSphTree) {
+        nodes = decltype(nodes)();
+    }
+    // Normal teardown retains the arena without traversing its unused slots.
+    // Cached remote lines and thread-local pointers still belong to the old
+    // tree and must be invalidated on every locality before the next rebuild.
+    treeCache = decltype(treeCache)();
+    resetLastCacheEntries();
+    hpx::wait_all(futs.begin(), futs.end());
+}
+
+void sphTreeSetNumberOfActiveParticles(TreeId id, ParticleInteger i) {
+    nodes[id.index].numberOfActiveParticles = i;
+}
+
+void sphTreeSetConverged(TreeId id, bool c) {
+    nodes[id.index].converged = c;
+}
+
+SphTreeNode const* sphTreeGetNode(TreeId id) {
+    if (id.proc == hpxRank()) {
+        ASSERT(id.index >= 0);
+#ifndef NDEBUG
+        if (id.index >= nodes.size()) {
+            THROW_ERROR("id.index is %li but nodes.size() is %li\n", id.index, nodes.size());
+        }
+#endif
+        return &nodes[id.index];
+    } else {
+        return treeCacheRead(id);
+    }
+}
+
+void sphTreeSetBoxes(TreeId id, Fixed32Range const& ibox, Fixed32Range const& obox) {
+    nodes[id.index].outerBox = obox;
+    nodes[id.index].innerBox = ibox;
+}
+
+static SphTreeNode const* treeCacheRead(TreeId id) {
+    int const lineSize = getOptions().compute.treeCacheLineSize;
+    TreeId lineId;
+    lineId.proc = id.proc;
+    ASSERT(lineId.proc >= 0 && lineId.proc < hpxSize());
+    lineId.index = (id.index / lineSize) * lineSize;
+    SphTreeNode const* ptr;
+    if (lineId != lastCacheEntry.line) {
+        size_t const bin = TreeIdHashLo()(lineId);
+        std::shared_ptr<hpx::shared_future<Vector<SphTreeNode>>> future;
+        {
+            std::lock_guard<SpinlockType> lock(mutex[bin]);
+            auto const entry = treeCache[bin].find(lineId);
+            if (entry != treeCache[bin].end()) {
+                future = entry->second;
+            }
+        }
+        if (!future) {
+            auto promise = std::make_shared<hpx::promise<Vector<SphTreeNode>>>();
+            auto candidate = std::make_shared<hpx::shared_future<Vector<SphTreeNode>>>(
+                promise->get_future().share());
+            bool inserted;
+            {
+                std::lock_guard<SpinlockType> lock(mutex[bin]);
+                auto const entry = treeCache[bin].emplace(lineId, candidate);
+                inserted = entry.second;
+                future = entry.first->second;
+            }
+            if (inserted) {
+                try {
+                    hpx::post(hpx::annotated_function(
+                        [promise, lineId]() {
+                            try {
+                                auto remote = hpx::async<SphTreeFetchCacheLineAction>(
+                                    hpxLocalities()[lineId.proc], lineId.index);
+                                promise->set_value(remote.get());
+                            } catch (...) {
+                                promise->set_exception(std::current_exception());
+                            }
+                        },
+                        "sph.tree.fetchCacheLine"));
+                } catch (...) {
+                    promise->set_exception(std::current_exception());
+                }
+            }
+        }
+        ptr = future->get().data();
+    } else {
+        ptr = lastCacheEntry.ptr;
+    }
+    lastCacheEntry.ptr = ptr;
+    lastCacheEntry.line = lineId;
+    return ptr + id.index - lineId.index;
+}
+
+static Vector<SphTreeNode> sphTreeFetchCacheLine(int index) {
+    int const lineSize = getOptions().compute.treeCacheLineSize;
+    Vector<SphTreeNode> line(lineSize);
+    int const begin = (index / lineSize) * lineSize;
+    int const end = std::min(begin + lineSize, int(nodes.size()));
+    for (int i = begin; i < end; i++) {
+        line[i - begin] = nodes[i];
+    }
+    return line;
+}

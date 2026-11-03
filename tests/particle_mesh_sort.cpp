@@ -8,13 +8,15 @@
 #include <algorithm>
 #include <bit>
 #include <cstdint>
+#include <format>
+#include <iostream>
 #include <limits>
 #include <stdexcept>
 #include <vector>
 
 #include <cosmictiger/particles/particle_mesh_sort.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 #endif
 
 namespace detail {
@@ -115,7 +117,9 @@ void initializeMeshSortFixture(ParticleInteger count, int pattern) {
         }
         particlesP[i] = std::bit_cast<float>(uint32_t(0x80000000U + i));
         particlesRung(i) = i % 11;
-        particlesLastgroup(i) = 100000 + i;
+        if constexpr (COSMICTIGER_ENABLE_ROCKSTAR) {
+            particlesLastgroup(i) = 100000 + i;
+        }
         particlesGrp[i].store(200000 + i, std::memory_order_relaxed);
         particlesTracer(i) = i % 2;
         particlesGravitySample(i) = i % 3 == 0 ? i : -1;
@@ -174,13 +178,17 @@ void checkMeshSortFixture(int meshSize, int pattern) {
         }
         requireParticleMeshSort(
             std::bit_cast<uint32_t>(particlesP[i]) == uint32_t(0x80000000U + identity) &&
-                particlesRung(i) == identity % 11 && particlesLastgroup(i) == 100000 + identity &&
+                particlesRung(i) == identity % 11 &&
                 particlesGrp[i].load(std::memory_order_relaxed) == 200000 + identity &&
                 particlesTracer(i) == identity % 2 &&
                 particlesGravitySample(i) == (identity % 3 == 0 ? identity : -1) &&
                 particlesType(i) ==
                     (COSMICTIGER_WITH_SPH && identity % 2 == 0 ? kSphType : kDarkMatterType),
             "Particle mesh sort detached a particle field");
+        if constexpr (COSMICTIGER_ENABLE_ROCKSTAR) {
+            requireParticleMeshSort(particlesLastgroup(i) == 100000 + identity,
+                "Particle mesh sort detached a particle's group history");
+        }
         particlesCaptureGravitySample(i, float(identity), float(identity + 1), float(identity + 2));
         for (int dim = 0; dim < kDimensions; ++dim) {
             float const captured = particlesGravitySampleAccelerations[identity][dim];
@@ -257,7 +265,7 @@ void particleMeshSortTest() {
     options.hydro.enabled = COSMICTIGER_WITH_SPH != 0;
     options.analysis.saveForce = true;
     options.analysis.tracers = true;
-    options.analysis.groups = true;
+    options.analysis.groups = COSMICTIGER_ENABLE_ROCKSTAR != 0;
     options.gravity.errorInterval = 0;
     options.chemistry.enabled = false;
     setOptions(options);
@@ -281,6 +289,12 @@ void particleMeshSortTest() {
             }
         }
     }
+    if constexpr (!COSMICTIGER_ENABLE_ROCKSTAR) {
+        // The temporary active-group array still exercises particle swaps.
+        // Empty the fixture before cleanup, which otherwise saves group history
+        // into the persistent array allocated only when group finding is enabled.
+        particlesResize(0);
+    }
     particlesGroupsDestroy();
     particlesGravitySamplesBegin(0);
     detail::requireParticleMeshSort(particlesGravitySampleAccelerations == nullptr,
@@ -290,7 +304,8 @@ void particleMeshSortTest() {
     sphParticlesResize(0, false);
 #endif
     setOptions(originalOptions);
-    PRINT("Particle mesh in-place sort passed (%s)\n",
-        COSMICTIGER_WITH_SPH ? "all fields, gas maps and fixed boundaries" :
-                               "collisionless fields and fixed boundaries");
+    std::cout << std::format("Particle mesh in-place sort passed ({:s})\n",
+                     COSMICTIGER_WITH_SPH ? "all fields, gas maps and fixed boundaries" :
+                                            "collisionless fields and fixed boundaries")
+              << std::flush;
 }

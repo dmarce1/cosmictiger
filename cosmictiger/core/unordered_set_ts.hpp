@@ -9,6 +9,7 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 #ifndef UNORDERED_SET_TS_HPP_
 #define UNORDERED_SET_TS_HPP_
 
+#include <iostream>
 #include <unordered_set>
 
 #include <cosmictiger/core/containers.hpp>
@@ -38,7 +39,7 @@ public:
         mutexes_.resize(kUnorderedSetSize, std::make_shared<SpinlockType>());
     }
     void insert(T const& member) {
-        PRINT("Inserting\n");
+        std::cout << "Inserting\n" << std::flush;
         HashLo hashlo;
         int const setIndex = hashlo(member);
         std::lock_guard<SpinlockType> lock(*mutexes_[setIndex]);

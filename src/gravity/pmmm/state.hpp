@@ -42,7 +42,7 @@
 #include <cosmictiger/gravity/pmmm/fmm/ghost_storage.hpp>
 #include <cosmictiger/gravity/pmmm/kernels.hpp>
 #include <cosmictiger/gravity/pmmm/kick.hpp>
-#include <cosmictiger/gravity/pmmm/pp/near_pp.hpp>
+#include <cosmictiger/gravity/pmmm/pp_near_pp.hpp>
 #include <cosmictiger/gravity/pmmm/solver.hpp>
 #include <cosmictiger/gravity/sources.hpp>
 #include <cosmictiger/gravity/tree.hpp>
@@ -50,7 +50,7 @@
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particle_mesh_sort.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 #endif
 
 namespace pmmm::detail {

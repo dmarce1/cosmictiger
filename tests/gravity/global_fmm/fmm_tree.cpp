@@ -10,6 +10,8 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <format>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -401,5 +403,6 @@ void fmmTreeTest() {
     detail::requireFmmTree(empty.maxGravitySupportRadius == 0.0f,
         "empty tree return has a nonzero maximum gravity support");
     treeDestroy(true);
-    PRINT("FMM tree regression passed (%i localities)\n", hpxSize());
+    std::cout << std::format("FMM tree regression passed ({:d} localities)\n", hpxSize())
+              << std::flush;
 }

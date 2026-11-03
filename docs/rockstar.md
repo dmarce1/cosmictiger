@@ -1,5 +1,15 @@
 # ROCKSTAR halo finding
 
+Build support is controlled by `COSMICTIGER_ENABLE_ROCKSTAR`, which defaults to
+`ON` and takes effect only when at least one gravity solver is enabled. Configure
+with `-DCOSMICTIGER_ENABLE_ROCKSTAR=OFF` to omit the snapshot FOF/ROCKSTAR halo
+finder and its internal Barnes–Hut solver, the coupled lightcone analysis
+pipeline, catalogue tools, and their tests. This also removes the HEALPix C++
+build dependency. Gravity solvers, power-spectrum output, and the standalone
+`healpix2silo` tool remain available; gravity builds still require the HEALPix C
+library. The interactive `./build.sh` menu exposes the same switch, and
+`cosmictiger_help` reports the effective capability.
+
 For local snapshot browsing, filtering, spatial plots, host/subhalo inspection,
 and CSV selections, see [Halo Explorer](halo_viewer.md).
 

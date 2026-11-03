@@ -13,6 +13,8 @@
 #include <cstdint>
 #include <fenv.h>
 #include <filesystem>
+#include <format>
+#include <iostream>
 #include <numbers>
 #include <stdexcept>
 
@@ -67,7 +69,8 @@ static void nativeChemistryInitializationTest() {
     // Serialize the production initial conditions before any source or gravity
     // step. The runtime checkpoint schedule remains unchanged.
     writeCheckpoint(state);
-    PRINT("Native chemistry initialization checkpoint written at iteration zero\n");
+    std::cout << "Native chemistry initialization checkpoint written at iteration zero\n"
+              << std::flush;
 }
 #endif
 
@@ -115,7 +118,8 @@ static void fft1Test() {
         }
         maxError = std::max(maxError, err);
     }
-    PRINT("FFT random-field round trip: maximum relative error %e\n", maxError);
+    std::cout << std::format("FFT random-field round trip: maximum relative error {:e}\n", maxError)
+              << std::flush;
 }
 
 static void fft2Test() {
@@ -189,8 +193,10 @@ static void fft2Test() {
         }
         maxRoundTripError = std::max(maxRoundTripError, error);
     }
-    PRINT("FFT cosine mode: maximum spectrum error %e, reconstruction error %e\n", maxSpectrumError,
-        maxRoundTripError);
+    std::cout << std::format(
+                     "FFT cosine mode: maximum spectrum error {:e}, reconstruction error {:e}\n",
+                     maxSpectrumError, maxRoundTripError)
+              << std::flush;
 }
 #endif
 
@@ -200,25 +206,25 @@ static void domainTest() {
     tm.start();
     particlesRandomInit();
     tm.stop();
-    PRINT("particles_random_init: %e s\n", tm.read());
+    std::cout << std::format("particles_random_init: {:e} s\n", tm.read()) << std::flush;
     tm.reset();
 
     tm.start();
     domainsRebound();
     tm.stop();
-    PRINT("domains_rebound: %e s\n", tm.read());
+    std::cout << std::format("domains_rebound: {:e} s\n", tm.read()) << std::flush;
     tm.reset();
 
     tm.start();
     domainsBegin(0);
     tm.stop();
-    PRINT("domains_begin: %e s\n", tm.read());
+    std::cout << std::format("domains_begin: {:e} s\n", tm.read()) << std::flush;
     tm.reset();
 
     tm.start();
     domainsEnd();
     tm.stop();
-    PRINT("domains_end: %e s\n", tm.read());
+    std::cout << std::format("domains_end: {:e} s\n", tm.read()) << std::flush;
     tm.reset();
 }
 
@@ -229,44 +235,44 @@ static void treeTest() {
     tm.start();
     particlesRandomInit();
     tm.stop();
-    PRINT("particles_random_init: %e s\n", tm.read());
+    std::cout << std::format("particles_random_init: {:e} s\n", tm.read()) << std::flush;
     tm.reset();
 
     tm.start();
     domainsRebound();
     tm.stop();
-    PRINT("domains_rebound: %e s\n", tm.read());
+    std::cout << std::format("domains_rebound: {:e} s\n", tm.read()) << std::flush;
     tm.reset();
 
     tm.start();
     domainsBegin(0);
     tm.stop();
-    PRINT("domains_begin: %e s\n", tm.read());
+    std::cout << std::format("domains_begin: {:e} s\n", tm.read()) << std::flush;
     tm.reset();
 
     tm.start();
     domainsEnd();
     tm.stop();
-    PRINT("domains_end: %e s\n", tm.read());
+    std::cout << std::format("domains_end: {:e} s\n", tm.read()) << std::flush;
     tm.reset();
 
     tm.start();
     TreeCreateParameters tparams(0, 0.7, getOptions().gravity.supportRadius);
     treeCreate(tparams);
     tm.stop();
-    PRINT("tree_create: %e s\n", tm.read());
+    std::cout << std::format("tree_create: {:e} s\n", tm.read()) << std::flush;
     tm.reset();
 
     tm.start();
     treeDestroy();
     tm.stop();
-    PRINT("tree_destroy: %e s\n", tm.read());
+    std::cout << std::format("tree_destroy: {:e} s\n", tm.read()) << std::flush;
     tm.reset();
 
     tm.start();
     treeCreate(tparams);
     tm.stop();
-    PRINT("tree_create: %e s\n", tm.read());
+    std::cout << std::format("tree_create: {:e} s\n", tm.read()) << std::flush;
     tm.reset();
 }
 
@@ -284,25 +290,25 @@ static void kickTest() {
         initialize(getOptions().cosmology.startRedshift);
     }
     tm.stop();
-    PRINT("initialize: %e s\n", tm.read());
+    std::cout << std::format("initialize: {:e} s\n", tm.read()) << std::flush;
     tm.reset();
 
     tm.start();
     domainsRebound();
     tm.stop();
-    PRINT("domains_rebound: %e s\n", tm.read());
+    std::cout << std::format("domains_rebound: {:e} s\n", tm.read()) << std::flush;
     tm.reset();
 
     tm.start();
     domainsBegin(0);
     tm.stop();
-    PRINT("domains_begin: %e s\n", tm.read());
+    std::cout << std::format("domains_begin: {:e} s\n", tm.read()) << std::flush;
     tm.reset();
 
     tm.start();
     domainsEnd();
     tm.stop();
-    PRINT("domains_end: %e s\n", tm.read());
+    std::cout << std::format("domains_end: {:e} s\n", tm.read()) << std::flush;
     tm.reset();
     tm.reset();
     tm.start();
@@ -310,18 +316,18 @@ static void kickTest() {
         0, getOptions().gravity.openingAngle, getOptions().gravity.supportRadius);
     auto sr = treeCreate(tparams);
     tm.stop();
-    PRINT("tree_create: %e s\n", tm.read());
+    std::cout << std::format("tree_create: {:e} s\n", tm.read()) << std::flush;
     tm.reset();
     tm.start();
     treeDestroy();
     tm.stop();
-    PRINT("tree_destroy: %e s\n", tm.read());
+    std::cout << std::format("tree_destroy: {:e} s\n", tm.read()) << std::flush;
     totalTime.start();
     tm.reset();
     tm.start();
     treeCreate(tparams);
     tm.stop();
-    PRINT("tree_create: %e s\n", tm.read());
+    std::cout << std::format("tree_create: {:e} s\n", tm.read()) << std::flush;
     tm.reset();
     tm.start();
     KickParameters kparams;
@@ -351,22 +357,22 @@ static void kickTest() {
     kickResetInteractionCounts();
     auto kr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
     tm.stop();
-    PRINT("tree_kick: %e s\n", tm.read());
+    std::cout << std::format("tree_kick: {:e} s\n", tm.read()) << std::flush;
     reportKickInteractions(kparams.theta);
     tm.reset();
     tm.start();
     treeDestroy();
     tm.stop();
-    PRINT("tree_destroy: %e s\n", tm.read());
+    std::cout << std::format("tree_destroy: {:e} s\n", tm.read()) << std::flush;
     tm.reset();
     tm.start();
     // drift(1.0, 0.0, 0.0, 0.0, 0.0);
     tm.stop();
-    PRINT("drift: %e s\n", tm.read());
+    std::cout << std::format("drift: {:e} s\n", tm.read()) << std::flush;
     totalTime.stop();
-    PRINT("avg time per step = %e\n", totalTime.read());
+    std::cout << std::format("avg time per step = {:e}\n", totalTime.read()) << std::flush;
     double const flopsMeasure = totalFlops / totalTime.read() / hpxSize();
-    PRINT("FLOPS / s / locality = %e\n", flopsMeasure);
+    std::cout << std::format("FLOPS / s / locality = {:e}\n", flopsMeasure) << std::flush;
     FILE* fp = fopen("results.txt", "at");
     fprintf(fp, "%i %e %e\n", hpxSize(), totalTime.read(), flopsMeasure);
     fclose(fp);
@@ -376,17 +382,23 @@ static void kickTest() {
 // Rank-local CPU walk counters and the net force from the saved accelerations.
 static void reportKickInteractions(double theta) {
     auto const counts = kickInteractionCounts();
-    PRINT("walk theta %.3f openLargerCell %i: tests %lld ccDirect %lld ccEwald %lld cp %lld pc "
-          "%lld ppLeafPairs %lld ppPairs %lld opened %lld deferred %lld\n",
-        theta, int(getOptions().gravity.openLargerCell), counts.acceptanceTests,
-        counts.cellCellDirect, counts.cellCellEwald, counts.cellParticle, counts.particleCell,
-        counts.particleParticleLeafPairs, counts.particleParticlePairs, counts.sourceOpenings,
-        counts.deferredSources);
-    PRINT("walk theta %.3f openLargerCell %i: cp at leaf sinks %lld, cp at internal sinks %lld; pc "
-          "from leaf sources %lld, pc from internal sources %lld\n",
-        theta, int(getOptions().gravity.openLargerCell), counts.cellParticleAtLeafSinks,
-        counts.cellParticle - counts.cellParticleAtLeafSinks, counts.particleCellFromLeafSources,
-        counts.particleCell - counts.particleCellFromLeafSources);
+    std::cout << std::format(
+                     "walk theta {:.3f} openLargerCell {:d}: tests {:d} ccDirect {:d} ccEwald {:d} "
+                     "cp {:d} pc {:d} ppLeafPairs {:d} ppPairs {:d} opened {:d} deferred {:d}\n",
+                     theta, int(getOptions().gravity.openLargerCell), counts.acceptanceTests,
+                     counts.cellCellDirect, counts.cellCellEwald, counts.cellParticle,
+                     counts.particleCell, counts.particleParticleLeafPairs,
+                     counts.particleParticlePairs, counts.sourceOpenings, counts.deferredSources)
+              << std::flush;
+    std::cout << std::format(
+                     "walk theta {:.3f} openLargerCell {:d}: cp at leaf sinks {:d}, cp at internal "
+                     "sinks {:d}; pc from leaf sources {:d}, pc from internal sources {:d}\n",
+                     theta, int(getOptions().gravity.openLargerCell),
+                     counts.cellParticleAtLeafSinks,
+                     counts.cellParticle - counts.cellParticleAtLeafSinks,
+                     counts.particleCellFromLeafSources,
+                     counts.particleCell - counts.particleCellFromLeafSources)
+              << std::flush;
     if (getOptions().analysis.saveForce) {
         auto const range = particlesCurrentRange();
         Vector3<double> total{};
@@ -404,8 +416,11 @@ static void reportKickInteractions(double theta) {
             std::sqrt(total[kXDimension] * total[kXDimension] +
                 total[kYDimension] * total[kYDimension] + total[kZDimension] * total[kZDimension]) /
             std::max(1.0, magnitudeSum);
-        PRINT("walk theta %.3f openLargerCell %i: rank-local net force residual %.3e\n", theta,
-            int(getOptions().gravity.openLargerCell), residual);
+        std::cout
+            << std::format(
+                   "walk theta {:.3f} openLargerCell {:d}: rank-local net force residual {:.3e}\n",
+                   theta, int(getOptions().gravity.openLargerCell), residual)
+            << std::flush;
     }
 }
 
@@ -457,7 +472,7 @@ static void forceTest() {
     TreeCreateParameters tparams(0, treeTheta, getOptions().gravity.supportRadius);
     if (fixedTree) {
         tparams = buildTree(treeTheta);
-        PRINT("tree built once at theta %.3f\n", treeTheta);
+        std::cout << std::format("tree built once at theta {:.3f}\n", treeTheta) << std::flush;
     }
     for (int iter = 0; iter < thetas.size(); iter++) {
         tmMain.start();
@@ -493,7 +508,7 @@ static void forceTest() {
         tmKick.start();
         auto kr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
         tmKick.stop();
-        PRINT("tree_kick: %e s\n", tmKick.read());
+        std::cout << std::format("tree_kick: {:e} s\n", tmKick.read()) << std::flush;
         reportKickInteractions(thetas[iter]);
         if (!fixedTree) {
             treeDestroy(false);
@@ -503,8 +518,9 @@ static void forceTest() {
         tm.start();
         auto rc = analyticCompare(1000);
         tm.stop();
-        PRINT("Analytic compare took %e s\n", tm.read());
-        PRINT("%e %e %e\n", thetas[iter], rc.first, rc.second);
+        std::cout << std::format("Analytic compare took {:e} s\n", tm.read()) << std::flush;
+        std::cout << std::format("{:e} {:e} {:e}\n", thetas[iter], rc.first, rc.second)
+                  << std::flush;
         FILE* fp = fopen("force_accuracy.txt", "at");
         fprintf(fp, "%e %e %e\n", thetas[iter], rc.first, rc.second);
         fclose(fp);
@@ -514,7 +530,7 @@ static void forceTest() {
     }
 
     kickClearBuffers();
-    PRINT("AVERAGE TIME = %e\n", tmMain.read() / kNiter);
+    std::cout << std::format("AVERAGE TIME = {:e}\n", tmMain.read() / kNiter) << std::flush;
 }
 
 static void bucketTest() {
@@ -547,7 +563,7 @@ static void bucketTest() {
             TreeCreateParameters tparams(
                 0, getOptions().gravity.openingAngle, getOptions().gravity.supportRadius);
             treeCreate(tparams);
-            PRINT("Tree created\n");
+            std::cout << "Tree created\n" << std::flush;
             KickParameters kparams;
             kparams.nodeLoad = 10;
             kparams.gpu = true;
@@ -576,7 +592,7 @@ static void bucketTest() {
             rootId.index = 0;
             Vector<TreeId> checklist;
             checklist.push_back(rootId);
-            PRINT("Doing kick\n");
+            std::cout << "Doing kick\n" << std::flush;
             auto kr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
             treeDestroy(false);
         }
@@ -614,11 +630,15 @@ static void speedTest() {
     }
     Timer tm;
     for (int ci = 0; ci < kNchecks; ci++) {
-        PRINT("------------------------------------------------------------------------------------"
-              "-\n");
-        PRINT("Test %i with bucket = %i\n", ci, buckets[ci]);
-        PRINT("------------------------------------------------------------------------------------"
-              "-\n");
+        std::cout << "-----------------------------------------------------------------------------"
+                     "-------"
+                     "-\n"
+                  << std::flush;
+        std::cout << std::format("Test {:d} with bucket = {:d}\n", ci, buckets[ci]) << std::flush;
+        std::cout << "-----------------------------------------------------------------------------"
+                     "-------"
+                     "-\n"
+                  << std::flush;
         std::filesystem::remove_all("checkpoint.999999");
         std::filesystem::copy(
             checkpoints[ci], "checkpoint.999999", std::filesystem::copy_options::recursive);
@@ -666,7 +686,7 @@ static void speedTest() {
             tm.stop();
         }
     }
-    PRINT("TOTAL TIME = %e\n", tm.read());
+    std::cout << std::format("TOTAL TIME = {:e}\n", tm.read()) << std::flush;
 }
 
 #endif
@@ -695,17 +715,17 @@ void bhTest() {
      tm1.stop();
      x0 = x;
      tm2.start();
-     PRINT("Doing gpu\n");
+
      auto phi2 = bh_evaluate_points(y, x0, true);
      tm2.stop();
-     PRINT("%e %e\n", tm1.read(), tm2.read());
+
      double err_tot = 0.0;
      for (int i = 0; i < phi1.size(); i++) {
      double err = fabs((phi1[i] - phi2[i]) / phi1[i]);
-     PRINT("%e %e %e\n", phi1[i], phi2[i], err);
+
      err_tot += err;
      }
-     PRINT("%e\n", err_tot / phi1.size());*/
+     */
 }
 
 void sphGravityTest();
@@ -757,7 +777,7 @@ ApplicationTest const applicationTests[] = {
 #endif
     {"sphChemistryTimesteps", sphChemistryTimestepsTest},
 #endif
-#if COSMICTIGER_WITH_GRAVITY
+#if COSMICTIGER_ENABLE_ROCKSTAR
     {"analysisBackends", analysisBackendsTest},
     {"rockstar", rockstarTest},
     {"bhPotential", bhPotentialTest},

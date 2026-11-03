@@ -16,6 +16,7 @@ import unittest
 from unittest.mock import patch
 
 import camb_reference
+import check_build_features
 import checkpoint_format as checkpoint
 import compare_native_recombination
 import run_gadget4_cooling
@@ -77,7 +78,7 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=None
         put('2b', 0, 1)
         put(2 * integer, -1, 0)
         offsets['gas'] = len(output)
-        version = 30000 + (110 if stars else 100 if cooling else 2)
+        version = 40000 + (110 if stars else 100 if cooling else 2)
         version += 0 if viscosity is None else 2 + 2 * viscosity
         put('7I', 0x43545350, version, integer_bytes, 4, 12, 3, 4)
         put(integer, 1)
@@ -91,8 +92,8 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=None
         put('2B', 0, 1)
         put('3f', .7, .8, .9)  # gravity acceleration
         if viscosity is not None:
-            put('2f' if viscosity == 0 else '3f',
-                *([.2, .3] if viscosity == 0 else [.2, .3, .4]))
+            put('f' if viscosity == 0 else '2f',
+                *([.2] if viscosity == 0 else [.2, .4]))
         if cooling:
             put('f', 1.)  # electron fraction
     if stars:
@@ -108,10 +109,29 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=None
     return bytes(output), offsets
 
 
+class BuildCapabilityTests(unittest.TestCase):
+    def test_rockstar_definitions_follow_requested_feature_and_gravity(self):
+        self.assertIn('ROCKSTAR', check_build_features.FEATURES)
+        self.assertIn('COSMICTIGER_ENABLE_ROCKSTAR', check_build_features.FEATURE_DEFINITIONS)
+        for gravity, rockstar in itertools.product((False, True), repeat=2):
+            with self.subTest(gravity=gravity, rockstar=rockstar):
+                configuration = {feature: feature in ('SPH', 'INTEGRATOR_TRADITIONAL')
+                                 for feature in check_build_features.FEATURES}
+                configuration.update(FMM=gravity, ROCKSTAR=rockstar)
+                definitions = check_build_features.configurationDefinitions(configuration, 32, (4, 6))
+                self.assertEqual(definitions['COSMICTIGER_ENABLE_ROCKSTAR'], str(int(gravity and rockstar)))
+                self.assertEqual(check_build_features.hasRockstar(configuration), gravity and rockstar)
+                self.assertEqual(check_build_features.sourceSelectionErrors(
+                    {'src/analysis/power.cpp', 'src/tools/healpix2silo.cpp'}, configuration),
+                    [] if gravity else [
+                        'gravity disabled but compiles cosmology source: src/analysis/power.cpp',
+                        'gravity disabled but compiles gravity source: src/tools/healpix2silo.cpp'])
+
+
 class CheckpointTests(unittest.TestCase):
     def test_layout_variants(self):
         for position_bytes, integer_bytes, global_step, state, viscosity in itertools.product(
-                (4, 8), (4, 8), (False, True), ('hydro', 'cooling', 'stars'), (None, 0, 1, 2)):
+                (4, 8), (4, 8), (False, True), ('hydro', 'cooling', 'stars'), (None, 0, 1, 2, 3)):
             with self.subTest(position_bytes=position_bytes, integer_bytes=integer_bytes,
                               global_step=global_step, state=state, viscosity=viscosity):
                 data, _ = checkpoint_fixture(position_bytes=position_bytes,

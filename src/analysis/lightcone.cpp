@@ -9,6 +9,8 @@
 #include <atomic>
 #include <cmath>
 #include <filesystem>
+#include <format>
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <numbers>
@@ -231,8 +233,9 @@ void lcLoad(FILE* fp) {
     if (sz == std::numeric_limits<size_t>::max()) {
         epochMap.load(fp, getOptions().lightcone.mapSize);
     } else {
-        PRINT("Legacy lightcone checkpoint has no accumulated HEALPix map; "
-              "this epoch's pre-checkpoint contributions are unavailable.\n");
+        std::cout << "Legacy lightcone checkpoint has no accumulated HEALPix map; "
+                     "this epoch's pre-checkpoint contributions are unavailable.\n"
+                  << std::flush;
     }
 }
 
@@ -845,7 +848,8 @@ void lcFormTrees(double tau, double linkingLength) {
                         parts.group[i] = kLightconeNoGroup;
                     }
                     if (rValue + 1e-4 < tauMax - tau) {
-                        PRINT("-----> low R %e %e\n", rValue, tauMax - tau);
+                        std::cout << std::format("-----> low R {:e} {:e}\n", rValue, tauMax - tau)
+                                  << std::flush;
                         //		ASSERT(R >= tau_max - tau);
                     }
                 }

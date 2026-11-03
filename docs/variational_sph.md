@@ -54,10 +54,10 @@ volume weight \(x_i\); \(r_{ij}=r_i-r_j\) and \(v_{ij}=v_i-v_j\).
 \(\partial W/\partial H=H^{-4}[-3w(q)-qw'(q)]\) (`sph_volume::kernelSupportDerivative`).
 This stage uses \(x_i=m_i\), so \(y_i\) is the ordinary mass-summed density, and all
 production gas particles have one mass. The shared algebra in
-`cosmictiger/hydro/sph/volume.hpp` keeps \(n\) and \(y\) distinct and accepts unequal
+`cosmictiger/sph/volume.hpp` keeps \(n\) and \(y\) distinct and accepts unequal
 weights and masses; the algebra tests use both.
 The pressure formulation is separate, in
-[`cosmictiger/hydro/sph/variational/equations.hpp`](../cosmictiger/hydro/sph/variational/equations.hpp):
+[`cosmictiger/sph/variable_smoothing_lengths.hpp`](../cosmictiger/sph/variable_smoothing_lengths.hpp):
 `variational::pressureVolumeFactor` and `variational::directedCoefficient` form the
 directed pressure coefficient, while `variational::pairForceFactor` and
 `variational::pairWork` evaluate the compatible force and thermal work.
@@ -105,8 +105,8 @@ closely the force is the gradient of the discrete thermal energy.
 
 In code, with \(x=m\) for every gas particle,
 \(Q_{ab}/m_a=(P_a/\rho_a^2)(m-\zeta_a)\) and
-\(Q_{ba}/m_a=(P_b/\rho_b^2)(m-\zeta_b)\); see `src/hydro/sph/sph_hydro_cpu.cpp` and
-`src/hydro/sph/sph_hydro.cu`.
+\(Q_{ba}/m_a=(P_b/\rho_b^2)(m-\zeta_b)\); see `src/sph/hydro_cpu.cpp` and
+`src/sph/hydro.cu`.
 
 ## Equation of state
 
@@ -210,10 +210,10 @@ gas in \(ds=d\tau/a\): the stored \(\sum_im_i(w_i^2/2+E_i)\) is conserved by the
 
 ## Implementation and data lifecycle
 
-- **Density pass** (`kSphRunPrehydro2`, CPU `src/hydro/sph/sph_prehydro_cpu.cpp`, CUDA
-  `src/hydro/sph/sph_prehydro.cu`): for every semiactive particle, after its support has
+- **Density pass** (`kSphRunPrehydro2`, CPU `src/sph/prehydro_cpu.cpp`, CUDA
+  `src/sph/prehydro.cu`): for every semiactive particle, after its support has
   converged, the loop also accumulates \(\sum_jw\) and \(\sum_jqw'\);
-  `sphGradHEvaluation` (`cosmictiger/hydro/sph/sph_kernel.hpp`) classifies the support and
+  `sphGradHEvaluation` (`cosmictiger/sph/run_data.hpp`) classifies the support and
   calls `sph_volume::gradHCorrection` in `volume.hpp`. For free supports that helper
   calls `sph_volume::omega` and `sph_volume::zeta` to form \(\Omega\) and \(\zeta\).
   Held supports use \(\Omega=1\) and \(\zeta=0\) without calling either function.
@@ -227,11 +227,11 @@ gas in \(ds=d\tau/a\): the stored \(\sum_im_i(w_i^2/2+E_i)\) is conserved by the
 - **Staging**: the force pass stages \(\zeta\) with the density through
   `sphParticlesGlobalReadDensity`; remote sources share the density cache line, which
   every `sphRun` clears. Source snapshots stay immutable during each pass.
-- **Pressure force and work**: `src/hydro/sph/sph_hydro_cpu.cpp` and
-  `src/hydro/sph/sph_hydro.cu` call `variational::directedCoefficient` with the staged
+- **Pressure force and work**: `src/sph/hydro_cpu.cpp` and
+  `src/sph/hydro.cu` call `variational::directedCoefficient` with the staged
   \(\zeta\), then `variational::pairForceFactor` and `variational::pairWork` with
   the separate gradients at each particle's support. These pressure equations live
-  in `cosmictiger/hydro/sph/variational/equations.hpp`.
+  in `cosmictiger/sph/variable_smoothing_lengths.hpp`.
 - **Freshness**: every source that interacts with an active sink in the force pass
   is semiactive, and every semiactive particle's density and \(\zeta\) are rebuilt in
   the same step's density pass. A correction left from an earlier step, a migrated

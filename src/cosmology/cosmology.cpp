@@ -9,7 +9,9 @@
 #include <cmath>
 #include <stdexcept>
 
+#if COSMICTIGER_ENABLE_ROCKSTAR
 #include <cosmictiger/analysis/rockstar_properties.hpp>
+#endif
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/cosmology/cosmology.hpp>
@@ -108,6 +110,7 @@ double cosmosConformalTime(double a0, double a1, bool countFlops) {
     return result.conformalTime;
 }
 
+#if COSMICTIGER_ENABLE_ROCKSTAR
 double cosmosKlypinFit(double vmax, double rvir, double mvir) {
     return rockstar::klypinScaleRadius(vmax, rvir, mvir * getOptions().gravity.gm);
 }
@@ -117,3 +120,4 @@ void cosmosNfwFit(Vector<double> radii, double& rs, double& rhoNfw) {
     rs = fit.scaleRadius;
     rhoNfw = fit.density;
 }
+#endif

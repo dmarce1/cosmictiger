@@ -360,21 +360,21 @@ CUDA_EXPORT inline Status doCooling(double specificEnergy, double density, doubl
 
 CUDA_EXPORT inline Result advance(Input const& input, Parameters const& parameters) {
     Result result;
-    result.state = input.state;
+    result.electronFraction = input.electronFraction;
     result.specificEnergy = input.specificEnergy;
     if (!detail::finite(input.specificEnergy) || input.specificEnergy < 0.0 ||
         !detail::finite(parameters.minimumSpecificEnergy) ||
         parameters.minimumSpecificEnergy < 0.0) {
         return result;
     }
-    double electrons = input.state.electronFraction;
+    double electrons = input.electronFraction;
     double energy;
     result.status =
         doCooling(detail::maximum(parameters.minimumSpecificEnergy, input.specificEnergy),
             input.density, input.interval, parameters, electrons, energy);
     if (result.status == Status::Success) {
         result.specificEnergy = detail::maximum(energy, parameters.minimumSpecificEnergy);
-        result.state.electronFraction = float(electrons);
+        result.electronFraction = float(electrons);
     }
     return result;
 }

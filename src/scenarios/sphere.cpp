@@ -8,6 +8,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <format>
+#include <iostream>
 #include <numbers>
 #include <vector>
 
@@ -169,7 +171,7 @@ static void relaxSphereSurfaceShell(SphereSurfaceShell shell) {
         error = kin / sums.phi;
         iter++;
     } while (error > kSphereSurfaceTolerance || iter < kSphereSurfaceMinIterations);
-    PRINT("Solved for %i in %i iterations\n", n, iter);
+    std::cout << std::format("Solved for {:d} in {:d} iterations\n", n, iter) << std::flush;
 }
 
 }    // namespace detail

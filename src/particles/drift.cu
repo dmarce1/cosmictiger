@@ -6,9 +6,11 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <format>
+#include <iostream>
 #include <numbers>
 
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
 #include <cosmictiger/analysis/lightcone.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #endif
@@ -22,7 +24,7 @@
 
 constexpr int kDriftBlockSize = 512;
 
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
 using ListType = DeviceVector<DeviceVector<LightconeEntry>>;
 
 __managed__ ListType* listPtr;
@@ -34,7 +36,7 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
     double tau1, double tauMax, bool doLc, int nside, double drag) {
     auto const& tid = threadIdx.x;
     auto const& bid = blockIdx.x;
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
     doLc = doLc && tauMax > 0.0 && (tauMax - tau1 < 1.0);
     auto* list = doLc ? &(*listPtr)[bid] : nullptr;
     double const c0 = doLc ? 1.0 / tauMax : 0.0;
@@ -46,7 +48,7 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
     ParticleInteger const end = (size_t) (bid + 1) * count / numberOfBlocks;
     ParticleInteger const end0 = roundUp(end - begin, ParticleInteger(kDriftBlockSize)) + begin;
     double const c1 = dt / a;
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
     if (doLc) {
         list->resize(0);
     }
@@ -56,7 +58,7 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
         bool driftParticle = false;
         double x0 = 0.0, y0 = 0.0, z0 = 0.0, x1 = 0.0, y1 = 0.0, z1 = 0.0;
         double displacementX = 0.0, displacementY = 0.0, displacementZ = 0.0;
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
         Vector3<double> x0Value;
         Vector3<double> x1Value;
         float vx = 0.0f, vy = 0.0f, vz = 0.0f;
@@ -67,7 +69,7 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
             if ((rung < 0 || thisRung == rung)) {
                 vel = vels[i].data();
                 driftParticle = true;
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
                 vx = double(vel[kXDimension]) * ainv;
                 vy = double(vel[kYDimension]) * ainv;
                 vz = double(vel[kZDimension]) * ainv;
@@ -89,7 +91,7 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                 }
             }
         }
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
         if (doLc) {
             for (int xi = -1; xi <= 0; xi++) {
                 x0Value[kXDimension] = x0 + (double) xi;
@@ -178,7 +180,7 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
 
 void cudaDrift(
     int rung, double a, double dt, double tau0, double tau1, double tauMax, double drag) {
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
     static bool init = false;
 #endif
     int numberOfBlocks;
@@ -193,7 +195,7 @@ void cudaDrift(
     if (rng.first == rng.second) {
         return;
     }
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
     bool const doLc = getOptions().lightcone.enabled && tauMax > 0.0 && tauMax - tau1 < 1.0;
 #else
     bool const doLc = false;
@@ -201,7 +203,7 @@ void cudaDrift(
     numberOfBlocks = static_cast<int>(std::min<ParticleInteger>(
         numberOfBlocks, std::max<ParticleInteger>((rng.second - rng.first) / kDriftBlockSize, 1)));
     auto cnt = rng.second - rng.first;
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
     if (doLc) {
         if (!init) {
             listPtr = (ListType*) cudaAllocate(sizeof(ListType));
@@ -225,7 +227,7 @@ void cudaDrift(
         drag);
     stream.checkLaunch();
     stream.wait();
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
     cnt = 0;
     static size_t totalCnt = 0;
     if (doLc) {
@@ -233,7 +235,8 @@ void cudaDrift(
     }
     if (cnt != 0) {
         totalCnt += cnt;
-        PRINT("%i flushed now %i flushed total\n", cnt, totalCnt);
+        std::cout << std::format("{:d} flushed now {:d} flushed total\n", cnt, totalCnt)
+                  << std::flush;
     }
 
 #endif

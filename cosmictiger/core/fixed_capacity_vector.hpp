@@ -52,7 +52,7 @@ public:
         if (tid == 0) {
             size_ = newSize;
             if (size_ >= n) {
-                PRINT("fixedcapvec exceeded size of %i in %s on line %i\n", n, __FILE__, __LINE__);
+                printf("fixedcapvec exceeded size of %i in %s on line %i\n", n, __FILE__, __LINE__);
 #ifdef __CUDA_ARCH__
                 __trap();
 #else
@@ -70,7 +70,7 @@ public:
             data_[size_] = item;
             size_++;
             if (size_ >= n) {
-                PRINT("fixedcapvec exceeded size of %i in %s on line %i\n", n, __FILE__, __LINE__);
+                printf("fixedcapvec exceeded size of %i in %s on line %i\n", n, __FILE__, __LINE__);
 #ifdef __CUDA_ARCH__
                 __trap();
 #else
@@ -107,7 +107,8 @@ public:
     __device__ T& operator[](int i) {
 #ifdef CHECK_BOUNDS
         if (i < 0 || i >= size_) {
-            PRINT("index out of bounds for fixedcapvec %i should be between 0 and %i.\n", i, size_);
+            printf(
+                "index out of bounds for fixedcapvec %i should be between 0 and %i.\n", i, size_);
 #ifdef __CUDA_ARCH__
             assert(false);
             __trap();
@@ -121,7 +122,8 @@ public:
     __device__ T operator[](int i) const {
 #ifdef CHECK_BOUNDS
         if (i < 0 || i >= size_) {
-            PRINT("index out of bounds for fixedcapvec %i should be between 0 and %i.\n", i, size_);
+            printf(
+                "index out of bounds for fixedcapvec %i should be between 0 and %i.\n", i, size_);
 #ifdef __CUDA_ARCH__
             __trap();
 #else

@@ -27,6 +27,7 @@ SCENARIOS = (
     ("disc", "disc", True, True, False),
     ("polytropic_star", "polytropicStar", True, True, False),
     ("hydro_wave", "hydroWave", False, True, False),
+    ("gresho", "gresho", False, True, False),
     ("cosmology", "cosmology", True, True, True),
     ("glass", "glass", True, False, False),
 )
@@ -180,7 +181,16 @@ def main():
         print(f"{name or scenario}: solver selection, finite diagnostics, and output containment passed")
         return directory, destination, options
 
-    results = {case[1]: exercise(*case) for case in SCENARIOS}
+    results = {case[1]: exercise(*case, overrides={"initial.closePack": "true"}
+                                if case[1] == "gresho" else None) for case in SCENARIOS}
+
+    gresho_log = (results["gresho"][0] / "run.log").read_text()
+    if int(setting(gresho_log, "Initialized particles")) != 4 * 8**3:
+        raise RuntimeError("Gresho close-packed particle count is incorrect")
+    gresho_cubic, _, _ = exercise("gresho", "gresho", False, True, False,
+                                  name="gresho_cubic", overrides={"initial.closePack": "false"})
+    if int(setting((gresho_cubic / "run.log").read_text(), "Initialized particles")) != 8**3:
+        raise RuntimeError("Gresho cubic particle count is incorrect")
 
     exercise("rayleigh_taylor", "rayleighTaylor", False, True, False,
              name="rayleighTaylor_no_gravity", overrides={"gravity.enabled": "false"})

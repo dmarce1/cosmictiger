@@ -14,6 +14,7 @@ showUsage() {
     printf 'SPH requires traditional or global integration; gravity may be disabled.\n'
     printf 'Equilibrium cooling is independently selectable and requires SPH.\n'
     printf 'Stars are selectable with COSMICTIGER_ENABLE_STARS and require chemistry and SPH.\n'
+    printf 'ROCKSTAR halo and lightcone analysis is selectable with COSMICTIGER_ENABLE_ROCKSTAR and requires gravity.\n'
     printf 'Position storage is selected for the whole build directory; fixed32 is the default.\n'
     printf 'Build jobs default to the detected system thread count, with no upper cap.\n'
     printf 'Use -j with no argument or -j max to select that thread count.\n'
@@ -52,10 +53,11 @@ rootDir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || exit 1
 cd -- "$rootDir" || exit 1
 
 defaultCudaArchitectures=
+defaultRockstar=
 readBuildDefaults() {
     local cacheFile=$1
     local cacheKey cacheValue
-    local cachedSourceDir= cachedArchitectures= cachedCuda=
+    local cachedSourceDir= cachedArchitectures= cachedCuda= cachedRockstar=
     [[ -f $cacheFile ]] || return 0
     # Read cache data without evaluating it as shell code.
     while IFS='=' read -r cacheKey cacheValue; do
@@ -63,9 +65,14 @@ readBuildDefaults() {
             CMAKE_HOME_DIRECTORY:*) cachedSourceDir=$cacheValue ;;
             CMAKE_CUDA_ARCHITECTURES:*) cachedArchitectures=$cacheValue ;;
             COSMICTIGER_WITH_CUDA:*) cachedCuda=$cacheValue ;;
+            COSMICTIGER_ENABLE_ROCKSTAR:*) cachedRockstar=$cacheValue ;;
         esac
     done < "$cacheFile"
-    [[ $cachedSourceDir == "$rootDir" && $cachedCuda == ON ]] || return 0
+    [[ $cachedSourceDir == "$rootDir" ]] || return 0
+    if [[ -z $defaultRockstar && $cachedRockstar =~ ^(ON|OFF)$ ]]; then
+        defaultRockstar=$cachedRockstar
+    fi
+    [[ $cachedCuda == ON ]] || return 0
     if [[ -z $defaultCudaArchitectures && -n $cachedArchitectures &&
         $cachedArchitectures != native ]]; then
         defaultCudaArchitectures=$cachedArchitectures
@@ -75,7 +82,7 @@ readBuildDefaults() {
 # Prefer the default build, then reuse another build belonging to this checkout.
 for cacheFile in "$rootDir/build/release_cuda/CMakeCache.txt" "$rootDir"/build/*/CMakeCache.txt; do
     readBuildDefaults "$cacheFile"
-    if [[ -n $defaultCudaArchitectures ]]; then
+    if [[ -n $defaultCudaArchitectures && -n $defaultRockstar ]]; then
         break
     fi
 done
@@ -113,6 +120,7 @@ enableCuda=ON
 enableSph=ON
 enableChemistry=ON
 enableStars=OFF
+enableRockstar=${defaultRockstar:-ON}
 testSuite=OFF
 buildJobs=$coreCount
 testJobs=2
@@ -375,6 +383,7 @@ showMainMenu() {
     printf ' 13) Position storage: %s\n' "$positionType"
     printf ' 14) Build equilibrium cooling (requires SPH): %s\n' "$enableChemistry"
     printf ' 15) Build stars (requires chemistry and SPH): %s\n' "$enableStars"
+    printf ' 16) Build ROCKSTAR halo and lightcone analysis (requires gravity): %s\n' "$enableRockstar"
     printf '  Enter or b) Configure and build    q) Quit\n'
     printf 'Build jobs default to %s system threads, with no upper cap; MPI tests use four CPUs each.\n' "$coreCount"
 }
@@ -384,7 +393,7 @@ chooseMainMenu() {
         if ! promptValue=$(dialogChoice --title 'Build configuration' \
             --cancel-button 'Quit' --default-item "$menuChoice" --notags \
             --menu "Build jobs: default $coreCount system threads, no upper cap. Test limit: $maxTestJobs (four CPUs per MPI test)." \
-            0 0 17 \
+            0 0 18 \
             1 "Build mode: $buildMode" \
             2 "CUDA: $enableCuda" \
             3 "Build and run test suite: $testSuite" \
@@ -400,6 +409,7 @@ chooseMainMenu() {
             13 "Position storage: $positionType" \
             14 "Build equilibrium cooling (requires SPH): $enableChemistry" \
             15 "Build stars (requires chemistry and SPH): $enableStars" \
+            16 "Build ROCKSTAR halo and lightcone analysis (requires gravity): $enableRockstar" \
             b 'Configure and build' q 'Quit'); then
             promptValue=q
         fi
@@ -452,6 +462,7 @@ while true; do
         13) choosePositionType ;;
         14) chooseToggle 'Build equilibrium cooling (requires SPH)' "$enableChemistry"; enableChemistry=$promptValue ;;
         15) chooseToggle 'Build stars (requires chemistry and SPH)' "$enableStars"; enableStars=$promptValue ;;
+        16) chooseToggle 'Build ROCKSTAR halo and lightcone analysis (requires gravity)' "$enableRockstar"; enableRockstar=$promptValue ;;
         *) printf 'Unknown option.\n' ;;
     esac
 done
@@ -508,6 +519,7 @@ configureCommand=(cmake -S "$rootDir" -B "$buildDir" -G 'Unix Makefiles'
     "-DCOSMICTIGER_ENABLE_SPH=$enableSph"
     "-DCOSMICTIGER_ENABLE_CHEMISTRY=$enableChemistry"
     "-DCOSMICTIGER_ENABLE_STARS=$enableStars"
+    "-DCOSMICTIGER_ENABLE_ROCKSTAR=$enableRockstar"
     "-DCOSMICTIGER_ENABLE_FMM=$enableFmm"
     "-DCOSMICTIGER_ENABLE_PMMM_PP=$enablePmmmPp"
     "-DCOSMICTIGER_ENABLE_PMMM_FMM=$enablePmmmFmm"
@@ -570,6 +582,7 @@ printf 'Integrators: traditional=%s hierarchical=%s global=%s\n' "$enableTraditi
 printf 'SPH support: %s\n' "$enableSph"
 printf 'Equilibrium cooling: %s (requires SPH)\n' "$enableChemistry"
 printf 'Stars: %s (requires chemistry and SPH)\n' "$enableStars"
+printf 'ROCKSTAR halo and lightcone analysis: %s (requires gravity)\n' "$enableRockstar"
 printf 'Position storage: %s\n' "$positionType"
 printf 'Build target: %s\n' "$buildTarget"
 printf 'Build directory: %s\nLog: %s\n' "$buildDir" "$logFile"

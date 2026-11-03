@@ -220,7 +220,7 @@ float rockstarFindLinkLen(DeviceVector<RockstarTree>& trees, DeviceVector<Rockst
         return 0.0f;
     }
     Range<float, 2 * kDimensions> rng = trees[treeRoot].box;
-    //	PRINT("V %e\n", rng.volume());
+
     Vector<Pair<float, int>> seps;
     for (int i = 0; i < trees.size(); i++) {
         if (trees[i].children[kLeftChild] == -1) {
@@ -244,7 +244,7 @@ float rockstarFindLinkLen(DeviceVector<RockstarTree>& trees, DeviceVector<Rockst
             break;
         }
     }
-    //	PRINT("%e ", max_link_len);
+
     bool done = false;
     do {
         for (auto& p : parts) {
@@ -271,7 +271,6 @@ float rockstarFindLinkLen(DeviceVector<RockstarTree>& trees, DeviceVector<Rockst
         int const i0 = std::min((int) (ff * parts.size()), (int) (parts.size() - 2));
         int const i1 = i0 + 1;
         if (dist2s[i1] == std::numeric_limits<float>::max()) {
-            //		PRINT( "doubling\n");
             if (maximumLinkingLength == 0.0f) {
                 maximumLinkingLength = rockstar::detail::initialLinkingLength(
                     trees[treeRoot].box, parts.size(), 2 * kDimensions);
@@ -283,7 +282,7 @@ float rockstarFindLinkLen(DeviceVector<RockstarTree>& trees, DeviceVector<Rockst
             done = true;
         }
     } while (!done);
-    //	PRINT("%e\n", max_link_len);
+
     return maximumLinkingLength;
 }
 
@@ -456,11 +455,10 @@ void rockstarFindSubgroups(DeviceVector<RockstarTree>& trees, DeviceVector<Rocks
             int rootId = trees.size() - 1;
             cnt = rockstarFindSubgroups(
                 trees, parts, rootId, Vector<int>(1, rootId), linkingLength, nextId);
-            //		PRINT("%i %i %e\n", root_id + 1, parts.size(), pct_active);
+
         } while (cnt != 0);
         tm.stop();
     }
-    //	PRINT( "find_subgroups = %e\n", tm.read());
 }
 
 struct Number {
@@ -612,7 +610,7 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
         findSigmas(subgroups[0]);
     } else {
         bool foundMerge;
-        // PRINT("Finding merges for %i subgroups\n", subgroups.size());
+
         for (int k = 0; k < subgroups.size();) {
             foundMerge = false;
             std::sort(subgroups.begin(), subgroups.end(), [](Subgroup const& a, Subgroup const& b) {

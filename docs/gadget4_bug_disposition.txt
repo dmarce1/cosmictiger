@@ -23,7 +23,7 @@ Validation limit: the former low-temperature UV nonconvergence branch is now rem
 Per-particle SH03 hazard and wind-decoupling limits are applied as a global SPH timestep cap (wind case drives rungs past kMaxRung)
 Status: superseded
 Assessment: Wind clocks, conversion hazards and per-source timestep caps are removed. GADGET-4 uses the saved prior SFR over the full completed interval, then computes cooling/new SFR.
-Evidence (checkout-relative): cosmictiger/particles/star_formation_state.hpp; cosmictiger/sph/star_formation_kernel.hpp:166; src/core/driver.cpp:514
+Evidence (checkout-relative): cosmictiger/stars/star_formation_state.hpp; cosmictiger/sph/star_formation_kernel.hpp:166; src/core/driver.cpp:514
 Completed: source ordering, inactive gas, conversion and exact restart passed for individual/global intervals. Source timestep-cap state and code are deleted.
 
 03. sph_infrastructure#1
@@ -65,7 +65,7 @@ Completed: invalid-state, failed-batch tests passed. The fixed GADGET-4 loop lim
 Decoupled winds in gas denser than n_H=1e4 cm^-3 are sent to the non-equilibrium solver, which rejects them and aborts the run
 Status: superseded
 Assessment: Winds and the old nH=1e4 network acceptance gate are removed by the explicitly authorized model replacement. Equilibrium cooling has no such density gate.
-Evidence (checkout-relative): cosmictiger/particles/star_formation_state.hpp; cosmictiger/chemistry/gadget4_cooling_impl.hpp:108; tests/gadget4_cooling.cpp:65
+Evidence (checkout-relative): cosmictiger/stars/star_formation_state.hpp; cosmictiger/chemistry/gadget4_cooling_impl.hpp:108; tests/gadget4_cooling.cpp:65
 Completed: dense equilibrium/SF source results passed CPU/CUDA and reference comparisons. The retired wind model is not certified.
 
 09. tests_sph_chem_cpp#1, chemistry_star_formation#4
@@ -173,7 +173,7 @@ Completed: source energy-ledger and failed-batch fixtures passed for ordinary/de
 Hydro-coupling flags are fetched with one blocking, uncached remote action per tree node
 Status: superseded
 Assessment: Wind hydro-coupling flags and the blocking remote fetch API were removed. Gas remains hydrodynamically coupled until particle conversion.
-Evidence (checkout-relative): cosmictiger/sph/sph_kernel.hpp; src/sph/sph.cpp; src/sph/star_formation.cpp
+Evidence (checkout-relative): cosmictiger/sph/run_data.hpp; src/sph/sph.cpp; src/sph/star_formation.cpp
 Completed: two-rank SPH migration/source fixtures passed with the retained EOS state. No wind-fetch path remains.
 
 25. chemistry_star_formation#14

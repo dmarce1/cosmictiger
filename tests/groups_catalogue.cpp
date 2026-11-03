@@ -12,7 +12,9 @@
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <format>
 #include <fstream>
+#include <iostream>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -371,8 +373,10 @@ void groupsCatalogueTest() {
         }
         std::filesystem::current_path(originalDirectory);
         std::filesystem::remove_all(directory);
-        PRINT("Snapshot halo catalogue, %s and temporal membership tests passed\n",
-            hydro ? "gas/stellar aperture masses" : "zero baryon masses");
+        std::cout << std::format(
+                         "Snapshot halo catalogue, {:s} and temporal membership tests passed\n",
+                         hydro ? "gas/stellar aperture masses" : "zero baryon masses")
+                  << std::flush;
     } catch (...) {
         std::filesystem::current_path(originalDirectory);
         throw;
@@ -849,10 +853,11 @@ void groupsCatalogueDistributedTest() {
         }
         restoreDirectories();
         std::filesystem::remove_all(directory);
-        PRINT("Two-locality snapshot catalogue, remote membership, %s and temporal history "
-              "tests passed\n",
-            getOptions().hydro.enabled ? "two-rank gas/stellar aperture masses" :
-                                         "zero baryon masses");
+        std::cout << std::format("Two-locality snapshot catalogue, remote membership, {:s} and "
+                                 "temporal history tests passed\n",
+                         getOptions().hydro.enabled ? "two-rank gas/stellar aperture masses" :
+                                                      "zero baryon masses")
+                  << std::flush;
     } catch (...) {
         restoreDirectories();
         throw;

@@ -19,8 +19,8 @@
 #include <cosmictiger/core/time.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/hydro/sph/sph.hpp>
-#include <cosmictiger/hydro/sph/sph_tree.hpp>
+#include <cosmictiger/sph/sph.hpp>
+#include <cosmictiger/sph/tree.hpp>
 #endif
 
 // Output cadence follows the nominal coarse clock even with raw global steps.

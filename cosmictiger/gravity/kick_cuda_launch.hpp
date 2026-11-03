@@ -23,7 +23,7 @@
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/gravity/kick_cuda_kernel.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 #endif
 
 namespace detail {

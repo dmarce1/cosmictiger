@@ -10,7 +10,7 @@
 #include <stdexcept>
 
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/gravity/pmmm/pp/near_pp.hpp>
+#include <cosmictiger/gravity/pmmm/pp_near_pp.hpp>
 #include <cosmictiger/math/kernel.hpp>
 
 void pmmmNearField(std::vector<PmmmNearParticle> const& sinks,

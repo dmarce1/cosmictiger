@@ -146,11 +146,11 @@ is now a star. Conversions are rare per step, so the common path gets the saving
 |---|---|
 | `src/core/driver.cpp` FMM path (~998–1021) | Join gravity before pass 1; overlap density only, or nothing |
 | `src/core/driver.cpp` `sphStep2` | Pass 1 runs with `deferAccelerationSources = false` and computes timesteps; drop `sphParticlesCompleteForces` from this path; commit staged rungs before the limiter; remove the phase-1 `sphRun` except after conversions |
-| `src/hydro/sph/hierarchical.cpp` (~lines 900–960) | Same change around `runEverywhere(phase 0/1)`; check the source commit and refresh order |
-| `src/hydro/sph/sph_hydro_cpu.cpp`, `sph_hydro.cu` | Run the timestep block in the force pass that closes the step; write rungs to the scratch array |
-| `cosmictiger/hydro/sph/sph_kernel.hpp` | `SphRunData` gains a proposed-rung sink pointer (plus \(\mu_{\max}\) if the post-source re-check is added) |
-| `src/hydro/sph/staged_run.cpp` | Stage the new sink array(s) for CUDA |
-| `cosmictiger/hydro/sph/sph.hpp`, kernels, `tests/sph/source_completion_cases.hpp` | `SphRunParameters::deferAccelerationSources` and `sphParticlesCompleteForces` lose their only production caller (driver.cpp:478–501). Remove them with their test, or keep them for a later re-overlap |
+| `src/sph/hierarchical.cpp` (~lines 900–960) | Same change around `runEverywhere(phase 0/1)`; check the source commit and refresh order |
+| `src/sph/hydro_cpu.cpp`, `sph_hydro.cu` | Run the timestep block in the force pass that closes the step; write rungs to the scratch array |
+| `cosmictiger/sph/run_data.hpp` | `SphRunData` gains a proposed-rung sink pointer (plus \(\mu_{\max}\) if the post-source re-check is added) |
+| `src/sph/staged_run.cpp` | Stage the new sink array(s) for CUDA |
+| `cosmictiger/sph/sph.hpp`, kernels, `tests/sph/source_completion_cases.hpp` | `SphRunParameters::deferAccelerationSources` and `sphParticlesCompleteForces` lose their only production caller (driver.cpp:478–501). Remove them with their test, or keep them for a later re-overlap |
 | `docs/monaghan_sph.md`, `docs/hierarchical_sph.md` | Remove "the opening force selects the next rung" wording |
 | `docs/flop_accounting.md` | Recount the moved timestep flops |
 

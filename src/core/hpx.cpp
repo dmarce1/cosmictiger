@@ -9,7 +9,7 @@
 #include <cstdio>
 #include <string>
 
-#if COSMICTIGER_WITH_GRAVITY
+#if COSMICTIGER_ENABLE_ROCKSTAR
 #include <cosmictiger/analysis/lightcone.hpp>
 #endif
 #include <cosmictiger/core/containers.hpp>
@@ -80,7 +80,7 @@ void hpxInit() {
 void hpxInitCuda() {
 #ifdef USE_CUDA
     cudaInit();
-#if COSMICTIGER_WITH_GRAVITY
+#if COSMICTIGER_ENABLE_ROCKSTAR
     healpixInit();
 #endif
 #endif

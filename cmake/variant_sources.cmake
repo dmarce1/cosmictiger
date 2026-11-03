@@ -30,6 +30,17 @@ function(cosmictiger_feature_sources output)
 
     if(COSMICTIGER_WITH_GRAVITY)
         list(APPEND cosmictiger_source_files
+            src/gravity/fmm_order.cpp
+            src/gravity/error.cpp
+            src/gravity/error_cuda.cu
+            src/gravity/reference_table.cpp
+            src/scenarios/cosmology.cpp
+            src/scenarios/plummer.cpp
+            src/scenarios/glass.cpp
+        )
+    endif()
+    if(COSMICTIGER_WITH_ROCKSTAR)
+        list(APPEND cosmictiger_source_files
             src/analysis/compress.cpp
             src/analysis/group_entry.cpp
             src/analysis/healpix.cu
@@ -42,15 +53,8 @@ function(cosmictiger_feature_sources output)
             src/analysis/rockstar.cpp
             src/analysis/rockstar.cu
             src/analysis/rockstar_catalogue.cpp
-            src/gravity/fmm_order.cpp
-            src/gravity/error.cpp
-            src/gravity/error_cuda.cu
-            src/gravity/reference_table.cpp
             src/analysis/bh.cpp
             src/analysis/bh.cu
-            src/scenarios/cosmology.cpp
-            src/scenarios/plummer.cpp
-            src/scenarios/glass.cpp
         )
     endif()
 
@@ -114,7 +118,7 @@ function(cosmictiger_feature_sources output)
         endif()
         if(COSMICTIGER_ENABLE_P3M_FMM)
             list(APPEND cosmictiger_source_files
-                src/gravity/p3m/fmm/short_fmm.cpp
+                src/gravity/p3m/fmm_short_fmm.cpp
             )
         endif()
     endif()
@@ -157,37 +161,36 @@ function(cosmictiger_feature_sources output)
             src/scenarios/gresho.cpp
             src/scenarios/exact_sod.cpp
             src/scenarios/sedov.cpp
-            src/hydro/sph/sph.cpp
-            src/hydro/sph/sph.cu
-            src/hydro/sph/sph_cpu.cpp
-            src/hydro/sph/sph_hydro.cu
-            src/hydro/sph/sph_hydro_cpu.cpp
-            src/hydro/sph/sph_particles.cpp
-            src/hydro/sph/sph_prehydro.cu
-            src/hydro/sph/sph_prehydro_cpu.cpp
-            src/hydro/sph/sph_rungs.cu
-            src/hydro/sph/sph_rungs_cpu.cpp
-            src/hydro/sph/sph_tree.cpp
+            src/sph/sph.cpp
+            src/sph/cuda.cu
+            src/sph/cpu.cpp
+            src/sph/hydro.cu
+            src/sph/hydro_cpu.cpp
+            src/sph/particles.cpp
+            src/sph/prehydro.cu
+            src/sph/prehydro_cpu.cpp
+            src/sph/rungs.cu
+            src/sph/rungs_cpu.cpp
+            src/sph/tree.cpp
             src/scenarios/sphere.cpp
             src/scenarios/sphere.cu
-            src/hydro/sph/cullen_and_dehnen/particle_exchange.cpp
-            src/hydro/sph/cullen_and_dehnen/viscosity.cpp
-            src/hydro/sph/morris_and_monaghan/viscosity.cpp
-            src/hydro/sph/price_etal/viscosity.cpp
+            src/sph/viscosity/cullen_and_dehnen_particle_exchange.cpp
+            src/sph/viscosity/cullen_and_dehnen.cpp
+            src/sph/viscosity/price_etal.cpp
         )
         if(COSMICTIGER_ENABLE_CHEMISTRY)
-            list(APPEND cosmictiger_source_files src/hydro/sph/sph_chemistry.cpp)
+            list(APPEND cosmictiger_source_files src/chemistry/sph.cpp)
         endif()
         if(COSMICTIGER_ENABLE_STAR_FORMATION)
-            list(APPEND cosmictiger_source_files src/hydro/sph/star_formation.cpp
-                src/hydro/sph/star_formation_cuda.cu)
+            list(APPEND cosmictiger_source_files src/stars/star_formation.cpp
+                src/stars/star_formation_cuda.cu)
         endif()
     endif()
 
     if(BUILD_TESTING)
         list(APPEND cosmictiger_source_files
             tests/test.cpp)
-        if(COSMICTIGER_WITH_GRAVITY)
+        if(COSMICTIGER_WITH_ROCKSTAR)
             list(APPEND cosmictiger_source_files
                 tests/analysis_backends.cpp tests/bh.cpp tests/groups_catalogue.cpp tests/rockstar.cpp)
         endif()

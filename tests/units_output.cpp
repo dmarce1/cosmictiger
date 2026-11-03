@@ -12,6 +12,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <format>
+#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -21,16 +23,16 @@
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/io/view.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 #if COSMICTIGER_ENABLE_CHEMISTRY
-#include <cosmictiger/hydro/sph/sph_chemistry.hpp>
+#include <cosmictiger/chemistry/sph.hpp>
 #endif
 #if COSMICTIGER_ENABLE_STAR_FORMATION
-#include <cosmictiger/hydro/sph/star_formation.hpp>
+#include <cosmictiger/stars/star_formation.hpp>
 #endif
 
 namespace detail {
@@ -147,8 +149,8 @@ void checkUnitsOutputCommandLine(DBfile* file) {
     requireUnitsOutput(foundHpxThreads && foundTest, "original HPX and application arguments");
 }
 
-void checkUnitsOutputField(DBfile* file, std::string const& name, int count, double expected,
-    char const* unit = nullptr, char const* expectedMesh = nullptr) {
+void checkUnitsOutputField(
+    DBfile* file, std::string const& name, int count, double expected, char const* unit = nullptr) {
     UnitsOutputField field(DBGetPointvar(file, name.c_str()), DBFreePointvar);
     requireUnitsOutput(bool(field), name + " field exists");
     requireUnitsOutput(field->datatype == DB_DOUBLE, name + " double datatype");
@@ -156,28 +158,47 @@ void checkUnitsOutputField(DBfile* file, std::string const& name, int count, dou
     if (unit) {
         requireUnitsOutput(field->units && std::string(field->units) == unit, name + " units");
     }
-    bool const gas = name.find("hydro_") != std::string::npos || name.ends_with("rho") ||
-        name.ends_with("eint") || name.ends_with("kernel_support_radius") ||
-        name.ends_with("alpha");
-    requireUnitsOutput(field->meshname &&
-            std::filesystem::path(field->meshname).filename() ==
-                (expectedMesh ? expectedMesh : (gas ? "gas" : "dark_matter")),
-        name + " attaches to the correct particle species");
+    requireUnitsOutput(
+        field->meshname && std::filesystem::path(field->meshname).filename() == "mesh",
+        name + " attaches to the species mesh");
     auto const* values = static_cast<double const*>(field->vals[0]);
     for (int i = 0; i < field->nels; i++) {
         requireUnitsOutputClose(values[i], expected, name + " value");
     }
 }
 
+void checkUnitsOutputMassExpression(
+    DBfile* file, std::string const& path, double expected, char const* unit) {
+    std::string const gas = path + "gas/";
+    requireUnitsOutput(!DBInqVarExists(file, (gas + "mass").c_str()),
+        "SPH mass is not stored as a particle array");
+    std::unique_ptr<DBdefvars, decltype(&DBFreeDefvars)> definition(
+        DBGetDefvars(file, (gas + "mass_expression").c_str()), DBFreeDefvars);
+    char directory[4096];
+    requireUnitsOutput(DBGetDir(file, directory) >= 0, "current output directory");
+    std::string const fullPath = std::string(directory + 1) + "/" + gas;
+    requireUnitsOutput(definition && definition->ndefs == 1 &&
+            definition->types[0] == DB_VARTYPE_SCALAR &&
+            std::string(definition->names[0]) == fullPath + "mass",
+        "mass is a single scalar expression with the species path");
+    std::string const expression(definition->defns[0]);
+    std::string const begin = "nodal_constant(<" + fullPath + "mesh>, ";
+    requireUnitsOutput(expression.starts_with(begin) && expression.ends_with(")"),
+        "mass expression is node centered on the gas mesh");
+    requireUnitsOutputClose(
+        std::stod(expression.substr(begin.size())), expected, "shared SPH mass value");
+    requireUnitsOutput(readUnitsOutputText(file, gas + "mass_unit") == unit, "mass units");
+}
+
 void checkUnitsOutputSourceFields(DBfile* file, std::string const& path, int rank) {
 #if COSMICTIGER_ENABLE_CHEMISTRY
-    auto const chemistry = sphChemistryOutput(sphParticlesChemistryStates[0],
+    auto const chemistry = sphChemistryOutput(sphParticlesElectronFractions[0],
         sphParticlesInternalEnergy(0), sphParticlesDensity(0), 0.25);
     char const* names[] = {"chem_HI", "chem_HII", "chem_HeI", "chem_HeII", "chem_HeIII",
         "chem_electrons", "temperature", "mean_molecular_weight", "frozen_gamma"};
     for (size_t field = 0; field < chemistry.size(); ++field) {
         checkUnitsOutputField(
-            file, path + names[field], 1, chemistry[field], field == 6 ? "K" : "1", "gas");
+            file, path + "gas/" + names[field], 1, chemistry[field], field == 6 ? "K" : "1");
     }
 #endif
 #if COSMICTIGER_ENABLE_STAR_FORMATION
@@ -185,7 +206,7 @@ void checkUnitsOutputSourceFields(DBfile* file, std::string const& path, int ran
     double hotTemperature = 0.0;
     if (phase.starForming) {
         auto const parameters = starFormationParameters(0.25);
-        double electrons = sphParticlesChemistryStates[0].electronFraction;
+        double electrons = sphParticlesElectronFractions[0];
         double const density =
             double(sphParticlesDensity(0)) * parameters.densityScale / (0.25 * 0.25 * 0.25);
         requireUnitsOutput(
@@ -193,18 +214,18 @@ void checkUnitsOutputSourceFields(DBfile* file, std::string const& path, int ran
                 hotTemperature) == gadget4::Status::Success,
             "reference hot-phase temperature");
     }
-    checkUnitsOutputField(file, path + "cold_fraction", 1, phase.coldFraction, "1", "gas");
-    checkUnitsOutputField(file, path + "hot_temperature", 1, hotTemperature, "K", "gas");
-    checkUnitsOutputField(file, path + "specific_sfr", 1,
-        particlesStarFormationStates[2].specificStarFormationRate, "1/s", "gas");
+    checkUnitsOutputField(file, path + "gas/cold_fraction", 1, phase.coldFraction, "1");
+    checkUnitsOutputField(file, path + "gas/hot_temperature", 1, hotTemperature, "K");
+    checkUnitsOutputField(file, path + "gas/specific_sfr", 1,
+        particlesStarFormationStates[2].specificStarFormationRate, "1/s");
     uint64_t const identity = (uint64_t{1} << 60) + 3 * uint64_t(rank) + 3;
-    checkUnitsOutputField(file, path + "hydro_id_low", 1, uint32_t(identity), "1", "gas");
-    checkUnitsOutputField(file, path + "hydro_id_high", 1, identity >> 32, "1", "gas");
+    checkUnitsOutputField(file, path + "gas/id_low", 1, uint32_t(identity), "1");
+    checkUnitsOutputField(file, path + "gas/id_high", 1, identity >> 32, "1");
 #endif
 }
 
 void checkUnitsOutputViscosity(DBfile* file, std::string const& path) {
-    std::string const name = path + "alpha";
+    std::string const name = path + "gas/alpha";
     if (getOptions().hydro.viscosityEvolution == "none") {
         requireUnitsOutput(
             !DBInqVarExists(file, name.c_str()), name + " is absent for constant viscosity");
@@ -260,7 +281,8 @@ void checkConvertedUnitsOutput(DBfile* file, bool cosmological, bool lab) {
     char const* velocityUnit = cosmological ? "km/s" : "cm/s";
     char const* massUnit = cosmological ? "Msun/h" : "g";
     char const* densityUnit = cosmological ? "(Msun/h)/(Mpc/h)^3" : "g/cm^3";
-    char const* energyUnit = cosmological ? "(km/s)^2" : "erg/g";
+    char const* entropyUnit =
+        cosmological ? "(km/s)^2/((Msun/h)/(Mpc/h)^3)^(gamma-1)" : "(erg/g)/(g/cm^3)^(gamma-1)";
     requireUnitsOutput(
         readUnitsOutputText(file, path + "unit_system") == (cosmological ? "cosmological" : "cgs"),
         "unit system metadata");
@@ -270,8 +292,9 @@ void checkConvertedUnitsOutput(DBfile* file, bool cosmological, bool lab) {
         "peculiar velocity convention");
     requireUnitsOutput(
         readUnitsOutputText(file, path + "hubble_flow") == "excluded", "Hubble flow excluded");
-    requireUnitsOutput(readUnitsOutputText(file, path + "specific_energy_convention") == "physical",
-        "physical energy convention");
+    requireUnitsOutput(readUnitsOutputText(file, path + "entropy_convention") ==
+            "A = P_physical / rho_physical^gamma",
+        "physical entropy convention");
     requireUnitsOutput(readUnitsOutputText(file, path + "integration_state") == "stored_staggered",
         "explicit staggered snapshot convention");
     requireUnitsOutput(
@@ -292,7 +315,10 @@ void checkConvertedUnitsOutput(DBfile* file, bool cosmological, bool lab) {
         "cosmological age convention");
     double const epoch = readUnitsOutputScalar(file, path + "time");
     requireUnitsOutput(epoch > 0.0, "positive cosmological age");
-    UnitsOutputMesh mesh(DBGetPointmesh(file, (path + "dark_matter").c_str()), DBFreePointmesh);
+    double const entropyScale = energyScale * a * a *
+        std::pow(densityScale * (lab ? a * a * a : 1.0), 1.0 - getOptions().hydro.gamma);
+    UnitsOutputMesh mesh(
+        DBGetPointmesh(file, (path + "dark_matter/mesh").c_str()), DBFreePointmesh);
     requireUnitsOutput(bool(mesh) && mesh->datatype == DB_DOUBLE && mesh->nels == 2,
         "dark matter mesh shape and datatype");
     requireUnitsOutputClose(mesh->dtime, epoch, "mesh time metadata");
@@ -311,19 +337,18 @@ void checkConvertedUnitsOutput(DBfile* file, bool cosmological, bool lab) {
             requireUnitsOutput(hi > lo, "adjacent fixed-point positions stay distinct");
         }
     }
-    checkUnitsOutputGas(file, path + "gas", 1, coordinateScale, lengthUnit, epoch);
-    checkUnitsOutputField(file, path + "vx", 2, 0.0, velocityUnit);
-    checkUnitsOutputField(file, path + "vy", 2, 0.0, velocityUnit);
-    checkUnitsOutputField(file, path + "vz", 2, 0.0, velocityUnit);
-    checkUnitsOutputField(file, path + "mass", 2, 0.75 * massScale, massUnit);
-    checkUnitsOutputField(file, path + "hydro_vx", 1, 0.125 * velocityScale, velocityUnit);
-    checkUnitsOutputField(file, path + "hydro_vy", 1, 0.25 * velocityScale, velocityUnit);
-    checkUnitsOutputField(file, path + "hydro_vz", 1, -0.5 * velocityScale, velocityUnit);
-    checkUnitsOutputField(file, path + "hydro_mass", 1, 0.25 * massScale, massUnit);
-    checkUnitsOutputField(file, path + "rho", 1, 8.0 * densityScale, densityUnit);
-    checkUnitsOutputField(file, path + "eint", 1, 4.0 * energyScale, energyUnit);
-    checkUnitsOutputField(
-        file, path + "kernel_support_radius", 1, 0.03125 * coordinateScale, lengthUnit);
+    checkUnitsOutputGas(file, path + "gas/mesh", 1, coordinateScale, lengthUnit, epoch);
+    checkUnitsOutputField(file, path + "dark_matter/vx", 2, 0.0, velocityUnit);
+    checkUnitsOutputField(file, path + "dark_matter/vy", 2, 0.0, velocityUnit);
+    checkUnitsOutputField(file, path + "dark_matter/vz", 2, 0.0, velocityUnit);
+    checkUnitsOutputField(file, path + "dark_matter/mass", 2, 0.75 * massScale, massUnit);
+    checkUnitsOutputField(file, path + "gas/vx", 1, 0.125 * velocityScale, velocityUnit);
+    checkUnitsOutputField(file, path + "gas/vy", 1, 0.25 * velocityScale, velocityUnit);
+    checkUnitsOutputField(file, path + "gas/vz", 1, -0.5 * velocityScale, velocityUnit);
+    checkUnitsOutputMassExpression(file, path, 0.25 * massScale, massUnit);
+    checkUnitsOutputField(file, path + "gas/rho", 1, 8.0 * densityScale, densityUnit);
+    checkUnitsOutputField(file, path + "gas/A", 1, 4.0 * entropyScale, entropyUnit);
+    checkUnitsOutputField(file, path + "gas/r", 1, 0.03125 * coordinateScale, lengthUnit);
 }
 
 }    // namespace detail
@@ -362,7 +387,7 @@ void unitsOutputParticleFixture(bool initialize) {
         }
 #if COSMICTIGER_ENABLE_CHEMISTRY
         if (getOptions().chemistry.enabled) {
-            sphParticlesChemistryStates[0] = {0.25f};
+            sphParticlesElectronFractions[0] = {0.25f};
         }
 #endif
 #if COSMICTIGER_ENABLE_STAR_FORMATION
@@ -373,11 +398,12 @@ void unitsOutputParticleFixture(bool initialize) {
         sphParticlesParticleIndex(0) = 2;
         sphParticlesSupportRadius(0) = 0.03125;
         sphParticlesDensity(0) = 8.0;
-        sphParticlesEntropies[0] = 4.0;
+        sphParticlesEntropyInitialized = true;
+        sphParticlesThermalScaleFactor = 0.25;
+        sphParticlesEntropy(0) = 4.0;
         if (getOptions().hydro.viscosityEvolution != "none") {
             // Distinct from the scalar CLI alpha; unchanged by unit/frame conversion.
-            sphParticlesViscosityStates[0] = {
-                detail::kUnitsOutputViscosityAlpha, 0.0f, detail::kUnitsOutputViscosityAlpha};
+            sphParticlesBulkViscosityCoefficients[0] = detail::kUnitsOutputViscosityAlpha;
         }
     } else {
         detail::requireUnitsOutput(particlesPos(kXDimension, 0).raw() ==
@@ -418,6 +444,8 @@ void unitsOutputSourceFixture(int snapshot) {
 void unitsOutputTest() {
     using namespace detail;
     auto const originalOptions = getOptions();
+    bool const originalEntropyInitialized = sphParticlesEntropyInitialized;
+    double const originalThermalScaleFactor = sphParticlesThermalScaleFactor;
     auto options = originalOptions;
     options.hydro.enabled = true;
 #if COSMICTIGER_ENABLE_CHEMISTRY
@@ -440,7 +468,7 @@ void unitsOutputTest() {
     options.initial.gasMass = 0.25;
     options.output.units = "code";
     options.output.frame = "comoving";
-    options.hydro.viscosityAlpha = 1.75;
+    options.hydro.bulkViscosityCoefficient = 1.75;
     options.gravity.supportRadius = 0.125 *
         selectedGravityKernel().supportRadiusPerEffectiveRadius /
         std::pow(double(options.initial.numberOfParticles), 1.0 / kDimensions);
@@ -457,7 +485,7 @@ void unitsOutputTest() {
         checkUnitsOutputCommandLine(file.get());
         checkUnitsOutputViscosity(file.get(), "");
         checkUnitsOutputSourceFields(file.get(), "", rank);
-        UnitsOutputMesh mesh(DBGetPointmesh(file.get(), "dark_matter"), DBFreePointmesh);
+        UnitsOutputMesh mesh(DBGetPointmesh(file.get(), "dark_matter/mesh"), DBFreePointmesh);
         requireUnitsOutput(bool(mesh) && mesh->datatype == DB_DOUBLE && mesh->nels == 2,
             "code-unit dark matter mesh schema");
         auto const* positions = static_cast<double const*>(mesh->coords[kXDimension]);
@@ -467,14 +495,18 @@ void unitsOutputTest() {
             *bounds.second, 0.5 + std::ldexp(1.0, -32), "second code-unit dark matter position");
         requireUnitsOutput(*bounds.second > *bounds.first,
             "code-unit output preserves adjacent fixed-point positions");
-        checkUnitsOutputGas(file.get(), "gas", 1, 1.0);
-        checkUnitsOutputField(file.get(), "hydro_vx", 1, 0.125);
-        checkUnitsOutputField(file.get(), "hydro_rung", 1, 1.0);
-        checkUnitsOutputField(file.get(), "rho", 1, 8.0);
-        checkUnitsOutputField(file.get(), "eint", 1, 4.0);
-        checkUnitsOutputField(file.get(), "kernel_support_radius", 1, 0.03125);
+        checkUnitsOutputGas(file.get(), "gas/mesh", 1, 1.0);
+        checkUnitsOutputField(file.get(), "gas/vx", 1, 0.125);
+        checkUnitsOutputMassExpression(file.get(), "", 0.25, "code");
         requireUnitsOutput(
-            !DBInqVarExists(file.get(), "cgs/lab/gas"), "code-unit output selection");
+            !DBInqVarExists(file.get(), "gas/eint") && !DBInqVarExists(file.get(), "gas/etot"),
+            "output stores entropy, not energy");
+        checkUnitsOutputField(file.get(), "gas/rung", 1, 1.0);
+        checkUnitsOutputField(file.get(), "gas/rho", 1, 8.0);
+        checkUnitsOutputField(file.get(), "gas/A", 1, 4.0);
+        checkUnitsOutputField(file.get(), "gas/r", 1, 0.03125);
+        requireUnitsOutput(
+            !DBInqVarExists(file.get(), "cgs/lab/gas/mesh"), "code-unit output selection");
     }
     options.output.units = "both";
     options.output.frame = "both";
@@ -492,7 +524,7 @@ void unitsOutputTest() {
             }
         }
         requireUnitsOutput(
-            !DBInqVarExists(file.get(), "gas"), "converted selection omits code mesh");
+            !DBInqVarExists(file.get(), "gas/mesh"), "converted selection omits code mesh");
     }
     options.output.units = "cgs";
     options.output.frame = "lab";
@@ -502,8 +534,8 @@ void unitsOutputTest() {
         auto file = openUnitsOutput(2, rank);
         checkUnitsOutputCommandLine(file.get());
         checkConvertedUnitsOutput(file.get(), false, true);
-        requireUnitsOutput(!DBInqVarExists(file.get(), "cgs/comoving/gas") &&
-                !DBInqVarExists(file.get(), "cosmological/lab/gas"),
+        requireUnitsOutput(!DBInqVarExists(file.get(), "cgs/comoving/gas/mesh") &&
+                !DBInqVarExists(file.get(), "cosmological/lab/gas/mesh"),
             "CGS lab selection");
     }
     options.output.units = "cosmological";
@@ -514,8 +546,8 @@ void unitsOutputTest() {
         auto file = openUnitsOutput(3, rank);
         checkUnitsOutputCommandLine(file.get());
         checkConvertedUnitsOutput(file.get(), true, false);
-        requireUnitsOutput(!DBInqVarExists(file.get(), "cosmological/lab/gas") &&
-                !DBInqVarExists(file.get(), "cgs/comoving/gas"),
+        requireUnitsOutput(!DBInqVarExists(file.get(), "cosmological/lab/gas/mesh") &&
+                !DBInqVarExists(file.get(), "cgs/comoving/gas/mesh"),
             "cosmological comoving selection");
     }
     unitsOutputParticleFixture(false);
@@ -535,7 +567,10 @@ void unitsOutputTest() {
         }
     }
 #endif
+    sphParticlesEntropyInitialized = originalEntropyInitialized;
+    sphParticlesThermalScaleFactor = originalThermalScaleFactor;
     setOptions(originalOptions);
     viewConfigure();
-    PRINT("Boost.Units Silo output checks passed (%i localities)\n", hpxSize());
+    std::cout << std::format("Boost.Units Silo output checks passed ({:d} localities)\n", hpxSize())
+              << std::flush;
 }

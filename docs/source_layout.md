@@ -3,7 +3,12 @@
 Public headers live under `cosmictiger/` and implementations under `src/`.
 Both trees are organized by subsystem and algorithm. A backend with one source
 file can live directly in its subsystem directory, as `src/chemistry/recombination.cpp`
-does. Common machinery sits directly in its subsystem directory; there is no
+does. Do not create single-file directories: flatten the file into its parent with
+a prefix naming the former directory. Within a subsystem directory, omit a
+redundant subsystem prefix (for example, `sph/cuda.hpp`, not `sph/sph_cuda.hpp`).
+This applies independently to the header and source trees; the single-file
+PMMM PP header and P3M FMM source are `gravity/pmmm/pp_near_pp.hpp` and
+`gravity/p3m/fmm_short_fmm.cpp`. Common machinery sits directly in its subsystem directory; there is no
 `shared/` layer.
 
 ## Build libraries
@@ -125,43 +130,60 @@ inactive; homogeneous recombination remains available with either setting.
 Homogeneous recombination is built only when a gravity algorithm is enabled.
 
 ```text
-hydro/sph/
-├── sph.*, sph_cpu.hpp, sph_cuda.hpp, sph_kernel.hpp
-├── sph_particles.*, sph_tree.*
-├── sph_prehydro_cpu.cpp, sph_prehydro.cu
-├── sph_hydro_cpu.cpp, sph_hydro.cu
-├── sph_rungs_cpu.cpp, sph_rungs.cu
-├── sph_chemistry.*, sph_flops.hpp, kernels.hpp, viscosity_state.hpp
-├── volume.hpp
-├── variational/
-│   └── equations.hpp
-├── monaghan/
-│   └── viscosity.hpp
-├── morris_and_monaghan/
-│   └── viscosity.*
-├── cullen_and_dehnen/
-│   ├── viscosity.*
-│   ├── state.hpp
-│   └── particle_exchange.*
-├── price_etal/
-│   └── viscosity.*
-└── balsara/
-    └── shear_limiter.hpp
+sph/                                      # Under both cosmictiger/ and src/
+├── sph.*, cpu.*, cuda.*
+├── particles.*, tree.*
+├── prehydro_cpu.cpp, prehydro.cu
+├── hydro_cpu.cpp, hydro.cu
+├── rungs_cpu.cpp, rungs.cu
+├── run_data.hpp, flops.hpp, volume.hpp, variable_smoothing_lengths.hpp
+└── viscosity/
+    ├── monaghan.hpp, morris_and_monaghan.hpp, balsara.hpp, hu_etal.hpp
+    ├── cullen_and_dehnen.hpp, cullen_and_dehnen.cpp
+    ├── cullen_and_dehnen_state.hpp
+    ├── cullen_and_dehnen_particle_exchange.hpp, cullen_and_dehnen_particle_exchange.cpp
+    └── price_etal.hpp, price_etal.cpp
+
+chemistry/sph.*                            # Particle cooling integration
+stars/
+├── star_formation.*, star_formation_cuda.*, star_formation_kernel.hpp
+└── springel_and_hernquist/                 # Header-only equations and cooling
+    ├── equations.hpp
+    └── cooling.hpp
 ```
 
-The `hydro/sph/` directory owns particle storage, neighbor traversal, smoothing and
-density loops, execution, timesteps, and common viscosity state. The Monaghan
-module supplies pair viscosity;
-Morris–Monaghan and Cullen–Dehnen supply the coefficient-evolution laws. The
-Balsara module supplies the optional shear limiter. `volume.hpp` holds the
-weighted-volume sums, support derivatives, constraint, and grad-H factors.
-`variational/equations.hpp` holds the compatible pressure force and thermal work
-used for every SPH run ([variational SPH](variational_sph.md)).
-The common CPU and CUDA loops call those modules, so selecting a viscosity model
-does not create a second neighbor engine.
+The `sph/` directory owns particle storage, neighbor traversal, smoothing and
+density loops, execution, and timesteps. `sph/viscosity/` owns the viscosity
+models and their diagnostic state/cache. The Monaghan module supplies pair
+viscosity; Morris–Monaghan, Cullen–Dehnen, Hu, and Price et al. supply
+coefficient-evolution laws. The Balsara module supplies the optional shear
+limiter. `volume.hpp` holds the weighted-volume sums, support derivatives,
+constraint, and grad-H factors. `variable_smoothing_lengths.hpp` holds the
+compatible pressure force and thermal work used for every SPH run
+([variational SPH](variational_sph.md)). The common CPU and CUDA loops call
+those modules, so selecting a viscosity model does not create a second
+neighbor engine.
+
+`tree.*` builds eight-way spatial subdivisions for each rank's SPH particles.
+Octant bit `d` selects the upper half of dimension `d`; empty octants have invalid
+child IDs and are skipped by both construction and neighbor traversal. The
+existing binary domain-key hierarchy remains the routing layer between ranks.
+Depths 0 through 15 are allowed. A node that still needs subdivision at depth 15
+throws `std::out_of_range` because its children would require depth 16; this also
+rejects unresolved coincident-particle buckets. Child tasks finish before a
+construction exception propagates, so the arena can be safely reset or released.
+
+`run_data.hpp` contains production CPU/CUDA run data and shared source-completion
+and support helpers; it is not a smoothing-kernel catalogue. Ideal-gas entropy
+conversions live with the entropy-backed particle accessors in `particles.hpp`.
+The independent cubic-spline reference formulas live in `tests/sph/kernels.hpp`;
+production smoothing kernels remain in `cosmictiger/math/`.
+Cooling stores a plain `float electronFraction` in batch and migration records,
+with the particle array named `sphParticlesElectronFractions`. The default guess
+remains `1.0f`, and checkpoints retain one float per gas particle.
 
 The runtime selector remains
-`hydro.viscosityEvolution=none|morrisAndMonaghan|cullenAndDehnen`. Model-specific
+`hydro.viscosityEvolution=none|morrisAndMonaghan|cullenAndDehnen|priceEtAl|hu_etal`. Model-specific
 state allocation, migration, checkpoint identity, and output are handled at the
 existing storage and integration boundaries. Cullen–Dehnen's additional
 particle exchange is owned by its module.

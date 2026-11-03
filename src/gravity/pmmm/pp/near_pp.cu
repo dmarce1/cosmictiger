@@ -19,7 +19,7 @@
 
 #include <cosmictiger/cuda/cuda.hpp>
 #include <cosmictiger/cuda/cuda_stream.hpp>
-#include <cosmictiger/gravity/pmmm/pp/near_pp.hpp>
+#include <cosmictiger/gravity/pmmm/pp_near_pp.hpp>
 #include <cosmictiger/math/kernel.hpp>
 
 namespace pmmm::detail {

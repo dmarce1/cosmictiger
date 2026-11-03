@@ -1,7 +1,9 @@
 #include <cerrno>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <locale>
 #include <stdexcept>
 #include <string>
@@ -67,10 +69,13 @@ void writeBackgroundPlot(double finalConformalTime) {
     data.close();
     try {
         detail::renderBackgroundPlot(dataPath, imagePath);
-        PRINT("  Cosmological background plot: %s\n", imagePath.c_str());
+        std::cout << std::format("  Cosmological background plot: {:s}\n", imagePath.c_str())
+                  << std::flush;
     } catch (std::exception const& error) {
-        PRINT("  Warning: Unable to render cosmology.png: %s. Samples saved in %s\n", error.what(),
-            dataPath.c_str());
+        std::cout << std::format(
+                         "  Warning: Unable to render cosmology.png: {:s}. Samples saved in {:s}\n",
+                         error.what(), dataPath.c_str())
+                  << std::flush;
     }
 }
 

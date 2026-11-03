@@ -3,8 +3,8 @@
 
 #include <cuda_runtime.h>
 
-#include <cosmictiger/hydro/sph/springel_and_hernquist/equations.hpp>
 #include "cuda_test.hpp"
+#include <cosmictiger/stars/springel_and_hernquist/equations.hpp>
 
 namespace {
 namespace sh = springel_and_hernquist;

@@ -10,17 +10,19 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <format>
+#include <iostream>
 #include <numbers>
 #include <stdexcept>
 
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/terminal.hpp>
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/diagnostics.hpp>
 #include <cosmictiger/scenarios/exact_sod.hpp>
 #include <cosmictiger/scenarios/sod.hpp>
+#include <cosmictiger/sph/particles.hpp>
 
 namespace scenarios {
 
@@ -61,7 +63,7 @@ namespace detail {
         l1 /= norm1;
         l2 /= norm2;
         l2 = sqrt(l2);
-        PRINT("L1 = %e L2 = %e Lmax = %e\n", l1, l2, lmax);
+        std::cout << std::format("L1 = {:e} L2 = {:e} Lmax = {:e}\n", l1, l2, lmax) << std::flush;
         fclose(fp);
     }
 

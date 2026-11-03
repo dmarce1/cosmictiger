@@ -313,10 +313,10 @@ symmetric splitting does not make the backward-Euler source solver second order.
 | Existing component | Required change |
 | --- | --- |
 | `cosmictiger/core/options.hpp`, `src/core/options.cpp`, `cosmictiger/core/options_metadata.hpp` | Add a `chemistry` group for enablement, network, radiation model, tolerances and bounded solver work; validate incompatible selections and serialize the new fields |
-| `cosmictiger/hydro/sph/sph_particles.hpp`, `src/hydro/sph/sph_particles.cpp` | Add optional abundance storage and integration-stage state; include it in allocation, free, swap, sorting, checkpoint visitation, and particle migration |
-| `src/core/driver.cpp`, `src/hydro/sph/sph.cpp` | Add explicit chemistry scheduling, rung/timestep coupling, reduction of failures, and cache invalidation |
-| `src/hydro/sph/sph_hydro_cpu.cpp`, `src/hydro/sph/sph_hydro.cu`, prehydro/rung code | Consume the shared EOS pressure and sound speed; replace constant-γ assumptions when molecular thermodynamics is selected |
-| `cosmictiger/hydro/sph/sph_kernel.hpp` (`SphRunData`) and SPH remote caches | Stage required EOS/source fields consistently across CPU, CUDA and MPI localities |
+| `cosmictiger/sph/particles.hpp`, `src/sph/particles.cpp` | Add optional abundance storage and integration-stage state; include it in allocation, free, swap, sorting, checkpoint visitation, and particle migration |
+| `src/core/driver.cpp`, `src/sph/sph.cpp` | Add explicit chemistry scheduling, rung/timestep coupling, reduction of failures, and cache invalidation |
+| `src/sph/hydro_cpu.cpp`, `src/sph/hydro.cu`, prehydro/rung code | Consume the shared EOS pressure and sound speed; replace constant-γ assumptions when molecular thermodynamics is selected |
+| `cosmictiger/sph/run_data.hpp` (`SphRunData`) and SPH remote caches | Stage required EOS/source fields consistently across CPU, CUDA and MPI localities |
 | `src/cosmology/initialize.cpp` | Replace the fixed neutral 1000 K chemistry-enabled initialization with explicit abundances and thermal state from a named initial-condition model |
 | Checkpoint code and output writers | Save species convention, network/rate/EOS/radiation versions, tables, units, particle state and split/rung timing; expose species, temperature and chemistry diagnostics |
 | `CMakeLists.txt`, `tests/` | Add independent CPU tests, CUDA parity tests, integration/restart tests and controlled benchmarks |

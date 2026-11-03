@@ -10,6 +10,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <format>
+#include <iostream>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -94,7 +96,7 @@ PositionInteger meshDomainPosition(int identity, int dim, int fixture, int phase
 struct MeshDomainRecord {
     Array<PositionInteger, kDimensions> raw;
     Vector3<float> velocity;
-    GroupInteger lastGroup;
+    GroupInteger lastGroup = kNoParticleGroup;
     int rung;
     int tracer;
     ParticleInteger gravitySample;
@@ -124,7 +126,9 @@ void initializeMeshDomains(int fixture) {
             particlesVel(dim, identity) = float(identity + 1) + 0.25f * dim;
         }
         particlesRung(identity) = 1 + identity % 7;
-        particlesLastgroup(identity) = 1000 + identity;
+        if constexpr (COSMICTIGER_ENABLE_ROCKSTAR) {
+            particlesLastgroup(identity) = 1000 + identity;
+        }
         particlesTracer(identity) = identity % 2;
         particlesGravitySample(identity) = identity % 3 == 0 ? identity : -1;
     }
@@ -150,7 +154,9 @@ MeshDomainSnapshot readMeshDomains() {
             record.velocity[dim] = particlesVel(dim, index);
         }
         record.rung = particlesRung(index);
-        record.lastGroup = particlesLastgroup(index);
+        if constexpr (COSMICTIGER_ENABLE_ROCKSTAR) {
+            record.lastGroup = particlesLastgroup(index);
+        }
         record.tracer = particlesTracer(index);
         record.gravitySample = particlesGravitySample(index);
     }
@@ -392,10 +398,13 @@ void verifyMeshDomains(int fixture, int phase, bool rebound, int coarseMeshSize)
                         record.velocity[dim] == float(identity + 1) + 0.25f * dim,
                     "partitioning or migration detached a particle position or velocity");
             }
-            requireMeshDomain(record.rung == 1 + identity % 7 &&
-                    record.lastGroup == 1000 + identity && record.tracer == identity % 2 &&
+            requireMeshDomain(record.rung == 1 + identity % 7 && record.tracer == identity % 2 &&
                     record.gravitySample == (identity % 3 == 0 ? identity : -1),
-                "partitioning or migration detached a rung, group, tracer or gravity sample");
+                "partitioning or migration detached a rung, tracer or gravity sample");
+            if constexpr (COSMICTIGER_ENABLE_ROCKSTAR) {
+                requireMeshDomain(record.lastGroup == 1000 + identity,
+                    "partitioning or migration detached a particle's group history");
+            }
             allRecords.push_back(record);
             owners.push_back(rank);
         }
@@ -444,7 +453,7 @@ void meshDomainsTest() {
     options.gravity.meshSize = detail::kMeshDomainMeshSize;
     options.gravity.pmmmNearWidth = detail::kMeshDomainNearWidth;
     options.gravity.errorInterval = 1;
-    options.analysis.groups = true;
+    options.analysis.groups = COSMICTIGER_ENABLE_ROCKSTAR != 0;
     options.analysis.tracers = true;
     options.analysis.saveForce = false;
     for (int const coarseMeshSize : detail::kMeshDomainCoarseMeshSizes) {
@@ -518,7 +527,8 @@ void meshDomainsTest() {
     for (auto& future : pending) {
         future.get();
     }
-    PRINT("Coarse-aligned particle domains, unsplit cells, count-balanced cuts and migration "
-          "passed (%i bits, %i ranks)\n",
-        kPositionBits, hpxSize());
+    std::cout << std::format("Coarse-aligned particle domains, unsplit cells, count-balanced cuts "
+                             "and migration passed ({:d} bits, {:d} ranks)\n",
+                     kPositionBits, hpxSize())
+              << std::flush;
 }

@@ -165,7 +165,7 @@ def checkViscosityRestarts(executable, baseWorkdir):
               "--run.endTime=0.00001", "--checkpoint.intervalSeconds=0",
               "--output.directory=.", "--output.silo=false", "--analysis.views=false",
               "--analysis.power=false", "--analysis.groups=false", "--lightcone.enabled=false"]
-    for model in ("none", "morrisAndMonaghan", "cullenAndDehnen", "priceEtAl"):
+    for model in ("none", "morrisAndMonaghan", "cullenAndDehnen", "priceEtAl", "hu_etal"):
         for limiter in (False, True):
             name = f"viscosity_{model}_{int(limiter)}"
             options = common + [f"--hydro.viscosityEvolution={model}",
@@ -195,6 +195,9 @@ def checkViscosityRestarts(executable, baseWorkdir):
                 if model == "cullenAndDehnen":
                     mutations.update({"maximum": "--hydro.viscosityAlphaMax=3",
                                       "decay": "--hydro.viscosityDecayCD=0.1"})
+                if model == "hu_etal":
+                    mutations.update({"maximum": "--hydro.viscosityAlphaMaxHu=0.5",
+                                      "decay": "--hydro.viscosityDecayHu=0.1"})
                 if model == "priceEtAl":
                     mutations.update({"maximum": "--hydro.viscosityAlphaMaxPrice=0.5",
                                       "decay": "--hydro.viscosityDecayPrice=0.2"})

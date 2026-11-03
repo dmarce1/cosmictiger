@@ -127,7 +127,7 @@ void testInvalidInput(ZeroOrderUniverse universe) {
     broken.sigmaT.values.clear();
     rejects([&] { solveBoltzmannTransfers(broken, 0.1, {1.0}); }, "Reject empty opacity table");
     broken = universe;
-    broken.cs2.values.front() = std::numeric_limits<double>::infinity();
+    broken.soundSpeedSquared.values.front() = std::numeric_limits<double>::infinity();
     rejects([&] { solveBoltzmannTransfers(broken, 0.1, {1.0}); }, "Reject infinite sound speed");
     universe.params.hubble = std::numeric_limits<double>::infinity();
     rejects([&] { solveBoltzmannTransfers(universe, 0.1, {1.0}); }, "Reject infinite cosmology");

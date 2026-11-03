@@ -60,6 +60,11 @@ To run a collisionless cosmology, set
 | [lcdm_present.ini](lcdm_present.ini) | `cosmology` | Gravity, SPH, equilibrium cooling, and star formation; 99 coarse intervals | `./output/lcdm_present/` |
 | [star_formation/lcdm.ini](star_formation/lcdm.ini) | `cosmology` | Gravity, SPH, equilibrium cooling, and star formation; CPU, 64 coarse intervals | `./output/star_formation/` |
 
+For Gresho, `initial.closePack=true` uses a periodic face-centered cubic lattice
+with four particles per conventional cell, or `4 * particlesPerDimension^3`
+particles. The false setting uses one particle per cell. The cosmological
+initializer's existing two-particle lattice is body-centered cubic.
+
 Run from a build directory containing the executable and any runtime inputs:
 
 ```sh

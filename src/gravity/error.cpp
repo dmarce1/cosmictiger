@@ -4,8 +4,10 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <format>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -201,8 +203,10 @@ void gravityErrorBegin() {
             samples[sample.slot] = sample;
         }
     }
-    PRINT("Computing direct gravity reference for %zu of %zu particles using %s Ewald table\n",
-        sampleCount, offsets.back(), getOptions().gravity.errorCuda ? "CUDA" : "CPU");
+    std::cout << std::format("Computing direct gravity reference for {:d} of {:d} particles using "
+                             "{:s} Ewald table\n",
+                     sampleCount, offsets.back(), getOptions().gravity.errorCuda ? "CUDA" : "CPU")
+              << std::flush;
     Vector<hpx::future<Vector<detail::GravityErrorAcceleration>>> references;
     for (auto const& locality : localities) {
         references.push_back(hpx::async<GravityErrorDirectAction>(locality, samples));
@@ -296,8 +300,9 @@ void gravityErrorFinish(int coarseStep, double time, double scaleFactor) {
     if (!output) {
         throw std::runtime_error("Cannot write gravity error output: " + path);
     }
-    PRINT("Gravity error at coarse step %i (%zu particles): RMS absolute %.6e, RMS relative "
-          "%.6e, max relative %.6e\n",
-        coarseStep, sampleCount, rmsAbsolute, rmsRelative, maxRelative);
+    std::cout << std::format("Gravity error at coarse step {:d} ({:d} particles): RMS absolute "
+                             "{:.6e}, RMS relative {:.6e}, max relative {:.6e}\n",
+                     coarseStep, sampleCount, rmsAbsolute, rmsRelative, maxRelative)
+              << std::flush;
     detail::gravityErrorReference.clear();
 }

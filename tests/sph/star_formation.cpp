@@ -4,16 +4,17 @@
 #include <bit>
 #include <cmath>
 #include <cstdio>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include <cosmictiger/chemistry/sph.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/hydro/sph/sph_chemistry.hpp>
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
-#include <cosmictiger/hydro/sph/star_formation.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
+#include <cosmictiger/sph/particles.hpp>
+#include <cosmictiger/stars/star_formation.hpp>
 
 namespace detail {
 constexpr double kSfScale = 0.25;
@@ -76,7 +77,7 @@ void initializeSfFixture() {
         sphParticlesSetInternalEnergy(index, sfStoredEnergy(model.parameters.coldEnergy));
         sphParticlesSupportRadius(index) = 0.125f;
         sphParticlesEntropyRate(index) = 0.0f;
-        sphParticlesChemistryStates[index] = {};
+        sphParticlesElectronFractions[index] = 1.0f;
         for (int dim = 0; dim < kDimensions; ++dim) {
             particlesPos(dim, index) = 0.25 + index * 0.125;
             particlesVel(dim, index) = float(dim - 1) / 4.0f;
@@ -98,8 +99,8 @@ std::vector<SfRecord> sfSnapshot() {
         bool const gas = particlesType(index) == kSphType;
         auto const gasIndex = particlesCatIndex(index);
         record.energy = std::bit_cast<uint32_t>(gas ? sphParticlesInternalEnergy(gasIndex) : 0.0f);
-        record.electrons = std::bit_cast<uint32_t>(
-            gas ? sphParticlesChemistryStates[gasIndex].electronFraction : 0.0f);
+        record.electrons =
+            std::bit_cast<uint32_t>(gas ? sphParticlesElectronFractions[gasIndex] : 0.0f);
         for (int dim = 0; dim < kDimensions; ++dim) {
             record.velocity[dim] = std::bit_cast<uint32_t>(particlesVel(dim, index));
         }
@@ -140,7 +141,7 @@ std::vector<SfRecord> sfSourceReference() {
     for (ParticleInteger gas = 1; gas < 3; ++gas) {
         star_formation_backend::Input input;
         input.state = particlesStarFormationStates[sphParticlesParticleIndex(gas)];
-        input.chemistry = sphParticlesChemistryStates[gas];
+        input.electronFraction = sphParticlesElectronFractions[gas];
         input.density = sphParticlesDensity(gas);
         input.energy = sphParticlesInternalEnergy(gas);
         input.rung = sphParticlesRung(gas);
@@ -148,7 +149,7 @@ std::vector<SfRecord> sfSourceReference() {
         requireSf(output.status == 0, "scalar source reference failed");
         SfRecord record;
         record.energy = std::bit_cast<uint32_t>(output.energy);
-        record.electrons = std::bit_cast<uint32_t>(output.chemistry.electronFraction);
+        record.electrons = std::bit_cast<uint32_t>(output.electronFraction);
         record.specificRate = std::bit_cast<uint64_t>(output.state.specificStarFormationRate);
         result.push_back(record);
     }
@@ -250,7 +251,8 @@ void starFormationTest() {
             "conversion changed momentum");
     }
     starFormationOpenNewStars(detail::sfStep(), detail::kSfScale, detail::sfStep(), 3, false);
-    PRINT("GADGET-4 star formation passed: full-step event-before-cooling, saved SFR, "
-          "inactive gas, electron state, energy ledger, failed-batch atomicity, "
-          "checkpoint, and whole-particle conversion\n");
+    std::cout << "GADGET-4 star formation passed: full-step event-before-cooling, saved SFR, "
+                 "inactive gas, electron state, energy ledger, failed-batch atomicity, "
+                 "checkpoint, and whole-particle conversion\n"
+              << std::flush;
 }

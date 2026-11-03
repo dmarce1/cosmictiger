@@ -11,7 +11,9 @@
 
 #include <atomic>
 #include <cstdint>
+#include <format>
 #include <fstream>
+#include <iostream>
 #include <type_traits>
 #include <unordered_map>
 
@@ -25,7 +27,7 @@
 #include <cosmictiger/math/range.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particle_types.hpp>
-#include <cosmictiger/particles/star_formation_state.hpp>
+#include <cosmictiger/stars/star_formation_state.hpp>
 
 static
 #ifdef __CUDACC__
@@ -191,11 +193,13 @@ struct ParticleSample {
 };
 
 #ifdef CHECK_BOUNDS
-#define CHECK_PART_BOUNDS(i)                                                                     \
-    if (i < 0 || i >= particlesSize()) {                                                         \
-        PRINT("particle bound check failure %li should be between %li and %li\n", (long long) i, \
-            (long long) 0, (long long) particlesSize());                                         \
-        ALWAYS_ASSERT(false);                                                                    \
+#define CHECK_PART_BOUNDS(i)                                                                    \
+    if (i < 0 || i >= particlesSize()) {                                                        \
+        std::cout << std::format(                                                               \
+                         "particle bound check failure {:d} should be between {:d} and {:d}\n", \
+                         (long long) i, (long long) 0, (long long) particlesSize())             \
+                  << std::flush;                                                                \
+        ALWAYS_ASSERT(false);                                                                   \
     }
 #else
 #define CHECK_PART_BOUNDS(i)

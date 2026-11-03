@@ -12,8 +12,10 @@
 #include <complex>
 #include <cstdio>
 #include <cstdlib>
+#include <format>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <limits>
 #include <numbers>
 #include <stdexcept>
@@ -44,9 +46,9 @@
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
 #if COSMICTIGER_ENABLE_CHEMISTRY
-#include <cosmictiger/hydro/sph/sph_chemistry.hpp>
+#include <cosmictiger/chemistry/sph.hpp>
 #endif
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 #endif
 
 struct PowerSpectrumFunction {
@@ -119,7 +121,8 @@ PowerSpectrumFunction computePowerSpectrum() {
     params.theta = options.cosmology.thetaCmb;
     params.hubble = options.cosmology.hubble;
     if (hpxRank() == 0) {
-        PRINT("  Initializing: cosmological background and linear power spectrum\n");
+        std::cout << "  Initializing: cosmological background and linear power spectrum\n"
+                  << std::flush;
     }
     ZeroOrderUniverse universe;
     {
@@ -149,8 +152,11 @@ PowerSpectrumFunction computePowerSpectrum() {
     Vector<hpx::future<void>> futures;
     futures.reserve(count);
     if (showProgress) {
-        PRINT("  Einstein–Boltzmann: %zu modes (one dot per %zu completed modes)\n    ", count,
-            kProgressInterval);
+        std::cout
+            << std::format(
+                   "  Einstein\u2013Boltzmann: {:d} modes (one dot per {:d} completed modes)\n    ",
+                   count, kProgressInterval)
+            << std::flush;
     }
     {
         profile::ScopedPhase profilePhase("initialize.transferFunctions.boltzmann", hpxRank() == 0);
@@ -164,7 +170,7 @@ PowerSpectrumFunction computePowerSpectrum() {
                             size_t const completed =
                                 completedModes.fetch_add(1, std::memory_order_relaxed) + 1;
                             if (completed % kProgressInterval == 0 || completed == count) {
-                                PRINT(".");
+                                std::cout << "." << std::flush;
                             }
                         }
                     },
@@ -173,7 +179,7 @@ PowerSpectrumFunction computePowerSpectrum() {
         } catch (...) {
             hpx::wait_all(futures.begin(), futures.end());
             if (showProgress) {
-                PRINT(" failed\n");
+                std::cout << " failed\n" << std::flush;
             }
             throw;
         }
@@ -186,13 +192,13 @@ PowerSpectrumFunction computePowerSpectrum() {
             }
         } catch (...) {
             if (showProgress) {
-                PRINT(" failed\n");
+                std::cout << " failed\n" << std::flush;
             }
             throw;
         }
     }
     if (showProgress) {
-        PRINT(" done (%zu/%zu modes)\n", count, count);
+        std::cout << std::format(" done ({:d}/{:d} modes)\n", count, count) << std::flush;
     }
 
     profile::ScopedPhase profilePhase("initialize.transferFunctions.normalize", hpxRank() == 0);
@@ -968,7 +974,6 @@ static void initX0() {
 
 static float zeldovichEnd(
     int dim, float d1Value, float prefac1, bool velocityOnly, int latticePhase) {
-    // PRINT( "enter zeldovich_end\n");
     float dxmax = 0.0;
     SpinlockType mutex;
     int64_t const n = getOptions().initial.fourierSize;

@@ -80,6 +80,10 @@ TEST(Flops, FloatingConversionsCountAtHigherPrecision) {
     static_assert(kNarrowed.singlePrecision == 0 && kNarrowed.doublePrecision == 1);
     static_assert(floatingPointConversionFlops<float, float>().total() == 0);
     static_assert(floatingPointConversionFlops<double const, double&>().total() == 0);
+    static_assert(floatingPointConversionFlops<float, int>().total() == 0);
+    static_assert(floatingPointConversionFlops<int, float>().total() == 0);
+    static_assert(floatingPointConversionFlops<int, double>().doublePrecision == 1);
+    static_assert(floatingPointConversionFlops<double, int>().doublePrecision == 1);
     FlopCount const count = (FlopCount(1) << 54) + 7;
     auto totals = floatingPointConversionFlops<float, double>(count);
     totals += floatingPointConversionFlops<double, float>(count);

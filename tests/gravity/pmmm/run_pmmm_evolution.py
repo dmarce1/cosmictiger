@@ -98,7 +98,7 @@ def main():
     parser.add_argument("--order", type=int, choices=range(3, 10), required=True)
     parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"), required=True)
     parser.add_argument("--viscosity-evolution",
-                        choices=("none", "morrisAndMonaghan", "cullenAndDehnen", "priceEtAl"),
+                        choices=("none", "morrisAndMonaghan", "cullenAndDehnen", "priceEtAl", "hu_etal"),
                         default="morrisAndMonaghan")
     parser.add_argument("--with-sph", action="store_true",
                         help="exercise mixed gas/dark-matter evolution in an SPH-enabled build")

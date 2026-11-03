@@ -10,6 +10,8 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <format>
+#include <iostream>
 #include <limits>
 #include <shared_mutex>
 #include <stdexcept>
@@ -33,7 +35,7 @@
 #include <cosmictiger/particles/particle_mesh_sort.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 #endif
 
 constexpr bool kVerbose = true;
@@ -271,7 +273,7 @@ void domainsInitRebounds() {
     localDomains[0].particleRange.first = 0;
     localDomains[0].particleRange.second = particlesSize();
     localDomains[0].depth = 0;
-    //	PRINT( "Setting init rebound on %i %i %i\n", hpx_rank(), 0, particles_size());
+
     hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -283,8 +285,7 @@ Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
         if (localDomains[i].depth == depth) {
             futs.push_back(hpx::async(hpx::annotated_function(
                 [i, &bounds, depth, &counts]() {
-                    //							PRINT("???? %i %i %i %i \n", hpx_rank(), i,
-                    // local_domains[i].part_range.first, local_domains[i].part_range.second);
+
                     auto const rng = localDomains[i].particleRange;
                     // Root-created initial conditions leave other localities empty
                     // until this rebalance migrates their particles. Empty ranges
@@ -393,8 +394,7 @@ void domainsReboundSort(Vector<double> bounds, int depth) {
                 [i, &bounds, depth, &mids]() {
                     mids[i] = particlesSort(
                         localDomains[i].particleRange, bounds[i], depth % kDimensions);
-                    ///	PRINT( "!!!!!!!! %i %i %e %i %i\n", hpx_rank(), mids[i], bounds[i],
-                    /// local_domains[i].part_range.first, local_domains[i].part_range.second);
+
                 },
                 "particles.domainsReboundSort")));
         }
@@ -426,7 +426,7 @@ void domainsRebound() {
         profile::ScopedPhase profilePhase("domains.rebound.initialize");
         domainsInitRebounds();
     }
-    //	PRINT( "Starting rebound\n");
+
     Vector<DomainGlobal> domains(1);
     boxesByKey = decltype(boxesByKey)();
     domains[0].box = unitBox<double>();
@@ -466,9 +466,8 @@ void domainsRebound() {
         }
         return all;
     };
-    //	PRINT( "Cycling rebound\n");
+
     while (!allLeaves(newDomains)) {
-        //		PRINT( "Cycle\n");
         domains = std::move(newDomains);
         Vector<size_t> counts(domains.size());
         Vector<double> bounds;
@@ -578,9 +577,9 @@ struct GasMigrationState {
     Vector3<float> acceleration, gravityAcceleration;
     float supportRadius, entropy, entropyRate, density;
     char converged, semiactive;
-    Pair<float> viscosity;    // Alpha and its previous conformal-time rate.
+    float bulkViscosityCoefficient;
     float divergence;         // Previous physical divergence for Cullen-Dehnen and Price et al.
-    gadget4::State chemistry;
+    float electronFraction{1.0f};
     template <class Archive>
     void serialize(Archive& arc, unsigned) {
         arc & acceleration;
@@ -592,13 +591,13 @@ struct GasMigrationState {
         arc & converged;
         arc & semiactive;
         if (getOptions().hydro.viscosityEvolution != "none") {
-            arc & viscosity;
+            arc & bulkViscosityCoefficient;
         }
         if (getOptions().hydro.viscosityGradientSwitch()) {
             arc & divergence;
         }
         if (getOptions().chemistry.enabled) {
-            arc & chemistry;
+            arc & electronFraction;
         }
     }
 };
@@ -635,21 +634,20 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
         auto const i = particlesCatIndex(index);
         auto& gas = result.gas;
         gas.supportRadius = sphParticlesSupportRadii[i];
-        gas.acceleration = sphParticlesAccelerationStates[i].acceleration;
+        gas.acceleration = sphParticlesAccelerationStates[i];
         gas.entropyRate = sphParticlesEntropyRates[i];
         gas.density = sphParticlesDensities[i];
         gas.converged = sphParticlesConvergenceFlags[i];
         gas.semiactive = sphParticlesSemiactiveFlags[i];
         gas.entropy = sphParticlesEntropies[i];
         if (getOptions().hydro.viscosityEvolution != "none") {
-            auto const& state = sphParticlesViscosityStates[i];
-            gas.viscosity = {state.alpha, state.rate};
+            gas.bulkViscosityCoefficient = sphParticlesBulkViscosityCoefficients[i];
         }
         if (getOptions().hydro.viscosityGradientSwitch()) {
             gas.divergence = sphParticlesCullenDehnenStates[i].divergence;
         }
         if (getOptions().chemistry.enabled) {
-            gas.chemistry = sphParticlesChemistryStates[i];
+            gas.electronFraction = sphParticlesElectronFractions[i];
         }
         for (int dim = 0; dim < kDimensions; dim++) {
             gas.gravityAcceleration[dim] = sphParticlesGravityAccelerations[dim][i];
@@ -668,21 +666,20 @@ static void unpackSphParticle(
         auto const& gas = record.gas;
         sphParticlesParticleIndex(i) = index;
         sphParticlesSupportRadii[i] = gas.supportRadius;
-        sphParticlesAccelerationStates[i].acceleration = gas.acceleration;
+        sphParticlesAccelerationStates[i] = gas.acceleration;
         sphParticlesEntropyRates[i] = gas.entropyRate;
         sphParticlesDensities[i] = gas.density;
         sphParticlesConvergenceFlags[i] = gas.converged;
         sphParticlesSemiactiveFlags[i] = gas.semiactive;
         sphParticlesEntropies[i] = gas.entropy;
         if (getOptions().hydro.viscosityEvolution != "none") {
-            sphParticlesViscosityStates[i] = {
-                gas.viscosity.first, gas.viscosity.second, gas.viscosity.first};
+            sphParticlesBulkViscosityCoefficients[i] = gas.bulkViscosityCoefficient;
         }
         if (getOptions().hydro.viscosityGradientSwitch()) {
             sphParticlesCullenDehnenStates[i] = {gas.divergence, 0.0f, 0.0f, 0.0f};
         }
         if (getOptions().chemistry.enabled) {
-            sphParticlesChemistryStates[i] = gas.chemistry;
+            sphParticlesElectronFractions[i] = gas.electronFraction;
         }
         for (int dim = 0; dim < kDimensions; dim++) {
             sphParticlesGravityAccelerations[dim][i] = gas.gravityAcceleration[dim];
@@ -846,9 +843,7 @@ void domainsBegin(int rung) {
                                 auto& send = sends[rank];
                                 send.push_back(particlesGetParticle(i));
                                 if (send.size() >= parcelCapacity) {
-                                    //				PRINT( "Sending %i from %i to %i\n",
-                                    // send.size(),
-                                    // hpx_rank(), rank);
+
                                     futs.push_back(hpx::async<DomainsTransmitParticlesAction>(
                                         hpxLocalities()[rank], std::move(send)));
                                 }
@@ -860,8 +855,7 @@ void domainsBegin(int rung) {
                 }
                 for (auto i = sends.begin(); i != sends.end(); i++) {
                     if (i->second.size()) {
-                        //			PRINT( "Sending %i from %i to %i\n", i->second.size(),
-                        // hpx_rank(),i->first);
+
                         futs.push_back(hpx::async<DomainsTransmitParticlesAction>(
                             hpxLocalities()[i->first], std::move(i->second)));
                     }
@@ -956,7 +950,7 @@ void domainsEnd() {
             particlesResize(particlesSize() - 1);
         }
     }
-    // PRINT("unloading particles on %i\n", hpx_rank());
+
     for (int proc = 0; proc < numberOfThreads; proc++) {
         futs.push_back(hpx::async(hpx::annotated_function(
             [numberOfThreads, proc, &allTransParticles]() {
@@ -970,7 +964,7 @@ void domainsEnd() {
             "particles.installDomainTransfers")));
     }
     hpx::wait_all(futs.begin(), futs.end());
-    // PRINT("Done on %i\n", hpx_rank());
+
     freeIndices = decltype(freeIndices)();
 #ifdef DOMAINS_CHECK
     domainsCheck();
@@ -1010,10 +1004,14 @@ static void domainsCheck() {
                         position[dim] = positionDomainCoordinate(particlesPos(dim, i));
                     }
                     if (!myDomain.contains(position)) {
-                        PRINT("particle out of range %li of %li %e %e %e rung %i\n", (long long) i,
-                            (long long) particlesSize(), position[0], position[1], position[2],
-                            particlesRung(i));
-                        PRINT("%s\n", domainsFindMyBox().toString().c_str());
+                        std::cout
+                            << std::format(
+                                   "particle out of range {:d} of {:d} {:e} {:e} {:e} rung {:d}\n",
+                                   (long long) i, (long long) particlesSize(), position[0],
+                                   position[1], position[2], particlesRung(i))
+                            << std::flush;
+                        std::cout << std::format("{:s}\n", domainsFindMyBox().toString().c_str())
+                                  << std::flush;
                         ALWAYS_ASSERT(false);
                         fail++;
                     }

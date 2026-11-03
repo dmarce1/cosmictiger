@@ -6,7 +6,7 @@
 
 #include <gtest/gtest.h>
 
-#include <cosmictiger/gravity/pmmm/pp/near_pp.hpp>
+#include <cosmictiger/gravity/pmmm/pp_near_pp.hpp>
 #include <cosmictiger/math/radial_kernel.hpp>
 #include <tests/flop_counting_real.hpp>
 

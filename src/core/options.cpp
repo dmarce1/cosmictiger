@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -48,7 +49,7 @@
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/scenarios/scenario.hpp>
 #if !COSMICTIGER_WITH_GRAVITY && COSMICTIGER_WITH_SPH
-#include <cosmictiger/hydro/sph/sph_tree.hpp>
+#include <cosmictiger/sph/tree.hpp>
 #endif
 
 namespace detail {
@@ -56,8 +57,8 @@ namespace detail {
 static std::vector<std::string> commandLineArguments;
 static bool displayOptions = false;
 
-// Invalid options are user errors, not program faults: hpx_main reports the
-// exception and finalizes, skipping THROW_ERROR's symbolized stack trace and abort.
+// Invalid options are user errors: hpx_main reports the exception and finalizes.
+// Keep these diagnostics concise, without THROW_ERROR's source location.
 [[noreturn]] __attribute__((format(printf, 1, 2))) void throwOptionError(char const* format, ...) {
     va_list arguments;
     va_start(arguments, format);
@@ -117,6 +118,16 @@ bool isFiniteFloatOption(double value) {
 bool isPositiveFloatOption(double value) {
     // Device fast math flushes subnormal floats, so require a positive normal.
     return isFiniteFloatOption(value) && value >= std::numeric_limits<float>::min();
+}
+
+void validateRockstar(Options const& opts) {
+#if !COSMICTIGER_ENABLE_ROCKSTAR
+    if (opts.analysis.groups || opts.analysis.groupsCuda || opts.lightcone.enabled ||
+        opts.lightcone.cuda) {
+        throw std::invalid_argument("Halo groups and lightcone analysis require "
+                                    "COSMICTIGER_ENABLE_ROCKSTAR=ON and a gravity-enabled build");
+    }
+#endif
 }
 
 void validateCudaBackends(Options const& opts) {
@@ -242,28 +253,28 @@ void show(char const* name, bool opt) {
     if (!detail::displayOptions) {
         return;
     }
-    PRINT("%-38s: %c\n", name, opt ? 'T' : 'F');
+    std::cout << std::format("{:<38s}: {:c}\n", name, opt ? 'T' : 'F') << std::flush;
 }
 
 void show(char const* name, int opt) {
     if (!detail::displayOptions) {
         return;
     }
-    PRINT("%-38s: %i\n", name, opt);
+    std::cout << std::format("{:<38s}: {:d}\n", name, opt) << std::flush;
 }
 
 void show(char const* name, double opt) {
     if (!detail::displayOptions) {
         return;
     }
-    PRINT("%-38s: %e\n", name, opt);
+    std::cout << std::format("{:<38s}: {:e}\n", name, opt) << std::flush;
 }
 
 void show(char const* name, std::string opt) {
     if (!detail::displayOptions) {
         return;
     }
-    PRINT("%-38s: %s\n", name, opt.c_str());
+    std::cout << std::format("{:<38s}: {:s}\n", name, opt.c_str()) << std::flush;
 }
 
 Options globalOpts;
@@ -275,6 +286,7 @@ Options const& getOptions() {
 }
 
 void setOptions(Options const& opts) {
+    detail::validateRockstar(opts);
     detail::validateCudaBackends(opts);
     detail::validateHydroMethod(opts);
     detail::validateFlatCosmology(opts);
@@ -397,6 +409,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"build.p3mFmm", gravity::kBuildHasP3mFmm},
         {"build.chemistry", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY)},
         {"build.starFormation", bool(COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION)},
+        {"build.rockstar", bool(COSMICTIGER_ENABLE_ROCKSTAR)},
         {"build.integratorTraditional", integration::kBuildHasTraditional},
         {"build.integratorHierarchical", integration::kBuildHasHierarchical},
         {"build.integratorGlobal", integration::kBuildHasGlobal},
@@ -532,17 +545,19 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"hydro.kernelDegree", options.hydro.kernelDegree},
         {"hydro.yAcceleration", options.hydro.yAcceleration},
         {"hydro.zPlaneAcceleration", options.hydro.zPlaneAcceleration},
-        {"hydro.viscosityAlpha", options.hydro.viscosityAlpha},
-        {"hydro.viscosityBeta", options.hydro.viscosityBeta},
+        {"hydro.viscosityAlpha", options.hydro.bulkViscosityCoefficient},
+        {"hydro.viscosityBeta", options.hydro.vonNeumannRichtmyerCoefficient},
         {"hydro.viscosityEpsilon", options.hydro.viscosityEpsilon},
         {"hydro.balsaraSwitch", options.hydro.balsaraSwitch},
         {"hydro.viscosityEvolution", options.hydro.viscosityEvolution},
-        {"hydro.viscosityAlphaMin", options.hydro.viscosityAlphaMin},
+        {"hydro.viscosityAlphaMin", options.hydro.minimumBulkViscosityCoefficient},
         {"hydro.viscosityDecay", options.hydro.viscosityDecay},
-        {"hydro.viscosityAlphaMax", options.hydro.viscosityAlphaMax},
+        {"hydro.viscosityAlphaMax", options.hydro.maximumBulkViscosityCoefficient},
         {"hydro.viscosityDecayCD", options.hydro.viscosityDecayCD},
-        {"hydro.viscosityAlphaMaxPrice", options.hydro.viscosityAlphaMaxPrice},
+        {"hydro.viscosityAlphaMaxPrice", options.hydro.maximumBulkViscosityCoefficientPrice},
         {"hydro.viscosityDecayPrice", options.hydro.viscosityDecayPrice},
+        {"hydro.viscosityAlphaMaxHu", options.hydro.maximumBulkViscosityCoefficientHu},
+        {"hydro.viscosityDecayHu", options.hydro.viscosityDecayHu},
         {"hydro.gamma", options.hydro.gamma},
         {"hydro.centralAcceleration", options.hydro.centralAcceleration},
         {"hydro.centralSoftening",
@@ -916,32 +931,36 @@ bool processOptions(int argc, char* argv[]) {
         "uniform gravitational acceleration in the y direction")("hydro.zPlaneAcceleration",
         po::value<double>(&opts.hydro.zPlaneAcceleration)->default_value(0.0),
         "nonnegative acceleration magnitude toward the plane z=0.5")("hydro.viscosityAlpha",
-        po::value<double>(&opts.hydro.viscosityAlpha)->default_value(1.0),
+        po::value<double>(&opts.hydro.bulkViscosityCoefficient)->default_value(1.0),
         "linear coefficient alpha when viscosityEvolution=none")("hydro.viscosityBeta",
-        po::value<double>(&opts.hydro.viscosityBeta)->default_value(2.0),
+        po::value<double>(&opts.hydro.vonNeumannRichtmyerCoefficient)->default_value(2.0),
         "quadratic coefficient beta: multiplies the pair alpha for morrisAndMonaghan and "
-        "cullenAndDehnen, constant for none and priceEtAl")("hydro.viscosityEpsilon",
+        "cullenAndDehnen and hu_etal, constant for none and priceEtAl")("hydro.viscosityEpsilon",
         po::value<double>(&opts.hydro.viscosityEpsilon)->default_value(0.01),
         "viscosity regularization relative to the calibrated radius sqrt(5/6) effectiveRadius")(
         "hydro.balsaraSwitch", po::value<bool>(&opts.hydro.balsaraSwitch)->default_value(true),
         "suppress artificial viscosity in shear flows with the Balsara switch")(
         "hydro.viscosityEvolution",
         po::value<std::string>(&opts.hydro.viscosityEvolution)->default_value("morrisAndMonaghan"),
-        "viscosity evolution: none, morrisAndMonaghan, cullenAndDehnen, or priceEtAl")(
+        "viscosity evolution: none, morrisAndMonaghan, cullenAndDehnen, priceEtAl, or hu_etal")(
         "hydro.viscosityAlphaMin",
-        po::value<double>(&opts.hydro.viscosityAlphaMin)->default_value(0.1),
+        po::value<double>(&opts.hydro.minimumBulkViscosityCoefficient)->default_value(0.1),
         "Morris-Monaghan alpha floor and smooth-flow initial value")("hydro.viscosityDecay",
         po::value<double>(&opts.hydro.viscosityDecay)->default_value(0.2),
         "Morris-Monaghan C1 in tau=h/(C1 c)")("hydro.viscosityAlphaMax",
-        po::value<double>(&opts.hydro.viscosityAlphaMax)->default_value(2.0),
+        po::value<double>(&opts.hydro.maximumBulkViscosityCoefficient)->default_value(2.0),
         "maximum alpha for Cullen-Dehnen viscosity evolution")("hydro.viscosityDecayCD",
         po::value<double>(&opts.hydro.viscosityDecayCD)->default_value(0.05),
         "Cullen-Dehnen decay coefficient ell in tau=H/(2 ell vSignal)")(
         "hydro.viscosityAlphaMaxPrice",
-        po::value<double>(&opts.hydro.viscosityAlphaMaxPrice)->default_value(1.0),
+        po::value<double>(&opts.hydro.maximumBulkViscosityCoefficientPrice)->default_value(1.0),
         "maximum alpha for Price et al. (Phantom) viscosity evolution")("hydro.viscosityDecayPrice",
         po::value<double>(&opts.hydro.viscosityDecayPrice)->default_value(0.1),
-        "Price et al. decay coefficient sigma in tau=h/(sigma c)")("hydro.gamma",
+        "Price et al. decay coefficient sigma in tau=h/(sigma c)")("hydro.viscosityAlphaMaxHu",
+        po::value<double>(&opts.hydro.maximumBulkViscosityCoefficientHu)->default_value(1.0),
+        "maximum alpha before the Hu et al. strong limiter")("hydro.viscosityDecayHu",
+        po::value<double>(&opts.hydro.viscosityDecayHu)->default_value(0.05),
+        "Hu et al. decay coefficient ell in tau=H/(2 ell vDecay)")("hydro.gamma",
         po::value<double>(&opts.hydro.gamma)->default_value(5.0 / 3.0),
         "ideal-gas adiabatic index; must be 5/3 when chemistry or star formation is enabled")(
         "hydro.centralAcceleration",
@@ -1058,6 +1077,8 @@ bool processOptions(int argc, char* argv[]) {
                   << (COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION ? "enabled" :
                                                                                   "disabled")
                   << "\n";
+        std::cout << "  ROCKSTAR and lightcones: "
+                  << (COSMICTIGER_ENABLE_ROCKSTAR ? "enabled" : "disabled") << "\n";
 #if COSMICTIGER_WITH_GRAVITY
         std::cout << "  Potential expansion degrees: " << kFmmMinOrder - 1 << " through "
                   << kFmmMaxOrder - 1 << "\n";
@@ -1133,6 +1154,7 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.gravity.pmmmNearWidth < 1 || opts.gravity.pmmmNearWidth > 4) {
         detail::throwOptionError("gravity.pmmmNearWidth must be between 1 and 4\n");
     }
+    detail::validateRockstar(opts);
 #if !COSMICTIGER_WITH_GRAVITY
     if (opts.gravity.enabled) {
         detail::throwOptionError("gravity.enabled=true requires a gravity-enabled build; "
@@ -1450,11 +1472,14 @@ bool processOptions(int argc, char* argv[]) {
         double supportRadius = defaultSupportRadius;
         if (selectedEffectiveKey != nullptr) {
             if (selectedEffectiveKey == effectiveKey && explicitOption(legacyKey)) {
-                PRINT("Warning: %s is ignored because %s is specified.\n", legacyKey, effectiveKey);
+                std::cout << std::format("Warning: {:s} is ignored because {:s} is specified.\n",
+                                 legacyKey, effectiveKey)
+                          << std::flush;
             }
             if (explicitOption(supportKey)) {
-                PRINT("Warning: %s is ignored because %s is specified.\n", supportKey,
-                    selectedEffectiveKey);
+                std::cout << std::format("Warning: {:s} is ignored because {:s} is specified.\n",
+                                 supportKey, selectedEffectiveKey)
+                          << std::flush;
             }
             supportRadius = vm[selectedEffectiveKey].as<double>() * supportRadiusPerEffectiveRadius;
         } else if (explicitOption(supportKey)) {
@@ -1571,8 +1596,10 @@ bool processOptions(int argc, char* argv[]) {
         opts.hydro.zPlaneAcceleration < 0.0) {
         detail::throwOptionError("hydro.zPlaneAcceleration must be finite and nonnegative\n");
     }
-    if (!detail::isFiniteOption(opts.hydro.viscosityAlpha) || opts.hydro.viscosityAlpha < 0.0 ||
-        !detail::isFiniteOption(opts.hydro.viscosityBeta) || opts.hydro.viscosityBeta < 0.0 ||
+    if (!detail::isFiniteOption(opts.hydro.bulkViscosityCoefficient) ||
+        opts.hydro.bulkViscosityCoefficient < 0.0 ||
+        !detail::isFiniteOption(opts.hydro.vonNeumannRichtmyerCoefficient) ||
+        opts.hydro.vonNeumannRichtmyerCoefficient < 0.0 ||
         !detail::isFiniteOption(opts.hydro.viscosityEpsilon) ||
         opts.hydro.viscosityEpsilon <= 0.0) {
         detail::throwOptionError(
@@ -1582,34 +1609,43 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.hydro.viscosityEvolution != "none" &&
         opts.hydro.viscosityEvolution != "morrisAndMonaghan" &&
         opts.hydro.viscosityEvolution != "cullenAndDehnen" &&
-        opts.hydro.viscosityEvolution != "priceEtAl") {
+        opts.hydro.viscosityEvolution != "priceEtAl" &&
+        opts.hydro.viscosityEvolution != "hu_etal") {
         detail::throwOptionError(
             "hydro.viscosityEvolution must be none, morrisAndMonaghan, cullenAndDehnen, "
-            "or priceEtAl\n");
+            "priceEtAl, or hu_etal\n");
     }
-    if (!detail::isPositiveFloatOption(opts.hydro.viscosityAlphaMin) ||
+    if (!detail::isPositiveFloatOption(opts.hydro.minimumBulkViscosityCoefficient) ||
         !detail::isPositiveFloatOption(opts.hydro.viscosityDecay)) {
         detail::throwOptionError(
             "hydro.viscosityAlphaMin and hydro.viscosityDecay must be finite and positive "
             "in single precision\n");
     }
-    if (!detail::isPositiveFloatOption(opts.hydro.viscosityAlphaMax) ||
+    if (!detail::isPositiveFloatOption(opts.hydro.maximumBulkViscosityCoefficient) ||
         !detail::isPositiveFloatOption(opts.hydro.viscosityDecayCD)) {
         detail::throwOptionError(
             "hydro.viscosityAlphaMax and hydro.viscosityDecayCD must be finite and positive "
             "in single precision\n");
     }
-    if (!detail::isPositiveFloatOption(opts.hydro.viscosityAlphaMaxPrice) ||
+    if (!detail::isPositiveFloatOption(opts.hydro.maximumBulkViscosityCoefficientPrice) ||
         !detail::isPositiveFloatOption(opts.hydro.viscosityDecayPrice)) {
         detail::throwOptionError(
             "hydro.viscosityAlphaMaxPrice and hydro.viscosityDecayPrice must be finite "
             "and positive in single precision\n");
     }
+    if (!detail::isPositiveFloatOption(opts.hydro.maximumBulkViscosityCoefficientHu) ||
+        !detail::isPositiveFloatOption(opts.hydro.viscosityDecayHu)) {
+        detail::throwOptionError(
+            "hydro.viscosityAlphaMaxHu and hydro.viscosityDecayHu must be finite "
+            "and positive in single precision\n");
+    }
     if (opts.hydro.viscosityBetaFollowsAlpha() &&
-        !detail::isFiniteFloatOption(opts.hydro.viscosityBeta *
+        !detail::isFiniteFloatOption(opts.hydro.vonNeumannRichtmyerCoefficient *
             (opts.hydro.viscosityEvolution == "morrisAndMonaghan" ?
-                    opts.hydro.viscosityAlphaMin :
-                    opts.hydro.viscosityAlphaMax))) {
+                    opts.hydro.minimumBulkViscosityCoefficient :
+                    (opts.hydro.viscosityEvolution == "hu_etal" ?
+                            opts.hydro.maximumBulkViscosityCoefficientHu :
+                            opts.hydro.maximumBulkViscosityCoefficient)))) {
         detail::throwOptionError(
             "the initial quadratic viscosity coefficient must be finite in single "
             "precision\n");
@@ -1633,8 +1669,8 @@ bool processOptions(int argc, char* argv[]) {
         detail::throwOptionError(
             "hydro support radii must be finite with 0 < minSupportRadius <= maxSupportRadius\n");
     }
-    if (!detail::isFiniteFloatOption(opts.hydro.viscosityAlpha) ||
-        !detail::isFiniteFloatOption(opts.hydro.viscosityBeta) ||
+    if (!detail::isFiniteFloatOption(opts.hydro.bulkViscosityCoefficient) ||
+        !detail::isFiniteFloatOption(opts.hydro.vonNeumannRichtmyerCoefficient) ||
         !detail::isPositiveFloatOption(opts.hydro.viscosityEpsilon)) {
         detail::throwOptionError(
             "hydro.viscosityAlpha, hydro.viscosityBeta and hydro.viscosityEpsilon must "
@@ -1767,19 +1803,17 @@ bool processOptions(int argc, char* argv[]) {
                                  "glass files already define the particle lattice\n");
     }
     size_t const particlesPerDimension = size_t(opts.initial.particlesPerDimension);
-    size_t const latticeMultiplicity = opts.initial.closePack ? 2 : 1;
+    // Gresho uses a conventional FCC cell; cosmology retains its two-point BCC cell.
+    size_t const latticeMultiplicity =
+        opts.initial.closePack ? (opts.run.scenario == "gresho" ? 4 : 2) : 1;
     if (particlesPerDimension > std::numeric_limits<size_t>::max() / particlesPerDimension /
             particlesPerDimension / latticeMultiplicity) {
         detail::throwOptionError(
             "initial.particlesPerDimension exceeds the particle-count range\n");
     }
     opts.initial.numberOfParticles =
-        particlesPerDimension * particlesPerDimension * particlesPerDimension;
+        particlesPerDimension * particlesPerDimension * particlesPerDimension * latticeMultiplicity;
     opts.initial.fourierSize = opts.initial.particlesPerDimension;
-    if (opts.initial.closePack) {
-        opts.initial.numberOfParticles *= 2;
-        //		opts.Nfour *= 2;
-    }
     if (!opts.initial.gadget4Restart.empty()) {
         if (hasBoxLength) {
             detail::throwOptionError(
@@ -1970,8 +2004,7 @@ bool processOptions(int argc, char* argv[]) {
     }
     detail::displayOptions = true;
     if (hpxRank() == 0 && opts.run.test.empty()) {
-        PRINT(
-            "%.*s\n", int(cosmictiger::kStartupScreen.size()), cosmictiger::kStartupScreen.data());
+        std::cout << cosmictiger::kStartupScreen << "\n" << std::flush;
     }
     terminal::detailPrint("Simulation Options\n");
     terminal::detailPrint("code_to_M_solar = %e\n", opts.units.massG / constants::kM0);
@@ -2021,14 +2054,20 @@ bool processOptions(int argc, char* argv[]) {
         if (!opts.configuration.empty()) {
             show("configuration", opts.configuration);
         }
-        PRINT("%-38s: %zu\n", "initial.numberOfParticles", size_t(opts.initial.numberOfParticles));
-        PRINT("%-38s: %e Mpc/h (%e Mpc comoving)\n", "units.boxLength",
-            opts.units.lengthCm / constants::kMpcToCm * opts.cosmology.hubble,
-            opts.units.lengthCm / constants::kMpcToCm);
-        PRINT("%-38s: %e Msun\n", "units.massSolar", opts.units.massG / constants::kM0);
-        PRINT("%-38s: %i localities, %zu worker threads here\n", "Runtime", hpxSize(),
-            size_t(hpx::get_num_worker_threads()));
-        PRINT("\n  Internal diagnostics: --run.verbose=true\n");
+        std::cout << std::format("{:<38s}: {:d}\n", "initial.numberOfParticles",
+                         size_t(opts.initial.numberOfParticles))
+                  << std::flush;
+        std::cout << std::format("{:<38s}: {:e} Mpc/h ({:e} Mpc comoving)\n", "units.boxLength",
+                         opts.units.lengthCm / constants::kMpcToCm * opts.cosmology.hubble,
+                         opts.units.lengthCm / constants::kMpcToCm)
+                  << std::flush;
+        std::cout << std::format("{:<38s}: {:e} Msun\n", "units.massSolar",
+                         opts.units.massG / constants::kM0)
+                  << std::flush;
+        std::cout << std::format("{:<38s}: {:d} localities, {:d} worker threads here\n", "Runtime",
+                         hpxSize(), size_t(hpx::get_num_worker_threads()))
+                  << std::flush;
+        std::cout << "\n  Internal diagnostics: --run.verbose=true\n" << std::flush;
         detail::displayOptions = terminal::verbose();
     }
     viewConfigure();

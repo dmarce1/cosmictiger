@@ -19,7 +19,6 @@
             std::abort();                                                               \
         }                                                                               \
     } while (false)
-#define PRINT(...) std::printf(__VA_ARGS__)
 
 enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorInvalidValue };
 

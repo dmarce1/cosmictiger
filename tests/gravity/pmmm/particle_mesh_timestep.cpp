@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <format>
+#include <iostream>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -389,7 +391,8 @@ void particleMeshTimestepTest() {
     detail::checkMeshApplyFieldFlops();
     detail::checkMeshGlobalTimestepFlops();
     pmmmDestroy();
-    PRINT("PMMM common-rung refinement, synchronization, coarsening and staged kicks "
-          "passed on %i locality/localities\n",
-        hpxSize());
+    std::cout << std::format("PMMM common-rung refinement, synchronization, coarsening and staged "
+                             "kicks passed on {:d} locality/localities\n",
+                     hpxSize())
+              << std::flush;
 }

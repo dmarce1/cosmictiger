@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <format>
+#include <iostream>
 #include <limits>
 #include <numbers>
 #include <random>
@@ -30,7 +32,7 @@
 #include <cosmictiger/gravity/kick_interaction_counts.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 #endif
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
@@ -538,7 +540,9 @@ void fmmWalkRequireForceReciprocity(std::string const& label, std::array<TreeId,
     // Normalize the norm of the net force by the sum of individual force norms.
     double const residual = std::sqrt(totalForceSquared) / std::max(1.0, forceMagnitudeSum);
     fmmWalkRequireClose(label + " vector total-force reciprocity", residual, 0.0, 2.0e-5);
-    PRINT("FMM %s: normalized total-force residual = %.9e\n", label.c_str(), residual);
+    std::cout << std::format("FMM {:s}: normalized total-force residual = {:.9e}\n", label.c_str(),
+                     residual)
+              << std::flush;
 }
 
 void fmmWalkReciprocalHybrid(bool useCuda) {
@@ -1546,11 +1550,13 @@ void fmmWalkOpenLargerCell(bool useCuda) {
         Forces cpuForces;
         double const cpuResidual = run(false, cpuForces);
         auto const c = kickInteractionCounts();
-        PRINT("FMM %s walk: tests %lld ccDirect %lld ccEwald %lld cp %lld pc %lld ppLeafPairs "
-              "%lld ppPairs %lld opened %lld deferred %lld, net-force residual %.3e\n",
-            variant.label, c.acceptanceTests, c.cellCellDirect, c.cellCellEwald, c.cellParticle,
-            c.particleCell, c.particleParticleLeafPairs, c.particleParticlePairs, c.sourceOpenings,
-            c.deferredSources, cpuResidual);
+        std::cout << std::format("FMM {:s} walk: tests {:d} ccDirect {:d} ccEwald {:d} cp {:d} pc "
+                                 "{:d} ppLeafPairs {:d} ppPairs {:d} opened {:d} deferred {:d}, "
+                                 "net-force residual {:.3e}\n",
+                         variant.label, c.acceptanceTests, c.cellCellDirect, c.cellCellEwald,
+                         c.cellParticle, c.particleCell, c.particleParticleLeafPairs,
+                         c.particleParticlePairs, c.sourceOpenings, c.deferredSources, cpuResidual)
+                  << std::flush;
         std::string const label = std::string("FMM ") + variant.label;
         fmmWalkRequireClose(label + " CPU net-force reciprocity", cpuResidual, 0.0, 2.0e-5);
         if (c.cellParticle != c.particleCell) {
@@ -1564,9 +1570,10 @@ void fmmWalkOpenLargerCell(bool useCuda) {
         } else {
             double rms, maximum;
             compare(lockstepForces, cpuForces, rms, maximum);
-            PRINT("%s versus lockstep: rms difference / rms force %.3e, maximum normalized "
-                  "difference %.3e\n",
-                label.c_str(), rms, maximum);
+            std::cout << std::format("{:s} versus lockstep: rms difference / rms force {:.3e}, "
+                                     "maximum normalized difference {:.3e}\n",
+                             label.c_str(), rms, maximum)
+                      << std::flush;
             fmmWalkRequireClose(label + " versus lockstep rms force difference", rms, 0.0, 1.0e-2);
         }
         if (useCuda) {
@@ -1574,9 +1581,11 @@ void fmmWalkOpenLargerCell(bool useCuda) {
             double const cudaResidual = run(true, cudaForces);
             double rms, maximum;
             compare(cpuForces, cudaForces, rms, maximum);
-            PRINT("%s CUDA versus CPU: rms difference / rms force %.3e, maximum normalized "
-                  "difference %.3e, net-force residual %.3e\n",
-                label.c_str(), rms, maximum, cudaResidual);
+            std::cout << std::format(
+                             "{:s} CUDA versus CPU: rms difference / rms force {:.3e}, maximum "
+                             "normalized difference {:.3e}, net-force residual {:.3e}\n",
+                             label.c_str(), rms, maximum, cudaResidual)
+                      << std::flush;
             fmmWalkRequireClose(label + " CUDA net-force reciprocity", cudaResidual, 0.0, 2.0e-5);
             fmmWalkRequireClose(label + " CUDA versus CPU rms force difference", rms, 0.0, 1.0e-3);
             fmmWalkRequireClose(
@@ -1763,6 +1772,7 @@ void fmmWalkTest() {
         treeDestroy();
     }
     setOptions(originalOptions);
-    PRINT("FMM walk regression passed (%s, %i rank(s))\n", useCuda ? "CPU and CUDA" : "CPU",
-        hpxSize());
+    std::cout << std::format("FMM walk regression passed ({:s}, {:d} rank(s))\n",
+                     useCuda ? "CPU and CUDA" : "CPU", hpxSize())
+              << std::flush;
 }

@@ -10,6 +10,8 @@
 #define MATH_HPP_
 
 #include <atomic>
+#include <format>
+#include <iostream>
 #include <numbers>
 
 #include <cosmictiger/core/flops.hpp>
@@ -49,11 +51,19 @@ CUDA_EXPORT int constrainRange(T& x) {
         flops++;
     }
     if (x > T(1)) {
-        PRINT("Print particle out of range %e\n", x);
+#ifdef __CUDA_ARCH__
+        printf("Print particle out of range %e\n", x);
+#else
+        std::cout << std::format("Print particle out of range {:e}\n", x) << std::flush;
+#endif
         ALWAYS_ASSERT(false);
     }
     if (x < T(0)) {
-        PRINT("Print particle out of range %e\n", x);
+#ifdef __CUDA_ARCH__
+        printf("Print particle out of range %e\n", x);
+#else
+        std::cout << std::format("Print particle out of range {:e}\n", x) << std::flush;
+#endif
         ALWAYS_ASSERT(false);
     }
     return flops;

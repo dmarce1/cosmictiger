@@ -149,7 +149,7 @@ void checkEmptyRanges() {
     require(lightconeCalls == 0, "empty dispatch unexpectedly emitted particles");
 }
 
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
 void checkLightcone() {
     constexpr size_t kCount = 8201;
     Fixture fixture(kCount);
@@ -251,7 +251,7 @@ TEST(DriftDispatch, EmptyRanges) {
     detail::checkEmptyRanges();
 }
 
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
 TEST(DriftDispatch, Lightcone) {
     detail::checkLightcone();
 }

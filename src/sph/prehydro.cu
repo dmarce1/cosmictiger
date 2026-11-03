@@ -1,0 +1,627 @@
+/*
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2026  Dominic C. Marcello
+
+ Distributed under the Boost Software License, Version 1.0.
+ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
+ */
+
+#include <cosmictiger/math/vector3.hpp>
+#include <cosmictiger/sph/cuda.hpp>
+#include <cosmictiger/sph/viscosity/balsara.hpp>
+#include <cosmictiger/sph/viscosity/cullen_and_dehnen.hpp>
+#include <cosmictiger/sph/viscosity/hu_etal.hpp>
+#include <cosmictiger/sph/viscosity/monaghan.hpp>
+#include <cosmictiger/sph/viscosity/morris_and_monaghan.hpp>
+#include <cosmictiger/sph/viscosity/price_etal.hpp>
+
+namespace detail {
+
+struct SmoothingWorkspace {
+    DeviceVector<SphNeighborPosition> positions;
+};
+
+struct NeighborActivity {
+    float supportRadius;
+    char rung;
+    float velocityX;
+    float velocityY;
+    float velocityZ;
+    float accelerationX;
+    float accelerationY;
+    float accelerationZ;
+    float divergence;
+    float internalEnergy;
+};
+
+struct DensityWorkspace {
+    DeviceVector<SphNeighborPosition> positions;
+    DeviceVector<NeighborActivity> particles;
+};
+
+}    // namespace detail
+
+__global__ void sphCudaPrehydro1(
+    SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
+    sph_flops::Counter flops = 0;
+    int const threadIndex = threadIdx.x;
+    int const blockSize = blockDim.x;
+    __shared__ int targetNodeIndex;
+    __shared__ detail::SmoothingWorkspace workspace;
+    new (&workspace) detail::SmoothingWorkspace();
+    if (threadIndex == 0) {
+        targetNodeIndex = atomicAdd(&reduction->nextNodeIndex, 1);
+    }
+    __syncthreads();
+    while (targetNodeIndex < data.numberOfTargetNodes) {
+        SphTreeNode const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
+        workspace.positions.resize(0);
+        for (int neighborNodeIndex = targetNode.neighborRange.first;
+            neighborNodeIndex < targetNode.neighborRange.second; neighborNodeIndex++) {
+            auto const& neighborNode = data.treeNodes[data.neighborNodeIndices[neighborNodeIndex]];
+            int const end = neighborNode.particleRange.first +
+                roundUp(neighborNode.particleRange.second - neighborNode.particleRange.first,
+                    ParticleInteger(blockSize));
+            for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
+                sourceParticleIndex < end; sourceParticleIndex += blockSize) {
+                bool contains = false;
+                Vector3<Position> position;
+                if (sourceParticleIndex < neighborNode.particleRange.second) {
+                    position[kXDimension] = data.sourcePositionX[sourceParticleIndex];
+                    position[kYDimension] = data.sourcePositionY[sourceParticleIndex];
+                    position[kZDimension] = data.sourcePositionZ[sourceParticleIndex];
+                    contains = targetNode.outerBox.contains(position, &flops.doublePrecision);
+                }
+                int slot = contains;
+                int total;
+                computeIndices<kPrehydro1BlockSize>(slot, total);
+                int const offset = workspace.positions.size();
+                __syncthreads();
+                workspace.positions.resize(offset + total);
+                if (contains) {
+                    workspace.positions[offset + slot] = {
+                        position[kXDimension], position[kYDimension], position[kZDimension]};
+                }
+            }
+        }
+        for (int particleIndex = targetNode.particleRange.first;
+            particleIndex < targetNode.particleRange.second; particleIndex++) {
+            __syncthreads();
+            int const sinkIndex =
+                targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
+            bool const active = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] >=
+                parameters.minimumRung;
+            if (active && !data.sinkSmoothingConverged[sinkIndex]) {
+                Vector3<Position> position;
+                position[kXDimension] = data.sourcePositionX[particleIndex];
+                position[kYDimension] = data.sourcePositionY[particleIndex];
+                position[kZDimension] = data.sourcePositionZ[particleIndex];
+                float& supportRadius = data.sinkSupportRadius[sinkIndex];
+                bool const converged = solveSphSupportRadius<kPrehydro1BlockSize>(supportRadius,
+                    parameters.minimumSupportRadius, parameters.maximumSupportRadius,
+                    data.targetNeighborCount, workspace.positions, position, targetNode.outerBox,
+                    flops);
+                if (threadIndex == 0) {
+                    data.sinkSmoothingConverged[sinkIndex] = converged;
+                    if (converged) {
+                        atomicMin(&reduction->minimumSupportRadius, supportRadius);
+                        atomicMax(&reduction->maximumSupportRadius, supportRadius);
+                    } else {
+                        atomicAdd(&reduction->pendingChanges, 1);
+                    }
+                }
+            }
+        }
+        __syncthreads();
+        if (threadIndex == 0) {
+            targetNodeIndex = atomicAdd(&reduction->nextNodeIndex, 1);
+        }
+        __syncthreads();
+    }
+    detail::recordSphGpuFlops(flops, reduction);
+    (&workspace)->~SmoothingWorkspace();
+}
+
+// clang-format off
+/*
+ * Density and gradient sums: Monaghan (1992), ARA&A 30, 543, equation (3.8),
+ * doi:10.1146/annurev.aa.30.090192.002551; Cullen & Dehnen (2010), equations
+ * (15), (17), (B2), (B4), (B7), (B12), https://arxiv.org/abs/1006.1524.
+ *   ρ_a = Σ_b m_b W_ab(H_a), W_ab = H_a⁻³ w(q_ab), q_ab = |r_ab|/H_a,
+ *   ρ_a ∇·v_a = −Σ_b m_b v_ab · ∇_a W_ab,
+ *   ρ_a ∇×v_a = Σ_b m_b v_ab × ∇_a W_ab,
+ *   R_a = ρ_a⁻¹ Σ_b m_b W_ab sign(∇·v_b),
+ *   T = Σ_b r_ab ⊗ r_ab w̄_ab, D = Σ_b v_ab ⊗ r_ab w̄_ab, V = D T⁻¹.
+ * Derived acceleration analogue: C = Σ_b a_ab ⊗ r_ab w̄_ab, G = C T⁻¹.
+ * Symbol directory (Pack denotes SIMD partial sums):
+ *   H_a → sinkKernelSupportRadius; q_ab → normalizedRadius; w(q_ab) → kernelWeight
+ *   ρ_a → density; ρ_a ∇·v_a → densityWeightedDivergence
+ *   ρ_a ∇×v_a → densityWeightedCurl; ρ_a R_a → densityWeightedSignAverage
+ *   r_ab, v_ab, a_ab → separation, physicalVelocityDifference, accelerationDifference
+ *   m_b ∇_a W_ab → massWeightedKernelGradient
+ *   T, D, C → gradientSums.moment, gradientSums.velocity, gradientSums.acceleration
+ *   Σ_b w → kernelSum; Σ_b q_ab w′ → kernelDerivativeMoment
+ *   v_sig,a → signalSpeed (CUDA), signalSpeedPack (CPU)
+ *   w̄_ab = −m_b F_a → gradientWeight inside the corrected-gradient branch.
+ * Physical pair velocities include the Hubble flow in stored units. Peculiar velocities
+ * alone enter densityDerivativeSum; division by a ρ_a Ω_a gives d ln ρ_a/dτ
+ * (Price 2012, equation (27), https://arxiv.org/abs/1012.1885).
+ */
+// clang-format on
+__global__ void sphCudaPrehydro2(
+    SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
+    sph_flops::Counter flops = 1;    // γ − 1.
+    float const adiabaticIndex = data.adiabaticIndex;
+    float const pressureEnergyRatio = adiabaticIndex - 1.0f;    // P/(ρu) for every particle.
+    int const threadIndex = threadIdx.x;
+    int const blockSize = blockDim.x;
+    __shared__ int targetNodeIndex;
+    __shared__ detail::DensityWorkspace workspace;
+    new (&workspace) detail::DensityWorkspace();
+    if (threadIndex == 0) {
+        targetNodeIndex = atomicAdd(&reduction->nextNodeIndex, 1);
+    }
+    __syncthreads();
+    while (targetNodeIndex < data.numberOfTargetNodes) {
+        SphTreeNode const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
+        workspace.positions.resize(0);
+        workspace.particles.resize(0);
+        for (int neighborNodeIndex = targetNode.neighborRange.first;
+            neighborNodeIndex < targetNode.neighborRange.second; neighborNodeIndex++) {
+            auto const& neighborNode = data.treeNodes[data.neighborNodeIndices[neighborNodeIndex]];
+            int const end = neighborNode.particleRange.first +
+                roundUp(neighborNode.particleRange.second - neighborNode.particleRange.first,
+                    ParticleInteger(blockSize));
+            for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
+                sourceParticleIndex < end; sourceParticleIndex += blockSize) {
+                bool contains = false;
+                Vector3<Position> position;
+                if (sourceParticleIndex < neighborNode.particleRange.second) {
+                    position[kXDimension] = data.sourcePositionX[sourceParticleIndex];
+                    position[kYDimension] = data.sourcePositionY[sourceParticleIndex];
+                    position[kZDimension] = data.sourcePositionZ[sourceParticleIndex];
+                    contains = targetNode.outerBox.contains(position, &flops.doublePrecision);
+                    if (!contains) {
+                        contains = sphSupportIntersects(targetNode.innerBox, position,
+                            data.sourceSupportRadius[sourceParticleIndex], &flops);
+                    }
+                }
+                int slot = contains;
+                int total;
+                computeIndices<kPrehydro2BlockSize>(slot, total);
+                int const offset = workspace.positions.size();
+                __syncthreads();
+                workspace.positions.resize(offset + total);
+                workspace.particles.resize(offset + total);
+                if (contains) {
+                    workspace.positions[offset + slot] = {
+                        position[kXDimension], position[kYDimension], position[kZDimension]};
+                    workspace.particles[offset + slot] = {
+                        data.sourceSupportRadius[sourceParticleIndex],
+                        data.sourceRungs[sourceParticleIndex],
+                        (parameters.balsaraSwitch || parameters.variableViscosity ||
+                            data.sinkLogDensityRate) ?
+                            data.sourceVelocityX[sourceParticleIndex] :
+                            0.0f,
+                        (parameters.balsaraSwitch || parameters.variableViscosity ||
+                            data.sinkLogDensityRate) ?
+                            data.sourceVelocityY[sourceParticleIndex] :
+                            0.0f,
+                        (parameters.balsaraSwitch || parameters.variableViscosity ||
+                            data.sinkLogDensityRate) ?
+                            data.sourceVelocityZ[sourceParticleIndex] :
+                            0.0f,
+                        parameters.gradientSwitch() ?
+                            data.sourceAccelerationX[sourceParticleIndex] :
+                            0.0f,
+                        parameters.gradientSwitch() ?
+                            data.sourceAccelerationY[sourceParticleIndex] :
+                            0.0f,
+                        parameters.gradientSwitch() ?
+                            data.sourceAccelerationZ[sourceParticleIndex] :
+                            0.0f,
+                        parameters.cullenDehnen ?
+                            data.sourceVelocityDivergence[sourceParticleIndex] :
+                            0.0f,
+                        (parameters.cullenDehnen || parameters.huEtAl) ?
+                            data.sourceInternalEnergy[sourceParticleIndex] :
+                            0.0f};
+                }
+            }
+        }
+        for (int particleIndex = targetNode.particleRange.first;
+            particleIndex < targetNode.particleRange.second; particleIndex++) {
+            __syncthreads();
+            int const sinkIndex =
+                targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
+            bool const active = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] >=
+                parameters.minimumRung;
+            Vector3<Position> position;
+            position[kXDimension] = data.sourcePositionX[particleIndex];
+            position[kYDimension] = data.sourcePositionY[particleIndex];
+            position[kZDimension] = data.sourcePositionZ[particleIndex];
+            float& supportRadius = data.sinkSupportRadius[sinkIndex];
+            int semiactive = active;
+            if (!active) {
+                for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
+                    neighborIndex += blockSize) {
+                    auto const& neighbor = workspace.positions[neighborIndex];
+                    auto const& particle = workspace.particles[neighborIndex];
+                    if (particle.rung >= parameters.minimumRung) {
+                        float const separationX =
+                            distance(position[kXDimension], neighbor.positionX);
+                        float const separationY =
+                            distance(position[kYDimension], neighbor.positionY);
+                        float const separationZ =
+                            distance(position[kZDimension], neighbor.positionZ);
+                        flops += 10;    // Three fixed distances, squared norm, two supports.
+                        if (sqr(separationX, separationY, separationZ) <
+                            fmaxf(sqr(supportRadius), sqr(particle.supportRadius))) {
+                            semiactive++;
+                        }
+                    }
+                }
+                sharedReduceAdd<int, kPrehydro2BlockSize>(semiactive);
+            }
+            if (threadIndex == 0) {
+                data.sinkSemiactive[sinkIndex] = semiactive != 0;
+            }
+            if (!semiactive) {
+                continue;
+            }
+            bool converged = true;
+            if (!active && !data.sinkSmoothingConverged[sinkIndex]) {
+                converged = solveSphSupportRadius<kPrehydro2BlockSize>(supportRadius,
+                    parameters.minimumSupportRadius, parameters.maximumSupportRadius,
+                    data.targetNeighborCount, workspace.positions, position, targetNode.outerBox,
+                    flops);
+            }
+            if (!converged) {
+                if (threadIndex == 0) {
+                    data.sinkSmoothingConverged[sinkIndex] = false;
+                    atomicAdd(&reduction->pendingChanges, 1);
+                }
+                continue;
+            }
+            // clang-format off
+            /*
+             * Equation 3.8 of Monaghan (1992) (the interpolant 2.7 at r_a): ρ_a = Σ_b m_b W_ab,
+             * with the sink's own support radius in W(r, H_a) = w(r/H_a)/H_a³, a gather form of
+             * equation 6.3 (which uses h_b). Every gas particle has mass m_b = gasMass, and the
+             * sum includes b = a. Each thread accumulates part of the sum.
+             *
+             * Symbol directory (in the code below):
+             *   H_a → sinkKernelSupportRadius
+             *   m_b → data.gasMass
+             *   ρ_a → density
+             */
+            // clang-format on
+
+            float const sinkKernelSupportRadius = supportRadius;
+            float const inverseSupportRadius = 1.0f / sinkKernelSupportRadius;
+            float const massOverSupportVolume =
+                data.gasMass * inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
+            flops += 4;    // Reciprocal support and the mass/support-cubed scale.
+            float density = 0.0f;
+            float densityDerivativeSum = 0.0f;
+            float densityWeightedDivergence = 0.0f;
+            Vector3<float> densityWeightedCurl(0.0f);
+            cullen_and_dehnen::GradientSums<float> gradientSums{};
+            float densityWeightedSignAverage = 0.0f;
+            float signalSpeed = 0.0f;
+            // clang-format off
+            /*
+             * Variational operator: ΣW = Σ_b w(q_ab) and Σ_b q_ab w'(q_ab) give Ω_a and ζ_a.
+             *
+             * Symbol directory (in the code below):
+             *   q_ab → normalizedRadius
+             *   ζ_a → gradH.correction.weightedSupportCorrection
+             *   ΣW → kernelSum
+             */
+            // clang-format on
+            float kernelSum = 0.0f;
+            float kernelDerivativeMoment = 0.0f;
+            float soundSpeedForSwitch =
+                0.0f;    // Sound speed for the CD signal speed or Price target.
+            if (parameters.gradientSwitch()) {
+                soundSpeedForSwitch = sqrtf(adiabaticIndex * pressureEnergyRatio *
+                    data.sourceInternalEnergy[particleIndex]);
+            }
+            for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
+                neighborIndex += blockSize) {
+                auto const& neighbor = workspace.positions[neighborIndex];
+                Vector3<float> const separation(distance(position[kXDimension], neighbor.positionX),
+                    distance(position[kYDimension], neighbor.positionY),
+                    distance(position[kZDimension], neighbor.positionZ));
+                float const radius = sqrtf(separation.dot(separation));
+                float const normalizedRadius = radius * inverseSupportRadius;    // r_ab/H_a
+                float const kernelWeight = kernelW(normalizedRadius);
+                density += massOverSupportVolume * kernelWeight;
+                flops += 12 +
+                    sph_flops::densityKernelOperations(selectedHydroKernel(), normalizedRadius);
+                if (normalizedRadius < 1.0f) {
+                    kernelSum += kernelWeight;
+                    kernelDerivativeMoment += normalizedRadius * dkernelWDq(normalizedRadius);
+                    flops += 3 +
+                        sph_flops::densityKernelOperations(
+                            selectedHydroKernel(), normalizedRadius, true);
+                }
+                if (parameters.cullenDehnen) {
+                    /*
+                     * Cullen & Dehnen (2010), equation (17), including the self term.
+                     */
+                    float const neighborVelocityDivergence =
+                        workspace.particles[neighborIndex].divergence;
+                    float const neighborDivergenceSign = neighborVelocityDivergence > 0.0f ?
+                        1.0f :
+                        (neighborVelocityDivergence < 0.0f ? -1.0f : 0.0f);
+                    densityWeightedSignAverage +=
+                        massOverSupportVolume * kernelW(normalizedRadius) * neighborDivergenceSign;
+                    flops += 3 +
+                        sph_flops::densityKernelOperations(selectedHydroKernel(), normalizedRadius);
+                }
+                if ((parameters.balsaraSwitch || parameters.variableViscosity ||
+                        data.sinkLogDensityRate) &&
+                    radius > 0.0f && normalizedRadius < 1.0f) {
+                    // clang-format off
+                    /*
+                     * GADGET-4 equation (72): ρ_a div(v)_a and ρ_a curl(v)_a
+                     * are −Σ_b m_b v_ab·gradW_ab and Σ_b m_b v_ab×gradW_ab.
+                     *
+                     * Symbol directory (in the code below):
+                     *   v_ab → velocityDifference
+                     *   m_b → data.gasMass
+                     *   ρ_a → density
+                     */
+                    // clang-format on
+                    float const massWeightedGradientFactor = massOverSupportVolume *
+                        inverseSupportRadius * dkernelWDq(normalizedRadius) / radius;
+                    Vector3<float> const massWeightedKernelGradient =
+                        massWeightedGradientFactor * separation;
+                    auto const& particle = workspace.particles[neighborIndex];
+                    Vector3<float> const velocityDifference =
+                        Vector3<float>(data.sourceVelocityX[particleIndex],
+                            data.sourceVelocityY[particleIndex],
+                            data.sourceVelocityZ[particleIndex]) -
+                        Vector3<float>(particle.velocityX, particle.velocityY, particle.velocityZ);
+                    if (data.sinkLogDensityRate) {
+                        densityDerivativeSum += velocityDifference.dot(massWeightedKernelGradient);
+                        flops += 6;
+                    }
+                    if (parameters.balsaraSwitch || parameters.variableViscosity) {
+                        Vector3<float> const physicalVelocityDifference =
+                            velocityDifference + parameters.expansionRate * separation;
+                        densityWeightedDivergence -=
+                            physicalVelocityDifference.dot(massWeightedKernelGradient);
+                        if (parameters.balsaraSwitch) {
+                            for (int dim = 0; dim < kDimensions; ++dim) {
+                                int const next = (dim + 1) % kDimensions;
+                                int const last = (dim + 2) % kDimensions;
+                                densityWeightedCurl[dim] += physicalVelocityDifference[next] *
+                                        massWeightedKernelGradient[last] -
+                                    physicalVelocityDifference[last] *
+                                        massWeightedKernelGradient[next];
+                            }
+                        }
+                        if (parameters.gradientSwitch()) {
+                            /*
+                             * Cullen & Dehnen (2010), equations (B2), (B4), (B7), (B12), which
+                             * Price et al. (2018) equations (51)-(53) also use.
+                             * Equation (B7) permits mass/kernel-gradient weights, independent
+                             * of densities being updated by other MPI ranks in this pass.
+                             */
+                            float const gradientWeight = -massWeightedGradientFactor;
+                            Vector3<float> const accelerationDifference =
+                                Vector3<float>(data.sourceAccelerationX[particleIndex],
+                                    data.sourceAccelerationY[particleIndex],
+                                    data.sourceAccelerationZ[particleIndex]) -
+                                Vector3<float>(particle.accelerationX, particle.accelerationY,
+                                    particle.accelerationZ);
+                            for (int i = 0; i < kDimensions; ++i) {
+                                for (int j = 0; j < kDimensions; ++j) {
+                                    gradientSums.moment[i][j] +=
+                                        gradientWeight * separation[i] * separation[j];
+                                    gradientSums.velocity[i][j] += gradientWeight *
+                                        physicalVelocityDifference[i] * separation[j];
+                                    gradientSums.acceleration[i][j] +=
+                                        gradientWeight * accelerationDifference[i] * separation[j];
+                                }
+                            }
+                            flops += 84;
+                        }
+                        if (parameters.cullenDehnen || parameters.huEtAl) {
+                            // CD (15) and Hu (18): maximum approaching-pair signal speed.
+                            float const radialVelocity =
+                                physicalVelocityDifference.dot(separation) / radius;
+                            float const neighborSoundSpeed = sqrtf(
+                                adiabaticIndex * pressureEnergyRatio * particle.internalEnergy);
+                            signalSpeed = fmaxf(signalSpeed,
+                                0.5f * (soundSpeedForSwitch + neighborSoundSpeed) -
+                                    fminf(radialVelocity, 0.0f));
+                            flops += 13;
+                        }
+                        flops += 21 + (parameters.balsaraSwitch ? 12 : 0) +
+                            sph_flops::densityKernelOperations(
+                                selectedHydroKernel(), normalizedRadius, true);
+                    } else {
+                        flops += 9 +
+                            sph_flops::densityKernelOperations(
+                                selectedHydroKernel(), normalizedRadius, true);
+                    }
+                }
+            }
+            sharedReduceAdd<float, kPrehydro2BlockSize>(density);
+            flops += detail::sphReductionFlops<kPrehydro2BlockSize>();
+            sharedReduceAdd<float, kPrehydro2BlockSize>(kernelSum);
+            sharedReduceAdd<float, kPrehydro2BlockSize>(kernelDerivativeMoment);
+            flops += 2 * detail::sphReductionFlops<kPrehydro2BlockSize>();
+            if (data.sinkLogDensityRate) {
+                sharedReduceAdd<float, kPrehydro2BlockSize>(densityDerivativeSum);
+                flops += detail::sphReductionFlops<kPrehydro2BlockSize>();
+            }
+            if (parameters.balsaraSwitch || parameters.variableViscosity) {
+                sharedReduceAdd<float, kPrehydro2BlockSize>(densityWeightedDivergence);
+                flops += detail::sphReductionFlops<kPrehydro2BlockSize>();
+            }
+            if (parameters.balsaraSwitch) {
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    sharedReduceAdd<float, kPrehydro2BlockSize>(densityWeightedCurl[dim]);
+                }
+                flops += 3 * detail::sphReductionFlops<kPrehydro2BlockSize>();
+            }
+            if (parameters.cullenDehnen) {
+                sharedReduceAdd<float, kPrehydro2BlockSize>(densityWeightedSignAverage);
+                flops += detail::sphReductionFlops<kPrehydro2BlockSize>();
+            }
+            if (parameters.cullenDehnen || parameters.huEtAl) {
+                sharedReduceMax<kPrehydro2BlockSize>(signalSpeed);
+            }
+            if (parameters.gradientSwitch()) {
+                for (int i = 0; i < kDimensions; ++i) {
+                    for (int j = 0; j < kDimensions; ++j) {
+                        sharedReduceAdd<float, kPrehydro2BlockSize>(gradientSums.moment[i][j]);
+                        sharedReduceAdd<float, kPrehydro2BlockSize>(gradientSums.velocity[i][j]);
+                        sharedReduceAdd<float, kPrehydro2BlockSize>(
+                            gradientSums.acceleration[i][j]);
+                    }
+                }
+                flops += 27 * detail::sphReductionFlops<kPrehydro2BlockSize>();
+            }
+
+            if (threadIndex == 0) {
+                ALWAYS_ASSERT(sinkKernelSupportRadius > 0.0f && density > 0.0f);
+                data.sinkDensity[sinkIndex] = density;
+
+                auto const gradH = sphGradHEvaluation(sinkKernelSupportRadius,
+                    parameters.minimumSupportRadius, parameters.maximumSupportRadius,
+                    data.targetNeighborCount, data.gasMass, kernelSum, kernelDerivativeMoment);
+                flops += 8;    // Residual (2), and Ω, ζ, the weighted sums (6).
+                if (gradH.constraint != sph_volume::SupportConstraint::Free) {
+                    atomicAdd(&reduction->heldSupports, 1);
+                } else {
+                    // clang-format off
+                    /*
+                     * A held support uses ζ_a = 0. An unusable free correction stops the
+                     * run; a small positive Ω_a is counted.
+                     *
+                     * Symbol directory (in the code below):
+                     *   ζ_a → gradH.correction.weightedSupportCorrection
+                     */
+                    // clang-format on
+                    if (!sph_volume::isUsable(gradH.correction)) {
+                        printf("SPH grad-H correction is unusable: supportRadius=%e "
+                               "density=%e ΣW=%e Σq dw/dq=%e Ω=%e ζ=%e residual=%e\n",
+                            sinkKernelSupportRadius, density, kernelSum, kernelDerivativeMoment,
+                            gradH.correction.supportJacobian,
+                            gradH.correction.weightedSupportCorrection, gradH.relativeResidual);
+                        __trap();
+                    }
+                    atomicMin(&reduction->minimumGradHOmega, gradH.correction.supportJacobian);
+                    atomicMax(&reduction->maximumSupportResidual, fabsf(gradH.relativeResidual));
+                    if (!sph_volume::isWellConditioned(gradH.correction)) {
+                        atomicAdd(&reduction->illConditionedSupports, 1);
+                    }
+                }
+                data.sinkGradHCorrection[sinkIndex] = gradH.correction.weightedSupportCorrection;
+                if (data.sinkLogDensityRate) {
+                    // clang-format off
+                    /*
+                     * Price (2012), equation (27), with peculiar motion only:
+                     * d log(rho_comoving)/d tau = sum m v_ab.grad W/(a rho Omega).
+                     *
+                     * Symbol directory (in the code below):
+                     *   v_ab → velocityDifference
+                     */
+                    // clang-format on
+                    data.sinkLogDensityRate[sinkIndex] = densityDerivativeSum /
+                        (parameters.scaleFactor * density * gradH.correction.supportJacobian);
+                    flops += 3;
+                }
+
+                if (data.sinkBalsaraFactor) {
+                    data.sinkBalsaraFactor[sinkIndex] = parameters.balsaraSwitch ?
+                        balsara::balsaraFactor(
+                            densityWeightedDivergence, densityWeightedCurl.norm()) :
+                        1.0f;
+                }
+                flops += parameters.balsaraSwitch ? 8 : 0;
+                if (parameters.variableViscosity && !parameters.gradientSwitch() && active &&
+                    !data.sinkSmoothingConverged[sinkIndex] && parameters.viscosityTimestep > 0.0) {
+                    /*
+                     * Morris & Monaghan (1997), equations (5), (6), (13), in conformal time.
+                     */
+
+                    float const velocityDivergence =
+                        densityWeightedDivergence / (density * parameters.scaleFactor);
+                    float const soundSpeed = sqrtf(adiabaticIndex * pressureEnergyRatio *
+                        data.sourceInternalEnergy[particleIndex]);
+                    float const smoothingLength = sinkKernelSupportRadius /
+                        float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
+                        float(monaghan::kViscosityWidthScale);
+                    flops.doublePrecision += 1;
+                    float const inverseDecayTime = parameters.viscosityDecay * soundSpeed /
+                        (parameters.scaleFactor * smoothingLength);
+                    int const rung = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]];
+                    float const timeStep = parameters.globalTimestep ?
+                        parameters.viscosityTimestep :
+                        parameters.viscosityTimestep / (1 << rung);
+                    auto& bulkViscosityCoefficient = data.sinkBulkViscosityCoefficient[sinkIndex];
+                    bulkViscosityCoefficient = morris_and_monaghan::evolvedBulkViscosityCoefficient(
+                        bulkViscosityCoefficient, parameters.minimumBulkViscosityCoefficient,
+                        inverseDecayTime, velocityDivergence, timeStep);
+
+                    flops += 19;
+                    flops.doublePrecision += parameters.globalTimestep ? 1 : 2;
+                }
+                if (parameters.gradientSwitch()) {
+                    cullen_and_dehnen::Result<float> diagnostics;
+                    if (parameters.cullenDehnen) {
+                        diagnostics = cullen_and_dehnen::diagnostics(gradientSums,
+                            parameters.scaleFactor, parameters.expansionAcceleration,
+                            densityWeightedSignAverage / density, sinkKernelSupportRadius,
+                            fmaxf(soundSpeedForSwitch, signalSpeed),
+                            parameters.maximumBulkViscosityCoefficient, parameters.viscosityDecayCD,
+                            flops);
+                        flops += 1;
+                    } else if (parameters.huEtAl) {
+                        diagnostics = hu_etal::diagnostics(gradientSums, parameters.scaleFactor,
+                            parameters.expansionAcceleration, sinkKernelSupportRadius,
+                            soundSpeedForSwitch, fmaxf(soundSpeedForSwitch, signalSpeed),
+                            parameters.maximumBulkViscosityCoefficientHu,
+                            parameters.viscosityDecayHu, flops);
+                    } else {
+                        /*
+                         * Price et al. (2018), equations (46)-(48): the paper's smoothing
+                         * length is the same calibrated viscosity length as Morris & Monaghan's h.
+                         */
+                        float const smoothingLength = sinkKernelSupportRadius /
+                            float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
+                            float(monaghan::kViscosityWidthScale);
+                        flops.doublePrecision += 1;
+                        diagnostics = price_etal::diagnostics(gradientSums, parameters.scaleFactor,
+                            parameters.expansionRate, smoothingLength, soundSpeedForSwitch,
+                            parameters.maximumBulkViscosityCoefficientPrice,
+                            parameters.viscosityDecayPrice, flops);
+                        flops += 2;
+                    }
+                    auto& state = data.sinkCullenDehnenStates[sinkIndex];
+                    state.pendingDivergence = diagnostics.divergence;
+                    state.targetBulkViscosityCoefficient =
+                        diagnostics.targetBulkViscosityCoefficient;
+                    state.inverseDecayTime = diagnostics.inverseDecayTime;
+                    state.limiter = diagnostics.limiter;
+                }
+                data.sinkSmoothingConverged[sinkIndex] = true;
+                atomicMin(&reduction->minimumSupportRadius, supportRadius);
+                atomicMax(&reduction->maximumSupportRadius, supportRadius);
+            }
+        }
+        __syncthreads();
+        if (threadIndex == 0) {
+            targetNodeIndex = atomicAdd(&reduction->nextNodeIndex, 1);
+        }
+        __syncthreads();
+    }
+    detail::recordSphGpuFlops(flops, reduction);
+    (&workspace)->~DensityWorkspace();
+}

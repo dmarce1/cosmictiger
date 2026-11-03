@@ -30,8 +30,10 @@ double cosmosD2adt2(double a);
 double cosmosTime(double a0, double a1);
 double cosmosConformalTime(double a0, double a1, bool countFlops = true);
 double cosmosTauToScale(double a0, double t1);
+#if COSMICTIGER_ENABLE_ROCKSTAR
 void cosmosNfwFit(Vector<double> n, double& rs, double& rho0);
 double cosmosKlypinFit(double vmax, double rvir, double mvir);
+#endif
 double cosmosAinv(double& adot, double& a, double dt0);
 
 #endif /* COSMOLOGY_HPP_ */

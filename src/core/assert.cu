@@ -13,7 +13,7 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 __device__ void cosmictigerCudaAssert(
     char const* condStr, bool cond, char const* filename, int line) {
     if (!cond) {
-        PRINT("Condition \"%s\" failed in %s on line %i in CUDA_ARCH\n", condStr, filename, line);
+        printf("Condition \"%s\" failed in %s on line %i in CUDA_ARCH\n", condStr, filename, line);
         __trap();
     }
 }

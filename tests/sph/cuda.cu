@@ -21,11 +21,13 @@
 
 #include <cuda_runtime.h>
 
-#include <cosmictiger/hydro/sph/sph_cpu.hpp>
-#include <cosmictiger/hydro/sph/sph_cuda.hpp>
 #include <cosmictiger/math/vector3.hpp>
+#include <cosmictiger/sph/cpu.hpp>
+#include <cosmictiger/sph/cuda.hpp>
+#include <cosmictiger/sph/viscosity/monaghan.hpp>
 #include <tests/cuda_test.hpp>
 #include <tests/sph/global_timestep_cases.hpp>
+#include <tests/sph/phantom_pairs.hpp>
 #include <tests/sph/source_completion_cases.hpp>
 
 // Only the options-constructor, CPU counter, and host assertion services are replaced here.
@@ -169,8 +171,8 @@ public:
         params_.maximumTimestep = 1.0f;
         params_.phase = 0;
         params_.courantFactor = 0.25f;
-        params_.viscosityAlpha = 1.0f;
-        params_.viscosityBeta = 2.0f;
+        params_.bulkViscosityCoefficient = 1.0f;
+        params_.vonNeumannRichtmyerCoefficient = 2.0f;
         params_.viscosityEpsilon = 0.01f;
         params_.balsaraSwitch = false;
         params_.variableViscosity = false;
@@ -234,19 +236,23 @@ public:
         }
     }
 
-    void enableVariableViscosity(bool cullenDehnen = false, bool priceEtAl = false) {
+    void enableVariableViscosity(
+        bool cullenDehnen = false, bool priceEtAl = false, bool huEtAl = false) {
         params_.variableViscosity = true;
         params_.cullenDehnen = cullenDehnen;
         params_.priceEtAl = priceEtAl;
-        params_.viscosityAlphaMin = 0.1f;
+        params_.huEtAl = huEtAl;
+        params_.maximumBulkViscosityCoefficientHu = 1.0f;
+        params_.viscosityDecayHu = 0.05f;
+        params_.minimumBulkViscosityCoefficient = 0.1f;
         params_.viscosityDecay = 0.2f;
-        params_.viscosityAlphaMax = 2.0f;
+        params_.maximumBulkViscosityCoefficient = 2.0f;
         params_.viscosityDecayCD = 0.05f;
-        params_.viscosityAlphaMaxPrice = 1.0f;
+        params_.maximumBulkViscosityCoefficientPrice = 1.0f;
         params_.viscosityDecayPrice = 0.1f;
-        data_.sourceViscosityAlpha = allocate<float>(count_);
-        data_.sinkViscosityStates = allocate<SphViscosityState>(count_);
-        if (cullenDehnen || priceEtAl) {
+        data_.sourceBulkViscosityCoefficient = allocate<float>(count_);
+        data_.sinkBulkViscosityCoefficient = allocate<float>(count_);
+        if (cullenDehnen || priceEtAl || huEtAl) {
             data_.sourceAccelerationX = allocate<float>(count_);
             data_.sourceAccelerationY = allocate<float>(count_);
             data_.sourceAccelerationZ = allocate<float>(count_);
@@ -256,8 +262,8 @@ public:
             data_.sinkCullenDehnenStates = allocate<SphCullenDehnenState>(count_);
         }
         for (int i = 0; i < count_; ++i) {
-            data_.sourceViscosityAlpha[sourceIndex(i)] = 0.7f;
-            data_.sinkViscosityStates[sinkIndex(i)] = {0.7f, -9.0f, 0.6f};
+            data_.sourceBulkViscosityCoefficient[sourceIndex(i)] = 0.7f;
+            data_.sinkBulkViscosityCoefficient[sinkIndex(i)] = 0.7f;
         }
     }
 
@@ -307,7 +313,7 @@ public:
             require(std::isfinite(data_.sinkInternalEnergyRate[i]),
                 "finite active-kernel thermal rate");
             for (int dim = 0; dim < kDimensions; dim++) {
-                require(std::isfinite(data_.sinkAccelerations[i].acceleration[dim]),
+                require(std::isfinite(data_.sinkAccelerations[i][dim]),
                     "finite active-kernel acceleration");
             }
             if (phase == 1) {
@@ -324,7 +330,7 @@ public:
         double absoluteEnergy = 0.0;
         double absoluteForce = 0.0;
         for (int i = 0; i < count_; i++) {
-            auto const& acceleration = data_.sinkAccelerations[i].acceleration;
+            auto const& acceleration = data_.sinkAccelerations[i];
             double const kinetic = data_.gasMass *
                 (data_.sourceVelocityX[i] * acceleration[kXDimension] +
                     data_.sourceVelocityY[i] * acceleration[kYDimension] +
@@ -380,15 +386,17 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
     std::vector<float> const sourceSupport(
         data.sourceSupportRadius, data.sourceSupportRadius + fixture.count_);
     std::vector<char> const sourceRungs(data.sourceRungs, data.sourceRungs + fixture.count_);
-    std::vector<SphViscosityState> viscosityStates;
+    std::vector<float> bulkViscosityCoefficients;
     std::vector<SphCullenDehnenState> cullenDehnenStates;
     std::vector<float> sourceAlpha;
     std::vector<float> sourceDivergence;
     std::array<std::vector<float>, 3> sourceAcceleration;
     if (fixture.params_.variableViscosity) {
-        viscosityStates.assign(data.sinkViscosityStates, data.sinkViscosityStates + fixture.count_);
-        cpuData.sinkViscosityStates = viscosityStates.data();
-        sourceAlpha.assign(data.sourceViscosityAlpha, data.sourceViscosityAlpha + fixture.count_);
+        bulkViscosityCoefficients.assign(
+            data.sinkBulkViscosityCoefficient, data.sinkBulkViscosityCoefficient + fixture.count_);
+        cpuData.sinkBulkViscosityCoefficient = bulkViscosityCoefficients.data();
+        sourceAlpha.assign(data.sourceBulkViscosityCoefficient,
+            data.sourceBulkViscosityCoefficient + fixture.count_);
     }
     if (fixture.params_.gradientSwitch()) {
         cullenDehnenStates.assign(
@@ -478,13 +486,10 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
                 std::bit_cast<uint32_t>(sourceGradHCorrection[i]),
             "CPU/CUDA phases preserve grad-H source snapshots");
         if (fixture.params_.variableViscosity) {
-            auto const& cpu = viscosityStates[i];
-            auto const& gpu = data.sinkViscosityStates[i];
-            requireClose("CPU/CUDA viscosity alpha", cpu.alpha, gpu.alpha, 0.0);
-            requireClose("CPU/CUDA viscosity rate", cpu.rate, gpu.rate, 7.0e-5);
-            requireClose(
-                "CPU/CUDA predicted viscosity", cpu.predictedAlpha, gpu.predictedAlpha, 0.0);
-            require(sourceAlpha[i] == data.sourceViscosityAlpha[i],
+            auto const& cpu = bulkViscosityCoefficients[i];
+            auto const& gpu = data.sinkBulkViscosityCoefficient[i];
+            requireClose("CPU/CUDA bulk viscosity coefficient", cpu, gpu, 7.0e-5);
+            require(sourceAlpha[i] == data.sourceBulkViscosityCoefficient[i],
                 "CPU/CUDA phases preserve viscosity source snapshots");
         }
         if (fixture.params_.gradientSwitch()) {
@@ -493,7 +498,8 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
             requireClose("CPU/CUDA previous divergence", cpu.divergence, gpu.divergence, 0.0);
             requireClose("CPU/CUDA reconstructed divergence", cpu.pendingDivergence,
                 gpu.pendingDivergence, 3.0e-4);
-            requireClose("CPU/CUDA CD viscosity target", cpu.targetAlpha, gpu.targetAlpha, 3.0e-4);
+            requireClose("CPU/CUDA CD viscosity target", cpu.targetBulkViscosityCoefficient,
+                gpu.targetBulkViscosityCoefficient, 3.0e-4);
             requireClose(
                 "CPU/CUDA CD decay rate", cpu.inverseDecayTime, gpu.inverseDecayTime, 7.0e-5);
             require((data.sourceVelocityDivergence == nullptr ||
@@ -512,8 +518,8 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
         requireClose(
             "CPU/CUDA thermal rate", energyRate[i], data.sinkInternalEnergyRate[i], 5.0e-5);
         for (int dim = 0; dim < kDimensions; dim++) {
-            requireClose("CPU/CUDA acceleration", acceleration[i].acceleration[dim],
-                data.sinkAccelerations[i].acceleration[dim], 5.0e-5);
+            requireClose("CPU/CUDA acceleration", acceleration[i][dim],
+                data.sinkAccelerations[i][dim], 5.0e-5);
         }
         require(rungs[i] == data.sinkParticleRungs[i], "CPU/CUDA particle-rung parity");
         require(semiactive[i] == data.sinkSemiactive[i], "CPU/CUDA semiactive parity");
@@ -530,7 +536,7 @@ void testCpuCudaParity(int viscosityMode = 0) {
     Fixture fixture(19, 3, true);
     if (viscosityMode != 0) {
         fixture.enableVariableViscosity(viscosityMode == 2, viscosityMode == 3);
-        fixture.params_.viscosityBeta = 3.5f;
+        fixture.params_.vonNeumannRichtmyerCoefficient = 3.5f;
     }
 
     fixture.params_.balsaraSwitch = true;
@@ -577,8 +583,8 @@ void testCpuCudaParity(int viscosityMode = 0) {
         data.sourceVelocityZ[source] = 0.01f * (source % 2 ? 1 : -1);
         data.sourceRungs[source] = data.sinkParticleRungs[particle] = source % 3 ? 1 : 3;
         if (viscosityMode != 0) {
-            data.sourceViscosityAlpha[source] = 0.15f + 0.05f * source;
-            data.sinkViscosityStates[sink] = {data.sourceViscosityAlpha[source], -9.0f, 0.1f};
+            data.sourceBulkViscosityCoefficient[source] = 0.15f + 0.05f * source;
+            data.sinkBulkViscosityCoefficient[sink] = data.sourceBulkViscosityCoefficient[source];
         }
         if (viscosityMode >= 2) {
             data.sourceAccelerationX[source] = 0.02f * (source % 3 - 1);
@@ -607,7 +613,14 @@ void testCpuCudaParity(int viscosityMode = 0) {
     };
     compareCpuCudaPhase(fixture, kSphRunPrehydro1);
     publishSupport();
+    if (viscosityMode == 1) {
+        fixture.params_.viscosityTimestep = 0.08;
+        for (int i = 0; i < fixture.count_; ++i) {
+            data.sinkSmoothingConverged[i] = false;
+        }
+    }
     compareCpuCudaPhase(fixture, kSphRunPrehydro2);
+    fixture.params_.viscosityTimestep = 0.0;
     publishSupport();
     for (int source = 0; source < fixture.count_; source++) {
         data.sourceDensity[source] = data.sinkDensity[sinkIndices[source]];
@@ -691,61 +704,76 @@ void testMorrisMonaghanDensity() {
         data.sourceRungs[fixture.sourceIndex(i)] =
             data.sinkParticleRungs[fixture.particleIndex(i)] = i == 13 ? 1 : 0;
     }
+    fixture.params_.viscosityTimestep = 0.08;
     // Continuum compression, pure shear, and background expansion have different
     // sources. The scalar sum retains the finite stencil's SPH consistency error.
     for (float const scaleFactor : {1.0f, 0.4f}) {
-        for (float const compression : {0.0f, 0.5f, -0.5f}) {
-            for (float const expansion : {0.0f, 0.2f}) {
-                fixture.params_.scaleFactor = scaleFactor;
-                fixture.params_.expansionRate = expansion;
-                double density = 0.0;
-                double densityDivergence = 0.0;
-                for (int i = 0; i < fixture.count_; ++i) {
-                    int const source = fixture.sourceIndex(i);
-                    double const x = data.sourcePositionX[source].toDouble() - 0.5;
-                    double const y = data.sourcePositionY[source].toDouble() - 0.5;
-                    double const z = data.sourcePositionZ[source].toDouble() - 0.5;
-                    data.sourceVelocityX[source] = float(0.25 - compression * x + 0.3 * y);
-                    data.sourceVelocityY[source] = float(-0.5 - compression * y);
-                    data.sourceVelocityZ[source] = float(0.125 - compression * z);
-                    double const radius = std::sqrt(x * x + y * y + z * z);
-                    density += data.gasMass * kernelW(radius / 0.25) / std::pow(0.25, 3);
-                    if (radius > 0.0) {
-                        double const velocityDotRadius =
-                            (expansion - compression) * radius * radius + 0.3 * x * y;
-                        densityDivergence -= data.gasMass * velocityDotRadius *
-                            dkernelWDq(radius / 0.25) / (std::pow(0.25, 4) * radius);
+        for (bool const globalTimestep : {false, true}) {
+            fixture.params_.globalTimestep = globalTimestep;
+            for (float const compression : {0.0f, 0.5f, -0.5f}) {
+                for (float const expansion : {0.0f, 0.2f}) {
+                    fixture.params_.scaleFactor = scaleFactor;
+                    fixture.params_.expansionRate = expansion;
+                    double density = 0.0;
+                    double densityDivergence = 0.0;
+                    for (int i = 0; i < fixture.count_; ++i) {
+                        int const source = fixture.sourceIndex(i);
+                        double const x = data.sourcePositionX[source].toDouble() - 0.5;
+                        double const y = data.sourcePositionY[source].toDouble() - 0.5;
+                        double const z = data.sourcePositionZ[source].toDouble() - 0.5;
+                        data.sourceVelocityX[source] = float(0.25 - compression * x + 0.3 * y);
+                        data.sourceVelocityY[source] = float(-0.5 - compression * y);
+                        data.sourceVelocityZ[source] = float(0.125 - compression * z);
+                        double const radius = std::sqrt(x * x + y * y + z * z);
+                        density += data.gasMass * kernelW(radius / 0.25) / std::pow(0.25, 3);
+                        if (radius > 0.0) {
+                            double const velocityDotRadius =
+                                (expansion - compression) * radius * radius + 0.3 * x * y;
+                            densityDivergence -= data.gasMass * velocityDotRadius *
+                                dkernelWDq(radius / 0.25) / (std::pow(0.25, 4) * radius);
+                        }
                     }
-                }
-                double const sound =
-                    std::sqrt(double(data.adiabaticIndex) * (data.adiabaticIndex - 1.0) * 0.9);
-                double const inverseDecayTime = 0.2 * sound / (scaleFactor * 0.125);
-                double const expected = -0.6 * inverseDecayTime +
-                    std::max(-densityDivergence / (density * scaleFactor), 0.0);
-                fixture.densityPass();
-                requireClose("M&M density source and conformal decay",
-                    data.sinkViscosityStates[center].rate, expected, 2.0e-5);
-                float const rate = data.sinkViscosityStates[center].rate;
-                fixture.densityPass();
-                requireClose("repeated density passes do not integrate alpha",
-                    data.sinkViscosityStates[center].rate, rate, 0.0);
-                for (int i = 0; i < fixture.count_; ++i) {
-                    auto const& state = data.sinkViscosityStates[fixture.sinkIndex(i)];
-                    require(state.alpha == 0.7f && state.predictedAlpha == 0.6f,
-                        "density preserves viscosity integration state");
-                    require(data.sourceViscosityAlpha[fixture.sourceIndex(i)] == 0.7f,
-                        "density preserves the viscosity source snapshot");
-                    if (i != 13) {
-                        require(data.sinkSemiactive[fixture.sinkIndex(i)] && state.rate == -9.0f,
-                            "semiactive M&M neighbors do not advance their viscosity rate");
+                    double const soundSpeed =
+                        std::sqrt(double(data.adiabaticIndex) * (data.adiabaticIndex - 1.0) * 0.9);
+                    double const inverseDecayTime = 0.2 * soundSpeed / (scaleFactor * 0.125);
+                    double const timeStep = globalTimestep ? 0.08 : 0.04;
+                    double const source =
+                        std::max(-densityDivergence / (density * scaleFactor), 0.0);
+                    double const expected = (0.7 + timeStep * (source + 0.1 * inverseDecayTime)) /
+                        (1.0 + timeStep * inverseDecayTime);
+                    data.sinkBulkViscosityCoefficient[center] = 0.7f;
+                    data.sinkSmoothingConverged[center] = false;
+                    fixture.densityPass();
+                    requireClose("M&M backward Euler source and conformal decay",
+                        data.sinkBulkViscosityCoefficient[center], expected, 2.0e-5);
+                    float const bulkViscosityCoefficient =
+                        data.sinkBulkViscosityCoefficient[center];
+                    fixture.densityPass();
+                    requireClose("repeated density passes advance alpha only once",
+                        data.sinkBulkViscosityCoefficient[center], bulkViscosityCoefficient, 0.0);
+                    fixture.params_.viscosityTimestep = 0.0;
+                    data.sinkSmoothingConverged[center] = false;
+                    fixture.densityPass();
+                    requireClose("initial-time and source refresh passes preserve alpha",
+                        data.sinkBulkViscosityCoefficient[center], bulkViscosityCoefficient, 0.0);
+                    fixture.params_.viscosityTimestep = 0.08;
+                    for (int i = 0; i < fixture.count_; ++i) {
+                        require(data.sourceBulkViscosityCoefficient[fixture.sourceIndex(i)] == 0.7f,
+                            "density preserves the viscosity source snapshot");
+                        if (i != 13) {
+                            int const sink = fixture.sinkIndex(i);
+                            require(data.sinkSemiactive[sink] &&
+                                    data.sinkBulkViscosityCoefficient[sink] == 0.7f,
+                                "semiactive M&M neighbors retain their viscosity coefficient");
+                        }
                     }
                 }
             }
         }
     }
     fixture.params_.variableViscosity = false;
-    data.sourceViscosityAlpha = nullptr;
-    data.sinkViscosityStates = nullptr;
+    data.sourceBulkViscosityCoefficient = nullptr;
+    data.sinkBulkViscosityCoefficient = nullptr;
     fixture.densityPass();
     require(data.sourceAccelerationX == nullptr && data.sourceVelocityDivergence == nullptr &&
             data.sinkCullenDehnenStates == nullptr,
@@ -824,12 +852,11 @@ void testCullenDehnenDensity() {
                     require(data.sourceVelocityDivergence[source] ==
                             (history == 2 ? (i == 13 ? -1.0f : 0.0f) : float(history)),
                         "CD source divergence remains immutable");
-                    require(data.sinkViscosityStates[sink].alpha == 0.7f &&
-                            data.sinkViscosityStates[sink].rate == -9.0f,
+                    require(data.sinkBulkViscosityCoefficient[sink] == 0.7f,
                         "CD density does not apply the M&M update");
                     if (flow == 1 || flow == 3 || history == 1) {
                         requireClose("nonsteepening flow and expanding neighbor history",
-                            state.targetAlpha, 0.0, 3.0e-5);
+                            state.targetBulkViscosityCoefficient, 0.0, 3.0e-5);
                     }
                 }
                 int const center = fixture.sinkIndex(13);
@@ -859,32 +886,35 @@ void testCullenDehnenDensity() {
                         }
                     }
                     if (radiusSquared > 0.0) {
-                        double const sound = std::sqrt(
+                        double const soundSpeed = std::sqrt(
                             double(data.adiabaticIndex) * (data.adiabaticIndex - 1.0) * 0.9);
-                        signal = std::max(
-                            signal, sound - std::min(projection / std::sqrt(radiusSquared), 0.0));
+                        signal = std::max(signal,
+                            soundSpeed - std::min(projection / std::sqrt(radiusSquared), 0.0));
                     }
                 }
                 double const supportSquaredDetector = 0.25 * 0.25 * a2 * a2 * limiter * detector;
                 double const expectedTarget =
                     2.0 * supportSquaredDetector / (signal * signal + supportSquaredDetector);
                 requireClose("CD shock target including self history and pair signal",
-                    data.sinkCullenDehnenStates[center].targetAlpha, expectedTarget, 4.0e-5);
+                    data.sinkCullenDehnenStates[center].targetBulkViscosityCoefficient,
+                    expectedTarget, 4.0e-5);
                 requireClose("CD conformal decay uses full support",
                     data.sinkCullenDehnenStates[center].inverseDecayTime,
                     0.1 * signal / (scaleFactor * 0.25), 3.0e-5);
-                float const oldTarget = data.sinkCullenDehnenStates[center].targetAlpha;
+                float const oldTarget =
+                    data.sinkCullenDehnenStates[center].targetBulkViscosityCoefficient;
                 fixture.densityPass();
                 requireClose("CD repeated density preserves its source history",
-                    data.sinkCullenDehnenStates[center].targetAlpha, oldTarget, 0.0);
+                    data.sinkCullenDehnenStates[center].targetBulkViscosityCoefficient, oldTarget,
+                    0.0);
             }
         }
     }
 }
 
-void testPriceEtAlDensity() {
+void testVorticityLimitedDensity(bool huEtAl = false) {
     Fixture fixture(27, 3, true);
-    fixture.enableVariableViscosity(false, true);
+    fixture.enableVariableViscosity(false, !huEtAl, huEtAl);
     initializeViscosityStencil(fixture);
     auto& data = fixture.data_;
     // Price et al. (2018), equations (46)-(48), on affine flows: steepening and
@@ -911,7 +941,8 @@ void testPriceEtAlDensity() {
                 gradient[0][1] = 4.0 * a2;
             }
             for (int dim = 0; dim < kDimensions; ++dim) {
-                accelerationGradient[dim][dim] -= expansion * expansion / scaleFactor;
+                accelerationGradient[dim][dim] -=
+                    (huEtAl ? expansionAcceleration : expansion * expansion) / scaleFactor;
             }
             for (int i = 0; i < fixture.count_; ++i) {
                 int const source = fixture.sourceIndex(i);
@@ -942,16 +973,15 @@ void testPriceEtAlDensity() {
                 int const sink = fixture.sinkIndex(i);
                 auto const& state = data.sinkCullenDehnenStates[sink];
                 double const expectedDivergence = flow < 2 ? -3.0 : (flow == 2 ? -1.0 : 0.0);
-                requireClose("Price affine physical divergence", state.pendingDivergence,
+                requireClose("gradient-switch affine physical divergence", state.pendingDivergence,
                     expectedDivergence, 3.0e-5);
                 require(state.divergence == 9.0f,
-                    "Price density preserves previous divergence until all sinks finish");
-                require(data.sinkViscosityStates[sink].alpha == 0.7f &&
-                        data.sinkViscosityStates[sink].rate == -9.0f,
-                    "Price density does not apply the M&M update");
+                    "gradient-switch density preserves previous divergence until all sinks finish");
+                require(data.sinkBulkViscosityCoefficient[sink] == 0.7f,
+                    "gradient-switch density does not apply the M&M update");
                 if (flow == 1 || flow == 3) {
-                    requireClose(
-                        "nonsteepening flow has no Price target", state.targetAlpha, 0.0, 3.0e-5);
+                    requireClose("nonsteepening flow has no shock target",
+                        state.targetBulkViscosityCoefficient, 0.0, 3.0e-5);
                 }
             }
             // Equation (47) from the reconstructed gradient: |curl v|² is 100 for the sheared
@@ -963,20 +993,53 @@ void testPriceEtAlDensity() {
                 divergence * divergence / (divergence * divergence + curlSquared) :
                 0.0;
             double const detector = flow == 0 ? 3.0 : (flow == 2 ? 1.0 : 0.0);
-            double const sound =
+            double const soundSpeed =
                 std::sqrt(double(data.adiabaticIndex) * (data.adiabaticIndex - 1.0) * 0.9);
-            double const viscosityLength =
-                0.25 / selectedHydroKernel().supportRadiusPerEffectiveRadius * 0.9128709291752769;
-            double const expectedTarget = std::min(1.0,
-                10.0 * viscosityLength * viscosityLength * a2 * a2 * limiter * detector /
-                    (sound * sound));
-            requireClose("Price shock target uses the calibrated smoothing length and sound speed",
-                data.sinkCullenDehnenStates[center].targetAlpha, expectedTarget, 4.0e-5);
-            requireClose("Price conformal decay uses the sound speed",
+            double const smoothingLength = 0.25 /
+                selectedHydroKernel().supportRadiusPerEffectiveRadius *
+                monaghan::kViscosityWidthScale;
+            double const radiusSquaredShock = 0.25 * 0.25 * a2 * a2 * detector;
+            double const expectedTarget = huEtAl ?
+                radiusSquaredShock / (radiusSquaredShock + soundSpeed * soundSpeed) :
+                std::min(1.0,
+                    10.0 * smoothingLength * smoothingLength * a2 * a2 * limiter * detector /
+                        (soundSpeed * soundSpeed));
+            requireClose("gradient-switch shock target",
+                data.sinkCullenDehnenStates[center].targetBulkViscosityCoefficient, expectedTarget,
+                4.0e-5);
+            double signalSpeed = soundSpeed;
+            for (int i = 0; i < fixture.count_; ++i) {
+                int const source = fixture.sourceIndex(i);
+                double const position[3] = {data.sourcePositionX[source].toDouble() - 0.5,
+                    data.sourcePositionY[source].toDouble() - 0.5,
+                    data.sourcePositionZ[source].toDouble() - 0.5};
+                double radiusSquared = 0.0;
+                double radialVelocity = 0.0;
+                for (int axis = 0; axis < 3; ++axis) {
+                    radiusSquared += position[axis] * position[axis];
+                    for (int dim = 0; dim < 3; ++dim) {
+                        radialVelocity += gradient[axis][dim] * position[axis] * position[dim];
+                    }
+                }
+                if (radiusSquared > 0.0) {
+                    signalSpeed = std::max(signalSpeed,
+                        soundSpeed - std::min(0.0, radialVelocity / std::sqrt(radiusSquared)));
+                }
+            }
+            requireClose("gradient-switch conformal decay",
                 data.sinkCullenDehnenStates[center].inverseDecayTime,
-                0.1 * sound / (scaleFactor * viscosityLength), 3.0e-5);
+                huEtAl ? 0.1 * signalSpeed / (scaleFactor * 0.25) :
+                         0.1 * soundSpeed / (scaleFactor * smoothingLength),
+                3.0e-5);
+            if (huEtAl) {
+                double const expectedLimiter = divergence * divergence * a2 * a2 /
+                    ((divergence * divergence + curlSquared) * a2 * a2 +
+                        1.0e-4 * soundSpeed * soundSpeed / (0.25 * 0.25));
+                requireClose("Hu quadratic vorticity limiter with sound-speed regularization",
+                    data.sinkCullenDehnenStates[center].limiter, expectedLimiter, 4.0e-5);
+            }
             require(data.sourceVelocityDivergence == nullptr,
-                "Price et al. needs no neighbor divergence snapshot");
+                "Hu and Price need no neighbor divergence snapshot");
         }
     }
 }
@@ -993,48 +1056,44 @@ void testVariableViscosityPairs() {
         data.sourceVelocityX[source] = i == 0 ? 0.1f : -0.1f;
         data.sourceDensity[source] = 1.0f + i;
         data.sourceSupportRadius[source] = i == 0 ? 0.2f : 0.45f;
-        data.sourceViscosityAlpha[source] = i == 0 ? 0.2f : 1.4f;
-        data.sinkViscosityStates[sink].alpha = data.sourceViscosityAlpha[source];
+        data.sourceBulkViscosityCoefficient[source] = i == 0 ? 0.2f : 1.4f;
+        data.sinkBulkViscosityCoefficient[sink] = data.sourceBulkViscosityCoefficient[source];
     }
-    // Morris-Monaghan and Cullen-Dehnen pairs use beta_ab = viscosityBeta alpha_ab; Price
-    // et al. pairs keep the constant beta of their equation (41).
-    for (bool const priceEtAl : {false, true}) {
-        for (float const beta : {0.0f, 2.0f, 3.5f}) {
-            fixture.params_.variableViscosity = true;
-            fixture.params_.priceEtAl = priceEtAl;
-            fixture.params_.viscosityAlpha = 8.0f;    // Must not replace particle alpha.
-            fixture.params_.viscosityBeta = beta;
-            fixture.hydro();
-            fixture.checkConservation();
-            std::array<float, 2> heating;
-            std::array<SphAcceleration, 2> force;
-            for (int i = 0; i < 2; ++i) {
-                heating[i] = data.sinkInternalEnergyRate[fixture.sinkIndex(i)];
-                force[i] = data.sinkAccelerations[fixture.sinkIndex(i)];
-            }
-            fixture.params_.variableViscosity = false;
-            fixture.params_.priceEtAl = false;
-            fixture.params_.viscosityAlpha = 0.8f;
-            fixture.params_.viscosityBeta = priceEtAl ? beta : 0.8f * beta;
-            auto* sourceAlpha = data.sourceViscosityAlpha;
-            auto* states = data.sinkViscosityStates;
-            data.sourceViscosityAlpha = nullptr;
-            data.sinkViscosityStates = nullptr;
-            fixture.hydro();
-            fixture.checkConservation();
-            for (int i = 0; i < 2; ++i) {
-                int const sink = fixture.sinkIndex(i);
-                requireClose("variable pair alpha and beta heating", heating[i],
-                    data.sinkInternalEnergyRate[sink], 1.0e-5);
-                for (int dim = 0; dim < kDimensions; ++dim) {
-                    requireClose("symmetric variable pair alpha and beta force",
-                        force[i].acceleration[dim], data.sinkAccelerations[sink].acceleration[dim],
-                        1.0e-5);
-                }
-            }
-            data.sourceViscosityAlpha = sourceAlpha;
-            data.sinkViscosityStates = states;
+    // Morris-Monaghan and Cullen-Dehnen use beta_ab = viscosityBeta alpha_ab.
+    for (float const vonNeumannRichtmyerCoefficient : {0.0f, 2.0f, 3.5f}) {
+        fixture.params_.variableViscosity = true;
+        fixture.params_.priceEtAl = false;
+        fixture.params_.bulkViscosityCoefficient = 8.0f;    // Must not replace particle alpha.
+        fixture.params_.vonNeumannRichtmyerCoefficient = vonNeumannRichtmyerCoefficient;
+        fixture.hydro();
+        fixture.checkConservation();
+        std::array<float, 2> heating;
+        std::array<SphAcceleration, 2> force;
+        for (int i = 0; i < 2; ++i) {
+            heating[i] = data.sinkInternalEnergyRate[fixture.sinkIndex(i)];
+            force[i] = data.sinkAccelerations[fixture.sinkIndex(i)];
         }
+        fixture.params_.variableViscosity = false;
+        fixture.params_.priceEtAl = false;
+        fixture.params_.bulkViscosityCoefficient = 0.8f;
+        fixture.params_.vonNeumannRichtmyerCoefficient = 0.8f * vonNeumannRichtmyerCoefficient;
+        auto* sourceAlpha = data.sourceBulkViscosityCoefficient;
+        auto* states = data.sinkBulkViscosityCoefficient;
+        data.sourceBulkViscosityCoefficient = nullptr;
+        data.sinkBulkViscosityCoefficient = nullptr;
+        fixture.hydro();
+        fixture.checkConservation();
+        for (int i = 0; i < 2; ++i) {
+            int const sink = fixture.sinkIndex(i);
+            requireClose("variable pair alpha and beta heating", heating[i],
+                data.sinkInternalEnergyRate[sink], 1.0e-5);
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                requireClose("symmetric variable pair alpha and beta force", force[i][dim],
+                    data.sinkAccelerations[sink][dim], 1.0e-5);
+            }
+        }
+        data.sourceBulkViscosityCoefficient = sourceAlpha;
+        data.sinkBulkViscosityCoefficient = states;
     }
 }
 
@@ -1042,7 +1101,7 @@ void testCullenDehnenExcludedThermodynamics() {
     Fixture fixture(2, 2, true);
     fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.1f;
     fixture.enableVariableViscosity(true);
-    fixture.params_.viscosityBeta = 4.0f;
+    fixture.params_.vonNeumannRichtmyerCoefficient = 4.0f;
     auto& data = fixture.data_;
     for (int i = 0; i < 2; ++i) {
         int const source = fixture.sourceIndex(i);
@@ -1054,7 +1113,7 @@ void testCullenDehnenExcludedThermodynamics() {
         data.sourceRungs[source] = data.sinkParticleRungs[fixture.particleIndex(i)] =
             i == 0 ? 1 : 0;
         data.sourceInternalEnergy[source] = i == 0 ? 0.9f : -1.0f;
-        data.sourceViscosityAlpha[source] = i == 0 ? 0.7f : 1.0e38f;
+        data.sourceBulkViscosityCoefficient[source] = i == 0 ? 0.7f : 1.0e38f;
         data.sinkSmoothingConverged[sink] = true;
         data.sinkDensity[sink] = -9.0f;
         data.sinkCullenDehnenStates[sink] = {3.0f, 4.0f, 5.0f, 6.0f};
@@ -1072,7 +1131,7 @@ void testCullenDehnenExcludedThermodynamics() {
         "excluded inactive thermodynamics remain untouched");
     auto const& state = data.sinkCullenDehnenStates[inactive];
     require(state.divergence == 3.0f && state.pendingDivergence == 4.0f &&
-            state.targetAlpha == 5.0f && state.inverseDecayTime == 6.0f,
+            state.targetBulkViscosityCoefficient == 5.0f && state.inverseDecayTime == 6.0f,
         "excluded inactive CD history remains untouched");
     fixture.hydro();
     requireClose("excluded alpha leaves isolated heating zero", data.sinkInternalEnergyRate[active],
@@ -1145,8 +1204,7 @@ void testLattice() {
         requireClose(
             "uniform gas thermal rate", fixture.data_.sinkInternalEnergyRate[i], 0.0, 2.0e-5);
         for (int dim = 0; dim < kDimensions; dim++) {
-            requireClose("uniform gas force", fixture.data_.sinkAccelerations[i].acceleration[dim],
-                0.0, 2.0e-4);
+            requireClose("uniform gas force", fixture.data_.sinkAccelerations[i][dim], 0.0, 2.0e-4);
         }
     }
     require(fixture.reduction_->inverseSoundTimestep > 0.0f &&
@@ -1163,7 +1221,7 @@ void testLattice() {
     fixture.checkConservation();
     double forceNorm = 0.0;
     for (int i = 0; i < fixture.count_; i++) {
-        forceNorm += std::abs(fixture.data_.sinkAccelerations[i].acceleration[kXDimension]);
+        forceNorm += std::abs(fixture.data_.sinkAccelerations[i][kXDimension]);
     }
     require(forceNorm > 0.1, "perturbed gas must exercise nonzero acceleration");
 
@@ -1210,12 +1268,13 @@ void testUnequalSupports() {
     data.sourceVelocityX[1] = -0.1f;
     fixture.hydro();
     fixture.checkConservation();
-    require(data.sinkAccelerations[0].acceleration[kXDimension] < 0.0f &&
-            data.sinkAccelerations[1].acceleration[kXDimension] > 0.0f,
+    require(data.sinkAccelerations[0][kXDimension] < 0.0f &&
+            data.sinkAccelerations[1][kXDimension] > 0.0f,
         "union support must include both directions of repulsive force");
     std::array<float, 2> const viscousEnergy = {
         data.sinkInternalEnergyRate[0], data.sinkInternalEnergyRate[1]};
-    fixture.params_.viscosityAlpha = fixture.params_.viscosityBeta = 0.0f;
+    fixture.params_.bulkViscosityCoefficient = fixture.params_.vonNeumannRichtmyerCoefficient =
+        0.0f;
     fixture.hydro();
     for (int i = 0; i < 2; i++) {
         require(viscousEnergy[i] > data.sinkInternalEnergyRate[i],
@@ -1226,8 +1285,8 @@ void testUnequalSupports() {
     fixture.hydro();
     std::array<float, 2> const inviscidEnergy = {
         data.sinkInternalEnergyRate[0], data.sinkInternalEnergyRate[1]};
-    fixture.params_.viscosityAlpha = 1.0f;
-    fixture.params_.viscosityBeta = 2.0f;
+    fixture.params_.bulkViscosityCoefficient = 1.0f;
+    fixture.params_.vonNeumannRichtmyerCoefficient = 2.0f;
     fixture.hydro();
     fixture.checkConservation();
     for (int i = 0; i < 2; i++) {
@@ -1250,7 +1309,8 @@ void testSelectedKernel() {
         data.sourceSupportRadius[i] = data.sinkSupportRadius[i] = i == 0 ? 0.35f : 0.42f;
         data.sourceInternalEnergy[i] = i == 0 ? 0.7f : 1.2f;
     }
-    fixture.params_.viscosityAlpha = fixture.params_.viscosityBeta = 0.0f;
+    fixture.params_.bulkViscosityCoefficient = fixture.params_.vonNeumannRichtmyerCoefficient =
+        0.0f;
     fixture.density();
     double const radius = std::abs(distance(data.sourcePositionX[0], data.sourcePositionX[1]));
     double pressureForce = 0.0;
@@ -1268,22 +1328,22 @@ void testSelectedKernel() {
         double const pressureFactor =
             (data.adiabaticIndex - 1.0f) * data.sourceInternalEnergy[i] / data.sourceDensity[i];
         pressureForce += data.gasMass * pressureFactor / omega * derivative / std::pow(support, 4);
-        double const sound = std::sqrt(
+        double const soundSpeed = std::sqrt(
             data.adiabaticIndex * (data.adiabaticIndex - 1.0f) * data.sourceInternalEnergy[i]);
-        inverseCfl = std::max(
-            inverseCfl, sound * selectedHydroKernel().supportRadiusPerEffectiveRadius / support);
+        inverseCfl = std::max(inverseCfl,
+            soundSpeed * selectedHydroKernel().supportRadiusPerEffectiveRadius / support);
     }
     fixture.hydro(1);
-    requireClose("selected kernel CPU/CUDA pressure force",
-        data.sinkAccelerations[0].acceleration[kXDimension], pressureForce, 8.0e-6);
+    requireClose("selected kernel CPU/CUDA pressure force", data.sinkAccelerations[0][kXDimension],
+        pressureForce, 8.0e-6);
     requireClose("selected kernel effective-width CFL", fixture.reduction_->inverseSoundTimestep,
         inverseCfl, 3.0e-6);
     fixture.checkConservation();
 
     data.sourceVelocityX[0] = 0.1f;
     data.sourceVelocityX[1] = -0.1f;
-    fixture.params_.viscosityAlpha = 1.0f;
-    fixture.params_.viscosityBeta = 2.0f;
+    fixture.params_.bulkViscosityCoefficient = 1.0f;
+    fixture.params_.vonNeumannRichtmyerCoefficient = 2.0f;
     fixture.hydro();
     fixture.checkConservation();
 }
@@ -1298,7 +1358,8 @@ void testUnequalPairEos() {
     double const pressureEnergyRatio = data.adiabaticIndex - 1.0;
     data.sourcePositionX[0] = 0.40;
     data.sourcePositionX[1] = 0.58;
-    fixture.params_.viscosityAlpha = fixture.params_.viscosityBeta = 0.0f;
+    fixture.params_.bulkViscosityCoefficient = fixture.params_.vonNeumannRichtmyerCoefficient =
+        0.0f;
     for (int i = 0; i < 2; ++i) {
         data.sourcePositionY[i] = data.sourcePositionZ[i] = 0.5;
         data.sinkSmoothingConverged[i] = true;
@@ -1325,16 +1386,15 @@ void testUnequalPairEos() {
             "unequal pair exercises a nonzero grad-H correction");
         requireClose("unequal-pair grad-H correction", data.sourceGradHCorrection[i], zeta, 8.0e-6);
         directedGradient[i] = pressureFactor * (data.gasMass - zeta) * radialGradient;
-        double const sound =
+        double const soundSpeed =
             std::sqrt(data.adiabaticIndex * pressureEnergyRatio * data.sourceInternalEnergy[i]);
-        inverseCfl = std::max(
-            inverseCfl, sound * selectedHydroKernel().supportRadiusPerEffectiveRadius / support);
+        inverseCfl = std::max(inverseCfl,
+            soundSpeed * selectedHydroKernel().supportRadiusPerEffectiveRadius / support);
     }
     double const pressureForce = directedGradient[0] + directedGradient[1];
     fixture.hydro(1);
     for (int i = 0; i < 2; ++i) {
-        requireClose("unequal-pair pressure force",
-            data.sinkAccelerations[i].acceleration[kXDimension],
+        requireClose("unequal-pair pressure force", data.sinkAccelerations[i][kXDimension],
             i == 0 ? pressureForce : -pressureForce, 8.0e-6);
     }
     requireClose(
@@ -1363,7 +1423,7 @@ void testUnequalPairEos() {
         requireClose(
             "unequal-pair cosmological work", data.sinkInternalEnergyRate[i], expected, 2.0e-6);
         requireClose("unequal-pair cosmological pressure force",
-            data.sinkAccelerations[i].acceleration[kXDimension],
+            data.sinkAccelerations[i][kXDimension],
             (i == 0 ? pressureForce : -pressureForce) / fixture.params_.scaleFactor, 8.0e-6);
     }
 }
@@ -1383,8 +1443,8 @@ void testSelectedCentralGravity() {
     double const expected = -data.centralAcceleration * radius /
         std::pow(double(data.centralSupportRadius), 3) *
         radial_kernel::forceFactor(selectedGravityKernel(), radius / data.centralSupportRadius);
-    requireClose("selected gravity kernel central force",
-        data.sinkAccelerations[0].acceleration[kXDimension], expected, 5.0e-6);
+    requireClose("selected gravity kernel central force", data.sinkAccelerations[0][kXDimension],
+        expected, 5.0e-6);
 }
 
 void testFixedGravityTimestep() {
@@ -1416,8 +1476,8 @@ void testFixedGravityTimestep() {
 #else
     require(fixture.reduction_->maximumGravityRung == 0,
         "SPH-only builds must not report a self-gravity timestep");
-    requireClose("SPH-only ignores stored self-gravity",
-        data.sinkAccelerations[0].acceleration[kXDimension], 0.0, 0.0);
+    requireClose(
+        "SPH-only ignores stored self-gravity", data.sinkAccelerations[0][kXDimension], 0.0, 0.0);
     int const hydroRung = fixture.reduction_->maximumHydroRung;
     data.sinkGravityAccelerationX[0] = 1.0e20f;
     data.gravityEffectiveRadius = 1.0e-20f;
@@ -1427,7 +1487,7 @@ void testFixedGravityTimestep() {
             fixture.reduction_->maximumRung == hydroRung,
         "stored self-gravity must not constrain SPH-only timesteps");
     requireClose("SPH-only ignores changed stored self-gravity",
-        data.sinkAccelerations[0].acceleration[kXDimension], 0.0, 0.0);
+        data.sinkAccelerations[0][kXDimension], 0.0, 0.0);
 #endif
 }
 
@@ -1462,7 +1522,7 @@ void testZPlaneAcceleration() {
     for (size_t i = 0; i < sizeof(positions) / sizeof(positions[0]); i++) {
         data.sourcePositionZ[source] = positions[i];
         fixture.hydro(1);
-        auto const& acceleration = data.sinkAccelerations[sink].acceleration;
+        auto const& acceleration = data.sinkAccelerations[sink];
         requireClose("midplane force has no x component", acceleration[kXDimension], 0.0, 1.0e-7);
         requireClose("midplane force has no y component", acceleration[kYDimension], 0.0, 1.0e-7);
         requireClose("midplane force points inward including adjacent fixed coordinates",
@@ -1482,7 +1542,7 @@ void testZPlaneAcceleration() {
     fixture.params_.zPlaneAcceleration = 0.0f;
     fixture.hydro();
     requireClose("zero magnitude disables midplane force",
-        data.sinkAccelerations[sink].acceleration[kZDimension], 0.0, 1.0e-7);
+        data.sinkAccelerations[sink][kZDimension], 0.0, 1.0e-7);
 
     fixture.params_.zPlaneAcceleration = 0.5f;
     fixture.params_.uniformAccelerationY = 0.25f;
@@ -1492,7 +1552,7 @@ void testZPlaneAcceleration() {
     for (bool const selfGravity : {false, true}) {
         data.selfGravityEnabled = selfGravity;
         fixture.hydro();
-        auto const& acceleration = data.sinkAccelerations[sink].acceleration;
+        auto const& acceleration = data.sinkAccelerations[sink];
         bool const expectSelfGravity = COSMICTIGER_WITH_GRAVITY && selfGravity;
         requireClose("midplane force preserves enabled self gravity in x",
             acceleration[kXDimension], expectSelfGravity ? 0.125 : 0.0, 1.0e-7);
@@ -1515,11 +1575,11 @@ void testDefaultTimestepCalibration() {
         std::sqrt(selectedGravityKernel().supportRadiusPerEffectiveRadius / oldCentralPotential);
     fixture.density();
     fixture.hydro(1);
-    double const sound = std::sqrt(
+    double const soundSpeed = std::sqrt(
         data.adiabaticIndex * (data.adiabaticIndex - 1.0f) * data.sourceInternalEnergy[0]);
     double const oldSmoothingLength = 0.5 * data.sourceSupportRadius[0];
-    double const expectedSoundStep =
-        0.25 * oldSmoothingLength / (sound * (1.0 + 0.6 * fixture.params_.viscosityAlpha));
+    double const expectedSoundStep = 0.25 * oldSmoothingLength /
+        (soundSpeed * (1.0 + 0.6 * fixture.params_.bulkViscosityCoefficient));
     double const soundStep = fixture.params_.courantFactor /
         (fixture.reduction_->inverseSoundTimestep + fixture.reduction_->inverseViscosityTimestep);
     requireClose("default cubic sound and viscosity timestep calibration", soundStep,
@@ -1546,7 +1606,8 @@ void testDefaultThermalTimestep() {
         data.sourceInternalEnergy[i] = 1.0e-6f;
         data.sourceVelocityX[i] = i == 0 ? 1.0f : -1.0f;
     }
-    fixture.params_.viscosityAlpha = fixture.params_.viscosityBeta = 0.0f;
+    fixture.params_.bulkViscosityCoefficient = fixture.params_.vonNeumannRichtmyerCoefficient =
+        0.0f;
     fixture.params_.courantFactor = 0.25 * std::sqrt(5.0 / 6.0);
     double const oldEta = 0.25 / std::sqrt(693.0 / 256.0);
     data.accelerationTimestepFactor =
@@ -1555,10 +1616,10 @@ void testDefaultThermalTimestep() {
     fixture.hydro(1);
     for (int i = 0; i < 2; i++) {
         double const oldWidth = 0.5 * data.sourceSupportRadius[i];
-        double const sound =
+        double const soundSpeed =
             std::sqrt(kAdiabaticIndex * (kAdiabaticIndex - 1.0f) * data.sourceInternalEnergy[i]);
-        double const acceleration = std::abs(data.sinkAccelerations[i].acceleration[kXDimension]);
-        double const soundStep = 0.25 * oldWidth / sound;
+        double const acceleration = std::abs(data.sinkAccelerations[i][kXDimension]);
+        double const soundStep = 0.25 * oldWidth / soundSpeed;
         double const accelerationStep = oldEta * std::sqrt(oldWidth / acceleration);
         double const thermalStep =
             0.25 * data.sourceInternalEnergy[i] / std::abs(data.sinkInternalEnergyRate[i]);
@@ -1612,7 +1673,16 @@ TEST_F(SphCudaTest, CullenDehnenDensity) {
 }
 
 TEST_F(SphCudaTest, PriceEtAlDensity) {
-    detail::testPriceEtAlDensity();
+    detail::testVorticityLimitedDensity();
+}
+
+TEST_F(SphCudaTest, HuEtAlDensity) {
+    detail::testVorticityLimitedDensity(true);
+}
+
+TEST_F(SphCudaTest, PhantomPairs) {
+    detail::Fixture fixture(2, 2, true);
+    detail::testPhantomPairs(fixture);
 }
 
 TEST_F(SphCudaTest, VariableViscosityPairs) {
@@ -1678,14 +1748,15 @@ TEST_F(SphCudaTest, BalsaraSymmetricForceAndHeating) {
         data.sinkInternalEnergyRate[0], data.sinkInternalEnergyRate[1]};
     std::array<SphAcceleration, 2> const fullForce = {
         data.sinkAccelerations[0], data.sinkAccelerations[1]};
-    fixture.params_.viscosityAlpha = fixture.params_.viscosityBeta = 0.0f;
+    fixture.params_.bulkViscosityCoefficient = fixture.params_.vonNeumannRichtmyerCoefficient =
+        0.0f;
     fixture.hydro();
     std::array<float, 2> const pressureHeating = {
         data.sinkInternalEnergyRate[0], data.sinkInternalEnergyRate[1]};
     std::array<SphAcceleration, 2> const pressureForce = {
         data.sinkAccelerations[0], data.sinkAccelerations[1]};
-    fixture.params_.viscosityAlpha = 1.0f;
-    fixture.params_.viscosityBeta = 2.0f;
+    fixture.params_.bulkViscosityCoefficient = 1.0f;
+    fixture.params_.vonNeumannRichtmyerCoefficient = 2.0f;
     fixture.params_.balsaraSwitch = true;
     fixture.hydro();
     fixture.checkConservation();
@@ -1694,10 +1765,8 @@ TEST_F(SphCudaTest, BalsaraSymmetricForceAndHeating) {
         detail::requireClose("Balsara pair heating", data.sinkInternalEnergyRate[i],
             pressureHeating[i] + 0.5f * (fullHeating[i] - pressureHeating[i]), 5.0e-6);
         for (int dim = 0; dim < kDimensions; ++dim) {
-            detail::requireClose("Balsara pair force", data.sinkAccelerations[i].acceleration[dim],
-                pressureForce[i].acceleration[dim] +
-                    0.5f * (fullForce[i].acceleration[dim] - pressureForce[i].acceleration[dim]),
-                5.0e-6);
+            detail::requireClose("Balsara pair force", data.sinkAccelerations[i][dim],
+                pressureForce[i][dim] + 0.5f * (fullForce[i][dim] - pressureForce[i][dim]), 5.0e-6);
         }
     }
 }

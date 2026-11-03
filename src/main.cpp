@@ -12,7 +12,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
+#include <format>
 #include <fstream>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -77,7 +79,7 @@ void writeProfile() {
     if (report.empty()) {
         return;
     }
-    PRINT("\n%s", report.c_str());
+    std::cout << std::format("\n{:s}", report.c_str()) << std::flush;
     profile::profileOutput(outputPath("profile.txt"));
 }
 
@@ -86,9 +88,10 @@ void writeProfile() {
 int hpx_main(int argc, char* argv[]) {
     std::atomic<int> i;
     if (!i.is_lock_free()) {
-        PRINT("std::atomic<int> is not lock free!\n");
-        PRINT("std::atomic<int> must be lock_free for CosmicTiger to run properly.\n");
-        PRINT("Exiting...\n");
+        std::cout << "std::atomic<int> is not lock free!\n" << std::flush;
+        std::cout << "std::atomic<int> must be lock_free for CosmicTiger to run properly.\n"
+                  << std::flush;
+        std::cout << "Exiting...\n" << std::flush;
         return hpx::finalize();
     }
     hpxInit();
@@ -196,7 +199,8 @@ int hpx_main(int argc, char* argv[]) {
 #endif
         particlesDestroy();
     } catch (profile::Interrupted const&) {
-        PRINT("\n  Interrupted: finishing cleanup and writing profiling reports.\n");
+        std::cout << "\n  Interrupted: finishing cleanup and writing profiling reports.\n"
+                  << std::flush;
         detail::writeProfile();
         try {
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
@@ -204,14 +208,16 @@ int hpx_main(int argc, char* argv[]) {
 #endif
             particlesDestroy();
         } catch (std::exception const& error) {
-            PRINT("Cleanup after interruption failed: %s\n", error.what());
+            std::cout << std::format("Cleanup after interruption failed: {:s}\n", error.what())
+                      << std::flush;
             if (daemonStarted) {
                 stopMemuseDaemon();
             }
             hpx::finalize();
             return EXIT_FAILURE;
         } catch (...) {
-            PRINT("Cleanup after interruption failed with an unknown exception\n");
+            std::cout << "Cleanup after interruption failed with an unknown exception\n"
+                      << std::flush;
             if (daemonStarted) {
                 stopMemuseDaemon();
             }
@@ -219,15 +225,16 @@ int hpx_main(int argc, char* argv[]) {
             return EXIT_FAILURE;
         }
     } catch (std::exception const& error) {
-        PRINT("CosmicTiger failed: %s\n", error.what());
+        std::cout << std::format("CosmicTiger failed: {:s}\n", error.what()) << std::flush;
         try {
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
             pmmmDestroy();
 #endif
         } catch (std::exception const& cleanupError) {
-            PRINT("PMMM cleanup failed: %s\n", cleanupError.what());
+            std::cout << std::format("PMMM cleanup failed: {:s}\n", cleanupError.what())
+                      << std::flush;
         } catch (...) {
-            PRINT("PMMM cleanup failed during exception handling\n");
+            std::cout << "PMMM cleanup failed during exception handling\n" << std::flush;
         }
         if (daemonStarted) {
             stopMemuseDaemon();
@@ -235,13 +242,13 @@ int hpx_main(int argc, char* argv[]) {
         hpx::finalize();
         return EXIT_FAILURE;
     } catch (...) {
-        PRINT("CosmicTiger failed with an unknown exception\n");
+        std::cout << "CosmicTiger failed with an unknown exception\n" << std::flush;
         try {
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
             pmmmDestroy();
 #endif
         } catch (...) {
-            PRINT("PMMM cleanup failed during exception handling\n");
+            std::cout << "PMMM cleanup failed during exception handling\n" << std::flush;
         }
         if (daemonStarted) {
             stopMemuseDaemon();

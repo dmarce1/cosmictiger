@@ -13,6 +13,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <format>
+#include <iostream>
 #include <numbers>
 #include <stdexcept>
 #include <string>
@@ -31,13 +33,13 @@
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/tree.hpp>
-#include <cosmictiger/hydro/sph/cullen_and_dehnen/particle_exchange.hpp>
-#include <cosmictiger/hydro/sph/sph.hpp>
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
-#include <cosmictiger/hydro/sph/sph_tree.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
+#include <cosmictiger/sph/sph.hpp>
+#include <cosmictiger/sph/tree.hpp>
+#include <cosmictiger/sph/viscosity/cullen_and_dehnen_particle_exchange.hpp>
 
 #ifdef USE_CUDA
 void verifySelectedKernelsCuda();
@@ -126,10 +128,10 @@ void verifySphExceptionMask() {
 #endif
 }
 
-gadget4::State migrationChemistryState(int target) {
-    gadget4::State state{};
-    state.electronFraction = 0.25f + target / 128.0f;
-    return state;
+float migrationElectronFraction(int target) {
+    float electronFraction{1.0f};
+    electronFraction = 0.25f + target / 128.0f;
+    return electronFraction;
 }
 
 void initializePair(double separation) {
@@ -269,20 +271,20 @@ double integrateReference(Function function, double begin, double end) {
 void softenedPairReference(double separation, double& inverseCube, double& inverseRadius) {
     auto const& kernel = selectedGravityKernel();
     double const support = getOptions().gravity.supportRadius;
-    double const q = separation / support;
+    double const smoothingNormalizedRadius = separation / support;
     double const fourPi = 4.0 * std::numbers::pi;
     // Integrate the density independently of the force/potential antiderivative tables.
     double const mass = fourPi *
         integrateReference(
             [&](double radius) { return radius * radius * radial_kernel::value(kernel, radius); },
-            0.0, q);
+            0.0, smoothingNormalizedRadius);
     inverseCube = mass / (separation * separation * separation);
     inverseRadius =
-        (mass / q +
+        (mass / smoothingNormalizedRadius +
             fourPi *
                 integrateReference(
-                    [&](double radius) { return radius * radial_kernel::value(kernel, radius); }, q,
-                    1.0)) /
+                    [&](double radius) { return radius * radial_kernel::value(kernel, radius); },
+                    smoothingNormalizedRadius, 1.0)) /
         support;
 }
 
@@ -464,16 +466,16 @@ void initializeSphDomainRegression() {
         particlesPos(kXDimension, i).raw() += 17;
     }
     sphParticlesEntropyRate(0) = 20.0 + target;
-    sphParticlesAccelerationStates[0].acceleration[kXDimension] = 30.0 + target;
+    sphParticlesAccelerationStates[0][kXDimension] = 30.0 + target;
     sphParticlesGravityAccelerations[kZDimension][0] = 50.0 + target;
     if (getOptions().hydro.viscosityEvolution != "none") {
-        sphParticlesViscosityStates[0] = {0.5f + target / 16.0f, -0.0625f + target / 128.0f, 99.0f};
+        sphParticlesBulkViscosityCoefficients[0] = 0.5f + target / 16.0f;
     }
     if (getOptions().hydro.viscosityGradientSwitch()) {
         sphParticlesCullenDehnenStates[0] = {-1.5f + target / 8.0f, 77.0f, 88.0f, 99.0f};
     }
     if (getOptions().chemistry.enabled) {
-        sphParticlesChemistryStates[0] = migrationChemistryState(target);
+        sphParticlesElectronFractions[0] = migrationElectronFraction(target);
     }
 }
 HPX_PLAIN_ACTION(initializeSphDomainRegression, InitializeSphDomainRegressionAction);
@@ -519,31 +521,26 @@ void validateSphDomainRegression() {
         }
     }
     requireClose("migration thermal stage", sphParticlesEntropyRate(0), 20.0 + target);
-    requireClose("migration acceleration stage",
-        sphParticlesAccelerationStates[0].acceleration[kXDimension], 30.0 + target);
+    requireClose("migration acceleration stage", sphParticlesAccelerationStates[0][kXDimension],
+        30.0 + target);
     requireClose(
         "migration gravity", sphParticlesGravityAccelerations[kZDimension][0], 50.0 + target);
     if (getOptions().hydro.viscosityEvolution != "none") {
-        requireClose(
-            "migration viscosity alpha", sphParticlesViscosityStates[0].alpha, 0.5 + target / 16.0);
-        requireClose("migration viscosity rate", sphParticlesViscosityStates[0].rate,
-            -0.0625 + target / 128.0);
-        requireClose("migration resets predictor scratch",
-            sphParticlesViscosityStates[0].predictedAlpha, sphParticlesViscosityStates[0].alpha);
+        requireClose("migration viscosity alpha", sphParticlesBulkViscosityCoefficients[0],
+            0.5 + target / 16.0);
     }
     if (getOptions().hydro.viscosityGradientSwitch()) {
         auto const& state = sphParticlesCullenDehnenStates[0];
         requireClose(
             "migration preserves physical divergence", state.divergence, -1.5 + target / 8.0);
         requireClose("migration resets pending divergence", state.pendingDivergence, 0.0);
-        requireClose("migration resets target alpha", state.targetAlpha, 0.0);
+        requireClose("migration resets target alpha", state.targetBulkViscosityCoefficient, 0.0);
         requireClose("migration resets decay time", state.inverseDecayTime, 0.0);
     }
     if (getOptions().chemistry.enabled) {
-        auto const expected = migrationChemistryState(target);
-        auto const& actual = sphParticlesChemistryStates[0];
-        if (std::bit_cast<uint32_t>(actual.electronFraction) !=
-            std::bit_cast<uint32_t>(expected.electronFraction)) {
+        auto const expected = migrationElectronFraction(target);
+        auto const& actual = sphParticlesElectronFractions[0];
+        if (std::bit_cast<uint32_t>(actual) != std::bit_cast<uint32_t>(expected)) {
             throw std::runtime_error("Migration changed the equilibrium electron-guess bits");
         }
     }
@@ -551,11 +548,12 @@ void validateSphDomainRegression() {
     remote.proc = (hpxRank() + 1) % hpxSize();
     remote.range = {0, 1};
     if (getOptions().hydro.viscosityEvolution != "none") {
-        float alpha[3] = {-9.0f, -9.0f, -9.0f};
-        sphParticlesGlobalReadDensity(remote, nullptr, 1, nullptr, alpha);
-        requireClose("remote viscosity cache", alpha[1], 0.5 + remote.proc / 16.0);
-        requireClose("remote viscosity lower padding", alpha[0], -9.0);
-        requireClose("remote viscosity upper padding", alpha[2], -9.0);
+        float bulkViscosityCoefficient[3] = {-9.0f, -9.0f, -9.0f};
+        sphParticlesGlobalReadDensity(remote, nullptr, 1, nullptr, bulkViscosityCoefficient);
+        requireClose(
+            "remote viscosity cache", bulkViscosityCoefficient[1], 0.5 + remote.proc / 16.0);
+        requireClose("remote viscosity lower padding", bulkViscosityCoefficient[0], -9.0);
+        requireClose("remote viscosity upper padding", bulkViscosityCoefficient[2], -9.0);
     }
     if (getOptions().hydro.viscosityGradientSwitch()) {
         float acceleration[kDimensions][3]{};
@@ -661,8 +659,10 @@ void sphGravityTest() {
     for (auto& future : pending) {
         future.get();
     }
-    PRINT("Native position gather regression passed (%i bits, %i localities)\n", kPositionBits,
-        hpxSize());
+    std::cout << std::format(
+                     "Native position gather regression passed ({:d} bits, {:d} localities)\n",
+                     kPositionBits, hpxSize())
+              << std::flush;
     domainsRebound();
     domainsBegin(0);
     domainsEnd();
@@ -684,6 +684,7 @@ void sphGravityTest() {
         }
         treeDestroy(true);
     }
-    PRINT("SPH gravity regression passed (%s, %i localities)\n", useCuda ? "CPU and CUDA" : "CPU",
-        hpxSize());
+    std::cout << std::format("SPH gravity regression passed ({:s}, {:d} localities)\n",
+                     useCuda ? "CPU and CUDA" : "CPU", hpxSize())
+              << std::flush;
 }

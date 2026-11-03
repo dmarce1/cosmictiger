@@ -4,8 +4,10 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <functional>
+#include <iostream>
 #include <limits>
 #include <numbers>
 #include <numeric>
@@ -655,9 +657,11 @@ void rockstarPruneCatalogueGroups(Vector<Subgroup>& groups, float scale) {
 size_t rockstarCatalogueSize(size_t count) {
     constexpr size_t kCapacity = 32768;
     if (count > kCapacity) {
-        PRINT("ROCKSTAR catalogue capacity: omitting %zu of %zu halos from this FoF work unit; "
-              "the native 15-bit halo ID format supports 32768 records.\n",
-            count - kCapacity, count);
+        std::cout << std::format(
+                         "ROCKSTAR catalogue capacity: omitting {:d} of {:d} halos from this FoF "
+                         "work unit; the native 15-bit halo ID format supports 32768 records.\n",
+                         count - kCapacity, count)
+                  << std::flush;
     }
     return std::min(count, kCapacity);
 }

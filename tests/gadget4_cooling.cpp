@@ -171,7 +171,7 @@ TEST(Gadget4Cooling, FloorAndFailedApplicationAreTransactional) {
     input.density = -1.0;
     result = g4::advance(input, parameters);
     EXPECT_EQ(result.status, g4::Status::InvalidInput);
-    EXPECT_EQ(result.state, input.state);
+    EXPECT_EQ(result.electronFraction, input.electronFraction);
     EXPECT_EQ(result.specificEnergy, input.specificEnergy);
     double electrons = 0.3;
     double output = 123.0;
@@ -245,7 +245,7 @@ TEST(Gadget4Cooling, BatchAndCudaUseTheSameSource) {
         auto const direct = g4::advance(inputs[index], parameters);
         ASSERT_EQ(cpu[index].status, g4::Status::Success);
         EXPECT_EQ(cpu[index].specificEnergy, direct.specificEnergy);
-        EXPECT_EQ(cpu[index].state, direct.state);
+        EXPECT_EQ(cpu[index].electronFraction, direct.electronFraction);
     }
     std::string error;
     bool const dispatched =
@@ -258,7 +258,7 @@ TEST(Gadget4Cooling, BatchAndCudaUseTheSameSource) {
         ASSERT_EQ(gpu[index].status, cpu[index].status);
         EXPECT_NEAR(gpu[index].specificEnergy, cpu[index].specificEnergy,
             5.0e-6 * cpu[index].specificEnergy);
-        EXPECT_NEAR(gpu[index].state.electronFraction, cpu[index].state.electronFraction, 5.0e-6);
+        EXPECT_NEAR(gpu[index].electronFraction, cpu[index].electronFraction, 5.0e-6);
     }
 }
 }    // namespace

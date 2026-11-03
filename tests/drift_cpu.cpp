@@ -240,7 +240,7 @@ void testFixed64Ticks() {
     }
 }
 
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if COSMICTIGER_ENABLE_ROCKSTAR
 Fixture stationaryParticle(double coordinate) {
     Fixture fixture(1);
     for (int dim = 0; dim < kDimensions; dim++) {
@@ -411,7 +411,7 @@ TEST(DriftCpu, Fixed64Ticks) {
     detail::testFixed64Ticks();
 }
 
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if COSMICTIGER_ENABLE_ROCKSTAR
 TEST(DriftCpu, LightconeImages) {
     detail::testLightconeImages();
 }

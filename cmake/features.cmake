@@ -30,6 +30,7 @@ option(COSMICTIGER_ENABLE_PM "Compile pure particle-mesh gravity with a mandator
 option(COSMICTIGER_ENABLE_P3M_PP "Compile PP-PM gravity: Gaussian-split PM plus direct short-range pairs" OFF)
 option(COSMICTIGER_ENABLE_P3M_FMM "Compile FMM-PM gravity: Gaussian-split PM plus a screened short-range FMM" OFF)
 option(COSMICTIGER_ENABLE_SPH "Compile SPH hydrodynamics" ON)
+option(COSMICTIGER_ENABLE_ROCKSTAR "Compile ROCKSTAR halo finding and lightcone analysis when gravity is enabled" ON)
 option(COSMICTIGER_ENABLE_CHEMISTRY "Compile GADGET-4 equilibrium cooling when SPH is enabled" ON)
 # The legacy name initializes a fresh/migrated cache once. Thereafter STARS is
 # authoritative, so explicitly disabling it cannot be undone by a stale alias.
@@ -68,6 +69,10 @@ set(COSMICTIGER_WITH_GRAVITY OFF)
 if(COSMICTIGER_ENABLE_FMM OR COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM OR
         COSMICTIGER_ENABLE_PM OR COSMICTIGER_ENABLE_P3M_PP OR COSMICTIGER_ENABLE_P3M_FMM)
     set(COSMICTIGER_WITH_GRAVITY ON)
+endif()
+set(COSMICTIGER_WITH_ROCKSTAR OFF)
+if(COSMICTIGER_WITH_GRAVITY AND COSMICTIGER_ENABLE_ROCKSTAR)
+    set(COSMICTIGER_WITH_ROCKSTAR ON)
 endif()
 # The scalar PM/FFT solve and the outer PM interval are shared by every PM variant.
 set(COSMICTIGER_WITH_PARTICLE_MESH OFF)

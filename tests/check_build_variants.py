@@ -11,7 +11,7 @@ import subprocess
 import unittest
 
 from check_build_features import (FEATURES, LEGACY_DEFINITIONS, checkBuild, configurationDefinitions,
-                                  degreeRange, hasChemistry, hasGravity, hasTree, requiredSources,
+                                  degreeRange, hasChemistry, hasGravity, hasRockstar, hasTree, requiredSources,
                                   sourceSelectionErrors)
 
 
@@ -24,7 +24,7 @@ class BuildFeaturesTest(unittest.TestCase):
         self.configure()
 
     def configure(self, **changes):
-        self.features = {feature: feature in ("FMM", "SPH", "CHEMISTRY", "INTEGRATOR_TRADITIONAL") for feature in FEATURES}
+        self.features = {feature: feature in ("FMM", "ROCKSTAR", "SPH", "CHEMISTRY", "INTEGRATOR_TRADITIONAL") for feature in FEATURES}
         self.features.update(changes)
         self.degrees = (4, 6)
         self.commands = []
@@ -40,6 +40,10 @@ class BuildFeaturesTest(unittest.TestCase):
             self.addCompilation("cosmictiger_cosmology", "src/cosmology/boltzmann.cpp", {})
             self.addCompilation("cosmictiger_fft", "src/cosmology/fft.cpp", {})
             self.addCompilation("cosmictiger_power", "src/analysis/power.cpp", {})
+        if hasRockstar(self.features):
+            self.addCompilation("cosmictiger_fp16", "src/math/fp16.cpp", {})
+            self.addCompilation("groups2halofunc", "src/tools/groups2halofunc.cpp", {})
+            self.addCompilation("halo_catalog_export", "src/tools/halo_catalog_export.cpp", {})
         if hasChemistry(self.features):
             self.addCompilation("cosmictiger_sph_chemistry", "src/chemistry/gadget4_cooling.cpp", {})
         bits = 32
@@ -75,7 +79,7 @@ class BuildFeaturesTest(unittest.TestCase):
         return checkBuild(self.buildDirectory)
 
     def testSphRequiresSharedSources(self):
-        for source in ("src/hydro/sph/sph_particles.cpp", "src/hydro/sph/sph_tree.cpp"):
+        for source in ("src/sph/particles.cpp", "src/sph/tree.cpp"):
             with self.subTest(source=source):
                 self.configure()
                 self.commands = [entry for entry in self.commands if not entry["file"].endswith(source)]
@@ -95,13 +99,93 @@ class BuildFeaturesTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "must match COSMICTIGER_ENABLE_STARS"):
             self.check()
 
+    def testRockstarCapabilityCombinations(self):
+        for gravity, rockstar in product((False, True), repeat=2):
+            with self.subTest(gravity=gravity, rockstar=rockstar):
+                self.configure(FMM=gravity, ROCKSTAR=rockstar)
+                self.assertIn("Build features passed", self.check())
+                self.assertEqual(self.definitions["COSMICTIGER_ENABLE_ROCKSTAR"],
+                                 str(int(gravity and rockstar)))
+
+    def testRockstarDisabledRejectsImplementationAndTestSources(self):
+        for source in ("src/analysis/bh.cpp", "src/analysis/bh.cu", "src/analysis/compress.cpp",
+                       "src/analysis/group_entry.cpp", "src/analysis/group_tree.cpp", "src/analysis/groups.cpp",
+                       "src/analysis/groups_find.cpp", "src/analysis/healpix.cu", "src/analysis/lightcone.cpp",
+                       "src/analysis/lightcone.cu", "src/analysis/lightcone_cpu.cpp", "src/analysis/rockstar.cpp",
+                       "src/analysis/rockstar.cu", "src/analysis/rockstar_catalogue.cpp", "src/math/fp16.cpp",
+                       "src/tools/groups2halofunc.cpp", "src/tools/halo_catalog_export.cpp",
+                       "tests/analysis_backends.cpp", "tests/analysis_tools.cpp", "tests/bh.cpp",
+                       "tests/compression.cpp", "tests/fp16.cpp", "tests/groups_catalogue.cpp",
+                       "tests/halo_catalog_fixture.cpp", "tests/lightcone_cpu.cpp", "tests/lightcone_cuda.cu",
+                       "tests/lightcone_epoch.cpp", "tests/rockstar.cpp", "tests/rockstar_core.cpp",
+                       "tests/rockstar_eigenpair.cpp", "tests/rockstar_properties.cpp"):
+            with self.subTest(source=source):
+                self.configure(ROCKSTAR=False)
+                self.cache["BUILD_TESTING"] = "ON"
+                self.addCompilation("unused_rockstar", source, {})
+                with self.assertRaisesRegex(ValueError, "ROCKSTAR disabled but compiles source: " + re.escape(source)):
+                    self.check()
+
+    def testRockstarEnabledRequiresProductionSourcesAndTools(self):
+        for source in ("src/analysis/bh.cpp", "src/analysis/compress.cpp", "src/analysis/group_entry.cpp",
+                       "src/analysis/group_tree.cpp", "src/analysis/groups.cpp", "src/analysis/groups_find.cpp",
+                       "src/analysis/lightcone.cpp", "src/analysis/lightcone_cpu.cpp", "src/analysis/rockstar.cpp",
+                       "src/analysis/rockstar_catalogue.cpp", "src/math/fp16.cpp",
+                       "src/tools/groups2halofunc.cpp", "src/tools/halo_catalog_export.cpp"):
+            with self.subTest(source=source):
+                self.configure()
+                self.commands = [entry for entry in self.commands if not entry["file"].endswith(source)]
+                with self.assertRaisesRegex(ValueError, "required (?:ROCKSTAR )?source missing: " + re.escape(source)):
+                    self.check()
+
+    def testRockstarDisabledRejectsTargetsWithoutCompiledSources(self):
+        self.configure(ROCKSTAR=False)
+        targetPath = self.buildDirectory / "CMakeFiles/TargetDirectories.txt"
+        for name in ("cosmictiger_fp16", "halo_catalog_export", "groups2halofunc", "halo_catalog_fixture",
+                     "rockstar_core_test", "rockstar_properties_fast_math_test", "rockstar_eigenpair_test",
+                     "lightcone_cpu_test", "lightcone_cuda_test", "lightcone_epoch_test", "compression_test",
+                     "fp16_standard_test", "analysis_tools_test"):
+            with self.subTest(name=name):
+                targetPath.write_text(f"{self.buildDirectory}/CMakeFiles/{name}.dir\n")
+                with self.assertRaisesRegex(ValueError, "ROCKSTAR disabled but configures target: " + name):
+                    self.check()
+
+    def testRockstarDisabledRejectsRegisteredTests(self):
+        self.configure(ROCKSTAR=False)
+        self.cache["BUILD_TESTING"] = "ON"
+        registration = self.buildDirectory / "CTestTestfile.cmake"
+        for name in ("rockstar_cpu", "bhPotential_cuda", "groupsCatalogue_hydro_mpi", "halo_viewer",
+                     "lightcone_cpu", "lightcone_cuda", "lightcone_epoch", "fp16_fast_math", "compression",
+                     "analysis_tools", "analysis_cpu_runtime", "analysis_cpu_hydro_runtime", "analysis_cpu_mpi"):
+            with self.subTest(name=name):
+                registration.write_text(f'add_test([=[{name}]=] "unused")\n')
+                with self.assertRaisesRegex(ValueError, "ROCKSTAR disabled but registers test: " + name):
+                    self.check()
+
+    def testRockstarDisabledKeepsPowerAndStandaloneHealpixTool(self):
+        self.configure(ROCKSTAR=False)
+        self.cache["BUILD_TESTING"] = "ON"
+        self.addCompilation("healpix2silo", "src/tools/healpix2silo.cpp", {})
+        self.addCompilation("power_cpu_test", "tests/power_cpu.cpp", {})
+        (self.buildDirectory / "CMakeFiles/TargetDirectories.txt").write_text(
+            f"{self.buildDirectory}/CMakeFiles/healpix2silo.dir\n")
+        (self.buildDirectory / "CTestTestfile.cmake").write_text(
+            'add_test(power_cpu "unused")\nadd_test(rockstar_capability "unused")\n')
+        self.assertIn("Build features passed", self.check())
+
+    def testRockstarCompilerDefinitionUsesEffectiveCapability(self):
+        self.configure(FMM=False, ROCKSTAR=True)
+        self.commands[-1]["arguments"].append("-DCOSMICTIGER_ENABLE_ROCKSTAR=1")
+        with self.assertRaisesRegex(ValueError, "needs COSMICTIGER_ENABLE_ROCKSTAR=0"):
+            self.check()
+
     def testStarsCompilerAliasMustMatch(self):
         self.commands[-1]["arguments"].append("-DCOSMICTIGER_ENABLE_STAR_FORMATION=1")
         with self.assertRaisesRegex(ValueError, "needs COSMICTIGER_ENABLE_STAR_FORMATION=0"):
             self.check()
 
     def testDisabledStarFormationRejectsEveryImplementationSource(self):
-        for source in ("src/hydro/sph/star_formation.cpp", "src/hydro/sph/star_formation_cuda.cu",
+        for source in ("src/stars/star_formation.cpp", "src/stars/star_formation_cuda.cu",
                               "tests/sph/star_formation_cuda.cu", "tests/sph/star_formation.cpp", "tests/star_formation_particles.cpp",
                        "tests/springel_and_hernquist.cpp", "tests/springel_and_hernquist_cuda.cu"):
             with self.subTest(source=source):
@@ -111,7 +195,7 @@ class BuildFeaturesTest(unittest.TestCase):
                     self.check()
 
     def testEnabledStarFormationRequiresRuntimeSource(self):
-        for source in ("src/hydro/sph/star_formation.cpp",):
+        for source in ("src/stars/star_formation.cpp",):
             with self.subTest(source=source):
                 self.configure(STARS=True)
                 self.commands = [entry for entry in self.commands if not entry["file"].endswith(source)]
@@ -196,7 +280,7 @@ class BuildFeaturesTest(unittest.TestCase):
 
     def testSphSourceLeak(self):
         self.configure(SPH=False)
-        self.addCompilation("cosmictiger_objects", "src/hydro/sph/sph.cpp", self.definitions)
+        self.addCompilation("cosmictiger_objects", "src/sph/sph.cpp", self.definitions)
         with self.assertRaisesRegex(ValueError, "SPH disabled but compiles SPH source"):
             self.check()
 
@@ -215,7 +299,7 @@ class BuildFeaturesTest(unittest.TestCase):
 
     def testDisabledChemistrySourceLeak(self):
         for source in ("src/chemistry/gadget4_cooling.cpp", "src/chemistry/gadget4_cooling.cu",
-                       "src/hydro/sph/sph_chemistry.cpp", "tests/sph/chemistry.cpp",
+                       "src/chemistry/sph.cpp", "tests/sph/chemistry.cpp",
                        "tests/gadget4_cooling.cpp"):
             with self.subTest(source=source):
                 self.configure(CHEMISTRY=False)
@@ -224,8 +308,8 @@ class BuildFeaturesTest(unittest.TestCase):
                     self.check()
 
     def testMissingSphChemistrySource(self):
-        self.commands = [entry for entry in self.commands if not entry["file"].endswith("sph/sph_chemistry.cpp")]
-        with self.assertRaisesRegex(ValueError, "required source missing: src/hydro/sph/sph_chemistry.cpp"):
+        self.commands = [entry for entry in self.commands if not entry["file"].endswith("chemistry/sph.cpp")]
+        with self.assertRaisesRegex(ValueError, "required source missing: src/chemistry/sph.cpp"):
             self.check()
 
     def testSphOnlyGravitySourceLeak(self):
@@ -473,7 +557,7 @@ class BuildConfigHeaderTest(unittest.TestCase):
 
     def definitions(self):
         return {"COSMICTIGER_ENABLE_" + name: int(name == "INTEGRATOR_TRADITIONAL")
-                for name in ("SPH", "CHEMISTRY", "STARS", "STAR_FORMATION",
+                for name in ("SPH", "CHEMISTRY", "STARS", "STAR_FORMATION", "ROCKSTAR",
                              "INTEGRATOR_TRADITIONAL", "INTEGRATOR_HIERARCHICAL", "INTEGRATOR_GLOBAL")}
 
     def testExplicitCapabilitiesCompile(self):
@@ -517,6 +601,8 @@ class FeatureConfigurationTest(unittest.TestCase):
                               'message(STATUS "chemistry=${COSMICTIGER_ENABLE_CHEMISTRY}")\n'
                               'message(STATUS "effective_chemistry=${COSMICTIGER_WITH_CHEMISTRY}")\n'
                               'message(STATUS "effective_stars=${COSMICTIGER_WITH_STARS}")\n'
+                              'message(STATUS "rockstar=${COSMICTIGER_ENABLE_ROCKSTAR}")\n'
+                              'message(STATUS "effective_rockstar=${COSMICTIGER_WITH_ROCKSTAR}")\n'
                               'message(STATUS "stars=${COSMICTIGER_ENABLE_STARS}")\n'
                               'message(STATUS "star_formation=${COSMICTIGER_ENABLE_STAR_FORMATION}")\n')
             return subprocess.run(["cmake", "-P", str(script)], text=True, capture_output=True)
@@ -532,6 +618,8 @@ class FeatureConfigurationTest(unittest.TestCase):
         self.assertIn("chemistry=ON", result.stdout)
         self.assertIn("stars=OFF", result.stdout)
         self.assertIn("star_formation=OFF", result.stdout)
+        self.assertIn("rockstar=ON", result.stdout)
+        self.assertIn("effective_rockstar=ON", result.stdout)
 
     def testSphControlsActualSources(self):
         source = Path(__file__).resolve().parents[1]
@@ -548,8 +636,8 @@ class FeatureConfigurationTest(unittest.TestCase):
                     'foreach(path IN LISTS selected)\nmessage(STATUS "source=${path}")\nendforeach()\n')
                 result = subprocess.run(["cmake", "-P", str(script)], text=True, capture_output=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                for name in ("src/hydro/sph/sph_particles.cpp", "src/hydro/sph/sph_tree.cpp",
-                             "src/hydro/sph/sph_hydro_cpu.cpp", "src/scenarios/gresho.cpp"):
+                for name in ("src/sph/particles.cpp", "src/sph/tree.cpp",
+                             "src/sph/hydro_cpu.cpp", "src/scenarios/gresho.cpp"):
                     self.assertEqual("source=" + name + "\n" in result.stdout, sph == "ON")
 
     def testStarsCapabilityCombinations(self):
@@ -629,9 +717,9 @@ class FeatureConfigurationTest(unittest.TestCase):
                 result = subprocess.run(["cmake", "-P", str(script)], text=True, capture_output=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 enabled = sph == "ON" and stars == "ON"
-                for name in ("src/hydro/sph/star_formation.cpp",):
+                for name in ("src/stars/star_formation.cpp",):
                     self.assertEqual("source=" + name + "\n" in result.stdout, enabled)
-                self.assertEqual("source=src/hydro/sph/star_formation_cuda.cu\n" in result.stdout,
+                self.assertEqual("source=src/stars/star_formation_cuda.cu\n" in result.stdout,
                                  enabled and cuda == "ON")
                 for name in ("tests/sph/star_formation.cpp", "tests/star_formation_particles.cpp"):
                     self.assertEqual("source=" + name + "\n" in result.stdout, enabled and testing == "ON")
@@ -644,6 +732,45 @@ class FeatureConfigurationTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn("chemistry=" + chemistry, result.stdout)
                 self.assertIn("effective_chemistry=" + ("ON" if sph == "ON" and chemistry == "ON" else "OFF"), result.stdout)
+
+    def testRockstarControlsActualSourceSelection(self):
+        source = Path(__file__).resolve().parents[1]
+        for gravity, rockstar, testing, cuda in product((False, True), repeat=4):
+            with self.subTest(gravity=gravity, rockstar=rockstar, testing=testing, cuda=cuda), \
+                    tempfile.TemporaryDirectory() as directory:
+                configuration = {feature: feature in ("SPH", "CHEMISTRY", "INTEGRATOR_TRADITIONAL")
+                                 for feature in FEATURES}
+                configuration.update(FMM=gravity, ROCKSTAR=rockstar)
+                script = Path(directory) / "sources.cmake"
+                script.write_text(
+                    f'set(PROJECT_SOURCE_DIR "{source}")\n' +
+                    "".join(f'set(COSMICTIGER_ENABLE_{feature} {"ON" if enabled else "OFF"} CACHE BOOL "")\n'
+                            for feature, enabled in configuration.items()) +
+                    f'set(BUILD_TESTING {"ON" if testing else "OFF"})\n'
+                    f'set(COSMICTIGER_WITH_CUDA {"ON" if cuda else "OFF"})\n'
+                    f'include("{source / "cmake/features.cmake"}")\n'
+                    f'include("{source / "cmake/variant_sources.cmake"}")\n'
+                    'message(STATUS "effective_rockstar=${COSMICTIGER_WITH_ROCKSTAR}")\n'
+                    'cosmictiger_feature_sources(selected)\n'
+                    'foreach(path IN LISTS selected)\nmessage(STATUS "source=${path}")\nendforeach()\n')
+                result = subprocess.run(["cmake", "-P", str(script)], text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                effective = gravity and rockstar
+                self.assertIn("effective_rockstar=" + ("ON" if effective else "OFF"), result.stdout)
+                selected = {line.removeprefix("-- source=") for line in result.stdout.splitlines()
+                            if line.startswith("-- source=")}
+                self.assertEqual(sourceSelectionErrors(selected, configuration), [])
+                for path in ("src/analysis/bh.cpp", "src/analysis/compress.cpp", "src/analysis/group_entry.cpp",
+                             "src/analysis/group_tree.cpp", "src/analysis/groups.cpp", "src/analysis/groups_find.cpp",
+                             "src/analysis/lightcone.cpp", "src/analysis/lightcone_cpu.cpp", "src/analysis/rockstar.cpp",
+                             "src/analysis/rockstar_catalogue.cpp"):
+                    self.assertEqual(path in selected, effective, path)
+                for path in ("src/analysis/bh.cu", "src/analysis/healpix.cu", "src/analysis/lightcone.cu",
+                             "src/analysis/rockstar.cu"):
+                    self.assertEqual(path in selected, effective and cuda, path)
+                for path in ("tests/analysis_backends.cpp", "tests/bh.cpp", "tests/groups_catalogue.cpp",
+                             "tests/rockstar.cpp"):
+                    self.assertEqual(path in selected, effective and testing, path)
 
     def testSingleAndBoundaryDegrees(self):
         for value, orders in (("2", "3-3"), ("8", "9-9"), ("2-8", "3-9")):
@@ -694,7 +821,7 @@ class FeatureConfigurationTest(unittest.TestCase):
         for solver, testing, cuda in product((None, "FMM", "PMMM_PP", "PMMM_FMM"),
                                               (False, True), (False, True)):
             with self.subTest(solver=solver, testing=testing, cuda=cuda), tempfile.TemporaryDirectory() as directory:
-                configuration = {feature: feature in (solver, "SPH", "CHEMISTRY", "INTEGRATOR_TRADITIONAL")
+                configuration = {feature: feature in (solver, "ROCKSTAR", "SPH", "CHEMISTRY", "INTEGRATOR_TRADITIONAL")
                                  for feature in FEATURES}
                 script = Path(directory) / "sources.cmake"
                 script.write_text(

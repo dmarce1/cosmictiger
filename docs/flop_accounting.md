@@ -13,7 +13,11 @@ other elementary mathematical results cost one; FMA costs two. Comparisons,
 selection/min/max, absolute values, unary signs, integer operations and copies
 cost zero. Each conversion between floating precisions costs one operation at
 the higher precision, so both float-to-double and double-to-float count as FP64.
-Same-type copies cost zero. Explicit fixed-point construction/conversion counts
+Conversions between double and integer count as FP64; conversions between float
+and integer count as integer work and are excluded from FLOPs. Same-type copies
+cost zero. Existing manually maintained production counts have not yet been
+fully audited for double/integer conversions, so some of those conversions may
+be missing from the reported estimates. Explicit fixed-point construction/conversion counts
 its floating scaling multiplication. Compile-time constant expressions are excluded. Compiler
 folding, instruction fusion and library implementations need not preserve these
 source counts.
@@ -22,11 +26,10 @@ source counts.
 
 CPU worker shards, CUDA warp submissions, and HPX locality reductions retain
 separate unsigned 64-bit totals for FP32 and FP64 arithmetic. A rate snapshot uses
-the same elapsed interval for both. The legacy unclassified field and `Mixed`
-column remain for serialization and output compatibility, and are zero for the
-audited production paths. Existing cosmological progress fields keep their
-positions; precision rates are appended as `Tflops32`, `Tflops64`, and
-`TflopsMixed`. The reported total includes every bucket.
+the same elapsed interval for both. The legacy unclassified field remains for
+counter diagnostics and is zero for the audited production paths. Existing
+cosmological progress fields keep their positions; precision rates are appended
+as `Tflops32` and `Tflops64`. The reported total includes every bucket.
 
 Cosmological background evolution,
 PMMM double-precision operators/direct pairs/mesh geometry and accumulation, and

@@ -8,7 +8,7 @@
 
 #include <gtest/gtest.h>
 
-#include <cosmictiger/hydro/sph/balsara/shear_limiter.hpp>
+#include <cosmictiger/sph/viscosity/balsara.hpp>
 
 TEST(Balsara, BalsaraFactor) {
     EXPECT_EQ(balsara::balsaraFactor(0.0, 0.0), 0.0);

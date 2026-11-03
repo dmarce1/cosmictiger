@@ -4,6 +4,8 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <format>
+#include <iostream>
 #include <limits>
 #include <map>
 #include <memory>
@@ -22,7 +24,7 @@
 #include <cosmictiger/gravity/kernels/spherical_ewald_kernels.hpp>
 #include <cosmictiger/gravity/pmmm/fmm/cell_tree.hpp>
 #include <cosmictiger/gravity/pmmm/fmm/ghost_storage.hpp>
-#include <cosmictiger/gravity/pmmm/pp/near_pp.hpp>
+#include <cosmictiger/gravity/pmmm/pp_near_pp.hpp>
 #include <cosmictiger/gravity/pmmm/solver.hpp>
 #include <cosmictiger/gravity/sources.hpp>
 #include <cosmictiger/gravity/tree.hpp>
@@ -32,7 +34,7 @@
 #include <cosmictiger/particles/particle_mesh_sort.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 #endif
 #include <src/gravity/pmmm/state.hpp>
 
@@ -1266,8 +1268,10 @@ void checkPmmmTraditionalKicks() {
     particlesSortByRung(0);
     pmmmDestroy();
     setOptions(saved);
-    PRINT("PMMM traditional all-source forces, active-only individual kicks, and gas handoff "
-          "checks passed\n");
+    std::cout
+        << "PMMM traditional all-source forces, active-only individual kicks, and gas handoff "
+           "checks passed\n"
+        << std::flush;
 }
 
 void checkPmmmPpBatchTargets() {
@@ -1465,8 +1469,10 @@ void checkPmmmStreamedStages() {
     }
     pmmmDestroy();
     setOptions(saved);
-    PRINT("PMMM streamed active-source stages, signed kicks, optional fields, and batch-size "
-          "checks passed\n");
+    std::cout
+        << "PMMM streamed active-source stages, signed kicks, optional fields, and batch-size "
+           "checks passed\n"
+        << std::flush;
 }
 
 void checkPmmmStageMeshes() {
@@ -1619,8 +1625,9 @@ void checkPmmmStageMeshes() {
     particlesSortByRung(0);
     pmmmDestroy();
     setOptions(saved);
-    PRINT("PMMM hierarchical mesh selection, global counts, coarse/empty stages, and cache "
-          "reuse/destruction checks passed\n");
+    std::cout << "PMMM hierarchical mesh selection, global counts, coarse/empty stages, and cache "
+                 "reuse/destruction checks passed\n"
+              << std::flush;
 }
 
 void checkPmmmCoarseMeshes() {
@@ -1743,8 +1750,10 @@ void checkPmmmCoarseMeshes() {
     particlesSortByRung(0);
     pmmmDestroy();
     setOptions(saved);
-    PRINT("PMMM explicit/default coarse mesh bounds, base-sized coarse stages, and cache reuse "
-          "checks passed\n");
+    std::cout
+        << "PMMM explicit/default coarse mesh bounds, base-sized coarse stages, and cache reuse "
+           "checks passed\n"
+        << std::flush;
 }
 
 void checkPmmmCellOverlap() {
@@ -1812,7 +1821,8 @@ void checkPmmmCellOverlap() {
     setGate(false);
     pmmmDestroy();
     setOptions(saved);
-    PRINT("PMMM deterministic interior/boundary whole-cell overlap checks passed\n");
+    std::cout << "PMMM deterministic interior/boundary whole-cell overlap checks passed\n"
+              << std::flush;
 }
 
 #if COSMICTIGER_ENABLE_PMMM_FMM
@@ -1935,11 +1945,12 @@ void checkPmmmFmmNear() {
             options.gravity.cuda = false;
             setOptions(options);
         }
-        PRINT("PMMM FMM-near n=%i order=%i loose=%e strict=%e repartitioned=%e CPU accepted=%llu "
-              "direct=%llu\n",
-            side, options.gravity.fmmOrder, looseError, strictError, repartitionError,
-            static_cast<unsigned long long>(looseCounts.nearCpuAcceptedMultipoles),
-            static_cast<unsigned long long>(strictCounts.nearCpuDirectPairs));
+        std::cout << std::format("PMMM FMM-near n={:d} order={:d} loose={:e} strict={:e} "
+                                 "repartitioned={:e} CPU accepted={:d} direct={:d}\n",
+                         side, options.gravity.fmmOrder, looseError, strictError, repartitionError,
+                         static_cast<unsigned long long>(looseCounts.nearCpuAcceptedMultipoles),
+                         static_cast<unsigned long long>(strictCounts.nearCpuDirectPairs))
+                  << std::flush;
     }
     pmmmDestroy();
     setOptions(saved);
@@ -2066,8 +2077,11 @@ void pmmmTest() {
                         recreated.greenBuilds == beforeDestroy.greenBuilds + 1,
                     "destroy/recreate did not rebuild exactly one cached plan/Green set");
             }
-            PRINT("PMMM Ewald oracle n=%i order=%i near=%i fixture=%i error=%e\n", configuration[0],
-                fmmOrder(), configuration[1], fixture, error);
+            std::cout
+                << std::format(
+                       "PMMM Ewald oracle n={:d} order={:d} near={:d} fixture={:d} error={:e}\n",
+                       configuration[0], fmmOrder(), configuration[1], fixture, error)
+                << std::flush;
         }
     }
     pmmmDestroy();
@@ -2080,7 +2094,8 @@ void pmmmTest() {
     detail::checkPmmmStageMeshes();
     detail::checkPmmmCoarseMeshes();
     detail::checkPmmmCellOverlap();
-    PRINT("PMMM periodic force, mass, self, ownership, and cache checks passed at order %i "
-          "with %s near interactions\n",
-        fmmOrder(), getOptions().gravity.pmmmNearMethod.c_str());
+    std::cout << std::format("PMMM periodic force, mass, self, ownership, and cache checks passed "
+                             "at order {:d} with {:s} near interactions\n",
+                     fmmOrder(), getOptions().gravity.pmmmNearMethod.c_str())
+              << std::flush;
 }

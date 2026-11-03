@@ -17,10 +17,10 @@
 
 #include <gtest/gtest.h>
 
-#include <cosmictiger/hydro/sph/kernels.hpp>
-#include <cosmictiger/hydro/sph/monaghan/viscosity.hpp>
-#include <cosmictiger/hydro/sph/variational/equations.hpp>
 #include <cosmictiger/math/vector3.hpp>
+#include <cosmictiger/sph/variable_smoothing_lengths.hpp>
+#include <cosmictiger/sph/viscosity/monaghan.hpp>
+#include <tests/sph/kernels.hpp>
 #include <tests/sph/test_helpers.hpp>
 
 namespace detail {
@@ -50,7 +50,7 @@ void testViscosity() {
         tolerance);
     requireClose("calibrated cubic viscosity preserves the paper scale",
         monaghan::viscosityMu(radiusSquared, velocityDotRadius, supportI, supportJ, epsilon,
-            supportRadiusPerEffectiveRadius, Real(0.9128709291752769)),
+            supportRadiusPerEffectiveRadius, Real(monaghan::kViscosityWidthScale)),
         expectedMu, tolerance);
     requireClose("symmetric viscosity mu", mu,
         monaghan::viscosityMu(radiusSquared, velocityDotRadius, supportJ, supportI, epsilon),
@@ -65,31 +65,33 @@ void testViscosity() {
     }
     Real const rhoI = Real(2.0);
     Real const rhoJ = Real(0.5);
-    Real const soundI = Real(1.2);
-    Real const soundJ = Real(0.8);
-    Real const viscosity =
-        monaghan::artificialViscosity(rhoI, rhoJ, soundI, soundJ, mu, Real(1), Real(2));
+    Real const soundSpeed = Real(1.2);
+    Real const neighborSoundSpeed = Real(0.8);
+    Real const viscosity = monaghan::artificialViscosity(
+        rhoI, rhoJ, soundSpeed, neighborSoundSpeed, mu, Real(1), Real(2));
     double const expectedViscosity = (-expectedMu + 2.0 * expectedMu * expectedMu) / 1.25;
     requireClose("Monaghan alpha beta viscosity", viscosity, expectedViscosity, tolerance);
     require(viscosity > Real(0), "positive compressive viscosity");
     requireClose("symmetric pair viscosity", viscosity,
-        monaghan::artificialViscosity(rhoJ, rhoI, soundJ, soundI, mu, Real(1), Real(2)), tolerance);
-    requireClose("viscosity scales as velocity squared", Real(4) * viscosity,
         monaghan::artificialViscosity(
-            rhoI, rhoJ, Real(2) * soundI, Real(2) * soundJ, Real(2) * mu, Real(1), Real(2)),
+            rhoJ, rhoI, neighborSoundSpeed, soundSpeed, mu, Real(1), Real(2)),
         tolerance);
-    require(
-        monaghan::artificialViscosity(rhoI, rhoJ, soundI, soundJ, mu, Real(0), Real(0)) == Real(0),
+    requireClose("viscosity scales as velocity squared", Real(4) * viscosity,
+        monaghan::artificialViscosity(rhoI, rhoJ, Real(2) * soundSpeed,
+            Real(2) * neighborSoundSpeed, Real(2) * mu, Real(1), Real(2)),
+        tolerance);
+    require(monaghan::artificialViscosity(
+                rhoI, rhoJ, soundSpeed, neighborSoundSpeed, mu, Real(0), Real(0)) == Real(0),
         "viscosity can be disabled");
-    Real const linear =
-        monaghan::artificialViscosity(rhoI, rhoJ, soundI, soundJ, mu, Real(1), Real(0));
-    Real const quadratic =
-        monaghan::artificialViscosity(rhoI, rhoJ, soundI, soundJ, mu, Real(0), Real(2));
+    Real const linear = monaghan::artificialViscosity(
+        rhoI, rhoJ, soundSpeed, neighborSoundSpeed, mu, Real(1), Real(0));
+    Real const quadratic = monaghan::artificialViscosity(
+        rhoI, rhoJ, soundSpeed, neighborSoundSpeed, mu, Real(0), Real(2));
     requireClose(
         "independent linear and quadratic viscosity", linear + quadratic, viscosity, tolerance);
     for (Real const inactiveMu : {Real(0), Real(0.3)}) {
-        require(monaghan::artificialViscosity(
-                    rhoI, rhoJ, soundI, soundJ, inactiveMu, Real(1), Real(2)) == Real(0),
+        require(monaghan::artificialViscosity(rhoI, rhoJ, soundSpeed, neighborSoundSpeed,
+                    inactiveMu, Real(1), Real(2)) == Real(0),
             "no artificial expansion heating");
     }
     Real const closeMu =
@@ -107,7 +109,7 @@ struct Particle {
     double rho;
     double pressure;
     double support;
-    double sound;
+    double soundSpeed;
 };
 
 struct Rates {
@@ -132,7 +134,7 @@ Rates pairRates(Particle const& sink, Particle const& source, double alpha, doub
     double const mu = monaghan::viscosityMu(
         radiusSquared, relativeVelocity.dot(displacement), sink.support, source.support, 0.01);
     double const viscosity = monaghan::artificialViscosity(
-        sink.rho, source.rho, sink.sound, source.sound, mu, alpha, beta);
+        sink.rho, source.rho, sink.soundSpeed, source.soundSpeed, mu, alpha, beta);
     // Fixed supports use zeta = 0; each particle contributes its own pressure gradient.
     double const coefficientI = variational::directedCoefficient(
         variational::pressureVolumeFactor(sink.pressure, sink.mass, sink.rho), source.mass, 0.0);

@@ -16,7 +16,8 @@
 // once; integer operations, comparisons and unary signs are excluded.
 // Converting between floating-point precisions counts once at the higher
 // precision, including narrowing conversions. Instrumentation bookkeeping is
-// excluded. Same-precision copies and integer conversions do not add FLOPs.
+// excluded. Same-precision copies and float/integer conversions do not add FLOPs;
+// conversions between double and integer count as double.
 using FlopCount = unsigned long long;
 static_assert(sizeof(FlopCount) == 8);
 
@@ -52,12 +53,15 @@ template <class Source, class Target>
 CUDA_EXPORT constexpr FlopCounts floatingPointConversionFlops(FlopCount conversions = 1) {
     using SourceType = std::remove_cvref_t<Source>;
     using TargetType = std::remove_cvref_t<Target>;
-    static_assert(std::is_same_v<SourceType, float> || std::is_same_v<SourceType, double>);
-    static_assert(std::is_same_v<TargetType, float> || std::is_same_v<TargetType, double>);
-    if constexpr (std::is_same_v<SourceType, TargetType>) {
-        return {};
-    } else {
+    static_assert(std::is_same_v<SourceType, float> || std::is_same_v<SourceType, double> ||
+        std::is_integral_v<SourceType>);
+    static_assert(std::is_same_v<TargetType, float> || std::is_same_v<TargetType, double> ||
+        std::is_integral_v<TargetType>);
+    if constexpr (!std::is_same_v<SourceType, TargetType> &&
+        (std::is_same_v<SourceType, double> || std::is_same_v<TargetType, double>)) {
         return {0, conversions, 0};
+    } else {
+        return {};
     }
 }
 

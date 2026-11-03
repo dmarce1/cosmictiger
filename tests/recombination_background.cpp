@@ -115,7 +115,7 @@ void testBackground() {
     requireClose(temperature, 50.669107, 0.001, "Background temperature against RECFAST at z=50");
 
     auto const& thermalTable = universe.k;
-    auto const& soundTable = universe.cs2;
+    auto const& soundTable = universe.soundSpeedSquared;
     require(thermalTable.values.size() == soundTable.values.size(), "Thermal table size mismatch");
     size_t const last = thermalTable.values.size() - 1;
     require(last >= 2, "Background thermal table too short");

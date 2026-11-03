@@ -30,18 +30,6 @@ inline constexpr int kMaximumIterations = 10000;
 enum class Status { Success, InvalidInput, NonConvergence, BackendUnavailable, BackendFailure };
 enum class Backend { Cpu, Cuda };
 
-// GADGET-4 stores only the equilibrium electron-fraction guess per gas particle.
-struct State {
-    float electronFraction{1.0f};
-
-    bool operator==(State const&) const = default;
-
-    template <class Archive>
-    void serialize(Archive& archive, unsigned) {
-        archive & electronFraction;
-    }
-};
-
 struct RateRow {
     double hydrogenExcitation{}, heliumIonExcitation{}, freeFree{};
     double hydrogenRecombination{}, heliumRecombination{}, heliumDoubleRecombination{};
@@ -66,13 +54,13 @@ struct GasState {
 };
 
 struct Input {
-    State state{};
+    float electronFraction{1.0f};
     double specificEnergy{};    // erg/g.
     double density{};           // proper g/cm^3.
     double interval{};          // physical seconds.
 };
 struct Result {
-    State state{};
+    float electronFraction{1.0f};
     double specificEnergy{};
     Status status{Status::InvalidInput};
 };

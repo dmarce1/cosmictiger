@@ -49,8 +49,8 @@ SedReal dSign(SedReal* a, SedReal* b) {
 
 /* Subroutine */ int sed1d(SedReal* time, int* nstep, SedReal* xpos, SedReal* eblast,
     SedReal* omegaInArg, SedReal* xgeomInArg, SedReal* rho0, SedReal* vel0, SedReal* ener0,
-    SedReal* pres0, SedReal* cs0, SedReal* gam0, SedReal* den, SedReal* ener, SedReal* pres,
-    SedReal* vel, SedReal* cs);
+    SedReal* pres0, SedReal* ambientSoundSpeed, SedReal* gam0, SedReal* den, SedReal* ener,
+    SedReal* pres, SedReal* vel, SedReal* soundSpeed);
 /* Common Block Declarations */
 
 struct {
@@ -100,8 +100,8 @@ int powIi(int* a, int* b) {
 
 /* Subroutine */ int sed1d(SedReal* time, int* nstep, SedReal* xpos, SedReal* eblast,
     SedReal* omegaInArg, SedReal* xgeomInArg, SedReal* rho0, SedReal* vel0, SedReal* ener0,
-    SedReal* pres0, SedReal* cs0, SedReal* gam0, SedReal* den, SedReal* ener, SedReal* pres,
-    SedReal* vel, SedReal* cs) {
+    SedReal* pres0, SedReal* ambientSoundSpeed, SedReal* gam0, SedReal* den, SedReal* ener,
+    SedReal* pres, SedReal* vel, SedReal* soundSpeed) {
     /* System generated locals */
     int i1;
     SedReal d1, d2, d3;
@@ -135,7 +135,7 @@ int powIi(int* a, int* b) {
     /* ..omegain  = density power law _exponent rho = rho0 * r**(-omega_in) */
     /* ..vel0     = ambient material speed cm/s */
     /* ..pres0    = ambient pressure erg/cm**3 */
-    /* ..cs0      = ambient sound speed cm/s */
+    /* ..ambientSoundSpeed      = ambient sound speed cm/s */
     /* ..gam0   = gamma law equation of state */
     /* ..xgeom_in = geometry factor, 3=spherical, 2=cylindircal, 1=planar */
     /* ..for efficiency reasons (doing the energy integrals only once), */
@@ -146,7 +146,7 @@ int powIi(int* a, int* b) {
     /* ..ener(i) = specific internal energy erg/g */
     /* ..pres(i) = presssure erg/cm**3 */
     /* ..vel(i)  = velocity cm/s */
-    /* ..cs(i)   = sound speed cm/s */
+    /* ..soundSpeed(i)   = sound speed cm/s */
     /* ..this routine is based upon two papers: */
     /* .."evaluation of the sedov-von neumann-taylor blast wave solution" */
     /* ..jim kamm, la-ur-00-6055 */
@@ -170,7 +170,7 @@ int powIi(int* a, int* b) {
     /* ..popular formats */
     /* ..initialize the solution */
     /* Parameter adjustments */
-    --cs;
+    --soundSpeed;
     --vel;
     --pres;
     --ener;
@@ -186,7 +186,7 @@ int powIi(int* a, int* b) {
         vel[iArg] = 0.f;
         pres[iArg] = 0.f;
         ener[iArg] = 0.f;
-        cs[iArg] = 0.f;
+        soundSpeed[iArg] = 0.f;
     }
     /* ..return on unphysical cases */
     /* ..infinite mass */
@@ -354,7 +354,7 @@ int powIi(int* a, int* b) {
     /* ..r2 = shock position, u2 = shock speed, rho1 = pre-shock density, */
     /* ..u2 = post-shock material speed, rho2 = post-shock density, */
     /* ..p2 = post-shock pressure, e2 = post-shoock specific internal energy, */
-    /* ..and cs2 = post-shock sound speed */
+    /* ..and postShockSoundSpeed = post-shock sound speed */
     d1 = *eblast / (alpha * *rho0);
     d2 = 1.f / slap_1.xg2;
     d3 = 2.f / slap_1.xg2;
@@ -368,7 +368,7 @@ int powIi(int* a, int* b) {
     d1 = us;
     p2 = rho1 * 2.f * (d1 * d1) / slap_1.gamp1;
     //	e2 = p2 / (slap_1.gamm1 * rho2);
-    //	cs2 = sqrt(slap_1.gamma * p2 / rho2);
+    //	postShockSoundSpeed = sqrt(slap_1.gamma * p2 / rho2);
     /* ..find the radius corresponding to vv */
     if (slap_1.lvacuum) {
         slap_1.vwant = slap_1.vv;
@@ -386,8 +386,8 @@ int powIi(int* a, int* b) {
     //		do_fio(&c__1, (char *) &e2, (ftnlen) sizeof(sed_real));
     //		do_fio(&c__1, "p2    =", (ftnlen) 7);
     //		do_fio(&c__1, (char *) &p2, (ftnlen) sizeof(sed_real));
-    //		do_fio(&c__1, "cs2   =", (ftnlen) 7);
-    //		do_fio(&c__1, (char *) &cs2, (ftnlen) sizeof(sed_real));
+    //		do_fio(&c__1, "postShockSoundSpeed   =", (ftnlen) 7);
+    //		do_fio(&c__1, (char *) &postShockSoundSpeed, (ftnlen) sizeof(sed_real));
     //		e_wsfe();
     //	}
     //	if (slap_1.lvacuum) {
@@ -404,8 +404,8 @@ int powIi(int* a, int* b) {
     //		do_fio(&c__1, (char *) &e2, (ftnlen) sizeof(sed_real));
     //		do_fio(&c__1, "p2    =", (ftnlen) 7);
     //		do_fio(&c__1, (char *) &p2, (ftnlen) sizeof(sed_real));
-    //		do_fio(&c__1, "cs2   =", (ftnlen) 7);
-    //		do_fio(&c__1, (char *) &cs2, (ftnlen) sizeof(sed_real));
+    //		do_fio(&c__1, "postShockSoundSpeed   =", (ftnlen) 7);
+    //		do_fio(&c__1, (char *) &postShockSoundSpeed, (ftnlen) sizeof(sed_real));
     //		e_wsfe();
     //	}
     /* ..now start the loop over spatial positions */
@@ -419,7 +419,7 @@ int powIi(int* a, int* b) {
             vel[iArg] = *vel0;
             pres[iArg] = *pres0;
             ener[iArg] = *ener0;
-            cs[iArg] = *cs0;
+            soundSpeed[iArg] = *ambientSoundSpeed;
             /* ..if we are between the origin and the shock front */
             /* ..find the correct similarity value for this radius in the standard or vacuum cases
              */
@@ -437,10 +437,10 @@ int powIi(int* a, int* b) {
             vel[iArg] = u2 * fFunArg;
             pres[iArg] = p2 * hFunArg;
             ener[iArg] = 0.f;
-            cs[iArg] = 0.f;
+            soundSpeed[iArg] = 0.f;
             if (den[iArg] != 0.f) {
                 ener[iArg] = pres[iArg] / (slap_1.gamm1 * den[iArg]);
-                cs[iArg] = sqrt(static_cast<double>(slap_1.gamma * pres[iArg] / den[iArg]));
+                soundSpeed[iArg] = sqrt(static_cast<double>(slap_1.gamma * pres[iArg] / den[iArg]));
             }
         }
         /* ..end of loop over positions */
@@ -1113,7 +1113,7 @@ void solution(double time, double r, double rmax, double& d, double& velocity, d
     SedReal vel0 = 0.0;
     SedReal ener0 = 0.0;
     SedReal pres0 = 0.0;
-    SedReal cs0 = 0.0;
+    SedReal ambientSoundSpeed = 0.0;
     SedReal gamma = gasGamma;
     SedReal omega = 0.0;
     SedReal eblast = 1.0;
@@ -1124,7 +1124,7 @@ void solution(double time, double r, double rmax, double& d, double& velocity, d
     std::vector<SedReal> ener(nstep + 2 * kBw);
     std::vector<SedReal> pres(nstep + 2 * kBw);
     std::vector<SedReal> vel(nstep + 2 * kBw);
-    std::vector<SedReal> cs(nstep + 2 * kBw);
+    std::vector<SedReal> soundSpeed(nstep + 2 * kBw);
 
     std::vector<double> den1(nstep + 2 * kBw);
     std::vector<double> pres1(nstep + 2 * kBw);
@@ -1143,22 +1143,22 @@ void solution(double time, double r, double rmax, double& d, double& velocity, d
         SedReal sedTime = time;
         printf("Computing sedov solution\n");
         sed1d(&sedTime, &nstep, xpos.data() + kBw, &eblast, &omega, &xgeom, &rho0, &vel0, &ener0,
-            &pres0, &cs0, &gamma, den.data() + kBw, ener.data() + kBw, pres.data() + kBw,
-            vel.data() + kBw, cs.data() + kBw);
+            &pres0, &ambientSoundSpeed, &gamma, den.data() + kBw, ener.data() + kBw,
+            pres.data() + kBw, vel.data() + kBw, soundSpeed.data() + kBw);
 
         xpos[0] = -xpos[3];
         den[0] = den[3];
         ener[0] = ener[3];
         pres[0] = pres[3];
         vel[0] = -vel[3];
-        cs[0] = cs[3];
+        soundSpeed[0] = soundSpeed[3];
 
         xpos[1] = -xpos[2];
         den[1] = den[2];
         ener[1] = ener[2];
         pres[1] = pres[2];
         vel[1] = -vel[2];
-        cs[1] = cs[2];
+        soundSpeed[1] = soundSpeed[2];
 
 #if defined(OCTOTIGER_HAVE_BOOST_MULTIPRECISION)
         std::transform(

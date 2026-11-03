@@ -11,7 +11,7 @@
 
 #include <gtest/gtest.h>
 
-#include <cosmictiger/hydro/sph/cullen_and_dehnen/viscosity.hpp>
+#include <cosmictiger/sph/viscosity/cullen_and_dehnen.hpp>
 #include <tests/sph/test_helpers.hpp>
 
 namespace detail {
@@ -98,7 +98,7 @@ void testCullenDehnenGradients() {
     cullen_and_dehnen::GradientSums<Real> empty;
     auto const result = cullen_and_dehnen::diagnostics(
         empty, Real(1), Real(0), Real(0), Real(0.5), Real(0), Real(2), Real(0.05));
-    require(result.divergence == Real(0) && result.targetAlpha == Real(0) &&
+    require(result.divergence == Real(0) && result.targetBulkViscosityCoefficient == Real(0) &&
             result.inverseDecayTime == Real(0),
         "empty cold neighborhood has finite zero diagnostics");
 }
@@ -116,12 +116,12 @@ void testCullenDehnenDiagnostics() {
     };
     sums.velocity[0][1] = Real(4);
     auto result = evaluate();
-    require(result.divergence == Real(0) && result.targetAlpha == Real(0),
+    require(result.divergence == Real(0) && result.targetBulkViscosityCoefficient == Real(0),
         "steady pure shear does not activate viscosity");
     sums.velocity[1][0] = Real(-4);
     sums.acceleration[0][0] = sums.acceleration[1][1] = Real(-16);
     result = evaluate();
-    require(result.divergence == Real(0) && result.targetAlpha == Real(0),
+    require(result.divergence == Real(0) && result.targetBulkViscosityCoefficient == Real(0),
         "solid-body rotation uses trace V squared, not the squared matrix norm");
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
@@ -131,7 +131,7 @@ void testCullenDehnenDiagnostics() {
     }
     result = evaluate();
     requireClose("homologous contraction divergence", result.divergence, -3.0, tolerance);
-    require(result.targetAlpha == Real(0),
+    require(result.targetBulkViscosityCoefficient == Real(0),
         "constant homologous contraction has no steepening detector");
     sums.velocity[0][1] = Real(4);
     sums.velocity[1][0] = Real(-4);
@@ -139,7 +139,7 @@ void testCullenDehnenDiagnostics() {
     sums.acceleration[0][1] = Real(-8);
     sums.acceleration[1][0] = Real(8);
     result = evaluate();
-    require(result.targetAlpha == Real(0),
+    require(result.targetBulkViscosityCoefficient == Real(0),
         "rotating contraction uses trace V squared, not the squared matrix norm");
     sums.velocity[0][1] = sums.velocity[1][0] = Real(0);
     sums.acceleration[0][1] = sums.acceleration[1][0] = Real(0);
@@ -147,14 +147,14 @@ void testCullenDehnenDiagnostics() {
         sums.acceleration[i][i] = Real(0);
     }
     result = evaluate();
-    requireClose(
-        "steepening ballistic compression target", result.targetAlpha, 6.0 / 19.0, tolerance);
+    requireClose("steepening ballistic compression target", result.targetBulkViscosityCoefficient,
+        6.0 / 19.0, tolerance);
     requireClose("Cullen-Dehnen decay uses the full support radius", result.inverseDecayTime, 0.4,
         tolerance);
     auto const cold = cullen_and_dehnen::diagnostics(
         sums, Real(1), Real(0), Real(-1), Real(0.5), Real(0), Real(2), Real(0.05));
-    requireClose(
-        "cold compressing gas reaches maximum viscosity", cold.targetAlpha, 2.0, tolerance);
+    requireClose("cold compressing gas reaches maximum viscosity",
+        cold.targetBulkViscosityCoefficient, 2.0, tolerance);
 
     sums.velocity[1][1] = sums.velocity[2][2] = Real(0);
     sums.velocity[0][1] = Real(10);
@@ -162,8 +162,9 @@ void testCullenDehnenDiagnostics() {
         double const limiter =
             signAverage == Real(-1) ? 384.0 / 403.0 : (signAverage == Real(0) ? 3.0 / 41.0 : 0.0);
         result = evaluate(signAverage);
-        requireClose("neighbor compression signs distinguish shocks from shear", result.targetAlpha,
-            0.5 * limiter / (4.0 + 0.25 * limiter), tolerance);
+        requireClose("neighbor compression signs distinguish shocks from shear",
+            result.targetBulkViscosityCoefficient, 0.5 * limiter / (4.0 + 0.25 * limiter),
+            tolerance);
     }
     // Represent the same physical ballistic contraction at different scale
     // factors, including the background acceleration term in equation (B12).
@@ -181,7 +182,7 @@ void testCullenDehnenDiagnostics() {
         requireClose("physical divergence independent of cosmological storage units",
             result.divergence, -3.0, tolerance);
         requireClose("target viscosity independent of cosmological storage units",
-            result.targetAlpha, 6.0 / 19.0, tolerance);
+            result.targetBulkViscosityCoefficient, 6.0 / 19.0, tolerance);
         requireClose("decay rate transforms to conformal time", result.inverseDecayTime,
             0.4 * double(scaleFactor), tolerance);
     }

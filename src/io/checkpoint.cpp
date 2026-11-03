@@ -12,7 +12,9 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <format>
 #include <fstream>
+#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -24,7 +26,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#if COSMICTIGER_WITH_GRAVITY
+#if COSMICTIGER_ENABLE_ROCKSTAR
 #include <cosmictiger/analysis/lightcone.hpp>
 #endif
 #include <cosmictiger/core/driver.hpp>
@@ -41,11 +43,11 @@
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/hydro/sph/sph.hpp>
+#include <cosmictiger/sph/sph.hpp>
 #if COSMICTIGER_ENABLE_CHEMISTRY
-#include <cosmictiger/hydro/sph/sph_chemistry.hpp>
+#include <cosmictiger/chemistry/sph.hpp>
 #endif
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 #endif
 
 HPX_PLAIN_ACTION(writeCheckpoint, WriteCheckpointAction);
@@ -91,9 +93,9 @@ Vector<double> readCheckpointList() {
     FILE* fp = fopen("checkpoint.txt", "rt");
     if (fp != nullptr) {
         float z;
-        PRINT("Checkpoints will be written at z = \n");
+        std::cout << "Checkpoints will be written at z = \n" << std::flush;
         while (fscanf(fp, "%f\n", &z) == 1) {
-            PRINT("%f\n", z);
+            std::cout << std::format("{:f}\n", z) << std::flush;
             chkpts.push_back(z);
         }
 
@@ -111,16 +113,21 @@ void checkpointRedshiftAlias(int iteration, double redshift) {
     std::error_code error;
     auto const status = std::filesystem::symlink_status(aliasPath, error);
     if (!error && status.type() != std::filesystem::file_type::not_found) {
-        PRINT("Redshift checkpoint alias %s already exists; restart from checkpoint.%i\n",
-            aliasName, iteration);
+        std::cout
+            << std::format(
+                   "Redshift checkpoint alias {:s} already exists; restart from checkpoint.{:d}\n",
+                   aliasName, iteration)
+            << std::flush;
         return;
     }
     error.clear();
     std::filesystem::create_directory_symlink(
         "checkpoint." + std::to_string(iteration), aliasPath, error);
     if (error) {
-        PRINT("Unable to create redshift checkpoint alias %s; restart from checkpoint.%i\n",
-            aliasName, iteration);
+        std::cout << std::format("Unable to create redshift checkpoint alias {:s}; restart from "
+                                 "checkpoint.{:d}\n",
+                         aliasName, iteration)
+                  << std::flush;
     }
 }
 
@@ -331,7 +338,7 @@ void validateCheckpointDirectory(fs::path const& directory, int iteration) {
                 THROW_ERROR("Format 3 checkpoint %s is missing its manifest\n", directory.c_str());
             }
         }
-        PRINT("Reading legacy checkpoint without integrity manifest\n");
+        std::cout << "Reading legacy checkpoint without integrity manifest\n" << std::flush;
         return;
     }
     std::ifstream manifest(manifestPath);
@@ -551,20 +558,25 @@ bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
 
 // Stored only for SPH checkpoints; the dark-matter layout is unchanged.
 std::array<double, 13> sphCheckpointParameters(Options const& opts) {
-    return {opts.hydro.viscosityAlpha, opts.hydro.viscosityBeta, opts.hydro.viscosityEpsilon,
-        opts.hydro.neighborNumber, opts.hydro.minSupportRadius, opts.hydro.maxSupportRadius,
-        opts.hydro.cfl, opts.gravity.timestepEta, opts.hydro.yAcceleration,
-        opts.hydro.centralAcceleration, opts.hydro.centralSupportRadius, opts.hydro.damping,
-        opts.gravity.enabled ? 1.0 : 0.0};
+    return {opts.hydro.bulkViscosityCoefficient, opts.hydro.vonNeumannRichtmyerCoefficient,
+        opts.hydro.viscosityEpsilon, opts.hydro.neighborNumber, opts.hydro.minSupportRadius,
+        opts.hydro.maxSupportRadius, opts.hydro.cfl, opts.gravity.timestepEta,
+        opts.hydro.yAcceleration, opts.hydro.centralAcceleration, opts.hydro.centralSupportRadius,
+        opts.hydro.damping, opts.gravity.enabled ? 1.0 : 0.0};
 }
 
 std::array<double, 7> viscosityCheckpointParameters(Options const& opts) {
     double const model = opts.hydro.viscosityEvolution == "cullenAndDehnen" ?
         1.0 :
-        (opts.hydro.viscosityEvolution == "priceEtAl" ? 2.0 : 0.0);
-    return {opts.hydro.viscosityAlphaMin, opts.hydro.viscosityDecay, model,
-        opts.hydro.viscosityAlphaMax, opts.hydro.viscosityDecayCD,
-        opts.hydro.viscosityAlphaMaxPrice, opts.hydro.viscosityDecayPrice};
+        (opts.hydro.viscosityEvolution == "priceEtAl" ?
+                2.0 :
+                (opts.hydro.viscosityEvolution == "hu_etal" ? 3.0 : 0.0));
+    return {opts.hydro.minimumBulkViscosityCoefficient, opts.hydro.viscosityDecay, model,
+        opts.hydro.viscosityEvolution == "hu_etal" ? opts.hydro.maximumBulkViscosityCoefficientHu :
+                                                     opts.hydro.maximumBulkViscosityCoefficient,
+        opts.hydro.viscosityEvolution == "hu_etal" ? opts.hydro.viscosityDecayHu :
+                                                     opts.hydro.viscosityDecayCD,
+        opts.hydro.maximumBulkViscosityCoefficientPrice, opts.hydro.viscosityDecayPrice};
 }
 
 bool zPlaneCheckpointCompatible(double acceleration, Options const& opts) {
@@ -1379,16 +1391,16 @@ void checkpointStateTest() {
     auto const fixedViscosityHeader = detail::checkpointHeader(viscosityOptions);
     ALWAYS_ASSERT((fixedViscosityHeader.flags & detail::kVariableViscosity) == 0U);
     auto betaOptions = viscosityOptions;
-    betaOptions.hydro.viscosityAlpha = 1.0;
+    betaOptions.hydro.bulkViscosityCoefficient = 1.0;
     auto const fixedViscosityParameters = detail::sphCheckpointParameters(betaOptions);
-    betaOptions.hydro.viscosityBeta += 0.5;
+    betaOptions.hydro.vonNeumannRichtmyerCoefficient += 0.5;
     ALWAYS_ASSERT(fixedViscosityParameters != detail::sphCheckpointParameters(betaOptions));
     viscosityOptions.hydro.viscosityEvolution = "morrisAndMonaghan";
     ALWAYS_ASSERT(!detail::checkpointCompatible(fixedViscosityHeader, viscosityOptions));
     for (int parameter = 0; parameter < 7; ++parameter) {
         auto altered = viscosityOptions;
         if (parameter == 0) {
-            altered.hydro.viscosityAlphaMin += 0.125;
+            altered.hydro.minimumBulkViscosityCoefficient += 0.125;
         } else if (parameter == 1) {
             altered.hydro.viscosityDecay += 0.125;
         } else if (parameter == 2) {
@@ -1396,14 +1408,23 @@ void checkpointStateTest() {
         } else if (parameter == 3) {
             altered.hydro.viscosityEvolution = "priceEtAl";
         } else if (parameter == 4) {
-            altered.hydro.viscosityAlphaMax += 0.125;
+            altered.hydro.maximumBulkViscosityCoefficient += 0.125;
         } else if (parameter == 5) {
             altered.hydro.viscosityDecayCD += 0.125;
         } else {
-            altered.hydro.viscosityAlphaMaxPrice += 0.125;
+            altered.hydro.maximumBulkViscosityCoefficientPrice += 0.125;
         }
         ALWAYS_ASSERT(viscosityParameters != detail::viscosityCheckpointParameters(altered));
     }
+    auto huOptions = viscosityOptions;
+    huOptions.hydro.viscosityEvolution = "hu_etal";
+    auto const huParameters = detail::viscosityCheckpointParameters(huOptions);
+    ALWAYS_ASSERT(huParameters[2] == 3.0 && huParameters != viscosityParameters);
+    huOptions.hydro.maximumBulkViscosityCoefficientHu += 0.125;
+    ALWAYS_ASSERT(huParameters != detail::viscosityCheckpointParameters(huOptions));
+    huOptions.hydro.maximumBulkViscosityCoefficientHu -= 0.125;
+    huOptions.hydro.viscosityDecayHu += 0.125;
+    ALWAYS_ASSERT(huParameters != detail::viscosityCheckpointParameters(huOptions));
     auto planeOptions = getOptions();
     planeOptions.hydro.enabled = true;
     planeOptions.hydro.zPlaneAcceleration = 0.0;
@@ -1422,7 +1443,7 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(!detail::checkpointCompatible(planeHeader, planeOptions));
     ALWAYS_ASSERT(!detail::zPlaneCheckpointCompatible(0.5, planeOptions));
     changed = getOptions();
-    changed.hydro.viscosityAlpha += 0.25;
+    changed.hydro.bulkViscosityCoefficient += 0.25;
     ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));
     changed = getOptions();
     changed.hydro.neighborNumber += 1.0;
@@ -1493,9 +1514,11 @@ void checkpointStateTest() {
         fclose(fp);
         particlesFree();
         particlesDestroy();
-        PRINT("Checkpoint position payload round trip passed (%i bits)\n", kPositionBits);
+        std::cout << std::format("Checkpoint position payload round trip passed ({:d} bits)\n",
+                         kPositionBits)
+                  << std::flush;
     }
-    PRINT("Checkpoint state and mode validation passed\n");
+    std::cout << "Checkpoint state and mode validation passed\n" << std::flush;
 }
 
 void writeCheckpoint(DriverParameters params) {
@@ -1526,7 +1549,7 @@ void writeCheckpoint(DriverParameters params) {
         detail::writeDriverState(file.get(), params);
         particlesSave(file.get());
         domainsSave(file.get());
-#if COSMICTIGER_WITH_GRAVITY
+#if COSMICTIGER_ENABLE_ROCKSTAR
         if (getOptions().lightcone.enabled) {
             lcSave(file.get());
         }
@@ -1549,14 +1572,14 @@ void writeCheckpoint(DriverParameters params) {
         }
         detail::fs::rename(stagingDirectory, directory);
         detail::syncDirectory(directory.has_parent_path() ? directory.parent_path() : ".");
-        PRINT("  Checkpoint saved: %s\n", directory.c_str());
+        std::cout << std::format("  Checkpoint saved: {:s}\n", directory.c_str()) << std::flush;
     }
 }
 
 DriverParameters readCheckpoint() {
     DriverParameters params{};
     if (hpxRank() == 0) {
-        PRINT("Reading checkpoint\n");
+        std::cout << "Reading checkpoint\n" << std::flush;
         profile::ScopedPhase profilePhase("readCheckpoint.validate");
         detail::validateCheckpointDirectory(
             detail::checkpointDirectory(getOptions().checkpoint.readIndex),
@@ -1578,7 +1601,7 @@ DriverParameters readCheckpoint() {
         params = detail::readDriverState(file.get());
         particlesLoad(file.get());
         domainsLoad(file.get());
-#if COSMICTIGER_WITH_GRAVITY
+#if COSMICTIGER_ENABLE_ROCKSTAR
         if (getOptions().lightcone.enabled) {
             lcLoad(file.get());
         }
@@ -1598,7 +1621,7 @@ DriverParameters readCheckpoint() {
         }
     }
     if (hpxRank() == 0) {
-        PRINT("Done reading checkpoint\n");
+        std::cout << "Done reading checkpoint\n" << std::flush;
     }
     return params;
 }

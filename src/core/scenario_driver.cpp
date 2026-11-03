@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <format>
+#include <iostream>
 #include <numeric>
 #include <stdexcept>
 #include <vector>
@@ -28,9 +30,9 @@
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/scenarios/scenario.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 #if COSMICTIGER_ENABLE_STAR_FORMATION
-#include <cosmictiger/hydro/sph/star_formation.hpp>
+#include <cosmictiger/stars/star_formation.hpp>
 #endif
 #endif
 
@@ -152,13 +154,16 @@ void runFixedScenario() {
     size_t progressRows = 0;
     if (hpxRank() == 0) {
         terminal::section(definition.name);
-        PRINT("%-38s: %e code time units\n", "Scenario duration", duration);
+        std::cout << std::format("{:<38s}: {:e} code time units\n", "Scenario duration", duration)
+                  << std::flush;
         if (hpxSize() == 1) {
-            PRINT(
-                "%-38s: %lld\n", "Initialized particles", static_cast<long long>(particlesSize()));
+            std::cout << std::format("{:<38s}: {:d}\n", "Initialized particles",
+                             static_cast<long long>(particlesSize()))
+                      << std::flush;
         }
-        PRINT("  Time and dt are in code units; wall durations use hh:mm:ss.ss and include "
-              "previous runs on restart.\n");
+        std::cout << "  Time and dt are in code units; wall durations use hh:mm:ss.ss and include "
+                     "previous runs on restart.\n"
+                  << std::flush;
     }
     int lastCheckpoint = restarting ? state.iter : -1;
     auto const checkpoint = [&]() {
@@ -190,9 +195,10 @@ void runFixedScenario() {
         }
         auto stageOptions = baseOptions;
         stageOptions.hydro.damping = stage.damping;
-        if (stage.viscosityAlpha >= 0.0) {
-            stageOptions.hydro.viscosityAlpha = stage.viscosityAlpha;
-            stageOptions.hydro.viscosityBeta = 2.0 * stage.viscosityAlpha;
+        if (stage.bulkViscosityCoefficient >= 0.0) {
+            stageOptions.hydro.bulkViscosityCoefficient = stage.bulkViscosityCoefficient;
+            stageOptions.hydro.vonNeumannRichtmyerCoefficient =
+                2.0 * stage.bulkViscosityCoefficient;
             stageOptions.hydro.viscosityEvolution = "none";
         }
         setOptions(stageOptions);
@@ -281,25 +287,31 @@ void runFixedScenario() {
                 double const displayedRuntime = restoredRuntime + runtime.read();
                 runtime.start();
                 if (progressRows == 0) {
-                    PRINT("  TFLOP/s uses counted gravity and SPH operations divided by force "
-                          "advancement wall time.\n"
-                          "  FP32/FP64 separate arithmetic precision; Mixed is reserved for "
-                          "unclassified diagnostic counts (normally zero).\n"
-                          "  Chemistry and star formation operations are excluded; their wall "
-                          "time is included.\n");
+                    std::cout
+                        << "  TFLOP/s uses counted gravity and SPH operations divided by force "
+                           "advancement wall time.\n"
+                           "  FP32/FP64 separate arithmetic precision.\n"
+                           "  Chemistry and star formation operations are excluded; their wall "
+                           "time is included.\n"
+                        << std::flush;
                 }
                 if (progressRows % 25 == 0) {
-                    PRINT("\n%8s %13s %13s %7s %13s %13s %13s %10s %10s %10s %10s\n", "Step",
-                        "Time", "dt", "Done %", "Rung(min/max)", "Wall", "Step time", "FP32 TF/s",
-                        "FP64 TF/s", "Mixed TF/s", "TFLOP/s");
+                    std::cout << std::format("\n{:>8s} {:>13s} {:>13s} {:>7s} {:>13s} {:>13s} "
+                                             "{:>13s} {:>10s} {:>10s} {:>10s}\n",
+                                     "Step", "Time", "dt", "Done %", "Rung(min/max)", "Wall",
+                                     "Step time", "FP32 TF/s", "FP64 TF/s", "TFLOP/s")
+                              << std::flush;
                 }
-                PRINT("%8i %13.6e %13.6e %7.2f %6i/%-6i %13s %13s %10.3e %10.3e %10.3e %10.3e\n",
-                    state.iter, state.tau, timestep,
-                    std::clamp(100.0 * state.tau / duration, 0.0, 100.0), displayedMinimumRung,
-                    state.maxRung, terminal::formatDuration(displayedRuntime).c_str(),
-                    terminal::formatDuration(stepTimer.read()).c_str(),
-                    flopRates.singlePrecision * 1e-12, flopRates.doublePrecision * 1e-12,
-                    flopRates.unclassified * 1e-12, flops * 1e-12);
+                std::cout << std::format("{:8d} {:13.6e} {:13.6e} {:7.2f} {:6d}/{:<6d} {:>13s} "
+                                         "{:>13s} {:10.3e} {:10.3e} {:10.3e}\n",
+                                 state.iter, state.tau, timestep,
+                                 std::clamp(100.0 * state.tau / duration, 0.0, 100.0),
+                                 displayedMinimumRung, state.maxRung,
+                                 terminal::formatDuration(displayedRuntime).c_str(),
+                                 terminal::formatDuration(stepTimer.read()).c_str(),
+                                 flopRates.singlePrecision * 1e-12,
+                                 flopRates.doublePrecision * 1e-12, flops * 1e-12)
+                          << std::flush;
                 progressRows++;
             }
         }
@@ -326,9 +338,11 @@ void runFixedScenario() {
         // half-step. Only the final diagnostics consume the synchronized state.
         auto finalOptions = baseOptions;
         finalOptions.hydro.damping = plan.stages.back().damping;
-        if (plan.stages.back().viscosityAlpha >= 0.0) {
-            finalOptions.hydro.viscosityAlpha = plan.stages.back().viscosityAlpha;
-            finalOptions.hydro.viscosityBeta = 2.0 * plan.stages.back().viscosityAlpha;
+        if (plan.stages.back().bulkViscosityCoefficient >= 0.0) {
+            finalOptions.hydro.bulkViscosityCoefficient =
+                plan.stages.back().bulkViscosityCoefficient;
+            finalOptions.hydro.vonNeumannRichtmyerCoefficient =
+                2.0 * plan.stages.back().bulkViscosityCoefficient;
             finalOptions.hydro.viscosityEvolution = "none";
         }
         setOptions(finalOptions);
@@ -351,16 +365,21 @@ void runFixedScenario() {
 #endif
     runtime.stop();
     if (hpxRank() == 0) {
-        PRINT("\n  %s: %s at t=%.6e after %i steps.\n", definition.name,
-            completed ? "finished" :
-                        (interrupted ? "interrupted" : "paused at the iteration limit"),
-            state.tau, state.iter);
+        std::cout << std::format("\n  {:s}: {:s} at t={:.6e} after {:d} steps.\n", definition.name,
+                         completed ?
+                             "finished" :
+                             (interrupted ? "interrupted" : "paused at the iteration limit"),
+                         state.tau, state.iter)
+                  << std::flush;
         double const evolutionSeconds = iterations > 0 ? runtime.read() : 0.0;
-        PRINT("  Total evolution time (this run, initialization excluded): %s\n",
-            terminal::formatDuration(evolutionSeconds).c_str());
+        std::cout << std::format(
+                         "  Total evolution time (this run, initialization excluded): {:s}\n",
+                         terminal::formatDuration(evolutionSeconds).c_str())
+                  << std::flush;
         if (restarting) {
-            PRINT("  Recorded time including previous runs: %s\n",
-                terminal::formatDuration(restoredRuntime + evolutionSeconds).c_str());
+            std::cout << std::format("  Recorded time including previous runs: {:s}\n",
+                             terminal::formatDuration(restoredRuntime + evolutionSeconds).c_str())
+                      << std::flush;
         }
     }
 }

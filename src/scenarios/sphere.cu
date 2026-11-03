@@ -134,7 +134,7 @@ __global__ void sphereSurfaceKernel(float** xMain, float** yMain, float** zMain,
         iter++;
     } while (error > detail::kSphereSurfaceTolerance || iter < detail::kSphereSurfaceMinIterations);
     if (tid == 0) {
-        PRINT("Solved for %i\n", nValue);
+        printf("Solved for %i\n", nValue);
     }
     __syncthreads();
     (&vx)->~DeviceVector<float>();

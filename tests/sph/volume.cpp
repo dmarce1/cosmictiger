@@ -17,15 +17,15 @@
 
 #include <gtest/gtest.h>
 
-#include <cosmictiger/hydro/sph/variational/equations.hpp>
-#include <cosmictiger/hydro/sph/volume.hpp>
 #include <cosmictiger/math/radial_kernel.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/vector3.hpp>
+#include <cosmictiger/sph/variable_smoothing_lengths.hpp>
+#include <cosmictiger/sph/volume.hpp>
 #include <tests/sph/test_helpers.hpp>
 
-// Double-precision references for cosmictiger/hydro/sph/volume.hpp and
-// cosmictiger/hydro/sph/variational/equations.hpp. A small isolated particle system with its own
+// Double-precision references for cosmictiger/sph/volume.hpp and
+// cosmictiger/sph/variable_smoothing_lengths.hpp. A small isolated particle system with its own
 // exact support solve supplies the discrete thermal energy whose gradient the compatible
 // density-energy force must be (docs/variational_sph.md).
 namespace detail {
@@ -189,11 +189,12 @@ struct System {
     // Hopkins (2013) equation 12 and the compatible work with the directed Q_ij.
     Rates rates(std::vector<Vector> const& velocity) const {
         std::vector<double> factor(size());
-        std::vector<double> zeta(size());
+        std::vector<double> weightedSupportCorrection(size());
         for (int i = 0; i < size(); ++i) {
             factor[i] =
                 variational::pressureVolumeFactor(pressure(i), weight[i], weightedDensity(i));
-            zeta[i] = sph_volume::gradHCorrection(sums(i), constraint[i]).zeta;
+            weightedSupportCorrection[i] =
+                sph_volume::gradHCorrection(sums(i), constraint[i]).weightedSupportCorrection;
         }
         Rates result{std::vector<Vector>(size(), Vector{}), std::vector<double>(size(), 0.0)};
         for (int i = 0; i < size(); ++i) {
@@ -205,10 +206,10 @@ struct System {
                 double const radius = std::sqrt(separation.squaredNorm());
                 double const gradientI = gradientFactor(radius, support[i]);
                 double const gradientJ = gradientFactor(radius, support[j]);
-                double const coefficientIJ =
-                    variational::directedCoefficient(factor[i], weight[j], zeta[i]);
-                double const coefficientJI =
-                    variational::directedCoefficient(factor[j], weight[i], zeta[j]);
+                double const coefficientIJ = variational::directedCoefficient(
+                    factor[i], weight[j], weightedSupportCorrection[i]);
+                double const coefficientJI = variational::directedCoefficient(
+                    factor[j], weight[i], weightedSupportCorrection[j]);
                 double const pairForce = variational::pairForceFactor(
                     coefficientIJ, coefficientJI, gradientI, gradientJ);
                 for (int dim = 0; dim < 3; ++dim) {
@@ -356,14 +357,15 @@ TEST(SphVolume, WeightedVolumeAndConstraintDerivatives) {
         EXPECT_NEAR(dydH,
             (direct(support + step, true) - direct(support - step, true)) / (2.0 * step),
             1.0e-6 * std::abs(dydH));
-        double const omega = sph_volume::omega(sums);
-        double const zeta = sph_volume::zeta(sums);
-        EXPECT_NEAR(omega, 1.0 + support / (3.0 * n) * dndH, 1.0e-12);
-        EXPECT_NEAR(zeta, support / (3.0 * n * omega) * dydH, 1.0e-12 * system.weight[i]);
+        double const supportJacobian = sph_volume::supportJacobian(sums);
+        double const weightedSupportCorrection = sph_volume::weightedSupportCorrection(sums);
+        EXPECT_NEAR(supportJacobian, 1.0 + support / (3.0 * n) * dndH, 1.0e-12);
+        EXPECT_NEAR(weightedSupportCorrection, support / (3.0 * n * supportJacobian) * dydH,
+            1.0e-12 * system.weight[i]);
         double const volume = sph_volume::volume(system.weight[i], y);
         double const volumeDensity = sph_volume::volumeDensity(system.mass[i], system.weight[i], y);
         EXPECT_NEAR(volume * volumeDensity, system.mass[i], 1.0e-15 * system.mass[i]);
-        EXPECT_GT(omega, 0.0);
+        EXPECT_GT(supportJacobian, 0.0);
     }
 }
 
@@ -380,23 +382,25 @@ TEST(SphVolume, EqualMassReducesToStandardGradH) {
         EXPECT_NEAR(equal.weightedSum, sums.weightedSum, 1.0e-15 * sums.weightedSum);
         EXPECT_NEAR(
             equal.weightedMoment, sums.weightedMoment, 1.0e-14 * std::abs(sums.weightedMoment));
-        double const omega = sph_volume::omega(sums);
-        double const zeta = sph_volume::zeta(sums);
-        EXPECT_NEAR(zeta, mass * (1.0 - 1.0 / omega), 1.0e-13 * mass);
-        EXPECT_NEAR(sph_volume::correctionFactor(zeta, mass), 1.0 / omega, 1.0e-13);
-        EXPECT_NEAR(mass - zeta, mass / omega, 1.0e-13 * mass);
+        double const supportJacobian = sph_volume::supportJacobian(sums);
+        double const weightedSupportCorrection = sph_volume::weightedSupportCorrection(sums);
+        EXPECT_NEAR(
+            weightedSupportCorrection, mass * (1.0 - 1.0 / supportJacobian), 1.0e-13 * mass);
+        EXPECT_NEAR(sph_volume::correctionFactor(weightedSupportCorrection, mass),
+            1.0 / supportJacobian, 1.0e-13);
+        EXPECT_NEAR(mass - weightedSupportCorrection, mass / supportJacobian, 1.0e-13 * mass);
     }
     std::vector<Vector> const still(system.size(), Vector{});
     auto const rates = system.rates(still);
     for (int i = 0; i < system.size(); ++i) {
         Vector price{};
-        double const omegaI = sph_volume::omega(system.sums(i));
+        double const omegaI = sph_volume::supportJacobian(system.sums(i));
         double const densityI = system.weightedDensity(i);
         for (int j = 0; j < system.size(); ++j) {
             if (i == j) {
                 continue;
             }
-            double const omegaJ = sph_volume::omega(system.sums(j));
+            double const omegaJ = sph_volume::supportJacobian(system.sums(j));
             double const densityJ = system.weightedDensity(j);
             Vector const separation = system.position[i] - system.position[j];
             double const radius = std::sqrt(separation.squaredNorm());
@@ -423,8 +427,8 @@ TEST(SphVolume, ConstrainedDensityDerivatives) {
         makeSystem({radial_kernel::Family::Spline, 4}, WeightModel::UnequalWeight, 5.0 / 3.0, 23);
     for (int i : {0, 7, 30}) {
         auto const sums = system.sums(i);
-        double const zeta = sph_volume::zeta(sums);
-        double const omega = sph_volume::omega(sums);
+        double const weightedSupportCorrection = sph_volume::weightedSupportCorrection(sums);
+        double const supportJacobian = sph_volume::supportJacobian(sums);
         double const n = sph_volume::numberDensity(sums, 1.0 / system.support[i]);
         for (int k : {i, (i + 3) % system.size(), (i + 11) % system.size()}) {
             Vector expectedDensity{};
@@ -438,10 +442,10 @@ TEST(SphVolume, ConstrainedDensityDerivatives) {
                     system.gradientFactor(std::sqrt(separation.squaredNorm()), system.support[i]);
                 double const sign = k == i ? 1.0 : -1.0;
                 for (int dim = 0; dim < 3; ++dim) {
-                    expectedDensity[dim] +=
-                        sign * (system.weight[j] - zeta) * gradient * separation[dim];
-                    expectedSupport[dim] -=
-                        sign * system.support[i] / (3.0 * n * omega) * gradient * separation[dim];
+                    expectedDensity[dim] += sign * (system.weight[j] - weightedSupportCorrection) *
+                        gradient * separation[dim];
+                    expectedSupport[dim] -= sign * system.support[i] / (3.0 * n * supportJacobian) *
+                        gradient * separation[dim];
                 }
             }
             for (int dim = 0; dim < 3; ++dim) {
@@ -682,8 +686,8 @@ TEST(SphVolume, SupportClassificationAndHeldCorrections) {
     for (auto const held :
         {SupportConstraint::LowerBound, SupportConstraint::UpperBound, SupportConstraint::Fixed}) {
         auto const correction = sph_volume::gradHCorrection(selfOnly, held);
-        EXPECT_EQ(correction.zeta, 0.0f);
-        EXPECT_EQ(correction.omega, 1.0f);
+        EXPECT_EQ(correction.weightedSupportCorrection, 0.0f);
+        EXPECT_EQ(correction.supportJacobian, 1.0f);
         EXPECT_TRUE(sph_volume::isWellConditioned(correction));
     }
 }

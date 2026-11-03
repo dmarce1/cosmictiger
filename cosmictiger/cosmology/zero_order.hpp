@@ -28,7 +28,7 @@ struct ZeroOrderUniverse {
     double amax;
     CosmicParameters params;
     InterpolationFunctor<double> sigmaT;
-    InterpolationFunctor<double> cs2;
+    InterpolationFunctor<double> soundSpeedSquared;
     InterpolationFunctor<double> k;
     std::function<double(double)> xe;
 

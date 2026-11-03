@@ -101,7 +101,7 @@ def check_finite_progress(directory):
     rows = [[float(value) for value in line.split()] for line in path.read_text().splitlines()
             if line.strip() and line.split()[0] != "runtime"]
     require(rows, f"empty progress file in {directory}")
-    require(all(len(row) == 17 for row in rows), f"incomplete progress output in {directory}")
+    require(all(len(row) == 16 for row in rows), f"incomplete progress output in {directory}")
     require(all(math.isfinite(value) for row in rows for value in row),
             f"nonfinite progress output in {directory}")
     return rows

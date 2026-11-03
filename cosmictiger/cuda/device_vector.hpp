@@ -11,6 +11,8 @@
 
 #include <algorithm>
 #include <climits>
+#include <format>
+#include <iostream>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -264,8 +266,16 @@ public:
         ThreadIndex tid;
         syncthreads();
         if (size_ > storageCapacity) {
-            PRINT("device_vector attach: %i live elements exceed the storage of %i\n", size_,
+#ifdef __CUDA_ARCH__
+            printf("device_vector attach: %i live elements exceed the storage of %i\n", size_,
                 storageCapacity);
+#else
+            std::cout
+                << std::format(
+                       "device_vector attach: {:d} live elements exceed the storage of {:d}\n",
+                       size_, storageCapacity)
+                << std::flush;
+#endif
             ALWAYS_ASSERT(false);
         }
         ALWAYS_ASSERT(storageCapacity >= 0);
@@ -304,7 +314,13 @@ public:
         if (tid == 0) {
             newPtr_ = (T*) cudaAllocate(sizeof(T) * newCapacity);
             if (newPtr_ == nullptr) {
-                PRINT("OOM in device_vector while requesting %i! \n", newCapacity);
+#ifdef __CUDA_ARCH__
+                printf("OOM in device_vector while requesting %i! \n", newCapacity);
+#else
+                std::cout << std::format(
+                                 "OOM in device_vector while requesting {:d}! \n", newCapacity)
+                          << std::flush;
+#endif
                 ALWAYS_ASSERT(false);
             }
         }
@@ -399,7 +415,13 @@ public:
     inline T& operator[](int i) {
 #ifdef CHECK_BOUNDS
         if (i < 0 || i >= size_) {
-            PRINT("A) Bound exceeded in device_vector %i %i %i\n", i, size_, sizeof(T));
+#ifdef __CUDA_ARCH__
+            printf("A) Bound exceeded in device_vector %i %i %i\n", i, size_, sizeof(T));
+#else
+            std::cout << std::format("A) Bound exceeded in device_vector {:d} {:d} {:d}\n", i,
+                             size_, sizeof(T))
+                      << std::flush;
+#endif
             ALWAYS_ASSERT(false);
         }
 #endif
@@ -409,7 +431,13 @@ public:
     inline T const& operator[](int i) const {
 #ifdef CHECK_BOUNDS
         if (i < 0 || i >= size_) {
-            PRINT("B) Bound exceeded in device_vector %i %i %i\n", i, size_, sizeof(T));
+#ifdef __CUDA_ARCH__
+            printf("B) Bound exceeded in device_vector %i %i %i\n", i, size_, sizeof(T));
+#else
+            std::cout << std::format("B) Bound exceeded in device_vector {:d} {:d} {:d}\n", i,
+                             size_, sizeof(T))
+                      << std::flush;
+#endif
             ALWAYS_ASSERT(false);
         }
 #endif

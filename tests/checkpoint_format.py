@@ -126,7 +126,7 @@ def read_prefix(data):
         if flags & (1 << 14):
             result.viscosity = reader.take("d", 7)
             require(all(math.isfinite(value) for value in result.viscosity) and
-                    result.viscosity[2] in (0.0, 1.0, 2.0),
+                    result.viscosity[2] in (0.0, 1.0, 2.0, 3.0),
                     "invalid checkpoint viscosity parameters")
             viscosity_offset = 2 + 2 * int(result.viscosity[2])
     if cooling:
@@ -161,9 +161,9 @@ def read_prefix(data):
                 and result.driver.outer_interval >= 0 and result.driver.outer_start >= 0,
                 "invalid checkpoint particle-mesh interval extension")
     result.particle_start = reader.offset
-    # Gas versions from 30000 store entropies and support radii as separate arrays,
+    # Gas versions from 40000 store entropies and support radii as separate arrays,
     # no predicted rates, and only the electron fraction of the cooling state.
-    result.gas_version = 30000 + (110 if stars else 100 if cooling else 2) + viscosity_offset
+    result.gas_version = 40000 + (110 if stars else 100 if cooling else 2) + viscosity_offset
     result.reader = reader
     return result
 
@@ -210,8 +210,8 @@ def decode_checkpoint(data, ranks=1):
             for a, rho in zip(result.entropies, scalars[1])) if result.entropy_initialized else result.entropies
         flags = [reader.take("B", gas_count) for _ in range(2)]
         vectors = [reader.take("f", gas_count) for _ in range(3)]
-        delta = (result.gas_version - 30000 - (110 if result.has_stars else 100 if result.has_cooling else 2))
-        width = {0: 0, 2: 2, 4: 3, 6: 3}[delta]
+        delta = (result.gas_version - 40000 - (110 if result.has_stars else 100 if result.has_cooling else 2))
+        width = {0: 0, 2: 1, 4: 2, 6: 2, 8: 2}[delta]
         viscosity = reader.take("f", width * gas_count)
         if result.has_cooling:
             result.cooling = tuple(reader.take("f", 1) for _ in range(gas_count))

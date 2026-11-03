@@ -125,36 +125,32 @@ void fft3d2silo(bool real) {
 }
 
 void fft3dExecute() {
-    //	PRINT("FFT z\n");
     fft3dPhase1();
-    //	PRINT("Transpose y-z\n");
+
     transpose(1, 2);
-    //	PRINT("FFT y\n");
+
     fft3dPhase2(1, false);
-    //	PRINT("Shifting\n");
+
     shift(false);
-    //	PRINT("FFT x\n");
+
     fft3dPhase2(0, false);
-    //	PRINT("Transpose z-x\n");
+
     transpose(2, 0);
     update();
-    //	PRINT("done\n");
 }
 
 void fft3dInvExecute() {
-    //	PRINT("Transpose z-x\n");
     transpose(0, 2);
-    //	PRINT("inv FFT x\n");
+
     fft3dPhase2(0, true);
-    //	PRINT("Shifting\n");
+
     shift(true);
-    //	PRINT("inv FFT y\n");
+
     fft3dPhase2(1, true);
-    //	PRINT("Transpose y-z\n");
+
     transpose(2, 1);
-    //	PRINT("inv FFT z\n");
+
     fft3dPhase3();
-    //	PRINT("done\n");
 }
 
 void fft3dForceReal() {
@@ -632,8 +628,7 @@ static void fft3dPhase3() {
                                        /*					if( i[2] == 0 || i[2] == N / 2) {
               const float value = Y[l].imag() / (Y[l].abs()+1e-20);
               if(std::abs(value) > 5.0e-3) {
-              PRINT( "!!!! %i %i %i %e %e\n", i[0], i[1], i[2], Y[l].real(),
-              Y[l].imag());
+
               }
               }*/
                                    }

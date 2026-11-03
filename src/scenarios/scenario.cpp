@@ -17,7 +17,7 @@
 #include <cosmictiger/scenarios/polytropic_star.hpp>
 #include <cosmictiger/scenarios/rayleigh_taylor.hpp>
 #include <cosmictiger/scenarios/sod.hpp>
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 #endif
 
 namespace scenarios {

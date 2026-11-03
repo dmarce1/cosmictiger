@@ -5,8 +5,8 @@
 #include <cuda_runtime.h>
 #include <gtest/gtest.h>
 
-#include <cosmictiger/hydro/sph/cullen_and_dehnen/viscosity.hpp>
 #include <cosmictiger/math/matrix_eigen.hpp>
+#include <cosmictiger/sph/viscosity/cullen_and_dehnen.hpp>
 
 namespace detail {
 

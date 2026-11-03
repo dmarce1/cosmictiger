@@ -11,7 +11,7 @@
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 #endif
 #include "state.hpp"
 

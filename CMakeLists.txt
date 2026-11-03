@@ -176,11 +176,14 @@ find_library(SILO_LIBRARY NAMES siloh5 silo REQUIRED)
 if(COSMICTIGER_WITH_GRAVITY)
     find_path(CHEALPIX_INCLUDE_DIR chealpix.h REQUIRED)
     find_library(CHEALPIX_LIBRARY NAMES chealpix REQUIRED)
+endif()
+if(COSMICTIGER_WITH_ROCKSTAR)
     find_path(HEALPIX_CXX_INCLUDE_DIR healpix_base.h PATH_SUFFIXES healpix_cxx REQUIRED)
     find_library(HEALPIX_CXX_LIBRARY NAMES healpix_cxx REQUIRED)
 endif()
 
 message(STATUS "cosmictiger SPH = ${COSMICTIGER_WITH_SPH}")
+message(STATUS "cosmictiger ROCKSTAR = ${COSMICTIGER_WITH_ROCKSTAR} (requires gravity)")
 message(STATUS "cosmictiger equilibrium cooling = ${COSMICTIGER_WITH_CHEMISTRY} (requires SPH)")
 message(STATUS "cosmictiger stars = ${COSMICTIGER_WITH_STARS} (COSMICTIGER_ENABLE_STARS; requires chemistry and SPH)")
 message(STATUS "cosmictiger position storage = ${COSMICTIGER_POSITION_TYPE}")
@@ -332,13 +335,13 @@ set(cosmictiger_header_files
     cosmictiger/scenarios/glass.hpp
     cosmictiger/scenarios/exact_sod.hpp
     cosmictiger/scenarios/sedov.hpp
-    cosmictiger/hydro/sph/sph.hpp
-    cosmictiger/hydro/sph/sph_chemistry.hpp
-    cosmictiger/hydro/sph/sph_cpu.hpp
-    cosmictiger/hydro/sph/sph_cuda.hpp
-    cosmictiger/hydro/sph/sph_kernel.hpp
-    cosmictiger/hydro/sph/sph_particles.hpp
-    cosmictiger/hydro/sph/sph_tree.hpp
+    cosmictiger/sph/sph.hpp
+    cosmictiger/chemistry/sph.hpp
+    cosmictiger/sph/cpu.hpp
+    cosmictiger/sph/cuda.hpp
+    cosmictiger/sph/run_data.hpp
+    cosmictiger/sph/particles.hpp
+    cosmictiger/sph/tree.hpp
     cosmictiger/scenarios/sphere.hpp
     cosmictiger/core/tree_id.hpp
     cosmictiger/gravity/global_fmm/cpu_instances.hpp
@@ -359,29 +362,31 @@ set(cosmictiger_header_files
     cosmictiger/gravity/pmmm/fmm/ghost_storage.hpp
     cosmictiger/gravity/pmmm/kernels.hpp
     cosmictiger/gravity/pmmm/kick.hpp
-    cosmictiger/gravity/pmmm/pp/near_pp.hpp
+    cosmictiger/gravity/pmmm/pp_near_pp.hpp
     cosmictiger/gravity/pmmm/solver.hpp
     cosmictiger/gravity/source_access.hpp
     cosmictiger/gravity/sources.hpp
     cosmictiger/gravity/tree_build.hpp
-    cosmictiger/hydro/sph/balsara/shear_limiter.hpp
-    cosmictiger/hydro/sph/cullen_and_dehnen/particle_exchange.hpp
-    cosmictiger/hydro/sph/cullen_and_dehnen/state.hpp
-    cosmictiger/hydro/sph/cullen_and_dehnen/viscosity.hpp
-    cosmictiger/hydro/sph/entropy.hpp
-    cosmictiger/hydro/sph/kernels.hpp
-    cosmictiger/hydro/sph/monaghan/viscosity.hpp
-    cosmictiger/hydro/sph/morris_and_monaghan/viscosity.hpp
-    cosmictiger/hydro/sph/price_etal/viscosity.hpp
-    cosmictiger/hydro/sph/sph_flops.hpp
-    cosmictiger/hydro/sph/variational/equations.hpp
-    cosmictiger/hydro/sph/viscosity_state.hpp
-    cosmictiger/hydro/sph/volume.hpp
+    cosmictiger/sph/viscosity/balsara.hpp
+    cosmictiger/sph/viscosity/cullen_and_dehnen_particle_exchange.hpp
+    cosmictiger/sph/viscosity/cullen_and_dehnen_state.hpp
+    cosmictiger/sph/viscosity/cullen_and_dehnen.hpp
+    cosmictiger/sph/viscosity/monaghan.hpp
+    cosmictiger/sph/viscosity/morris_and_monaghan.hpp
+    cosmictiger/sph/viscosity/price_etal.hpp
+    cosmictiger/sph/viscosity/hu_etal.hpp
+    cosmictiger/sph/flops.hpp
+    cosmictiger/sph/variable_smoothing_lengths.hpp
+    cosmictiger/sph/volume.hpp
 )
 
 # Source conversions to the evolved entropy variable are deliberately deferred.
 set(cosmictiger_entropy_sources_ready OFF)
 if(BUILD_TESTING)
+    set(cosmictiger_rockstar_test_args)
+    if(NOT COSMICTIGER_WITH_ROCKSTAR)
+        list(APPEND cosmictiger_rockstar_test_args --without-rockstar)
+    endif()
     set(cosmictiger_star_formation_test_args)
     if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_STAR_FORMATION AND cosmictiger_entropy_sources_ready)
         list(APPEND cosmictiger_star_formation_test_args --with-star-formation)
@@ -395,7 +400,7 @@ if(BUILD_TESTING)
         COMPILE_DEFINITIONS COSMICTIGER_BUILD_TESTING)
 endif()
 
-if(COSMICTIGER_WITH_GRAVITY)
+if(COSMICTIGER_WITH_ROCKSTAR)
     # Keep the C++23 standard half type in one host-only translation unit. The
     # public two-byte storage type remains usable by the C++20/CUDA application.
     add_library(cosmictiger_fp16 STATIC src/math/fp16.cpp)
@@ -435,11 +440,11 @@ if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
             $<$<COMPILE_LANGUAGE:CUDA>:--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false;-Xcompiler=-fno-fast-math;-Xcompiler=-ffp-contract=off>)
     endif()
 endif()
-set_source_files_properties(src/hydro/sph/sph_chemistry.cpp src/io/view.cpp tests/sph/chemistry.cpp
-    src/hydro/sph/star_formation.cpp tests/sph/star_formation.cpp
+set_source_files_properties(src/chemistry/sph.cpp src/io/view.cpp tests/sph/chemistry.cpp
+    src/stars/star_formation.cpp tests/sph/star_formation.cpp
     PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 # Star-formation device physics shares the chemistry rounding contract.
-set_source_files_properties(src/hydro/sph/star_formation_cuda.cu PROPERTIES COMPILE_OPTIONS
+set_source_files_properties(src/stars/star_formation_cuda.cu PROPERTIES COMPILE_OPTIONS
     "--expt-relaxed-constexpr;--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false;-Xcompiler=-fno-fast-math;-Xcompiler=-ffp-contract=off")
 
 # The adaptive Boltzmann solve needs finite-value checks and accurate
@@ -466,7 +471,7 @@ set_source_files_properties(
     src/gravity/pm/interval.cpp
     src/gravity/p3m/solver.cpp
     src/gravity/p3m/pp/short_pp.cpp
-    src/gravity/p3m/fmm/short_fmm.cpp
+    src/gravity/p3m/fmm_short_fmm.cpp
     tests/gravity/pm/pm.cpp
     tests/gravity/p3m/p3m.cpp
     PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
@@ -524,20 +529,25 @@ if(COSMICTIGER_WITH_GRAVITY)
     target_include_directories(healpix2silo PRIVATE ${PROJECT_SOURCE_DIR})
     target_include_directories(healpix2silo SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR} ${SILO_INCLUDE_DIR})
 
-    add_hpx_executable(groups2halofunc
-        SOURCES src/core/assert.cpp src/core/hpx.cpp src/tools/groups2halofunc.cpp src/analysis/group_entry.cpp)
-    target_link_libraries(groups2halofunc PUBLIC Boost::program_options PRIVATE cosmictiger_stacktrace)
-    set_target_properties(groups2halofunc PROPERTIES ENABLE_EXPORTS ON)
-    target_include_directories(groups2halofunc PRIVATE ${PROJECT_SOURCE_DIR})
+    set(cosmictiger_analysis_tools healpix2silo)
+    if(COSMICTIGER_WITH_ROCKSTAR)
+        add_hpx_executable(groups2halofunc
+            SOURCES src/core/assert.cpp src/core/hpx.cpp src/tools/groups2halofunc.cpp src/analysis/group_entry.cpp)
+        target_link_libraries(groups2halofunc PUBLIC Boost::program_options PRIVATE cosmictiger_stacktrace)
+        set_target_properties(groups2halofunc PROPERTIES ENABLE_EXPORTS ON)
+        target_include_directories(groups2halofunc PRIVATE ${PROJECT_SOURCE_DIR})
+        list(APPEND cosmictiger_analysis_tools groups2halofunc)
+        target_link_libraries(halo_catalog_export PRIVATE cosmictiger_default_config)
+    endif()
 
-    foreach(tool_target IN ITEMS healpix2silo groups2halofunc)
+    foreach(tool_target IN LISTS cosmictiger_analysis_tools)
         target_compile_options(${tool_target} PRIVATE -Wno-attributes -ffast-math)
         if(COMPILER_SUPPORTS_MARCH_NATIVE)
             target_compile_options(${tool_target} PRIVATE -march=native)
         endif()
     endforeach()
 
-    foreach(tool_target IN ITEMS halo_catalog_export healpix2silo groups2halofunc)
+    foreach(tool_target IN LISTS cosmictiger_analysis_tools)
         target_link_libraries(${tool_target} PRIVATE cosmictiger_default_config)
     endforeach()
 endif()
@@ -849,6 +859,9 @@ if(BUILD_TESTING)
         cosmictiger_add_gtest(NAME cosmology_evolution TARGET cosmology_evolution_test
             PROPERTIES TIMEOUT 30)
     endif()
+    add_executable(safe_io_test tests/safe_io.cpp)
+    target_include_directories(safe_io_test PRIVATE ${PROJECT_SOURCE_DIR})
+    cosmictiger_add_gtest(NAME safe_io TARGET safe_io_test PROPERTIES TIMEOUT 10)
     add_executable(terminal_test tests/terminal.cpp)
     target_include_directories(terminal_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_options(terminal_test PRIVATE -ffast-math)
@@ -927,7 +940,7 @@ if(BUILD_TESTING)
             PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
     endif()
 
-    if(COSMICTIGER_WITH_GRAVITY)
+    if(COSMICTIGER_WITH_ROCKSTAR)
         add_executable(halo_catalog_fixture tests/halo_catalog_fixture.cpp)
         target_link_libraries(halo_catalog_fixture PRIVATE cosmictiger_fp16)
         target_compile_options(halo_catalog_fixture PRIVATE -fno-fast-math)
@@ -1012,7 +1025,7 @@ if(BUILD_TESTING)
             RUN_SERIAL TRUE TIMEOUT 1200 PROCESSORS 2 LABELS "integration;star_formation;cpu")
         if(COSMICTIGER_WITH_CUDA)
             add_executable(star_formation_cuda_test tests/sph/star_formation_cuda.cu
-                src/hydro/sph/star_formation_cuda.cu)
+                src/stars/star_formation_cuda.cu)
             target_include_directories(star_formation_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
             target_compile_definitions(star_formation_cuda_test PRIVATE USE_CUDA)
             target_link_libraries(star_formation_cuda_test PRIVATE cosmictiger_sph_chemistry CUDA::cudart Boost::boost)
@@ -1194,36 +1207,38 @@ if(BUILD_TESTING)
                     ${cosmictiger_chemistry_test_args})
                 set_tests_properties(cpu_only_runtime PROPERTIES TIMEOUT 250 RUN_SERIAL TRUE)
             endif()
-            add_test(NAME analysis_cpu_runtime COMMAND ${Python3_EXECUTABLE}
-                ${PROJECT_SOURCE_DIR}/tests/run_analysis_cpu.py $<TARGET_FILE:cosmictiger>
-                ${PROJECT_BINARY_DIR}/tests/analysis_cpu_runtime
-                --guard $<TARGET_FILE:no_cuda_runtime>)
-            set_tests_properties(analysis_cpu_runtime PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
-            if(COSMICTIGER_WITH_SPH)
-                # Gas joins the maps and spectra; the lightcone finder keeps dark matter.
-                add_test(NAME analysis_cpu_hydro_runtime COMMAND ${Python3_EXECUTABLE}
+            if(COSMICTIGER_WITH_ROCKSTAR)
+                add_test(NAME analysis_cpu_runtime COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/run_analysis_cpu.py $<TARGET_FILE:cosmictiger>
-                    ${PROJECT_BINARY_DIR}/tests/analysis_cpu_hydro_runtime
-                    --guard $<TARGET_FILE:no_cuda_runtime> --hydro)
-                set_tests_properties(analysis_cpu_hydro_runtime PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
-            endif()
-            if(cosmictiger_mpi_tests)
-                set(analysis_mpi_launcher_args --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG})
-                foreach(flag IN LISTS MPIEXEC_PREFLAGS)
-                    list(APPEND analysis_mpi_launcher_args --mpi-preflag=${flag})
-                endforeach()
-                foreach(flag IN LISTS MPIEXEC_POSTFLAGS)
-                    list(APPEND analysis_mpi_launcher_args --mpi-postflag=${flag})
-                endforeach()
-                foreach(flag IN LISTS cosmictiger_mpi_transport_args)
-                    list(APPEND analysis_mpi_launcher_args --hpx-option=${flag})
-                endforeach()
-                add_test(NAME analysis_cpu_mpi COMMAND ${Python3_EXECUTABLE}
-                    ${PROJECT_SOURCE_DIR}/tests/run_analysis_cpu.py $<TARGET_FILE:cosmictiger>
-                    ${PROJECT_BINARY_DIR}/tests/analysis_cpu_mpi
-                    --guard $<TARGET_FILE:no_cuda_runtime> --mpi-exec ${MPIEXEC_EXECUTABLE}
-                    ${analysis_mpi_launcher_args} --ranks 2)
-                set_tests_properties(analysis_cpu_mpi PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE PROCESSORS 4)
+                    ${PROJECT_BINARY_DIR}/tests/analysis_cpu_runtime
+                    --guard $<TARGET_FILE:no_cuda_runtime>)
+                set_tests_properties(analysis_cpu_runtime PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
+                if(COSMICTIGER_WITH_SPH)
+                    # Gas joins the maps and spectra; the lightcone finder keeps dark matter.
+                    add_test(NAME analysis_cpu_hydro_runtime COMMAND ${Python3_EXECUTABLE}
+                        ${PROJECT_SOURCE_DIR}/tests/run_analysis_cpu.py $<TARGET_FILE:cosmictiger>
+                        ${PROJECT_BINARY_DIR}/tests/analysis_cpu_hydro_runtime
+                        --guard $<TARGET_FILE:no_cuda_runtime> --hydro)
+                    set_tests_properties(analysis_cpu_hydro_runtime PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
+                endif()
+                if(cosmictiger_mpi_tests)
+                    set(analysis_mpi_launcher_args --mpi-numproc-flag=${MPIEXEC_NUMPROC_FLAG})
+                    foreach(flag IN LISTS MPIEXEC_PREFLAGS)
+                        list(APPEND analysis_mpi_launcher_args --mpi-preflag=${flag})
+                    endforeach()
+                    foreach(flag IN LISTS MPIEXEC_POSTFLAGS)
+                        list(APPEND analysis_mpi_launcher_args --mpi-postflag=${flag})
+                    endforeach()
+                    foreach(flag IN LISTS cosmictiger_mpi_transport_args)
+                        list(APPEND analysis_mpi_launcher_args --hpx-option=${flag})
+                    endforeach()
+                    add_test(NAME analysis_cpu_mpi COMMAND ${Python3_EXECUTABLE}
+                        ${PROJECT_SOURCE_DIR}/tests/run_analysis_cpu.py $<TARGET_FILE:cosmictiger>
+                        ${PROJECT_BINARY_DIR}/tests/analysis_cpu_mpi
+                        --guard $<TARGET_FILE:no_cuda_runtime> --mpi-exec ${MPIEXEC_EXECUTABLE}
+                        ${analysis_mpi_launcher_args} --ranks 2)
+                    set_tests_properties(analysis_cpu_mpi PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE PROCESSORS 4)
+                endif()
             endif()
         endif()
     endif()
@@ -1284,7 +1299,7 @@ if(BUILD_TESTING)
         target_compile_options(sedov_test PRIVATE -fno-fast-math -ffp-contract=off)
         cosmictiger_add_gtest(NAME sedov TARGET sedov_test LABELS "scenarios;cpu" PROPERTIES TIMEOUT 30)
     endif()
-    if(COSMICTIGER_WITH_GRAVITY)
+    if(COSMICTIGER_WITH_ROCKSTAR)
         add_executable(analysis_tools_test tests/analysis_tools.cpp src/analysis/group_entry.cpp)
         target_include_directories(analysis_tools_test PRIVATE ${PROJECT_SOURCE_DIR}
             ${CHEALPIX_INCLUDE_DIR} ${SILO_INCLUDE_DIR})
@@ -1352,7 +1367,7 @@ if(BUILD_TESTING)
         endforeach()
     endif()
 
-    if(COSMICTIGER_WITH_GRAVITY)
+    if(COSMICTIGER_WITH_ROCKSTAR)
         foreach(fp16_variant IN ITEMS standard fast_math)
             add_executable(fp16_${fp16_variant}_test tests/fp16.cpp)
             target_include_directories(fp16_${fp16_variant}_test PRIVATE ${PROJECT_SOURCE_DIR})
@@ -1382,7 +1397,7 @@ if(BUILD_TESTING)
             PROPERTIES TIMEOUT 30)
     endforeach()
 
-    if(COSMICTIGER_WITH_GRAVITY)
+    if(COSMICTIGER_WITH_ROCKSTAR)
         add_executable(rockstar_eigenpair_test tests/rockstar_eigenpair.cpp src/math/math.cpp)
         target_include_directories(rockstar_eigenpair_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(rockstar_eigenpair_test PRIVATE ORDER=${cosmictiger_default_fmm_order})
@@ -1481,10 +1496,19 @@ if(BUILD_TESTING)
         list(APPEND cosmictiger_sph_test_args --without-sph)
     endif()
     if(COSMICTIGER_WITH_GRAVITY)
+        set(rockstar_capability_args)
+        if(COSMICTIGER_WITH_ROCKSTAR)
+            list(APPEND rockstar_capability_args --enabled)
+        endif()
+        add_test(NAME rockstar_capability COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_rockstar_capability.py $<TARGET_FILE:cosmictiger>
+            ${PROJECT_BINARY_DIR}/tests/rockstar_capability ${rockstar_capability_args})
+        set_tests_properties(rockstar_capability PROPERTIES TIMEOUT 120 PROCESSORS 2 LABELS "build;cpu")
         add_test(NAME grouped_options COMMAND ${Python3_EXECUTABLE}
             ${PROJECT_SOURCE_DIR}/tests/run_options.py $<TARGET_FILE:cosmictiger>
             ${PROJECT_BINARY_DIR}/tests/grouped_options ${cosmictiger_sph_test_args}
             ${cosmictiger_chemistry_test_args} ${cosmictiger_star_formation_test_args}
+            ${cosmictiger_rockstar_test_args}
             --gravity-method ${cosmictiger_default_gravity_method}
             --near-method ${cosmictiger_default_near_method} --order ${cosmictiger_default_fmm_order}
             --time-integrator ${cosmictiger_default_integrator})
@@ -1494,6 +1518,7 @@ if(BUILD_TESTING)
             ${PROJECT_SOURCE_DIR}/tests/run_options.py $<TARGET_FILE:cosmictiger>
             ${PROJECT_BINARY_DIR}/tests/hydro_methods ${cosmictiger_sph_test_args}
             ${cosmictiger_chemistry_test_args} ${cosmictiger_star_formation_test_args}
+            ${cosmictiger_rockstar_test_args}
             --gravity-method ${cosmictiger_default_gravity_method}
             --near-method ${cosmictiger_default_near_method} --order ${cosmictiger_default_fmm_order}
             --time-integrator ${cosmictiger_default_integrator} --hydro-methods-only)
@@ -1646,9 +1671,11 @@ if(BUILD_TESTING)
         set_tests_properties(units_output PROPERTIES
             WORKING_DIRECTORY "${units_output_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
         # Keep the existing cases on the default model and cover the other state layouts.
-        foreach(units_viscosity IN ITEMS none cullen_and_dehnen price_etal)
+        foreach(units_viscosity IN ITEMS none cullen_and_dehnen price_etal hu_etal)
             if(units_viscosity STREQUAL "none")
                 set(units_viscosity_option none)
+            elseif(units_viscosity STREQUAL "hu_etal")
+                set(units_viscosity_option hu_etal)
             elseif(units_viscosity STREQUAL "price_etal")
                 set(units_viscosity_option priceEtAl)
             else()
@@ -2186,9 +2213,14 @@ if(BUILD_TESTING)
         cosmictiger_add_gtest(NAME cullen_and_dehnen TARGET cullen_and_dehnen_test
             PROPERTIES TIMEOUT 30 LABELS "sph;cpu")
 
-        add_executable(price_etal_test tests/sph/price_etal/viscosity.cpp src/hydro/sph/price_etal/viscosity.cpp)
+        add_executable(price_etal_test tests/sph/price_etal/viscosity.cpp src/sph/viscosity/price_etal.cpp)
         target_include_directories(price_etal_test PRIVATE ${PROJECT_SOURCE_DIR})
         cosmictiger_add_gtest(NAME price_etal TARGET price_etal_test
+            PROPERTIES TIMEOUT 30 LABELS "sph;cpu")
+
+        add_executable(hu_etal_test tests/sph/hu_etal/viscosity.cpp)
+        target_include_directories(hu_etal_test PRIVATE ${PROJECT_SOURCE_DIR})
+        cosmictiger_add_gtest(NAME hu_etal TARGET hu_etal_test
             PROPERTIES TIMEOUT 30 LABELS "sph;cpu")
 
         add_executable(balsara_test tests/sph/balsara/shear_limiter.cpp)
@@ -2209,7 +2241,8 @@ if(BUILD_TESTING)
     endif()
 
     foreach(analysis_kernel IN ITEMS power lightcone)
-        if(NOT COSMICTIGER_WITH_GRAVITY)
+        if(NOT COSMICTIGER_WITH_GRAVITY OR
+                (analysis_kernel STREQUAL "lightcone" AND NOT COSMICTIGER_WITH_ROCKSTAR))
             continue()
         endif()
         add_executable(${analysis_kernel}_cpu_test
@@ -2234,17 +2267,19 @@ if(BUILD_TESTING)
             cosmictiger_add_gtest(NAME power_cuda TARGET power_cuda_test
                 PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
 
-            add_executable(lightcone_cuda_test tests/lightcone_cuda.cu src/analysis/lightcone.cu
-                src/analysis/lightcone_cpu.cpp src/core/assert.cu src/cuda/cuda_stream.cpp)
-            target_include_directories(lightcone_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
-            target_compile_definitions(lightcone_cuda_test PRIVATE USE_CUDA ORDER=${cosmictiger_default_fmm_order})
-            cosmictiger_use_generated_kernels(lightcone_cuda_test)
-            target_link_libraries(lightcone_cuda_test PRIVATE HPX::hpx CUDA::cudart)
-            target_compile_options(lightcone_cuda_test PRIVATE
-                $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>)
-            set_target_properties(lightcone_cuda_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-            cosmictiger_add_gtest(NAME lightcone_cuda TARGET lightcone_cuda_test
-                PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+            if(COSMICTIGER_WITH_ROCKSTAR)
+                add_executable(lightcone_cuda_test tests/lightcone_cuda.cu src/analysis/lightcone.cu
+                    src/analysis/lightcone_cpu.cpp src/core/assert.cu src/cuda/cuda_stream.cpp)
+                target_include_directories(lightcone_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+                target_compile_definitions(lightcone_cuda_test PRIVATE USE_CUDA ORDER=${cosmictiger_default_fmm_order})
+                cosmictiger_use_generated_kernels(lightcone_cuda_test)
+                target_link_libraries(lightcone_cuda_test PRIVATE HPX::hpx CUDA::cudart)
+                target_compile_options(lightcone_cuda_test PRIVATE
+                    $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>)
+                set_target_properties(lightcone_cuda_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+                cosmictiger_add_gtest(NAME lightcone_cuda TARGET lightcone_cuda_test
+                    PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+            endif()
         endif()
 
         add_hpx_executable(cuda_async_test
@@ -2312,8 +2347,8 @@ if(BUILD_TESTING)
             PROPERTIES TIMEOUT 120 PROCESSORS 2)
 
         # Compile the production SIMD path without USE_CUDA or device kernels.
-        add_executable(sph_cpu_test tests/sph/cpu.cpp src/hydro/sph/sph_cpu.cpp
-            src/hydro/sph/sph_prehydro_cpu.cpp src/hydro/sph/sph_hydro_cpu.cpp src/hydro/sph/sph_rungs_cpu.cpp src/math/kernel.cpp)
+        add_executable(sph_cpu_test tests/sph/cpu.cpp src/sph/cpu.cpp
+            src/sph/prehydro_cpu.cpp src/sph/hydro_cpu.cpp src/sph/rungs_cpu.cpp src/math/kernel.cpp)
         target_include_directories(sph_cpu_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_compile_definitions(sph_cpu_test PRIVATE ORDER=${cosmictiger_default_fmm_order})
         cosmictiger_use_generated_kernels(sph_cpu_test)
@@ -2521,8 +2556,8 @@ if(BUILD_TESTING)
             add_executable(monaghan_sph_cuda_test tests/sph/cuda.cu
                 tests/cuda_memory_backend.cpp
                 src/core/flops.cu
-                src/hydro/sph/sph_prehydro.cu src/hydro/sph/sph_hydro.cu src/hydro/sph/sph_rungs.cu
-                src/hydro/sph/sph_cpu.cpp src/hydro/sph/sph_prehydro_cpu.cpp src/hydro/sph/sph_hydro_cpu.cpp src/hydro/sph/sph_rungs_cpu.cpp
+                src/sph/prehydro.cu src/sph/hydro.cu src/sph/rungs.cu
+                src/sph/cpu.cpp src/sph/prehydro_cpu.cpp src/sph/hydro_cpu.cpp src/sph/rungs_cpu.cpp
                 src/math/kernel.cpp src/math/kernel.cu src/cuda/cuda_memory.cu src/core/assert.cu)
             target_include_directories(monaghan_sph_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
             target_compile_definitions(monaghan_sph_cuda_test PRIVATE
@@ -2541,7 +2576,7 @@ if(BUILD_TESTING)
                 PROPERTIES RUN_SERIAL TRUE TIMEOUT 120)
         endif()
 
-        if(COSMICTIGER_WITH_GRAVITY)
+        if(COSMICTIGER_WITH_ROCKSTAR)
             # These host regressions need CUDA headers, but do not initialize or run a GPU.
             add_executable(compression_test tests/compression.cpp src/analysis/compress.cpp)
             foreach(test_target IN ITEMS compression_test)
@@ -2821,6 +2856,9 @@ if(BUILD_TESTING)
         endif()
         foreach(smoke_mode IN ITEMS sod sph sph_analysis)
             if(NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+                continue()
+            endif()
+            if(smoke_mode STREQUAL "sph_analysis" AND NOT COSMICTIGER_WITH_ROCKSTAR)
                 continue()
             endif()
             add_test(NAME smoke_${smoke_mode}_cpu COMMAND ${Python3_EXECUTABLE}

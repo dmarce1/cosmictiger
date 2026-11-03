@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -247,7 +248,7 @@ Vector<GroupInteger> groupsExist(Vector<GroupInteger> grps) {
 
 std::pair<size_t, size_t> groupsSave(int number, double scale, double time) {
     if (hpxRank() == 0) {
-        PRINT("Writing group database\n");
+        std::cout << "Writing group database\n" << std::flush;
         std::filesystem::create_directories(outputPath("groups." + std::to_string(number)));
         // Invalidate a previous attempt before touching its per-rank files.
         std::filesystem::remove(

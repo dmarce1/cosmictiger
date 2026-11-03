@@ -14,7 +14,7 @@
 
 #include <cosmictiger/scenarios/exact_sod.hpp>
 
-static double pl, pr, rhol, rhor, cl, cr, gammaValue;
+static double pl, pr, rhol, rhor, leftSoundSpeed, rightSoundSpeed, gammaValue;
 static double func(double pm);
 static double rtbis(double x1, double x2, double xacc);
 
@@ -43,21 +43,22 @@ void exactSod(SodStateT* out, SodInitT const* in, double position, double t, dou
         pr = in->pr;
         rhol = in->rhol;
         rhor = in->rhor;
-        cl = sqrt(gammaValue * pl / rhol);
-        cr = sqrt(gammaValue * pr / rhor);
+        leftSoundSpeed = sqrt(gammaValue * pl / rhol);
+        rightSoundSpeed = sqrt(gammaValue * pr / rhor);
         pm = rtbis(pr, pl, 1.E-16);
         rhoml = rhol * pow((pm / pl), (1. / gammaValue));
-        vm = 2.0 * cl / (gammaValue - 1.) *
+        vm = 2.0 * leftSoundSpeed / (gammaValue - 1.) *
             (1.0 - pow((pm / pl), ((gammaValue - 1.0) / (2.0 * gammaValue))));
         rhomr = rhor * ((pm + mu2 * pr) / (pr + mu2 * pm));
         vs = vm / (1. - rhor / rhomr);
-        vt = cl - vm / (1. - mu2);
+        vt = leftSoundSpeed - vm / (1. - mu2);
 
-        if (position <= -cl * t) {
+        if (position <= -leftSoundSpeed * t) {
             density = rhol;
         } else if (position <= -vt * t) {
-            density =
-                rhol * pow((-mu2 * (position / (cl * t)) + (1. - mu2)), (2. / (gammaValue - 1.)));
+            density = rhol *
+                pow((-mu2 * (position / (leftSoundSpeed * t)) + (1. - mu2)),
+                    (2. / (gammaValue - 1.)));
         } else if (position <= vm * t) {
             density = rhoml;
         } else if (position <= vs * t) {
@@ -65,21 +66,21 @@ void exactSod(SodStateT* out, SodInitT const* in, double position, double t, dou
         } else {
             density = rhor;
         }
-        if (position <= -cl * t) {
+        if (position <= -leftSoundSpeed * t) {
             pressure = pl;
         } else if (position <= -vt * t) {
             pressure = pl *
-                pow((-mu2 * (position / (cl * t)) + (1. - mu2)),
+                pow((-mu2 * (position / (leftSoundSpeed * t)) + (1. - mu2)),
                     (2. * gammaValue / (gammaValue - 1.)));
         } else if (position <= vs * t) {
             pressure = pm;
         } else {
             pressure = pr;
         }
-        if (position <= -cl * t) {
+        if (position <= -leftSoundSpeed * t) {
             velocity = 0.0;
         } else if (position <= -vt * t) {
-            velocity = (1 - mu2) * (position / t + cl);
+            velocity = (1 - mu2) * (position / t + leftSoundSpeed);
         } else if (position <= vs * t) {
             velocity = vm;
         } else {
@@ -94,8 +95,8 @@ void exactSod(SodStateT* out, SodInitT const* in, double position, double t, dou
 
 static double func(double pm) {
     double const mu2 = (gammaValue - 1.) / (gammaValue + 1.);
-    double rc = -2 * cl * (1 - pow((pm / pl), ((-1 + gammaValue) / (2 * gammaValue)))) /
-            (cr * (-1 + gammaValue)) +
+    double rc = -2 * leftSoundSpeed * (1 - pow((pm / pl), ((-1 + gammaValue) / (2 * gammaValue)))) /
+            (rightSoundSpeed * (-1 + gammaValue)) +
         (-1 + pm / pr) * sqrt(((1 - mu2) / (gammaValue * (mu2 + pm / pr))));
     return rc;
 }

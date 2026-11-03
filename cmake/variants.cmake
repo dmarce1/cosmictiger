@@ -20,8 +20,8 @@ if(COSMICTIGER_WITH_CUDA)
     target_compile_options(cosmictiger_platform INTERFACE
         $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math;-lineinfo>)
     set_source_files_properties(src/particles/drift.cu PROPERTIES COMPILE_OPTIONS -maxrregcount=64)
-    set_source_files_properties(src/hydro/sph/sph.cu src/hydro/sph/sph_prehydro.cu
-        src/hydro/sph/sph_hydro.cu src/hydro/sph/sph_rungs.cu PROPERTIES COMPILE_OPTIONS -maxrregcount=128)
+    set_source_files_properties(src/sph/cuda.cu src/sph/prehydro.cu
+        src/sph/hydro.cu src/sph/rungs.cu PROPERTIES COMPILE_OPTIONS -maxrregcount=128)
 endif()
 
 add_library(cosmictiger_core STATIC ${cosmictiger_core_source_files})
@@ -43,6 +43,7 @@ foreach(feature IN ITEMS FMM PMMM_PP PMMM_FMM PM P3M_PP P3M_FMM SPH
 endforeach()
 target_compile_definitions(cosmictiger_default_config INTERFACE
     COSMICTIGER_ENABLE_CHEMISTRY=$<BOOL:${COSMICTIGER_WITH_CHEMISTRY}>
+    COSMICTIGER_ENABLE_ROCKSTAR=$<BOOL:${COSMICTIGER_WITH_ROCKSTAR}>
     COSMICTIGER_ENABLE_STARS=$<BOOL:${COSMICTIGER_WITH_STARS}>
     COSMICTIGER_ENABLE_STAR_FORMATION=$<BOOL:${COSMICTIGER_WITH_STARS}>
     COSMICTIGER_WITH_GRAVITY=$<BOOL:${COSMICTIGER_WITH_GRAVITY}>
@@ -95,8 +96,8 @@ if(COSMICTIGER_WITH_CUDA AND COSMICTIGER_WITH_STARS)
     # The GADGET-4 device EOS/rates must use the same precise math as the CPU
     # chemistry backend and its tests. Per-source flags cannot undo the
     # intrinsic substitutions enabled by the platform's --use_fast_math.
-    list(REMOVE_ITEM cosmictiger_enabled_sources src/hydro/sph/star_formation_cuda.cu)
-    add_library(cosmictiger_star_formation_cuda OBJECT src/hydro/sph/star_formation_cuda.cu)
+    list(REMOVE_ITEM cosmictiger_enabled_sources src/stars/star_formation_cuda.cu)
+    add_library(cosmictiger_star_formation_cuda OBJECT src/stars/star_formation_cuda.cu)
     target_include_directories(cosmictiger_star_formation_cuda PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_definitions(cosmictiger_star_formation_cuda PRIVATE USE_CUDA)
     target_link_libraries(cosmictiger_star_formation_cuda PRIVATE
@@ -124,10 +125,13 @@ add_library(cosmictiger_objects OBJECT ${cosmictiger_enabled_sources}
 target_link_libraries(cosmictiger_objects PUBLIC cosmictiger_core cosmictiger_default_config)
 if(COSMICTIGER_WITH_GRAVITY)
     target_include_directories(cosmictiger_objects SYSTEM PUBLIC
-        ${CHEALPIX_INCLUDE_DIR} ${HEALPIX_CXX_INCLUDE_DIR})
+        ${CHEALPIX_INCLUDE_DIR})
     target_link_libraries(cosmictiger_objects PUBLIC
-        cosmictiger_cosmology cosmictiger_power cosmictiger_fp16
-        ${CHEALPIX_LIBRARY} ${HEALPIX_CXX_LIBRARY})
+        cosmictiger_cosmology cosmictiger_power ${CHEALPIX_LIBRARY})
+endif()
+if(COSMICTIGER_WITH_ROCKSTAR)
+    target_include_directories(cosmictiger_objects SYSTEM PUBLIC ${HEALPIX_CXX_INCLUDE_DIR})
+    target_link_libraries(cosmictiger_objects PUBLIC cosmictiger_fp16 ${HEALPIX_CXX_LIBRARY})
 endif()
 if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
     target_link_libraries(cosmictiger_objects PUBLIC cosmictiger_sph_chemistry)

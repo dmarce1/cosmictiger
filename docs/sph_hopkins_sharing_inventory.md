@@ -206,8 +206,7 @@ Sizes are per particle.
 | convergence, semiactive flags | 2 | sph | T (but checkpointed) | SPH | char×2 | reset at `sph_particles.cpp:1483-1530` |
 | gradHCorrection | 4 | sph | T traditional; P hierarchical | SPH | float | `sph_particles.hpp:67-71` |
 | balsaraFactor | 4 | sph, by option | T traditional; P hierarchical | SPH | float | — |
-| viscosity alpha, rate | 8 | sph | P | SPH | float×2 | `viscosity_state.hpp:14-18` |
-| viscosity predictedAlpha | 4 | sph | T | SPH, scratch | float | — |
+| bulkViscosityCoefficient (alpha) | 4 | sph | P | SPH | float | `sph_particles.hpp` |
 | C&D divergence | 4 | sph | P | SPH | float | `cullen_and_dehnen/state.hpp:13-18` |
 | C&D pendingDivergence, targetAlpha, inverseDecayTime | 12 | sph | T | SPH, scratch | float×3 | — |
 | SourceState fields (§5b) | 248 | sph hierarchical | P | SPH (hierarchical) | double / uint64 / int | `hierarchical_state.hpp:10-34` |
@@ -258,7 +257,7 @@ Totals derived from the rows: ML ≈ 359 B per cell. MFV adds 56 B plus the 4 B 
   The fields `minimumSupportRadius`, `maximumSupportRadius`, `pressureEnergyRatio` and `adiabaticIndex` copy option values. `liveSource` refreshes them every time (`hierarchical.cpp:79-80,96-97`), so they should be dropped from storage *(design opinion)*.
 
   Seven SourceState groups map one to one onto meshless fields: id↔identifier, position↔positionAnchor, driftVelocity↔meshVelocity, epoch↔sourceTime, validUntil↔endTime, driftScale↔positionDriftScale, rung↔hydroRung. A shared "trajectory anchor" array group is possible, but two things must be settled first: position type (double versus Fixed64) and kinematic order (linear versus quadratic) *(design opinion; see §7)*.
-- **`SphViscosityState`** becomes alpha[] and rate[] (persistent) plus predictedAlpha[] (scratch). Brace-initialisers at `sph_particles.cpp:573,621,1187` and `domain.cpp:733-734` need updating.
+- **Viscosity alpha** is already the scalar `sphParticlesBulkViscosityCoefficients` array; Morris-Monaghan uses backward Euler without a stored rate or predictor.
 - **`SphCullenDehnenState`** becomes divergence[] (persistent) plus pendingDivergence[], targetAlpha[] and inverseDecayTime[] (scratch). Migration and checkpoint already carry only the divergence (`domain.cpp:611-613`, `sph_particles.cpp:1188-1192`).
 - **Chemistry**: `gadget4::State` becomes electronFraction[]. `Pair<float>` EOS becomes two arrays, or is dropped (see the table). The audit flags "EOS with stars but no cooling is migrated but not checkpointed", but that case cannot occur: starFormation requires chemistry (**Confirmed** `options.cpp:246-247`).
 

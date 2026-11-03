@@ -350,7 +350,7 @@ DeviceVector<float> bhEvaluatePotential(DeviceVector<Vector3<float>>& positions,
             bhEvaluatePotentialGpu(nodes, positions, sinkBuckets, kBhMaximumRelativePotentialError,
                 getOptions().gravity.supportRadius, getOptions().gravity.gm);
         tm1.stop();
-        //		PRINT("1 %e\n", tm1.read());
+
 #endif
     }
     rpot.resize(positions.size());

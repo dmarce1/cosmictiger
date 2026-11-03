@@ -3,15 +3,16 @@
 #include <algorithm>
 #include <bit>
 #include <cstdio>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 
 namespace detail {
 
@@ -21,14 +22,13 @@ void requireStarParticles(bool condition, char const* message) {
     }
 }
 
-gadget4::State fixtureChemistry(int rank, int originalGasIndex) {
+float fixtureElectronFraction(int rank, int originalGasIndex) {
     return {float(0.25 + 0.125 * originalGasIndex + 0.01 * rank)};
 }
 
 void requireFixtureChemistry(ParticleInteger gasIndex, int rank, int originalGasIndex) {
-    auto const expected = fixtureChemistry(rank, originalGasIndex);
-    requireStarParticles(
-        sphParticlesChemistryStates[gasIndex].electronFraction == expected.electronFraction,
+    auto const expected = fixtureElectronFraction(rank, originalGasIndex);
+    requireStarParticles(sphParticlesElectronFractions[gasIndex] == expected,
         "combined persistence changed the GADGET-4 electron guess");
 }
 
@@ -51,7 +51,7 @@ void initializeStarParticleFixture() {
             sphParticlesSetInternalEnergy(gasIndex, 1.0f + index);
             sphParticlesSupportRadius(gasIndex) = 0.125f;
             sphParticlesDensity(gasIndex) = 2.0f + index;
-            sphParticlesChemistryStates[gasIndex] = fixtureChemistry(hpxRank(), gasIndex);
+            sphParticlesElectronFractions[gasIndex] = fixtureElectronFraction(hpxRank(), gasIndex);
         }
     }
 }
@@ -101,7 +101,7 @@ std::vector<Particle> exerciseStarParticleFixture() {
     for (ParticleInteger index = 0; index < 3; ++index) {
         particlesStarFormationStates[index] = {};
     }
-    sphParticlesChemistryStates[0] = {};
+    sphParticlesElectronFractions[0] = 1.0f;
     std::rewind(file);
     particlesLoad(file);
     FILE* const mixedCheckpoint = file;
@@ -223,7 +223,8 @@ void starFormationParticlesTest() {
                 beforeMigration[index].starFormation == afterMigration[index].starFormation,
             "migration lost stellar identity or saved gas source state");
     }
-    PRINT("Star-formation particles passed: IDs, permutation, conversion, compaction, "
-          "momentum, checkpoint, combined chemistry/source metadata, empty gas, "
-          "HPX serialization and migration\n");
+    std::cout << "Star-formation particles passed: IDs, permutation, conversion, compaction, "
+                 "momentum, checkpoint, combined chemistry/source metadata, empty gas, "
+                 "HPX serialization and migration\n"
+              << std::flush;
 }

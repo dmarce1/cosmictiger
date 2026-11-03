@@ -4,14 +4,15 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <string>
 
 #include <cosmictiger/core/file_handle.hpp>
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 
 void sphOnlyDiagnosticsTest() {
     static_assert(!COSMICTIGER_WITH_GRAVITY && COSMICTIGER_WITH_SPH);
@@ -121,5 +122,7 @@ void sphOnlyDiagnosticsTest() {
         throw std::runtime_error("Entropy closing/opening kicks used the wrong rates or intervals");
     }
     sphCheckpointTest();
-    PRINT("SPH-only diagnostics and entropy lifecycle passed (prediction, kicks, checkpoint)\n");
+    std::cout
+        << "SPH-only diagnostics and entropy lifecycle passed (prediction, kicks, checkpoint)\n"
+        << std::flush;
 }

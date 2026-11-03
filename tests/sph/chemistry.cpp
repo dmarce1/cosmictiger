@@ -4,15 +4,17 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <format>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include <cosmictiger/chemistry/sph.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
-#include <cosmictiger/hydro/sph/sph_chemistry.hpp>
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
+#include <cosmictiger/sph/particles.hpp>
 
 namespace detail {
 constexpr double kChemistryTestScale = 0.02;
@@ -76,7 +78,7 @@ void initializeChemistryFixture(bool invalid) {
 ChemistryLocalSnapshot chemistryFixtureSnapshot() {
     ChemistryLocalSnapshot records;
     for (ParticleInteger i = 0; i < 3; ++i) {
-        records.push_back({std::bit_cast<uint32_t>(sphParticlesChemistryStates[i].electronFraction),
+        records.push_back({std::bit_cast<uint32_t>(sphParticlesElectronFractions[i]),
             std::bit_cast<uint32_t>(sphParticlesInternalEnergy(i)), uint64_t(sphParticlesRung(i))});
     }
     return records;
@@ -87,7 +89,7 @@ void roundtripChemistryFixture() {
     requireChemistry(file != nullptr, "cannot open checkpoint fixture");
     sphParticlesSave(file);
     for (ParticleInteger i = 0; i < 3; ++i) {
-        sphParticlesChemistryStates[i].electronFraction = 0.0f;
+        sphParticlesElectronFractions[i] = 0.0f;
     }
     std::rewind(file);
     sphParticlesLoad(file);
@@ -194,8 +196,10 @@ void sphChemistryTimestepsTest() {
     sphChemistryClose(3, kChemistryTestScale, 0.0, baseTimestep);
     requireChemistry(
         mixed == chemistrySnapshot(), "failed source left stale results in a subsequent batch");
-    PRINT("SPH chemistry timesteps passed: completed mixed/global intervals, inactive state, "
-          "checkpoint, "
-          "energy ledger and failed-batch atomicity (%i localities)\n",
-        hpxSize());
+    std::cout
+        << std::format(
+               "SPH chemistry timesteps passed: completed mixed/global intervals, inactive state, "
+               "checkpoint, energy ledger and failed-batch atomicity ({:d} localities)\n",
+               hpxSize())
+        << std::flush;
 }

@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <format>
+#include <iostream>
 #include <memory>
 #include <numbers>
 #include <stdexcept>
@@ -449,5 +451,8 @@ void analysisBackendsTest() {
     if (getOptions().hydro.enabled) {
         detail::analysisCheckSpeciesLightcone(3);
     }
-    PRINT("CPU analysis backend integration regression passed (%i localities)\n", hpxSize());
+    std::cout << std::format(
+                     "CPU analysis backend integration regression passed ({:d} localities)\n",
+                     hpxSize())
+              << std::flush;
 }

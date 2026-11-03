@@ -40,31 +40,29 @@ def run_simulation(command, workdir, log_name):
 
 
 def validateFlopRates(outputLog, rows):
-    if any(len(row) != 17 for row in rows):
+    if any(len(row) != 16 for row in rows):
         raise RuntimeError("progress contains incomplete rows")
     if any(not math.isfinite(value) for row in rows for value in row):
         raise RuntimeError("progress contains nonfinite values")
     if not re.search(
-            r"^\s*Step\s+z.*\s+FP32 TF/s\s+FP64 TF/s\s+Mixed TF/s\s+TFLOP/s\s*$",
+            r"^\s*Step\s+z.*\s+FP32 TF/s\s+FP64 TF/s\s+TFLOP/s\s*$",
             outputLog, re.MULTILINE):
         raise RuntimeError("terminal progress is missing the precision FLOP rate columns")
     terminalRows = re.findall(
         r"^\s*\d+(?:\s+[+\-]?[\d.]+e[+\-]\d+){4}"
         r"\s+\d+\s+\d+(?:\s+\d{2,}:\d{2}:\d{2}\.\d{2}){2}"
-        r"\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*$",
+        r"\s+(\S+)\s+(\S+)\s+(\S+)\s*$",
         outputLog, re.MULTILINE)
     if len(terminalRows) != len(rows):
         raise RuntimeError("terminal FLOP rate rows disagree with progress.txt")
     for terminalRow, row in zip(terminalRows, rows):
-        single, double, mixed, total = rates = tuple(map(float, terminalRow))
+        single, double, total = rates = tuple(map(float, terminalRow))
         if any(not math.isfinite(rate) or rate < 0.0 for rate in rates) or total <= 0.0:
             raise RuntimeError("terminal FLOP rates are nonfinite, negative or have no work")
-        if rates != (row[14], row[15], row[16], row[10]):
+        if rates != (row[14], row[15], row[10]):
             raise RuntimeError("terminal FLOP rates disagree with progress.txt")
-        if mixed != 0.0:
-            raise RuntimeError("production submitted operations without an arithmetic precision")
         # Each rate is independently rounded to four significant figures.
-        if not math.isclose(single + double + mixed, total, rel_tol=0.002):
+        if not math.isclose(single + double, total, rel_tol=0.002):
             raise RuntimeError("precision FLOP rates do not sum to the total")
 
 
@@ -252,7 +250,7 @@ def main():
                     restarted.append([float(value) for value in fields])
             if len(restarted) != 1:
                 raise RuntimeError("SPH checkpoint restart did not complete exactly one step")
-            if len(restarted[0]) != 17:
+            if len(restarted[0]) != 16:
                 raise RuntimeError("SPH checkpoint restart progress row is incomplete")
             # Compare the physical clock and scale-factor columns, excluding
             # timings and throughput. Particle payloads have a separate test.

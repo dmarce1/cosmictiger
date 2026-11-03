@@ -9,16 +9,20 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <format>
 #include <functional>
+#include <iostream>
 #include <limits>
 #include <numbers>
 #include <string>
 
-#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
+#if COSMICTIGER_ENABLE_ROCKSTAR
 #include <cosmictiger/analysis/group_tree.hpp>
 #include <cosmictiger/analysis/groups.hpp>
 #include <cosmictiger/analysis/groups_find.hpp>
 #include <cosmictiger/analysis/lightcone.hpp>
+#endif
+#if !defined(COSMICTIGER_WITH_GRAVITY) || COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/analysis/power.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #endif
@@ -76,16 +80,16 @@
 #endif
 #include <cosmictiger/scenarios/scenario.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/hydro/sph/sph.hpp>
+#include <cosmictiger/sph/sph.hpp>
 #if COSMICTIGER_ENABLE_CHEMISTRY
-#include <cosmictiger/hydro/sph/sph_chemistry.hpp>
+#include <cosmictiger/chemistry/sph.hpp>
 #endif
-#include <cosmictiger/hydro/sph/sph_particles.hpp>
+#include <cosmictiger/sph/particles.hpp>
 #if COSMICTIGER_ENABLE_STAR_FORMATION
-#include <cosmictiger/hydro/sph/star_formation.hpp>
+#include <cosmictiger/stars/star_formation.hpp>
 #endif
-#include <cosmictiger/hydro/sph/sph_tree.hpp>
-#include <cosmictiger/hydro/sph/volume.hpp>
+#include <cosmictiger/sph/tree.hpp>
+#include <cosmictiger/sph/volume.hpp>
 #endif
 
 constexpr double kSmoothLengthBuffer = 0.21;
@@ -127,7 +131,7 @@ static void flushTimings(bool reset) {
     fclose(fp);
 }
 
-#if COSMICTIGER_WITH_GRAVITY
+#if COSMICTIGER_ENABLE_ROCKSTAR
 void doGroups(int number, double scale, double years) {
     groupsPrepareHistory(number);
 
@@ -324,6 +328,8 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
 #endif
     runParameters.scaleFactor = scale;
     runParameters.baseTimestep = t0;
+    runParameters.viscosityTimestep =
+        tau > 0.0 ? (globalTimestep ? previousTimestep : closingScale) : 0.0;
     runParameters.minimumRung = minrung;
     bool needsNeighborRefresh;
     SphRunReturn result;
@@ -461,6 +467,8 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
             sph_volume::kMinimumWellConditionedOmega, gradHDiagnostics.illConditionedSupports);
     };
     prepareDensities();
+    // Any later density preparation refreshes sources at this same event time.
+    runParameters.viscosityTimestep = 0.0;
     Timer timer;
     if (runParameters.gradientSwitch()) {
         // Cullen & Dehnen (2010), equation (A15), or Price et al. (2018), equation (50),
@@ -684,7 +692,6 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         sphParticlesClearCaches();
         sphParticlesResetSemiactive();
     }
-    //	PRINT( "%i\n", max_rung);
 
     profile::ScopedPhase timestepDiagnosticsPhase("hydro.diagnostics.timesteps");
     if (!std::isfinite(inverseSoundTimestep) || !std::isfinite(inverseViscosityTimestep) ||
@@ -759,7 +766,7 @@ KickParameters prepareFmmKick(int minrung, double scale, double dadt, double t0,
     sortTime += tm.read();
     tm.reset();
     tm.start();
-    //	PRINT("numberOfActiveParticles = %li\n", sr.numberOfActiveParticles);
+
     KickParameters kparams;
     if (getOptions().run.scenario == "cosmology") {
         kparams.maxDt =
@@ -1181,7 +1188,6 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
     KickReturn kr;
     //	minrung = std::max(minrung, 1);
     //	max_rung = std::max(max_rung,minrung);
-    // PRINT( "%i %i %i\n", minrung, max_rung, minrung0);
     Vector<int> levels(std::max(maxRung - minrung, 0) + 1);
     int k = 0;
     for (int i = maxRung; i > minrung; i--) {
@@ -1191,7 +1197,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
     bool ascending = true;
     bool top;
     bool clipTop = false;
-    //	PRINT("climbing kick ladder\n");
+
     Timer totalTime;
     totalTime.start();
     double particlesProcessed = 0.0;
@@ -1203,11 +1209,8 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             top = false;
         }
         if (ascending) {
-            //			PRINT("ASCENDING  rung %i\n", levels[li]);
         } else if (top) {
-            //			PRINT("AT TOP     rung %i\n", levels[li]);
         } else if (!ascending) {
-            //			PRINT("DESCENDING rung %i\n", levels[li]);
         }
 
         if (!ascending && !top) {
@@ -1228,7 +1231,6 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             }
             profile::profileEnd();
             tm.stop();
-            //			PRINT("Domains took %e\n", tm.read());
         }
 
         if (!ascending) {
@@ -1238,7 +1240,6 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             particlesSortByRung(levels[li]);
             profile::profileEnd();
             tm.stop();
-            //			PRINT("Rung sort took %e\n", tm.read());
         }
         auto rng = particlesCurrentRange();
         particlesProcessed += rng.second - rng.first;
@@ -1250,9 +1251,12 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             auto const merge = rungMergeDecision(counts, minrung0, fraction);
             if (merge.merge) {
                 clipTop = true;
-                PRINT("  Merging rung %i into rung %i: %zu of %zu particles on finer rungs "
-                      "exceed run.rungMergeFraction = %g\n",
-                    minrung0, minrung0 + 1, merge.fineCount, merge.activeCount, fraction);
+                std::cout << std::format(
+                                 "  Merging rung {:d} into rung {:d}: {:d} of {:d} particles on "
+                                 "finer rungs exceed run.rungMergeFraction = {:g}\n",
+                                 minrung0, minrung0 + 1, merge.fineCount, merge.activeCount,
+                                 fraction)
+                          << std::flush;
             }
         }
 
@@ -1282,7 +1286,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         }
 #endif
         tm.stop();
-        //		PRINT("Tree create took %e\n", tm.read());
+
         KickParameters kparams;
         if (clipTop && levels[li] == minrung0 + 1) {
             kparams.top = true;
@@ -1390,7 +1394,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         }
         energies->tckin += thisKr.dkin;
         tm.stop();
-        //		PRINT("Kick took %e\n", tm.read());
+
         if (clipTop && top) {
             particlesSetMinrung(minrung0 + 1);
         }
@@ -1442,7 +1446,6 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             driftRungEverywhere(a, dt, tau, tau + dt, endTime, levels[li], drag);
             profile::profileEnd();
             tm.stop();
-            // PRINT("Drift took %e\n", tm.read());
         }
 #if COSMICTIGER_ENABLE_FMM
         if (treeGravity) {
@@ -1455,7 +1458,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             particlesPopRungs();
         }
     }
-    //	PRINT("done climbing kick ladder\n");
+
     if (clipTop) {
         minrung++;
     }
@@ -1795,11 +1798,12 @@ void driver() {
     int thisIter = 0;
     size_t progressRows = 0;
     terminal::section(getOptions().run.scenario.c_str());
-    PRINT("  tau is conformal time / coarse interval; dt is in code units.\n"
-          "  Wall durations use hh:mm:ss.ss; initialization is excluded.\n");
+    std::cout << "  tau is conformal time / coarse interval; dt is in code units.\n"
+                 "  Wall durations use hh:mm:ss.ss; initialization is excluded.\n"
+              << std::flush;
     Timer reset;
     reset.start();
-#if COSMICTIGER_WITH_GRAVITY
+#if COSMICTIGER_ENABLE_ROCKSTAR
     if (getOptions().lightcone.enabled) {
         lcInit(tau, tauMax);
     }
@@ -1809,7 +1813,7 @@ void driver() {
     if (tau == 0.0) {
         particlesSetMinrung(minrung0);
     }
-#if COSMICTIGER_WITH_GRAVITY
+#if COSMICTIGER_ENABLE_ROCKSTAR
     auto const checkLc = [&tau, &dt, &tauMax, &a, &iter](bool force) {
         if (force || lcTimeToFlush(tau, tauMax)) {
             profile::profileBegin("lightcone");
@@ -1931,7 +1935,7 @@ void driver() {
         if (cosmology::endTimeReached(tau, tauMax) || thisIter >= getOptions().run.maxIterations) {
             break;
         }
-        //		PRINT("STEP  = %i\n", step);
+
         double t0 = tauMax / getOptions().run.numberOfSteps;
         do {
             // Stop only between completed substeps, retaining the current clock
@@ -1993,7 +1997,6 @@ void driver() {
                     tm.start();
                     outputView(number, years);
                     tm.stop();
-                    //					PRINT("View %i took %e \n", number, tm.read());
                 }
                 profile::profileEnd();
             }
@@ -2003,7 +2006,6 @@ void driver() {
             } else if (minrung == 0) {
                 // A full reorder invalidates the saved rung suffix stack. Keep
                 // the initial decomposition until a synchronized rebuild exists.
-                //				PRINT("Checking imbalance\n");
                 double imbalance = domainsGetLoadImbalance();
                 rebound = (imbalance > kMaxLoadImbalance);
             }
@@ -2063,8 +2065,7 @@ void driver() {
             }
             int thisMinrung = std::max(minrung, minrung0);
             int om = thisMinrung;
-            //				PRINT("MINRUNG0 = %i\n", minrung0);
-            //			PRINT( "Doing kick\n");
+
             if (outputDue) {
                 //				kick_workspace::clear_buffers();
                 //				tree_destroy(true);
@@ -2073,7 +2074,7 @@ void driver() {
                     doPowerSpectrum(outputStep, a, adot);
                     profile::profileEnd();
                 }
-#if COSMICTIGER_WITH_GRAVITY && !defined(CHECK_MUTUAL_SORT)
+#if COSMICTIGER_ENABLE_ROCKSTAR && !defined(CHECK_MUTUAL_SORT)
                 if (getOptions().analysis.groups) {
                     profile::profileBegin("groups");
                     doGroups(outputStep, a, years);
@@ -2114,7 +2115,6 @@ void driver() {
             // coarser step, even when that pass reports no active particle rung.
             maxRung = global ? 0 : std::max(kr.maxRung, static_cast<int>(minRung(itime)));
 
-            //			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
             if (minrung <= 0) {
                 if (tau == 0) {
                     energy0 = 0.0;
@@ -2133,7 +2133,7 @@ void driver() {
             if (!(dt > 0.0) || !std::isfinite(dt) || tau + dt == tau) {
                 THROW_ERROR("Selected timestep cannot advance the evolution clock\n");
             }
-            //			PRINT("Done kicking\n");
+
             double a0 = a;
             double physicalInterval = a * dt;
             double driftScale = a;
@@ -2177,7 +2177,6 @@ void driver() {
                 }
             }
 
-            //			PRINT("%e %e\n", a1, a);
             Timer dtm;
             dtm.start();
             if (!getOptions().run.hierarchicalGravity) {
@@ -2197,7 +2196,7 @@ void driver() {
             remainingTime.start();
             runtime += totalTime.read();
             double pps = totalProcessed / runtime;
-            //	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
+
             double const numberOfParticles = getOptions().initial.numberOfParticles;
             double close = 0.0, direct = 0.0;
 #if COSMICTIGER_ENABLE_FMM || COSMICTIGER_ENABLE_PMMM_FMM
@@ -2211,10 +2210,9 @@ void driver() {
             if (outputDue) {
                 fprintf(textfp,
                     "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s "
-                    "%10s %10s\n",
+                    "%10s\n",
                     "runtime", "i", "z", "a", "adot", "timestep", "years", "mnr", "mxr", "bs",
-                    "Tflops", "time", "GPU close", "GPU direct", "Tflops32", "Tflops64",
-                    "TflopsMixed");
+                    "Tflops", "time", "GPU close", "GPU direct", "Tflops32", "Tflops64");
             }
             stepTm.stop();
             TimeType const nextIntegerTime = global ? 0 : inc(itime, maxRung);
@@ -2228,29 +2226,35 @@ void driver() {
             int const displayedMinimumRung = minrung;
             fprintf(textfp,
                 "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10i %10.3e %10.3e "
-                "%10.3e %10.3e %10.3e %10.3e %10.3e \n",
+                "%10.3e %10.3e %10.3e %10.3e \n",
                 runtime, iter - 1, outputRedshift, a, adot, nextTau / coarseInterval, nextYears,
                 displayedMinimumRung, maxRung, bucketSize, flops * 1e-12, stepTm.read(), close,
-                direct, flopRates.singlePrecision * 1e-12, flopRates.doublePrecision * 1e-12,
-                flopRates.unclassified * 1e-12);
+                direct, flopRates.singlePrecision * 1e-12, flopRates.doublePrecision * 1e-12);
             if (progressRows == 0) {
-                PRINT("  TFLOP/s uses counted gravity and SPH operations divided by force "
-                      "advancement wall time.\n"
-                      "  FP32/FP64 separate arithmetic precision; Mixed is reserved for "
-                      "unclassified diagnostic counts (normally zero).\n"
-                      "  Chemistry and star formation operations are excluded; their wall time "
-                      "is included.\n");
+                std::cout
+                    << "  TFLOP/s uses counted gravity and SPH operations divided by force "
+                       "advancement wall time.\n"
+                       "  FP32/FP64 separate arithmetic precision.\n"
+                       "  Chemistry and star formation operations are excluded; their wall time "
+                       "is included.\n"
+                    << std::flush;
             }
             if (progressRows % 25 == 0) {
-                PRINT("\n%8s %10s %10s %10s %10s %7s %7s %13s %13s %10s %10s %10s %10s\n", "Step",
-                    "z", "a", "tau", "dt", "MinRung", "MaxRung", "Wall", "Step time", "FP32 TF/s",
-                    "FP64 TF/s", "Mixed TF/s", "TFLOP/s");
+                std::cout << std::format("\n{:>8s} {:>10s} {:>10s} {:>10s} {:>10s} {:>7s} {:>7s} "
+                                         "{:>13s} {:>13s} {:>10s} {:>10s} {:>10s}\n",
+                                 "Step", "z", "a", "tau", "dt", "MinRung", "MaxRung", "Wall",
+                                 "Step time", "FP32 TF/s", "FP64 TF/s", "TFLOP/s")
+                          << std::flush;
             }
-            PRINT("%8i %10.3e %10.3e %10.3e %10.3e %7i %7i %13s %13s %10.3e %10.3e %10.3e %10.3e\n",
-                iter, outputRedshift, a, nextTau / coarseInterval, dt, displayedMinimumRung,
-                maxRung, terminal::formatDuration(runtime).c_str(),
-                terminal::formatDuration(stepTm.read()).c_str(), flopRates.singlePrecision * 1e-12,
-                flopRates.doublePrecision * 1e-12, flopRates.unclassified * 1e-12, flops * 1e-12);
+            std::cout << std::format("{:8d} {:10.3e} {:10.3e} {:10.3e} {:10.3e} {:7d} {:7d} "
+                                     "{:>13s} {:>13s} {:10.3e} {:10.3e} {:10.3e}\n",
+                             iter, outputRedshift, a, nextTau / coarseInterval, dt,
+                             displayedMinimumRung, maxRung,
+                             terminal::formatDuration(runtime).c_str(),
+                             terminal::formatDuration(stepTm.read()).c_str(),
+                             flopRates.singlePrecision * 1e-12, flopRates.doublePrecision * 1e-12,
+                             flops * 1e-12)
+                      << std::flush;
             progressRows++;
             fclose(textfp);
             totalTime.reset();
@@ -2273,17 +2277,18 @@ void driver() {
             thisIter++;
             years = nextYears;
             if (cosmology::endTimeReached(tau, tauMax)) {
-                PRINT("\n  Finished: reached the requested end time or redshift.\n");
+                std::cout << "\n  Finished: reached the requested end time or redshift.\n"
+                          << std::flush;
                 break;
             } else if (thisIter >= getOptions().run.maxIterations) {
-                PRINT("\n  Stopped at the iteration limit.\n");
+                std::cout << "\n  Stopped at the iteration limit.\n" << std::flush;
                 break;
             }
             jiter++;
             if (jiter > 100) {
                 //			abort();
             }
-#if COSMICTIGER_WITH_GRAVITY
+#if COSMICTIGER_ENABLE_ROCKSTAR
             if (getOptions().lightcone.enabled && minRung(itime) <= minrung0) {
                 checkLc(false);
             }
@@ -2302,7 +2307,8 @@ void driver() {
     }
     lcFut.get();
     if (interrupted) {
-        PRINT("\n  Interrupted: saving the completed simulation state before shutdown.\n");
+        std::cout << "\n  Interrupted: saving the completed simulation state before shutdown.\n"
+                  << std::flush;
     }
     profile::profileBegin("output");
     viewOutputViews(driverFinalOutputStep(tau, coarseInterval), a, true, years);
@@ -2311,6 +2317,8 @@ void driver() {
     if (getOptions().run.scenario == "glass") {
         scenarios::saveGlass();
     }
+#endif
+#if COSMICTIGER_ENABLE_ROCKSTAR
     if (getOptions().lightcone.enabled) {
         checkLc(true);
     }
@@ -2379,18 +2387,22 @@ void driver() {
     if (particleMesh) {
         // Mesh solves happen only at outer boundaries (plus the terminal energy
         // pass); every other force pass is an inner rung step without an FFT.
-        PRINT("  Particle-mesh intervals completed: %llu; mesh solves this run: %llu; "
-              "force passes this run: %i\n",
-            static_cast<unsigned long long>(params.outerIndex),
-            static_cast<unsigned long long>(pmDiagnostics().solveCount), thisIter);
+        std::cout << std::format("  Particle-mesh intervals completed: {:d}; mesh solves this run: "
+                                 "{:d}; force passes this run: {:d}\n",
+                         static_cast<unsigned long long>(params.outerIndex),
+                         static_cast<unsigned long long>(pmDiagnostics().solveCount), thisIter)
+                  << std::flush;
     }
 #endif
-    PRINT("  Total evolution time (this run, initialization excluded): %s\n",
-        terminal::formatDuration(thisIter > 0 ? evolutionTime.read() : 0.0).c_str());
+    std::cout << std::format("  Total evolution time (this run, initialization excluded): {:s}\n",
+                     terminal::formatDuration(thisIter > 0 ? evolutionTime.read() : 0.0).c_str())
+              << std::flush;
     if (getOptions().checkpoint.readIndex >= 0) {
-        PRINT("  Recorded time including previous runs: %s\n",
-            terminal::formatDuration(previousRuntime + (thisIter > 0 ? evolutionTime.read() : 0.0))
-                .c_str());
+        std::cout << std::format("  Recorded time including previous runs: {:s}\n",
+                         terminal::formatDuration(
+                             previousRuntime + (thisIter > 0 ? evolutionTime.read() : 0.0))
+                             .c_str())
+                  << std::flush;
     }
 #else
     THROW_ERROR(

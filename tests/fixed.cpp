@@ -6,6 +6,7 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <bit>
 #include <cfenv>
 #include <cmath>
 #include <cstdint>
@@ -35,18 +36,21 @@ static_assert(Fixed64::kToFloatFactor_ == 0x1p-64);
 #if defined(__GLIBC__) && GTEST_HAS_DEATH_TEST
 namespace detail {
 
+template <class FloatingPoint>
 void fixedFloatingTrapProbe() {
-    double volatile inputs[] = {
-        0.5, 0.75, std::nextafter(1.0, 0.0), -0.5, -0.75, 0x1p-64, -0x1p-64};
+    FloatingPoint volatile inputs[] = {0.5, 0.75,
+        std::nextafter(FloatingPoint(1), FloatingPoint(0)), -0.5, -0.75, 0x1p-64, -0x1p-64};
     uint64_t const expected[] = {uint64_t(1) << 63, uint64_t(3) << 62,
-        uint64_t(0) - (uint64_t(1) << 11), uint64_t(1) << 63, uint64_t(1) << 62, 1,
-        std::numeric_limits<uint64_t>::max()};
+        uint64_t(0) - (uint64_t(1) << (64 - std::numeric_limits<FloatingPoint>::digits)),
+        uint64_t(1) << 63, uint64_t(1) << 62, 1, std::numeric_limits<uint64_t>::max()};
     std::feclearexcept(FE_ALL_EXCEPT);
     if (feenableexcept(FE_INVALID | FE_DIVBYZERO | FE_OVERFLOW) == -1) {
         std::_Exit(1);
     }
     for (size_t index = 0; index < sizeof(inputs) / sizeof(inputs[0]); ++index) {
-        if (Fixed64(inputs[index]).raw() != expected[index]) {
+        Fixed64 assigned;
+        assigned = inputs[index];
+        if (Fixed64(inputs[index]).raw() != expected[index] || assigned.raw() != expected[index]) {
             std::_Exit(2);
         }
     }
@@ -56,7 +60,8 @@ void fixedFloatingTrapProbe() {
 }    // namespace detail
 
 TEST(Fixed, ValidCoordinatesWithFloatingPointTraps) {
-    EXPECT_EXIT(detail::fixedFloatingTrapProbe(), ::testing::ExitedWithCode(0), "");
+    EXPECT_EXIT(detail::fixedFloatingTrapProbe<double>(), ::testing::ExitedWithCode(0), "");
+    EXPECT_EXIT(detail::fixedFloatingTrapProbe<float>(), ::testing::ExitedWithCode(0), "");
 }
 #endif
 
@@ -180,4 +185,60 @@ TEST(Fixed, SignedRangesAndWrapping) {
     EXPECT_EQ((minimum - Signed64::min()).raw(), std::numeric_limits<int64_t>::max());
     EXPECT_EQ((Signed64::max() + Signed64::min()).raw(), minimum.raw());
     EXPECT_EQ(minimum.toInt(), -1);
+}
+
+namespace detail {
+
+template <class FixedPoint>
+void checkFloatConversion(float value) {
+    auto const expected = FixedPoint(double(value)).raw();
+    EXPECT_EQ(FixedPoint(value).raw(), expected) << value;
+    FixedPoint assigned;
+    assigned = value;
+    EXPECT_EQ(assigned.raw(), expected) << value;
+}
+
+void checkFloatConversions(float value) {
+    checkFloatConversion<Fixed32>(value);
+    checkFloatConversion<Fixed64>(value);
+    checkFloatConversion<Fixed<int32_t, 29>>(value);
+    checkFloatConversion<Fixed<int64_t, 32>>(value);
+}
+
+}    // namespace detail
+
+TEST(Fixed, FloatConversionMatchesPromotedInput) {
+    float const edges[] = {0.0f, -0.0f, 0.5f, 0.75f, 1.0f, 2.0f, 8.0f, 0x1p-65f, 0x1p-64f, 0x1p-63f,
+        0x1p-33f, 0x1p-32f, 0x1p-31f, std::numeric_limits<float>::denorm_min(),
+        std::numeric_limits<float>::min(), std::numeric_limits<float>::max(),
+        std::nextafter(1.0f, 0.0f), std::nextafter(1.0f, 2.0f), std::nextafter(8.0f, 0.0f),
+        std::nextafter(8.0f, 16.0f)};
+    for (float value : edges) {
+        detail::checkFloatConversions(value);
+        detail::checkFloatConversions(-value);
+    }
+    std::mt19937 random(0x76132);
+    for (int sample = 0; sample < 32768; ++sample) {
+        uint32_t const bits = random();
+        // Exclude NaN/Inf by their representation, also under -ffast-math.
+        if ((bits & 0x7f800000U) != 0x7f800000U) {
+            detail::checkFloatConversions(std::bit_cast<float>(bits));
+        }
+    }
+}
+
+TEST(Fixed, FloatAssignmentPreservesOtherAssignmentOverloads) {
+    Fixed64 value;
+    value = 1;
+    EXPECT_EQ(value.raw(), 0U);
+    value = 1L;
+    EXPECT_EQ(value.raw(), 0U);
+    value = 1U;
+    EXPECT_EQ(value.raw(), 0U);
+    value = 0x1p-64;
+    EXPECT_EQ(value.raw(), 1U);
+    value = 0x1p-64f;
+    EXPECT_EQ(value.raw(), 1U);
+    value = Fixed32(0.75f);
+    EXPECT_EQ(value.raw(), uint64_t(3) << 62);
 }
