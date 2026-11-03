@@ -1068,6 +1068,14 @@ mapSize = 8
             "--cosmology.sigma8=-0.1")):
         run(f"invalid_cosmology_{index}", metadata_options + [invalid], success=False)
 
+    for index, value in enumerate(("-0.1", "1.5", "nan", "inf")):
+        output = run(f"invalid_rung_merge_fraction_{index}", metadata_options + [
+            f"--run.rungMergeFraction={value}"], success=False)
+        if "run.rungMergeFraction must be finite and between 0 and 1" not in output:
+            raise RuntimeError(f"invalid run.rungMergeFraction={value} lacked its diagnostic")
+    output = run("rung_merge_fraction", metadata_options + ["--run.rungMergeFraction=0.5"])
+    assertNumericSetting(output, "run.rungMergeFraction", 0.5)
+
     lambda_baseline = run("lambda_baseline", metadata_options)
     def cosmologySetting(output, key):
         match = re.search(r"^cosmology\." + key + r"\s*:\s*(\S+)", output, re.MULTILINE)

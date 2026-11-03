@@ -27,6 +27,7 @@
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/interrupt_profile.hpp>
 #include <cosmictiger/core/profiler.hpp>
+#include <cosmictiger/core/rung_merge.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/core/time.hpp>
 #include <cosmictiger/core/timer.hpp>
@@ -1214,26 +1215,17 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         }
         auto rng = particlesCurrentRange();
         particlesProcessed += rng.second - rng.first;
-        if (top && minrung == minrung0) {
-            auto counts = particlesRungCounts();
-            if (counts.size() > minrung0 + 1) {
-                auto const total = getOptions().initial.numberOfParticles;
-                //				PRINT("Rungs\n");
-                for (int i = 0; i < counts.size(); i++) {
-                    //					PRINT("%i %li %f %%\n", i, counts[i], 100.0 * counts[i] /
-                    // total);
-                }
-                size_t fast = 0;
-                size_t slow = counts[minrung0];
-                for (int i = minrung0 + 1; i < counts.size(); i++) {
-                    fast += counts[i];
-                }
-                if (3 * fast > slow) {
-                    clipTop = true && !nocrop;
-                    //					PRINT("------------------------------------\n");
-                    //					PRINT("Setting minimum level to %i\n", minrung + 1);
-                    //					PRINT("------------------------------------\n");
-                }
+        if (top && minrung == minrung0 && !nocrop) {
+            // GADGET-4 time-bin merging: close the lowest rung here and reopen
+            // its particles one rung finer when that saves gravity solves.
+            auto const counts = particlesRungCounts();
+            double const fraction = getOptions().run.rungMergeFraction;
+            auto const merge = rungMergeDecision(counts, minrung0, fraction);
+            if (merge.merge) {
+                clipTop = true;
+                PRINT("  Merging rung %i into rung %i: %zu of %zu particles on finer rungs "
+                      "exceed run.rungMergeFraction = %g\n",
+                    minrung0, minrung0 + 1, merge.fineCount, merge.activeCount, fraction);
             }
         }
 

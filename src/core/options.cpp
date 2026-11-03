@@ -431,6 +431,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"run.maxIterations", options.run.maxIterations},
         {"run.numberOfSteps", options.run.numberOfSteps},
         {"run.minRung", options.run.minRung},
+        {"run.rungMergeFraction", options.run.rungMergeFraction},
         {"run.treeOpeningAngle", options.run.treeOpeningAngle},
         {"drift.cuda", options.drift.cuda},
         {"sort.cuda", options.sort.cuda},
@@ -661,10 +662,14 @@ bool processOptions(int argc, char* argv[]) {
         "endRedshift, 0 uses the scenario duration")("run.maxIterations",
         po::value<int>(&opts.run.maxIterations)->default_value(1000000),
         "maximum number of time steps")("run.numberOfSteps",
-        po::value<int>(&opts.run.numberOfSteps)->default_value(64),
-        "number of super time steps")("run.minRung",
-        po::value<int>(&opts.run.minRung)->default_value(0), "minimum starting rung")(
-        "run.treeOpeningAngle", po::value<double>(&opts.run.treeOpeningAngle)->default_value(0.0),
+        po::value<int>(&opts.run.numberOfSteps)->default_value(64), "number of super time steps")(
+        "run.minRung", po::value<int>(&opts.run.minRung)->default_value(0),
+        "minimum starting rung")("run.rungMergeFraction",
+        po::value<double>(&opts.run.rungMergeFraction)->default_value(1.0 / 3.0),
+        "hierarchical: merge the lowest occupied rung into the next one when the finer rungs "
+        "hold more than this fraction of the particles on or above it (GADGET-4: N1 > N0/3); "
+        "1 never merges")("run.treeOpeningAngle",
+        po::value<double>(&opts.run.treeOpeningAngle)->default_value(0.0),
         "run.test=force: build the tree once at this opening angle and sweep only the kick's "
         "angle upward from it; 0 rebuilds the tree at every angle");
 
@@ -1424,6 +1429,10 @@ bool processOptions(int argc, char* argv[]) {
         (!usesGlobalIntegration(opts.run) && opts.run.minRung >= kMaxRung)) {
         THROW_ERROR(
             "run.minRung must be nonnegative and less than %i for rung integrators\n", kMaxRung);
+    }
+    if (!detail::isFiniteOption(opts.run.rungMergeFraction) || opts.run.rungMergeFraction < 0.0 ||
+        opts.run.rungMergeFraction > 1.0) {
+        THROW_ERROR("run.rungMergeFraction must be finite and between 0 and 1\n");
     }
     if (opts.run.numberOfSteps <= 0) {
         THROW_ERROR("run.numberOfSteps must be positive\n");
