@@ -238,12 +238,11 @@ requires `lightcone.enabled=false` until crossings can be emitted from completed
 hydro trajectory segments instead of tentative gravity projections.
 
 `src/hydro/hopkins.cpp` is a CPU SIMD backend, including in a
-CUDA-enabled build. It gathers gas state from all HPX localities onto the
-coordinating locality, queries a persistent hydro source tree there, runs CPU
-SIMD loops, and scatters updated states to the particle owners. MPI domain ownership and
-migration are supported, but the meshless calculation is not distributed across
-the locality CPUs: its global gas state and neighbor lists must fit in the
-coordinator's memory. Communication and coordinator memory limit scalability.
+CUDA-enabled build. Every HPX locality integrates its own gas cells against a
+persistent hydro source tree of those cells, with read-only ghost copies of the
+remote cells within stencil reach; rank 0 only sequences the phases of an event
+and folds their results (see [Distributed event engine](#distributed-event-engine-november-2-2026)).
+No locality holds the global gas state, and no neighbor list is stored.
 `gravity.cuda` and `drift.cuda` independently select their CUDA-capable
 components. Set `hydro.cuda=false` for this CPU meshless backend; selecting CUDA
 for gravity or drift does not move the meshless flux calculation to the GPU.
@@ -308,12 +307,10 @@ Inactive primitives, face velocities, geometry rates, and timestep signals use
 one prediction from their retained own-step anchor. Positions drift to each
 global event using the separately anchored mesh velocity and acceleration; a
 fine drift neither commits `U0 + deltaU` nor rebuilds the coarse trajectory.
-The coordinator still gathers all gas and reconstructs support/geometry at
-every global event. The persistent tree removes repeated spatial sorting;
-this first integration still updates all source geometry and materializes all
-neighbor lists. Individual rungs save primitive reconstructions, pair Riemann
-solves, and conservative/source commits. They do not yet remove global gathering
-or support/geometry work. `Hopkins tree` log rows separate sorted sources,
+Supports and geometry are refreshed only for the active cells and their
+first-ring halo (see [Retained distributed source records](#retained-distributed-source-records-november-2-2026)).
+Individual rungs save primitive reconstructions, pair Riemann solves, and
+conservative/source commits. `Hopkins tree` log rows separate sorted sources,
 updated sources, refitted nodes, topology rebuilds, and visited candidates.
 The same geometry tree serves hierarchical MFM, using retained trajectories to
 obtain event-time positions even when the shared gravity coordinate is already
@@ -419,7 +416,7 @@ resident set and every owner mirror before recollecting.
 
 The tree topology follows GADGET-4's practice for its neighbor tree, which is
 rebuilt with every domain decomposition and otherwise only drifted in place:
-`hopkinsRebuildForActivity` rebuilds the topology once per event when at least
+the coordinator rebuilds every locality's topology once per event when at least
 `hydro.treeRebuildActiveFraction` of the cells is active (default one third,
 the paper's `N1 > N0/3` rule for merging the first time bin into the top one)
 or when a domain rebound happened since the last event (`hopkinsDomainsRebound`,
@@ -500,6 +497,56 @@ a restart recollects everything, and every later decision depends only on the
 checkpointed state and the event time. The sound-wave diagnostic solves all
 supports in a scratch copy of the workspace, so it no longer changes retained
 supports as a side effect.
+
+### Distributed event engine (November 2, 2026)
+
+The workspace described above now exists once per locality and holds only that
+locality's cells, in increasing identifier order, in slots `[0, ownedCount)`.
+During an event a second slot range holds ghost copies of remote cells, also in
+identifier order, indexed by a separate `ghostTree`; every stencil query visits
+both trees, and stencils are sorted by identifier, so each reduction sums in the
+order a single workspace would. Rank 0 runs an event as a sequence of phases
+(`hopkinsRunPhase`), each broadcast to every locality and folded in rank order;
+with one locality every phase is a direct call and nothing is communicated.
+
+- Ghost exchange. Every leaf envelope of a locality's owned tree queries each
+  peer with one radius `R = 1.5 * 1.2 * max(h_owned)`, raised to whatever an
+  earlier support solve found it needed. A peer returns each owned cell `j` with
+  `r(x_j, box) <= max(R, supportUpper_j)`, together with its derived state
+  (geometry, face rates, support rate, primitive, gradient and the solved/built
+  flags). The reply therefore holds every remote member of every symmetric
+  stencil of the requester's cells, including members whose own support reaches
+  them. Ghosts are replaced wholesale by each exchange, which follows every step
+  that changes a support, a geometry, an activity flag or a public view.
+- Supports and geometry. `hopkinsEnsureEverywhere` repeats the single-workspace
+  steps in lockstep: solve the unsolved active cells, derive the halo, solve the
+  unsolved halo cells, build geometry, with an exchange after each step that
+  changed anything. A support solve whose search radius would pass `R` stops,
+  resets the cell to its entry support and reports it incomplete; the
+  coordinator widens the exchange and the cell is solved again from the start.
+  Remote halo members are requested from their owners, which solve and build
+  them as their own halo. Singular moment matrices expand in lockstep attempts,
+  with an exchange between attempts.
+- Pair intervals are held by the locality that opened them, the owner of the
+  lower identifier at that time; they do not move when an endpoint migrates. At
+  settlement each holder asks the peers for the activity of endpoints it does
+  not own, integrates the interval and sends each endpoint's deposit to its
+  current owner. Deposits are applied at the start of the next phase sorted by
+  pair key, left before right, so every endpoint accumulates its shares in the
+  order of one walk over a global pair map. Checkpoints write each locality's
+  held intervals.
+- Timesteps. Each locality scans its own cells. The Appendix G sweep runs on
+  rank 0, seeded with every cell's rung and activity; the owners answer its
+  stencil requests, and the final rungs return to them.
+- Cells that migrate between a hierarchical `Begin` and its `Finish` carry their
+  event state (support, solved/built/touched flags and derived geometry) to the
+  new owner as a sidecar.
+- MFV gravity masses project each held interval locally; rank 0 sums the
+  shares in pair-key order and every locality installs the result.
+
+The tree-rebuild decision is made by rank 0 from the global active count, and
+every locality rebuilds its owned tree. The sound-wave diagnostic still needs
+one locality.
 
 Each event prints a `Hopkins work` row beside the existing `Hopkins step` and
 `Hopkins tree` rows: `total`, `active`, `halo` (cells with geometry that are
@@ -800,6 +847,21 @@ integrators and the three `run_hopkins.py` fixtures. A second tree with
 `hopkins_global_sources` and `hopkins_thermal_sources`, so gas-to-star
 conversion drops resident records and rebuilds the tree topology as intended.
 The checkpoint state layout is version 7 (472 bytes) after the merge.
+
+### Distributed event engine on 2026-11-02
+
+One locality against the unmodified `9009127f4` binaries: `run_hierarchical_mfm.py`
+keeps all 260 checkpoints payload-identical, and `run_hopkins.py --matrix-only`
+keeps the traditional (14) and global (18) FMM checkpoints payload-identical.
+Two localities: `hopkins_localities_mpi` (`tests/run_hopkins_localities.py`) finds
+the gravity-free blasts bitwise identical to one locality for the traditional,
+global and hierarchical integrators, with about 39000 live pairs joining cells of
+different localities. The two-locality FMM matrices match the `9009127f4`
+coordinator's two-locality output per identifier on all checkpoints. Both builds
+fail that matrix's restart check identically ("restart changed physical particle
+state"), so the failure predates this engine. The targeted CPU CTest selection
+(117 tests) and the stars-build Hopkins, star and chemistry selection (120) pass,
+and the CUDA 13.1 build compiles.
 
 ### List-free stencil queries on 2026-11-02
 

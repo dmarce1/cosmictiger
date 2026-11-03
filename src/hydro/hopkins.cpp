@@ -131,6 +131,38 @@ struct HopkinsWork {
     uint64_t gradientCells = 0;
     uint64_t listQueries = 0;
     uint64_t pairsSolved = 0;
+    template <class Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & recordsReceived & bytesReceived & recordsInstalled & bytesInstalled &
+            sourcesUpdated & supportCells & supportSums & geometryCells & rateCells &
+            gradientCells & listQueries & pairsSolved;
+    }
+    void add(HopkinsWork const& other) {
+        recordsReceived += other.recordsReceived;
+        bytesReceived += other.bytesReceived;
+        recordsInstalled += other.recordsInstalled;
+        bytesInstalled += other.bytesInstalled;
+        sourcesUpdated += other.sourcesUpdated;
+        supportCells += other.supportCells;
+        supportSums += other.supportSums;
+        geometryCells += other.geometryCells;
+        rateCells += other.rateCells;
+        gradientCells += other.gradientCells;
+        listQueries += other.listQueries;
+        pairsSolved += other.pairsSolved;
+    }
+};
+
+// A remote cell as its owner holds it during an event: the record and the
+// per-slot state its neighbors read (packed HopkinsDerived bytes).
+struct HopkinsGhostPayload {
+    HopkinsParticle particle;
+    std::vector<char> derived;
+    int owner = 0;
+    template <class Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & particle & derived & owner;
+    }
 };
 
 // The coordinator's resident workspace. Records persist between events in
@@ -161,9 +193,6 @@ struct HopkinsWorkspace {
     // resident position may change until the event closes. Neighbor sets are
     // never stored; every consumer queries the tree when it needs them.
     bool stencilsFrozen = false;
-    // The tree topology decision (rebuild or keep) is made once per event, at
-    // the first marking of the active set.
-    bool rebuildDecided = false;
     bool eventOpen = false;
     double eventTime = 0.0;
     double expansionRate = 0.0;
@@ -178,6 +207,35 @@ struct HopkinsWorkspace {
     double switchedEnergy = 0.0;
     int darkMatterRung = 0;
     int dimensions = 3;
+    // Every locality keeps its own gas cells in slots [0, ownedCount), in
+    // increasing identifier order, followed during an event by read-only ghost
+    // copies of the remote cells within stencil reach (ghostOwners: their ranks),
+    // also in identifier order. Ghosts are refreshed wholesale by every exchange.
+    size_t ownedCount = 0;
+    std::vector<int> ghostOwners;
+    hydro_source::SourceTree ghostTree;
+    // Query radius of the last ghost import, and the radius a support solve found
+    // it needed beyond that import (its cells are solved again after a wider one).
+    double ghostRadius = std::numeric_limits<double>::infinity();
+    double requiredGhostRadius = 0.0;
+    // Per-event working sets of this locality, all owned slots: cells a peer asked
+    // to have solved and built as its halo, this locality's own halo, the cells
+    // whose support solve saw an incomplete ghost set, the cells a singular moment
+    // matrix expanded, and the refreshed set A ∪ N(A) for reconstruction.
+    std::vector<unsigned char> haloRequested;
+    std::vector<size_t> localHalo;
+    std::vector<size_t> incomplete;
+    std::vector<size_t> expanded;
+    std::vector<size_t> refreshed;
+    std::vector<unsigned char> closed;
+    std::vector<size_t> closing;
+    // Owned cells that arrived with the last membership rebuild: their record
+    // comes from the new owner, so the in-event position guard has no previous
+    // copy to compare against.
+    std::vector<unsigned char> arrived;
+    // Ghost payloads received by the last exchange, installed by the next phase.
+    std::vector<HopkinsGhostPayload> pendingGhosts;
+    bool ghostsPending = false;
 };
 
 struct HopkinsPairRecord {
@@ -193,6 +251,25 @@ struct HopkinsPairRecord {
     hopkins::Vector workMidpoint{};
 };
 using HopkinsPairKey = std::pair<uint64_t, uint64_t>;
+// One endpoint's share of a settled pair interval: the left endpoint receives
+// -delta and the right +delta, both receive the same gravity-work integral. A
+// record produces its two deposits together; they may be applied on different
+// localities, so a deposit carries everything its endpoint needs.
+struct HopkinsDeposit {
+    HopkinsPairKey key{};
+    uint64_t endpoint = 0;
+    bool right = false;
+    double beginTime = 0.0;
+    hopkins::Conserved delta{};
+    hopkins::Vector integral{};
+    hopkins::Vector firstMoment{};
+    template <class Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & key & endpoint & right & beginTime & delta.mass & delta.momentum & delta.energy &
+            integral & firstMoment;
+    }
+};
+
 std::map<HopkinsPairKey, HopkinsPairRecord> hopkinsPairs;
 std::unique_ptr<HopkinsWorkspace> hopkinsResident;
 bool hopkinsTreePrepared = false;
@@ -237,9 +314,10 @@ std::vector<size_t> hopkinsSlotsWhere(
     return slots;
 }
 
+// Active owned slots; ghost copies are never integrated here.
 std::vector<size_t> hopkinsActiveSlots(HopkinsWorkspace const& workspace) {
     std::vector<size_t> slots;
-    for (size_t slot = 0; slot < workspace.particles.size(); ++slot) {
+    for (size_t slot = 0; slot < workspace.ownedCount; ++slot) {
         if (workspace.particles[slot].active) {
             slots.push_back(slot);
         }
@@ -626,30 +704,6 @@ void hopkinsResetOwnerMirror() {
     hopkinsOwnerKeys.clear();
 }
 
-// Publish stable IDs before any persistent neighbor query. This operation changes
-// no conserved state, reconstruction anchor, support, velocity, or particle order.
-void hopkinsInstallIdentifiers(std::vector<uint64_t> const& identifiers) {
-    if (identifiers.size() != size_t(sphParticlesSize())) {
-        throw std::runtime_error("Hopkins identity publication changed particle membership");
-    }
-    for (size_t index = 0; index < identifiers.size(); ++index) {
-        auto const identifier = sphParticlesHopkinsState(index).identifier;
-        if (identifier != std::numeric_limits<uint64_t>::max() &&
-            identifier != identifiers[index]) {
-            throw std::runtime_error("Hopkins identity changed during source preparation");
-        }
-    }
-    for (size_t index = 0; index < identifiers.size(); ++index) {
-        sphParticlesHopkinsState(index).identifier = identifiers[index];
-        if (index < hopkinsOwnerIdentifiers.size()) {
-            hopkinsOwnerIdentifiers[index] = identifiers[index];
-            std::memcpy(
-                hopkinsOwnerKeys[index].state.data() + offsetof(HopkinsParticleState, identifier),
-                &identifiers[index], sizeof(uint64_t));
-        }
-    }
-}
-
 // Predicted public views of a sleeping cell: the same formula the coordinator
 // applies in hopkinsCurrentViews, evaluated by the owner without communication.
 hopkins::Primitive hopkinsPredictedPrimitive(
@@ -822,14 +876,102 @@ void hopkinsAssignIdentifiersLocal() {
 }    // namespace detail
 
 HPX_PLAIN_ACTION(detail::hopkinsAssignIdentifiersLocal, HopkinsAssignIdentifiersAction);
-HPX_PLAIN_ACTION(detail::hopkinsCollectDelta, HopkinsCollectDeltaAction);
-HPX_PLAIN_ACTION(detail::hopkinsResetOwnerMirror, HopkinsResetOwnerMirrorAction);
-HPX_PLAIN_ACTION(detail::hopkinsInstallIdentifiers, HopkinsInstallIdentifiersAction);
-HPX_PLAIN_ACTION(detail::hopkinsInstallSparse, HopkinsInstallSparseAction);
-HPX_PLAIN_ACTION(detail::hopkinsInstallGravityMasses, HopkinsInstallGravityMassesAction);
 
 namespace detail {
 
+// Event state of a cell that migrates while an event is open (the hierarchical
+// gravity ladder moves gas between Begin and Finish): its new owner resumes the
+// event with the support, flags and geometry the old owner had solved, exactly
+// as the cell would have kept them had it stayed.
+struct HopkinsSidecar {
+    uint64_t identifier = 0;
+    double support = 0.0;
+    unsigned char solved = 0;
+    unsigned char built = 0;
+    unsigned char touched = 0;
+    std::vector<char> geometry;
+    template <class Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & identifier & support & solved & built & touched & geometry;
+    }
+};
+
+struct HopkinsDerived {
+    hopkins::Geometry geometry{};
+    hopkins::GeometryRate geometryRate{};
+    double supportRate = 0.0;
+    hopkins::Primitive primitive{};
+    hopkins::Gradient gradient{};
+    unsigned char solved = 0;
+    unsigned char built = 0;
+};
+static_assert(std::is_trivially_copyable_v<HopkinsDerived>);
+
+HopkinsDerived hopkinsDerivedOf(HopkinsWorkspace const& workspace, size_t slot) {
+    return {workspace.geometry[slot], workspace.geometryRates[slot], workspace.supportRates[slot],
+        workspace.primitives[slot], workspace.gradients[slot], workspace.solved[slot],
+        workspace.built[slot]};
+}
+
+std::vector<char> hopkinsBytes(HopkinsDerived const& derived) {
+    std::vector<char> bytes(sizeof(HopkinsDerived));
+    std::memcpy(bytes.data(), &derived, sizeof(HopkinsDerived));
+    return bytes;
+}
+
+HopkinsDerived hopkinsDerivedFrom(std::vector<char> const& bytes) {
+    if (bytes.size() != sizeof(HopkinsDerived)) {
+        throw std::runtime_error("Malformed Hopkins derived-state payload");
+    }
+    HopkinsDerived derived;
+    std::memcpy(&derived, bytes.data(), sizeof(HopkinsDerived));
+    return derived;
+}
+
+// Messages other localities leave for this one between phases. Service actions
+// only append under the mutex; the next phase drains them.
+struct HopkinsInbox {
+    std::mutex mutex;
+    std::vector<uint64_t> haloRequests;
+    std::vector<HopkinsDeposit> deposits;
+    std::vector<HopkinsSidecar> sidecars;
+};
+HopkinsInbox hopkinsInbox;
+// Deposits this locality's own settlement produced for cells it owns.
+std::vector<HopkinsDeposit> hopkinsLocalDeposits;
+// Sidecars received for cells that arrived here while an event was open.
+std::unordered_map<uint64_t, HopkinsSidecar> hopkinsStagedSidecars;
+
+void hopkinsResizeOwned(HopkinsWorkspace& workspace) {
+    workspace.ownedCount = workspace.particles.size();
+    workspace.ghostOwners.clear();
+    workspace.haloRequested.assign(workspace.ownedCount, 0);
+    workspace.closed.assign(workspace.ownedCount, 0);
+    workspace.arrived.assign(workspace.ownedCount, 0);
+}
+
+// Drop the ghost range: owned slots and their per-slot state stay untouched.
+void hopkinsDropGhosts(HopkinsWorkspace& workspace) {
+    for (size_t slot = workspace.ownedCount; slot < workspace.particles.size(); ++slot) {
+        workspace.indices.erase(workspace.particles[slot].state.identifier);
+    }
+    size_t const count = workspace.ownedCount;
+    workspace.particles.resize(count);
+    workspace.geometry.resize(count);
+    workspace.geometryRates.resize(count);
+    workspace.supportRates.resize(count);
+    workspace.primitives.resize(count);
+    workspace.gradients.resize(count);
+    workspace.dirty.resize(count);
+    workspace.solved.resize(count);
+    workspace.built.resize(count);
+    workspace.touched.resize(count);
+    workspace.ghostOwners.clear();
+    workspace.ghostTree.clear();
+}
+
+// Reset every per-slot array for the owned cells now in workspace.particles
+// (callers drop the ghost range first).
 void hopkinsResizeSlots(HopkinsWorkspace& workspace) {
     size_t const count = workspace.particles.size();
     workspace.owners.resize(count);
@@ -843,80 +985,35 @@ void hopkinsResizeSlots(HopkinsWorkspace& workspace) {
     workspace.built.assign(count, 0);
     workspace.touched.assign(count, 0);
     workspace.stencilsFrozen = false;
+    hopkinsResizeOwned(workspace);
 }
 
 void hopkinsClearResident(HopkinsWorkspace& workspace) {
+    hopkinsDropGhosts(workspace);
     workspace.particles.clear();
-    workspace.rankIdentifiers.assign(size_t(hpxSize()), {});
-    workspace.rankSlots.assign(size_t(hpxSize()), {});
+    workspace.rankIdentifiers.assign(1, {});
+    workspace.rankSlots.assign(1, {});
     workspace.indices.clear();
     workspace.tree.clear();
     hopkinsResizeSlots(workspace);
 }
 
-enum class HopkinsMembership { Unchanged, Rebuilt, ResetRequired };
-
-// Assign identifiers to new gas, publish them, and rebuild the slot order after
-// any locality reported a membership change. Slots stay in identifier order;
-// an owner change alone keeps every resident record and the tree topology.
-// ResetRequired is reserved for an owner mirror that outlived the resident set.
-HopkinsMembership hopkinsRebuildMembership(
-    HopkinsWorkspace& workspace, std::vector<HopkinsDelta>& deltas) {
-    size_t const ranks = workspace.rankIdentifiers.size();
-    for (auto const& identifiers : workspace.rankIdentifiers) {
-        for (uint64_t identifier : identifiers) {
-            if (identifier != std::numeric_limits<uint64_t>::max()) {
-                workspace.nextIdentifier = std::max(workspace.nextIdentifier, identifier + 1);
-            }
-        }
-    }
-    std::vector<hpx::future<void>> publications;
-    try {
-        for (size_t rank = 0; rank < ranks; ++rank) {
-            auto& identifiers = workspace.rankIdentifiers[rank];
-            std::unordered_map<ParticleInteger, size_t> reported;
-            for (size_t k = 0; k < deltas[rank].indices.size(); ++k) {
-                reported.emplace(deltas[rank].indices[k], k);
-            }
-            bool assigned = false;
-            for (size_t index = 0; index < identifiers.size(); ++index) {
-                if (identifiers[index] != std::numeric_limits<uint64_t>::max()) {
-                    continue;
-                }
-                if (workspace.nextIdentifier == std::numeric_limits<uint64_t>::max()) {
-                    throw std::overflow_error("Hopkins stable particle identifiers are exhausted");
-                }
-                identifiers[index] = workspace.nextIdentifier++;
-                auto const found = reported.find(ParticleInteger(index));
-                if (found == reported.end()) {
-                    throw std::runtime_error("Hopkins new particle was not reported");
-                }
-                deltas[rank].particles[found->second].state.identifier = identifiers[index];
-                assigned = true;
-            }
-            if (assigned) {
-                publications.push_back(hpx::async<HopkinsInstallIdentifiersAction>(
-                    hpxLocalities()[rank], identifiers));
-            }
-        }
-    } catch (...) {
-        hpx::wait_all(publications);
-        throw;
-    }
-    hpx::wait_all(publications);
-    for (auto& publication : publications) {
-        publication.get();
-    }
+// Rebuild the owned slots in identifier order after the local membership
+// changed, reusing every retained record and its per-slot event state.
+// Returns the sidecars of cells that left while the event was open.
+std::vector<HopkinsSidecar> hopkinsRebuildMembership(
+    HopkinsWorkspace& workspace, std::vector<uint64_t> const& identifiers, bool keepEventState) {
     struct Entry {
         uint64_t identifier;
-        HopkinsOwner owner;
+        ParticleInteger index;
     };
     std::vector<Entry> entries;
-    for (size_t rank = 0; rank < ranks; ++rank) {
-        auto const& identifiers = workspace.rankIdentifiers[rank];
-        for (size_t index = 0; index < identifiers.size(); ++index) {
-            entries.push_back({identifiers[index], {int(rank), ParticleInteger(index)}});
+    entries.reserve(identifiers.size());
+    for (size_t index = 0; index < identifiers.size(); ++index) {
+        if (identifiers[index] == std::numeric_limits<uint64_t>::max()) {
+            throw std::runtime_error("Hopkins gas cell without a stable identifier");
         }
+        entries.push_back({identifiers[index], ParticleInteger(index)});
     }
     std::sort(entries.begin(), entries.end(),
         [](Entry const& left, Entry const& right) { return left.identifier < right.identifier; });
@@ -925,23 +1022,55 @@ HopkinsMembership hopkinsRebuildMembership(
             throw std::runtime_error("Duplicate Hopkins stable particle identifier");
         }
     }
-    bool sameSet = entries.size() == workspace.particles.size();
+    std::vector<HopkinsSidecar> departed;
+    bool sameSet = entries.size() == workspace.ownedCount;
     for (size_t slot = 0; sameSet && slot < entries.size(); ++slot) {
         sameSet = workspace.particles[slot].state.identifier == entries[slot].identifier;
     }
     if (!sameSet) {
-        // Identifiers that no owner reports any more (gas converted to stars)
-        // are dropped; a live pair interval referencing one is detected by the
-        // settle step. New identifiers get default records filled by the deltas.
+        std::unordered_map<uint64_t, size_t> arrived;
+        for (size_t k = 0; k < entries.size(); ++k) {
+            arrived.emplace(entries[k].identifier, k);
+        }
+        if (keepEventState) {
+            for (size_t slot = 0; slot < workspace.ownedCount; ++slot) {
+                uint64_t const identifier = workspace.particles[slot].state.identifier;
+                if (arrived.contains(identifier)) {
+                    continue;
+                }
+                HopkinsSidecar sidecar;
+                sidecar.identifier = identifier;
+                sidecar.support = workspace.particles[slot].support;
+                sidecar.solved = workspace.solved[slot];
+                sidecar.built = workspace.built[slot];
+                sidecar.touched = workspace.touched[slot];
+                sidecar.geometry = hopkinsBytes(hopkinsDerivedOf(workspace, slot));
+                departed.push_back(std::move(sidecar));
+            }
+        }
+        // Identifiers no longer present here (converted to stars or migrated) are
+        // dropped; new identifiers get default records filled by the delta.
         std::vector<HopkinsParticle> particles;
+        std::vector<HopkinsDerived> derived;
+        std::vector<unsigned char> solved, built, touched;
+        std::vector<size_t> newcomers;
         particles.reserve(entries.size());
         for (auto const& entry : entries) {
             auto const found = workspace.indices.find(entry.identifier);
-            if (found != workspace.indices.end()) {
+            if (found != workspace.indices.end() && found->second < workspace.ownedCount) {
                 particles.push_back(workspace.particles[found->second]);
+                derived.push_back(hopkinsDerivedOf(workspace, found->second));
+                solved.push_back(workspace.solved[found->second]);
+                built.push_back(workspace.built[found->second]);
+                touched.push_back(workspace.touched[found->second]);
             } else {
                 particles.emplace_back();
                 particles.back().state.identifier = entry.identifier;
+                derived.emplace_back();
+                solved.push_back(0);
+                built.push_back(0);
+                touched.push_back(0);
+                newcomers.push_back(particles.size() - 1);
             }
         }
         workspace.particles = std::move(particles);
@@ -950,113 +1079,118 @@ HopkinsMembership hopkinsRebuildMembership(
         for (size_t slot = 0; slot < entries.size(); ++slot) {
             workspace.indices.emplace(entries[slot].identifier, slot);
         }
+        bool const frozen = workspace.stencilsFrozen;
         hopkinsResizeSlots(workspace);
+        if (keepEventState) {
+            for (size_t slot = 0; slot < entries.size(); ++slot) {
+                workspace.geometry[slot] = derived[slot].geometry;
+                workspace.geometryRates[slot] = derived[slot].geometryRate;
+                workspace.supportRates[slot] = derived[slot].supportRate;
+                workspace.primitives[slot] = derived[slot].primitive;
+                workspace.gradients[slot] = derived[slot].gradient;
+                workspace.solved[slot] = solved[slot];
+                workspace.built[slot] = built[slot];
+                workspace.touched[slot] = touched[slot];
+            }
+            workspace.stencilsFrozen = frozen;
+        }
+        for (size_t slot : newcomers) {
+            workspace.arrived[slot] = 1;
+        }
     }
-    workspace.rankSlots.assign(ranks, {});
-    for (size_t rank = 0; rank < ranks; ++rank) {
-        workspace.rankSlots[rank].resize(workspace.rankIdentifiers[rank].size());
-    }
+    workspace.rankIdentifiers.assign(1, identifiers);
+    workspace.rankSlots.assign(1, std::vector<size_t>(identifiers.size()));
     for (size_t slot = 0; slot < entries.size(); ++slot) {
-        workspace.owners[slot] = entries[slot].owner;
-        workspace.rankSlots[size_t(entries[slot].owner.rank)][size_t(entries[slot].owner.index)] =
-            slot;
+        workspace.owners[slot] = {hpxRank(), entries[slot].index};
+        workspace.rankSlots[0][size_t(entries[slot].index)] = slot;
     }
-    return sameSet ? HopkinsMembership::Unchanged : HopkinsMembership::Rebuilt;
+    return departed;
 }
 
-// Import the records whose inputs changed since the previous event. Returns
-// true when the resident identifier set changed and the tree must be rebuilt.
-bool hopkinsRefreshRecords(HopkinsWorkspace& workspace, bool readForces) {
+// Import this locality's records whose inputs changed since the previous event
+// and rebuild the owned slots if its membership changed. Returns true when the
+// owned identifier set changed (the tree topology is then rebuilt), and the
+// sidecars of cells that left during an open event.
+bool hopkinsRefreshRecords(HopkinsWorkspace& workspace, bool readForces, bool keepEventState,
+    std::vector<HopkinsSidecar>& departed) {
     profile::ScopedPhase profilePhase("hydro.hopkins.gather");
+    hopkinsDropGhosts(workspace);
+    std::fill(workspace.arrived.begin(), workspace.arrived.end(), 0);
+    hopkinsAssignIdentifiersLocal();
+    if (workspace.rankIdentifiers.size() != 1) {
+        hopkinsClearResident(workspace);
+        hopkinsResetOwnerMirror();
+    }
+    auto delta = hopkinsCollectDelta(workspace.countOperations, readForces, workspace.time);
+    if (readForces) {
+        workspace.darkMatterRung = delta.darkMatterRung;
+    }
     bool rebuilt = false;
-    for (int attempt = 0; attempt < 2; ++attempt) {
-        std::vector<hpx::future<HopkinsDelta>> pending;
-        for (auto const& locality : hpxLocalities()) {
-            pending.push_back(hpx::async<HopkinsCollectDeltaAction>(
-                locality, workspace.countOperations, readForces, workspace.time));
+    if (delta.membershipChanged || workspace.particles.empty()) {
+        auto const& identifiers =
+            delta.membershipChanged ? delta.identifiers : workspace.rankIdentifiers[0];
+        departed = hopkinsRebuildMembership(workspace, identifiers, keepEventState);
+        rebuilt = true;
+    } else if (workspace.rankIdentifiers[0].size() != size_t(delta.count)) {
+        throw std::runtime_error("Hopkins owner mirror and resident records disagree");
+    }
+    for (size_t k = 0; k < delta.indices.size(); ++k) {
+        size_t const slot = workspace.rankSlots[0].at(size_t(delta.indices[k]));
+        auto record = delta.particles[k];
+        auto& resident = workspace.particles[slot];
+        if (resident.state.identifier != record.state.identifier) {
+            throw std::runtime_error("Hopkins owner record identity mismatch");
         }
-        std::vector<HopkinsDelta> deltas;
-        for (auto& future : pending) {
-            deltas.push_back(future.get());
+        if (workspace.solved[slot]) {
+            // The event owns a support it solved; the owner's copy is only
+            // installed when the event closes.
+            record.support = resident.support;
+            record.state.supportRadius = resident.state.supportRadius;
         }
-        if (workspace.rankIdentifiers.size() != size_t(hpxSize())) {
-            hopkinsClearResident(workspace);
-        }
-        if (readForces) {
-            workspace.darkMatterRung = 0;
-            for (auto const& delta : deltas) {
-                workspace.darkMatterRung = std::max(workspace.darkMatterRung, delta.darkMatterRung);
+        if (!workspace.arrived[slot] &&
+            (workspace.stencilsFrozen || workspace.built[slot] || workspace.solved[slot])) {
+            bool moved = false;
+            for (int dim = 0; dim < 3; ++dim) {
+                moved = moved || resident.position[dim] != record.position[dim];
+            }
+            if (moved) {
+                throw std::runtime_error(
+                    "Hopkins resident record changed position within an event");
             }
         }
-        bool membershipChanged = workspace.particles.empty();
-        bool resetRequired = false;
-        for (size_t rank = 0; rank < deltas.size(); ++rank) {
-            auto const& delta = deltas[rank];
-            if (delta.membershipChanged) {
-                workspace.rankIdentifiers[rank] = delta.identifiers;
-                membershipChanged = true;
-                workspace.work.bytesReceived += delta.identifiers.size() * sizeof(uint64_t);
-            } else if (workspace.rankIdentifiers[rank].size() != size_t(delta.count)) {
-                // The owner mirror outlived the resident set (a coordinator
-                // reset): every owner must report its complete membership.
-                resetRequired = true;
-            }
-        }
-        if (membershipChanged && !resetRequired) {
-            auto const outcome = hopkinsRebuildMembership(workspace, deltas);
-            resetRequired = outcome == HopkinsMembership::ResetRequired;
-            rebuilt = outcome == HopkinsMembership::Rebuilt;
-        }
-        if (resetRequired) {
-            if (attempt != 0) {
-                throw std::runtime_error("Hopkins resident membership could not be rebuilt");
-            }
-            hopkinsClearResident(workspace);
-            std::vector<hpx::future<void>> resets;
-            for (auto const& locality : hpxLocalities()) {
-                resets.push_back(hpx::async<HopkinsResetOwnerMirrorAction>(locality));
-            }
-            hpx::wait_all(resets);
-            for (auto& reset : resets) {
-                reset.get();
-            }
+        resident = record;
+        workspace.dirty[slot] = 1;
+    }
+    workspace.work.recordsReceived += delta.indices.size();
+    workspace.work.bytesReceived +=
+        delta.indices.size() * (sizeof(HopkinsParticle) + sizeof(ParticleInteger));
+    return rebuilt;
+}
+
+// Apply the sidecars of cells that arrived during an open event.
+void hopkinsApplySidecars(HopkinsWorkspace& workspace) {
+    for (auto& [identifier, sidecar] : hopkinsStagedSidecars) {
+        auto const found = workspace.indices.find(identifier);
+        if (found == workspace.indices.end() || found->second >= workspace.ownedCount) {
             continue;
         }
-        for (size_t rank = 0; rank < deltas.size(); ++rank) {
-            auto const& delta = deltas[rank];
-            for (size_t k = 0; k < delta.indices.size(); ++k) {
-                size_t const slot = workspace.rankSlots[rank].at(size_t(delta.indices[k]));
-                auto record = delta.particles[k];
-                auto& resident = workspace.particles[slot];
-                if (resident.state.identifier != record.state.identifier) {
-                    throw std::runtime_error("Hopkins owner record identity mismatch");
-                }
-                if (workspace.solved[slot]) {
-                    // The coordinator owns a support it solved at this event;
-                    // the owner's copy is only installed when the event closes.
-                    record.support = resident.support;
-                    record.state.supportRadius = resident.state.supportRadius;
-                }
-                if (workspace.stencilsFrozen || workspace.built[slot] || workspace.solved[slot]) {
-                    bool moved = false;
-                    for (int dim = 0; dim < 3; ++dim) {
-                        moved = moved || resident.position[dim] != record.position[dim];
-                    }
-                    if (moved) {
-                        throw std::runtime_error(
-                            "Hopkins resident record changed position within an event");
-                    }
-                }
-                resident = record;
-                workspace.dirty[slot] = 1;
-            }
-            workspace.work.recordsReceived += delta.indices.size();
-            workspace.work.bytesReceived +=
-                delta.indices.size() * (sizeof(HopkinsParticle) + sizeof(ParticleInteger));
+        size_t const slot = found->second;
+        auto const derived = hopkinsDerivedFrom(sidecar.geometry);
+        workspace.geometry[slot] = derived.geometry;
+        workspace.geometryRates[slot] = derived.geometryRate;
+        workspace.supportRates[slot] = derived.supportRate;
+        workspace.primitives[slot] = derived.primitive;
+        workspace.gradients[slot] = derived.gradient;
+        workspace.solved[slot] = sidecar.solved;
+        workspace.built[slot] = sidecar.built;
+        workspace.touched[slot] = sidecar.touched;
+        if (sidecar.solved) {
+            workspace.particles[slot].support = sidecar.support;
+            workspace.particles[slot].state.supportRadius = sidecar.support;
         }
-        return rebuilt;
+        workspace.dirty[slot] = 1;
     }
-    throw std::logic_error("Hopkins record refresh did not complete");
+    hopkinsStagedSidecars.clear();
 }
 
 // Clean records carry their previous inputs; only their predicted hierarchical
@@ -1201,10 +1335,18 @@ void hopkinsNeighborQuery(HopkinsWorkspace const& workspace, size_t i, double fa
         std::nextafter(factor * particle.support, std::numeric_limits<double>::infinity()) +
         64.0 * std::numeric_limits<double>::epsilon();
     neighbors.clear();
-    for (uint64_t identifier : workspace.tree.query(sink, radius, workspace.time)) {
+    auto const consider = [&](uint64_t identifier) {
         size_t const j = workspace.indices.at(identifier);
         if (j != i && hopkinsStencilMember(workspace, i, j, factor, symmetric, operations)) {
             neighbors.push_back(j);
+        }
+    };
+    for (uint64_t identifier : workspace.tree.query(sink, radius, workspace.time)) {
+        consider(identifier);
+    }
+    if (workspace.ghostTree.size() > 0) {
+        for (uint64_t identifier : workspace.ghostTree.query(sink, radius, workspace.time)) {
+            consider(identifier);
         }
     }
     // Reductions follow the stable identifier order. On the coordinator slot order
@@ -1247,7 +1389,11 @@ std::vector<size_t> hopkinsHaloOf(
 }
 
 // Solve the constant kernel-number support of the given cells only. Returns
-// the cells whose support changed; their symmetric lists must be repaired.
+// the cells whose support changed; the caller refits them in the tree. A cell
+// whose candidate search would reach beyond the imported ghosts stops, is reset
+// to its entry support and is listed in workspace.incomplete, to be solved again
+// from the start after a wider ghost import: each cell's iteration depends only
+// on positions, so the repeated solve is exactly the one a single locality makes.
 std::vector<size_t> hopkinsSolveSupports(
     HopkinsWorkspace& workspace, std::vector<size_t> const& cells) {
     profile::ScopedPhase profilePhase("hydro.hopkins.support");
@@ -1266,6 +1412,8 @@ std::vector<size_t> hopkinsSolveSupports(
     workspace.work.supportCells += cells.size();
     std::vector<size_t> pending(cells.size());
     std::iota(pending.begin(), pending.end(), size_t(0));
+    std::vector<double> reach(cells.size(), 0.0);
+    std::vector<unsigned char> beyond(cells.size(), 0);
     for (int iteration = 0; iteration < 256 && !pending.empty(); iteration++) {
         for (size_t k : pending) {
             auto const& particle = workspace.particles[cells[k]];
@@ -1283,6 +1431,14 @@ std::vector<size_t> hopkinsSolveSupports(
                 double const support = std::clamp(particle.support, minimum, maximum);
                 double next = support;
                 if (support == particle.support) {
+                    double const radius = std::nextafter(kHopkinsSolveSearchFactor * support,
+                                              std::numeric_limits<double>::infinity()) +
+                        64.0 * std::numeric_limits<double>::epsilon();
+                    reach[k] = std::max(reach[k], radius);
+                    if (radius > workspace.ghostRadius) {
+                        beyond[k] = 1;
+                        return;
+                    }
                     // Own candidates at the search factor. The test is one-sided,
                     // so no tree refit is needed between solve iterations.
                     std::vector<size_t> candidates;
@@ -1326,7 +1482,7 @@ std::vector<size_t> hopkinsSolveSupports(
         workspace.work.supportSums += pending.size();
         std::vector<size_t> next;
         for (size_t p = 0; p < pending.size(); ++p) {
-            if (changed[p]) {
+            if (changed[p] && !beyond[pending[p]]) {
                 next.push_back(pending[p]);
             }
         }
@@ -1334,6 +1490,14 @@ std::vector<size_t> hopkinsSolveSupports(
     }
     if (!pending.empty()) {
         throw std::runtime_error("Hopkins kernel-support solve did not converge");
+    }
+    for (size_t k = 0; k < cells.size(); ++k) {
+        if (beyond[k]) {
+            workspace.particles[cells[k]].support = entry[k];
+            workspace.solved[cells[k]] = 0;
+            workspace.incomplete.push_back(cells[k]);
+            workspace.requiredGhostRadius = std::max(workspace.requiredGhostRadius, reach[k]);
+        }
     }
     std::vector<size_t> moved;
     for (size_t k = 0; k < cells.size(); ++k) {
@@ -1345,84 +1509,76 @@ std::vector<size_t> hopkinsSolveSupports(
 }
 
 // Build the volume partition and moment matrix of the given cells from their
-// symmetric stencils. A singular matrix expands that cell's own search and the
-// tree is refit so later stencil queries see the new support; the expanded
-// cells are returned so the caller can re-derive the dependency halo.
-std::vector<size_t> hopkinsBuildGeometry(
-    HopkinsWorkspace& workspace, std::vector<size_t> const& cells) {
+// symmetric stencils: one attempt. A singular matrix expands that cell's own
+// search (Appendix C: never invert a regularized singular moment or silently
+// substitute the SPH pressure operator) and the tree is refit so later stencil
+// queries see the new support. Returns the expanded cells, which the next
+// attempt builds again after every locality refreshed its ghost copies.
+std::vector<size_t> hopkinsBuildAttempt(
+    HopkinsWorkspace& workspace, std::vector<size_t> const& todo) {
     profile::ScopedPhase profilePhase("hydro.hopkins.geometry");
     HopkinsFlopBatch operations(workspace.countOperations);
-    std::vector<size_t> expanded;
-    std::vector<size_t> todo = cells;
-    for (int attempt = 0; attempt < 16 && !todo.empty(); attempt++) {
-        workspace.work.listQueries += todo.size();
-        {
-            profile::ScopedPhase profilePhase("hydro.hopkins.geometry.solve");
-            hopkinsParallel(todo.size(), [&](size_t k) {
-                HopkinsFlopBatch operations(workspace.countOperations);
-                size_t const i = todo[k];
-                auto const& particle = workspace.particles[i];
-                double kernelSum =
-                    hopkinsKernel(0.0, particle.support, workspace.dimensions, operations);
-                hopkins::Matrix moment{};
-                hopkinsNeighborBatches(
-                    workspace, i, operations, [&](HopkinsNeighborBatch const& batch) {
-                        auto const weight = hopkinsKernel(
-                            batch.radius, particle.support, workspace.dimensions, operations);
-                        HopkinsSimdMatrix contributions;
-                        hopkins::detail::countFlops(operations, 18 * HopkinsSimd::size());
+    workspace.work.listQueries += todo.size();
+    {
+        profile::ScopedPhase profilePhase("hydro.hopkins.geometry.solve");
+        hopkinsParallel(todo.size(), [&](size_t k) {
+            HopkinsFlopBatch operations(workspace.countOperations);
+            size_t const i = todo[k];
+            auto const& particle = workspace.particles[i];
+            double kernelSum =
+                hopkinsKernel(0.0, particle.support, workspace.dimensions, operations);
+            hopkins::Matrix moment{};
+            hopkinsNeighborBatches(
+                workspace, i, operations, [&](HopkinsNeighborBatch const& batch) {
+                    auto const weight = hopkinsKernel(
+                        batch.radius, particle.support, workspace.dimensions, operations);
+                    HopkinsSimdMatrix contributions;
+                    hopkins::detail::countFlops(operations, 18 * HopkinsSimd::size());
+                    for (int row = 0; row < 3; row++) {
+                        for (int column = 0; column < 3; column++) {
+                            contributions[row][column] =
+                                weight * batch.separation[row] * batch.separation[column];
+                        }
+                    }
+                    hopkins::detail::countFlops(operations, 10 * batch.count);
+                    for (size_t lane = 0; lane < batch.count; lane++) {
+                        kernelSum += weight[lane];
                         for (int row = 0; row < 3; row++) {
                             for (int column = 0; column < 3; column++) {
-                                contributions[row][column] =
-                                    weight * batch.separation[row] * batch.separation[column];
+                                moment[row][column] += contributions[row][column][lane];
                             }
                         }
-                        hopkins::detail::countFlops(operations, 10 * batch.count);
-                        for (size_t lane = 0; lane < batch.count; lane++) {
-                            kernelSum += weight[lane];
-                            for (int row = 0; row < 3; row++) {
-                                for (int column = 0; column < 3; column++) {
-                                    moment[row][column] += contributions[row][column][lane];
-                                }
-                            }
-                        }
-                    });
-                workspace.geometry[i] = hopkins::makeGeometry(
-                    kernelSum, moment, 100.0, workspace.dimensions, operations);
-            });
-        }
-        workspace.work.geometryCells += todo.size();
-        std::vector<size_t> invalid;
-        for (size_t i : todo) {
-            if (!workspace.geometry[i].valid) {
-                auto& support = workspace.particles[i].support;
-                if (support >= getOptions().hydro.maxSupportRadius) {
-                    throw std::runtime_error(
-                        "Hopkins gradient remains singular at hydro.maxSupportRadius");
-                }
-                hopkins::detail::countFlops(operations, 1);
-                support = std::min(1.5 * support, getOptions().hydro.maxSupportRadius);
-                invalid.push_back(i);
-            } else {
-                hopkins::detail::countFlops(operations, 1);
-                workspace.particles[i].density =
-                    workspace.particles[i].mass / workspace.geometry[i].volume;
-                workspace.built[i] = 1;
-                workspace.touched[i] = 1;
+                    }
+                });
+            workspace.geometry[i] =
+                hopkins::makeGeometry(kernelSum, moment, 100.0, workspace.dimensions, operations);
+        });
+    }
+    workspace.work.geometryCells += todo.size();
+    std::vector<size_t> invalid;
+    for (size_t i : todo) {
+        if (!workspace.geometry[i].valid) {
+            auto& support = workspace.particles[i].support;
+            if (support >= getOptions().hydro.maxSupportRadius) {
+                throw std::runtime_error(
+                    "Hopkins gradient remains singular at hydro.maxSupportRadius");
             }
+            hopkins::detail::countFlops(operations, 1);
+            support = std::min(1.5 * support, getOptions().hydro.maxSupportRadius);
+            invalid.push_back(i);
+        } else {
+            hopkins::detail::countFlops(operations, 1);
+            workspace.particles[i].density =
+                workspace.particles[i].mass / workspace.geometry[i].volume;
+            workspace.built[i] = 1;
+            workspace.touched[i] = 1;
         }
-        // Appendix C: expand the actual tree search, never invert a regularized
-        // singular moment or silently substitute the SPH pressure operator.
-        hopkinsUpdateSources(workspace, invalid);
-        expanded.insert(expanded.end(), invalid.begin(), invalid.end());
-        todo = std::move(invalid);
     }
-    if (!todo.empty()) {
-        throw std::runtime_error(
-            "Hopkins gradient matrix did not converge after 16 support expansions");
-    }
-    return expanded;
+    hopkinsUpdateSources(workspace, invalid);
+    return invalid;
 }
+
+constexpr int kHopkinsGeometryAttempts = 16;
 
 std::vector<size_t> hopkinsUnflagged(HopkinsWorkspace const& workspace,
     std::vector<size_t> const& slots, std::vector<unsigned char> const& flags) {
@@ -1435,59 +1591,139 @@ std::vector<size_t> hopkinsUnflagged(HopkinsWorkspace const& workspace,
     return result;
 }
 
-// Refresh supports and geometry for the active cells and the first-ring halo
-// their incident pair fluxes, gradients and face rates depend on. Supports and
-// geometry are solved at most once per cell per event, and the tree's
-// supportUpper is refit after every solve so the symmetric stencil queries stay
-// exact. Returns the refreshed set A ∪ N(A) in slot order.
+// Refreshing supports and geometry for the active cells and the first-ring halo
+// their incident pair fluxes, gradients and face rates depend on runs as steps,
+// so that every locality can take each step for its own cells between ghost
+// exchanges. Supports and geometry are solved at most once per cell per event,
+// and the tree's supportUpper is refit after every solve so the symmetric
+// stencil queries stay exact.
+
+// Solve the active owned cells that have no support yet; returns how many.
+size_t hopkinsStepSolveActive(HopkinsWorkspace& workspace) {
+    workspace.incomplete.clear();
+    auto const unsolved =
+        hopkinsUnflagged(workspace, hopkinsActiveSlots(workspace), workspace.solved);
+    if (!unsolved.empty()) {
+        hopkinsUpdateSources(workspace, hopkinsSolveSupports(workspace, unsolved));
+    }
+    return unsolved.size();
+}
+
+// The halo N(A): inactive members of the active owned cells' symmetric stencils.
+// Owned members are this locality's halo; ghost members are returned as
+// (owner rank, identifier) pairs, to be solved and built by their owners.
+std::vector<std::pair<int, uint64_t>> hopkinsStepHalo(HopkinsWorkspace& workspace) {
+    // From the first stencil query on, no resident position may change until
+    // the event closes (hopkinsRefreshRecords enforces this).
+    workspace.stencilsFrozen = true;
+    auto const active = hopkinsActiveSlots(workspace);
+    workspace.work.listQueries += active.size();
+    workspace.localHalo.clear();
+    std::vector<std::pair<int, uint64_t>> remote;
+    for (size_t slot : hopkinsHaloOf(workspace, active)) {
+        if (slot < workspace.ownedCount) {
+            workspace.localHalo.push_back(slot);
+        } else {
+            remote.emplace_back(workspace.ghostOwners[slot - workspace.ownedCount],
+                workspace.particles[slot].state.identifier);
+        }
+    }
+    std::fill(workspace.haloRequested.begin(), workspace.haloRequested.end(), 0);
+    return remote;
+}
+
+// Owned cells in A ∪ N(A): active, this locality's halo, and cells peers need as
+// their halo, in slot (identifier) order.
+std::vector<size_t> hopkinsNeededSlots(HopkinsWorkspace const& workspace) {
+    std::vector<unsigned char> needed(workspace.ownedCount, 0);
+    for (size_t slot : hopkinsActiveSlots(workspace)) {
+        needed[slot] = 1;
+    }
+    for (size_t slot : workspace.localHalo) {
+        needed[slot] = 1;
+    }
+    std::vector<size_t> slots;
+    for (size_t slot = 0; slot < workspace.ownedCount; ++slot) {
+        if (needed[slot] || workspace.haloRequested[slot]) {
+            slots.push_back(slot);
+        }
+    }
+    return slots;
+}
+
+// Solve the halo cells (own and requested) that have no support yet.
+size_t hopkinsStepSolveHalo(HopkinsWorkspace& workspace) {
+    workspace.incomplete.clear();
+    std::vector<size_t> halo;
+    std::vector<unsigned char> inHalo(workspace.ownedCount, 0);
+    for (size_t slot : workspace.localHalo) {
+        inHalo[slot] = 1;
+    }
+    for (size_t slot = 0; slot < workspace.ownedCount; ++slot) {
+        if ((inHalo[slot] || workspace.haloRequested[slot]) && !workspace.particles[slot].active) {
+            halo.push_back(slot);
+        }
+    }
+    auto const unsolved = hopkinsUnflagged(workspace, halo, workspace.solved);
+    if (!unsolved.empty()) {
+        hopkinsUpdateSources(workspace, hopkinsSolveSupports(workspace, unsolved));
+    }
+    return unsolved.size();
+}
+
+// One lockstep geometry attempt. Attempt 0 builds every unbuilt needed cell;
+// later attempts rebuild the cells the previous attempt expanded. Returns the
+// number of cells built and leaves the expanded ones in workspace.expanded.
+size_t hopkinsStepBuild(HopkinsWorkspace& workspace, int attempt) {
+    std::vector<size_t> todo = attempt == 0 ?
+        hopkinsUnflagged(workspace, hopkinsNeededSlots(workspace), workspace.built) :
+        workspace.expanded;
+    if (attempt >= kHopkinsGeometryAttempts && !todo.empty()) {
+        throw std::runtime_error(
+            "Hopkins gradient matrix did not converge after 16 support expansions");
+    }
+    workspace.expanded =
+        todo.empty() ? std::vector<size_t>{} : hopkinsBuildAttempt(workspace, todo);
+    return todo.size();
+}
+
+// The same steps on one workspace with no peers. Returns A ∪ N(A).
 std::vector<size_t> hopkinsEnsureGeometry(HopkinsWorkspace& workspace) {
     size_t const limit = 2 * workspace.particles.size() + 16;
     for (size_t pass = 0; pass < limit; ++pass) {
-        bool progressed = false;
-        auto const active = hopkinsActiveSlots(workspace);
-        auto const unsolved = hopkinsUnflagged(workspace, active, workspace.solved);
-        if (!unsolved.empty()) {
-            hopkinsUpdateSources(workspace, hopkinsSolveSupports(workspace, unsolved));
-            progressed = true;
-        }
-        // From the first stencil query on, no resident position may change
-        // until the event closes (hopkinsRefreshRecords enforces this).
-        workspace.stencilsFrozen = true;
-        workspace.work.listQueries += active.size();
-        auto const halo = hopkinsHaloOf(workspace, active);
-        auto const unsolvedHalo = hopkinsUnflagged(workspace, halo, workspace.solved);
-        if (!unsolvedHalo.empty()) {
-            hopkinsUpdateSources(workspace, hopkinsSolveSupports(workspace, unsolvedHalo));
-            progressed = true;
+        bool progressed = hopkinsStepSolveActive(workspace) > 0;
+        hopkinsStepHalo(workspace);
+        if (hopkinsStepSolveHalo(workspace) > 0) {
             continue;
         }
-        std::vector<size_t> needed;
-        std::merge(
-            active.begin(), active.end(), halo.begin(), halo.end(), std::back_inserter(needed));
-        auto const unbuilt = hopkinsUnflagged(workspace, needed, workspace.built);
-        if (!unbuilt.empty()) {
-            hopkinsBuildGeometry(workspace, unbuilt);
-            progressed = true;
+        bool const built = hopkinsStepBuild(workspace, 0) > 0;
+        for (int attempt = 1; !workspace.expanded.empty(); ++attempt) {
+            hopkinsStepBuild(workspace, attempt);
         }
-        if (!progressed) {
-            return needed;
+        if (!progressed && !built) {
+            workspace.refreshed = hopkinsNeededSlots(workspace);
+            return workspace.refreshed;
         }
     }
     throw std::runtime_error("Hopkins retained geometry refresh did not converge");
 }
 
-// Start or continue the event at this time: import changed records, derive the
-// predicted positions of clean records and refit their sources. Flags survive
-// between a hierarchical Begin and its Finish at the same time.
-void hopkinsOpenEvent(HopkinsWorkspace& workspace, double scale, double expansionRate, double time,
-    double baseTimestep, bool global, bool readForces) {
+// Start or continue the event at this time, first half: event scalars, a new
+// event's flag reset, and this locality's changed records. Flags survive between
+// a hierarchical Begin and its Finish at the same time; cells that left this
+// locality in between are returned with their event state.
+bool hopkinsOpenRecords(HopkinsWorkspace& workspace, double scale, double expansionRate,
+    double time, double baseTimestep, bool global, bool readForces,
+    std::vector<HopkinsSidecar>& departed) {
     workspace.dimensions = scenarios::definition(getOptions().run.scenario).hydroDimensions;
     workspace.scale = scale;
     workspace.expansionRate = expansionRate;
     workspace.time = time;
     workspace.tickDuration = baseTimestep > 0.0 ? baseTimestep / double(kHopkinsTicksPerBase) : 0.0;
     workspace.tick = global || baseTimestep <= 0.0 ? 0 : hopkinsTick(time, baseTimestep, nullptr);
-    if (!workspace.eventOpen || workspace.eventTime != time) {
+    bool const continuing = workspace.eventOpen && workspace.eventTime == time;
+    if (!continuing) {
+        hopkinsDropGhosts(workspace);
         hopkinsResizeSlots(workspace);
         for (auto& particle : workspace.particles) {
             particle.active = false;
@@ -1496,78 +1732,68 @@ void hopkinsOpenEvent(HopkinsWorkspace& workspace, double scale, double expansio
         workspace.switchedEnergy = 0.0;
         workspace.eventOpen = true;
         workspace.eventTime = time;
-        workspace.rebuildDecided = false;
     }
-    bool const rebuilt = hopkinsRefreshRecords(workspace, readForces);
+    return hopkinsRefreshRecords(workspace, readForces, continuing, departed);
+}
+
+// Second half: arrived event state, predicted positions of clean records, and
+// the owned tree. Every stencil query of this event is made at workspace.time:
+// the node envelopes and source positions are evaluated once, and in-event
+// refits keep them current.
+bool hopkinsOpenSources(HopkinsWorkspace& workspace, bool rebuilt) {
+    hopkinsApplySidecars(workspace);
     hopkinsDeriveRecords(workspace);
-    if (rebuilt || workspace.tree.size() != workspace.particles.size()) {
+    rebuilt = rebuilt || workspace.tree.size() != workspace.ownedCount;
+    if (rebuilt) {
         hopkinsRebuildSources(workspace);
-        workspace.rebuildDecided = true;
-        hopkinsRebuildOnNextEvent = false;
     } else {
         hopkinsUpdateSources(workspace, hopkinsSlotsWhere(workspace, workspace.dirty));
     }
     std::fill(workspace.dirty.begin(), workspace.dirty.end(), 0);
-    // Every stencil query of this event is made at workspace.time: evaluate the
-    // node envelopes and source positions once; in-event refits keep them current.
     workspace.tree.prepare(workspace.time);
+    return rebuilt;
+}
+
+// Both halves on one workspace with no peers (the sound-wave diagnostic).
+void hopkinsOpenEvent(HopkinsWorkspace& workspace, double scale, double expansionRate, double time,
+    double baseTimestep, bool global, bool readForces) {
+    std::vector<HopkinsSidecar> departed;
+    bool const rebuilt = hopkinsOpenRecords(
+        workspace, scale, expansionRate, time, baseTimestep, global, readForces, departed);
+    hopkinsOpenSources(workspace, rebuilt);
 }
 
 // GADGET-4 rebuilds its neighbor tree with every domain decomposition, which
-// its active-particle fraction triggers. Do the same once per event: rebuild the
-// topology when a rebound happened or when at least hydro.treeRebuildActiveFraction
-// of the cells is active; otherwise keep refitting it in place. The stencil sets
-// come from the exact pair test, so the topology never changes a result.
-void hopkinsRebuildForActivity(HopkinsWorkspace& workspace) {
-    if (workspace.rebuildDecided) {
-        return;
-    }
-    workspace.rebuildDecided = true;
-    size_t active = 0;
-    for (auto const& particle : workspace.particles) {
-        active += particle.active;
-    }
-    double const fraction = getOptions().hydro.treeRebuildActiveFraction;
-    bool const crowded = double(active) >= fraction * double(workspace.particles.size());
-    if (!hopkinsRebuildOnNextEvent && !crowded) {
-        return;
-    }
-    hopkinsRebuildOnNextEvent = false;
+// its active-particle fraction triggers. The coordinator decides once per event
+// from the global active fraction (or a domain rebound since the last event);
+// every locality then rebuilds its owned tree topology. The stencil sets come
+// from the exact pair test, so the topology never changes a result.
+void hopkinsRebuildTree(HopkinsWorkspace& workspace) {
     hopkinsRebuildSources(workspace);
     workspace.tree.prepare(workspace.time);
 }
 
-// Return refreshed records to their owners; each owner then refreshes the
-// predicted public mirrors of its untouched cells without communication.
+// Install this locality's touched records into its particle arrays; the owner
+// then refreshes the predicted public mirrors of its untouched cells.
 void hopkinsInstallTouched(HopkinsWorkspace& workspace, int phase) {
     profile::ScopedPhase profilePhase("hydro.hopkins.scatter");
-    size_t const ranks = workspace.rankSlots.size();
-    std::vector<std::vector<ParticleInteger>> indices(ranks);
-    std::vector<std::vector<HopkinsParticle>> records(ranks);
-    for (size_t slot = 0; slot < workspace.particles.size(); ++slot) {
+    std::vector<ParticleInteger> indices;
+    std::vector<HopkinsParticle> records;
+    for (size_t slot = 0; slot < workspace.ownedCount; ++slot) {
         if (workspace.touched[slot]) {
             auto& particle = workspace.particles[slot];
             // The resident sidecar mirrors the solved double support exactly
             // as the owner stores it after this install.
             particle.state.supportRadius = particle.support;
-            auto const& owner = workspace.owners[slot];
-            indices[size_t(owner.rank)].push_back(owner.index);
-            records[size_t(owner.rank)].push_back(particle);
+            indices.push_back(workspace.owners[slot].index);
+            records.push_back(particle);
         }
     }
-    std::vector<hpx::future<void>> pending;
-    for (size_t rank = 0; rank < ranks; ++rank) {
-        workspace.work.recordsInstalled += records[rank].size();
-        workspace.work.bytesInstalled +=
-            records[rank].size() * (sizeof(HopkinsParticle) + sizeof(ParticleInteger));
-        pending.push_back(hpx::async<HopkinsInstallSparseAction>(hpxLocalities()[rank],
-            std::move(indices[rank]), std::move(records[rank]), phase, workspace.time,
-            workspace.scale, workspace.countOperations));
-    }
-    hpx::wait_all(pending);
-    for (auto& future : pending) {
-        future.get();
-    }
+    workspace.work.recordsInstalled += records.size();
+    workspace.work.bytesInstalled +=
+        records.size() * (sizeof(HopkinsParticle) + sizeof(ParticleInteger));
+    hopkinsInstallSparse(
+        indices, records, phase, workspace.time, workspace.scale, workspace.countOperations);
 }
 
 double hopkinsKernelRate(double radius, double radiusRate, double support, double supportRate,
@@ -1755,12 +1981,13 @@ hopkins::Primitive hopkinsPredictedPrimitive(
 
 // Reconstruct the active cells from the primitives of every refreshed cell:
 // active cells use their closed views, halo cells their retained predictors.
-void hopkinsGradients(HopkinsWorkspace& workspace, std::vector<size_t> const& active,
-    std::vector<size_t> const& refreshed) {
-    profile::ScopedPhase profilePhase("hydro.hopkins.gradients");
+// Primitives of every refreshed cell: active cells their closed views, halo cells
+// their retained predictors with the stored gradient. Neighbors read these as
+// ghost copies, so every locality finishes this before any gradient is formed.
+void hopkinsReconstructPrimitives(
+    HopkinsWorkspace& workspace, std::vector<size_t> const& refreshed) {
+    profile::ScopedPhase profilePhase("hydro.hopkins.reconstruct");
     HopkinsFlopBatch operations(workspace.countOperations);
-    workspace.work.gradientCells += active.size();
-    workspace.work.listQueries += active.size();
     double const gamma = getOptions().hydro.gamma;
     for (size_t i : refreshed) {
         auto const& particle = workspace.particles[i];
@@ -1777,6 +2004,13 @@ void hopkinsGradients(HopkinsWorkspace& workspace, std::vector<size_t> const& ac
             throw std::runtime_error("Nonphysical Hopkins cell before reconstruction");
         }
     }
+}
+
+// Limited gradients of the active cells from the primitives of their stencils.
+void hopkinsReconstructGradients(HopkinsWorkspace& workspace, std::vector<size_t> const& active) {
+    profile::ScopedPhase profilePhase("hydro.hopkins.gradients");
+    workspace.work.gradientCells += active.size();
+    workspace.work.listQueries += active.size();
     hopkinsParallel(active.size(), [&](size_t k) {
         HopkinsFlopBatch operations(workspace.countOperations);
         size_t const i = active[k];
@@ -1903,14 +2137,23 @@ uint64_t hopkinsTick(double time, double baseTimestep, FlopCount* operations) {
     return uint64_t(std::llround(ticks));
 }
 
-HopkinsStepResult hopkinsSelectTimesteps(HopkinsWorkspace& workspace, int minimumRung,
-    double baseTimestep, double maximumGlobalTimestep, size_t& woken, bool allowCoarsen = true) {
+struct HopkinsPassResult {
+    double minimumTimestep = 0.0;
+    size_t woken = 0;
+    int lowestRung = kMaxRung;
+};
+
+// Timestep selection over this locality's cells: every owned cell's own bound
+// from its symmetric stencil (pass one, in parallel), applied in slot order
+// (pass two). Under global integration the raw minimum is returned and every
+// cell joins rung 0. The Appendix G sweep follows separately.
+HopkinsPassResult hopkinsTimestepPasses(HopkinsWorkspace& workspace, int minimumRung,
+    double baseTimestep, double maximumGlobalTimestep, bool allowCoarsen) {
     profile::ScopedPhase profilePhase("hydro.hopkins.timesteps");
     HopkinsFlopBatch operations(workspace.countOperations);
     auto const& options = getOptions();
     double const gamma = options.hydro.gamma;
-    int maximumRung = std::max(
-        options.run.hierarchicalGravity ? 0 : workspace.darkMatterRung, options.run.minRung);
+    size_t woken = 0;
     bool const global = maximumGlobalTimestep > 0.0;
     double minimumTimestep = maximumGlobalTimestep;
     hopkins::detail::countFlops(operations, global ? 0 : 1);
@@ -1928,7 +2171,7 @@ HopkinsStepResult hopkinsSelectTimesteps(HopkinsWorkspace& workspace, int minimu
     // bound from its symmetric stencil, and whether a sleeping cell's retained
     // prediction is still physical. Pass two applies them in slot order, so the
     // outcome does not depend on the thread count.
-    size_t const count = workspace.particles.size();
+    size_t const count = workspace.ownedCount;
     std::vector<double> timesteps(count, backgroundTimestep);
     std::vector<unsigned char> invalidPrediction(count, 0);
     workspace.work.listQueries += count;
@@ -2007,59 +2250,65 @@ HopkinsStepResult hopkinsSelectTimesteps(HopkinsWorkspace& workspace, int minimu
             woken++;
         }
     }
-    if (global) {
-        // The workspace contains every locality's gas; this is the collective
-        // raw minimum, already bounded by gravity and the driver's endpoint.
-        return {0, minimumTimestep};
+    HopkinsPassResult result;
+    result.minimumTimestep = minimumTimestep;
+    result.woken = woken;
+    for (size_t slot = 0; slot < count; ++slot) {
+        result.lowestRung = std::min(result.lowestRung, workspace.particles[slot].rung);
     }
-    // Appendix G: prevent a timestep contrast larger than four across an
-    // interacting pair. Wake sleeping neighbors onto the shorter active bin.
-    // hopkins::WakeSweep replays the sequential identifier-order sweep exactly;
-    // here every stencil is answered locally, a prefetch window at a time, with
-    // the full symmetric stencil (valid at any rung).
-    int lowestRung = kMaxRung;
-    for (auto const& particle : workspace.particles) {
-        lowestRung = std::min(lowestRung, particle.rung);
+    if (!global) {
+        hopkins::detail::countFlops(operations, 1);
     }
-    hopkins::WakeSweep sweep;
-    for (auto const& particle : workspace.particles) {
-        sweep.seed(particle.state.identifier, particle.rung, particle.active);
+    return result;
+}
+
+// Appendix G: prevent a timestep contrast larger than four across an
+// interacting pair by waking sleeping neighbors onto the shorter active bin.
+// hopkins::WakeSweep replays the sequential identifier-order sweep exactly; the
+// owners answer its stencil requests with full symmetric stencils.
+struct HopkinsWakeStencil {
+    uint64_t identifier = 0;
+    std::vector<uint64_t> members;
+    template <class Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & identifier & members;
     }
-    constexpr size_t kWakePrefetch = 4096;
-    sweep.start(lowestRung, minimumRung, kWakePrefetch);
-    for (auto requests = sweep.step(); !requests.empty(); requests = sweep.step()) {
-        std::vector<std::vector<hopkins::WakeSweep::Member>> stencils(requests.size());
-        workspace.work.listQueries += requests.size();
-        hopkinsParallel(requests.size(), [&](size_t k) {
-            HopkinsFlopBatch operations(workspace.countOperations);
-            std::vector<size_t> neighbors;
-            hopkinsNeighborQuery(
-                workspace, workspace.indices.at(requests[k]), 1.0, true, operations, neighbors);
-            stencils[k].reserve(neighbors.size());
-            for (size_t j : neighbors) {
-                auto const& neighbor = workspace.particles[j];
-                stencils[k].push_back({neighbor.state.identifier, neighbor.rung, neighbor.active});
-            }
-        });
-        for (size_t k = 0; k < requests.size(); ++k) {
-            sweep.provide(requests[k], stencils[k], hopkins::WakeSweep::kAnyRung);
+};
+
+std::vector<HopkinsWakeStencil> hopkinsWakeStencils(
+    HopkinsWorkspace& workspace, std::vector<uint64_t> const& requests) {
+    std::vector<size_t> slots;
+    for (uint64_t identifier : requests) {
+        auto const found = workspace.indices.find(identifier);
+        if (found != workspace.indices.end() && found->second < workspace.ownedCount) {
+            slots.push_back(found->second);
         }
     }
-    woken += sweep.woken();
-    for (auto const& raise : sweep.raises()) {
-        auto& particle = workspace.particles[workspace.indices.at(raise.identifier)];
-        particle.rung = raise.rung;
-        particle.active = raise.active;
-    }
-    for (auto const& particle : workspace.particles) {
-        maximumRung = std::max(maximumRung, particle.rung);
-    }
-    if (maximumRung >= kMaxRung) {
-        throw std::runtime_error("Hopkins timestep exceeds the available rung range");
-    }
-    hopkins::detail::countFlops(operations, 1);
-    return {maximumRung, std::ldexp(baseTimestep, -maximumRung)};
+    std::vector<HopkinsWakeStencil> stencils(slots.size());
+    workspace.work.listQueries += slots.size();
+    hopkinsParallel(slots.size(), [&](size_t k) {
+        HopkinsFlopBatch operations(workspace.countOperations);
+        std::vector<size_t> neighbors;
+        hopkinsNeighborQuery(workspace, slots[k], 1.0, true, operations, neighbors);
+        stencils[k].identifier = workspace.particles[slots[k]].state.identifier;
+        stencils[k].members.reserve(neighbors.size());
+        for (size_t j : neighbors) {
+            stencils[k].members.push_back(workspace.particles[j].state.identifier);
+        }
+    });
+    return stencils;
 }
+
+struct HopkinsRungUpdate {
+    uint64_t identifier = 0;
+    int rung = 0;
+    bool active = false;
+    template <class Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & identifier & rung & active;
+    }
+};
+
 // Keep interval ownership and fixed-point geometry preparation scalar. Independent
 // reconstructed face states and Riemann solves are evaluated together in SIMD.
 struct HopkinsPairInput {
@@ -2362,25 +2611,6 @@ void hopkinsPairBatch(HopkinsWorkspace const& workspace,
     }
 }
 
-// One endpoint's share of a settled pair interval: the left endpoint receives
-// -delta and the right +delta, both receive the same gravity-work integral. A
-// record produces its two deposits together; they may be applied on different
-// localities, so a deposit carries everything its endpoint needs.
-struct HopkinsDeposit {
-    HopkinsPairKey key{};
-    uint64_t endpoint = 0;
-    bool right = false;
-    double beginTime = 0.0;
-    hopkins::Conserved delta{};
-    hopkins::Vector integral{};
-    hopkins::Vector firstMoment{};
-    template <class Archive>
-    void serialize(Archive& archive, unsigned) {
-        archive & key & endpoint & right & beginTime & delta.mass & delta.momentum & delta.energy &
-            integral & firstMoment;
-    }
-};
-
 // Integrate a live interval up to the event time (or its scheduled end) and
 // emit both endpoints' deposits.
 void hopkinsSettleRecord(
@@ -2431,38 +2661,84 @@ void hopkinsApplyDeposits(HopkinsWorkspace& workspace, std::vector<HopkinsDeposi
     deposits.clear();
 }
 
+// Endpoint state a holder needs for a cell it does not own.
+struct HopkinsEndpointState {
+    uint64_t identifier = 0;
+    int rank = 0;
+    bool active = false;
+    template <class Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & identifier & rank & active;
+    }
+};
+
+// Endpoints of the records held here that this locality does not own. A record
+// stays with the locality that opened it; its endpoints may migrate later.
+std::vector<uint64_t> hopkinsRemoteEndpoints(HopkinsWorkspace const& workspace) {
+    std::vector<uint64_t> remote;
+    for (auto const& [key, record] : hopkinsPairs) {
+        for (uint64_t identifier : {record.leftId, record.rightId}) {
+            auto const found = workspace.indices.find(identifier);
+            if (found == workspace.indices.end() || found->second >= workspace.ownedCount) {
+                remote.push_back(identifier);
+            }
+        }
+    }
+    std::sort(remote.begin(), remote.end());
+    remote.erase(std::unique(remote.begin(), remote.end()), remote.end());
+    return remote;
+}
+
 // Settle an interval only at its scheduled endpoint, or once when a wake/terminal
-// event cuts it short. Both deposits are made from the same integral.
-size_t hopkinsSettlePairs(HopkinsWorkspace& workspace, bool closingOnly) {
+// event cuts it short. Both deposits are made from the same integral; deposits
+// for owned endpoints stay here, the others go to their owners. Every deposit
+// is applied at the start of the next phase, in pair-key order.
+size_t hopkinsSettlePairs(HopkinsWorkspace& workspace, bool closingOnly,
+    std::unordered_map<uint64_t, HopkinsEndpointState> const& remote,
+    std::vector<std::vector<HopkinsDeposit>>& outgoing) {
     profile::ScopedPhase profilePhase("hydro.hopkins.flux.settle");
-    auto const& indices = workspace.indices;
+    auto const endpoint = [&](uint64_t identifier) -> std::pair<int, bool> {
+        auto const found = workspace.indices.find(identifier);
+        if (found != workspace.indices.end() && found->second < workspace.ownedCount) {
+            return {hpxRank(), workspace.particles[found->second].active};
+        }
+        auto const reported = remote.find(identifier);
+        if (reported == remote.end()) {
+            throw std::runtime_error("Hopkins live pair lost an endpoint");
+        }
+        return {reported->second.rank, reported->second.active};
+    };
     size_t settled = 0;
+    outgoing.assign(size_t(hpxSize()), {});
     std::vector<HopkinsDeposit> deposits;
     for (auto iterator = hopkinsPairs.begin(); iterator != hopkinsPairs.end();) {
         auto const& record = iterator->second;
-        auto const left = indices.find(record.leftId);
-        auto const right = indices.find(record.rightId);
-        if (left == indices.end() || right == indices.end()) {
-            throw std::runtime_error("Hopkins live pair lost an endpoint");
-        }
-        if (!closingOnly && record.endTime > workspace.time &&
-            !workspace.particles[left->second].active &&
-            !workspace.particles[right->second].active) {
+        auto const left = endpoint(record.leftId);
+        auto const right = endpoint(record.rightId);
+        if (!closingOnly && record.endTime > workspace.time && !left.second && !right.second) {
             ++iterator;
             continue;
         }
+        deposits.clear();
         hopkinsSettleRecord(record, workspace.time, deposits);
+        for (auto const& deposit : deposits) {
+            int const rank = deposit.right ? right.first : left.first;
+            if (rank == hpxRank()) {
+                hopkinsLocalDeposits.push_back(deposit);
+            } else {
+                outgoing[size_t(rank)].push_back(deposit);
+            }
+        }
         iterator = hopkinsPairs.erase(iterator);
         ++settled;
     }
-    hopkinsApplyDeposits(workspace, deposits);
     return settled;
 }
 
 void hopkinsInitialize(HopkinsWorkspace& workspace) {
     double const coefficient =
         (5.0 - 3.0 * getOptions().hydro.gamma) * workspace.expansionRate / workspace.scale;
-    for (size_t i = 0; i < workspace.particles.size(); ++i) {
+    for (size_t i = 0; i < workspace.ownedCount; ++i) {
         auto& particle = workspace.particles[i];
         auto& state = particle.state;
         if (!state.initialized) {
@@ -2733,7 +3009,7 @@ void hopkinsSynchronizeEntropy(HopkinsWorkspace& workspace, std::vector<size_t> 
 
 void hopkinsCurrentViews(HopkinsWorkspace& workspace) {
     profile::ScopedPhase profilePhase("hydro.hopkins.primitives");
-    for (size_t i = 0; i < workspace.particles.size(); ++i) {
+    for (size_t i = 0; i < workspace.ownedCount; ++i) {
         auto& particle = workspace.particles[i];
         auto const& state = particle.state;
         auto const primitive = particle.active ?
@@ -2754,33 +3030,39 @@ void hopkinsCurrentViews(HopkinsWorkspace& workspace) {
 // Open every pair incident on an active cell that has no live interval. The left
 // endpoint of a pair is the lower identifier, which need not be the lower slot
 // once owned cells and ghosts occupy separate slot ranges.
-void hopkinsOpenPairs(HopkinsWorkspace& workspace, std::vector<size_t> const& active,
-    size_t& retained, size_t& opened) {
+void hopkinsOpenPairs(HopkinsWorkspace& workspace, size_t& opened) {
     profile::ScopedPhase profilePhase("hydro.hopkins.flux.open");
-    // Workers enumerate the pairs of their active cells from transient stencil
-    // queries; the merged list is sorted and deduplicated, so active-active
-    // pairs seen from both sides open once and the batch order is fixed.
-    size_t const workers = hopkinsWorkerCount(active.size());
+    // The owner of a pair's lower identifier opens it: every built owned cell l
+    // (active or halo) pairs with each stencil member u of higher identifier when
+    // either is active. Stencils are symmetric, so these are exactly the pairs
+    // incident on an active cell, each enumerated once, wherever its endpoints
+    // live. The merged list is sorted by key, so the batch order is fixed.
+    std::vector<size_t> lower;
+    for (size_t slot = 0; slot < workspace.ownedCount; ++slot) {
+        if (workspace.built[slot]) {
+            lower.push_back(slot);
+        }
+    }
+    size_t const workers = hopkinsWorkerCount(lower.size());
     std::vector<std::vector<std::pair<size_t, size_t>>> found(workers);
-    workspace.work.listQueries += active.size();
-    hopkinsParallelWorkers(active.size(), workers, [&](size_t worker, size_t k) {
+    workspace.work.listQueries += lower.size();
+    hopkinsParallelWorkers(lower.size(), workers, [&](size_t worker, size_t k) {
         HopkinsFlopBatch operations(workspace.countOperations);
-        size_t const i = active[k];
+        size_t const l = lower[k];
+        auto const& left = workspace.particles[l];
         std::vector<size_t> neighbors;
-        hopkinsNeighborQuery(workspace, i, 1.0, true, operations, neighbors);
-        for (size_t j : neighbors) {
-            bool const ordered =
-                workspace.particles[i].state.identifier < workspace.particles[j].state.identifier;
-            size_t const lower = ordered ? i : j;
-            size_t const upper = ordered ? j : i;
-            auto const& left = workspace.particles[lower];
-            auto const& right = workspace.particles[upper];
-            if (!workspace.built[lower] || !workspace.built[upper]) {
+        hopkinsNeighborQuery(workspace, l, 1.0, true, operations, neighbors);
+        for (size_t u : neighbors) {
+            auto const& right = workspace.particles[u];
+            if (right.state.identifier < left.state.identifier || !(left.active || right.active)) {
+                continue;
+            }
+            if (!workspace.built[u]) {
                 throw std::logic_error("Hopkins pair opening requires both geometries");
             }
             if (!left.convert && !right.convert &&
                 !hopkinsPairs.contains({left.state.identifier, right.state.identifier})) {
-                found[worker].emplace_back(lower, upper);
+                found[worker].emplace_back(l, u);
             }
         }
     });
@@ -2806,7 +3088,6 @@ void hopkinsOpenPairs(HopkinsWorkspace& workspace, std::vector<size_t> const& ac
         hopkinsPairBatch(workspace, pairs, solvePairs, batch * HopkinsSimd::size(), workspace.tick,
             false, records);
     });
-    retained = hopkinsPairs.size();
     opened = records.size();
     for (auto const& record : records) {
         if (!hopkinsPairs.emplace(HopkinsPairKey{record.leftId, record.rightId}, record).second) {
@@ -2864,7 +3145,8 @@ namespace detail {
 size_t hopkinsMarkActive(
     HopkinsWorkspace& workspace, bool global, bool closingOnly, int minimumRung) {
     size_t woken = 0;
-    for (auto& particle : workspace.particles) {
+    for (size_t slot = 0; slot < workspace.ownedCount; ++slot) {
+        auto& particle = workspace.particles[slot];
         auto const& state = particle.state;
         particle.active = closingOnly || state.hierarchicalActive || !state.predictorInitialized ||
             (global ? state.endTime <= workspace.time : state.endTick <= workspace.tick);
@@ -2878,25 +3160,67 @@ size_t hopkinsMarkActive(
     return woken;
 }
 
-void hopkinsCloseEvent(HopkinsWorkspace& workspace) {
-    // The event is complete: refreshed cells resume their retained trajectories
-    // in the source tree, and only touched records return to their owners.
-    for (auto& particle : workspace.particles) {
+// Per-event totals of one locality, summed in rank order by the coordinator.
+struct HopkinsEventTotals {
+    uint64_t total = 0;
+    uint64_t active = 0;
+    uint64_t halo = 0;
+    uint64_t ghosts = 0;
+    HopkinsWork work;
+    hydro_source::Counters tree;
+    hydro_source::Counters ghostTree;
+    int minimumGravityRung = kMaxRung;
+    int maximumGravityRung = 0;
+    uint64_t futureProjections = 0;
+    template <class Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & total & active & halo & ghosts & work & tree & ghostTree & minimumGravityRung &
+            maximumGravityRung & futureProjections;
+    }
+    void add(HopkinsEventTotals const& other) {
+        total += other.total;
+        active += other.active;
+        halo += other.halo;
+        ghosts += other.ghosts;
+        work.add(other.work);
+        tree.add(other.tree);
+        ghostTree.add(other.ghostTree);
+        minimumGravityRung = std::min(minimumGravityRung, other.minimumGravityRung);
+        maximumGravityRung = std::max(maximumGravityRung, other.maximumGravityRung);
+        futureProjections += other.futureProjections;
+    }
+};
+
+// The event is complete: refreshed cells resume their retained trajectories in
+// the owned tree, touched records return to the particle arrays, and the ghost
+// copies are dropped.
+HopkinsEventTotals hopkinsCloseEvent(HopkinsWorkspace& workspace, size_t active, double time) {
+    HopkinsEventTotals totals;
+    totals.ghosts = workspace.particles.size() - workspace.ownedCount;
+    totals.ghostTree = workspace.ghostTree.counters();
+    hopkinsDropGhosts(workspace);
+    totals.total = workspace.ownedCount;
+    totals.active = active;
+    for (size_t slot = 0; slot < workspace.ownedCount; ++slot) {
+        auto& particle = workspace.particles[slot];
         particle.active = false;
+        // Reported as before: every cell with geometry this event.
+        totals.halo += workspace.built[slot];
+        totals.minimumGravityRung = std::min(totals.minimumGravityRung, particle.gravityRung);
+        totals.maximumGravityRung = std::max(totals.maximumGravityRung, particle.gravityRung);
+        totals.futureProjections += particle.state.gravityEndTime > time;
     }
     hopkinsUpdateSources(workspace, hopkinsSlotsWhere(workspace, workspace.touched));
     hopkinsInstallTouched(workspace, 1);
     workspace.eventOpen = false;
+    totals.work = workspace.work;
+    totals.tree = workspace.tree.counters();
+    return totals;
 }
 
-void hopkinsReportWork(
-    HopkinsWorkspace const& workspace, double time, size_t active, bool closingOnly) {
-    auto const& work = workspace.work;
-    auto const treeWork = workspace.tree.counters();
-    size_t halo = 0;
-    for (size_t slot = 0; slot < workspace.particles.size(); ++slot) {
-        halo += workspace.built[slot] && !workspace.particles[slot].active;
-    }
+void hopkinsReportWork(HopkinsEventTotals const& totals, double time, bool closingOnly) {
+    auto const& work = totals.work;
+    auto const& treeWork = totals.tree;
     terminal::detailPrint("Hopkins tree: time=%.17g sorted=%llu updated=%llu refitted=%llu "
                           "rebuilds=%llu candidates=%llu\n",
         time, static_cast<unsigned long long>(treeWork.sourcesSorted),
@@ -2905,11 +3229,13 @@ void hopkinsReportWork(
         static_cast<unsigned long long>(treeWork.topologyRebuilds),
         static_cast<unsigned long long>(treeWork.sourcesVisited));
     terminal::detailPrint(
-        "Hopkins work: time=%.17g total=%zu active=%zu halo=%zu received=%llu "
+        "Hopkins work: time=%.17g total=%llu active=%llu halo=%llu received=%llu "
         "receivedBytes=%llu installed=%llu installedBytes=%llu sources=%llu supports=%llu "
         "supportSums=%llu geometry=%llu rates=%llu gradients=%llu queries=%llu "
-        "candidates=%llu pairs=%llu terminal=%d\n",
-        time, workspace.particles.size(), active, halo,
+        "candidates=%llu pairs=%llu ghosts=%llu ghostCandidates=%llu terminal=%d\n",
+        time, static_cast<unsigned long long>(totals.total),
+        static_cast<unsigned long long>(totals.active),
+        static_cast<unsigned long long>(totals.halo),
         static_cast<unsigned long long>(work.recordsReceived),
         static_cast<unsigned long long>(work.bytesReceived),
         static_cast<unsigned long long>(work.recordsInstalled),
@@ -2922,13 +3248,826 @@ void hopkinsReportWork(
         static_cast<unsigned long long>(work.gradientCells),
         static_cast<unsigned long long>(work.listQueries),
         static_cast<unsigned long long>(treeWork.sourcesVisited),
-        static_cast<unsigned long long>(work.pairsSolved), int(closingOnly));
+        static_cast<unsigned long long>(work.pairsSolved),
+        static_cast<unsigned long long>(totals.ghosts),
+        static_cast<unsigned long long>(totals.ghostTree.sourcesVisited), int(closingOnly));
+}
+
+// ---------------------------------------------------------------------------
+// Distributed event engine. Every locality integrates its own gas cells; the
+// coordinator (rank 0) sequences the phases of an event and folds their returns
+// in rank order. Between phases, localities exchange ghost copies of the remote
+// cells within stencil reach, halo requests, settlement deposits and the event
+// state of cells that migrated during an open event. On one locality every
+// phase runs directly, with no communication, in the order a single workspace
+// would run it.
+
+// Service: the owned cells within reach of a requester's leaf envelopes. A cell
+// j is returned for a box when periodicDistance(x_j, box) <= max(radius,
+// supportUpper_j), so the reply also holds every cell whose own support reaches
+// the box. Reads owned slots only; the serving locality is inside the same
+// exchange phase and changes no owned state.
+std::vector<HopkinsGhostPayload> hopkinsQueryGhosts(
+    std::vector<double> const& boxes, double radius, double time) {
+    auto& workspace = hopkinsWorkspace();
+    std::vector<uint64_t> identifiers;
+    for (size_t offset = 0; offset + 6 <= boxes.size(); offset += 6) {
+        hydro_source::Box box;
+        for (int dimension = 0; dimension < 3; ++dimension) {
+            box.lower[dimension] = boxes[offset + dimension];
+            box.upper[dimension] = boxes[offset + 3 + dimension];
+        }
+        auto const found = workspace.tree.query(box, radius, time);
+        identifiers.insert(identifiers.end(), found.begin(), found.end());
+    }
+    std::sort(identifiers.begin(), identifiers.end());
+    identifiers.erase(std::unique(identifiers.begin(), identifiers.end()), identifiers.end());
+    std::vector<HopkinsGhostPayload> payloads;
+    payloads.reserve(identifiers.size());
+    for (uint64_t identifier : identifiers) {
+        size_t const slot = workspace.indices.at(identifier);
+        if (slot >= workspace.ownedCount) {
+            throw std::logic_error("Hopkins owned tree returned a ghost");
+        }
+        payloads.push_back({workspace.particles[slot],
+            hopkinsBytes(hopkinsDerivedOf(workspace, slot)), hpxRank()});
+    }
+    return payloads;
+}
+
+void hopkinsReceiveHalo(std::vector<uint64_t> const& identifiers) {
+    std::lock_guard lock(hopkinsInbox.mutex);
+    hopkinsInbox.haloRequests.insert(
+        hopkinsInbox.haloRequests.end(), identifiers.begin(), identifiers.end());
+}
+
+// Service: activity of the requested cells this locality owns.
+std::vector<HopkinsEndpointState> hopkinsQueryActivity(std::vector<uint64_t> const& identifiers) {
+    auto& workspace = hopkinsWorkspace();
+    std::vector<HopkinsEndpointState> result;
+    for (uint64_t identifier : identifiers) {
+        auto const found = workspace.indices.find(identifier);
+        if (found != workspace.indices.end() && found->second < workspace.ownedCount) {
+            result.push_back({identifier, hpxRank(), workspace.particles[found->second].active});
+        }
+    }
+    return result;
+}
+
+void hopkinsReceiveDeposits(std::vector<HopkinsDeposit> const& deposits) {
+    std::lock_guard lock(hopkinsInbox.mutex);
+    hopkinsInbox.deposits.insert(hopkinsInbox.deposits.end(), deposits.begin(), deposits.end());
+}
+
+void hopkinsReceiveSidecars(std::vector<HopkinsSidecar> const& sidecars) {
+    std::lock_guard lock(hopkinsInbox.mutex);
+    hopkinsInbox.sidecars.insert(hopkinsInbox.sidecars.end(), sidecars.begin(), sidecars.end());
+}
+
+}    // namespace detail
+
+HPX_PLAIN_ACTION(detail::hopkinsQueryGhosts, HopkinsQueryGhostsAction);
+HPX_PLAIN_ACTION(detail::hopkinsReceiveHalo, HopkinsReceiveHaloAction);
+HPX_PLAIN_ACTION(detail::hopkinsQueryActivity, HopkinsQueryActivityAction);
+HPX_PLAIN_ACTION(detail::hopkinsReceiveDeposits, HopkinsReceiveDepositsAction);
+HPX_PLAIN_ACTION(detail::hopkinsReceiveSidecars, HopkinsReceiveSidecarsAction);
+
+namespace detail {
+
+template <class Future>
+void hopkinsWaitAll(std::vector<Future>& pending) {
+    hpx::wait_all(pending);
+    for (auto& future : pending) {
+        future.get();
+    }
+}
+
+// Install the ghost copies the last exchange received: owned slots and their
+// state stay untouched, the ghost range is replaced in identifier order.
+void hopkinsInstallGhosts(HopkinsWorkspace& workspace) {
+    profile::ScopedPhase profilePhase("hydro.hopkins.ghosts");
+    hopkinsDropGhosts(workspace);
+    auto& payloads = workspace.pendingGhosts;
+    std::sort(payloads.begin(), payloads.end(), [](auto const& left, auto const& right) {
+        return left.particle.state.identifier < right.particle.state.identifier;
+    });
+    size_t const count = workspace.ownedCount + payloads.size();
+    workspace.particles.reserve(count);
+    workspace.geometry.resize(count);
+    workspace.geometryRates.resize(count);
+    workspace.supportRates.resize(count);
+    workspace.primitives.resize(count);
+    workspace.gradients.resize(count);
+    workspace.dirty.resize(count, 0);
+    workspace.solved.resize(count, 0);
+    workspace.built.resize(count, 0);
+    workspace.touched.resize(count, 0);
+    std::vector<hydro_source::Source> sources;
+    sources.reserve(payloads.size());
+    for (auto& payload : payloads) {
+        size_t const slot = workspace.particles.size();
+        if (!workspace.indices.emplace(payload.particle.state.identifier, slot).second) {
+            throw std::runtime_error("Hopkins ghost duplicates a resident cell");
+        }
+        workspace.particles.push_back(payload.particle);
+        auto const derived = hopkinsDerivedFrom(payload.derived);
+        workspace.geometry[slot] = derived.geometry;
+        workspace.geometryRates[slot] = derived.geometryRate;
+        workspace.supportRates[slot] = derived.supportRate;
+        workspace.primitives[slot] = derived.primitive;
+        workspace.gradients[slot] = derived.gradient;
+        workspace.solved[slot] = derived.solved;
+        workspace.built[slot] = derived.built;
+        workspace.ghostOwners.push_back(payload.owner);
+        sources.push_back(hopkinsSourceOf(workspace, slot));
+    }
+    workspace.ghostTree.reset(std::move(sources));
+    workspace.ghostTree.prepare(workspace.time);
+    payloads.clear();
+    workspace.ghostsPending = false;
+}
+
+// Start of every phase but the exchange: install ghosts, mark the halo cells
+// peers requested, apply the deposits of the last settlement in pair-key order,
+// and stage the event state of arrived cells.
+void hopkinsDrain(HopkinsWorkspace& workspace) {
+    std::vector<uint64_t> halo;
+    std::vector<HopkinsDeposit> deposits;
+    std::vector<HopkinsSidecar> sidecars;
+    {
+        std::lock_guard lock(hopkinsInbox.mutex);
+        halo.swap(hopkinsInbox.haloRequests);
+        deposits.swap(hopkinsInbox.deposits);
+        sidecars.swap(hopkinsInbox.sidecars);
+    }
+    if (workspace.ghostsPending) {
+        hopkinsInstallGhosts(workspace);
+    }
+    for (uint64_t identifier : halo) {
+        auto const found = workspace.indices.find(identifier);
+        if (found == workspace.indices.end() || found->second >= workspace.ownedCount) {
+            throw std::runtime_error("Hopkins halo request for a cell this locality does not own");
+        }
+        workspace.haloRequested[found->second] = 1;
+    }
+    deposits.insert(deposits.end(), hopkinsLocalDeposits.begin(), hopkinsLocalDeposits.end());
+    hopkinsLocalDeposits.clear();
+    if (!deposits.empty()) {
+        for (auto const& deposit : deposits) {
+            auto const found = workspace.indices.find(deposit.endpoint);
+            if (found == workspace.indices.end() || found->second >= workspace.ownedCount) {
+                throw std::runtime_error("Hopkins live pair lost an endpoint");
+            }
+        }
+        hopkinsApplyDeposits(workspace, deposits);
+    }
+    for (auto& sidecar : sidecars) {
+        hopkinsStagedSidecars[sidecar.identifier] = std::move(sidecar);
+    }
+}
+
+// Ghost import. Each owned-tree leaf envelope queries every peer with one
+// radius: enough for the support solve's search at 1.2 h with a 50% margin for
+// supports still growing, and at least the radius a previous solve found it
+// needed. A support solve whose search would go further marks its cell
+// incomplete, and the coordinator repeats the exchange before solving it again.
+constexpr double kHopkinsGhostMargin = 1.5;
+
+void hopkinsExchangeGhosts(HopkinsWorkspace& workspace) {
+    workspace.pendingGhosts.clear();
+    workspace.ghostsPending = true;
+    if (hpxSize() == 1) {
+        workspace.ghostRadius = std::numeric_limits<double>::infinity();
+        return;
+    }
+    profile::ScopedPhase profilePhase("hydro.hopkins.exchange");
+    double support = 0.0;
+    for (size_t slot = 0; slot < workspace.ownedCount; ++slot) {
+        support = std::max(support, workspace.particles[slot].support);
+    }
+    double const radius =
+        std::max(std::nextafter(kHopkinsGhostMargin * kHopkinsSolveSearchFactor * support,
+                     std::numeric_limits<double>::infinity()) +
+                64.0 * std::numeric_limits<double>::epsilon(),
+            workspace.requiredGhostRadius);
+    workspace.ghostRadius = radius;
+    workspace.requiredGhostRadius = 0.0;
+    std::vector<double> boxes;
+    workspace.tree.forEachLeaf(workspace.time, [&](hydro_source::Box const& box) {
+        boxes.insert(boxes.end(), box.lower.begin(), box.lower.end());
+        boxes.insert(boxes.end(), box.upper.begin(), box.upper.end());
+    });
+    if (boxes.empty()) {
+        return;
+    }
+    std::vector<hpx::future<std::vector<HopkinsGhostPayload>>> pending;
+    for (int rank = 0; rank < hpxSize(); ++rank) {
+        if (rank != hpxRank()) {
+            pending.push_back(hpx::async<HopkinsQueryGhostsAction>(
+                hpxLocalities()[rank], boxes, radius, workspace.time));
+        }
+    }
+    hpx::wait_all(pending);
+    for (auto& future : pending) {
+        auto payloads = future.get();
+        workspace.pendingGhosts.insert(workspace.pendingGhosts.end(),
+            std::make_move_iterator(payloads.begin()), std::make_move_iterator(payloads.end()));
+    }
+}
+
+enum class HopkinsPhase : int {
+    ResetCounters,
+    OpenRecords,
+    OpenSources,
+    RebuildTree,
+    Exchange,
+    SolveActive,
+    Halo,
+    SolveHalo,
+    Build,
+    Refreshed,
+    Initialize,
+    Settle,
+    BeginMark,
+    BeginClose,
+    CloseActive,
+    EntropyViews,
+    Timesteps,
+    WakeStencils,
+    ApplyRaises,
+    Schedule,
+    Reconstruct,
+    Gradients,
+    OpenPairs,
+    CloseEvent,
+    ProjectMasses,
+    InstallMasses,
+};
+
+struct HopkinsMassShare {
+    HopkinsPairKey key{};
+    bool right = false;
+    uint64_t identifier = 0;
+    double mass = 0.0;
+    template <class Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & key & right & identifier & mass;
+    }
+};
+
+struct HopkinsPhaseParameters {
+    int phase = 0;
+    double scale = 1.0;
+    double expansionRate = 0.0;
+    double time = 0.0;
+    double baseTimestep = 0.0;
+    double maximumGlobalTimestep = 0.0;
+    double minimumTimestep = 0.0;
+    bool global = false;
+    bool readForces = false;
+    bool closingOnly = false;
+    bool allowCoarsen = true;
+    bool begin = false;
+    bool rebuilt = false;
+    int minimumRung = 0;
+    int minimumGravityRung = 0;
+    int attempt = 0;
+    uint64_t active = 0;
+    std::vector<uint64_t> identifiers;
+    std::vector<HopkinsRungUpdate> updates;
+    std::vector<std::pair<uint64_t, double>> masses;
+    template <class Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & phase & scale & expansionRate & time & baseTimestep & maximumGlobalTimestep &
+            minimumTimestep & global & readForces & closingOnly & allowCoarsen & begin & rebuilt &
+            minimumRung & minimumGravityRung & attempt & active & identifiers & updates & masses;
+    }
+};
+
+struct HopkinsPhaseResult {
+    uint64_t count = 0;
+    uint64_t incomplete = 0;
+    uint64_t expanded = 0;
+    uint64_t woken = 0;
+    uint64_t converted = 0;
+    uint64_t active = 0;
+    uint64_t total = 0;
+    uint64_t retained = 0;
+    uint64_t gravityActive = 0;
+    uint64_t hydroDue = 0;
+    uint64_t switched = 0;
+    bool flag = false;
+    int maximumRung = 0;
+    int minimumRung = kMaxRung;
+    int darkMatterRung = 0;
+    double minimumTimestep = std::numeric_limits<double>::infinity();
+    double heating = 0.0;
+    double switchedEnergy = 0.0;
+    std::vector<HopkinsRungUpdate> seeds;
+    std::vector<HopkinsWakeStencil> stencils;
+    std::vector<HopkinsMassShare> masses;
+    HopkinsEventTotals totals;
+    template <class Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & count & incomplete & expanded & woken & converted & active & total & retained &
+            gravityActive & hydroDue & switched & flag & maximumRung & minimumRung &
+            darkMatterRung & minimumTimestep & heating & switchedEnergy & seeds & stencils &
+            masses & totals;
+    }
+    // Fold another locality's return; called in rank order.
+    void add(HopkinsPhaseResult const& other) {
+        count += other.count;
+        incomplete += other.incomplete;
+        expanded += other.expanded;
+        woken += other.woken;
+        converted += other.converted;
+        active += other.active;
+        total += other.total;
+        retained += other.retained;
+        gravityActive += other.gravityActive;
+        hydroDue += other.hydroDue;
+        switched += other.switched;
+        flag = flag || other.flag;
+        maximumRung = std::max(maximumRung, other.maximumRung);
+        minimumRung = std::min(minimumRung, other.minimumRung);
+        darkMatterRung = std::max(darkMatterRung, other.darkMatterRung);
+        minimumTimestep = std::min(minimumTimestep, other.minimumTimestep);
+        heating += other.heating;
+        switchedEnergy += other.switchedEnergy;
+        seeds.insert(seeds.end(), other.seeds.begin(), other.seeds.end());
+        stencils.insert(stencils.end(), other.stencils.begin(), other.stencils.end());
+        masses.insert(masses.end(), other.masses.begin(), other.masses.end());
+        totals.add(other.totals);
+    }
+};
+
+void hopkinsSetEventScalars(HopkinsWorkspace& workspace, HopkinsPhaseParameters const& parameters) {
+    workspace.scale = parameters.scale;
+    workspace.expansionRate = parameters.expansionRate;
+    workspace.time = parameters.time;
+}
+
+// One phase of an event on this locality.
+HopkinsPhaseResult hopkinsRunPhase(HopkinsPhaseParameters const& parameters) {
+    auto& workspace = hopkinsWorkspace();
+    auto const phase = HopkinsPhase(parameters.phase);
+    if (phase == HopkinsPhase::Settle && workspace.ghostsPending) {
+        // Peers read this locality's index map during settlement; a ghost
+        // install would modify it concurrently.
+        throw std::logic_error("Hopkins settlement follows an uninstalled ghost exchange");
+    }
+    if (phase != HopkinsPhase::Exchange) {
+        hopkinsDrain(workspace);
+    }
+    HopkinsPhaseResult result;
+    switch (phase) {
+    case HopkinsPhase::ResetCounters:
+        workspace.tree.resetCounters();
+        workspace.ghostTree.resetCounters();
+        workspace.work = {};
+        break;
+    case HopkinsPhase::OpenRecords: {
+        std::vector<HopkinsSidecar> departed;
+        result.flag = hopkinsOpenRecords(workspace, parameters.scale, parameters.expansionRate,
+            parameters.time, parameters.baseTimestep, parameters.global, parameters.readForces,
+            departed);
+        result.darkMatterRung = workspace.darkMatterRung;
+        if (!departed.empty()) {
+            // The new owners are unknown here; every peer keeps the sidecars of
+            // the cells it now owns.
+            std::vector<hpx::future<void>> pending;
+            for (int rank = 0; rank < hpxSize(); ++rank) {
+                if (rank != hpxRank()) {
+                    pending.push_back(
+                        hpx::async<HopkinsReceiveSidecarsAction>(hpxLocalities()[rank], departed));
+                }
+            }
+            hopkinsWaitAll(pending);
+        }
+        break;
+    }
+    case HopkinsPhase::OpenSources: {
+        result.flag = hopkinsOpenSources(workspace, parameters.rebuilt);
+        if (parameters.begin) {
+            for (size_t slot = 0; slot < workspace.ownedCount; ++slot) {
+                auto& particle = workspace.particles[slot];
+                bool const gravityTouched = particle.gravityRung >= parameters.minimumGravityRung;
+                bool const due = !particle.state.predictorInitialized ||
+                    particle.state.endTick <= workspace.tick;
+                bool const invalidPrediction = particle.state.predictorInitialized &&
+                    !hopkins::physical(hopkinsPredictedPrimitive(particle, workspace, nullptr));
+                particle.active =
+                    parameters.closingOnly || gravityTouched || due || invalidPrediction;
+                result.woken += invalidPrediction && !gravityTouched && !due;
+                result.gravityActive += gravityTouched;
+                result.hydroDue += due;
+                result.maximumRung = std::max(result.maximumRung, particle.rung);
+            }
+        } else {
+            result.woken = hopkinsMarkActive(
+                workspace, parameters.global, parameters.closingOnly, parameters.minimumRung);
+        }
+        for (size_t slot = 0; slot < workspace.ownedCount; ++slot) {
+            result.active += workspace.particles[slot].active;
+        }
+        result.total = workspace.ownedCount;
+        break;
+    }
+    case HopkinsPhase::RebuildTree:
+        hopkinsRebuildTree(workspace);
+        break;
+    case HopkinsPhase::Exchange:
+        hopkinsExchangeGhosts(workspace);
+        break;
+    case HopkinsPhase::SolveActive:
+        result.count = hopkinsStepSolveActive(workspace);
+        result.incomplete = workspace.incomplete.size();
+        break;
+    case HopkinsPhase::Halo: {
+        auto const remote = hopkinsStepHalo(workspace);
+        std::vector<std::vector<uint64_t>> requests(static_cast<size_t>(hpxSize()));
+        for (auto const& [rank, identifier] : remote) {
+            requests[size_t(rank)].push_back(identifier);
+        }
+        std::vector<hpx::future<void>> pending;
+        for (int rank = 0; rank < hpxSize(); ++rank) {
+            if (!requests[size_t(rank)].empty()) {
+                pending.push_back(hpx::async<HopkinsReceiveHaloAction>(
+                    hpxLocalities()[rank], requests[size_t(rank)]));
+            }
+        }
+        hopkinsWaitAll(pending);
+        break;
+    }
+    case HopkinsPhase::SolveHalo:
+        result.count = hopkinsStepSolveHalo(workspace);
+        result.incomplete = workspace.incomplete.size();
+        break;
+    case HopkinsPhase::Build:
+        result.count = hopkinsStepBuild(workspace, parameters.attempt);
+        result.expanded = workspace.expanded.size();
+        break;
+    case HopkinsPhase::Refreshed:
+        workspace.refreshed = hopkinsNeededSlots(workspace);
+        break;
+    case HopkinsPhase::Initialize:
+        hopkinsInitialize(workspace);
+        break;
+    case HopkinsPhase::Settle: {
+        auto const remote = hopkinsRemoteEndpoints(workspace);
+        std::unordered_map<uint64_t, HopkinsEndpointState> states;
+        if (!remote.empty()) {
+            std::vector<hpx::future<std::vector<HopkinsEndpointState>>> pending;
+            for (int rank = 0; rank < hpxSize(); ++rank) {
+                if (rank != hpxRank()) {
+                    pending.push_back(
+                        hpx::async<HopkinsQueryActivityAction>(hpxLocalities()[rank], remote));
+                }
+            }
+            hpx::wait_all(pending);
+            for (auto& future : pending) {
+                for (auto const& state : future.get()) {
+                    states.emplace(state.identifier, state);
+                }
+            }
+        }
+        std::vector<std::vector<HopkinsDeposit>> outgoing;
+        result.count = hopkinsSettlePairs(workspace, parameters.closingOnly, states, outgoing);
+        std::vector<hpx::future<void>> pending;
+        for (int rank = 0; rank < hpxSize(); ++rank) {
+            if (!outgoing[size_t(rank)].empty()) {
+                pending.push_back(hpx::async<HopkinsReceiveDepositsAction>(
+                    hpxLocalities()[rank], outgoing[size_t(rank)]));
+            }
+        }
+        hopkinsWaitAll(pending);
+        break;
+    }
+    case HopkinsPhase::BeginMark:
+        for (size_t slot = 0; slot < workspace.ownedCount; ++slot) {
+            auto& particle = workspace.particles[slot];
+            particle.state.hierarchicalActive = particle.active;
+        }
+        break;
+    case HopkinsPhase::BeginClose:
+        for (size_t slot = 0; slot < workspace.ownedCount; ++slot) {
+            if (workspace.particles[slot].active) {
+                hopkinsCloseParticle(workspace, slot);
+                ++result.count;
+            }
+        }
+        hopkinsCurrentViews(workspace);
+        // Phase two publishes closed anchors before any signed gravity impulse
+        // but leaves raw coordinates at the current gravity endpoint throughout
+        // the ladder.
+        hopkinsDropGhosts(workspace);
+        hopkinsInstallTouched(workspace, 2);
+        result.total = workspace.ownedCount;
+        break;
+    case HopkinsPhase::CloseActive: {
+        profile::ScopedPhase closePhase("hydro.hopkins.close");
+        hopkinsSetEventScalars(workspace, parameters);
+        workspace.closing.clear();
+        std::vector<double> durations;
+        for (size_t slot = 0; slot < workspace.ownedCount; ++slot) {
+            if (workspace.particles[slot].active && !workspace.closed[slot]) {
+                workspace.closing.push_back(slot);
+                durations.push_back(workspace.time - workspace.particles[slot].state.sourceTime);
+                hopkinsCloseParticle(workspace, slot);
+                workspace.closed[slot] = 1;
+            }
+        }
+        EnergiesT sourced{};
+        size_t converted = 0;
+        hopkinsApplySources(workspace, workspace.closing, durations, sourced, converted);
+        result.converted = converted;
+        result.heating = sourced.heating;
+        result.count = workspace.closing.size();
+        break;
+    }
+    case HopkinsPhase::EntropyViews:
+        hopkinsSynchronizeEntropy(workspace, workspace.closing);
+        hopkinsCurrentViews(workspace);
+        break;
+    case HopkinsPhase::Timesteps: {
+        auto const passes = hopkinsTimestepPasses(workspace, parameters.minimumRung,
+            parameters.baseTimestep, parameters.maximumGlobalTimestep, parameters.allowCoarsen);
+        result.minimumTimestep = passes.minimumTimestep;
+        result.woken = passes.woken;
+        result.minimumRung = passes.lowestRung;
+        for (size_t slot = 0; slot < workspace.ownedCount; ++slot) {
+            auto const& particle = workspace.particles[slot];
+            if (!parameters.global) {
+                result.seeds.push_back({particle.state.identifier, particle.rung, particle.active});
+            }
+            result.flag = result.flag || (particle.active && !workspace.closed[slot]);
+        }
+        break;
+    }
+    case HopkinsPhase::WakeStencils:
+        result.stencils = hopkinsWakeStencils(workspace, parameters.identifiers);
+        break;
+    case HopkinsPhase::ApplyRaises:
+        for (auto const& update : parameters.updates) {
+            auto const found = workspace.indices.find(update.identifier);
+            if (found != workspace.indices.end() && found->second < workspace.ownedCount) {
+                auto& particle = workspace.particles[found->second];
+                particle.rung = update.rung;
+                particle.active = update.active;
+            }
+        }
+        for (size_t slot = 0; slot < workspace.ownedCount; ++slot) {
+            auto const& particle = workspace.particles[slot];
+            result.maximumRung = std::max(result.maximumRung, particle.rung);
+            result.flag = result.flag || (particle.active && !workspace.closed[slot]);
+        }
+        break;
+    case HopkinsPhase::Schedule:
+        for (size_t slot = 0; slot < workspace.ownedCount; ++slot) {
+            auto& particle = workspace.particles[slot];
+            result.active += particle.active;
+            result.minimumRung = std::min(result.minimumRung, particle.rung);
+            result.maximumRung = std::max(result.maximumRung, particle.rung);
+            if (particle.active && !parameters.closingOnly) {
+                double const duration = parameters.global ?
+                    parameters.minimumTimestep :
+                    std::ldexp(parameters.baseTimestep, -particle.rung);
+                particle.state.endTime = workspace.time + duration;
+                particle.state.endTick = parameters.global ?
+                    0 :
+                    workspace.tick + (uint64_t(1) << (kHopkinsTickRung - particle.rung));
+            }
+        }
+        workspace.globalTimestep = parameters.global ? parameters.minimumTimestep : 0.0;
+        result.retained = hopkinsPairs.size();
+        result.switched = workspace.switched;
+        result.switchedEnergy = workspace.switchedEnergy;
+        break;
+    case HopkinsPhase::Reconstruct:
+        hopkinsReconstructPrimitives(workspace, workspace.refreshed);
+        break;
+    case HopkinsPhase::Gradients: {
+        auto const active = hopkinsActiveSlots(workspace);
+        hopkinsReconstructGradients(workspace, active);
+        hopkinsGeometryRates(workspace, workspace.refreshed);
+        double const scale = parameters.scale;
+        for (size_t i : active) {
+            auto& particle = workspace.particles[i];
+            auto& state = particle.state;
+            state.meshVelocity = particle.velocity;
+            if (getOptions().run.hierarchicalGravity) {
+                state.positionDriftScale = scale;
+#if COSMICTIGER_WITH_GRAVITY
+                if (getOptions().run.scenario == "cosmology") {
+                    double scaleWork = scale;
+                    double derivativeWork = parameters.expansionRate / scale;
+                    state.positionDriftScale =
+                        1.0 / cosmosAinv(derivativeWork, scaleWork, state.endTime - workspace.time);
+                }
+#endif
+            }
+            for (int dim = 0; dim < 3; ++dim) {
+                state.meshAcceleration[dim] = state.sourceAcceleration[dim] -
+                    workspace.gradients[i].pressure[dim] / (particle.density * scale) -
+                    getOptions().hydro.damping * particle.velocity[dim];
+            }
+        }
+        if (workspace.time == 0.0 && getOptions().run.scenario == "soundWave") {
+            if (hpxSize() != 1) {
+                throw std::runtime_error("The Hopkins sound-wave diagnostic requires one locality");
+            }
+            hopkinsWriteSoundWave(workspace, workspace.time);
+        }
+        break;
+    }
+    case HopkinsPhase::OpenPairs: {
+        size_t opened = 0;
+        hopkinsOpenPairs(workspace, opened);
+        result.count = opened;
+        break;
+    }
+    case HopkinsPhase::CloseEvent:
+        result.totals = hopkinsCloseEvent(workspace, size_t(parameters.active), workspace.time);
+        break;
+    case HopkinsPhase::ProjectMasses:
+        for (auto const& [key, record] : hopkinsPairs) {
+            double const interval = record.endTime - record.beginTime;
+            double const duration =
+                std::max(0.0, std::min(parameters.time, record.endTime) - record.beginTime);
+            auto const transfer =
+                hopkins::integrateFlux(record.initial, record.midpoint, interval, 0.0, duration);
+            result.masses.push_back({key, false, record.leftId, -transfer.mass});
+            result.masses.push_back({key, true, record.rightId, transfer.mass});
+        }
+        break;
+    case HopkinsPhase::InstallMasses:
+        hopkinsInstallGravityMasses(parameters.masses);
+        break;
+    }
+    return result;
+}
+
+}    // namespace detail
+
+HPX_PLAIN_ACTION(detail::hopkinsRunPhase, HopkinsPhaseAction);
+
+namespace detail {
+
+// Run a phase on every locality and fold the returns in rank order.
+HopkinsPhaseResult hopkinsPhase(HopkinsPhaseParameters const& parameters) {
+    if (hpxSize() == 1) {
+        return hopkinsRunPhase(parameters);
+    }
+    std::vector<hpx::future<HopkinsPhaseResult>> pending;
+    for (auto const& locality : hpxLocalities()) {
+        pending.push_back(hpx::async<HopkinsPhaseAction>(locality, parameters));
+    }
+    hpx::wait_all(pending);
+    HopkinsPhaseResult result;
+    for (auto& future : pending) {
+        result.add(future.get());
+    }
+    return result;
+}
+
+HopkinsPhaseResult hopkinsPhase(HopkinsPhase phase, HopkinsPhaseParameters parameters) {
+    parameters.phase = int(phase);
+    return hopkinsPhase(parameters);
+}
+
+// The geometry refresh of an event across all localities, step for step what
+// hopkinsEnsureGeometry does on one workspace, with ghost exchanges after every
+// step that changes a support or a geometry. The coordinator's pass loop sees
+// the global counts, so every locality takes the same branch.
+void hopkinsEnsureEverywhere(HopkinsPhaseParameters const& base, uint64_t total) {
+    auto const exchange = [&] { hopkinsPhase(HopkinsPhase::Exchange, base); };
+    auto const solve = [&](HopkinsPhase phase) {
+        auto result = hopkinsPhase(phase, base);
+        uint64_t solved = result.count;
+        while (result.incomplete > 0) {
+            exchange();
+            result = hopkinsPhase(phase, base);
+            solved += result.count;
+        }
+        return solved;
+    };
+    exchange();
+    uint64_t const limit = 2 * total + 16;
+    for (uint64_t pass = 0; pass < limit; ++pass) {
+        bool const progressed = solve(HopkinsPhase::SolveActive) > 0;
+        if (progressed) {
+            exchange();
+        }
+        hopkinsPhase(HopkinsPhase::Halo, base);
+        if (solve(HopkinsPhase::SolveHalo) > 0) {
+            exchange();
+            continue;
+        }
+        auto parameters = base;
+        parameters.attempt = 0;
+        auto result = hopkinsPhase(HopkinsPhase::Build, parameters);
+        bool const built = result.count > 0;
+        while (result.expanded > 0) {
+            exchange();
+            ++parameters.attempt;
+            result = hopkinsPhase(HopkinsPhase::Build, parameters);
+        }
+        if (built) {
+            exchange();
+        }
+        if (!progressed && !built) {
+            hopkinsPhase(HopkinsPhase::Refreshed, base);
+            return;
+        }
+    }
+    throw std::runtime_error("Hopkins retained geometry refresh did not converge");
+}
+
+// Coordinator state of the open event.
+bool hopkinsCoordinatorEventOpen = false;
+double hopkinsCoordinatorEventTime = 0.0;
+bool hopkinsRebuildDecided = false;
+int hopkinsGlobalDarkMatterRung = 0;
+
+// Open the event on every locality: records, then sources and the active set.
+HopkinsPhaseResult hopkinsOpenEverywhere(HopkinsPhaseParameters parameters) {
+    if (!hopkinsCoordinatorEventOpen || hopkinsCoordinatorEventTime != parameters.time) {
+        hopkinsCoordinatorEventOpen = true;
+        hopkinsCoordinatorEventTime = parameters.time;
+        hopkinsRebuildDecided = false;
+    }
+    auto const records = hopkinsPhase(HopkinsPhase::OpenRecords, parameters);
+    if (parameters.readForces) {
+        hopkinsGlobalDarkMatterRung = records.darkMatterRung;
+    }
+    parameters.rebuilt = records.flag;
+    auto opened = hopkinsPhase(HopkinsPhase::OpenSources, parameters);
+    if (opened.flag) {
+        // A membership change rebuilt the topology of at least one owned tree.
+        hopkinsRebuildDecided = true;
+        hopkinsRebuildOnNextEvent = false;
+    }
+    if (!hopkinsRebuildDecided) {
+        hopkinsRebuildDecided = true;
+        double const fraction = getOptions().hydro.treeRebuildActiveFraction;
+        bool const crowded = double(opened.active) >= fraction * double(opened.total);
+        if (hopkinsRebuildOnNextEvent || crowded) {
+            hopkinsRebuildOnNextEvent = false;
+            hopkinsPhase(HopkinsPhase::RebuildTree, parameters);
+        }
+    }
+    return opened;
+}
+
+// Appendix G on the coordinator: replay the identifier-order sweep with every
+// cell's rung seeded and the owners answering stencil requests, then return the
+// final rungs to the owners. Returns the cells' maximum rung after the sweep.
+int hopkinsSweepEverywhere(HopkinsPhaseParameters const& base, HopkinsPhaseResult const& selected,
+    int minimumRung, size_t& woken, bool& anyUnclosed) {
+    hopkins::WakeSweep sweep;
+    for (auto const& seed : selected.seeds) {
+        sweep.seed(seed.identifier, seed.rung, seed.active);
+    }
+    constexpr size_t kWakePrefetch = 4096;
+    sweep.start(selected.minimumRung, minimumRung, kWakePrefetch);
+    for (auto requests = sweep.step(); !requests.empty(); requests = sweep.step()) {
+        auto parameters = base;
+        parameters.identifiers = requests;
+        auto const answered = hopkinsPhase(HopkinsPhase::WakeStencils, parameters);
+        std::unordered_map<uint64_t, std::vector<uint64_t> const*> stencils;
+        for (auto const& stencil : answered.stencils) {
+            stencils.emplace(stencil.identifier, &stencil.members);
+        }
+        for (uint64_t identifier : requests) {
+            auto const found = stencils.find(identifier);
+            if (found == stencils.end()) {
+                throw std::runtime_error("Hopkins wake sweep requested a cell nobody owns");
+            }
+            std::vector<hopkins::WakeSweep::Member> members;
+            members.reserve(found->second->size());
+            for (uint64_t member : *found->second) {
+                members.push_back({member, 0, false});
+            }
+            sweep.provide(identifier, members, hopkins::WakeSweep::kAnyRung);
+        }
+    }
+    woken += sweep.woken();
+    auto parameters = base;
+    for (auto const& raise : sweep.raises()) {
+        parameters.updates.push_back({raise.identifier, raise.rung, raise.active});
+    }
+    auto const applied = hopkinsPhase(HopkinsPhase::ApplyRaises, parameters);
+    anyUnclosed = applied.flag;
+    return applied.maximumRung;
 }
 
 }    // namespace detail
 
 void hopkinsSoundWaveDiagnostics(double time) {
     profile::ScopedPhase profilePhase("hydro.hopkins.diagnostics");
+    if (hpxSize() != 1) {
+        throw std::runtime_error("The Hopkins sound-wave diagnostic requires one locality");
+    }
     auto& resident = detail::hopkinsWorkspace();
     resident.countOperations = false;
     // Refresh the resident records at the diagnostic time, then solve every
@@ -2936,6 +4075,7 @@ void hopkinsSoundWaveDiagnostics(double time) {
     // support, source trajectory, pair interval or public mirror.
     detail::hopkinsOpenEvent(resident, 1.0, 0.0, time, 0.0, true, false);
     resident.eventOpen = false;
+    detail::hopkinsCoordinatorEventOpen = false;
     resident.countOperations = true;
     detail::HopkinsWorkspace scratch = resident;
     scratch.countOperations = false;
@@ -2960,23 +4100,20 @@ void hopkinsPrepareGravityMasses(double time) {
     if (!(time >= 0.0) || !std::isfinite(time)) {
         throw std::invalid_argument("Invalid Hopkins gravity projection time");
     }
+    detail::HopkinsPhaseParameters parameters;
+    parameters.time = time;
+    auto shares = detail::hopkinsPhase(detail::HopkinsPhase::ProjectMasses, parameters).masses;
+    // Accumulate in pair-key order, left before right, as one walk over the
+    // pair map would, wherever the records are held.
+    std::sort(shares.begin(), shares.end(), [](auto const& left, auto const& right) {
+        return left.key != right.key ? left.key < right.key : left.right < right.right;
+    });
     std::map<uint64_t, double> partial;
-    for (auto const& [key, record] : detail::hopkinsPairs) {
-        double const interval = record.endTime - record.beginTime;
-        double const duration = std::max(0.0, std::min(time, record.endTime) - record.beginTime);
-        auto const transfer =
-            hopkins::integrateFlux(record.initial, record.midpoint, interval, 0.0, duration);
-        partial[record.leftId] -= transfer.mass;
-        partial[record.rightId] += transfer.mass;
+    for (auto const& share : shares) {
+        partial[share.identifier] += share.mass;
     }
-    std::vector<std::pair<uint64_t, double>> values(partial.begin(), partial.end());
-    std::vector<hpx::future<void>> pending;
-    for (auto const& locality : hpxLocalities()) {
-        pending.push_back(hpx::async<HopkinsInstallGravityMassesAction>(locality, values));
-    }
-    for (auto& future : pending) {
-        future.get();
-    }
+    parameters.masses.assign(partial.begin(), partial.end());
+    detail::hopkinsPhase(detail::HopkinsPhase::InstallMasses, parameters);
     // No force workers are live yet; invalidate source-mass projections before
     // migration, remote source imports, or multipole/mesh construction begins.
     sphParticlesClearCaches();
@@ -2987,23 +4124,35 @@ void hopkinsPrepareTree() {
     if (detail::hopkinsTreePrepared) {
         throw std::runtime_error("Hopkins tree preparation was not consumed");
     }
-    auto& workspace = detail::hopkinsWorkspace();
-    workspace.tree.resetCounters();
-    workspace.work = {};
+    detail::hopkinsPhase(detail::HopkinsPhase::ResetCounters, {});
     detail::hopkinsTreePrepared = true;
 }
+
+namespace detail {
+
+HopkinsPhaseParameters hopkinsEventParameters(
+    double scale, double expansionRate, double time, double baseTimestep, bool global) {
+    HopkinsPhaseParameters parameters;
+    parameters.scale = scale;
+    parameters.expansionRate = expansionRate;
+    parameters.time = time;
+    parameters.baseTimestep = baseTimestep;
+    parameters.global = global;
+    return parameters;
+}
+
+}    // namespace detail
 
 void hopkinsPrepareGeometry(
     double scale, double expansionRate, double time, double baseTimestep, bool global) {
     if (!detail::hopkinsTreePrepared || detail::hopkinsEventPrepared) {
         throw std::runtime_error("Invalid Hopkins geometry preparation order");
     }
-    auto& workspace = detail::hopkinsWorkspace();
-    detail::hopkinsOpenEvent(workspace, scale, expansionRate, time, baseTimestep, global, false);
+    auto parameters =
+        detail::hopkinsEventParameters(scale, expansionRate, time, baseTimestep, global);
     // Wake rungs are assigned by hopkinsKick; here the set only selects geometry.
-    detail::hopkinsMarkActive(workspace, global, false, 0);
-    detail::hopkinsRebuildForActivity(workspace);
-    detail::hopkinsEnsureGeometry(workspace);
+    auto const opened = detail::hopkinsOpenEverywhere(parameters);
+    detail::hopkinsEnsureEverywhere(parameters, opened.total);
     detail::hopkinsEventPrepared = true;
 }
 
@@ -3014,41 +4163,21 @@ HopkinsStepResult hopkinsHierarchicalBegin(int minimumGravityRung, double scale,
         detail::hopkinsHierarchyPending || detail::hopkinsEventPrepared) {
         throw std::runtime_error("Invalid MFM hierarchical begin order");
     }
-    detail::hopkinsHierarchyWoken = 0;
     hopkinsPrepareTree();
-    auto& workspace = detail::hopkinsWorkspace();
-    detail::hopkinsOpenEvent(workspace, scale, expansionRate, time, baseTimestep, false, true);
-    size_t gravityActive = 0, hydroDue = 0, closed = 0;
-    int maximumHydroRung = getOptions().run.minRung;
-    for (auto& particle : workspace.particles) {
-        bool const gravityTouched = particle.gravityRung >= minimumGravityRung;
-        bool const due =
-            !particle.state.predictorInitialized || particle.state.endTick <= workspace.tick;
-        bool const invalidPrediction = particle.state.predictorInitialized &&
-            !hopkins::physical(detail::hopkinsPredictedPrimitive(particle, workspace, nullptr));
-        particle.active = closingOnly || gravityTouched || due || invalidPrediction;
-        detail::hopkinsHierarchyWoken += invalidPrediction && !gravityTouched && !due;
-        gravityActive += gravityTouched;
-        hydroDue += due;
-        maximumHydroRung = std::max(maximumHydroRung, particle.rung);
-    }
-    detail::hopkinsRebuildForActivity(workspace);
-    detail::hopkinsEnsureGeometry(workspace);
-    detail::hopkinsInitialize(workspace);
-    for (auto& particle : workspace.particles) {
-        particle.state.hierarchicalActive = particle.active;
-    }
-    size_t const settled = detail::hopkinsSettlePairs(workspace, closingOnly);
-    for (size_t i = 0; i < workspace.particles.size(); ++i) {
-        if (workspace.particles[i].active) {
-            detail::hopkinsCloseParticle(workspace, i);
-            ++closed;
-        }
-    }
-    detail::hopkinsCurrentViews(workspace);
-    // Phase two publishes closed anchors before any signed gravity impulse but
-    // leaves raw coordinates at the current gravity endpoint throughout the ladder.
-    detail::hopkinsInstallTouched(workspace, 2);
+    auto parameters =
+        detail::hopkinsEventParameters(scale, expansionRate, time, baseTimestep, false);
+    parameters.readForces = true;
+    parameters.begin = true;
+    parameters.closingOnly = closingOnly;
+    parameters.minimumGravityRung = minimumGravityRung;
+    auto const opened = detail::hopkinsOpenEverywhere(parameters);
+    detail::hopkinsHierarchyWoken = opened.woken;
+    int const maximumHydroRung = std::max(getOptions().run.minRung, opened.maximumRung);
+    detail::hopkinsEnsureEverywhere(parameters, opened.total);
+    detail::hopkinsPhase(detail::HopkinsPhase::Initialize, parameters);
+    detail::hopkinsPhase(detail::HopkinsPhase::BeginMark, parameters);
+    size_t const settled = detail::hopkinsPhase(detail::HopkinsPhase::Settle, parameters).count;
+    size_t const closed = detail::hopkinsPhase(detail::HopkinsPhase::BeginClose, parameters).count;
     auto const synchronized = particlesSumEnergies();
     // Source closure precedes every gravity impulse. The closed thermal energy
     // is invariant under those kicks. Gravity replaces kinetic/momentum totals
@@ -3064,8 +4193,8 @@ HopkinsStepResult hopkinsHierarchicalBegin(int minimumGravityRung, double scale,
     terminal::detailPrint("Hopkins hierarchy begin: time=%.17g gravityMinRung=%d "
                           "gravityActive=%zu hydroDue=%zu closed=%zu total=%zu settled=%zu "
                           "hydroMaxRung=%d terminal=%d\n",
-        time, minimumGravityRung, gravityActive, hydroDue, closed, workspace.particles.size(),
-        settled, maximumHydroRung, int(closingOnly));
+        time, minimumGravityRung, size_t(opened.gravityActive), size_t(opened.hydroDue), closed,
+        size_t(opened.total), settled, maximumHydroRung, int(closingOnly));
     return {maximumHydroRung, std::ldexp(baseTimestep, -maximumHydroRung)};
 }
 
@@ -3090,6 +4219,8 @@ HopkinsStepResult hopkinsHierarchicalFinish(int minimumHydroRung, double scale,
 HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRate, double time,
     double baseTimestep, EnergiesT& energies, bool closingOnly, double previousTimestep,
     double maximumGlobalTimestep) {
+    using detail::HopkinsPhase;
+    using detail::hopkinsPhase;
     profile::ScopedPhase profilePhase("hydro.hopkins");
     bool const global = maximumGlobalTimestep > 0.0;
     bool const hierarchical = getOptions().run.hierarchicalGravity;
@@ -3101,114 +4232,95 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
         hopkinsPrepareTree();
     }
     detail::hopkinsEventPrepared = false;
-    auto& workspace = detail::hopkinsWorkspace();
+    auto parameters =
+        detail::hopkinsEventParameters(scale, expansionRate, time, baseTimestep, global);
     // Gravity has joined: now it is safe to import fresh accelerations and the
     // dark-matter rung reduction. Geometry solved before the kick stays valid.
-    detail::hopkinsOpenEvent(workspace, scale, expansionRate, time, baseTimestep, global, true);
-    size_t woken = hierarchical ? detail::hopkinsHierarchyWoken : 0;
-    woken += detail::hopkinsMarkActive(workspace, global, closingOnly, global ? 0 : minimumRung);
-    detail::hopkinsRebuildForActivity(workspace);
-    detail::hopkinsEnsureGeometry(workspace);
-    detail::hopkinsInitialize(workspace);
-    std::vector<unsigned char> closed(workspace.particles.size(), 0);
+    parameters.readForces = true;
+    parameters.closingOnly = closingOnly;
+    parameters.minimumRung = global ? 0 : minimumRung;
+    parameters.maximumGlobalTimestep = maximumGlobalTimestep;
+    auto const opened = detail::hopkinsOpenEverywhere(parameters);
+    parameters.readForces = false;
+    uint64_t const total = opened.total;
+    size_t woken = (hierarchical ? detail::hopkinsHierarchyWoken : 0) + opened.woken;
+    detail::hopkinsEnsureEverywhere(parameters, total);
+    hopkinsPhase(HopkinsPhase::Initialize, parameters);
+    int const darkMatterRung = hierarchical ? 0 : detail::hopkinsGlobalDarkMatterRung;
     HopkinsStepResult result;
-    result.maximumRung = hierarchical ? 0 : workspace.darkMatterRung;
+    result.maximumRung = darkMatterRung;
     result.minimumTimestep = maximumGlobalTimestep;
     size_t settled = 0;
     size_t converted = 0;
     bool firstSelection = true;
-    // The refreshed set A ∪ N(A) of the last geometry pass: the loop below only
-    // exits once a timestep selection woke nobody, so it is still current then.
-    std::vector<size_t> refreshed;
     while (true) {
-        settled += detail::hopkinsSettlePairs(workspace, closingOnly);
-        refreshed = detail::hopkinsEnsureGeometry(workspace);
-        {
-            profile::ScopedPhase closePhase("hydro.hopkins.close");
-            std::vector<size_t> closing;
-            std::vector<double> durations;
-            for (size_t i = 0; i < workspace.particles.size(); ++i) {
-                if (workspace.particles[i].active && !closed[i]) {
-                    closing.push_back(i);
-                    durations.push_back(time - workspace.particles[i].state.sourceTime);
-                    detail::hopkinsCloseParticle(workspace, i);
-                    closed[i] = 1;
-                }
-            }
-            detail::hopkinsApplySources(workspace, closing, durations, energies, converted);
-            detail::hopkinsSynchronizeEntropy(workspace, closing);
-        }
-        detail::hopkinsCurrentViews(workspace);
+        settled += hopkinsPhase(HopkinsPhase::Settle, parameters).count;
+        detail::hopkinsEnsureEverywhere(parameters, total);
+        auto const closed = hopkinsPhase(HopkinsPhase::CloseActive, parameters);
+        converted += closed.converted;
+        energies.heating += closed.heating;
+        // Entropy synchronization reads the closed totals of remote stencil members.
+        hopkinsPhase(HopkinsPhase::Exchange, parameters);
+        hopkinsPhase(HopkinsPhase::EntropyViews, parameters);
         if (closingOnly) {
             break;
         }
-        result = detail::hopkinsSelectTimesteps(workspace, global ? 0 : minimumRung, baseTimestep,
-            maximumGlobalTimestep, woken, firstSelection);
+        // Timestep selection reads the current views of remote stencil members.
+        hopkinsPhase(HopkinsPhase::Exchange, parameters);
+        auto selection = parameters;
+        selection.allowCoarsen = firstSelection;
+        auto const selected = hopkinsPhase(HopkinsPhase::Timesteps, selection);
         firstSelection = false;
-        bool newlyWoken = false;
-        for (size_t i = 0; i < workspace.particles.size(); ++i) {
-            newlyWoken = newlyWoken || (workspace.particles[i].active && !closed[i]);
+        woken += selected.woken;
+        bool anyUnclosed = selected.flag;
+        if (global) {
+            // The collective raw minimum, already bounded by gravity and the
+            // driver's endpoint.
+            result = {0, selected.minimumTimestep};
+        } else {
+            int const swept = detail::hopkinsSweepEverywhere(
+                parameters, selected, parameters.minimumRung, woken, anyUnclosed);
+            int const maximumRung = std::max({darkMatterRung, getOptions().run.minRung, swept});
+            if (maximumRung >= kMaxRung) {
+                throw std::runtime_error("Hopkins timestep exceeds the available rung range");
+            }
+            result = {maximumRung, std::ldexp(baseTimestep, -maximumRung)};
         }
-        if (!newlyWoken) {
+        if (!anyUnclosed) {
             break;
         }
     }
+    auto schedule = parameters;
+    schedule.minimumTimestep = result.minimumTimestep;
+    auto const scheduled = hopkinsPhase(HopkinsPhase::Schedule, schedule);
     // The pressure switch added the entropy estimate's excess over the total-energy
     // closure; book it like the thermal sources so the energy budget stays exact.
-    energies.heating -= workspace.switchedEnergy / scale;
-    size_t active = 0;
-    int minimumGasRung = kMaxRung, maximumGasRung = 0;
-    for (auto& particle : workspace.particles) {
-        active += particle.active;
-        minimumGasRung = std::min(minimumGasRung, particle.rung);
-        maximumGasRung = std::max(maximumGasRung, particle.rung);
-        if (particle.active && !closingOnly) {
-            double const duration =
-                global ? result.minimumTimestep : std::ldexp(baseTimestep, -particle.rung);
-            particle.state.endTime = time + duration;
-            particle.state.endTick = global ?
-                0 :
-                workspace.tick + (uint64_t(1) << (detail::kHopkinsTickRung - particle.rung));
-        }
-    }
-    workspace.globalTimestep = global ? result.minimumTimestep : 0.0;
-    size_t retained = detail::hopkinsPairs.size(), opened = 0;
+    energies.heating -= scheduled.switchedEnergy / scale;
+    size_t const active = scheduled.active;
+    int const minimumGasRung = scheduled.minimumRung;
+    int const maximumGasRung = scheduled.maximumRung;
+    size_t const retained = scheduled.retained;
+    size_t opening = 0;
     if (!closingOnly) {
-        auto const activeSlots = detail::hopkinsActiveSlots(workspace);
-        detail::hopkinsGradients(workspace, activeSlots, refreshed);
-        detail::hopkinsGeometryRates(workspace, refreshed);
-        for (size_t i : activeSlots) {
-            auto& particle = workspace.particles[i];
-            auto& state = particle.state;
-            state.meshVelocity = particle.velocity;
-            if (getOptions().run.hierarchicalGravity) {
-                state.positionDriftScale = scale;
-#if COSMICTIGER_WITH_GRAVITY
-                if (getOptions().run.scenario == "cosmology") {
-                    double scaleWork = scale;
-                    double derivativeWork = expansionRate / scale;
-                    state.positionDriftScale =
-                        1.0 / cosmosAinv(derivativeWork, scaleWork, state.endTime - time);
-                }
-#endif
-            }
-            for (int dim = 0; dim < 3; ++dim) {
-                state.meshAcceleration[dim] = state.sourceAcceleration[dim] -
-                    workspace.gradients[i].pressure[dim] / (particle.density * scale) -
-                    getOptions().hydro.damping * particle.velocity[dim];
-            }
-        }
-        if (time == 0.0 && getOptions().run.scenario == "soundWave") {
-            detail::hopkinsWriteSoundWave(workspace, time);
-        }
-        detail::hopkinsOpenPairs(workspace, activeSlots, retained, opened);
+        hopkinsPhase(HopkinsPhase::Reconstruct, parameters);
+        // Gradients read the reconstructed primitives of remote stencil members.
+        hopkinsPhase(HopkinsPhase::Exchange, parameters);
+        hopkinsPhase(HopkinsPhase::Gradients, parameters);
+        // Pair opening reads remote gradients, face rates and mesh motion.
+        hopkinsPhase(HopkinsPhase::Exchange, parameters);
+        opening = hopkinsPhase(HopkinsPhase::OpenPairs, parameters).count;
     } else {
         result.maximumRung = std::max(result.maximumRung, maximumGasRung);
-        if (!detail::hopkinsPairs.empty()) {
+        if (retained != 0) {
             throw std::runtime_error("Hopkins terminal closure left a live pair interval");
         }
     }
-    detail::hopkinsCloseEvent(workspace);
+    auto closing = parameters;
+    closing.active = active;
+    auto totals = hopkinsPhase(HopkinsPhase::CloseEvent, closing).totals;
+    // Every locality was handed the global count; report it once.
+    totals.active = active;
+    detail::hopkinsCoordinatorEventOpen = false;
     {
         profile::ScopedPhase energyPhase("hydro.hopkins.diagnostics.energies");
         auto const sum = particlesSumEnergies();
@@ -3230,23 +4342,17 @@ HopkinsStepResult hopkinsKick(int minimumRung, double scale, double expansionRat
     terminal::detailPrint("Hopkins step: time=%.17g active=%zu total=%zu minRung=%d maxRung=%d "
                           "pairs=%zu cached=%zu refreshed=%zu woken=%zu settled=%zu stars=%zu "
                           "switched=%zu terminal=%d\n",
-        time, active, workspace.particles.size(), minimumGasRung, maximumGasRung, retained + opened,
-        retained, opened, woken, settled, converted, workspace.switched, int(closingOnly));
+        time, active, size_t(totals.total), minimumGasRung, maximumGasRung, retained + opening,
+        retained, opening, woken, settled, converted, size_t(scheduled.switched), int(closingOnly));
     if (hierarchical) {
-        int minimumGravityRung = kMaxRung, maximumGravityRung = 0;
-        size_t futureProjections = 0;
-        for (auto const& particle : workspace.particles) {
-            minimumGravityRung = std::min(minimumGravityRung, particle.gravityRung);
-            maximumGravityRung = std::max(maximumGravityRung, particle.gravityRung);
-            futureProjections += particle.state.gravityEndTime > time;
-        }
         terminal::detailPrint("Hopkins hierarchy finish: time=%.17g hydroMinRung=%d "
                               "hydroMaxRung=%d gravityMinRung=%d gravityMaxRung=%d "
                               "projected=%zu total=%zu terminal=%d\n",
-            time, minimumGasRung, maximumGasRung, minimumGravityRung, maximumGravityRung,
-            futureProjections, workspace.particles.size(), int(closingOnly));
+            time, minimumGasRung, maximumGasRung, totals.minimumGravityRung,
+            totals.maximumGravityRung, size_t(totals.futureProjections), size_t(totals.total),
+            int(closingOnly));
     }
-    detail::hopkinsReportWork(workspace, time, active, closingOnly);
+    detail::hopkinsReportWork(totals, time, closingOnly);
     detail::hopkinsTreePrepared = false;
     {
         profile::ScopedPhase cachePhase("hydro.hopkins.caches.clear");
@@ -3297,6 +4403,16 @@ void hopkinsDomainsRebound() {
 void hopkinsResetSources() {
     detail::hopkinsResident.reset();
     detail::hopkinsResetOwnerMirror();
+    {
+        std::lock_guard lock(detail::hopkinsInbox.mutex);
+        detail::hopkinsInbox.haloRequests.clear();
+        detail::hopkinsInbox.deposits.clear();
+        detail::hopkinsInbox.sidecars.clear();
+    }
+    detail::hopkinsLocalDeposits.clear();
+    detail::hopkinsStagedSidecars.clear();
+    detail::hopkinsCoordinatorEventOpen = false;
+    detail::hopkinsRebuildDecided = false;
     detail::hopkinsRebuildOnNextEvent = false;
     detail::hopkinsTreePrepared = false;
     detail::hopkinsEventPrepared = false;
@@ -3310,13 +4426,12 @@ void hopkinsWriteCheckpoint(FILE* file) {
         throw std::runtime_error("Cannot checkpoint an unfinished MFM gravity ladder");
     }
     static_assert(sizeof(detail::HopkinsPairRecord) == 176);
+    // Every locality writes the live intervals it holds.
     uint64_t header[4] = {detail::kHopkinsCacheMagic, 2, sizeof(detail::HopkinsPairRecord),
-        hpxRank() == 0 ? uint64_t(detail::hopkinsPairs.size()) : 0};
+        uint64_t(detail::hopkinsPairs.size())};
     FWRITE(header, sizeof(uint64_t), 4, file);
-    if (hpxRank() == 0) {
-        for (auto& [key, record] : detail::hopkinsPairs) {
-            FWRITE(&record, sizeof(record), 1, file);
-        }
+    for (auto& [key, record] : detail::hopkinsPairs) {
+        FWRITE(&record, sizeof(record), 1, file);
     }
 }
 
@@ -3325,7 +4440,7 @@ void hopkinsReadCheckpoint(FILE* file) {
     uint64_t header[4];
     FREAD(header, sizeof(uint64_t), 4, file);
     if (header[0] != detail::kHopkinsCacheMagic || header[1] != 2 ||
-        header[2] != sizeof(detail::HopkinsPairRecord) || (hpxRank() != 0 && header[3] != 0)) {
+        header[2] != sizeof(detail::HopkinsPairRecord)) {
         throw std::runtime_error("Incompatible Hopkins pair-cache checkpoint");
     }
     detail::hopkinsPairs.clear();

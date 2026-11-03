@@ -65,6 +65,19 @@ struct Counters {
     uint64_t topologyRebuilds = 0;
     uint64_t nodesVisited = 0;
     uint64_t sourcesVisited = 0;
+    template <class Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & sourcesSorted & sourcesUpdated & nodesRefitted & topologyRebuilds & nodesVisited &
+            sourcesVisited;
+    }
+    void add(Counters const& other) {
+        sourcesSorted += other.sourcesSorted;
+        sourcesUpdated += other.sourcesUpdated;
+        nodesRefitted += other.nodesRefitted;
+        topologyRebuilds += other.topologyRebuilds;
+        nodesVisited += other.nodesVisited;
+        sourcesVisited += other.sourcesVisited;
+    }
 };
 
 namespace detail {
@@ -733,6 +746,20 @@ public:
         auto const& record = source(id);
         detail::validateTime(record, time);
         return positionUnchecked(record, time);
+    }
+
+    // Visit every leaf's position envelope at this time (prepared envelopes are
+    // reused when time is the prepared time).
+    template <class Visitor>
+    void forEachLeaf(double time, Visitor&& visitor) const {
+        bool const cached = prepared_ && time == preparedTime_;
+        for (size_t index = 0; index < nodes_.size(); ++index) {
+            auto const& node = nodes_[index];
+            if (node.left != kNoNode_) {
+                continue;
+            }
+            visitor(cached ? preparedBounds_[index].position : bounds(node, time).position);
+        }
     }
 
     std::vector<uint64_t> query(Box const& sink, double support, double time,
