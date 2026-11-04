@@ -18,7 +18,8 @@
 namespace detail {
 
 struct SmoothingWorkspace {
-    DeviceVector<SphNeighborPosition> positions;
+    SharedNeighborBuffer<SphNeighborPosition, kSphNeighborSharedBytes / sizeof(SphNeighborPosition)>
+        positions;
 };
 
 struct NeighborActivity {
@@ -32,8 +33,11 @@ struct NeighborActivity {
 };
 
 struct DensityWorkspace {
-    DeviceVector<SphNeighborPosition> positions;
-    DeviceVector<NeighborActivity> particles;
+    // Smaller density blocks need an 8 KiB budget to retain their residency.
+    static constexpr int kSharedCapacity =
+        (kSphNeighborSharedBytes / 2) / (sizeof(SphNeighborPosition) + sizeof(NeighborActivity));
+    SharedNeighborBuffer<SphNeighborPosition, kSharedCapacity> positions;
+    SharedNeighborBuffer<NeighborActivity, kSharedCapacity> particles;
 };
 
 }    // namespace detail

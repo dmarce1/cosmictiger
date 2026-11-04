@@ -339,6 +339,7 @@ set(cosmictiger_header_files
     cosmictiger/chemistry/sph.hpp
     cosmictiger/sph/cpu.hpp
     cosmictiger/sph/cuda.hpp
+    cosmictiger/sph/neighbor_buffer.hpp
     cosmictiger/sph/run_data.hpp
     cosmictiger/sph/particles.hpp
     cosmictiger/sph/tree.hpp

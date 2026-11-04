@@ -12,11 +12,13 @@
 namespace detail {
 
 struct RungsWorkspace {
-    DeviceVector<Position> positionX;
-    DeviceVector<Position> positionY;
-    DeviceVector<Position> positionZ;
-    DeviceVector<float> supportRadius;
-    DeviceVector<char> rungs;
+    static constexpr int kSharedCapacity =
+        kSphNeighborSharedBytes / (3 * sizeof(Position) + sizeof(float) + sizeof(char));
+    SharedNeighborBuffer<Position, kSharedCapacity> positionX;
+    SharedNeighborBuffer<Position, kSharedCapacity> positionY;
+    SharedNeighborBuffer<Position, kSharedCapacity> positionZ;
+    SharedNeighborBuffer<float, kSharedCapacity> supportRadius;
+    SharedNeighborBuffer<char, kSharedCapacity> rungs;
 };
 
 }    // namespace detail

@@ -1789,7 +1789,7 @@ protected:
         // The production allocator has process lifetime and no shutdown API.
         static bool allocatorInitialized = false;
         if (!allocatorInitialized) {
-            cudaMemoryInitialize(4 * 1024 * 1024);
+            cudaMemoryInitialize(256 * 1024 * 1024);
             detail::checkCuda(cudaGetLastError(), "production workspace allocator initialization");
             allocatorInitialized = true;
         }
@@ -2045,4 +2045,174 @@ TEST_F(SphCudaTest, ConservativeMixedRungPairKicks) {
 TEST_F(SphCudaTest, ConservativeDirectedViscosityPairKicks) {
     detail::Fixture fixture(2, 2, true);
     detail::testConservativePairKick(fixture, true);
+}
+
+TEST_F(SphCudaTest, LargeNeighborListsCpuParity) {
+    // More neighbors than any shared buffer, an uneven tail, then a smaller list
+    // on the same block. Only the first few particles in each leaf are active.
+    detail::Fixture fixture(1537, 3, true);
+    auto& data = fixture.data_;
+    fixture.params_.minimumRung = 2;
+    for (int i = 0; i < fixture.count_; ++i) {
+        data.sourcePositionX[i] = (i % 13 + 0.5) / 13.0;
+        data.sourcePositionY[i] = (i / 13 % 13 + 0.5) / 13.0;
+        data.sourcePositionZ[i] = (i / 169 + 0.5) / 13.0;
+        data.sourceDensity[i] = data.sinkDensity[i] = 1.0f;
+        data.sourceVelocityX[i] = 0.01f * (i % 7 - 3);
+        data.sourceVelocityY[i] = 0.02f * (i % 5 - 2);
+        data.sourceVelocityZ[i] = 0.03f * (i % 3 - 1);
+        data.sourceRungs[i] = data.sinkParticleRungs[i] = i % 512 < 3 ? 3 : 1;
+    }
+    data.treeNodes[2].neighborRange = {2, 3};
+    detail::compareCpuCudaPhase(fixture, kSphRunPrehydro1);
+    for (int i = 0; i < fixture.count_; ++i) {
+        data.sourceSupportRadius[i] = data.sinkSupportRadius[i];
+    }
+    detail::compareCpuCudaPhase(fixture, kSphRunPrehydro2);
+    for (int i = 0; i < fixture.count_; ++i) {
+        data.sourceDensity[i] = data.sinkDensity[i];
+        data.sourceGradHCorrection[i] = data.sinkGradHCorrection[i];
+    }
+    detail::compareCpuCudaPhase(fixture, kSphRunHydro);
+    detail::compareCpuCudaPhase(fixture, kSphRunRungs);
+}
+
+namespace detail {
+
+__global__ void resetSphBenchmark(
+    SphRunCudaData data, SphReduction* reduction, int count, bool solveSupport) {
+    if (threadIdx.x == 0) {
+        *reduction = {};
+        reduction->minimumSupportRadius = std::numeric_limits<float>::max();
+        reduction->minimumTimestep = std::numeric_limits<float>::max();
+        reduction->minimumGradHOmega = std::numeric_limits<float>::max();
+    }
+    for (int i = threadIdx.x; i < count; i += blockDim.x) {
+        data.sinkSmoothingConverged[i] = !solveSupport;
+        data.sinkSupportRadius[i] = 0.2f;
+    }
+}
+
+}    // namespace detail
+
+// Explicit opt-in microbenchmark: no timing assertions in the regression suite.
+TEST_F(SphCudaTest, DISABLED_NeighborStagingBenchmark) {
+    constexpr int kParticleCount = 8192;
+    constexpr int kTreeCount = 256;
+    detail::Fixture fixture(kParticleCount, kTreeCount, true);
+    auto& data = fixture.data_;
+    for (int i = 0; i < kParticleCount; ++i) {
+        data.sourcePositionX[i] = (i % 32 + 0.5) / 32.0;
+        data.sourcePositionY[i] = (i / 32 % 16 + 0.5) / 16.0;
+        data.sourcePositionZ[i] = (i / 512 + 0.5) / 16.0;
+        data.sourceDensity[i] = data.sinkDensity[i] = 1.0f;
+        data.sourceVelocityX[i] = 0.01f * (i % 7 - 3);
+        data.sourceVelocityY[i] = 0.02f * (i % 5 - 2);
+        data.sourceVelocityZ[i] = 0.03f * (i % 3 - 1);
+    }
+    cudaDeviceProp device{};
+    detail::checkCuda(cudaGetDeviceProperties(&device, 0), "benchmark device properties");
+    void const* const kernels[] = {(void const*) sphCudaPrehydro1, (void const*) sphCudaPrehydro2,
+        (void const*) sphCudaHydro, (void const*) sphCudaRungs};
+    int const blockSizes[] = {
+        kPrehydro1BlockSize, kPrehydro2BlockSize, kHydroBlockSize, kRungsBlockSize};
+    char const* const names[] = {"smoothing", "density", "hydro", "rungs"};
+    cudaEvent_t start;
+    cudaEvent_t stop;
+    detail::checkCuda(cudaEventCreate(&start), "benchmark start event");
+    detail::checkCuda(cudaEventCreate(&stop), "benchmark stop event");
+    for (int neighbors : {128, 512, 2048}) {
+        int const leaves = neighbors / (kParticleCount / kTreeCount);
+        for (int tree = 0; tree < kTreeCount; ++tree) {
+            int const begin = tree / leaves * leaves;
+            data.treeNodes[tree].neighborRange = {begin, begin + leaves};
+        }
+        for (int pass = 0; pass < 4; ++pass) {
+            cudaFuncAttributes attributes{};
+            int residentBlocks;
+            detail::checkCuda(
+                cudaFuncGetAttributes(&attributes, kernels[pass]), "kernel attributes");
+            detail::checkCuda(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+                                  &residentBlocks, kernels[pass], blockSizes[pass], 0),
+                "kernel occupancy");
+            int const blocks = std::min(kTreeCount, residentBlocks * device.multiProcessorCount);
+            std::array<float, 9> samples{};
+            for (int iteration = -2; iteration < int(samples.size()); ++iteration) {
+                detail::resetSphBenchmark<<<1, 256>>>(
+                    data, fixture.reduction_, kParticleCount, pass == 0);
+                detail::checkCuda(cudaEventRecord(start), "benchmark start");
+                void* arguments[] = {&fixture.params_, &data, &fixture.reduction_};
+                detail::checkCuda(cudaLaunchKernel(kernels[pass], dim3(blocks),
+                                      dim3(blockSizes[pass]), arguments),
+                    "benchmark launch");
+                detail::checkCuda(cudaEventRecord(stop), "benchmark stop");
+                detail::checkCuda(cudaEventSynchronize(stop), "benchmark completion");
+                float milliseconds;
+                detail::checkCuda(
+                    cudaEventElapsedTime(&milliseconds, start, stop), "benchmark time");
+                if (iteration >= 0) {
+                    samples[iteration] = milliseconds;
+                }
+            }
+            std::sort(samples.begin(), samples.end());
+            std::printf("SPH_BENCH %s neighbors=%d shared=%zu registers=%d blocks_per_sm=%d "
+                        "median_ms=%.6f\n",
+                names[pass], neighbors, attributes.sharedSizeBytes, attributes.numRegs,
+                residentBlocks, samples[samples.size() / 2]);
+        }
+    }
+    detail::checkCuda(cudaEventDestroy(start), "destroy benchmark start");
+    detail::checkCuda(cudaEventDestroy(stop), "destroy benchmark stop");
+}
+
+namespace detail {
+
+__global__ void checkSharedNeighborBuffer(int* errors) {
+    constexpr int kCapacity = 67;
+    __shared__ SharedNeighborBuffer<int, kCapacity> neighbors;
+    new (&neighbors) SharedNeighborBuffer<int, kCapacity>();
+    int const sizes[] = {0, 66, 67, 68, 197, 11, 301, 0, 67};
+    int previousSize = 0;
+    bool usesShared = true;
+    for (int stage = 0; stage < int(sizeof(sizes) / sizeof(sizes[0])); ++stage) {
+        int const count = sizes[stage];
+        neighbors.resize(count);
+        usesShared = count == 0 || (usesShared && count <= kCapacity);
+        if (neighbors.size() != count) {
+            atomicAdd(errors, 1);
+        }
+        for (int i = threadIdx.x; i < count; i += blockDim.x) {
+            if (i < previousSize && neighbors[i] != 1000 * (stage - 1) + i) {
+                atomicAdd(errors, 1);
+            }
+            if ((usesShared && !__isShared(&neighbors[i])) ||
+                (!usesShared && !__isGlobal(&neighbors[i]))) {
+                atomicAdd(errors, 1);
+            }
+            neighbors[i] = 1000 * stage + i;
+        }
+        __syncthreads();
+        // Read values written by other lanes after shared-to-global relocation.
+        for (int i = threadIdx.x; i < count; i += blockDim.x) {
+            int const reverse = count - 1 - i;
+            if (neighbors[reverse] != 1000 * stage + reverse) {
+                atomicAdd(errors, 1);
+            }
+        }
+        previousSize = count;
+    }
+    neighbors.~SharedNeighborBuffer();
+}
+
+}    // namespace detail
+
+TEST_F(SphCudaTest, SharedNeighborStorageAndResize) {
+    int* errors;
+    detail::checkCuda(cudaMallocManaged(&errors, sizeof(int)), "shared neighbor test allocation");
+    *errors = 0;
+    detail::checkSharedNeighborBuffer<<<4, 96>>>(errors);
+    detail::checkCuda(cudaGetLastError(), "shared neighbor test launch");
+    detail::checkCuda(cudaDeviceSynchronize(), "shared neighbor test completion");
+    EXPECT_EQ(*errors, 0);
+    detail::checkCuda(cudaFree(errors), "shared neighbor test release");
 }

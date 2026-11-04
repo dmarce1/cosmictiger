@@ -33,7 +33,7 @@ struct HydroNeighbor {
 };
 
 struct HydroWorkspace {
-    DeviceVector<HydroNeighbor> neighbors;
+    SharedNeighborBuffer<HydroNeighbor, kSphNeighborSharedBytes / sizeof(HydroNeighbor)> neighbors;
 };
 
 }    // namespace detail

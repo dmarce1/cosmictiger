@@ -23,6 +23,7 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/sph/flops.hpp>
+#include <cosmictiger/sph/neighbor_buffer.hpp>
 #include <cosmictiger/sph/particles.hpp>
 #include <cosmictiger/sph/run_data.hpp>
 #include <cosmictiger/sph/sph.hpp>
@@ -131,11 +132,11 @@ __device__ inline void recordSphGpuFlops(sph_flops::Counter const& flops, SphRed
  */
 // clang-format on
 
-template <int blockSize>
+template <int blockSize, class Neighbors>
 inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimumSupportRadius,
-    float maximumSupportRadius, float targetNeighborCount,
-    DeviceVector<SphNeighborPosition> const& neighbors, Vector3<Position> const& position,
-    Fixed32Range const& neighborSearchBox, sph_flops::Counter& flops) {
+    float maximumSupportRadius, float targetNeighborCount, Neighbors const& neighbors,
+    Vector3<Position> const& position, Fixed32Range const& neighborSearchBox,
+    sph_flops::Counter& flops) {
     int const threadIndex = threadIdx.x;
     int const runtimeBlockSize = blockDim.x;
     ALWAYS_ASSERT(minimumSupportRadius > 0.0f && maximumSupportRadius >= minimumSupportRadius &&
