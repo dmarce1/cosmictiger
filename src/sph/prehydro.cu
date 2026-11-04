@@ -33,9 +33,10 @@ struct NeighborActivity {
 };
 
 struct DensityWorkspace {
-    // Smaller density blocks need an 8 KiB budget to retain their residency.
+    // The RTX 3090 budget sweep favored 12 KiB over 8 KiB for density.
+    static constexpr int kSharedBytes = 12 * 1024;
     static constexpr int kSharedCapacity =
-        (kSphNeighborSharedBytes / 2) / (sizeof(SphNeighborPosition) + sizeof(NeighborActivity));
+        kSharedBytes / (sizeof(SphNeighborPosition) + sizeof(NeighborActivity));
     SharedNeighborBuffer<SphNeighborPosition, kSharedCapacity> positions;
     SharedNeighborBuffer<NeighborActivity, kSharedCapacity> particles;
 };

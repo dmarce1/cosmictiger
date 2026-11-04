@@ -12,8 +12,10 @@
 namespace detail {
 
 struct RungsWorkspace {
+    // Fit 1024 fixed32 neighbors with little short-list cost in the RTX 3090 sweep.
+    static constexpr int kSharedBytes = 20 * 1024;
     static constexpr int kSharedCapacity =
-        kSphNeighborSharedBytes / (3 * sizeof(Position) + sizeof(float) + sizeof(char));
+        kSharedBytes / (3 * sizeof(Position) + sizeof(float) + sizeof(char));
     SharedNeighborBuffer<Position, kSharedCapacity> positionX;
     SharedNeighborBuffer<Position, kSharedCapacity> positionY;
     SharedNeighborBuffer<Position, kSharedCapacity> positionZ;
