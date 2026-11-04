@@ -118,7 +118,7 @@ ScenarioPlan initializeSod() {
                     m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * rho1),
                     1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSupportRadius(i) = h;
+                sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x + rand1() * dx * kEta;
                 sphParticlesPosition(kYDimension, i) = y + rand1() * dx * kEta;
                 sphParticlesPosition(kZDimension, i) = z + rand1() * dx * kEta;
@@ -132,7 +132,7 @@ ScenarioPlan initializeSod() {
                 y = (iy + 0.5) * dx;
                 z = (iz + 0.5) * dx;
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSupportRadius(i) = h;
+                sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x + rand1() * dx * kEta;
                 sphParticlesPosition(kYDimension, i) = y + rand1() * dx * kEta;
                 sphParticlesPosition(kZDimension, i) = z + rand1() * dx * kEta;
@@ -158,7 +158,7 @@ ScenarioPlan initializeSod() {
                     m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * rho0),
                     1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSupportRadius(i) = h;
+                sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x + rand1() * dx * kEta;
                 sphParticlesPosition(kYDimension, i) = y + rand1() * dx * kEta;
                 sphParticlesPosition(kZDimension, i) = z + rand1() * dx * kEta;
@@ -174,7 +174,7 @@ ScenarioPlan initializeSod() {
                 y = (iy + 0.5) * dx;
                 z = (iz + 0.5) * dx;
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSupportRadius(i) = h;
+                sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x + rand1() * dx * kEta;
                 sphParticlesPosition(kYDimension, i) = y + rand1() * dx * kEta;
                 sphParticlesPosition(kZDimension, i) = z + rand1() * dx * kEta;

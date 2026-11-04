@@ -42,11 +42,13 @@ CUDA_EXPORT inline Real evolvedBulkViscosityCoefficient(Real bulkViscosityCoeffi
     return limiter * updatedBulkViscosityCoefficient;
 }
 
-// Reuse the corrected gradient reconstruction and cosmological conversion of CD:
+// The acceleration-gradient reference uses CD's corrected reconstruction:
 // V = a^2 grad_r(v_phys), G = grad_x(F), and expansionAcceleration = a^3 d^2a/dt^2.
 // The unscaled material derivative in these variables is a^4 D(div v_phys)/Dt.
 // H is Hu's full kernel support radius. Stored c = a c_phys makes both H^2 Q/c^2
 // and the regularized limiter invariant; inverseDecayTime is a conformal-time rate.
+// Production history instead supplies V = ∇_x w and a² D(tr V)/Dt, following
+// GADGET-4's convention of differencing its stored gradient before conversion.
 // clang-format off
 /*
  * Hu et al. (2014), equations (16), (18), (19); citation above:
@@ -86,7 +88,6 @@ CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnosticsFromGradient(
     Real const curlZ = velocityGradient[1][0] - velocityGradient[0][1];
     Real const curlSquared = curlX * curlX + curlY * curlY + curlZ * curlZ;
     result.divergence = divergence / (scaleFactor * scaleFactor);
-    result.sampleDivergence = result.divergence;
     Real const shockIndicator = divergenceDerivative < Real(0) ? -divergenceDerivative : Real(0);
     Real const radiusSquaredShock = supportRadius * supportRadius * shockIndicator;
     Real const targetDenominator = radiusSquaredShock + soundSpeed * soundSpeed;
@@ -126,29 +127,29 @@ CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnostics(
         floatingPointOperations);
 }
 
-// Appendix B3 time differences retain this model's target and limiter unchanged.
+// Appendix B3 time differences use peculiar gradients in production. The target
+// and limiter formulas are unchanged; the physical-gradient acceleration route
+// above is retained only as a reference estimator.
 template <typename Real, typename Counter>
 CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnosticsFromHistory(
     cullen_and_dehnen::VelocityGradientSums<Real> const& sums, Real scaleFactor,
-    SphCullenDehnenState const& state, double sampleInterval, Real supportRadius, Real soundSpeed,
-    Real signalSpeed, Real maximumBulkViscosityCoefficient, Real decayCoefficient,
-    Counter& floatingPointOperations) {
+    Float16Storage const& state, double sampleInterval, double previousSampleTimestep,
+    Real supportRadius, Real soundSpeed, Real signalSpeed, Real maximumBulkViscosityCoefficient,
+    Real decayCoefficient, Counter& floatingPointOperations) {
     Real velocityGradient[3][3];
     int const rank = cullen_and_dehnen::reconstructVelocityGradient(
         sums, velocityGradient, floatingPointOperations);
     Real const divergence =
-        (velocityGradient[0][0] + velocityGradient[1][1] + velocityGradient[2][2]) /
-        (scaleFactor * scaleFactor);
-    Real const sampleDivergence = divergence;
-    floatingPointOperations += 4;
+        velocityGradient[0][0] + velocityGradient[1][1] + velocityGradient[2][2];
+    floatingPointOperations += 2;
     Real const derivative = rank == 0 ?
         Real(0) :
-        cullen_and_dehnen::divergenceTimeDerivative(
-            sampleDivergence, scaleFactor, state, sampleInterval, floatingPointOperations);
+        cullen_and_dehnen::divergenceTimeDerivative(divergence, scaleFactor, state, sampleInterval,
+            previousSampleTimestep, floatingPointOperations);
     auto result = diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, supportRadius,
         soundSpeed, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient,
         floatingPointOperations);
-    result.sampleDivergence = sampleDivergence;
+    result.divergence = divergence;
     return result;
 }
 

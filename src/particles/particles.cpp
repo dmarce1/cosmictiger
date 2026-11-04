@@ -813,7 +813,16 @@ void particlesSetMinrung(int minrung) {
                 ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
                 for (ParticleInteger i = b; i < e; i++) {
                     auto& rung = particlesRung(i);
-                    rung = std::max((int) rung, minrung);
+                    int const nextRung = std::max(int(rung), minrung);
+#if COSMICTIGER_WITH_SPH
+                    if (sphScaledDivergence != nullptr && rung != nextRung &&
+                        particlesType(i) == kSphType && !usesGlobalIntegration(getOptions().run) &&
+                        !sphRescaleDivergence(
+                            sphScaledDivergence[particlesCatIndex(i)], rung, nextRung)) {
+                        THROW_ERROR("SPH rung promotion overflows timestep-scaled divergence\n");
+                    }
+#endif
+                    rung = nextRung;
                 }
             },
             "particles.setMinrung")));

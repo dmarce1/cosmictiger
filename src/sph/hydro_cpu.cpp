@@ -93,10 +93,11 @@ SphRunReturn sphCpuHydro(
         if (!parameters.isActiveRung(previousRung)) {
             continue;
         }
-        float const sinkSupportRadius = data.sourceSupportRadius[particleIndex];
+        float const sinkSmoothingLength = data.sourceSmoothingLength[particleIndex];
         float const sinkDensity = data.sourceDensity[particleIndex];
         float const sinkInternalEnergy = data.sourceInternalEnergy[particleIndex];
-        ALWAYS_ASSERT(sinkSupportRadius > 0.0f && sinkDensity > 0.0f && sinkInternalEnergy > 0.0f);
+        ALWAYS_ASSERT(
+            sinkSmoothingLength > 0.0f && sinkDensity > 0.0f && sinkInternalEnergy > 0.0f);
         // clang-format off
         /*
          * Particle a. Section 3.5 leaves the equation of state free; the ideal gas gives
@@ -110,7 +111,7 @@ SphRunReturn sphCpuHydro(
          */
         // clang-format on
         float const sinkKernelSupportRadius =
-            sinkSupportRadius;    // support radius, 2h_a for the cubic spline
+            sinkSmoothingLength;    // support radius, 2h_a for the cubic spline
         float const density = sinkDensity;
         float const internalEnergy = sinkInternalEnergy;
         float const pressure = pressureEnergyRatio * density * internalEnergy;
@@ -159,7 +160,7 @@ SphRunReturn sphCpuHydro(
                 detail::sphCpuSeparations(data, particleIndex, neighbors, first);    // r_a − r_b
             SimdFloat const stagedSeparationSquared = separation.dot(separation);
             SimdFloat const stagedNeighborSupportRadius =
-                detail::sphCpuLoad(data.sourceSupportRadius, neighbors, first, 1.0f);
+                detail::sphCpuLoad(data.sourceSmoothingLength, neighbors, first, 1.0f);
             auto const supportsIntersect = detail::sphCpuValidLanes(neighbors, first) &
                 (stagedSeparationSquared <
                     simdMax(SimdFloat(sinkKernelSupportRadius * sinkKernelSupportRadius),
@@ -598,8 +599,8 @@ SphRunReturn sphCpuHydro(
 #endif
             }
             ALWAYS_ASSERT(nextRung < kMaxRung);
-            if (data.sinkProposedRungs != nullptr) {
-                data.sinkProposedRungs[sinkIndex] = nextRung;
+            if (data.proposeRungs) {
+                data.sinkFlags[sinkIndex].setProposedRung(nextRung);
             } else {
                 data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] = nextRung;
             }

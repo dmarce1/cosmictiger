@@ -43,7 +43,7 @@ void sphSeedRungProposals() {
         children.push_back(hpx::async<SphSeedRungProposalsAction>(child));
     }
     for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
-        sphParticlesProposedRungs[gas] = sphParticlesRung(gas);
+        sphParticlesSetProposedRung(gas, sphParticlesRung(gas));
     }
     for (auto& child : children) {
         child.get();
@@ -58,8 +58,12 @@ int sphCommitBalancedRungs() {
     }
     int maximumRung = 0;
     for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
-        auto const candidate = sphParticlesProposedRungs[gas];
+        auto const candidate = sphParticlesProposedRung(gas);
         ALWAYS_ASSERT(candidate >= 0 && candidate < kMaxRung);
+        if (sphScaledDivergence != nullptr && sphParticlesRung(gas) != candidate &&
+            !sphRescaleDivergence(sphScaledDivergence[gas], sphParticlesRung(gas), candidate)) {
+            throw std::runtime_error("SPH rung balance overflows timestep-scaled divergence");
+        }
         sphParticlesRung(gas) = candidate;
         maximumRung = std::max(maximumRung, int(candidate));
     }
@@ -100,7 +104,7 @@ void sphPrepareRungCandidates(bool initialize) {
     for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
         auto const particle = sphParticlesParticleIndex(gas);
         if (initialize) {
-            auto const seed = sphParticlesProposedRungs[gas];
+            auto const seed = sphParticlesProposedRung(gas);
             ALWAYS_ASSERT(seed >= 0 && seed < kMaxRung);
             detail::rungCandidates[particle] = seed;
         }
@@ -143,9 +147,9 @@ SphRungBalanceReturn sphFinishRungCandidates(bool publish) {
     if (publish) {
         for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
             auto const candidate = detail::rungCandidates[sphParticlesParticleIndex(gas)];
-            result.changedParticles += candidate != sphParticlesProposedRungs[gas];
+            result.changedParticles += candidate != sphParticlesProposedRung(gas);
             result.maximumRung = std::max(result.maximumRung, int(candidate));
-            sphParticlesProposedRungs[gas] = candidate;
+            sphParticlesSetProposedRung(gas, candidate);
         }
     }
     if (detail::rungCandidates != nullptr) {
@@ -259,9 +263,14 @@ int sphParticlesSelectMidpointRungs(int minimumRung) {
     for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
         auto& rung = sphParticlesRung(gas);
         if (rung >= minimumRung) {
-            rung = std::max(
+            int const nextRung = std::max(
                 {minimumRung, int(rung) - 1, sphParticlesHydroRung(gas), getOptions().run.minRung});
-            ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
+            ALWAYS_ASSERT(nextRung >= 0 && nextRung < kMaxRung);
+            if (sphScaledDivergence != nullptr && rung != nextRung &&
+                !sphRescaleDivergence(sphScaledDivergence[gas], rung, nextRung)) {
+                throw std::runtime_error("SPH rung selection overflows timestep-scaled divergence");
+            }
+            rung = nextRung;
         }
         maximumRung = std::max(maximumRung, int(rung));
     }

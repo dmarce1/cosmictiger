@@ -88,9 +88,9 @@ struct StarParticleInfo : public DarkMatterParticleInfo {};
 struct SphParticleInfo : public DarkMatterParticleInfo {
     double entropy;
     float rho;
-    float h;
+    float smoothingLength;
     float alpha;
-    float divergence;
+    double divergence;
 #if COSMICTIGER_ENABLE_CHEMISTRY
     std::array<float, 9> chemistryFields{};
 #endif
@@ -562,7 +562,8 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
                     return conversion.frequency(particle.divergence);
                 });
             writeViewText(db, "divv_convention",
-                "Physical velocity divergence including Hubble flow; last SPH evaluation.");
+                "Stored peculiar velocity gradient G = div_x(a v_pec) = a_sample^2 div_r(v_pec); "
+                "last completed endpoint sample, excluding Hubble flow.");
         }
         writeViewField(db, metadata, "rho", "mesh", gas, densityUnit,
             [&conversion](
@@ -571,8 +572,9 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
             [&conversion](
                 SphParticleInfo const& particle) { return conversion.entropy(particle.entropy); });
         writeViewField(db, metadata, "r", "mesh", gas, lengthUnit,
-            [&conversion](
-                SphParticleInfo const& particle) { return conversion.length(particle.h); });
+            [&conversion](SphParticleInfo const& particle) {
+                return conversion.length(particle.smoothingLength);
+            });
         checkViewWrite(DBSetDir(db, ".."), "..");
     }
 #endif
@@ -580,7 +582,8 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
 
 std::mutex siloViewMutex;
 
-ViewSnapshot collectViewParticles(double a) {
+ViewSnapshot collectViewParticles(
+    double a, double viscosityBaseTimestep, double viscosityGlobalTimestep) {
     ViewSnapshot snapshot;
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION
     std::optional<star_formation_backend::Parameters> parameters;
@@ -618,12 +621,19 @@ ViewSnapshot collectViewParticles(double a) {
                 sph_entropy::fromStoredEnergy(sphParticlesInternalEnergy(index),
                     sphParticlesDensity(index), getOptions().hydro.gamma, a);
             gas.rho = sphParticlesDensity(index);
-            gas.h = sphParticlesSupportRadius(index);
+            gas.smoothingLength = sphParticlesSmoothingLength(index);
             if (getOptions().hydro.viscosityEvolution != "none") {
                 gas.alpha = sphParticlesBulkViscosityCoefficients[index];
             }
             if (getOptions().hydro.viscosityGradientSwitch()) {
-                gas.divergence = sphParticlesCullenDehnenStates[index].physicalDivergence();
+                auto const& history = sphScaledDivergence[index];
+                double const sampleTimestep =
+                    sphViscosityStoredSampleTimestep(sphParticlesRung(index), viscosityBaseTimestep,
+                        viscosityGlobalTimestep, getOptions().run.timeIntegrator == "global");
+                if (!(sampleTimestep > 0.0)) {
+                    THROW_ERROR("SPH divergence output requires its sample timestep\n");
+                }
+                gas.divergence = sphDecodeDivergence(history, sampleTimestep);
             }
 #if COSMICTIGER_ENABLE_CHEMISTRY
             if (getOptions().chemistry.enabled) {
@@ -862,7 +872,8 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
             db, metadata, "rho", "mesh", gas, "code", [](auto const& p) { return p.rho; });
         writeViewField(
             db, metadata, "A", "mesh", gas, "code", [](auto const& p) { return p.entropy; });
-        writeViewField(db, metadata, "r", "mesh", gas, "code", [](auto const& p) { return p.h; });
+        writeViewField(db, metadata, "r", "mesh", gas, "code",
+            [](auto const& p) { return p.smoothingLength; });
 #if COSMICTIGER_ENABLE_CHEMISTRY
         writeChemistryFields(db, metadata, gas);
 #endif
@@ -874,7 +885,8 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
             writeViewField(db, metadata, "divv", "mesh", gas, "1/code_time",
                 [](SphParticleInfo const& particle) { return double(particle.divergence); });
             writeViewText(db, "divv_convention",
-                "Physical velocity divergence including Hubble flow; last SPH evaluation.");
+                "Stored peculiar velocity gradient G = div_x(a v_pec) = a_sample^2 div_r(v_pec); "
+                "last completed endpoint sample, excluding Hubble flow.");
         }
         checkViewWrite(DBSetDir(db, ".."), "..");
     }
@@ -883,8 +895,9 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
 }
 
 ViewLeafMetadata writeParticleLeaf(Vector<Range<double>> const& boxes, int cycle, double a,
-    double time, std::string const& generation) {
-    auto const snapshot = collectViewParticles(a);
+    double time, std::string const& generation, double viscosityBaseTimestep,
+    double viscosityGlobalTimestep) {
+    auto const snapshot = collectViewParticles(a, viscosityBaseTimestep, viscosityGlobalTimestep);
     ViewLeafMetadata metadata;
     metadata.boxes.resize(boxes.size());
     auto const frames = particleViewFrames();
@@ -1033,7 +1046,8 @@ void writeParticleMaster(size_t box, int cycle, double a, double time,
     std::filesystem::rename(temporary, filename);
 }
 
-void writeDistributedParticleViews(int cycle, double a, double time) {
+void writeDistributedParticleViews(int cycle, double a, double time, double viscosityBaseTimestep,
+    double viscosityGlobalTimestep) {
     static std::atomic<uint64_t> sequence{0};
     auto const ticks = std::chrono::system_clock::now().time_since_epoch().count();
     std::string const generation =
@@ -1049,7 +1063,7 @@ void writeDistributedParticleViews(int cycle, double a, double time) {
     auto const leaves = [&]() {
         profile::ScopedPhase profilePhase("output.particles.leaves");
         return onViewLocalities<WriteParticleLeafAction, ViewLeafMetadata>(
-            viewBoxes, cycle, a, time, generation);
+            viewBoxes, cycle, a, time, generation, viscosityBaseTimestep, viscosityGlobalTimestep);
     }();
     profile::ScopedPhase profilePhase("output.particles.master");
     for (size_t box = 0; box < viewBoxes.size(); ++box) {
@@ -1059,7 +1073,8 @@ void writeDistributedParticleViews(int cycle, double a, double time) {
 
 }    // namespace detail
 
-void viewOutputViews(int cycle, double a, bool force, double physicalYears) {
+void viewOutputViews(int cycle, double a, bool force, double physicalYears,
+    double viscosityBaseTimestep, double viscosityGlobalTimestep) {
     if (!getOptions().output.silo || viewBoxes.empty() ||
         (!force && cycle % getOptions().output.siloInterval != 0)) {
         return;
@@ -1071,7 +1086,8 @@ void viewOutputViews(int cycle, double a, bool force, double physicalYears) {
             cosmosTime(1e-6, a) * getOptions().units.timeSeconds * constants::kSecondsToYears / 1e9;
     }
 #endif
-    detail::writeDistributedParticleViews(cycle, a, time);
+    detail::writeDistributedParticleViews(
+        cycle, a, time, viscosityBaseTimestep, viscosityGlobalTimestep);
 }
 
 void viewConfigure() {

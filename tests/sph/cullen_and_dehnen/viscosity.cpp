@@ -236,134 +236,100 @@ TEST(CullenAndDehnen, EveryFiniteHalfStorageValueRoundTripsExactly) {
     }
 }
 
-TEST(CullenAndDehnen, ScaledInt16RetainsNormalFloatRangeAndSign) {
-    for (uint32_t exponent = 1; exponent < 255; ++exponent) {
-        for (uint32_t const fraction : {0U, 1U, 0x1ffU, 0x200U, 0x3fffffU, 0x7fffffU}) {
-            uint32_t const magnitude = (exponent << 23) | fraction;
-            for (uint32_t const sign : {0U, 0x80000000U}) {
-                uint32_t const originalBits = sign | magnitude;
-                auto const stored =
-                    scaled_int16_storage::encode(std::bit_cast<float>(originalBits));
-                uint32_t const restoredBits = std::bit_cast<uint32_t>(
-                    scaled_int16_storage::decode(stored.significand, stored.exponent));
-                SCOPED_TRACE(originalBits);
-                EXPECT_TRUE(scaled_int16_storage::isValid(stored.significand, stored.exponent));
-                EXPECT_EQ(restoredBits & 0x80000000U, sign);
-                uint32_t const restoredMagnitude = restoredBits & 0x7fffffffU;
-                EXPECT_LE(restoredMagnitude, magnitude);
-                EXPECT_GE(restoredMagnitude, 0x00800000U);
-                EXPECT_NE(restoredBits & 0x7f800000U, 0x7f800000U);
-                double const significand = double(0x800000U | fraction);
-                EXPECT_LT(double(magnitude - restoredMagnitude), significand / 16384.0);
-            }
-        }
-    }
-}
-
-TEST(CullenAndDehnen, ScaledInt16FlushesSignedZeroAndSubnormals) {
-    // Inspect encodings directly so the test also works with flush-to-zero
-    // arithmetic enabled, and both signs must produce the same canonical zero.
-    for (uint32_t const magnitude : {0U, 1U, 0x1ffU, 0x200U, 0x400000U, 0x7fffffU}) {
-        for (uint32_t const sign : {0U, 0x80000000U}) {
-            auto const stored =
-                scaled_int16_storage::encode(std::bit_cast<float>(sign | magnitude));
-            EXPECT_EQ(stored.significand, 0);
-            EXPECT_EQ(stored.exponent, 0);
-            EXPECT_TRUE(scaled_int16_storage::isValid(stored.significand, stored.exponent));
-            EXPECT_EQ(std::bit_cast<uint32_t>(
-                          scaled_int16_storage::decode(stored.significand, stored.exponent)),
-                0U);
-        }
-    }
-}
-
-TEST(CullenAndDehnen, ScaledInt16RejectsMalformedAndNonfiniteValues) {
-    scaled_int16_storage::ScaledValue const malformed[] = {{1, 0}, {-1, 0}, {16383, 0}, {-16383, 0},
-        {-32768, 0}, {16384, -127}, {-16384, -128}, {0, 1}, {0, -128}, {0, 127}};
-    for (auto const& stored : malformed) {
-        EXPECT_FALSE(scaled_int16_storage::isValid(stored.significand, stored.exponent));
-        EXPECT_EQ(std::bit_cast<uint32_t>(
-                      scaled_int16_storage::decode(stored.significand, stored.exponent)),
-            0x7fc00000U);
-    }
-    for (uint32_t const bits : {0x7f800000U, 0xff800000U, 0x7fc00000U, 0x7f800001U, 0xffc00001U}) {
-        auto const stored = scaled_int16_storage::encode(std::bit_cast<float>(bits));
-        EXPECT_EQ(stored.significand, 0);
-        EXPECT_EQ(stored.exponent, scaled_int16_storage::kInvalidExponent);
-        EXPECT_FALSE(scaled_int16_storage::isValid(stored.significand, stored.exponent));
-        EXPECT_EQ(std::bit_cast<uint32_t>(
-                      scaled_int16_storage::decode(stored.significand, stored.exponent)),
-            0x7fc00000U);
-    }
-    for (int8_t const exponent : {-126, -1, 0, 127}) {
-        for (int16_t const significand : {-32767, -16384, 16384, 32767}) {
-            EXPECT_TRUE(scaled_int16_storage::isValid(significand, exponent));
-        }
-    }
-}
-
-TEST(CullenAndDehnen, DivergenceStorageUsesIndependentScales) {
-    SphCullenDehnenState state{};
-    state.sampleRung = 3;
-    float const largest = std::numeric_limits<float>::max();
-    float const smallest = std::numeric_limits<float>::min();
-    state.setDivergences(largest, smallest);
-    EXPECT_EQ(state.divergenceExponent, 127);
-    EXPECT_EQ(state.sampleDivergenceExponent, -126);
-    EXPECT_EQ(std::bit_cast<uint32_t>(state.sampledDivergence()), 0x00800000U);
-    uint32_t const largestStored = std::bit_cast<uint32_t>(state.physicalDivergence());
-    EXPECT_LE(largestStored, 0x7f7fffffU);
-    EXPECT_EQ(largestStored, 0x7f7ffe00U);
-    state.setDivergences(-smallest, -largest);
-    EXPECT_EQ(std::bit_cast<uint32_t>(state.physicalDivergence()), 0x80800000U);
-    EXPECT_EQ(std::bit_cast<uint32_t>(state.sampledDivergence()), largestStored | 0x80000000U);
-    EXPECT_EQ(state.sampleRung, 3);
-}
-
-TEST(CullenAndDehnen, OwnMidpointSampleIntervalsFollowRungChanges) {
-    SphCullenDehnenState state{};
-    EXPECT_EQ(sphViscositySampleInterval(state, 2, 1.0, false), 0.0);
-    state.sampleRung = -2;
-    EXPECT_EQ(sphViscositySampleInterval(state, 2, 1.0, false), 0.125);
-    state.sampleRung = 2;
-    EXPECT_EQ(sphViscositySampleInterval(state, 2, 1.0, false), 0.25);
-
-    // A common boundary at tau=0.5 joins a rung-1 midpoint at 0.25 to
-    // a rung-2 midpoint at 0.625. Reversing the rung change has the same gap.
-    state.sampleRung = 1;
-    EXPECT_EQ(sphViscositySampleInterval(state, 2, 1.0, false), 0.375);
-    state.sampleRung = 2;
-    EXPECT_EQ(sphViscositySampleInterval(state, 1, 1.0, false), 0.375);
-    EXPECT_EQ(sphViscositySampleInterval(state, 1, 2.0, false), 0.75);
-    EXPECT_EQ(sphViscositySampleInterval(state, 1, 0.0, false), 0.0);
-    EXPECT_EQ(state.sampleRung, 2);
-}
-
-TEST(CullenAndDehnen, GlobalSampleIntervalsUseSharedMidpointSeparation) {
-    SphCullenDehnenState state{};
-    EXPECT_EQ(sphViscositySampleInterval(state, 0, 0.125, true), 0.0);
-    state.sampleRung = -2;
-    // The driver supplies the initial half interval; do not halve it again.
-    EXPECT_EQ(sphViscositySampleInterval(state, 0, 0.125, true), 0.125);
-    state.sampleRung = 0;
-    // Consecutive global intervals of 0.25 and 0.5 have midpoint gap 0.375;
-    // then intervals of 0.5 and 0.125 have gap 0.3125.
-    EXPECT_EQ(sphViscositySampleInterval(state, 0, 0.375, true), 0.375);
-    EXPECT_EQ(sphViscositySampleInterval(state, 0, 0.3125, true), 0.3125);
-    EXPECT_EQ(sphViscositySampleInterval(state, 0, 0.0, true), 0.0);
-    EXPECT_EQ(state.sampleRung, 0);
-}
-
-TEST(CullenAndDehnen, DivergenceHistoryUsesOwnMidpointInterval) {
-    // The same physical compression has Dθ/Dt = -3 at the latest sample.
-    // Startup, unchanged rungs, refinement, and coarsening must agree even
-    // though their previous own-midpoint samples have different separations.
+TEST(CullenAndDehnen, TimestepScaledDivergenceRecoversPreviousSample) {
     struct SampleCase {
-        int8_t previousRung;
+        float divergence;
+        double timestep;
+    };
+    SampleCase const samples[] = {{-8.0f, 0.125}, {3.141592f, 0.25},
+        {std::numeric_limits<float>::max(), std::ldexp(1.0, -127)},
+        {std::numeric_limits<float>::min(), std::ldexp(1.0, 126)}};
+    Float16Storage state{};
+    for (auto const& sample : samples) {
+        ASSERT_TRUE(sphEncodeDivergence(state, sample.divergence, sample.timestep));
+        EXPECT_NEAR(sphDecodeDivergence(state, sample.timestep), double(sample.divergence),
+            std::abs(double(sample.divergence)) / 2048.0);
+        EXPECT_EQ(sphDivergenceSign(state), sample.divergence > 0.0f ? 1.0f : -1.0f);
+    }
+    ASSERT_TRUE(sphEncodeDivergence(state, 0.0f, 0.125));
+    EXPECT_EQ(sphDivergenceSign(state), 0.0f);
+    EXPECT_EQ(sphDecodeDivergence(state, 0.125), 0.0);
+}
+
+TEST(CullenAndDehnen, TimestepScaledDivergenceRejectsInvalidInputsWithoutClamping) {
+    Float16Storage state{};
+    ASSERT_TRUE(sphEncodeDivergence(state, -2.0f, 0.25));
+    uint16_t const previousBits = state.bits;
+    for (double const timestep : {0.0, -1.0, std::numeric_limits<double>::infinity(),
+             std::numeric_limits<double>::quiet_NaN(), 65505.0,
+             std::numeric_limits<double>::max()}) {
+        EXPECT_FALSE(sphEncodeDivergence(state, 1.0f, timestep));
+        EXPECT_EQ(state.bits, previousBits);
+    }
+    for (float const divergence :
+        {std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity(),
+            std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::max()}) {
+        EXPECT_FALSE(sphEncodeDivergence(state, divergence, 1.0));
+        EXPECT_EQ(state.bits, previousBits);
+    }
+    EXPECT_FALSE(sphEncodeDivergence(state, 2.0f, std::numeric_limits<double>::max()));
+    EXPECT_EQ(state.bits, previousBits);
+    EXPECT_TRUE(sphEncodeDivergence(state, -65504.0f, 1.0));
+    EXPECT_EQ(float(state), -65504.0f);
+    EXPECT_EQ(sphDecodeDivergence(state, 0.0), 0.0);
+}
+
+TEST(CullenAndDehnen, TimestepScaledDivergenceRoundsSmallSamples) {
+    Float16Storage state{};
+    ASSERT_TRUE(sphEncodeDivergence(state, std::ldexp(1.0f, -24), 1.0));
+    EXPECT_EQ(state.bits, 1U);
+    ASSERT_TRUE(sphEncodeDivergence(state, std::ldexp(1.0f, -25), 1.0));
+    EXPECT_EQ(state.bits, 0U);
+    EXPECT_EQ(sphDivergenceSign(state), 0.0f);
+}
+
+TEST(CullenAndDehnen, StoredSampleScaleUsesLiveRungOrSharedGlobalStep) {
+    EXPECT_EQ(sphViscosityStoredSampleTimestep(3, 2.0, 0.375, false), 0.25);
+    EXPECT_EQ(sphViscosityStoredSampleTimestep(3, 2.0, 0.375, true), 0.375);
+    EXPECT_EQ(sphViscosityStoredSampleTimestep(0, 2.0, 0.0, true), 2.0);
+    EXPECT_EQ(sphViscosityStoredSampleTimestep(3, 0.0, 0.375, false), 0.0);
+    EXPECT_EQ(sphViscosityStoredSampleTimestep(-1, 2.0, 0.375, false), 0.0);
+}
+
+TEST(CullenAndDehnen, EndpointIntervalsUseCompletedStep) {
+    EXPECT_EQ(sphViscositySampleInterval(2, 1.0, false, true), 0.0);
+    EXPECT_EQ(sphViscositySampleInterval(2, 1.0, false), 0.25);
+    EXPECT_EQ(sphViscositySampleInterval(1, 1.0, false), 0.5);
+    EXPECT_EQ(sphViscositySampleInterval(0, 0.375, true), 0.375);
+    EXPECT_EQ(sphViscositySampleInterval(0, 0.375, true, true), 0.0);
+    EXPECT_EQ(sphViscositySampleInterval(0, 0.0, true), 0.0);
+}
+
+TEST(CullenAndDehnen, LiveRungTransitionsRescaleWithoutChangingGradient) {
+    Float16Storage state{};
+    ASSERT_TRUE(sphEncodeDivergence(state, -3.0f, 0.5));
+    ASSERT_TRUE(sphRescaleDivergence(state, 1, 3));
+    EXPECT_EQ(sphDecodeDivergence(state, 0.125), -3.0);
+    ASSERT_TRUE(sphRescaleDivergence(state, 3, 2));
+    EXPECT_EQ(sphDecodeDivergence(state, 0.25), -3.0);
+    uint16_t const bits = state.bits;
+    ASSERT_TRUE(sphRescaleDivergence(state, 2, 2));
+    EXPECT_EQ(state.bits, bits);
+    EXPECT_FALSE(sphRescaleDivergence(state, -1, 2));
+    EXPECT_EQ(state.bits, bits);
+    state = 65504.0f;
+    EXPECT_FALSE(sphRescaleDivergence(state, 1, 0));
+    EXPECT_EQ(float(state), 65504.0f);
+}
+
+TEST(CullenAndDehnen, DivergenceHistoryUsesCompletedEndpointInterval) {
+    // The same converted GADGET-4 indicator has a⁻² DG/Dt = -3 at the latest sample.
+    // Every live rung recovers the same slope from successive endpoints.
+    struct SampleCase {
         int currentRung;
         double expectedInterval;
     };
-    SampleCase const sampleCases[] = {{-2, 2, 0.125}, {2, 2, 0.25}, {1, 2, 0.375}, {2, 1, 0.375}};
+    SampleCase const sampleCases[] = {{1, 0.5}, {2, 0.25}, {3, 0.125}};
     for (float const scaleFactor : {0.25f, 0.5f, 1.0f, 2.0f}) {
         for (auto const& sample : sampleCases) {
             cullen_and_dehnen::VelocityGradientSums<float> sums;
@@ -371,80 +337,172 @@ TEST(CullenAndDehnen, DivergenceHistoryUsesOwnMidpointInterval) {
                 sums.moment[component][component] = 1.0f;
                 sums.velocity[component][component] = -scaleFactor * scaleFactor;
             }
-            SphCullenDehnenState state{};
-            state.sampleRung = sample.previousRung;
-            state.setDivergences(-3.0f, float(-3.0 + 3.0 * scaleFactor * sample.expectedInterval));
+            Float16Storage state{};
+            double const previousSampleTimestep =
+                sphViscosityStoredSampleTimestep(sample.currentRung, 1.0, 0.0, false);
+            ASSERT_TRUE(sphEncodeDivergence(state,
+                float(-3.0 * scaleFactor * scaleFactor +
+                    3.0 * scaleFactor * scaleFactor * scaleFactor * sample.expectedInterval),
+                previousSampleTimestep));
             double const sampleInterval =
-                sphViscositySampleInterval(state, sample.currentRung, 1.0, false);
+                sphViscositySampleInterval(sample.currentRung, 1.0, false);
             unsigned long long operations = 0;
-            auto const cd =
-                cullen_and_dehnen::diagnosticsFromHistory(sums, scaleFactor, state, sampleInterval,
-                    -1.0f, 0.5f / scaleFactor, 2.0f * scaleFactor, 2.0f, 0.05f, operations);
+            auto const cd = cullen_and_dehnen::diagnosticsFromHistory(sums, scaleFactor, state,
+                sampleInterval, previousSampleTimestep, -1.0f, 0.5f / scaleFactor,
+                2.0f * scaleFactor, 2.0f, 0.05f, operations);
             auto const hu = hu_etal::diagnosticsFromHistory(sums, scaleFactor, state,
-                sampleInterval, 0.5f / scaleFactor, 2.0f * scaleFactor, 3.0f * scaleFactor, 1.0f,
-                0.05f, operations);
-            auto const price = price_etal::diagnosticsFromHistory(sums, scaleFactor, 0.0f, state,
-                sampleInterval, 0.5f / scaleFactor, 2.0f * scaleFactor, 4.0f, 0.1f, operations);
+                sampleInterval, previousSampleTimestep, 0.5f / scaleFactor, 2.0f * scaleFactor,
+                3.0f * scaleFactor, 1.0f, 0.05f, operations);
+            auto const price = price_etal::diagnosticsFromHistory(sums, scaleFactor, state,
+                sampleInterval, previousSampleTimestep, 0.5f / scaleFactor, 2.0f * scaleFactor,
+                4.0f, 0.1f, operations);
             EXPECT_NEAR(cd.targetBulkViscosityCoefficient, 6.0 / 19.0, 2.0e-6);
             EXPECT_NEAR(hu.targetBulkViscosityCoefficient, 3.0 / 19.0, 2.0e-6);
             EXPECT_NEAR(price.targetBulkViscosityCoefficient, 1.875, 2.0e-6);
             EXPECT_NEAR(hu.limiter, 9.0 / (9.0 + 0.0016), 2.0e-6);
-            EXPECT_EQ(state.sampleRung, sample.previousRung);
         }
     }
 }
 
-TEST(CullenAndDehnen, HistoryHandlesMissingZeroIntervalAndUnresolvedSamples) {
+TEST(CullenAndDehnen, HistoryHandlesInitializationZeroIntervalAndUnresolvedSamples) {
     cullen_and_dehnen::VelocityGradientSums<float> sums;
     for (int component = 0; component < 3; ++component) {
         sums.moment[component][component] = 1.0f;
         sums.velocity[component][component] = -1.0f;
     }
     unsigned long long operations = 0;
-    struct SampleCase {
-        int8_t previousRung;
-        double interval;
-    };
-    SampleCase const sampleCases[] = {{-1, 0.5}, {0, 0.0}, {0, -0.25}};
-    for (auto const& sample : sampleCases) {
-        SphCullenDehnenState state{};
-        state.sampleRung = sample.previousRung;
-        state.setDivergences(100.0f, 100.0f);
+    for (double const interval : {0.0, -0.25}) {
+        Float16Storage state{};
+        ASSERT_TRUE(sphEncodeDivergence(state, 100.0f, 1.0));
         auto const cd = cullen_and_dehnen::diagnosticsFromHistory(
-            sums, 1.0f, state, sample.interval, -1.0f, 0.5f, 2.0f, 2.0f, 0.05f, operations);
+            sums, 1.0f, state, interval, 1.0, -1.0f, 0.5f, 2.0f, 2.0f, 0.05f, operations);
         auto const hu = hu_etal::diagnosticsFromHistory(
-            sums, 1.0f, state, sample.interval, 0.5f, 2.0f, 3.0f, 1.0f, 0.05f, operations);
+            sums, 1.0f, state, interval, 1.0, 0.5f, 2.0f, 3.0f, 1.0f, 0.05f, operations);
         auto const price = price_etal::diagnosticsFromHistory(
-            sums, 1.0f, 0.0f, state, sample.interval, 0.5f, 2.0f, 1.0f, 0.1f, operations);
+            sums, 1.0f, state, interval, 1.0, 0.5f, 2.0f, 1.0f, 0.1f, operations);
         EXPECT_EQ(cd.targetBulkViscosityCoefficient, 0.0f);
         EXPECT_EQ(hu.targetBulkViscosityCoefficient, 0.0f);
         EXPECT_EQ(price.targetBulkViscosityCoefficient, 0.0f);
     }
-    SphCullenDehnenState state{};
-    state.sampleRung = 0;
-    state.setDivergences(100.0f, 100.0f);
+    Float16Storage state{};
+    ASSERT_TRUE(sphEncodeDivergence(state, 100.0f, 1.0));
     cullen_and_dehnen::VelocityGradientSums<float> empty;
     auto const hu = hu_etal::diagnosticsFromHistory(
-        empty, 1.0f, state, 0.5, 0.5f, 2.0f, 3.0f, 1.0f, 0.05f, operations);
+        empty, 1.0f, state, 0.5, 1.0, 0.5f, 2.0f, 3.0f, 1.0f, 0.05f, operations);
     EXPECT_EQ(hu.targetBulkViscosityCoefficient, 0.0f);
 }
 
-TEST(CullenAndDehnen, PriceHistorySubtractsHomogeneousExpansion) {
-    SphCullenDehnenState state{};
-    state.sampleRung = 0;
-    state.setDivergences(0.0f, 0.0f);    // No peculiar divergence at the previous time.
+TEST(CullenAndDehnen, AllHistorySensorsRemainQuietForPureHubbleExpansion) {
+    Float16Storage state{};
+    ASSERT_TRUE(sphEncodeDivergence(state, 0.0f, 0.25));
     unsigned long long operations = 0;
     for (float const scaleFactor : {0.5f, 1.0f, 2.0f}) {
+        // Pure Hubble flow has zero stored peculiar velocity. Production passes
+        // these zero peculiar gradients without adding the Hubble background.
         cullen_and_dehnen::VelocityGradientSums<float> sums;
-        float const expansionRate = 0.25f;
-        for (int i = 0; i < 3; ++i) {
-            sums.moment[i][i] = 1.0f;
-            sums.velocity[i][i] = expansionRate;
+        for (int component = 0; component < 3; ++component) {
+            sums.moment[component][component] = 1.0f;
         }
-        auto const result = price_etal::diagnosticsFromHistory(
-            sums, scaleFactor, expansionRate, state, 0.5, 0.5f, 2.0f, 1.0f, 0.1f, operations);
-        EXPECT_EQ(result.sampleDivergence, 0.0f);
-        EXPECT_EQ(result.targetBulkViscosityCoefficient, 0.0f);
-        EXPECT_EQ(result.divergence, 0.75f / (scaleFactor * scaleFactor));
+        auto const cd = cullen_and_dehnen::diagnosticsFromHistory(
+            sums, scaleFactor, state, 0.375, 0.25, 0.0f, 0.5f, 2.0f, 2.0f, 0.05f, operations);
+        auto const hu = hu_etal::diagnosticsFromHistory(
+            sums, scaleFactor, state, 0.375, 0.25, 0.5f, 2.0f, 3.0f, 1.0f, 0.05f, operations);
+        auto const price = price_etal::diagnosticsFromHistory(
+            sums, scaleFactor, state, 0.375, 0.25, 0.5f, 2.0f, 1.0f, 0.1f, operations);
+        EXPECT_EQ(cd.divergence, 0.0f);
+        EXPECT_EQ(hu.divergence, 0.0f);
+        EXPECT_EQ(price.divergence, 0.0f);
+        EXPECT_EQ(cd.targetBulkViscosityCoefficient, 0.0f);
+        EXPECT_EQ(hu.targetBulkViscosityCoefficient, 0.0f);
+        EXPECT_EQ(price.targetBulkViscosityCoefficient, 0.0f);
+    }
+}
+
+TEST(CullenAndDehnen, GlobalHistorySeparatesSampleScaleFromCompletedInterval) {
+    // Changing the global duration changes q's normalization independently of
+    // the completed interval used in the derivative. Recover the same slope in
+    // both refinement and coarsening cases.
+    for (double const previousTimestep : {0.125, 0.25, 0.5}) {
+        for (double const currentTimestep : {0.125, 0.25, 0.5}) {
+            double const completedInterval = currentTimestep;
+            Float16Storage state{};
+            ASSERT_TRUE(sphEncodeDivergence(
+                state, float(-3.0 + 2.0 * completedInterval), previousTimestep));
+            double const sampleScale =
+                sphViscosityStoredSampleTimestep(0, 1.0, previousTimestep, true);
+            unsigned long long operations = 0;
+            EXPECT_DOUBLE_EQ(cullen_and_dehnen::divergenceTimeDerivative(
+                                 -3.0, 1.0, state, completedInterval, sampleScale, operations),
+                -2.0);
+        }
+    }
+}
+
+TEST(CullenAndDehnen, ConstantStoredVelocityDivergenceHasNoRungChangeTrigger) {
+    // The normalized q values change with the rung, while the canonical
+    // divergence remains constant. Its GADGET-4 time-difference trigger is zero.
+    for (int const previousRung : {0, 1, 2, 3}) {
+        for (int const currentRung : {0, 1, 2, 3}) {
+            Float16Storage state{};
+            double const oldScale = std::ldexp(1.0, -previousRung);
+            ASSERT_TRUE(sphEncodeDivergence(state, -3.0f, oldScale));
+            ASSERT_TRUE(sphRescaleDivergence(state, previousRung, currentRung));
+            double const sampleScale = std::ldexp(1.0, -currentRung);
+            double const completedInterval = sphViscositySampleInterval(currentRung, 1.0, false);
+            for (float const scaleFactor : {0.25f, 0.5f, 1.0f, 2.0f}) {
+                cullen_and_dehnen::VelocityGradientSums<float> sums;
+                for (int component = 0; component < 3; ++component) {
+                    sums.moment[component][component] = 1.0f;
+                    sums.velocity[component][component] = -1.0f;
+                }
+                unsigned long long operations = 0;
+                auto const result =
+                    cullen_and_dehnen::diagnosticsFromHistory(sums, scaleFactor, state,
+                        completedInterval, sampleScale, -1.0f, 0.5f, 2.0f, 2.0f, 0.05f, operations);
+                EXPECT_EQ(result.divergence, -3.0f);
+                EXPECT_EQ(result.targetBulkViscosityCoefficient, 0.0f);
+            }
+        }
+    }
+}
+
+TEST(CullenAndDehnen, HistoryMatchesGadgetGradientConversionDuringExpansion) {
+    // Hold θ_pec constant while a changes. G = a² θ_pec changes, so GADGET-4
+    // detects a⁻² DG/Dt rather than cancelling to Dθ_pec/Dt = 0. The finite
+    // difference in conformal time becomes a*(G_n-G_previous)/Δτ in the scaled
+    // shock indicator consumed by the target formulas.
+    float constexpr kPhysicalPeculiarDivergence = -3.0f;
+    double constexpr kPreviousTimestep = 0.125;
+    double constexpr kCompletedInterval = 0.25;
+    for (float const previousScale : {0.25f, 0.5f, 1.0f}) {
+        float const currentScale = 2.0f * previousScale;
+        float const previousGradient = previousScale * previousScale * kPhysicalPeculiarDivergence;
+        float const currentGradient = currentScale * currentScale * kPhysicalPeculiarDivergence;
+        Float16Storage state{};
+        ASSERT_TRUE(sphEncodeDivergence(state, previousGradient, kPreviousTimestep));
+        unsigned long long operations = 0;
+        double const expected =
+            currentScale * double(currentGradient - previousGradient) / kCompletedInterval;
+        EXPECT_DOUBLE_EQ(
+            cullen_and_dehnen::divergenceTimeDerivative(double(currentGradient),
+                double(currentScale), state, kCompletedInterval, kPreviousTimestep, operations),
+            expected);
+        cullen_and_dehnen::VelocityGradientSums<float> sums;
+        for (int component = 0; component < 3; ++component) {
+            sums.moment[component][component] = 1.0f;
+            sums.velocity[component][component] = currentGradient / 3.0f;
+        }
+        auto const cd = cullen_and_dehnen::diagnosticsFromHistory(sums, currentScale, state,
+            kCompletedInterval, kPreviousTimestep, -1.0f, 0.5f, 2.0f, 2.0f, 0.05f, operations);
+        auto const hu = hu_etal::diagnosticsFromHistory(sums, currentScale, state,
+            kCompletedInterval, kPreviousTimestep, 0.5f, 2.0f, 3.0f, 1.0f, 0.05f, operations);
+        auto const price = price_etal::diagnosticsFromHistory(sums, currentScale, state,
+            kCompletedInterval, kPreviousTimestep, 0.125f, 2.0f, 4.0f, 0.1f, operations);
+        EXPECT_EQ(cd.divergence, currentGradient);
+        EXPECT_EQ(hu.divergence, currentGradient);
+        EXPECT_EQ(price.divergence, currentGradient);
+        EXPECT_GT(cd.targetBulkViscosityCoefficient, 0.0f);
+        EXPECT_GT(hu.targetBulkViscosityCoefficient, 0.0f);
+        EXPECT_GT(price.targetBulkViscosityCoefficient, 0.0f);
     }
 }

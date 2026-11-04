@@ -52,7 +52,7 @@ ScenarioPlan initializeDisc() {
                 r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
                 if (r > innerRadius && r < outerRadius) {
                     sphParticlesResize(sphParticlesSize() + 1);
-                    sphParticlesSupportRadius(i) = h;
+                    sphParticlesSmoothingLength(i) = h;
                     sphParticlesPosition(kXDimension, i) = x;
                     sphParticlesPosition(kYDimension, i) = y;
                     sphParticlesPosition(kZDimension, i) = z;

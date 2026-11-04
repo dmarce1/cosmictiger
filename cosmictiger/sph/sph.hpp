@@ -155,9 +155,15 @@ struct SphRunParameters {
     // A midpoint hydro operator uses the current split-stage sources and owns
     // only nongravitational rates. Gravity supplies its own scalar timestep bound.
     bool midpointHydro = false;
-    // Dyadic integration: base interval used with the current and previous
-    // sample rungs. Global integration: actual elapsed time between midpoints.
+    // Endpoint history: dyadic base interval, or the actual completed global
+    // interval. A live rung recovers each dyadic particle's completed duration.
     double viscositySampleInterval = 0.0;
+    bool viscosityInitializeHistory = false;
+    // Exact shared normalization for half-precision endpoint history. Dyadic
+    // history is rescaled whenever the live rung changes; global history uses
+    // the previous completed duration, with the base interval at startup.
+    double viscosityBaseTimestep = 0.0;
+    double viscosityPreviousTimestep = 0.0;
     // Positive hydro interval; zero only estimates forces/timestep bounds.
     double hydroKickTimestep = 0.0;
     // Phase zero may publish pair rates before the fresh gravity field arrives.
@@ -182,8 +188,9 @@ struct SphRunParameters {
     float expansionAcceleration = 0.0f;    // a³ d²a/dt² for the physical CD acceleration gradient.
     float minimumBulkViscosityCoefficient;
     float viscosityDecay;
-    // Actual completed hydro interval for Morris-Monaghan. Zero disables evolution
-    // during density-only output preparation and initialization.
+    // Completed interval for Morris-Monaghan: dyadic base duration (divided by
+    // the live rung in the density pass), or the actual global duration. Zero
+    // disables evolution at midpoints, initialization, and diagnostic refreshes.
     double viscosityTimestep = 0.0;
     float velocityDampingRate;    // Velocity damping used while relaxing the gas sphere.
     SphRunParameters() {
@@ -211,8 +218,8 @@ struct SphRunParameters {
         minimumBulkViscosityCoefficient = opts.hydro.minimumBulkViscosityCoefficient;
         viscosityDecay = opts.hydro.viscosityDecay;
     }
-    // These switches reconstruct velocity gradients and difference timestamped
-    // divergence samples; no previous acceleration is stored.
+    // These switches reconstruct velocity gradients and difference endpoint
+    // samples; no per-particle timestamp or previous acceleration is stored.
     CUDA_EXPORT bool gradientSwitch() const {
         return cullenDehnen || priceEtAl || huEtAl;
     }
@@ -252,6 +259,9 @@ struct SphRunParameters {
         arc & globalTimestep;
         arc & midpointHydro;
         arc & viscositySampleInterval;
+        arc & viscosityInitializeHistory;
+        arc & viscosityBaseTimestep;
+        arc & viscosityPreviousTimestep;
         arc & hydroKickTimestep;
         arc & deferAccelerationSources;
         arc & refreshConvergedDensity;

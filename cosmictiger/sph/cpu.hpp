@@ -48,7 +48,7 @@ inline std::vector<int> sphCpuNeighbors(SphRunData const& data, SphTreeNode cons
             if (targetNode.outerBox.contains(position, &flops.doublePrecision) ||
                 (symmetric &&
                     sphSupportIntersects(targetNode.innerBox, position,
-                        data.sourceSupportRadius[sourceIndex], &flops))) {
+                        data.sourceSmoothingLength[sourceIndex], &flops))) {
                 neighbors.push_back(sourceIndex);
             }
         }

@@ -15,7 +15,9 @@ Vector<float> outputView(int number, double time);
 // Pass the actual elapsed cosmological age when a may revisit an earlier value.
 // A negative physicalYears retains the expanding-branch diagnostic fallback
 // when gravity is compiled, or writes zero when cosmology is unavailable.
-void viewOutputViews(int cycle, double a, bool force = false, double physicalYears = -1.0);
+// Shared integration durations decode the last committed SPH divergence sample.
+void viewOutputViews(int cycle, double a, bool force = false, double physicalYears = -1.0,
+    double viscosityBaseTimestep = 0.0, double viscosityGlobalTimestep = 0.0);
 
 void viewConfigure();
 

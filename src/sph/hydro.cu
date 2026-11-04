@@ -19,7 +19,7 @@ struct HydroNeighbor {
     Position positionX;
     Position positionY;
     Position positionZ;
-    float supportRadius;
+    float smoothingLength;
     float velocityX;
     float velocityY;
     float velocityZ;
@@ -129,7 +129,7 @@ __global__ void sphCudaHydro(
                     contains = targetNode.outerBox.contains(position, &flops.doublePrecision);
                     if (!contains) {
                         contains = sphSupportIntersects(targetNode.innerBox, position,
-                            data.sourceSupportRadius[sourceParticleIndex], &flops);
+                            data.sourceSmoothingLength[sourceParticleIndex], &flops);
                     }
                 }
                 int slot = contains;
@@ -141,7 +141,7 @@ __global__ void sphCudaHydro(
                 if (contains) {
                     workspace.neighbors[offset + slot] = {position[kXDimension],
                         position[kYDimension], position[kZDimension],
-                        data.sourceSupportRadius[sourceParticleIndex],
+                        data.sourceSmoothingLength[sourceParticleIndex],
                         data.sourceVelocityX[sourceParticleIndex],
                         data.sourceVelocityY[sourceParticleIndex],
                         data.sourceVelocityZ[sourceParticleIndex],
@@ -167,11 +167,11 @@ __global__ void sphCudaHydro(
             if (!parameters.isActiveRung(previousRung)) {
                 continue;
             }
-            float const sinkSupportRadius = data.sourceSupportRadius[particleIndex];
+            float const sinkSmoothingLength = data.sourceSmoothingLength[particleIndex];
             float const sinkDensity = data.sourceDensity[particleIndex];
             float const sinkInternalEnergy = data.sourceInternalEnergy[particleIndex];
             ALWAYS_ASSERT(
-                sinkSupportRadius > 0.0f && sinkDensity > 0.0f && sinkInternalEnergy > 0.0f);
+                sinkSmoothingLength > 0.0f && sinkDensity > 0.0f && sinkInternalEnergy > 0.0f);
             // clang-format off
             /*
              * Particle a. Section 3.5 leaves the equation of state free; the ideal gas gives
@@ -185,7 +185,7 @@ __global__ void sphCudaHydro(
              */
             // clang-format on
             float const sinkKernelSupportRadius =
-                sinkSupportRadius;    // support radius, 2h_a for the cubic spline
+                sinkSmoothingLength;    // support radius, 2h_a for the cubic spline
             float const density = sinkDensity;
             float const internalEnergy = sinkInternalEnergy;
             float const gasAdiabaticIndex = adiabaticIndex;
@@ -238,7 +238,7 @@ __global__ void sphCudaHydro(
                     distance(positionY, neighbor.positionY),
                     distance(positionZ, neighbor.positionZ));
                 float const separationSquared = separation.dot(separation);    // |r_ab|²
-                float const neighborSupportRadius = neighbor.supportRadius;
+                float const neighborSupportRadius = neighbor.smoothingLength;
                 flops +=
                     8 + (separationSquared == 0.0f ? 0 : 2);    // Distances, dot, support squares.
                 bool const supportsIntersect =
@@ -606,8 +606,8 @@ __global__ void sphCudaHydro(
 #endif
                     }
                     ALWAYS_ASSERT(nextRung < kMaxRung);
-                    if (data.sinkProposedRungs != nullptr) {
-                        data.sinkProposedRungs[sinkIndex] = nextRung;
+                    if (data.proposeRungs) {
+                        data.sinkFlags[sinkIndex].setProposedRung(nextRung);
                     } else {
                         data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] = nextRung;
                     }

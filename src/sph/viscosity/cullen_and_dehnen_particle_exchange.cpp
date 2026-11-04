@@ -10,6 +10,8 @@
 
 #include "../particle_cache.hpp"
 
+// CD equation (17) needs only the sign. A positive timestep normalization
+// preserves that sign without a per-source clock or cosmological scale.
 static Vector<float> sphParticlesFetchViscosityDiagnosticsCacheLine(ParticleInteger index);
 
 HPX_PLAIN_ACTION(sphParticlesFetchViscosityDiagnosticsCacheLine,
@@ -27,7 +29,7 @@ static Vector<float> sphParticlesFetchViscosityDiagnosticsCacheLine(ParticleInte
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; ++i) {
-        line[i - begin] = sphParticlesCullenDehnenStates[i].physicalDivergence();
+        line[i - begin] = sphDivergenceSign(sphScaledDivergence[i]);
     }
     return line;
 }
@@ -42,7 +44,7 @@ void sphParticlesGlobalReadViscosityDiagnostics(
         for (ParticleInteger i = range.range.first; i < range.range.second; ++i) {
             ParticleInteger const destination = offset + i - range.range.first;
             if (divergence) {
-                divergence[destination] = sphParticlesCullenDehnenStates[i].physicalDivergence();
+                divergence[destination] = sphDivergenceSign(sphScaledDivergence[i]);
             }
         }
     } else {

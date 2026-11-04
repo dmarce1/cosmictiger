@@ -40,6 +40,8 @@ def main():
                         help="Check hydrodynamics method selection without the full option suite")
     parser.add_argument("--startup-options-only", action="store_true",
                         help="Check the complete option dump during normal nonverbose startup")
+    parser.add_argument("--balsara-options-only", action="store_true",
+                        help="Check model-dependent Balsara defaults and explicit CLI/INI overrides")
     args = parser.parse_args()
     if args.gravity_method == "none":
         if not args.startup_options_only or args.order != 0 or args.without_sph:
@@ -308,6 +310,69 @@ mapSize = 8
 
     metadata_options = ["--run.test=checkpointState",
                         "--hydro.enabled=false", "--initial.particlesPerDimension=8"]
+
+    def checkBalsaraOptions():
+        gradientModels = ("cullenAndDehnen", "hu_etal", "priceEtAl")
+        cases = []
+        expected = []
+
+        def addCase(name, options, enabled, warningModel=None):
+            cases.append((name, metadata_options + options, True))
+            expected.append((name, enabled, warningModel))
+
+        for model in ("none", "morrisAndMonaghan", *gradientModels):
+            addCase("balsara_default_" + model, [f"--hydro.viscosityEvolution={model}"],
+                    model not in gradientModels)
+        automaticConfigs = {}
+        enabledConfigs = {}
+        for model in gradientModels:
+            automatic = args.workdir / f"balsara_automatic_{model}.ini"
+            automatic.write_text(f"[hydro]\nviscosityEvolution = {model}\n")
+            automaticConfigs[model] = automatic
+            addCase("balsara_automatic_ini_" + model,
+                    [f"--configuration={automatic.resolve()}"], False)
+            enabled = args.workdir / f"balsara_enabled_{model}.ini"
+            enabled.write_text(f"[hydro]\nviscosityEvolution = {model}\nbalsaraSwitch = true\n")
+            enabledConfigs[model] = enabled
+            addCase("balsara_enabled_ini_" + model,
+                    [f"--configuration={enabled.resolve()}"], True, model)
+
+        disabled = args.workdir / "balsara_disabled_price.ini"
+        disabled.write_text("[hydro]\nviscosityEvolution = priceEtAl\nbalsaraSwitch = false\n")
+        # Preserve numeric bool spellings as well as true/false. Explicit CLI
+        # wins over INI, while an omitted bool follows the final model selection.
+        addCase("balsara_enabled_cli_override", [f"--configuration={disabled.resolve()}",
+                "--hydro.balsaraSwitch=1"], True, "priceEtAl")
+        addCase("balsara_disabled_cli_override", [
+            f"--configuration={enabledConfigs['priceEtAl'].resolve()}",
+            "--hydro.balsaraSwitch=0"], False)
+        addCase("balsara_automatic_model_override", [
+            f"--configuration={automaticConfigs['hu_etal'].resolve()}",
+            "--hydro.viscosityEvolution=none"], True)
+        addCase("balsara_explicit_model_override", [
+            f"--configuration={enabledConfigs['cullenAndDehnen'].resolve()}",
+            "--hydro.viscosityEvolution=priceEtAl"], True, "priceEtAl")
+
+        warningPrefix = "Warning: hydro.balsaraSwitch=true adds redundant shear suppression:"
+        for (name, enabled, warningModel), output in zip(expected, runAll(cases)):
+            resolved = "T" if enabled else "F"
+            if not re.search(r"^hydro\.balsaraSwitch\s*:\s*" + resolved + r"\s*$",
+                             output, re.MULTILINE):
+                raise RuntimeError(f"{name}: incorrect resolved Balsara switch")
+            warnings = [line for line in output.splitlines() if line.startswith(warningPrefix)]
+            if warningModel is None:
+                if warnings:
+                    raise RuntimeError(f"{name}: unexpected redundant-suppression warning")
+            elif (len(warnings) != 1 or f"hydro.viscosityEvolution={warningModel}" not in warnings[0]
+                  or "already includes a shear limiter" not in warnings[0]):
+                raise RuntimeError(f"{name}: missing model-specific redundancy warning")
+            if "Checkpoint state and mode validation passed" not in output:
+                raise RuntimeError(f"{name}: metadata validation did not finish")
+
+    if args.balsara_options_only:
+        checkBalsaraOptions()
+        print("Balsara model defaults, explicit overrides, and redundancy warnings passed")
+        return
 
     for key in cuda_keys:
         if not re.search(r"^" + re.escape(key) + r"\s*:\s*F\s*$", configured, re.MULTILINE):
@@ -839,7 +904,7 @@ mapSize = 8
                 raise RuntimeError("midpoint deferred source rejection lacked guidance")
     if sph_controls_available:
         if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_default, re.MULTILINE):
-            raise RuntimeError("Balsara switch must default to enabled")
+            raise RuntimeError("Balsara switch must default to enabled for Morris-Monaghan")
         balsara_override = run("balsara_cli_override", [f"--configuration={config.resolve()}",
                                                      "--hydro.balsaraSwitch=true"] + sph_control_options)
         if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_override, re.MULTILINE):
@@ -849,6 +914,7 @@ mapSize = 8
             if not re.search(r"^hydro\.viscosityEvolution\s*:\s*" + expected_value + r"\s*$",
                              output, re.MULTILINE):
                 raise RuntimeError("unexpected hydro.viscosityEvolution setting")
+    checkBalsaraOptions()
     # Pressure is always variational; neither old selector value is accepted.
     for operator in ("monaghan", "variational"):
         rejected = run("pressure_operator_removed_cli_" + operator,
@@ -1417,7 +1483,7 @@ mapSize = 8
                      "gravity.effectiveRadius", "gravity.supportRadius",
                      "gravity.method.near", "gravity.expansionDegree",
                      "units.boxLength",
-                     "hydro.centralEffectiveRadius", "hydro.centralSupportRadius",
+                     "hydro.balsaraSwitch", "hydro.centralEffectiveRadius", "hydro.centralSupportRadius",
                      "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius"}
     public_keys = set(option_names) - {"help", "configuration"}
     preset_curvatures = {"critical.ini": 0.0}

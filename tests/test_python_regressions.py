@@ -25,15 +25,16 @@ import run_star_formation_ids
 import run_variational_sph
 
 
-def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=None,
+def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=None, balsara=False,
                        position_bytes=4, integer_bytes=4, global_step=False, pmmm=0,
-                       ranks=1):
+                       ranks=1, converged=False, semiactive=True, proposed_rung=3):
     """Small writer-order fixture, with magic-like data inside a position array."""
     flags = 1 << 18
     flags |= int(hydro) | (int(cooling) << 11) | (int(stars) << 20)
     flags |= (int(position_bytes == 8) << 15) | (int(integer_bytes == 8) << 21)
     flags |= (int(global_step) << 19) | (int(bool(pmmm)) << 17)
     flags |= (int(viscosity is not None) << 14)
+    flags |= int(hydro and balsara) << 13
     header = checkpoint.Header()
     header.magic, header.version, header.flags = 0x4354535048303031, 3, flags
     header.particles_per_species = 2
@@ -78,23 +79,30 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=None
         put('2b', 0, 1)
         put(2 * integer, -1, 0)
         offsets['gas'] = len(output)
-        version = 60000 + (110 if stars else 100 if cooling else 2)
+        version = 130000 + (110 if stars else 100 if cooling else 2)
         version += 0 if viscosity is None else 2 + 2 * viscosity
-        put('7I', 0x43545350, version, integer_bytes, 4, 12, 3, 4)
+        version += int(balsara and viscosity is not None and viscosity > 0)
+        offsets['gas_version'] = len(output) + 4
+        put('7I', 0x43545350, version, integer_bytes, 4, 0, 3, 4)
         put(integer, 1)
         put('I', 0)  # initial-energy state, not yet converted to entropy
         put('d', 1.0)  # thermal scale factor
         put('2f', 100., .1)  # initial thermal array, then support radius array
-        put('3f', .1, .2, .3)
         offsets['gas_mapping'] = len(output)
         put(integer, 1)
-        put('2f', .5, .6)  # internal-energy rate, density
-        put('2B', 0, 1)
+        put('f', .6)  # density; no persistent acceleration or entropy-rate arrays
+        offsets['gas_flags'] = len(output)
         offsets['hydro_rung'] = len(output)
-        put('b', 3)  # latest midpoint hydro timestep bound
+        encoded_rung = proposed_rung
+        put('B', int(converged) | (int(semiactive) << 1) | (encoded_rung << 2))
         if viscosity is not None:
-            put('f' if viscosity == 0 else '2f',
-                *([.2] if viscosity == 0 else [.2, .4]))
+            offsets['viscosity_alpha'] = len(output)
+            put('e', .25)
+            if viscosity > 0:
+                offsets['scaled_divergence'] = len(output)
+                put('e', -.375)  # q = own conformal interval times canonical divergence
+                if balsara:
+                    put('B', 173)  # retained factor from the same reconstructed gradient
         if cooling:
             put('f', 1.)  # electron fraction
     if stars:
@@ -131,13 +139,14 @@ class BuildCapabilityTests(unittest.TestCase):
 
 class CheckpointTests(unittest.TestCase):
     def test_layout_variants(self):
-        for position_bytes, integer_bytes, global_step, state, viscosity in itertools.product(
-                (4, 8), (4, 8), (False, True), ('hydro', 'cooling', 'stars'), (None, 0, 1, 2, 3)):
+        for position_bytes, integer_bytes, global_step, state, viscosity, balsara in itertools.product(
+                (4, 8), (4, 8), (False, True), ('hydro', 'cooling', 'stars'), (None, 0, 1, 2, 3),
+                (False, True)):
             with self.subTest(position_bytes=position_bytes, integer_bytes=integer_bytes,
-                              global_step=global_step, state=state, viscosity=viscosity):
+                              global_step=global_step, state=state, viscosity=viscosity, balsara=balsara):
                 data, _ = checkpoint_fixture(position_bytes=position_bytes,
                     integer_bytes=integer_bytes, global_step=global_step,
-                    cooling=state != 'hydro', stars=state == 'stars', viscosity=viscosity)
+                    cooling=state != 'hydro', stars=state == 'stars', viscosity=viscosity, balsara=balsara)
                 result = checkpoint.decode_checkpoint(data)
                 self.assertEqual((result.count, result.gas_count), (2, 1))
                 self.assertEqual(result.positions[0][0], 0x43545350)
@@ -145,7 +154,46 @@ class CheckpointTests(unittest.TestCase):
                 self.assertEqual(len(result.stars), 2 if state == 'stars' else 0)
                 self.assertEqual(result.driver.global_timestep, .1 if global_step else 0.)
                 self.assertEqual(result.driver.global_hydro_timestep, .025 if global_step else 0.)
+                self.assertEqual(result.gas_flags, (14,))
+                self.assertEqual(result.converged, (False,))
+                self.assertEqual(result.semiactive, (True,))
                 self.assertEqual(result.proposed_rungs, (3,))
+                self.assertEqual(result.gas[0][3:6], (False, True, 3))
+                self.assertEqual(result.bulk_viscosity_coefficients,
+                                 [] if viscosity is None else [.25])
+                self.assertEqual(result.divergence_histories,
+                                     [-.375] if viscosity is not None and viscosity > 0 else [])
+                self.assertEqual(result.balsara_factors,
+                                 [173] if balsara and viscosity is not None and viscosity > 0 else [])
+
+    def test_packed_gas_flags_preserve_all_valid_combinations(self):
+        for converged, semiactive, proposed_rung in itertools.product(
+                (False, True), (False, True), range(16)):
+            with self.subTest(converged=converged, semiactive=semiactive,
+                              proposed_rung=proposed_rung):
+                data, offsets = checkpoint_fixture(viscosity=1, balsara=True,
+                    converged=converged, semiactive=semiactive, proposed_rung=proposed_rung)
+                result = checkpoint.decode_checkpoint(data)
+                encoded_rung = proposed_rung
+                expected = int(converged) | (int(semiactive) << 1) | (encoded_rung << 2)
+                self.assertEqual(result.gas_flags, (expected,))
+                self.assertEqual(result.converged, (converged,))
+                self.assertEqual(result.semiactive, (semiactive,))
+                self.assertEqual(result.proposed_rungs, (proposed_rung,))
+                self.assertEqual(result.gas[0][3:6], (converged, semiactive, proposed_rung))
+                self.assertEqual(offsets['viscosity_alpha'], offsets['gas_flags'] + 1)
+                self.assertEqual(result.bulk_viscosity_coefficients, [.25])
+                self.assertEqual(result.divergence_histories, [-.375])
+                self.assertEqual(result.balsara_factors, [173])
+
+    def test_packed_gas_flags_reject_unused_rung_codes(self):
+        data, offsets = checkpoint_fixture()
+        for encoded_rung, flags in itertools.product(range(16, 64), range(4)):
+            altered = bytearray(data)
+            struct.pack_into('=B', altered, offsets['gas_flags'], (encoded_rung << 2) | flags)
+            with self.subTest(encoded_rung=encoded_rung, flags=flags), \
+                    self.assertRaisesRegex(RuntimeError, 'hydro rung bound'):
+                checkpoint.decode_checkpoint(altered)
 
     def test_pmmm_dark_matter_and_multiple_domains(self):
         for version, integer_bytes in itertools.product((1, 2, 3, 4, 5), (4, 8)):
@@ -169,9 +217,13 @@ class CheckpointTests(unittest.TestCase):
         mutations = [('cooling', 'd', 5., 'cooling checkpoint model'),
                      ('star_model', 'Q', 2, 'star-formation model'),
                      ('gas', 'I', 0, 'gas layout'),
+                     ('gas_version', 'I', 90110, 'gas layout'),
+                     ('gas_version', 'I', 100110, 'gas layout'),
+                     ('gas_version', 'I', 110110, 'gas layout'),
+                     ('gas_version', 'I', 120110, 'gas layout'),
                      ('count', 'i', 999, 'particle counts'),
                      ('gas_mapping', 'i', 0, 'gas mapping'),
-                     ('hydro_rung', 'b', 64, 'hydro rung bound'),
+                     ('hydro_rung', 'B', 64, 'hydro rung bound'),
                      ('metadata', 'Q', 0, 'star-particle metadata'),
                      ('second_identity', 'Q', 1, 'particle identities')]
         for name, code, value, message in mutations:
@@ -181,6 +233,33 @@ class CheckpointTests(unittest.TestCase):
                 checkpoint.decode_checkpoint(altered)
         with self.assertRaisesRegex(RuntimeError, 'trailing'):
             checkpoint.decode_checkpoint(data + b'x')
+
+    def test_compact_viscosity_corruption(self):
+        data, offsets = checkpoint_fixture(viscosity=1)
+        mutations = [
+            ('viscosity_alpha', 'H', bits, 'viscosity coefficient')
+            for bits in (0xbc00, 0x7c00, 0xfc00, 0x7e00)
+        ]
+        mutations += [
+            ('scaled_divergence', 'H', bits, 'divergence history')
+            for bits in (0x7c00, 0xfc00, 0x7e00)
+        ]
+        for name, code, value, message in mutations:
+            altered = bytearray(data)
+            struct.pack_into('=' + code, altered, offsets[name], value)
+            with self.subTest(name=name, value=value), \
+                    self.assertRaisesRegex(RuntimeError, message):
+                checkpoint.decode_checkpoint(altered)
+
+    def test_compact_history_preserves_half_values(self):
+        data, offsets = checkpoint_fixture(viscosity=3, global_step=True)
+        for bits in (0x0000, 0x8000, 0x0001, 0x8001, 0x0400, 0x8400, 0x7bff, 0xfbff):
+            altered = bytearray(data)
+            struct.pack_into('=H', altered, offsets['scaled_divergence'], bits)
+            with self.subTest(bits=bits):
+                result = checkpoint.decode_checkpoint(altered)
+                scaled_divergence = result.divergence_histories[0]
+                self.assertEqual(struct.pack('=e', scaled_divergence), struct.pack('=H', bits))
 
     def test_old_uv_checkpoint_inserts_checksum_and_is_rejected_early(self):
         data, offsets = checkpoint_fixture(cooling=True)

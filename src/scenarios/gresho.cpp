@@ -33,7 +33,7 @@ ScenarioPlan initializeGresho() {
                     auto const state = greshoState(radius);
                     double const angularVelocity =
                         radius > 0.0 ? state.azimuthalVelocity / radius : 0.0;
-                    sphParticlesSupportRadius(i) = supportRadius;
+                    sphParticlesSmoothingLength(i) = supportRadius;
                     sphParticlesPosition(kXDimension, i) = position[0];
                     sphParticlesPosition(kYDimension, i) = position[1];
                     sphParticlesPosition(kZDimension, i) = position[2];

@@ -18,7 +18,7 @@ SphRunReturn sphCpuRungs(SphRunParameters const&, SphRunData const& data, int ta
         int const sinkRung = data.sourceRungs[particleIndex];
         int const sinkIndex =
             targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
-        float const supportRadius = data.sinkSupportRadius[sinkIndex];
+        float const supportRadius = data.sinkSmoothingLength[sinkIndex];
         SimdFloat const squaredSupportRadius(supportRadius * supportRadius);
         flops += 1;
         SimdFloat maximumNeighborRungs(0.0f);
@@ -28,7 +28,7 @@ SphRunReturn sphCpuRungs(SphRunParameters const&, SphRunData const& data, int ta
             auto const squaredSeparation =
                 sqr(separation[kXDimension], separation[kYDimension], separation[kZDimension]);
             auto const neighborSupport =
-                detail::sphCpuLoad(data.sourceSupportRadius, neighbors, first, 0.0f);
+                detail::sphCpuLoad(data.sourceSmoothingLength, neighbors, first, 0.0f);
             SimdFloat const neighborRungs([&](auto lane) {
                 size_t const index = first + size_t(lane);
                 return index < neighbors.size() ? float(data.sourceRungs[neighbors[index]]) : 0.0f;

@@ -214,7 +214,7 @@ ScenarioPlan initializePolytropicStar() {
             sphParticlesPosition(kXDimension, k) = xValue[i][kXDimension][l] * radius[i] + 0.5;
             sphParticlesPosition(kYDimension, k) = xValue[i][kYDimension][l] * radius[i] + 0.5;
             sphParticlesPosition(kZDimension, k) = xValue[i][kZDimension][l] * radius[i] + 0.5;
-            sphParticlesSupportRadius(k) = h;
+            sphParticlesSmoothingLength(k) = h;
             double const pValue = kValue * pow(d, 1.0 + 1.0 / npoly);
             double const eint = pValue / ((opts.hydro.gamma - 1.0) * d);
             sphParticlesSetInternalEnergy(k, eint);

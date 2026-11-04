@@ -100,7 +100,7 @@ ScenarioPlan initializeBlast() {
                     m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * rho0),
                     1.0 / 3.0);
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSupportRadius(i) = h;
+                sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x;
                 sphParticlesPosition(kYDimension, i) = y;
                 sphParticlesPosition(kZDimension, i) = z;
@@ -123,7 +123,7 @@ ScenarioPlan initializeBlast() {
                 vy = 0.0;
                 vz = 0.0;
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSupportRadius(i) = h;
+                sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x;
                 sphParticlesPosition(kYDimension, i) = y;
                 sphParticlesPosition(kZDimension, i) = z;

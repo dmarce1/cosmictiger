@@ -30,7 +30,7 @@ def comparison_records(state):
         gas = state.gas_indices[particle]
         records.append((*(axis[particle] for axis in state.positions),
                         *state.velocities[3 * particle:3 * particle + 3],
-                        state.entropies[gas], state.support_radii[gas],
+                        state.entropies[gas], state.smoothing_lengths[gas],
                         state.rungs[particle]))
     return sorted(records)
 
@@ -83,7 +83,7 @@ def compare_restart(reference, resumed, *, position_units=0, accumulation_units=
         require(not any(grid.values()), "GPU restart left unmatched particles")
         second = tuple(matched)
     particle_fields = (4, 5, 6)
-    # Version 90000 stores A, support, density, flags, proposal, then optional
+    # Version 130000 packs flags and proposal into one byte after density, then
     # viscosity history. Removed forces/rates must not shift discrete fields
     # into the float-tolerated set. Viscosity history remains exact here.
     gas_fields = (0, 1, 2)

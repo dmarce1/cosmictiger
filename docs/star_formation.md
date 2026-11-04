@@ -79,8 +79,23 @@ changed. It does not advance committed viscosity history. As with inviscid SPH,
 gas rungs still change only at common all-particle boundaries: abrupt heating or
 new contacts do not trigger immediate wakeups or rollback between boundaries.
 This policy does not guarantee an immediate CFL response to new source heating.
-Viscosity histories advance only at each surviving particle's own hydro midpoint;
-their previous sampled rung determines the next sampling interval. The five
+All evolving alpha, including Morris–Monaghan, advances at each completed own
+interval endpoint, before gas rung changes and before source conversion. CD, Hu
+and Price also commit divergence history there; Morris–Monaghan stores no such
+history. These updates reuse the endpoint density/gradient pass already needed
+by cooling or star formation. Startup does not advance alpha. Ordinary midpoint
+force evaluations use the last endpoint's alpha. For CD, Hu and Price, Balsara
+uses the same reconstructed velocity gradient at startup and endpoints, and its
+factor is retained until the next reconstruction. This replaces their old
+uncorrected SPH divergence/curl estimate with the matrix-corrected estimate,
+without an additional midpoint gradient pass. Constant-α and Morris–Monaghan
+runs retain direct midpoint divergence/curl sums when Balsara is enabled.
+The gradient-history endpoint difference is centered on the completed interval's midpoint but
+available afterward; its alpha is used by the following hydro kick, giving the
+accepted first-order viscosity timing. Midpoint pressure and viscous force
+evaluations retain their existing schedule. The old live rung gives the completed
+dyadic duration; every rung mutation rescales the saved scalar by
+\(2^{r_{\rm old}-r_{\rm new}}\), so no previous-rung byte is needed. The four
 pending viscosity diagnostics are temporary density-event scratch, released
 before source conversion and not allocated by the post-source bound estimate.
 
@@ -168,8 +183,9 @@ pinned equations does not establish identical SPH force discretization,
 random streams, or galaxy statistics between codes. Report the actual builds,
 backends and application runs used when assessing a change.
 
-The endpoint regression checks mixed-rung source counts and durations, unchanged
-committed viscosity history, and no mechanical kick from the post-source estimate.
+The endpoint regression checks mixed-rung source counts and durations, one
+gradient-history update before sources, and no further history update or mechanical
+kick from the post-source estimate.
 The particle fixture compares a converted star with an identical existing star
 through a nonzero ordinary gravity update for each compiled integrator.
 Application restart tests include a controlled saved rate that guarantees
@@ -178,20 +194,55 @@ gas population. Source payloads already carry particle ID, event counter, birth
 time, saved specific formation rate and elapsed physical time; this integration
 adds no persistent per-particle fields or force-rate arrays.
 
-The SPH payload uses base version 90000 for compact viscosity storage. Evolving
-alpha remains two-byte binary16. CD, Price and Hu use eight bytes of in-memory
-committed history: two signed 16-bit divergence significands, two independent
-signed one-byte exponents and the previous sampled rung. Each nonzero divergence
-decodes as \(q\,2^{e-14}\), with \(16384\le|q|\le32767\) and
-\(-126\le e\le127\). Normal float32 inputs are truncated to 15 significant
-bits; subnormals are flushed to zero. Fieldwise serialization is `h,h,b,b,b`
-(seven bytes). Source counters and elapsed source time retain their existing
+The SPH payload uses base version 130000 for compact viscosity storage and packed
+gas flags. One `SphParticleFlags` byte follows density: convergence is bit 0,
+semiactivity bit 1, and proposed rung bits 2–7. Rung codes 0–15 are valid; 63
+decodes to `-1`, and the remaining codes are rejected. This replaces three byte
+arrays in memory, checkpoints and migration, saving two bytes per gas particle.
+Callers use explicit setters rather than mutable references to individual bits.
+Evolving
+alpha remains two-byte binary16. CD, Price and Hu share one two-byte
+`Float16Storage* sphScaledDivergence` array, storing the dimensionless sample
+\(q_n=\delta\tau_n G_n\), where
+\(G_n=\nabla_{\mathbf x}\cdot\mathbf w_n=a_n^2\theta_{{\rm pec},n}\).
+The normalization is the particle's own conformal interval; its actual duration
+is recovered from the live rung or shared previous completed global step. Global
+startup uses the shared base duration until a step has completed; dyadic startup
+uses the live rung. Startup seeds history without advancing alpha. There is no
+wrapper or retained sampled-rung byte. Checkpoint and migration both store `H`
+(two bytes). As in GADGET-4, the sensor differences decoded canonical
+gradients before converting with the current scale factor; the derivative is
+not retained. The `divv` output reports the last endpoint's canonical \(G\), explicitly identified
+by its metadata. Four float pending diagnostics occupy sixteen
+temporary bytes only during density events.
+
+The Balsara factor is one byte, rounded to the nearest multiple of \(1/255\);
+force/source staging uses float. With CD, Hu and Price, its retained byte is
+checkpointed and migrated when enabled. With constant α and Morris–Monaghan,
+it remains transient and is recomputed after restart or migration.
+Balsara defaults off for CD/Hu/Price and on for constant α/MM; explicit extra
+suppression for a gradient model is accepted with a warning.
+History, alpha and Balsara together use five bytes per gas particle when all
+are enabled, down from fourteen. Constant viscosity has no history or evolving
+alpha array. Source counters and elapsed source time retain their existing
 meanings; no viscosity timestamp is added. Older SPH payload versions, including
-base 80000's scaled binary16 divergences, are rejected.
+base 90000's signed-significand histories and the intermediate bases 100000,
+110000 and 120000, are rejected.
+
+The source-history lifecycle fixtures passed on CPU, CUDA and two MPI ranks for
+commit `1bc12b5f6`, the signed-significand/base-90000 representation, as recorded
+in [the pair-midpoint design](sph_pair_midpoint_plan.md#validation). That is
+historical validation. The same linked design records the later base-120000
+endpoint-history/Balsara work and successful final packed-flag/base-130000
+validation. The final CPU selection passed all ten CTests, including source
+completion on CPU and MPI; both selected CUDA application tests also passed.
+Focused kernel, restart, reordering and two-rank migration checks are detailed
+there. These checks do not establish long-duration star-formation statistics,
+performance or full-suite coverage.
 
 The following results are historical validation of commit `9ccd34a85`, using
-checkpoint base 80000. They do not validate the subsequent signed-significand
-representation or its base-90000 payload. On November 4, 2026, after that
+checkpoint base 80000. They do not validate subsequent compact-history
+representations. On November 4, 2026, after that
 compact-history update, source timing and conversion fixtures passed on CPU,
 CUDA and two MPI ranks. The star-formation
 application passed traditional, hierarchical and global evolution/restart cases
