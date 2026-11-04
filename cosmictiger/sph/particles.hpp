@@ -16,6 +16,7 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/sph/hierarchical_state.hpp>
 #include <cosmictiger/sph/viscosity/cullen_and_dehnen_state.hpp>
 
 namespace sph_entropy {
@@ -108,9 +109,12 @@ SPH_PARTICLES_EXTERN float* sphParticlesEntropies;
 // Compact support radius of the SPH smoothing kernel.
 SPH_PARTICLES_EXTERN float* sphParticlesSupportRadii;
 SPH_PARTICLES_EXTERN SphAcceleration* sphParticlesAccelerationStates;
+SPH_PARTICLES_EXTERN SphHierarchicalState* sphParticlesHierarchicalStates;
 SPH_PARTICLES_EXTERN ParticleInteger* sphParticlesParticleIndices;
-// Gravity of the latest walk. The walk does not kick gas: hydro adds it to the
-// gas acceleration and owns the gas momentum.
+// Optional transient handoff for standalone gravity/hydro passes. The combined
+// FMM leaf path releases it and retains only the total acceleration above.
+void sphParticlesEnsureGravityStorage();
+void sphParticlesReleaseGravityStorage();
 SPH_PARTICLES_EXTERN Array<float*, kDimensions> sphParticlesGravityAccelerations;
 SPH_PARTICLES_EXTERN float* sphParticlesEntropyRates;
 SPH_PARTICLES_EXTERN float* sphParticlesDensities;

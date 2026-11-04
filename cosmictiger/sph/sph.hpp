@@ -261,6 +261,18 @@ inline constexpr int kSphRunRungs = 3;
 
 SphRunReturn sphRun(SphRunParameters params, bool cuda = false);
 void sphParticlesCompleteForces(SphRunParameters const& parameters);
+// Collective force-pass lifetime: freeze every locality's predicted sources
+// before any gravity leaf writes the combined gas acceleration or entropy rate.
+void sphGravityPrepare(SphRunParameters parameters);
+bool sphGravityActive();
+void sphGravityKickLeaf(Pair<ParticleInteger> particleRange, Fixed32Range const& box,
+    float const* gravityX, float const* gravityY, float const* gravityZ);
+// CUDA bridge: completed gravity subtrees supply launch-owned gas-indexed
+// accelerations, consumed by one grouped hydro launch before their release.
+void sphGravityKickSubtrees(Vector<TreeId> const& roots, float const* gravityX,
+    float const* gravityY, float const* gravityZ, ParticleInteger gravityOffset);
+SphRunReturn sphGravityFinish();
+void sphGravityAbort();
 #ifndef __CUDACC__
 hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     SphTreeNeighborParameters params, TreeId self, Vector<TreeId> checklist, int level = 0);

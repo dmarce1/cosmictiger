@@ -9,7 +9,9 @@
 #include <format>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <stack>
+#include <type_traits>
 #include <vector>
 
 #include <hpx/threading_base/annotated_function.hpp>
@@ -17,6 +19,9 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/safe_io.hpp>
+#if COSMICTIGER_ENABLE_FMM
+#include <cosmictiger/gravity/tree.hpp>
+#endif
 #include <cosmictiger/math/vector3.hpp>
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
 #include <cosmictiger/gravity/pmmm/solver.hpp>
@@ -27,6 +32,7 @@
 #include <cosmictiger/sph/cpu.hpp>
 #include <cosmictiger/sph/flops.hpp>
 #include <cosmictiger/sph/sph.hpp>
+#include <cosmictiger/sph/time_integration.hpp>
 #ifdef USE_CUDA
 #include <cosmictiger/sph/cuda.hpp>
 #endif
@@ -76,6 +82,30 @@ struct SphRunWorkspace {
     std::unordered_map<TreeId, int, SphTreeIdHash> treeMap;
     std::unordered_map<int, Pair<int>> neighborRanges;
     MutexType mutex;
+    template <class Copy>
+    void copySources(SphRunData& runData, Copy&& copy) {
+        copy(runData.sourcePositionX, hostPositionX);
+        copy(runData.sourcePositionY, hostPositionY);
+        copy(runData.sourcePositionZ, hostPositionZ);
+        copy(runData.sourceSupportRadius, hostSupportRadius);
+        copy(runData.sourceRungs, hostRungs);
+        copy(runData.sourceInternalEnergy, hostInternalEnergy);
+        copy(runData.sourceDensity, hostDensity);
+        copy(runData.sourceGradHCorrection, hostGradHCorrection);
+        copy(runData.sourceBalsaraFactor, hostBalsaraFactor);
+        copy(runData.sourceBulkViscosityCoefficient, hostViscosityAlpha);
+        copy(runData.sourceAccelerationX, hostAccelerationX);
+        copy(runData.sourceAccelerationY, hostAccelerationY);
+        copy(runData.sourceAccelerationZ, hostAccelerationZ);
+        copy(runData.sourceVelocityDivergence, hostVelocityDivergence);
+        copy(runData.sourceVelocityX, hostVelocityX);
+        copy(runData.sourceVelocityY, hostVelocityY);
+        copy(runData.sourceVelocityZ, hostVelocityZ);
+        copy(runData.treeNodes, hostTrees);
+        copy(runData.targetNodeIndices, hostTargetNodeIndices);
+        copy(runData.neighborNodeIndices, hostNeighborNodeIndices);
+    }
+    SphRunData data();
     void addWork(TreeId selfid);
     // stage() gathers every source, including remote cache lines; compute() runs the
     // kernels, which update sink arrays that remote localities may still be staging.
@@ -623,31 +653,10 @@ void SphRunWorkspace::stage() {
     }
 }
 
-SphRunReturn SphRunWorkspace::compute(bool useCuda) {
+SphRunData SphRunWorkspace::data() {
     SphRunData runData{};
-    auto const copySources = [&](auto const& copy) {
-        copy(runData.sourcePositionX, hostPositionX);
-        copy(runData.sourcePositionY, hostPositionY);
-        copy(runData.sourcePositionZ, hostPositionZ);
-        copy(runData.sourceSupportRadius, hostSupportRadius);
-        copy(runData.sourceRungs, hostRungs);
-        copy(runData.sourceInternalEnergy, hostInternalEnergy);
-        copy(runData.sourceDensity, hostDensity);
-        copy(runData.sourceGradHCorrection, hostGradHCorrection);
-        copy(runData.sourceBalsaraFactor, hostBalsaraFactor);
-        copy(runData.sourceBulkViscosityCoefficient, hostViscosityAlpha);
-        copy(runData.sourceAccelerationX, hostAccelerationX);
-        copy(runData.sourceAccelerationY, hostAccelerationY);
-        copy(runData.sourceAccelerationZ, hostAccelerationZ);
-        copy(runData.sourceVelocityDivergence, hostVelocityDivergence);
-        copy(runData.sourceVelocityX, hostVelocityX);
-        copy(runData.sourceVelocityY, hostVelocityY);
-        copy(runData.sourceVelocityZ, hostVelocityZ);
-        copy(runData.treeNodes, hostTrees);
-        copy(runData.targetNodeIndices, hostTargetNodeIndices);
-        copy(runData.neighborNodeIndices, hostNeighborNodeIndices);
-    };
-    copySources([](auto*& destination, auto& source) {
+
+    copySources(runData, [](auto*& destination, auto& source) {
         destination = source.empty() ? nullptr : source.data();
     });
     runData.sinkParticleIndices = &sphParticlesParticleIndex(0);
@@ -664,9 +673,9 @@ SphRunReturn SphRunWorkspace::compute(bool useCuda) {
     runData.sinkSupportRadius = sphParticlesSupportRadii;
     runData.sinkEntropyRate = sphParticlesEntropyRates;
 #if COSMICTIGER_WITH_GRAVITY
-    runData.sinkGravityAccelerationX = &sphParticlesGravityAcceleration(kXDimension, 0);
-    runData.sinkGravityAccelerationY = &sphParticlesGravityAcceleration(kYDimension, 0);
-    runData.sinkGravityAccelerationZ = &sphParticlesGravityAcceleration(kZDimension, 0);
+    runData.sinkGravityAccelerationX = sphParticlesGravityAccelerations[kXDimension];
+    runData.sinkGravityAccelerationY = sphParticlesGravityAccelerations[kYDimension];
+    runData.sinkGravityAccelerationZ = sphParticlesGravityAccelerations[kZDimension];
     runData.gravityEffectiveRadius = getOptions().gravity.supportRadius /
         selectedGravityKernel().supportRadiusPerEffectiveRadius;
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
@@ -687,6 +696,11 @@ SphRunReturn SphRunWorkspace::compute(bool useCuda) {
     runData.gasMass = getOptions().initial.gasMass;
     runData.accelerationTimestepFactor = getOptions().gravity.timestepEta;
 
+    return runData;
+}
+
+SphRunReturn SphRunWorkspace::compute(bool useCuda) {
+    SphRunData runData = data();
     for (int i = 0; i < hostTargetNodeIndices.size(); i++) {
         auto const& node = hostTrees[hostTargetNodeIndices[i]];
         bool found = false;
@@ -742,7 +756,7 @@ SphRunReturn SphRunWorkspace::compute(bool useCuda) {
     // Declared after the source owners so failure drains submitted copies or
     // kernels before their device allocations are released.
     CudaStream stream(cudaGetDevice());
-    copySources([&](auto*& device, auto const& host) {
+    copySources(runData, [&](auto*& device, auto const& host) {
         device = nullptr;
         if (!host.empty()) {
             size_t const bytes = sizeof(*device) * host.size();
@@ -759,4 +773,339 @@ SphRunReturn SphRunWorkspace::compute(bool useCuda) {
     ALWAYS_ASSERT(false);
     return {};
 #endif
+}
+
+namespace detail {
+
+struct SphGravityBatch;
+
+struct SphGravityState {
+    std::shared_ptr<SphRunWorkspace> sources;
+    Vector<int> gasSourceIndices;
+    SphRunReturn result;
+    MutexType resultMutex;
+    std::atomic<size_t> evaluatedTargets{0};
+    size_t expectedTargets = 0;
+    std::unique_ptr<SphGravityBatch> cpuTargets;
+};
+
+static std::unique_ptr<SphGravityState> sphGravityState;
+
+struct SphGravityBatch {
+    Vector<SphTreeNode, PinnedAllocator<SphTreeNode>> targets;
+    Vector<int, PinnedAllocator<int>> sourceIndices;
+    Vector<ParticleInteger, PinnedAllocator<ParticleInteger>> gasIndices;
+    Vector<int, PinnedAllocator<int>> neighbors;
+    Vector<Vector3<float>, PinnedAllocator<Vector3<float>>> accelerations;
+    Vector<Vector3<float>, PinnedAllocator<Vector3<float>>> leafAccelerations;
+    Vector<Vector3<float>, PinnedAllocator<Vector3<float>>> oldHydroAccelerations;
+    Vector<Vector3<float>, PinnedAllocator<Vector3<float>>> hydroAccelerations;
+
+    void append(SphGravityBatch&& other) {
+        int const targetOffset = sourceIndices.size();
+        int const neighborOffset = neighbors.size();
+        for (auto node : other.targets) {
+            node.particleRange.first += targetOffset;
+            node.particleRange.second += targetOffset;
+            node.neighborRange.first += neighborOffset;
+            node.neighborRange.second += neighborOffset;
+            targets.push_back(node);
+        }
+        sourceIndices.insert(
+            sourceIndices.end(), other.sourceIndices.begin(), other.sourceIndices.end());
+        gasIndices.insert(gasIndices.end(), other.gasIndices.begin(), other.gasIndices.end());
+        neighbors.insert(neighbors.end(), other.neighbors.begin(), other.neighbors.end());
+        accelerations.insert(
+            accelerations.end(), other.accelerations.begin(), other.accelerations.end());
+        leafAccelerations.insert(leafAccelerations.end(), other.leafAccelerations.begin(),
+            other.leafAccelerations.end());
+        oldHydroAccelerations.insert(oldHydroAccelerations.end(),
+            other.oldHydroAccelerations.begin(), other.oldHydroAccelerations.end());
+        hydroAccelerations.resize(oldHydroAccelerations.size());
+    }
+
+    void addLeaf(Pair<ParticleInteger> particleRange, Fixed32Range const& box,
+        float const* gravityX, float const* gravityY, float const* gravityZ,
+        ParticleInteger gravityOffset) {
+        auto const& state = *sphGravityState;
+        auto const& sources = *state.sources;
+        SphTreeNode target;
+        target.innerBox = box;
+        target.outerBox = box;
+        target.particleRange.first = sourceIndices.size();
+        for (ParticleInteger particle = particleRange.first; particle < particleRange.second;
+            ++particle) {
+            if (particlesType(particle) != kSphType ||
+                particlesRung(particle) < sources.params.minimumRung) {
+                continue;
+            }
+            ParticleInteger const gas = particlesCatIndex(particle);
+            int const source = state.gasSourceIndices[gas];
+            ALWAYS_ASSERT(source >= 0);
+            sourceIndices.push_back(source);
+            gasIndices.push_back(gas);
+            ParticleInteger const gravityIndex = particle - gravityOffset;
+            Vector3<float> const leafGravity(
+                gravityX[gravityIndex], gravityY[gravityIndex], gravityZ[gravityIndex]);
+            bool const hierarchical = sphHierarchyEventActive();
+            accelerations.push_back(hierarchical && !sphHierarchyFullGravity() ?
+                    sphHierarchyGravityPrediction(gas) :
+                    leafGravity);
+            if (hierarchical) {
+                leafAccelerations.push_back(leafGravity);
+                oldHydroAccelerations.push_back(
+                    sphParticlesHierarchicalStates[gas].hydroAcceleration);
+                hydroAccelerations.emplace_back(0.0f);
+            }
+            Position const position[kDimensions] = {sources.hostPositionX[source],
+                sources.hostPositionY[source], sources.hostPositionZ[source]};
+            RangeFixed const support(sources.hostSupportRadius[source]);
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                RangeFixed const coordinate(position[dim].toDouble());
+                target.innerBox.begin[dim] = std::min(target.innerBox.begin[dim], coordinate);
+                target.innerBox.end[dim] = std::max(target.innerBox.end[dim], coordinate);
+                target.outerBox.begin[dim] =
+                    std::min(target.outerBox.begin[dim], coordinate - support);
+                target.outerBox.end[dim] = std::max(target.outerBox.end[dim], coordinate + support);
+            }
+        }
+        target.particleRange.second = sourceIndices.size();
+        if (target.particleRange.first == target.particleRange.second) {
+            return;
+        }
+        target.neighborRange.first = neighbors.size();
+        Vector<TreeId> pending{{0, 0}};
+        while (!pending.empty()) {
+            TreeId const id = pending.back();
+            pending.pop_back();
+            auto const* source = sphTreeGetNode(id);
+            if (!rangeIntersect(target.outerBox, source->driftBox) &&
+                !rangeIntersect(target.innerBox, source->outerBox)) {
+                continue;
+            }
+            if (source->leaf) {
+                // The complete IJ lists staged every leaf capable of touching
+                // an active target. The larger kd-cell box can also find leaves
+                // with no actual interacting pair; those need no extra fetch.
+                auto const staged = sources.treeMap.find(id);
+                if (staged != sources.treeMap.end()) {
+                    neighbors.push_back(staged->second);
+                }
+            } else {
+                for (auto const& child : source->children) {
+                    if (child.index >= 0) {
+                        pending.push_back(child);
+                    }
+                }
+            }
+        }
+        target.neighborRange.second = neighbors.size();
+        targets.push_back(target);
+    }
+
+    void compute(bool useCuda) {
+        if (targets.empty()) {
+            return;
+        }
+        auto& state = *sphGravityState;
+        auto& sources = *state.sources;
+        SphRunData runData = sources.data();
+        runData.targetNodes = targets.data();
+        runData.targetSourceIndices = sourceIndices.data();
+        runData.targetGasIndices = gasIndices.data();
+        runData.targetGravityAccelerations = accelerations.data();
+        runData.targetHydroAccelerations =
+            hydroAccelerations.empty() ? nullptr : hydroAccelerations.data();
+        runData.neighborNodeIndices = neighbors.data();
+        runData.numberOfTargetNodes = targets.size();
+        SphRunReturn result;
+        if (!useCuda) {
+            for (int target = 0; target < targets.size(); ++target) {
+                result += sphCpuHydro(sources.params, runData, target);
+            }
+        } else {
+#ifdef USE_CUDA
+            // All completed kd leaves share one immutable source upload and one
+            // hydro launch. Nothing is retained after this launch's stream drains.
+            std::vector<std::unique_ptr<void, decltype(&cudaFree)>> buffers;
+            CudaStream stream(cudaGetDevice());
+            auto const upload = [&](auto*& device, auto const& host) {
+                using Element = std::remove_const_t<
+                    std::remove_pointer_t<std::remove_reference_t<decltype(device)>>>;
+                device = nullptr;
+                if (!host.empty()) {
+                    Element* storage = nullptr;
+                    size_t const bytes = sizeof(Element) * host.size();
+                    CUDA_CHECK(cudaMalloc(&storage, bytes));
+                    buffers.emplace_back(storage, cudaFree);
+                    stream.copyAsync(storage, host.data(), bytes, cudaMemcpyHostToDevice);
+                    device = storage;
+                }
+            };
+            sources.copySources(runData, upload);
+            upload(runData.targetNodes, targets);
+            upload(runData.targetSourceIndices, sourceIndices);
+            upload(runData.targetGasIndices, gasIndices);
+            upload(runData.targetGravityAccelerations, accelerations);
+            upload(runData.targetHydroAccelerations, hydroAccelerations);
+            upload(runData.neighborNodeIndices, neighbors);
+            result = sphRunCuda(sources.params, runData, stream);
+            if (!hydroAccelerations.empty()) {
+                stream.copyAsync(hydroAccelerations.data(), runData.targetHydroAccelerations,
+                    hydroAccelerations.size() * sizeof(Vector3<float>), cudaMemcpyDeviceToHost);
+            }
+            stream.wait();
+#else
+            ALWAYS_ASSERT(false);
+#endif
+        }
+        if (!hydroAccelerations.empty()) {
+            for (size_t target = 0; target < gasIndices.size(); ++target) {
+                result.maximumRung = std::max(result.maximumRung,
+                    sphHierarchyKickTarget(gasIndices[target], oldHydroAccelerations[target],
+                        hydroAccelerations[target], leafAccelerations[target]));
+            }
+        }
+        state.evaluatedTargets.fetch_add(gasIndices.size(), std::memory_order_relaxed);
+        std::lock_guard<MutexType> lock(state.resultMutex);
+        state.result += result;
+    }
+};
+
+}    // namespace detail
+
+HPX_PLAIN_ACTION(sphGravityPrepare, SphGravityPrepareAction);
+HPX_PLAIN_ACTION(sphGravityFinish, SphGravityFinishAction);
+HPX_PLAIN_ACTION(sphGravityAbort, SphGravityAbortAction);
+
+void sphGravityPrepare(SphRunParameters parameters) {
+    ALWAYS_ASSERT(!detail::sphGravityState);
+    ALWAYS_ASSERT(parameters.runType == kSphRunHydro && !parameters.deferAccelerationSources);
+    if (hpxRank() == 0) {
+        sphParticlesPrepareThermodynamics(parameters.scaleFactor, true);
+        sphParticlesClearCaches();
+    }
+    Vector<hpx::future<void>> children;
+    try {
+        for (auto const& child : hpxChildren()) {
+            children.push_back(hpx::async<SphGravityPrepareAction>(child, parameters));
+        }
+        bool useCuda = false;
+        parameters = detail::prepareSphRunParameters(parameters, useCuda);
+        auto state = std::make_unique<detail::SphGravityState>();
+        state->sources = detail::collectSphRunWork(parameters);
+        state->gasSourceIndices.resize(sphParticlesSize(), -1);
+        if (!state->sources->hostTargetNodeIndices.empty()) {
+            state->sources->stage();
+            for (auto const& entry : state->sources->treeMap) {
+                if (entry.first.proc != hpxRank()) {
+                    continue;
+                }
+                auto const& node = state->sources->hostTrees[entry.second];
+                for (ParticleInteger gas = node.sinkParticleRange.first;
+                    gas < node.sinkParticleRange.second; ++gas) {
+                    state->gasSourceIndices[gas] =
+                        node.particleRange.first + gas - node.sinkParticleRange.first;
+                }
+            }
+        }
+        for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
+            if (sphParticlesRung(gas) >= parameters.minimumRung) {
+                ALWAYS_ASSERT(state->gasSourceIndices[gas] >= 0);
+                ++state->expectedTargets;
+            }
+        }
+        detail::sphGravityState = std::move(state);
+        for (auto& child : children) {
+            child.get();
+        }
+    } catch (...) {
+        hpx::wait_all(children.begin(), children.end());
+        throw;
+    }
+}
+
+bool sphGravityActive() {
+    return bool(detail::sphGravityState);
+}
+
+void sphGravityKickLeaf(Pair<ParticleInteger> particleRange, Fixed32Range const& box,
+    float const* gravityX, float const* gravityY, float const* gravityZ) {
+    ALWAYS_ASSERT(sphGravityActive());
+    detail::SphGravityBatch batch;
+    batch.addLeaf(particleRange, box, gravityX, gravityY, gravityZ, particleRange.first);
+#ifdef USE_CUDA
+    if (getOptions().hydro.cuda) {
+        // Mixed CPU/GPU gravity walks still honor the hydro backend choice.
+        // Collect the CPU leaves for a single CUDA launch at force completion.
+        auto& state = *detail::sphGravityState;
+        std::lock_guard<MutexType> lock(state.resultMutex);
+        if (!state.cpuTargets) {
+            state.cpuTargets = std::make_unique<detail::SphGravityBatch>();
+        }
+        state.cpuTargets->append(std::move(batch));
+        return;
+    }
+#endif
+    batch.compute(false);
+}
+
+void sphGravityKickSubtrees(Vector<TreeId> const& roots, float const* gravityX,
+    float const* gravityY, float const* gravityZ, ParticleInteger gravityOffset) {
+#if COSMICTIGER_ENABLE_FMM
+    ALWAYS_ASSERT(sphGravityActive());
+    detail::SphGravityBatch batch;
+    Vector<TreeId> pending = roots;
+    while (!pending.empty()) {
+        TreeId const id = pending.back();
+        pending.pop_back();
+        auto const* node = treeGetNode(id);
+        if (node->leaf) {
+            batch.addLeaf(
+                node->particleRange, node->box, gravityX, gravityY, gravityZ, gravityOffset);
+        } else {
+            for (auto const& child : node->children) {
+                pending.push_back(child);
+            }
+        }
+    }
+    batch.compute(getOptions().hydro.cuda);
+#else
+    ALWAYS_ASSERT(false);
+#endif
+}
+
+SphRunReturn sphGravityFinish() {
+    ALWAYS_ASSERT(sphGravityActive());
+    Vector<hpx::future<SphRunReturn>> children;
+    try {
+        for (auto const& child : hpxChildren()) {
+            children.push_back(hpx::async<SphGravityFinishAction>(child));
+        }
+        if (detail::sphGravityState->cpuTargets) {
+            detail::sphGravityState->cpuTargets->compute(true);
+        }
+        auto state = std::move(detail::sphGravityState);
+        ALWAYS_ASSERT(
+            state->evaluatedTargets.load(std::memory_order_relaxed) == state->expectedTargets);
+        SphRunReturn result = state->result;
+        for (auto& child : children) {
+            result += child.get();
+        }
+        return result;
+    } catch (...) {
+        hpx::wait_all(children.begin(), children.end());
+        throw;
+    }
+}
+
+void sphGravityAbort() {
+    Vector<hpx::future<void>> children;
+    for (auto const& child : hpxChildren()) {
+        children.push_back(hpx::async<SphGravityAbortAction>(child));
+    }
+    detail::sphGravityState.reset();
+    for (auto& child : children) {
+        child.get();
+    }
 }

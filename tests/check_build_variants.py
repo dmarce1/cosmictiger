@@ -79,7 +79,7 @@ class BuildFeaturesTest(unittest.TestCase):
         return checkBuild(self.buildDirectory)
 
     def testSphRequiresSharedSources(self):
-        for source in ("src/sph/particles.cpp", "src/sph/tree.cpp"):
+        for source in ("src/sph/particles.cpp", "src/sph/tree.cpp", "src/sph/time_integration.cpp"):
             with self.subTest(source=source):
                 self.configure()
                 self.commands = [entry for entry in self.commands if not entry["file"].endswith(source)]

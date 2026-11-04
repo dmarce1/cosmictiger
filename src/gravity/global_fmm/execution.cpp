@@ -32,6 +32,10 @@
 #include <cosmictiger/gravity/tree.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#if COSMICTIGER_WITH_SPH
+#include <cosmictiger/sph/particles.hpp>
+#include <cosmictiger/sph/sph.hpp>
+#endif
 
 HPX_PLAIN_ACTION(kick, KickAction);
 namespace detail {
@@ -186,6 +190,11 @@ hpx::future<KickReturn> kickFork(KickParameters params, ExpansionBuffer const& l
 
 KickReturn kick(KickParameters params, ExpansionBuffer l, Vector3<Position> pos, TreeId self,
     Vector<TreeId> direct, Vector<TreeId> periodic, std::shared_ptr<KickWorkspace> workspace) {
+#if COSMICTIGER_WITH_SPH
+    if (getOptions().hydro.enabled && !sphGravityActive() && !params.htime && !params.forceOnly) {
+        sphParticlesEnsureGravityStorage();
+    }
+#endif
 #if COSMICTIGER_PROFILE
     bool const coordinator = params.profileCoordinator && self.proc == 0 && self.index == 0 &&
         !params.forceOnly && hpxRank() == 0 && treeGetNode(self)->depth == 0;

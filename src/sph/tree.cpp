@@ -6,7 +6,9 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <exception>
 #include <memory>
 #include <mutex>
@@ -32,6 +34,8 @@ constexpr bool kVerbose = true;
 
 static Vector<SphTreeNode> sphTreeFetchCacheLine(int);
 static void sphTreeAllocateNodes();
+static SphTreeCreateReturn sphTreeRefreshNode(
+    TreeId id, SphTreeCreateParameters params, double driftFactor);
 
 HPX_PLAIN_ACTION(sphTreeAllocateNodes, SphTreeAllocateNodesAction);
 HPX_PLAIN_ACTION(sphTreeCreate, SphTreeCreateAction);
@@ -39,6 +43,8 @@ HPX_PLAIN_ACTION(sphTreeDestroy, SphTreeDestroyAction);
 HPX_PLAIN_ACTION(sphTreeCacheClear, SphTreeCacheClearAction);
 HPX_PLAIN_ACTION(sphTreeFetchCacheLine, SphTreeFetchCacheLineAction);
 HPX_PLAIN_ACTION(sphTreeFreeNeighborList, SphTreeFreeNeighborListAction);
+HPX_PLAIN_ACTION(sphTreeAllValid, SphTreeAllValidAction);
+HPX_PLAIN_ACTION(sphTreeRefreshNode, SphTreeRefreshNodeAction);
 
 class SphTreeAllocator {
     int next_;
@@ -74,6 +80,133 @@ static Vector<TreeId> neighborList;
 static Vector<int> leaflist;
 static MutexType leaflistMutex;
 static MutexType neighborListMutex;
+static std::atomic<bool> treeValid(false);
+static TreeId retainedRoot{-1, -1};
+static TreeId localRootId{-1, -1};
+static ParticleInteger retainedParticleCount = -1;
+static int retainedMinimumRung = kMaxRung;
+
+void sphTreeInvalidate() {
+    treeValid = false;
+}
+
+bool sphTreeIsValid() {
+    return treeValid && retainedParticleCount == sphParticlesSize();
+}
+
+bool sphTreeAllValid() {
+    std::vector<hpx::future<bool>> futures;
+    for (auto const& child : hpxChildren()) {
+        futures.push_back(hpx::async<SphTreeAllValidAction>(child));
+    }
+    bool valid = sphTreeIsValid();
+    for (auto& future : futures) {
+        valid = future.get() && valid;
+    }
+    return valid;
+}
+
+namespace detail {
+
+void mergeSphBounds(Fixed32Range& target, Fixed32Range const& source) {
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        target.begin[dim] = std::min(target.begin[dim], source.begin[dim]);
+        target.end[dim] = std::max(target.end[dim], source.end[dim]);
+    }
+}
+
+Fixed32Range sweptSphBounds(Fixed32Range const& positions, Vector3<double> const& minimumVelocity,
+    Vector3<double> const& maximumVelocity, double driftFactor) {
+    Fixed32Range result = positions;
+    double const padding = 2.0 * RangeFixed::min().toDouble();
+    // clang-format off
+    /*
+     * Derived conservative bound for the implemented linear drift x' = x + v D:
+     *   b'_d = b_d + min(0, D v⁻_d, D v⁺_d),
+     *   e'_d = e_d + max(0, D v⁻_d, D v⁺_d).
+     * This is a local derivation, not a numbered source equation. D = Δτ/a uses
+     * the same stored velocities and periodic unit-box coordinates as drift().
+     * Bounds include every intermediate position and permit negative D. A span
+     * of at least one periodic box covers that entire axis; saturating before
+     * fixed-point conversion avoids wrapping the signed bound representation.
+     * Symbol directory: b_d/e_d -> positions.begin/end[dim]; D -> driftFactor;
+     * v⁻_d/v⁺_d -> minimumVelocity/maximumVelocity[dim]; b'_d/e'_d -> result.
+     */
+    // clang-format on
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        if (positions.begin[dim] > positions.end[dim]) {
+            continue;
+        }
+        double const firstDisplacement = driftFactor * minimumVelocity[dim];
+        double const secondDisplacement = driftFactor * maximumVelocity[dim];
+        double const lower = positions.begin[dim].toDouble() +
+            std::min({0.0, firstDisplacement, secondDisplacement}) - padding;
+        double const upper = positions.end[dim].toDouble() +
+            std::max({0.0, firstDisplacement, secondDisplacement}) + padding;
+        if (!std::isfinite(lower) || !std::isfinite(upper)) {
+            throw std::runtime_error("Nonfinite SPH drift bound");
+        }
+        if (upper - lower >= 1.0) {
+            result.begin[dim] = -padding;
+            result.end[dim] = 1.0 + padding;
+        } else {
+            result.begin[dim] = lower;
+            result.end[dim] = upper;
+        }
+    }
+    return result;
+}
+
+void updateLocalSphDriftBounds(TreeId id, double driftFactor, int rung) {
+    auto& node = nodes[id.index];
+    // Only particles active at the last build/refit can change rung before the
+    // next refit. A drift on that rung or a finer one cannot move this subtree.
+    // Unrestricted drifts and coarser-rung requests still visit every particle.
+    if (rung >= retainedMinimumRung && node.numberOfActiveParticles == 0) {
+        return;
+    }
+    if (node.leaf) {
+        auto positions = emptySphBounds();
+        Vector3<double> minimumVelocity;
+        Vector3<double> maximumVelocity;
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            minimumVelocity[dim] = 0.0;
+            maximumVelocity[dim] = 0.0;
+        }
+        double const padding = 2.0 * RangeFixed::min().toDouble();
+        for (ParticleInteger particle = node.particleRange.first;
+            particle < node.particleRange.second; ++particle) {
+            bool const moving = rung < 0 || sphParticlesRung(particle) == rung;
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                double const position = sphParticlesPosition(dim, particle).toDouble();
+                positions.begin[dim] =
+                    std::min(positions.begin[dim].toDouble(), position - padding);
+                positions.end[dim] = std::max(positions.end[dim].toDouble(), position + padding);
+                double const velocity = moving ? sphParticlesVelocity(dim, particle) : 0.0;
+                minimumVelocity[dim] = std::min(minimumVelocity[dim], velocity);
+                maximumVelocity[dim] = std::max(maximumVelocity[dim], velocity);
+            }
+        }
+        mergeSphBounds(node.driftBox,
+            sweptSphBounds(positions, minimumVelocity, maximumVelocity, driftFactor));
+    } else {
+        for (auto const& child : node.children) {
+            if (child.index >= 0) {
+                ALWAYS_ASSERT(child.proc == hpxRank());
+                updateLocalSphDriftBounds(child, driftFactor, rung);
+                mergeSphBounds(node.driftBox, nodes[child.index].driftBox);
+            }
+        }
+    }
+}
+
+}    // namespace detail
+
+void sphTreeDriftBounds(double driftFactor, int rung) {
+    if (treeValid && localRootId.index >= 0 && retainedParticleCount == sphParticlesSize()) {
+        detail::updateLocalSphDriftBounds(localRootId, driftFactor, rung);
+    }
+}
 
 void sphTreeSetNeighborRange(TreeId id, Pair<int, int> rng) {
     nodes[id.index].neighborRange = rng;
@@ -267,6 +400,7 @@ hpx::future<SphTreeCreateReturn> sphTreeCreateFork(SphTreeCreateParameters param
 }
 
 static void sphTreeAllocateNodes() {
+    sphTreeInvalidate();
     int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
     int const bucketSize = getOptions().compute.sphBucketSize;
     Vector<hpx::future<void>> futs;
@@ -311,6 +445,11 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         leaflist.resize(0);
         particleRange.first = 0;
         particleRange.second = sphParticlesSize();
+        // A retained hierarchical owner can hold inactive gas outside its rank
+        // domain. Rank-routing nodes still follow the binary domain keys, but
+        // each local octree partitions the full periodic box so a later rebuild
+        // can subdivide those particles rather than chasing a domain boundary.
+        box = unitBox<double>();
     }
     Array<TreeId, kSphChildCount> children;
     for (auto& child : children) {
@@ -336,6 +475,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     int const index = allocator.allocate();
     Fixed32Range innerBox;
     Fixed32Range outerBox;
+    Fixed32Range driftBox;
     if (processRange.second - processRange.first > 1 ||
         particleRange.second - particleRange.first > bucketSize) {
         if (depth == SphTreeNode::kMaximumDepth) {
@@ -418,6 +558,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
             if (firstChild) {
                 innerBox = child.innerBox;
                 outerBox = child.outerBox;
+                driftBox = child.driftBox;
                 minDepth = child.minDepth;
                 maxDepth = child.maxDepth;
                 firstChild = false;
@@ -429,6 +570,8 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
                     innerBox.end[dim] = std::max(innerBox.end[dim], child.innerBox.end[dim]);
                     outerBox.begin[dim] = std::min(outerBox.begin[dim], child.outerBox.begin[dim]);
                     outerBox.end[dim] = std::max(outerBox.end[dim], child.outerBox.end[dim]);
+                    driftBox.begin[dim] = std::min(driftBox.begin[dim], child.driftBox.begin[dim]);
+                    driftBox.end[dim] = std::max(driftBox.end[dim], child.driftBox.end[dim]);
                 }
             }
         }
@@ -464,6 +607,8 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
             }
         }
 
+        driftBox = innerBox;
+
         /*	double small_span = 1e30;
          double hmax = 0.0;
          for( int dim = 0; dim < NDIM; dim++) {
@@ -495,6 +640,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     node.nodeCount = nodeCount;
     node.innerBox = innerBox;
     node.outerBox = outerBox;
+    node.driftBox = driftBox;
 
     node.children = children;
     node.localRoot = localRoot;
@@ -523,6 +669,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     rc.id.proc = hpxRank();
     rc.innerBox = node.innerBox;
     rc.outerBox = node.outerBox;
+    rc.driftBox = node.driftBox;
     for (int dim = 0; dim < kDimensions; dim++) {
         node.box.begin[dim] = box.begin[dim];
         node.box.end[dim] = box.end[dim];    // == 1.0 ? fixed32::max() : fixed32(box.end[dim]);
@@ -542,11 +689,149 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     rc.maxDepth = maxDepth;
     if (localRoot) {
         sphParticlesResolveWithParticles();
+        localRootId = rc.id;
+        retainedParticleCount = sphParticlesSize();
+        retainedMinimumRung = params.minimumRung;
+        treeValid = true;
+    }
+    if (depth == 0) {
+        retainedRoot = rc.id;
+        treeValid = true;
     }
     return rc;
 }
 
+static SphTreeCreateReturn sphTreeRefreshNode(
+    TreeId id, SphTreeCreateParameters params, double driftFactor) {
+    ALWAYS_ASSERT(id.proc == hpxRank());
+    auto& node = nodes[id.index];
+    if (node.localRoot) {
+        sphTreeFreeNeighborList();
+        retainedMinimumRung = params.minimumRung;
+    }
+    SphTreeCreateReturn result{};
+    result.id = id;
+    result.innerBox = emptySphBounds();
+    result.outerBox = emptySphBounds();
+    result.driftBox = node.driftBox;
+    result.nodeCount = 1;
+    result.minDepth = node.depth;
+    result.maxDepth = node.depth;
+    sph_flops::Counter flops;
+    if (node.leaf) {
+        Vector3<double> minimumVelocity;
+        Vector3<double> maximumVelocity;
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            minimumVelocity[dim] = 0.0;
+            maximumVelocity[dim] = 0.0;
+        }
+        double const padding = 2.0 * RangeFixed::min().toDouble();
+        for (ParticleInteger particle = node.particleRange.first;
+            particle < node.particleRange.second; ++particle) {
+            bool const active = sphParticlesRung(particle) >= params.minimumRung;
+            result.numberOfActiveParticles += active;
+            float const support =
+                params.supportRadiusMultiplier * sphParticlesSupportRadius(particle);
+            flops.singlePrecision += 1;
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                double const position = sphParticlesPosition(dim, particle).toDouble();
+                double const velocity = sphParticlesVelocity(dim, particle);
+                minimumVelocity[dim] = std::min(minimumVelocity[dim], velocity);
+                maximumVelocity[dim] = std::max(maximumVelocity[dim], velocity);
+                result.innerBox.begin[dim] =
+                    std::min(result.innerBox.begin[dim].toDouble(), position - padding);
+                result.innerBox.end[dim] =
+                    std::max(result.innerBox.end[dim].toDouble(), position + padding);
+                flops.doublePrecision += 7;
+                if (active) {
+                    result.outerBox.begin[dim] = std::min(
+                        result.outerBox.begin[dim].toDouble(), position - support - padding);
+                    result.outerBox.end[dim] =
+                        std::max(result.outerBox.end[dim].toDouble(), position + support + padding);
+                    flops.doublePrecision += 10;
+                }
+            }
+        }
+        detail::mergeSphBounds(result.driftBox,
+            detail::sweptSphBounds(result.innerBox, minimumVelocity, maximumVelocity, driftFactor));
+        result.leafNodes = 1;
+        result.activeLeafNodes = result.numberOfActiveParticles != 0;
+    } else {
+        std::array<hpx::future<SphTreeCreateReturn>, kSphChildCount> futures;
+        for (int childIndex = 0; childIndex < kSphChildCount; ++childIndex) {
+            auto const child = node.children[childIndex];
+            if (child.index < 0) {
+                continue;
+            }
+            if (child.proc != hpxRank()) {
+                futures[childIndex] = hpx::async<SphTreeRefreshNodeAction>(
+                    hpxLocalities()[child.proc], child, params, driftFactor);
+            } else if (node.numberOfParticles() >= kMinSortThreadParts || !node.isLocal()) {
+                futures[childIndex] = hpx::async(hpx::annotated_function(
+                    [child, params, driftFactor]() {
+                        return sphTreeRefreshNode(child, params, driftFactor);
+                    },
+                    "sph.tree.refresh"));
+            } else {
+                try {
+                    futures[childIndex] =
+                        hpx::make_ready_future(sphTreeRefreshNode(child, params, driftFactor));
+                } catch (...) {
+                    futures[childIndex] =
+                        hpx::make_exceptional_future<SphTreeCreateReturn>(std::current_exception());
+                }
+            }
+        }
+        for (auto& future : futures) {
+            if (future.valid()) {
+                future.wait();
+            }
+        }
+        result.minDepth = SphTreeNode::kMaximumDepth;
+        for (auto& future : futures) {
+            if (!future.valid()) {
+                continue;
+            }
+            auto const child = future.get();
+            detail::mergeSphBounds(result.innerBox, child.innerBox);
+            detail::mergeSphBounds(result.outerBox, child.outerBox);
+            detail::mergeSphBounds(result.driftBox, child.driftBox);
+            result.numberOfActiveParticles += child.numberOfActiveParticles;
+            result.nodeCount += child.nodeCount;
+            result.activeNodes += child.activeNodes;
+            result.leafNodes += child.leafNodes;
+            result.activeLeafNodes += child.activeLeafNodes;
+            result.minDepth = std::min(result.minDepth, child.minDepth);
+            result.maxDepth = std::max(result.maxDepth, child.maxDepth);
+            result.floatingPointOperations += child.floatingPointOperations;
+        }
+    }
+    result.activeNodes += result.numberOfActiveParticles != 0;
+    node.innerBox = result.innerBox;
+    node.outerBox = result.outerBox;
+    node.driftBox = result.driftBox;
+    node.numberOfActiveParticles = result.numberOfActiveParticles;
+    node.activeNodes = result.activeNodes;
+    node.converged = false;
+    node.neighborRange = Pair<int>(-1, -1);
+    addCpuFlops(flops.counts());
+    result.floatingPointOperations += FlopCount(flops);
+    return result;
+}
+
+SphTreeCreateReturn sphTreeRefresh(SphTreeCreateParameters params, double driftFactor) {
+    if (!sphTreeAllValid() || retainedRoot.index < 0) {
+        throw std::runtime_error("Cannot refresh an invalid SPH tree; rebuild it first");
+    }
+    sphTreeCacheClear();
+    auto result = sphTreeRefreshNode(retainedRoot, params, driftFactor);
+    // Refresh changes remotely cached node contents and every leaf's neighbor list.
+    sphTreeCacheClear();
+    return result;
+}
+
 void sphTreeDestroy(bool freeSphTree) {
+    sphTreeInvalidate();
     Vector<hpx::future<void>> futs;
     auto const children = hpxChildren();
     for (auto const& c : children) {

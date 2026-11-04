@@ -140,8 +140,7 @@ void runFixedScenario() {
 #endif
     }
     state.minrung0 = std::max(state.minrung0, baseOptions.run.minRung);
-    // Fixed-time scenarios are SPH runs, which use the traditional or global integrator.
-    ALWAYS_ASSERT(!baseOptions.run.hierarchicalGravity);
+    bool const hierarchical = baseOptions.run.hierarchicalGravity;
     bool const global = usesGlobalIntegration(baseOptions.run);
     profile::profileBegin("rebound");
     domainsRebound();
@@ -226,12 +225,25 @@ void runFixedScenario() {
             int const errorInterval = baseOptions.gravity.errorInterval;
             int const gravityErrorStep =
                 outputDue && errorInterval > 0 && outputStep % errorInterval == 0 ? outputStep : -1;
-            ForceStepResult const result = advanceForces(minimumRung, 1.0, 0.0, state.tau,
-                baseTimestep, baseOptions.gravity.openingAngle, state.iter == 0, fullEvaluation,
-                state.energies, gravityErrorStep, false, state.globalTimestep,
-                global ?
-                    std::min(stageEnd - state.tau, (outputStep + 1) * baseTimestep - state.tau) :
-                    0.0);
+            ForceStepResult result;
+#if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
+            if (hierarchical) {
+                int activeRung = std::max(minimumRung, state.minrung0);
+                MeshKickSchedule schedule;
+                schedule.endTime = stageEnd;
+                result = kickStepHierarchical(activeRung, state.maxRung, 1.0, 0.0, state.tau,
+                    baseTimestep, baseOptions.gravity.openingAngle, &state.energies, state.minrung0,
+                    fullEvaluation, nullptr, true, 0.0, gravityErrorStep, false, schedule);
+            } else
+#endif
+            {
+                result = advanceForces(minimumRung, 1.0, 0.0, state.tau, baseTimestep,
+                    baseOptions.gravity.openingAngle, state.iter == 0, fullEvaluation,
+                    state.energies, gravityErrorStep, false, state.globalTimestep,
+                    global ? std::min(stageEnd - state.tau,
+                                 (outputStep + 1) * baseTimestep - state.tau) :
+                             0.0);
+            }
             auto const flopRates = flopRatesPerSecond();
             double const flops = flopRates.total();
             state.maxRung =
@@ -252,9 +264,11 @@ void runFixedScenario() {
                 state.tau + timestep == state.tau) {
                 THROW_ERROR("Scenario timestep cannot advance time\n");
             }
-            profile::profileBegin("drift");
-            drift(1.0, timestep, state.tau, state.tau + timestep, duration);
-            profile::profileEnd();
+            if (!hierarchical) {
+                profile::profileBegin("drift");
+                drift(1.0, timestep, state.tau, state.tau + timestep, duration);
+                profile::profileEnd();
+            }
             state.tau += timestep;
             state.itime = global ? 0 : inc(state.itime, state.maxRung);
             if (global) {
@@ -346,9 +360,21 @@ void runFixedScenario() {
             finalOptions.hydro.viscosityEvolution = "none";
         }
         setOptions(finalOptions);
-        advanceForces(0, 1.0, 0.0, state.tau, coarseInterval, baseOptions.gravity.openingAngle,
-            false, true, state.energies, -1, true, state.globalTimestep,
-            global ? coarseInterval : 0.0);
+#if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
+        if (hierarchical) {
+            int minimumRung = state.minrung0;
+            MeshKickSchedule schedule;
+            schedule.endTime = duration;
+            kickStepHierarchical(minimumRung, state.maxRung, 1.0, 0.0, state.tau, coarseInterval,
+                baseOptions.gravity.openingAngle, &state.energies, state.minrung0, true, nullptr,
+                true, 0.0, -1, true, schedule);
+        } else
+#endif
+        {
+            advanceForces(0, 1.0, 0.0, state.tau, coarseInterval, baseOptions.gravity.openingAngle,
+                false, true, state.energies, -1, true, state.globalTimestep,
+                global ? coarseInterval : 0.0);
+        }
         {
             profile::ScopedPhase phase("diagnostics");
             detail::writeScenarioDiagnostics(state);

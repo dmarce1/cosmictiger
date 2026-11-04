@@ -30,7 +30,7 @@ struct SphTreeNode {
     /*
      * Variable directory
      *
-     * Expected total: 200 bytes, including 7 bytes of alignment padding.
+     * Expected total: 224 bytes, including 7 bytes of alignment padding.
      * Assumes 4-byte int/ParticleInteger, 8-byte size_t, 1-byte bool,
      * kSphChildCount == 8, and kDimensions == 3.
      *
@@ -42,6 +42,7 @@ struct SphTreeNode {
      * outerBox               - 24 bytes - Bounds enclosing active particles' kernel supports,
      *                                    expanded by the configured support-radius multiplier.
      * box                    - 24 bytes - Spatial partition assigned to this node.
+     * driftBox               - 24 bytes - Conservative swept bounds since the last rebuild.
      * numberOfActiveParticles-  8 bytes - Number of active particles in this subtree.
      * depth                  -  5 bits - Tree level (0-15), packed with the three flags below.
      * localRoot              -  1 bit   - Whether this node roots a process-local subtree.
@@ -52,7 +53,7 @@ struct SphTreeNode {
      * neighborRange          -  8 bytes - Neighbor-list indices [begin, end); (-1, -1) if unset.
      *
      * With LONG_LONG_PART_INT, both particle ranges occupy 16 bytes each,
-     * increasing the expected total to 216 bytes.
+     * increasing the expected total to 240 bytes.
      * Sizes describe the in-memory layout, not the serialized representation.
      */
     Array<TreeId, kSphChildCount> children;
@@ -62,6 +63,7 @@ struct SphTreeNode {
     Fixed32Range innerBox;
     Fixed32Range outerBox;
     Fixed32Range box;
+    Fixed32Range driftBox;
     size_t numberOfActiveParticles;
     struct {
         unsigned char depth : 5;
@@ -92,6 +94,7 @@ struct SphTreeNode {
             innerBox.begin[dim] = innerBox.end[dim] = 0.0;
             outerBox.begin[dim] = outerBox.end[dim] = 0.0;
             box.begin[dim] = box.end[dim] = 0.0;
+            driftBox.begin[dim] = driftBox.end[dim] = 0.0;
         }
     }
     inline ParticleInteger numberOfParticles() const {
@@ -131,6 +134,7 @@ struct SphTreeNode {
         arc & activeNodes;
         arc & nodeCount;
         arc & archivedDepth;
+        arc & driftBox;
         if constexpr (std::is_same_v<std::remove_cvref_t<A>, hpx::serialization::input_archive>) {
             if (archivedDepth < 0 || archivedDepth > kMaximumDepth) {
                 throw std::out_of_range("SPH tree depth must be between 0 and 15");
@@ -146,6 +150,7 @@ struct SphTreeNode {
 struct SphTreeCreateReturn {
     Fixed32Range innerBox;
     Fixed32Range outerBox;
+    Fixed32Range driftBox;
     TreeId id;
     size_t numberOfActiveParticles;
     size_t activeNodes;
@@ -168,6 +173,7 @@ struct SphTreeCreateReturn {
         a & floatingPointOperations;
         a & maxDepth;
         a & minDepth;
+        a & driftBox;
     }
 };
 
@@ -187,6 +193,22 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key = 1
     Pair<int, int> processRange = Pair<int>(0, hpxSize()),
     Pair<ParticleInteger> particleRange = Pair<ParticleInteger>(-1, -1),
     Range<double> box = unitBox<double>(), int depth = 0, bool localRoot = (hpxSize() == 1));
+// The threshold counts all active gravity particles, including collisionless ones.
+// Avoid multiplying counts so the exact one-third comparison cannot overflow.
+constexpr bool sphTreeShouldRebuild(size_t activeParticles, size_t totalParticles) {
+    return totalParticles != 0 && activeParticles >= totalParticles / 3 + (totalParticles % 3 != 0);
+}
+// Refresh active/support bounds without sorting or changing particle membership.
+// driftFactor has units of displacement / stored velocity (dt / a for drift()).
+SphTreeCreateReturn sphTreeRefresh(SphTreeCreateParameters params, double driftFactor = 0.0);
+// Local invalidation is cheap enough for particle resize/swap hooks. The all-valid
+// query reduces over all localities and must be called from the coordinator.
+void sphTreeInvalidate();
+bool sphTreeIsValid();
+bool sphTreeAllValid();
+// Called on each locality before its particle drift. Rung < 0 includes every
+// particle; otherwise only that exact rung moves. Refresh before global queries.
+void sphTreeDriftBounds(double driftFactor, int rung = -1);
 void sphTreeCacheClear();
 // Call after all tree consumers finish. Normal teardown invalidates caches but
 // retains the constructed arena for rebuilding; true explicitly releases it.

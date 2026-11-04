@@ -88,6 +88,7 @@
 #if COSMICTIGER_ENABLE_STAR_FORMATION
 #include <cosmictiger/stars/star_formation.hpp>
 #endif
+#include <cosmictiger/sph/time_integration.hpp>
 #include <cosmictiger/sph/tree.hpp>
 #include <cosmictiger/sph/volume.hpp>
 #endif
@@ -246,6 +247,31 @@ void doGroups(int number, double scale, double years) {
 #endif
 
 #if COSMICTIGER_WITH_SPH
+// All-particle counts make the rebuild decision identical on every rank. The
+// threshold is per event, not an accumulated number of force evaluations.
+bool prepareSphDomainEvent(int minimumRung) {
+    auto const counts = particlesRungCounts();
+    size_t active = 0;
+    size_t total = 0;
+    for (size_t rung = 0; rung < counts.size(); ++rung) {
+        total += counts[rung];
+        if (int(rung) >= minimumRung) {
+            active += counts[rung];
+        }
+    }
+    bool const valid = sphTreeAllValid();
+    bool const threshold = sphTreeShouldRebuild(active, total);
+    bool const rebuild = !valid || threshold;
+    if (rebuild) {
+        terminal::detailPrint("SPH octree rebuild: active=%zu total=%zu reason=%s\n", active, total,
+            valid ? "threshold" : "invalidated");
+        sphTreeDestroy();
+    } else {
+        terminal::detailPrint("SPH octree retain: active=%zu total=%zu\n", active, total);
+    }
+    return rebuild;
+}
+
 SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
     profile::ScopedPhase profilePhase("hydro.tree.create");
     verbose = true;
@@ -264,7 +290,7 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
         terminal::detailPrint(
             "starting sph_tree_create = %s\n", terminal::formatDuration(timer.read()).c_str());
     }
-    treeResult = sphTreeCreate(treeParameters);
+    treeResult = sphTreeAllValid() ? sphTreeRefresh(treeParameters) : sphTreeCreate(treeParameters);
     timer.stop();
     if (verbose) {
         terminal::detailPrint("sph_tree_create time = %s %i\n",
@@ -277,7 +303,8 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
 SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
     EnergiesT* energies, bool verbose, int uniformMinimumRung, bool closingOnly,
     double previousTimestep, double maximumGlobalTimestep, bool predictorPrepared,
-    std::function<double()> const& joinGravity, double closingTimeStepScale) {
+    std::function<double()> const& joinGravity, double closingTimeStepScale,
+    std::function<SphRunReturn(SphRunParameters const&)> const& combinedForces) {
     profile::ScopedPhase profilePhase("hydro.sph");
     bool const globalTimestep = maximumGlobalTimestep > 0.0;
     double selectedTimestep = maximumGlobalTimestep;
@@ -501,7 +528,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         runParameters.phase = closingOnly ? 0 : 1;
         runParameters.runType = kSphRunHydro;
         profile::ScopedPhase profilePhase(name);
-        return sphRun(runParameters, true);
+        return combinedForces ? combinedForces(runParameters) : sphRun(runParameters, true);
     };
     timer.reset();
     timer.start();
@@ -605,8 +632,10 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
             sphParticlesClearHydroCaches();
         }
         {
-            profile::ScopedPhase profilePhase("hydro.tree.destroy");
-            sphTreeDestroy();
+            profile::ScopedPhase profilePhase("hydro.tree.retain");
+            sphTreeCacheClear();
+            sphTreeFreeNeighborList();
+            sphTreeClearNeighborRanges();
         }
         {
             profile::ScopedPhase profilePhase("hydro.caches.clear");
@@ -684,8 +713,10 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     }
 
     {
-        profile::ScopedPhase profilePhase("hydro.tree.destroy");
-        sphTreeDestroy();
+        profile::ScopedPhase profilePhase("hydro.tree.retain");
+        sphTreeCacheClear();
+        sphTreeFreeNeighborList();
+        sphTreeClearNeighborRanges();
     }
     {
         profile::ScopedPhase profilePhase("hydro.caches.clear");
@@ -740,12 +771,18 @@ KickParameters prepareFmmKick(int minrung, double scale, double dadt, double t0,
     tm.start();
     terminal::detailPrint("domains_begin\n");
     profile::profileBegin("domains");
-    {
+    bool migrate = true;
+#if COSMICTIGER_WITH_SPH
+    if (getOptions().hydro.enabled) {
+        migrate = prepareSphDomainEvent(minrung);
+    }
+#endif
+    if (migrate) {
         profile::ScopedPhase phase("domains.migrate");
         domainsBegin(minrung);
     }
     terminal::detailPrint("domains_end \n");
-    {
+    if (migrate) {
         profile::ScopedPhase phase("domains.install");
         domainsEnd();
     }
@@ -1008,10 +1045,11 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
 #if COSMICTIGER_ENABLE_FMM
         if (!meshGravity && !particleMesh) {
 #if COSMICTIGER_WITH_SPH
-            // Distributed CUDA staging appends remote sources to the shared
-            // particle arrays. Hydro must not read them during that resize.
-            bool const stableParticleStorage = !getOptions().gravity.cuda || hpxSize() == 1;
-            if (getOptions().hydro.enabled && !closingOnly && stableParticleStorage) {
+            // Source updates can require a second hydro force pass. Keep their
+            // existing separate gravity handoff until those source schedules
+            // are integrated with the shared leaf callback.
+            if (getOptions().hydro.enabled && !getOptions().chemistry.enabled &&
+                !getOptions().starFormation.enabled) {
                 auto parameters =
                     detail::prepareFmmKick(minRung, scale, scaleDerivative, baseTimestep, theta,
                         firstCall, fullEvaluation, previousTimestep, maximumGlobalTimestep);
@@ -1020,32 +1058,29 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
                 sphStep1(minRung);
                 sphParticlesApplyUpdates(
                     minRung, 0, baseTimestep, time, global ? previousTimestep : -1.0);
-                parameters.profileCoordinator = false;
-                auto gravityFuture = hpx::async([parameters] {
-                    profile::ScopedWork work(profile::WorkPhase::ConcurrentGravity);
-                    return detail::evaluateFmmKick(parameters);
-                });
-                bool joined = false;
-                auto const joinGravity = [&] {
-                    if (!joined) {
-                        result = gravityFuture.get();
-                        joined = true;
+                // Freeze every SPH source before any gravity leaf publishes new rates.
+                // The leaf consumes its gravity field directly, so gas keeps only the
+                // combined acceleration needed by prediction and the opening kick.
+                auto const combinedForces = [&](SphRunParameters const& forceParameters) {
+                    try {
+                        sphGravityPrepare(forceParameters);
+                        sphParticlesReleaseGravityStorage();
+                        result = detail::evaluateFmmKick(parameters);
+                        auto hydroResult = sphGravityFinish();
+                        hydroResult.minimumTimestep =
+                            std::min(hydroResult.minimumTimestep, result.minimumTimestep);
+                        return hydroResult;
+                    } catch (...) {
+                        sphGravityAbort();
+                        throw;
                     }
-                    return result.minimumTimestep;
                 };
                 try {
-                    profile::ScopedPhase overlap("hydro.gravity.overlap");
                     preparedSphResult = sphStep2(minRung, scale, time, baseTimestep, 1,
-                        scaleDerivative, &energies, true, -1, false, previousTimestep,
-                        maximumGlobalTimestep, true, joinGravity);
+                        scaleDerivative, &energies, true, -1, closingOnly, previousTimestep,
+                        maximumGlobalTimestep, true, {}, 0.0, combinedForces);
                     sphAdvanced = true;
-                    joinGravity();
                 } catch (...) {
-                    // Hydro arrays and both trees must outlive every force
-                    // worker, including when hydro preparation throws.
-                    if (gravityFuture.valid()) {
-                        gravityFuture.wait();
-                    }
                     detail::finishFmmKick();
                     throw;
                 }
@@ -1062,11 +1097,17 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
 #endif
     {
         profile::profileBegin("domains");
-        {
+        bool migrate = true;
+#if COSMICTIGER_WITH_SPH
+        if (getOptions().hydro.enabled) {
+            migrate = prepareSphDomainEvent(minRung);
+        }
+#endif
+        if (migrate) {
             profile::ScopedPhase phase("domains.migrate");
             domainsBegin(minRung);
         }
-        {
+        if (migrate) {
             profile::ScopedPhase phase("domains.install");
             domainsEnd();
         }
@@ -1184,6 +1225,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
     bool const meshGravity = usesMeshGravity(getOptions().gravity);
     bool const particleMesh = selfGravity && usesParticleMesh(getOptions().gravity);
     bool const treeGravity = selfGravity && !meshGravity && !particleMesh;
+    bool const hierarchicalHydro = getOptions().hydro.enabled;
     Timer tm;
     KickReturn kr;
     //	minrung = std::max(minrung, 1);
@@ -1217,7 +1259,13 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             particlesPushRungs();
         }
 
-        if (ascending || top) {
+        bool migrateThisLevel = ascending || top;
+#if COSMICTIGER_WITH_SPH
+        if (hierarchicalHydro && migrateThisLevel) {
+            migrateThisLevel = prepareSphDomainEvent(levels[li]);
+        }
+#endif
+        if (migrateThisLevel) {
             tm.reset();
             tm.start();
             profile::profileBegin("domains");
@@ -1377,9 +1425,57 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
 #endif
 #if COSMICTIGER_ENABLE_FMM
         if (treeGravity) {
-            profile::profileBegin("kick");
-            thisKr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
-            profile::profileEnd();
+#if COSMICTIGER_WITH_SPH
+            if (hierarchicalHydro && top) {
+                auto const counts = particlesRungCounts();
+                bool fullGravity = true;
+                for (int rung = 0; rung < levels[li]; ++rung) {
+                    fullGravity = fullGravity && (rung >= counts.size() || counts[rung] == 0);
+                }
+                sphHierarchyBeginEvent(tau, levels[li], t0, fullGravity, kparams);
+                try {
+                    // The gravity tree contains only the current active set;
+                    // inactive gas positions are projected solely for shared
+                    // octree density and SPH force discovery at this event.
+                    sphStep1(levels[li]);
+                    auto const combinedForces = [&](SphRunParameters const& forceParameters) {
+                        try {
+                            sphGravityPrepare(forceParameters);
+                            sphParticlesReleaseGravityStorage();
+                            {
+                                profile::ScopedPhase forcePhase("kick");
+                                thisKr =
+                                    kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
+                            }
+                            return sphGravityFinish();
+                        } catch (...) {
+                            sphGravityAbort();
+                            throw;
+                        }
+                    };
+                    auto const hydroResult = sphStep2(levels[li], scale, tau, t0, 1, adot, energies,
+                        true, -1, closingOnly, 0.0, 0.0, true, {}, 0.0, combinedForces);
+                    thisKr.maxRung = std::max(thisKr.maxRung, hydroResult.maximumRung);
+                    sphHierarchyCaptureRungs();
+                    auto const gas = sphParticlesApplyUpdates(levels[li], 3, t0, tau);
+                    energies->kin = (thisKr.kin + gas.kin) / sqr(scale);
+                    energies->xmom = (thisKr.xmom + gas.xmom) / scale;
+                    energies->ymom = (thisKr.ymom + gas.ymom) / scale;
+                    energies->zmom = (thisKr.zmom + gas.zmom) / scale;
+                    energies->nmom = (thisKr.nmom + gas.nmom) / scale;
+                    energies->therm = gas.therm / sqr(scale);
+                } catch (...) {
+                    sphHierarchyEndEvent();
+                    throw;
+                }
+                sphHierarchyEndEvent();
+            } else
+#endif
+            {
+                profile::profileBegin("kick");
+                thisKr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
+                profile::profileEnd();
+            }
         }
 #endif
         if (top) {
@@ -1400,12 +1496,16 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         }
         if (top) {
             kr = thisKr;
-            energies->pot = kr.pot / scale;
-            energies->kin = kr.kin / sqr(scale);
-            energies->xmom = kr.xmom / scale;
-            energies->ymom = kr.ymom / scale;
-            energies->zmom = kr.zmom / scale;
-            energies->nmom = kr.nmom / scale;
+            if (kparams.doPhi) {
+                energies->pot = kr.pot / scale;
+            }
+            if (!hierarchicalHydro) {
+                energies->kin = kr.kin / sqr(scale);
+                energies->xmom = kr.xmom / scale;
+                energies->ymom = kr.ymom / scale;
+                energies->zmom = kr.zmom / scale;
+                energies->nmom = kr.nmom / scale;
+            }
         }
         if (closingOnly && top) {
 #if COSMICTIGER_ENABLE_FMM
@@ -1430,6 +1530,14 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             tm.reset();
             tm.start();
             double const dt = rungDt[levels[li]] * t0;
+#if COSMICTIGER_WITH_SPH
+            if (hierarchicalHydro) {
+                // A gas particle opens hydro only once its final rung is fixed.
+                // Every hydro duration is positive; signed ladder corrections
+                // remain exclusively gravitational.
+                sphHierarchyOpenRung(levels[li]);
+            }
+#endif
             if (lcFut) {
                 lcFut->get();
                 *lcFut = hpx::make_ready_future();
@@ -1461,6 +1569,9 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
 
     if (clipTop) {
         minrung++;
+    }
+    if (hierarchicalHydro && !closingOnly) {
+        energies->tckin = particlesSumEnergies().kin;
     }
     totalTime.stop();
     int bucketSize = getOptions().compute.bucketSize;

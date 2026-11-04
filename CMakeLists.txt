@@ -2645,6 +2645,56 @@ if(BUILD_TESTING)
     endif()
 
     if(COSMICTIGER_ENABLE_FMM)
+        if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL)
+            add_test(NAME sph_hierarchical_application COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_sph_hierarchical.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/sph_hierarchical_application)
+            set_tests_properties(sph_hierarchical_application PROPERTIES
+                RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2 LABELS "integration;sph;gravity;hierarchical")
+            add_test(NAME sph_hierarchical_gravity COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_sph_hierarchical_gravity.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/sph_hierarchical_gravity)
+            set_tests_properties(sph_hierarchical_gravity PROPERTIES
+                RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2 LABELS "integration;sph;gravity;hierarchical")
+            if(cosmictiger_mpi_tests)
+                add_test(NAME sph_hierarchical_application_mpi COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/run_sph_hierarchical.py $<TARGET_FILE:cosmictiger>
+                    ${PROJECT_BINARY_DIR}/tests/sph_hierarchical_application_mpi
+                    ${cosmictiger_python_mpi_args})
+                set_tests_properties(sph_hierarchical_application_mpi PROPERTIES
+                    RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 4 LABELS "integration;sph;gravity;hierarchical;mpi")
+            endif()
+            if(COSMICTIGER_WITH_CUDA)
+                add_test(NAME sph_hierarchical_application_cuda COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/run_sph_hierarchical.py $<TARGET_FILE:cosmictiger>
+                    ${PROJECT_BINARY_DIR}/tests/sph_hierarchical_application_cuda --cuda)
+                set_tests_properties(sph_hierarchical_application_cuda PROPERTIES
+                    RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2 LABELS "integration;sph;gravity;hierarchical;cuda")
+            endif()
+        endif()
+        if(COSMICTIGER_WITH_SPH AND (COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL OR
+                COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL))
+            add_test(NAME sph_octree_application COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_sph_octree.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/sph_octree_application)
+            set_tests_properties(sph_octree_application PROPERTIES
+                RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2 LABELS "integration;sph;gravity;octree")
+            if(COSMICTIGER_WITH_CUDA)
+                add_test(NAME sph_octree_application_cuda COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/run_sph_octree.py $<TARGET_FILE:cosmictiger>
+                    ${PROJECT_BINARY_DIR}/tests/sph_octree_application_cuda --cuda)
+                set_tests_properties(sph_octree_application_cuda PROPERTIES
+                    RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2 LABELS "integration;sph;gravity;octree;cuda")
+            endif()
+            if(cosmictiger_mpi_tests)
+                add_test(NAME sph_octree_application_mpi COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/run_sph_octree.py $<TARGET_FILE:cosmictiger>
+                    ${PROJECT_BINARY_DIR}/tests/sph_octree_application_mpi
+                    ${cosmictiger_python_mpi_args})
+                set_tests_properties(sph_octree_application_mpi PROPERTIES
+                    RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 4 LABELS "integration;sph;gravity;octree;mpi")
+            endif()
+        endif()
         if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
             set(sph_tree_workdir "${PROJECT_BINARY_DIR}/tests/sph_tree")
             file(MAKE_DIRECTORY "${sph_tree_workdir}")

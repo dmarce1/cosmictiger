@@ -28,6 +28,9 @@
 #include <cosmictiger/gravity/kick_cuda.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#if COSMICTIGER_WITH_SPH
+#include <cosmictiger/sph/hierarchical_state.hpp>
+#endif
 
 namespace detail {
 
@@ -136,6 +139,31 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             (data.type[sinkIndex] == kDarkMatterType ? data.darkMatterMass : data.sphMass) :
             1.0f;
         float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
+#if COSMICTIGER_WITH_SPH
+        if (data.coupledSph && data.sph && data.type[sinkIndex] == kSphType) {
+            ParticleInteger const target = sinkIndex - data.sphGravityOffset;
+            data.sphGravityAccelerationX[target] = gx;
+            data.sphGravityAccelerationY[target] = gy;
+            data.sphGravityAccelerationZ[target] = gz;
+            if (params.htime) {
+                // Hydro's grouped continuation owns the gas close/open sequence.
+                if (allGx != nullptr) {
+                    allGx[sinkIndex] = gx;
+                    allGy[sinkIndex] = gy;
+                    allGz[sinkIndex] = gz;
+                }
+                if (allPhi != nullptr) {
+                    allPhi[sinkIndex] = phi;
+                }
+                phiTot += 0.5f * mass * phi;
+                flops +=
+                    cosmictiger::gravity::cartesian::tracefree::detail::L2P<fmmLocalDegree(order),
+                        true>::kFlops_ +
+                    18;
+                continue;
+            }
+        }
+#endif
         if (params.globalTimestep) {
             float const accelerationSquared = sqr(gx, gy, gz) + 1e-35f;
             float const timestep = fminf(params.maxDt,
@@ -143,12 +171,9 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                     sqrtf(gravityEffectiveRadius / sqrtf(accelerationSquared)));
             ALWAYS_ASSERT(isfinite(timestep) && timestep > 0.0f);
             minimumTimestep = fminf(minimumTimestep, timestep);
-            data.globalAcceleration[kXDimension][sinkIndex] = gx;
-            data.globalAcceleration[kYDimension][sinkIndex] = gy;
-            data.globalAcceleration[kZDimension][sinkIndex] = gz;
 #if COSMICTIGER_WITH_SPH
             bool const gas = data.sph && data.type[sinkIndex] == kSphType;
-            if (gas) {
+            if (gas && !data.coupledSph) {
                 ParticleInteger const k = data.catIndex[sinkIndex];
                 data.sphGravityAccelerationX[k] = gx;
                 data.sphGravityAccelerationY[k] = gy;
@@ -158,6 +183,9 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             bool const gas = false;
 #endif
             if (!gas) {
+                data.globalAcceleration[kXDimension][sinkIndex] = gx;
+                data.globalAcceleration[kYDimension][sinkIndex] = gy;
+                data.globalAcceleration[kZDimension][sinkIndex] = gz;
                 double const halfStep = params.sign * 0.5 * params.previousTimestep;
                 vx = fma(double(gx), halfStep, double(vx));
                 vy = fma(double(gy), halfStep, double(vy));
@@ -183,7 +211,7 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             }
             flops += 12;
         } else if (params.htime) {
-            // Hierarchical integration is collisionless only (no SPH gas).
+            // Signed gravity-only ladder, including gas on correction levels.
             float const sgn = params.sign * (params.top ? 1.f : -1.f);
             flops += 1;    // Kick direction; exclude energy and momentum diagnostics.
             auto const applyKick = [&](float halfStep) {
@@ -219,9 +247,16 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                     params.t0);    // 12
                 dt = fminf(params.maxDt, dt);
                 rung = rungs[sinkIndex];
-                int const nextRung =
+                int nextRung =
                     max(params.minRung + int((int) ceilf(log2f(params.t0 / dt)) > params.minRung),
                         rung - 1);
+#if COSMICTIGER_WITH_SPH
+                if (data.sphHierarchicalStates != nullptr && data.sph &&
+                    data.type[sinkIndex] == kSphType) {
+                    nextRung = max(nextRung,
+                        data.sphHierarchicalStates[data.catIndex[sinkIndex]].minimumHydroRung);
+                }
+#endif
                 maxRung = max(nextRung, maxRung);
                 ALWAYS_ASSERT(nextRung >= 0 && nextRung < kMaxRung);
                 flops += 13;
@@ -237,7 +272,7 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             bool const gas = false;
 #endif
 #if COSMICTIGER_WITH_SPH
-            if (gas) {
+            if (gas && !data.coupledSph) {
                 ParticleInteger const k = data.catIndex[sinkIndex];
                 data.sphGravityAccelerationX[k] = gx;
                 data.sphGravityAccelerationY[k] = gy;

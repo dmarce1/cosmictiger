@@ -63,7 +63,9 @@ SphRunReturn sphCpuHydro(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
     sph_flops::Counter flops = 3;    // Scale-factor reciprocal, gas mass scaling and γ − 1.
-    auto const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
+    auto const& targetNode = data.targetNodes ?
+        data.targetNodes[targetNodeIndex] :
+        data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
     auto const neighbors = detail::sphCpuNeighbors(data, targetNode, true, flops);
     float const inverseScaleFactor = 1.0f / parameters.scaleFactor;
     float const gasAdiabaticIndex = data.adiabaticIndex;
@@ -83,9 +85,12 @@ SphRunReturn sphCpuHydro(
     SimdFloat const scaledGasMass(gasMass * inverseScaleFactor);
     float const viscosityRegularization = parameters.viscosityEpsilon;    // η²/h² of p. 551
     float const expansionRate = parameters.expansionRate;    // a·da/dt, the Hubble flow of a pair
-    for (int particleIndex = targetNode.particleRange.first;
-        particleIndex < targetNode.particleRange.second; particleIndex++) {
-        int const sinkIndex =
+    for (int targetIndex = targetNode.particleRange.first;
+        targetIndex < targetNode.particleRange.second; targetIndex++) {
+        int const particleIndex =
+            data.targetSourceIndices ? data.targetSourceIndices[targetIndex] : targetIndex;
+        ParticleInteger const sinkIndex = data.targetGasIndices ?
+            data.targetGasIndices[targetIndex] :
             targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
         int const previousRung = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]];
         if (previousRung < parameters.minimumRung) {
@@ -374,11 +379,21 @@ SphRunReturn sphCpuHydro(
         Vector3<float> gravityAcceleration(0.0f);
 #if COSMICTIGER_WITH_GRAVITY
         if (!parameters.deferAccelerationSources && data.selfGravityEnabled) {
-            gravityAcceleration = Vector3<float>(data.sinkGravityAccelerationX[sinkIndex],
-                data.sinkGravityAccelerationY[sinkIndex], data.sinkGravityAccelerationZ[sinkIndex]);
+            gravityAcceleration = data.targetGravityAccelerations ?
+                data.targetGravityAccelerations[targetIndex] :
+                Vector3<float>(data.sinkGravityAccelerationX[sinkIndex],
+                    data.sinkGravityAccelerationY[sinkIndex],
+                    data.sinkGravityAccelerationZ[sinkIndex]);
         }
 #endif
         if (!parameters.deferAccelerationSources) {
+            if (data.targetHydroAccelerations) {
+                data.targetHydroAccelerations[targetIndex] = sphCompleteAcceleration(parameters,
+                    Vector3<Position>(data.sourcePositionX[particleIndex],
+                        data.sourcePositionY[particleIndex], data.sourcePositionZ[particleIndex]),
+                    velocity, acceleration, Vector3<float>(0.0f), data.centralAcceleration,
+                    data.centralSupportRadius, flops);
+            }
             acceleration = sphCompleteAcceleration(parameters,
                 Vector3<Position>(data.sourcePositionX[particleIndex],
                     data.sourcePositionY[particleIndex], data.sourcePositionZ[particleIndex]),

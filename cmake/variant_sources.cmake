@@ -172,6 +172,7 @@ function(cosmictiger_feature_sources output)
             src/sph/rungs.cu
             src/sph/rungs_cpu.cpp
             src/sph/tree.cpp
+            src/sph/time_integration.cpp
             src/scenarios/sphere.cpp
             src/scenarios/sphere.cu
             src/sph/viscosity/cullen_and_dehnen_particle_exchange.cpp

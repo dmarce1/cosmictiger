@@ -161,26 +161,30 @@ def main():
     hydro = prepareCase(workdir, "hydro")
     hydro_options = [option for option in common if not option.startswith(
         ("--hydro.enabled=", "--initial.particlesPerDimension="))]
+    hierarchicalHydro = args.time_integrator == "hierarchical"
+    hydroSupported = not args.without_sph and (not hierarchicalHydro or args.gravity_method == "fmm")
+    if hierarchicalHydro:
+        hydro_options.append("--gravity.enabled=true")
     output = runSimulation([str(executable), *hydro_options, f"--compute.positionType={selected}",
                             "--hydro.enabled=true",
                             "--initial.particlesPerDimension=8", "--run.scenario=sod",
                             "--run.endTime=0.00001", "--run.numberOfSteps=2", "--run.maxIterations=1",
                             "--checkpoint.intervalSeconds=1000000000"], hydro, "run.log",
-                           expectSuccess=not args.without_sph and args.time_integrator != "hierarchical")
+                           expectSuccess=hydroSupported)
     if args.without_sph:
         if "COSMICTIGER_ENABLE_SPH=ON" not in output:
             raise RuntimeError("SPH rejection lacked SPH build guidance")
         print(f"{selected} selection, raw checkpoint bits, evolution/restart, width rejection, "
               "and disabled SPH rejection passed")
         return 0
-    if args.time_integrator == "hierarchical":
-        if "run.timeIntegrator" not in output:
+    if not hydroSupported:
+        if "hierarchical SPH requires FMM gravity" not in output:
             raise RuntimeError("SPH rejection lacked integrator build guidance")
         print(f"{selected} selection, raw checkpoint bits, evolution/restart, width rejection, "
-              "and hierarchical SPH incompatibility passed")
+              "and non-FMM hierarchical SPH rejection passed")
         return 0
     hydro_checkpoint = hydro / "checkpoint.1"
-    checkManifest(hydro_checkpoint, 1, scenario="sod", endTime=0.00001, gravity=False)
+    checkManifest(hydro_checkpoint, 1, scenario="sod", endTime=0.00001, gravity=hierarchicalHydro)
     if checkpoint_position_bytes((hydro_checkpoint / "checkpoint.0.dat").read_bytes()) != bits // 8:
         raise RuntimeError("hydro checkpoint used the wrong position representation")
     state = decode_checkpoint((hydro_checkpoint / "checkpoint.0.dat").read_bytes())

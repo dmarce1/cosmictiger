@@ -31,6 +31,19 @@ class Driver(ctypes.Structure):
     _fields_ += [("integer_time", ctypes.c_uint64)]
 
 
+class SphHierarchicalState(ctypes.Structure):
+    _fields_ = [("hydro_acceleration", ctypes.c_float * 3),
+                ("predicted_velocity", ctypes.c_float * 3),
+                ("prediction_time", ctypes.c_double), ("position_time", ctypes.c_double),
+                ("inverse_drift_scale", ctypes.c_double), ("entropy_time", ctypes.c_double),
+                ("minimum_hydro_rung", ctypes.c_int), ("initialized", ctypes.c_bool)]
+
+    def values(self):
+        return (*self.hydro_acceleration, *self.predicted_velocity, self.prediction_time,
+                self.position_time, self.inverse_drift_scale, self.entropy_time,
+                self.minimum_hydro_rung, self.initialized)
+
+
 class Domain(ctypes.Structure):
     _fields_ = [("box", ctypes.c_double * 6), ("midpoint", ctypes.c_double),
                 ("rank", ctypes.c_int)]
@@ -161,9 +174,10 @@ def read_prefix(data):
                 and result.driver.outer_interval >= 0 and result.driver.outer_start >= 0,
                 "invalid checkpoint particle-mesh interval extension")
     result.particle_start = reader.offset
-    # Gas versions from 40000 store entropies and support radii as separate arrays,
+    # Gas versions from 50000 store entropies and support radii as separate arrays,
     # no predicted rates, and only the electron fraction of the cooling state.
-    result.gas_version = 40000 + (110 if stars else 100 if cooling else 2) + viscosity_offset
+    result.hierarchy_offset = 1000 if flags & (1 << 6) else 0
+    result.gas_version = 50000 + result.hierarchy_offset + (110 if stars else 100 if cooling else 2) + viscosity_offset
     result.reader = reader
     return result
 
@@ -209,8 +223,10 @@ def decode_checkpoint(data, ranks=1):
         result.internal_energies = tuple(a * rho ** (gamma - 1) * factor
             for a, rho in zip(result.entropies, scalars[1])) if result.entropy_initialized else result.entropies
         flags = [reader.take("B", gas_count) for _ in range(2)]
-        vectors = [reader.take("f", gas_count) for _ in range(3)]
-        delta = (result.gas_version - 40000 - (110 if result.has_stars else 100 if result.has_cooling else 2))
+        result.hierarchy = tuple(reader.native(SphHierarchicalState).values()
+                                 for _ in range(gas_count)) if result.hierarchy_offset else ()
+        vectors = []  # Gravity is transient; total acceleration is stored above.
+        delta = (result.gas_version - 50000 - result.hierarchy_offset - (110 if result.has_stars else 100 if result.has_cooling else 2))
         width = {0: 0, 2: 1, 4: 2, 6: 2, 8: 2}[delta]
         viscosity = reader.take("f", width * gas_count)
         if result.has_cooling:
@@ -228,6 +244,7 @@ def decode_checkpoint(data, ranks=1):
                 *(field[gas_index] for field in scalars),
                 *(field[gas_index] for field in flags),
                 *(field[gas_index] for field in vectors),
+                *(result.hierarchy[gas_index] if result.hierarchy_offset else ()),
                 *viscosity[width * gas_index:width * (gas_index + 1)],
                 *(result.cooling[gas_index] if result.has_cooling else ()))
     if result.has_stars:

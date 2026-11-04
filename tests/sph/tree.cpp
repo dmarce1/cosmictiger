@@ -20,9 +20,12 @@
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/gravity/kick.hpp>
+#include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/sph/particles.hpp>
 #include <cosmictiger/sph/sph.hpp>
+#include <cosmictiger/sph/time_integration.hpp>
 #include <cosmictiger/sph/tree.hpp>
 
 namespace detail {
@@ -81,6 +84,7 @@ std::vector<char> legacySphTreeArchive(SphTreeNode const& node, int depth) {
         archive << node.activeNodes;
         archive << node.nodeCount;
         archive << depth;
+        archive << node.driftBox;
     }
     return bytes;
 }
@@ -93,6 +97,10 @@ void verifySphTreePackedMetadata() {
             expected.localRoot = (flags & 1) != 0;
             expected.leaf = (flags & 2) != 0;
             expected.converged = (flags & 4) != 0;
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                expected.driftBox.begin[dim] = -0.125 * (dim + 1);
+                expected.driftBox.end[dim] = 1.125 + 0.125 * dim;
+            }
             std::vector<char> bytes;
             {
                 hpx::serialization::output_archive archive(bytes);
@@ -108,6 +116,11 @@ void verifySphTreePackedMetadata() {
             requireSphTree(actual.depth == depth && actual.localRoot == expected.localRoot &&
                     actual.leaf == expected.leaf && actual.converged == expected.converged,
                 "packed metadata did not survive the HPX archive");
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                requireSphTree(actual.driftBox.begin[dim] == expected.driftBox.begin[dim] &&
+                        actual.driftBox.end[dim] == expected.driftBox.end[dim],
+                    "drift bounds did not survive the remote-node archive");
+            }
         }
     }
     for (int depth : {-1, SphTreeNode::kMaximumDepth + 1, kMaxDepth - 1}) {
@@ -378,11 +391,684 @@ void verifyRefreshedOctreeBoxes(TreeId root) {
     verifyOctreeNeighbors(root);
 }
 
+void verifySphRebuildThreshold() {
+    requireSphTree(!sphTreeShouldRebuild(0, 0), "empty population requests a threshold rebuild");
+    requireSphTree(
+        !sphTreeShouldRebuild(2, 9) && sphTreeShouldRebuild(3, 9) && sphTreeShouldRebuild(4, 9),
+        "one-third rebuild threshold is not inclusive");
+    requireSphTree(!sphTreeShouldRebuild(3, 10) && sphTreeShouldRebuild(4, 10),
+        "one-third rebuild threshold was rounded down");
+    size_t const maximum = std::numeric_limits<size_t>::max();
+    requireSphTree(!sphTreeShouldRebuild(maximum / 3 - 1, maximum) &&
+            sphTreeShouldRebuild(maximum / 3 + (maximum % 3 != 0), maximum),
+        "large population overflowed the rebuild threshold");
+}
+
+#if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL && COSMICTIGER_ENABLE_FMM
+void verifySphHierarchyClocks() {
+    auto const savedOptions = getOptions();
+    auto options = savedOptions;
+    options.run.timeIntegrator = "hierarchical";
+    options.run.hierarchicalGravity = true;
+    options.gravity.enabled = true;
+    options.gravity.method = "fmm";
+    options.initial.gasMass = 0.5;
+    setOptions(options);
+    bool const savedEntropyInitialized = sphParticlesEntropyInitialized;
+    double const savedThermalScale = sphParticlesThermalScaleFactor;
+    sphParticlesEntropyInitialized = false;
+    initializeSphTreeParticles(2, 0);
+    for (ParticleInteger gas = 0; gas < 2; ++gas) {
+        sphParticlesDensities[gas] = 1.0f;
+        sphParticlesHierarchicalStates[gas] = {};
+        sphParticlesRung(gas) = gas == 0 ? 0 : 2;
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            sphParticlesPosition(dim, gas) = 0.125;
+            sphParticlesVelocity(dim, gas) = 0.0f;
+        }
+    }
+    sphParticlesPrepareThermodynamics(1.0, true);
+    sphParticlesPosition(0, 0) = 0.875;
+    sphParticlesPosition(0, 1) = 0.25;
+    sphParticlesVelocity(0, 0) = 0.25f;
+    sphParticlesVelocity(0, 1) = 0.5f;
+    for (ParticleInteger gas = 0; gas < 2; ++gas) {
+        sphParticlesEntropy(gas) = 2.0f;
+        sphParticlesEntropyRate(gas) = gas == 0 ? 0.25f : 0.5f;
+        sphParticlesProposedRungs[gas] = sphParticlesRung(gas);
+        sphParticlesAccelerationState(gas) = Vector3<float>(gas == 0 ? 2.5f : 5.0f, 0.0f, 0.0f);
+    }
+    KickParameters parameters;
+    parameters.t0 = 1.0f;
+    parameters.minRung = 0;
+    parameters.top = true;
+    parameters.ascending = true;
+    parameters.descending = false;
+    parameters.firstCall = true;
+    sphHierarchyBeginEvent(0.0, 0, 1.0, true, parameters);
+    sphHierarchyKickTarget(0, Vector3<float>(0.0f), Vector3<float>(0.5f, 0.0f, 0.0f),
+        Vector3<float>(2.0f, 0.0f, 0.0f));
+    sphHierarchyKickTarget(1, Vector3<float>(0.0f), Vector3<float>(1.0f, 0.0f, 0.0f),
+        Vector3<float>(4.0f, 0.0f, 0.0f));
+    requireSphTree(sphParticlesVelocity(0, 0) == 0.25f && sphParticlesVelocity(0, 1) == 0.5f &&
+            sphParticlesEntropy(0) == 2.0f && sphParticlesEntropy(1) == 2.0f,
+        "hierarchical initialization applied an unopened closing kick");
+    sphHierarchyCaptureRungs();
+    sphHierarchyEndEvent();
+
+    // The coarse particle stores its future endpoint while fine particles reach
+    // an intermediate event. Dyadic coordinates make wrapping/projection exact
+    // in both supported fixed-point position representations.
+    sphHierarchyOpenRung(0);
+    sphHierarchyOpenRung(2);
+    sphParticlesPosition(0, 0) = 0.125;
+    sphParticlesPosition(0, 1) = 0.328125;
+    sphHierarchyRecordDrift(0, 1.0, 0.5);
+    sphHierarchyRecordDrift(2, 0.25, 0.5);
+    requireSphTree(sphParticlesVelocity(0, 0) == 0.5f && sphParticlesVelocity(0, 1) == 0.625f &&
+            sphParticlesEntropy(0) == 2.125f && sphParticlesEntropy(1) == 2.0625f &&
+            sphParticlesHierarchicalStates[0].entropyTime == 0.5 &&
+            sphParticlesHierarchicalStates[1].entropyTime == 0.125,
+        "hierarchical opening kick used the wrong positive gas interval");
+    Position const coarseEndpoint = sphParticlesPosition(0, 0);
+    Position const fineEndpoint = sphParticlesPosition(0, 1);
+    parameters.minRung = 2;
+    parameters.firstCall = false;
+    sphHierarchyBeginEvent(0.25, 2, 1.0, false, parameters);
+    requireSphTree(sphParticlesPosition(0, 0).toDouble() == 0.9375 &&
+            sphParticlesPosition(0, 1) == fineEndpoint,
+        "inactive source was not projected from its wrapped future endpoint");
+    requireSphTree(sphHierarchyPredictedVelocity(0, 0) == 0.875f &&
+            sphHierarchyPredictedVelocity(0, 1) == 1.75f &&
+            sphHierarchyPredictedEntropy(0) == 2.0625 && sphHierarchyPredictedEntropy(1) == 2.125,
+        "hierarchical source prediction did not use each particle's clocks");
+    sphParticlesEntropyRate(1) = 0.75f;
+    sphParticlesAccelerationState(1) = Vector3<float>(5.5f, 0.0f, 0.0f);
+    sphHierarchyKickTarget(1, Vector3<float>(1.0f, 0.0f, 0.0f), Vector3<float>(1.5f, 0.0f, 0.0f),
+        Vector3<float>(0.25f, 0.0f, 0.0f));
+    requireSphTree(sphParticlesVelocity(0, 1) == 0.84375f && sphParticlesEntropy(1) == 2.15625f &&
+            sphParticlesHierarchicalStates[1].entropyTime == 0.25 &&
+            sphHierarchyPredictedVelocity(0, 1) == 1.8125f &&
+            sphHierarchyGravityPrediction(1)[0] == 4.0f,
+        "fine closing kick mixed the partial gravity force into its full-force predictor");
+    auto const diagnostics = sphParticlesApplyUpdates(2, 3, 1.0f, 0.25f);
+    double const expectedThermal = 0.5 *
+        (sph_entropy::storedEnergy(2.0625, 1.0, options.hydro.gamma, 1.0) +
+            sph_entropy::storedEnergy(2.15625, 1.0, options.hydro.gamma, 1.0));
+    requireSphTree(std::abs(diagnostics.therm - expectedThermal) < 1e-6 &&
+            std::abs(diagnostics.kin - 0.25 * (0.875 * 0.875 + 1.8125 * 1.8125)) < 1e-6,
+        "hierarchical diagnostics combine quantities from different times");
+    sphHierarchyEndEvent();
+    requireSphTree(
+        sphParticlesPosition(0, 0) == coarseEndpoint && sphParticlesPosition(0, 1) == fineEndpoint,
+        "source projection did not restore exact stored positions");
+
+    // At the same timestamp a negative gravity correction must leave the gas
+    // entropy and positive hydro interval unchanged. The old generic kick
+    // phases must also be inert under hierarchical scheduling.
+    parameters.top = false;
+    sphHierarchyBeginEvent(0.25, 2, 1.0, false, parameters);
+    sphParticlesApplyUpdates(2, 0, 1.0f, 0.25f);
+    sphParticlesApplyUpdates(2, 1, 1.0f, 0.25f);
+    sphHierarchyKickTarget(1, Vector3<float>(1.5f, 0.0f, 0.0f), Vector3<float>(1.5f, 0.0f, 0.0f),
+        Vector3<float>(0.25f, 0.0f, 0.0f));
+    requireSphTree(sphParticlesVelocity(0, 1) == 0.8125f && sphParticlesEntropy(1) == 2.15625f &&
+            sphParticlesHierarchicalStates[1].entropyTime == 0.25 &&
+            sphHierarchyPredictedVelocity(0, 1) == 1.8125f,
+        "signed gravity correction applied a second hydro kick or changed the predictor");
+    sphHierarchyEndEvent();
+    sphHierarchyOpenRung(2);
+    requireSphTree(sphParticlesVelocity(0, 1) == 1.0f && sphParticlesEntropy(1) == 2.25f &&
+            sphParticlesHierarchicalStates[1].entropyTime == 0.375,
+        "next gas interval did not open once with positive duration");
+    auto const expected = sphParticlesHierarchicalStates[1];
+    std::vector<char> bytes;
+    {
+        hpx::serialization::output_archive archive(bytes);
+        archive << expected;
+    }
+    SphHierarchicalState actual;
+    {
+        hpx::serialization::input_archive archive(bytes);
+        archive >> actual;
+    }
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        requireSphTree(actual.hydroAcceleration[dim] == expected.hydroAcceleration[dim] &&
+                actual.predictedVelocity[dim] == expected.predictedVelocity[dim],
+            "hierarchical force/predictor state did not survive migration serialization");
+    }
+    requireSphTree(actual.predictionTime == expected.predictionTime &&
+            actual.positionTime == expected.positionTime &&
+            actual.inverseDriftScale == expected.inverseDriftScale &&
+            actual.entropyTime == expected.entropyTime &&
+            actual.minimumHydroRung == expected.minimumHydroRung &&
+            actual.initialized == expected.initialized,
+        "hierarchical clocks did not survive migration serialization");
+    setOptions(savedOptions);
+    sphParticlesResize(0, false);
+    particlesResize(0);
+    sphParticlesEntropyInitialized = savedEntropyInitialized;
+    sphParticlesThermalScaleFactor = savedThermalScale;
+    std::cout << "SPH hierarchical clock regression passed\n" << std::flush;
+}
+#endif
+
+void verifyRetainedSphOctree(SphTreeCreateParameters const& params) {
+    sphTreeDestroy();
+    initializeSphTreeParticles(8, 0);
+    for (ParticleInteger particle = 0; particle < 8; ++particle) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            particlesPos(dim, particle) = ((particle >> dim) & 1) != 0 ? 0.99 : 0.49;
+            particlesVel(dim, particle) = ((particle + dim) & 1) != 0 ? 0.4f : -0.4f;
+        }
+        particlesRung(particle) = particle < 4 ? 2 : 0;
+    }
+    auto const built = sphTreeCreate(params);
+    requireSphTree(sphTreeIsValid(), "new SPH octree is invalid");
+    std::vector<Vector3<Position>> originalPositions(sphParticlesSize());
+    for (ParticleInteger particle = 0; particle < sphParticlesSize(); ++particle) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            originalPositions[particle][dim] = sphParticlesPosition(dim, particle);
+        }
+    }
+    // A gravity rebuild permutes its own array but leaves the retained SPH
+    // memberships intact; the inverse mapping is the only link that changes.
+    particlesSwap(0, 7);
+    particlesSwap(1, 6);
+    particlesResolveWithSphParticles();
+    requireSphTree(sphTreeIsValid(), "gravity permutation invalidated SPH membership");
+    for (ParticleInteger particle = 0; particle < sphParticlesSize(); ++particle) {
+        requireSphTree(particlesCatIndex(sphParticlesParticleIndex(particle)) == particle,
+            "gravity permutation failed to repair the gas-to-particle mapping");
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            requireSphTree(sphParticlesPosition(dim, particle) == originalPositions[particle][dim],
+                "gravity permutation moved a gas particle to a different SPH leaf");
+        }
+    }
+    std::vector<TreeId> leaves;
+    std::vector<SphTreeNode> originalNodes;
+    std::vector<ParticleInteger> originalOrder;
+    for (int index = 0; index < sphTreeLeaflistSize(); ++index) {
+        leaves.push_back(sphTreeGetLeaf(index));
+        originalNodes.push_back(*sphTreeGetNode(leaves.back()));
+    }
+    for (ParticleInteger particle = 0; particle < sphParticlesSize(); ++particle) {
+        originalOrder.push_back(sphParticlesParticleIndex(particle));
+    }
+    double const driftFactor = 0.25;
+    sphTreeDriftBounds(driftFactor, 2);
+    bool crossedPartition = false;
+    bool crossedPeriodicBoundary = false;
+    for (size_t index = 0; index < leaves.size(); ++index) {
+        auto const& leaf = *sphTreeGetNode(leaves[index]);
+        if (originalNodes[index].numberOfActiveParticles == 0) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                requireSphTree(
+                    leaf.driftBox.begin[dim] == originalNodes[index].driftBox.begin[dim] &&
+                        leaf.driftBox.end[dim] == originalNodes[index].driftBox.end[dim],
+                    "fine-rung drift visited an entirely inactive subtree");
+            }
+        }
+        for (ParticleInteger particle = leaf.particleRange.first;
+            particle < leaf.particleRange.second; ++particle) {
+            Vector3<Position> position;
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                position[dim] = sphParticlesPosition(dim, particle);
+            }
+            requireSphTree(leaf.driftBox.contains(position), "swept box lost its starting point");
+            if (sphParticlesRung(particle) == 2) {
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    double const endpoint = position[dim].toDouble() +
+                        driftFactor * sphParticlesVelocity(dim, particle);
+                    crossedPeriodicBoundary = crossedPeriodicBoundary || endpoint >= 1.0;
+                    position[dim] = endpoint;
+                    sphParticlesPosition(dim, particle) = position[dim];
+                }
+            }
+            crossedPartition = crossedPartition || !originalNodes[index].box.contains(position);
+            requireSphTree(leaf.driftBox.contains(position),
+                "velocity-expanded cell missed a periodic drift endpoint");
+            sphParticlesRung(particle) = particle < 3 ? 2 : 0;
+            sphParticlesSupportRadius(particle) = 0.125f;
+        }
+    }
+    requireSphTree(crossedPartition && crossedPeriodicBoundary,
+        "drift fixture did not cross both spatial and periodic boundaries");
+    auto const refreshed = sphTreeRefresh(params);
+    requireSphTree(refreshed.id == built.id && refreshed.nodeCount == built.nodeCount &&
+            refreshed.numberOfActiveParticles == 3,
+        "retained tree changed topology or retained stale active counts");
+    std::vector<char> returnBytes;
+    {
+        hpx::serialization::output_archive archive(returnBytes);
+        archive << refreshed;
+    }
+    SphTreeCreateReturn received{};
+    {
+        hpx::serialization::input_archive archive(returnBytes);
+        archive >> received;
+    }
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        requireSphTree(received.driftBox.begin[dim] == refreshed.driftBox.begin[dim] &&
+                received.driftBox.end[dim] == refreshed.driftBox.end[dim],
+            "drift bounds were lost in the distributed refresh result");
+    }
+    for (ParticleInteger particle = 0; particle < sphParticlesSize(); ++particle) {
+        requireSphTree(originalOrder[particle] == sphParticlesParticleIndex(particle),
+            "refresh reordered SPH particles");
+    }
+    for (size_t index = 0; index < leaves.size(); ++index) {
+        auto const& leaf = *sphTreeGetNode(leaves[index]);
+        auto const& original = originalNodes[index];
+        requireSphTree(sphTreeGetLeaf(index) == leaves[index] &&
+                leaf.particleRange == original.particleRange &&
+                leaf.neighborRange == Pair<int>(-1, -1),
+            "retained tree changed leaf membership or kept stale neighbors");
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            requireSphTree(leaf.box.begin[dim] == original.box.begin[dim] &&
+                    leaf.box.end[dim] == original.box.end[dim],
+                "refresh changed the original octree partition");
+            requireSphTree(leaf.driftBox.begin[dim] <= original.driftBox.begin[dim] &&
+                    leaf.driftBox.end[dim] >= original.driftBox.end[dim],
+                "refresh discarded the previous swept envelope");
+        }
+        size_t active = 0;
+        for (ParticleInteger particle = leaf.particleRange.first;
+            particle < leaf.particleRange.second; ++particle) {
+            active += sphParticlesRung(particle) >= params.minimumRung;
+            Vector3<Position> position;
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                position[dim] = sphParticlesPosition(dim, particle);
+                if (sphParticlesRung(particle) >= params.minimumRung) {
+                    double const support =
+                        params.supportRadiusMultiplier * sphParticlesSupportRadius(particle);
+                    requireSphTree(
+                        leaf.outerBox.begin[dim].toDouble() <= position[dim].toDouble() - support &&
+                            leaf.outerBox.end[dim].toDouble() >= position[dim].toDouble() + support,
+                        "refresh missed a growing kernel support");
+                }
+            }
+            requireSphTree(leaf.innerBox.contains(position) && leaf.driftBox.contains(position),
+                "refreshed cell does not contain a current particle");
+        }
+        requireSphTree(leaf.numberOfActiveParticles == active, "leaf active count is stale");
+    }
+    verifyOctreeNeighbors(refreshed.id);
+    sphTreeDriftBounds(-0.5, 2);
+    for (auto const leafId : leaves) {
+        auto const& leaf = *sphTreeGetNode(leafId);
+        for (ParticleInteger particle = leaf.particleRange.first;
+            particle < leaf.particleRange.second; ++particle) {
+            if (sphParticlesRung(particle) == 2) {
+                Vector3<Position> endpoint;
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    endpoint[dim] = sphParticlesPosition(dim, particle).toDouble() -
+                        0.5 * sphParticlesVelocity(dim, particle);
+                }
+                requireSphTree(leaf.driftBox.contains(endpoint),
+                    "signed drift missed its negative-time endpoint");
+            }
+        }
+    }
+    // A many-box displacement must saturate rather than overflow Q3.29 bounds.
+    for (ParticleInteger particle = 0; particle < sphParticlesSize(); ++particle) {
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            sphParticlesVelocity(dim, particle) = 16.0f;
+        }
+    }
+    sphTreeDriftBounds(1.0);
+    for (auto const leafId : leaves) {
+        auto const& leaf = *sphTreeGetNode(leafId);
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            requireSphTree(leaf.driftBox.begin[dim].toDouble() <= 0.0 &&
+                    leaf.driftBox.end[dim].toDouble() >= 1.0,
+                "long periodic drift did not cover the full axis");
+        }
+    }
+    sphTreeInvalidate();
+    requireSphTree(!sphTreeIsValid(), "particle mutation did not invalidate retained topology");
+    bool rejected = false;
+    try {
+        sphTreeRefresh(params);
+    } catch (std::runtime_error const&) {
+        rejected = true;
+    }
+    requireSphTree(rejected, "invalid topology was refreshed instead of rejected");
+}
+
 }    // namespace detail
 
+void initializeDistributedSphOctree() {
+    detail::initializeSphTreeParticles(8, 0);
+    for (ParticleInteger particle = 0; particle < 8; ++particle) {
+        particlesPos(0, particle) = particle == 0 ? (hpxRank() == 0 ? 0.49 : 0.51) :
+                                                    (hpxRank() + (particle + 0.5) / 8.0) / 2.0;
+        particlesPos(1, particle) = 0.25 + 0.25 * (particle & 1);
+        particlesPos(2, particle) = 0.25 + 0.25 * ((particle >> 1) & 1);
+        particlesVel(0, particle) = particle == 0 ? (hpxRank() == 0 ? 0.08f : -0.08f) : 0.0f;
+        particlesRung(particle) = particle == 0 ? 2 : 0;
+        sphParticlesSupportRadius(particle) = 0.09f;
+    }
+}
+HPX_PLAIN_ACTION(initializeDistributedSphOctree, InitializeDistributedSphOctreeAction);
+
+size_t driftDistributedSphOctree() {
+    sphTreeDriftBounds(0.5, 2);
+    size_t crossed = 0;
+    auto const domain = domainsFindMyBox();
+    for (ParticleInteger particle = 0; particle < sphParticlesSize(); ++particle) {
+        if (sphParticlesRung(particle) != 2) {
+            continue;
+        }
+        sphParticlesPosition(0, particle) += Position(0.5 * sphParticlesVelocity(0, particle));
+        Vector3<double> position;
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            position[dim] = sphParticlesPosition(dim, particle).toDouble();
+        }
+        crossed += !domain.contains(position);
+    }
+    return crossed;
+}
+HPX_PLAIN_ACTION(driftDistributedSphOctree, DriftDistributedSphOctreeAction);
+
+void verifyDistributedSphOctree(Vector<TreeId> const& allLeaves) {
+    for (int leafIndex = 0; leafIndex < sphTreeLeaflistSize(); ++leafIndex) {
+        auto const& target = *sphTreeGetNode(sphTreeGetLeaf(leafIndex));
+        std::set<TreeId> neighbors;
+        for (int index = target.neighborRange.first; index < target.neighborRange.second; ++index) {
+            neighbors.insert(sphTreeGetNeighbor(index));
+        }
+        for (ParticleInteger particle = target.particleRange.first;
+            particle < target.particleRange.second; ++particle) {
+            if (sphParticlesRung(particle) != 2) {
+                continue;
+            }
+            bool remotePair = false;
+            for (auto const sourceId : allLeaves) {
+                auto const& source = *sphTreeGetNode(sourceId);
+                size_t const count = source.numberOfParticles();
+                Vector<Position> positions[3];
+                for (auto& coordinate : positions) {
+                    coordinate.resize(count);
+                }
+                sphParticlesGlobalReadPositions(source.globalParticleRange(), positions[0].data(),
+                    positions[1].data(), positions[2].data(), 0);
+                for (size_t neighbor = 0; neighbor < count; ++neighbor) {
+                    double squaredDistance = 0.0;
+                    Vector3<Position> position;
+                    for (int dim = 0; dim < kDimensions; ++dim) {
+                        position[dim] = positions[dim][neighbor];
+                        double const separation =
+                            std::remainder(sphParticlesPosition(dim, particle).toDouble() -
+                                    position[dim].toDouble(),
+                                1.0);
+                        squaredDistance += separation * separation;
+                    }
+                    detail::requireSphTree(source.driftBox.contains(position),
+                        "remote swept bounds missed a particle after crossing domains");
+                    if (squaredDistance < 0.09 * 0.09) {
+                        detail::requireSphTree(neighbors.contains(sourceId),
+                            "retained distributed tree missed a brute-force neighbor");
+                        remotePair = remotePair || sourceId.proc != hpxRank();
+                    }
+                }
+            }
+            detail::requireSphTree(remotePair, "distributed fixture lacks a cross-rank pair");
+        }
+    }
+}
+HPX_PLAIN_ACTION(verifyDistributedSphOctree, VerifyDistributedSphOctreeAction);
+
+#if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL && COSMICTIGER_ENABLE_FMM
+void verifyDistributedSphHierarchyMigration(bool afterMigration) {
+    static std::vector<Vector3<Position>> prefixPositions;
+    auto const range = particlesCurrentRange();
+    detail::requireSphTree(range.first == 7 && range.second == 8,
+        "hierarchical migration changed the inactive prefix or active suffix size");
+    if (!afterMigration) {
+        prefixPositions.resize(range.first);
+    }
+    for (ParticleInteger particle = 0; particle < particlesSize(); ++particle) {
+        ParticleInteger const gas = particlesCatIndex(particle);
+        if (!afterMigration) {
+            sphParticlesEntropies[gas] = 100 * hpxRank() + particle + 1;
+        }
+        float const identity = sphParticlesEntropies[gas];
+        SphHierarchicalState expected;
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            expected.hydroAcceleration[dim] = identity + 0.25f * (dim + 1);
+            expected.predictedVelocity[dim] = identity + dim + 1;
+        }
+        expected.predictionTime = identity / 64.0;
+        expected.positionTime = identity / 16.0;
+        expected.inverseDriftScale = 0.75;
+        expected.entropyTime = identity / 32.0;
+        expected.minimumHydroRung = particlesRung(particle);
+        expected.initialized = true;
+        if (!afterMigration) {
+            sphParticlesHierarchicalStates[gas] = expected;
+            if (particle < range.first) {
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    prefixPositions[particle][dim] = particlesPos(dim, particle);
+                }
+            }
+            continue;
+        }
+        auto const& actual = sphParticlesHierarchicalStates[gas];
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            detail::requireSphTree(
+                actual.hydroAcceleration[dim] == expected.hydroAcceleration[dim] &&
+                    actual.predictedVelocity[dim] == expected.predictedVelocity[dim],
+                "migration changed a hierarchical force or predictor field");
+        }
+        detail::requireSphTree(actual.predictionTime == expected.predictionTime &&
+                actual.positionTime == expected.positionTime &&
+                actual.inverseDriftScale == expected.inverseDriftScale &&
+                actual.entropyTime == expected.entropyTime &&
+                actual.minimumHydroRung == expected.minimumHydroRung && actual.initialized,
+            "migration changed a hierarchical clock or hydro rung bound");
+        if (particle < range.first) {
+            detail::requireSphTree(
+                identity == 100 * hpxRank() + particle + 1 && particlesRung(particle) == 0,
+                "active migration moved or replaced an inactive prefix particle");
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                detail::requireSphTree(
+                    particlesPos(dim, particle) == prefixPositions[particle][dim],
+                    "migration reordered positions in a saved rung prefix");
+            }
+        } else {
+            detail::requireSphTree(
+                int(identity) / 100 == 1 - hpxRank() && particlesRung(particle) == 2,
+                "crossed active particle did not arrive from the opposite rank");
+        }
+    }
+}
+HPX_PLAIN_ACTION(
+    verifyDistributedSphHierarchyMigration, VerifyDistributedSphHierarchyMigrationAction);
+
+size_t initializeOutsideDomainSphHierarchy() {
+    size_t outside = 0;
+    auto const domain = domainsFindMyBox();
+    for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
+        bool const active = gas >= 5;
+        sphParticlesRung(gas) = active ? 2 : 0;
+        sphParticlesPosition(0, gas) = active ? (hpxRank() == 0 ? 0.21 : 0.71) + 0.015 * (gas - 5) :
+                                                (hpxRank() == 0 ? 0.75 : 0.25) + 0.01 * gas;
+        Vector3<double> position;
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            if (dim != 0) {
+                sphParticlesPosition(dim, gas) = 0.25;
+            }
+            sphParticlesVelocity(dim, gas) = 0.0f;
+            position[dim] = sphParticlesPosition(dim, gas).toDouble();
+        }
+        outside += !active && !domain.contains(position);
+    }
+    return outside;
+}
+HPX_PLAIN_ACTION(initializeOutsideDomainSphHierarchy, InitializeOutsideDomainSphHierarchyAction);
+#endif
+
+void distributedSphOctreeTest() {
+    detail::requireSphTree(hpxSize() == 2, "distributed retained-tree fixture needs two ranks");
+    auto options = getOptions();
+    options.hydro.enabled = true;
+    options.chemistry.enabled = false;
+    options.starFormation.enabled = false;
+    options.analysis.groups = false;
+    options.analysis.tracers = false;
+    options.compute.sphBucketSize = 2;
+    options.initial.numberOfParticles = 16;
+    setOptions(options);
+    std::vector<hpx::future<void>> initialization;
+    for (auto const& locality : hpxLocalities()) {
+        initialization.push_back(hpx::async<InitializeDistributedSphOctreeAction>(locality));
+    }
+    for (auto& future : initialization) {
+        future.get();
+    }
+    domainsRebound();
+    domainsBegin(0);
+    domainsEnd();
+    SphTreeCreateParameters parameters{};
+    parameters.minimumRung = 2;
+    parameters.supportRadiusMultiplier = 1.0;
+    auto const built = sphTreeCreate(parameters);
+    detail::requireSphTree(built.numberOfActiveParticles == 2 && !sphTreeShouldRebuild(2, 16),
+        "distributed fixture is not below the rebuild threshold");
+    Vector<TreeId> leaves;
+    Vector<TreeId> pending{built.id};
+    while (!pending.empty()) {
+        auto const id = pending.back();
+        pending.pop_back();
+        auto const& node = *sphTreeGetNode(id);
+        if (node.leaf) {
+            leaves.push_back(id);
+        } else {
+            for (auto const child : node.children) {
+                if (child.index >= 0) {
+                    pending.push_back(child);
+                }
+            }
+        }
+    }
+    // The traversal above intentionally populated remote cache lines before drift.
+    std::vector<hpx::future<size_t>> drifts;
+    for (auto const& locality : hpxLocalities()) {
+        drifts.push_back(hpx::async<DriftDistributedSphOctreeAction>(locality));
+    }
+    size_t crossed = 0;
+    for (auto& future : drifts) {
+        crossed += future.get();
+    }
+    detail::requireSphTree(crossed == 2, "active particles did not cross both rank boundaries");
+    sphParticlesClearCaches();
+    auto const refreshed = sphTreeRefresh(parameters);
+    detail::requireSphTree(refreshed.id == built.id && refreshed.nodeCount == built.nodeCount &&
+            refreshed.numberOfActiveParticles == built.numberOfActiveParticles,
+        "distributed refresh changed topology or active counts");
+    SphTreeNeighborParameters neighbors{};
+    neighbors.runType = kSphTreeNeighborNeighbors;
+    neighbors.innerSelection = kSphInteractionsIJ;
+    neighbors.minimumRung = 2;
+    sphTreeNeighbor(neighbors, refreshed.id, Vector<TreeId>{refreshed.id}).get();
+    std::vector<hpx::future<void>> validation;
+    for (auto const& locality : hpxLocalities()) {
+        validation.push_back(hpx::async<VerifyDistributedSphOctreeAction>(locality, leaves));
+    }
+    for (auto& future : validation) {
+        future.get();
+    }
+    sphTreeDestroy(true);
+#if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL && COSMICTIGER_ENABLE_FMM
+    if (options.run.hierarchicalGravity) {
+        particlesPushRungs();
+        particlesSortByRung(2);
+        for (bool afterMigration : {false, true}) {
+            if (afterMigration) {
+                domainsBegin(2);
+                domainsEnd();
+            }
+            std::vector<hpx::future<void>> stateChecks;
+            for (auto const& locality : hpxLocalities()) {
+                stateChecks.push_back(hpx::async<VerifyDistributedSphHierarchyMigrationAction>(
+                    locality, afterMigration));
+            }
+            for (auto& future : stateChecks) {
+                future.get();
+            }
+        }
+        particlesPopRungs();
+        detail::requireSphTree(particlesCurrentRange().first == 0,
+            "hierarchical migration corrupted the saved rung stack");
+        std::cout << "SPH hierarchical migration regression passed: crossed=2 prefix=7\n"
+                  << std::flush;
+
+        // A threshold rebuild can occur before slow particles reach their own
+        // migration event. More than one bucket of those particles now lies
+        // outside each rank's domain; a domain-limited local octree could never
+        // separate their x coordinates and would exceed its maximum depth.
+        std::vector<hpx::future<size_t>> outsideCounts;
+        for (auto const& locality : hpxLocalities()) {
+            outsideCounts.push_back(
+                hpx::async<InitializeOutsideDomainSphHierarchyAction>(locality));
+        }
+        size_t outside = 0;
+        for (auto& future : outsideCounts) {
+            outside += future.get();
+        }
+        detail::requireSphTree(outside == 10 && sphTreeShouldRebuild(6, 16),
+            "out-of-domain fixture did not reach its active rebuild threshold");
+        domainsBegin(2);
+        domainsEnd();
+        auto const rebuilt = sphTreeCreate(parameters);
+        detail::requireSphTree(sphTreeAllValid() && rebuilt.numberOfActiveParticles == 6,
+            "threshold rebuild failed with inactive gas outside its owner domain");
+        // The earlier brute-force check cached remote positions. Match the
+        // production SPH staging boundary after manual mutation and resorting.
+        sphParticlesClearCaches();
+        leaves.clear();
+        pending = {rebuilt.id};
+        while (!pending.empty()) {
+            auto const id = pending.back();
+            pending.pop_back();
+            auto const& node = *sphTreeGetNode(id);
+            if (node.leaf) {
+                leaves.push_back(id);
+            } else {
+                for (auto const child : node.children) {
+                    if (child.index >= 0) {
+                        pending.push_back(child);
+                    }
+                }
+            }
+        }
+        sphTreeNeighbor(neighbors, rebuilt.id, Vector<TreeId>{rebuilt.id}).get();
+        validation.clear();
+        for (auto const& locality : hpxLocalities()) {
+            validation.push_back(hpx::async<VerifyDistributedSphOctreeAction>(locality, leaves));
+        }
+        for (auto& future : validation) {
+            future.get();
+        }
+        sphTreeDestroy(true);
+        std::cout << "SPH hierarchical out-of-domain rebuild regression passed: "
+                     "active=6 total=16 inactive_outside=10\n"
+                  << std::flush;
+    }
+#endif
+    std::cout << "SPH octree distributed retain regression passed: active=2 total=16 crossed=2\n"
+              << std::flush;
+}
+
 void sphTreeTest() {
+    if (hpxSize() > 1) {
+        distributedSphOctreeTest();
+        return;
+    }
     detail::verifySphTreePackedMetadata();
     detail::verifyEmptySphBounds();
+    detail::verifySphRebuildThreshold();
     // This fixture exercises the real local allocator and rebuild path. Remote
     // cache invalidation and growth beyond the arena minimum need separate tests.
     detail::requireSphTree(hpxSize() == 1, "arena regression requires one locality");
@@ -473,6 +1159,7 @@ void sphTreeTest() {
     detail::requireSphTree(
         boundaryOctree.nodeCount == 9, "split-plane particles did not select the upper octants");
     detail::verifyOctreeNeighbors(boundaryOctree.id);
+    detail::verifyRetainedSphOctree(params);
 
     sphTreeDestroy();
     detail::initializeSphTreeParticles(2, 0);
@@ -529,5 +1216,8 @@ void sphTreeTest() {
     auto const empty = sphTreeCreate(params);
     detail::verifySphTreeBuild(empty, 0);
     sphTreeDestroy(true);
+#if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL && COSMICTIGER_ENABLE_FMM
+    detail::verifySphHierarchyClocks();
+#endif
     std::cout << "SPH tree arena regression passed (CPU, one locality)\n" << std::flush;
 }

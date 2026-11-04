@@ -257,7 +257,8 @@ def requiredSources(configuration, cuda):
         required.add("src/gravity/kick.cpp")
     if configuration["SPH"]:
         required.update({"src/sph/sph.cpp", "src/sph/hydro_cpu.cpp", "src/sph/prehydro_cpu.cpp",
-                         "src/sph/rungs_cpu.cpp", "src/sph/particles.cpp", "src/sph/tree.cpp"})
+                         "src/sph/rungs_cpu.cpp", "src/sph/particles.cpp", "src/sph/tree.cpp",
+                         "src/sph/time_integration.cpp"})
         if cuda:
             required.update({"src/sph/cuda.cu", "src/sph/hydro.cu", "src/sph/prehydro.cu", "src/sph/rungs.cu"})
     if hasChemistry(configuration):

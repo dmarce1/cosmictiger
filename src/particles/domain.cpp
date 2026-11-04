@@ -36,6 +36,7 @@
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/particles.hpp>
+#include <cosmictiger/sph/tree.hpp>
 #endif
 
 constexpr bool kVerbose = true;
@@ -285,7 +286,6 @@ Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
         if (localDomains[i].depth == depth) {
             futs.push_back(hpx::async(hpx::annotated_function(
                 [i, &bounds, depth, &counts]() {
-
                     auto const rng = localDomains[i].particleRange;
                     // Root-created initial conditions leave other localities empty
                     // until this rebalance migrates their particles. Empty ranges
@@ -394,7 +394,6 @@ void domainsReboundSort(Vector<double> bounds, int depth) {
                 [i, &bounds, depth, &mids]() {
                     mids[i] = particlesSort(
                         localDomains[i].particleRange, bounds[i], depth % kDimensions);
-
                 },
                 "particles.domainsReboundSort")));
         }
@@ -575,15 +574,19 @@ void domainsTransmitParticles(Vector<Particle> parts) {
 // gravity particle. Category indices are local and are rebuilt at the receiver.
 struct GasMigrationState {
     Vector3<float> acceleration, gravityAcceleration;
+    SphHierarchicalState hierarchy{};
     float supportRadius, entropy, entropyRate, density;
     char converged, semiactive;
     float bulkViscosityCoefficient;
-    float divergence;         // Previous physical divergence for Cullen-Dehnen and Price et al.
+    float divergence;    // Previous physical divergence for Cullen-Dehnen and Price et al.
     float electronFraction{1.0f};
     template <class Archive>
     void serialize(Archive& arc, unsigned) {
         arc & acceleration;
         arc & gravityAcceleration;
+        if (getOptions().run.hierarchicalGravity) {
+            arc & hierarchy;
+        }
         arc & supportRadius;
         arc & entropy;
         arc & entropyRate;
@@ -640,6 +643,9 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
         gas.converged = sphParticlesConvergenceFlags[i];
         gas.semiactive = sphParticlesSemiactiveFlags[i];
         gas.entropy = sphParticlesEntropies[i];
+        if (sphParticlesHierarchicalStates != nullptr) {
+            gas.hierarchy = sphParticlesHierarchicalStates[i];
+        }
         if (getOptions().hydro.viscosityEvolution != "none") {
             gas.bulkViscosityCoefficient = sphParticlesBulkViscosityCoefficients[i];
         }
@@ -650,7 +656,9 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
             gas.electronFraction = sphParticlesElectronFractions[i];
         }
         for (int dim = 0; dim < kDimensions; dim++) {
-            gas.gravityAcceleration[dim] = sphParticlesGravityAccelerations[dim][i];
+            gas.gravityAcceleration[dim] = sphParticlesGravityAccelerations[dim] != nullptr ?
+                sphParticlesGravityAccelerations[dim][i] :
+                0.0f;
         }
     }
     return result;
@@ -672,6 +680,9 @@ static void unpackSphParticle(
         sphParticlesConvergenceFlags[i] = gas.converged;
         sphParticlesSemiactiveFlags[i] = gas.semiactive;
         sphParticlesEntropies[i] = gas.entropy;
+        if (sphParticlesHierarchicalStates != nullptr) {
+            sphParticlesHierarchicalStates[i] = gas.hierarchy;
+        }
         if (getOptions().hydro.viscosityEvolution != "none") {
             sphParticlesBulkViscosityCoefficients[i] = gas.bulkViscosityCoefficient;
         }
@@ -682,7 +693,9 @@ static void unpackSphParticle(
             sphParticlesElectronFractions[i] = gas.electronFraction;
         }
         for (int dim = 0; dim < kDimensions; dim++) {
-            sphParticlesGravityAccelerations[dim][i] = gas.gravityAcceleration[dim];
+            if (sphParticlesGravityAccelerations[dim] != nullptr) {
+                sphParticlesGravityAccelerations[dim][i] = gas.gravityAcceleration[dim];
+            }
         }
     }
 }
@@ -696,15 +709,19 @@ static void beginSphMigration(int rung) {
     std::unordered_map<int, Vector<SphMigrationParticle>> sends;
     size_t parcelSequence = 0;
     size_t const parcelCapacity = domainsMigrationParcelCapacity(true);
-    // The ordinary integrator retains every rung in the same particle range.
-    // Moving every out-of-domain particle also handles domain rebalancing.
+    auto const activeRange = particlesCurrentRange();
+    // Ordinary stepping migrates all out-of-domain particles. Hierarchical
+    // stepping preserves the saved rung-prefix offsets: only this closing rung
+    // in the current suffix may leave, just as in collisionless migration.
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         Vector3<double> position;
         for (int dim = 0; dim < kDimensions; dim++) {
             position[dim] = positionDomainCoordinate(particlesPos(dim, i));
         }
         auto record = packSphParticle(i);
-        if (box.contains(position)) {
+        bool const eligible = !getOptions().run.hierarchicalGravity ||
+            (i >= activeRange.first && particlesRung(i) == rung);
+        if (!eligible || box.contains(position)) {
             retainedSphParticles.push_back(std::move(record));
         } else {
             auto const rank = findParticleDomain(position);
@@ -802,6 +819,7 @@ size_t domainsMigrationParcelCapacity(bool gas) {
 void domainsBegin(int rung) {
 #if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
+        sphTreeInvalidate();
         beginSphMigration(rung);
         return;
     }
@@ -843,7 +861,6 @@ void domainsBegin(int rung) {
                                 auto& send = sends[rank];
                                 send.push_back(particlesGetParticle(i));
                                 if (send.size() >= parcelCapacity) {
-
                                     futs.push_back(hpx::async<DomainsTransmitParticlesAction>(
                                         hpxLocalities()[rank], std::move(send)));
                                 }
@@ -855,7 +872,6 @@ void domainsBegin(int rung) {
                 }
                 for (auto i = sends.begin(); i != sends.end(); i++) {
                     if (i->second.size()) {
-
                         futs.push_back(hpx::async<DomainsTransmitParticlesAction>(
                             hpxLocalities()[i->first], std::move(i->second)));
                     }

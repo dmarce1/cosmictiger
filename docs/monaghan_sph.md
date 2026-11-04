@@ -583,8 +583,12 @@ Checkpoints use version 3, and the low byte of `reserved` is 2 for the
 are rejected. The next two bytes encode independent gravity and hydro kernel
 selections. Bit 24 identifies the compact gas layout after removal of stellar,
 chemistry, and obsolete solver fields. Older SPH checkpoints lack this bit and
-are rejected before particle data are loaded; the gas payload also has its own
-version 2 header. Compatible dark-matter checkpoint layouts remain unchanged.
+are rejected before particle data are loaded. The gas payload has a separate
+version: base 50000 omits the transient gravity handoff, and hierarchical SPH
+adds 1000 for its predictor and drift-clock record, before the existing physics
+and viscosity suffixes. Earlier gas payloads are rejected. See the
+[SPH octree design](sph_octree_plan.md) for the retained tree and kick schedule.
+Compatible dark-matter checkpoint layouts remain unchanged.
 Historical kernel marker values retain their original meanings; the Ferrers F2
 default changes the selected gravity marker. A change of kernel selection on
 restart is rejected.

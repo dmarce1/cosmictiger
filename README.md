@@ -296,7 +296,11 @@ cosmological conversions, and deliberate implementation choices. SPH support is
 built by default; `-DCOSMICTIGER_ENABLE_SPH=OFF` excludes it. Enable gas
 explicitly with `--hydro.enabled=true`. SPH supports traditional block timesteps
 and global adaptive timesteps with FMM, either PMMM near method, or gravity
-disabled. Hierarchical integration is collisionless only and rejects SPH.
+disabled. Hierarchical integration supports SPH with FMM gravity. Global,
+traditional, and hierarchical SPH share the adaptive octree and force formulation;
+hierarchical gravity retains its signed kick ladder. Chemistry and star formation
+are not yet supported with hierarchical SPH. See the
+[SPH octree design](docs/sph_octree_plan.md).
 Select SIMD CPU SPH with `--hydro.cuda=false` or CUDA SPH with `--hydro.cuda=true`.
 Particle drift selects its backend with `drift.cuda`: the CPU path uses SIMD position updates
 and HPX workers, including rung filtering, glass damping, and lightcone crossings.

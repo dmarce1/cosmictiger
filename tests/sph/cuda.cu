@@ -213,6 +213,36 @@ public:
         }
     }
 
+    void mapGravityLeaves(std::vector<int> const& order, int leafCount) {
+        auto* targets = allocate<SphTreeNode>(leafCount);
+        auto* sources = allocate<int>(order.size());
+        auto* gas = allocate<ParticleInteger>(order.size());
+        auto* gravity = allocate<Vector3<float>>(order.size());
+        for (size_t target = 0; target < order.size(); ++target) {
+            int const index = order[target];
+            sources[target] = gas[target] = index;
+            gravity[target] = Vector3<float>(data_.sinkGravityAccelerationX[index],
+                data_.sinkGravityAccelerationY[index], data_.sinkGravityAccelerationZ[index]);
+        }
+        for (int leaf = 0; leaf < leafCount; ++leaf) {
+            targets[leaf] = data_.treeNodes[0];
+            targets[leaf].particleRange = {ParticleInteger(leaf * order.size() / leafCount),
+                ParticleInteger((leaf + 1) * order.size() / leafCount)};
+        }
+        data_.targetNodes = targets;
+        data_.targetSourceIndices = sources;
+        data_.targetGasIndices = gas;
+        data_.targetGravityAccelerations = gravity;
+        data_.numberOfTargetNodes = leafCount;
+        data_.targetNodeIndices = nullptr;
+        data_.sinkGravityAccelerationX = data_.sinkGravityAccelerationY =
+            data_.sinkGravityAccelerationZ = nullptr;
+    }
+
+    void enableHydroAccelerationOutput() {
+        data_.targetHydroAccelerations = allocate<Vector3<float>>(count_);
+    }
+
     void solveSmoothing(float minimum, float maximum, float initial) {
         params_.minimumSupportRadius = minimum;
         params_.maximumSupportRadius = maximum;
@@ -1861,4 +1891,88 @@ TEST_F(SphCudaTest, GlobalRawTimestep) {
 
 TEST_F(SphCudaTest, DeferredSourceCompletion) {
     detail::testDeferredSourceCompletion<detail::Fixture>();
+}
+
+TEST_F(SphCudaTest, GravityLeafTargetsMatchContiguousHydroAndCpu) {
+    for (bool global : {false, true}) {
+        for (int phase : {0, 1}) {
+            detail::Fixture fixture(5, 1, true);
+            auto& data = fixture.data_;
+            fixture.params_.globalTimestep = global;
+            fixture.params_.maximumSupportRadius = 0.35f;
+            data.selfGravityEnabled = true;
+            std::array<float, 5> const positions{0.97f, 0.02f, 0.1f, 0.3f, 0.8f};
+            for (int index = 0; index < 5; ++index) {
+                data.sourcePositionX[index] = positions[index];
+                data.sourcePositionY[index] = data.sourcePositionZ[index] = 0.5;
+                data.sourceVelocityX[index] = 0.2f * (index - 2);
+                data.sourceInternalEnergy[index] = 0.8f + 0.1f * index;
+                data.sinkSmoothingConverged[index] = true;
+                data.sourceSupportRadius[index] = data.sinkSupportRadius[index] = 0.35f;
+                data.sinkGravityAccelerationX[index] = 0.3f * index;
+                data.sinkGravityAccelerationY[index] = -0.2f * index;
+                data.sinkGravityAccelerationZ[index] = 0.1f;
+            }
+            fixture.densityPass();
+            for (int index = 0; index < 5; ++index) {
+                data.sourceDensity[index] = data.sinkDensity[index];
+                data.sourceGradHCorrection[index] = data.sinkGradHCorrection[index];
+            }
+            data.sinkParticleRungs[2] = 0;
+            detail::compareCpuCudaPhase(fixture, kSphRunHydro, phase);
+            std::array<SphAcceleration, 5> referenceAcceleration;
+            std::array<float, 5> referenceEnergyRate{};
+            std::array<char, 5> referenceRungs{};
+            for (int index = 0; index < 5; ++index) {
+                referenceAcceleration[index] = data.sinkAccelerations[index];
+                referenceEnergyRate[index] = data.sinkInternalEnergyRate[index];
+                referenceRungs[index] = data.sinkParticleRungs[index];
+                data.sinkParticleRungs[index] = index == 2 ? 0 : 1;
+                data.sinkAccelerations[index] = Vector3<float>(-123.0f);
+                data.sinkInternalEnergyRate[index] = -123.0f;
+            }
+            fixture.mapGravityLeaves({4, 1, 0, 3, 2}, 2);
+            detail::compareCpuCudaPhase(fixture, kSphRunHydro, phase);
+            for (int index = 0; index < 5; ++index) {
+                if (index == 2) {
+                    EXPECT_EQ(data.sinkInternalEnergyRate[index], -123.0f);
+                    continue;
+                }
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    detail::requireClose("gravity-leaf acceleration parity",
+                        data.sinkAccelerations[index][dim], referenceAcceleration[index][dim],
+                        5.e-5);
+                }
+                detail::requireClose("gravity-leaf energy-rate parity",
+                    data.sinkInternalEnergyRate[index], referenceEnergyRate[index], 5.e-5);
+                EXPECT_EQ(data.sinkParticleRungs[index], referenceRungs[index]);
+            }
+        }
+    }
+}
+
+TEST_F(SphCudaTest, HierarchicalHydroOutputRetainsSmallPressureForce) {
+    detail::Fixture fixture(2);
+    auto& data = fixture.data_;
+    data.selfGravityEnabled = true;
+    for (int index = 0; index < 2; ++index) {
+        data.sourcePositionX[index] = 0.45 + 0.1 * index;
+        data.sourcePositionY[index] = data.sourcePositionZ[index] = 0.5;
+        data.sinkSmoothingConverged[index] = true;
+    }
+    fixture.density();
+    fixture.hydro();
+    std::array<Vector3<float>, 2> reference{data.sinkAccelerations[0], data.sinkAccelerations[1]};
+    fixture.enableHydroAccelerationOutput();
+    for (int index = 0; index < 2; ++index) {
+        data.sinkGravityAccelerationX[index] = 1.e20f;
+    }
+    fixture.hydro();
+    for (int index = 0; index < 2; ++index) {
+        ASSERT_NE(reference[index][kXDimension], 0.0f);
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            EXPECT_EQ(data.targetHydroAccelerations[index][dim], reference[index][dim]);
+        }
+        EXPECT_EQ(data.sinkAccelerations[index][kXDimension], 1.e20f);
+    }
 }

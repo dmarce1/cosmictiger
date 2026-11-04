@@ -77,6 +77,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/particles.hpp>
+#include <cosmictiger/sph/sph.hpp>
 #endif
 
 namespace detail {
@@ -418,6 +419,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
         work.next(profile::WorkPhase::KickCpuLeafKick);
         detail::kickReleaseLists(std::move(workspace));
         auto const rng = selfPtr->particleRange;
+#if COSMICTIGER_WITH_SPH
+        bool const coupledSph = !params.forceOnly && sphGravityActive();
+#endif
         for (ParticleInteger i = rng.first; i < rng.second; i++) {
             if (params.forceOnly || particlesRung(i) >= params.minRung) {
                 ParticleInteger const j = i - rng.first;
@@ -467,6 +471,17 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 auto& vy = particlesVel(kYDimension, i);
                 auto& vz = particlesVel(kZDimension, i);
                 auto& rung = particlesRung(i);
+#if COSMICTIGER_WITH_SPH
+                if (params.htime && coupledSph && particlesType(i) == kSphType) {
+                    // The shared gas callback closes hydro, then applies this
+                    // signed gravity kick and chooses the next gas rung.
+                    kr.pot += 0.5f * particlesMass(i) * forces.phi[j];
+                    flops += cosmictiger::gravity::cartesian::tracefree::detail::L2P<kLocalDegree,
+                                 true>::kFlops_ +
+                        15;
+                    continue;
+                }
+#endif
                 if (params.globalTimestep) {
                     float const gx = forces.gx[j], gy = forces.gy[j], gz = forces.gz[j];
                     float const accelerationSquared = sqr(gx, gy, gz) + 1e-35f;
@@ -475,14 +490,11 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                             sqrtf(gravityEffectiveRadius / sqrtf(accelerationSquared))));
                     ALWAYS_ASSERT(std::isfinite(timestep) && timestep > 0.0);
                     kr.minimumTimestep = std::min(kr.minimumTimestep, timestep);
-                    gravityGlobalAcceleration(kXDimension)[i] = gx;
-                    gravityGlobalAcceleration(kYDimension)[i] = gy;
-                    gravityGlobalAcceleration(kZDimension)[i] = gz;
                     float const mass = particlesMass(i);
                     double const oldKinetic = 0.5 * mass * sqr(vx, vy, vz);
 #if COSMICTIGER_WITH_SPH
                     bool const gas = getOptions().hydro.enabled && particlesType(i) == kSphType;
-                    if (gas) {
+                    if (gas && !coupledSph) {
                         ParticleInteger const k = particlesCatIndex(i);
                         sphParticlesGravityAcceleration(kXDimension, k) = gx;
                         sphParticlesGravityAcceleration(kYDimension, k) = gy;
@@ -492,6 +504,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     bool const gas = false;
 #endif
                     if (!gas) {
+                        gravityGlobalAcceleration(kXDimension)[i] = gx;
+                        gravityGlobalAcceleration(kYDimension)[i] = gy;
+                        gravityGlobalAcceleration(kZDimension)[i] = gz;
                         double const halfStep = params.sign * 0.5 * params.previousTimestep;
                         vx = std::fma(gx, halfStep, vx);
                         vy = std::fma(gy, halfStep, vy);
@@ -513,7 +528,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     flops += 12;
                     doubleFlops += 2;    // Float timestep and maximum widened for selection.
                 } else if (params.htime) {
-                    // Hierarchical integration is collisionless only (no SPH gas).
+                    // Signed gravity-only ladder, including gas on correction levels.
                     float const mass = particlesMass(i);
                     float g2;
                     float kin0 = 0.5 * mass * sqr(vx, vy, vz);
@@ -543,9 +558,17 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                         float dt = std::min(
                             factor * sqrtf(gravityEffectiveRadius / sqrtf(g2)), (float) params.t0);
                         dt = std::min(params.maxDt, dt);
-                        int const nextRung = std::max(params.minRung +
+                        int nextRung = std::max(params.minRung +
                                 int((int) ceilf(log2f(params.t0 / dt)) > params.minRung),
                             int(rung) - 1);
+#if COSMICTIGER_WITH_SPH
+                        if (getOptions().hydro.enabled && particlesType(i) == kSphType &&
+                            sphParticlesHierarchicalStates != nullptr) {
+                            nextRung = std::max(nextRung,
+                                sphParticlesHierarchicalStates[particlesCatIndex(i)]
+                                    .minimumHydroRung);
+                        }
+#endif
                         kr.maxRung = std::max(nextRung, kr.maxRung);
                         ALWAYS_ASSERT(nextRung >= 0 && nextRung < kMaxRung);
                         flops += 15;
@@ -566,7 +589,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
 #endif
                     float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
 #if COSMICTIGER_WITH_SPH
-                    if (gas) {
+                    if (gas && !coupledSph) {
                         ParticleInteger const k = particlesCatIndex(i);
                         sphParticlesGravityAcceleration(kXDimension, k) = forces.gx[j];
                         sphParticlesGravityAcceleration(kYDimension, k) = forces.gy[j];
@@ -627,6 +650,12 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     15;
             }
         }
+#if COSMICTIGER_WITH_SPH
+        if (coupledSph) {
+            sphGravityKickLeaf(
+                rng, selfPtr->box, forces.gx.data(), forces.gy.data(), forces.gz.data());
+        }
+#endif
         if (cudaWorkspace != nullptr && cudaWorkspace->isBatch()) {
             cudaWorkspace->accumulateBatchReturn(kr);
             cudaWorkspace->addInteractionCounts(counts);

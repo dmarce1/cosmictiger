@@ -341,8 +341,14 @@ void setOptions(Options const& opts) {
             (opts.run.timeIntegrator == "hierarchical" && integration::kBuildHasHierarchical) ||
             (opts.run.timeIntegrator == "global" && integration::kBuildHasGlobal)) ||
         opts.run.hierarchicalGravity != usesHierarchicalIntegration(opts.run) ||
-        (opts.run.hierarchicalGravity && opts.hydro.enabled)) {
+        (opts.run.hierarchicalGravity && opts.hydro.enabled &&
+            (!opts.gravity.enabled || opts.gravity.method != "fmm"))) {
         throw std::invalid_argument("run.timeIntegrator is unavailable or inconsistent");
+    }
+    if (opts.run.hierarchicalGravity && opts.hydro.enabled &&
+        (opts.chemistry.enabled || opts.starFormation.enabled)) {
+        throw std::invalid_argument(
+            "Hierarchical SPH does not yet support chemistry or star formation");
     }
 #if COSMICTIGER_WITH_GRAVITY
     if (opts.gravity.fmmOrder != opts.gravity.pmmmOrder) {
@@ -639,7 +645,8 @@ bool processOptions(int argc, char* argv[]) {
     po::options_description runOpts("Run control");
     runOpts.add_options()("run.timeIntegrator",
         po::value<std::string>(&opts.run.timeIntegrator)->default_value(""),
-        "time integrator: traditional, hierarchical (collisionless only), or global; required when "
+        "time integrator: traditional, hierarchical (SPH requires FMM gravity), or global; "
+        "required when "
         "multiple eligible integrators are compiled")("help", "produce help message")(
         "configuration", po::value<std::string>(&opts.configuration)->default_value(""),
         "INI configuration file; explicit command-line values take precedence")("run.test",
@@ -1745,10 +1752,11 @@ bool processOptions(int argc, char* argv[]) {
             "chemistry.enabled=true requires COSMICTIGER_ENABLE_CHEMISTRY=ON\n");
     }
 #endif
-    // Hierarchical integration advances collisionless particles only; SPH uses
-    // the traditional or global integrator.
+    // SPH keeps its positive physical intervals and shared force formulation;
+    // hierarchical gravity supplies the independent signed FMM kick ladder.
     bool const hierarchicalEligible = integration::kBuildHasHierarchical &&
-        COSMICTIGER_WITH_GRAVITY && opts.gravity.enabled && !opts.hydro.enabled;
+        COSMICTIGER_WITH_GRAVITY && opts.gravity.enabled &&
+        (!opts.hydro.enabled || opts.gravity.method == "fmm");
     if (opts.run.timeIntegrator.empty()) {
         int const choices = int(integration::kBuildHasTraditional) + int(hierarchicalEligible) +
             int(integration::kBuildHasGlobal);
@@ -1766,9 +1774,14 @@ bool processOptions(int argc, char* argv[]) {
             (opts.run.timeIntegrator == "global" && integration::kBuildHasGlobal))) {
         detail::throwOptionError(
             "run.timeIntegrator is unavailable for the selected physics; hierarchical "
-            "requires a gravity-capable build, gravity, and hydro.enabled=false\n");
+            "requires gravity; hierarchical SPH requires FMM gravity\n");
     }
     opts.run.hierarchicalGravity = usesHierarchicalIntegration(opts.run);
+    if (opts.run.hierarchicalGravity && opts.hydro.enabled &&
+        (opts.chemistry.enabled || opts.starFormation.enabled)) {
+        detail::throwOptionError(
+            "Hierarchical SPH does not yet support chemistry or star formation\n");
+    }
 
     if (opts.gravity.enabled && usesParticleMesh(opts.gravity) &&
         opts.run.timeIntegrator == "global") {

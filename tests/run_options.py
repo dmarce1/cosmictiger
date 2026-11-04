@@ -63,9 +63,9 @@ def main():
                     "kickSharedExpansion", "kickHandoffBlocks", "kickFineHandoffBlocks",
                     "kickListReserve")
 
-    # Hierarchical integration is collisionless only; SPH requests are rejected with it.
-    hydro_rejected = args.time_integrator == "hierarchical"
-    hydro_error = "hierarchical requires a gravity-capable build, gravity, and hydro.enabled=false"
+    # Hierarchical SPH shares the hydro path and currently supports FMM gravity.
+    hydro_rejected = args.time_integrator == "hierarchical" and args.gravity_method != "fmm"
+    hydro_error = "hierarchical SPH requires FMM gravity"
 
     def run(name, options, success=True, pmmm_mesh=8, selectors=True):
         if selectors:
@@ -175,7 +175,7 @@ def main():
     if not required <= option_names:
         raise RuntimeError(f"grouped help is missing {sorted(required - option_names)}")
 
-    sph_controls_available = not args.without_sph and args.time_integrator != "hierarchical"
+    sph_controls_available = not args.without_sph and not hydro_rejected
     sph_control_options = ["--hydro.enabled=true"] if sph_controls_available else []
 
     def assertStartupOptions(output, hydroMethod):
@@ -446,7 +446,7 @@ mapSize = 8
             f"--initial.particlesPerDimension={resolution}",
             f"--initial.closePack={str(closePack).lower()}", f"--units.boxLength={boxLength}"])
         assertNormalization(normalized, boxLength, massSolar * 8**3 / count)
-    if not args.without_sph and args.time_integrator != "hierarchical":
+    if sph_controls_available:
         options = [option for option in normalizationOptions
                    if not option.startswith("--hydro.enabled=")]
         normalized = run("units_box_sph_combined_mass", options + [
@@ -797,7 +797,8 @@ mapSize = 8
             raise RuntimeError("disabled SPH chemistry request lacked build guidance")
     else:
         for gravity_enabled in ("true", "false"):
-            rejected_here = hydro_rejected
+            rejected_here = hydro_rejected or (args.time_integrator == "hierarchical" and
+                                               gravity_enabled == "false")
             output = run(f"sph_cli_gravity_{gravity_enabled}", sph_options + [
                 "--hydro.enabled=true", f"--gravity.enabled={gravity_enabled}"],
                 success=not rejected_here)
@@ -820,6 +821,15 @@ mapSize = 8
             assertCompiledSettings(output)
             if not re.search(r"^hydro\.enabled\s*:\s*T\s*$", output, re.MULTILINE):
                 raise RuntimeError("SPH INI request was not enabled")
+    if sph_controls_available and args.time_integrator == "hierarchical":
+        for field in ("chemistry.enabled", "starFormation.enabled"):
+            output = run("hierarchical_source_rejected_" + field, sph_options + [
+                "--hydro.enabled=true", "--gravity.enabled=true", f"--{field}=true"], success=False)
+            expected = "Hierarchical SPH does not yet support chemistry or star formation"
+            if field == "chemistry.enabled" and not chemistryAvailable:
+                expected = "COSMICTIGER_ENABLE_CHEMISTRY=ON"
+            if expected not in output:
+                raise RuntimeError("hierarchical deferred source rejection lacked guidance")
     if sph_controls_available:
         if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_default, re.MULTILINE):
             raise RuntimeError("Balsara switch must default to enabled")
@@ -872,7 +882,8 @@ mapSize = 8
                 raise RuntimeError(f"Hu CLI {key} did not override INI")
         hu_config = args.workdir / "hu_viscosity.ini"
         hu_config.write_text("[hydro]\nviscosityEvolution = hu_etal\n")
-        hu_ini = run("hu_viscosity_ini", [f"--configuration={hu_config.resolve()}"] + sph_control_options)
+        hu_ini = run("hu_viscosity_ini", sph_options +
+                     [f"--configuration={hu_config.resolve()}"] + sph_control_options)
         if not re.search(r"^hydro\.viscosityEvolution\s*:\s*hu_etal\s*$", hu_ini, re.MULTILINE):
             raise RuntimeError("Hu viscosity INI selector was not applied")
 
@@ -928,7 +939,7 @@ mapSize = 8
             success=False)
         if "COSMICTIGER_ENABLE_CHEMISTRY=ON" not in rejected and "pending SPH entropy source conversions" not in rejected:
             raise RuntimeError("star formation without compiled chemistry lacked build guidance")
-    elif not hydro_rejected:  # hydro needs the traditional or global integrator
+    elif not hydro_rejected and args.time_integrator != "hierarchical":
         star_options = [option for option in metadata_options
                         if not option.startswith("--hydro.enabled=")] + [
                             "--hydro.enabled=true", "--starFormation.enabled=true",
@@ -981,7 +992,7 @@ mapSize = 8
             if "COSMICTIGER_ENABLE_CHEMISTRY=ON" not in rejected and "pending SPH entropy source conversions" not in rejected:
                 raise RuntimeError("disabled chemistry request lacked build guidance")
 
-    if not args.without_sph and args.time_integrator != "hierarchical":
+    if sph_controls_available:
         # Both checkpoint layouts round-trip: zero retains the existing SPH block,
         # while nonzero acceleration appends the flagged z-plane force parameter.
         hydro_metadata_options = [option for option in metadata_options
@@ -995,7 +1006,7 @@ mapSize = 8
             if "Checkpoint state and mode validation passed" not in output:
                 raise RuntimeError("z-plane acceleration checkpoint state did not round-trip")
 
-    if chemistryAvailable and not hydro_rejected:
+    if chemistryAvailable and not hydro_rejected and args.time_integrator != "hierarchical":
         cooling_options = [option for option in metadata_options
                            if not option.startswith("--hydro.enabled=")] + [
                                "--hydro.enabled=true", "--chemistry.enabled=true"]
@@ -1528,7 +1539,7 @@ mapSize = 8
     for (source, option, _), output in zip(removedCases, runAll([case for _, _, case in removedCases])):
         if option not in output or not re.search(r"unrecogni[sz]ed option|is ambiguous and matches", output):
             raise RuntimeError(f"removed {source} option {option} was not rejected explicitly")
-    if not args.without_sph and args.gravity_method == "fmm" and args.time_integrator != "hierarchical":
+    if not args.without_sph and args.gravity_method == "fmm":
         for parameter in ("omegaB", "omegaC"):
             for value in ("0", "-0.1", "nan", "inf"):
                 output = run(f"invalid_class_mass_{parameter}_{value}", [

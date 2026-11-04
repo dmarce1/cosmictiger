@@ -111,7 +111,8 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     EnergiesT* energies, bool verbose = true, int uniformMinimumRung = -1, bool closingOnly = false,
     double previousTimestep = 0.0, double maximumGlobalTimestep = 0.0,
     bool predictorPrepared = false, std::function<double()> const& joinGravity = {},
-    double closingTimeStepScale = 0.0);
+    double closingTimeStepScale = 0.0,
+    std::function<SphRunReturn(SphRunParameters const&)> const& combinedForces = {});
 #endif
 #if COSMICTIGER_WITH_GRAVITY
 ForceStepResult kickStep(int minrung, double scale, double, double t0, double theta, bool firstCall,

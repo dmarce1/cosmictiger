@@ -70,6 +70,15 @@ struct SphRunData {
     SphTreeNode* treeNodes;
     int* targetNodeIndices;
     int* neighborNodeIndices;
+    // A gravity leaf contains arbitrary gas slots. Optional target indirection
+    // leaves the immutable source snapshot and its octree leaves shared.
+    SphTreeNode const* targetNodes = nullptr;
+    int const* targetSourceIndices = nullptr;
+    ParticleInteger const* targetGasIndices = nullptr;
+    Vector3<float> const* targetGravityAccelerations = nullptr;
+    // Hierarchical gravity keeps its signed momentum ladder separate from the
+    // positive-duration gas update; this optional compact output supplies H.
+    Vector3<float>* targetHydroAccelerations = nullptr;
     float targetNeighborCount;    // Weighted neighbor target for the support-radius solve.
     float gasMass;
     float adiabaticIndex;    // Ideal-gas index shared by all gas particles.

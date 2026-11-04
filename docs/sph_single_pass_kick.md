@@ -1,6 +1,9 @@
 # Single force pass per SPH step: scope
 
-Status, November 3, 2026 (implemented without profiling, at the user's request):
+Historical status, November 3, 2026 (implemented without profiling, at the user's request).
+The subsequent [SPH octree work](sph_octree_plan.md) replaces the separate FMM
+gravity handoff for adiabatic SPH and enables hierarchical FMM/SPH with explicit
+source prediction clocks. The details below describe the preceding change.
 
 - **Option A.** Gravity is joined before the closing pass. The pass runs with
   `phase = 1` and writes its rungs to `sphParticlesProposedRungs` (the

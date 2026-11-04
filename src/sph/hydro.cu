@@ -105,7 +105,9 @@ __global__ void sphCudaHydro(
     float maximumSignalSpeed = 0.0f;
     while (targetNodeIndex < data.numberOfTargetNodes) {
         __syncthreads();
-        SphTreeNode const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
+        SphTreeNode const& targetNode = data.targetNodes ?
+            data.targetNodes[targetNodeIndex] :
+            data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
         workspace.neighbors.resize(0);
         // The union of both supports is required by the symmetric gradient.
         for (int neighborNodeIndex = targetNode.neighborRange.first;
@@ -152,10 +154,13 @@ __global__ void sphCudaHydro(
                 }
             }
         }
-        for (int particleIndex = targetNode.particleRange.first;
-            particleIndex < targetNode.particleRange.second; particleIndex++) {
+        for (int targetIndex = targetNode.particleRange.first;
+            targetIndex < targetNode.particleRange.second; targetIndex++) {
+            int const particleIndex =
+                data.targetSourceIndices ? data.targetSourceIndices[targetIndex] : targetIndex;
             __syncthreads();
-            int const sinkIndex =
+            ParticleInteger const sinkIndex = data.targetGasIndices ?
+                data.targetGasIndices[targetIndex] :
                 targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
             int const previousRung = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]];
             if (previousRung < parameters.minimumRung) {
@@ -402,12 +407,20 @@ __global__ void sphCudaHydro(
                 Vector3<float> gravityAcceleration(0.0f);
 #if COSMICTIGER_WITH_GRAVITY
                 if (!parameters.deferAccelerationSources && data.selfGravityEnabled) {
-                    gravityAcceleration = Vector3<float>(data.sinkGravityAccelerationX[sinkIndex],
-                        data.sinkGravityAccelerationY[sinkIndex],
-                        data.sinkGravityAccelerationZ[sinkIndex]);
+                    gravityAcceleration = data.targetGravityAccelerations ?
+                        data.targetGravityAccelerations[targetIndex] :
+                        Vector3<float>(data.sinkGravityAccelerationX[sinkIndex],
+                            data.sinkGravityAccelerationY[sinkIndex],
+                            data.sinkGravityAccelerationZ[sinkIndex]);
                 }
 #endif
                 if (!parameters.deferAccelerationSources) {
+                    if (data.targetHydroAccelerations) {
+                        data.targetHydroAccelerations[targetIndex] = sphCompleteAcceleration(
+                            parameters, Vector3<Position>(positionX, positionY, positionZ),
+                            velocity, acceleration, Vector3<float>(0.0f), data.centralAcceleration,
+                            data.centralSupportRadius, flops);
+                    }
                     acceleration = sphCompleteAcceleration(parameters,
                         Vector3<Position>(positionX, positionY, positionZ), velocity, acceleration,
                         gravityAcceleration, data.centralAcceleration, data.centralSupportRadius,
