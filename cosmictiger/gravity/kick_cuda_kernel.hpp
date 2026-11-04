@@ -28,9 +28,6 @@
 #include <cosmictiger/gravity/kick_cuda.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
-#if COSMICTIGER_WITH_SPH
-#include <cosmictiger/sph/hierarchical_state.hpp>
-#endif
 
 namespace detail {
 
@@ -139,31 +136,6 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             (data.type[sinkIndex] == kDarkMatterType ? data.darkMatterMass : data.sphMass) :
             1.0f;
         float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
-#if COSMICTIGER_WITH_SPH
-        if (data.coupledSph && data.sph && data.type[sinkIndex] == kSphType) {
-            ParticleInteger const target = sinkIndex - data.sphGravityOffset;
-            data.sphGravityAccelerationX[target] = gx;
-            data.sphGravityAccelerationY[target] = gy;
-            data.sphGravityAccelerationZ[target] = gz;
-            if (params.htime) {
-                // Hydro's grouped continuation owns the gas close/open sequence.
-                if (allGx != nullptr) {
-                    allGx[sinkIndex] = gx;
-                    allGy[sinkIndex] = gy;
-                    allGz[sinkIndex] = gz;
-                }
-                if (allPhi != nullptr) {
-                    allPhi[sinkIndex] = phi;
-                }
-                phiTot += 0.5f * mass * phi;
-                flops +=
-                    cosmictiger::gravity::cartesian::tracefree::detail::L2P<fmmLocalDegree(order),
-                        true>::kFlops_ +
-                    18;
-                continue;
-            }
-        }
-#endif
         if (params.globalTimestep) {
             float const accelerationSquared = sqr(gx, gy, gz) + 1e-35f;
             float const timestep = fminf(params.maxDt,
@@ -173,7 +145,7 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             minimumTimestep = fminf(minimumTimestep, timestep);
 #if COSMICTIGER_WITH_SPH
             bool const gas = data.sph && data.type[sinkIndex] == kSphType;
-            if (gas && !data.coupledSph) {
+            if (gas && !data.midpointHydro) {
                 ParticleInteger const k = data.catIndex[sinkIndex];
                 data.sphGravityAccelerationX[k] = gx;
                 data.sphGravityAccelerationY[k] = gy;
@@ -182,7 +154,7 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
 #else
             bool const gas = false;
 #endif
-            if (!gas) {
+            if (!gas || data.midpointHydro) {
                 data.globalAcceleration[kXDimension][sinkIndex] = gx;
                 data.globalAcceleration[kYDimension][sinkIndex] = gy;
                 data.globalAcceleration[kZDimension][sinkIndex] = gz;
@@ -192,9 +164,9 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                 vz = fma(double(gz), halfStep, double(vz));
                 doubleFlops += 18;    // Double half-step and three mixed-precision FMAs.
             }
-            if (!gas) {
+            if (!gas || data.midpointHydro) {
                 rungs[sinkIndex] = 0;
-                // Hydro owns the gas momentum and sums the gas energies in its kick.
+                // Midpoint gas receives the same gravitational kick as dark matter.
                 kinTot += 0.5f * mass * sqr(vx, vy, vz);
                 xmomTot += mass * vx;
                 ymomTot += mass * vy;
@@ -251,10 +223,8 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                     max(params.minRung + int((int) ceilf(log2f(params.t0 / dt)) > params.minRung),
                         rung - 1);
 #if COSMICTIGER_WITH_SPH
-                if (data.sphHierarchicalStates != nullptr && data.sph &&
-                    data.type[sinkIndex] == kSphType) {
-                    nextRung = max(nextRung,
-                        data.sphHierarchicalStates[data.catIndex[sinkIndex]].minimumHydroRung);
+                if (data.midpointHydro && data.sph && data.type[sinkIndex] == kSphType) {
+                    nextRung = max(nextRung, int(data.sphHydroRungs[data.catIndex[sinkIndex]]));
                 }
 #endif
                 maxRung = max(nextRung, maxRung);
@@ -272,22 +242,22 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             bool const gas = false;
 #endif
 #if COSMICTIGER_WITH_SPH
-            if (gas && !data.coupledSph) {
+            if (gas && !data.midpointHydro) {
                 ParticleInteger const k = data.catIndex[sinkIndex];
                 data.sphGravityAccelerationX[k] = gx;
                 data.sphGravityAccelerationY[k] = gy;
                 data.sphGravityAccelerationZ[k] = gz;
             }
 #endif
-            if (!gas && !params.firstCall) {
+            if ((!gas || data.midpointHydro) && !params.firstCall) {
                 float const dt = params.sign * 0.5f * rungDt[rungs[sinkIndex]] * params.t0;
                 vx = fmaf(gx, dt, vx);
                 vy = fmaf(gy, dt, vy);
                 vz = fmaf(gz, dt, vz);
                 flops += 9;
             }
-            if (!gas) {
-                // Hydro owns the gas momentum and sums the gas energies in its kick.
+            if (!gas || data.midpointHydro) {
+                // Legacy hydro owns gas momentum; midpoint hydro leaves gravity here.
                 kinTot += 0.5f * mass * sqr(vx, vy, vz);
                 xmomTot += mass * vx;
                 ymomTot += mass * vy;
@@ -302,7 +272,7 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             if (allPhi != nullptr) {
                 allPhi[sinkIndex] = phi;
             }
-            if (!gas) {
+            if (!gas || data.midpointHydro) {
                 float const syncVx = vx, syncVy = vy, syncVz = vz;
                 float const g2 = sqr(gx, gy, gz) + 1e-35f;
                 float dt =
@@ -312,6 +282,11 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                 rung = max(max((int) ceilf(log2f(params.t0 / dt)),
                                max((int) rungs[sinkIndex] - 1, params.minRung)),
                     1);
+#if COSMICTIGER_WITH_SPH
+                if (gas && data.midpointHydro) {
+                    rung = max(rung, int(data.sphHydroRungs[data.catIndex[sinkIndex]]));
+                }
+#endif
                 if (params.fixedRung != 0) {
                     maxRung = max(maxRung, int(rung));
                     rung = params.fixedRung;
@@ -334,9 +309,8 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             maxRung = max(maxRung, (int) rungs[sinkIndex]);
         }
         float kin1 = 0.5 * mass * sqr(vx, vy, vz);
-        // Traditional gas state belongs to hydro. Even writing its unchanged
-        // velocity would race with concurrent hydro preparation.
-        if (params.htime || !data.sph || data.type[sinkIndex] != kSphType) {
+        // Only legacy hydro retains ownership of the gas gravitational kick.
+        if (params.htime || data.midpointHydro || !data.sph || data.type[sinkIndex] != kSphType) {
             vels[sinkIndex][kXDimension] = vx;
             vels[sinkIndex][kYDimension] = vy;
             vels[sinkIndex][kZDimension] = vz;

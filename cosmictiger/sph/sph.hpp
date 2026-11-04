@@ -140,6 +140,8 @@ struct SphRunParameters {
     int runType;
     int phase;
     int minimumRung;
+    int maximumRung = kMaxRung - 1;
+    int minimumProposedRung = 0;
     float baseTimestep;
     float scaleFactor;      // Cosmological scale factor; one in isolated test problems.
     float expansionRate;    // Expansion rate; zero in isolated test problems.
@@ -150,6 +152,9 @@ struct SphRunParameters {
     float zPlaneAcceleration;      // Magnitude of the force toward z = 0.5.
     float maximumTimestep = 1e30f;
     bool globalTimestep = false;
+    // A midpoint hydro operator uses the current split-stage sources and owns
+    // only nongravitational rates. Gravity supplies its own scalar timestep bound.
+    bool midpointHydro = false;
     // Phase zero may publish pair rates before the fresh gravity field arrives.
     // Source acceleration is then assembled before the closing corrector.
     bool deferAccelerationSources = false;
@@ -172,12 +177,13 @@ struct SphRunParameters {
     float expansionAcceleration = 0.0f;    // a³ d²a/dt² for the physical CD acceleration gradient.
     float minimumBulkViscosityCoefficient;
     float viscosityDecay;
-    // Completed interval for Morris-Monaghan: a base interval for individual rungs,
-    // or the actual previous global step. Zero disables evolution during refreshes.
+    // Completed interval for Morris-Monaghan: a base interval for legacy individual
+    // rungs, or the actual global/midpoint interval. Zero disables refresh evolution.
     double viscosityTimestep = 0.0;
     float velocityDampingRate;    // Velocity damping used while relaxing the gas sphere.
     SphRunParameters() {
         auto const opts = getOptions();
+        minimumProposedRung = opts.run.minRung;
         minimumSupportRadius = opts.hydro.minSupportRadius;
         maximumSupportRadius = opts.hydro.maxSupportRadius;
         velocityDampingRate = opts.hydro.damping;
@@ -204,6 +210,9 @@ struct SphRunParameters {
     // and the shared target-alpha state of the density pass.
     CUDA_EXPORT bool gradientSwitch() const {
         return cullenDehnen || priceEtAl || huEtAl;
+    }
+    CUDA_EXPORT bool isActiveRung(int rung) const {
+        return rung >= minimumRung && rung <= maximumRung;
     }
     // Morris-Monaghan, Cullen-Dehnen, and Hu et al. pairs use beta_ab = viscosityBeta alpha_ab;
     // fixed Monaghan coefficients and Price et al. (2018) equation (41) use the constant beta.
@@ -236,6 +245,7 @@ struct SphRunParameters {
         arc & expansionRate;
         arc & maximumTimestep;
         arc & globalTimestep;
+        arc & midpointHydro;
         arc & deferAccelerationSources;
         arc & refreshConvergedDensity;
         arc & uniformAccelerationY;
@@ -243,6 +253,8 @@ struct SphRunParameters {
         arc & phase;
         arc & runType;
         arc & minimumRung;
+        arc & maximumRung;
+        arc & minimumProposedRung;
         arc & scaleFactor;
         arc & courantFactor;
         arc & zPlaneAcceleration;
@@ -260,19 +272,11 @@ inline constexpr int kSphRunHydro = 2;
 inline constexpr int kSphRunRungs = 3;
 
 SphRunReturn sphRun(SphRunParameters params, bool cuda = false);
+// Collective, after density/neighbor preparation at the hydro midpoint. Freeze
+// all source states once, then publish H, irreversible entropy rates and scalar
+// timestep proposals. The caller applies the full positive kick duration.
+SphRunReturn sphMidpointForces(SphRunParameters params, bool cuda = true);
 void sphParticlesCompleteForces(SphRunParameters const& parameters);
-// Collective force-pass lifetime: freeze every locality's predicted sources
-// before any gravity leaf writes the combined gas acceleration or entropy rate.
-void sphGravityPrepare(SphRunParameters parameters);
-bool sphGravityActive();
-void sphGravityKickLeaf(Pair<ParticleInteger> particleRange, Fixed32Range const& box,
-    float const* gravityX, float const* gravityY, float const* gravityZ);
-// CUDA bridge: completed gravity subtrees supply launch-owned gas-indexed
-// accelerations, consumed by one grouped hydro launch before their release.
-void sphGravityKickSubtrees(Vector<TreeId> const& roots, float const* gravityX,
-    float const* gravityY, float const* gravityZ, ParticleInteger gravityOffset);
-SphRunReturn sphGravityFinish();
-void sphGravityAbort();
 #ifndef __CUDACC__
 hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     SphTreeNeighborParameters params, TreeId self, Vector<TreeId> checklist, int level = 0);

@@ -63,9 +63,7 @@ SphRunReturn sphCpuHydro(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
     sph_flops::Counter flops = 3;    // Scale-factor reciprocal, gas mass scaling and γ − 1.
-    auto const& targetNode = data.targetNodes ?
-        data.targetNodes[targetNodeIndex] :
-        data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
+    auto const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
     auto const neighbors = detail::sphCpuNeighbors(data, targetNode, true, flops);
     float const inverseScaleFactor = 1.0f / parameters.scaleFactor;
     float const gasAdiabaticIndex = data.adiabaticIndex;
@@ -85,15 +83,12 @@ SphRunReturn sphCpuHydro(
     SimdFloat const scaledGasMass(gasMass * inverseScaleFactor);
     float const viscosityRegularization = parameters.viscosityEpsilon;    // η²/h² of p. 551
     float const expansionRate = parameters.expansionRate;    // a·da/dt, the Hubble flow of a pair
-    for (int targetIndex = targetNode.particleRange.first;
-        targetIndex < targetNode.particleRange.second; targetIndex++) {
-        int const particleIndex =
-            data.targetSourceIndices ? data.targetSourceIndices[targetIndex] : targetIndex;
-        ParticleInteger const sinkIndex = data.targetGasIndices ?
-            data.targetGasIndices[targetIndex] :
+    for (int particleIndex = targetNode.particleRange.first;
+         particleIndex < targetNode.particleRange.second; particleIndex++) {
+        ParticleInteger const sinkIndex =
             targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
         int const previousRung = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]];
-        if (previousRung < parameters.minimumRung) {
+        if (!parameters.isActiveRung(previousRung)) {
             continue;
         }
         float const sinkSupportRadius = data.sourceSupportRadius[particleIndex];
@@ -153,6 +148,7 @@ SphRunReturn sphCpuHydro(
         SimdFloat viscousHeatingPack(zero);
         SimdFloat internalEnergyRatePack(zero);         // lane partial sums of thermal work
         SimdFloat maximumCompressionSpeedPack(zero);    // lane maxima of −μ_ab for δt_cv
+        SimdFloat maximumNeighborRungPack(zero);
         for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
             // Particle b: one SIMD pack of staged neighbors. Lanes beyond the list, outside
             // both supports, or at zero separation are excluded. Their inputs are replaced
@@ -162,11 +158,20 @@ SphRunReturn sphCpuHydro(
             SimdFloat const stagedSeparationSquared = separation.dot(separation);
             SimdFloat const stagedNeighborSupportRadius =
                 detail::sphCpuLoad(data.sourceSupportRadius, neighbors, first, 1.0f);
-            auto const interacts = detail::sphCpuValidLanes(neighbors, first) &
-                (stagedSeparationSquared > zero) &
+            auto const supportsIntersect = detail::sphCpuValidLanes(neighbors, first) &
                 (stagedSeparationSquared <
                     simdMax(SimdFloat(sinkKernelSupportRadius * sinkKernelSupportRadius),
                         sqr(stagedNeighborSupportRadius)));
+            if (parameters.midpointHydro && parameters.phase == 1) {
+                SimdFloat const neighborRungs([&](auto lane) {
+                    size_t const index = first + size_t(lane);
+                    return index < neighbors.size() ? float(data.sourceRungs[neighbors[index]]) :
+                                                      0.0f;
+                });
+                maximumNeighborRungPack = simdMax(
+                    maximumNeighborRungPack, simdSelect(supportsIntersect, neighborRungs, zero));
+            }
+            auto const interacts = supportsIntersect & (stagedSeparationSquared > zero);
             // Three fixed scales, five dot operations and H_b² per lane; H_a² is scalar.
             flops += 9 * SimdFloat::size() + 1;
             if (!simdAnyOf(interacts)) {
@@ -378,22 +383,13 @@ SphRunReturn sphCpuHydro(
         // the following corrector require the fresh endpoint acceleration.
         Vector3<float> gravityAcceleration(0.0f);
 #if COSMICTIGER_WITH_GRAVITY
-        if (!parameters.deferAccelerationSources && data.selfGravityEnabled) {
-            gravityAcceleration = data.targetGravityAccelerations ?
-                data.targetGravityAccelerations[targetIndex] :
-                Vector3<float>(data.sinkGravityAccelerationX[sinkIndex],
-                    data.sinkGravityAccelerationY[sinkIndex],
-                    data.sinkGravityAccelerationZ[sinkIndex]);
+        if (!parameters.midpointHydro && !parameters.deferAccelerationSources &&
+            data.selfGravityEnabled) {
+            gravityAcceleration = Vector3<float>(data.sinkGravityAccelerationX[sinkIndex],
+                data.sinkGravityAccelerationY[sinkIndex], data.sinkGravityAccelerationZ[sinkIndex]);
         }
 #endif
         if (!parameters.deferAccelerationSources) {
-            if (data.targetHydroAccelerations) {
-                data.targetHydroAccelerations[targetIndex] = sphCompleteAcceleration(parameters,
-                    Vector3<Position>(data.sourcePositionX[particleIndex],
-                        data.sourcePositionY[particleIndex], data.sourcePositionZ[particleIndex]),
-                    velocity, acceleration, Vector3<float>(0.0f), data.centralAcceleration,
-                    data.centralSupportRadius, flops);
-            }
             acceleration = sphCompleteAcceleration(parameters,
                 Vector3<Position>(data.sourcePositionX[particleIndex],
                     data.sourcePositionY[particleIndex], data.sourcePositionZ[particleIndex]),
@@ -478,24 +474,39 @@ SphRunReturn sphCpuHydro(
             flops.doublePrecision += 1;
             int const hydroRung = parameters.globalTimestep ?
                 0 :
-                std::max(1, int(std::ceil(std::log2(parameters.baseTimestep / timeStep))));
-            int nextRung = std::max(std::max(parameters.minimumRung, previousRung - 1), hydroRung);
-#if COSMICTIGER_WITH_GRAVITY
-            float const gravityTimestep = std::fmin(parameters.maximumTimestep,
-                data.accelerationTimestepFactor *
-                    std::sqrt(parameters.scaleFactor * data.gravityEffectiveRadius /
-                        std::fmax(gravityAcceleration.norm(), 1.0e-30f)));
-            if (data.selfGravityEnabled) {
-                result.minimumTimestep = std::min(result.minimumTimestep, double(gravityTimestep));
-                flops.doublePrecision += 1;
+                std::max(parameters.midpointHydro ? 0 : 1,
+                    int(std::ceil(std::log2(parameters.baseTimestep / timeStep))));
+            int const minimumProposedRung =
+                parameters.midpointHydro ? parameters.minimumProposedRung : parameters.minimumRung;
+            int nextRung = std::max(std::max(minimumProposedRung, previousRung - 1), hydroRung);
+            if (parameters.midpointHydro) {
+                // Keep the existing touching-neighbor timestep limit in the proposal.
+                // The gravity boundary, not this midpoint, commits the new live rung.
+                nextRung = std::max(nextRung,
+                    int(simdMaximum(maximumNeighborRungPack)) - kMaxNeighborRungDifference);
             }
-            int const gravityRung = parameters.globalTimestep ?
-                0 :
-                std::max(1, int(std::ceil(std::log2(parameters.baseTimestep / gravityTimestep))));
-            nextRung = std::max(nextRung, data.selfGravityEnabled ? gravityRung : 1);
-            result.maximumGravityRung = std::max(result.maximumGravityRung, gravityRung);
-            // Exclude the bound computed only for disabled-gravity diagnostics.
-            flops += data.selfGravityEnabled ? (parameters.globalTimestep ? 10 : 13) : 0;
+#if COSMICTIGER_WITH_GRAVITY
+            float gravityTimestep = parameters.maximumTimestep;
+            int gravityRung = 0;
+            if (!parameters.midpointHydro) {
+                gravityTimestep = std::fmin(parameters.maximumTimestep,
+                    data.accelerationTimestepFactor *
+                        std::sqrt(parameters.scaleFactor * data.gravityEffectiveRadius /
+                            std::fmax(gravityAcceleration.norm(), 1.0e-30f)));
+                if (data.selfGravityEnabled) {
+                    result.minimumTimestep =
+                        std::min(result.minimumTimestep, double(gravityTimestep));
+                    flops.doublePrecision += 1;
+                }
+                gravityRung = parameters.globalTimestep ?
+                    0 :
+                    std::max(
+                        1, int(std::ceil(std::log2(parameters.baseTimestep / gravityTimestep))));
+                nextRung = std::max(nextRung, data.selfGravityEnabled ? gravityRung : 1);
+                result.maximumGravityRung = std::max(result.maximumGravityRung, gravityRung);
+                // Exclude the bound computed only for disabled-gravity diagnostics.
+                flops += data.selfGravityEnabled ? (parameters.globalTimestep ? 10 : 13) : 0;
+            }
 #endif
             if (parameters.globalTimestep) {
                 nextRung = 0;

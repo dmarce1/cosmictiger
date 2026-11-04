@@ -190,7 +190,8 @@ bool sphCpuHasActiveNeighbor(SphRunParameters const& parameters, SphRunData cons
             size_t const index = first + size_t(lane);
             return index < neighbors.size() ? float(data.sourceRungs[neighbors[index]]) : 0.0f;
         });
-        auto const active = neighborRung >= SimdFloat(float(parameters.minimumRung));
+        auto const active = (neighborRung >= SimdFloat(float(parameters.minimumRung))) &&
+            (neighborRung <= SimdFloat(float(parameters.maximumRung)));
         auto const intersects =
             squaredSeparation < simdMax(squaredSupportRadius, sqr(neighborSupport));
         flops += 9 * SimdFloat::size();    // Three fixed scales, five dot ops, support square.
@@ -210,11 +211,11 @@ SphRunReturn sphCpuPrehydro1(
     auto const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
     auto const neighbors = detail::sphCpuNeighbors(data, targetNode, false, flops);
     for (int particleIndex = targetNode.particleRange.first;
-        particleIndex < targetNode.particleRange.second; ++particleIndex) {
+         particleIndex < targetNode.particleRange.second; ++particleIndex) {
         int const sinkIndex =
             targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
         bool const active =
-            data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] >= parameters.minimumRung;
+            parameters.isActiveRung(data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]]);
         if (active && !data.sinkSmoothingConverged[sinkIndex]) {
             float& supportRadius = data.sinkSupportRadius[sinkIndex];
             bool const converged = detail::solveSphCpuSupportRadius(
@@ -268,11 +269,11 @@ SphRunReturn sphCpuPrehydro2(
     auto const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
     auto const neighbors = detail::sphCpuNeighbors(data, targetNode, true, flops);
     for (int particleIndex = targetNode.particleRange.first;
-        particleIndex < targetNode.particleRange.second; ++particleIndex) {
+         particleIndex < targetNode.particleRange.second; ++particleIndex) {
         int const sinkIndex =
             targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
         bool const active =
-            data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] >= parameters.minimumRung;
+            parameters.isActiveRung(data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]]);
         float& supportRadius = data.sinkSupportRadius[sinkIndex];
         bool const semiactive = active ||
             detail::sphCpuHasActiveNeighbor(
@@ -536,15 +537,15 @@ SphRunReturn sphCpuPrehydro2(
             float const inverseDecayTime =
                 parameters.viscosityDecay * soundSpeed / (parameters.scaleFactor * smoothingLength);
             int const rung = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]];
-            float const timeStep = parameters.globalTimestep ?
-                parameters.viscosityTimestep :
-                parameters.viscosityTimestep / (1 << rung);
+            bool const actualInterval = parameters.globalTimestep || parameters.midpointHydro;
+            float const timeStep = actualInterval ? parameters.viscosityTimestep :
+                                                    parameters.viscosityTimestep / (1 << rung);
             auto& bulkViscosityCoefficient = data.sinkBulkViscosityCoefficient[sinkIndex];
             bulkViscosityCoefficient = morris_and_monaghan::evolvedBulkViscosityCoefficient(
                 bulkViscosityCoefficient, parameters.minimumBulkViscosityCoefficient,
                 inverseDecayTime, velocityDivergence, timeStep);
             flops += SimdFloat::size() - 1 + 19;
-            flops.doublePrecision += parameters.globalTimestep ? 1 : 2;
+            flops.doublePrecision += actualInterval ? 1 : 2;
         }
         if (parameters.gradientSwitch()) {
             cullen_and_dehnen::GradientSums<float> sums{};

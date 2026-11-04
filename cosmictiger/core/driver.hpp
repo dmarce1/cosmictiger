@@ -57,6 +57,9 @@ struct DriverParameters {
     TimeType itime;
     // Interval of the pending global half-step, independent of the rung clock.
     double globalTimestep{};
+    // Latest midpoint hydro bound; gravity selects the next global interval
+    // at its boundary without retaining a per-gas gravitational acceleration.
+    double globalHydroTimestep{};
     // Particle-mesh solvers: the outer PM interval whose opening long half-kick
     // has been applied (zero before the first), the conformal time at which it
     // started, and the number of completed outer intervals. itime is the
@@ -83,6 +86,7 @@ struct DriverParameters {
         arc & itime;
         arc & years;
         arc & globalTimestep;
+        arc & globalHydroTimestep;
         arc & outerInterval;
         arc & outerStart;
         arc & outerIndex;
@@ -106,13 +110,19 @@ struct MeshKickSchedule {
 };
 
 #if COSMICTIGER_WITH_SPH
+// Positive duration: midpoint kick. Zero: initial force/timestep estimate.
+// Negative: density-only synchronized diagnostics. A negative rung selects all gas.
+SphRunReturn sphMidpointStep(int rung, double time, double timestep, double baseTimestep,
+    double scale, double scaleDerivative, EnergiesT& energies, bool global = false,
+    double maximumTimestep = 0.0);
 SphTreeCreateReturn sphStep1(int minrung, bool verbose = true);
 SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
     EnergiesT* energies, bool verbose = true, int uniformMinimumRung = -1, bool closingOnly = false,
     double previousTimestep = 0.0, double maximumGlobalTimestep = 0.0,
     bool predictorPrepared = false, std::function<double()> const& joinGravity = {},
     double closingTimeStepScale = 0.0,
-    std::function<SphRunReturn(SphRunParameters const&)> const& combinedForces = {});
+    std::function<SphRunReturn(SphRunParameters const&)> const& combinedForces = {},
+    bool midpointHydro = false, int maximumHydroRung = kMaxRung - 1, double hydroTimestep = 0.0);
 #endif
 #if COSMICTIGER_WITH_GRAVITY
 ForceStepResult kickStep(int minrung, double scale, double, double t0, double theta, bool firstCall,

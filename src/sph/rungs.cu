@@ -44,7 +44,7 @@ __global__ void sphCudaRungs(
         workspace.rungs.resize(0);
         SphTreeNode const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
         for (int neighborNodeIndex = targetNode.neighborRange.first;
-            neighborNodeIndex < targetNode.neighborRange.second; neighborNodeIndex++) {
+             neighborNodeIndex < targetNode.neighborRange.second; neighborNodeIndex++) {
             SphTreeNode const& neighborNode =
                 data.treeNodes[data.neighborNodeIndices[neighborNodeIndex]];
             int const roundedSourceEnd =
@@ -52,7 +52,7 @@ __global__ void sphCudaRungs(
                     ParticleInteger(blockSize)) +
                 neighborNode.particleRange.first;
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
-                sourceParticleIndex < roundedSourceEnd; sourceParticleIndex += blockSize) {
+                 sourceParticleIndex < roundedSourceEnd; sourceParticleIndex += blockSize) {
                 bool contains = false;
                 int neighborIndex;
                 int total;
@@ -93,9 +93,9 @@ __global__ void sphCudaRungs(
             }
         }
         for (int particleIndex = targetNode.particleRange.first;
-            particleIndex < targetNode.particleRange.second; particleIndex++) {
+             particleIndex < targetNode.particleRange.second; particleIndex++) {
             __syncthreads();
-            if (data.sourceRungs[particleIndex] >= parameters.minimumRung) {
+            if (parameters.isActiveRung(data.sourceRungs[particleIndex])) {
                 int const sinkIndex = targetNode.sinkParticleRange.first -
                     targetNode.particleRange.first + particleIndex;
                 auto const sinkPositionX = data.sourcePositionX[particleIndex];
@@ -108,7 +108,7 @@ __global__ void sphCudaRungs(
                 int const roundedNeighborEnd = roundUp(workspace.positionX.size(), blockSize);
                 int maximumNeighborRung = 0;
                 for (int neighborIndex = threadIndex; neighborIndex < roundedNeighborEnd;
-                    neighborIndex += blockSize) {
+                     neighborIndex += blockSize) {
                     if (neighborIndex < workspace.positionX.size()) {
                         auto const neighborPositionX = workspace.positionX[neighborIndex];
                         auto const neighborPositionY = workspace.positionY[neighborIndex];

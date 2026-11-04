@@ -64,7 +64,7 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=None
     driver.a, driver.tau, driver.iteration = 1., .1, 1
     output.extend(bytes(driver))
     if global_step:
-        put('Qd', 1, .1)
+        put('Qdd', 2, .1, .025 if hydro else 0.)
     integer = 'q' if integer_bytes == 8 else 'i'
     offsets['count'] = len(output)
     put(integer, 2)
@@ -78,7 +78,7 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=None
         put('2b', 0, 1)
         put(2 * integer, -1, 0)
         offsets['gas'] = len(output)
-        version = 40000 + (110 if stars else 100 if cooling else 2)
+        version = 60000 + (110 if stars else 100 if cooling else 2)
         version += 0 if viscosity is None else 2 + 2 * viscosity
         put('7I', 0x43545350, version, integer_bytes, 4, 12, 3, 4)
         put(integer, 1)
@@ -90,7 +90,8 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=None
         put(integer, 1)
         put('2f', .5, .6)  # internal-energy rate, density
         put('2B', 0, 1)
-        put('3f', .7, .8, .9)  # gravity acceleration
+        offsets['hydro_rung'] = len(output)
+        put('b', 3)  # latest midpoint hydro timestep bound
         if viscosity is not None:
             put('f' if viscosity == 0 else '2f',
                 *([.2] if viscosity == 0 else [.2, .4]))
@@ -143,6 +144,8 @@ class CheckpointTests(unittest.TestCase):
                 self.assertEqual(result.gas_indices, (-1, 0))
                 self.assertEqual(len(result.stars), 2 if state == 'stars' else 0)
                 self.assertEqual(result.driver.global_timestep, .1 if global_step else 0.)
+                self.assertEqual(result.driver.global_hydro_timestep, .025 if global_step else 0.)
+                self.assertEqual(result.proposed_rungs, (3,))
 
     def test_pmmm_dark_matter_and_multiple_domains(self):
         for version, integer_bytes in itertools.product((1, 2, 3, 4, 5), (4, 8)):
@@ -168,6 +171,7 @@ class CheckpointTests(unittest.TestCase):
                      ('gas', 'I', 0, 'gas layout'),
                      ('count', 'i', 999, 'particle counts'),
                      ('gas_mapping', 'i', 0, 'gas mapping'),
+                     ('hydro_rung', 'b', 64, 'hydro rung bound'),
                      ('metadata', 'Q', 0, 'star-particle metadata'),
                      ('second_identity', 'Q', 1, 'particle identities')]
         for name, code, value, message in mutations:

@@ -19,6 +19,9 @@
 #include <cosmictiger/gravity/kick_walk.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#if COSMICTIGER_WITH_SPH
+#include <cosmictiger/sph/time_integration.hpp>
+#endif
 
 namespace detail {
 
@@ -111,6 +114,11 @@ double gravityFinishGlobalKick(double timestep) {
     }
     ALWAYS_ASSERT(detail::globalAccelerationCount == particlesSize());
     auto const& options = getOptions();
+#if COSMICTIGER_WITH_SPH
+    bool const midpointHydro = sphMidpointEnabled();
+#else
+    bool const midpointHydro = false;
+#endif
     double const halfStep = (options.run.scenario == "glass" ? -0.5 : 0.5) * timestep;
     double kinetic = 0.0;
     FlopCount flops = 1;
@@ -118,7 +126,7 @@ double gravityFinishGlobalKick(double timestep) {
         particlesRung(i) = 0;
         double velocitySquared = 0.0;
         for (int dim = 0; dim < kDimensions; ++dim) {
-            if (!options.hydro.enabled || particlesType(i) != kSphType) {
+            if (!options.hydro.enabled || particlesType(i) != kSphType || midpointHydro) {
                 particlesVel(dim, i) =
                     std::fma(detail::globalAccelerations[dim][i], halfStep, particlesVel(dim, i));
                 flops += 5;    // Double FMA, two float inputs, and float output conversion.
@@ -129,6 +137,11 @@ double gravityFinishGlobalKick(double timestep) {
         kinetic += 0.5 * particlesMass(i) * velocitySquared;
     }
     addCpuFlops(flops, FlopPrecision::Double);
+    for (int dimension = 0; dimension < kDimensions; ++dimension) {
+        freeManagedMemory(detail::globalAccelerations[dimension]);
+        detail::globalAccelerations[dimension] = nullptr;
+    }
+    detail::globalAccelerationCount = 0;
     hpx::wait_all(futures.begin(), futures.end());
     for (auto& future : futures) {
         kinetic += future.get();

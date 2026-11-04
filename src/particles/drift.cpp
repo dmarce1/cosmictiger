@@ -18,7 +18,6 @@
 #include <cosmictiger/particles/drift.hpp>
 #include <cosmictiger/particles/drift_cpu.hpp>
 #if COSMICTIGER_WITH_SPH
-#include <cosmictiger/sph/time_integration.hpp>
 #include <cosmictiger/sph/tree.hpp>
 #endif
 
@@ -129,15 +128,6 @@ void drift(
         profile::ScopedPhase profilePhase("drift.cpu", detail::profileDriftCoordinator());
         cpuDrift(rung, scale, dt, tau0, tau1, tauMax, drag);
     }
-#if COSMICTIGER_WITH_SPH
-    if (getOptions().hydro.enabled && getOptions().run.hierarchicalGravity) {
-        // Drift uses the incoming velocity before applying drag. Recover that
-        // same displacement from the damped live velocity during prediction.
-        // Both backends override the requested drag with the glass policy.
-        double const effectiveDrag = getOptions().run.scenario == "glass" ? std::numbers::pi : 0.0;
-        sphHierarchyRecordDrift(rung, tau1, (1.0 + effectiveDrag * dt) / scale);
-    }
-#endif
     if (!futures.empty()) {
         profile::ScopedPhase profilePhase("drift.wait", detail::profileDriftCoordinator());
         for (auto& future : futures) {

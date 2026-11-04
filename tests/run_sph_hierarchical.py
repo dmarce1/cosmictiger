@@ -1,6 +1,7 @@
-"""Exercise shared SPH rates with hierarchical gravity and explicit source clocks."""
+"""Exercise chronological midpoint SPH with hierarchical gravity and retained trees."""
 
 import argparse
+import itertools
 import json
 import math
 from pathlib import Path
@@ -12,6 +13,7 @@ from application_selection import application_arguments, compiled_algorithms, cp
 from checkpoint_format import decode_checkpoint, require
 from run_checkpoint import prepareCase, runSimulation
 from run_sph_octree import checkpoint_state, validate_events
+from sph_midpoint_checks import check_midpoint_state, validate_midpoints
 
 
 def read_states(directory, iteration, ranks):
@@ -19,26 +21,6 @@ def read_states(directory, iteration, ranks):
                               f"checkpoint.{rank}.dat").read_bytes(), ranks=ranks)
             for rank in range(ranks)]
 
-
-def check_clocks(state, base_timestep):
-    require(state.hierarchy_offset == 1000 and len(state.hierarchy) == state.gas_count,
-            "hierarchical checkpoint omitted the predictor state")
-    future = 0
-    for gas, values in enumerate(state.hierarchy):
-        require(all(math.isfinite(value) for value in values), "nonfinite hierarchical predictor")
-        prediction, position, inverse_scale, entropy, minimum_rung, initialized = values[6:]
-        particle = state.gravity_indices[gas]
-        rung = state.rungs[particle]
-        half_step = math.ldexp(base_timestep, -rung - 1)
-        require(initialized and inverse_scale == 1.0, "fixed-background drift metadata is invalid")
-        require(prediction <= state.driver.tau <= position + 1e-14,
-                "predictor or stored position is on the wrong side of the driver clock")
-        require(math.isclose(position - entropy, half_step, rel_tol=2e-12, abs_tol=1e-14),
-                "positive hydro half-step does not match the recorded drift endpoint")
-        require(0 <= minimum_rung <= rung, "gravity selected a rung below its hydro bound")
-        require(state.entropies[gas] > 0, "nonpositive entropy")
-        future += position > state.driver.tau + 1e-14
-    return future
 
 
 def comparison_records(state):
@@ -52,15 +34,51 @@ def comparison_records(state):
     return sorted(records)
 
 
-def compare_restart(reference, resumed):
+def compare_restart(reference, resumed, *, position_units=0, accumulation_units=4,
+                    position_period=2 ** 32):
     require(reference[2:] == resumed[2:], "restart changed particle counts or driver clocks")
     first, second = reference[0], resumed[0]
     require(len(first) == len(second), "restart changed the particle population")
     # Restart reconstructs the octree and can change float neighbor accumulation
     # order. Only force/density-derived float fields may differ at this level;
-    # positions, entropy, entropy rate, rungs, flags and every stage clock stay exact.
+    # rungs, flags and hydro timestep bounds stay exact. Positive
+    # viscosity heating can change entropy by one float rounding unit when the
+    # recomputed rate changes; constrain entropy locally as well as globally.
+    # CUDA rebuilding can perturb the live velocity by float accumulation
+    # rounding. Two subsequent half-drifts can then move fixed32 positions by
+    # two units. This explicit GPU regression tolerance is not an error bound;
+    # CPU positions remain exact. Match uniquely within the periodic allowance
+    # so canonical xyz sorting cannot exchange particles in equal-x columns.
+    maximum_position_units = 0
+    if position_units:
+        require(position_units == 2 and position_period % 4 == 0,
+                "unsupported restart position tolerance")
+        cells = position_period // 4
+        grid = {}
+        for row in second:
+            key = (row[0], *(coordinate // 4 for coordinate in row[1:4]))
+            grid.setdefault(key, []).append(row)
+        matched = []
+        for row in first:
+            candidates = []
+            for offset in itertools.product((-1, 0, 1), repeat=3):
+                key = (row[0], *((coordinate // 4 + shift) % cells
+                                for coordinate, shift in zip(row[1:4], offset)))
+                for candidate in grid.get(key, ()):
+                    differences = [min(abs(old - new), position_period - abs(old - new))
+                                   for old, new in zip(row[1:4], candidate[1:4])]
+                    if max(differences) <= position_units:
+                        candidates.append((key, candidate, max(differences)))
+            require(len(candidates) == 1,
+                    "GPU restart lacks a unique particle match within two position units")
+            key, candidate, difference = candidates[0]
+            grid[key].remove(candidate)
+            matched.append(candidate)
+            maximum_position_units = max(maximum_position_units, difference)
+        require(not any(grid.values()), "GPU restart left unmatched particles")
+        second = tuple(matched)
     particle_fields = (4, 5, 6)
-    gas_fields = (1, 2, 3, 4, 6, 9, 10, 11, 12, 13, 14)
+    gas_fields = (0, 1, 2, 3, 4, 5, 6)
     scales = {}
     for field in particle_fields:
         scales[("particle", field)] = max(abs(row[field]) for row in first + second)
@@ -68,7 +86,8 @@ def compare_restart(reference, resumed):
         scales[("gas", field)] = max(abs(row[-1][field]) for row in first + second if row[0] == 1)
     errors = {key: 0.0 for key in scales}
     for left, right in zip(first, second):
-        require(left[:4] == right[:4] and left[7] == right[7],
+        require(left[0] == right[0] and (position_units or left[1:4] == right[1:4]) and
+                left[7] == right[7],
                 "restart changed exact particle positions, species or rungs")
         require(len(left[-1]) == len(right[-1]), "restart changed gas state layout")
         for field in particle_fields:
@@ -76,14 +95,21 @@ def compare_restart(reference, resumed):
             errors[key] = max(errors[key], abs(left[field] - right[field]))
         for field, (old, new) in enumerate(zip(left[-1], right[-1])):
             if field in gas_fields:
+                if field == 0:
+                    require(abs(old - new) <= 2 * 2 ** -23 * max(abs(old), abs(new)),
+                            "restart changed entropy beyond local float rounding")
                 key = ("gas", field)
                 errors[key] = max(errors[key], abs(old - new))
             else:
                 require(old == new, f"restart changed exact gas field {field}")
     for key, error in errors.items():
-        require(error <= 4 * 2 ** -23 * scales[key],
+        require(error <= accumulation_units * 2 ** -23 * scales[key],
                 f"restart changed {key} beyond float accumulation tolerance: {error}")
-    return {f"{kind}_{field}": error for (kind, field), error in errors.items()}
+    return {"maximum_position_units": maximum_position_units,
+            "maximum_accumulation_float_units": max(
+                (error / (2 ** -23 * scales[key]) if scales[key] else 0)
+                for key, error in errors.items()),
+            **{f"{kind}_{field}": error for (kind, field), error in errors.items()}}
 
 
 def main():
@@ -114,7 +140,8 @@ def main():
               "analysis.groups": "false", "analysis.tracers": "false", "analysis.views": "false",
               "analysis.power": "false", "analysis.slice": "false", "lightcone.enabled": "false",
               "output.silo": "false", "output.directory": ".", "checkpoint.intervalSeconds": 0,
-              "run.verbose": "true", "compute.sphBucketSize": 16, "hydro.viscosityEvolution": "none"}
+              "run.verbose": "true", "compute.sphBucketSize": 16,
+              "hydro.viscosityEvolution": "morrisAndMonaghan"}
     common["gravity.cuda"] = "true" if args.cuda or args.gravity_cuda else "false"
     common["hydro.cuda"] = "true" if args.cuda or args.hydro_cuda else "false"
 
@@ -134,60 +161,65 @@ def main():
         fixture = prepareCase(root, "hierarchy_migration")
         output = run(fixture, {"run.test": "sphTree"})
         require("SPH hierarchical migration regression passed: crossed=2 prefix=7" in output,
-                "two-rank hierarchical state migration fixture did not finish")
+                "two-rank midpoint gas migration fixture did not finish")
         require("SPH hierarchical out-of-domain rebuild regression passed: "
                 "active=6 total=16 inactive_outside=10" in output,
                 "two-rank hierarchy did not rebuild around inactive out-of-domain gas")
 
     # A localized blast supplies hot fine-rung gas and cold coarse-rung sources.
-    # Stop before the endpoint so the checkpoint contains pending positive hydro
-    # half-kicks and source positions stored ahead of the event clock.
+    # Stop before the endpoint so restart resumes the boundary gravity ladder
+    # with all particle positions at the same chronological time.
     options = {"run.scenario": "blast", "run.endTime": 0.005,
                "run.numberOfSteps": 1, "run.maxIterations": 8,
                "initial.particlesPerDimension": 16}
     directory = prepareCase(root, "blast")
     output = run(directory, options)
+    require("SPH midpoint:" in output, "blast driver did not execute midpoint hydro")
     events = validate_events(output, "hierarchical_blast", "hierarchical")
     previous_entropy = 0.0
-    maximum_future = 0
     rungs = set()
     for iteration in range(1, options["run.maxIterations"] + 1):
         states = read_states(directory, iteration, ranks)
-        maximum_future = max(maximum_future,
-                             sum(check_clocks(state, options["run.endTime"]) for state in states))
         for state in states:
+            check_midpoint_state(state)
             rungs.update(state.rungs)
         entropy = math.fsum(value for state in states for value in state.entropies)
         require(entropy >= previous_entropy * (1.0 - 1e-7),
                 "positive viscosity evolution decreased accumulated entropy")
         previous_entropy = entropy
-    require(len(rungs) >= 2 and maximum_future > 0,
-            "blast failed to exercise slow sources at future positions")
+    require(len(rungs) >= 2, "blast failed to exercise multiple gas rungs")
+    midpoint_events = validate_midpoints(output, "hierarchical_blast", options["run.endTime"],
+                                        states[0].driver.tau)
     final = checkpoint_state(directory, options["run.maxIterations"], ranks)
     restart_iteration = options["run.maxIterations"] - 1
     resumed = prepareCase(root, "blast_restart", directory / f"checkpoint.{restart_iteration}")
     run(resumed, dict(options, **{"run.maxIterations": 1}), restart=restart_iteration)
     continued = checkpoint_state(resumed, options["run.maxIterations"], ranks)
-    restart_errors = compare_restart(final, continued)
+    gpu = args.cuda or args.gravity_cuda or args.hydro_cuda
+    restart_errors = compare_restart(final, continued, position_units=2 if gpu else 0,
+                                     accumulation_units=8 if gpu else 4,
+                                     position_period=2 ** (8 * states[0].position_bytes))
     for state in read_states(resumed, options["run.maxIterations"], ranks):
-        check_clocks(state, options["run.endTime"])
-    evidence = {"blast": {**events, "rungs": sorted(rungs), "maximum_future_sources": maximum_future,
+        check_midpoint_state(state)
+    evidence = {"blast": {**events, "rungs": sorted(rungs), "midpoints": midpoint_events,
                            "entropy": previous_entropy, "ranks": ranks,
                            "exact_restart": final[0] == continued[0],
                            "restart_maximum_absolute_errors": restart_errors}}
 
     if "traditional" in available["integrator"]:
-        # Forced uniform rungs reduce both schemes to the same KDK composition.
+        # Forced uniform rungs reduce both schemes to the same midpoint composition.
         # A short density-wave interval keeps gas on the configured minimum rung.
         options = {"run.scenario": "hydroWave", "run.endTime": 0.001,
                    "run.numberOfSteps": 1, "run.maxIterations": 2, "run.minRung": 3}
         states = []
         for integrator in ("hierarchical", "traditional"):
             directory = prepareCase(root, "uniform_" + integrator)
-            run(directory, options, integrator)
+            uniform_output = run(directory, options, integrator)
             localities = read_states(directory, options["run.maxIterations"], ranks)
             require(all(set(state.rungs) == {3} for state in localities),
                     "uniform comparison did not remain on rung three")
+            validate_midpoints(uniform_output, f"uniform_{integrator}", options["run.endTime"],
+                               localities[0].driver.tau, 3)
             states.append(localities)
         require(all(state.driver.tau == states[0][0].driver.tau
                     for localities in states for state in localities), "uniform clocks diverged")
@@ -208,7 +240,7 @@ def main():
                         "uniform hierarchical/traditional hydro state diverged")
         evidence["uniform"] = {"maximum_absolute_state_error": maximum_error}
     (root / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
-    print("Hierarchical SPH clocks, positive entropy, future-source prediction and restart passed")
+    print("Hierarchical SPH midpoint timing, positive entropy, retained topology and restart passed")
     return 0
 
 

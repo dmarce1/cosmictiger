@@ -29,8 +29,6 @@ static_assert(
     kMaxBucketSize >= 32 && kMaxBucketSize <= 1024 && (kMaxBucketSize & (kMaxBucketSize - 1)) == 0,
     "MAX_BUCKET_SIZE must be a power of two from 32 to 1024");
 
-struct SphHierarchicalState;
-
 struct CudaKickData {
     TreeNode* treeNodes;
     Position* x;
@@ -41,11 +39,8 @@ struct CudaKickData {
     float* sphGravityAccelerationX;
     float* sphGravityAccelerationY;
     float* sphGravityAccelerationZ;
-    // Coupled SPH uses launch-owned gravity scratch indexed by full particle
-    // slot relative to the launch interval, never persistent gas state.
-    bool coupledSph = false;
-    ParticleInteger sphGravityOffset = 0;
-    SphHierarchicalState const* sphHierarchicalStates = nullptr;
+    bool midpointHydro = false;
+    char const* sphHydroRungs = nullptr;
     ParticleInteger* catIndex;
     char* type;
     bool sph;

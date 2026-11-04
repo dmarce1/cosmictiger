@@ -57,13 +57,13 @@ __global__ void sphCudaPrehydro1(
         SphTreeNode const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
         workspace.positions.resize(0);
         for (int neighborNodeIndex = targetNode.neighborRange.first;
-            neighborNodeIndex < targetNode.neighborRange.second; neighborNodeIndex++) {
+             neighborNodeIndex < targetNode.neighborRange.second; neighborNodeIndex++) {
             auto const& neighborNode = data.treeNodes[data.neighborNodeIndices[neighborNodeIndex]];
             int const end = neighborNode.particleRange.first +
                 roundUp(neighborNode.particleRange.second - neighborNode.particleRange.first,
                     ParticleInteger(blockSize));
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
-                sourceParticleIndex < end; sourceParticleIndex += blockSize) {
+                 sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
                 Vector3<Position> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
@@ -85,12 +85,12 @@ __global__ void sphCudaPrehydro1(
             }
         }
         for (int particleIndex = targetNode.particleRange.first;
-            particleIndex < targetNode.particleRange.second; particleIndex++) {
+             particleIndex < targetNode.particleRange.second; particleIndex++) {
             __syncthreads();
             int const sinkIndex =
                 targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
-            bool const active = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] >=
-                parameters.minimumRung;
+            bool const active = parameters.isActiveRung(
+                data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]]);
             if (active && !data.sinkSmoothingConverged[sinkIndex]) {
                 Vector3<Position> position;
                 position[kXDimension] = data.sourcePositionX[particleIndex];
@@ -167,13 +167,13 @@ __global__ void sphCudaPrehydro2(
         workspace.positions.resize(0);
         workspace.particles.resize(0);
         for (int neighborNodeIndex = targetNode.neighborRange.first;
-            neighborNodeIndex < targetNode.neighborRange.second; neighborNodeIndex++) {
+             neighborNodeIndex < targetNode.neighborRange.second; neighborNodeIndex++) {
             auto const& neighborNode = data.treeNodes[data.neighborNodeIndices[neighborNodeIndex]];
             int const end = neighborNode.particleRange.first +
                 roundUp(neighborNode.particleRange.second - neighborNode.particleRange.first,
                     ParticleInteger(blockSize));
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
-                sourceParticleIndex < end; sourceParticleIndex += blockSize) {
+                 sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
                 Vector3<Position> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
@@ -230,12 +230,12 @@ __global__ void sphCudaPrehydro2(
             }
         }
         for (int particleIndex = targetNode.particleRange.first;
-            particleIndex < targetNode.particleRange.second; particleIndex++) {
+             particleIndex < targetNode.particleRange.second; particleIndex++) {
             __syncthreads();
             int const sinkIndex =
                 targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
-            bool const active = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] >=
-                parameters.minimumRung;
+            bool const active = parameters.isActiveRung(
+                data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]]);
             Vector3<Position> position;
             position[kXDimension] = data.sourcePositionX[particleIndex];
             position[kYDimension] = data.sourcePositionY[particleIndex];
@@ -244,10 +244,10 @@ __global__ void sphCudaPrehydro2(
             int semiactive = active;
             if (!active) {
                 for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
-                    neighborIndex += blockSize) {
+                     neighborIndex += blockSize) {
                     auto const& neighbor = workspace.positions[neighborIndex];
                     auto const& particle = workspace.particles[neighborIndex];
-                    if (particle.rung >= parameters.minimumRung) {
+                    if (parameters.isActiveRung(particle.rung)) {
                         float const separationX =
                             distance(position[kXDimension], neighbor.positionX);
                         float const separationY =
@@ -328,7 +328,7 @@ __global__ void sphCudaPrehydro2(
                     data.sourceInternalEnergy[particleIndex]);
             }
             for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
-                neighborIndex += blockSize) {
+                 neighborIndex += blockSize) {
                 auto const& neighbor = workspace.positions[neighborIndex];
                 Vector3<float> const separation(distance(position[kXDimension], neighbor.positionX),
                     distance(position[kYDimension], neighbor.positionY),
@@ -562,7 +562,9 @@ __global__ void sphCudaPrehydro2(
                     float const inverseDecayTime = parameters.viscosityDecay * soundSpeed /
                         (parameters.scaleFactor * smoothingLength);
                     int const rung = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]];
-                    float const timeStep = parameters.globalTimestep ?
+                    bool const actualInterval =
+                        parameters.globalTimestep || parameters.midpointHydro;
+                    float const timeStep = actualInterval ?
                         parameters.viscosityTimestep :
                         parameters.viscosityTimestep / (1 << rung);
                     auto& bulkViscosityCoefficient = data.sinkBulkViscosityCoefficient[sinkIndex];
@@ -571,7 +573,7 @@ __global__ void sphCudaPrehydro2(
                         inverseDecayTime, velocityDivergence, timeStep);
 
                     flops += 19;
-                    flops.doublePrecision += parameters.globalTimestep ? 1 : 2;
+                    flops.doublePrecision += actualInterval ? 1 : 2;
                 }
                 if (parameters.gradientSwitch()) {
                     cullen_and_dehnen::Result<float> diagnostics;

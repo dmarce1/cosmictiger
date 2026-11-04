@@ -574,9 +574,8 @@ void domainsTransmitParticles(Vector<Particle> parts) {
 // gravity particle. Category indices are local and are rebuilt at the receiver.
 struct GasMigrationState {
     Vector3<float> acceleration, gravityAcceleration;
-    SphHierarchicalState hierarchy{};
     float supportRadius, entropy, entropyRate, density;
-    char converged, semiactive;
+    char converged, semiactive, hydroRung;
     float bulkViscosityCoefficient;
     float divergence;    // Previous physical divergence for Cullen-Dehnen and Price et al.
     float electronFraction{1.0f};
@@ -584,15 +583,13 @@ struct GasMigrationState {
     void serialize(Archive& arc, unsigned) {
         arc & acceleration;
         arc & gravityAcceleration;
-        if (getOptions().run.hierarchicalGravity) {
-            arc & hierarchy;
-        }
         arc & supportRadius;
         arc & entropy;
         arc & entropyRate;
         arc & density;
         arc & converged;
         arc & semiactive;
+        arc & hydroRung;
         if (getOptions().hydro.viscosityEvolution != "none") {
             arc & bulkViscosityCoefficient;
         }
@@ -643,9 +640,7 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
         gas.converged = sphParticlesConvergenceFlags[i];
         gas.semiactive = sphParticlesSemiactiveFlags[i];
         gas.entropy = sphParticlesEntropies[i];
-        if (sphParticlesHierarchicalStates != nullptr) {
-            gas.hierarchy = sphParticlesHierarchicalStates[i];
-        }
+        gas.hydroRung = sphParticlesProposedRungs[i];
         if (getOptions().hydro.viscosityEvolution != "none") {
             gas.bulkViscosityCoefficient = sphParticlesBulkViscosityCoefficients[i];
         }
@@ -680,9 +675,7 @@ static void unpackSphParticle(
         sphParticlesConvergenceFlags[i] = gas.converged;
         sphParticlesSemiactiveFlags[i] = gas.semiactive;
         sphParticlesEntropies[i] = gas.entropy;
-        if (sphParticlesHierarchicalStates != nullptr) {
-            sphParticlesHierarchicalStates[i] = gas.hierarchy;
-        }
+        sphParticlesProposedRungs[i] = gas.hydroRung;
         if (getOptions().hydro.viscosityEvolution != "none") {
             sphParticlesBulkViscosityCoefficients[i] = gas.bulkViscosityCoefficient;
         }

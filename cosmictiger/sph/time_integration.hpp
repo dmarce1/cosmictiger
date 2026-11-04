@@ -8,34 +8,24 @@
 
 #pragma once
 
-#include <cosmictiger/core/defs.hpp>
-#include <cosmictiger/math/vector3.hpp>
-#include <cosmictiger/sph/hierarchical_state.hpp>
+#include <cstddef>
 
-struct KickParameters;
+// The midpoint split uses live operator-stage velocities and entropies. Its
+// driver drifts all particles chronologically; no per-particle predictor clocks
+// or future-position restoration are needed.
+bool sphMidpointEnabled();
+bool sphMidpointEventActive();
+void sphMidpointBeginEvent();
+void sphMidpointEndEvent();
 
-// These collective calls run only after gravity sorting/migration has completed.
-// Begin freezes the event-time predictor and projects inactive source positions;
-// end restores those positions before the next gravity rung can drift.
-void sphHierarchyBeginEvent(double time, int minimumRung, double baseTimestep, bool fullGravity,
-    KickParameters const& gravityParameters);
-void sphHierarchyEndEvent();
-void sphHierarchyCaptureRungs();
-void sphHierarchyOpenRung(int rung);
-void sphHierarchyRecordDrift(int rung, double endTime, double inverseScale);
+// Count exact-rung targets collectively; a negative rung selects all gas.
+size_t sphMidpointTargetCount(int exactRung);
 
-bool sphHierarchyEventActive();
-bool sphHierarchyFullGravity();
-float sphHierarchyPredictedVelocity(int dimension, ParticleInteger gas);
-double sphHierarchyPredictedEntropy(ParticleInteger gas);
-Vector3<float> sphHierarchyGravityPrediction(ParticleInteger gas);
+// Apply the force pass's hydro acceleration and entropy rate over one positive
+// interval. A negative exactRung selects all gas for a global step. Rung bounds
+// remain staged until overwritten by the next midpoint force calculation.
+void sphParticlesApplyMidpointUpdates(int exactRung, double timestep);
 
-// Called once for each active gas target, before the gravity closing kick.
-// oldHydro must be captured before the shared SPH kernel publishes new rates.
-void sphHierarchyCloseTarget(
-    ParticleInteger gas, Vector3<float> const& oldHydro, Vector3<float> const& newHydro);
-// Called after the gravity closing kick and before its opening kick. Only a
-// full-source gravity event can synchronize this predictor to the live momentum.
-void sphHierarchySynchronizeTarget(ParticleInteger gas, Vector3<float> const& velocity);
-int sphHierarchyKickTarget(ParticleInteger gas, Vector3<float> const& oldHydro,
-    Vector3<float> const& newHydro, Vector3<float> const& leafGravity);
+// Gravity-disabled traditional steps choose a new rung only for particles whose
+// interval ends at this boundary. Return the maximum occupied rung globally.
+int sphParticlesSelectMidpointRungs(int minimumRung);

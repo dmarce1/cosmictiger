@@ -13,6 +13,7 @@
 #include <cosmictiger/core/interrupt_profile.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/profiler.hpp>
+#include <cosmictiger/core/sph_midpoint.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/core/timer.hpp>
 #if COSMICTIGER_WITH_GRAVITY
@@ -31,6 +32,7 @@
 #include <cosmictiger/scenarios/scenario.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/particles.hpp>
+#include <cosmictiger/sph/time_integration.hpp>
 #if COSMICTIGER_ENABLE_STAR_FORMATION
 #include <cosmictiger/stars/star_formation.hpp>
 #endif
@@ -94,7 +96,26 @@ void runFixedScenario() {
     auto plan = definition.initialize();
     profile::profileEnd();
     profile::checkForInterrupt();
-    auto const baseOptions = getOptions();
+    auto baseOptions = getOptions();
+    bool const fixedViscosityStage = std::any_of(plan.stages.begin(), plan.stages.end(),
+        [](auto const& stage) { return stage.bulkViscosityCoefficient >= 0.0; });
+    bool const inheritedViscosityStage = std::any_of(plan.stages.begin(), plan.stages.end(),
+        [](auto const& stage) { return stage.bulkViscosityCoefficient < 0.0; });
+    if (baseOptions.hydro.enabled && baseOptions.hydro.viscosityGradientSwitch() &&
+        fixedViscosityStage && inheritedViscosityStage) {
+        THROW_ERROR("Staged scenarios mixing fixed-viscosity overrides with gradient viscosity "
+                    "are not supported; use Morris-Monaghan or fixed viscosity throughout\n");
+    }
+    if (baseOptions.hydro.enabled && fixedViscosityStage && !inheritedViscosityStage &&
+        baseOptions.hydro.viscosityEvolution != "none") {
+        // Every stage replaces the requested viscosity evolution with fixed
+        // coefficients. Use that effective model for allocation and checkpoint
+        // layout too; migration frees the unused variable-viscosity arrays.
+        baseOptions.hydro.viscosityEvolution = "none";
+        setOptions(baseOptions);
+        terminal::detailPrint("All scenario stages prescribe fixed viscosity; using "
+                              "hydro.viscosityEvolution=none for evolution and checkpoints\n");
+    }
     double const defaultDuration = std::accumulate(plan.stages.begin(), plan.stages.end(), 0.0,
         [](double sum, auto const& stage) { return sum + stage.duration; });
     int const defaultSteps = std::accumulate(plan.stages.begin(), plan.stages.end(), 0,
@@ -131,7 +152,7 @@ void runFixedScenario() {
             THROW_ERROR("Checkpoint duration differs from the selected scenario\n");
         }
     } else {
-        particlesSetMinrung(baseOptions.run.minRung);
+        particlesSetMinrung(usesGlobalIntegration(baseOptions.run) ? 0 : baseOptions.run.minRung);
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION
         if (baseOptions.starFormation.enabled) {
             profile::ScopedPhase phase("starFormation.initialize");
@@ -139,7 +160,9 @@ void runFixedScenario() {
         }
 #endif
     }
-    state.minrung0 = std::max(state.minrung0, baseOptions.run.minRung);
+    state.minrung0 = usesGlobalIntegration(baseOptions.run) ?
+        0 :
+        std::max(state.minrung0, baseOptions.run.minRung);
     bool const hierarchical = baseOptions.run.hierarchicalGravity;
     bool const global = usesGlobalIntegration(baseOptions.run);
     profile::profileBegin("rebound");
@@ -201,6 +224,11 @@ void runFixedScenario() {
             stageOptions.hydro.viscosityEvolution = "none";
         }
         setOptions(stageOptions);
+#if COSMICTIGER_WITH_SPH
+        bool const midpointHydro = sphMidpointEnabled();
+#else
+        bool const midpointHydro = false;
+#endif
         double const baseTimestep = duration / baseOptions.run.numberOfSteps;
         while (state.tau < (global ? stageEnd : stageEnd - tolerance) &&
             iterations < baseOptions.run.maxIterations) {
@@ -214,6 +242,20 @@ void runFixedScenario() {
             bool const fullEvaluation = minimumRung == 0;
             int const outputStep = driverOutputStep(state.tau, baseTimestep);
             bool const outputDue = fullEvaluation && (!global || outputStep > lastOutputStep);
+#if COSMICTIGER_WITH_SPH
+            if (midpointHydro) {
+                if (state.iter == 0) {
+                    auto const estimate = sphMidpointStep(-1, state.tau, 0.0, baseTimestep, 1.0,
+                        0.0, state.energies, global,
+                        global ? baseTimestep : std::ldexp(baseTimestep, -baseOptions.run.minRung));
+                    state.globalHydroTimestep = estimate.minimumTimestep;
+                } else if (outputDue) {
+                    // Refresh density at the output coordinates without another
+                    // force evaluation, viscosity update, or entropy kick.
+                    sphMidpointStep(-1, state.tau, -1.0, baseTimestep, 1.0, 0.0, state.energies);
+                }
+            }
+#endif
             if (outputDue) {
                 lastOutputStep = outputStep;
                 profile::profileBegin("output");
@@ -225,6 +267,12 @@ void runFixedScenario() {
             int const errorInterval = baseOptions.gravity.errorInterval;
             int const gravityErrorStep =
                 outputDue && errorInterval > 0 && outputStep % errorInterval == 0 ? outputStep : -1;
+            double const globalStepCap = global ?
+                std::min(stageEnd - state.tau, (outputStep + 1) * baseTimestep - state.tau) :
+                0.0;
+            double const forceStepCap = global && midpointHydro ?
+                std::min(globalStepCap, state.globalHydroTimestep) :
+                globalStepCap;
             ForceStepResult result;
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
             if (hierarchical) {
@@ -239,13 +287,19 @@ void runFixedScenario() {
             {
                 result = advanceForces(minimumRung, 1.0, 0.0, state.tau, baseTimestep,
                     baseOptions.gravity.openingAngle, state.iter == 0, fullEvaluation,
-                    state.energies, gravityErrorStep, false, state.globalTimestep,
-                    global ? std::min(stageEnd - state.tau,
-                                 (outputStep + 1) * baseTimestep - state.tau) :
-                             0.0);
+                    state.energies, gravityErrorStep, false, state.globalTimestep, forceStepCap);
             }
-            auto const flopRates = flopRatesPerSecond();
-            double const flops = flopRates.total();
+#if COSMICTIGER_WITH_SPH
+            if (midpointHydro && !global) {
+                int const hydroRung = sphMidpointRung(state.itime);
+                if (hydroRung >= 0) {
+                    // Gravity close/open kicks at this boundary precede the
+                    // coincident coarse hydro pulse; viscosity is first order.
+                    sphMidpointStep(hydroRung, state.tau, std::ldexp(baseTimestep, -hydroRung),
+                        baseTimestep, 1.0, 0.0, state.energies);
+                }
+            }
+#endif
             state.maxRung =
                 global ? 0 : std::max({int(result.maxRung), baseOptions.run.minRung, minimumRung});
             int const displayedMinimumRung = minimumRung;
@@ -264,11 +318,33 @@ void runFixedScenario() {
                 state.tau + timestep == state.tau) {
                 THROW_ERROR("Scenario timestep cannot advance time\n");
             }
-            if (!hierarchical) {
+#if COSMICTIGER_WITH_SPH
+            if (midpointHydro) {
+                double const midpointTime = state.tau + 0.5 * timestep;
+                {
+                    profile::ScopedPhase phase("drift");
+                    drift(1.0, 0.5 * timestep, state.tau, midpointTime, duration);
+                }
+                auto const hydro = sphMidpointStep(global ? -1 : state.maxRung, midpointTime,
+                    timestep, baseTimestep, 1.0, 0.0, state.energies, global,
+                    global ? baseTimestep : 0.0);
+                if (global) {
+                    state.globalHydroTimestep = hydro.minimumTimestep;
+                }
+                {
+                    profile::ScopedPhase phase("drift");
+                    drift(1.0, 0.5 * timestep, midpointTime, state.tau + timestep, duration);
+                }
+                state.energies.tckin = particlesSumEnergies().kin;
+            }
+#endif
+            if (!midpointHydro && !hierarchical) {
                 profile::profileBegin("drift");
                 drift(1.0, timestep, state.tau, state.tau + timestep, duration);
                 profile::profileEnd();
             }
+            auto const flopRates = flopRatesPerSecond();
+            double const flops = flopRates.total();
             state.tau += timestep;
             state.itime = global ? 0 : inc(state.itime, state.maxRung);
             if (global) {
@@ -335,11 +411,9 @@ void runFixedScenario() {
         state.tau = stageEnd;
         state.itime = 0;
     }
-    // Use the next cycle for a final partial coarse step, preserving earlier snapshots.
-    profile::profileBegin("output");
-    viewOutputViews(driverFinalOutputStep(state.tau, coarseInterval), 1.0, true,
-        state.tau * getOptions().units.timeSeconds * constants::kSecondsToYears);
-    profile::profileEnd();
+    // Preserve the completed integrator state before refreshing density for
+    // final views; this keeps stopped and uninterrupted checkpoints identical.
+    auto finalOptions = getOptions();
     setOptions(baseOptions);
     if (state.iter > 0 && state.iter != lastCheckpoint) {
         profile::profileBegin("writeCheckpoint");
@@ -347,10 +421,8 @@ void runFixedScenario() {
         profile::profileEnd();
     }
     bool const completed = state.tau >= duration * (1.0 - 1.0e-12);
-    if (completed && !interrupted && iterations > 0) {
-        // Restart state remains at the completed drift with a pending closing
-        // half-step. Only the final diagnostics consume the synchronized state.
-        auto finalOptions = baseOptions;
+    if (completed) {
+        finalOptions = baseOptions;
         finalOptions.hydro.damping = plan.stages.back().damping;
         if (plan.stages.back().bulkViscosityCoefficient >= 0.0) {
             finalOptions.hydro.bulkViscosityCoefficient =
@@ -359,7 +431,21 @@ void runFixedScenario() {
                 2.0 * plan.stages.back().bulkViscosityCoefficient;
             finalOptions.hydro.viscosityEvolution = "none";
         }
-        setOptions(finalOptions);
+    }
+    setOptions(finalOptions);
+#if COSMICTIGER_WITH_SPH
+    if (sphMidpointEnabled()) {
+        sphMidpointStep(-1, state.tau, -1.0, coarseInterval, 1.0, 0.0, state.energies);
+    }
+#endif
+    // Use the next cycle for a final partial coarse step, preserving earlier snapshots.
+    profile::profileBegin("output");
+    viewOutputViews(driverFinalOutputStep(state.tau, coarseInterval), 1.0, true,
+        state.tau * getOptions().units.timeSeconds * constants::kSecondsToYears);
+    profile::profileEnd();
+    if (completed && !interrupted && iterations > 0) {
+        // Only terminal diagnostics consume the outstanding gravity closing
+        // half-step. They reuse the density already refreshed for final views.
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
         if (hierarchical) {
             int minimumRung = state.minrung0;
@@ -379,8 +465,8 @@ void runFixedScenario() {
             profile::ScopedPhase phase("diagnostics");
             detail::writeScenarioDiagnostics(state);
         }
-        setOptions(baseOptions);
     }
+    setOptions(baseOptions);
     // Scenario diagnostics require the synchronized terminal closing pass.
     if (completed && !interrupted && iterations > 0 && plan.finish != nullptr) {
         profile::ScopedPhase phase("diagnostics.scenario");

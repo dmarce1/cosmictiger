@@ -31,6 +31,9 @@ def checkpoint_state(directory, iteration, rank=0, integer_bytes=None):
     require(driver.iteration == iteration and driver.step == iteration,
             f"{path}: driver iteration differs from checkpoint name")
     require(not any(decoded.rungs), "global particles retained block rungs")
+    if decoded.hydro and decoded.algorithms[1] in (0, 1):
+        require(driver.global_hydro_timestep > 0,
+                f"{path}: midpoint global hydro bound was not persisted")
     return driver, driver.global_timestep, decoded.physical
 
 
@@ -59,6 +62,8 @@ def main():
               "analysis.tracers": "false", "analysis.power": "false",
               "lightcone.enabled": "false", "output.silo": "false",
               "output.directory": ".", "checkpoint.intervalSeconds": 0,
+              # Global integration deliberately accepts a floor beyond the rung
+              # table: its raw timestep must neither index nor obey that floor.
               "run.numberOfSteps": 1, "run.minRung": 20}
     cases = []
     if not args.without_sph:
@@ -133,10 +138,16 @@ def main():
         if label == cases[0][0]:
             # Rehash each damaged file so validation reaches the clock reader,
             # independently of the existing checksum-corruption regression.
-            mutations = (("zero_dt", first.global_extension_offset + 8, "d", 0.0),
-                         ("nan_dt", first.global_extension_offset + 8, "d", math.nan),
-                         ("integer_phase", first.integer_phase_offset, "Q", 1))
-            for suffix, offset, encoding, value in mutations:
+            clock_error = "Invalid global timestep checkpoint extension"
+            hydro_error = "Invalid global hydro timestep checkpoint extension"
+            mutations = [("zero_dt", first.global_extension_offset + 8, "d", 0.0, clock_error),
+                         ("nan_dt", first.global_extension_offset + 8, "d", math.nan, clock_error),
+                         ("integer_phase", first.integer_phase_offset, "Q", 1, clock_error)]
+            if hydro and far in (None, "fmm"):
+                mutations += [
+                    ("zero_hydro_dt", first.global_extension_offset + 16, "d", 0.0, hydro_error),
+                    ("nan_hydro_dt", first.global_extension_offset + 16, "d", math.nan, hydro_error)]
+            for suffix, offset, encoding, value, expected_error in mutations:
                 rejected = prepareCase(root, label + "_" + suffix, baseline / "checkpoint.1")
                 directory = rejected / "checkpoint.1"
                 path = directory / "checkpoint.0.dat"
@@ -149,9 +160,9 @@ def main():
                 manifest.write_text("\n".join(lines) + "\n")
                 output = run(rejected, dict(options, **{"run.maxIterations": 0}),
                              selections, restart=1, success=False)
-                if not ('Invalid global timestep checkpoint extension' in output):
+                if expected_error not in output:
                     raise RuntimeError(suffix)
-            print("global checkpoint clock: zero/NaN pending intervals and integer phase rejected")
+            print("global checkpoint clock: invalid gravity/hydro intervals and integer phase rejected")
 
         if args.mpi_exec and label == cases[0][0]:
             distributed = prepareCase(root, label + "_mpi")

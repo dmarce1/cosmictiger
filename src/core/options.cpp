@@ -350,6 +350,12 @@ void setOptions(Options const& opts) {
         throw std::invalid_argument(
             "Hierarchical SPH does not yet support chemistry or star formation");
     }
+    if (opts.run.hierarchicalGravity && opts.hydro.enabled &&
+        opts.hydro.viscosityEvolution != "none" &&
+        opts.hydro.viscosityEvolution != "morrisAndMonaghan") {
+        throw std::invalid_argument(
+            "Midpoint hierarchical SPH currently supports Morris-Monaghan or fixed viscosity");
+    }
 #if COSMICTIGER_WITH_GRAVITY
     if (opts.gravity.fmmOrder != opts.gravity.pmmmOrder) {
         throw std::invalid_argument("Far and near gravity must use the same expansion degree");
@@ -1557,11 +1563,6 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.initial.particlesPerDimension <= 0) {
         detail::throwOptionError("initial.particlesPerDimension must be positive\n");
     }
-    if (opts.run.minRung < 0 ||
-        (!usesGlobalIntegration(opts.run) && opts.run.minRung >= kMaxRung)) {
-        detail::throwOptionError(
-            "run.minRung must be nonnegative and less than %i for rung integrators\n", kMaxRung);
-    }
     if (!detail::isFiniteOption(opts.run.rungMergeFraction) || opts.run.rungMergeFraction < 0.0 ||
         opts.run.rungMergeFraction > 1.0) {
         detail::throwOptionError("run.rungMergeFraction must be finite and between 0 and 1\n");
@@ -1787,10 +1788,21 @@ bool processOptions(int argc, char* argv[]) {
             "requires gravity; hierarchical SPH requires FMM gravity\n");
     }
     opts.run.hierarchicalGravity = usesHierarchicalIntegration(opts.run);
+    if (opts.run.minRung < 0 ||
+        (!usesGlobalIntegration(opts.run) && opts.run.minRung >= kMaxRung)) {
+        detail::throwOptionError(
+            "run.minRung must be nonnegative and less than %i for rung integrators\n", kMaxRung);
+    }
     if (opts.run.hierarchicalGravity && opts.hydro.enabled &&
         (opts.chemistry.enabled || opts.starFormation.enabled)) {
         detail::throwOptionError(
             "Hierarchical SPH does not yet support chemistry or star formation\n");
+    }
+    if (opts.run.hierarchicalGravity && opts.hydro.enabled &&
+        opts.hydro.viscosityEvolution != "none" &&
+        opts.hydro.viscosityEvolution != "morrisAndMonaghan") {
+        detail::throwOptionError(
+            "Midpoint hierarchical SPH currently supports Morris-Monaghan or fixed viscosity\n");
     }
 
     if (opts.gravity.enabled && usesParticleMesh(opts.gravity) &&

@@ -25,7 +25,7 @@
 #include <cosmictiger/gravity/kick_cuda_kernel.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/particles.hpp>
-#include <cosmictiger/sph/sph.hpp>
+#include <cosmictiger/sph/time_integration.hpp>
 #endif
 
 namespace detail {
@@ -493,25 +493,7 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     eindices[workitems.size()] = ecount;
     CudaKickData data;
 #if COSMICTIGER_WITH_SPH
-    std::unique_ptr<float, decltype(&cudaFree)> sphGravityStorage(nullptr, cudaFree);
-    Vector<TreeId> sphTargetRoots;
-    data.coupledSph = !kparams.forceOnly && sphGravityActive();
-    ParticleInteger sphGravityCount = 0;
-    if (data.coupledSph) {
-        ParticleInteger first = std::numeric_limits<ParticleInteger>::max();
-        ParticleInteger last = 0;
-        for (auto const& item : workitems) {
-            auto const range = treeGetNode(item.self)->particleRange;
-            first = std::min(first, range.first);
-            last = std::max(last, range.second);
-            sphTargetRoots.push_back(item.self);
-        }
-        data.sphGravityOffset = first;
-        sphGravityCount = last - first;
-        float* storage = nullptr;
-        CUDA_CHECK(cudaMallocManaged(&storage, size_t(3) * sphGravityCount * sizeof(float)));
-        sphGravityStorage.reset(storage);
-    }
+    data.midpointHydro = !kparams.forceOnly && sphMidpointEnabled();
 #endif
     for (int dim = 0; dim < kDimensions; ++dim) {
         data.globalAcceleration[dim] =
@@ -535,16 +517,13 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
 #if COSMICTIGER_WITH_SPH
     bool const gasKick = data.sph && !kparams.forceOnly;
     data.catIndex = gasKick ? &particlesCatIndex(0) : nullptr;
-    data.sphHierarchicalStates = gasKick ? sphParticlesHierarchicalStates : nullptr;
-    data.sphGravityAccelerationX = data.coupledSph ? sphGravityStorage.get() :
-        gasKick                                    ? sphParticlesGravityAccelerations[kXDimension] :
-                                                     nullptr;
-    data.sphGravityAccelerationY = data.coupledSph ? sphGravityStorage.get() + sphGravityCount :
-        gasKick                                    ? sphParticlesGravityAccelerations[kYDimension] :
-                                                     nullptr;
-    data.sphGravityAccelerationZ = data.coupledSph ? sphGravityStorage.get() + 2 * sphGravityCount :
-        gasKick                                    ? sphParticlesGravityAccelerations[kZDimension] :
-                                                     nullptr;
+    data.sphHydroRungs = gasKick && data.midpointHydro ? sphParticlesProposedRungs : nullptr;
+    data.sphGravityAccelerationX =
+        gasKick && !data.midpointHydro ? sphParticlesGravityAccelerations[kXDimension] : nullptr;
+    data.sphGravityAccelerationY =
+        gasKick && !data.midpointHydro ? sphParticlesGravityAccelerations[kYDimension] : nullptr;
+    data.sphGravityAccelerationZ =
+        gasKick && !data.midpointHydro ? sphParticlesGravityAccelerations[kZDimension] : nullptr;
 #else
     data.catIndex = nullptr;
     data.sphGravityAccelerationX = nullptr;
@@ -621,12 +600,6 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
 #endif
     stream.wait();
     launchPhase.stop();
-#if COSMICTIGER_WITH_SPH
-    if (data.coupledSph) {
-        sphGravityKickSubtrees(sphTargetRoots, data.sphGravityAccelerationX,
-            data.sphGravityAccelerationY, data.sphGravityAccelerationZ, data.sphGravityOffset);
-    }
-#endif
 #if COSMICTIGER_PROFILE
     deviceEvents.collect();
 #endif

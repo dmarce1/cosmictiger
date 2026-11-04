@@ -28,7 +28,7 @@ void testGlobalRawTimestep() {
     data.selfGravityEnabled = false;
     fixture.density();
     double const ceiling = parameters.maximumTimestep;
-    for (int const oldRung : {0, 20}) {
+    for (int const oldRung : {0, kMaxRung - 1}) {
         data.sourceRungs[source] = data.sinkParticleRungs[particle] = oldRung;
         fixture.hydro(1);
         if (std::abs(fixture.reduction_->minimumTimestep - ceiling) > 1.0e-8 ||

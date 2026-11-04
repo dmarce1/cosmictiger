@@ -34,7 +34,7 @@
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/particles.hpp>
-#include <cosmictiger/sph/sph.hpp>
+#include <cosmictiger/sph/time_integration.hpp>
 #endif
 
 HPX_PLAIN_ACTION(kick, KickAction);
@@ -191,7 +191,7 @@ hpx::future<KickReturn> kickFork(KickParameters params, ExpansionBuffer const& l
 KickReturn kick(KickParameters params, ExpansionBuffer l, Vector3<Position> pos, TreeId self,
     Vector<TreeId> direct, Vector<TreeId> periodic, std::shared_ptr<KickWorkspace> workspace) {
 #if COSMICTIGER_WITH_SPH
-    if (getOptions().hydro.enabled && !sphGravityActive() && !params.htime && !params.forceOnly) {
+    if (getOptions().hydro.enabled && !sphMidpointEnabled() && !params.htime && !params.forceOnly) {
         sphParticlesEnsureGravityStorage();
     }
 #endif

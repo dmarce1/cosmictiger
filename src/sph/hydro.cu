@@ -28,6 +28,7 @@ struct HydroNeighbor {
     float balsaraFactor;
     float bulkViscosityCoefficient;
     float gradHCorrection;    // ζ_b from the current density pass.
+    int rung;
 };
 
 struct HydroWorkspace {
@@ -105,19 +106,17 @@ __global__ void sphCudaHydro(
     float maximumSignalSpeed = 0.0f;
     while (targetNodeIndex < data.numberOfTargetNodes) {
         __syncthreads();
-        SphTreeNode const& targetNode = data.targetNodes ?
-            data.targetNodes[targetNodeIndex] :
-            data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
+        SphTreeNode const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
         workspace.neighbors.resize(0);
         // The union of both supports is required by the symmetric gradient.
         for (int neighborNodeIndex = targetNode.neighborRange.first;
-            neighborNodeIndex < targetNode.neighborRange.second; neighborNodeIndex++) {
+             neighborNodeIndex < targetNode.neighborRange.second; neighborNodeIndex++) {
             auto const& neighborNode = data.treeNodes[data.neighborNodeIndices[neighborNodeIndex]];
             int const end = neighborNode.particleRange.first +
                 roundUp(neighborNode.particleRange.second - neighborNode.particleRange.first,
                     ParticleInteger(blockSize));
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
-                sourceParticleIndex < end; sourceParticleIndex += blockSize) {
+                 sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
                 Vector3<Position> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
@@ -150,20 +149,18 @@ __global__ void sphCudaHydro(
                         parameters.variableViscosity ?
                             data.sourceBulkViscosityCoefficient[sourceParticleIndex] :
                             parameters.bulkViscosityCoefficient,
-                        data.sourceGradHCorrection[sourceParticleIndex]};
+                        data.sourceGradHCorrection[sourceParticleIndex],
+                        parameters.midpointHydro ? int(data.sourceRungs[sourceParticleIndex]) : 0};
                 }
             }
         }
-        for (int targetIndex = targetNode.particleRange.first;
-            targetIndex < targetNode.particleRange.second; targetIndex++) {
-            int const particleIndex =
-                data.targetSourceIndices ? data.targetSourceIndices[targetIndex] : targetIndex;
+        for (int particleIndex = targetNode.particleRange.first;
+             particleIndex < targetNode.particleRange.second; particleIndex++) {
             __syncthreads();
-            ParticleInteger const sinkIndex = data.targetGasIndices ?
-                data.targetGasIndices[targetIndex] :
+            ParticleInteger const sinkIndex =
                 targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
             int const previousRung = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]];
-            if (previousRung < parameters.minimumRung) {
+            if (!parameters.isActiveRung(previousRung)) {
                 continue;
             }
             float const sinkSupportRadius = data.sourceSupportRadius[particleIndex];
@@ -228,8 +225,9 @@ __global__ void sphCudaHydro(
                 parameters.bulkViscosityCoefficient;
             float maximumBulkViscosityCoefficient = bulkViscosityCoefficient;
             float maximumCompressionSpeed = 0.0f;    // max_b(−μ_ab) for δt_cv
+            int maximumNeighborRung = 0;
             for (int neighborIndex = threadIndex; neighborIndex < workspace.neighbors.size();
-                neighborIndex += blockSize) {
+                 neighborIndex += blockSize) {
                 auto const& neighbor = workspace.neighbors[neighborIndex];
                 // Particle b. Pairs outside both supports or at zero separation are skipped.
                 Vector3<float> const separation(distance(positionX, neighbor.positionX),
@@ -239,9 +237,13 @@ __global__ void sphCudaHydro(
                 float const neighborSupportRadius = neighbor.supportRadius;
                 flops +=
                     8 + (separationSquared == 0.0f ? 0 : 2);    // Distances, dot, support squares.
-                if (separationSquared == 0.0f ||
-                    separationSquared >= fmaxf(sinkKernelSupportRadius * sinkKernelSupportRadius,
-                                             neighborSupportRadius * neighborSupportRadius)) {
+                bool const supportsIntersect =
+                    separationSquared < fmaxf(sinkKernelSupportRadius * sinkKernelSupportRadius,
+                                            neighborSupportRadius * neighborSupportRadius);
+                if (parameters.midpointHydro && parameters.phase == 1 && supportsIntersect) {
+                    maximumNeighborRung = max(maximumNeighborRung, neighbor.rung);
+                }
+                if (separationSquared == 0.0f || !supportsIntersect) {
                     continue;
                 }
                 float const neighborDensity = neighbor.density;
@@ -392,6 +394,9 @@ __global__ void sphCudaHydro(
             sharedReduceAdd<float, kHydroBlockSize>(viscousHeatingRate);
             sharedReduceMax<kHydroBlockSize>(maximumCompressionSpeed);
             sharedReduceMax<kHydroBlockSize>(maximumBulkViscosityCoefficient);
+            if (parameters.midpointHydro && parameters.phase == 1) {
+                sharedReduceMax<kHydroBlockSize>(maximumNeighborRung);
+            }
             flops += 5 * detail::sphReductionFlops<kHydroBlockSize>();
             if (threadIndex == 0) {
                 // Corrections are derived, never checkpointed or migrated; slots that the
@@ -406,21 +411,14 @@ __global__ void sphCudaHydro(
                 }
                 Vector3<float> gravityAcceleration(0.0f);
 #if COSMICTIGER_WITH_GRAVITY
-                if (!parameters.deferAccelerationSources && data.selfGravityEnabled) {
-                    gravityAcceleration = data.targetGravityAccelerations ?
-                        data.targetGravityAccelerations[targetIndex] :
-                        Vector3<float>(data.sinkGravityAccelerationX[sinkIndex],
-                            data.sinkGravityAccelerationY[sinkIndex],
-                            data.sinkGravityAccelerationZ[sinkIndex]);
+                if (!parameters.midpointHydro && !parameters.deferAccelerationSources &&
+                    data.selfGravityEnabled) {
+                    gravityAcceleration = Vector3<float>(data.sinkGravityAccelerationX[sinkIndex],
+                        data.sinkGravityAccelerationY[sinkIndex],
+                        data.sinkGravityAccelerationZ[sinkIndex]);
                 }
 #endif
                 if (!parameters.deferAccelerationSources) {
-                    if (data.targetHydroAccelerations) {
-                        data.targetHydroAccelerations[targetIndex] = sphCompleteAcceleration(
-                            parameters, Vector3<Position>(positionX, positionY, positionZ),
-                            velocity, acceleration, Vector3<float>(0.0f), data.centralAcceleration,
-                            data.centralSupportRadius, flops);
-                    }
                     acceleration = sphCompleteAcceleration(parameters,
                         Vector3<Position>(positionX, positionY, positionZ), velocity, acceleration,
                         gravityAcceleration, data.centralAcceleration, data.centralSupportRadius,
@@ -502,24 +500,37 @@ __global__ void sphCudaHydro(
                     atomicMin(&reduction->minimumTimestep, timeStep);
                     int const hydroRung = parameters.globalTimestep ?
                         0 :
-                        max(1, int(ceilf(log2f(parameters.baseTimestep / timeStep))));
-                    int nextRung = max(max(parameters.minimumRung, previousRung - 1), hydroRung);
-#if COSMICTIGER_WITH_GRAVITY
-                    float const gravityTimestep = fminf(parameters.maximumTimestep,
-                        data.accelerationTimestepFactor *
-                            sqrtf(parameters.scaleFactor * data.gravityEffectiveRadius /
-                                fmaxf(sqrtf(gravityAcceleration.dot(gravityAcceleration)),
-                                    1.0e-30f)));
-                    if (data.selfGravityEnabled) {
-                        atomicMin(&reduction->minimumTimestep, gravityTimestep);
+                        max(parameters.midpointHydro ? 0 : 1,
+                            int(ceilf(log2f(parameters.baseTimestep / timeStep))));
+                    int const minimumProposedRung = parameters.midpointHydro ?
+                        parameters.minimumProposedRung :
+                        parameters.minimumRung;
+                    int nextRung = max(max(minimumProposedRung, previousRung - 1), hydroRung);
+                    if (parameters.midpointHydro) {
+                        // Commit the touching-neighbor bound at the next gravity boundary.
+                        nextRung = max(nextRung, maximumNeighborRung - kMaxNeighborRungDifference);
                     }
-                    int const gravityRung = parameters.globalTimestep ?
-                        0 :
-                        max(1, int(ceilf(log2f(parameters.baseTimestep / gravityTimestep))));
-                    nextRung = max(nextRung, data.selfGravityEnabled ? gravityRung : 1);
-                    maximumGravityRung = max(maximumGravityRung, gravityRung);
-                    // Exclude the bound computed only for disabled-gravity diagnostics.
-                    flops += data.selfGravityEnabled ? (parameters.globalTimestep ? 10 : 13) : 0;
+#if COSMICTIGER_WITH_GRAVITY
+                    float gravityTimestep = parameters.maximumTimestep;
+                    int gravityRung = 0;
+                    if (!parameters.midpointHydro) {
+                        gravityTimestep = fminf(parameters.maximumTimestep,
+                            data.accelerationTimestepFactor *
+                                sqrtf(parameters.scaleFactor * data.gravityEffectiveRadius /
+                                    fmaxf(sqrtf(gravityAcceleration.dot(gravityAcceleration)),
+                                        1.0e-30f)));
+                        if (data.selfGravityEnabled) {
+                            atomicMin(&reduction->minimumTimestep, gravityTimestep);
+                        }
+                        gravityRung = parameters.globalTimestep ?
+                            0 :
+                            max(1, int(ceilf(log2f(parameters.baseTimestep / gravityTimestep))));
+                        nextRung = max(nextRung, data.selfGravityEnabled ? gravityRung : 1);
+                        maximumGravityRung = max(maximumGravityRung, gravityRung);
+                        // Exclude the bound computed only for disabled-gravity diagnostics.
+                        flops +=
+                            data.selfGravityEnabled ? (parameters.globalTimestep ? 10 : 13) : 0;
+                    }
 #endif
                     if (parameters.globalTimestep) {
                         nextRung = 0;

@@ -48,6 +48,7 @@
 #include <cosmictiger/chemistry/sph.hpp>
 #endif
 #include <cosmictiger/sph/particles.hpp>
+#include <cosmictiger/sph/time_integration.hpp>
 #endif
 
 HPX_PLAIN_ACTION(writeCheckpoint, WriteCheckpointAction);
@@ -769,9 +770,10 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
         THROW_ERROR("Unable to write checkpoint driver state\n");
     }
     if ((header.flags & kGlobalIntegrator) != 0U) {
-        uint64_t const version = 1;
+        uint64_t const version = 2;
         if (fwrite(&version, sizeof(version), 1, fp) != 1 ||
-            fwrite(&params.globalTimestep, sizeof(params.globalTimestep), 1, fp) != 1) {
+            fwrite(&params.globalTimestep, sizeof(params.globalTimestep), 1, fp) != 1 ||
+            fwrite(&params.globalHydroTimestep, sizeof(params.globalHydroTimestep), 1, fp) != 1) {
             THROW_ERROR("Unable to write global timestep checkpoint extension\n");
         }
     }
@@ -910,13 +912,27 @@ DriverParameters readDriverState(FILE* fp) {
             uint64_t version;
             FREAD(&version, sizeof(version), 1, fp);
             FREAD(&params.globalTimestep, sizeof(params.globalTimestep), 1, fp);
+            if (version == 2) {
+                FREAD(&params.globalHydroTimestep, sizeof(params.globalHydroTimestep), 1, fp);
+            }
             uint64_t bits;
             std::memcpy(&bits, &params.globalTimestep, sizeof(bits));
-            if (version != 1 || (bits & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL ||
+            if ((version != 1 && version != 2) ||
+                (bits & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL ||
                 params.globalTimestep < 0.0 || params.itime != 0 ||
                 (params.iter > 0 && params.globalTimestep == 0.0)) {
                 THROW_ERROR("Invalid global timestep checkpoint extension\n");
             }
+            std::memcpy(&bits, &params.globalHydroTimestep, sizeof(bits));
+            if ((bits & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL ||
+                params.globalHydroTimestep < 0.0) {
+                THROW_ERROR("Invalid global hydro timestep checkpoint extension\n");
+            }
+#if COSMICTIGER_WITH_SPH
+            if (sphMidpointEnabled() && params.iter > 0 && params.globalHydroTimestep == 0.0) {
+                THROW_ERROR("Invalid global hydro timestep checkpoint extension\n");
+            }
+#endif
         }
         if ((header.flags & kParticleMeshInterval) != 0U) {
             uint64_t version;
@@ -1061,6 +1077,7 @@ void checkpointStateTest() {
     input.energies.therm = kThermal;
     input.energies.heating = kHeating;
     input.globalTimestep = usesGlobalIntegration(getOptions().run) ? 0.03125 : 0.0;
+    input.globalHydroTimestep = usesGlobalIntegration(getOptions().run) ? 0.0625 : 0.0;
     bool const particleMesh =
         getOptions().gravity.enabled && usesParticleMesh(getOptions().gravity);
     if (particleMesh) {
@@ -1076,6 +1093,7 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(restored.itime == input.itime && restored.maxRung == input.maxRung);
     ALWAYS_ASSERT(restored.energies.therm == kThermal && restored.energies.heating == kHeating);
     ALWAYS_ASSERT(restored.globalTimestep == input.globalTimestep);
+    ALWAYS_ASSERT(restored.globalHydroTimestep == input.globalHydroTimestep);
     ALWAYS_ASSERT(restored.outerInterval == input.outerInterval &&
         restored.outerStart == input.outerStart && restored.outerIndex == input.outerIndex);
     if (!usesGlobalIntegration(getOptions().run) && !particleMesh) {

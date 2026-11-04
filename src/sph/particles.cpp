@@ -141,8 +141,8 @@ static double predictionHalfStep(ParticleInteger gas) {
 }
 
 static float predictedVelocity(int dimension, ParticleInteger gas, double halfStep) {
-    if (sphHierarchyEventActive()) {
-        return sphHierarchyPredictedVelocity(dimension, gas);
+    if (sphMidpointEnabled()) {
+        return particlesVel(dimension, sphParticlesParticleIndex(gas));
     }
     return particlesVel(dimension, sphParticlesParticleIndex(gas)) +
         sphParticlesAcceleration(dimension, gas) * halfStep;
@@ -152,8 +152,8 @@ static float predictedInternalEnergy(ParticleInteger gas, double halfStep) {
     if (!sphParticlesEntropyInitialized) {
         return sphParticlesInternalEnergy(gas);
     }
-    double const entropy = sphHierarchyEventActive() ?
-        sphHierarchyPredictedEntropy(gas) :
+    double const entropy = sphMidpointEnabled() ?
+        sphParticlesEntropy(gas) :
         sphParticlesEntropy(gas) + sphParticlesEntropyRate(gas) * halfStep;
     ALWAYS_ASSERT(entropy > 0.0);
     float const energy = sph_entropy::storedEnergy(entropy, sphParticlesDensity(gas),
@@ -190,11 +190,10 @@ void sphParticlesPrepareThermodynamics(double scaleFactor, bool initializeEntrop
 HPX_PLAIN_ACTION(sphParticlesApplyUpdates, SphParticlesApplyUpdatesAction);
 EnergiesT sphParticlesApplyUpdates(
     int minimumRung, int phase, float timeStepScale, float time, double explicitTimestep) {
-    // The common force kernel publishes the same SPH rates for both integrators.
-    // Hierarchical gravity closes the positive gas interval in its leaf callback
-    // and opens it only when the descending ladder fixes the final gas rung.
-    bool const hierarchical = getOptions().run.hierarchicalGravity;
-    if (hierarchical && phase < 2) {
+    // Midpoint integration applies one full hydro kick through its own helper.
+    // Legacy predictor/corrector calls must not add another kick or prediction.
+    bool const midpoint = sphMidpointEnabled();
+    if (midpoint && phase < 2) {
         return {};
     }
     // At time zero no step has opened yet, so there is no half-kick to predict or close.
@@ -216,7 +215,7 @@ EnergiesT sphParticlesApplyUpdates(
     for (int threadIndex = 0; threadIndex < numberOfThreads; threadIndex++) {
         futures.push_back(hpx::async(hpx::annotated_function(
             [timeStepScale, numberOfThreads, threadIndex, phase, minimumRung, explicitTimestep,
-                savePotential, hierarchical]() {
+                savePotential, midpoint]() {
                 ParticleInteger const rangeBegin =
                     (size_t) threadIndex * sphParticlesSize() / numberOfThreads;
                 ParticleInteger const rangeEnd =
@@ -229,15 +228,9 @@ EnergiesT sphParticlesApplyUpdates(
                     if (phase >= 2) {
                         // Every gas particle at the synchronized state, before any opening
                         // kick, as particlesSumEnergies would count it.
-                        float const vx = hierarchical ? sphParticlesHierarchicalStates[gasIndex]
-                                                            .predictedVelocity[kXDimension] :
-                                                        particlesVel(kXDimension, gravityIndex);
-                        float const vy = hierarchical ? sphParticlesHierarchicalStates[gasIndex]
-                                                            .predictedVelocity[kYDimension] :
-                                                        particlesVel(kYDimension, gravityIndex);
-                        float const vz = hierarchical ? sphParticlesHierarchicalStates[gasIndex]
-                                                            .predictedVelocity[kZDimension] :
-                                                        particlesVel(kZDimension, gravityIndex);
+                        float const vx = particlesVel(kXDimension, gravityIndex);
+                        float const vy = particlesVel(kYDimension, gravityIndex);
+                        float const vz = particlesVel(kZDimension, gravityIndex);
                         float const m = particlesMass(gravityIndex);
                         if (savePotential) {
                             energies.pot += 0.5 * m * particlesPot(gravityIndex);
@@ -247,11 +240,8 @@ EnergiesT sphParticlesApplyUpdates(
                         energies.ymom += m * vy;
                         energies.zmom += m * vz;
                         energies.nmom += m * std::sqrt(sqr(vx) + sqr(vy) + sqr(vz));
-                        energies.therm += m *
-                            (hierarchical && sphHierarchyEventActive() ?
-                                    detail::predictedInternalEnergy(gasIndex, 0.0) :
-                                    sphParticlesInternalEnergy(gasIndex));
-                        if (phase == 3 || hierarchical) {
+                        energies.therm += m * sphParticlesInternalEnergy(gasIndex);
+                        if (phase == 3 || midpoint) {
                             continue;
                         }
                     }
@@ -300,6 +290,7 @@ EnergiesT sphParticlesApplyUpdates(
 HPX_PLAIN_ACTION(sphParticlesCommitProposedRungs, SphParticlesCommitProposedRungsAction);
 
 void sphParticlesCommitProposedRungs(int minimumRung) {
+    ALWAYS_ASSERT(!sphMidpointEnabled());
     Vector<hpx::future<void>> pending;
     for (auto const& child : hpxChildren()) {
         pending.push_back(hpx::async<SphParticlesCommitProposedRungsAction>(child, minimumRung));
@@ -316,9 +307,7 @@ void sphParticlesCommitProposedRungs(int minimumRung) {
                         ALWAYS_ASSERT(proposed >= 0);
                     }
                     if (proposed >= 0) {
-                        sphParticlesRung(gas) = getOptions().run.hierarchicalGravity ?
-                            std::max(sphParticlesRung(gas), proposed) :
-                            proposed;
+                        sphParticlesRung(gas) = proposed;
                         proposed = -1;
                     }
                 }
@@ -393,9 +382,7 @@ void visitSphCheckpointArrays(
     visit(sphParticlesDensities, count);
     visit(sphParticlesConvergenceFlags, count);
     visit(sphParticlesSemiactiveFlags, count);
-    if (sphParticlesHierarchicalStates != nullptr) {
-        visit(sphParticlesHierarchicalStates, count);
-    }
+    visit(sphParticlesProposedRungs, count);
     if (includeViscosity && sphParticlesBulkViscosityCoefficients != nullptr) {
         visit(sphParticlesBulkViscosityCoefficients, count);
     }
@@ -423,7 +410,6 @@ void sphParticlesSwap(ParticleInteger i, ParticleInteger j) {
         std::swap(sphParticlesBalsaraFactors[i], sphParticlesBalsaraFactors[j]);
     }
     std::swap(sphParticlesGradHCorrections[i], sphParticlesGradHCorrections[j]);
-    std::swap(sphParticlesProposedRungs[i], sphParticlesProposedRungs[j]);
     detail::visitSphCheckpointArrays(
         [i, j](auto* values, size_t) { std::swap(values[i], values[j]); });
 }
@@ -464,8 +450,8 @@ void sphParticlesArrayResize(T*& ptr, ParticleInteger newCapacity) {
     ptr = newPtr;
 }
 
-// Legacy standalone gravity/hydro passes use this transient handoff. The shared
-// FMM leaf path releases it; prediction and checkpointing need only total rates.
+// Legacy standalone gravity/hydro passes use this handoff. Midpoint events
+// release it because gravity applies its own kicks directly.
 void sphParticlesEnsureGravityStorage() {
     static MutexType mutex;
     std::lock_guard<MutexType> lock(mutex);
@@ -527,9 +513,6 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         sphParticlesArrayResize(sphParticlesEntropies, newCapacity);
         sphParticlesArrayResize(sphParticlesSupportRadii, newCapacity);
         sphParticlesArrayResize(sphParticlesAccelerationStates, newCapacity);
-        if (getOptions().run.hierarchicalGravity) {
-            sphParticlesArrayResize(sphParticlesHierarchicalStates, newCapacity);
-        }
         sphParticlesArrayResize(sphParticlesConvergenceFlags, newCapacity);
         sphParticlesArrayResize(sphParticlesSemiactiveFlags, newCapacity);
         sphParticlesArrayResize(sphParticlesParticleIndices, newCapacity);
@@ -587,15 +570,6 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
     if (resizeGravityParticles) {
         particlesResize(particlesSize() + numberOfNewParticles);
     }
-    if (getOptions().run.hierarchicalGravity && sphParticlesHierarchicalStates == nullptr &&
-        capacity != 0) {
-        sphParticlesHierarchicalStates = static_cast<SphHierarchicalState*>(
-            allocateManagedMemory(sizeof(SphHierarchicalState) * capacity));
-        std::fill_n(sphParticlesHierarchicalStates, particleCount, SphHierarchicalState{});
-    } else if (!getOptions().run.hierarchicalGravity && sphParticlesHierarchicalStates != nullptr) {
-        freeManagedMemory(sphParticlesHierarchicalStates);
-        sphParticlesHierarchicalStates = nullptr;
-    }
     int previousSize = size;
     size = particleCount;
     for (int i = 0; i < numberOfNewParticles; i++) {
@@ -606,9 +580,6 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
             sphParticlesElectronFractions[slot] = 1.0f;
         }
         sphParticlesAccelerationStates[slot] = {};
-        if (sphParticlesHierarchicalStates != nullptr) {
-            sphParticlesHierarchicalStates[slot] = {};
-        }
         sphParticlesParticleIndices[slot] = kNoParticleIndex;
         sphParticlesEntropyRates[slot] = 0.0f;
         sphParticlesDensities[slot] = 0.0f;
@@ -616,7 +587,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
             sphParticlesBalsaraFactors[slot] = 0.0f;
         }
         sphParticlesGradHCorrections[slot] = unbuiltGradHCorrection;
-        sphParticlesProposedRungs[slot] = -1;
+        sphParticlesProposedRungs[slot] = sphMidpointEnabled() ? 0 : -1;
         if (getOptions().hydro.viscosityEvolution != "none") {
             float const bulkViscosityCoefficient =
                 gradientSwitch ? 0.0f : getOptions().hydro.minimumBulkViscosityCoefficient;
@@ -666,10 +637,6 @@ void sphParticlesFree() {
     if (sphParticlesGradHCorrections != nullptr) {
         freeManagedMemory(sphParticlesGradHCorrections);
         sphParticlesGradHCorrections = nullptr;
-    }
-    if (sphParticlesProposedRungs != nullptr) {
-        freeManagedMemory(sphParticlesProposedRungs);
-        sphParticlesProposedRungs = nullptr;
     }
     detail::visitSphCheckpointArrays([](auto*& values, size_t) {
         freeManagedMemory(values);
@@ -1031,7 +998,9 @@ uint32_t sphCheckpointVersion() {
     // its rate store entropy, with an explicit initialization flag and scale factor.
     // From 40000 viscosity stores only the scalar bulk viscosity coefficient.
     // From 50000 the transient gravity handoff is no longer checkpointed.
-    return 50000U + (options.run.hierarchicalGravity ? 1000U : 0U) +
+    // From 60000 the hydro rung bound is persistent and the hierarchical
+    // predictor/position-clock structure is removed for chronological drifts.
+    return 60000U +
         (options.starFormation.enabled ? 110U : (options.chemistry.enabled ? 100U : 2U)) +
         (options.hydro.viscosityEvolution == "hu_etal" ?
                 8U :

@@ -7,6 +7,7 @@
  */
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <format>
 #include <iostream>
@@ -16,7 +17,6 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
-#include <cosmictiger/sph/hierarchical_state.hpp>
 #include <cosmictiger/sph/viscosity/cullen_and_dehnen_state.hpp>
 
 namespace sph_entropy {
@@ -109,10 +109,9 @@ SPH_PARTICLES_EXTERN float* sphParticlesEntropies;
 // Compact support radius of the SPH smoothing kernel.
 SPH_PARTICLES_EXTERN float* sphParticlesSupportRadii;
 SPH_PARTICLES_EXTERN SphAcceleration* sphParticlesAccelerationStates;
-SPH_PARTICLES_EXTERN SphHierarchicalState* sphParticlesHierarchicalStates;
 SPH_PARTICLES_EXTERN ParticleInteger* sphParticlesParticleIndices;
-// Optional transient handoff for standalone gravity/hydro passes. The combined
-// FMM leaf path releases it and retains only the total acceleration above.
+// Optional handoff for legacy standalone gravity/hydro passes. Midpoint events
+// release it because gravity applies its own kicks directly.
 void sphParticlesEnsureGravityStorage();
 void sphParticlesReleaseGravityStorage();
 SPH_PARTICLES_EXTERN Array<float*, kDimensions> sphParticlesGravityAccelerations;
@@ -127,10 +126,15 @@ SPH_PARTICLES_EXTERN float* sphParticlesBulkViscosityCoefficients;
 SPH_PARTICLES_EXTERN SphCullenDehnenState* sphParticlesCullenDehnenStates;
 SPH_PARTICLES_EXTERN char* sphParticlesConvergenceFlags;
 SPH_PARTICLES_EXTERN char* sphParticlesSemiactiveFlags;
-// Next rung proposed by the force pass that closes a step; -1 when none is staged. The
-// corrector and the source closes still need the closing rung, so the proposal reaches
-// particlesRung only through sphParticlesCommitProposedRungs. Never migrated or checkpointed.
+// Midpoint integration retains the most recent hydro timestep bound until its
+// next force pass; gravity reads it when selecting a new rung. Legacy integration
+// stages a next-rung proposal here and clears it after commit. Migrated and
+// checkpointed so a midpoint bound survives intervening finer-rung events.
 SPH_PARTICLES_EXTERN char* sphParticlesProposedRungs;
+
+inline int sphParticlesHydroRung(ParticleInteger gas) {
+    return std::max(0, int(sphParticlesProposedRungs[gas]));
+}
 
 ParticleInteger sphParticlesSize();
 void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticles = true);

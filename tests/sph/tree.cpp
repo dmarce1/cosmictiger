@@ -20,6 +20,7 @@
 
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/sph_midpoint.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -434,14 +435,35 @@ void verifySphRebuildThreshold() {
         "locality option serialization lost the independently configured fractions");
 }
 
-#if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL && COSMICTIGER_ENABLE_FMM
-void verifySphHierarchyClocks() {
+void verifySphMidpointSchedule() {
+    requireSphTree(
+        sphMidpointRung(0) == -1, "a synchronized coarse boundary scheduled an extra hydro kick");
+    for (int rung = 0; rung < kMaxRung; ++rung) {
+        TimeType const halfStep = TimeType{1} << (63 - rung);
+        // Independently enumerate the odd half-step centers of each rung.
+        // Unsigned wrap at a full interval must return to the no-H boundary.
+        for (TimeType ordinal : {TimeType{1}, TimeType{3}, TimeType{5}, TimeType{7}}) {
+            TimeType const center = ordinal * halfStep;
+            requireSphTree(sphMidpointRung(center) == rung,
+                "dyadic midpoint selected the wrong exact hydro rung");
+        }
+        if (rung > 0) {
+            requireSphTree(sphMidpointRung(2 * halfStep) == rung - 1,
+                "a fine boundary repeated fine hydro instead of selecting the coarse midpoint");
+        }
+    }
+    std::cout << "SPH midpoint schedule regression passed\n" << std::flush;
+}
+
+void verifySphMidpointUpdates() {
     auto const savedOptions = getOptions();
     auto options = savedOptions;
-    options.run.timeIntegrator = "hierarchical";
-    options.run.hierarchicalGravity = true;
-    options.gravity.enabled = true;
-    options.gravity.method = "fmm";
+    options.hydro.enabled = true;
+    options.hydro.method = "sph";
+    options.hydro.viscosityEvolution = "morrisAndMonaghan";
+    options.chemistry.enabled = false;
+    options.starFormation.enabled = false;
+    options.gravity.enabled = false;
     options.initial.gasMass = 0.5;
     setOptions(options);
     bool const savedEntropyInitialized = sphParticlesEntropyInitialized;
@@ -450,138 +472,78 @@ void verifySphHierarchyClocks() {
     initializeSphTreeParticles(2, 0);
     for (ParticleInteger gas = 0; gas < 2; ++gas) {
         sphParticlesDensities[gas] = 1.0f;
-        sphParticlesHierarchicalStates[gas] = {};
         sphParticlesRung(gas) = gas == 0 ? 0 : 2;
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            sphParticlesPosition(dim, gas) = 0.125;
-            sphParticlesVelocity(dim, gas) = 0.0f;
+        for (int dimension = 0; dimension < kDimensions; ++dimension) {
+            sphParticlesPosition(dimension, gas) = gas == 0 ? 0.875 : 0.25;
+            sphParticlesVelocity(dimension, gas) = 0.0f;
         }
     }
     sphParticlesPrepareThermodynamics(1.0, true);
-    sphParticlesPosition(0, 0) = 0.875;
-    sphParticlesPosition(0, 1) = 0.25;
-    sphParticlesVelocity(0, 0) = 0.25f;
-    sphParticlesVelocity(0, 1) = 0.5f;
     for (ParticleInteger gas = 0; gas < 2; ++gas) {
+        sphParticlesVelocity(0, gas) = gas == 0 ? 0.25f : 0.5f;
         sphParticlesEntropy(gas) = 2.0f;
         sphParticlesEntropyRate(gas) = gas == 0 ? 0.25f : 0.5f;
-        sphParticlesProposedRungs[gas] = sphParticlesRung(gas);
-        sphParticlesAccelerationState(gas) = Vector3<float>(gas == 0 ? 2.5f : 5.0f, 0.0f, 0.0f);
+        sphParticlesProposedRungs[gas] = sphParticlesRung(gas) + 1;
+        sphParticlesAccelerationState(gas) = Vector3<float>(gas == 0 ? 0.5f : 1.0f, 0.0f, 0.0f);
     }
-    KickParameters parameters;
-    parameters.t0 = 1.0f;
-    parameters.minRung = 0;
-    parameters.top = true;
-    parameters.ascending = true;
-    parameters.descending = false;
-    parameters.firstCall = true;
-    sphHierarchyBeginEvent(0.0, 0, 1.0, true, parameters);
-    sphHierarchyKickTarget(0, Vector3<float>(0.0f), Vector3<float>(0.5f, 0.0f, 0.0f),
-        Vector3<float>(2.0f, 0.0f, 0.0f));
-    sphHierarchyKickTarget(1, Vector3<float>(0.0f), Vector3<float>(1.0f, 0.0f, 0.0f),
-        Vector3<float>(4.0f, 0.0f, 0.0f));
-    requireSphTree(sphParticlesVelocity(0, 0) == 0.25f && sphParticlesVelocity(0, 1) == 0.5f &&
-            sphParticlesEntropy(0) == 2.0f && sphParticlesEntropy(1) == 2.0f,
-        "hierarchical initialization applied an unopened closing kick");
-    sphHierarchyCaptureRungs();
-    sphHierarchyEndEvent();
-
-    // The coarse particle stores its future endpoint while fine particles reach
-    // an intermediate event. Dyadic coordinates make wrapping/projection exact
-    // in both supported fixed-point position representations.
-    sphHierarchyOpenRung(0);
-    sphHierarchyOpenRung(2);
-    sphParticlesPosition(0, 0) = 0.125;
-    sphParticlesPosition(0, 1) = 0.328125;
-    sphHierarchyRecordDrift(0, 1.0, 0.5);
-    sphHierarchyRecordDrift(2, 0.25, 0.5);
-    requireSphTree(sphParticlesVelocity(0, 0) == 0.5f && sphParticlesVelocity(0, 1) == 0.625f &&
-            sphParticlesEntropy(0) == 2.125f && sphParticlesEntropy(1) == 2.0625f &&
-            sphParticlesHierarchicalStates[0].entropyTime == 0.5 &&
-            sphParticlesHierarchicalStates[1].entropyTime == 0.125,
-        "hierarchical opening kick used the wrong positive gas interval");
-    Position const coarseEndpoint = sphParticlesPosition(0, 0);
-    Position const fineEndpoint = sphParticlesPosition(0, 1);
-    parameters.minRung = 2;
-    parameters.firstCall = false;
-    sphHierarchyBeginEvent(0.25, 2, 1.0, false, parameters);
-    requireSphTree(sphParticlesPosition(0, 0).toDouble() == 0.9375 &&
-            sphParticlesPosition(0, 1) == fineEndpoint,
-        "inactive source was not projected from its wrapped future endpoint");
-    requireSphTree(sphHierarchyPredictedVelocity(0, 0) == 0.875f &&
-            sphHierarchyPredictedVelocity(0, 1) == 1.75f &&
-            sphHierarchyPredictedEntropy(0) == 2.0625 && sphHierarchyPredictedEntropy(1) == 2.125,
-        "hierarchical source prediction did not use each particle's clocks");
-    sphParticlesEntropyRate(1) = 0.75f;
-    sphParticlesAccelerationState(1) = Vector3<float>(5.5f, 0.0f, 0.0f);
-    sphHierarchyKickTarget(1, Vector3<float>(1.0f, 0.0f, 0.0f), Vector3<float>(1.5f, 0.0f, 0.0f),
-        Vector3<float>(0.25f, 0.0f, 0.0f));
-    requireSphTree(sphParticlesVelocity(0, 1) == 0.84375f && sphParticlesEntropy(1) == 2.15625f &&
-            sphParticlesHierarchicalStates[1].entropyTime == 0.25 &&
-            sphHierarchyPredictedVelocity(0, 1) == 1.8125f &&
-            sphHierarchyGravityPrediction(1)[0] == 4.0f,
-        "fine closing kick mixed the partial gravity force into its full-force predictor");
-    auto const diagnostics = sphParticlesApplyUpdates(2, 3, 1.0f, 0.25f);
-    double const expectedThermal = 0.5 *
-        (sph_entropy::storedEnergy(2.0625, 1.0, options.hydro.gamma, 1.0) +
-            sph_entropy::storedEnergy(2.15625, 1.0, options.hydro.gamma, 1.0));
-    requireSphTree(std::abs(diagnostics.therm - expectedThermal) < 1e-6 &&
-            std::abs(diagnostics.kin - 0.25 * (0.875 * 0.875 + 1.8125 * 1.8125)) < 1e-6,
-        "hierarchical diagnostics combine quantities from different times");
-    sphHierarchyEndEvent();
-    requireSphTree(
-        sphParticlesPosition(0, 0) == coarseEndpoint && sphParticlesPosition(0, 1) == fineEndpoint,
-        "source projection did not restore exact stored positions");
-
-    // At the same timestamp a negative gravity correction must leave the gas
-    // entropy and positive hydro interval unchanged. The old generic kick
-    // phases must also be inert under hierarchical scheduling.
-    parameters.top = false;
-    sphHierarchyBeginEvent(0.25, 2, 1.0, false, parameters);
-    sphParticlesApplyUpdates(2, 0, 1.0f, 0.25f);
-    sphParticlesApplyUpdates(2, 1, 1.0f, 0.25f);
-    sphHierarchyKickTarget(1, Vector3<float>(1.5f, 0.0f, 0.0f), Vector3<float>(1.5f, 0.0f, 0.0f),
-        Vector3<float>(0.25f, 0.0f, 0.0f));
-    requireSphTree(sphParticlesVelocity(0, 1) == 0.8125f && sphParticlesEntropy(1) == 2.15625f &&
-            sphParticlesHierarchicalStates[1].entropyTime == 0.25 &&
-            sphHierarchyPredictedVelocity(0, 1) == 1.8125f,
-        "signed gravity correction applied a second hydro kick or changed the predictor");
-    sphHierarchyEndEvent();
-    sphHierarchyOpenRung(2);
-    requireSphTree(sphParticlesVelocity(0, 1) == 1.0f && sphParticlesEntropy(1) == 2.25f &&
-            sphParticlesHierarchicalStates[1].entropyTime == 0.375,
-        "next gas interval did not open once with positive duration");
-    auto const expected = sphParticlesHierarchicalStates[1];
-    std::vector<char> bytes;
-    {
-        hpx::serialization::output_archive archive(bytes);
-        archive << expected;
+    requireSphTree(sphMidpointEnabled() && !sphMidpointEventActive(),
+        "midpoint fixture did not begin outside a hydro event");
+    sphMidpointBeginEvent();
+    sphParticlesApplyMidpointUpdates(2, 0.25);
+    requireSphTree(sphParticlesVelocity(0, 0) == 0.25f && sphParticlesVelocity(0, 1) == 0.75f &&
+            sphParticlesEntropy(0) == 2.0f && sphParticlesEntropy(1) == 2.125f &&
+            sphParticlesProposedRungs[1] == 3,
+        "fine midpoint updated the slow target or discarded its next hydro bound");
+    sphParticlesApplyMidpointUpdates(2, 0.0);
+    sphMidpointEndEvent();
+    // A signed gravity correction changes only live momentum. Legacy opening,
+    // closing and diagnostic hydro phases must not add another hydro interval.
+    sphParticlesVelocity(0, 1) -= 0.125f;
+    for (int phase = 0; phase < 4; ++phase) {
+        sphParticlesApplyUpdates(0, phase, 1.0f, 0.25f);
     }
-    SphHierarchicalState actual;
-    {
-        hpx::serialization::input_archive archive(bytes);
-        archive >> actual;
+    requireSphTree(!sphMidpointEventActive() && sphParticlesVelocity(0, 0) == 0.25f &&
+            sphParticlesVelocity(0, 1) == 0.625f && sphParticlesEntropy(0) == 2.0f &&
+            sphParticlesEntropy(1) == 2.125f,
+        "a gravity-only interval applied a duplicate hydro kick");
+    ParticleGlobalRange range;
+    range.proc = hpxRank();
+    range.range = Pair<ParticleInteger>(0, 2);
+    float velocityX[2], velocityY[2], velocityZ[2], internalEnergy[2];
+    sphParticlesGlobalReadVelocities(range, velocityX, velocityY, velocityZ, 0);
+    sphParticlesGlobalReadInternalEnergyAndSupportRadius(range, internalEnergy, nullptr, 0);
+    requireSphTree(velocityX[0] == 0.25f && velocityX[1] == 0.625f &&
+            std::abs(internalEnergy[0] -
+                sph_entropy::storedEnergy(2.0, 1.0, options.hydro.gamma, 1.0)) < 1e-6 &&
+            std::abs(internalEnergy[1] -
+                sph_entropy::storedEnergy(2.125, 1.0, options.hydro.gamma, 1.0)) < 1e-6,
+        "midpoint source staging used stale velocity or entropy predictors");
+    sphMidpointBeginEvent();
+    sphParticlesApplyMidpointUpdates(0, 1.0);
+    sphMidpointEndEvent();
+    requireSphTree(sphParticlesVelocity(0, 0) == 0.75f && sphParticlesVelocity(0, 1) == 0.625f &&
+            sphParticlesEntropy(0) == 2.25f && sphParticlesEntropy(1) == 2.125f,
+        "coarse midpoint also kicked fine targets");
+    sphMidpointBeginEvent();
+    sphParticlesApplyMidpointUpdates(-1, 0.125);
+    sphMidpointEndEvent();
+    requireSphTree(sphParticlesVelocity(0, 0) == 0.8125f && sphParticlesVelocity(0, 1) == 0.75f &&
+            sphParticlesEntropy(0) == 2.28125f && sphParticlesEntropy(1) == 2.1875f,
+        "global midpoint failed to kick all gas once");
+    for (ParticleInteger gas = 0; gas < 2; ++gas) {
+        for (int dimension = 0; dimension < kDimensions; ++dimension) {
+            requireSphTree(
+                sphParticlesPosition(dimension, gas).toDouble() == (gas == 0 ? 0.875 : 0.25),
+                "fixed-position midpoint hydro moved a particle");
+        }
     }
-    for (int dim = 0; dim < kDimensions; ++dim) {
-        requireSphTree(actual.hydroAcceleration[dim] == expected.hydroAcceleration[dim] &&
-                actual.predictedVelocity[dim] == expected.predictedVelocity[dim],
-            "hierarchical force/predictor state did not survive migration serialization");
-    }
-    requireSphTree(actual.predictionTime == expected.predictionTime &&
-            actual.positionTime == expected.positionTime &&
-            actual.inverseDriftScale == expected.inverseDriftScale &&
-            actual.entropyTime == expected.entropyTime &&
-            actual.minimumHydroRung == expected.minimumHydroRung &&
-            actual.initialized == expected.initialized,
-        "hierarchical clocks did not survive migration serialization");
-    setOptions(savedOptions);
     sphParticlesResize(0, false);
     particlesResize(0);
+    setOptions(savedOptions);
     sphParticlesEntropyInitialized = savedEntropyInitialized;
     sphParticlesThermalScaleFactor = savedThermalScale;
-    std::cout << "SPH hierarchical clock regression passed\n" << std::flush;
+    std::cout << "SPH midpoint target, source and positive-kick regression passed\n" << std::flush;
 }
-#endif
 
 void verifyRetainedSphOctree(SphTreeCreateParameters const& params) {
     sphTreeDestroy();
@@ -724,6 +686,37 @@ void verifyRetainedSphOctree(SphTreeCreateParameters const& params) {
         requireSphTree(leaf.numberOfActiveParticles == active, "leaf active count is stale");
     }
     verifyOctreeNeighbors(refreshed.id);
+    // Chronological midpoint integration drifts coarse sources too, even when
+    // only fine targets are active. Change the velocity between the two halves
+    // so the second envelope must use the post-kick momentum, not a saved rate.
+    for (int half = 0; half < 2; ++half) {
+        for (ParticleInteger particle = 0; particle < sphParticlesSize(); ++particle) {
+            for (int dimension = 0; dimension < kDimensions; ++dimension) {
+                sphParticlesVelocity(dimension, particle) =
+                    (half == 0 ? -0.5f : 0.75f) * (dimension + 1);
+            }
+        }
+        sphTreeDriftBounds(0.125, -1);
+        for (auto const leafId : leaves) {
+            auto const& leaf = *sphTreeGetNode(leafId);
+            for (ParticleInteger particle = leaf.particleRange.first;
+                particle < leaf.particleRange.second; ++particle) {
+                Vector3<Position> endpoint;
+                for (int dimension = 0; dimension < kDimensions; ++dimension) {
+                    endpoint[dimension] = sphParticlesPosition(dimension, particle).toDouble() +
+                        0.125 * sphParticlesVelocity(dimension, particle);
+                    sphParticlesPosition(dimension, particle) = endpoint[dimension];
+                }
+                requireSphTree(leaf.driftBox.contains(endpoint),
+                    "chronological half-drift missed an inactive source or the new velocity");
+            }
+        }
+        auto const midpointRefit = sphTreeRefresh(params);
+        requireSphTree(midpointRefit.id == built.id && midpointRefit.nodeCount == built.nodeCount &&
+                midpointRefit.numberOfActiveParticles == 3,
+            "chronological midpoint refit changed retained topology or active targets");
+        verifyOctreeNeighbors(midpointRefit.id);
+    }
     sphTreeDriftBounds(-0.5, 2);
     for (auto const leafId : leaves) {
         auto const& leaf = *sphTreeGetNode(leafId);
@@ -864,19 +857,18 @@ void verifyDistributedSphHierarchyMigration(bool afterMigration) {
             sphParticlesEntropies[gas] = 100 * hpxRank() + particle + 1;
         }
         float const identity = sphParticlesEntropies[gas];
-        SphHierarchicalState expected;
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            expected.hydroAcceleration[dim] = identity + 0.25f * (dim + 1);
-            expected.predictedVelocity[dim] = identity + dim + 1;
-        }
-        expected.predictionTime = identity / 64.0;
-        expected.positionTime = identity / 16.0;
-        expected.inverseDriftScale = 0.75;
-        expected.entropyTime = identity / 32.0;
-        expected.minimumHydroRung = particlesRung(particle);
-        expected.initialized = true;
         if (!afterMigration) {
-            sphParticlesHierarchicalStates[gas] = expected;
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                sphParticlesAccelerationState(gas)[dim] = identity + 0.25f * (dim + 1);
+            }
+            sphParticlesEntropyRate(gas) = identity / 64.0f;
+            sphParticlesDensities[gas] = identity + 0.5f;
+            if (sphParticlesBulkViscosityCoefficients) {
+                sphParticlesBulkViscosityCoefficients[gas] = identity / 256.0f;
+            }
+            // The last midpoint's hydro timestep bound must survive migration
+            // until the next gravity boundary consumes it.
+            sphParticlesProposedRungs[gas] = particlesRung(particle) + 1;
             if (particle < range.first) {
                 for (int dim = 0; dim < kDimensions; ++dim) {
                     prefixPositions[particle][dim] = particlesPos(dim, particle);
@@ -884,19 +876,17 @@ void verifyDistributedSphHierarchyMigration(bool afterMigration) {
             }
             continue;
         }
-        auto const& actual = sphParticlesHierarchicalStates[gas];
         for (int dim = 0; dim < kDimensions; ++dim) {
             detail::requireSphTree(
-                actual.hydroAcceleration[dim] == expected.hydroAcceleration[dim] &&
-                    actual.predictedVelocity[dim] == expected.predictedVelocity[dim],
-                "migration changed a hierarchical force or predictor field");
+                sphParticlesAccelerationState(gas)[dim] == identity + 0.25f * (dim + 1),
+                "migration changed the midpoint hydro acceleration");
         }
-        detail::requireSphTree(actual.predictionTime == expected.predictionTime &&
-                actual.positionTime == expected.positionTime &&
-                actual.inverseDriftScale == expected.inverseDriftScale &&
-                actual.entropyTime == expected.entropyTime &&
-                actual.minimumHydroRung == expected.minimumHydroRung && actual.initialized,
-            "migration changed a hierarchical clock or hydro rung bound");
+        detail::requireSphTree(sphParticlesEntropyRate(gas) == identity / 64.0f &&
+                sphParticlesDensities[gas] == identity + 0.5f &&
+                (!sphParticlesBulkViscosityCoefficients ||
+                    sphParticlesBulkViscosityCoefficients[gas] == identity / 256.0f) &&
+                sphParticlesProposedRungs[gas] == particlesRung(particle) + 1,
+            "migration changed midpoint gas rates or the hydro rung bound");
         if (particle < range.first) {
             detail::requireSphTree(
                 identity == 100 * hpxRank() + particle + 1 && particlesRung(particle) == 0,
@@ -1099,6 +1089,7 @@ void sphTreeTest() {
     detail::verifySphTreePackedMetadata();
     detail::verifyEmptySphBounds();
     detail::verifySphRebuildThreshold();
+    detail::verifySphMidpointSchedule();
     // This fixture exercises the real local allocator and rebuild path. Remote
     // cache invalidation and growth beyond the arena minimum need separate tests.
     detail::requireSphTree(hpxSize() == 1, "arena regression requires one locality");
@@ -1246,8 +1237,6 @@ void sphTreeTest() {
     auto const empty = sphTreeCreate(params);
     detail::verifySphTreeBuild(empty, 0);
     sphTreeDestroy(true);
-#if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL && COSMICTIGER_ENABLE_FMM
-    detail::verifySphHierarchyClocks();
-#endif
+    detail::verifySphMidpointUpdates();
     std::cout << "SPH tree arena regression passed (CPU, one locality)\n" << std::flush;
 }

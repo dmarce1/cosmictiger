@@ -1,4 +1,4 @@
-"""Validate retained SPH octrees, shared FMM kicks, and current-format restarts.
+"""Validate retained SPH octrees, chronological midpoint kicks, and restarts.
 
 The deterministic application fixture tests sparse activity, periodic drift and
 unchanged membership. With MPI it also crosses both rank boundaries without
@@ -19,6 +19,7 @@ sys.dont_write_bytecode = True
 from application_selection import application_arguments, compiled_algorithms, cpu_backend_options
 from checkpoint_format import decode_checkpoint, require
 from run_checkpoint import prepareCase, runSimulation
+from sph_midpoint_checks import check_midpoint_state, validate_midpoints
 
 
 EVENT = re.compile(r"SPH octree (rebuild|retain): active=(\d+) total=(\d+)"
@@ -58,9 +59,10 @@ def checkpoint_state(directory, iteration, ranks):
         state = decode_checkpoint(path.read_bytes(), ranks=ranks)
         require(state.hydro and not state.has_cooling and not state.has_stars,
                 f"{path}: expected ideal-gas SPH without additional sources")
-        require(state.gas_version >= 50000, f"{path}: obsolete stored-gravity checkpoint")
+        require(state.gas_version >= 60000, f"{path}: obsolete SPH predictor checkpoint")
         clocks.append((state.driver.tau, state.driver.integer_time,
-                       state.driver.global_timestep, state.driver.iteration))
+                       state.driver.global_timestep, state.driver.global_hydro_timestep,
+                       state.driver.iteration))
         payloads.append(state.physical)
         for particle, kind in enumerate(state.types):
             require(kind in (0, 1), f"{path}: unexpected particle species")
@@ -134,7 +136,8 @@ def main():
     fixture = prepareCase(root, "tree_geometry")
     output = run(fixture, {"run.test": "sphTree"}, integrators[0])
     require("SPH tree arena regression passed" in output, "serial octree fixture did not finish")
-    evidence["fixtures"].append("serial: periodic/signed drift, membership, support growth, threshold")
+    evidence["fixtures"].append("serial: periodic/signed drift, membership, support growth, "
+                                "threshold, midpoint target selection and live sources")
     if args.mpi_exec:
         fixture = prepareCase(root, "tree_geometry_mpi")
         output = run(fixture, {"run.test": "sphTree"}, integrators[0], ranks=2)
@@ -153,9 +156,21 @@ def main():
             label = f"{integrator}_{name}"
             reference = prepareCase(root, label)
             output = run(reference, options, integrator, ranks=ranks)
+            require("SPH midpoint:" in output, f"{label}: driver did not execute midpoint hydro")
             counts = validate_events(output, label, integrator)
             final_iteration = options["run.maxIterations"]
             final, payloads, clock, species = checkpoint_state(reference, final_iteration, ranks)
+            previous_time = 0.0
+            global_intervals = []
+            for iteration in range(1, final_iteration + 1):
+                state = decode_checkpoint((reference / f"checkpoint.{iteration}" /
+                                           "checkpoint.0.dat").read_bytes(), ranks=ranks)
+                check_midpoint_state(state)
+                global_intervals.append((previous_time, state.driver.tau))
+                previous_time = state.driver.tau
+            base_timestep = state.driver.tau_max / state.header.steps
+            counts["midpoints"] = validate_midpoints(output, label, base_timestep,
+                state.driver.tau, global_intervals=global_intervals if integrator == "global" else None)
             require(species[1] > 0 and (name == "wave" or species[0] > 0),
                     f"{label}: did not exercise the requested species")
             # One resumed event is sufficient to exercise tree reconstruction and

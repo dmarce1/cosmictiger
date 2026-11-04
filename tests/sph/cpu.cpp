@@ -26,6 +26,7 @@
 #include <cosmictiger/sph/cpu.hpp>
 #include <cosmictiger/sph/viscosity/monaghan.hpp>
 #include <tests/sph/global_timestep_cases.hpp>
+#include <tests/sph/midpoint_cases.hpp>
 #include <tests/sph/phantom_pairs.hpp>
 #include <tests/sph/source_completion_cases.hpp>
 
@@ -251,6 +252,16 @@ public:
 
     void densityPass() {
         run(kSphRunPrehydro2);
+    }
+
+    void prehydro1Pass() {
+        run(kSphRunPrehydro1);
+    }
+
+    void enableMidpointOutputs() {
+        data_.sinkEntropyRate = allocate<float>(count_ + sinkOffset_ + 3);
+        data_.sinkProposedRungs = allocate<char>(count_ + sinkOffset_ + 3);
+        std::fill_n(data_.sinkProposedRungs, count_ + sinkOffset_ + 3, char(-1));
     }
 
     void publishSupport() {
@@ -2744,7 +2755,7 @@ TEST_F(SphCpuTest, DensityPredictionUsesPeculiarMotionAndGradHWithoutViscosity) 
             EXPECT_FLOAT_EQ(logDensityRate[index], -19.0f);
         }
         for (size_t index = fixture.sinkIndex(fixture.count_); index < logDensityRate.size();
-            ++index) {
+             ++index) {
             EXPECT_FLOAT_EQ(logDensityRate[index], -19.0f);
         }
     }
@@ -2863,123 +2874,14 @@ TEST_F(SphCpuTest, DeferredSourceCompletion) {
     detail::testDeferredSourceCompletion<detail::Fixture>();
 }
 
-TEST_F(SphCpuTest, GravityLeafTargetsMatchContiguousHydro) {
-    // Gravity-leaf order differs from SPH order, with unrelated source, gas,
-    // and full-particle offsets. Both periodic support tails and inactive
-    // sources participate, while gravity exists only in the leaf input.
-    for (bool global : {false, true}) {
-        for (int phase : {0, 1}) {
-            detail::Fixture fixture(5, 1, 3, 2, 4);
-            auto& data = fixture.data_;
-            std::array<float, 5> const positions{0.97f, 0.02f, 0.1f, 0.3f, 0.8f};
-            std::array<float, 10> entropy{};
-            std::array<char, 10> proposals{};
-            data.sinkEntropyRate = entropy.data();
-            data.sinkProposedRungs = proposals.data();
-            data.selfGravityEnabled = true;
-            fixture.params_.globalTimestep = global;
-            fixture.params_.maximumSupportRadius = 0.35f;
-            for (int index = 0; index < 5; ++index) {
-                int const source = fixture.sourceIndex(index);
-                int const sink = fixture.sinkIndex(index);
-                data.sourcePositionX[source] = positions[index];
-                data.sourcePositionY[source] = data.sourcePositionZ[source] = 0.5;
-                data.sourceVelocityX[source] = 0.2f * (index - 2);
-                data.sourceInternalEnergy[source] = 0.8f + 0.1f * index;
-                data.sinkSmoothingConverged[sink] = true;
-                data.sourceSupportRadius[source] = data.sinkSupportRadius[sink] = 0.35f;
-                data.sinkGravityAccelerationX[sink] = 0.3f * index;
-                data.sinkGravityAccelerationY[sink] = -0.2f * index;
-                data.sinkGravityAccelerationZ[sink] = 0.1f;
-            }
-            fixture.density();
-            data.sinkParticleRungs[fixture.particleIndex(2)] = 0;
-            fixture.params_.phase = phase;
-            fixture.run(kSphRunHydro);
-            SphRunReturn const reference = *fixture.reduction_;
-            std::array<Vector3<float>, 5> referenceAcceleration;
-            std::array<float, 5> referenceEnergyRate{};
-            std::array<float, 5> referenceEntropyRate{};
-            std::array<char, 5> referenceRung{};
-            for (int index = 0; index < 5; ++index) {
-                int const sink = fixture.sinkIndex(index);
-                referenceAcceleration[index] = data.sinkAccelerations[sink];
-                referenceEnergyRate[index] = data.sinkInternalEnergyRate[sink];
-                referenceEntropyRate[index] = entropy[sink];
-                referenceRung[index] = proposals[sink];
-                data.sinkAccelerations[sink] = Vector3<float>(-123.0f);
-                data.sinkInternalEnergyRate[sink] = entropy[sink] = -123.0f;
-                proposals[sink] = -1;
-            }
-            std::array<int, 5> const order{4, 1, 0, 3, 2};
-            std::array<int, 5> sourceIndices;
-            std::array<ParticleInteger, 5> gasIndices;
-            std::array<Vector3<float>, 5> gravity;
-            for (int target = 0; target < 5; ++target) {
-                sourceIndices[target] = fixture.sourceIndex(order[target]);
-                int const sink = fixture.sinkIndex(order[target]);
-                gasIndices[target] = sink;
-                gravity[target] = Vector3<float>(data.sinkGravityAccelerationX[sink],
-                    data.sinkGravityAccelerationY[sink], data.sinkGravityAccelerationZ[sink]);
-            }
-            std::array<SphTreeNode, 2> targets{data.treeNodes[0], data.treeNodes[0]};
-            targets[0].particleRange = {0, 3};
-            targets[1].particleRange = {3, 5};
-            data.targetNodes = targets.data();
-            data.targetSourceIndices = sourceIndices.data();
-            data.targetGasIndices = gasIndices.data();
-            data.targetGravityAccelerations = gravity.data();
-            data.sinkGravityAccelerationX = data.sinkGravityAccelerationY =
-                data.sinkGravityAccelerationZ = nullptr;
-            data.targetNodeIndices = nullptr;
-            SphRunReturn actual = sphCpuHydro(fixture.params_, data, 1);
-            actual += sphCpuHydro(fixture.params_, data, 0);
-            EXPECT_EQ(actual.minimumTimestep, reference.minimumTimestep);
-            EXPECT_EQ(actual.maximumRung, reference.maximumRung);
-            for (int index = 0; index < 5; ++index) {
-                int const sink = fixture.sinkIndex(index);
-                if (index == 2) {
-                    EXPECT_EQ(data.sinkInternalEnergyRate[sink], -123.0f);
-                    EXPECT_EQ(entropy[sink], -123.0f);
-                    EXPECT_EQ(proposals[sink], -1);
-                    continue;
-                }
-                for (int dim = 0; dim < kDimensions; ++dim) {
-                    EXPECT_EQ(data.sinkAccelerations[sink][dim], referenceAcceleration[index][dim]);
-                }
-                EXPECT_EQ(data.sinkInternalEnergyRate[sink], referenceEnergyRate[index]);
-                EXPECT_EQ(entropy[sink], referenceEntropyRate[index]);
-                EXPECT_EQ(proposals[sink], phase == 1 ? referenceRung[index] : -1);
-            }
-        }
-    }
+TEST_F(SphCpuTest, MidpointHydroUsesExactRungWithoutGravityStorage) {
+    detail::Fixture fixture(4, 2, 2, 3, 4);
+    detail::testMidpointHydroTargets(fixture);
 }
 
-TEST_F(SphCpuTest, HierarchicalHydroOutputRetainsSmallPressureForce) {
-    detail::Fixture fixture(2);
-    auto& data = fixture.data_;
-    data.selfGravityEnabled = true;
-    for (int index = 0; index < 2; ++index) {
-        data.sourcePositionX[index] = 0.45 + 0.1 * index;
-        data.sourcePositionY[index] = data.sourcePositionZ[index] = 0.5;
-        data.sinkSmoothingConverged[index] = true;
-    }
-    fixture.density();
-    fixture.hydro();
-    std::array<Vector3<float>, 2> reference{data.sinkAccelerations[0], data.sinkAccelerations[1]};
-    std::array<Vector3<float>, 2> hydroOutput;
-    data.targetHydroAccelerations = hydroOutput.data();
-    for (int index = 0; index < 2; ++index) {
-        data.sinkGravityAccelerationX[index] = 1.e20f;
-    }
-    fixture.hydro();
-    for (int index = 0; index < 2; ++index) {
-        ASSERT_NE(reference[index][kXDimension], 0.0f);
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            EXPECT_EQ(hydroOutput[index][dim], reference[index][dim]);
-        }
-        EXPECT_EQ(data.sinkAccelerations[index][kXDimension], 1.e20f);
-    }
+TEST_F(SphCpuTest, MidpointMorrisMonaghanUsesActualIntervalAndExactRung) {
+    detail::Fixture fixture(3, 1, 2, 3, 4);
+    detail::testMidpointMorrisInterval(fixture);
 }
 
 TEST_F(SphCpuTest, ColdShockTimestep) {

@@ -1,144 +1,110 @@
-# Retained SPH octree and shared FMM leaf kick
+# Retained SPH octree and midpoint hydro kicks
 
-November 3, 2026. Branch `codex/sph_octree`, baseline `dc0d3f0d9`.
+November 3, 2026. Branch `codex/sph_octree`.
+This design supersedes the earlier shared gravity-leaf/SPH kick implementation.
 
 ## Authorized scope
 
-Combine FMM gravity and SPH force evaluation at gravity leaves for global,
-traditional, and hierarchical integration. All three use the same SPH formulation
-and adaptive octree. Retain SPH octree membership between large active events.
-Add a `Fixed32Range` that conservatively encloses drifting members of each node.
-Rebuild and re-sort at an event when the active count reaches
-`compute.sphTreeRebuildFraction` of all particles, inclusive (default `1/3`),
-rather than accumulating active counts across events.
-Chemistry, stars, PM and P3M are outside this implementation scope.
+Global, traditional, and hierarchical integration use the same adaptive SPH
+neighbor octree and entropy formulation. Hydro uses Morris–Monaghan evolving
+viscosity, or fixed viscosity, with one force evaluation per midpoint. The user
+explicitly accepts first-order temporal accuracy from viscosity. Chemistry,
+stars, PM/P3M, and acceleration-gradient viscosity switches are outside the new
+midpoint implementation. Their existing traditional/global paths remain separate;
+hierarchical SPH rejects unsupported switches rather than silently substituting.
 
-Set the threshold with `--compute.sphTreeRebuildFraction=0.5` or
-`sphTreeRebuildFraction = 0.5` in an INI `[compute]` section. Values must be finite
-and in `[0,1]`: zero rebuilds every nonempty event, and one requires full activity.
-Invalidated trees always rebuild regardless of this threshold. This control is
-independent of `run.rungMergeFraction`, which governs hierarchical gravity rungs.
+## Operator schedule
 
-## Design
+Locally derived composition, written in execution order:
 
-1. Keep the original octant partition separate from moving membership bounds.
-   Expand the latter using the minimum and maximum member drift velocities and
-   the same displacement factor used by the particle drift. Handle periodic
-   wrapping conservatively and round fixed-point bounds outwards. Update support
-   bounds whenever smoothing lengths change. Inactive neighbors remain sources.
-2. Reuse node membership and particle order on small active events. Rebuild at
-   `active/total >= fraction` (exactly `active >= ceil(total/3)` by default)
-   and whenever topology is invalidated by migration,
-   resizing or a gas permutation. Delay routine domain migration to rebuild
-   events; gravity particle permutations preserve the gas-to-particle mapping.
-3. Complete density, support, viscosity preparation and immutable source staging
-   before leaf workers modify acceleration or velocity. Query the SPH octree once
-   for a gravity-leaf gas batch, with both target and source kernel extents.
-4. Consume the temporary gravity force directly when calculating total gas
-   acceleration. Keep the total acceleration required for prediction and opening
-   kicks, but release the separate per-gas gravity field on the combined path.
-5. Close the old interval with its old duration. Reduce global timestep or run
-   the traditional neighbor rung limiter before opening the new interval.
-   Preserve initialization, closing-only diagnostics and exact checkpoint restart.
-6. Keep CPU and CUDA behavior consistent. Any limitation must be explicit and
-   tested; no silent bypass of selected force backends.
+    K_gravity(h/2) D(h/2) K_hydro(h) D(h/2) K_gravity(h/2)
 
-CPU gravity leaves consume their temporary field directly. CUDA gravity launches
-retain a temporary field over their target interval, then run grouped SPH kernels
-after the gravity stream completes. This removes persistent per-gas gravity
-storage, but is not a single fused device kernel. Peak transient storage and
-runtime gains have not been benchmarked. Standalone PM and source-update paths
-retain their existing optional handoff arrays.
+Pressure is evaluated at midpoint positions. A hydro event freezes its input
+sources before any target publishes updated velocity or entropy. It applies one
+full positive hydro kick and stores the proposed next hydro rung. Viscous heating
+and viscosity evolution use the same physical interval; there is no RK2 stage.
+The inviscid fixed-rung composition is second order. Viscosity and changing rung
+assignments do not inherit that guarantee.
 
-The gas checkpoint payload now has base version 50000, with a 1000 offset for
-hierarchical predictor records and the existing physics/viscosity suffixes.
-Earlier gas payloads are rejected; transient gravity storage is not serialized.
-The hierarchy record is 64 bytes per gas particle in the validated build. The
-extra node bound increases the normal-index SPH node from 200 to 224 bytes.
+For a slow interval T and a fast interval T/2, let G_s contain all gravity terms
+involving slow particles and G_f contain gravity internal to the fast set. H_s
+and H_f update their respective target sets but read all required gas neighbors.
+The symmetric fixed-rung reference schedule is:
 
-GADGET-4's documented approach similarly rebuilds its neighbor tree at large
-active events and otherwise expands the nodes to contain their assigned gas:
-https://wwwmpa.mpa-garching.mpg.de/gadget4/05_parameterfile/#domain-decomposition
-The displacement-envelope formulas are derived locally from this code's drift.
+    G_s(T/2) G_f(T/4)
+    D(T/4) H_f(T/2) D(T/4)
+    G_f(T/4) H_s(T) G_f(T/4)
+    D(T/4) H_f(T/2) D(T/4)
+    G_f(T/4) G_s(T/2)
 
-## Hierarchical boundary
+The implementation combines coincident closing/opening gravity kicks before the
+coarse hydro event. Inviscid pressure kicks commute with gravity; the ordering
+error from velocity-dependent viscosity is within the accepted first-order
+viscous treatment. This avoids saving gravity across hydro. The nested signed
+gravity ladder itself remains gravitational; no hydro runs on its negative
+correction calls.
 
-The user's clarified scope includes hierarchical integration with the same SPH
-formulation and adaptive octree. Its gravity driver still evaluates nested active
-source sets, applies signed gravitational correction kicks, and immediately
-drifts a completed rung to its future endpoint. Hydrodynamics runs exactly once
-at the top physical event, with positive closing and opening durations.
+A nonzero integer-clock boundary has one possible hydro midpoint:
+`hydroRung = minRung(integerTime) - 1`. The finest current rung also receives its
+hydro kick at the center of each driver interval. Targets are selected by exact
+rung, while density/support preparation retains all necessary neighbors. Global
+steps instead use one midpoint for all gas and an arbitrary positive interval.
+An initial zero-duration force estimate seeds timestep bounds without a kick.
 
-The hierarchy adds a gas-only predictor record: hydro acceleration, physical
-predicted velocity, prediction time, stored-position time, the exact inverse
-scale used by that drift, entropy time, and a hydro rung bound. The ordinary total
-acceleration remains the force predictor; subtracting the stored hydro component
-recovers the coarse gravitational predictor. There is no persistent separate
-gravity-acceleration vector. These hierarchy-only records add memory; the
-storage reduction of the global and traditional paths is not claimed here.
+The driver advances all particles chronologically in half-intervals. This is a
+conscious first implementation: there are no per-particle last-drift clocks,
+future positions, back projections, or predictor records. It adds whole-array
+drift work on fine hierarchical intervals. Lazy leaf/source drifts are a later
+optimization and would require explicit drift-clock bookkeeping. Cosmological
+half-drifts integrate their own intervals rather than halving a full-step factor.
 
-The implemented schedule is:
+GADGET-4 provides the gravity ladder (equation 50) and brackets an SPH step by
+gravity half-kicks (§5.7.3); its inner SPH step is KDK. The midpoint DKD schedule
+above and its integer-clock mapping are local derivations, not quoted equations.
+Source: https://wwwmpa.mpa-garching.mpg.de/gadget4/gadget4-code-paper.pdf
 
-1. After the hierarchy's migration and gravity-tree construction, advance every
-   gas velocity predictor to the event time. Project an inactive gas source from
-   its stored future endpoint along its actual drift velocity, using the recorded
-   cosmological drift factor. Its live endpoint is saved for restoration.
-2. Run the common octree density and immutable force-source staging at that event
-   time. The shared leaf kernel evaluates the same SPH force and entropy rates as
-   global/traditional integration. Fine gravity events retain the coarse gravity
-   contribution to the total acceleration; full-source events replace it.
-3. Close each active gas hydro interval once using its new rates and elapsed
-   positive duration. Apply the top gravity closing kick, synchronize the physical
-   velocity predictor only at full-source gravity events, then apply the opening
-   gravity kick. Signed finer gravity corrections never update entropy.
-4. Merge hydro timestep proposals and the existing neighbor limiter, record the
-   gas rung lower bound, and restore inactive source endpoints before continuing
-   the gravity ladder. A gas particle opens its positive hydro half-step only when
-   its final descending rung is known, immediately before its drift. Record the
-   endpoint time and exact drift factor after that drift.
-5. Migrate and checkpoint the complete predictor record. Source snapshots and
-   source-time projections are transient and rebuilt after restart.
+## Tree retention and gravity rung merging
 
-The shared neighbor limiter only adjusts active gas, as before this change. It
-does not wake an inactive neighbor in the middle of its current interval. Adding
-such wakeups would require closing the elapsed hydro interval and reconstructing
-its stored future position and momentum before promoting its rung; changing the
-rung alone is not sufficient. That separate formulation change is outside this
-work. Chemistry, stars, PM and P3M remain outside the requested scope.
+Each SPH node retains its original octant partition and an additional
+`Fixed32Range driftBox` enclosing its moving members. Bounds expand using member
+velocity extrema and the actual drift factor, rounding outward and conservatively
+handling periodic wraps. Support changes refresh neighbor bounds. Small events
+retain particle ordering; migration and other invalidations force reconstruction.
 
-The separation of physical prediction from gravity's staggered momentum follows
-GADGET-4's primary implementation. Its hierarchy stores a full gravitational
-acceleration at the coarsest occupied gravity bin, and source prediction combines
-that field with the hydro acceleration. See
-[`kicks.cc`, source lines 357–363](https://wwwmpa.mpa-garching.mpg.de/gadget4/doxygen/kicks_8cc_source.html)
-and [`predict.cc`, source lines 373–379](https://wwwmpa.mpa-garching.mpg.de/gadget4/doxygen/predict_8cc_source.html).
-The retained neighbor tree alone does not remove this prediction requirement.
+`--compute.sphTreeRebuildFraction` defaults to one third of **all particles**.
+Rebuild at `active/total >= fraction`, inclusive, without accumulating events.
+The accepted interval is [0,1]; zero rebuilds every nonempty event. This remains
+independent of `run.rungMergeFraction`. Hierarchical gravity promotes the lowest
+rung when cumulative counts satisfy N_n <= 3 N_(n+1), including equal-cost ties.
 
-Validation must exercise multiple rungs, inactive sources stored at future
-endpoints, positive entropy-update durations, and restart with pending hydro
-half-kicks. The application regression checks the explicit clocks and accumulated
-entropy, compares uniform-rung integration to traditional KDK, and resumes a
-nonuniform blast checkpoint. Restart clocks, rungs and entropy remain exact;
-small field-specific floating-point bounds cover changed neighbor summation order
-when the transient octree is rebuilt. A self-gravitating polytrope checks
-comparable gravity and hydro forces, timestep convergence, and bounded energy
-and momentum error. The direct state fixture checks projection and
-restoration against prescribed drift/predictor data. CPU/CUDA, MPI migration,
-and timestep-convergence claims require their corresponding runtime results;
-compilation or traditional-integrator results do not establish them.
+## Storage and checkpoints
+
+The 64-byte `SphHierarchicalState` and the inactive-position restore buffer are
+removed. Midpoint gas has no separate persistent gravitational acceleration.
+Existing hydro acceleration/entropy-rate arrays contain the hydro result only;
+source arrays remain temporary immutable staging for each force pass.
+
+The existing one-byte proposed-rung array now retains the last hydro timestep
+constraint until the next hydro evaluation and is migrated/checkpointed. Gravity
+combines this scalar constraint with its own timestep at eligible boundaries;
+hydro does not change a rung halfway through an open interval. Global integration
+adds one driver-level double for the latest raw hydro timestep bound. Global
+adaptive gravity still needs temporary all-particle force storage between force
+reduction and its opening kick; that storage is released after the kick.
+
+The extra octree bound remains 24 bytes per node (normal-index node 200 → 224
+bytes). The gas payload uses base version 60000, without a hierarchy offset.
+Older gas payloads are intentionally rejected. Global driver extensions use
+version 2 and serialize both pending global interval and hydro bound.
+
+Checkpoints occur after the previous interval's midpoint hydro and final drift,
+with every position at driver.tau and the current boundary gravity/hydro events
+still pending. Restart rebuilds transient trees and source workspaces.
 
 ## Validation
 
-Completed checks and their limits are recorded in
-[SPH octree validation](sph_octree_validation.md).
-
-- Exact one-third boundary, configurable rebuild fractions and CLI/INI handling,
-  retained topology, changed active counts and forced invalidation/rebuild.
-- Moving/periodic cell bounds, mixed velocity signs, support growth and inactive
-  large-support neighbors against exhaustive neighbor discovery.
-- Leaf force results against the existing SPH reference, with mixed gas/DM
-  buckets, leaf traversal ordering and nonuniform rungs.
-- Global and traditional application runs, synchronized diagnostics, checkpoint
-  restart, gravity-disabled SPH, CPU/CUDA parity and two-rank MPI where available.
-- Build variants and focused regression suites; report actual validation and any
-  unrun performance or long-run scientific comparisons.
+Required checks include exact-rung target selection with inactive neighbors,
+hydro-only acceleration and timestep estimates, actual-interval Morris–Monaghan
+updates, direct CPU/CUDA gas gravity kicks, midpoint lattice/positive intervals,
+retained bounds, physical convergence, and checkpoint/migration/restart coverage.
+Current execution evidence is recorded separately in `sph_octree_validation.md`.

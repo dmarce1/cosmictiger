@@ -1,4 +1,104 @@
-# SPH octree validation
+# Midpoint implementation validation
+
+November 3, 2026, branch `codex/sph_octree`. The midpoint changes follow commit
+`665da4279`; the older shared-leaf results below are historical only.
+
+## Builds and kernel checks
+
+Release CPU and CUDA FMM/SPH applications compile and link, as does the CPU
+SPH-only application with gravity disabled. All 41 CPU and 23 CUDA SPH unit
+tests pass, including exact-rung targets with inactive neighbors, absent gas
+gravity buffers, hydro-only timestep constraints, and Morris–Monaghan evolution
+over the actual midpoint interval. The CUDA tests executed on the GPU.
+
+The CPU gravity/SPH kick fixture, checkpoint-state fixture, retained-tree fixture,
+and Sod smoke test pass. The CUDA gravity/SPH kick fixture passes. Seventeen
+Python regression tests pass. A separate SPH-only traditional Sod run completes,
+and its global hydro regression passes raw-step, restart, endpoint, and corrupted
+clock checks.
+
+The CPU build with only the hierarchical integrator enabled also compiles,
+links, and passes the hierarchical application and restart regression.
+
+## Evolution, integration order, and restart
+
+Global and traditional retained-octree wave and mixed gas/DM cases pass on CPU
+and CUDA, including their canonical checkpoint restart comparisons. The CPU
+global regression additionally verifies that `run.minRung=20` does not quantize
+global timesteps: hydro-only and mixed FMM/hydro select 0.0122166788206, while
+FMM-only selects 0.000162290700246 in the fixture. Restart and endpoint clipping
+pass. Zero/NaN gravity and hydro intervals and a nonzero global integer phase
+are rejected after recalculating checkpoint checksums.
+
+The CPU hierarchical M&M blast passes exact midpoint-lattice checks, nonuniform
+rungs, positive entropy, uniform-rung agreement with traditional integration,
+and restart with bounded accumulation roundoff. The same application passes on
+two MPI ranks with one HPX thread per rank. The separate distributed tree fixture
+passes with two ranks and two threads per rank, exercising both domain-boundary
+crossings, inactive prefixes, and threshold rebuilds with inactive particles
+outside their owning domains.
+
+The CUDA hierarchical application passes with explicitly bounded numerical
+restart comparisons. Seven of 3,456 particles differ by at most two fixed32
+units per coordinate; their measured velocity differences reproduce those
+position differences exactly through the two rounded half-drifts. The largest
+accumulated-field difference is 4.082 float epsilons of its field scale. The
+GPU-only regression permits two position units and eight float epsilons; CPU
+positions remain exact and CPU accumulation tolerance remains four epsilons.
+Entropy uses a local two-epsilon bound. Clocks, rungs, hydro proposals, flags,
+and M&M coefficients remain exact. Position matching is unique and periodic;
+mutation probes reject a three-unit displacement or altered discrete state.
+
+The runtime rebuild-fraction regression passes on CPU with all three
+integrators, including the default, zero/one endpoints, CLI/INI precedence,
+invalid values, retained/rebuilt event decisions, and the all-particle
+denominator in mixed gas/DM cases.
+
+The undamped, inviscid 512-particle wave uses fixed rungs and a common final time
+0.05. Successive position differences under timestep halving are:
+
+| Comparison | RMS position difference |
+| --- | ---: |
+| First refinement | 3.36936e-6 |
+| Second refinement | 8.41589e-7 |
+| Third refinement | 2.12387e-7 |
+
+The ratios are 4.00357 and 3.96253, giving orders 2.0013 and 1.9864. Particle
+correspondence uses unchanged transverse lattice columns. This demonstrates
+second-order inviscid pressure evolution; viscosity and relaxation damping are
+explicit first-order updates and are not used to claim second-order convergence.
+
+The self-gravitating star has maximum gravity/hydro force ratio 0.898807 and
+natural rungs 11–12. Its damped fixed-rung cases keep relative energy change
+below 7.14e-4 and net momentum fraction below 2.27e-8. Uniform hierarchical and
+traditional results agree exactly in this fixture. The scenario's fixed
+viscosity overrides are canonicalized before checkpoint allocation/serialization;
+starting with the default M&M option now passes checkpoint and exact restart.
+
+The mixed cosmology case exercises an actual promotion from rung 9 to 10 with
+64 of 128 particles on the finer rung, expansion, and exact checkpoint 7→8
+restart. Separate gamma=4/3 cases in both hierarchical and traditional modes
+check the boundary entropy-to-energy conversion: measured relative error is
+5.8331e-8, versus 1.66677e-4 with the obsolete midpoint scale factor. Complete
+self-gravity evidence is `/tmp/sph_midpoint_gravity_validated/evidence.json`.
+
+## Storage and remaining performance limits
+
+The old 64-byte hierarchy predictor state and future-position restoration buffer
+are removed. Midpoint gas uses no persistent gravitational acceleration. Its
+existing proposed-rung byte persists the hydro constraint, and global integration
+adds one driver double. The retained octree still adds one 24-byte `Fixed32Range`
+per node. Gas payload version 60000 intentionally rejects older gas checkpoints.
+
+This implementation drifts all particles chronologically at each half-drift.
+It trades hierarchical drift work for removal of predictor clocks and restoration
+storage; no large-run speedup or scaling claim is made. Chemistry, stars, PM/P3M,
+and higher-order viscosity integration were outside this implementation's scope.
+
+Evidence logs and output directories use the `/tmp/sph_midpoint_*` prefix, with
+GPU application evidence also under `build/cuda/tests/`.
+
+# Historical shared-leaf SPH octree validation
 
 November 3, 2026. Branch `codex/sph_octree`, based on `dc0d3f0d9`.
 See [the design and implementation notes](sph_octree_plan.md).

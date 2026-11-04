@@ -31,19 +31,6 @@ class Driver(ctypes.Structure):
     _fields_ += [("integer_time", ctypes.c_uint64)]
 
 
-class SphHierarchicalState(ctypes.Structure):
-    _fields_ = [("hydro_acceleration", ctypes.c_float * 3),
-                ("predicted_velocity", ctypes.c_float * 3),
-                ("prediction_time", ctypes.c_double), ("position_time", ctypes.c_double),
-                ("inverse_drift_scale", ctypes.c_double), ("entropy_time", ctypes.c_double),
-                ("minimum_hydro_rung", ctypes.c_int), ("initialized", ctypes.c_bool)]
-
-    def values(self):
-        return (*self.hydro_acceleration, *self.predicted_velocity, self.prediction_time,
-                self.position_time, self.inverse_drift_scale, self.entropy_time,
-                self.minimum_hydro_rung, self.initialized)
-
-
 class Domain(ctypes.Structure):
     _fields_ = [("box", ctypes.c_double * 6), ("midpoint", ctypes.c_double),
                 ("rank", ctypes.c_int)]
@@ -156,12 +143,16 @@ def read_prefix(data):
     result.driver = reader.native(Driver)
     result.driver.integer_phase_offset = result.driver_offset + Driver.integer_time.offset
     result.driver.global_timestep = 0.0
+    result.driver.global_hydro_timestep = 0.0
     if flags & (1 << 19):
         result.driver.global_extension_offset = reader.offset
         version = reader.take("Q")[0]
-        result.driver.global_timestep = reader.take("d")[0]
-        require(version == 1 and math.isfinite(result.driver.global_timestep)
-                and result.driver.global_timestep >= 0, "invalid checkpoint global timestep")
+        result.driver.global_timestep, result.driver.global_hydro_timestep = reader.take("d", 2)
+        require(version == 2 and math.isfinite(result.driver.global_timestep)
+                and result.driver.global_timestep >= 0
+                and math.isfinite(result.driver.global_hydro_timestep)
+                and result.driver.global_hydro_timestep >= 0,
+                "invalid checkpoint global timestep")
     result.driver.outer_interval = 0.0
     result.driver.outer_start = 0.0
     result.driver.outer_index = 0
@@ -174,10 +165,8 @@ def read_prefix(data):
                 and result.driver.outer_interval >= 0 and result.driver.outer_start >= 0,
                 "invalid checkpoint particle-mesh interval extension")
     result.particle_start = reader.offset
-    # Gas versions from 50000 store entropies and support radii as separate arrays,
-    # no predicted rates, and only the electron fraction of the cooling state.
-    result.hierarchy_offset = 1000 if flags & (1 << 6) else 0
-    result.gas_version = 50000 + result.hierarchy_offset + (110 if stars else 100 if cooling else 2) + viscosity_offset
+    # Version 60000 stores the hydro rung bound and removes hierarchical predictor clocks.
+    result.gas_version = 60000 + (110 if stars else 100 if cooling else 2) + viscosity_offset
     result.reader = reader
     return result
 
@@ -223,10 +212,10 @@ def decode_checkpoint(data, ranks=1):
         result.internal_energies = tuple(a * rho ** (gamma - 1) * factor
             for a, rho in zip(result.entropies, scalars[1])) if result.entropy_initialized else result.entropies
         flags = [reader.take("B", gas_count) for _ in range(2)]
-        result.hierarchy = tuple(reader.native(SphHierarchicalState).values()
-                                 for _ in range(gas_count)) if result.hierarchy_offset else ()
-        vectors = []  # Gravity is transient; total acceleration is stored above.
-        delta = (result.gas_version - 50000 - result.hierarchy_offset - (110 if result.has_stars else 100 if result.has_cooling else 2))
+        result.proposed_rungs = reader.take("b", gas_count)
+        require(all(-1 <= rung < 64 for rung in result.proposed_rungs),
+                "invalid checkpoint hydro rung bound")
+        delta = (result.gas_version - 60000 - (110 if result.has_stars else 100 if result.has_cooling else 2))
         width = {0: 0, 2: 1, 4: 2, 6: 2, 8: 2}[delta]
         viscosity = reader.take("f", width * gas_count)
         if result.has_cooling:
@@ -243,8 +232,7 @@ def decode_checkpoint(data, ranks=1):
                 *accelerations[3 * gas_index:3 * gas_index + 3],
                 *(field[gas_index] for field in scalars),
                 *(field[gas_index] for field in flags),
-                *(field[gas_index] for field in vectors),
-                *(result.hierarchy[gas_index] if result.hierarchy_offset else ()),
+                result.proposed_rungs[gas_index],
                 *viscosity[width * gas_index:width * (gas_index + 1)],
                 *(result.cooling[gas_index] if result.has_cooling else ()))
     if result.has_stars:
