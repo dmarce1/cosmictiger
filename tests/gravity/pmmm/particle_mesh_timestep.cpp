@@ -227,7 +227,7 @@ void checkMeshApplyFieldFlops() {
     parameters.t0 = 1.0f;
     parameters.maxDt = 1.0f;
     parameters.eta = 0.1f;
-    parameters.gravitySupportRadius = getOptions().gravity.supportRadius;
+    parameters.gravitySmoothingLength = getOptions().gravity.smoothingLength;
     parameters.saveForce = false;
     parameters.minRung = 1;
     parameters.fixedRung = 2;

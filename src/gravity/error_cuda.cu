@@ -26,7 +26,8 @@ constexpr size_t kGravityErrorSinkBatch = 128;
 
 __global__ void gravityErrorReferenceKernel(GravityErrorPosition const* sinks,
     GravityErrorSource const* sources, size_t sourceCount, radial_kernel::KernelTable const* kernel,
-    double supportRadius, GravityErrorForce const* correctionValues, GravityErrorForce* partials) {
+    double smoothingLength, GravityErrorForce const* correctionValues,
+    GravityErrorForce* partials) {
     __shared__ double threadForces[3][kGravityErrorBlockSize];
     GravityErrorPosition const sink = sinks[blockIdx.y];
     size_t const sourceBegin = size_t(blockIdx.x) * kGravityErrorSourcesPerBlock;
@@ -41,7 +42,7 @@ __global__ void gravityErrorReferenceKernel(GravityErrorPosition const* sinks,
             separation[dim] = doubleDistance(sink[dim], value.position[dim]);
         }
         auto const force =
-            tabulatedGravityReference(separation, *kernel, supportRadius, correctionValues);
+            tabulatedGravityReference(separation, *kernel, smoothingLength, correctionValues);
         for (int dim = 0; dim < 3; ++dim) {
             sum[dim].add(value.mass * force[dim]);
         }
@@ -94,13 +95,13 @@ std::unique_ptr<Value, GravityErrorDeviceDeleter> allocateGravityErrorBuffer(
 
 std::vector<GravityErrorForce> gravityErrorDirectCuda(std::span<GravityErrorPosition const> sinks,
     size_t sourceCount, GravityErrorSourceLoader const& loadSources,
-    radial_kernel::KernelTable const& kernel, double supportRadius,
+    radial_kernel::KernelTable const& kernel, double smoothingLength,
     std::span<GravityErrorForce const> correctionValues) {
     std::vector<GravityErrorForce> result(sinks.size());
     if (sinks.empty() || sourceCount == 0) {
         return result;
     }
-    if (!std::isfinite(supportRadius) || supportRadius <= 0) {
+    if (!std::isfinite(smoothingLength) || smoothingLength <= 0) {
         throw std::invalid_argument(
             "Gravity error CUDA support radius must be finite and positive");
     }
@@ -145,7 +146,7 @@ std::vector<GravityErrorForce> gravityErrorDirectCuda(std::span<GravityErrorPosi
             dim3 const grid(static_cast<unsigned>(blocks), static_cast<unsigned>(batchSinks));
             gravityErrorReferenceKernel<<<grid, kGravityErrorBlockSize, 0, stream.nativeHandle()>>>(
                 deviceSinks.get(), deviceSources.get(), batchSources, deviceKernel.get(),
-                supportRadius, deviceCorrections.get(), devicePartials.get());
+                smoothingLength, deviceCorrections.get(), devicePartials.get());
             stream.checkLaunch();
             stream.copyAsync(hostPartials.data(), devicePartials.get(),
                 partialCount * sizeof(GravityErrorForce), cudaMemcpyDeviceToHost);

@@ -40,21 +40,21 @@ namespace detail {
  * Symbol directory (in the code below):
  *   q_ab → normalizedRadius
  *   |r_ab| → separationMagnitudePacks
- *   H_a → sinkKernelSupportRadius
+ *   H_a → sinkKernelSmoothingLength
  *   ρ_a → density
  *   ΣW → kernelSum
  */
 // clang-format on
-bool solveSphCpuSupportRadius(SphRunParameters const& parameters, SphRunData const& data,
+bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData const& data,
     SphTreeNode const& targetNode, std::vector<int> const& neighbors, int particleIndex,
-    float& supportRadius, sph_flops::Counter& flops) {
-    float const minimumSupportRadius = parameters.minimumSupportRadius;
-    float const maximumSupportRadius = parameters.maximumSupportRadius;
-    ALWAYS_ASSERT(minimumSupportRadius > 0.0f && maximumSupportRadius >= minimumSupportRadius &&
-        data.targetNeighborCount > 0.0f);
-    float& sinkKernelSupportRadius = supportRadius;
-    sinkKernelSupportRadius =
-        std::min(std::max(sinkKernelSupportRadius, minimumSupportRadius), maximumSupportRadius);
+    float& smoothingLength, sph_flops::Counter& flops) {
+    float const minimumSmoothingLength = parameters.minimumSmoothingLength;
+    float const maximumSmoothingLength = parameters.maximumSmoothingLength;
+    ALWAYS_ASSERT(minimumSmoothingLength > 0.0f &&
+        maximumSmoothingLength >= minimumSmoothingLength && data.targetNeighborCount > 0.0f);
+    float& sinkKernelSmoothingLength = smoothingLength;
+    sinkKernelSmoothingLength = std::min(
+        std::max(sinkKernelSmoothingLength, minimumSmoothingLength), maximumSmoothingLength);
     Vector3<Position> position;
     position[kXDimension] = data.sourcePositionX[particleIndex];
     position[kYDimension] = data.sourcePositionY[particleIndex];
@@ -69,8 +69,8 @@ bool solveSphCpuSupportRadius(SphRunParameters const& parameters, SphRunData con
         separationMagnitudePacks.push_back(simdSqrt(separation.dot(separation)));
         flops += 9 * SimdFloat::size();    // Three fixed scales, dot product, square root.
     }
-    float lower = minimumSupportRadius;
-    float upper = maximumSupportRadius;
+    float lower = minimumSmoothingLength;
+    float upper = maximumSmoothingLength;
     float const targetKernelSum =
         data.targetNeighborCount * (3.0f / (4.0f * std::numbers::pi_v<float>) );
     flops += 1;
@@ -78,27 +78,27 @@ bool solveSphCpuSupportRadius(SphRunParameters const& parameters, SphRunData con
         for (int dim = 0; dim < kDimensions; ++dim) {
             flops.singlePrecision += 1;    // Single-precision fixed-point scale.
             if (targetNode.outerBox.end[dim] < RangeFixed(position[dim]) +
-                    RangeFixed(sinkKernelSupportRadius) + RangeFixed::min()) {
+                    RangeFixed(sinkKernelSmoothingLength) + RangeFixed::min()) {
                 return false;
             }
             flops.singlePrecision += 1;
             if (RangeFixed(position[dim]) < targetNode.outerBox.begin[dim] +
-                    RangeFixed(sinkKernelSupportRadius) + RangeFixed::min()) {
+                    RangeFixed(sinkKernelSmoothingLength) + RangeFixed::min()) {
                 return false;
             }
         }
-        SimdFloat const inverseSupportRadius(1.0f / sinkKernelSupportRadius);
+        SimdFloat const inverseSmoothingLength(1.0f / sinkKernelSmoothingLength);
         flops += 1;
         SimdFloat kernelSumPack(0.0f);
         SimdFloat kernelSumSupportDerivativePack(0.0f);
         for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
             auto const normalizedRadius =
-                separationMagnitudePacks[first / SimdFloat::size()] * inverseSupportRadius;
+                separationMagnitudePacks[first / SimdFloat::size()] * inverseSmoothingLength;
             auto const contributes =
                 sphCpuValidLanes(neighbors, first) && normalizedRadius < SimdFloat(1.0f);
             kernelSumPack += simdSelect(contributes, kernelW(normalizedRadius), SimdFloat(0.0f));
             kernelSumSupportDerivativePack -= simdSelect(contributes,
-                normalizedRadius * dkernelWDq(normalizedRadius) * inverseSupportRadius,
+                normalizedRadius * dkernelWDq(normalizedRadius) * inverseSmoothingLength,
                 SimdFloat(0.0f));
             // q, two accumulations and the two derivative products, in every lane.
             flops += 5 * SimdFloat::size() +
@@ -108,36 +108,36 @@ bool solveSphCpuSupportRadius(SphRunParameters const& parameters, SphRunData con
         float const residual = simdSum(kernelSumPack) - targetKernelSum;
         flops += SimdFloat::size() - 1 +
             2;    // Reduction, residual and tolerance; abs is a sign operation.
-        if (std::abs(residual) <= kSphSupportRadiusTolerance * targetKernelSum ||
-            (sinkKernelSupportRadius <= minimumSupportRadius && residual >= 0.0f) ||
-            (sinkKernelSupportRadius >= maximumSupportRadius && residual <= 0.0f)) {
+        if (std::abs(residual) <= kSphSmoothingLengthTolerance * targetKernelSum ||
+            (sinkKernelSmoothingLength <= minimumSmoothingLength && residual >= 0.0f) ||
+            (sinkKernelSmoothingLength >= maximumSmoothingLength && residual <= 0.0f)) {
             return true;
         }
         if (residual > 0.0f) {
-            upper = sinkKernelSupportRadius;
+            upper = sinkKernelSmoothingLength;
         } else {
-            lower = sinkKernelSupportRadius;
+            lower = sinkKernelSmoothingLength;
         }
         float const kernelSumSupportDerivative = simdSum(kernelSumSupportDerivativePack);
         flops += SimdFloat::size() - 1 + 4;    // Reduction, change, two bounds, next H.
         float change = kernelSumSupportDerivative > 0.0f ? -residual / kernelSumSupportDerivative :
-                                                           0.2f * sinkKernelSupportRadius;
+                                                           0.2f * sinkKernelSmoothingLength;
         change = std::min(
-            std::max(change, -0.2f * sinkKernelSupportRadius), 0.2f * sinkKernelSupportRadius);
-        float next = std::min(
-            std::max(sinkKernelSupportRadius + change, minimumSupportRadius), maximumSupportRadius);
+            std::max(change, -0.2f * sinkKernelSmoothingLength), 0.2f * sinkKernelSmoothingLength);
+        float next = std::min(std::max(sinkKernelSmoothingLength + change, minimumSmoothingLength),
+            maximumSmoothingLength);
         if (next < lower || next > upper) {
             next = 0.5f * (lower + upper);
             flops += 2;
         }
-        if (next == sinkKernelSupportRadius) {
+        if (next == sinkKernelSmoothingLength) {
             return true;
         }
-        sinkKernelSupportRadius = next;
+        sinkKernelSmoothingLength = next;
     }
-    std::cout << std::format("SPH smoothing-length solve did not converge: supportRadius={:e} "
+    std::cout << std::format("SPH smoothing-length solve did not converge: smoothingLength={:e} "
                              "bounds=[{:e},{:e}] target={:e}\n",
-                     sinkKernelSupportRadius, minimumSupportRadius, maximumSupportRadius,
+                     sinkKernelSmoothingLength, minimumSmoothingLength, maximumSmoothingLength,
                      data.targetNeighborCount)
               << std::flush;
     ALWAYS_ASSERT(false);
@@ -153,7 +153,7 @@ bool solveSphCpuSupportRadius(SphRunParameters const& parameters, SphRunData con
  *   ζ_a → gradH.correction.weightedSupportCorrection
  */
 // clang-format on
-void recordSphCpuGradH(SphGradHEvaluation const& gradH, float supportRadius, float density,
+void recordSphCpuGradH(SphGradHEvaluation const& gradH, float smoothingLength, float density,
     float numberSum, float numberMoment, SphRunReturn& result) {
     if (gradH.constraint != sph_volume::SupportConstraint::Free) {
         result.heldSupports++;
@@ -161,9 +161,9 @@ void recordSphCpuGradH(SphGradHEvaluation const& gradH, float supportRadius, flo
     }
     if (!sph_volume::isUsable(gradH.correction)) {
         std::cout << std::format(
-                         "SPH grad-H correction is unusable: supportRadius={:e} density={:e} "
+                         "SPH grad-H correction is unusable: smoothingLength={:e} density={:e} "
                          "\u03a3W={:e} \u03a3q dw/dq={:e} \u03a9={:e} \u03b6={:e} residual={:e}\n",
-                         supportRadius, density, numberSum, numberMoment,
+                         smoothingLength, density, numberSum, numberMoment,
                          gradH.correction.supportJacobian,
                          gradH.correction.weightedSupportCorrection, gradH.relativeResidual)
                   << std::flush;
@@ -178,9 +178,9 @@ void recordSphCpuGradH(SphGradHEvaluation const& gradH, float supportRadius, flo
 }
 
 bool sphCpuHasActiveNeighbor(SphRunParameters const& parameters, SphRunData const& data,
-    std::vector<int> const& neighbors, int particleIndex, float supportRadius,
+    std::vector<int> const& neighbors, int particleIndex, float smoothingLength,
     sph_flops::Counter& flops) {
-    SimdFloat const squaredSupportRadius(supportRadius * supportRadius);
+    SimdFloat const squaredSmoothingLength(smoothingLength * smoothingLength);
     flops += 1;
     for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
         auto const separation = sphCpuSeparations(data, particleIndex, neighbors, first);
@@ -193,7 +193,7 @@ bool sphCpuHasActiveNeighbor(SphRunParameters const& parameters, SphRunData cons
         auto const active = (neighborRung >= SimdFloat(float(parameters.minimumRung))) &&
             (neighborRung <= SimdFloat(float(parameters.maximumRung)));
         auto const intersects =
-            squaredSeparation < simdMax(squaredSupportRadius, sqr(neighborSupport));
+            squaredSeparation < simdMax(squaredSmoothingLength, sqr(neighborSupport));
         flops += 9 * SimdFloat::size();    // Three fixed scales, five dot ops, support square.
         if (simdAnyOf(sphCpuValidLanes(neighbors, first) && active && intersects)) {
             return true;
@@ -204,7 +204,7 @@ bool sphCpuHasActiveNeighbor(SphRunParameters const& parameters, SphRunData cons
 
 }    // namespace detail
 
-SphRunReturn sphCpuPrehydro1(
+SphRunReturn sphCpuSmoothingLengths(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
     sph_flops::Counter flops;
@@ -217,13 +217,15 @@ SphRunReturn sphCpuPrehydro1(
         bool const active =
             parameters.isActiveRung(data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]]);
         if (active && !data.sinkFlags[sinkIndex].converged()) {
-            float& supportRadius = data.sinkSmoothingLength[sinkIndex];
-            bool const converged = detail::solveSphCpuSupportRadius(
-                parameters, data, targetNode, neighbors, particleIndex, supportRadius, flops);
+            float& smoothingLength = data.sinkSmoothingLength[sinkIndex];
+            bool const converged = detail::solveSphCpuSmoothingLength(
+                parameters, data, targetNode, neighbors, particleIndex, smoothingLength, flops);
             data.sinkFlags[sinkIndex].setConverged(converged);
             if (converged) {
-                result.minimumSupportRadius = std::min(result.minimumSupportRadius, supportRadius);
-                result.maximumSupportRadius = std::max(result.maximumSupportRadius, supportRadius);
+                result.minimumSmoothingLength =
+                    std::min(result.minimumSmoothingLength, smoothingLength);
+                result.maximumSmoothingLength =
+                    std::max(result.maximumSmoothingLength, smoothingLength);
             } else {
                 result.needsAnotherPass = true;
             }
@@ -245,7 +247,7 @@ SphRunReturn sphCpuPrehydro1(
  *   R_a = ρ_a⁻¹ Σ_b m_b W_ab sign(∇·v_b),
  *   T = Σ_b r_ab ⊗ r_ab w̄_ab, D = Σ_b v_ab ⊗ r_ab w̄_ab, V = D T⁻¹.
  * Symbol directory (Pack denotes SIMD partial sums):
- *   H_a → sinkKernelSupportRadius; q_ab → normalizedRadius; w(q_ab) → kernelWeight
+ *   H_a → sinkKernelSmoothingLength; q_ab → normalizedRadius; w(q_ab) → kernelWeight
  *   ρ_a → density; ρ_a ∇·v_a → densityWeightedDivergence
  *   ρ_a ∇×v_a → densityWeightedCurl; ρ_a R_a → densityWeightedSignAverage
  *   r_ab, v_ab → separation, velocityDifference (peculiar stored velocity)
@@ -260,7 +262,7 @@ SphRunReturn sphCpuPrehydro1(
  * Physical pair velocities include Hubble flow in the signal-speed estimate.
  */
 // clang-format on
-SphRunReturn sphCpuPrehydro2(
+SphRunReturn sphCpuDensityAndGradients(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
     bool const computeGradientHistory =
@@ -279,10 +281,10 @@ SphRunReturn sphCpuPrehydro2(
             targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
         bool const active =
             parameters.isActiveRung(data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]]);
-        float& supportRadius = data.sinkSmoothingLength[sinkIndex];
+        float& smoothingLength = data.sinkSmoothingLength[sinkIndex];
         bool const semiactive = active ||
             detail::sphCpuHasActiveNeighbor(
-                parameters, data, neighbors, particleIndex, supportRadius, flops);
+                parameters, data, neighbors, particleIndex, smoothingLength, flops);
         data.sinkFlags[sinkIndex].setSemiactive(semiactive);
         if (!semiactive) {
             continue;
@@ -291,8 +293,8 @@ SphRunReturn sphCpuPrehydro2(
             evolveMorrisMonaghan && active && !data.sinkFlags[sinkIndex].converged();
         bool const computeSphDivergence = computeSphBalsara || updateMorrisMonaghan;
         if (!active && !data.sinkFlags[sinkIndex].converged() &&
-            !detail::solveSphCpuSupportRadius(
-                parameters, data, targetNode, neighbors, particleIndex, supportRadius, flops)) {
+            !detail::solveSphCpuSmoothingLength(
+                parameters, data, targetNode, neighbors, particleIndex, smoothingLength, flops)) {
             data.sinkFlags[sinkIndex].setConverged(false);
             result.needsAnotherPass = true;
             continue;
@@ -304,15 +306,15 @@ SphRunReturn sphCpuPrehydro2(
          * uses h_b). Every gas particle has mass m_b = gasMass, and the sum includes b = a.
          *
          * Symbol directory (in the code below):
-         *   H_a → sinkKernelSupportRadius
+         *   H_a → sinkKernelSmoothingLength
          *   m_b → data.gasMass
          *   ρ_a → density
          */
         // clang-format on
-        float const sinkKernelSupportRadius = supportRadius;
-        float const inverseSupportRadius = 1.0f / sinkKernelSupportRadius;
-        SimdFloat const massOverSupportVolume(
-            data.gasMass * inverseSupportRadius * inverseSupportRadius * inverseSupportRadius);
+        float const sinkKernelSmoothingLength = smoothingLength;
+        float const inverseSmoothingLength = 1.0f / sinkKernelSmoothingLength;
+        SimdFloat const massOverSupportVolume(data.gasMass * inverseSmoothingLength *
+            inverseSmoothingLength * inverseSmoothingLength);
         flops += 4;    // Reciprocal and three mass/support products.
         SimdFloat densityPack(0.0f);
         SimdFloat densityDerivativeSumPack(0.0f);
@@ -344,7 +346,7 @@ SphRunReturn sphCpuPrehydro2(
             Vector3<SimdFloat> const separation =
                 detail::sphCpuSeparations(data, particleIndex, neighbors, first);
             SimdFloat const radius = simdSqrt(separation.dot(separation));
-            SimdFloat const normalizedRadius = radius * SimdFloat(inverseSupportRadius);
+            SimdFloat const normalizedRadius = radius * SimdFloat(inverseSmoothingLength);
             SimdFloat const kernelWeight = kernelW(normalizedRadius);
             densityPack += simdSelect(detail::sphCpuValidLanes(neighbors, first),
                 massOverSupportVolume * kernelWeight, SimdFloat(0.0f));
@@ -374,7 +376,7 @@ SphRunReturn sphCpuPrehydro2(
                 auto const contributes = detail::sphCpuValidLanes(neighbors, first) &&
                     radius > SimdFloat(0.0f) && normalizedRadius < SimdFloat(1.0f);
                 SimdFloat const massWeightedGradientFactor = simdSelect(contributes,
-                    massOverSupportVolume * SimdFloat(inverseSupportRadius) *
+                    massOverSupportVolume * SimdFloat(inverseSmoothingLength) *
                         dkernelWDq(normalizedRadius) /
                         simdSelect(contributes, radius, SimdFloat(1.0f)),
                     SimdFloat(0.0f));
@@ -472,19 +474,19 @@ SphRunReturn sphCpuPrehydro2(
         }
         float const density = simdSum(densityPack);
         flops += SimdFloat::size() - 1;
-        ALWAYS_ASSERT(sinkKernelSupportRadius > 0.0f && density > 0.0f);
+        ALWAYS_ASSERT(sinkKernelSmoothingLength > 0.0f && density > 0.0f);
         data.sinkDensity[sinkIndex] = density;
         float const kernelSum = simdSum(kernelSumPack);
         float const kernelDerivativeMoment = simdSum(kernelDerivativeMomentPack);
-        auto const gradH = sphGradHEvaluation(sinkKernelSupportRadius,
-            parameters.minimumSupportRadius, parameters.maximumSupportRadius,
+        auto const gradH = sphGradHEvaluation(sinkKernelSmoothingLength,
+            parameters.minimumSmoothingLength, parameters.maximumSmoothingLength,
             data.targetNeighborCount, data.gasMass, kernelSum, kernelDerivativeMoment);
         /*
          * Reductions, residual (2), and Ω, ζ, the weighted sums (6).
          */
         flops += 2 * (SimdFloat::size() - 1) + 8;
         detail::recordSphCpuGradH(
-            gradH, sinkKernelSupportRadius, density, kernelSum, kernelDerivativeMoment, result);
+            gradH, sinkKernelSmoothingLength, density, kernelSum, kernelDerivativeMoment, result);
         data.sinkGradHCorrection[sinkIndex] = gradH.correction.weightedSupportCorrection;
         if (data.sinkLogDensityRate) {
             // clang-format off
@@ -520,8 +522,8 @@ SphRunReturn sphCpuPrehydro2(
                 simdSum(densityWeightedDivergencePack) / (density * parameters.scaleFactor);
             float const soundSpeed = std::sqrt(
                 gasAdiabaticIndex * pressureEnergyRatio * data.sourceInternalEnergy[particleIndex]);
-            float const smoothingLength = sinkKernelSupportRadius /
-                float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
+            float const smoothingLength = sinkKernelSmoothingLength /
+                float(selectedHydroKernel().smoothingLengthPerEffectiveRadius) *
                 float(monaghan::kViscosityWidthScale);
             flops.doublePrecision += 1;    // Runtime kernel-table coefficient narrowing.
             float const inverseDecayTime =
@@ -575,14 +577,14 @@ SphRunReturn sphCpuPrehydro2(
             if (parameters.cullenDehnen) {
                 diagnostics = cullen_and_dehnen::diagnosticsFromGradient(velocityGradient,
                     parameters.scaleFactor, divergenceDerivative,
-                    simdSum(densityWeightedSignAveragePack) / density, sinkKernelSupportRadius,
+                    simdSum(densityWeightedSignAveragePack) / density, sinkKernelSmoothingLength,
                     std::max(soundSpeedForSwitch, simdMaximum(signalSpeedPack)),
                     parameters.maximumBulkViscosityCoefficient, parameters.viscosityDecayCD, flops);
                 flops += SimdFloat::size() - 1;
             } else if (parameters.huEtAl) {
                 diagnostics =
                     hu_etal::diagnosticsFromGradient(velocityGradient, parameters.scaleFactor,
-                        divergenceDerivative, sinkKernelSupportRadius, soundSpeedForSwitch,
+                        divergenceDerivative, sinkKernelSmoothingLength, soundSpeedForSwitch,
                         std::max(soundSpeedForSwitch, simdMaximum(signalSpeedPack)),
                         parameters.maximumBulkViscosityCoefficientHu, parameters.viscosityDecayHu,
                         flops);
@@ -591,8 +593,8 @@ SphRunReturn sphCpuPrehydro2(
                  * Price et al. (2018), equations (46)-(48): the paper's smoothing length is
                  * the same calibrated viscosity length as Morris & Monaghan's h.
                  */
-                float const smoothingLength = sinkKernelSupportRadius /
-                    float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
+                float const smoothingLength = sinkKernelSmoothingLength /
+                    float(selectedHydroKernel().smoothingLengthPerEffectiveRadius) *
                     float(monaghan::kViscosityWidthScale);
                 flops.doublePrecision += 1;
                 diagnostics = price_etal::diagnosticsFromGradient(velocityGradient,
@@ -612,10 +614,10 @@ SphRunReturn sphCpuPrehydro2(
             flops += 18 * (SimdFloat::size() - 1);
         }
         data.sinkFlags[sinkIndex].setConverged(true);
-        result.minimumSupportRadius =
-            std::min(result.minimumSupportRadius, sinkKernelSupportRadius);
-        result.maximumSupportRadius =
-            std::max(result.maximumSupportRadius, sinkKernelSupportRadius);
+        result.minimumSmoothingLength =
+            std::min(result.minimumSmoothingLength, sinkKernelSmoothingLength);
+        result.maximumSmoothingLength =
+            std::max(result.maximumSmoothingLength, sinkKernelSmoothingLength);
     }
     result.floatingPointOperations = FlopCount(flops);
     addCpuFlops(flops.counts());

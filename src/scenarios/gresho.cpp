@@ -17,7 +17,7 @@ ScenarioPlan initializeGresho() {
     ParticleInteger const count = ParticleInteger(opts.initial.numberOfParticles);
     opts.initial.gasMass = 1.0 / count;
     setOptions(opts);
-    double const supportRadius =
+    double const smoothingLength =
         std::cbrt(opts.initial.gasMass * opts.hydro.neighborNumber / (4.0 * std::acos(-1.0) / 3.0));
     sphParticlesResize(count);
     ParticleInteger i = 0;
@@ -33,7 +33,7 @@ ScenarioPlan initializeGresho() {
                     auto const state = greshoState(radius);
                     double const angularVelocity =
                         radius > 0.0 ? state.azimuthalVelocity / radius : 0.0;
-                    sphParticlesSmoothingLength(i) = supportRadius;
+                    sphParticlesSmoothingLength(i) = smoothingLength;
                     sphParticlesPosition(kXDimension, i) = position[0];
                     sphParticlesPosition(kYDimension, i) = position[1];
                     sphParticlesPosition(kZDimension, i) = position[2];

@@ -18,9 +18,9 @@
 // phase, including when another leaf updates the corresponding local sink.
 SphRunReturn sphRunCpuNode(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex);
-SphRunReturn sphCpuPrehydro1(
+SphRunReturn sphCpuSmoothingLengths(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex);
-SphRunReturn sphCpuPrehydro2(
+SphRunReturn sphCpuDensityAndGradients(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex);
 SphRunReturn sphCpuHydro(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex);

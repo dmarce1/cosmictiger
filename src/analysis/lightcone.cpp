@@ -564,11 +564,11 @@ std::pair<int, Range<double>> lcTreeCreate(int pix, Range<double> box, Pair<int>
     int index = nodes.size();
     nodes.pushBack(thisNode);
     if (leaf && pix >= myPixRange.first && pix < myPixRange.second) {
-        LightconeTreeId selfid;
-        selfid.index = index;
-        selfid.pix = pix;
+        LightconeTreeId selfId;
+        selfId.index = index;
+        selfId.pix = pix;
         std::lock_guard<SpinlockType> lock(leafMutex);
-        leafNodes.pushBack(selfid);
+        leafNodes.pushBack(selfId);
     }
     std::pair<int, Range<double>> rc;
     rc.first = index;

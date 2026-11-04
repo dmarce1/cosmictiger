@@ -10,10 +10,10 @@
 SphRunReturn sphRunCpuNode(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     switch (parameters.runType) {
-    case kSphRunPrehydro1:
-        return sphCpuPrehydro1(parameters, data, targetNodeIndex);
-    case kSphRunPrehydro2:
-        return sphCpuPrehydro2(parameters, data, targetNodeIndex);
+    case kSphRunSmoothingLengths:
+        return sphCpuSmoothingLengths(parameters, data, targetNodeIndex);
+    case kSphRunDensityAndGradients:
+        return sphCpuDensityAndGradients(parameters, data, targetNodeIndex);
     case kSphRunHydro:
         return sphCpuHydro(parameters, data, targetNodeIndex);
     case kSphRunRungs:

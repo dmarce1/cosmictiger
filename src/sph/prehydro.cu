@@ -43,7 +43,7 @@ struct DensityWorkspace {
 
 }    // namespace detail
 
-__global__ void sphCudaPrehydro1(
+__global__ void sphCudaSmoothingLengths(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
     sph_flops::Counter flops = 0;
     int const threadIndex = threadIdx.x;
@@ -76,7 +76,7 @@ __global__ void sphCudaPrehydro1(
                 }
                 int slot = contains;
                 int total;
-                computeIndices<kPrehydro1BlockSize>(slot, total);
+                computeIndices<kSmoothingLengthsBlockSize>(slot, total);
                 int const offset = workspace.positions.size();
                 __syncthreads();
                 workspace.positions.resize(offset + total);
@@ -98,16 +98,16 @@ __global__ void sphCudaPrehydro1(
                 position[kXDimension] = data.sourcePositionX[particleIndex];
                 position[kYDimension] = data.sourcePositionY[particleIndex];
                 position[kZDimension] = data.sourcePositionZ[particleIndex];
-                float& supportRadius = data.sinkSmoothingLength[sinkIndex];
-                bool const converged = solveSphSupportRadius<kPrehydro1BlockSize>(supportRadius,
-                    parameters.minimumSupportRadius, parameters.maximumSupportRadius,
-                    data.targetNeighborCount, workspace.positions, position, targetNode.outerBox,
-                    flops);
+                float& smoothingLength = data.sinkSmoothingLength[sinkIndex];
+                bool const converged = solveSphSmoothingLength<kSmoothingLengthsBlockSize>(
+                    smoothingLength, parameters.minimumSmoothingLength,
+                    parameters.maximumSmoothingLength, data.targetNeighborCount,
+                    workspace.positions, position, targetNode.outerBox, flops);
                 if (threadIndex == 0) {
                     data.sinkFlags[sinkIndex].setConverged(converged);
                     if (converged) {
-                        atomicMin(&reduction->minimumSupportRadius, supportRadius);
-                        atomicMax(&reduction->maximumSupportRadius, supportRadius);
+                        atomicMin(&reduction->minimumSmoothingLength, smoothingLength);
+                        atomicMax(&reduction->maximumSmoothingLength, smoothingLength);
                     } else {
                         atomicAdd(&reduction->pendingChanges, 1);
                     }
@@ -135,7 +135,7 @@ __global__ void sphCudaPrehydro1(
  *   R_a = ρ_a⁻¹ Σ_b m_b W_ab sign(∇·v_b),
  *   T = Σ_b r_ab ⊗ r_ab w̄_ab, D = Σ_b v_ab ⊗ r_ab w̄_ab, V = D T⁻¹.
  * Symbol directory (Pack denotes SIMD partial sums):
- *   H_a → sinkKernelSupportRadius; q_ab → normalizedRadius; w(q_ab) → kernelWeight
+ *   H_a → sinkKernelSmoothingLength; q_ab → normalizedRadius; w(q_ab) → kernelWeight
  *   ρ_a → density; ρ_a ∇·v_a → densityWeightedDivergence
  *   ρ_a ∇×v_a → densityWeightedCurl; ρ_a R_a → densityWeightedSignAverage
  *   r_ab, v_ab → separation, velocityDifference (peculiar stored velocity)
@@ -149,7 +149,7 @@ __global__ void sphCudaPrehydro1(
  * (Price 2012, equation (27), https://arxiv.org/abs/1012.1885).
  */
 // clang-format on
-__global__ void sphCudaPrehydro2(
+__global__ void sphCudaDensityAndGradients(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
     bool const computeGradientHistory =
         parameters.gradientSwitch() && data.sinkViscosityDiagnostics != nullptr;
@@ -196,7 +196,7 @@ __global__ void sphCudaPrehydro2(
                 }
                 int slot = contains;
                 int total;
-                computeIndices<kPrehydro2BlockSize>(slot, total);
+                computeIndices<kDensityAndGradientsBlockSize>(slot, total);
                 int const offset = workspace.positions.size();
                 __syncthreads();
                 workspace.positions.resize(offset + total);
@@ -230,7 +230,7 @@ __global__ void sphCudaPrehydro2(
             position[kXDimension] = data.sourcePositionX[particleIndex];
             position[kYDimension] = data.sourcePositionY[particleIndex];
             position[kZDimension] = data.sourcePositionZ[particleIndex];
-            float& supportRadius = data.sinkSmoothingLength[sinkIndex];
+            float& smoothingLength = data.sinkSmoothingLength[sinkIndex];
             int semiactive = active;
             if (!active) {
                 for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
@@ -246,12 +246,12 @@ __global__ void sphCudaPrehydro2(
                             distance(position[kZDimension], neighbor.positionZ);
                         flops += 10;    // Three fixed distances, squared norm, two supports.
                         if (sqr(separationX, separationY, separationZ) <
-                            fmaxf(sqr(supportRadius), sqr(particle.smoothingLength))) {
+                            fmaxf(sqr(smoothingLength), sqr(particle.smoothingLength))) {
                             semiactive++;
                         }
                     }
                 }
-                sharedReduceAdd<int, kPrehydro2BlockSize>(semiactive);
+                sharedReduceAdd<int, kDensityAndGradientsBlockSize>(semiactive);
             }
             if (threadIndex == 0) {
                 data.sinkFlags[sinkIndex].setSemiactive(semiactive != 0);
@@ -267,8 +267,8 @@ __global__ void sphCudaPrehydro2(
             bool const computeSphDivergence = computeSphBalsara || updateMorrisMonaghan;
             bool converged = true;
             if (!active && !data.sinkFlags[sinkIndex].converged()) {
-                converged = solveSphSupportRadius<kPrehydro2BlockSize>(supportRadius,
-                    parameters.minimumSupportRadius, parameters.maximumSupportRadius,
+                converged = solveSphSmoothingLength<kDensityAndGradientsBlockSize>(smoothingLength,
+                    parameters.minimumSmoothingLength, parameters.maximumSmoothingLength,
                     data.targetNeighborCount, workspace.positions, position, targetNode.outerBox,
                     flops);
             }
@@ -287,16 +287,16 @@ __global__ void sphCudaPrehydro2(
              * sum includes b = a. Each thread accumulates part of the sum.
              *
              * Symbol directory (in the code below):
-             *   H_a → sinkKernelSupportRadius
+             *   H_a → sinkKernelSmoothingLength
              *   m_b → data.gasMass
              *   ρ_a → density
              */
             // clang-format on
 
-            float const sinkKernelSupportRadius = supportRadius;
-            float const inverseSupportRadius = 1.0f / sinkKernelSupportRadius;
-            float const massOverSupportVolume =
-                data.gasMass * inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
+            float const sinkKernelSmoothingLength = smoothingLength;
+            float const inverseSmoothingLength = 1.0f / sinkKernelSmoothingLength;
+            float const massOverSupportVolume = data.gasMass * inverseSmoothingLength *
+                inverseSmoothingLength * inverseSmoothingLength;
             flops += 4;    // Reciprocal support and the mass/support-cubed scale.
             float density = 0.0f;
             float densityDerivativeSum = 0.0f;
@@ -330,7 +330,7 @@ __global__ void sphCudaPrehydro2(
                     distance(position[kYDimension], neighbor.positionY),
                     distance(position[kZDimension], neighbor.positionZ));
                 float const radius = sqrtf(separation.dot(separation));
-                float const normalizedRadius = radius * inverseSupportRadius;    // r_ab/H_a
+                float const normalizedRadius = radius * inverseSmoothingLength;    // r_ab/H_a
                 float const kernelWeight = kernelW(normalizedRadius);
                 density += massOverSupportVolume * kernelWeight;
                 flops += 12 +
@@ -369,7 +369,7 @@ __global__ void sphCudaPrehydro2(
                      */
                     // clang-format on
                     float const massWeightedGradientFactor = massOverSupportVolume *
-                        inverseSupportRadius * dkernelWDq(normalizedRadius) / radius;
+                        inverseSmoothingLength * dkernelWDq(normalizedRadius) / radius;
                     auto const& particle = workspace.particles[neighborIndex];
                     Vector3<float> const velocityDifference =
                         Vector3<float>(data.sourceVelocityX[particleIndex],
@@ -438,48 +438,50 @@ __global__ void sphCudaPrehydro2(
                     }
                 }
             }
-            sharedReduceAdd<float, kPrehydro2BlockSize>(density);
-            flops += detail::sphReductionFlops<kPrehydro2BlockSize>();
-            sharedReduceAdd<float, kPrehydro2BlockSize>(kernelSum);
-            sharedReduceAdd<float, kPrehydro2BlockSize>(kernelDerivativeMoment);
-            flops += 2 * detail::sphReductionFlops<kPrehydro2BlockSize>();
+            sharedReduceAdd<float, kDensityAndGradientsBlockSize>(density);
+            flops += detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
+            sharedReduceAdd<float, kDensityAndGradientsBlockSize>(kernelSum);
+            sharedReduceAdd<float, kDensityAndGradientsBlockSize>(kernelDerivativeMoment);
+            flops += 2 * detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
             if (data.sinkLogDensityRate) {
-                sharedReduceAdd<float, kPrehydro2BlockSize>(densityDerivativeSum);
-                flops += detail::sphReductionFlops<kPrehydro2BlockSize>();
+                sharedReduceAdd<float, kDensityAndGradientsBlockSize>(densityDerivativeSum);
+                flops += detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
             }
             if (computeSphDivergence) {
-                sharedReduceAdd<float, kPrehydro2BlockSize>(densityWeightedDivergence);
-                flops += detail::sphReductionFlops<kPrehydro2BlockSize>();
+                sharedReduceAdd<float, kDensityAndGradientsBlockSize>(densityWeightedDivergence);
+                flops += detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
             }
             if (computeSphBalsara) {
                 for (int dim = 0; dim < kDimensions; ++dim) {
-                    sharedReduceAdd<float, kPrehydro2BlockSize>(densityWeightedCurl[dim]);
+                    sharedReduceAdd<float, kDensityAndGradientsBlockSize>(densityWeightedCurl[dim]);
                 }
-                flops += 3 * detail::sphReductionFlops<kPrehydro2BlockSize>();
+                flops += 3 * detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
             }
             if (computeGradientHistory && parameters.cullenDehnen) {
-                sharedReduceAdd<float, kPrehydro2BlockSize>(densityWeightedSignAverage);
-                flops += detail::sphReductionFlops<kPrehydro2BlockSize>();
+                sharedReduceAdd<float, kDensityAndGradientsBlockSize>(densityWeightedSignAverage);
+                flops += detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
             }
             if (computeGradientHistory && (parameters.cullenDehnen || parameters.huEtAl)) {
-                sharedReduceMax<kPrehydro2BlockSize>(signalSpeed);
+                sharedReduceMax<kDensityAndGradientsBlockSize>(signalSpeed);
             }
             if (computeGradientHistory) {
                 for (int i = 0; i < kDimensions; ++i) {
                     for (int j = 0; j < kDimensions; ++j) {
-                        sharedReduceAdd<float, kPrehydro2BlockSize>(gradientSums.moment[i][j]);
-                        sharedReduceAdd<float, kPrehydro2BlockSize>(gradientSums.velocity[i][j]);
+                        sharedReduceAdd<float, kDensityAndGradientsBlockSize>(
+                            gradientSums.moment[i][j]);
+                        sharedReduceAdd<float, kDensityAndGradientsBlockSize>(
+                            gradientSums.velocity[i][j]);
                     }
                 }
-                flops += 18 * detail::sphReductionFlops<kPrehydro2BlockSize>();
+                flops += 18 * detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
             }
 
             if (threadIndex == 0) {
-                ALWAYS_ASSERT(sinkKernelSupportRadius > 0.0f && density > 0.0f);
+                ALWAYS_ASSERT(sinkKernelSmoothingLength > 0.0f && density > 0.0f);
                 data.sinkDensity[sinkIndex] = density;
 
-                auto const gradH = sphGradHEvaluation(sinkKernelSupportRadius,
-                    parameters.minimumSupportRadius, parameters.maximumSupportRadius,
+                auto const gradH = sphGradHEvaluation(sinkKernelSmoothingLength,
+                    parameters.minimumSmoothingLength, parameters.maximumSmoothingLength,
                     data.targetNeighborCount, data.gasMass, kernelSum, kernelDerivativeMoment);
                 flops += 8;    // Residual (2), and Ω, ζ, the weighted sums (6).
                 if (gradH.constraint != sph_volume::SupportConstraint::Free) {
@@ -495,9 +497,9 @@ __global__ void sphCudaPrehydro2(
                      */
                     // clang-format on
                     if (!sph_volume::isUsable(gradH.correction)) {
-                        printf("SPH grad-H correction is unusable: supportRadius=%e "
+                        printf("SPH grad-H correction is unusable: smoothingLength=%e "
                                "density=%e ΣW=%e Σq dw/dq=%e Ω=%e ζ=%e residual=%e\n",
-                            sinkKernelSupportRadius, density, kernelSum, kernelDerivativeMoment,
+                            sinkKernelSmoothingLength, density, kernelSum, kernelDerivativeMoment,
                             gradH.correction.supportJacobian,
                             gradH.correction.weightedSupportCorrection, gradH.relativeResidual);
                         __trap();
@@ -541,8 +543,8 @@ __global__ void sphCudaPrehydro2(
                         densityWeightedDivergence / (density * parameters.scaleFactor);
                     float const soundSpeed = sqrtf(adiabaticIndex * pressureEnergyRatio *
                         data.sourceInternalEnergy[particleIndex]);
-                    float const smoothingLength = sinkKernelSupportRadius /
-                        float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
+                    float const smoothingLength = sinkKernelSmoothingLength /
+                        float(selectedHydroKernel().smoothingLengthPerEffectiveRadius) *
                         float(monaghan::kViscosityWidthScale);
                     flops.doublePrecision += 1;
                     float const inverseDecayTime = parameters.viscosityDecay * soundSpeed /
@@ -593,14 +595,14 @@ __global__ void sphCudaPrehydro2(
                     if (parameters.cullenDehnen) {
                         diagnostics = cullen_and_dehnen::diagnosticsFromGradient(velocityGradient,
                             parameters.scaleFactor, divergenceDerivative,
-                            densityWeightedSignAverage / density, sinkKernelSupportRadius,
+                            densityWeightedSignAverage / density, sinkKernelSmoothingLength,
                             fmaxf(soundSpeedForSwitch, signalSpeed),
                             parameters.maximumBulkViscosityCoefficient, parameters.viscosityDecayCD,
                             flops);
                         flops += 1;
                     } else if (parameters.huEtAl) {
                         diagnostics = hu_etal::diagnosticsFromGradient(velocityGradient,
-                            parameters.scaleFactor, divergenceDerivative, sinkKernelSupportRadius,
+                            parameters.scaleFactor, divergenceDerivative, sinkKernelSmoothingLength,
                             soundSpeedForSwitch, fmaxf(soundSpeedForSwitch, signalSpeed),
                             parameters.maximumBulkViscosityCoefficientHu,
                             parameters.viscosityDecayHu, flops);
@@ -609,8 +611,8 @@ __global__ void sphCudaPrehydro2(
                          * Price et al. (2018), equations (46)-(48): the paper's smoothing
                          * length is the same calibrated viscosity length as Morris & Monaghan's h.
                          */
-                        float const smoothingLength = sinkKernelSupportRadius /
-                            float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
+                        float const smoothingLength = sinkKernelSmoothingLength /
+                            float(selectedHydroKernel().smoothingLengthPerEffectiveRadius) *
                             float(monaghan::kViscosityWidthScale);
                         flops.doublePrecision += 1;
                         diagnostics = price_etal::diagnosticsFromGradient(velocityGradient,
@@ -630,8 +632,8 @@ __global__ void sphCudaPrehydro2(
                     }
                 }
                 data.sinkFlags[sinkIndex].setConverged(true);
-                atomicMin(&reduction->minimumSupportRadius, supportRadius);
-                atomicMax(&reduction->maximumSupportRadius, supportRadius);
+                atomicMin(&reduction->minimumSmoothingLength, smoothingLength);
+                atomicMax(&reduction->maximumSmoothingLength, smoothingLength);
             }
         }
         __syncthreads();

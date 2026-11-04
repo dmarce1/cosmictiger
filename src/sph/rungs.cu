@@ -103,7 +103,7 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
             auto const sinkPositionZ = data.sourcePositionZ[particleIndex];
             auto const sinkSmoothingLength = data.sinkSmoothingLength[sinkIndex];
             int const sinkRung = data.sourceRungs[particleIndex];
-            auto const squaredSinkSupportRadius = sqr(sinkSmoothingLength);
+            auto const squaredSinkSmoothingLength = sqr(sinkSmoothingLength);
             flops += 1;
             int const roundedNeighborEnd = roundUp(workspace.positionX.size(), blockSize);
             int maximumNeighborRung = 0;
@@ -119,7 +119,7 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
                     float const separationZ = distance(sinkPositionZ, neighborPositionZ);    // 1
                     float const squaredSeparation =
                         sqr(separationX, separationY, separationZ);    // 5
-                    if (squaredSeparation <= fmaxf(squaredSinkSupportRadius,
+                    if (squaredSeparation <= fmaxf(squaredSinkSmoothingLength,
                                                  sqr(workspace.smoothingLength[neighborIndex]))) {
                         maximumNeighborRung = max(maximumNeighborRung, neighborRung);
                     }

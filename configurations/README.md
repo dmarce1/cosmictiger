@@ -237,5 +237,5 @@ Every project INI lists all current application
 options, with mutually exclusive alternatives commented where appropriate.
 Cooling initialization uses `chemistry.initializationTemperature`; zero preserves
 initial-condition energy. Set gravity radius through `gravity.effectiveRadius`,
-`gravity.supportRadius`, or the legacy `gravity.softening` alias. Alternative
+`gravity.smoothingLength`, or the legacy `gravity.softening` alias. Alternative
 radius representations remain commented to avoid conflicting inputs.

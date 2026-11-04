@@ -18,8 +18,8 @@ SphRunReturn sphCpuRungs(SphRunParameters const&, SphRunData const& data, int ta
         int const sinkRung = data.sourceRungs[particleIndex];
         int const sinkIndex =
             targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
-        float const supportRadius = data.sinkSmoothingLength[sinkIndex];
-        SimdFloat const squaredSupportRadius(supportRadius * supportRadius);
+        float const smoothingLength = data.sinkSmoothingLength[sinkIndex];
+        SimdFloat const squaredSmoothingLength(smoothingLength * smoothingLength);
         flops += 1;
         SimdFloat maximumNeighborRungs(0.0f);
         for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
@@ -34,7 +34,7 @@ SphRunReturn sphCpuRungs(SphRunParameters const&, SphRunData const& data, int ta
                 return index < neighbors.size() ? float(data.sourceRungs[neighbors[index]]) : 0.0f;
             });
             auto const intersects = detail::sphCpuValidLanes(neighbors, first) &&
-                squaredSeparation <= simdMax(squaredSupportRadius, sqr(neighborSupport));
+                squaredSeparation <= simdMax(squaredSmoothingLength, sqr(neighborSupport));
             flops += 9 * SimdFloat::size();    // Includes arithmetic in padded SIMD lanes.
             maximumNeighborRungs = simdMax(
                 maximumNeighborRungs, simdSelect(intersects, neighborRungs, SimdFloat(0.0f)));
@@ -42,7 +42,7 @@ SphRunReturn sphCpuRungs(SphRunParameters const&, SphRunData const& data, int ta
         int const maximumNeighborRung = int(simdMaximum(maximumNeighborRungs));
         // Locally derived monotone neighbor-graph closure, including inactive endpoints:
         //   rᵢ⁽ᵏ⁺¹⁾ = max(rᵢ⁽ᵏ⁾, max_{j: dᵢⱼ ≤ max(Hᵢ,Hⱼ)} rⱼ⁽ᵏ⁾ − 1).
-        // rᵢ -> sinkRung; max rⱼ -> maximumNeighborRung; H -> supportRadius;
+        // rᵢ -> sinkRung; max rⱼ -> maximumNeighborRung; H -> smoothingLength;
         // dᵢⱼ² -> squaredSeparation. Each pass reads a frozen source snapshot.
         // Candidate storage defers live-rung changes until the driver schedules them.
         if (sinkRung < maximumNeighborRung - kMaxNeighborRungDifference) {

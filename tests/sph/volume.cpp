@@ -91,10 +91,10 @@ struct System {
         return int(position.size());
     }
 
-    double kernelSum(int i, double supportRadius) const {
+    double kernelSum(int i, double smoothingLength) const {
         double sum = 0.0;
         for (int j = 0; j < size(); ++j) {
-            double const q = std::sqrt((position[i] - position[j]).squaredNorm()) / supportRadius;
+            double const q = std::sqrt((position[i] - position[j]).squaredNorm()) / smoothingLength;
             sum += q < 1.0 ? radial_kernel::value(table, q) : 0.0;
         }
         return sum;
@@ -174,10 +174,10 @@ struct System {
         return total;
     }
 
-    double gradientFactor(double radius, double supportRadius) const {
-        double const q = radius / supportRadius;
+    double gradientFactor(double radius, double smoothingLength) const {
+        double const q = radius / smoothingLength;
         return q < 1.0 ? sph_volume::kernelGradientFactor(
-                             radial_kernel::derivative(table, q), 1.0 / supportRadius, radius) :
+                             radial_kernel::derivative(table, q), 1.0 / smoothingLength, radius) :
                          0.0;
     }
 
@@ -335,12 +335,12 @@ TEST(SphVolume, WeightedVolumeAndConstraintDerivatives) {
     for (int i = 0; i < system.size(); i += 5) {
         double const support = system.support[i];
         auto const sums = system.sums(i);
-        auto const direct = [&](double supportRadius, bool weighted) {
+        auto const direct = [&](double smoothingLength, bool weighted) {
             double sum = 0.0;
             for (int j = 0; j < system.size(); ++j) {
                 Vector const separation = system.position[i] - system.position[j];
                 sum += (weighted ? system.weight[j] : 1.0) *
-                    kernel(system.table, std::sqrt(separation.squaredNorm()), supportRadius);
+                    kernel(system.table, std::sqrt(separation.squaredNorm()), smoothingLength);
             }
             return sum;
         };

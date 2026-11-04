@@ -22,7 +22,7 @@ struct DensityKernelTable {
     double changePoints[kMaximumPieces + 1]{};
     double coefficients[kMaximumPieces][kMaximumDegree + 1]{};
     double derivativeCoefficients[kMaximumPieces][kMaximumDegree]{};
-    double supportRadiusPerEffectiveRadius = 0;
+    double smoothingLengthPerEffectiveRadius = 0;
 };
 
 template <size_t dimension>
@@ -147,7 +147,7 @@ constexpr DensityKernelTable<dimension> makeDensityKernelTable(KernelSpec spec) 
         return DensityKernelTable<dimension>{};
     }
     result.degree = degree;
-    result.supportRadiusPerEffectiveRadius = static_cast<double>(support);
+    result.smoothingLengthPerEffectiveRadius = static_cast<double>(support);
     for (int piece = 0; piece < result.pieceCount; ++piece) {
         double const width = result.changePoints[piece + 1] - result.changePoints[piece];
         for (int i = 0; i <= degree; ++i) {

@@ -17,7 +17,7 @@ force. It is the polynomial degree on each span for a spline. There is no
 degree-nine Wendland or Ferrers member in these families: their next members
 have degrees eleven and ten. Unsupported family/degree combinations are rejected.
 
-The degree-2 member is the quadratic spline (M3). With `q = r/supportRadius`,
+The degree-2 member is the quadratic spline (M3). With `q = r/smoothingLength`,
 its normalized three-dimensional density is `W(r,H) = H^-3 w(q)`, where
 
 \[
@@ -74,12 +74,12 @@ higher moments. Gravity's effective radius is computed from its equivalent mass
 density.
 
 The compact support radius, \(R_{\mathrm{sup}}\), is the outer boundary of the
-kernel. Internally the radial argument is `q = r/supportRadius` and the dimensional
-density is `supportRadius^-3` times the tabulated shape. The table computes
-`supportRadiusPerEffectiveRadius = supportRadius/effectiveRadius` from its
+kernel. Internally the radial argument is `q = r/smoothingLength` and the dimensional
+density is `smoothingLength^-3` times the tabulated shape. The table computes
+`smoothingLengthPerEffectiveRadius = smoothingLength/effectiveRadius` from its
 moments. Some 3D conversions are:
 
-| Kernel | `supportRadius/effectiveRadius` |
+| Kernel | `smoothingLength/effectiveRadius` |
 | --- | ---: |
 | Quadratic spline (M3) | `sqrt(135/52) = 1.6112584666` |
 | Cubic spline | `sqrt(10/3) = 1.8257418584` |
@@ -92,10 +92,10 @@ The accepted radius options are:
 
 | Purpose | Effective-radius key | Support-radius key | Units and kernel |
 | --- | --- | --- | --- |
-| Fixed comoving gravity | `gravity.effectiveRadius` | `gravity.supportRadius` | Initial reference spacings; gravity kernel |
-| Imposed central force | `hydro.centralEffectiveRadius` | `hydro.centralSupportRadius` | Box units; gravity kernel |
-| SPH minimum | `hydro.minEffectiveRadius` | `hydro.minSupportRadius` | Initial interparticle spacings; hydro kernel |
-| SPH maximum | `hydro.maxEffectiveRadius` | `hydro.maxSupportRadius` | Initial interparticle spacings; hydro kernel |
+| Fixed comoving gravity | `gravity.effectiveRadius` | `gravity.smoothingLength` | Initial reference spacings; gravity kernel |
+| Imposed central force | `hydro.centralEffectiveRadius` | `hydro.centralSmoothingLength` | Box units; gravity kernel |
+| SPH minimum | `hydro.minEffectiveRadius` | `hydro.minSmoothingLength` | Initial interparticle spacings; hydro kernel |
+| SPH maximum | `hydro.maxEffectiveRadius` | `hydro.maxSmoothingLength` | Initial interparticle spacings; hydro kernel |
 
 Gravity's reference spacing is `numberOfParticles^-1/3` in box units, preserving
 the existing radius-input convention. Cosmological SPH runs use
@@ -119,7 +119,7 @@ SPH adapts and stores each particle's support radius because neighbor searches
 must reach the support boundary. Its minimum and maximum bounds can use either
 representation. The maximum support remains capped at half the box. Timesteps
 use effective radius, computed as
-`supportRadius / supportRadiusPerEffectiveRadius`; force and neighbor evaluation
+`smoothingLength / smoothingLengthPerEffectiveRadius`; force and neighbor evaluation
 use support radius. Checkpoint field order and stored radius units are unchanged.
 
 The smoothing solve retains the kernel-weighted target
@@ -160,7 +160,7 @@ constexpr auto kTwentyDimensional = radial_kernel::makeDensityKernelTable<20>(
 
 These tables contain the same coefficient/change-point representation and work
 with the overloaded scalar, SIMD, and CUDA `value` and `derivative` evaluators.
-The normalization is `supportRadius^-dimension`, and their effective radius uses
+The normalization is `smoothingLength^-dimension`, and their effective radius uses
 `sigma^2 = integral(r*r*W)/dimension`. Gravitational force and potential remain
 explicitly three-dimensional and accept the production `KernelTable` only.
 
@@ -204,7 +204,7 @@ equal large powers near the support boundary.
 
 Gas and dark matter use the same selected gravity kernel and one fixed
 comoving support radius. Set that radius with `gravity.effectiveRadius`,
-`gravity.supportRadius`, or the legacy effective-radius alias `gravity.softening`.
+`gravity.smoothingLength`, or the legacy effective-radius alias `gravity.softening`.
 The configured radius remains constant in comoving coordinates during evolution;
 its physical length scales with the cosmological scale factor. Gravity does not
 solve a neighbor constraint or use the gas smoothing radius.
@@ -260,7 +260,7 @@ old convention. A change of kernel shape is a separate physical choice, not a
 unit conversion.
 
 Viscosity uses a fixed reference factor `sqrt(5/6)` times the mean SPH effective
-radius. This equals Monaghan's `supportRadius/2` for the cubic and preserves the meaning of
+radius. This equals Monaghan's `smoothingLength/2` for the cubic and preserves the meaning of
 the existing cubic `viscosityAlpha`, `viscosityBeta`, and regularization settings.
 The hydro acceleration limit additionally retains a fixed reference calibration
 `0.7115965735877551` multiplying gravity eta, preserving the historical

@@ -51,7 +51,7 @@ std::pair<Vector<double>, Array<Vector<double>, kDimensions>> gravityAnalyticCal
     auto forceZOwner = allocate(devGz, numberOfSinks * sizeof(double));
     Vector<double> zero(numberOfSinks, 0.0);
     Vector<double> initialPotential(
-        numberOfSinks, hpxRank() == 0 ? selfPhi() / getOptions().gravity.supportRadius : 0.0);
+        numberOfSinks, hpxRank() == 0 ? selfPhi() / getOptions().gravity.smoothingLength : 0.0);
     {
         CudaStream copies(cudaGetDevice());
         copies.copyAsync(devPhi, initialPotential.data(), numberOfSinks * sizeof(double),
@@ -108,7 +108,7 @@ std::pair<Vector<double>, Array<Vector<double>, kDimensions>> gravityAnalyticCal
                 analyticGravityKernel<<<numberOfSinks, kAnalyticBlockSize, 0,
                     streams[j]->nativeHandle()>>>(devSinkx, devSinky, devSinkz, devSrcx + begin,
                     devSrcy + begin, devSrcz + begin, end - begin, devPhi, devGx, devGy, devGz,
-                    getOptions().gravity.supportRadius);
+                    getOptions().gravity.smoothingLength);
                 streams[j]->checkLaunch();
             }
             for (auto const& stream : streams) {

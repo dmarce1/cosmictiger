@@ -205,7 +205,7 @@ KickParameters makeKickParams() {
     p.a = 1.0;
     p.t0 = 0.001;
     p.theta = 0.5;
-    p.gravitySupportRadius = getOptions().gravity.supportRadius;
+    p.gravitySmoothingLength = getOptions().gravity.smoothingLength;
     p.eta = getOptions().gravity.timestepEta;
     p.gm = kGravityScale;
     p.velInit = false;
@@ -297,7 +297,7 @@ double integrateReference(Function function, double begin, double end) {
 
 void softenedPairReference(double separation, double& inverseCube, double& inverseRadius) {
     auto const& kernel = selectedGravityKernel();
-    double const support = getOptions().gravity.supportRadius;
+    double const support = getOptions().gravity.smoothingLength;
     double const smoothingNormalizedRadius = separation / support;
     double const fourPi = 4.0 * std::numbers::pi;
     // Integrate the density independently of the force/potential antiderivative tables.
@@ -316,7 +316,7 @@ void softenedPairReference(double separation, double& inverseCube, double& inver
 }
 
 void verifyBhPotentials(bool useCuda) {
-    double const separation = 0.25 * getOptions().gravity.supportRadius;
+    double const separation = 0.25 * getOptions().gravity.smoothingLength;
     DeviceVector<Vector3<float>> sources(2);
     for (int dim = 0; dim < kDimensions; ++dim) {
         sources[0][dim] = 0.375;
@@ -350,16 +350,17 @@ void verifyBhPotentials(bool useCuda) {
 }
 
 void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
-    double const nominalSeparation = softened ? 0.25 * getOptions().gravity.supportRadius : 0.25;
+    double const nominalSeparation = softened ? 0.25 * getOptions().gravity.smoothingLength : 0.25;
     initializePair(nominalSeparation);
     float const gasMass = particlesMass(sphParticlesParticleIndex(0));
     sphParticlesSmoothingLength(0) = hydroSupport;
-    auto const built = treeCreate(TreeCreateParameters(0, 0.5, getOptions().gravity.supportRadius));
+    auto const built =
+        treeCreate(TreeCreateParameters(0, 0.5, getOptions().gravity.smoothingLength));
     verifyMappings();
     requireClose("root mixed mass", nodeMass(treeGetNode(built.id)),
         getOptions().initial.darkMatterMass + gasMass);
     requireClose("gravity tree support is independent of hydro smoothing",
-        built.maxGravitySupportRadius, getOptions().gravity.supportRadius);
+        built.maxGravitySmoothingLength, getOptions().gravity.smoothingLength);
     ParticleInteger const gas = sphParticlesParticleIndex(0);
     ParticleInteger const darkMatterIndex = 1 - gas;
     double const separation = particlesPos(kXDimension, darkMatterIndex).toDouble() -
@@ -377,7 +378,7 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
         double const expected =
             (particlesIsSph(sink) ? 1.0 : -1.0) * sourceMass * separation * inverseCube;
         ForceVectors direct(1);
-        cpuGravityPp(direct, true, self, sources, getOptions().gravity.supportRadius);
+        cpuGravityPp(direct, true, self, sources, getOptions().gravity.smoothingLength);
         requireClose("CPU particle-particle mass", direct.gx[0], expected);
         requireClose("CPU particle-particle potential", direct.phi[0], -sourceMass * inverseRadius);
         if (!softened) {
@@ -417,8 +418,8 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
     }
     auto params = makeKickParams();
     double const darkMatterAcceleration = kGravityScale * gasMass * separation * inverseCube;
-    double const gravityEffectiveRadius = getOptions().gravity.supportRadius /
-        selectedGravityKernel().supportRadiusPerEffectiveRadius;
+    double const gravityEffectiveRadius = getOptions().gravity.smoothingLength /
+        selectedGravityKernel().smoothingLengthPerEffectiveRadius;
     double const darkMatterTimestep =
         params.eta * std::sqrt(gravityEffectiveRadius / darkMatterAcceleration);
     params.t0 = 2.2 * darkMatterTimestep;
@@ -812,7 +813,7 @@ void runSphMidpointPairRegression(bool useCuda) {
     options.hydro.bulkViscosityCoefficient = 1.0;
     options.hydro.vonNeumannRichtmyerCoefficient = 2.0;
     options.hydro.balsaraSwitch = false;
-    options.hydro.minSupportRadius = options.hydro.maxSupportRadius = 0.25;
+    options.hydro.minSmoothingLength = options.hydro.maxSmoothingLength = 0.25;
     options.hydro.damping = options.hydro.centralAcceleration = 0.0;
     options.hydro.yAcceleration = options.hydro.zPlaneAcceleration = 0.0;
     options.initial.numberOfParticles = 2;
@@ -913,7 +914,7 @@ void sphGravityTest() {
     opts.initial.gasMass = 0.25;
     opts.compute.bucketSize = 1;
     opts.initial.numberOfParticles = 2 * hpxSize();
-    opts.gravity.supportRadius = 0.01;
+    opts.gravity.smoothingLength = 0.01;
     setOptions(opts);
     verifyKernelSelections();
     if (hpxSize() == 1) {
@@ -976,7 +977,7 @@ void sphGravityTest() {
         future.get();
     }
     if (hpxSize() > 1) {
-        treeCreate(TreeCreateParameters(0, 0.5, getOptions().gravity.supportRadius));
+        treeCreate(TreeCreateParameters(0, 0.5, getOptions().gravity.smoothingLength));
         pending.clear();
         for (auto const& locality : hpxLocalities()) {
             pending.push_back(hpx::async<ValidateSphRemoteTreeCacheAction>(locality));

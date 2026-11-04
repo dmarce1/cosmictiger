@@ -57,7 +57,7 @@ CUDA_EXPORT inline Real evolvedBulkViscosityCoefficient(Real bulkViscosityCoeffi
  *   ξ_i = |∇·v_i|²/(|∇·v_i|² + |∇×v_i|² + 10⁻⁴(c_i/h_i)²).             (19)
  * The paper uses τ_i = 10h_i/v_dec; the configurable form is h_i/(2ℓ v_dec), ℓ = 0.05.
  * Symbol directory in the stored cosmological variables:
- *   h_i → supportRadius; a c_i → soundSpeed; a v_dec → signalSpeed
+ *   h_i → smoothingLength; a c_i → soundSpeed; a v_dec → signalSpeed
  *   α_max → maximumBulkViscosityCoefficient; α_tar,i → result.targetBulkViscosityCoefficient
  *   a → scaleFactor; a³ ä → expansionAcceleration; ℓ → decayCoefficient
  *   a² ∇_r v_phys → velocityGradient; ∇_x F → accelerationGradient
@@ -71,15 +71,15 @@ CUDA_EXPORT inline Real evolvedBulkViscosityCoefficient(Real bulkViscosityCoeffi
 template <typename Real, typename Counter>
 CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnosticsFromGradient(
     Real const (&velocityGradient)[3][3], Real scaleFactor, Real divergenceDerivative,
-    Real supportRadius, Real soundSpeed, Real signalSpeed, Real maximumBulkViscosityCoefficient,
+    Real smoothingLength, Real soundSpeed, Real signalSpeed, Real maximumBulkViscosityCoefficient,
     Real decayCoefficient, Counter& floatingPointOperations) {
     cullen_and_dehnen::Result<Real> result{};
     result.limiter = Real(0);
-    if (!(scaleFactor > Real(0)) || !(supportRadius > Real(0))) {
+    if (!(scaleFactor > Real(0)) || !(smoothingLength > Real(0))) {
         return result;
     }
     result.inverseDecayTime =
-        Real(2) * decayCoefficient * signalSpeed / (scaleFactor * supportRadius);
+        Real(2) * decayCoefficient * signalSpeed / (scaleFactor * smoothingLength);
     floatingPointOperations += 4;
     Real const divergence =
         velocityGradient[0][0] + velocityGradient[1][1] + velocityGradient[2][2];
@@ -89,13 +89,13 @@ CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnosticsFromGradient(
     Real const curlSquared = curlX * curlX + curlY * curlY + curlZ * curlZ;
     result.divergence = divergence / (scaleFactor * scaleFactor);
     Real const shockIndicator = divergenceDerivative < Real(0) ? -divergenceDerivative : Real(0);
-    Real const radiusSquaredShock = supportRadius * supportRadius * shockIndicator;
+    Real const radiusSquaredShock = smoothingLength * smoothingLength * shockIndicator;
     Real const targetDenominator = radiusSquaredShock + soundSpeed * soundSpeed;
     result.targetBulkViscosityCoefficient = targetDenominator > Real(0) ?
         maximumBulkViscosityCoefficient * radiusSquaredShock / targetDenominator :
         Real(0);
     Real const divergenceSquared = divergence * divergence;
-    Real const soundSpeedOverRadius = soundSpeed / supportRadius;
+    Real const soundSpeedOverRadius = soundSpeed / smoothingLength;
     Real const limiterDenominator = divergenceSquared + curlSquared +
         Real(1.0e-4) * soundSpeedOverRadius * soundSpeedOverRadius;
     result.limiter =
@@ -108,7 +108,7 @@ CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnosticsFromGradient(
 template <typename Real, typename Counter>
 CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnostics(
     cullen_and_dehnen::GradientSums<Real> const& sums, Real scaleFactor, Real expansionAcceleration,
-    Real supportRadius, Real soundSpeed, Real signalSpeed, Real maximumBulkViscosityCoefficient,
+    Real smoothingLength, Real soundSpeed, Real signalSpeed, Real maximumBulkViscosityCoefficient,
     Real decayCoefficient, Counter& floatingPointOperations) {
     Real velocityGradient[3][3];
     Real accelerationGradient[3][3];
@@ -122,7 +122,7 @@ CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnostics(
         }
     }
     floatingPointOperations += 26;
-    return diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, supportRadius,
+    return diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, smoothingLength,
         soundSpeed, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient,
         floatingPointOperations);
 }
@@ -134,7 +134,7 @@ template <typename Real, typename Counter>
 CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnosticsFromHistory(
     cullen_and_dehnen::VelocityGradientSums<Real> const& sums, Real scaleFactor,
     Float16Storage const& state, double sampleInterval, double previousSampleTimestep,
-    Real supportRadius, Real soundSpeed, Real signalSpeed, Real maximumBulkViscosityCoefficient,
+    Real smoothingLength, Real soundSpeed, Real signalSpeed, Real maximumBulkViscosityCoefficient,
     Real decayCoefficient, Counter& floatingPointOperations) {
     Real velocityGradient[3][3];
     int const rank = cullen_and_dehnen::reconstructVelocityGradient(
@@ -146,8 +146,8 @@ CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnosticsFromHistory(
         Real(0) :
         cullen_and_dehnen::divergenceTimeDerivative(divergence, scaleFactor, state, sampleInterval,
             previousSampleTimestep, floatingPointOperations);
-    auto result = diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, supportRadius,
-        soundSpeed, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient,
+    auto result = diagnosticsFromGradient(velocityGradient, scaleFactor, derivative,
+        smoothingLength, soundSpeed, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient,
         floatingPointOperations);
     result.divergence = divergence;
     return result;
@@ -156,11 +156,11 @@ CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnosticsFromHistory(
 template <typename Real>
 CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnostics(
     cullen_and_dehnen::GradientSums<Real> const& sums, Real scaleFactor, Real expansionAcceleration,
-    Real supportRadius, Real soundSpeed, Real signalSpeed, Real maximumBulkViscosityCoefficient,
+    Real smoothingLength, Real soundSpeed, Real signalSpeed, Real maximumBulkViscosityCoefficient,
     Real decayCoefficient) {
     unsigned long long operations = 0;
-    return hu_etal::diagnostics(sums, scaleFactor, expansionAcceleration, supportRadius, soundSpeed,
-        signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient, operations);
+    return hu_etal::diagnostics(sums, scaleFactor, expansionAcceleration, smoothingLength,
+        soundSpeed, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient, operations);
 }
 
 }    // namespace hu_etal

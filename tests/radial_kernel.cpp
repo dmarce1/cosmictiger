@@ -118,7 +118,7 @@ void testTable(KernelSpec spec) {
         integrate(table, 0, 1, [&](double q) { return fourPi * q * q * q * q * density(q); });
     close(mass, 1, 4e-14, "unit mass");
     close(secondMoment,
-        3 / (4 * table.supportRadiusPerEffectiveRadius * table.supportRadiusPerEffectiveRadius),
+        3 / (4 * table.smoothingLengthPerEffectiveRadius * table.smoothingLengthPerEffectiveRadius),
         4e-14, "variance width");
     close(radial_kernel::forceFactor(table, 0.0), fourPi * density(0) / 3, 4e-14,
         "central harmonic force");
@@ -194,7 +194,7 @@ void testTable(KernelSpec spec) {
         close(radial_kernel::potential(table, q), 1 / q, 4e-15, "Newtonian exterior potential");
     }
     if (spec.family == Family::Ferrers) {
-        close(table.supportRadiusPerEffectiveRadius, std::sqrt(spec.degree + 5.0) / 2, 4e-15,
+        close(table.smoothingLengthPerEffectiveRadius, std::sqrt(spec.degree + 5.0) / 2, 4e-15,
             "Ferrers width conversion");
     }
 #if defined(RADIAL_KERNEL_TEST_SIMD)
@@ -230,7 +230,7 @@ void testTable(KernelSpec spec) {
 // Closed forms for the normalized quadratic (M3) spline and its spherical
 // gravity integrals, independent of the Bernstein table construction.
 void testQuadraticSpline() {
-    close(kQuadratic.supportRadiusPerEffectiveRadius, std::sqrt(135.0 / 52), 4e-15,
+    close(kQuadratic.smoothingLengthPerEffectiveRadius, std::sqrt(135.0 / 52), 4e-15,
         "quadratic width conversion");
     double const normalization = 81.0 / (16 * std::numbers::pi);
     for (double const q : {0.0, 1e-30, 0.1, std::nextafter(1.0 / 3, 0.0), 1.0 / 3,
@@ -263,11 +263,11 @@ void testQuadraticSpline() {
 }
 
 void testLegacyKernels() {
-    close(kCubic.supportRadiusPerEffectiveRadius, std::sqrt(10.0 / 3), 4e-15,
+    close(kCubic.smoothingLengthPerEffectiveRadius, std::sqrt(10.0 / 3), 4e-15,
         "cubic width conversion");
-    close(radial_kernel::makeKernelTable({Family::Wendland, 5}).supportRadiusPerEffectiveRadius,
+    close(radial_kernel::makeKernelTable({Family::Wendland, 5}).smoothingLengthPerEffectiveRadius,
         std::sqrt(15.0) / 2, 4e-15, "Wendland C2 width");
-    close(radial_kernel::makeKernelTable({Family::Wendland, 8}).supportRadiusPerEffectiveRadius,
+    close(radial_kernel::makeKernelTable({Family::Wendland, 8}).smoothingLengthPerEffectiveRadius,
         std::sqrt(39.0 / 8), 4e-15, "Wendland C4 width");
     for (int i = 0; i <= 100; ++i) {
         double const q = static_cast<double>(i) / 100;

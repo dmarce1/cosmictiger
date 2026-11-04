@@ -15,13 +15,13 @@ void testDeferredSourceCompletion() {
     Fixture fixture(2);
     auto& data = fixture.data_;
     auto& parameters = fixture.params_;
-    parameters.minimumSupportRadius = parameters.maximumSupportRadius = 0.35f;
+    parameters.minimumSmoothingLength = parameters.maximumSmoothingLength = 0.35f;
     parameters.uniformAccelerationY = 0.375f;
     parameters.zPlaneAcceleration = 0.25f;
     parameters.velocityDampingRate = 0.125f;
     parameters.expansionRate = 0.2f;
     data.centralAcceleration = 0.003f;
-    data.centralSupportRadius = 0.2f;
+    data.centralSmoothingLength = 0.2f;
     data.selfGravityEnabled = true;
     std::array<Vector3<float>, 2> gravity;
     for (int i = 0; i < 2; ++i) {
@@ -64,7 +64,7 @@ void testDeferredSourceCompletion() {
             Vector3<float>(data.sourceVelocityX[source], data.sourceVelocityY[source],
                 data.sourceVelocityZ[source]),
             data.sinkAccelerations[sink], gravity[i], data.centralAcceleration,
-            data.centralSupportRadius, flops);
+            data.centralSmoothingLength, flops);
         for (int dim = 0; dim < kDimensions; ++dim) {
             if (std::abs(completed[dim] - expectedAcceleration[i][dim]) >
                 1.0e-6f * std::max(1.0f, std::abs(expectedAcceleration[i][dim]))) {

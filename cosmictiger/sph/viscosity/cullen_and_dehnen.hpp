@@ -300,7 +300,7 @@ CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
  * Production history instead supplies V′ = a² ∇_r v_pec and differences its trace
  * before unit conversion; the target and limiter retain the same scaled form.
  * Symbol directory:
- *   a → scaleFactor/localScaleFactor; h_i → supportRadius/kernelSupportRadius
+ *   a → scaleFactor/localScaleFactor; h_i → smoothingLength/kernelSmoothingLength
  *   v_sig,i → signalSpeed/localSignalSpeed; ℓ → decayCoefficient
  *   α_max → maximumBulkViscosityCoefficient; α_loc,i → result.targetBulkViscosityCoefficient
  *   R_i → signAverage/divergenceSignAverage; ξ_i → shearLimiter
@@ -316,18 +316,18 @@ CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
 // clang-format on
 template <typename Real, typename Counter>
 CUDA_EXPORT inline Result<Real> diagnosticsFromGradient(Real const (&velocityGradientMatrix)[3][3],
-    Real scaleFactor, Real divergenceDerivative, Real signAverage, Real supportRadius,
+    Real scaleFactor, Real divergenceDerivative, Real signAverage, Real smoothingLength,
     Real signalSpeed, Real maximumBulkViscosityCoefficient, Real decayCoefficient,
     Counter& floatingPointOperations) {
     Real const localScaleFactor = scaleFactor;
-    Real const kernelSupportRadius = supportRadius;
+    Real const kernelSmoothingLength = smoothingLength;
     Real const localSignalSpeed = signalSpeed;
     Result<Real> result{};
-    if (!(localScaleFactor > Real(0)) || !(kernelSupportRadius > Real(0))) {
+    if (!(localScaleFactor > Real(0)) || !(kernelSmoothingLength > Real(0))) {
         return result;
     }
     result.inverseDecayTime =
-        Real(2) * decayCoefficient * localSignalSpeed / (localScaleFactor * kernelSupportRadius);
+        Real(2) * decayCoefficient * localSignalSpeed / (localScaleFactor * kernelSmoothingLength);
     floatingPointOperations += 4;
     Real const velocityDivergence =
         velocityGradientMatrix[0][0] + velocityGradientMatrix[1][1] + velocityGradientMatrix[2][2];
@@ -354,7 +354,7 @@ CUDA_EXPORT inline Result<Real> diagnosticsFromGradient(Real const (&velocityGra
     Real const shockIndicator =
         shearLimiter * (divergenceDerivative < Real(0) ? -divergenceDerivative : Real(0));
     Real const radiusSquaredShockIndicator =
-        kernelSupportRadius * kernelSupportRadius * shockIndicator;
+        kernelSmoothingLength * kernelSmoothingLength * shockIndicator;
     Real const denominator = localSignalSpeed * localSignalSpeed + radiusSquaredShockIndicator;
     result.targetBulkViscosityCoefficient = denominator > Real(0) ?
         maximumBulkViscosityCoefficient * radiusSquaredShockIndicator / denominator :
@@ -366,7 +366,7 @@ CUDA_EXPORT inline Result<Real> diagnosticsFromGradient(Real const (&velocityGra
 
 template <typename Real, typename Counter>
 CUDA_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums, Real scaleFactor,
-    Real expansionAcceleration, Real signAverage, Real supportRadius, Real signalSpeed,
+    Real expansionAcceleration, Real signAverage, Real smoothingLength, Real signalSpeed,
     Real maximumBulkViscosityCoefficient, Real decayCoefficient, Counter& floatingPointOperations) {
     Real velocityGradient[3][3];
     Real accelerationGradient[3][3];
@@ -380,7 +380,7 @@ CUDA_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums, Real
     }
     floatingPointOperations += 25;
     return diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, signAverage,
-        supportRadius, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient,
+        smoothingLength, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient,
         floatingPointOperations);
 }
 
@@ -388,7 +388,7 @@ CUDA_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums, Real
 template <typename Real, typename Counter>
 CUDA_EXPORT inline Result<Real> diagnosticsFromHistory(VelocityGradientSums<Real> const& sums,
     Real scaleFactor, Float16Storage const& state, double sampleInterval,
-    double previousSampleTimestep, Real signAverage, Real supportRadius, Real signalSpeed,
+    double previousSampleTimestep, Real signAverage, Real smoothingLength, Real signalSpeed,
     Real maximumBulkViscosityCoefficient, Real decayCoefficient, Counter& floatingPointOperations) {
     Real velocityGradient[3][3];
     int const rank = reconstructVelocityGradient(sums, velocityGradient, floatingPointOperations);
@@ -400,7 +400,7 @@ CUDA_EXPORT inline Result<Real> diagnosticsFromHistory(VelocityGradientSums<Real
         divergenceTimeDerivative(divergence, scaleFactor, state, sampleInterval,
             previousSampleTimestep, floatingPointOperations);
     auto result = diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, signAverage,
-        supportRadius, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient,
+        smoothingLength, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient,
         floatingPointOperations);
     result.divergence = divergence;
     return result;
@@ -408,10 +408,10 @@ CUDA_EXPORT inline Result<Real> diagnosticsFromHistory(VelocityGradientSums<Real
 
 template <typename Real>
 CUDA_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums, Real scaleFactor,
-    Real expansionAcceleration, Real signAverage, Real supportRadius, Real signalSpeed,
+    Real expansionAcceleration, Real signAverage, Real smoothingLength, Real signalSpeed,
     Real maximumBulkViscosityCoefficient, Real decayCoefficient) {
     unsigned long long floatingPointOperations = 0;
-    return diagnostics(sums, scaleFactor, expansionAcceleration, signAverage, supportRadius,
+    return diagnostics(sums, scaleFactor, expansionAcceleration, signAverage, smoothingLength,
         signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient, floatingPointOperations);
 }
 

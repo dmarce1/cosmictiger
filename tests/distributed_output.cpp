@@ -264,8 +264,9 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
             nearDistributedOutput(value("vy"), -0.25 * scales.velocity, "y velocity conversion");
             nearDistributedOutput(value("vz"), 0.5 * scales.velocity, "z velocity conversion");
             nearDistributedOutput(value("rung"), global % 5, "rung association");
-            double const supportRadius = (0.03125 + global / 4096.0) * scales.length;
-            nearDistributedOutput(value("r"), supportRadius, "SPH support radius remains a field");
+            double const smoothingLength = (0.03125 + global / 4096.0) * scales.length;
+            nearDistributedOutput(
+                value("r"), smoothingLength, "SPH support radius remains a field");
             double const mass = particleMass;
             nearDistributedOutput(mass, 0.25, "each output particle retains its full mass");
             totalMass += mass;

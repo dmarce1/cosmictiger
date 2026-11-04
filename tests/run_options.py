@@ -158,10 +158,10 @@ def main():
                 "gravity.openingAngle", "gravity.openingSchedule",
                 "gravity.errorInterval", "gravity.errorSampleSize",
                 "hydro.kernelFamily", "hydro.kernelDegree",
-                "gravity.effectiveRadius", "gravity.supportRadius",
+                "gravity.effectiveRadius", "gravity.smoothingLength",
                 "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius",
-                "hydro.minSupportRadius", "hydro.maxSupportRadius",
-                "hydro.centralEffectiveRadius", "hydro.centralSupportRadius",
+                "hydro.minSmoothingLength", "hydro.maxSmoothingLength",
+                "hydro.centralEffectiveRadius", "hydro.centralSmoothingLength",
                 "hydro.zPlaneAcceleration",
                 "output.silo", "output.siloInterval", "output.directory",
                 "output.units", "output.frame",
@@ -206,14 +206,14 @@ def main():
             "--analysis.power=false", "--analysis.groups=false", "--analysis.tracers=false",
             "--lightcone.enabled=false", f"--output.directory={startupDirectory.resolve()}",
             "--units.boxLength=20", "--compute.sphBucketSize=0", "--cosmology.omegaLambda=auto",
-            "--hydro.centralSupportRadius=0.02", "--hydro.minEffectiveRadius=0.001",
-            "--hydro.maxSupportRadius=1000", "--starFormation.seed=18446744073709551615",
+            "--hydro.centralSmoothingLength=0.02", "--hydro.minEffectiveRadius=0.001",
+            "--hydro.maxSmoothingLength=1000", "--starFormation.seed=18446744073709551615",
             "--analysis.saveForce=true"])
         assertStartupOptions(output, hydroMethod)
         assertNumericSetting(output, "compute.sphBucketSize", 106)
-        assertNumericSetting(output, "hydro.maxSupportRadius", 4)
+        assertNumericSetting(output, "hydro.maxSmoothingLength", 4)
         assertNumericSetting(output, "units.boxLength", 20)
-        assertNumericSetting(output, "hydro.centralSupportRadius", 0.02)
+        assertNumericSetting(output, "hydro.centralSmoothingLength", 0.02)
         assertNumericSetting(output, "hydro.minEffectiveRadius", 0.001)
         for key, expected in (("starFormation.seed", "18446744073709551615"),
                               ("analysis.saveForce", "T"), ("analysis.saveAcceleration", "F"),
@@ -297,7 +297,7 @@ mapSize = 8
                 "hydro.viscosityAlphaMaxHu": 0.9, "hydro.viscosityDecayHu": 0.07,
                 "hydro.gamma": 1.4, "hydro.neighborNumber": 48.0,
                 "hydro.cfl": 0.3, "hydro.zPlaneAcceleration": 0.25, "lightcone.mapSize": 8.0,
-                "hydro.minSupportRadius": 1.0e-6, "hydro.maxSupportRadius": 4.0,
+                "hydro.minSmoothingLength": 1.0e-6, "hydro.maxSmoothingLength": 4.0,
                 "gravity.kernelDegree": 4.0,
                 "compute.bucketSize": 64.0, "compute.sphBucketSize": 73.0,
                 "compute.sphTreeRebuildFraction": 0.5}
@@ -758,10 +758,10 @@ mapSize = 8
                 raise RuntimeError(f"{label}: missing PMMM mesh diagnostic: {diagnostic}")
         # The support radius is normalized by the 8**3 fixture; width/mesh = 0.25.
         radius_options = metadata_options + ["--gravity.meshSize=8"]
-        run("pmmm_support_within_width", radius_options + ["--gravity.supportRadius=1.9"])
+        run("pmmm_support_within_width", radius_options + ["--gravity.smoothingLength=1.9"])
         rejected = run("pmmm_support_beyond_width", radius_options + [
-            "--gravity.supportRadius=2.1"], success=False)
-        if ("PMMM requires the normalized gravity.supportRadius to be no larger than "
+            "--gravity.smoothingLength=2.1"], success=False)
+        if ("PMMM requires the normalized gravity.smoothingLength to be no larger than "
                 "gravity.pmmmNearWidth/gravity.meshSize") not in rejected:
             raise RuntimeError("PMMM support validation lacked its near-width diagnostic")
         for scenario in ("cosmology", "plummer"):
@@ -799,7 +799,7 @@ mapSize = 8
             for index, invalid in enumerate((["--gravity.meshSize=32", "--gravity.p3mSplitCells=0"],
                                              ["--gravity.meshSize=32", "--gravity.p3mCutoff=-1"],
                                              ["--gravity.meshSize=16", "--gravity.p3mCutoff=4.5"],
-                                             ["--gravity.meshSize=32", "--gravity.supportRadius=8"])):
+                                             ["--gravity.meshSize=32", "--gravity.smoothingLength=8"])):
                 run(f"p3m_invalid_{index}", metadata_options + invalid, success=False, pmmm_mesh=None)
     for selected_field in ("saveAcceleration", "savePotential"):
         output = run(f"diagnostic_{selected_field}", metadata_options + [
@@ -818,7 +818,7 @@ mapSize = 8
                 ["--gravity.meshSize=4", "--gravity.pmmmNearWidth=3"],
                 ["--gravity.meshSize=8", "--gravity.pmmmNearWidth=4"],
                 ["--gravity.meshSize=2", "--gravity.pmmmNearWidth=1"],
-                ["--gravity.meshSize=8", "--gravity.supportRadius=8"],
+                ["--gravity.meshSize=8", "--gravity.smoothingLength=8"],
                 ["--gravity.meshSize=8", "--gravity.pmmmBatchParticles=0"],
                 ["--gravity.meshSize=8", "--gravity.pmmmBatchParticles=-1"],
                 ["--gravity.meshSize=2147483647"],
@@ -903,14 +903,14 @@ mapSize = 8
             if expected not in output:
                 raise RuntimeError("midpoint deferred source rejection lacked guidance")
     if sph_controls_available:
-        if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_default, re.MULTILINE):
-            raise RuntimeError("Balsara switch must default to enabled for Morris-Monaghan")
+        if not re.search(r"^hydro\.balsaraSwitch\s*:\s*F\s*$", balsara_default, re.MULTILINE):
+            raise RuntimeError("Balsara switch must default to disabled for Hu et al.")
         balsara_override = run("balsara_cli_override", [f"--configuration={config.resolve()}",
                                                      "--hydro.balsaraSwitch=true"] + sph_control_options)
         if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_override, re.MULTILINE):
             raise RuntimeError("CLI hydro.balsaraSwitch did not override INI")
 
-        for output, expected_value in ((configured, "none"), (balsara_default, "morrisAndMonaghan")):
+        for output, expected_value in ((configured, "none"), (balsara_default, "hu_etal")):
             if not re.search(r"^hydro\.viscosityEvolution\s*:\s*" + expected_value + r"\s*$",
                              output, re.MULTILINE):
                 raise RuntimeError("unexpected hydro.viscosityEvolution setting")
@@ -1279,7 +1279,7 @@ mapSize = 8
             raise RuntimeError(f"missing warning that {ignoredKey} is ignored")
 
     def assertNoRadiusWarning(output):
-        radiusKeys = ("effectiveRadius", "EffectiveRadius", "supportRadius", "SupportRadius",
+        radiusKeys = ("effectiveRadius", "EffectiveRadius", "smoothingLength", "SmoothingLength",
                       "gravity.softening", "hydro.centralSoftening")
         if any("warning" in line.lower() and any(key in line for key in radiusKeys)
                for line in output.splitlines()):
@@ -1318,28 +1318,28 @@ mapSize = 8
                                    ("wendland", 5, math.sqrt(15) / 2)):
         common = metadata_options + [f"--gravity.kernelFamily={family}",
                                       f"--gravity.kernelDegree={degree}"]
-        for representation, value in (("effectiveRadius", 0.02), ("supportRadius", 0.02 * ratio)):
+        for representation, value in (("effectiveRadius", 0.02), ("smoothingLength", 0.02 * ratio)):
             output = run(f"radius_{family}_{degree}_{representation}", common + [
                 f"--gravity.{representation}={value}"])
             assertNumericSetting(output, "gravity.effectiveRadius", 0.02)
-            assertNumericSetting(output, "gravity.supportRadius", 0.02 * ratio)
+            assertNumericSetting(output, "gravity.smoothingLength", 0.02 * ratio)
             assertNoRadiusWarning(output)
 
     gravityRatio = 1.5
     hydroRatio = math.sqrt(10 / 3)
     radiusPairs = (
-        ("gravity.effectiveRadius", "gravity.supportRadius", 0.02, gravityRatio),
-        ("hydro.centralEffectiveRadius", "hydro.centralSupportRadius", 0.02, gravityRatio),
-        ("hydro.minEffectiveRadius", "hydro.minSupportRadius", 0.01, hydroRatio),
-        ("hydro.maxEffectiveRadius", "hydro.maxSupportRadius", 0.1, hydroRatio),
+        ("gravity.effectiveRadius", "gravity.smoothingLength", 0.02, gravityRatio),
+        ("hydro.centralEffectiveRadius", "hydro.centralSmoothingLength", 0.02, gravityRatio),
+        ("hydro.minEffectiveRadius", "hydro.minSmoothingLength", 0.01, hydroRatio),
+        ("hydro.maxEffectiveRadius", "hydro.maxSmoothingLength", 0.1, hydroRatio),
     )
     radiusConfig = args.workdir / "radius.ini"
     for effectiveKey, supportKey, effectiveRadius, ratio in radiusPairs:
-        supportRadius = effectiveRadius * ratio
-        conflictingSupport = 2 * supportRadius
-        for key, value in ((effectiveKey, effectiveRadius), (supportKey, supportRadius)):
+        smoothingLength = effectiveRadius * ratio
+        conflictingSupport = 2 * smoothingLength
+        for key, value in ((effectiveKey, effectiveRadius), (supportKey, smoothingLength)):
             output = run(f"radius_only_{key}", metadata_options + [f"--{key}={value}"])
-            assertNumericSetting(output, supportKey, supportRadius)
+            assertNumericSetting(output, supportKey, smoothingLength)
             assertNoRadiusWarning(output)
 
         # Explicit effective radii win across representations regardless of
@@ -1358,27 +1358,27 @@ mapSize = 8
             radiusConfig.write_text(configText)
             output = run(f"radius_precedence_{effectiveKey}_{sourceName}", metadata_options +
                          [f"--configuration={radiusConfig.resolve()}"] + cliOptions)
-            assertNumericSetting(output, supportKey, supportRadius)
+            assertNumericSetting(output, supportKey, smoothingLength)
             assertIgnoredOption(output, supportKey)
 
         # A losing support radius is ignored before physical validation.
         for invalidValue in ("0", "-1", "nan", "inf"):
             output = run(f"radius_ignored_{supportKey}_{invalidValue}", metadata_options +
                          [f"--{effectiveKey}={effectiveRadius}", f"--{supportKey}={invalidValue}"])
-            assertNumericSetting(output, supportKey, supportRadius)
+            assertNumericSetting(output, supportKey, smoothingLength)
             assertIgnoredOption(output, supportKey)
 
         # Ordinary CLI-over-INI precedence still applies within each key.
-        for key, value in ((effectiveKey, effectiveRadius), (supportKey, supportRadius)):
+        for key, value in ((effectiveKey, effectiveRadius), (supportKey, smoothingLength)):
             radiusConfig.write_text(f"{key} = {2 * value}\n")
             output = run(f"radius_same_key_{key}", metadata_options +
                          [f"--configuration={radiusConfig.resolve()}", f"--{key}={value}"])
-            assertNumericSetting(output, supportKey, supportRadius)
+            assertNumericSetting(output, supportKey, smoothingLength)
             assertNoRadiusWarning(output)
 
     for effectiveKey, supportKey, aliasKey in (
-            ("gravity.effectiveRadius", "gravity.supportRadius", "gravity.softening"),
-            ("hydro.centralEffectiveRadius", "hydro.centralSupportRadius", "hydro.centralSoftening")):
+            ("gravity.effectiveRadius", "gravity.smoothingLength", "gravity.softening"),
+            ("hydro.centralEffectiveRadius", "hydro.centralSmoothingLength", "hydro.centralSoftening")):
         # Legacy effective-radius aliases retain their meaning, and explicitly
         # supplied aliases also take precedence over support-radius inputs.
         output = run(f"radius_alias_{aliasKey}", metadata_options + [f"--{aliasKey}=0.02"])
@@ -1480,10 +1480,10 @@ mapSize = 8
     # and empty-string defaults without running its physical problem.
     root = Path(__file__).resolve().parents[1]
     optional_keys = {"compute.positionType", "compute.bucketSize",
-                     "gravity.effectiveRadius", "gravity.supportRadius",
+                     "gravity.effectiveRadius", "gravity.smoothingLength",
                      "gravity.method.near", "gravity.expansionDegree",
                      "units.boxLength",
-                     "hydro.balsaraSwitch", "hydro.centralEffectiveRadius", "hydro.centralSupportRadius",
+                     "hydro.balsaraSwitch", "hydro.centralEffectiveRadius", "hydro.centralSmoothingLength",
                      "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius"}
     public_keys = set(option_names) - {"help", "configuration"}
     preset_curvatures = {"critical.ini": 0.0}
@@ -1626,7 +1626,7 @@ mapSize = 8
         ("gamma_rounding", "--hydro.gamma=1.00000001", "single precision"),
         ("neighbors_rounding", "--hydro.neighborNumber=10.66666667", "single precision"),
         ("cfl_underflow", "--hydro.cfl=1e-100", "single precision"),
-        ("support_underflow", "--hydro.minSupportRadius=1e-100", "single precision"),
+        ("support_underflow", "--hydro.minSmoothingLength=1e-100", "single precision"),
         ("viscosity_alpha_max_hu", "--hydro.viscosityAlphaMaxHu=0", "hydro.viscosityAlphaMaxHu"),
         ("viscosity_decay_hu", "--hydro.viscosityDecayHu=0", "hydro.viscosityDecayHu"),
         ("viscosity_evolution", "--hydro.viscosityEvolution=unknown", "hydro.viscosityEvolution"),
@@ -1651,8 +1651,8 @@ mapSize = 8
         ("cfl_zero", "--hydro.cfl=0", "hydro.cfl"),
         ("cfl_large", "--hydro.cfl=1.1", "hydro.cfl"),
         ("neighbors", "--hydro.neighborNumber=10", "hydro.neighborNumber"),
-        ("min_radius", "--hydro.minSupportRadius=0", "hydro.minSupportRadius"),
-        ("max_radius", "--hydro.maxSupportRadius=1e-7", "support radii"),
+        ("min_radius", "--hydro.minSmoothingLength=0", "hydro.minSmoothingLength"),
+        ("max_radius", "--hydro.maxSmoothingLength=1e-7", "support radii"),
         ("chemistry", "--hydro.chemistry=true", "hydro.chemistry"),
         ("conduction", "--hydro.conduction=true", "hydro.conduction"),
         ("diffusion", "--hydro.diffusion=true", "hydro.diffusion"),
@@ -1695,7 +1695,7 @@ mapSize = 8
                 if diagnostic not in output:
                     raise RuntimeError(f"invalid {parameter} did not produce {diagnostic!r}")
     output = run("support_half_box", metadata_options + [
-                                      "--hydro.minSupportRadius=5"], success=False)
+                                      "--hydro.minSmoothingLength=5"], success=False)
     if "half the periodic box" not in output:
         raise RuntimeError("oversized minimum support radius was not rejected explicitly")
     print("Grouped CLI, complete INIs, Silo units/frames, and parameter bounds passed")

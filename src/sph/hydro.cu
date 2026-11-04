@@ -63,7 +63,7 @@ struct HydroWorkspace {
  * Symbol directory:
  *   a → parameters.scaleFactor; m_b → gasMass; γ → gasAdiabaticIndex (CPU), adiabaticIndex (CUDA)
  *   ρ_a, P_a, u_a → density, pressure, internalEnergy
- *   H_a, H_b → sinkKernelSupportRadius, neighborSupportRadius
+ *   H_a, H_b → sinkKernelSmoothingLength, neighborSmoothingLength
  *   r_ab, |r_ab| → separation, pairDistance; v_ab → velocityDifference
  *   ζ_a → gradHCorrection; Q_ab/m_a, Q_ba/m_a → sinkPressureCoefficient, neighborPressureCoefficient
  *   F_a, F_b → sinkGradientFactor, neighborGradientFactor
@@ -94,8 +94,8 @@ __global__ void sphCudaHydro(
     // Calibrate the hydro acceleration limit to the former cubic/Ferrers F4
     // defaults after gravity eta and smoothing lengths adopt the common width.
     constexpr float kHydroAccelerationScale = 0.7115965735877551f;
-    float const supportRadiusPerEffectiveRadius =
-        float(selectedHydroKernel().supportRadiusPerEffectiveRadius);
+    float const smoothingLengthPerEffectiveRadius =
+        float(selectedHydroKernel().smoothingLengthPerEffectiveRadius);
     flops.doublePrecision += 1;
     float const gasMass = data.gasMass;    // every gas particle has the same mass
     float const scaledGasMass = gasMass * inverseScaleFactor;
@@ -184,7 +184,7 @@ __global__ void sphCudaHydro(
              *   γ → gasAdiabaticIndex
              */
             // clang-format on
-            float const sinkKernelSupportRadius =
+            float const sinkKernelSmoothingLength =
                 sinkSmoothingLength;    // support radius, 2h_a for the cubic spline
             float const density = sinkDensity;
             float const internalEnergy = sinkInternalEnergy;
@@ -197,8 +197,9 @@ __global__ void sphCudaHydro(
             Position const positionZ = data.sourcePositionZ[particleIndex];
             Vector3<float> const velocity(data.sourceVelocityX[particleIndex],
                 data.sourceVelocityY[particleIndex], data.sourceVelocityZ[particleIndex]);
-            float const inverseSupportRadius = 1.0f / sinkKernelSupportRadius;
-            float const inverseSupportRadiusFourth = sqr(sqr(inverseSupportRadius));    // 1/H_a⁴
+            float const inverseSmoothingLength = 1.0f / sinkKernelSmoothingLength;
+            float const inverseSmoothingLengthFourth =
+                sqr(sqr(inverseSmoothingLength));    // 1/H_a⁴
             flops += 8;
             // clang-format off
             /*
@@ -238,12 +239,12 @@ __global__ void sphCudaHydro(
                     distance(positionY, neighbor.positionY),
                     distance(positionZ, neighbor.positionZ));
                 float const separationSquared = separation.dot(separation);    // |r_ab|²
-                float const neighborSupportRadius = neighbor.smoothingLength;
+                float const neighborSmoothingLength = neighbor.smoothingLength;
                 flops +=
                     8 + (separationSquared == 0.0f ? 0 : 2);    // Distances, dot, support squares.
                 bool const supportsIntersect =
-                    separationSquared < fmaxf(sinkKernelSupportRadius * sinkKernelSupportRadius,
-                                            neighborSupportRadius * neighborSupportRadius);
+                    separationSquared < fmaxf(sinkKernelSmoothingLength * sinkKernelSmoothingLength,
+                                            neighborSmoothingLength * neighborSmoothingLength);
                 if (parameters.midpointHydro && parameters.phase == 1 && supportsIntersect) {
                     maximumNeighborRung = max(maximumNeighborRung, neighbor.rung);
                 }
@@ -269,13 +270,14 @@ __global__ void sphCudaHydro(
                  *   r_ab → separation
                  */
                 // clang-format on
-                float const inverseNeighborSupportRadius = 1.0f / neighborSupportRadius;
-                float const normalizedSinkRadius = pairDistance * inverseSupportRadius;
-                float const normalizedNeighborRadius = pairDistance * inverseNeighborSupportRadius;
+                float const inverseNeighborSmoothingLength = 1.0f / neighborSmoothingLength;
+                float const normalizedSinkRadius = pairDistance * inverseSmoothingLength;
+                float const normalizedNeighborRadius =
+                    pairDistance * inverseNeighborSmoothingLength;
                 float const sinkGradientFactor =
-                    dkernelWDq(normalizedSinkRadius) * inverseSupportRadiusFourth / pairDistance;
+                    dkernelWDq(normalizedSinkRadius) * inverseSmoothingLengthFourth / pairDistance;
                 float const neighborGradientFactor = dkernelWDq(normalizedNeighborRadius) *
-                    sqr(sqr(inverseNeighborSupportRadius)) / pairDistance;
+                    sqr(sqr(inverseNeighborSmoothingLength)) / pairDistance;
                 float const symmetricGradientFactor =
                     0.5f * (sinkGradientFactor + neighborGradientFactor);
                 // v_ab = v_a − v_b from the stored peculiar velocities. The physical relative
@@ -289,8 +291,8 @@ __global__ void sphCudaHydro(
                 float const viscosityVelocity = parameters.priceEtAl ?
                     fminf(physicalVelocityDotSeparation / pairDistance, 0.0f) :
                     monaghan::viscosityMu(separationSquared, physicalVelocityDotSeparation,
-                        sinkKernelSupportRadius, neighborSupportRadius, viscosityRegularization,
-                        supportRadiusPerEffectiveRadius, float(monaghan::kViscosityWidthScale));
+                        sinkKernelSmoothingLength, neighborSmoothingLength, viscosityRegularization,
+                        smoothingLengthPerEffectiveRadius, float(monaghan::kViscosityWidthScale));
                 float const neighborBulkViscosityCoefficient = parameters.variableViscosity ?
                     neighbor.bulkViscosityCoefficient :
                     bulkViscosityCoefficient;
@@ -435,9 +437,9 @@ __global__ void sphCudaHydro(
                 if (!(sph_volume::isFiniteValue(acceleration.dot(acceleration)) &&
                         sph_volume::isFiniteValue(internalEnergyRate) &&
                         sph_volume::isFiniteValue(viscousHeatingRate))) {
-                    printf("SPH variational rates are not finite: supportRadius=%e density=%e "
+                    printf("SPH variational rates are not finite: smoothingLength=%e density=%e "
                            "ζ=%e\n",
-                        sinkKernelSupportRadius, density, gradHCorrection);
+                        sinkKernelSmoothingLength, density, gradHCorrection);
                     __trap();
                 }
                 Vector3<float> gravityAcceleration(0.0f);
@@ -452,7 +454,7 @@ __global__ void sphCudaHydro(
                 if (!parameters.deferAccelerationSources) {
                     acceleration = sphCompleteAcceleration(parameters,
                         Vector3<Position>(positionX, positionY, positionZ), velocity, acceleration,
-                        gravityAcceleration, data.centralAcceleration, data.centralSupportRadius,
+                        gravityAcceleration, data.centralAcceleration, data.centralSmoothingLength,
                         flops);
                 } else {
                     ALWAYS_ASSERT(parameters.phase == 0);
@@ -461,7 +463,7 @@ __global__ void sphCudaHydro(
                     Vector3<float> const externalAcceleration = sphCompleteAcceleration(parameters,
                         Vector3<Position>(positionX, positionY, positionZ), velocity,
                         Vector3<float>(0.0f), Vector3<float>(0.0f), data.centralAcceleration,
-                        data.centralSupportRadius, flops);
+                        data.centralSmoothingLength, flops);
                     sphAccumulateExternalKick(data.sourcePairUpdates[particleIndex],
                         externalAcceleration, parameters.hydroKickTimestep);
                     flops.doublePrecision += 6;
@@ -510,7 +512,7 @@ __global__ void sphCudaHydro(
                      */
                     // clang-format on
                     float const smoothingLength =
-                        sinkKernelSupportRadius / supportRadiusPerEffectiveRadius;
+                        sinkKernelSmoothingLength / smoothingLengthPerEffectiveRadius;
                     float const inverseSoundTimestep = soundSpeed / smoothingLength;
                     float const maximumVonNeumannRichtmyerCoefficient =
                         parameters.vonNeumannRichtmyerCoefficientFollowsBulk() ?
@@ -596,7 +598,7 @@ __global__ void sphCudaHydro(
                                 parameters.courantFactor / float(monaghan::kViscosityWidthScale) *
                                     internalEnergy / fabsf(internalEnergyRate) :
                                 parameters.maximumTimestep,
-                            sinkKernelSupportRadius, density, internalEnergy, internalEnergyRate,
+                            sinkKernelSmoothingLength, density, internalEnergy, internalEnergyRate,
                             accelerationMagnitude, soundSpeed, maximumCompressionSpeed,
                             maximumBulkViscosityCoefficient, gasMass / (gasMass - gradHCorrection),
                             parameters.scaleFactor);

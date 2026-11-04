@@ -184,7 +184,7 @@ struct Gravity {
     // Open only the larger of two rejected cells instead of both.
     bool openLargerCell{};
     // Fixed comoving compact support in box units; effectiveRadius is 2 sigma.
-    double supportRadius{};
+    double smoothingLength{};
     double timestepEta{};
     double gm{};
 };
@@ -253,8 +253,8 @@ struct Hydro {
     double bulkViscosityCoefficient{};
     double vonNeumannRichtmyerCoefficient{};
     double viscosityEpsilon{};
-    bool balsaraSwitch{true};
-    std::string viscosityEvolution{"morrisAndMonaghan"};
+    bool balsaraSwitch{false};
+    std::string viscosityEvolution{"hu_etal"};
     double minimumBulkViscosityCoefficient{0.1};
     double viscosityDecay{0.2};
     double maximumBulkViscosityCoefficient{2.0};
@@ -278,15 +278,15 @@ struct Hydro {
     double cfl{};
     double neighborNumber{42.0};
     // Canonical support bounds in box units, normalized from input particle spacings.
-    double minSupportRadius{};
-    double maxSupportRadius{};
+    double minSmoothingLength{};
+    double maxSmoothingLength{};
     // Optional uniform external acceleration in the y direction.
     double yAcceleration{};
     // Magnitude of the external acceleration toward the plane z = 0.5.
     double zPlaneAcceleration{};
     // Fixed central potential for the orbiting-disc gas test.
     double centralAcceleration{};
-    double centralSupportRadius{};
+    double centralSmoothingLength{};
     // Velocity damping during the self-gravitating gas relaxation test.
     double damping{};
 };
@@ -358,8 +358,8 @@ struct Options {
         arc & hydro.maximumBulkViscosityCoefficientHu;
         arc & hydro.viscosityDecayHu;
         arc & hydro.neighborNumber;
-        arc & hydro.minSupportRadius;
-        arc & hydro.maxSupportRadius;
+        arc & hydro.minSmoothingLength;
+        arc & hydro.maxSmoothingLength;
         arc & hydro.damping;
         arc & initial.darkMatterMass;
         arc & initial.gasMass;
@@ -367,7 +367,7 @@ struct Options {
         arc & hydro.gamma;
         arc & hydro.yAcceleration;
         arc & hydro.centralAcceleration;
-        arc & hydro.centralSupportRadius;
+        arc & hydro.centralSmoothingLength;
         arc & initial.closePack;
         arc & initial.numberOfParticles;
         arc & initial.useGlass;
@@ -431,7 +431,7 @@ struct Options {
         arc & gravity.openLargerCell;
         arc & analysis.sliceSize;
         arc & analysis.linkingLength;
-        arc & gravity.supportRadius;
+        arc & gravity.smoothingLength;
         arc & gravity.gm;
         arc & gravity.timestepEta;
         arc & units.timeSeconds;

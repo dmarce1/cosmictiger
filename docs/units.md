@@ -122,7 +122,7 @@ and Silo's
 [`DBPutDefvars` definitions](https://silo.readthedocs.io/latest/objects.html#dbputdefvars).
 
 This layout replaces the former flat `hydro_*`, `star_*`, `eint`, and
-`kernel_support_radius` output fields. Saved visualization sessions and scripts
+`kernel_smoothing_length` output fields. Saved visualization sessions and scripts
 using those paths need updating. Mesh time and `time` metadata retain the
 existing cosmological-age convention in Gyr (`time_unit=Gyr`,
 `time_convention=cosmological_age`); this is not elapsed standalone hydro time.

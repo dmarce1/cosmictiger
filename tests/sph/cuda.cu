@@ -118,7 +118,7 @@ class Fixture {
     void resetReduction() {
         resetGpuFlops();
         *reduction_ = {};
-        reduction_->minimumSupportRadius = std::numeric_limits<float>::max();
+        reduction_->minimumSmoothingLength = std::numeric_limits<float>::max();
         reduction_->minimumTimestep = std::numeric_limits<float>::max();
         reduction_->minimumGradHOmega = std::numeric_limits<float>::max();
     }
@@ -183,9 +183,10 @@ public:
         params_.variableViscosity = false;
         params_.cullenDehnen = false;
         params_.priceEtAl = false;
-        params_.minimumSupportRadius = 0.1f;
+        params_.huEtAl = false;
+        params_.minimumSmoothingLength = 0.1f;
         // The initial isolated support is held at the upper bound.
-        params_.maximumSupportRadius = 0.2f;
+        params_.maximumSmoothingLength = 0.2f;
         for (int i = 0; i < count; i++) {
             data_.sinkParticleIndices[i] = i;
             data_.sourceBalsaraFactor[i] = 1.0f;
@@ -221,16 +222,16 @@ public:
     }
 
     void solveSmoothing(float minimum, float maximum, float initial) {
-        params_.minimumSupportRadius = minimum;
-        params_.maximumSupportRadius = maximum;
+        params_.minimumSmoothingLength = minimum;
+        params_.maximumSmoothingLength = maximum;
         for (int i = 0; i < count_; i++) {
             data_.sinkFlags[i].setConverged(false);
             data_.sourceSmoothingLength[i] = data_.sinkSmoothingLength[i] = initial;
         }
         resetReduction();
-        sphCudaPrehydro1<<<1, kPrehydro1BlockSize>>>(params_, data_, reduction_);
-        checkCuda(cudaGetLastError(), "prehydro1 launch");
-        checkCuda(cudaDeviceSynchronize(), "prehydro1 execution");
+        sphCudaSmoothingLengths<<<1, kSmoothingLengthsBlockSize>>>(params_, data_, reduction_);
+        checkCuda(cudaGetLastError(), "smoothing lengths launch");
+        checkCuda(cudaDeviceSynchronize(), "smoothing lengths execution");
         checkFlops();
         require(reduction_->pendingChanges == 0,
             "complete neighbor fixture must converge without refresh");
@@ -287,16 +288,17 @@ public:
 
     void densityPass() {
         resetReduction();
-        sphCudaPrehydro2<<<1, kPrehydro2BlockSize>>>(params_, data_, reduction_);
+        sphCudaDensityAndGradients<<<1, kDensityAndGradientsBlockSize>>>(
+            params_, data_, reduction_);
         checkCuda(cudaGetLastError(), "viscosity density launch");
         checkCuda(cudaDeviceSynchronize(), "viscosity density execution");
         checkFlops();
         require(reduction_->pendingChanges == 0, "viscosity density needs no refresh");
     }
 
-    void prehydro1Pass() {
+    void smoothingLengthsPass() {
         resetReduction();
-        sphCudaPrehydro1<<<1, kPrehydro1BlockSize>>>(params_, data_, reduction_);
+        sphCudaSmoothingLengths<<<1, kSmoothingLengthsBlockSize>>>(params_, data_, reduction_);
         checkCuda(cudaGetLastError(), "midpoint support launch");
         checkCuda(cudaDeviceSynchronize(), "midpoint support execution");
         checkFlops();
@@ -324,9 +326,10 @@ public:
 
     void density() {
         resetReduction();
-        sphCudaPrehydro2<<<1, kPrehydro2BlockSize>>>(params_, data_, reduction_);
-        checkCuda(cudaGetLastError(), "prehydro2 launch");
-        checkCuda(cudaDeviceSynchronize(), "prehydro2 execution");
+        sphCudaDensityAndGradients<<<1, kDensityAndGradientsBlockSize>>>(
+            params_, data_, reduction_);
+        checkCuda(cudaGetLastError(), "density and gradients launch");
+        checkCuda(cudaDeviceSynchronize(), "density and gradients execution");
         checkFlops();
         require(
             reduction_->pendingChanges == 0, "density fixture unexpectedly needs neighbor refresh");
@@ -471,15 +474,17 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
     }
     resetGpuFlops();
     *fixture.reduction_ = {};
-    fixture.reduction_->minimumSupportRadius = std::numeric_limits<float>::max();
+    fixture.reduction_->minimumSmoothingLength = std::numeric_limits<float>::max();
     fixture.reduction_->minimumTimestep = std::numeric_limits<float>::max();
     fixture.reduction_->minimumGradHOmega = std::numeric_limits<float>::max();
     switch (runType) {
-    case kSphRunPrehydro1:
-        sphCudaPrehydro1<<<1, kPrehydro1BlockSize>>>(fixture.params_, data, fixture.reduction_);
+    case kSphRunSmoothingLengths:
+        sphCudaSmoothingLengths<<<1, kSmoothingLengthsBlockSize>>>(
+            fixture.params_, data, fixture.reduction_);
         break;
-    case kSphRunPrehydro2:
-        sphCudaPrehydro2<<<1, kPrehydro2BlockSize>>>(fixture.params_, data, fixture.reduction_);
+    case kSphRunDensityAndGradients:
+        sphCudaDensityAndGradients<<<1, kDensityAndGradientsBlockSize>>>(
+            fixture.params_, data, fixture.reduction_);
         break;
     case kSphRunHydro:
         sphCudaHydro<<<1, kHydroBlockSize>>>(fixture.params_, data, fixture.reduction_);
@@ -505,10 +510,10 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
         "CPU/CUDA SPH must both count their floating work");
     require(getGpuFlops() == cudaResult.floatingPointOperations,
         "SPH phase did not reach the global GPU counter exactly once");
-    requireClose("CPU/CUDA minimum support", cpuResult.minimumSupportRadius,
-        cudaResult.minimumSupportRadius, 3.0e-5);
-    requireClose("CPU/CUDA maximum support", cpuResult.maximumSupportRadius,
-        cudaResult.maximumSupportRadius, 3.0e-5);
+    requireClose("CPU/CUDA minimum support", cpuResult.minimumSmoothingLength,
+        cudaResult.minimumSmoothingLength, 3.0e-5);
+    requireClose("CPU/CUDA maximum support", cpuResult.maximumSmoothingLength,
+        cudaResult.maximumSmoothingLength, 3.0e-5);
     requireClose("CPU/CUDA signal speed", cpuResult.maximumSignalSpeed,
         cudaResult.maximumSignalSpeed, 5.0e-5);
     requireClose("CPU/CUDA sound timestep", cpuResult.inverseSoundTimestep,
@@ -604,8 +609,8 @@ void testCpuCudaParity(int viscosityMode = 0) {
         }
     }
     fixture.params_.minimumRung = 2;
-    fixture.params_.minimumSupportRadius = 0.03f;
-    fixture.params_.maximumSupportRadius = 0.24f;
+    fixture.params_.minimumSmoothingLength = 0.03f;
+    fixture.params_.maximumSmoothingLength = 0.24f;
     fixture.params_.scaleFactor = 0.7f;
     fixture.params_.expansionRate = 0.08f;
     fixture.params_.baseTimestep = 1.11f;
@@ -616,7 +621,7 @@ void testCpuCudaParity(int viscosityMode = 0) {
     data.adiabaticIndex = 1.4f;
     data.selfGravityEnabled = true;
     data.centralAcceleration = 0.002f;
-    data.centralSupportRadius = 0.2f;
+    data.centralSmoothingLength = 0.2f;
     for (int source = 0; source < fixture.count_; source++) {
         int const sink = sinkIndices[source];
         int const particle = (2 * source) % fixture.count_;
@@ -662,7 +667,7 @@ void testCpuCudaParity(int viscosityMode = 0) {
                 data.sinkParticleRungs[data.sinkParticleIndices[sinkIndices[source]]];
         }
     };
-    compareCpuCudaPhase(fixture, kSphRunPrehydro1);
+    compareCpuCudaPhase(fixture, kSphRunSmoothingLengths);
     publishSupport();
     if (viscosityMode == 1) {
         fixture.params_.viscosityTimestep = 0.08;
@@ -670,7 +675,7 @@ void testCpuCudaParity(int viscosityMode = 0) {
             data.sinkFlags[i].setConverged(false);
         }
     }
-    compareCpuCudaPhase(fixture, kSphRunPrehydro2);
+    compareCpuCudaPhase(fixture, kSphRunDensityAndGradients);
     fixture.params_.viscosityTimestep = 0.0;
     publishSupport();
     for (int source = 0; source < fixture.count_; source++) {
@@ -702,7 +707,7 @@ void testCpuCudaParity(int viscosityMode = 0) {
     // An unbuilt correction on the excluded source must stay masked on both backends.
     data.sinkGradHCorrection[excludedSink] = -9.0f;
     data.sourceGradHCorrection[excluded] = std::numeric_limits<float>::quiet_NaN();
-    compareCpuCudaPhase(fixture, kSphRunPrehydro2);
+    compareCpuCudaPhase(fixture, kSphRunDensityAndGradients);
     require(!data.sinkFlags[excludedSink].semiactive() && data.sinkDensity[excludedSink] == -9.0f,
         "distant inactive particle must leave density untouched");
     require(data.sinkGradHCorrection[excludedSink] == -9.0f,
@@ -727,7 +732,7 @@ void testCpuCudaParity(int viscosityMode = 0) {
         data.sinkFlags[sink].setConverged(false);
         data.sinkSmoothingLength[sink] = 0.1f;
     }
-    compareCpuCudaPhase(fixture, kSphRunPrehydro1);
+    compareCpuCudaPhase(fixture, kSphRunSmoothingLengths);
     require(fixture.reduction_->pendingChanges > 0,
         "undersized neighbor boxes must request another pass on both backends");
 }
@@ -1179,7 +1184,7 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
                 double const soundSpeed =
                     std::sqrt(double(data.adiabaticIndex) * (data.adiabaticIndex - 1.0) * 0.9);
                 double const smoothingLength = 0.25 /
-                    selectedHydroKernel().supportRadiusPerEffectiveRadius *
+                    selectedHydroKernel().smoothingLengthPerEffectiveRadius *
                     monaghan::kViscosityWidthScale;
                 double const radiusSquaredShock = 0.25 * 0.25 * detector;
                 double const expectedTarget = huEtAl ?
@@ -1308,7 +1313,7 @@ void testVariableViscosityPairs() {
 
 void testCullenDehnenExcludedThermodynamics() {
     Fixture fixture(2, 2, true);
-    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.1f;
+    fixture.params_.minimumSmoothingLength = fixture.params_.maximumSmoothingLength = 0.1f;
     fixture.enableVariableViscosity(true);
     fixture.params_.vonNeumannRichtmyerCoefficient = 4.0f;
     auto& data = fixture.data_;
@@ -1522,7 +1527,7 @@ void testUnequalSupports() {
 // table as an independent CPU path. Core tests also check the table mathematics.
 void testSelectedKernel() {
     Fixture fixture(2);
-    fixture.params_.maximumSupportRadius = 0.49f;
+    fixture.params_.maximumSmoothingLength = 0.49f;
     auto& data = fixture.data_;
     data.sourcePositionX[0] = 0.40;
     data.sourcePositionX[1] = 0.58;
@@ -1554,7 +1559,7 @@ void testSelectedKernel() {
         double const soundSpeed = std::sqrt(
             data.adiabaticIndex * (data.adiabaticIndex - 1.0f) * data.sourceInternalEnergy[i]);
         inverseCfl = std::max(inverseCfl,
-            soundSpeed * selectedHydroKernel().supportRadiusPerEffectiveRadius / support);
+            soundSpeed * selectedHydroKernel().smoothingLengthPerEffectiveRadius / support);
     }
     fixture.hydro(1);
     requireClose("selected kernel CPU/CUDA pressure force", data.sinkAccelerations[0][kXDimension],
@@ -1573,7 +1578,7 @@ void testSelectedKernel() {
 
 void testUnequalPairEos() {
     Fixture fixture(2);
-    fixture.params_.maximumSupportRadius = 0.49f;
+    fixture.params_.maximumSmoothingLength = 0.49f;
 
     auto& data = fixture.data_;
     // A non-5/3 gamma keeps the cosmological work term nonzero.
@@ -1612,7 +1617,7 @@ void testUnequalPairEos() {
         double const soundSpeed =
             std::sqrt(data.adiabaticIndex * pressureEnergyRatio * data.sourceInternalEnergy[i]);
         inverseCfl = std::max(inverseCfl,
-            soundSpeed * selectedHydroKernel().supportRadiusPerEffectiveRadius / support);
+            soundSpeed * selectedHydroKernel().smoothingLengthPerEffectiveRadius / support);
     }
     double const pressureForce = directedGradient[0] + directedGradient[1];
     fixture.hydro(1);
@@ -1653,32 +1658,32 @@ void testUnequalPairEos() {
 
 void testSelectedCentralGravity() {
     Fixture fixture(1);
-    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.2f;
+    fixture.params_.minimumSmoothingLength = fixture.params_.maximumSmoothingLength = 0.2f;
     auto& data = fixture.data_;
     data.sourcePositionX[0] = 0.6;
     data.sourcePositionY[0] = data.sourcePositionZ[0] = 0.5;
     data.sinkFlags[0].setConverged(true);
     data.centralAcceleration = 0.07f;
-    data.centralSupportRadius = 0.3f;
+    data.centralSmoothingLength = 0.3f;
     fixture.density();
     fixture.hydro();
     double const radius = distance(data.sourcePositionX[0], Position(0.5));
     double const expected = -data.centralAcceleration * radius /
-        std::pow(double(data.centralSupportRadius), 3) *
-        radial_kernel::forceFactor(selectedGravityKernel(), radius / data.centralSupportRadius);
+        std::pow(double(data.centralSmoothingLength), 3) *
+        radial_kernel::forceFactor(selectedGravityKernel(), radius / data.centralSmoothingLength);
     requireClose("selected gravity kernel central force", data.sinkAccelerations[0][kXDimension],
         expected, 5.0e-6);
 }
 
 void testFixedGravityTimestep() {
     Fixture fixture(1);
-    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.2f;
+    fixture.params_.minimumSmoothingLength = fixture.params_.maximumSmoothingLength = 0.2f;
     auto& data = fixture.data_;
     data.sourcePositionX[0] = data.sourcePositionY[0] = data.sourcePositionZ[0] = 0.5;
     data.sinkFlags[0].setConverged(true);
     data.sourceInternalEnergy[0] = 1.0e-6f;
     data.selfGravityEnabled = true;
-    data.gravityEffectiveRadius = 0.08f / selectedGravityKernel().supportRadiusPerEffectiveRadius;
+    data.gravityEffectiveRadius = 0.08f / selectedGravityKernel().smoothingLengthPerEffectiveRadius;
     data.sinkGravityAccelerationX[0] = 0.1f;
     fixture.density();
     fixture.hydro(1);
@@ -1691,7 +1696,7 @@ void testFixedGravityTimestep() {
     require(fixture.reduction_->maximumGravityRung == expectedGravityRung,
         "gas gravity timestep must use the shared fixed gravity radius");
     data.sourceSmoothingLength[0] = data.sinkSmoothingLength[0] = 0.3f;
-    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.3f;
+    fixture.params_.minimumSmoothingLength = fixture.params_.maximumSmoothingLength = 0.3f;
     fixture.density();
     fixture.hydro(1);
     require(fixture.reduction_->maximumGravityRung == expectedGravityRung,
@@ -1795,7 +1800,7 @@ void testDefaultTimestepCalibration() {
     fixture.params_.courantFactor = 0.25 * std::sqrt(5.0 / 6.0);
     double const oldCentralPotential = 693.0 / 256.0;
     data.accelerationTimestepFactor = 0.25 *
-        std::sqrt(selectedGravityKernel().supportRadiusPerEffectiveRadius / oldCentralPotential);
+        std::sqrt(selectedGravityKernel().smoothingLengthPerEffectiveRadius / oldCentralPotential);
     fixture.density();
     fixture.hydro(1);
     double const soundSpeed = std::sqrt(
@@ -1834,7 +1839,7 @@ void testDefaultThermalTimestep() {
     fixture.params_.courantFactor = 0.25 * std::sqrt(5.0 / 6.0);
     double const oldEta = 0.25 / std::sqrt(693.0 / 256.0);
     data.accelerationTimestepFactor =
-        oldEta * std::sqrt(selectedGravityKernel().supportRadiusPerEffectiveRadius);
+        oldEta * std::sqrt(selectedGravityKernel().smoothingLengthPerEffectiveRadius);
     fixture.density();
     fixture.hydro(1);
     for (int i = 0; i < 2; i++) {
@@ -2121,7 +2126,7 @@ TEST_F(SphCudaTest, EndpointMorrisMonaghanUsesCompletedIntervalsAndClosingRungs)
     for (int index = 0; index < fixture.count_; ++index) {
         fixture.data_.sinkFlags[fixture.sinkIndex(index)].setConverged(false);
     }
-    detail::compareCpuCudaPhase(fixture, kSphRunPrehydro2);
+    detail::compareCpuCudaPhase(fixture, kSphRunDensityAndGradients);
 }
 
 TEST_F(SphCudaTest, ConservativeMixedRungPairKicks) {
@@ -2151,11 +2156,11 @@ TEST_F(SphCudaTest, LargeNeighborListsCpuParity) {
         data.sourceRungs[i] = data.sinkParticleRungs[i] = i % 512 < 3 ? 3 : 1;
     }
     data.treeNodes[2].neighborRange = {2, 3};
-    detail::compareCpuCudaPhase(fixture, kSphRunPrehydro1);
+    detail::compareCpuCudaPhase(fixture, kSphRunSmoothingLengths);
     for (int i = 0; i < fixture.count_; ++i) {
         data.sourceSmoothingLength[i] = data.sinkSmoothingLength[i];
     }
-    detail::compareCpuCudaPhase(fixture, kSphRunPrehydro2);
+    detail::compareCpuCudaPhase(fixture, kSphRunDensityAndGradients);
     for (int i = 0; i < fixture.count_; ++i) {
         data.sourceDensity[i] = data.sinkDensity[i];
         data.sourceGradHCorrection[i] = data.sinkGradHCorrection[i];
@@ -2170,7 +2175,7 @@ __global__ void resetSphBenchmark(
     SphRunCudaData data, SphReduction* reduction, int count, bool solveSupport) {
     if (threadIdx.x == 0) {
         *reduction = {};
-        reduction->minimumSupportRadius = std::numeric_limits<float>::max();
+        reduction->minimumSmoothingLength = std::numeric_limits<float>::max();
         reduction->minimumTimestep = std::numeric_limits<float>::max();
         reduction->minimumGradHOmega = std::numeric_limits<float>::max();
     }
@@ -2199,10 +2204,11 @@ TEST_F(SphCudaTest, DISABLED_NeighborStagingBenchmark) {
     }
     cudaDeviceProp device{};
     detail::checkCuda(cudaGetDeviceProperties(&device, 0), "benchmark device properties");
-    void const* const kernels[] = {(void const*) sphCudaPrehydro1, (void const*) sphCudaPrehydro2,
-        (void const*) sphCudaHydro, (void const*) sphCudaRungs};
-    int const blockSizes[] = {
-        kPrehydro1BlockSize, kPrehydro2BlockSize, kHydroBlockSize, kRungsBlockSize};
+    void const* const kernels[] = {(void const*) sphCudaSmoothingLengths,
+        (void const*) sphCudaDensityAndGradients, (void const*) sphCudaHydro,
+        (void const*) sphCudaRungs};
+    int const blockSizes[] = {kSmoothingLengthsBlockSize, kDensityAndGradientsBlockSize,
+        kHydroBlockSize, kRungsBlockSize};
     char const* const names[] = {"smoothing", "density", "hydro", "rungs"};
     cudaEvent_t start;
     cudaEvent_t stop;

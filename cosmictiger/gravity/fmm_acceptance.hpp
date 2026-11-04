@@ -54,10 +54,10 @@ CUDA_EXPORT inline float fmmInverseOpeningAngle(float theta) {
 // Either cell can contain the larger compact support. Retain the kick's fixed
 // support as a floor for callers that override the value used to build the tree.
 template <class T>
-CUDA_EXPORT inline T fmmPairSupportRadius(
-    T const& fixedSupportRadius, T const& sinkSupportRadius, T const& sourceSupportRadius) {
+CUDA_EXPORT inline T fmmPairSmoothingLength(
+    T const& fixedSmoothingLength, T const& sinkSmoothingLength, T const& sourceSmoothingLength) {
     return detail::fmmMaximum(
-        fixedSupportRadius, detail::fmmMaximum(sinkSupportRadius, sourceSupportRadius));
+        fixedSmoothingLength, detail::fmmMaximum(sinkSmoothingLength, sourceSmoothingLength));
 }
 
 // Inputs describe enclosing cells and periodic minimum distances. The support
@@ -66,13 +66,13 @@ CUDA_EXPORT inline T fmmPairSupportRadius(
 template <class T>
 CUDA_EXPORT inline FmmAcceptance<T> computeFmmAcceptance(T const& centerDistanceSquared,
     T const& sinkRadius, T const& sourceRadius, T const& sinkBoxToSourceCenterSquared,
-    T const& sourceBoxToSinkCenterSquared, T const& pairSupportRadius, T const& inverseTheta,
+    T const& sourceBoxToSinkCenterSquared, T const& pairSmoothingLength, T const& inverseTheta,
     FlopCount* operationCount = nullptr) {
     T const radiusSum = sinkRadius + sourceRadius;
-    T const supportDistance = radiusSum + pairSupportRadius;
+    T const supportDistance = radiusSum + pairSmoothingLength;
     auto const centerSupportSeparated = centerDistanceSquared > supportDistance * supportDistance;
-    T const sourceSupportDistance = sourceRadius + pairSupportRadius;
-    T const sinkSupportDistance = sinkRadius + pairSupportRadius;
+    T const sourceSupportDistance = sourceRadius + pairSmoothingLength;
+    T const sinkSupportDistance = sinkRadius + pairSmoothingLength;
     auto const sourceSupportSeparated =
         sinkBoxToSourceCenterSquared > sourceSupportDistance * sourceSupportDistance;
     auto const sinkSupportSeparated =

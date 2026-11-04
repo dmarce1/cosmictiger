@@ -27,7 +27,7 @@ are identified explicitly. The same convention applies to CPU, SIMD, and CUDA co
 | α_a, α_b, α_ab | `bulkViscosityCoefficient`, `neighborBulkViscosityCoefficient`, `pairBulkViscosityCoefficient` | Linear artificial viscosity coefficients |
 | β_ab | `pairVonNeumannRichtmyerCoefficient` | Quadratic artificial viscosity coefficient |
 | ρ_a, P_a, u_a | `density`, `pressure`, `internalEnergy` | Sink thermodynamic state |
-| H_a, H_b | `sinkKernelSupportRadius`, `neighborSupportRadius` | Compact support radii |
+| H_a, H_b | `sinkKernelSmoothingLength`, `neighborSmoothingLength` | Compact support radii |
 | r_ab, v_ab | `separation`, `velocityDifference` | Sink minus neighbor vectors |
 | μ_ab, Π_ab | `viscosityVelocity`, `pairArtificialViscosity` | Monaghan velocity measure and pair viscosity |
 | F_a, F_b, F_ab | `sinkGradientFactor`, `neighborGradientFactor`, `symmetricGradientFactor` | Radial kernel-gradient factors |
@@ -125,7 +125,7 @@ The self contribution imposes \(N_{\rm target}>(4\pi/3)w(0)\), which is
 \(32/3\) for the default cubic. Startup checks use the selected kernel's floor,
 including its single-precision representation. The solve respects the configured
 radius bounds, supplied as `hydro.minEffectiveRadius`/`hydro.maxEffectiveRadius`
-or `hydro.minSupportRadius`/`hydro.maxSupportRadius` and converted with the selected
+or `hydro.minSmoothingLength`/`hydro.maxSmoothingLength` and converted with the selected
 hydro kernel. Explicit effective-radius settings take precedence with a warning
 naming each ignored support-radius setting. It refreshes neighbors if the search
 box is too small, and caps each local solve at 128 iterations. Its relative residual tolerance
@@ -175,7 +175,7 @@ These modes follow equation 4.1, the unnumbered definition of
 and \(\Pi_{ij}=0\) otherwise. Arithmetic means are used for density and sound
 speed. The viscosity length scale is
 \(\bar\ell_{ij}=\sqrt{5/6}\,(h_i+h_j)/2\), using the effective radii
-\(h_i=H_i/\texttt{supportRadiusPerEffectiveRadius}\). The fixed factor makes
+\(h_i=H_i/\texttt{smoothingLengthPerEffectiveRadius}\). The fixed factor makes
 \(\bar\ell_{ij}=(H_i+H_j)/4\) for the cubic and preserves the previous
 interpretation of the viscosity parameters. The same factor applies to every
 selected family. The regularization remains \(\epsilon=0.01\). With variable
@@ -263,7 +263,7 @@ identity does not imply exact conservation by a finite-step asynchronous integra
 
 ## Morris–Monaghan variable viscosity
 
-`hydro.viscosityEvolution=morrisAndMonaghan` (the default) enables the original additive switch of
+`hydro.viscosityEvolution=morrisAndMonaghan` enables the original additive switch of
 Morris & Monaghan (1997), *A Switch to Reduce SPH Viscosity*, JCP 136, 41–50,
 [doi:10.1006/jcph.1997.5690](https://doi.org/10.1006/jcph.1997.5690):
 
@@ -278,7 +278,7 @@ The defaults are \(\alpha^\ast=0.1\) and \(\mathcal C_1=0.2\), as used in their
 calculations. There is no hard upper cap or \((\alpha_{\max}-\alpha)\) source
 multiplier. The source uses equation (13) directly, without an additional
 adiabatic-index scaling. The decay length is the same calibrated viscosity length
-\(h_{M,i}=\sqrt{5/6}\,H_i/\texttt{supportRadiusPerEffectiveRadius}\), equal to
+\(h_{M,i}=\sqrt{5/6}\,H_i/\texttt{smoothingLengthPerEffectiveRadius}\), equal to
 \(H_i/2\) for the cubic spline. New particles start at \(\alpha^\ast\); this
 smooth-flow initialization is an implementation choice, since the paper uses
 problem-dependent initial values, including elevated α near the initial Sod interface.
@@ -470,7 +470,7 @@ as described above.
 
 ## Hu et al. variable viscosity
 
-`--hydro.viscosityEvolution=hu_etal` selects Hu et al. (2014), *SPHGal*,
+`--hydro.viscosityEvolution=hu_etal` (the default) selects Hu et al. (2014), *SPHGal*,
 [equations (16)–(19)](https://arxiv.org/html/1402.1788#S2.SS3), implemented in
 `viscosity/hu_etal.hpp`. The matrix-corrected peculiar gradients and GADGET-4
 cosmological shock-slope conversion are shared with Cullen–Dehnen, but the target
@@ -753,7 +753,7 @@ hydrodynamic controls are:
 | `hydro.gamma` | `5/3` | Ideal-gas adiabatic index |
 | `hydro.viscosityAlpha` | `1` | Constant linear coefficient when variable viscosity is disabled |
 | `hydro.viscosityBeta` | `2` | Quadratic coefficient: multiplies \(\bar\alpha_{ij}\) for `morrisAndMonaghan`, `cullenAndDehnen`, and `hu_etal`, constant for `none` and `priceEtAl` |
-| `hydro.viscosityEvolution` | `morrisAndMonaghan` | α evolution: `none`, `morrisAndMonaghan`, `cullenAndDehnen`, `priceEtAl`, or `hu_etal` |
+| `hydro.viscosityEvolution` | `hu_etal` | α evolution: `none`, `morrisAndMonaghan`, `cullenAndDehnen`, `priceEtAl`, or `hu_etal` |
 | `hydro.viscosityAlphaMaxHu` | `1` | Hu maximum before the strong limiter |
 | `hydro.viscosityDecayHu` | `0.05` | Hu decay coefficient in τ = H/(2 ell V) |
 | `hydro.viscosityAlphaMin` | `0.1` | Morris–Monaghan positive α floor and initial value |
@@ -767,18 +767,18 @@ hydrodynamic controls are:
 | `hydro.neighborNumber` | `42` | Kernel-weighted support-sphere count |
 | `compute.sphBucketSize` | `0` (automatic) | SPH tree leaf limit; automatic sizing uses `floor(8/pi * hydro.neighborNumber)`, giving `106` at the default neighbor target |
 | `hydro.minEffectiveRadius` | unset | Alternative minimum effective radius \(h=2\sigma\), in initial interparticle spacings |
-| `hydro.minSupportRadius` | `1e-6` | Minimum \(H\), in initial interparticle spacings |
+| `hydro.minSmoothingLength` | `1e-6` | Minimum \(H\), in initial interparticle spacings |
 | `hydro.maxEffectiveRadius` | unset | Alternative maximum effective radius \(h=2\sigma\), in initial interparticle spacings |
-| `hydro.maxSupportRadius` | `1000` | Requested maximum \(H\), in initial interparticle spacings; capped at half the box |
+| `hydro.maxSmoothingLength` | `1000` | Requested maximum \(H\), in initial interparticle spacings; capped at half the box |
 | `hydro.centralEffectiveRadius` | `0.0054772255750516604` | Imposed central-force effective radius in box units; uses the gravity kernel |
-| `hydro.centralSupportRadius` | derived | Alternative central-force support radius in box units; uses the gravity kernel |
+| `hydro.centralSmoothingLength` | derived | Alternative central-force support radius in box units; uses the gravity kernel |
 | `hydro.centralSoftening` | legacy alias | Alias for `hydro.centralEffectiveRadius` with the same value and units |
 | `hydro.cfl` | `0.22821773229381923` | Courant-viscous coefficient using the effective radius \(h=2\sigma\); also controls the calibrated fractional-energy bound |
 
 For each radius pair, an explicit effective-radius key wins over the
 support-radius key, including across CLI and INI inputs, with a warning naming
 the ignored key. For the central force, precedence is `centralEffectiveRadius`,
-then the `centralSoftening` alias, then `centralSupportRadius`. The command line
+then the `centralSoftening` alias, then `centralSmoothingLength`. The command line
 still overrides INI values for the same key. See [kernel radii](kernels.md) for
 the equivalent gravity options and conversion factors.
 

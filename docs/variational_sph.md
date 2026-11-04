@@ -65,7 +65,7 @@ directed pressure coefficient, while `variational::pairForceFactor` and
 ## Constraint and equations
 
 The support solve holds \(H_i^3 n_i\) constant: \(\sum_j w(q_{ij})=3N_{\rm target}/(4\pi)\)
-to a relative residual \(10^{-4}\) (`kSphSupportRadiusTolerance`), within the bounds
+to a relative residual \(10^{-4}\) (`kSphSmoothingLengthTolerance`), within the bounds
 \(H_{\min}\le H_i\le H_{\max}\). For a free support,
 \[
 \Omega_i=1+\frac{H_i}{3n_i}\frac{\partial n_i}{\partial H_i}
@@ -210,7 +210,7 @@ gas in \(ds=d\tau/a\): the stored \(\sum_im_i(w_i^2/2+E_i)\) is conserved by the
 
 ## Implementation and data lifecycle
 
-- **Density pass** (`kSphRunPrehydro2`, CPU `src/sph/prehydro_cpu.cpp`, CUDA
+- **Density pass** (`kSphRunDensityAndGradients`, CPU `src/sph/prehydro_cpu.cpp`, CUDA
   `src/sph/prehydro.cu`): for every semiactive particle, after its support has
   converged, the loop also accumulates \(\sum_jw\) and \(\sum_jqw'\);
   `sphGradHEvaluation` (`cosmictiger/sph/run_data.hpp`) classifies the support and

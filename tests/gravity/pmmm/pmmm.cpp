@@ -126,7 +126,7 @@ void checkedPmmmNearField(std::vector<PmmmNearParticle> const& sinks,
     FlopCount expected = 0;
     if (!sinks.empty() && !sources.empty()) {
         expected = 3;
-        double const inverseRadius = 1 / getOptions().gravity.supportRadius;
+        double const inverseRadius = 1 / getOptions().gravity.smoothingLength;
         double const inverseCubed = inverseRadius * inverseRadius * inverseRadius;
         for (auto const& sink : sinks) {
             std::array<double, 4> ignored{};
@@ -153,7 +153,7 @@ void checkedPmmmNearFieldBatch(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearSourceRange> const& sourceRanges, bool doPotential,
     std::vector<std::array<double, 4>>& fields) {
     constexpr double kCellWidth = 0.25;
-    double const inverseRadius = 1 / getOptions().gravity.supportRadius;
+    double const inverseRadius = 1 / getOptions().gravity.smoothingLength;
     double const inverseCubed = inverseRadius * inverseRadius * inverseRadius;
     FlopCount expected = 0;
     size_t usefulSinks = 0;
@@ -193,7 +193,7 @@ void checkedPmmmNearFieldBatch(std::vector<PmmmNearParticle> const& sinks,
 void checkPmmmNearBatches() {
     auto const saved = getOptions();
     auto options = saved;
-    options.gravity.supportRadius = 0.125;
+    options.gravity.smoothingLength = 0.125;
     // Rectangles straddle both CUDA scheduling limits.
     // Later heterogeneous batches grow and shrink both reusable device buffers.
     struct BatchShape {
@@ -279,7 +279,7 @@ void checkPmmmNearEdges() {
     auto options = getOptions();
     bool const useCuda = options.gravity.cuda;
     double const support = 0.125;
-    options.gravity.supportRadius = support;
+    options.gravity.smoothingLength = support;
     PmmmNearParticle const sink{{0.0, 0.0, 0.0}, 0.75, 0, 7};
     std::vector<PmmmNearParticle> const sinks{sink};
     std::vector<std::vector<PmmmNearParticle>> const cases{{sink}, {{{0.0, 0.0, 0.0}, 2.0, 0, 8}},
@@ -343,7 +343,7 @@ void checkPmmmNearEdges() {
         }
     }
     options.gravity.cuda = useCuda;
-    options.gravity.supportRadius = 0.001;
+    options.gravity.smoothingLength = 0.001;
     setOptions(options);
 }
 
@@ -595,7 +595,7 @@ size_t verifyPmmmTreeCell(TreeId id, uint64_t key, int meshSize) {
             using WideInteger = __int128;
             WideInteger constexpr kBoundaryScale = WideInteger(1) << (kPositionBits - 29);
             for (ParticleInteger i = node->particleRange.first; i < node->particleRange.second;
-                 ++i) {
+                ++i) {
                 long double radiusSquared = 0.0;
                 for (int dim = 0; dim < kDimensions; ++dim) {
                     WideInteger const raw = particlesPos(dim, i).raw();
@@ -666,7 +666,7 @@ std::array<double, 4> directPmmmReference(size_t sink, Vector<PmmmSample> const&
                         displacement[1] * displacement[1] + displacement[2] * displacement[2];
                     if (!(source == sink && origin)) {
                         double const radius = std::sqrt(radiusSquared);
-                        requirePmmm(!origin || radius > getOptions().gravity.supportRadius,
+                        requirePmmm(!origin || radius > getOptions().gravity.smoothingLength,
                             "direct Ewald fixture contains a softened pair");
                         double const screened = std::erfc(kAlpha * radius) / radius;
                         double const radial = (screened +
@@ -759,7 +759,7 @@ std::array<double, 4> directPmmmExpansionReferenceOrder(
         if (near && source != sink) {
             double const radiusSquared = pair[0] * pair[0] + pair[1] * pair[1] + pair[2] * pair[2];
             double const radius = std::sqrt(radiusSquared);
-            requirePmmm(radius > options.gravity.supportRadius,
+            requirePmmm(radius > options.gravity.smoothingLength,
                 "direct expansion fixture contains a softened pair");
             field[0] -= samples[source].mass / radius;
             for (int dim = 0; dim < kDimensions; ++dim) {
@@ -815,7 +815,7 @@ double verifyPmmmReference(Vector<PmmmSample> const& samples) {
         double const selfCancellationAllowance = (getOptions().gravity.pmmmNearMethod == "fmm") ?
             4.0 * std::numeric_limits<float>::epsilon() *
                 std::abs(options.gravity.gm * samples[sink].mass *
-                    selectedGravityKernel().centralPotential / options.gravity.supportRadius) :
+                    selectedGravityKernel().centralPotential / options.gravity.smoothingLength) :
             0.0;
         for (int component = 0; component < 4; ++component) {
             double const scale = component == 0 ? potentialScale : norm;
@@ -894,7 +894,8 @@ void comparePmmmSamples(
             double const selfCancellationAllowance = options.gravity.pmmmNearMethod == "fmm" ?
                 4.0 * std::numeric_limits<float>::epsilon() *
                     std::abs(options.gravity.gm * first[i].mass *
-                        selectedGravityKernel().centralPotential / options.gravity.supportRadius) :
+                        selectedGravityKernel().centralPotential /
+                        options.gravity.smoothingLength) :
                 0.0;
             requirePmmm(std::abs(first[i].potential - second[i].potential) <
                     2.0e-5 * std::max(1.0f, std::abs(first[i].potential)) +
@@ -1104,7 +1105,7 @@ void checkPmmmTraditionalKicks() {
     parameters.minRung = 2;
     parameters.a = parameters.t0 = parameters.maxDt = 1.0f;
     parameters.eta = 1.0e6f;
-    parameters.gravitySupportRadius = options.gravity.supportRadius;
+    parameters.gravitySmoothingLength = options.gravity.smoothingLength;
     parameters.gm = options.gravity.gm;
     parameters.theta = options.gravity.openingAngle;
     parameters.gpu = options.gravity.cuda;
@@ -1307,7 +1308,7 @@ void checkPmmmStreamedStages() {
             parameters.a = 1.0f;
             parameters.t0 = 1.0f;
             parameters.theta = options.gravity.openingAngle;
-            parameters.gravitySupportRadius = options.gravity.supportRadius;
+            parameters.gravitySmoothingLength = options.gravity.smoothingLength;
             parameters.eta = options.gravity.timestepEta;
             parameters.gm = options.gravity.gm;
             parameters.nodeLoad = 1.0f;
@@ -1458,7 +1459,7 @@ void checkPmmmStageMeshes() {
     parameters.a = 1.0f;
     parameters.t0 = 1.0f;
     parameters.theta = options.gravity.openingAngle;
-    parameters.gravitySupportRadius = options.gravity.supportRadius;
+    parameters.gravitySmoothingLength = options.gravity.smoothingLength;
     parameters.eta = options.gravity.timestepEta;
     parameters.gm = options.gravity.gm;
     parameters.nodeLoad = 1.0f;
@@ -1609,7 +1610,7 @@ void checkPmmmCoarseMeshes() {
     parameters.a = 1.0f;
     parameters.t0 = 1.0f;
     parameters.theta = options.gravity.openingAngle;
-    parameters.gravitySupportRadius = options.gravity.supportRadius;
+    parameters.gravitySmoothingLength = options.gravity.smoothingLength;
     parameters.eta = options.gravity.timestepEta;
     parameters.gm = options.gravity.gm;
     parameters.nodeLoad = 1.0f;
@@ -1778,7 +1779,7 @@ void checkPmmmFmmNear() {
     options.gravity.fmmOrder = fmmOrder();
     options.gravity.pmmmOrder = options.gravity.fmmOrder;
     options.gravity.pmmmNearWidth = 1;
-    options.gravity.supportRadius = 0.001;
+    options.gravity.smoothingLength = 0.001;
     if (saved.gravity.cuda) {
         setOptions(options);
         std::vector<hpx::future<void>> futures;
@@ -1908,7 +1909,7 @@ void pmmmTest() {
     // Keep the live kick fixtures collisionless while mesh/SPH coupling is deferred.
     options.hydro.enabled = false;
     options.gravity.gm = 0.125;
-    options.gravity.supportRadius = 0.001;
+    options.gravity.smoothingLength = 0.001;
     options.gravity.fmmOrder = fmmOrder();
     options.gravity.pmmmOrder = fmmOrder();
     options.gravity.openingAngle = 0.05;

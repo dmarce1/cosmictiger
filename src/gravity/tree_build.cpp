@@ -45,7 +45,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     FlopCounter<FlopCount> flops = 0;    // Double box/center arithmetic.
     FlopCounter<FlopCount> singleFlops = 0;
     FlopCounter<FlopCounts> multipoleFlops;
-    double const h = getOptions().gravity.supportRadius;
+    double const h = getOptions().gravity.smoothingLength;
     int bucketSize = getOptions().compute.bucketSize;
     TreeCreateReturn rc;
     if (depth >= kMaxDepth) {
@@ -164,8 +164,8 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         futr.wait();
         auto const rcl = futl.get();
         auto const rcr = futr.get();
-        rc.maxGravitySupportRadius =
-            std::max(rcl.maxGravitySupportRadius, rcr.maxGravitySupportRadius);
+        rc.maxGravitySmoothingLength =
+            std::max(rcl.maxGravitySmoothingLength, rcr.maxGravitySmoothingLength);
         auto const& xl = rcl.pos;
         auto const& xr = rcr.pos;
         auto const& ml = rcl.multi;
@@ -356,7 +356,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     } else {
         // All species use the same fixed comoving gravity support. Gas smoothing
         // lengths belong only to the hydrodynamic tree and neighbor searches.
-        rc.maxGravitySupportRadius = numberOfParticles > 0 ? float(h) : 0.0f;
+        rc.maxGravitySmoothingLength = numberOfParticles > 0 ? float(h) : 0.0f;
         flops += numberOfParticles > 0 ? 1 : 0;
         auto& xminValue = rbox.begin;
         auto& xmaxValue = rbox.end;
@@ -431,7 +431,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     }
     TreeNode node;
     node.radius = radius;
-    node.maxGravitySupportRadius = rc.maxGravitySupportRadius;
+    node.maxGravitySmoothingLength = rc.maxGravitySmoothingLength;
     node.children = children;
     node.localRoot = localRoot;
     node.particleRange = particleRange;

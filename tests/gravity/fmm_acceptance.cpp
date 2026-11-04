@@ -29,7 +29,7 @@ struct AcceptanceCase {
     float sourceRadius;
     float sinkBoxToSourceCenterSquared;
     float sourceBoxToSinkCenterSquared;
-    float pairSupportRadius;
+    float pairSmoothingLength;
     float inverseTheta;
     bool sinkLeaf;
     bool sourceLeaf;
@@ -161,7 +161,7 @@ template <class T>
 FmmAcceptance<T> evaluate(AcceptanceCase const& value) {
     return computeFmmAcceptance(T(value.centerDistanceSquared), T(value.sinkRadius),
         T(value.sourceRadius), T(value.sinkBoxToSourceCenterSquared),
-        T(value.sourceBoxToSinkCenterSquared), T(value.pairSupportRadius), T(value.inverseTheta));
+        T(value.sourceBoxToSinkCenterSquared), T(value.pairSmoothingLength), T(value.inverseTheta));
 }
 
 template <class T>
@@ -201,7 +201,7 @@ void testSimdCases(std::vector<AcceptanceCase> const& cases) {
         SimdFloat sourceRadius{};
         SimdFloat sinkBoxToSourceCenterSquared{};
         SimdFloat sourceBoxToSinkCenterSquared{};
-        SimdFloat pairSupportRadius{};
+        SimdFloat pairSmoothingLength{};
         SimdFloat inverseTheta{};
         for (int lane = 0; lane < kSimdFloatSize; lane++) {
             auto const& value = cases[(start + lane) % cases.size()];
@@ -210,12 +210,12 @@ void testSimdCases(std::vector<AcceptanceCase> const& cases) {
             simdSetLane(sourceRadius, lane, value.sourceRadius);
             simdSetLane(sinkBoxToSourceCenterSquared, lane, value.sinkBoxToSourceCenterSquared);
             simdSetLane(sourceBoxToSinkCenterSquared, lane, value.sourceBoxToSinkCenterSquared);
-            simdSetLane(pairSupportRadius, lane, value.pairSupportRadius);
+            simdSetLane(pairSmoothingLength, lane, value.pairSmoothingLength);
             simdSetLane(inverseTheta, lane, value.inverseTheta);
         }
         auto const acceptance = computeFmmAcceptance(centerDistanceSquared, sinkRadius,
             sourceRadius, sinkBoxToSourceCenterSquared, sourceBoxToSinkCenterSquared,
-            pairSupportRadius, inverseTheta);
+            pairSmoothingLength, inverseTheta);
         for (int lane = 0; lane < kSimdFloatSize; lane++) {
             auto const& value = cases[(start + lane) % cases.size()];
             auto const scalar = evaluate<float>(value);

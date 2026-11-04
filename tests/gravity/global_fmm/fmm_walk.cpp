@@ -77,7 +77,7 @@ KickParameters fmmWalkParameters(bool useCuda, float theta = kFmmWalkTheta) {
     params.a = 1.0f;
     params.t0 = 1.0f;
     params.theta = theta;
-    params.gravitySupportRadius = getOptions().gravity.supportRadius;
+    params.gravitySmoothingLength = getOptions().gravity.smoothingLength;
     params.eta = getOptions().gravity.timestepEta;
     params.gm = 1.0f;
     params.velInit = false;
@@ -117,13 +117,13 @@ void fmmWalkPrepareArena() {
     }
     fmmWalkResetKickState();
     particlesSortByRung(0);
-    treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().gravity.supportRadius));
+    treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().gravity.smoothingLength));
 }
 
 TreeId fmmWalkAddNode(Vector3<Position> const& position, float radius,
     Pair<ParticleInteger> particleRange, int depth, bool localRoot = false,
     TreeId left = TreeId{-1, -1}, TreeId right = TreeId{-1, -1}, bool spansTwoRanks = false,
-    float maxSupportRadius = 0.0f, bool tightParticleBox = false) {
+    float maxSmoothingLength = 0.0f, bool tightParticleBox = false) {
     TreeNode node{};
     node.pos = position;
     node.radius = radius;
@@ -134,13 +134,13 @@ TreeId fmmWalkAddNode(Vector3<Position> const& position, float radius,
     node.leaf = left.index == -1;
     node.children[kLeftChild] = left;
     node.children[kRightChild] = right;
-    node.maxGravitySupportRadius = particleRange.first == particleRange.second ?
+    node.maxGravitySmoothingLength = particleRange.first == particleRange.second ?
         0.0f :
-        std::max(float(getOptions().gravity.supportRadius), maxSupportRadius);
+        std::max(float(getOptions().gravity.smoothingLength), maxSmoothingLength);
     if (!node.leaf) {
         for (int child = 0; child < kChildCount; child++) {
-            node.maxGravitySupportRadius = std::max(node.maxGravitySupportRadius,
-                treeGetNode(node.children[child])->maxGravitySupportRadius);
+            node.maxGravitySmoothingLength = std::max(node.maxGravitySmoothingLength,
+                treeGetNode(node.children[child])->maxGravitySmoothingLength);
         }
     }
     MultipoleBuffer multipole;
@@ -200,7 +200,7 @@ void fmmWalkVerifyEwald(std::string const& label, TreeId sink, Vector<TreeId> co
         kScaleFactor2 * value.accelerationY(), kScaleFactor2 * value.accelerationZ()};
     double const expectedEwaldPotential = kScaleFactor1 * value.potential();
     // The call's support may differ from the defaults used to build the tree.
-    float const support = 2.0f * getOptions().gravity.supportRadius;
+    float const support = 2.0f * getOptions().gravity.smoothingLength;
     double const selfPotential = selfPhi() * (1.0f / support);
     double const expectedPotential = selfPotential + expectedEwaldPotential;
     auto const* sinkNode = treeGetNode(sink);
@@ -212,7 +212,7 @@ void fmmWalkVerifyEwald(std::string const& label, TreeId sink, Vector<TreeId> co
             ExpansionBuffer local;
             local.zero();
             auto params = fmmWalkParameters(backend != 0);
-            params.gravitySupportRadius = support;
+            params.gravitySmoothingLength = support;
             params.doPhi = potentialMode != 0;
             auto const result =
                 kick(params, local, sinkNode->pos, sink, Vector<TreeId>{}, checklist, nullptr);
@@ -390,8 +390,8 @@ FmmInteraction fmmWalkSelectInteraction(TreeId sink, TreeId source, float suppor
     float const distanceSquared = std::fma(displacement[kXDimension], displacement[kXDimension],
         std::fma(
             displacement[kYDimension], displacement[kYDimension], sqr(displacement[kZDimension])));
-    float const pairSupport = fmmPairSupportRadius(
-        support, sinkNode->maxGravitySupportRadius, sourceNode->maxGravitySupportRadius);
+    float const pairSupport = fmmPairSmoothingLength(
+        support, sinkNode->maxGravitySmoothingLength, sourceNode->maxGravitySmoothingLength);
     auto const acceptance = computeFmmAcceptance(distanceSquared, sinkNode->radius,
         sourceNode->radius, boxDistanceSquared(sinkNode->box, sourceNode->pos),
         boxDistanceSquared(sourceNode->box, sinkNode->pos), pairSupport,
@@ -475,7 +475,7 @@ ForceVectors fmmWalkApplyInteraction(TreeId sink, TreeId source, float support, 
     ExpansionBuffer local;
     local.zero();
     auto params = fmmWalkParameters(useCuda);
-    params.gravitySupportRadius = support;
+    params.gravitySmoothingLength = support;
     FlopCount const beforeFlops = useCuda ? getGpuFlops() : readFlops();
     kick(params, local, position, sink, Vector<TreeId>{source}, Vector<TreeId>{}, nullptr);
     if constexpr (kCountFlops) {
@@ -570,7 +570,7 @@ void fmmWalkReciprocalHybrid(bool useCuda) {
         fmmWalkSetHybridParticles(testCase.secondParticleCount);
         fmmWalkResetKickState();
         particlesSortByRung(0);
-        treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().gravity.supportRadius));
+        treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().gravity.smoothingLength));
         // The ordinary build initializes the arenas and may reorder particles.
         // Restore the prescribed ranges before constructing the synthetic moments.
         fmmWalkSetHybridParticles(testCase.secondParticleCount);
@@ -861,7 +861,7 @@ void fmmWalkCellSupportBounds(bool useCuda) {
                     fmmWalkAddNode(centers[side], radii[side], ranges[side], 4, true, left, right,
                         false, testCase.refine ? 0.0f : cellSupport, testCase.tightParticleBoxes);
                 fmmWalkRequireClose("synthetic cell support maximum",
-                    treeGetNode(sinks[side])->maxGravitySupportRadius, cellSupport, 0.0);
+                    treeGetNode(sinks[side])->maxGravitySmoothingLength, cellSupport, 0.0);
             }
             // Only opening metadata differs. PP still uses fixedSupport; this
             // tests conservative routing, not variable-softening PP physics.
@@ -902,21 +902,21 @@ void fmmWalkCellSupportBounds(bool useCuda) {
 
 void fmmWalkCollectLeaves(TreeId id, Vector<TreeId>& leaves) {
     auto const* node = treeGetNode(id);
-    float expectedSupportRadius = 0.0f;
+    float expectedSmoothingLength = 0.0f;
     if (node->leaf) {
         if (node->numberOfParticles()) {
             leaves.push_back(id);
-            expectedSupportRadius = getOptions().gravity.supportRadius;
+            expectedSmoothingLength = getOptions().gravity.smoothingLength;
         }
     } else {
         for (int child = 0; child < kChildCount; child++) {
             fmmWalkCollectLeaves(node->children[child], leaves);
-            expectedSupportRadius = std::max(
-                expectedSupportRadius, treeGetNode(node->children[child])->maxGravitySupportRadius);
+            expectedSmoothingLength = std::max(expectedSmoothingLength,
+                treeGetNode(node->children[child])->maxGravitySmoothingLength);
         }
     }
-    fmmWalkRequireClose("distributed cell support maximum", node->maxGravitySupportRadius,
-        expectedSupportRadius, 0.0);
+    fmmWalkRequireClose("distributed cell support maximum", node->maxGravitySmoothingLength,
+        expectedSmoothingLength, 0.0);
 }
 
 struct FmmWalkPeriodicField {
@@ -957,7 +957,7 @@ FmmWalkPeriodicField fmmWalkDirectPeriodicReference(
                         displacement[1] * displacement[1] + displacement[2] * displacement[2];
                     if (!(source == sink && origin)) {
                         double const radius = std::sqrt(radiusSquared);
-                        if (origin && radius <= getOptions().gravity.supportRadius) {
+                        if (origin && radius <= getOptions().gravity.smoothingLength) {
                             throw std::runtime_error(
                                 "Periodic FMM reference requires separated particle pairs");
                         }
@@ -1350,7 +1350,7 @@ void fmmWalkPeriodicBackground(bool useCuda) {
             throw std::runtime_error("Periodic background regression selected the wrong sources");
         }
         auto const built =
-            treeCreate(TreeCreateParameters(0, kTheta, getOptions().gravity.supportRadius));
+            treeCreate(TreeCreateParameters(0, kTheta, getOptions().gravity.smoothingLength));
         if (built.id.proc != 0 || built.id.index != 0) {
             throw std::runtime_error("Periodic background regression requires the global root");
         }
@@ -1477,7 +1477,7 @@ void fmmWalkOpenLargerCell(bool useCuda) {
     fmmWalkResetKickState();
     particlesSortByRung(0);
     auto const built =
-        treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().gravity.supportRadius));
+        treeCreate(TreeCreateParameters(0, kFmmWalkTheta, getOptions().gravity.smoothingLength));
     auto const range = particlesCurrentRange();
     if (range.second - range.first != kCount) {
         throw std::runtime_error("Open-larger regression lost particles");
@@ -1638,7 +1638,7 @@ double fmmWalkVerifyDistributedForces(TreeId root) {
     }
     ForceVectors reference(1);
     reference.gx[0] = reference.gy[0] = reference.gz[0] = reference.phi[0] = 0.0f;
-    cpuGravityPp(reference, true, sink, sources, getOptions().gravity.supportRadius);
+    cpuGravityPp(reference, true, sink, sources, getOptions().gravity.smoothingLength);
     detail::fmmWalkRequireClose("distributed handoff x acceleration",
         particlesGravityAcceleration(kXDimension, 0), reference.gx[0]);
     detail::fmmWalkRequireClose("distributed handoff y acceleration",
@@ -1697,7 +1697,7 @@ void fmmWalkTest() {
     options.analysis.groups = false;
     options.analysis.tracers = false;
     options.compute.bucketSize = 64;
-    options.gravity.supportRadius = 0.005;
+    options.gravity.smoothingLength = 0.005;
     options.initial.numberOfParticles = hpxSize() == 1 ? 6 : hpxSize();
     setOptions(options);
     if (hpxSize() == 1) {
@@ -1730,7 +1730,8 @@ void fmmWalkTest() {
         domainsBegin(0);
         domainsEnd();
         particlesSortByRung(0);
-        auto const built = treeCreate(TreeCreateParameters(0, 0.1, options.gravity.supportRadius));
+        auto const built =
+            treeCreate(TreeCreateParameters(0, 0.1, options.gravity.smoothingLength));
         // Three ranks give a one-rank left child and a global right child at the first handoff.
         // First force nearby sources open against the direct reference, then
         // include Ewald to exercise the distributed root-background reduction.

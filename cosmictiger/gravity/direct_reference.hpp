@@ -168,7 +168,7 @@ CUDA_EXPORT inline Vector3<double> gravityReferenceCorrection(
 // Unit-source acceleration with the production compact-support convention.
 // Only the nearest image is softened, even when support exceeds half a box.
 CUDA_EXPORT inline Vector3<double> directGravityReference(Vector3<double> const& displacement,
-    radial_kernel::KernelTable const& kernel, double supportRadius, bool periodic,
+    radial_kernel::KernelTable const& kernel, double smoothingLength, bool periodic,
     GravityReferenceTables const& tables) {
     double const radiusSquared = displacement[0] * displacement[0] +
         displacement[1] * displacement[1] + displacement[2] * displacement[2];
@@ -177,9 +177,9 @@ CUDA_EXPORT inline Vector3<double> directGravityReference(Vector3<double> const&
         return {};
     }
     double const radius = std::sqrt(radiusSquared);
-    double const inverseSupport = 1.0 / supportRadius;
+    double const inverseSupport = 1.0 / smoothingLength;
     // Reuse the CPU/CUDA radial evaluator used by both production PP solvers.
-    double const softened = radius < supportRadius ?
+    double const softened = radius < smoothingLength ?
         radial_kernel::forceFactor(kernel, radius * inverseSupport) * inverseSupport *
             inverseSupport * inverseSupport :
         1.0 / (radiusSquared * radius);
@@ -192,9 +192,9 @@ CUDA_EXPORT inline Vector3<double> directGravityReference(Vector3<double> const&
 }
 
 inline Vector3<double> directGravityReference(Vector3<double> const& displacement,
-    radial_kernel::KernelTable const& kernel, double supportRadius, bool periodic = true) {
+    radial_kernel::KernelTable const& kernel, double smoothingLength, bool periodic = true) {
     return directGravityReference(
-        displacement, kernel, supportRadius, periodic, gravityReferenceTables());
+        displacement, kernel, smoothingLength, periodic, gravityReferenceTables());
 }
 
 }    // namespace detail

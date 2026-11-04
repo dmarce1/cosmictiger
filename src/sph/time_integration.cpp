@@ -169,11 +169,11 @@ SphRungBalanceReturn sphFinishRungCandidates(bool publish) {
 SphRungBalanceReturn sphBalanceRungs(TreeId root, float scaleFactor, bool cuda) {
     ALWAYS_ASSERT(hpxRank() == 0 && sphTreeAllValid());
     SphTreeNeighborParameters neighbors;
-    neighbors.runType = kSphTreeNeighborBoxes;
-    neighbors.innerSelection = neighbors.outerSelection = kSphSetAll;
+    neighbors.operation = SphNeighborOperation::RefreshBounds;
+    neighbors.innerParticleSelection = neighbors.outerParticleSelection = SphParticleSelection::All;
     sphTreeNeighbor(neighbors, root, {}).get();
-    neighbors.runType = kSphTreeNeighborNeighbors;
-    neighbors.innerSelection = kSphInteractionsIJ;
+    neighbors.operation = SphNeighborOperation::FindNeighbors;
+    neighbors.interactionDirection = SphInteractionDirection::EitherSupport;
     sphTreeNeighbor(neighbors, root, Vector<TreeId>{root}).get();
 
     try {

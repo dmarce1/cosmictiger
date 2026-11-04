@@ -362,7 +362,7 @@ TreeCellRoot treeCreateCell(ParticleMeshCell const& cell, int meshSize, FmmParti
         }
     }
     auto const& gravity = getOptions().gravity;
-    TreeCreateParameters params(0, gravity.openingAngle, gravity.supportRadius);
+    TreeCreateParameters params(0, gravity.openingAngle, gravity.smoothingLength);
     auto const built = treeCreateCellImpl(params, domainKey, processRange,
         Pair<ParticleInteger>(cell.begin, cell.end), box, domainDepth, true, context);
 #if COSMICTIGER_WITH_SPH
@@ -448,7 +448,7 @@ TreeId treeCombineCellRoots(uint64_t cellKey, int meshSize, Vector<TreeId> contr
     context.cellKey = cellKey;
     context.roots = std::move(contributors);
     auto const& gravity = getOptions().gravity;
-    TreeCreateParameters params(0, gravity.openingAngle, gravity.supportRadius);
+    TreeCreateParameters params(0, gravity.openingAngle, gravity.smoothingLength);
     return treeCreateFork(params, 1, Pair<int>(0, hpxSize()), Pair<ParticleInteger>(-1, -1), box, 0,
         false, false, context)
         .get()

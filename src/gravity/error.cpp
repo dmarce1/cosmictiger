@@ -84,7 +84,7 @@ Vector<GravityErrorAcceleration> gravityErrorDirect(Vector<GravityErrorSample> c
         return result;
     }
     auto const& correctionTable = gravityReferenceCorrectionTable();
-    double const supportRadius = getOptions().gravity.supportRadius;
+    double const smoothingLength = getOptions().gravity.smoothingLength;
     double const gm = getOptions().gravity.gm;
 #ifdef USE_CUDA
     if (getOptions().gravity.errorCuda) {
@@ -105,7 +105,7 @@ Vector<GravityErrorAcceleration> gravityErrorDirect(Vector<GravityErrorSample> c
                     sources[offset].mass = particlesMass(source);
                 }
             },
-            selectedGravityKernel(), supportRadius, correctionTable);
+            selectedGravityKernel(), smoothingLength, correctionTable);
         for (size_t slot = 0; slot < samples.size(); ++slot) {
             for (int dim = 0; dim < kDimensions; ++dim) {
                 result[slot][dim] = gm * accelerations[slot][dim];
@@ -131,7 +131,7 @@ Vector<GravityErrorAcceleration> gravityErrorDirect(Vector<GravityErrorSample> c
                                 samples[slot].position[dim], particlesPos(dim, source));
                         }
                         auto const force = tabulatedGravityReference(separation,
-                            selectedGravityKernel(), supportRadius, correctionTable.data());
+                            selectedGravityKernel(), smoothingLength, correctionTable.data());
                         double const mass = particlesMass(source);
                         for (int dim = 0; dim < kDimensions; ++dim) {
                             sum[dim].add(mass * force[dim]);

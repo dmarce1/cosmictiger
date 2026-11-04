@@ -65,11 +65,27 @@ Source: https://wwwmpa.mpa-garching.mpg.de/gadget4/gadget4-code-paper.pdf
 
 ## Tree retention and gravity rung merging
 
-Each SPH node retains its original octant partition and an additional
+The spatial tree uses hybrid fanout near the bucket threshold (November 4, 2026):
+for `B = compute.sphBucketSize`, counts above `4B` split into eight cells, counts
+in `(2B, 4B]` into four, and counts in `(B, 2B]` into two. Counts at or below `B`
+remain leaves. Partial splits bisect the longest one or two partition axes,
+breaking equal-length ties in x/y/z order. Empty children remain absent; rank
+routing stays binary.
+
+Each SPH node retains its original spatial partition and an additional
 `Fixed32Range driftBox` enclosing its moving members. Bounds expand using member
 velocity extrema and the actual drift factor, rounding outward and conservatively
 handling periodic wraps. Support changes refresh neighbor bounds. Small events
 retain particle ordering; migration and other invalidations force reconstruction.
+
+Both tree construction and refresh return `SphTreeCreateReturn::minVolumeRatio`
+and `maxVolumeRatio`, the extrema of `volume(driftBox) / volume(box)` over
+nonempty spatial nodes, including internal nodes. Rank-routing nodes are excluded, and an empty tree returns zero.
+This measures conservative swept bounds since the last rebuild relative to the
+original partition; periodic seam expansion contributes, while kernel-support
+radii do not. A fresh tree can report less than one because tight particle bounds
+need not fill their partition. Rebuilding resets the swept history. The driver
+prints both values with its tree diagnostics.
 
 `--compute.sphTreeRebuildFraction` defaults to one third of **all particles**.
 Rebuild at `active/total >= fraction`, inclusive, without accumulating events.

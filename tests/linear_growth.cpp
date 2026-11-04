@@ -269,8 +269,8 @@ struct LinearExperiment {
         }
         particlesSortByRung(0);
         auto const built = treeCreate(
-            TreeCreateParameters(0, options.gravity.openingAngle, options.gravity.supportRadius));
-        if (built.maxGravitySupportRadius != float(options.gravity.supportRadius)) {
+            TreeCreateParameters(0, options.gravity.openingAngle, options.gravity.smoothingLength));
+        if (built.maxGravitySmoothingLength != float(options.gravity.smoothingLength)) {
             throw std::runtime_error(
                 "Linear-growth tree changed the configured fixed gravity support");
         }
@@ -282,7 +282,7 @@ struct LinearExperiment {
         parameters.a = 1.0;
         parameters.t0 = 0.001;
         parameters.theta = options.gravity.openingAngle;
-        parameters.gravitySupportRadius = options.gravity.supportRadius;
+        parameters.gravitySmoothingLength = options.gravity.smoothingLength;
         parameters.eta = options.gravity.timestepEta;
         parameters.gm = options.gravity.gm;
         parameters.velInit = false;
@@ -320,7 +320,7 @@ struct LinearExperiment {
                 throw std::runtime_error("Linear-growth particle labels are not unique");
             }
             seen[index] = true;
-            double const support = built.maxGravitySupportRadius;
+            double const support = built.maxGravitySmoothingLength;
             result.meanSupport[kind] += support / perSpecies;
             result.minimumSupport = std::min(result.minimumSupport, support);
             result.maximumSupport = std::max(result.maximumSupport, support);
@@ -403,7 +403,7 @@ void writeLinearMetadata(LinearExperiment const& experiment, LinearSample const&
            << "  \"kernel_family\": \"" << options.gravity.kernelFamily << "\",\n"
            << "  \"kernel_degree\": " << options.gravity.kernelDegree << ",\n"
            << "  \"softening_mode\": \"fixed\",\n"
-           << "  \"configured_support_radius_box\": " << options.gravity.supportRadius
+           << "  \"configured_smoothing_length_box\": " << options.gravity.smoothingLength
            << ",\n"
            // Retain the historical metadata key; fixed gravity has no neighbor target.
            << "  \"neighbor_number\": 0,\n"

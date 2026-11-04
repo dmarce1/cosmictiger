@@ -51,34 +51,36 @@ struct SphTreeNeighborReturn {
 };
 #endif
 
-inline constexpr int kSphTreeNeighborBoxes = 0;
-inline constexpr int kSphTreeNeighborNeighbors = 1;
-inline constexpr int kSphInteractionsI = 1;
-inline constexpr int kSphInteractionsJ = 2;
-inline constexpr int kSphInteractionsIJ = 3;
-inline constexpr int kSphSetActive = 1;
-inline constexpr int kSphSetAll = 4;
+enum class SphNeighborOperation { RefreshBounds, FindNeighbors };
+
+// Which particle's kernel support can admit a pair to the neighbor list.
+enum class SphInteractionDirection { TargetSupport, SourceSupport, EitherSupport };
+
+// Active means rung >= minimumRung; this selection applies only to bounds refresh.
+enum class SphParticleSelection { Active, All };
 
 struct SphTreeNeighborParameters {
-    int runType = 0;
-    float supportRadiusMultiplier = 1.0f;
+    SphNeighborOperation operation = SphNeighborOperation::RefreshBounds;
+    float smoothingLengthMultiplier = 1.0f;
     int minimumRung = 0;
-    int innerSelection = 0;
-    int outerSelection = 0;
+    SphInteractionDirection interactionDirection = SphInteractionDirection::EitherSupport;
+    SphParticleSelection innerParticleSelection = SphParticleSelection::All;
+    SphParticleSelection outerParticleSelection = SphParticleSelection::Active;
     template <typename T>
     void serialize(T&& arc, unsigned) {
-        arc & innerSelection;
-        arc & outerSelection;
-        arc & runType;
-        arc & supportRadiusMultiplier;
+        arc & interactionDirection;
+        arc & innerParticleSelection;
+        arc & outerParticleSelection;
+        arc & operation;
+        arc & smoothingLengthMultiplier;
         arc & minimumRung;
     }
 };
 
 struct SphRunReturn {
     double minimumTimestep = std::numeric_limits<double>::max();
-    float minimumSupportRadius = std::numeric_limits<float>::max();
-    float maximumSupportRadius = 0.0f;
+    float minimumSmoothingLength = std::numeric_limits<float>::max();
+    float maximumSmoothingLength = 0.0f;
     double floatingPointOperations = 0.0;
     int maximumHydroRung = 0;
     int maximumGravityRung = 0;
@@ -106,8 +108,8 @@ struct SphRunReturn {
         arc & inverseSoundTimestep;
         arc & inverseViscosityTimestep;
         arc & inverseAccelerationTimestep;
-        arc & minimumSupportRadius;
-        arc & maximumSupportRadius;
+        arc & minimumSmoothingLength;
+        arc & maximumSmoothingLength;
         arc & maximumHydroRung;
         arc & maximumGravityRung;
         arc & maximumRung;
@@ -116,8 +118,8 @@ struct SphRunReturn {
     SphRunReturn& operator+=(SphRunReturn const& other) {
         minimumTimestep = std::min(minimumTimestep, other.minimumTimestep);
         floatingPointOperations += other.floatingPointOperations;
-        maximumSupportRadius = std::max(maximumSupportRadius, other.maximumSupportRadius);
-        minimumSupportRadius = std::min(minimumSupportRadius, other.minimumSupportRadius);
+        maximumSmoothingLength = std::max(maximumSmoothingLength, other.maximumSmoothingLength);
+        minimumSmoothingLength = std::min(minimumSmoothingLength, other.minimumSmoothingLength);
         maximumHydroRung = std::max(maximumHydroRung, other.maximumHydroRung);
         maximumGravityRung = std::max(maximumGravityRung, other.maximumGravityRung);
         maximumRung = std::max(maximumRung, other.maximumRung);
@@ -146,8 +148,8 @@ struct SphRunParameters {
     float scaleFactor;      // Cosmological scale factor; one in isolated test problems.
     float expansionRate;    // Expansion rate; zero in isolated test problems.
     float courantFactor;
-    float minimumSupportRadius;
-    float maximumSupportRadius;
+    float minimumSmoothingLength;
+    float maximumSmoothingLength;
     float uniformAccelerationY;    // Optional uniform force along y.
     float zPlaneAcceleration;      // Magnitude of the force toward z = 0.5.
     float maximumTimestep = 1e30f;
@@ -196,8 +198,8 @@ struct SphRunParameters {
     SphRunParameters() {
         auto const opts = getOptions();
         minimumProposedRung = opts.run.minRung;
-        minimumSupportRadius = opts.hydro.minSupportRadius;
-        maximumSupportRadius = opts.hydro.maxSupportRadius;
+        minimumSmoothingLength = opts.hydro.minSmoothingLength;
+        maximumSmoothingLength = opts.hydro.maxSmoothingLength;
         velocityDampingRate = opts.hydro.damping;
         uniformAccelerationY = opts.hydro.yAcceleration;
         zPlaneAcceleration = opts.hydro.zPlaneAcceleration;
@@ -252,8 +254,8 @@ struct SphRunParameters {
         arc & viscosityDecay;
         arc & viscosityTimestep;
         arc & velocityDampingRate;
-        arc & minimumSupportRadius;
-        arc & maximumSupportRadius;
+        arc & minimumSmoothingLength;
+        arc & maximumSmoothingLength;
         arc & expansionRate;
         arc & maximumTimestep;
         arc & globalTimestep;
@@ -283,8 +285,8 @@ struct SphRunParameters {
     }
 };
 
-inline constexpr int kSphRunPrehydro1 = 0;
-inline constexpr int kSphRunPrehydro2 = 1;
+inline constexpr int kSphRunSmoothingLengths = 0;
+inline constexpr int kSphRunDensityAndGradients = 1;
 inline constexpr int kSphRunHydro = 2;
 inline constexpr int kSphRunRungs = 3;
 

@@ -257,7 +257,7 @@ static void treeTest() {
     tm.reset();
 
     tm.start();
-    TreeCreateParameters tparams(0, 0.7, getOptions().gravity.supportRadius);
+    TreeCreateParameters tparams(0, 0.7, getOptions().gravity.smoothingLength);
     treeCreate(tparams);
     tm.stop();
     std::cout << std::format("tree_create: {:e} s\n", tm.read()) << std::flush;
@@ -313,7 +313,7 @@ static void kickTest() {
     tm.reset();
     tm.start();
     TreeCreateParameters tparams(
-        0, getOptions().gravity.openingAngle, getOptions().gravity.supportRadius);
+        0, getOptions().gravity.openingAngle, getOptions().gravity.smoothingLength);
     auto sr = treeCreate(tparams);
     tm.stop();
     std::cout << std::format("tree_create: {:e} s\n", tm.read()) << std::flush;
@@ -336,7 +336,7 @@ static void kickTest() {
     kparams.minLevel = tparams.minLevel;
     kparams.saveForce = getOptions().analysis.saveForce;
     kparams.gm = getOptions().gravity.gm;
-    kparams.gravitySupportRadius = getOptions().gravity.supportRadius;
+    kparams.gravitySmoothingLength = getOptions().gravity.smoothingLength;
     kparams.eta = getOptions().gravity.timestepEta;
     kparams.a = 1.0;
     kparams.firstCall = true;
@@ -465,11 +465,11 @@ static void forceTest() {
         domainsBegin(0);
         domainsEnd();
         particlesSortByRung(0);
-        TreeCreateParameters tparams(0, theta, getOptions().gravity.supportRadius);
+        TreeCreateParameters tparams(0, theta, getOptions().gravity.smoothingLength);
         treeCreate(tparams);
         return tparams;
     };
-    TreeCreateParameters tparams(0, treeTheta, getOptions().gravity.supportRadius);
+    TreeCreateParameters tparams(0, treeTheta, getOptions().gravity.smoothingLength);
     if (fixedTree) {
         tparams = buildTree(treeTheta);
         std::cout << std::format("tree built once at theta {:.3f}\n", treeTheta) << std::flush;
@@ -485,7 +485,7 @@ static void forceTest() {
         kparams.minLevel = tparams.minLevel;
         kparams.saveForce = getOptions().analysis.saveForce;
         kparams.gm = getOptions().gravity.gm;
-        kparams.gravitySupportRadius = getOptions().gravity.supportRadius;
+        kparams.gravitySmoothingLength = getOptions().gravity.smoothingLength;
         kparams.eta = getOptions().gravity.timestepEta;
         kparams.a = 1.0;
         kparams.firstCall = true;
@@ -561,7 +561,7 @@ static void bucketTest() {
             domainsEnd();
             particlesSortByRung(0);
             TreeCreateParameters tparams(
-                0, getOptions().gravity.openingAngle, getOptions().gravity.supportRadius);
+                0, getOptions().gravity.openingAngle, getOptions().gravity.smoothingLength);
             treeCreate(tparams);
             std::cout << "Tree created\n" << std::flush;
             KickParameters kparams;
@@ -571,7 +571,7 @@ static void bucketTest() {
             kparams.minLevel = tparams.minLevel;
             kparams.saveForce = getOptions().analysis.saveForce;
             kparams.gm = getOptions().gravity.gm;
-            kparams.gravitySupportRadius = getOptions().gravity.supportRadius;
+            kparams.gravitySmoothingLength = getOptions().gravity.smoothingLength;
             kparams.eta = getOptions().gravity.timestepEta;
             kparams.a = 1.0;
             kparams.firstCall = true;
@@ -654,7 +654,7 @@ static void speedTest() {
             domainsBegin(0);
             domainsEnd();
             particlesSortByRung(0);
-            TreeCreateParameters tparams(0, thetas[ci], getOptions().gravity.supportRadius);
+            TreeCreateParameters tparams(0, thetas[ci], getOptions().gravity.smoothingLength);
             treeCreate(tparams);
             KickParameters kparams;
             kparams.nodeLoad = 10;
@@ -662,7 +662,7 @@ static void speedTest() {
             kparams.minLevel = tparams.minLevel;
             kparams.saveForce = getOptions().analysis.saveForce;
             kparams.gm = getOptions().gravity.gm;
-            kparams.gravitySupportRadius = getOptions().gravity.supportRadius;
+            kparams.gravitySmoothingLength = getOptions().gravity.smoothingLength;
             kparams.eta = getOptions().gravity.timestepEta;
             kparams.a = 1.0;
             kparams.firstCall = true;

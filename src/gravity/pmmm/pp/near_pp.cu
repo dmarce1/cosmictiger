@@ -28,7 +28,7 @@ constexpr int kNearBlockSize = 128;
 
 __global__ void nearKernel(PmmmNearParticle const* sinks, size_t sinkCount,
     PmmmNearParticle const* sources, PmmmNearSourceRange const* sourceRanges, double cellWidth,
-    double inverseSupportRadius, double inverseSupportRadiusCubed, bool doPotential,
+    double inverseSmoothingLength, double inverseSmoothingLengthCubed, bool doPotential,
     std::array<double, 4>* fields) {
     FlopCounter<> flops;
     for (size_t sink = size_t(blockIdx.x) * blockDim.x + threadIdx.x; sink < sinkCount;
@@ -37,8 +37,8 @@ __global__ void nearKernel(PmmmNearParticle const* sinks, size_t sinkCount,
         auto const range = sourceRanges[sink];
         for (size_t source = range.begin; source < range.end; ++source) {
             flops +=
-                accumulateNearPair(sinks[sink], sources[source], cellWidth, inverseSupportRadius,
-                    inverseSupportRadiusCubed, doPotential, selectedGravityKernel(), field);
+                accumulateNearPair(sinks[sink], sources[source], cellWidth, inverseSmoothingLength,
+                    inverseSmoothingLengthCubed, doPotential, selectedGravityKernel(), field);
         }
         fields[sink] = field;
     }
@@ -163,7 +163,7 @@ void clearPmmmNearCudaWorkspaces() {
 
 void pmmmNearFieldCuda(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearParticle> const& sources,
-    std::vector<PmmmNearSourceRange> const& sourceRanges, double cellWidth, double supportRadius,
+    std::vector<PmmmNearSourceRange> const& sourceRanges, double cellWidth, double smoothingLength,
     bool doPotential, std::vector<std::array<double, 4>>& fields) {
     cudaSetDevice();
     int const device = cudaGetDevice();
@@ -179,15 +179,16 @@ void pmmmNearFieldCuda(std::vector<PmmmNearParticle> const& sinks,
         sources.size() * sizeof(PmmmNearParticle), cudaMemcpyHostToDevice);
     stream.copyAsync(workspace->sourceRanges.data.get(), sourceRanges.data(),
         sourceRanges.size() * sizeof(PmmmNearSourceRange), cudaMemcpyHostToDevice);
-    double const inverseSupportRadius = 1 / supportRadius;
-    double const inverseSupportRadiusCubed =
-        inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
+    double const inverseSmoothingLength = 1 / smoothingLength;
+    double const inverseSmoothingLengthCubed =
+        inverseSmoothingLength * inverseSmoothingLength * inverseSmoothingLength;
     addCpuFlops(3, FlopPrecision::Double);
     int const blocks = static_cast<int>(std::min(
         size_t(65535), (sinks.size() + size_t(kNearBlockSize) - 1) / size_t(kNearBlockSize)));
     nearKernel<<<blocks, kNearBlockSize, 0, stream.nativeHandle()>>>(workspace->sinks.data.get(),
         sinks.size(), workspace->sources.data.get(), workspace->sourceRanges.data.get(), cellWidth,
-        inverseSupportRadius, inverseSupportRadiusCubed, doPotential, workspace->fields.data.get());
+        inverseSmoothingLength, inverseSmoothingLengthCubed, doPotential,
+        workspace->fields.data.get());
     stream.checkLaunch();
     stream.copyAsync(fields.data(), workspace->fields.data.get(), fields.size() * sizeof(fields[0]),
         cudaMemcpyDeviceToHost);

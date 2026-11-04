@@ -37,20 +37,20 @@ struct ShortSourceRange {
 struct ShortPairParameters {
     double alpha = 0;
     double cutoffSquared = 0;
-    double supportRadius = 0;
+    double smoothingLength = 0;
     double supportSquared = 0;
     double inverseSupport = 0;
     double inverseSupportCubed = 0;
 };
 
 CUDA_EXPORT inline ShortPairParameters makeShortPairParameters(
-    double splitRadius, double cutoffRadius, double supportRadius) {
+    double splitRadius, double cutoffRadius, double smoothingLength) {
     ShortPairParameters parameters;
     parameters.alpha = 0.5 / splitRadius;
     parameters.cutoffSquared = cutoffRadius * cutoffRadius;
-    parameters.supportRadius = supportRadius;
-    parameters.supportSquared = supportRadius * supportRadius;
-    parameters.inverseSupport = 1.0 / supportRadius;
+    parameters.smoothingLength = smoothingLength;
+    parameters.supportSquared = smoothingLength * smoothingLength;
+    parameters.inverseSupport = 1.0 / smoothingLength;
     parameters.inverseSupportCubed =
         parameters.inverseSupport * parameters.inverseSupport * parameters.inverseSupport;
     return parameters;

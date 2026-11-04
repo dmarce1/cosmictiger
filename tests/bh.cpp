@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include <cosmictiger/core/options.hpp>
 #include <cosmictiger/analysis/bh.hpp>
+#include <cosmictiger/core/options.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 
 namespace detail {
@@ -25,7 +25,7 @@ Vector3<float> bhPosition(float x, float y, float z) {
 
 void requireBhClose(char const* label, double actual, double expected, double tolerance) {
     auto const& options = getOptions();
-    double const roundingScale = options.gravity.gm / options.gravity.supportRadius;
+    double const roundingScale = options.gravity.gm / options.gravity.smoothingLength;
     // The application enables fast-math, so inspect exponent bits rather than
     // allowing the compiler to assume std::isfinite is always true.
     constexpr std::uint64_t kExponentMask = 0x7ff0000000000000ULL;
@@ -40,7 +40,7 @@ void requireBhClose(char const* label, double actual, double expected, double to
 double directBhPotential(
     Vector3<float> const& sink, BhPositions const& sources, int selfIndex, bool skipCoincident) {
     auto const& options = getOptions();
-    double const support = options.gravity.supportRadius;
+    double const support = options.gravity.smoothingLength;
     double potential = 0.0;
     for (int j = 0; j < sources.size(); ++j) {
         if (j == selfIndex) {
@@ -95,7 +95,7 @@ void compareBhPoints(char const* label, BhPositions const& sources, BhPositions 
 
 #ifdef USE_CUDA
 void verifyBhCudaWorkspaceReuse() {
-    float const support = getOptions().gravity.supportRadius;
+    float const support = getOptions().gravity.smoothingLength;
     BhPositions positions(2 * kBhBucketSize);
     for (int i = 0; i < positions.size(); ++i) {
         positions[i] = bhPosition(0.1f * support * i, 0.0f, 0.0f);
@@ -138,7 +138,7 @@ void verifyBhCudaWorkspaceReuse() {
 
 void bhPotentialTest() {
     auto const& options = getOptions();
-    float const support = options.gravity.supportRadius;
+    float const support = options.gravity.smoothingLength;
     detail::BhPositions empty;
     if (bhEvaluatePotential(empty, true).size() != 0) {
         throw std::runtime_error("Empty halo potential must be empty");

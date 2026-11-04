@@ -85,7 +85,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     boxR = sqrt(boxR);
     bool const distanceSatisfied = boxR < 0.25 * (params.theta / (1.0 + params.theta));
     bool const ewaldSatisfied =
-        distanceSatisfied && boxR < 0.125 - 0.25 * getOptions().gravity.supportRadius;
+        distanceSatisfied && boxR < 0.125 - 0.25 * getOptions().gravity.smoothingLength;
     policy.extraSubdivision = !ewaldSatisfied && particleRange.second > particleRange.first;
     // Box extents/accumulation and opening arithmetic are double. The
     // float radius accumulator widens and narrows in each dimension.

@@ -346,8 +346,8 @@ float pmmmPotential(ParticleInteger index) {
 }
 
 double pmmmEffectiveRadius() {
-    return getOptions().gravity.supportRadius /
-        selectedGravityKernel().supportRadiusPerEffectiveRadius;
+    return getOptions().gravity.smoothingLength /
+        selectedGravityKernel().smoothingLengthPerEffectiveRadius;
 }
 
 void pmmmSetCellObserver(std::function<void(PmmmCellEvent, uint64_t)> observer) {

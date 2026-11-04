@@ -64,7 +64,7 @@ void evaluatePairs() {
     int const n = state.meshSize;
     int const width = gravity.pmmmNearWidth;
     auto const pairParameters = makeShortPairParameters(
-        gravity.p3mSplitRadius, gravity.p3mCutoffRadius, gravity.supportRadius);
+        gravity.p3mSplitRadius, gravity.p3mCutoffRadius, gravity.smoothingLength);
     bool const doPotential = state.request.doPotential;
     size_t const targetParticles = gravity.pmmmBatchParticles;
     std::vector<std::pair<size_t, size_t>> batches;

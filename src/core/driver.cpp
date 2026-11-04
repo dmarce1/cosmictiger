@@ -283,7 +283,7 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
 
     Timer timer;
     treeParameters.minimumRung = minrung;
-    treeParameters.supportRadiusMultiplier = (1.0 + kSmoothLengthBuffer);
+    treeParameters.smoothingLengthMultiplier = (1.0 + kSmoothLengthBuffer);
     SphTreeCreateReturn treeResult;
 
     timer.start();
@@ -296,6 +296,8 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
     if (verbose) {
         terminal::detailPrint("sph_tree_create time = %s %i\n",
             terminal::formatDuration(timer.read()).c_str(), treeResult.numberOfActiveParticles);
+        terminal::detailPrint("SPH tree swept/partition volume ratio: min=%.6e max=%.6e\n",
+            treeResult.minVolumeRatio, treeResult.maxVolumeRatio);
     }
     timer.reset();
     return treeResult;
@@ -414,7 +416,7 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
 
     runParameters.phase = 1;
     SphTreeNeighborParameters neighborParameters;
-    neighborParameters.supportRadiusMultiplier = (1.0 + kSmoothLengthBuffer);
+    neighborParameters.smoothingLengthMultiplier = (1.0 + kSmoothLengthBuffer);
     neighborParameters.minimumRung = minrung;
     TreeId rootId;
     rootId.proc = 0;
@@ -424,8 +426,8 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
 
     auto prepareDensities = [&]() {
         profile::ScopedPhase profilePhase("hydro.density");
-        neighborParameters.innerSelection = kSphInteractionsI;
-        neighborParameters.runType = kSphTreeNeighborNeighbors;
+        neighborParameters.interactionDirection = SphInteractionDirection::TargetSupport;
+        neighborParameters.operation = SphNeighborOperation::FindNeighbors;
         {
             profile::ScopedPhase profilePhase("hydro.neighbors.initial");
             sphTreeNeighbor(neighborParameters, rootId, checklist).get();
@@ -442,7 +444,7 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
                 THROW_ERROR("SPH smoothing lengths did not converge after 256 tree rebuilds\n");
             }
 
-            runParameters.runType = kSphRunPrehydro1;
+            runParameters.runType = kSphRunSmoothingLengths;
             Timer timer;
             timer.start();
             {
@@ -451,16 +453,17 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
             }
             timer.stop();
             if (verbose) {
-                terminal::detailPrint("sph_run(SPH_RUN_PREHYDRO1): tm = %s min_h = %e max_h = %e\n",
-                    terminal::formatDuration(timer.read()).c_str(), result.minimumSupportRadius,
-                    result.maximumSupportRadius);
+                terminal::detailPrint("sph_run(smoothing lengths): tm = %s min_h = %e max_h = %e\n",
+                    terminal::formatDuration(timer.read()).c_str(), result.minimumSmoothingLength,
+                    result.maximumSmoothingLength);
             }
             timer.reset();
             needsNeighborRefresh = result.needsAnotherPass;
-            neighborParameters.supportRadiusMultiplier = (1.0 + kSmoothLengthBuffer);
-            neighborParameters.runType = kSphTreeNeighborBoxes;
-            neighborParameters.outerSelection = needsNeighborRefresh ? kSphSetActive : kSphSetAll;
-            neighborParameters.innerSelection = kSphSetAll;
+            neighborParameters.smoothingLengthMultiplier = (1.0 + kSmoothLengthBuffer);
+            neighborParameters.operation = SphNeighborOperation::RefreshBounds;
+            neighborParameters.outerParticleSelection =
+                needsNeighborRefresh ? SphParticleSelection::Active : SphParticleSelection::All;
+            neighborParameters.innerParticleSelection = SphParticleSelection::All;
             timer.start();
             {
                 profile::ScopedPhase profilePhase("hydro.neighbors.boxes");
@@ -470,9 +473,10 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
             terminal::detailPrint("%s\n", terminal::formatDuration(timer.read()).c_str());
             timer.reset();
             timer.start();
-            neighborParameters.innerSelection =
-                needsNeighborRefresh ? kSphInteractionsI : kSphInteractionsIJ;
-            neighborParameters.runType = kSphTreeNeighborNeighbors;
+            neighborParameters.interactionDirection = needsNeighborRefresh ?
+                SphInteractionDirection::TargetSupport :
+                SphInteractionDirection::EitherSupport;
+            neighborParameters.operation = SphNeighborOperation::FindNeighbors;
             {
                 profile::ScopedPhase profilePhase("hydro.neighbors.refresh");
                 sphTreeNeighbor(neighborParameters, rootId, checklist).get();
@@ -494,7 +498,7 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
                 THROW_ERROR("SPH neighbor densities did not converge after 256 tree rebuilds\n");
             }
 
-            runParameters.runType = kSphRunPrehydro2;
+            runParameters.runType = kSphRunDensityAndGradients;
             Timer timer;
             timer.start();
             {
@@ -504,17 +508,18 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
             gradHDiagnostics += result;
             timer.stop();
             if (verbose) {
-                terminal::detailPrint("sph_run(SPH_RUN_PREHYDRO2): tm = %s min_h = %e max_h = %e\n",
-                    terminal::formatDuration(timer.read()).c_str(), result.minimumSupportRadius,
-                    result.maximumSupportRadius);
+                terminal::detailPrint(
+                    "sph_run(density and gradients): tm = %s min_h = %e max_h = %e\n",
+                    terminal::formatDuration(timer.read()).c_str(), result.minimumSmoothingLength,
+                    result.maximumSmoothingLength);
             }
             timer.reset();
             needsNeighborRefresh = result.needsAnotherPass;
-            neighborParameters.supportRadiusMultiplier =
+            neighborParameters.smoothingLengthMultiplier =
                 needsNeighborRefresh ? (1.0 + kSmoothLengthBuffer) : 1.01;
-            neighborParameters.runType = kSphTreeNeighborBoxes;
-            neighborParameters.outerSelection = kSphSetAll;
-            neighborParameters.innerSelection = kSphSetAll;
+            neighborParameters.operation = SphNeighborOperation::RefreshBounds;
+            neighborParameters.outerParticleSelection = SphParticleSelection::All;
+            neighborParameters.innerParticleSelection = SphParticleSelection::All;
             timer.start();
             {
                 profile::ScopedPhase profilePhase("hydro.neighbors.boxes");
@@ -524,8 +529,8 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
             terminal::detailPrint("%s\n", terminal::formatDuration(timer.read()).c_str());
             timer.reset();
             timer.start();
-            neighborParameters.innerSelection = kSphInteractionsIJ;
-            neighborParameters.runType = kSphTreeNeighborNeighbors;
+            neighborParameters.interactionDirection = SphInteractionDirection::EitherSupport;
+            neighborParameters.operation = SphNeighborOperation::FindNeighbors;
             {
                 profile::ScopedPhase profilePhase("hydro.neighbors.refresh");
                 sphTreeNeighbor(neighborParameters, rootId, checklist).get();
@@ -763,7 +768,7 @@ KickParameters prepareFmmKick(int minrung, double scale, double dadt, double t0,
     kparams.saveForce = getOptions().analysis.saveForce;
     kparams.gm = getOptions().gravity.enabled ? getOptions().gravity.gm : 0.0;
     kparams.eta = getOptions().gravity.timestepEta;
-    kparams.gravitySupportRadius = getOptions().gravity.supportRadius;
+    kparams.gravitySmoothingLength = getOptions().gravity.smoothingLength;
     kparams.a = scale;
     kparams.firstCall = firstCall;
     kparams.minRung = minrung;
@@ -900,7 +905,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
                 parameters.t0 = baseTimestep;
                 parameters.a = scale;
                 parameters.eta = getOptions().gravity.timestepEta;
-                parameters.gravitySupportRadius = getOptions().gravity.supportRadius;
+                parameters.gravitySmoothingLength = getOptions().gravity.smoothingLength;
                 parameters.gm = getOptions().gravity.gm;
                 parameters.sign = getOptions().run.scenario == "glass" ? -1.0 : 1.0;
                 parameters.firstCall = firstCall;
@@ -954,7 +959,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
             parameters.t0 = baseTimestep;
             parameters.a = scale;
             parameters.eta = getOptions().gravity.timestepEta;
-            parameters.gravitySupportRadius = getOptions().gravity.supportRadius;
+            parameters.gravitySmoothingLength = getOptions().gravity.smoothingLength;
             parameters.gm = getOptions().gravity.gm;
             parameters.sign = getOptions().run.scenario == "glass" ? -1.0 : 1.0;
             parameters.firstCall = firstCall;
@@ -1257,7 +1262,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         kparams.saveForce = getOptions().analysis.saveForce;
         kparams.gm = getOptions().gravity.gm;
         kparams.eta = getOptions().gravity.timestepEta;
-        kparams.gravitySupportRadius = getOptions().gravity.supportRadius;
+        kparams.gravitySmoothingLength = getOptions().gravity.smoothingLength;
         kparams.a = scale;
         kparams.firstCall = tau == 0.0;
         kparams.minRung = levels[li];
@@ -1901,7 +1906,7 @@ void driver() {
     };
 #endif
     auto checkpointlist = readCheckpointList();
-    double const hsoft0 = getOptions().gravity.supportRadius;
+    double const hsoft0 = getOptions().gravity.smoothingLength;
     bool doCheck = false;
     double checkz = 1.0 / a - 1.0;
     int lastCheckpointIteration = getOptions().checkpoint.readIndex >= 0 ? params.iter : -1;
@@ -2041,7 +2046,7 @@ void driver() {
             }
 #endif
             auto opts = getOptions();
-            opts.gravity.supportRadius =
+            opts.gravity.smoothingLength =
                 hsoft0;    // Fixed comoving support for every particle type.
             // Global FMM schedules advance after drift; PMMM retains its angle
             // derived from the ghost width throughout evolution.

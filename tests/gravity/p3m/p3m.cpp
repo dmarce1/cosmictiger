@@ -338,7 +338,7 @@ Vector<P3mSample> solveFixture(int fixture) {
 // evaluated for every sink of index divisible by the stride.
 std::vector<Vector3<double>> directReference(Vector<P3mSample> const& samples, size_t stride) {
     auto const& kernel = selectedGravityKernel();
-    double const support = getOptions().gravity.supportRadius;
+    double const support = getOptions().gravity.smoothingLength;
     double const gm = getOptions().gravity.gm;
     std::vector<Vector3<double>> result(samples.size());
     for (size_t i = 0; i < samples.size(); i += stride) {
@@ -419,7 +419,7 @@ void p3mTest() {
     options.gravity.p3mSplitCells = 1.25;
     options.gravity.p3mCutoff = 4.5;
     options.gravity.pmmmNearWidth = 2;
-    options.gravity.supportRadius = 0.02;
+    options.gravity.smoothingLength = 0.02;
     options.gravity.openingAngle = 0.35;
     options.analysis.saveForce = false;
     options.analysis.tracers = false;

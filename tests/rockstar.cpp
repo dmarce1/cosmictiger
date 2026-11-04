@@ -398,9 +398,9 @@ std::vector<double> directRockstarPotentials(Subgroup const& group) {
                 double const dx = double(group.parts[i].xValue[dim]) - group.parts[j].xValue[dim];
                 r2 += dx * dx;
             }
-            phi[i] -= options.gravity.gm / options.gravity.supportRadius *
+            phi[i] -= options.gravity.gm / options.gravity.smoothingLength *
                 radial_kernel::potential(
-                    selectedGravityKernel(), std::sqrt(r2) / options.gravity.supportRadius);
+                    selectedGravityKernel(), std::sqrt(r2) / options.gravity.smoothingLength);
         }
     }
     return phi;
@@ -519,7 +519,7 @@ void checkRockstarHierarchyAndHistory() {
 }
 
 void checkRockstarMajorMerger() {
-    float const offset = 0.125f * getOptions().gravity.supportRadius;
+    float const offset = 0.125f * getOptions().gravity.smoothingLength;
     Vector<Subgroup> groups;
     groups.push_back(rockstarTestGroup(36, -offset, 1, 0.0f));
     groups.push_back(rockstarTestGroup(12, offset, 2, 0.0f));
@@ -1130,7 +1130,7 @@ void rockstarTest() {
     options.analysis.groupsCuda = false;
     options.initial.numberOfParticles = 1000000;
     options.gravity.gm = 1.e-8;
-    options.gravity.supportRadius = 1.e-4;
+    options.gravity.smoothingLength = 1.e-4;
     options.cosmology.omegaM = 0.3;
     options.cosmology.omegaLambda = 0.7;
     options.cosmology.omegaR = options.cosmology.omegaK = 0.0;

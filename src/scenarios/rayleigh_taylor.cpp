@@ -52,7 +52,7 @@ ScenarioPlan initializeRayleighTaylor() {
                 bool const heavy = iz < quarterDim;
                 double const density = heavy ? kHeavyDensity : kLightDensity;
                 int const samples = heavy ? 2 : 1;
-                double const supportRadius = std::cbrt(
+                double const smoothingLength = std::cbrt(
                     mass * opts.hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * density));
                 for (int sample = 0; sample < samples; sample++) {
                     double const offset = heavy ? 0.25 + 0.5 * sample : 0.5;
@@ -88,7 +88,7 @@ ScenarioPlan initializeRayleighTaylor() {
                         sphParticlesVelocity(kXDimension, index) = 0.0f;
                         sphParticlesVelocity(kYDimension, index) = 0.0f;
                         sphParticlesVelocity(kZDimension, index) = side == 0 ? velocity : -velocity;
-                        sphParticlesSmoothingLength(index) = supportRadius;
+                        sphParticlesSmoothingLength(index) = smoothingLength;
                         sphParticlesSetInternalEnergy(index, internalEnergy);
                         sphParticlesRung(index) = 0;
                         index++;

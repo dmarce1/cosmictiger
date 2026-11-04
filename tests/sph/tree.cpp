@@ -164,6 +164,61 @@ void initializeSphTreeParticles(ParticleInteger count, int generation) {
     }
 }
 
+int expectedSphSplitMask(SphTreeNode const& node) {
+    auto const count = node.numberOfParticles();
+    auto const bucket = getOptions().compute.sphBucketSize;
+    int const dimensions = count > 4 * bucket ? 3 : count > 2 * bucket ? 2 : 1;
+    std::array<int, kDimensions> axes{0, 1, 2};
+    std::stable_sort(axes.begin(), axes.end(), [&](int first, int second) {
+        return node.box.end[first].toDouble() - node.box.begin[first].toDouble() >
+            node.box.end[second].toDouble() - node.box.begin[second].toDouble();
+    });
+    int mask = 0;
+    for (int axis = 0; axis < dimensions; ++axis) {
+        mask |= 1 << axes[axis];
+    }
+    return mask;
+}
+
+void verifySphTreeVolumeRatios(SphTreeCreateReturn const& tree) {
+    std::vector<double> ratios;
+    std::vector<TreeId> pending{tree.id};
+    while (!pending.empty()) {
+        auto const id = pending.back();
+        pending.pop_back();
+        auto const& node = *sphTreeGetNode(id);
+        if (node.isLocal() && node.numberOfParticles() > 0) {
+            // Independent reference: multiply dimensionless side-length ratios.
+            double ratio = 1.0;
+            for (int dimension = 0; dimension < kDimensions; ++dimension) {
+                double const originalSpan =
+                    node.box.end[dimension].toDouble() - node.box.begin[dimension].toDouble();
+                double const evolvedSpan = node.driftBox.end[dimension].toDouble() -
+                    node.driftBox.begin[dimension].toDouble();
+                requireSphTree(originalSpan > 0.0 && evolvedSpan > 0.0,
+                    "occupied spatial node has invalid volume bounds");
+                ratio *= evolvedSpan / originalSpan;
+            }
+            ratios.push_back(ratio);
+        }
+        for (auto const child : node.children) {
+            if (child.index >= 0) {
+                pending.push_back(child);
+            }
+        }
+    }
+    double expectedMinimum = 0.0;
+    double expectedMaximum = 0.0;
+    if (!ratios.empty()) {
+        auto const extrema = std::minmax_element(ratios.begin(), ratios.end());
+        expectedMinimum = *extrema.first;
+        expectedMaximum = *extrema.second;
+    }
+    requireSphTree(std::abs(tree.minVolumeRatio - expectedMinimum) <= 1.0e-12 * expectedMinimum &&
+            std::abs(tree.maxVolumeRatio - expectedMaximum) <= 1.0e-12 * expectedMaximum,
+        "tree volume extrema disagree with occupied spatial nodes");
+}
+
 struct SphTreeSummary {
     size_t nodes = 0;
     size_t activeNodes = 0;
@@ -250,12 +305,15 @@ SphTreeSummary verifySphTreeNode(TreeId id, int depth, std::set<int>& leaves) {
     } else {
         ParticleInteger nextParticle = node.particleRange.first;
         int populatedChildren = 0;
+        int const splitMask = expectedSphSplitMask(node);
         for (int childIndex = 0; childIndex < kSphChildCount; ++childIndex) {
             TreeId const childId = node.children[childIndex];
             if (childId.index < 0) {
                 requireSphTree(childId.proc == -1, "empty octant has a valid process rank");
                 continue;
             }
+            requireSphTree(
+                (childIndex & ~splitMask) == 0, "child occupies a slot on an unsplit axis");
             ++populatedChildren;
             auto const& child = *sphTreeGetNode(childId);
             requireSphTree(child.particleRange.first == nextParticle &&
@@ -265,13 +323,16 @@ SphTreeSummary verifySphTreeNode(TreeId id, int depth, std::set<int>& leaves) {
             for (int dim = 0; dim < kDimensions; ++dim) {
                 double const midpoint =
                     0.5 * (node.box.begin[dim].toDouble() + node.box.end[dim].toDouble());
-                double const lower =
-                    (childIndex & (1 << dim)) ? midpoint : node.box.begin[dim].toDouble();
-                double const upper =
-                    (childIndex & (1 << dim)) ? node.box.end[dim].toDouble() : midpoint;
+                bool const split = (splitMask & (1 << dim)) != 0;
+                double const lower = split && (childIndex & (1 << dim)) != 0 ?
+                    midpoint :
+                    node.box.begin[dim].toDouble();
+                double const upper = split && (childIndex & (1 << dim)) == 0 ?
+                    midpoint :
+                    node.box.end[dim].toDouble();
                 requireSphTree(std::abs(child.box.begin[dim].toDouble() - lower) <= quantum &&
                         std::abs(child.box.end[dim].toDouble() - upper) <= quantum,
-                    "child geometry is not the corresponding octant");
+                    "child geometry does not match the selected longest-axis split");
             }
             auto const childSummary = verifySphTreeNode(childId, depth + 1, leaves);
             summary.nodes += childSummary.nodes;
@@ -288,6 +349,7 @@ SphTreeSummary verifySphTreeNode(TreeId id, int depth, std::set<int>& leaves) {
 }
 
 void verifySphTreeBuild(SphTreeCreateReturn const& built, ParticleInteger count) {
+    verifySphTreeVolumeRatios(built);
     auto const& root = *sphTreeGetNode(built.id);
     requireSphTree(root.particleRange.first == 0 && root.particleRange.second == count,
         "root retained the previous population range");
@@ -335,31 +397,179 @@ void seedOldSphTreeState(TreeId id) {
     }
 }
 void verifyOctreeNeighbors(TreeId root) {
-    SphTreeNeighborParameters params;
-    params.runType = kSphTreeNeighborNeighbors;
-    params.innerSelection = kSphInteractionsIJ;
-    Vector<TreeId> checklist;
-    checklist.push_back(root);
-    sphTreeNeighbor(params, root, checklist).get();
-    for (int targetIndex = 0; targetIndex < sphTreeLeaflistSize(); ++targetIndex) {
-        auto const& target = *sphTreeGetNode(sphTreeGetLeaf(targetIndex));
-        std::set<TreeId> expected;
-        for (int sourceIndex = 0; sourceIndex < sphTreeLeaflistSize(); ++sourceIndex) {
-            auto const sourceId = sphTreeGetLeaf(sourceIndex);
-            auto const& source = *sphTreeGetNode(sourceId);
-            if (target.outerBox.periodicIntersects(source.innerBox) ||
-                target.innerBox.periodicIntersects(source.outerBox)) {
-                expected.insert(sourceId);
+    for (auto const direction : {SphInteractionDirection::TargetSupport,
+             SphInteractionDirection::SourceSupport, SphInteractionDirection::EitherSupport}) {
+        sphTreeFreeNeighborList();
+        SphTreeNeighborParameters params;
+        params.operation = SphNeighborOperation::FindNeighbors;
+        params.interactionDirection = direction;
+        Vector<TreeId> checklist;
+        checklist.push_back(root);
+        sphTreeNeighbor(params, root, checklist).get();
+        for (int targetIndex = 0; targetIndex < sphTreeLeaflistSize(); ++targetIndex) {
+            auto const& target = *sphTreeGetNode(sphTreeGetLeaf(targetIndex));
+            std::set<TreeId> expected;
+            for (int sourceIndex = 0; sourceIndex < sphTreeLeaflistSize(); ++sourceIndex) {
+                auto const sourceId = sphTreeGetLeaf(sourceIndex);
+                auto const& source = *sphTreeGetNode(sourceId);
+                bool const targetSupport = direction != SphInteractionDirection::SourceSupport &&
+                    target.outerBox.periodicIntersects(source.innerBox);
+                bool const sourceSupport = direction != SphInteractionDirection::TargetSupport &&
+                    target.innerBox.periodicIntersects(source.outerBox);
+                if (targetSupport || sourceSupport) {
+                    expected.insert(sourceId);
+                }
+            }
+            std::set<TreeId> actual;
+            for (int index = target.neighborRange.first; index < target.neighborRange.second;
+                ++index) {
+                requireSphTree(actual.insert(sphTreeGetNeighbor(index)).second,
+                    "neighbor walk visited a child twice");
+            }
+            requireSphTree(actual == expected,
+                "directional neighbor walk disagrees with exhaustive leaf intersections");
+        }
+    }
+}
+
+void verifyHybridSphTree(SphTreeCreateParameters const& params) {
+    auto const savedOptions = getOptions();
+    auto options = savedOptions;
+    options.compute.sphBucketSize = 2;
+    setOptions(options);
+    for (ParticleInteger count : {0, 2, 3, 4, 5, 8, 9}) {
+        sphTreeDestroy();
+        initializeSphTreeParticles(count, 0);
+        for (ParticleInteger particle = 0; particle < count; ++particle) {
+            for (int dimension = 0; dimension < kDimensions; ++dimension) {
+                particlesPos(dimension, particle) = 0.25 + 0.5 * ((particle >> dimension) & 1);
             }
         }
-        std::set<TreeId> actual;
-        for (int index = target.neighborRange.first; index < target.neighborRange.second; ++index) {
-            requireSphTree(actual.insert(sphTreeGetNeighbor(index)).second,
-                "neighbor walk visited an octant twice");
+        auto const built = sphTreeCreate(params);
+        verifySphTreeBuild(built, count);
+        auto const& root = *sphTreeGetNode(built.id);
+        int occupied = 0;
+        for (auto const child : root.children) {
+            occupied += child.index >= 0;
         }
-        requireSphTree(
-            actual == expected, "neighbor walk disagrees with exhaustive leaf intersections");
+        int const expected = count > 8 ? 8 : count > 4 ? 4 : count > 2 ? 2 : 0;
+        requireSphTree(occupied == expected, "hybrid fanout changed at the wrong bucket threshold");
+        verifyOctreeNeighbors(built.id);
     }
+
+    options.compute.sphBucketSize = 1;
+    setOptions(options);
+    sphTreeDestroy();
+    initializeSphTreeParticles(12, 0);
+    ParticleInteger particle = 0;
+    for (int octant = 0; octant < kSphChildCount; ++octant) {
+        int const count = octant == 0 ? 4 : octant == 1 ? 2 : 1;
+        for (int member = 0; member < count; ++member, ++particle) {
+            for (int dimension = 0; dimension < kDimensions; ++dimension) {
+                double const origin = 0.5 * ((octant >> dimension) & 1);
+                particlesPos(dimension, particle) =
+                    origin + 0.125 + 0.25 * ((member >> dimension) & 1);
+            }
+        }
+    }
+    auto const mixed = sphTreeCreate(params);
+    verifySphTreeBuild(mixed, 12);
+    requireSphTree(mixed.nodeCount == 15 && mixed.leafNodes == 12 && mixed.minDepth == 1 &&
+            mixed.maxDepth == 2,
+        "mixed tree did not combine eight-, four-, and two-child nodes");
+    verifyOctreeNeighbors(mixed.id);
+
+    // A first x split leaves y and z longer. Sparse physical child bits must
+    // retain their axis meaning when the next split selects y or z.
+    for (int longAxis : {1, 2}) {
+        sphTreeDestroy();
+        ParticleInteger const count = longAxis == 1 ? 2 : 3;
+        initializeSphTreeParticles(count, 0);
+        for (ParticleInteger member = 0; member < count; ++member) {
+            for (int dimension = 0; dimension < kDimensions; ++dimension) {
+                particlesPos(dimension, member) = member == 2 ? 0.75 :
+                    dimension == longAxis && member == 1      ? 0.75 :
+                                                                0.25;
+            }
+        }
+        auto const anisotropic = sphTreeCreate(params);
+        verifySphTreeBuild(anisotropic, count);
+        auto const& root = *sphTreeGetNode(anisotropic.id);
+        auto const& refined = *sphTreeGetNode(root.children[0]);
+        requireSphTree(refined.children[0].index >= 0 &&
+                refined.children[1 << longAxis].index >= 0 && refined.nodeCount == 3,
+            "anisotropic refinement did not split its longest axis");
+        verifyOctreeNeighbors(anisotropic.id);
+    }
+    sphTreeDestroy();
+    setOptions(savedOptions);
+}
+
+void verifySphTreeVolumeEvolution(SphTreeCreateParameters const& params) {
+    SphTreeCreateReturn defaultResult;
+    requireSphTree(defaultResult.minVolumeRatio == 0.0 && defaultResult.maxVolumeRatio == 0.0,
+        "volume extrema are not initialized for an empty result");
+    auto const savedOptions = getOptions();
+    auto options = savedOptions;
+    options.compute.sphBucketSize = 2;
+    setOptions(options);
+    sphTreeDestroy();
+    initializeSphTreeParticles(2, 0);
+    for (ParticleInteger particle = 0; particle < 2; ++particle) {
+        particlesRung(particle) = 2;
+        for (int dimension = 0; dimension < kDimensions; ++dimension) {
+            particlesPos(dimension, particle) = particle == 0 ? 0.25 : 0.5;
+            particlesVel(dimension, particle) = particle == 0 ? -0.25f : 0.25f;
+        }
+    }
+    auto const built = sphTreeCreate(params);
+    verifySphTreeVolumeRatios(built);
+    requireSphTree(std::abs(built.maxVolumeRatio - 1.0 / 64.0) < 1.0e-7 &&
+            built.minVolumeRatio == built.maxVolumeRatio,
+        "fresh volume diagnostic did not use the original partition denominator");
+    auto const evolved = sphTreeRefresh(params, 0.5);
+    verifySphTreeVolumeRatios(evolved);
+    requireSphTree(std::abs(evolved.maxVolumeRatio - 1.0 / 8.0) < 1.0e-7 &&
+            evolved.minVolumeRatio == evolved.maxVolumeRatio,
+        "known half-step drift has the wrong volume ratio");
+    sphTreeDestroy();
+    auto const rebuilt = sphTreeCreate(params);
+    verifySphTreeVolumeRatios(rebuilt);
+    requireSphTree(rebuilt.minVolumeRatio == built.minVolumeRatio &&
+            rebuilt.maxVolumeRatio == built.maxVolumeRatio,
+        "rebuild retained historical swept-volume extrema");
+    sphTreeDestroy();
+    initializeSphTreeParticles(0, 0);
+    auto const empty = sphTreeCreate(params);
+    auto const emptyRefresh = sphTreeRefresh(params);
+    requireSphTree(empty.minVolumeRatio == 0.0 && empty.maxVolumeRatio == 0.0 &&
+            emptyRefresh.minVolumeRatio == 0.0 && emptyRefresh.maxVolumeRatio == 0.0,
+        "empty or inverted bounds contributed a volume ratio");
+    sphTreeDestroy();
+    setOptions(savedOptions);
+}
+
+void verifySphNeighborParameterArchive() {
+    SphTreeNeighborParameters expected;
+    expected.operation = SphNeighborOperation::FindNeighbors;
+    expected.interactionDirection = SphInteractionDirection::SourceSupport;
+    expected.innerParticleSelection = SphParticleSelection::Active;
+    expected.outerParticleSelection = SphParticleSelection::All;
+    std::vector<char> bytes;
+    {
+        hpx::serialization::output_archive archive(bytes);
+        archive << expected;
+    }
+    SphTreeNeighborParameters restored;
+    {
+        hpx::serialization::input_archive archive(bytes);
+        archive >> restored;
+    }
+    requireSphTree(restored.operation == expected.operation &&
+            restored.interactionDirection == expected.interactionDirection &&
+            restored.innerParticleSelection == expected.innerParticleSelection &&
+            restored.outerParticleSelection == expected.outerParticleSelection,
+        "neighbor parameter archive lost an independent selection control");
 }
 
 void verifyRefreshedOctreeBoxes(TreeId root) {
@@ -367,11 +577,11 @@ void verifyRefreshedOctreeBoxes(TreeId root) {
         sphParticlesSmoothingLength(i) = 0.2f + float(i % 3) * 0.05f;
     }
     SphTreeNeighborParameters params;
-    params.runType = kSphTreeNeighborBoxes;
-    params.innerSelection = kSphSetAll;
-    params.outerSelection = kSphSetActive;
+    params.operation = SphNeighborOperation::RefreshBounds;
+    params.innerParticleSelection = SphParticleSelection::All;
+    params.outerParticleSelection = SphParticleSelection::Active;
     params.minimumRung = kSphTreeMinimumRung;
-    params.supportRadiusMultiplier = kSphTreeSupportMultiplier;
+    params.smoothingLengthMultiplier = kSphTreeSupportMultiplier;
     sphTreeNeighbor(params, root, {}).get();
     SphTreeNeighborReturn combined;
     for (int index = 0; index < sphTreeLeaflistSize(); ++index) {
@@ -495,16 +705,16 @@ void verifySphMidpointUpdates() {
     }
     SphTreeCreateParameters treeParameters{};
     treeParameters.minimumRung = 2;
-    treeParameters.supportRadiusMultiplier = 1.0f;
+    treeParameters.smoothingLengthMultiplier = 1.0f;
     auto const tree = sphTreeCreate(treeParameters);
     SphTreeNeighborParameters neighbors{};
     neighbors.minimumRung = 2;
-    neighbors.runType = kSphTreeNeighborBoxes;
-    neighbors.innerSelection = neighbors.outerSelection = kSphSetAll;
-    neighbors.supportRadiusMultiplier = 1.0f;
+    neighbors.operation = SphNeighborOperation::RefreshBounds;
+    neighbors.innerParticleSelection = neighbors.outerParticleSelection = SphParticleSelection::All;
+    neighbors.smoothingLengthMultiplier = 1.0f;
     sphTreeNeighbor(neighbors, tree.id, Vector<TreeId>{}).get();
-    neighbors.runType = kSphTreeNeighborNeighbors;
-    neighbors.innerSelection = kSphInteractionsIJ;
+    neighbors.operation = SphNeighborOperation::FindNeighbors;
+    neighbors.interactionDirection = SphInteractionDirection::EitherSupport;
     sphTreeNeighbor(neighbors, tree.id, Vector<TreeId>{tree.id}).get();
     SphRunParameters parameters;
     parameters.minimumRung = parameters.maximumRung = 2;
@@ -667,6 +877,7 @@ void verifyRetainedSphOctree(SphTreeCreateParameters const& params) {
     requireSphTree(crossedPartition && crossedPeriodicBoundary,
         "drift fixture did not cross both spatial and periodic boundaries");
     auto const refreshed = sphTreeRefresh(params);
+    verifySphTreeVolumeRatios(refreshed);
     requireSphTree(refreshed.id == built.id && refreshed.nodeCount == built.nodeCount &&
             refreshed.numberOfActiveParticles == 3,
         "retained tree changed topology or retained stale active counts");
@@ -680,6 +891,9 @@ void verifyRetainedSphOctree(SphTreeCreateParameters const& params) {
         hpx::serialization::input_archive archive(returnBytes);
         archive >> received;
     }
+    requireSphTree(received.minVolumeRatio == refreshed.minVolumeRatio &&
+            received.maxVolumeRatio == refreshed.maxVolumeRatio,
+        "volume extrema were lost in the distributed refresh result");
     for (int dim = 0; dim < kDimensions; ++dim) {
         requireSphTree(received.driftBox.begin[dim] == refreshed.driftBox.begin[dim] &&
                 received.driftBox.end[dim] == refreshed.driftBox.end[dim],
@@ -713,7 +927,7 @@ void verifyRetainedSphOctree(SphTreeCreateParameters const& params) {
                 position[dim] = sphParticlesPosition(dim, particle);
                 if (sphParticlesRung(particle) >= params.minimumRung) {
                     double const support =
-                        params.supportRadiusMultiplier * sphParticlesSmoothingLength(particle);
+                        params.smoothingLengthMultiplier * sphParticlesSmoothingLength(particle);
                     requireSphTree(
                         leaf.outerBox.begin[dim].toDouble() <= position[dim].toDouble() - support &&
                             leaf.outerBox.end[dim].toDouble() >= position[dim].toDouble() + support,
@@ -752,6 +966,7 @@ void verifyRetainedSphOctree(SphTreeCreateParameters const& params) {
             }
         }
         auto const midpointRefit = sphTreeRefresh(params);
+        verifySphTreeVolumeRatios(midpointRefit);
         requireSphTree(midpointRefit.id == built.id && midpointRefit.nodeCount == built.nodeCount &&
                 midpointRefit.numberOfActiveParticles == 3,
             "chronological midpoint refit changed retained topology or active targets");
@@ -1052,7 +1267,7 @@ void sphRungChainTest() {
         }
         SphTreeCreateParameters parameters{};
         parameters.minimumRung = 7;
-        parameters.supportRadiusMultiplier = 1.0f;
+        parameters.smoothingLengthMultiplier = 1.0f;
         auto const tree = sphTreeCreate(parameters);
         detail::requireSphTree(
             tree.numberOfActiveParticles == 1, "rung chain did not contain inactive endpoints");
@@ -1119,8 +1334,9 @@ void distributedSphOctreeTest() {
     domainsEnd();
     SphTreeCreateParameters parameters{};
     parameters.minimumRung = 2;
-    parameters.supportRadiusMultiplier = 1.0;
+    parameters.smoothingLengthMultiplier = 1.0;
     auto const built = sphTreeCreate(parameters);
+    detail::verifySphTreeVolumeRatios(built);
     detail::requireSphTree(built.numberOfActiveParticles == 2 && !sphTreeShouldRebuild(2, 16),
         "distributed fixture is not below the rebuild threshold");
     Vector<TreeId> leaves;
@@ -1151,12 +1367,13 @@ void distributedSphOctreeTest() {
     detail::requireSphTree(crossed == 2, "active particles did not cross both rank boundaries");
     sphParticlesClearCaches();
     auto const refreshed = sphTreeRefresh(parameters);
+    detail::verifySphTreeVolumeRatios(refreshed);
     detail::requireSphTree(refreshed.id == built.id && refreshed.nodeCount == built.nodeCount &&
             refreshed.numberOfActiveParticles == built.numberOfActiveParticles,
         "distributed refresh changed topology or active counts");
     SphTreeNeighborParameters neighbors{};
-    neighbors.runType = kSphTreeNeighborNeighbors;
-    neighbors.innerSelection = kSphInteractionsIJ;
+    neighbors.operation = SphNeighborOperation::FindNeighbors;
+    neighbors.interactionDirection = SphInteractionDirection::EitherSupport;
     neighbors.minimumRung = 2;
     sphTreeNeighbor(neighbors, refreshed.id, Vector<TreeId>{refreshed.id}).get();
     std::vector<hpx::future<void>> validation;
@@ -1390,6 +1607,7 @@ void sphTreeTest() {
     detail::verifyEmptySphBounds();
     detail::verifySphRebuildThreshold();
     detail::verifySphMidpointSchedule();
+    detail::verifySphNeighborParameterArchive();
     // This fixture exercises the real local allocator and rebuild path. Remote
     // cache invalidation and growth beyond the arena minimum need separate tests.
     detail::requireSphTree(hpxSize() == 1, "arena regression requires one locality");
@@ -1405,7 +1623,9 @@ void sphTreeTest() {
     sphTreeDestroy(true);
     SphTreeCreateParameters params{};
     params.minimumRung = detail::kSphTreeMinimumRung;
-    params.supportRadiusMultiplier = detail::kSphTreeSupportMultiplier;
+    params.smoothingLengthMultiplier = detail::kSphTreeSupportMultiplier;
+    detail::verifyHybridSphTree(params);
+    detail::verifySphTreeVolumeEvolution(params);
 
     detail::initializeSphTreeParticles(8, 0);
     auto const first = sphTreeCreate(params);
@@ -1487,7 +1707,8 @@ void sphTreeTest() {
     for (int dim = 0; dim < kDimensions; ++dim) {
         particlesPos(dim, 0) = particlesPos(dim, 1) = 0.0;
     }
-    particlesPos(0, 1) = std::ldexp(1.0, -SphTreeNode::kMaximumDepth);
+    // Two-particle nodes bisect x/y/z in turn; the fifth z split is depth 15.
+    particlesPos(2, 1) = std::ldexp(1.0, -SphTreeNode::kMaximumDepth / kDimensions);
     auto const deepestAllowed = sphTreeCreate(params);
     detail::verifySphTreeBuild(deepestAllowed, 2);
     detail::requireSphTree(deepestAllowed.maxDepth == SphTreeNode::kMaximumDepth,

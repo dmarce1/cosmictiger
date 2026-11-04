@@ -98,8 +98,8 @@ void initialize(int meshSize) {
         options.pmmmNearWidth > 4 || options.pmmmNearWidth > (options.meshSize - 1) / 2 ||
         coarseMeshSize < 2 * options.pmmmNearWidth + 1 || coarseMeshSize > baseMeshSize ||
         !isPowerOfTwo(coarseMeshSize) || options.pmmmOrder < kFmmMinOrder ||
-        options.pmmmOrder > kFmmMaxOrder || !(options.supportRadius > 0) ||
-        options.supportRadius > double(options.pmmmNearWidth) / baseMeshSize ||
+        options.pmmmOrder > kFmmMaxOrder || !(options.smoothingLength > 0) ||
+        options.smoothingLength > double(options.pmmmNearWidth) / baseMeshSize ||
         meshSize < coarseMeshSize || meshSize > baseMeshSize || !isPowerOfTwo(meshSize)) {
         throw std::runtime_error("Invalid PMMM mesh, order, near width or softening support");
     }

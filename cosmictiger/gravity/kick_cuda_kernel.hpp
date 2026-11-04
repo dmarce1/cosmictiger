@@ -76,7 +76,7 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
     float darkMatterMomentumNormCorrection = 0.0f;
 
     float const gravityEffectiveRadius =
-        params.gravitySupportRadius / selectedGravityKernel().supportRadiusPerEffectiveRadius;
+        params.gravitySmoothingLength / selectedGravityKernel().smoothingLengthPerEffectiveRadius;
     FlopCounter<FlopCount> flops = 0;
     // Widen support radius, divide by the double kernel radius, then narrow.
     FlopCounter<FlopCount> doubleFlops = 3;
@@ -493,8 +493,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
     auto& treeNodes = data.treeNodes;
     bool const equalMass = !COSMICTIGER_WITH_SPH || !data.sph;
     bool const sharedForces = layout.forceOffset >= 0;
-    float const& supportRadius = globalParams.gravitySupportRadius;
-    float const inverseSupportRadius = 1.f / supportRadius;
+    float const& smoothingLength = globalParams.gravitySmoothingLength;
+    float const inverseSmoothingLength = 1.f / smoothingLength;
     int index;
     auto group = cooperative_groups::this_thread_block();
     if (group.thread_rank() == 0) {
@@ -617,13 +617,13 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                     float const r2 = fmaf(dx[kXDimension], dx[kXDimension],
                                         fmaf(dx[kYDimension], dx[kYDimension],
                                             dx[kZDimension] * dx[kZDimension]));
-                                    float const pairSupportRadius = fmmPairSupportRadius(
-                                        supportRadius, self.maxGravitySupportRadius,
-                                        other.maxGravitySupportRadius);
+                                    float const pairSmoothingLength = fmmPairSmoothingLength(
+                                        smoothingLength, self.maxGravitySmoothingLength,
+                                        other.maxGravitySmoothingLength);
                                     FlopCount acceptanceFlops;
                                     auto acceptance =
                                         computeFmmAcceptance(r2, self.radius, other.radius, 0.0f,
-                                            0.0f, pairSupportRadius, thetainv, &acceptanceFlops);
+                                            0.0f, pairSmoothingLength, thetainv, &acceptanceFlops);
                                     flops += 5 + acceptanceFlops;    // Float norm; geometry counted
                                                                      // separately.
                                     if (!acceptance.cellCell && (other.leaf || self.leaf)) {
@@ -633,7 +633,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                                     self.box, other.pos, geometry, &geometryFlops),
                                                 fmmSourceBoxDistanceSquared(other.box, self.pos,
                                                     other.pos, geometry, &geometryFlops),
-                                                pairSupportRadius, thetainv, &acceptanceFlops);
+                                                pairSmoothingLength, thetainv, &acceptanceFlops);
                                         flops += acceptanceFlops;    // Box arithmetic is counted by
                                                                      // precision at its source.
                                     }
@@ -731,7 +731,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                                                                data.sphMass) :
                                     1.0f;
                                 force.gx[l] = force.gy[l] = force.gz[l] = 0.f;
-                                force.phi[l] = mass * selfPhi() * inverseSupportRadius;
+                                force.phi[l] = mass * selfPhi() * inverseSmoothingLength;
                                 flops += 2;
                             }
                             __syncwarp();
@@ -741,11 +741,11 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                             work.next(profile::DevicePhase::KickP2P);
                             if (equalMass) {
                                 interactionFlops += cudaGravityPpDirect<order, true>(data, control,
-                                    self, sinkBegin, sinkCount, leaflist, supportRadius,
+                                    self, sinkBegin, sinkCount, leaflist, smoothingLength,
                                     globalParams.doPhi, geometry);
                             } else {
                                 interactionFlops += cudaGravityPpDirect<order, false>(data, control,
-                                    self, sinkBegin, sinkCount, leaflist, supportRadius,
+                                    self, sinkBegin, sinkCount, leaflist, smoothingLength,
                                     globalParams.doPhi, geometry);
                             }
                             __syncwarp();

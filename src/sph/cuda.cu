@@ -29,8 +29,8 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
     reduction->minimumTimestep = std::numeric_limits<float>::max();
     reduction->nextNodeIndex = reduction->pendingChanges = 0;
     reduction->timestepFailureReported = 0;
-    reduction->minimumSupportRadius = std::numeric_limits<float>::max();
-    reduction->maximumSupportRadius = 0.0f;
+    reduction->minimumSmoothingLength = std::numeric_limits<float>::max();
+    reduction->maximumSmoothingLength = 0.0f;
     reduction->floatingPointOperations = 0;
     reduction->maximumSignalSpeed = 0.0;
     reduction->maximumGravityRung = 0;
@@ -51,10 +51,10 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
     Timer timer;
     if (first) {
         first = false;
-        CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-            &smoothingBlockCount, (void const*) sphCudaPrehydro1, kPrehydro1BlockSize, 0));
-        CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-            &densityBlockCount, (void const*) sphCudaPrehydro2, kPrehydro2BlockSize, 0));
+        CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&smoothingBlockCount,
+            (void const*) sphCudaSmoothingLengths, kSmoothingLengthsBlockSize, 0));
+        CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&densityBlockCount,
+            (void const*) sphCudaDensityAndGradients, kDensityAndGradientsBlockSize, 0));
         CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
             &hydroBlockCount, (void const*) sphCudaHydro, kHydroBlockSize, 0));
         CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
@@ -66,23 +66,23 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
     }
     timer.start();
     switch (parameters.runType) {
-    case kSphRunPrehydro1: {
-        sphCudaPrehydro1<<<smoothingBlockCount, kPrehydro1BlockSize, 0, stream.nativeHandle()>>>(
-            parameters, data, reduction);
+    case kSphRunSmoothingLengths: {
+        sphCudaSmoothingLengths<<<smoothingBlockCount, kSmoothingLengthsBlockSize, 0,
+            stream.nativeHandle()>>>(parameters, data, reduction);
         stream.checkLaunch();
         stream.wait();
         result.needsAnotherPass = reduction->pendingChanges;
-        result.minimumSupportRadius = reduction->minimumSupportRadius;
-        result.maximumSupportRadius = reduction->maximumSupportRadius;
+        result.minimumSmoothingLength = reduction->minimumSmoothingLength;
+        result.maximumSmoothingLength = reduction->maximumSmoothingLength;
     } break;
-    case kSphRunPrehydro2: {
-        sphCudaPrehydro2<<<densityBlockCount, kPrehydro2BlockSize, 0, stream.nativeHandle()>>>(
-            parameters, data, reduction);
+    case kSphRunDensityAndGradients: {
+        sphCudaDensityAndGradients<<<densityBlockCount, kDensityAndGradientsBlockSize, 0,
+            stream.nativeHandle()>>>(parameters, data, reduction);
         stream.checkLaunch();
         stream.wait();
         result.needsAnotherPass = reduction->pendingChanges;
-        result.minimumSupportRadius = reduction->minimumSupportRadius;
-        result.maximumSupportRadius = reduction->maximumSupportRadius;
+        result.minimumSmoothingLength = reduction->minimumSmoothingLength;
+        result.maximumSmoothingLength = reduction->maximumSmoothingLength;
         result.minimumGradHOmega = reduction->minimumGradHOmega;
         result.maximumSupportResidual = reduction->maximumSupportResidual;
         result.heldSupports = reduction->heldSupports;

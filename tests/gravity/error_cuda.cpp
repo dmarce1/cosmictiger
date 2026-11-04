@@ -73,7 +73,7 @@ using GravityErrorLoadCalls = std::vector<std::pair<size_t, size_t>>;
 
 std::vector<GravityErrorForce> evaluateGravityErrorCuda(
     std::vector<GravityErrorPosition> const& sinks, std::vector<GravityErrorSource> const& sources,
-    radial_kernel::KernelTable const& kernel, double supportRadius,
+    radial_kernel::KernelTable const& kernel, double smoothingLength,
     GravityErrorLoadCalls* calls = nullptr) {
     return gravityErrorDirectCuda(
         sinks, sources.size(),
@@ -86,12 +86,12 @@ std::vector<GravityErrorForce> evaluateGravityErrorCuda(
             }
             std::copy_n(sources.data() + begin, destination.size(), destination.data());
         },
-        kernel, supportRadius, gravityReferenceCorrectionTable());
+        kernel, smoothingLength, gravityReferenceCorrectionTable());
 }
 
 std::vector<GravityErrorForce> evaluateGravityErrorCpu(
     std::vector<GravityErrorPosition> const& sinks, std::vector<GravityErrorSource> const& sources,
-    radial_kernel::KernelTable const& kernel, double supportRadius) {
+    radial_kernel::KernelTable const& kernel, double smoothingLength) {
     auto const& corrections = gravityReferenceCorrectionTable();
     std::vector<GravityErrorForce> result(sinks.size());
     for (size_t sink = 0; sink < sinks.size(); ++sink) {
@@ -102,7 +102,7 @@ std::vector<GravityErrorForce> evaluateGravityErrorCpu(
                 separation[dim] = doubleDistance(sinks[sink][dim], source.position[dim]);
             }
             auto const force =
-                tabulatedGravityReference(separation, kernel, supportRadius, corrections.data());
+                tabulatedGravityReference(separation, kernel, smoothingLength, corrections.data());
             for (int dim = 0; dim < 3; ++dim) {
                 sum[dim].add(source.mass * force[dim]);
             }

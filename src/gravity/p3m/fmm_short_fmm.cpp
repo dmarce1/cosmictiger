@@ -188,7 +188,7 @@ namespace {
             std::vector<SourceItem> nextlist;
             std::vector<SourceItem> pairs;
             double const cutoff = parameters.cutoffRadius;
-            double const support = parameters.pair.supportRadius;
+            double const support = parameters.pair.smoothingLength;
             double const theta = parameters.openingAngle;
             do {
                 nextlist.clear();
@@ -338,7 +338,7 @@ void evaluateTrees() {
     int const width = gravity.pmmmNearWidth;
     fmm::ShortWalkParameters parameters;
     parameters.pair = makeShortPairParameters(
-        gravity.p3mSplitRadius, gravity.p3mCutoffRadius, gravity.supportRadius);
+        gravity.p3mSplitRadius, gravity.p3mCutoffRadius, gravity.smoothingLength);
     parameters.splitRadius = gravity.p3mSplitRadius;
     parameters.cutoffRadius = gravity.p3mCutoffRadius;
     parameters.openingAngle = gravity.openingAngle;

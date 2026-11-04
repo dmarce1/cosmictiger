@@ -294,7 +294,7 @@ component Nyquist modes are rejected because the sampled sine can vanish.
 
 For a pure-DM control set `--hydro.enabled=false --gravity.cuda=false --hydro.cuda=false --drift.cuda=false`. The
 fixed-support mixed control uses `--gravity.softeningMode=fixed` and
-`--gravity.supportRadius=1.3997290134429932`, matching the adaptive unperturbed
+`--gravity.smoothingLength=1.3997290134429932`, matching the adaptive unperturbed
 support in units of the per-species spacing. The finer-lattice control uses
 `N=16`, modes `1,0,0;2,0,0`, and amplitude `0.005`. Both CPU and CUDA pilots used
 `N=8`, mode `1,0,0`, amplitude `0.01`, and opening angle `0.2`.

@@ -121,9 +121,9 @@ void checkUnitsOutputCommandLine(DBfile* file) {
                 getOptions().gravity.pmmmNearMethod,
         "nested gravity method options use directories");
     requireUnitsOutputClose(
-        readUnitsOutputScalar(file, "/cli/hydro/minSupportRadius"), 0.2, "CLI minimum support");
+        readUnitsOutputScalar(file, "/cli/hydro/minSmoothingLength"), 0.2, "CLI minimum support");
     requireUnitsOutputClose(
-        readUnitsOutputScalar(file, "/cli/hydro/maxSupportRadius"), 0.4, "CLI maximum support");
+        readUnitsOutputScalar(file, "/cli/hydro/maxSmoothingLength"), 0.4, "CLI maximum support");
     requireUnitsOutputClose(readUnitsOutputScalar(file, "/cli/units/massSolar"),
         3.0e33 / constants::kM0, "CLI solar mass units");
     requireUnitsOutputClose(readUnitsOutputScalar(file, "/cli/units/boxLength"),
@@ -506,12 +506,12 @@ void unitsOutputTest() {
     options.output.units = "code";
     options.output.frame = "comoving";
     options.hydro.bulkViscosityCoefficient = 1.75;
-    options.gravity.supportRadius = 0.125 *
-        selectedGravityKernel().supportRadiusPerEffectiveRadius /
+    options.gravity.smoothingLength = 0.125 *
+        selectedGravityKernel().smoothingLengthPerEffectiveRadius /
         std::pow(double(options.initial.numberOfParticles), 1.0 / kDimensions);
     options.gravity.timestepEta = 0.3;
-    options.hydro.minSupportRadius = 0.2 / options.initial.particlesPerDimension;
-    options.hydro.maxSupportRadius = 0.4 / options.initial.particlesPerDimension;
+    options.hydro.minSmoothingLength = 0.2 / options.initial.particlesPerDimension;
+    options.hydro.maxSmoothingLength = 0.4 / options.initial.particlesPerDimension;
     options.configuration = "input with spaces.ini";
     setOptions(options);
     unitsOutputParticleFixture(true);

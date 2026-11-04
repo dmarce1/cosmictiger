@@ -8,7 +8,7 @@
 #include <cosmictiger/math/simd_math.hpp>
 
 // Normalized spherical density kernels in three spatial dimensions. All radial
-// arguments are radius / supportRadius. The effective radius is 2 sigma,
+// arguments are radius / smoothingLength. The effective radius is 2 sigma,
 // with sigma the one-coordinate standard deviation.
 namespace radial_kernel {
 
@@ -37,7 +37,7 @@ struct KernelTable {
     // Factoring the first span analytically avoids division by q near zero.
     double centralForceCoefficients[kMaximumDegree + 1]{};
     double centralPotentialDropCoefficients[kMaximumDegree + 1]{};
-    double supportRadiusPerEffectiveRadius = 0;
+    double smoothingLengthPerEffectiveRadius = 0;
     double centralPotential = 0;
 };
 
@@ -249,7 +249,7 @@ constexpr KernelTable makeKernelTable(KernelSpec spec) {
         varianceMoment += detail::moment(raw[piece], degree, 4, points[piece], points[piece + 1]);
     }
     long double const normalization = 1 / (detail::kFourPi * massMoment);
-    result.supportRadiusPerEffectiveRadius =
+    result.smoothingLengthPerEffectiveRadius =
         static_cast<double>(detail::squareRoot(3 * massMoment / (4 * varianceMoment)));
     long double massPrefix = 0;
     for (int piece = 0; piece < result.pieceCount; ++piece) {

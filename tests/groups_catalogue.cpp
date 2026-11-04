@@ -135,7 +135,7 @@ void groupsCatalogueTest() {
         particlesResize(totalCount);
         std::mt19937 generator(141018);
         std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
-        float const support = getOptions().gravity.supportRadius;
+        float const support = getOptions().gravity.smoothingLength;
         float const speed = 0.03f * std::sqrt(getOptions().gravity.gm / support);
         for (int i = 0; i < totalCount; ++i) {
             int const baryon = i - kParticleCount;
@@ -428,7 +428,7 @@ void groupsCatalogueDistributedSetup(std::string directory) {
     particlesResize(total);
     std::mt19937 generator(141018 + hpxRank());
     std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
-    float const support = getOptions().gravity.supportRadius;
+    float const support = getOptions().gravity.smoothingLength;
     float const speed = 0.03f * std::sqrt(getOptions().gravity.gm / support);
     for (int i = 0; i < total; ++i) {
         int const baryon = i - kDistributedLocalCount;

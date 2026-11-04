@@ -87,8 +87,8 @@ struct SphRunData {
     float gravityEffectiveRadius;        // Twice the gravity kernel standard deviation.
     float accelerationTimestepFactor;    // Coefficient of the acceleration timestep bound.
     // Optional external central potential, used by the orbiting-disc problem.
-    float centralAcceleration;     // Zero disables this force.
-    float centralSupportRadius;    // Support radius of the selected gravity kernel.
+    float centralAcceleration;       // Zero disables this force.
+    float centralSmoothingLength;    // Support radius of the selected gravity kernel.
 };
 
 // Preserve the force-source arithmetic order for both the unsplit kernels and
@@ -96,7 +96,7 @@ struct SphRunData {
 CUDA_EXPORT inline Vector3<float> sphCompleteAcceleration(SphRunParameters const& parameters,
     Vector3<Position> const& position, Vector3<float> const& velocity, Vector3<float> acceleration,
     Vector3<float> const& gravityAcceleration, float centralAcceleration,
-    float centralSupportRadius, sph_flops::Counter& flops) {
+    float centralSmoothingLength, sph_flops::Counter& flops) {
 #if COSMICTIGER_WITH_GRAVITY
     acceleration += gravityAcceleration;
     flops += 3;
@@ -110,11 +110,11 @@ CUDA_EXPORT inline Vector3<float> sphCompleteAcceleration(SphRunParameters const
             distance(position[kYDimension], Position(0.5)),
             distance(position[kZDimension], Position(0.5)));
         float const radius = separation.norm();
-        float const inverseSupportRadius = 1.0f / centralSupportRadius;
-        float const normalizedRadius = radius * inverseSupportRadius;
+        float const inverseSmoothingLength = 1.0f / centralSmoothingLength;
+        float const normalizedRadius = radius * inverseSmoothingLength;
         float const force = centralAcceleration *
             radial_kernel::forceFactor(selectedGravityKernel(), normalizedRadius) *
-            inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
+            inverseSmoothingLength * inverseSmoothingLength * inverseSmoothingLength;
         acceleration -= force * separation;
         flops += 21 + sph_flops::forceKernelOperations(selectedGravityKernel(), normalizedRadius);
         flops.doublePrecision += 3 * sph_flops::positionConstructionFlops();
@@ -125,7 +125,7 @@ CUDA_EXPORT inline Vector3<float> sphCompleteAcceleration(SphRunParameters const
 }
 
 inline constexpr int kMaxNeighborRungDifference = 1;
-inline constexpr float kSphSupportRadiusTolerance = float(1.0e-4);
+inline constexpr float kSphSmoothingLengthTolerance = float(1.0e-4);
 
 // Target of the support solves: ΣW = Σ_b w(q_ab) = 3 N_target/(4π).
 CUDA_EXPORT inline float sphTargetKernelSum(float targetNeighborCount) {
@@ -141,14 +141,14 @@ struct SphGradHEvaluation {
 // The variational density pass's correction for one sink, from its unweighted sums
 // numberSum = Σ_b w(q_ab) and numberMoment = Σ_b q_ab w'(q_ab) at the converged support.
 // Every gas particle has the mass gasMass and the volume weight x = gasMass.
-CUDA_EXPORT inline SphGradHEvaluation sphGradHEvaluation(float supportRadius,
-    float minimumSupportRadius, float maximumSupportRadius, float targetNeighborCount,
+CUDA_EXPORT inline SphGradHEvaluation sphGradHEvaluation(float smoothingLength,
+    float minimumSmoothingLength, float maximumSmoothingLength, float targetNeighborCount,
     float gasMass, float numberSum, float numberMoment) {
     float const target = sphTargetKernelSum(targetNeighborCount);
     SphGradHEvaluation result;
     result.relativeResidual = (numberSum - target) / target;
-    result.constraint = sph_volume::classifySupport(supportRadius, minimumSupportRadius,
-        maximumSupportRadius, result.relativeResidual, kSphSupportRadiusTolerance);
+    result.constraint = sph_volume::classifySupport(smoothingLength, minimumSmoothingLength,
+        maximumSmoothingLength, result.relativeResidual, kSphSmoothingLengthTolerance);
     result.correction = sph_volume::gradHCorrection(
         sph_volume::equalWeightSupportSums(numberSum, numberMoment, gasMass), result.constraint);
     return result;

@@ -59,13 +59,13 @@ inline constexpr float kMinimumWellConditionedOmega = 0.1f;
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   w → kernelValue; w′ → kernelDerivative; q → normalizedRadius; H⁻¹ → inverseSupportRadius.
+ *   w → kernelValue; w′ → kernelDerivative; q → normalizedRadius; H⁻¹ → inverseSmoothingLength.
  */
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline Real kernelSupportDerivative(
-    Real kernelValue, Real kernelDerivative, Real normalizedRadius, Real inverseSupportRadius) {
-    Real const inverseSupportSquared = inverseSupportRadius * inverseSupportRadius;
+    Real kernelValue, Real kernelDerivative, Real normalizedRadius, Real inverseSmoothingLength) {
+    Real const inverseSupportSquared = inverseSmoothingLength * inverseSmoothingLength;
     return -(simdBroadcast<Real>(3) * kernelValue + normalizedRadius * kernelDerivative) *
         inverseSupportSquared * inverseSupportSquared;
 }
@@ -77,13 +77,13 @@ CUDA_EXPORT inline Real kernelSupportDerivative(
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   w′ → kernelDerivative; H⁻¹ → inverseSupportRadius; r → radius; bracket → return value.
+ *   w′ → kernelDerivative; H⁻¹ → inverseSmoothingLength; r → radius; bracket → return value.
  */
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline Real kernelGradientFactor(
-    Real kernelDerivative, Real inverseSupportRadius, Real radius) {
-    Real const inverseSupportSquared = inverseSupportRadius * inverseSupportRadius;
+    Real kernelDerivative, Real inverseSmoothingLength, Real radius) {
+    Real const inverseSupportSquared = inverseSmoothingLength * inverseSmoothingLength;
     return kernelDerivative * inverseSupportSquared * inverseSupportSquared / radius;
 }
 
@@ -137,12 +137,13 @@ CUDA_EXPORT inline SupportSums<Real> equalWeightSupportSums(
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   Σw → sums.numberSum; H⁻¹ → inverseSupportRadius; n_i → return value.
+ *   Σw → sums.numberSum; H⁻¹ → inverseSmoothingLength; n_i → return value.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real numberDensity(SupportSums<Real> const& sums, Real inverseSupportRadius) {
-    return sums.numberSum * inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
+CUDA_EXPORT inline Real numberDensity(SupportSums<Real> const& sums, Real inverseSmoothingLength) {
+    return sums.numberSum * inverseSmoothingLength * inverseSmoothingLength *
+        inverseSmoothingLength;
 }
 
 // clang-format off
@@ -151,13 +152,13 @@ CUDA_EXPORT inline Real numberDensity(SupportSums<Real> const& sums, Real invers
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   Σw → sums.numberSum; Σqw′ → sums.numberMoment; H⁻¹ → inverseSupportRadius.
+ *   Σw → sums.numberSum; Σqw′ → sums.numberMoment; H⁻¹ → inverseSmoothingLength.
  */
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline Real numberDensityDerivative(
-    SupportSums<Real> const& sums, Real inverseSupportRadius) {
-    Real const inverseSupportSquared = inverseSupportRadius * inverseSupportRadius;
+    SupportSums<Real> const& sums, Real inverseSmoothingLength) {
+    Real const inverseSupportSquared = inverseSmoothingLength * inverseSmoothingLength;
     return -(simdBroadcast<Real>(3) * sums.numberSum + sums.numberMoment) * inverseSupportSquared *
         inverseSupportSquared;
 }
@@ -168,12 +169,14 @@ CUDA_EXPORT inline Real numberDensityDerivative(
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   Σxw → sums.weightedSum; H⁻¹ → inverseSupportRadius; y_i → return value.
+ *   Σxw → sums.weightedSum; H⁻¹ → inverseSmoothingLength; y_i → return value.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real weightedDensity(SupportSums<Real> const& sums, Real inverseSupportRadius) {
-    return sums.weightedSum * inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
+CUDA_EXPORT inline Real weightedDensity(
+    SupportSums<Real> const& sums, Real inverseSmoothingLength) {
+    return sums.weightedSum * inverseSmoothingLength * inverseSmoothingLength *
+        inverseSmoothingLength;
 }
 
 // clang-format off
@@ -182,13 +185,13 @@ CUDA_EXPORT inline Real weightedDensity(SupportSums<Real> const& sums, Real inve
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   Σxw → sums.weightedSum; Σxqw′ → sums.weightedMoment; H⁻¹ → inverseSupportRadius.
+ *   Σxw → sums.weightedSum; Σxqw′ → sums.weightedMoment; H⁻¹ → inverseSmoothingLength.
  */
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline Real weightedDensityDerivative(
-    SupportSums<Real> const& sums, Real inverseSupportRadius) {
-    Real const inverseSupportSquared = inverseSupportRadius * inverseSupportRadius;
+    SupportSums<Real> const& sums, Real inverseSmoothingLength) {
+    Real const inverseSupportSquared = inverseSmoothingLength * inverseSmoothingLength;
     return -(simdBroadcast<Real>(3) * sums.weightedSum + sums.weightedMoment) *
         inverseSupportSquared * inverseSupportSquared;
 }
@@ -283,16 +286,16 @@ enum class SupportConstraint : int {
 
 // relativeResidual is (sum_j w - target)/target at the stored H. A residual within
 // the solve tolerance satisfies the constraint and is free even at a bound.
-CUDA_EXPORT inline SupportConstraint classifySupport(float supportRadius,
-    float minimumSupportRadius, float maximumSupportRadius, float relativeResidual,
+CUDA_EXPORT inline SupportConstraint classifySupport(float smoothingLength,
+    float minimumSmoothingLength, float maximumSmoothingLength, float relativeResidual,
     float tolerance) {
-    if (minimumSupportRadius == maximumSupportRadius) {
+    if (minimumSmoothingLength == maximumSmoothingLength) {
         return SupportConstraint::Fixed;
     }
-    if (supportRadius <= minimumSupportRadius && relativeResidual > tolerance) {
+    if (smoothingLength <= minimumSmoothingLength && relativeResidual > tolerance) {
         return SupportConstraint::LowerBound;
     }
-    if (supportRadius >= maximumSupportRadius && relativeResidual < -tolerance) {
+    if (smoothingLength >= maximumSmoothingLength && relativeResidual < -tolerance) {
         return SupportConstraint::UpperBound;
     }
     return SupportConstraint::Free;

@@ -169,9 +169,10 @@ public:
         params_.variableViscosity = false;
         params_.cullenDehnen = false;
         params_.priceEtAl = false;
-        params_.minimumSupportRadius = 0.1f;
+        params_.huEtAl = false;
+        params_.minimumSmoothingLength = 0.1f;
         // The initial isolated support is held at the upper bound.
-        params_.maximumSupportRadius = 0.2f;
+        params_.maximumSmoothingLength = 0.2f;
         params_.uniformAccelerationY = 0.0f;
         params_.zPlaneAcceleration = 0.0f;
         params_.velocityDampingRate = 0.0f;
@@ -258,11 +259,11 @@ public:
     }
 
     void densityPass() {
-        run(kSphRunPrehydro2);
+        run(kSphRunDensityAndGradients);
     }
 
-    void prehydro1Pass() {
-        run(kSphRunPrehydro1);
+    void smoothingLengthsPass() {
+        run(kSphRunSmoothingLengths);
     }
 
     void enableMidpointOutputs() {
@@ -318,14 +319,14 @@ public:
     }
 
     void solveSmoothing(float minimum, float maximum, float initial) {
-        params_.minimumSupportRadius = minimum;
-        params_.maximumSupportRadius = maximum;
+        params_.minimumSmoothingLength = minimum;
+        params_.maximumSmoothingLength = maximum;
         for (int i = 0; i < count_; i++) {
             data_.sinkFlags[sinkIndex(i)].setConverged(false);
             data_.sourceSmoothingLength[sourceIndex(i)] = data_.sinkSmoothingLength[sinkIndex(i)] =
                 initial;
         }
-        run(kSphRunPrehydro1);
+        run(kSphRunSmoothingLengths);
         require(!reduction_->needsAnotherPass,
             "complete neighbor fixture must converge without refresh");
         for (int i = 0; i < count_; i++) {
@@ -341,7 +342,7 @@ public:
     }
 
     void density() {
-        run(kSphRunPrehydro2);
+        run(kSphRunDensityAndGradients);
         require(
             !reduction_->needsAnotherPass, "density fixture unexpectedly needs neighbor refresh");
         for (int i = 0; i < count_; i++) {
@@ -854,7 +855,7 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
                 double const soundSpeed =
                     std::sqrt(double(data.adiabaticIndex) * (data.adiabaticIndex - 1.0) * 0.9);
                 double const smoothingLength = 0.25 /
-                    selectedHydroKernel().supportRadiusPerEffectiveRadius *
+                    selectedHydroKernel().smoothingLengthPerEffectiveRadius *
                     monaghan::kViscosityWidthScale;
                 double const radiusSquaredShock = 0.25 * 0.25 * detector;
                 double const expectedTarget = huEtAl ?
@@ -983,7 +984,7 @@ void testVariableViscosityPairs() {
 
 void testCullenDehnenExcludedThermodynamics() {
     Fixture fixture(2, 2);
-    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.1f;
+    fixture.params_.minimumSmoothingLength = fixture.params_.maximumSmoothingLength = 0.1f;
     fixture.enableVariableViscosity(true);
     fixture.params_.vonNeumannRichtmyerCoefficient = 4.0f;
     auto& data = fixture.data_;
@@ -1197,7 +1198,7 @@ void testUnequalSupports() {
 // table through scalar double arithmetic. Core tests also check the table mathematics.
 void testSelectedKernel() {
     Fixture fixture(2);
-    fixture.params_.maximumSupportRadius = 0.49f;
+    fixture.params_.maximumSmoothingLength = 0.49f;
     auto& data = fixture.data_;
     data.sourcePositionX[0] = 0.98;
     data.sourcePositionX[1] = 0.16;
@@ -1230,7 +1231,7 @@ void testSelectedKernel() {
         double const soundSpeed = std::sqrt(
             data.adiabaticIndex * (data.adiabaticIndex - 1.0f) * data.sourceInternalEnergy[i]);
         inverseCfl = std::max(inverseCfl,
-            soundSpeed * selectedHydroKernel().supportRadiusPerEffectiveRadius / support);
+            soundSpeed * selectedHydroKernel().smoothingLengthPerEffectiveRadius / support);
     }
     fixture.hydro(1);
     requireClose("selected kernel scalar/SIMD pressure force",
@@ -1249,7 +1250,7 @@ void testSelectedKernel() {
 
 void testUnequalPairEos() {
     Fixture fixture(2);
-    fixture.params_.maximumSupportRadius = 0.49f;
+    fixture.params_.maximumSmoothingLength = 0.49f;
 
     auto& data = fixture.data_;
     // A non-5/3 gamma keeps the cosmological work term nonzero.
@@ -1290,7 +1291,7 @@ void testUnequalPairEos() {
         double const soundSpeed =
             std::sqrt(data.adiabaticIndex * pressureEnergyRatio * data.sourceInternalEnergy[i]);
         inverseCfl = std::max(inverseCfl,
-            soundSpeed * selectedHydroKernel().supportRadiusPerEffectiveRadius / support);
+            soundSpeed * selectedHydroKernel().smoothingLengthPerEffectiveRadius / support);
     }
     double const pressureForce = directedGradient[0] + directedGradient[1];
     fixture.hydro(1);
@@ -1331,32 +1332,32 @@ void testUnequalPairEos() {
 
 void testSelectedCentralGravity() {
     Fixture fixture(1);
-    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.2f;
+    fixture.params_.minimumSmoothingLength = fixture.params_.maximumSmoothingLength = 0.2f;
     auto& data = fixture.data_;
     data.sourcePositionX[0] = 0.6;
     data.sourcePositionY[0] = data.sourcePositionZ[0] = 0.5;
     data.sinkFlags[0].setConverged(true);
     data.centralAcceleration = 0.07f;
-    data.centralSupportRadius = 0.3f;
+    data.centralSmoothingLength = 0.3f;
     fixture.density();
     fixture.hydro();
     double const radius = distance(data.sourcePositionX[0], Position(0.5));
     double const expected = -data.centralAcceleration * radius /
-        std::pow(double(data.centralSupportRadius), 3) *
-        radial_kernel::forceFactor(selectedGravityKernel(), radius / data.centralSupportRadius);
+        std::pow(double(data.centralSmoothingLength), 3) *
+        radial_kernel::forceFactor(selectedGravityKernel(), radius / data.centralSmoothingLength);
     requireClose("selected gravity kernel central force", data.sinkAccelerations[0][kXDimension],
         expected, 5.0e-6);
 }
 
 void testFixedGravityTimestep() {
     Fixture fixture(1);
-    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.2f;
+    fixture.params_.minimumSmoothingLength = fixture.params_.maximumSmoothingLength = 0.2f;
     auto& data = fixture.data_;
     data.sourcePositionX[0] = data.sourcePositionY[0] = data.sourcePositionZ[0] = 0.5;
     data.sinkFlags[0].setConverged(true);
     data.sourceInternalEnergy[0] = 1.0e-6f;
     data.selfGravityEnabled = true;
-    data.gravityEffectiveRadius = 0.08f / selectedGravityKernel().supportRadiusPerEffectiveRadius;
+    data.gravityEffectiveRadius = 0.08f / selectedGravityKernel().smoothingLengthPerEffectiveRadius;
     data.sinkGravityAccelerationX[0] = 0.1f;
     fixture.density();
     fixture.hydro(1);
@@ -1369,7 +1370,7 @@ void testFixedGravityTimestep() {
     require(fixture.reduction_->maximumGravityRung == expectedGravityRung,
         "gas gravity timestep must use the shared fixed gravity radius");
     data.sourceSmoothingLength[0] = data.sinkSmoothingLength[0] = 0.3f;
-    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.3f;
+    fixture.params_.minimumSmoothingLength = fixture.params_.maximumSmoothingLength = 0.3f;
     fixture.density();
     fixture.hydro(1);
     require(fixture.reduction_->maximumGravityRung == expectedGravityRung,
@@ -1474,7 +1475,7 @@ void testDefaultTimestepCalibration() {
     fixture.params_.courantFactor = 0.25 * std::sqrt(5.0 / 6.0);
     double const oldCentralPotential = 693.0 / 256.0;
     data.accelerationTimestepFactor = 0.25 *
-        std::sqrt(selectedGravityKernel().supportRadiusPerEffectiveRadius / oldCentralPotential);
+        std::sqrt(selectedGravityKernel().smoothingLengthPerEffectiveRadius / oldCentralPotential);
     fixture.density();
     fixture.hydro(1);
     double const soundSpeed = std::sqrt(
@@ -1513,7 +1514,7 @@ void testDefaultThermalTimestep() {
     fixture.params_.courantFactor = 0.25 * std::sqrt(5.0 / 6.0);
     double const oldEta = 0.25 / std::sqrt(693.0 / 256.0);
     data.accelerationTimestepFactor =
-        oldEta * std::sqrt(selectedGravityKernel().supportRadiusPerEffectiveRadius);
+        oldEta * std::sqrt(selectedGravityKernel().smoothingLengthPerEffectiveRadius);
     fixture.density();
     fixture.hydro(1);
     for (int i = 0; i < 2; i++) {
@@ -1587,7 +1588,7 @@ void testPeriodicTailsAndOffsets() {
         data.sinkDensity[fixture->sinkIndex(count)] = -91.0f;
         data.sinkInternalEnergyRate[fixture->sinkIndex(count)] = -92.0f;
         data.sinkAccelerations[fixture->sinkIndex(count)][kXDimension] = -93.0f;
-        fixture->run(kSphRunPrehydro2);
+        fixture->run(kSphRunDensityAndGradients);
         for (int i = 0; i < count; i++) {
             int const source = fixture->sourceIndex(i);
             double const support = data.sourceSmoothingLength[source];
@@ -1649,7 +1650,7 @@ void testActivity() {
     Fixture fixture(3, 1, 4, 7, 2);
     auto& data = fixture.data_;
     fixture.params_.minimumRung = 4;
-    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.25f;
+    fixture.params_.minimumSmoothingLength = fixture.params_.maximumSmoothingLength = 0.25f;
     for (int i = 0; i < 3; i++) {
         int const source = fixture.sourceIndex(i);
         int const sink = fixture.sinkIndex(i);
@@ -1663,14 +1664,14 @@ void testActivity() {
             data.sinkAccelerations[sink][dim] = -13.0f;
         }
     }
-    auto result = sphCpuPrehydro1(fixture.params_, data, 0);
+    auto result = sphCpuSmoothingLengths(fixture.params_, data, 0);
     require(!result.needsAnotherPass, "active fixed support converges");
     require(data.sinkFlags[fixture.sinkIndex(0)].converged(), "active smoothing is solved");
     require(!data.sinkFlags[fixture.sinkIndex(1)].converged() &&
             !data.sinkFlags[fixture.sinkIndex(2)].converged(),
         "inactive smoothing waits for semiactive classification");
     fixture.publishSupport();
-    result = sphCpuPrehydro2(fixture.params_, data, 0);
+    result = sphCpuDensityAndGradients(fixture.params_, data, 0);
     require(!result.needsAnotherPass, "semiactive fixed support converges");
     require(data.sinkFlags[fixture.sinkIndex(0)].semiactive() &&
             data.sinkFlags[fixture.sinkIndex(1)].semiactive() &&
@@ -1716,14 +1717,14 @@ void testSupportRefresh() {
     Fixture active(1);
     auto& data = active.data_;
     data.sourcePositionX[0] = data.sourcePositionY[0] = data.sourcePositionZ[0] = 0.5;
-    active.params_.minimumSupportRadius = 0.1f;
-    active.params_.maximumSupportRadius = 0.3f;
+    active.params_.minimumSmoothingLength = 0.1f;
+    active.params_.maximumSmoothingLength = 0.3f;
     data.sourceSmoothingLength[0] = data.sinkSmoothingLength[0] = 0.1f;
     for (int dim = 0; dim < kDimensions; dim++) {
         data.treeNodes[0].outerBox.begin[dim] = 0.39;
         data.treeNodes[0].outerBox.end[dim] = 0.61;
     }
-    auto result = sphCpuPrehydro1(active.params_, data, 0);
+    auto result = sphCpuSmoothingLengths(active.params_, data, 0);
     require(result.needsAnotherPass && !data.sinkFlags[0].converged(),
         "active smoothing requests a neighbor refresh when support grows beyond the search box");
     require(data.sinkSmoothingLength[0] > 0.1f,
@@ -1734,7 +1735,7 @@ void testSupportRefresh() {
         data.treeNodes[0].outerBox.begin[dim] = -1.0;
         data.treeNodes[0].outerBox.end[dim] = 2.0;
     }
-    result = sphCpuPrehydro1(active.params_, data, 0);
+    result = sphCpuSmoothingLengths(active.params_, data, 0);
     require(!result.needsAnotherPass && data.sinkFlags[0].converged(),
         "active smoothing converges after neighbor refresh");
     requireClose("sparse gas reaches the configured support ceiling", data.sinkSmoothingLength[0],
@@ -1743,8 +1744,8 @@ void testSupportRefresh() {
     Fixture semiactive(2);
     auto& semiData = semiactive.data_;
     semiactive.params_.minimumRung = 4;
-    semiactive.params_.minimumSupportRadius = 0.1f;
-    semiactive.params_.maximumSupportRadius = 0.3f;
+    semiactive.params_.minimumSmoothingLength = 0.1f;
+    semiactive.params_.maximumSmoothingLength = 0.3f;
     for (int i = 0; i < 2; i++) {
         semiData.sourcePositionX[i] = 0.5 + 0.05 * i;
         semiData.sourcePositionY[i] = semiData.sourcePositionZ[i] = 0.55;
@@ -1758,7 +1759,7 @@ void testSupportRefresh() {
         semiData.treeNodes[0].outerBox.begin[dim] = 0.43;
         semiData.treeNodes[0].outerBox.end[dim] = 0.67;
     }
-    result = sphCpuPrehydro2(semiactive.params_, semiData, 0);
+    result = sphCpuDensityAndGradients(semiactive.params_, semiData, 0);
     require(result.needsAnotherPass && semiData.sinkFlags[1].semiactive() &&
             !semiData.sinkFlags[1].converged(),
         "semiactive smoothing requests a neighbor refresh");
@@ -1767,7 +1768,7 @@ void testSupportRefresh() {
         semiData.treeNodes[0].outerBox.begin[dim] = -1.0;
         semiData.treeNodes[0].outerBox.end[dim] = 2.0;
     }
-    result = sphCpuPrehydro2(semiactive.params_, semiData, 0);
+    result = sphCpuDensityAndGradients(semiactive.params_, semiData, 0);
     require(!result.needsAnotherPass && semiData.sinkFlags[1].converged() &&
             semiData.sinkDensity[1] > 0.0f,
         "semiactive density completes after neighbor refresh");
@@ -1879,7 +1880,7 @@ std::vector<double> exactSupports(Fixture const& fixture) {
     std::vector<double> supports(fixture.count_);
     for (int i = 0; i < fixture.count_; i++) {
         double lower = 1.0e-3;
-        double upper = fixture.params_.maximumSupportRadius;
+        double upper = fixture.params_.maximumSmoothingLength;
         if (kernelSumAt(fixture, i, upper) < targetKernelSum(fixture)) {
             supports[i] = upper;
             continue;
@@ -1888,7 +1889,8 @@ std::vector<double> exactSupports(Fixture const& fixture) {
             double const middle = 0.5 * (lower + upper);
             (kernelSumAt(fixture, i, middle) < targetKernelSum(fixture) ? lower : upper) = middle;
         }
-        supports[i] = std::max(0.5 * (lower + upper), double(fixture.params_.minimumSupportRadius));
+        supports[i] =
+            std::max(0.5 * (lower + upper), double(fixture.params_.minimumSmoothingLength));
     }
     return supports;
 }
@@ -1908,11 +1910,11 @@ VariationalReference variationalReference(
     result.acceleration.assign(count, {});
     result.energyRate.assign(count, 0.0);
     std::vector<double> pressureFactor(count);
-    auto const gradient = [&](double radius, double supportRadius) {
-        double const smoothingNormalizedRadius = radius / supportRadius;
+    auto const gradient = [&](double radius, double smoothingLength) {
+        double const smoothingNormalizedRadius = radius / smoothingLength;
         return smoothingNormalizedRadius < 1.0 ?
             sph_volume::kernelGradientFactor(
-                radial_kernel::derivative(table, smoothingNormalizedRadius), 1.0 / supportRadius,
+                radial_kernel::derivative(table, smoothingNormalizedRadius), 1.0 / smoothingLength,
                 radius) :
             0.0;
     };
@@ -1934,8 +1936,8 @@ VariationalReference variationalReference(
         result.density[i] = sph_volume::weightedDensity(sums, 1.0 / support[i]);
         result.residual[i] = (sums.numberSum - targetKernelSum(fixture)) / targetKernelSum(fixture);
         auto const constraint = sph_volume::classifySupport(float(support[i]),
-            fixture.params_.minimumSupportRadius, fixture.params_.maximumSupportRadius,
-            float(result.residual[i]), kSphSupportRadiusTolerance);
+            fixture.params_.minimumSmoothingLength, fixture.params_.maximumSmoothingLength,
+            float(result.residual[i]), kSphSmoothingLengthTolerance);
         result.weightedSupportCorrection[i] = constraint == sph_volume::SupportConstraint::Free ?
             sph_volume::weightedSupportCorrection(sums) :
             0.0;
@@ -2036,7 +2038,7 @@ void testVariationalAgainstReference() {
     fixture.density();
     SphRunReturn const densityPass = *fixture.reduction_;
     require(densityPass.heldSupports == 0, "perturbed lattice supports are free");
-    require(densityPass.maximumSupportResidual <= 1.2f * kSphSupportRadiusTolerance,
+    require(densityPass.maximumSupportResidual <= 1.2f * kSphSmoothingLengthTolerance,
         "density pass reports the support-solve residual");
     require(densityPass.minimumGradHOmega > 0.5f && densityPass.illConditionedSupports == 0,
         "perturbed lattice corrections are well conditioned");
@@ -2061,7 +2063,7 @@ void testVariationalAgainstReference() {
     auto const exact = compareRates(fixture, variationalReference(fixture, exactSupports(fixture)));
     std::printf("variational float rates against exactly solved supports: acceleration %.3e, "
                 "energy %.3e (solve tolerance %.1e)\n",
-        exact.acceleration, exact.energyRate, double(kSphSupportRadiusTolerance));
+        exact.acceleration, exact.energyRate, double(kSphSmoothingLengthTolerance));
     require(exact.acceleration < 2.0e-3 && exact.energyRate < 2.0e-3,
         "support-solve tolerance bounds the variational rate error");
 }
@@ -2208,7 +2210,7 @@ void testVariationalHeldSupports() {
     fixture.density();
     fixture.hydro();
     fixture.checkConservation();
-    std::vector<double> support(fixture.count_, fixture.params_.minimumSupportRadius);
+    std::vector<double> support(fixture.count_, fixture.params_.minimumSmoothingLength);
     fixture.params_.bulkViscosityCoefficient = fixture.params_.vonNeumannRichtmyerCoefficient =
         0.0f;
     fixture.hydro();
@@ -2321,7 +2323,7 @@ public:
         for (int i = 0; i < fixture_.count_; i++) {
             data.sinkFlags[fixture_.sinkIndex(i)].setConverged(false);
         }
-        fixture_.run(kSphRunPrehydro1);
+        fixture_.run(kSphRunSmoothingLengths);
         require(!fixture_.reduction_->needsAnotherPass, "stepping fixture supports converge");
         fixture_.publishSupport();
         fixture_.density();
@@ -2610,7 +2612,7 @@ void testVariationalStaleCorrections() {
             fixture.data_.sinkSmoothingLength[fixture.sinkIndex(i)] = 0.1f;
         fixture.data_.sinkFlags[fixture.sinkIndex(i)].setConverged(true);
     }
-    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.1f;
+    fixture.params_.minimumSmoothingLength = fixture.params_.maximumSmoothingLength = 0.1f;
     fixture.density();
     float const notANumber = std::numeric_limits<float>::quiet_NaN();
     fixture.data_.sourceGradHCorrection[fixture.sourceIndex(2)] = notANumber;
@@ -2727,7 +2729,7 @@ TEST_F(SphCpuTest, BalsaraVelocityGradients) {
                 data.sinkFlags[sink].setConverged(true);
                 data.sourceBalsaraFactor[source] = -7.0f;
             }
-            fixture.run(kSphRunPrehydro2);
+            fixture.run(kSphRunDensityAndGradients);
             for (int i = 0; i < fixture.count_; ++i) {
                 float const factor =
                     balsara::decodeFactor(data.sinkBalsaraFactor[fixture.sinkIndex(i)]);
@@ -2742,7 +2744,7 @@ TEST_F(SphCpuTest, BalsaraVelocityGradients) {
         }
     }
     fixture.params_.balsaraSwitch = false;
-    fixture.run(kSphRunPrehydro2);
+    fixture.run(kSphRunDensityAndGradients);
     for (int i = 0; i < fixture.count_; ++i) {
         EXPECT_EQ(data.sinkBalsaraFactor[fixture.sinkIndex(i)], 255);
     }
@@ -2792,8 +2794,8 @@ TEST_F(SphCpuTest, EveryPhaseSubmitsItsArithmeticCount) {
     // The partial final packet verifies that actual SIMD work is counted, even
     // when only one lane in that packet contains a particle.
     detail::Fixture fixture(SimdFloat::size() + 1);
-    fixture.params_.minimumSupportRadius = 0.2f;
-    fixture.params_.maximumSupportRadius = 0.2f;
+    fixture.params_.minimumSmoothingLength = 0.2f;
+    fixture.params_.maximumSmoothingLength = 0.2f;
     fixture.params_.phase = 1;
     for (int i = 0; i < fixture.count_; ++i) {
         auto const source = fixture.sourceIndex(i);
@@ -2802,7 +2804,8 @@ TEST_F(SphCpuTest, EveryPhaseSubmitsItsArithmeticCount) {
         fixture.data_.sourcePositionZ[source] = 0.5f;
         fixture.data_.sourceDensity[source] = 1.0f;
     }
-    for (int runType : {kSphRunPrehydro1, kSphRunPrehydro2, kSphRunHydro, kSphRunRungs}) {
+    for (int runType :
+        {kSphRunSmoothingLengths, kSphRunDensityAndGradients, kSphRunHydro, kSphRunRungs}) {
         detail::submittedSphFlops = {};
         auto const result = fixture.run(runType);
         EXPECT_GT(detail::submittedSphFlops.singlePrecision, 0) << "phase " << runType;
@@ -2819,7 +2822,7 @@ TEST_F(SphCpuTest, EveryPhaseSubmitsItsArithmeticCount) {
 TEST_F(SphCpuTest, DensityAndRungsCountPaddedPackets) {
     int const width = SimdFloat::size();
     detail::Fixture fixture(width + 1);
-    fixture.params_.minimumSupportRadius = fixture.params_.maximumSupportRadius = 0.2f;
+    fixture.params_.minimumSmoothingLength = fixture.params_.maximumSmoothingLength = 0.2f;
     // Every neighbor passes all three dimensions of the first periodic image:
     // six fixed-point image conversions per source. Two SIMD packets execute
     // per sink, including the unused lanes of the final packet.
@@ -2839,7 +2842,7 @@ TEST_F(SphCpuTest, DensityAndRungsCountPaddedPackets) {
     // per packet (44 double operations including its four width subtractions).
     // The single target node also computes gamma - 1 once.
     detail::submittedSphFlops = {};
-    auto const density = fixture.run(kSphRunPrehydro2);
+    auto const density = fixture.run(kSphRunDensityAndGradients);
     EXPECT_EQ(density.floatingPointOperations, double(fixture.count_) * (103 + 173 * width) + 1);
     EXPECT_EQ(detail::submittedSphFlops.singlePrecision, fixture.count_ * (9 + 173 * width) + 1);
     EXPECT_EQ(detail::submittedSphFlops.doublePrecision, 94 * fixture.count_);
@@ -2879,8 +2882,8 @@ TEST_F(SphCpuTest, DensityPredictionUsesPeculiarMotionAndGradHWithoutViscosity) 
         if (freeSupport) {
             fixture.solveSmoothing(0.04f, 0.45f, 0.2f);
         } else {
-            fixture.params_.minimumSupportRadius = 0.25f;
-            fixture.params_.maximumSupportRadius = 0.25f;
+            fixture.params_.minimumSmoothingLength = 0.25f;
+            fixture.params_.maximumSmoothingLength = 0.25f;
         }
         ASSERT_FALSE(fixture.params_.balsaraSwitch);
         ASSERT_FALSE(fixture.params_.variableViscosity);

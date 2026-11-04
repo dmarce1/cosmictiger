@@ -35,7 +35,7 @@ def runDiagnostic(executable, workdir):
                "--initial.closePack=false", "--initial.useGlass=false",
                "--hydro.enabled=true", "--gravity.cuda=false",
                "--gravity.kernelFamily=ferrers", "--gravity.kernelDegree=4",
-               "--gravity.supportRadius=1.5",
+               "--gravity.smoothingLength=1.5",
                "--gravity.openingAngle=0.1", "--cosmology.omegaB=0.049389",
                "--cosmology.omegaC=0.26503", "--analysis.views=false",
                "--lightcone.enabled=false", "--analysis.power=false",
@@ -76,7 +76,7 @@ def readMetadata(workdir):
             f"invalid class masses {masses}")
     fractions = [mass / sum(masses) for mass in masses]
     require(0.14 < fractions[1] < 0.18, f"unexpected gas mass fraction {fractions[1]}")
-    support = metadata["configured_support_radius_box"]
+    support = metadata["configured_smoothing_length_box"]
     require(math.isclose(support, 1.5 / 8, rel_tol=1.0e-12),
             f"unexpected configured support {support}")
     for key in ("baseline_support_dm", "baseline_support_gas",

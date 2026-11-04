@@ -28,8 +28,8 @@ void sphOnlyDiagnosticsTest() {
     options.analysis.tracers = false;
     options.hydro.cuda = false;
     options.hydro.viscosityEvolution = "morrisAndMonaghan";
-    options.hydro.minSupportRadius = 0.25;
-    options.hydro.maxSupportRadius = 0.25;
+    options.hydro.minSmoothingLength = 0.25;
+    options.hydro.maxSmoothingLength = 0.25;
     options.hydro.damping = 0.0;
     options.hydro.centralAcceleration = 0.0;
     options.hydro.yAcceleration = 0.0;

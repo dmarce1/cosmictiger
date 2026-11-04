@@ -74,7 +74,7 @@ void initializeSourceTiming() {
         sphParticlesParticleIndex(particle) = particle;
         sphParticlesDensity(particle) = getOptions().initial.gasMass * kSourceParticleCount;
         sphParticlesSetInternalEnergy(particle, storedEnergy);
-        sphParticlesSmoothingLength(particle) = getOptions().hydro.minSupportRadius;
+        sphParticlesSmoothingLength(particle) = getOptions().hydro.minSmoothingLength;
         sphParticlesElectronFractions[particle] = 1.0f;
         sphParticlesSetProposedRung(particle, particlesRung(particle));
         sphParticlesBulkViscosityCoefficients[particle] = 0.25f + 0.0625f * (ordinal % 4);
@@ -245,7 +245,7 @@ void sphSourceTimingTest() {
     auto options = savedOptions;
     options.initial.numberOfParticles = detail::kSourceParticleCount;
     options.compute.sphBucketSize = 8;
-    options.hydro.minSupportRadius = options.hydro.maxSupportRadius = 0.45f;
+    options.hydro.minSmoothingLength = options.hydro.maxSmoothingLength = 0.45f;
     options.hydro.damping = 0.0;
     options.hydro.yAcceleration = 0.0;
     options.hydro.zPlaneAcceleration = 0.0;
@@ -262,8 +262,8 @@ void sphSourceTimingTest() {
             double const soundSpeed =
                 std::sqrt(options.hydro.gamma * (options.hydro.gamma - 1.0) * 1.0e12 *
                     detail::kSourceScale * detail::kSourceScale / sourceParameters.energyScale);
-            double const smoothingLength = options.hydro.minSupportRadius /
-                selectedHydroKernel().supportRadiusPerEffectiveRadius *
+            double const smoothingLength = options.hydro.minSmoothingLength /
+                selectedHydroKernel().smoothingLengthPerEffectiveRadius *
                 monaghan::kViscosityWidthScale;
             options.hydro.viscosityDecay =
                 detail::kSourceScale * smoothingLength / (soundSpeed * (baseTimestep / 4.0));

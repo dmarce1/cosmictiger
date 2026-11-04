@@ -86,8 +86,8 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
     float const gx = acceleration[kXDimension];
     float const gy = acceleration[kYDimension];
     float const gz = acceleration[kZDimension];
-    float const effectiveRadius =
-        parameters.gravitySupportRadius / selectedGravityKernel().supportRadiusPerEffectiveRadius;
+    float const effectiveRadius = parameters.gravitySmoothingLength /
+        selectedGravityKernel().smoothingLengthPerEffectiveRadius;
     // A new outer interval closes the previous substep with the old base timestep.
     float const closingBase =
         parameters.closingBaseTimestep > 0.0f ? parameters.closingBaseTimestep : parameters.t0;

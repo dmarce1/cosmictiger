@@ -108,6 +108,47 @@ bool sphTreeAllValid() {
 
 namespace detail {
 
+void mergeSphVolumeRatios(SphTreeCreateReturn& result, double minimum, double maximum) {
+    // Empty subtrees return zero; every occupied box has positive padded volume.
+    if (maximum > 0.0) {
+        result.minVolumeRatio =
+            result.maxVolumeRatio > 0.0 ? std::min(result.minVolumeRatio, minimum) : minimum;
+        result.maxVolumeRatio = std::max(result.maxVolumeRatio, maximum);
+    }
+}
+
+double sphTreeVolumeRatio(SphTreeNode const& node, sph_flops::Counter& flops) {
+    if (!node.isLocal() || node.numberOfParticles() == 0) {
+        return 0.0;
+    }
+    // clang-format off
+    /*
+     * Derived diagnostic (no external equation):
+     *   R = V_swept / V_partition
+     *     = ∏_d (e_swept,d − b_swept,d) / ∏_d (e_partition,d − b_partition,d).
+     * Both boxes use the same comoving periodic unit-box coordinates. The swept
+     * bounds include motion since the most recent rebuild, including conservative
+     * expansion at periodic seams; kernel support is excluded. Use double spans
+     * and products: fixed-point volume products can underflow in refined cells.
+     * Symbol directory: R -> returned ratio; b/e_swept -> node.driftBox.begin/end;
+     * b/e_partition -> node.box.begin/end; V_swept -> sweptVolume;
+     * V_partition -> partitionVolume.
+     */
+    // clang-format on
+    double partitionVolume = 1.0;
+    double sweptVolume = 1.0;
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        double const partitionSpan = node.box.end[dim].toDouble() - node.box.begin[dim].toDouble();
+        double const sweptSpan =
+            node.driftBox.end[dim].toDouble() - node.driftBox.begin[dim].toDouble();
+        ALWAYS_ASSERT(partitionSpan > 0.0 && sweptSpan >= 0.0);
+        partitionVolume *= partitionSpan;
+        sweptVolume *= sweptSpan;
+    }
+    flops.doublePrecision += 8 * kDimensions + 1;
+    return sweptVolume / partitionVolume;
+}
+
 void mergeSphBounds(Fixed32Range& target, Fixed32Range const& source) {
     for (int dim = 0; dim < kDimensions; ++dim) {
         target.begin[dim] = std::min(target.begin[dim], source.begin[dim]);
@@ -484,7 +525,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         std::array<hpx::future<SphTreeCreateReturn>, kSphChildCount> childFutures;
         if (processRange.second - processRange.first > 1) {
             // Rank ownership still follows the domain decomposition's binary keys.
-            // Only the spatial particle trees below these routing nodes are octrees.
+            // Only the spatial particle trees below these routing nodes are hybrid trees.
             int const middleRank = (processRange.first + processRange.second) / 2;
             for (int childIndex = 0; childIndex < 2; ++childIndex) {
                 size_t const childKey = (key << 1) + childIndex;
@@ -496,33 +537,72 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
                     childRanks.second - childRanks.first == 1, true);
             }
         } else {
-            // Octant bit d selects the upper half along dimension d. Partition
-            // z, then y, then x so occupied octants have contiguous index ranges.
+            // Reduce fanout only near the bucket threshold. Widen before
+            // multiplying so large configured bucket sizes cannot overflow int.
+            auto const particleCount = std::uint64_t(particleRange.second - particleRange.first);
+            auto const bucketCount = std::uint64_t(bucketSize);
+            int splitDimensions = 1;
+            if (particleCount > 4 * bucketCount) {
+                splitDimensions = 3;
+            } else if (particleCount > 2 * bucketCount) {
+                splitDimensions = 2;
+            }
+            int splitMask = 0;
+            for (int split = 0; split < splitDimensions; ++split) {
+                int longestDimension = -1;
+                double longestSpan = -1.0;
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    double const span = box.end[dim] - box.begin[dim];
+                    flops.doublePrecision += 1;
+                    if ((splitMask & (1 << dim)) == 0 && span > longestSpan) {
+                        longestDimension = dim;
+                        longestSpan = span;
+                    }
+                }
+                splitMask |= 1 << longestDimension;
+            }
+            // Child bit d selects the upper half along dimension d. Partition
+            // selected axes in z/y/x order so occupied slots have contiguous ranges.
+            // Longest-axis selection limits cell aspect ratios after partial splits.
             // Derived geometric split: m_d = (b_d + e_d)/2.
             // b_d -> box.begin[dim], e_d -> box.end[dim], m_d -> midpoint[dim].
             std::array<Pair<ParticleInteger>, kSphChildCount> childParticleRanges;
             childParticleRanges[0] = particleRange;
             Vector3<double> midpoint;
+            int partitionedMask = 0;
             for (int dim = kDimensions - 1; dim >= 0; --dim) {
+                int const upperBit = 1 << dim;
+                if ((splitMask & upperBit) == 0) {
+                    continue;
+                }
                 midpoint[dim] = 0.5 * (box.begin[dim] + box.end[dim]);
                 Position const splitPosition(midpoint[dim]);
                 flops.doublePrecision += 2 + sph_flops::positionConstructionFlops();
-                int const upperBit = 1 << dim;
-                for (int childIndex = 0; childIndex < kSphChildCount; childIndex += 2 * upperBit) {
+                for (int childIndex = 0; childIndex < kSphChildCount; ++childIndex) {
+                    if ((childIndex & ~partitionedMask) != 0) {
+                        continue;
+                    }
                     auto& lowerRange = childParticleRanges[childIndex];
                     ParticleInteger const split = sphParticlesSort(lowerRange, splitPosition, dim);
                     childParticleRanges[childIndex + upperBit] =
                         Pair<ParticleInteger>(split, lowerRange.second);
                     lowerRange.second = split;
                 }
+                partitionedMask |= upperBit;
             }
             for (int childIndex = kSphChildCount - 1; childIndex >= 0; --childIndex) {
+                if ((childIndex & ~splitMask) != 0) {
+                    continue;
+                }
                 auto const childRange = childParticleRanges[childIndex];
                 if (childRange.first == childRange.second) {
                     continue;
                 }
                 auto childBox = box;
                 for (int dim = 0; dim < kDimensions; ++dim) {
+                    if ((splitMask & (1 << dim)) == 0) {
+                        continue;
+                    }
                     if ((childIndex & (1 << dim)) != 0) {
                         childBox.begin[dim] = midpoint[dim];
                     } else {
@@ -555,6 +635,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
             activeNodes += child.activeNodes;
             numberOfActiveParticles += child.numberOfActiveParticles;
             totalFlops += child.floatingPointOperations;
+            detail::mergeSphVolumeRatios(rc, child.minVolumeRatio, child.maxVolumeRatio);
             if (firstChild) {
                 innerBox = child.innerBox;
                 outerBox = child.outerBox;
@@ -583,7 +664,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         auto const tiny = 2.0 * RangeFixed::min().toDouble();
         flops.doublePrecision += 4 * kDimensions + 2;
         for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
-            float const h = params.supportRadiusMultiplier * sphParticlesSmoothingLength(i);
+            float const h = params.smoothingLengthMultiplier * sphParticlesSmoothingLength(i);
             flops.singlePrecision += 1;
             Vector3<Position> xValue;
             for (int dim = 0; dim < kDimensions; dim++) {
@@ -674,6 +755,8 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         node.box.begin[dim] = box.begin[dim];
         node.box.end[dim] = box.end[dim];    // == 1.0 ? fixed32::max() : fixed32(box.end[dim]);
     }
+    double const volumeRatio = detail::sphTreeVolumeRatio(node, flops);
+    detail::mergeSphVolumeRatios(rc, volumeRatio, volumeRatio);
     nodes[index] = node;
     rc.leafNodes = leafNodes;
     rc.activeLeafNodes = activeLeafNodes;
@@ -731,7 +814,7 @@ static SphTreeCreateReturn sphTreeRefreshNode(
             bool const active = sphParticlesRung(particle) >= params.minimumRung;
             result.numberOfActiveParticles += active;
             float const support =
-                params.supportRadiusMultiplier * sphParticlesSmoothingLength(particle);
+                params.smoothingLengthMultiplier * sphParticlesSmoothingLength(particle);
             flops.singlePrecision += 1;
             for (int dim = 0; dim < kDimensions; ++dim) {
                 double const position = sphParticlesPosition(dim, particle).toDouble();
@@ -804,12 +887,15 @@ static SphTreeCreateReturn sphTreeRefreshNode(
             result.minDepth = std::min(result.minDepth, child.minDepth);
             result.maxDepth = std::max(result.maxDepth, child.maxDepth);
             result.floatingPointOperations += child.floatingPointOperations;
+            detail::mergeSphVolumeRatios(result, child.minVolumeRatio, child.maxVolumeRatio);
         }
     }
     result.activeNodes += result.numberOfActiveParticles != 0;
     node.innerBox = result.innerBox;
     node.outerBox = result.outerBox;
     node.driftBox = result.driftBox;
+    double const volumeRatio = detail::sphTreeVolumeRatio(node, flops);
+    detail::mergeSphVolumeRatios(result, volumeRatio, volumeRatio);
     node.numberOfActiveParticles = result.numberOfActiveParticles;
     node.activeNodes = result.activeNodes;
     node.converged = false;

@@ -160,7 +160,7 @@ void testEndpointMorrisInterval(Fixture& fixture) {
         data.sinkFlags[sink].setConverged(false);
         data.sinkFlags[sink].setProposedRung(index + 4);
     }
-    fixture.prehydro1Pass();
+    fixture.smoothingLengthsPass();
     for (int index = 0; index < 3; ++index) {
         midpointRequire(data.sinkFlags[fixture.sinkIndex(index)].converged() == (index >= 1),
             "endpoint support solve ignored the closing-rung range");
@@ -184,7 +184,7 @@ void testEndpointMorrisInterval(Fixture& fixture) {
             double const soundSpeed = std::sqrt(double(data.adiabaticIndex) *
                 (data.adiabaticIndex - 1.0) * double(data.sourceInternalEnergy[source]));
             double const smoothingLength = data.sinkSmoothingLength[sink] /
-                selectedHydroKernel().supportRadiusPerEffectiveRadius *
+                selectedHydroKernel().smoothingLengthPerEffectiveRadius *
                 monaghan::kViscosityWidthScale;
             double const inverseDecayTime =
                 parameters.viscosityDecay * soundSpeed / (parameters.scaleFactor * smoothingLength);

@@ -164,15 +164,16 @@ CUDA_EXPORT inline Vector3<double> gravityReferenceTableCorrection(
 // softening kernel; periodic images remain Newtonian, including when the
 // support radius exceeds half the box. Mass and G belong to the caller.
 CUDA_EXPORT inline Vector3<double> tabulatedGravityReference(Vector3<double> const& displacement,
-    radial_kernel::KernelTable const& kernel, double supportRadius, Vector3<double> const* values) {
+    radial_kernel::KernelTable const& kernel, double smoothingLength,
+    Vector3<double> const* values) {
     double const radiusSquared = displacement[0] * displacement[0] +
         displacement[1] * displacement[1] + displacement[2] * displacement[2];
     if (radiusSquared == 0) {
         return {};
     }
     double const radius = std::sqrt(radiusSquared);
-    double const inverseSupport = 1 / supportRadius;
-    double const primary = radius < supportRadius ?
+    double const inverseSupport = 1 / smoothingLength;
+    double const primary = radius < smoothingLength ?
         radial_kernel::forceFactor(kernel, radius * inverseSupport) * inverseSupport *
             inverseSupport * inverseSupport :
         1 / (radiusSquared * radius);
@@ -182,7 +183,7 @@ CUDA_EXPORT inline Vector3<double> tabulatedGravityReference(Vector3<double> con
         // Reflection makes the complete Newtonian periodic force normal to a
         // half-box face exactly zero. Softening only the primary image breaks
         // that cancellation when the support reaches this separation.
-        if (radius >= supportRadius && std::abs(displacement[dim]) == 0.5) {
+        if (radius >= smoothingLength && std::abs(displacement[dim]) == 0.5) {
             force[dim] = 0;
         }
     }

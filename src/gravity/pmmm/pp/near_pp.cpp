@@ -24,8 +24,8 @@ void pmmmNearFieldBatch(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearParticle> const& sources,
     std::vector<PmmmNearSourceRange> const& sourceRanges, double cellWidth, bool doPotential,
     std::vector<std::array<double, 4>>& fields) {
-    double const supportRadius = getOptions().gravity.supportRadius;
-    if (!(cellWidth > 0 && cellWidth <= 1 && supportRadius > 0 && supportRadius <= 1)) {
+    double const smoothingLength = getOptions().gravity.smoothingLength;
+    if (!(cellWidth > 0 && cellWidth <= 1 && smoothingLength > 0 && smoothingLength <= 1)) {
         throw std::invalid_argument("PMMM near-field cell width/support must be in (0,1]");
     }
     if (sourceRanges.size() != sinks.size()) {
@@ -49,20 +49,21 @@ void pmmmNearFieldBatch(std::vector<PmmmNearParticle> const& sinks,
     if (getOptions().gravity.cuda &&
         pmmm::detail::shouldUsePmmmNearCuda(usefulSinkCount, candidatePairs)) {
         pmmm::detail::pmmmNearFieldCuda(
-            sinks, sources, sourceRanges, cellWidth, supportRadius, doPotential, fields);
+            sinks, sources, sourceRanges, cellWidth, smoothingLength, doPotential, fields);
         return;
     }
 #endif
-    double const inverseSupportRadius = 1 / supportRadius;
-    double const inverseSupportRadiusCubed =
-        inverseSupportRadius * inverseSupportRadius * inverseSupportRadius;
+    double const inverseSmoothingLength = 1 / smoothingLength;
+    double const inverseSmoothingLengthCubed =
+        inverseSmoothingLength * inverseSmoothingLength * inverseSmoothingLength;
     auto const& kernel = selectedGravityKernel();
     FlopCounter<> flops = 3;
     for (size_t sink = 0; sink < sinks.size(); ++sink) {
         auto const& range = sourceRanges[sink];
         for (size_t source = range.begin; source < range.end; ++source) {
             flops += pmmm::detail::accumulateNearPair(sinks[sink], sources[source], cellWidth,
-                inverseSupportRadius, inverseSupportRadiusCubed, doPotential, kernel, fields[sink]);
+                inverseSmoothingLength, inverseSmoothingLengthCubed, doPotential, kernel,
+                fields[sink]);
         }
     }
     addCpuFlops(flops, FlopPrecision::Double);

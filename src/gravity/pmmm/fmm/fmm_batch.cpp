@@ -198,7 +198,7 @@ FmmForceResult kickCellBatch(Vector<KickWorkitem> workitems, bool doPotential, i
     params.a = params.t0 = params.gm = 1.0f;
     params.theta = getOptions().gravity.openingAngle;
     params.openLargerCell = getOptions().gravity.openLargerCell;
-    params.gravitySupportRadius = getOptions().gravity.supportRadius;
+    params.gravitySmoothingLength = getOptions().gravity.smoothingLength;
     params.eta = params.nodeLoad = 0.0f;
     params.saveForce = false;
     params.firstCall = true;

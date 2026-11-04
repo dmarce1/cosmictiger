@@ -46,7 +46,7 @@
  * Symbol directory:
  *   a → parameters.scaleFactor; m_b → gasMass; γ → gasAdiabaticIndex (CPU), adiabaticIndex (CUDA)
  *   ρ_a, P_a, u_a → density, pressure, internalEnergy
- *   H_a, H_b → sinkKernelSupportRadius, neighborSupportRadius
+ *   H_a, H_b → sinkKernelSmoothingLength, neighborSmoothingLength
  *   r_ab, |r_ab| → separation, pairDistance; v_ab → velocityDifference
  *   ζ_a → gradHCorrection; Q_ab/m_a, Q_ba/m_a → sinkPressureCoefficient, neighborPressureCoefficient
  *   F_a, F_b → sinkGradientFactor, neighborGradientFactor
@@ -73,8 +73,8 @@ SphRunReturn sphCpuHydro(
     // Calibrate the hydro acceleration limit to the former cubic/Ferrers F4 defaults
     // after gravity eta and smoothing lengths adopt the common width.
     constexpr float kHydroAccelerationScale = 0.7115965735877551f;
-    float const supportRadiusPerEffectiveRadius =
-        float(selectedHydroKernel().supportRadiusPerEffectiveRadius);
+    float const smoothingLengthPerEffectiveRadius =
+        float(selectedHydroKernel().smoothingLengthPerEffectiveRadius);
     flops.doublePrecision += 1;
     SimdFloat const zero(0.0f);
     SimdFloat const one(1.0f);
@@ -110,7 +110,7 @@ SphRunReturn sphCpuHydro(
          *   γ → gasAdiabaticIndex
          */
         // clang-format on
-        float const sinkKernelSupportRadius =
+        float const sinkKernelSmoothingLength =
             sinkSmoothingLength;    // support radius, 2h_a for the cubic spline
         float const density = sinkDensity;
         float const internalEnergy = sinkInternalEnergy;
@@ -124,7 +124,7 @@ SphRunReturn sphCpuHydro(
             data.sourceBulkViscosityCoefficient[particleIndex] :
             parameters.bulkViscosityCoefficient;
         SimdFloat maximumBulkViscosityCoefficientPack(bulkViscosityCoefficient);
-        float const inverseSupportRadius = 1.0f / sinkKernelSupportRadius;
+        float const inverseSmoothingLength = 1.0f / sinkKernelSmoothingLength;
         flops += 8;
         // clang-format off
         /*
@@ -146,7 +146,7 @@ SphRunReturn sphCpuHydro(
         float const sinkPressureCoefficient = variational::directedCoefficient(
             variational::pressureVolumeFactor(pressure, 1.0f, density), gasMass, gradHCorrection);
         flops += 5;
-        float const inverseSupportRadiusFourth = sqr(sqr(inverseSupportRadius));    // 1/H_a⁴
+        float const inverseSmoothingLengthFourth = sqr(sqr(inverseSmoothingLength));    // 1/H_a⁴
         Vector3<SimdFloat> accelerationPack(zero);    // lane partial sums of acceleration
         SimdFloat viscousHeatingPack(zero);
         SimdFloat internalEnergyRatePack(zero);         // lane partial sums of thermal work
@@ -159,12 +159,12 @@ SphRunReturn sphCpuHydro(
             Vector3<SimdFloat> const separation =
                 detail::sphCpuSeparations(data, particleIndex, neighbors, first);    // r_a − r_b
             SimdFloat const stagedSeparationSquared = separation.dot(separation);
-            SimdFloat const stagedNeighborSupportRadius =
+            SimdFloat const stagedNeighborSmoothingLength =
                 detail::sphCpuLoad(data.sourceSmoothingLength, neighbors, first, 1.0f);
             auto const supportsIntersect = detail::sphCpuValidLanes(neighbors, first) &
                 (stagedSeparationSquared <
-                    simdMax(SimdFloat(sinkKernelSupportRadius * sinkKernelSupportRadius),
-                        sqr(stagedNeighborSupportRadius)));
+                    simdMax(SimdFloat(sinkKernelSmoothingLength * sinkKernelSmoothingLength),
+                        sqr(stagedNeighborSmoothingLength)));
             if (parameters.midpointHydro && parameters.phase == 1) {
                 SimdFloat const neighborRungs([&](auto lane) {
                     size_t const index = first + size_t(lane);
@@ -180,8 +180,8 @@ SphRunReturn sphCpuHydro(
             if (!simdAnyOf(interacts)) {
                 continue;
             }
-            SimdFloat const neighborSupportRadius =
-                simdSelect(interacts, stagedNeighborSupportRadius, one);
+            SimdFloat const neighborSmoothingLength =
+                simdSelect(interacts, stagedNeighborSmoothingLength, one);
             SimdFloat const neighborDensity = simdSelect(
                 interacts, detail::sphCpuLoad(data.sourceDensity, neighbors, first, 1.0f), one);
             SimdFloat const neighborInternalEnergy = simdSelect(interacts,
@@ -204,13 +204,14 @@ SphRunReturn sphCpuHydro(
              *   r_ab → separation
              */
             // clang-format on
-            SimdFloat const inverseNeighborSupportRadius = one / neighborSupportRadius;
-            SimdFloat const normalizedSinkRadius = pairDistance * SimdFloat(inverseSupportRadius);
-            SimdFloat const normalizedNeighborRadius = pairDistance * inverseNeighborSupportRadius;
+            SimdFloat const inverseNeighborSmoothingLength = one / neighborSmoothingLength;
+            SimdFloat const normalizedSinkRadius = pairDistance * SimdFloat(inverseSmoothingLength);
+            SimdFloat const normalizedNeighborRadius =
+                pairDistance * inverseNeighborSmoothingLength;
             SimdFloat const sinkGradientFactor = dkernelWDq(normalizedSinkRadius) *
-                SimdFloat(inverseSupportRadiusFourth) / pairDistance;
+                SimdFloat(inverseSmoothingLengthFourth) / pairDistance;
             SimdFloat const neighborGradientFactor = dkernelWDq(normalizedNeighborRadius) *
-                sqr(sqr(inverseNeighborSupportRadius)) / pairDistance;
+                sqr(sqr(inverseNeighborSmoothingLength)) / pairDistance;
             flops += sph_flops::densityKernelOperations(
                          selectedHydroKernel(), normalizedSinkRadius, true) +
                 sph_flops::densityKernelOperations(
@@ -234,8 +235,9 @@ SphRunReturn sphCpuHydro(
             SimdFloat const viscosityVelocity = parameters.priceEtAl ?
                 simdMin(physicalVelocityDotSeparation / pairDistance, zero) :
                 monaghan::viscosityMu(separationSquared, physicalVelocityDotSeparation,
-                    SimdFloat(sinkKernelSupportRadius), neighborSupportRadius,
-                    SimdFloat(viscosityRegularization), SimdFloat(supportRadiusPerEffectiveRadius),
+                    SimdFloat(sinkKernelSmoothingLength), neighborSmoothingLength,
+                    SimdFloat(viscosityRegularization),
+                    SimdFloat(smoothingLengthPerEffectiveRadius),
                     SimdFloat(float(monaghan::kViscosityWidthScale)));
             SimdFloat const neighborBulkViscosityCoefficient = parameters.variableViscosity ?
                 simdSelect(interacts,
@@ -406,9 +408,9 @@ SphRunReturn sphCpuHydro(
         if (!(sph_volume::isFiniteValue(acceleration.dot(acceleration)) &&
                 sph_volume::isFiniteValue(internalEnergyRate) &&
                 sph_volume::isFiniteValue(simdSum(viscousHeatingPack)))) {
-            std::cout << std::format("SPH variational rates are not finite: supportRadius={:e} "
+            std::cout << std::format("SPH variational rates are not finite: smoothingLength={:e} "
                                      "density={:e} \u03b6={:e}\n",
-                             sinkKernelSupportRadius, density, gradHCorrection)
+                             sinkKernelSmoothingLength, density, gradHCorrection)
                       << std::flush;
             ALWAYS_ASSERT(false);
         }
@@ -435,7 +437,7 @@ SphRunReturn sphCpuHydro(
                 Vector3<Position>(data.sourcePositionX[particleIndex],
                     data.sourcePositionY[particleIndex], data.sourcePositionZ[particleIndex]),
                 velocity, acceleration, gravityAcceleration, data.centralAcceleration,
-                data.centralSupportRadius, flops);
+                data.centralSmoothingLength, flops);
         } else {
             ALWAYS_ASSERT(parameters.phase == 0);
         }
@@ -446,7 +448,7 @@ SphRunReturn sphCpuHydro(
                 Vector3<Position>(data.sourcePositionX[particleIndex],
                     data.sourcePositionY[particleIndex], data.sourcePositionZ[particleIndex]),
                 velocity, Vector3<float>(0.0f), Vector3<float>(0.0f), data.centralAcceleration,
-                data.centralSupportRadius, flops);
+                data.centralSmoothingLength, flops);
             sphAccumulateExternalKick(data.sourcePairUpdates[particleIndex], externalAcceleration,
                 parameters.hydroKickTimestep);
             flops.doublePrecision += 6;
@@ -502,7 +504,8 @@ SphRunReturn sphCpuHydro(
              *   β → quadraticViscosityCoefficient
              */
             // clang-format on
-            float const smoothingLength = sinkKernelSupportRadius / supportRadiusPerEffectiveRadius;
+            float const smoothingLength =
+                sinkKernelSmoothingLength / smoothingLengthPerEffectiveRadius;
             float const inverseSoundTimestep = soundSpeed / smoothingLength;
             float const inverseViscosityTimestep = 0.6f *
                 (maximumBulkViscosityCoefficient * soundSpeed +
@@ -585,7 +588,7 @@ SphRunReturn sphCpuHydro(
                                          float(monaghan::kViscosityWidthScale) * internalEnergy /
                                          std::fabs(internalEnergyRate) :
                                                               parameters.maximumTimestep,
-                                 sinkKernelSupportRadius, density, internalEnergy,
+                                 sinkKernelSmoothingLength, density, internalEnergy,
                                  internalEnergyRate, accelerationMagnitude, soundSpeed,
                                  maximumCompressionSpeed, maximumBulkViscosityCoefficient,
                                  gasMass / (gasMass - gradHCorrection), parameters.scaleFactor)

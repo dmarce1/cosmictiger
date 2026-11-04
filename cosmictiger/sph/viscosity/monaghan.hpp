@@ -43,7 +43,7 @@ inline constexpr double kViscosityWidthScale = 0.9128709291752769;
  * unequal resolution lengths the pair uses pairSmoothingLength = ½(smoothingLength +
  * neighborSmoothingLength), the arithmetic mean that p. 554 offers. viscosityEpsilon is η²/h². The
  * two scale factors convert the stored support radii to the paper's h:
- * supportRadiusPerEffectiveRadius maps H to the common effective radius of docs/kernels.md, and
+ * smoothingLengthPerEffectiveRadius maps H to the common effective radius of docs/kernels.md, and
  * viscosityWidthScale maps that radius to h. Their defaults give h = H/2, the cubic-spline
  * convention, for the standalone references in tests/sph/monaghan/equations.cpp.
  */
@@ -55,22 +55,22 @@ inline constexpr double kViscosityWidthScale = 0.9128709291752769;
  *   μ_ab = h̄_ab (v_ab · r_ab)/(r_ab² + η²) for v_ab · r_ab < 0; otherwise 0.
  * Symbol directory:
  *   r_ab² → radiusSquared; v_ab · r_ab → velocityDotRadius
- *   H_a, H_b → supportRadius, sourceSupportRadius (stored compact supports)
+ *   H_a, H_b → smoothingLength, sourceSmoothingLength (stored compact supports)
  *   h̄_ab → pairSmoothingLength; ε → viscosityEpsilon
  *   η² → regularizationLengthSquared; μ_ab → viscosityVelocity (return value)
- *   h_a = H_a / supportRadiusPerEffectiveRadius × viscosityWidthScale.
+ *   h_a = H_a / smoothingLengthPerEffectiveRadius × viscosityWidthScale.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real viscosityMu(Real radiusSquared, Real velocityDotRadius, Real supportRadius,
-    Real sourceSupportRadius, Real viscosityEpsilon, Real supportRadiusPerEffectiveRadius = Real(2),
-    Real viscosityWidthScale = Real(1)) {
+CUDA_EXPORT inline Real viscosityMu(Real radiusSquared, Real velocityDotRadius,
+    Real smoothingLength, Real sourceSmoothingLength, Real viscosityEpsilon,
+    Real smoothingLengthPerEffectiveRadius = Real(2), Real viscosityWidthScale = Real(1)) {
     Real const separationSquared = radiusSquared;    // |r_ab|²
     Real const velocityDotSeparation = velocityDotRadius;
-    Real const sinkKernelSupportRadius = supportRadius;
-    Real const neighborSupportRadius = sourceSupportRadius;
+    Real const sinkKernelSmoothingLength = smoothingLength;
+    Real const neighborSmoothingLength = sourceSmoothingLength;
     Real const pairSmoothingLength = simdBroadcast<Real>(0.5) *
-        (sinkKernelSupportRadius + neighborSupportRadius) / supportRadiusPerEffectiveRadius *
+        (sinkKernelSmoothingLength + neighborSmoothingLength) / smoothingLengthPerEffectiveRadius *
         viscosityWidthScale;
     Real const regularizationLengthSquared =
         viscosityEpsilon * pairSmoothingLength * pairSmoothingLength;    // η²

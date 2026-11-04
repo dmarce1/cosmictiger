@@ -527,7 +527,7 @@ bool legacyCheckpointCompatible(Options const& opts) {
 CheckpointHeader checkpointHeader(Options const& opts) {
     return {kCheckpointMagic, kCheckpointVersion, checkpointFlags(opts),
         opts.initial.darkMatterMass, opts.initial.gasMass, opts.hydro.gamma,
-        opts.gravity.supportRadius, opts.gravity.gm, opts.cosmology.omegaM, opts.cosmology.omegaR,
+        opts.gravity.smoothingLength, opts.gravity.gm, opts.cosmology.omegaM, opts.cosmology.omegaR,
         opts.cosmology.omegaLambda, opts.units.lengthCm, opts.units.timeSeconds, opts.units.massG,
         opts.initial.numberOfParticles, opts.run.numberOfSteps, checkpointPhysicsCode(opts)};
 }
@@ -546,7 +546,7 @@ bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
         header.reserved == checkpointPhysicsCode(opts) &&
         header.darkMatterMass == opts.initial.darkMatterMass &&
         header.gasMass == opts.initial.gasMass && header.gamma == opts.hydro.gamma &&
-        header.softening == opts.gravity.supportRadius &&
+        header.softening == opts.gravity.smoothingLength &&
         header.gravitationalMass == opts.gravity.gm &&
         header.omegaMatter == opts.cosmology.omegaM &&
         header.omegaRadiation == opts.cosmology.omegaR &&
@@ -560,9 +560,9 @@ bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
 // Stored only for SPH checkpoints; the dark-matter layout is unchanged.
 std::array<double, 13> sphCheckpointParameters(Options const& opts) {
     return {opts.hydro.bulkViscosityCoefficient, opts.hydro.vonNeumannRichtmyerCoefficient,
-        opts.hydro.viscosityEpsilon, opts.hydro.neighborNumber, opts.hydro.minSupportRadius,
-        opts.hydro.maxSupportRadius, opts.hydro.cfl, opts.gravity.timestepEta,
-        opts.hydro.yAcceleration, opts.hydro.centralAcceleration, opts.hydro.centralSupportRadius,
+        opts.hydro.viscosityEpsilon, opts.hydro.neighborNumber, opts.hydro.minSmoothingLength,
+        opts.hydro.maxSmoothingLength, opts.hydro.cfl, opts.gravity.timestepEta,
+        opts.hydro.yAcceleration, opts.hydro.centralAcceleration, opts.hydro.centralSmoothingLength,
         opts.hydro.damping, opts.gravity.enabled ? 1.0 : 0.0};
 }
 
@@ -1467,7 +1467,7 @@ void checkpointStateTest() {
     changed.hydro.neighborNumber += 1.0;
     ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));
     changed = getOptions();
-    changed.hydro.maxSupportRadius *= 2.0;
+    changed.hydro.maxSmoothingLength *= 2.0;
     ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));
     changed = getOptions();
     changed.run.numberOfSteps++;

@@ -130,7 +130,7 @@ distribution. With the near FMM capability enabled:
 The compact gravity softening support must fit inside that near region:
 the normalized support radius must be no larger than `w/N`, where `N` is the
 rounded full-particle side length. The existing
-`gravity.supportRadius` and `gravity.effectiveRadius` input conventions still
+`gravity.smoothingLength` and `gravity.effectiveRadius` input conventions still
 apply; the parser checks this bound after converting the configured radius
 to box units. Both near methods retain the selected compact gravity kernel for
 direct pairs, including distinct coincident particles, and exclude primary self.

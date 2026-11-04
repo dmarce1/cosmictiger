@@ -31,8 +31,8 @@
 
 using SphRunCudaData = SphRunData;
 
-inline constexpr int kPrehydro1BlockSize = 160;
-inline constexpr int kPrehydro2BlockSize = 64;
+inline constexpr int kSmoothingLengthsBlockSize = 160;
+inline constexpr int kDensityAndGradientsBlockSize = 64;
 inline constexpr int kHydroBlockSize = 96;
 inline constexpr int kRungsBlockSize = 256;
 
@@ -41,8 +41,8 @@ struct SphReduction {
     int nextNodeIndex;
     int pendingChanges;
     int timestepFailureReported;
-    float minimumSupportRadius;
-    float maximumSupportRadius;
+    float minimumSmoothingLength;
+    float maximumSmoothingLength;
     float maximumSignalSpeed;
     FlopCount floatingPointOperations;
     int maximumHydroRung;
@@ -64,9 +64,9 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
 
 #ifdef __CUDACC__
 
-__global__ void sphCudaPrehydro1(
+__global__ void sphCudaSmoothingLengths(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction);
-__global__ void sphCudaPrehydro2(
+__global__ void sphCudaDensityAndGradients(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction);
 __global__ void sphCudaHydro(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction);
@@ -120,33 +120,34 @@ __device__ inline void recordSphGpuFlops(sph_flops::Counter const& flops, SphRed
  * smoothingLength ∝ ρ_a^(−1/ν) with ν = 3 (equations 6.1-6.2). Instead of integrating equation 6.2
  * or 6.7, the solve holds (4π/3) ρ_a H_a³/m = N_target, i.e. ΣW = Σ_b w(r_ab/H_a) = 3 N_target/(4π)
  * for the selected kernel W(r, H) = w(r/H)/H³, by a bounded Newton iteration on the support
- * radius H_a = supportRadius with dΣW/dH_a = −Σ_b q_ab w'(q_ab)/H_a, q_ab = r_ab/H_a. The
+ * radius H_a = smoothingLength with dΣW/dH_a = −Σ_b q_ab w'(q_ab)/H_a, q_ab = r_ab/H_a. The
  * bounds limit the support radius without modifying the density sum.
  *
  * Symbol directory (in the code below):
  *   q_ab → normalizedRadius
  *   r_ab → separation
- *   H_a → supportRadius
+ *   H_a → smoothingLength
  *   ρ_a → density
  *   ΣW → kernelSum
  */
 // clang-format on
 
 template <int blockSize, class Neighbors>
-inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimumSupportRadius,
-    float maximumSupportRadius, float targetNeighborCount, Neighbors const& neighbors,
+inline __device__ bool solveSphSmoothingLength(float& smoothingLength, float minimumSmoothingLength,
+    float maximumSmoothingLength, float targetNeighborCount, Neighbors const& neighbors,
     Vector3<Position> const& position, Fixed32Range const& neighborSearchBox,
     sph_flops::Counter& flops) {
     int const threadIndex = threadIdx.x;
     int const runtimeBlockSize = blockDim.x;
-    ALWAYS_ASSERT(minimumSupportRadius > 0.0f && maximumSupportRadius >= minimumSupportRadius &&
-        targetNeighborCount > 0.0f);
+    ALWAYS_ASSERT(minimumSmoothingLength > 0.0f &&
+        maximumSmoothingLength >= minimumSmoothingLength && targetNeighborCount > 0.0f);
     if (threadIndex == 0) {
-        supportRadius = fminf(fmaxf(supportRadius, minimumSupportRadius), maximumSupportRadius);
+        smoothingLength =
+            fminf(fmaxf(smoothingLength, minimumSmoothingLength), maximumSmoothingLength);
     }
     __syncthreads();
-    float lower = minimumSupportRadius;
-    float upper = maximumSupportRadius;
+    float lower = minimumSmoothingLength;
+    float upper = maximumSmoothingLength;
     float const targetKernelSum =
         targetNeighborCount * (3.0f / (4.0f * std::numbers::pi_v<float>) );
     flops += 1;
@@ -154,15 +155,15 @@ inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimum
         int boxExceeded = false;
         for (int dim = 0; dim < kDimensions; dim++) {
             bool const upperExceeded = neighborSearchBox.end[dim] <
-                RangeFixed(position[dim]) + RangeFixed(supportRadius) + RangeFixed::min();
+                RangeFixed(position[dim]) + RangeFixed(smoothingLength) + RangeFixed::min();
             // Single-precision fixed-point scale, preserving short circuiting.
             flops.singlePrecision += 1;
             if (upperExceeded) {
                 boxExceeded = true;
             } else {
                 flops.singlePrecision += 1;
-                if (RangeFixed(position[dim]) <
-                    neighborSearchBox.begin[dim] + RangeFixed(supportRadius) + RangeFixed::min()) {
+                if (RangeFixed(position[dim]) < neighborSearchBox.begin[dim] +
+                        RangeFixed(smoothingLength) + RangeFixed::min()) {
                     boxExceeded = true;
                 }
             }
@@ -170,7 +171,7 @@ inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimum
         if (boxExceeded) {
             return false;
         }
-        float const inverseSupportRadius = 1.0f / supportRadius;
+        float const inverseSmoothingLength = 1.0f / smoothingLength;
         flops += 1;
         float kernelSum = 0.0f;
         float kernelSumSupportDerivative = 0.0f;
@@ -180,12 +181,13 @@ inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimum
             Vector3<float> const separation(distance(position[kXDimension], neighbor.positionX),
                 distance(position[kYDimension], neighbor.positionY),
                 distance(position[kZDimension], neighbor.positionZ));
-            float const normalizedRadius = sqrtf(separation.dot(separation)) * inverseSupportRadius;
+            float const normalizedRadius =
+                sqrtf(separation.dot(separation)) * inverseSmoothingLength;
             flops += 10;    // Three fixed distances, dot, root, normalized radius.
             if (normalizedRadius < 1.0f) {
                 kernelSum += kernelW(normalizedRadius);
                 kernelSumSupportDerivative -=
-                    normalizedRadius * dkernelWDq(normalizedRadius) * inverseSupportRadius;
+                    normalizedRadius * dkernelWDq(normalizedRadius) * inverseSmoothingLength;
                 flops += 4 +
                     sph_flops::densityKernelOperations(selectedHydroKernel(), normalizedRadius) +
                     sph_flops::densityKernelOperations(
@@ -197,39 +199,39 @@ inline __device__ bool solveSphSupportRadius(float& supportRadius, float minimum
         flops += 2 * detail::sphReductionFlops<blockSize>();
         float const residual = kernelSum - targetKernelSum;
         flops += 2;    // Residual and relative tolerance product (absolute value is free).
-        if (fabsf(residual) <= kSphSupportRadiusTolerance * targetKernelSum ||
-            (supportRadius <= minimumSupportRadius && residual >= 0.0f) ||
-            (supportRadius >= maximumSupportRadius && residual <= 0.0f)) {
+        if (fabsf(residual) <= kSphSmoothingLengthTolerance * targetKernelSum ||
+            (smoothingLength <= minimumSmoothingLength && residual >= 0.0f) ||
+            (smoothingLength >= maximumSmoothingLength && residual <= 0.0f)) {
             return true;
         }
         if (residual > 0.0f) {
-            upper = supportRadius;
+            upper = smoothingLength;
         } else {
-            lower = supportRadius;
+            lower = smoothingLength;
         }
         float change = kernelSumSupportDerivative > 0.0f ? -residual / kernelSumSupportDerivative :
-                                                           0.2f * supportRadius;
-        change = fminf(fmaxf(change, -0.2f * supportRadius), 0.2f * supportRadius);
+                                                           0.2f * smoothingLength;
+        change = fminf(fmaxf(change, -0.2f * smoothingLength), 0.2f * smoothingLength);
         float next =
-            fminf(fmaxf(supportRadius + change, minimumSupportRadius), maximumSupportRadius);
+            fminf(fmaxf(smoothingLength + change, minimumSmoothingLength), maximumSmoothingLength);
         flops += 4;    // Newton/fallback change, two clamp products, radius update.
         if (next < lower || next > upper) {
             next = 0.5f * (lower + upper);
             flops += 2;
         }
-        if (next == supportRadius) {
+        if (next == smoothingLength) {
             return true;
         }
         __syncthreads();
         if (threadIndex == 0) {
-            supportRadius = next;
+            smoothingLength = next;
         }
         __syncthreads();
     }
     if (threadIndex == 0) {
-        printf("SPH smoothing-length solve did not converge: supportRadius=%e bounds=[%e,%e] "
+        printf("SPH smoothing-length solve did not converge: smoothingLength=%e bounds=[%e,%e] "
                "target=%e\n",
-            supportRadius, minimumSupportRadius, maximumSupportRadius, targetNeighborCount);
+            smoothingLength, minimumSmoothingLength, maximumSmoothingLength, targetNeighborCount);
         __trap();
     }
     return false;

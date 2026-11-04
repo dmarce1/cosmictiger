@@ -28,7 +28,7 @@ using GravityErrorSourceLoader = std::function<void(size_t, std::span<GravityErr
 // representation until doubleDistance forms each wrapped pair separation.
 std::vector<GravityErrorForce> gravityErrorDirectCuda(std::span<GravityErrorPosition const> sinks,
     size_t sourceCount, GravityErrorSourceLoader const& loadSources,
-    radial_kernel::KernelTable const& kernel, double supportRadius,
+    radial_kernel::KernelTable const& kernel, double smoothingLength,
     std::span<GravityErrorForce const> correctionValues);
 #endif
 

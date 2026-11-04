@@ -44,11 +44,11 @@ namespace detail {
 // Our sink-bucket extension uses its nearest possible point. Our additional
 // compact-support guard keeps the Newtonian bound outside softened sources.
 CUDA_EXPORT inline bool bhAcceptMonopole(float distanceSquared, BhTreeNode const& source,
-    float sinkRadius, float supportRadius, float relativeError) {
+    float sinkRadius, float smoothingLength, float relativeError) {
     float const halfRadius = 0.5f * source.radius;
     float const errorDistance =
         halfRadius + sqrtf(halfRadius * halfRadius + source.meanSquaredRadius / relativeError);
-    float const supportDistance = source.radius + supportRadius;
+    float const supportDistance = source.radius + smoothingLength;
     float const minimumDistance =
         sinkRadius + (errorDistance > supportDistance ? errorDistance : supportDistance);
     return distanceSquared > minimumDistance * minimumDistance;

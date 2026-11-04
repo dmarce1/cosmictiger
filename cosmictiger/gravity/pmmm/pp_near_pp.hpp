@@ -92,8 +92,8 @@ CUDA_EXPORT inline FlopCount nearPairFlops(Kernel const& kernel, Real const& q, 
 // Real also permits independent arithmetic-counting tests of this exact path.
 template <bool countFlops = kCountFlops, class Kernel, class Real>
 CUDA_EXPORT inline FlopCount accumulateNearPair(PmmmNearParticle const& sink,
-    PmmmNearParticle const& source, Real cellWidth, Real inverseSupportRadius,
-    Real inverseSupportRadiusCubed, bool doPotential, Kernel const& kernel,
+    PmmmNearParticle const& source, Real cellWidth, Real inverseSmoothingLength,
+    Real inverseSmoothingLengthCubed, bool doPotential, Kernel const& kernel,
     std::array<Real, 4>& field) {
     if (source.rank == sink.rank && source.index == sink.index) {
         return 0;
@@ -101,13 +101,13 @@ CUDA_EXPORT inline FlopCount accumulateNearPair(PmmmNearParticle const& sink,
     Real const dx = (Real(sink.offset[0]) - Real(source.offset[0])) * cellWidth;
     Real const dy = (Real(sink.offset[1]) - Real(source.offset[1])) * cellWidth;
     Real const dz = (Real(sink.offset[2]) - Real(source.offset[2])) * cellWidth;
-    Real const q = simdSqrt(dx * dx + dy * dy + dz * dz) * inverseSupportRadius;
-    Real const factor = Real(source.mass) * inverseSupportRadiusCubed * forceFactor(kernel, q);
+    Real const q = simdSqrt(dx * dx + dy * dy + dz * dz) * inverseSmoothingLength;
+    Real const factor = Real(source.mass) * inverseSmoothingLengthCubed * forceFactor(kernel, q);
     field[1] -= factor * dx;
     field[2] -= factor * dy;
     field[3] -= factor * dz;
     if (doPotential) {
-        field[0] -= Real(source.mass) * inverseSupportRadius * potential(kernel, q);
+        field[0] -= Real(source.mass) * inverseSmoothingLength * potential(kernel, q);
     }
     if constexpr (countFlops) {
         return nearPairFlops(kernel, q, doPotential);
@@ -118,7 +118,7 @@ CUDA_EXPORT inline FlopCount accumulateNearPair(PmmmNearParticle const& sink,
 #ifdef USE_CUDA
 void pmmmNearFieldCuda(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearParticle> const& sources,
-    std::vector<PmmmNearSourceRange> const& sourceRanges, double cellWidth, double supportRadius,
+    std::vector<PmmmNearSourceRange> const& sourceRanges, double cellWidth, double smoothingLength,
     bool doPotential, std::vector<std::array<double, 4>>& fields);
 
 // Call only after all PMMM batches have completed, before CUDA device teardown.

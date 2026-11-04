@@ -39,7 +39,7 @@ def metadataFor(path):
     support = float(metadata["baseline_support_dm"])
     if not math.isfinite(support) or support <= 0.:
         raise ValueError("invalid fixed support")
-    if not math.isclose(support, float(metadata["configured_support_radius_box"]), rel_tol=2.e-7):
+    if not math.isclose(support, float(metadata["configured_smoothing_length_box"]), rel_tol=2.e-7):
         raise ValueError("configured and measured fixed support differ")
     return metadata
 

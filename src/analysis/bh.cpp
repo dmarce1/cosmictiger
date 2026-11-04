@@ -12,10 +12,10 @@
 
 #include <hpx/threading_base/annotated_function.hpp>
 
+#include <cosmictiger/analysis/bh.hpp>
 #include <cosmictiger/core/assert.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/timer.hpp>
-#include <cosmictiger/analysis/bh.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/simd.hpp>
@@ -111,7 +111,7 @@ void bhCreateTree(DeviceVector<BhTreeNode>& nodes, DeviceVector<int>& sinkBucket
 
 void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& sinkBuckets,
     DeviceVector<float>& phi, DeviceVector<Vector3<float>>& parts, float relativeError) {
-    float const h = getOptions().gravity.supportRadius;
+    float const h = getOptions().gravity.smoothingLength;
     float const gm = getOptions().gravity.gm;
     float const hinv = 1.0 / h;
     float const h2 = h * h;
@@ -218,7 +218,7 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
 
 void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Vector3<float> pt, float& phi,
     DeviceVector<Vector3<float>>& parts, float relativeError) {
-    float const h = getOptions().gravity.supportRadius;
+    float const h = getOptions().gravity.smoothingLength;
     float const gm = getOptions().gravity.gm;
     float const hinv = 1.0f / h;
     float const h2 = h * h;
@@ -348,7 +348,7 @@ DeviceVector<float> bhEvaluatePotential(DeviceVector<Vector3<float>>& positions,
         tm1.start();
         pot =
             bhEvaluatePotentialGpu(nodes, positions, sinkBuckets, kBhMaximumRelativePotentialError,
-                getOptions().gravity.supportRadius, getOptions().gravity.gm);
+                getOptions().gravity.smoothingLength, getOptions().gravity.gm);
         tm1.stop();
 
 #endif
@@ -399,7 +399,7 @@ DeviceVector<float> bhEvaluatePoints(
     if (gpu) {
 #ifdef USE_CUDA
         pot = bhEvaluatePotentialPointsGpu(nodes, positions, y, kBhMaximumRelativePotentialError,
-            getOptions().gravity.supportRadius, getOptions().gravity.gm);
+            getOptions().gravity.smoothingLength, getOptions().gravity.gm);
 #endif
     } else {
         for (int i = 0; i < y.size(); i++) {

@@ -193,15 +193,15 @@ neighborNumber = 120
 ```
 
 The supported density polynomial degrees are spline 2–9, Wendland 2/5/8,
-and Ferrers 2/4/6/8. Specify `gravity.effectiveRadius` or `gravity.supportRadius`,
+and Ferrers 2/4/6/8. Specify `gravity.effectiveRadius` or `gravity.smoothingLength`,
 in mean particle spacings. The imposed central force similarly accepts
-`hydro.centralEffectiveRadius` or `hydro.centralSupportRadius`, in box units,
+`hydro.centralEffectiveRadius` or `hydro.centralSmoothingLength`, in box units,
 using the gravity kernel. `gravity.softening` and `hydro.centralSoftening`
 remain aliases for their effective radii.
 
 SPH adapts each particle's support radius to its density. Its bounds accept
-`hydro.minEffectiveRadius` or `hydro.minSupportRadius`, and
-`hydro.maxEffectiveRadius` or `hydro.maxSupportRadius`, in initial interparticle
+`hydro.minEffectiveRadius` or `hydro.minSmoothingLength`, and
+`hydro.maxEffectiveRadius` or `hydro.maxSmoothingLength`, in initial interparticle
 spacings, using the hydro kernel. Neighbor and force evaluation use support
 radii; timestep limits use effective radii.
 

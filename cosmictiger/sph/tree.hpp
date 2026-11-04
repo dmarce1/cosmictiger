@@ -23,8 +23,9 @@
 #include <cosmictiger/math/range.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
-// Octant bit d selects the upper half of spatial dimension d. Unoccupied
-// octants use {-1, -1}; rank-routing nodes use only slots 0 and 1.
+// Child bit d selects the upper half of spatial dimension d. Hybrid spatial
+// nodes bisect the longest one, two or three axes; unselected bits stay zero.
+// Unoccupied slots use {-1, -1}; rank-routing nodes use only slots 0 and 1.
 inline constexpr int kSphChildCount = 1 << kDimensions;
 
 struct SphTreeNode {
@@ -162,6 +163,11 @@ struct SphTreeCreateReturn {
     int maxDepth;
     int minDepth;
     double floatingPointOperations;
+    // Extrema of swept volume since rebuild / original partition volume over
+    // nonempty spatial nodes. Excludes rank routing; zero for an empty tree.
+    // Fresh tight bounds can occupy less than the full partition (ratio < 1).
+    double maxVolumeRatio = 0.0;
+    double minVolumeRatio = 0.0;
     template <typename A>
     void serialize(A&& a, unsigned) {
         a & activeLeafNodes;
@@ -176,18 +182,20 @@ struct SphTreeCreateReturn {
         a & maxDepth;
         a & minDepth;
         a & driftBox;
+        a & maxVolumeRatio;
+        a & minVolumeRatio;
     }
 };
 
 struct SphTreeCreateParameters {
     int minimumRung;
-    float supportRadiusMultiplier;
+    float smoothingLengthMultiplier;
     SphTreeCreateParameters() = default;
-    SphTreeCreateParameters(int minimumRung, float supportRadiusMultiplier);
+    SphTreeCreateParameters(int minimumRung, float smoothingLengthMultiplier);
     template <typename A>
     void serialize(A&& arc, unsigned) {
         arc & minimumRung;
-        arc & supportRadiusMultiplier;
+        arc & smoothingLengthMultiplier;
     }
 };
 

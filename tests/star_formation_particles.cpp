@@ -254,7 +254,7 @@ void verifyNewbornGravity() {
     options.gravity.method = "fmm";
     options.gravity.cuda = false;
     options.gravity.gm = 1.0;
-    options.gravity.supportRadius = 0.05;
+    options.gravity.smoothingLength = 0.05;
     options.run.scenario = "cosmology";
     options.run.minRung = 2;
     options.initial.numberOfParticles = 2;

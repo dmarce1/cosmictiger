@@ -121,7 +121,7 @@ struct KickParameters {
     float a = 1.0f;
     float t0{};
     float theta{};
-    float gravitySupportRadius{};
+    float gravitySmoothingLength{};
     float eta{};
     float gm{};
     bool velInit;
@@ -165,7 +165,7 @@ struct KickParameters {
         arc & t0;
         arc & theta;
         arc & firstCall;
-        arc & gravitySupportRadius;
+        arc & gravitySmoothingLength;
         arc & eta;
         arc & gm;
         arc & sign;

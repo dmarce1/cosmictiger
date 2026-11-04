@@ -91,7 +91,7 @@ CUDA_EXPORT AcceptanceResult evaluate(AcceptanceInput const& input) {
     float const inverseTheta = fmmInverseOpeningAngle(input.theta);
     auto const accepted = computeFmmAcceptance(input.centerDistanceSquared, input.sinkRadius,
         input.sourceRadius, input.sinkBoxDistanceSquared, input.sourceBoxDistanceSquared,
-        fmmPairSupportRadius(0.0f, input.sinkSupport, input.sourceSupport), inverseTheta);
+        fmmPairSmoothingLength(0.0f, input.sinkSupport, input.sourceSupport), inverseTheta);
     auto const selected = selectFmmInteraction(accepted.cellCell != 0.0f,
         accepted.particleCell != 0.0f, accepted.cellParticle != 0.0f, input.sinkLeaf,
         input.sourceLeaf, input.sinkRadius, input.sourceRadius);
