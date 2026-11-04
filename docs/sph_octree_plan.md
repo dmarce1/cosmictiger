@@ -8,9 +8,16 @@ Combine FMM gravity and SPH force evaluation at gravity leaves for global,
 traditional, and hierarchical integration. All three use the same SPH formulation
 and adaptive octree. Retain SPH octree membership between large active events.
 Add a `Fixed32Range` that conservatively encloses drifting members of each node.
-Rebuild and re-sort at an event when the active count is at least one third of
-all particles, inclusive, rather than accumulating active counts across events.
+Rebuild and re-sort at an event when the active count reaches
+`compute.sphTreeRebuildFraction` of all particles, inclusive (default `1/3`),
+rather than accumulating active counts across events.
 Chemistry, stars, PM and P3M are outside this implementation scope.
+
+Set the threshold with `--compute.sphTreeRebuildFraction=0.5` or
+`sphTreeRebuildFraction = 0.5` in an INI `[compute]` section. Values must be finite
+and in `[0,1]`: zero rebuilds every nonempty event, and one requires full activity.
+Invalidated trees always rebuild regardless of this threshold. This control is
+independent of `run.rungMergeFraction`, which governs hierarchical gravity rungs.
 
 ## Design
 
@@ -20,7 +27,8 @@ Chemistry, stars, PM and P3M are outside this implementation scope.
    wrapping conservatively and round fixed-point bounds outwards. Update support
    bounds whenever smoothing lengths change. Inactive neighbors remain sources.
 2. Reuse node membership and particle order on small active events. Rebuild at
-   `active >= ceil(total/3)` and whenever topology is invalidated by migration,
+   `active/total >= fraction` (exactly `active >= ceil(total/3)` by default)
+   and whenever topology is invalidated by migration,
    resizing or a gas permutation. Delay routine domain migration to rebuild
    events; gravity particle permutations preserve the gas-to-particle mapping.
 3. Complete density, support, viscosity preparation and immutable source staging
@@ -124,8 +132,8 @@ compilation or traditional-integrator results do not establish them.
 Completed checks and their limits are recorded in
 [SPH octree validation](sph_octree_validation.md).
 
-- Exact one-third boundary, retained topology, changed active counts and forced
-  invalidation/rebuild.
+- Exact one-third boundary, configurable rebuild fractions and CLI/INI handling,
+  retained topology, changed active counts and forced invalidation/rebuild.
 - Moving/periodic cell bounds, mixed velocity signs, support growth and inactive
   large-support neighbors against exhaustive neighbor discovery.
 - Leaf force results against the existing SPH reference, with mixed gas/DM

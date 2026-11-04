@@ -9,6 +9,8 @@
 #ifndef SPH_TREE_HPP_
 #define SPH_TREE_HPP_
 
+#include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <type_traits>
 
@@ -194,9 +196,28 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key = 1
     Pair<ParticleInteger> particleRange = Pair<ParticleInteger>(-1, -1),
     Range<double> box = unitBox<double>(), int depth = 0, bool localRoot = (hpxSize() == 1));
 // The threshold counts all active gravity particles, including collisionless ones.
-// Avoid multiplying counts so the exact one-third comparison cannot overflow.
-constexpr bool sphTreeShouldRebuild(size_t activeParticles, size_t totalParticles) {
-    return totalParticles != 0 && activeParticles >= totalParticles / 3 + (totalParticles % 3 != 0);
+// The default uses an exact integer comparison, without multiplying counts or
+// rounding one third of a large population through double precision.
+constexpr bool sphTreeShouldRebuild(
+    size_t activeParticles, size_t totalParticles, double fraction = 1.0 / 3.0) {
+    if (totalParticles == 0) {
+        return false;
+    }
+    if (fraction == 1.0) {
+        return activeParticles >= totalParticles;
+    }
+    if (fraction == 1.0 / 3.0) {
+        return activeParticles >= totalParticles / 3 + (totalParticles % 3 != 0);
+    }
+    // Match the precision of the configured fraction when the counts are exact
+    // doubles: decimal inputs such as 0.07 include their boundary (7/100).
+    if (totalParticles <= (std::uint64_t{1} << std::numeric_limits<double>::digits)) {
+        return static_cast<double>(activeParticles) / static_cast<double>(totalParticles) >=
+            fraction;
+    }
+    // Avoid rounding enormous integer counts to double before comparing them.
+    return static_cast<long double>(activeParticles) >=
+        static_cast<long double>(fraction) * static_cast<long double>(totalParticles);
 }
 // Refresh active/support bounds without sorting or changing particle membership.
 // driftFactor has units of displacement / stored velocity (dt / a for drift()).

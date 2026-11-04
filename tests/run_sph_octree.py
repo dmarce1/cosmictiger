@@ -25,21 +25,22 @@ EVENT = re.compile(r"SPH octree (rebuild|retain): active=(\d+) total=(\d+)"
                    r"(?: reason=(threshold|invalidated))?")
 
 
-def validate_events(output, label, integrator):
+def validate_events(output, label, integrator, fraction=1 / 3):
     events = EVENT.findall(output)
     require(events, f"{label}: no SPH octree lifecycle diagnostics")
     counts = {"rebuild": 0, "retain": 0}
     for operation, active_text, total_text, reason in events:
         active, total = int(active_text), int(total_text)
         require(0 <= active <= total and total > 0, f"{label}: invalid active/total counts")
+        threshold = 3 * active >= total if fraction == 1 / 3 else active / total >= fraction
         counts[operation] += 1
         if operation == "retain":
-            require(3 * active < total and not reason,
-                    f"{label}: retained the octree at or above one-third activity")
+            require(not threshold and not reason,
+                    f"{label}: retained the octree at or above fraction {fraction}")
         else:
             require(reason in ("threshold", "invalidated"), f"{label}: missing rebuild reason")
             if reason == "threshold":
-                require(3 * active >= total, f"{label}: threshold rebuild below one third")
+                require(threshold, f"{label}: threshold rebuild below fraction {fraction}")
         if integrator == "global":
             require(active == total and operation == "rebuild",
                     f"{label}: global integration did not rebuild its fully active octree")

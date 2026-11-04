@@ -12,22 +12,29 @@
 #include <span>
 
 // The coarse solve set of the lowest occupied hierarchical rung and its finer
-// subset, with the GADGET-4 time-bin merging decision for that rung.
+// subset, with the inclusive time-bin merging decision for that rung.
 struct RungMergeDecision {
     size_t activeCount{};
     size_t fineCount{};
     bool merge{};
 };
 
-// GADGET-4 (Springel et al. 2021, section 4.2, eqs. 51-52) counts N_k, the
-// particles on timestep bin k or finer, so N_0 is the whole coarse solve set.
-// A hierarchical solve over a set costs its particle count. Per coarse step the
-// set on rung n + 1 is solved three times: twice at the coarse synchronization
-// (closing and opening sweeps on either side of the top kick) and once at the
-// middle one. Rung n's set is solved once; deeper sets cost the same either way.
-// Hierarchy N_0 + 3 N_1 against merged 2 N_0 favours merging rung n into rung
-// n + 1 when N_1 > N_0 / 3, whether or not n + 1 is the finest rung. The
-// fraction is the threshold N_1 / N_0 above which the rung is merged.
+/*
+ * GADGET-4 (Springel et al. 2021, §4.2, equation 52):
+ *   K_hierarchical = N₀ + 3 ∑_{k≥1} 2ᵏ⁻¹ Nₖ.
+ * https://wwwmpa.mpa-garching.mpg.de/gadget4/gadget4-code-paper.pdf
+ * Nₖ counts the particles on rung n+k or finer, not only that rung.
+ *
+ * Derived comparison after cancelling the unchanged deeper solves:
+ *   C_hierarchy = Nₙ + 3 Nₙ₊₁, C_merged = 2 Nₙ.
+ *   C_merged ≤ C_hierarchy ⇔ Nₙ ≤ 3 Nₙ₊₁.
+ * The paper uses strict cost saving. The selected policy also promotes on an
+ * equal-cost tie. An empty finer set never triggers promotion.
+ *
+ * Symbol directory:
+ *   Nₙ -> activeCount; Nₙ₊₁ -> fineCount;
+ *   configurable threshold Nₙ₊₁/Nₙ -> fraction (default 1/3).
+ */
 inline RungMergeDecision rungMergeDecision(
     std::span<size_t const> rungCounts, int lowestRung, double fraction) {
     RungMergeDecision decision;
@@ -37,8 +44,18 @@ inline RungMergeDecision rungMergeDecision(
             decision.fineCount += rungCounts[rung];
         }
     }
-    decision.merge = decision.fineCount > 0 &&
-        static_cast<double>(decision.fineCount) >
-            fraction * static_cast<double>(decision.activeCount);
+    if (fraction == 1.0 / 3.0) {
+        // fineCount ≥ ceil(activeCount / 3), without multiplying counts or
+        // rounding a large population through double precision.
+        size_t const minimumFineCount =
+            decision.activeCount / 3 + size_t(decision.activeCount % 3 != 0);
+        decision.merge = decision.fineCount > 0 && decision.fineCount >= minimumFineCount;
+    } else if (fraction == 1.0) {
+        decision.merge = decision.fineCount > 0 && decision.fineCount == decision.activeCount;
+    } else {
+        decision.merge = decision.fineCount > 0 &&
+            static_cast<double>(decision.fineCount) >=
+                fraction * static_cast<double>(decision.activeCount);
+    }
     return decision;
 }

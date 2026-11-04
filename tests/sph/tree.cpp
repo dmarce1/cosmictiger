@@ -402,6 +402,36 @@ void verifySphRebuildThreshold() {
     requireSphTree(!sphTreeShouldRebuild(maximum / 3 - 1, maximum) &&
             sphTreeShouldRebuild(maximum / 3 + (maximum % 3 != 0), maximum),
         "large population overflowed the rebuild threshold");
+    requireSphTree(!sphTreeShouldRebuild(0, 0, 0.0) && sphTreeShouldRebuild(0, 10, 0.0),
+        "zero fraction must rebuild every nonempty population");
+    requireSphTree(!sphTreeShouldRebuild(9, 10, 1.0) && sphTreeShouldRebuild(10, 10, 1.0) &&
+            !sphTreeShouldRebuild(maximum - 1, maximum, 1.0),
+        "unit fraction must require all particles active");
+    requireSphTree(!sphTreeShouldRebuild(4, 10, 0.5) && sphTreeShouldRebuild(5, 10, 0.5) &&
+            !sphTreeShouldRebuild(5, 11, 0.5) && sphTreeShouldRebuild(6, 11, 0.5),
+        "custom fraction must use the inclusive ceiling threshold");
+    requireSphTree(!sphTreeShouldRebuild(maximum / 2, maximum, 0.5) &&
+            sphTreeShouldRebuild(maximum / 2 + 1, maximum, 0.5),
+        "custom fraction lost precision at large population counts");
+    requireSphTree(sphTreeShouldRebuild(1, 10, 0.1) && sphTreeShouldRebuild(7, 100, 0.07) &&
+            !sphTreeShouldRebuild(1, 10, std::nextafter(0.1, 1.0)),
+        "decimal fraction did not preserve the configured threshold");
+    auto expected = getOptions();
+    expected.compute.sphTreeRebuildFraction = 0.25;
+    expected.run.rungMergeFraction = 0.75;
+    std::vector<char> bytes;
+    {
+        hpx::serialization::output_archive archive(bytes);
+        archive << expected;
+    }
+    Options restored;
+    {
+        hpx::serialization::input_archive archive(bytes);
+        archive >> restored;
+    }
+    requireSphTree(
+        restored.compute.sphTreeRebuildFraction == 0.25 && restored.run.rungMergeFraction == 0.75,
+        "locality option serialization lost the independently configured fractions");
 }
 
 #if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL && COSMICTIGER_ENABLE_FMM

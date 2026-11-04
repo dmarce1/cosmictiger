@@ -448,6 +448,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"compute.positionType", options.compute.positionType},
         {"compute.bucketSize", options.compute.bucketSize},
         {"compute.sphBucketSize", options.compute.sphBucketSize},
+        {"compute.sphTreeRebuildFraction", options.compute.sphTreeRebuildFraction},
         {"gravity.cuda.kickResidency", options.gravity.cudaKickResidency},
         {"gravity.cuda.kickSinkTile", options.gravity.cudaKickSinkTile},
         {"gravity.cuda.kickParticleTile", options.gravity.cudaKickParticleTile},
@@ -672,8 +673,8 @@ bool processOptions(int argc, char* argv[]) {
         "minimum starting rung")("run.rungMergeFraction",
         po::value<double>(&opts.run.rungMergeFraction)->default_value(1.0 / 3.0),
         "hierarchical: merge the lowest occupied rung into the next one when the finer rungs "
-        "hold more than this fraction of the particles on or above it (GADGET-4: N1 > N0/3); "
-        "1 never merges")("run.treeOpeningAngle",
+        "hold at least this fraction of the particles on or above it (GADGET-4: N1 > N0/3, "
+        "including cost ties); 1 only merges empty lowest rungs")("run.treeOpeningAngle",
         po::value<double>(&opts.run.treeOpeningAngle)->default_value(0.0),
         "run.test=force: build the tree once at this opening angle and sweep only the kick's "
         "angle upward from it; 0 rebuilds the tree at every angle");
@@ -688,7 +689,11 @@ bool processOptions(int argc, char* argv[]) {
             ->default_value(std::min(128, int(MAX_BUCKET_SIZE))),
         "gravity tree leaf bucket size")("compute.sphBucketSize",
         po::value<int>(&opts.compute.sphBucketSize)->default_value(0),
-        "SPH tree leaf bucket size; 0 uses floor(8/pi * hydro.neighborNumber)");
+        "SPH tree leaf bucket size; 0 uses floor(8/pi * hydro.neighborNumber)")(
+        "compute.sphTreeRebuildFraction",
+        po::value<double>(&opts.compute.sphTreeRebuildFraction)->default_value(1.0 / 3.0),
+        "rebuild the SPH octree when at least this fraction of all particles is active; "
+        "0 rebuilds every event, 1 requires all particles active; invalidation always rebuilds");
 
     po::options_description driftOpts("Particle drift");
     driftOpts.add_options()("drift.cuda", po::value<bool>(&opts.drift.cuda)->default_value(false),
@@ -1577,6 +1582,11 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.compute.sphBucketSize < 0) {
         detail::throwOptionError(
             "compute.sphBucketSize must be nonnegative (0 selects automatic sizing)\n");
+    }
+    if (!detail::isFiniteOption(opts.compute.sphTreeRebuildFraction) ||
+        opts.compute.sphTreeRebuildFraction < 0.0 || opts.compute.sphTreeRebuildFraction > 1.0) {
+        detail::throwOptionError(
+            "compute.sphTreeRebuildFraction must be finite and between 0 and 1\n");
     }
     if (opts.compute.bucketSize > MAX_BUCKET_SIZE) {
         detail::throwOptionError("compute.bucketSize must not exceed the compile-time maximum %i "

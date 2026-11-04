@@ -2,14 +2,15 @@
 # Copyright (C) 2026 Dominic C. Marcello
 # SPDX-License-Identifier: BSL-1.0
 
-"""Check GADGET-4 time-bin merging in the hierarchical gravity driver.
+"""Check the inclusive time-bin merge threshold in the hierarchical gravity driver.
 
 A Plummer sphere on a coarse base step occupies rungs 0-3. The first three
 coarse synchronizations would merge rung 0 into 1, 1 into 2 and 2 into 3 with
 finer fractions of about 0.98, 0.94 and 0.63 of the particles on or above the
 lowest rung. run.rungMergeFraction must merge exactly where that fraction is
-exceeded: all three at 0 and at the GADGET-4 default 1/3, the first two at 0.75,
-and none at 1.
+met or exceeded: all three at 0 and at the default 1/3, the first two at 0.75,
+and none at 1 for this fixture. The default also promotes equal-cost ties; the
+paper describes strict cost saving.
 """
 
 import argparse
@@ -22,7 +23,7 @@ import subprocess
 from application_selection import application_arguments, cpu_backend_options
 
 MERGE_PATTERN = re.compile(r"Merging rung (\d+) into rung (\d+): (\d+) of (\d+) particles on finer "
-                           r"rungs exceed run\.rungMergeFraction = (\S+)")
+                           r"rungs meet run\.rungMergeFraction = (\S+)")
 
 
 def require(condition, message):
@@ -64,7 +65,7 @@ def run_case(executable, base, name, fraction):
               for lower, upper, fine, active, _ in MERGE_PATTERN.findall(result.stdout)]
     for lower, upper, fine, active in merges:
         require(upper == lower + 1, f"{name} merged rung {lower} into {upper}")
-        require(fine > float(fraction) * active,
+        require(fine >= float(fraction) * active,
                 f"{name} merged rung {lower} with {fine} of {active} finer particles")
     return merges
 
@@ -86,9 +87,10 @@ def main():
     require(three_quarters == default[:2],
             f"fraction 0.75 merged {three_quarters}, expected {default[:2]}")
     _, _, fine, active = default[2]
-    require(not fine > 0.75 * active,
+    require(fine < 0.75 * active,
             f"rung 2 held {fine} of {active} finer particles, above the 0.75 threshold")
-    require(run_case(executable, base, "never", "1") == [], "fraction 1 merged a rung")
+    require(run_case(executable, base, "no_empty_floor", "1") == [],
+            "fraction 1 merged a rung with particles on its lowest level")
     for lower, upper, fine, active in default:
         print(f"rung {lower} -> {upper}: {fine}/{active} = {fine / active:.3f} on finer rungs")
     print("hierarchical rung merging follows run.rungMergeFraction")

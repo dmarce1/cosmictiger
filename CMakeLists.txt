@@ -2672,6 +2672,13 @@ if(BUILD_TESTING)
                     RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2 LABELS "integration;sph;gravity;hierarchical;cuda")
             endif()
         endif()
+        if(COSMICTIGER_WITH_SPH)
+            add_test(NAME sph_rebuild_fraction_application COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/run_sph_rebuild_fraction.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/sph_rebuild_fraction_application)
+            set_tests_properties(sph_rebuild_fraction_application PROPERTIES
+                RUN_SERIAL TRUE TIMEOUT 600 PROCESSORS 2 LABELS "integration;sph;gravity;octree;options")
+        endif()
         if(COSMICTIGER_WITH_SPH AND (COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL OR
                 COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL))
             add_test(NAME sph_octree_application COMMAND ${Python3_EXECUTABLE}

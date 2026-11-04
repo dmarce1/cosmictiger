@@ -260,7 +260,8 @@ bool prepareSphDomainEvent(int minimumRung) {
         }
     }
     bool const valid = sphTreeAllValid();
-    bool const threshold = sphTreeShouldRebuild(active, total);
+    bool const threshold =
+        sphTreeShouldRebuild(active, total, getOptions().compute.sphTreeRebuildFraction);
     bool const rebuild = !valid || threshold;
     if (rebuild) {
         terminal::detailPrint("SPH octree rebuild: active=%zu total=%zu reason=%s\n", active, total,
@@ -1292,8 +1293,8 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         auto rng = particlesCurrentRange();
         particlesProcessed += rng.second - rng.first;
         if (top && minrung == minrung0 && !nocrop) {
-            // GADGET-4 time-bin merging: close the lowest rung here and reopen
-            // its particles one rung finer when that saves gravity solves.
+            // Close the lowest rung and reopen it one rung finer when the
+            // occupied finer set meets the configured inclusive threshold.
             auto const counts = particlesRungCounts();
             double const fraction = getOptions().run.rungMergeFraction;
             auto const merge = rungMergeDecision(counts, minrung0, fraction);
@@ -1301,7 +1302,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
                 clipTop = true;
                 std::cout << std::format(
                                  "  Merging rung {:d} into rung {:d}: {:d} of {:d} particles on "
-                                 "finer rungs exceed run.rungMergeFraction = {:g}\n",
+                                 "finer rungs meet run.rungMergeFraction = {:g}\n",
                                  minrung0, minrung0 + 1, merge.fineCount, merge.activeCount,
                                  fraction)
                           << std::flush;

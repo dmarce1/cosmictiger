@@ -26,8 +26,8 @@ struct Run {
     int numberOfSteps{};
     int minRung{};
     // Hierarchical gravity merges its lowest occupied rung into the next one when
-    // the finer rungs hold more than this fraction of the coarse solve set
-    // (GADGET-4: N1 > N0/3; see docs/hierarchical_gravity.md).
+    // the finer rungs hold at least this fraction of the coarse solve set
+    // (GADGET-4's N1 > N0/3, including cost ties; docs/hierarchical_gravity.md).
     double rungMergeFraction{1.0 / 3.0};
     // run.test=force: build the tree once at this opening angle and sweep only
     // the kick's angle upward from it; zero rebuilds the tree at every angle.
@@ -43,6 +43,8 @@ struct Compute {
     // Zero input derives the SPH leaf size from hydro.neighborNumber; startup
     // stores the resolved positive size independently of the gravity bucket.
     int sphBucketSize{};
+    // Rebuild the SPH octree when this fraction of all particles is active.
+    double sphTreeRebuildFraction{1.0 / 3.0};
     int treeCacheLineSize{};
     int treeAllocLineSize{};
     int particleCacheLineSize{};
@@ -503,6 +505,8 @@ struct Options {
         arc & gravity.p3mSplitRadius;
         arc & gravity.p3mCutoffRadius;
         arc & gravity.p3mMeshSize;
+        arc & compute.sphTreeRebuildFraction;
+        arc & run.rungMergeFraction;
     }
 };
 

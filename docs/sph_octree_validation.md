@@ -72,6 +72,33 @@ changing inverse drift factors. Gas clocks, positive entropy, and nonzero
 gravitational forces pass their checks. Restart from event seven reproduces
 event eight's complete physical and stage state exactly.
 
+## Runtime threshold follow-up
+
+After adding `compute.sphTreeRebuildFraction` and including equal-cost gravity
+rung promotions, the CPU application was rebuilt and linked successfully.
+Ten focused CTests pass: six rung-merge unit cases (including 4,095 exhaustive
+four-rung cost comparisons), the rung-merge application, SPH tree/serialization,
+hierarchical hydro/restart, and hierarchical self-gravity/cosmology/restart.
+
+`tests/run_sph_rebuild_fraction.py` passes on one rank with all three integrators,
+and on two MPI ranks with hierarchical integration. It checks help and the
+default, CLI/INI precedence, accepted fractions, rejection of nonfinite and
+out-of-range values, and the actual tree lifecycle. The four-event blast has
+3,456 gas particles; the mixed case verifies the denominator is all 128
+particles (64 gas plus 64 dark matter), including across ranks.
+
+| Integrator | Fraction 0: rebuild/retain | Default 1/3 | Fraction 1 |
+| --- | ---: | ---: | ---: |
+| Hierarchical, one or two ranks | 5/0 | 1/4 | 1/4 |
+| Traditional, one rank | 4/0 | 1/3 | 1/3 |
+| Global, one rank | 4/0 | 4/0 | 4/0 |
+
+Evidence: `build/sph_rebuild_fraction_cpu/evidence.json`,
+`/tmp/sph_octree_fraction_mpi/evidence.json`, and
+`/tmp/sph_octree_fraction_{build,core_tests,rung_ctest,cpu,mpi}.log`.
+CUDA and the full grouped-option suite were validated before this host-side
+follow-up, not rerun for it; the new focused script covers its CLI/INI behavior.
+
 ## Limits
 
 These are focused local checks, not the entire repository suite or hosted CI.

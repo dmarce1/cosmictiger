@@ -141,7 +141,7 @@ def main():
         raise RuntimeError("help options were not alphabetical and unique")
     required = {"help", "configuration", "run.scenario", "run.endTime", "run.verbose",
                 "initial.particlesPerDimension", "compute.bucketSize",
-                "compute.sphBucketSize", "compute.positionType",
+                "compute.sphBucketSize", "compute.sphTreeRebuildFraction", "compute.positionType",
                 "hydro.enabled", "hydro.method", "hydro.viscosityAlpha", "hydro.viscosityBeta",
                 "hydro.viscosityEpsilon", "hydro.balsaraSwitch",
                 "hydro.neighborNumber", "gravity.enabled",
@@ -256,6 +256,7 @@ particlesPerDimension = 8
 [compute]
 bucketSize = 64
 sphBucketSize = 73
+sphTreeRebuildFraction = 0.5
 [hydro]
 enabled = false
 viscosityAlpha = 0.75
@@ -291,7 +292,8 @@ mapSize = 8
                 "hydro.cfl": 0.3, "hydro.zPlaneAcceleration": 0.25, "lightcone.mapSize": 8.0,
                 "hydro.minSupportRadius": 1.0e-6, "hydro.maxSupportRadius": 4.0,
                 "gravity.kernelDegree": 4.0,
-                "compute.bucketSize": 64.0, "compute.sphBucketSize": 73.0}
+                "compute.bucketSize": 64.0, "compute.sphBucketSize": 73.0,
+                "compute.sphTreeRebuildFraction": 0.5}
     for name, value in expected.items():
         match = re.search(r"^" + re.escape(name) + r"\s*:\s*(\S+)", configured, re.MULTILINE)
         if match is None or abs(float(match.group(1)) - value) > 1.0e-6:
@@ -1067,6 +1069,15 @@ mapSize = 8
             raise RuntimeError(f"invalid run.rungMergeFraction={value} lacked its diagnostic")
     output = run("rung_merge_fraction", metadata_options + ["--run.rungMergeFraction=0.5"])
     assertNumericSetting(output, "run.rungMergeFraction", 0.5)
+
+    rebuildOutputs = runAll([(f"invalid_sph_rebuild_fraction_{index}", metadata_options + [
+        f"--compute.sphTreeRebuildFraction={value}"], False)
+        for index, value in enumerate(rungValues)])
+    for value, output in zip(rungValues, rebuildOutputs):
+        if "compute.sphTreeRebuildFraction must be finite and between 0 and 1" not in output:
+            raise RuntimeError(f"invalid compute.sphTreeRebuildFraction={value} lacked its diagnostic")
+    output = run("sph_rebuild_fraction", metadata_options + ["--compute.sphTreeRebuildFraction=0.25"])
+    assertNumericSetting(output, "compute.sphTreeRebuildFraction", 0.25)
 
     lambda_baseline = run("lambda_baseline", metadata_options)
     def cosmologySetting(output, key):
