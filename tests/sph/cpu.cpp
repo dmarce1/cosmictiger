@@ -27,7 +27,9 @@
 #include <cosmictiger/sph/viscosity/monaghan.hpp>
 #include <tests/sph/global_timestep_cases.hpp>
 #include <tests/sph/midpoint_cases.hpp>
+#include <tests/sph/pair_kick_cases.hpp>
 #include <tests/sph/phantom_pairs.hpp>
+#include <tests/sph/rung_limiter_cases.hpp>
 #include <tests/sph/source_completion_cases.hpp>
 
 namespace detail {
@@ -236,9 +238,6 @@ public:
         data_.sourceBulkViscosityCoefficient = allocate<float>(count_ + sourceOffset_ + 3);
         data_.sinkBulkViscosityCoefficient = allocate<float>(count_ + sinkOffset_ + 3);
         if (cullenDehnen || priceEtAl || huEtAl) {
-            data_.sourceAccelerationX = allocate<float>(count_ + sourceOffset_ + 3);
-            data_.sourceAccelerationY = allocate<float>(count_ + sourceOffset_ + 3);
-            data_.sourceAccelerationZ = allocate<float>(count_ + sourceOffset_ + 3);
             if (cullenDehnen) {
                 data_.sourceVelocityDivergence = allocate<float>(count_ + sourceOffset_ + 3);
             }
@@ -262,6 +261,17 @@ public:
         data_.sinkEntropyRate = allocate<float>(count_ + sinkOffset_ + 3);
         data_.sinkProposedRungs = allocate<char>(count_ + sinkOffset_ + 3);
         std::fill_n(data_.sinkProposedRungs, count_ + sinkOffset_ + 3, char(-1));
+    }
+
+    SphPairSourceId* enablePairKickOutputs() {
+        auto* identities = allocate<SphPairSourceId>(count_ + sourceOffset_ + 3);
+        data_.sourceIds = identities;
+        data_.sourcePairUpdates = allocate<SphPairUpdate>(count_ + sourceOffset_ + 3);
+        return identities;
+    }
+
+    void enableRungCandidates() {
+        data_.sinkRungCandidates = allocate<char>(count_ + particleOffset_ + 3);
     }
 
     void publishSupport() {
@@ -336,11 +346,15 @@ public:
         run(kSphRunHydro);
         for (int i = 0; i < count_; i++) {
             int const sink = sinkIndex(i);
-            require(
-                isFinite(data_.sinkInternalEnergyRate[sink]), "finite active-kernel thermal rate");
-            for (int dim = 0; dim < kDimensions; dim++) {
-                require(isFinite(data_.sinkAccelerations[sink][dim]),
-                    "finite active-kernel acceleration");
+            if (data_.sinkInternalEnergyRate) {
+                require(isFinite(data_.sinkInternalEnergyRate[sink]),
+                    "finite active-kernel thermal rate");
+            }
+            if (data_.sinkAccelerations) {
+                for (int dim = 0; dim < kDimensions; dim++) {
+                    require(isFinite(data_.sinkAccelerations[sink][dim]),
+                        "finite active-kernel acceleration");
+                }
             }
             if (phase == 1) {
                 require(
@@ -478,7 +492,7 @@ void testMorrisMonaghanDensity() {
     data.sourceBulkViscosityCoefficient = nullptr;
     data.sinkBulkViscosityCoefficient = nullptr;
     fixture.densityPass();
-    require(data.sourceAccelerationX == nullptr && data.sourceVelocityDivergence == nullptr &&
+    require(data.sourceVelocityDivergence == nullptr &&
             data.sinkCullenDehnenStates == nullptr,
         "M&M needs no persistent divergence or acceleration snapshot");
 }
@@ -489,7 +503,7 @@ void testCullenDehnenDensity() {
     initializeViscosityStencil(fixture);
     auto& data = fixture.data_;
     // Affine gradients are recovered exactly, including at the stencil boundary.
-    // The third flow has strong shear and compressive acceleration; signs from
+    // The third flow has strong shear and decreasing divergence; signs from
     // the preceding sweep must control equation (18)'s limiter.
     for (float const scaleFactor : {1.0f, 0.7f}) {
         for (int flow = 0; flow < 4; ++flow) {
@@ -501,20 +515,15 @@ void testCullenDehnenDensity() {
                 fixture.params_.expansionRate = float(expansion);
                 fixture.params_.expansionAcceleration = float(expansionAcceleration);
                 double gradient[3][3]{};
-                double accelerationGradient[3][3]{};
                 if (flow == 0 || flow == 1) {
                     for (int dim = 0; dim < kDimensions; ++dim) {
                         gradient[dim][dim] = -a2;
-                        accelerationGradient[dim][dim] = flow == 1 ? a2 * a2 / scaleFactor : 0.0;
                     }
                 } else if (flow == 2) {
                     gradient[0][0] = -a2;
                     gradient[0][1] = 10.0 * a2;
                 } else {
                     gradient[0][1] = 4.0 * a2;
-                }
-                for (int dim = 0; dim < kDimensions; ++dim) {
-                    accelerationGradient[dim][dim] -= expansionAcceleration / scaleFactor;
                 }
                 for (int i = 0; i < fixture.count_; ++i) {
                     int const source = fixture.sourceIndex(i);
@@ -524,21 +533,23 @@ void testCullenDehnenDensity() {
                         data.sourcePositionZ[source].toDouble() - 0.5};
                     float* velocity[] = {
                         data.sourceVelocityX, data.sourceVelocityY, data.sourceVelocityZ};
-                    float* acceleration[] = {data.sourceAccelerationX, data.sourceAccelerationY,
-                        data.sourceAccelerationZ};
                     for (int dim = 0; dim < kDimensions; ++dim) {
                         double value = 0.125 * (dim + 1) - expansion * position[dim];
-                        double force = 0.01 * (dim + 1);
                         for (int axis = 0; axis < kDimensions; ++axis) {
                             value += gradient[dim][axis] * position[axis];
-                            force += accelerationGradient[dim][axis] * position[axis];
                         }
                         velocity[dim][source] = float(value);
-                        acceleration[dim][source] = float(force);
                     }
                     data.sourceVelocityDivergence[source] =
                         history == 2 ? (i == 13 ? -1.0f : 0.0f) : float(history);
                     data.sinkCullenDehnenStates[sink] = {9.0f, 8.0f, 7.0f, 6.0f};
+                    auto& state = data.sinkCullenDehnenStates[sink];
+                    fixture.params_.viscositySampleTime = 0.5;
+                    state.sampleTime = i % 2 ? 0.25 : 0.375;
+                    double const physicalDivergence = flow < 2 ? -3.0 : (flow == 2 ? -1.0 : 0.0);
+                    double const steepening = flow == 0 ? 3.0 : (flow == 2 ? 1.0 : 0.0);
+                    state.sampleDivergence = float(physicalDivergence +
+                        steepening * scaleFactor * (fixture.params_.viscositySampleTime - state.sampleTime));
                     data.sourceRungs[source] = data.sinkParticleRungs[fixture.particleIndex(i)] =
                         i == 13 ? 1 : 0;
                 }
@@ -610,6 +621,21 @@ void testCullenDehnenDensity() {
                 requireClose("CD repeated density preserves its source history",
                     data.sinkCullenDehnenStates[center].targetBulkViscosityCoefficient, oldTarget,
                     0.0);
+                // A first sample, duplicate event or stale event cannot infer a time derivative.
+                for (double const sampleTime : {-1.0, 0.5, 0.625}) {
+                    for (int i = 0; i < fixture.count_; ++i) {
+                        auto& state = data.sinkCullenDehnenStates[fixture.sinkIndex(i)];
+                        state.sampleTime = sampleTime;
+                        state.sampleDivergence = -100.0f;
+                    }
+                    fixture.densityPass();
+                    requireClose("CD missing or nonforward history has no shock target",
+                        data.sinkCullenDehnenStates[center].targetBulkViscosityCoefficient,
+                        0.0, 0.0);
+                    require(data.sinkCullenDehnenStates[center].sampleTime == sampleTime &&
+                            data.sinkCullenDehnenStates[center].sampleDivergence == -100.0f,
+                        "CD density does not commit history");
+                }
             }
         }
     }
@@ -631,21 +657,15 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
             fixture.params_.expansionRate = float(expansion);
             fixture.params_.expansionAcceleration = float(expansionAcceleration);
             double gradient[3][3]{};
-            double accelerationGradient[3][3]{};
             if (flow == 0 || flow == 1) {
                 for (int dim = 0; dim < kDimensions; ++dim) {
                     gradient[dim][dim] = -a2;
-                    accelerationGradient[dim][dim] = flow == 1 ? a2 * a2 / scaleFactor : 0.0;
                 }
             } else if (flow == 2) {
                 gradient[0][0] = -a2;
                 gradient[0][1] = 10.0 * a2;
             } else {
                 gradient[0][1] = 4.0 * a2;
-            }
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                accelerationGradient[dim][dim] -=
-                    (huEtAl ? expansionAcceleration : expansion * expansion) / scaleFactor;
             }
             for (int i = 0; i < fixture.count_; ++i) {
                 int const source = fixture.sourceIndex(i);
@@ -655,19 +675,21 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
                     data.sourcePositionZ[source].toDouble() - 0.5};
                 float* velocity[] = {
                     data.sourceVelocityX, data.sourceVelocityY, data.sourceVelocityZ};
-                float* acceleration[] = {
-                    data.sourceAccelerationX, data.sourceAccelerationY, data.sourceAccelerationZ};
                 for (int dim = 0; dim < kDimensions; ++dim) {
                     double value = 0.125 * (dim + 1) - expansion * position[dim];
-                    double force = 0.01 * (dim + 1);
                     for (int axis = 0; axis < kDimensions; ++axis) {
                         value += gradient[dim][axis] * position[axis];
-                        force += accelerationGradient[dim][axis] * position[axis];
                     }
                     velocity[dim][source] = float(value);
-                    acceleration[dim][source] = float(force);
                 }
                 data.sinkCullenDehnenStates[sink] = {9.0f, 8.0f, 7.0f, 6.0f};
+                auto& state = data.sinkCullenDehnenStates[sink];
+                fixture.params_.viscositySampleTime = 0.5;
+                state.sampleTime = i % 2 ? 0.25 : 0.375;
+                double const physicalDivergence = flow < 2 ? -3.0 : (flow == 2 ? -1.0 : 0.0);
+                double const steepening = flow == 0 ? 3.0 : (flow == 2 ? 1.0 : 0.0);
+                state.sampleDivergence = float(physicalDivergence - (huEtAl ? 0.0 : 3.0 * expansion / a2) +
+                    steepening * scaleFactor * (fixture.params_.viscositySampleTime - state.sampleTime));
                 data.sourceRungs[source] = data.sinkParticleRungs[fixture.particleIndex(i)] =
                     i == 13 ? 1 : 0;
             }
@@ -743,6 +765,23 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
             }
             require(data.sourceVelocityDivergence == nullptr,
                 "Hu and Price need no neighbor divergence snapshot");
+            requireClose("model-specific divergence sample",
+                data.sinkCullenDehnenStates[center].pendingSampleDivergence,
+                divergence - (huEtAl ? 0.0 : 3.0 * expansion / a2), 4.0e-5);
+            for (double const sampleTime : {-1.0, 0.5, 0.625}) {
+                for (int i = 0; i < fixture.count_; ++i) {
+                    auto& state = data.sinkCullenDehnenStates[fixture.sinkIndex(i)];
+                    state.sampleTime = sampleTime;
+                    state.sampleDivergence = -100.0f;
+                }
+                fixture.densityPass();
+                requireClose("Hu/Price missing or nonforward history has no shock target",
+                    data.sinkCullenDehnenStates[center].targetBulkViscosityCoefficient,
+                    0.0, 0.0);
+                require(data.sinkCullenDehnenStates[center].sampleTime == sampleTime &&
+                        data.sinkCullenDehnenStates[center].sampleDivergence == -100.0f,
+                    "Hu/Price density does not commit history");
+            }
         }
     }
 }
@@ -2159,8 +2198,8 @@ public:
 
     // The closing half-kick is first predicted with the old rates, the velocity-dependent
     // rates are evaluated at the predicted state, and the corrector replaces the predicted
-    // kick. sphParticlesApplyUpdates reaches the same state by staging the prediction
-    // instead of applying and undoing it.
+    // kick. This reference integrator tests the force formulation independently
+    // of the production pair-midpoint driver.
     void step(double interval) {
         double const powerBefore = expansionPower();
         kick(0.5 * interval);
@@ -2781,6 +2820,18 @@ TEST_F(SphCpuTest, RungPropagation) {
     detail::testRungPropagation();
 }
 
+TEST_F(SphCpuTest, InactiveRungCandidateClosure) {
+    detail::Fixture fixture(7, 7, 5, 11, 3);
+    detail::testInactiveRungCandidateClosure(
+        fixture, [&] { return fixture.run(kSphRunRungs).needsAnotherPass; });
+}
+
+TEST_F(SphCpuTest, SupportBoundaryRungCandidates) {
+    detail::Fixture fixture(2, 2, 5, 11, 3);
+    detail::testSupportBoundaryRungCandidates(
+        fixture, [&] { return fixture.run(kSphRunRungs).needsAnotherPass; });
+}
+
 TEST_F(SphCpuTest, Lattice) {
     detail::testLattice();
 }
@@ -2882,6 +2933,16 @@ TEST_F(SphCpuTest, MidpointHydroUsesExactRungWithoutGravityStorage) {
 TEST_F(SphCpuTest, MidpointMorrisMonaghanUsesActualIntervalAndExactRung) {
     detail::Fixture fixture(3, 1, 2, 3, 4);
     detail::testMidpointMorrisInterval(fixture);
+}
+
+TEST_F(SphCpuTest, ConservativeMixedRungPairKicks) {
+    detail::Fixture fixture(2, 2, 2, 4, 6);
+    detail::testConservativePairKick(fixture, false);
+}
+
+TEST_F(SphCpuTest, ConservativeDirectedViscosityPairKicks) {
+    detail::Fixture fixture(2, 2, 2, 4, 6);
+    detail::testConservativePairKick(fixture, true);
 }
 
 TEST_F(SphCpuTest, ColdShockTimestep) {

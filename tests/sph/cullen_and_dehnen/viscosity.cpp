@@ -12,6 +12,8 @@
 #include <gtest/gtest.h>
 
 #include <cosmictiger/sph/viscosity/cullen_and_dehnen.hpp>
+#include <cosmictiger/sph/viscosity/hu_etal.hpp>
+#include <cosmictiger/sph/viscosity/price_etal.hpp>
 #include <tests/sph/test_helpers.hpp>
 
 namespace detail {
@@ -204,4 +206,84 @@ TEST(CullenAndDehnen, CullenDehnenDiagnosticsDouble) {
 
 TEST(CullenAndDehnen, CullenDehnenDiagnosticsFloat) {
     detail::testCullenDehnenDiagnostics<float>();
+}
+
+TEST(CullenAndDehnen, DivergenceHistoryUsesActualSampleInterval) {
+    // The same physical compression has Dθ/Dt = -3 at the latest sample.
+    // Different previous conformal sample times represent mixed/adaptive rungs.
+    for (float const scaleFactor : {0.25f, 0.5f, 1.0f, 2.0f}) {
+        for (double const previousTime : {0.0, 0.125, 0.4375}) {
+            cullen_and_dehnen::VelocityGradientSums<float> sums;
+            for (int i = 0; i < 3; ++i) {
+                sums.moment[i][i] = 1.0f;
+                sums.velocity[i][i] = -scaleFactor * scaleFactor;
+            }
+            SphCullenDehnenState state{};
+            state.sampleTime = previousTime;
+            state.sampleDivergence = float(-3.0 + 3.0 * scaleFactor * (0.5 - previousTime));
+            unsigned long long operations = 0;
+            auto const cd = cullen_and_dehnen::diagnosticsFromHistory(sums, scaleFactor, state, 0.5,
+                -1.0f, 0.5f / scaleFactor, 2.0f * scaleFactor, 2.0f, 0.05f, operations);
+            auto const hu =
+                hu_etal::diagnosticsFromHistory(sums, scaleFactor, state, 0.5, 0.5f / scaleFactor,
+                    2.0f * scaleFactor, 3.0f * scaleFactor, 1.0f, 0.05f, operations);
+            auto const price = price_etal::diagnosticsFromHistory(sums, scaleFactor, 0.0f, state,
+                0.5, 0.5f / scaleFactor, 2.0f * scaleFactor, 4.0f, 0.1f, operations);
+            EXPECT_NEAR(cd.targetBulkViscosityCoefficient, 6.0 / 19.0, 2.0e-6);
+            EXPECT_NEAR(hu.targetBulkViscosityCoefficient, 3.0 / 19.0, 2.0e-6);
+            EXPECT_NEAR(price.targetBulkViscosityCoefficient, 1.875, 2.0e-6);
+            EXPECT_NEAR(hu.limiter, 9.0 / (9.0 + 0.0016), 2.0e-6);
+            EXPECT_EQ(state.sampleTime, previousTime);
+        }
+    }
+}
+
+TEST(CullenAndDehnen, HistoryHandlesMissingDuplicateAndUnresolvedSamples) {
+    cullen_and_dehnen::VelocityGradientSums<float> sums;
+    for (int i = 0; i < 3; ++i) {
+        sums.moment[i][i] = 1.0f;
+        sums.velocity[i][i] = -1.0f;
+    }
+    unsigned long long operations = 0;
+    for (double const previousTime : {-1.0, 0.5, 0.75}) {
+        SphCullenDehnenState state{};
+        state.sampleTime = previousTime;
+        state.sampleDivergence = 100.0f;
+        auto const cd = cullen_and_dehnen::diagnosticsFromHistory(
+            sums, 1.0f, state, 0.5, -1.0f, 0.5f, 2.0f, 2.0f, 0.05f, operations);
+        auto const hu = hu_etal::diagnosticsFromHistory(
+            sums, 1.0f, state, 0.5, 0.5f, 2.0f, 3.0f, 1.0f, 0.05f, operations);
+        auto const price = price_etal::diagnosticsFromHistory(
+            sums, 1.0f, 0.0f, state, 0.5, 0.5f, 2.0f, 1.0f, 0.1f, operations);
+        EXPECT_EQ(cd.targetBulkViscosityCoefficient, 0.0f);
+        EXPECT_EQ(hu.targetBulkViscosityCoefficient, 0.0f);
+        EXPECT_EQ(price.targetBulkViscosityCoefficient, 0.0f);
+    }
+    SphCullenDehnenState state{};
+    state.sampleTime = 0.0;
+    state.sampleDivergence = 100.0f;
+    cullen_and_dehnen::VelocityGradientSums<float> empty;
+    auto const hu = hu_etal::diagnosticsFromHistory(
+        empty, 1.0f, state, 0.5, 0.5f, 2.0f, 3.0f, 1.0f, 0.05f, operations);
+    EXPECT_EQ(hu.targetBulkViscosityCoefficient, 0.0f);
+}
+
+TEST(CullenAndDehnen, PriceHistorySubtractsHomogeneousExpansion) {
+    SphCullenDehnenState state{};
+    state.sampleTime = 0.25;
+    state.sampleDivergence = 0.0f;    // No peculiar divergence at the previous time.
+    unsigned long long operations = 0;
+    for (float const scaleFactor : {0.5f, 1.0f, 2.0f}) {
+        cullen_and_dehnen::VelocityGradientSums<float> sums;
+        float const expansionRate = 0.25f;
+        for (int i = 0; i < 3; ++i) {
+            sums.moment[i][i] = 1.0f;
+            sums.velocity[i][i] = expansionRate;
+        }
+        auto const result = price_etal::diagnosticsFromHistory(
+            sums, scaleFactor, expansionRate, state, 0.5, 0.5f, 2.0f, 1.0f, 0.1f, operations);
+        EXPECT_EQ(result.sampleDivergence, 0.0f);
+        EXPECT_EQ(result.targetBulkViscosityCoefficient, 0.0f);
+        EXPECT_EQ(result.divergence, 0.75f / (scaleFactor * scaleFactor));
+    }
 }

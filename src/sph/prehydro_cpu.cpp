@@ -238,20 +238,19 @@ SphRunReturn sphCpuPrehydro1(
 /*
  * Density and gradient sums: Monaghan (1992), ARA&A 30, 543, equation (3.8),
  * doi:10.1146/annurev.aa.30.090192.002551; Cullen & Dehnen (2010), equations
- * (15), (17), (B2), (B4), (B7), (B12), https://arxiv.org/abs/1006.1524.
+ * (15), (17), (B2), (B4), (B7), https://arxiv.org/abs/1006.1524.
  *   ρ_a = Σ_b m_b W_ab(H_a), W_ab = H_a⁻³ w(q_ab), q_ab = |r_ab|/H_a,
  *   ρ_a ∇·v_a = −Σ_b m_b v_ab · ∇_a W_ab,
  *   ρ_a ∇×v_a = Σ_b m_b v_ab × ∇_a W_ab,
  *   R_a = ρ_a⁻¹ Σ_b m_b W_ab sign(∇·v_b),
  *   T = Σ_b r_ab ⊗ r_ab w̄_ab, D = Σ_b v_ab ⊗ r_ab w̄_ab, V = D T⁻¹.
- * Derived acceleration analogue: C = Σ_b a_ab ⊗ r_ab w̄_ab, G = C T⁻¹.
  * Symbol directory (Pack denotes SIMD partial sums):
  *   H_a → sinkKernelSupportRadius; q_ab → normalizedRadius; w(q_ab) → kernelWeight
  *   ρ_a → density; ρ_a ∇·v_a → densityWeightedDivergence
  *   ρ_a ∇×v_a → densityWeightedCurl; ρ_a R_a → densityWeightedSignAverage
- *   r_ab, v_ab, a_ab → separation, physicalVelocityDifference, accelerationDifference
+ *   r_ab, v_ab → separation, physicalVelocityDifference
  *   m_b ∇_a W_ab → massWeightedKernelGradient
- *   T, D, C → gradientSums.moment, gradientSums.velocity, gradientSums.acceleration
+ *   T, D → gradientSums.moment, gradientSums.velocity
  *   Σ_b w → kernelSum; Σ_b q_ab w′ → kernelDerivativeMoment
  *   v_sig,a → signalSpeed (CUDA), signalSpeedPack (CPU)
  *   w̄_ab = −m_b F_a → gradientWeight inside the corrected-gradient branch.
@@ -310,7 +309,7 @@ SphRunReturn sphCpuPrehydro2(
         SimdFloat densityDerivativeSumPack(0.0f);
         SimdFloat densityWeightedDivergencePack(0.0f);
         Vector3<SimdFloat> densityWeightedCurlPack(SimdFloat(0.0f));
-        cullen_and_dehnen::GradientSums<SimdFloat> gradientSums{};
+        cullen_and_dehnen::VelocityGradientSums<SimdFloat> gradientSums{};
         SimdFloat densityWeightedSignAveragePack(0.0f);
         SimdFloat signalSpeedPack(0.0f);
         // clang-format off
@@ -402,32 +401,23 @@ SphRunReturn sphCpuPrehydro2(
                     }
                     if (parameters.gradientSwitch()) {
                         /*
-                         * Cullen & Dehnen (2010), equations (B2), (B4), (B7), (B12), which
-                         * Price et al. (2018) equations (51)-(53) also use.
-                         * Positive weights are equivalent to reversing the sign of W'/q.
-                         * B7 allows arbitrary scalar weights. Mass/kernel-gradient weights
-                         * avoid reading remote densities while this pass is updating them.
+                         * Cullen & Dehnen (2010), equations (B2), (B4), (B7), which
+                         * Price et al. (2018) equations (51)-(52) also use; Appendix B3 time
+                         * differences supply the material divergence derivative without
+                         * acceleration sources. Positive weights are equivalent to reversing the
+                         * sign of W'/q. B7 allows arbitrary scalar weights. Mass/kernel-gradient
+                         * weights avoid reading remote densities while this pass is updating them.
                          */
                         SimdFloat const gradientWeight = -massWeightedGradientFactor;
-                        Vector3<SimdFloat> const accelerationDifference = simdSelect(contributes,
-                            Vector3<SimdFloat>(SimdFloat(data.sourceAccelerationX[particleIndex]),
-                                SimdFloat(data.sourceAccelerationY[particleIndex]),
-                                SimdFloat(data.sourceAccelerationZ[particleIndex])) -
-                                detail::sphCpuLoad3(data.sourceAccelerationX,
-                                    data.sourceAccelerationY, data.sourceAccelerationZ, neighbors,
-                                    first, 0.0f),
-                            Vector3<SimdFloat>(SimdFloat(0)));
                         for (int i = 0; i < kDimensions; ++i) {
                             for (int j = 0; j < kDimensions; ++j) {
                                 gradientSums.moment[i][j] +=
                                     gradientWeight * separation[i] * separation[j];
                                 gradientSums.velocity[i][j] +=
                                     gradientWeight * physicalVelocityDifference[i] * separation[j];
-                                gradientSums.acceleration[i][j] +=
-                                    gradientWeight * accelerationDifference[i] * separation[j];
                             }
                         }
-                        flops += 84 * SimdFloat::size();
+                        flops += 54 * SimdFloat::size();
                     }
                     if (parameters.cullenDehnen) {
                         /*
@@ -548,26 +538,25 @@ SphRunReturn sphCpuPrehydro2(
             flops.doublePrecision += actualInterval ? 1 : 2;
         }
         if (parameters.gradientSwitch()) {
-            cullen_and_dehnen::GradientSums<float> sums{};
+            cullen_and_dehnen::VelocityGradientSums<float> sums{};
             for (int i = 0; i < kDimensions; ++i) {
                 for (int j = 0; j < kDimensions; ++j) {
                     sums.moment[i][j] = simdSum(gradientSums.moment[i][j]);
                     sums.velocity[i][j] = simdSum(gradientSums.velocity[i][j]);
-                    sums.acceleration[i][j] = simdSum(gradientSums.acceleration[i][j]);
                 }
             }
             auto& state = data.sinkCullenDehnenStates[sinkIndex];
             cullen_and_dehnen::Result<float> diagnostics;
             if (parameters.cullenDehnen) {
-                diagnostics = cullen_and_dehnen::diagnostics(sums, parameters.scaleFactor,
-                    parameters.expansionAcceleration,
+                diagnostics = cullen_and_dehnen::diagnosticsFromHistory(sums,
+                    parameters.scaleFactor, state, parameters.viscositySampleTime,
                     simdSum(densityWeightedSignAveragePack) / density, sinkKernelSupportRadius,
                     std::max(soundSpeedForSwitch, simdMaximum(signalSpeedPack)),
                     parameters.maximumBulkViscosityCoefficient, parameters.viscosityDecayCD, flops);
                 flops += SimdFloat::size() - 1;
             } else if (parameters.huEtAl) {
-                diagnostics = hu_etal::diagnostics(sums, parameters.scaleFactor,
-                    parameters.expansionAcceleration, sinkKernelSupportRadius, soundSpeedForSwitch,
+                diagnostics = hu_etal::diagnosticsFromHistory(sums, parameters.scaleFactor, state,
+                    parameters.viscositySampleTime, sinkKernelSupportRadius, soundSpeedForSwitch,
                     std::max(soundSpeedForSwitch, simdMaximum(signalSpeedPack)),
                     parameters.maximumBulkViscosityCoefficientHu, parameters.viscosityDecayHu,
                     flops);
@@ -580,17 +569,19 @@ SphRunReturn sphCpuPrehydro2(
                     float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
                     float(monaghan::kViscosityWidthScale);
                 flops.doublePrecision += 1;
-                diagnostics = price_etal::diagnostics(sums, parameters.scaleFactor,
-                    parameters.expansionRate, smoothingLength, soundSpeedForSwitch,
+                diagnostics = price_etal::diagnosticsFromHistory(sums, parameters.scaleFactor,
+                    parameters.expansionRate, state, parameters.viscositySampleTime,
+                    smoothingLength, soundSpeedForSwitch,
                     parameters.maximumBulkViscosityCoefficientPrice, parameters.viscosityDecayPrice,
                     flops);
                 flops += 2;
             }
             state.pendingDivergence = diagnostics.divergence;
+            state.pendingSampleDivergence = diagnostics.sampleDivergence;
             state.targetBulkViscosityCoefficient = diagnostics.targetBulkViscosityCoefficient;
             state.inverseDecayTime = diagnostics.inverseDecayTime;
             state.limiter = diagnostics.limiter;
-            flops += 27 * (SimdFloat::size() - 1);
+            flops += 18 * (SimdFloat::size() - 1);
         }
         data.sinkSmoothingConverged[sinkIndex] = true;
         result.minimumSupportRadius =

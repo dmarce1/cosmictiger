@@ -67,8 +67,8 @@ CUDA_EXPORT inline Real evolvedBulkViscosityCoefficient(Real bulkViscosityCoeffi
  */
 // clang-format on
 template <typename Real, typename Counter>
-CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnostics(
-    cullen_and_dehnen::GradientSums<Real> const& sums, Real scaleFactor, Real expansionAcceleration,
+CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnosticsFromGradient(
+    Real const (&velocityGradient)[3][3], Real scaleFactor, Real divergenceDerivative,
     Real supportRadius, Real soundSpeed, Real signalSpeed, Real maximumBulkViscosityCoefficient,
     Real decayCoefficient, Counter& floatingPointOperations) {
     cullen_and_dehnen::Result<Real> result{};
@@ -79,29 +79,14 @@ CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnostics(
     result.inverseDecayTime =
         Real(2) * decayCoefficient * signalSpeed / (scaleFactor * supportRadius);
     floatingPointOperations += 4;
-    Real velocityGradient[3][3];
-    Real accelerationGradient[3][3];
-    if (cullen_and_dehnen::reconstructGradients(
-            sums, velocityGradient, accelerationGradient, floatingPointOperations) == 0) {
-        return result;
-    }
     Real const divergence =
         velocityGradient[0][0] + velocityGradient[1][1] + velocityGradient[2][2];
-    Real const accelerationDivergence =
-        accelerationGradient[0][0] + accelerationGradient[1][1] + accelerationGradient[2][2];
-    Real gradientSquareTrace = Real(0);
-    for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 3; ++j) {
-            gradientSquareTrace += velocityGradient[i][j] * velocityGradient[j][i];
-        }
-    }
     Real const curlX = velocityGradient[2][1] - velocityGradient[1][2];
     Real const curlY = velocityGradient[0][2] - velocityGradient[2][0];
     Real const curlZ = velocityGradient[1][0] - velocityGradient[0][1];
     Real const curlSquared = curlX * curlX + curlY * curlY + curlZ * curlZ;
     result.divergence = divergence / (scaleFactor * scaleFactor);
-    Real const divergenceDerivative = scaleFactor * accelerationDivergence +
-        Real(3) * expansionAcceleration - gradientSquareTrace;
+    result.sampleDivergence = result.divergence;
     Real const shockIndicator = divergenceDerivative < Real(0) ? -divergenceDerivative : Real(0);
     Real const radiusSquaredShock = supportRadius * supportRadius * shockIndicator;
     Real const targetDenominator = radiusSquaredShock + soundSpeed * soundSpeed;
@@ -115,7 +100,55 @@ CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnostics(
     result.limiter =
         limiterDenominator > Real(0) ? divergenceSquared / limiterDenominator : Real(0);
     floatingPointOperations +=
-        46 + (targetDenominator > Real(0) ? 2 : 0) + (limiterDenominator > Real(0) ? 1 : 0);
+        23 + (targetDenominator > Real(0) ? 2 : 0) + (limiterDenominator > Real(0) ? 1 : 0);
+    return result;
+}
+
+template <typename Real, typename Counter>
+CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnostics(
+    cullen_and_dehnen::GradientSums<Real> const& sums, Real scaleFactor, Real expansionAcceleration,
+    Real supportRadius, Real soundSpeed, Real signalSpeed, Real maximumBulkViscosityCoefficient,
+    Real decayCoefficient, Counter& floatingPointOperations) {
+    Real velocityGradient[3][3];
+    Real accelerationGradient[3][3];
+    cullen_and_dehnen::reconstructGradients(
+        sums, velocityGradient, accelerationGradient, floatingPointOperations);
+    Real derivative = Real(3) * expansionAcceleration;
+    for (int i = 0; i < 3; ++i) {
+        derivative += scaleFactor * accelerationGradient[i][i];
+        for (int j = 0; j < 3; ++j) {
+            derivative -= velocityGradient[i][j] * velocityGradient[j][i];
+        }
+    }
+    floatingPointOperations += 26;
+    return diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, supportRadius,
+        soundSpeed, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient,
+        floatingPointOperations);
+}
+
+// Appendix B3 time differences retain this model's target and limiter unchanged.
+template <typename Real, typename Counter>
+CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnosticsFromHistory(
+    cullen_and_dehnen::VelocityGradientSums<Real> const& sums, Real scaleFactor,
+    SphCullenDehnenState const& state, double sampleTime, Real supportRadius, Real soundSpeed,
+    Real signalSpeed, Real maximumBulkViscosityCoefficient, Real decayCoefficient,
+    Counter& floatingPointOperations) {
+    Real velocityGradient[3][3];
+    int const rank = cullen_and_dehnen::reconstructVelocityGradient(
+        sums, velocityGradient, floatingPointOperations);
+    Real const divergence =
+        (velocityGradient[0][0] + velocityGradient[1][1] + velocityGradient[2][2]) /
+        (scaleFactor * scaleFactor);
+    Real const sampleDivergence = divergence;
+    floatingPointOperations += 4;
+    Real const derivative = rank == 0 ?
+        Real(0) :
+        cullen_and_dehnen::divergenceTimeDerivative(
+            sampleDivergence, scaleFactor, state, sampleTime, floatingPointOperations);
+    auto result = diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, supportRadius,
+        soundSpeed, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient,
+        floatingPointOperations);
+    result.sampleDivergence = sampleDivergence;
     return result;
 }
 

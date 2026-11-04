@@ -29,6 +29,7 @@ struct HydroNeighbor {
     float bulkViscosityCoefficient;
     float gradHCorrection;    // ζ_b from the current density pass.
     int rung;
+    int sourceIndex;
 };
 
 struct HydroWorkspace {
@@ -100,6 +101,8 @@ __global__ void sphCudaHydro(
     float const scaledGasMass = gasMass * inverseScaleFactor;
     float const viscosityRegularization = parameters.viscosityEpsilon;    // η²/h² of p. 551
     float const expansionRate = parameters.expansionRate;    // a·da/dt, the Hubble flow of a pair
+    bool const applyPairKicks = data.sourcePairUpdates && parameters.hydroKickTimestep > 0.0;
+    ALWAYS_ASSERT(!applyPairKicks || (parameters.midpointHydro && data.sourceIds));
     int maximumHydroRung = 0;
     int maximumGravityRung = 0;
     int maximumRung = 0;
@@ -110,13 +113,13 @@ __global__ void sphCudaHydro(
         workspace.neighbors.resize(0);
         // The union of both supports is required by the symmetric gradient.
         for (int neighborNodeIndex = targetNode.neighborRange.first;
-             neighborNodeIndex < targetNode.neighborRange.second; neighborNodeIndex++) {
+            neighborNodeIndex < targetNode.neighborRange.second; neighborNodeIndex++) {
             auto const& neighborNode = data.treeNodes[data.neighborNodeIndices[neighborNodeIndex]];
             int const end = neighborNode.particleRange.first +
                 roundUp(neighborNode.particleRange.second - neighborNode.particleRange.first,
                     ParticleInteger(blockSize));
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
-                 sourceParticleIndex < end; sourceParticleIndex += blockSize) {
+                sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
                 Vector3<Position> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
@@ -150,12 +153,13 @@ __global__ void sphCudaHydro(
                             data.sourceBulkViscosityCoefficient[sourceParticleIndex] :
                             parameters.bulkViscosityCoefficient,
                         data.sourceGradHCorrection[sourceParticleIndex],
-                        parameters.midpointHydro ? int(data.sourceRungs[sourceParticleIndex]) : 0};
+                        parameters.midpointHydro ? int(data.sourceRungs[sourceParticleIndex]) : 0,
+                        sourceParticleIndex};
                 }
             }
         }
         for (int particleIndex = targetNode.particleRange.first;
-             particleIndex < targetNode.particleRange.second; particleIndex++) {
+            particleIndex < targetNode.particleRange.second; particleIndex++) {
             __syncthreads();
             ParticleInteger const sinkIndex =
                 targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
@@ -227,7 +231,7 @@ __global__ void sphCudaHydro(
             float maximumCompressionSpeed = 0.0f;    // max_b(−μ_ab) for δt_cv
             int maximumNeighborRung = 0;
             for (int neighborIndex = threadIndex; neighborIndex < workspace.neighbors.size();
-                 neighborIndex += blockSize) {
+                neighborIndex += blockSize) {
                 auto const& neighbor = workspace.neighbors[neighborIndex];
                 // Particle b. Pairs outside both supports or at zero separation are skipped.
                 Vector3<float> const separation(distance(positionX, neighbor.positionX),
@@ -333,6 +337,7 @@ __global__ void sphCudaHydro(
                         neighborPressureCoefficient, sinkGradientFactor, neighborGradientFactor);
                 float viscousForce;
                 float viscousHeating;
+                float neighborViscousHeating = 0.0f;
                 if (parameters.priceEtAl) {
                     /*
                      * Phantom (2018), equations (39)-(42), including each side's grad-H factor.
@@ -360,6 +365,14 @@ __global__ void sphCudaHydro(
                     viscousHeating = inverseScaleFactor *
                         variational::pairWork(sinkViscosityCoefficient, sinkGradientFactor,
                             physicalVelocityDotSeparation);
+                    if (applyPairKicks) {
+                        // Negating both separation and relative velocity leaves
+                        // their dot product unchanged in the reverse pair.
+                        neighborViscousHeating = inverseScaleFactor *
+                            variational::pairWork(neighborViscosityCoefficient,
+                                neighborGradientFactor, physicalVelocityDotSeparation);
+                        flops += 3;
+                    }
                     flops += 28;    // radial division, two q/C terms, force/work
                 } else {
                     float pairArtificialViscosity = monaghan::artificialViscosity(density,
@@ -373,9 +386,27 @@ __global__ void sphCudaHydro(
                         scaledGasMass * pairArtificialViscosity * symmetricGradientFactor;
                     viscousHeating = scaledGasMass * 0.5f * pairArtificialViscosity *
                         symmetricGradientFactor * physicalVelocityDotSeparation;
+                    neighborViscousHeating = viscousHeating;
                     flops += sph_flops::kViscosityMu + sph_flops::kArtificialViscosity + 6;
                 }
-                acceleration -= (pressureForce + viscousForce) * separation;
+                Vector3<float> const pairForce = (pressureForce + viscousForce) * separation;
+                acceleration -= pairForce;
+                if (applyPairKicks &&
+                    sphOwnsPairKick(data.sourceIds[particleIndex],
+                        data.sourceIds[neighbor.sourceIndex], previousRung, neighbor.rung)) {
+                    Vector3<float> const pairAcceleration(
+                        -pairForce[kXDimension], -pairForce[kYDimension], -pairForce[kZDimension]);
+                    double const targetEntropyRate = sph_entropy::fromStoredEnergy(
+                        viscousHeating, density, adiabaticIndex, parameters.scaleFactor);
+                    double const neighborEntropyRate =
+                        sph_entropy::fromStoredEnergy(neighborViscousHeating, neighborDensity,
+                            adiabaticIndex, parameters.scaleFactor);
+                    sphAccumulatePairKick(data.sourcePairUpdates[particleIndex],
+                        data.sourcePairUpdates[neighbor.sourceIndex], pairAcceleration,
+                        targetEntropyRate, neighborEntropyRate, parameters.hydroKickTimestep);
+                    flops.doublePrecision +=
+                        13 + 2 * (adiabaticIndex == float(5.0 / 3.0) ? 12 : 14);
+                }
                 internalEnergyRate += inverseScaleFactor *
                     variational::pairWork(
                         sinkPressureCoefficient, sinkGradientFactor, velocityDotSeparation);
@@ -426,8 +457,19 @@ __global__ void sphCudaHydro(
                 } else {
                     ALWAYS_ASSERT(parameters.phase == 0);
                 }
-                for (int dim = 0; dim < kDimensions; dim++) {
-                    data.sinkAccelerations[sinkIndex][dim] = acceleration[dim];
+                if (applyPairKicks) {
+                    Vector3<float> const externalAcceleration = sphCompleteAcceleration(parameters,
+                        Vector3<Position>(positionX, positionY, positionZ), velocity,
+                        Vector3<float>(0.0f), Vector3<float>(0.0f), data.centralAcceleration,
+                        data.centralSupportRadius, flops);
+                    sphAccumulateExternalKick(data.sourcePairUpdates[particleIndex],
+                        externalAcceleration, parameters.hydroKickTimestep);
+                    flops.doublePrecision += 6;
+                }
+                if (data.sinkAccelerations) {
+                    for (int dim = 0; dim < kDimensions; dim++) {
+                        data.sinkAccelerations[sinkIndex][dim] = acceleration[dim];
+                    }
                 }
                 // E=a^2 u and homogeneous work du/dt=-3 H P/rho give
                 // dE/dtau=(2-3 P/(rho*u)) (da/dtau)/a E = (5-3 gamma) (da/dtau)/a E.

@@ -573,19 +573,17 @@ void domainsTransmitParticles(Vector<Particle> parts) {
 // Ordinary SPH timesteps migrate the complete gas state together with its
 // gravity particle. Category indices are local and are rebuilt at the receiver.
 struct GasMigrationState {
-    Vector3<float> acceleration, gravityAcceleration;
-    float supportRadius, entropy, entropyRate, density;
+    float supportRadius, entropy, density;
+    double divergenceSampleTime = -1.0;
+    float sampledDivergence = 0.0f;
     char converged, semiactive, hydroRung;
     float bulkViscosityCoefficient;
     float divergence;    // Previous physical divergence for Cullen-Dehnen and Price et al.
     float electronFraction{1.0f};
     template <class Archive>
     void serialize(Archive& arc, unsigned) {
-        arc & acceleration;
-        arc & gravityAcceleration;
         arc & supportRadius;
         arc & entropy;
-        arc & entropyRate;
         arc & density;
         arc & converged;
         arc & semiactive;
@@ -595,6 +593,8 @@ struct GasMigrationState {
         }
         if (getOptions().hydro.viscosityGradientSwitch()) {
             arc & divergence;
+            arc & divergenceSampleTime;
+            arc & sampledDivergence;
         }
         if (getOptions().chemistry.enabled) {
             arc & electronFraction;
@@ -634,8 +634,6 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
         auto const i = particlesCatIndex(index);
         auto& gas = result.gas;
         gas.supportRadius = sphParticlesSupportRadii[i];
-        gas.acceleration = sphParticlesAccelerationStates[i];
-        gas.entropyRate = sphParticlesEntropyRates[i];
         gas.density = sphParticlesDensities[i];
         gas.converged = sphParticlesConvergenceFlags[i];
         gas.semiactive = sphParticlesSemiactiveFlags[i];
@@ -646,14 +644,11 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
         }
         if (getOptions().hydro.viscosityGradientSwitch()) {
             gas.divergence = sphParticlesCullenDehnenStates[i].divergence;
+            gas.divergenceSampleTime = sphParticlesCullenDehnenStates[i].sampleTime;
+            gas.sampledDivergence = sphParticlesCullenDehnenStates[i].sampleDivergence;
         }
         if (getOptions().chemistry.enabled) {
             gas.electronFraction = sphParticlesElectronFractions[i];
-        }
-        for (int dim = 0; dim < kDimensions; dim++) {
-            gas.gravityAcceleration[dim] = sphParticlesGravityAccelerations[dim] != nullptr ?
-                sphParticlesGravityAccelerations[dim][i] :
-                0.0f;
         }
     }
     return result;
@@ -669,8 +664,6 @@ static void unpackSphParticle(
         auto const& gas = record.gas;
         sphParticlesParticleIndex(i) = index;
         sphParticlesSupportRadii[i] = gas.supportRadius;
-        sphParticlesAccelerationStates[i] = gas.acceleration;
-        sphParticlesEntropyRates[i] = gas.entropyRate;
         sphParticlesDensities[i] = gas.density;
         sphParticlesConvergenceFlags[i] = gas.converged;
         sphParticlesSemiactiveFlags[i] = gas.semiactive;
@@ -680,15 +673,14 @@ static void unpackSphParticle(
             sphParticlesBulkViscosityCoefficients[i] = gas.bulkViscosityCoefficient;
         }
         if (getOptions().hydro.viscosityGradientSwitch()) {
-            sphParticlesCullenDehnenStates[i] = {gas.divergence, 0.0f, 0.0f, 0.0f};
+            auto& state = sphParticlesCullenDehnenStates[i];
+            state = {};
+            state.divergence = gas.divergence;
+            state.sampleTime = gas.divergenceSampleTime;
+            state.sampleDivergence = gas.sampledDivergence;
         }
         if (getOptions().chemistry.enabled) {
             sphParticlesElectronFractions[i] = gas.electronFraction;
-        }
-        for (int dim = 0; dim < kDimensions; dim++) {
-            if (sphParticlesGravityAccelerations[dim] != nullptr) {
-                sphParticlesGravityAccelerations[dim][i] = gas.gravityAcceleration[dim];
-            }
         }
     }
 }

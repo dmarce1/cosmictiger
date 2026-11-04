@@ -155,6 +155,9 @@ struct SphRunParameters {
     // A midpoint hydro operator uses the current split-stage sources and owns
     // only nongravitational rates. Gravity supplies its own scalar timestep bound.
     bool midpointHydro = false;
+    // Actual event time and positive interval; zero interval only estimates bounds.
+    double viscositySampleTime = 0.0;
+    double hydroKickTimestep = 0.0;
     // Phase zero may publish pair rates before the fresh gravity field arrives.
     // Source acceleration is then assembled before the closing corrector.
     bool deferAccelerationSources = false;
@@ -177,8 +180,8 @@ struct SphRunParameters {
     float expansionAcceleration = 0.0f;    // a³ d²a/dt² for the physical CD acceleration gradient.
     float minimumBulkViscosityCoefficient;
     float viscosityDecay;
-    // Completed interval for Morris-Monaghan: a base interval for legacy individual
-    // rungs, or the actual global/midpoint interval. Zero disables refresh evolution.
+    // Actual completed hydro interval for Morris-Monaghan. Zero disables evolution
+    // during density-only output preparation and initialization.
     double viscosityTimestep = 0.0;
     float velocityDampingRate;    // Velocity damping used while relaxing the gas sphere.
     SphRunParameters() {
@@ -206,8 +209,8 @@ struct SphRunParameters {
         minimumBulkViscosityCoefficient = opts.hydro.minimumBulkViscosityCoefficient;
         viscosityDecay = opts.hydro.viscosityDecay;
     }
-    // Cullen-Dehnen, Hu, and Price et al. all need the gradient sums, previous accelerations,
-    // and the shared target-alpha state of the density pass.
+    // These switches reconstruct velocity gradients and difference timestamped
+    // divergence samples; no previous acceleration is stored.
     CUDA_EXPORT bool gradientSwitch() const {
         return cullenDehnen || priceEtAl || huEtAl;
     }
@@ -246,6 +249,8 @@ struct SphRunParameters {
         arc & maximumTimestep;
         arc & globalTimestep;
         arc & midpointHydro;
+        arc & viscositySampleTime;
+        arc & hydroKickTimestep;
         arc & deferAccelerationSources;
         arc & refreshConvergedDensity;
         arc & uniformAccelerationY;
@@ -276,7 +281,6 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda = false);
 // all source states once, then publish H, irreversible entropy rates and scalar
 // timestep proposals. The caller applies the full positive kick duration.
 SphRunReturn sphMidpointForces(SphRunParameters params, bool cuda = true);
-void sphParticlesCompleteForces(SphRunParameters const& parameters);
 #ifndef __CUDACC__
 hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     SphTreeNeighborParameters params, TreeId self, Vector<TreeId> checklist, int level = 0);

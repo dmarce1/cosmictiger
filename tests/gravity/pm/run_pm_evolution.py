@@ -186,12 +186,22 @@ def main():
     label = f"{args.far_method}_{args.near_method}_{args.time_integrator}"
     coarse = common["run.endTime"] / common["run.numberOfSteps"]
     cases = [("dark_matter", False)]
-    if args.with_sph and args.time_integrator == "traditional":
+    if args.with_sph:
         cases.append(("mixed", True))
     for case, hydro in cases:
         name = f"{label}_{case}"
         options = dict(common, **{"hydro.enabled": str(hydro).lower(),
                                   "run.scenario": "cosmology" if hydro else "plummer"})
+        if hydro:
+            rejected = prepareCase(root, name + "_rejected")
+            log = run(rejected, dict(options, **{"run.maxIterations": 0}), False)
+            diagnostic = ("hierarchical SPH requires FMM gravity"
+                          if args.time_integrator == "hierarchical" else
+                          "Midpoint SPH currently requires FMM or disabled gravity")
+            require(diagnostic in log,
+                    "deferred mesh/SPH coupling lacked its startup diagnostic")
+            print(f"{name}: deferred mesh/SPH coupling rejected at startup")
+            continue
         # Short-range rungs subdivide a P3M interval into tens of substeps.
         iterations = 80 if split else 6
         baseline = prepareCase(root, name + "_baseline")

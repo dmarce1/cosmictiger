@@ -28,7 +28,9 @@
 #include <tests/cuda_test.hpp>
 #include <tests/sph/global_timestep_cases.hpp>
 #include <tests/sph/midpoint_cases.hpp>
+#include <tests/sph/pair_kick_cases.hpp>
 #include <tests/sph/phantom_pairs.hpp>
+#include <tests/sph/rung_limiter_cases.hpp>
 #include <tests/sph/source_completion_cases.hpp>
 
 // Only the options-constructor, CPU counter, and host assertion services are replaced here.
@@ -254,9 +256,6 @@ public:
         data_.sourceBulkViscosityCoefficient = allocate<float>(count_);
         data_.sinkBulkViscosityCoefficient = allocate<float>(count_);
         if (cullenDehnen || priceEtAl || huEtAl) {
-            data_.sourceAccelerationX = allocate<float>(count_);
-            data_.sourceAccelerationY = allocate<float>(count_);
-            data_.sourceAccelerationZ = allocate<float>(count_);
             if (cullenDehnen) {
                 data_.sourceVelocityDivergence = allocate<float>(count_);
             }
@@ -304,6 +303,17 @@ public:
         std::fill_n(data_.sinkProposedRungs, count_, char(-1));
     }
 
+    SphPairSourceId* enablePairKickOutputs() {
+        auto* identities = allocate<SphPairSourceId>(count_);
+        data_.sourceIds = identities;
+        data_.sourcePairUpdates = allocate<SphPairUpdate>(count_);
+        return identities;
+    }
+
+    void enableRungCandidates() {
+        data_.sinkRungCandidates = allocate<char>(count_);
+    }
+
     void density() {
         resetReduction();
         sphCudaPrehydro2<<<1, kPrehydro2BlockSize>>>(params_, data_, reduction_);
@@ -321,16 +331,20 @@ public:
     void hydro(int phase = 0) {
         params_.phase = phase;
         resetReduction();
-        sphCudaHydro<<<1, kHydroBlockSize>>>(params_, data_, reduction_);
+        sphCudaHydro<<<data_.sourcePairUpdates ? 2 : 1, kHydroBlockSize>>>(params_, data_, reduction_);
         checkCuda(cudaGetLastError(), "hydro launch");
         checkCuda(cudaDeviceSynchronize(), "hydro execution");
         checkFlops();
         for (int i = 0; i < count_; i++) {
-            require(std::isfinite(data_.sinkInternalEnergyRate[i]),
-                "finite active-kernel thermal rate");
-            for (int dim = 0; dim < kDimensions; dim++) {
-                require(std::isfinite(data_.sinkAccelerations[i][dim]),
-                    "finite active-kernel acceleration");
+            if (data_.sinkInternalEnergyRate) {
+                require(std::isfinite(data_.sinkInternalEnergyRate[i]),
+                    "finite active-kernel thermal rate");
+            }
+            if (data_.sinkAccelerations) {
+                for (int dim = 0; dim < kDimensions; dim++) {
+                    require(std::isfinite(data_.sinkAccelerations[i][dim]),
+                        "finite active-kernel acceleration");
+                }
             }
             if (phase == 1) {
                 require(data_.sourceRungs[i] >= (params_.globalTimestep ? 0 : 1) &&
@@ -398,6 +412,11 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
         proposedRungs.assign(data.sinkProposedRungs, data.sinkProposedRungs + fixture.count_);
         cpuData.sinkProposedRungs = proposedRungs.data();
     }
+    std::vector<char> rungCandidates;
+    if (data.sinkRungCandidates) {
+        rungCandidates.assign(data.sinkRungCandidates, data.sinkRungCandidates + fixture.count_);
+        cpuData.sinkRungCandidates = rungCandidates.data();
+    }
     std::vector<SphAcceleration> acceleration(
         data.sinkAccelerations, data.sinkAccelerations + fixture.count_);
     std::vector<float> supportRadii(
@@ -416,7 +435,6 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
     std::vector<SphCullenDehnenState> cullenDehnenStates;
     std::vector<float> sourceAlpha;
     std::vector<float> sourceDivergence;
-    std::array<std::vector<float>, 3> sourceAcceleration;
     if (fixture.params_.variableViscosity) {
         bulkViscosityCoefficients.assign(
             data.sinkBulkViscosityCoefficient, data.sinkBulkViscosityCoefficient + fixture.count_);
@@ -432,11 +450,7 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
             sourceDivergence.assign(
                 data.sourceVelocityDivergence, data.sourceVelocityDivergence + fixture.count_);
         }
-        float* const fields[] = {
-            data.sourceAccelerationX, data.sourceAccelerationY, data.sourceAccelerationZ};
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            sourceAcceleration[dim].assign(fields[dim], fields[dim] + fixture.count_);
-        }
+
     }
     cpuData.sinkDensity = density.data();
     cpuData.sinkBalsaraFactor = balsaraFactor.data();
@@ -528,12 +542,13 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
                 gpu.targetBulkViscosityCoefficient, 3.0e-4);
             requireClose(
                 "CPU/CUDA CD decay rate", cpu.inverseDecayTime, gpu.inverseDecayTime, 7.0e-5);
-            require((data.sourceVelocityDivergence == nullptr ||
-                        sourceDivergence[i] == data.sourceVelocityDivergence[i]) &&
-                    sourceAcceleration[0][i] == data.sourceAccelerationX[i] &&
-                    sourceAcceleration[1][i] == data.sourceAccelerationY[i] &&
-                    sourceAcceleration[2][i] == data.sourceAccelerationZ[i],
-                "CPU/CUDA phases preserve CD history and acceleration snapshots");
+            require(data.sourceVelocityDivergence == nullptr ||
+                    sourceDivergence[i] == data.sourceVelocityDivergence[i],
+                "CPU/CUDA phases preserve CD neighbor history");
+            requireClose("CPU/CUDA pending divergence sample", cpu.pendingSampleDivergence,
+                gpu.pendingSampleDivergence, 3.0e-4);
+            require(cpu.sampleTime == gpu.sampleTime && cpu.sampleDivergence == gpu.sampleDivergence,
+                "CPU/CUDA density preserves committed history");
         }
         requireClose("CPU/CUDA density", density[i], data.sinkDensity[i], 5.0e-5);
         requireClose(
@@ -548,6 +563,9 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
         }
         if (data.sinkProposedRungs) {
             require(proposedRungs[i] == data.sinkProposedRungs[i], "CPU/CUDA proposed-rung parity");
+        }
+        if (data.sinkRungCandidates) {
+            require(rungCandidates[i] == data.sinkRungCandidates[i], "CPU/CUDA candidate-rung parity");
         }
         for (int dim = 0; dim < kDimensions; dim++) {
             requireClose("CPU/CUDA acceleration", acceleration[i][dim],
@@ -619,14 +637,14 @@ void testCpuCudaParity(int viscosityMode = 0) {
             data.sinkBulkViscosityCoefficient[sink] = data.sourceBulkViscosityCoefficient[source];
         }
         if (viscosityMode >= 2) {
-            data.sourceAccelerationX[source] = 0.02f * (source % 3 - 1);
-            data.sourceAccelerationY[source] = -0.01f * (source % 5 - 2);
-            data.sourceAccelerationZ[source] = 0.015f * (source % 2 ? 1 : -1);
             float const divergence = float(source % 3 - 1);
             if (viscosityMode == 2) {
                 data.sourceVelocityDivergence[source] = divergence;
             }
             data.sinkCullenDehnenStates[sink] = {divergence, 0.0f, 0.0f, 0.0f};
+            data.sinkCullenDehnenStates[sink].sampleDivergence = divergence;
+            data.sinkCullenDehnenStates[sink].sampleTime = 0.125;
+            fixture.params_.viscositySampleTime = 0.25;
         }
         data.sinkGravityAccelerationX[sink] = 0.01f * (source % 3 - 1);
         data.sinkGravityAccelerationY[sink] = -0.005f;
@@ -807,7 +825,7 @@ void testMorrisMonaghanDensity() {
     data.sourceBulkViscosityCoefficient = nullptr;
     data.sinkBulkViscosityCoefficient = nullptr;
     fixture.densityPass();
-    require(data.sourceAccelerationX == nullptr && data.sourceVelocityDivergence == nullptr &&
+    require(data.sourceVelocityDivergence == nullptr &&
             data.sinkCullenDehnenStates == nullptr,
         "M&M needs no persistent divergence or acceleration snapshot");
 }
@@ -818,7 +836,7 @@ void testCullenDehnenDensity() {
     initializeViscosityStencil(fixture);
     auto& data = fixture.data_;
     // Affine gradients are recovered exactly, including at the stencil boundary.
-    // The third flow has strong shear and compressive acceleration; signs from
+    // The third flow has strong shear and decreasing divergence; signs from
     // the preceding sweep must control equation (18)'s limiter.
     for (float const scaleFactor : {1.0f, 0.7f}) {
         for (int flow = 0; flow < 4; ++flow) {
@@ -830,20 +848,15 @@ void testCullenDehnenDensity() {
                 fixture.params_.expansionRate = float(expansion);
                 fixture.params_.expansionAcceleration = float(expansionAcceleration);
                 double gradient[3][3]{};
-                double accelerationGradient[3][3]{};
                 if (flow == 0 || flow == 1) {
                     for (int dim = 0; dim < kDimensions; ++dim) {
                         gradient[dim][dim] = -a2;
-                        accelerationGradient[dim][dim] = flow == 1 ? a2 * a2 / scaleFactor : 0.0;
                     }
                 } else if (flow == 2) {
                     gradient[0][0] = -a2;
                     gradient[0][1] = 10.0 * a2;
                 } else {
                     gradient[0][1] = 4.0 * a2;
-                }
-                for (int dim = 0; dim < kDimensions; ++dim) {
-                    accelerationGradient[dim][dim] -= expansionAcceleration / scaleFactor;
                 }
                 for (int i = 0; i < fixture.count_; ++i) {
                     int const source = fixture.sourceIndex(i);
@@ -853,21 +866,23 @@ void testCullenDehnenDensity() {
                         data.sourcePositionZ[source].toDouble() - 0.5};
                     float* velocity[] = {
                         data.sourceVelocityX, data.sourceVelocityY, data.sourceVelocityZ};
-                    float* acceleration[] = {data.sourceAccelerationX, data.sourceAccelerationY,
-                        data.sourceAccelerationZ};
                     for (int dim = 0; dim < kDimensions; ++dim) {
                         double value = 0.125 * (dim + 1) - expansion * position[dim];
-                        double force = 0.01 * (dim + 1);
                         for (int axis = 0; axis < kDimensions; ++axis) {
                             value += gradient[dim][axis] * position[axis];
-                            force += accelerationGradient[dim][axis] * position[axis];
                         }
                         velocity[dim][source] = float(value);
-                        acceleration[dim][source] = float(force);
                     }
                     data.sourceVelocityDivergence[source] =
                         history == 2 ? (i == 13 ? -1.0f : 0.0f) : float(history);
                     data.sinkCullenDehnenStates[sink] = {9.0f, 8.0f, 7.0f, 6.0f};
+                    auto& state = data.sinkCullenDehnenStates[sink];
+                    fixture.params_.viscositySampleTime = 0.5;
+                    state.sampleTime = i % 2 ? 0.25 : 0.375;
+                    double const physicalDivergence = flow < 2 ? -3.0 : (flow == 2 ? -1.0 : 0.0);
+                    double const steepening = flow == 0 ? 3.0 : (flow == 2 ? 1.0 : 0.0);
+                    state.sampleDivergence = float(physicalDivergence +
+                        steepening * scaleFactor * (fixture.params_.viscositySampleTime - state.sampleTime));
                     data.sourceRungs[source] = data.sinkParticleRungs[fixture.particleIndex(i)] =
                         i == 13 ? 1 : 0;
                 }
@@ -939,6 +954,21 @@ void testCullenDehnenDensity() {
                 requireClose("CD repeated density preserves its source history",
                     data.sinkCullenDehnenStates[center].targetBulkViscosityCoefficient, oldTarget,
                     0.0);
+                // A first sample, duplicate event or stale event cannot infer a time derivative.
+                for (double const sampleTime : {-1.0, 0.5, 0.625}) {
+                    for (int i = 0; i < fixture.count_; ++i) {
+                        auto& state = data.sinkCullenDehnenStates[fixture.sinkIndex(i)];
+                        state.sampleTime = sampleTime;
+                        state.sampleDivergence = -100.0f;
+                    }
+                    fixture.densityPass();
+                    requireClose("CD missing or nonforward history has no shock target",
+                        data.sinkCullenDehnenStates[center].targetBulkViscosityCoefficient,
+                        0.0, 0.0);
+                    require(data.sinkCullenDehnenStates[center].sampleTime == sampleTime &&
+                            data.sinkCullenDehnenStates[center].sampleDivergence == -100.0f,
+                        "CD density does not commit history");
+                }
             }
         }
     }
@@ -960,21 +990,15 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
             fixture.params_.expansionRate = float(expansion);
             fixture.params_.expansionAcceleration = float(expansionAcceleration);
             double gradient[3][3]{};
-            double accelerationGradient[3][3]{};
             if (flow == 0 || flow == 1) {
                 for (int dim = 0; dim < kDimensions; ++dim) {
                     gradient[dim][dim] = -a2;
-                    accelerationGradient[dim][dim] = flow == 1 ? a2 * a2 / scaleFactor : 0.0;
                 }
             } else if (flow == 2) {
                 gradient[0][0] = -a2;
                 gradient[0][1] = 10.0 * a2;
             } else {
                 gradient[0][1] = 4.0 * a2;
-            }
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                accelerationGradient[dim][dim] -=
-                    (huEtAl ? expansionAcceleration : expansion * expansion) / scaleFactor;
             }
             for (int i = 0; i < fixture.count_; ++i) {
                 int const source = fixture.sourceIndex(i);
@@ -984,19 +1008,21 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
                     data.sourcePositionZ[source].toDouble() - 0.5};
                 float* velocity[] = {
                     data.sourceVelocityX, data.sourceVelocityY, data.sourceVelocityZ};
-                float* acceleration[] = {
-                    data.sourceAccelerationX, data.sourceAccelerationY, data.sourceAccelerationZ};
                 for (int dim = 0; dim < kDimensions; ++dim) {
                     double value = 0.125 * (dim + 1) - expansion * position[dim];
-                    double force = 0.01 * (dim + 1);
                     for (int axis = 0; axis < kDimensions; ++axis) {
                         value += gradient[dim][axis] * position[axis];
-                        force += accelerationGradient[dim][axis] * position[axis];
                     }
                     velocity[dim][source] = float(value);
-                    acceleration[dim][source] = float(force);
                 }
                 data.sinkCullenDehnenStates[sink] = {9.0f, 8.0f, 7.0f, 6.0f};
+                auto& state = data.sinkCullenDehnenStates[sink];
+                fixture.params_.viscositySampleTime = 0.5;
+                state.sampleTime = i % 2 ? 0.25 : 0.375;
+                double const physicalDivergence = flow < 2 ? -3.0 : (flow == 2 ? -1.0 : 0.0);
+                double const steepening = flow == 0 ? 3.0 : (flow == 2 ? 1.0 : 0.0);
+                state.sampleDivergence = float(physicalDivergence - (huEtAl ? 0.0 : 3.0 * expansion / a2) +
+                    steepening * scaleFactor * (fixture.params_.viscositySampleTime - state.sampleTime));
                 data.sourceRungs[source] = data.sinkParticleRungs[fixture.particleIndex(i)] =
                     i == 13 ? 1 : 0;
             }
@@ -1072,6 +1098,23 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
             }
             require(data.sourceVelocityDivergence == nullptr,
                 "Hu and Price need no neighbor divergence snapshot");
+            requireClose("model-specific divergence sample",
+                data.sinkCullenDehnenStates[center].pendingSampleDivergence,
+                divergence - (huEtAl ? 0.0 : 3.0 * expansion / a2), 4.0e-5);
+            for (double const sampleTime : {-1.0, 0.5, 0.625}) {
+                for (int i = 0; i < fixture.count_; ++i) {
+                    auto& state = data.sinkCullenDehnenStates[fixture.sinkIndex(i)];
+                    state.sampleTime = sampleTime;
+                    state.sampleDivergence = -100.0f;
+                }
+                fixture.densityPass();
+                requireClose("Hu/Price missing or nonforward history has no shock target",
+                    data.sinkCullenDehnenStates[center].targetBulkViscosityCoefficient,
+                    0.0, 0.0);
+                require(data.sinkCullenDehnenStates[center].sampleTime == sampleTime &&
+                        data.sinkCullenDehnenStates[center].sampleDivergence == -100.0f,
+                    "Hu/Price density does not commit history");
+            }
         }
     }
 }
@@ -1833,6 +1876,22 @@ TEST_F(SphCudaTest, PeriodicSupport) {
     detail::testPeriodicSupport();
 }
 
+TEST_F(SphCudaTest, InactiveRungCandidateClosure) {
+    detail::Fixture fixture(7, 7, true);
+    detail::testInactiveRungCandidateClosure(fixture, [&] {
+        detail::compareCpuCudaPhase(fixture, kSphRunRungs);
+        return fixture.reduction_->pendingChanges != 0;
+    });
+}
+
+TEST_F(SphCudaTest, SupportBoundaryRungCandidates) {
+    detail::Fixture fixture(2, 2, true);
+    detail::testSupportBoundaryRungCandidates(fixture, [&] {
+        detail::compareCpuCudaPhase(fixture, kSphRunRungs);
+        return fixture.reduction_->pendingChanges != 0;
+    });
+}
+
 TEST_F(SphCudaTest, Lattice) {
     detail::testLattice();
 }
@@ -1907,4 +1966,14 @@ TEST_F(SphCudaTest, MidpointMorrisMonaghanUsesActualIntervalAndExactRung) {
     fixture.params_.viscosityTimestep = 0.08;
     fixture.data_.sinkSmoothingConverged[1] = false;
     detail::compareCpuCudaPhase(fixture, kSphRunPrehydro2);
+}
+
+TEST_F(SphCudaTest, ConservativeMixedRungPairKicks) {
+    detail::Fixture fixture(2, 2, true);
+    detail::testConservativePairKick(fixture, false);
+}
+
+TEST_F(SphCudaTest, ConservativeDirectedViscosityPairKicks) {
+    detail::Fixture fixture(2, 2, true);
+    detail::testConservativePairKick(fixture, true);
 }

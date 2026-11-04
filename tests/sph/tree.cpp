@@ -7,6 +7,7 @@
  */
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -21,7 +22,6 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/sph_midpoint.hpp>
-#include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/sph/particles.hpp>
@@ -461,6 +461,11 @@ void verifySphMidpointUpdates() {
     options.hydro.enabled = true;
     options.hydro.method = "sph";
     options.hydro.viscosityEvolution = "morrisAndMonaghan";
+    options.hydro.balsaraSwitch = false;
+    options.hydro.damping = 0.0;
+    options.hydro.yAcceleration = 0.0;
+    options.hydro.zPlaneAcceleration = 0.0;
+    options.hydro.centralAcceleration = 0.0;
     options.chemistry.enabled = false;
     options.starFormation.enabled = false;
     options.gravity.enabled = false;
@@ -468,81 +473,116 @@ void verifySphMidpointUpdates() {
     setOptions(options);
     bool const savedEntropyInitialized = sphParticlesEntropyInitialized;
     double const savedThermalScale = sphParticlesThermalScaleFactor;
+    sphTreeDestroy(true);
     sphParticlesEntropyInitialized = false;
     initializeSphTreeParticles(2, 0);
     for (ParticleInteger gas = 0; gas < 2; ++gas) {
         sphParticlesDensities[gas] = 1.0f;
+        sphParticlesGradHCorrections[gas] = 0.0f;
+        sphParticlesSupportRadius(gas) = 0.2f;
         sphParticlesRung(gas) = gas == 0 ? 0 : 2;
+        sphParticlesProposedRungs[gas] = sphParticlesRung(gas);
+        sphParticlesBulkViscosityCoefficients[gas] = 0.5f;
         for (int dimension = 0; dimension < kDimensions; ++dimension) {
-            sphParticlesPosition(dimension, gas) = gas == 0 ? 0.875 : 0.25;
+            sphParticlesPosition(dimension, gas) = dimension == 0 ? 0.45 + 0.1 * gas : 0.5;
             sphParticlesVelocity(dimension, gas) = 0.0f;
         }
     }
     sphParticlesPrepareThermodynamics(1.0, true);
     for (ParticleInteger gas = 0; gas < 2; ++gas) {
-        sphParticlesVelocity(0, gas) = gas == 0 ? 0.25f : 0.5f;
+        sphParticlesVelocity(0, gas) = gas == 0 ? 0.25f : -0.25f;
         sphParticlesEntropy(gas) = 2.0f;
-        sphParticlesEntropyRate(gas) = gas == 0 ? 0.25f : 0.5f;
-        sphParticlesProposedRungs[gas] = sphParticlesRung(gas) + 1;
-        sphParticlesAccelerationState(gas) = Vector3<float>(gas == 0 ? 0.5f : 1.0f, 0.0f, 0.0f);
     }
+    SphTreeCreateParameters treeParameters{};
+    treeParameters.minimumRung = 2;
+    treeParameters.supportRadiusMultiplier = 1.0f;
+    auto const tree = sphTreeCreate(treeParameters);
+    SphTreeNeighborParameters neighbors{};
+    neighbors.minimumRung = 2;
+    neighbors.runType = kSphTreeNeighborBoxes;
+    neighbors.innerSelection = neighbors.outerSelection = kSphSetAll;
+    neighbors.supportRadiusMultiplier = 1.0f;
+    sphTreeNeighbor(neighbors, tree.id, Vector<TreeId>{}).get();
+    neighbors.runType = kSphTreeNeighborNeighbors;
+    neighbors.innerSelection = kSphInteractionsIJ;
+    sphTreeNeighbor(neighbors, tree.id, Vector<TreeId>{tree.id}).get();
+    SphRunParameters parameters;
+    parameters.minimumRung = parameters.maximumRung = 2;
+    parameters.baseTimestep = 1.0e-3f;
+    parameters.scaleFactor = 1.0f;
+    parameters.expansionRate = 0.0f;
+    parameters.hydroKickTimestep = 1.0e-5;
     requireSphTree(sphMidpointEnabled() && !sphMidpointEventActive(),
         "midpoint fixture did not begin outside a hydro event");
     sphMidpointBeginEvent();
-    sphParticlesApplyMidpointUpdates(2, 0.25);
-    requireSphTree(sphParticlesVelocity(0, 0) == 0.25f && sphParticlesVelocity(0, 1) == 0.75f &&
-            sphParticlesEntropy(0) == 2.0f && sphParticlesEntropy(1) == 2.125f &&
-            sphParticlesProposedRungs[1] == 3,
-        "fine midpoint updated the slow target or discarded its next hydro bound");
-    sphParticlesApplyMidpointUpdates(2, 0.0);
+    sphMidpointForces(parameters, false);
+    requireSphTree(sphParticlesVelocity(0, 0) != 0.25f && sphParticlesVelocity(0, 1) != -0.25f &&
+            std::abs(sphParticlesVelocity(0, 0) + sphParticlesVelocity(0, 1)) < 1.0e-7 &&
+            sphParticlesEntropy(0) > 2.0f && sphParticlesEntropy(1) > 2.0f &&
+            sphParticlesRung(0) == 0 && sphParticlesRung(1) == 2,
+        "fine-owned pair did not kick and heat both endpoints conservatively");
+    std::array<float, 2> velocities{sphParticlesVelocity(0, 0), sphParticlesVelocity(0, 1)};
+    std::array<float, 2> entropies{sphParticlesEntropy(0), sphParticlesEntropy(1)};
+    parameters.hydroKickTimestep = 0.0;
+    sphMidpointForces(parameters, false);
     sphMidpointEndEvent();
-    // A signed gravity correction changes only live momentum. Legacy opening,
-    // closing and diagnostic hydro phases must not add another hydro interval.
-    sphParticlesVelocity(0, 1) -= 0.125f;
-    for (int phase = 0; phase < 4; ++phase) {
-        sphParticlesApplyUpdates(0, phase, 1.0f, 0.25f);
+    for (int gas = 0; gas < 2; ++gas) {
+        requireSphTree(sphParticlesVelocity(0, gas) == velocities[gas] &&
+                sphParticlesEntropy(gas) == entropies[gas],
+            "zero-duration estimate applied a physical pair impulse");
     }
-    requireSphTree(!sphMidpointEventActive() && sphParticlesVelocity(0, 0) == 0.25f &&
-            sphParticlesVelocity(0, 1) == 0.625f && sphParticlesEntropy(0) == 2.0f &&
-            sphParticlesEntropy(1) == 2.125f,
-        "a gravity-only interval applied a duplicate hydro kick");
+    // Event bookkeeping and source reads must not replay a previous impulse
+    // after an independent signed gravity correction to live momentum.
+    sphParticlesVelocity(0, 1) -= 0.125f;
+    velocities[1] = sphParticlesVelocity(0, 1);
+    sphMidpointBeginEvent();
+    sphMidpointEndEvent();
     ParticleGlobalRange range;
     range.proc = hpxRank();
     range.range = Pair<ParticleInteger>(0, 2);
     float velocityX[2], velocityY[2], velocityZ[2], internalEnergy[2];
     sphParticlesGlobalReadVelocities(range, velocityX, velocityY, velocityZ, 0);
     sphParticlesGlobalReadInternalEnergyAndSupportRadius(range, internalEnergy, nullptr, 0);
-    requireSphTree(velocityX[0] == 0.25f && velocityX[1] == 0.625f &&
-            std::abs(internalEnergy[0] -
-                sph_entropy::storedEnergy(2.0, 1.0, options.hydro.gamma, 1.0)) < 1e-6 &&
-            std::abs(internalEnergy[1] -
-                sph_entropy::storedEnergy(2.125, 1.0, options.hydro.gamma, 1.0)) < 1e-6,
-        "midpoint source staging used stale velocity or entropy predictors");
+    for (int gas = 0; gas < 2; ++gas) {
+        requireSphTree(velocityX[gas] == velocities[gas] &&
+                std::abs(internalEnergy[gas] -
+                    sph_entropy::storedEnergy(entropies[gas], 1.0, options.hydro.gamma, 1.0)) <
+                    1.0e-6,
+            "source staging replayed a rate or used stale physical state");
+    }
+    parameters.minimumRung = parameters.maximumRung = 0;
+    parameters.hydroKickTimestep = 4.0e-5;
     sphMidpointBeginEvent();
-    sphParticlesApplyMidpointUpdates(0, 1.0);
+    sphMidpointForces(parameters, false);
     sphMidpointEndEvent();
-    requireSphTree(sphParticlesVelocity(0, 0) == 0.75f && sphParticlesVelocity(0, 1) == 0.625f &&
-            sphParticlesEntropy(0) == 2.25f && sphParticlesEntropy(1) == 2.125f,
-        "coarse midpoint also kicked fine targets");
+    for (int gas = 0; gas < 2; ++gas) {
+        requireSphTree(sphParticlesVelocity(0, gas) == velocities[gas] &&
+                sphParticlesEntropy(gas) == entropies[gas],
+            "coarse midpoint repeated the finer-owned pair");
+    }
+    parameters.maximumRung = kMaxRung - 1;
+    parameters.globalTimestep = true;
     sphMidpointBeginEvent();
-    sphParticlesApplyMidpointUpdates(-1, 0.125);
+    sphMidpointForces(parameters, false);
     sphMidpointEndEvent();
-    requireSphTree(sphParticlesVelocity(0, 0) == 0.8125f && sphParticlesVelocity(0, 1) == 0.75f &&
-            sphParticlesEntropy(0) == 2.28125f && sphParticlesEntropy(1) == 2.1875f,
-        "global midpoint failed to kick all gas once");
+    requireSphTree(sphParticlesVelocity(0, 0) != velocities[0] &&
+            std::abs(sphParticlesVelocity(0, 0) + sphParticlesVelocity(0, 1) -
+                (velocities[0] + velocities[1])) < 1.0e-7,
+        "global pair kick missed an endpoint or changed total momentum");
     for (ParticleInteger gas = 0; gas < 2; ++gas) {
         for (int dimension = 0; dimension < kDimensions; ++dimension) {
-            requireSphTree(
-                sphParticlesPosition(dimension, gas).toDouble() == (gas == 0 ? 0.875 : 0.25),
-                "fixed-position midpoint hydro moved a particle");
+            requireSphTree(sphParticlesPosition(dimension, gas) ==
+                    Position(dimension == 0 ? 0.45 + 0.1 * gas : 0.5),
+                "fixed-position midpoint pair kick moved a particle");
         }
     }
+    sphTreeDestroy(true);
     sphParticlesResize(0, false);
     particlesResize(0);
     setOptions(savedOptions);
     sphParticlesEntropyInitialized = savedEntropyInitialized;
     sphParticlesThermalScaleFactor = savedThermalScale;
-    std::cout << "SPH midpoint target, source and positive-kick regression passed\n" << std::flush;
+    std::cout << "SPH midpoint pair, source and positive-kick regression passed\n" << std::flush;
 }
 
 void verifyRetainedSphOctree(SphTreeCreateParameters const& params) {
@@ -858,13 +898,15 @@ void verifyDistributedSphHierarchyMigration(bool afterMigration) {
         }
         float const identity = sphParticlesEntropies[gas];
         if (!afterMigration) {
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                sphParticlesAccelerationState(gas)[dim] = identity + 0.25f * (dim + 1);
-            }
-            sphParticlesEntropyRate(gas) = identity / 64.0f;
             sphParticlesDensities[gas] = identity + 0.5f;
             if (sphParticlesBulkViscosityCoefficients) {
                 sphParticlesBulkViscosityCoefficients[gas] = identity / 256.0f;
+            }
+            if (sphParticlesCullenDehnenStates) {
+                auto& state = sphParticlesCullenDehnenStates[gas];
+                state.divergence = identity / 32.0f;
+                state.sampleDivergence = identity / 64.0f;
+                state.sampleTime = identity / 128.0;
             }
             // The last midpoint's hydro timestep bound must survive migration
             // until the next gravity boundary consumes it.
@@ -876,17 +918,18 @@ void verifyDistributedSphHierarchyMigration(bool afterMigration) {
             }
             continue;
         }
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            detail::requireSphTree(
-                sphParticlesAccelerationState(gas)[dim] == identity + 0.25f * (dim + 1),
-                "migration changed the midpoint hydro acceleration");
-        }
-        detail::requireSphTree(sphParticlesEntropyRate(gas) == identity / 64.0f &&
-                sphParticlesDensities[gas] == identity + 0.5f &&
+        detail::requireSphTree(sphParticlesDensities[gas] == identity + 0.5f &&
                 (!sphParticlesBulkViscosityCoefficients ||
                     sphParticlesBulkViscosityCoefficients[gas] == identity / 256.0f) &&
                 sphParticlesProposedRungs[gas] == particlesRung(particle) + 1,
-            "migration changed midpoint gas rates or the hydro rung bound");
+            "migration changed midpoint gas scalars or the hydro rung bound");
+        if (sphParticlesCullenDehnenStates) {
+            auto const& state = sphParticlesCullenDehnenStates[gas];
+            detail::requireSphTree(state.divergence == identity / 32.0f &&
+                    state.sampleDivergence == identity / 64.0f &&
+                    state.sampleTime == identity / 128.0,
+                "migration changed committed viscosity samples");
+        }
         if (particle < range.first) {
             detail::requireSphTree(
                 identity == 100 * hpxRank() + particle + 1 && particlesRung(particle) == 0,
@@ -929,10 +972,93 @@ size_t initializeOutsideDomainSphHierarchy() {
 HPX_PLAIN_ACTION(initializeOutsideDomainSphHierarchy, InitializeOutsideDomainSphHierarchyAction);
 #endif
 
+void initializeSphRungChain(bool emptyRemoteRank) {
+    ParticleInteger const first = hpxSize() == 1 || hpxRank() == 0 ? 0 : 4;
+    ParticleInteger const count = emptyRemoteRank ? (hpxRank() == 0 ? 7 : 0) :
+        hpxSize() == 1                            ? 7 :
+        hpxRank() == 0                            ? 4 :
+                                                    3;
+    detail::initializeSphTreeParticles(count, 0);
+    for (ParticleInteger gas = 0; gas < count; ++gas) {
+        int const identity = first + gas;
+        sphParticlesPosition(0, gas) = std::fmod(0.76 + 0.08 * identity, 1.0);
+        sphParticlesPosition(1, gas) = sphParticlesPosition(2, gas) = 0.5;
+        sphParticlesSupportRadius(gas) = identity % 2 == 0 ? 0.04f : 0.09f;
+        sphParticlesRung(gas) = identity == 0 ? 7 : 0;
+        sphParticlesProposedRungs[gas] = sphParticlesRung(gas);
+        sphParticlesDensities[gas] = 1.0f;
+        sphParticlesEntropies[gas] = 1.0f;
+    }
+}
+HPX_PLAIN_ACTION(initializeSphRungChain, InitializeSphRungChainAction);
+
+void verifySphRungChain(bool coarsened) {
+    for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
+        int const identity = int(std::lround(
+            std::remainder(sphParticlesPosition(0, gas).toDouble() - 0.76, 1.0) / 0.08));
+        detail::requireSphTree(
+            identity >= 0 && identity < 7, "rung closure moved a source from the chain");
+        detail::requireSphTree(sphParticlesRung(gas) == (identity == 0 ? 7 : 0),
+            "rung closure changed a live rung before the common-boundary commit");
+        detail::requireSphTree(sphParticlesProposedRungs[gas] == (coarsened ? 0 : 7 - identity),
+            "rung closure missed an inactive touching-kernel chain endpoint");
+        // The next call must consume the exact caller seeds, even when they are
+        // below the live rungs. Gravity/hydro coarsening policy belongs upstream.
+        sphParticlesProposedRungs[gas] = 0;
+    }
+    detail::requireSphTree(!sphRungBalanceActive() && sphRungCandidatesData() == nullptr,
+        "rung closure retained its transient candidate epoch");
+}
+HPX_PLAIN_ACTION(verifySphRungChain, VerifySphRungChainAction);
+
+void sphRungChainTest() {
+    auto const savedOptions = getOptions();
+    auto options = savedOptions;
+    options.compute.sphBucketSize = 1;
+    setOptions(options);
+    for (int distribution = 0; distribution < (hpxSize() == 1 ? 1 : 2); ++distribution) {
+        sphTreeDestroy(true);
+        Vector<hpx::future<void>> futures;
+        for (auto const& locality : hpxLocalities()) {
+            futures.push_back(
+                hpx::async<InitializeSphRungChainAction>(locality, distribution == 1));
+        }
+        for (auto& future : futures) {
+            future.get();
+        }
+        SphTreeCreateParameters parameters{};
+        parameters.minimumRung = 7;
+        parameters.supportRadiusMultiplier = 1.0f;
+        auto const tree = sphTreeCreate(parameters);
+        detail::requireSphTree(
+            tree.numberOfActiveParticles == 1, "rung chain did not contain inactive endpoints");
+        for (bool coarsened : {false, true}) {
+            auto const result = sphBalanceRungs(tree.id, 1.0f, false);
+            detail::requireSphTree(result.maximumRung == (coarsened ? 0 : 7) &&
+                    result.passes == (coarsened ? 1 : 7) &&
+                    result.changedParticles == (coarsened ? 0 : 6),
+                "rung chain did not reach its expected multi-pass least fixed point");
+            futures.clear();
+            for (auto const& locality : hpxLocalities()) {
+                futures.push_back(hpx::async<VerifySphRungChainAction>(locality, coarsened));
+            }
+            for (auto& future : futures) {
+                future.get();
+            }
+        }
+    }
+    sphTreeDestroy(true);
+    setOptions(savedOptions);
+    std::cout << "SPH common-boundary rung closure regression passed: ranks=" << hpxSize()
+              << " passes=7 inactive=6\n"
+              << std::flush;
+}
+
 void distributedSphOctreeTest() {
     detail::requireSphTree(hpxSize() == 2, "distributed retained-tree fixture needs two ranks");
     auto options = getOptions();
     options.hydro.enabled = true;
+    options.hydro.viscosityEvolution = "cullenAndDehnen";
     options.chemistry.enabled = false;
     options.starFormation.enabled = false;
     options.analysis.groups = false;
@@ -1079,6 +1205,7 @@ void distributedSphOctreeTest() {
 #endif
     std::cout << "SPH octree distributed retain regression passed: active=2 total=16 crossed=2\n"
               << std::flush;
+    sphRungChainTest();
 }
 
 void sphTreeTest() {
@@ -1238,5 +1365,6 @@ void sphTreeTest() {
     detail::verifySphTreeBuild(empty, 0);
     sphTreeDestroy(true);
     detail::verifySphMidpointUpdates();
+    sphRungChainTest();
     std::cout << "SPH tree arena regression passed (CPU, one locality)\n" << std::flush;
 }

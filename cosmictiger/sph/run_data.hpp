@@ -13,6 +13,7 @@
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/sph/flops.hpp>
+#include <cosmictiger/sph/pair_kick.hpp>
 #include <cosmictiger/sph/particles.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/tree.hpp>
@@ -40,6 +41,10 @@ struct SphRunData {
     float* sourceGradHCorrection;
     // Frozen before sink writes; required by prehydro and rung limiting.
     char* sourceRungs;
+    // Optional conservative midpoint output. Source identities and double
+    // increments live only for the frozen pass and its reverse MPI exchange.
+    SphPairSourceId const* sourceIds = nullptr;
+    SphPairUpdate* sourcePairUpdates = nullptr;
 
     // Local sink arrays indexed by the SPH particle index.
     // Optional total dE/dtau diagnostic; it is not integrated by production kicks.
@@ -65,6 +70,8 @@ struct SphRunData {
     // Optional: a phase-1 hydro pass writes its rung proposals here instead of into
     // sinkParticleRungs, so the closing rung stays in place until the driver commits them.
     char* sinkProposedRungs = nullptr;
+    // Optional globally closed rung candidates, indexed by full particle index.
+    char* sinkRungCandidates = nullptr;
 
     int numberOfTargetNodes;
     SphTreeNode* treeNodes;

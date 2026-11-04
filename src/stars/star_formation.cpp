@@ -246,15 +246,7 @@ StarFormationUpdate starFormationPrepare(
     return result;
 }
 void starFormationConvertGas(ParticleInteger gas, StarFormationState const& state) {
-    ParticleInteger const particle = sphParticlesParticleIndex(gas);
-    particlesStarFormationStates[particle] = state;
-    detail::NewStar star{particle, {}};
-    for (int dim = 0; dim < kDimensions; ++dim) {
-        star.gravity[dim] =
-            getOptions().gravity.enabled ? sphParticlesGravityAcceleration(dim, gas) : 0.0f;
-    }
-    detail::newStars.push_back(star);
-    particlesConvertToStar(particle, state.formationTime);
+    THROW_ERROR("Star formation is deferred for midpoint SPH\n");
 }
 std::vector<star_formation_backend::Output> starFormationAdvanceBatch(
     std::vector<star_formation_backend::Input> const& inputs, std::vector<double> const& intervals,

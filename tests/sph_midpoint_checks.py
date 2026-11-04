@@ -11,8 +11,8 @@ MIDPOINT = re.compile(r"SPH midpoint: time=(\S+) rung=(-?\d+) dt=(\S+)")
 
 
 def check_midpoint_state(state):
-    require(60000 <= state.gas_version < 61000,
-            "midpoint checkpoint retained the obsolete per-particle hierarchy state")
+    require(70000 <= state.gas_version < 71000,
+            "midpoint checkpoint retained obsolete per-particle force or entropy-rate arrays")
     require(len(state.proposed_rungs) == state.gas_count,
             "checkpoint omitted the persistent hydro timestep bounds")
     require(all(0 <= rung < 16 for rung in state.proposed_rungs),
@@ -21,6 +21,8 @@ def check_midpoint_state(state):
             "midpoint entropy is not finite and positive")
     require(all(math.isfinite(value) for value in state.velocities),
             "midpoint velocity is not finite")
+    require(all(value > 0 and math.isfinite(value) for value in state.densities),
+            "midpoint density is not finite and positive")
 
 
 def validate_midpoints(output, label, base_timestep, endpoint=None, uniform_rung=None,

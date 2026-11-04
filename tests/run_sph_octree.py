@@ -18,7 +18,7 @@ sys.dont_write_bytecode = True
 
 from application_selection import application_arguments, compiled_algorithms, cpu_backend_options
 from checkpoint_format import decode_checkpoint, require
-from run_checkpoint import prepareCase, runSimulation
+from run_checkpoint import prepareCase, runSimulation, check_velocity_roundoff_restart
 from sph_midpoint_checks import check_midpoint_state, validate_midpoints
 
 
@@ -59,7 +59,7 @@ def checkpoint_state(directory, iteration, ranks):
         state = decode_checkpoint(path.read_bytes(), ranks=ranks)
         require(state.hydro and not state.has_cooling and not state.has_stars,
                 f"{path}: expected ideal-gas SPH without additional sources")
-        require(state.gas_version >= 60000, f"{path}: obsolete SPH predictor checkpoint")
+        require(70000 <= state.gas_version < 71000, f"{path}: obsolete SPH rate checkpoint")
         clocks.append((state.driver.tau, state.driver.integer_time,
                        state.driver.global_timestep, state.driver.global_hydro_timestep,
                        state.driver.iteration))
@@ -184,15 +184,25 @@ def main():
                     f"{label}: checkpoint was not loaded")
             continued, continued_payloads, continued_clock, continued_species = checkpoint_state(
                 resumed, final_iteration, ranks)
-            require(clock == continued_clock and species == continued_species and final == continued,
-                    f"{label}: restart changed exact particle/stage values or simulation clock")
+            require(clock == continued_clock and species == continued_species,
+                    f"{label}: restart changed particle counts or simulation clock")
+            if name == "wave":
+                # Pair reduction order leaves transverse residuals below 0.12
+                # float eps in this wave. All nonvelocity payload bytes stay exact.
+                counts["restart_maximum_velocity_errors"] = check_velocity_roundoff_restart(
+                    reference / f"checkpoint.{final_iteration}",
+                    resumed / f"checkpoint.{final_iteration}")
+            else:
+                require(final == continued,
+                        f"{label}: restart changed exact particle/stage values")
             counts["restart_payload_identical"] = payloads == continued_payloads
             counts["particles"] = sum(species)
             counts["gas"] = species[1]
             counts["ranks"] = ranks
             evidence["evolution"][label] = counts
+            restart_kind = "velocity-roundoff" if name == "wave" else "exact physical"
             print(f"{label}: {counts['rebuild']} rebuilds, {counts['retain']} retained events, "
-                  "exact physical restart passed", flush=True)
+                  f"{restart_kind} restart passed", flush=True)
     (root / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
     print("SPH octree application regression passed", flush=True)
     return 0

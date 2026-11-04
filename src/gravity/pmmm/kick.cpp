@@ -95,8 +95,7 @@ KickReturn particleMeshPrepareKick(double scale, double baseTimestep, double max
                         for (int dim = 0; dim < kDimensions; ++dim) {
 #if COSMICTIGER_WITH_SPH
                             if (gas) {
-                                sphParticlesGravityAcceleration(dim, particlesCatIndex(i)) =
-                                    sign * acceleration[dim];
+                                THROW_ERROR("Mesh gravity with midpoint SPH is deferred\n");
                                 // Promote acceleration, multiply, then narrow the result.
                                 flops += 3;
                             } else

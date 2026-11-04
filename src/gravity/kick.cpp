@@ -69,6 +69,7 @@ KickReturn kickWalkDispatch(KickParameters params, ExpansionBuffer l, Vector3<Po
 
 HPX_PLAIN_ACTION(gravityBeginGlobalKick, GravityBeginGlobalKickAction);
 HPX_PLAIN_ACTION(gravityFinishGlobalKick, GravityFinishGlobalKickAction);
+HPX_PLAIN_ACTION(gravityFinishBalancedGasKick, GravityFinishBalancedGasKickAction);
 
 void gravityBeginGlobalKick() {
     Vector<hpx::future<void>> futures;
@@ -104,6 +105,58 @@ void gravityBeginGlobalKick() {
 
 float* gravityGlobalAcceleration(int dimension) {
     return detail::globalAccelerations[dimension];
+}
+
+KickReturn gravityFinishBalancedGasKick(double baseTimestep, float sign) {
+    ALWAYS_ASSERT(std::isfinite(baseTimestep) && baseTimestep > 0.0);
+    Vector<hpx::future<KickReturn>> futures;
+    for (auto const& child : hpxChildren()) {
+        futures.push_back(
+            hpx::async<GravityFinishBalancedGasKickAction>(child, baseTimestep, sign));
+    }
+    ALWAYS_ASSERT(detail::globalAccelerationCount == particlesSize());
+    KickReturn result;
+#if COSMICTIGER_WITH_SPH
+    ALWAYS_ASSERT(sphMidpointEnabled());
+    FlopCount flops = 0;
+    for (ParticleInteger index = 0; index < particlesSize(); ++index) {
+        if (particlesType(index) != kSphType) {
+            continue;
+        }
+        int const rung = particlesRung(index);
+        ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
+        result.maxRung = std::max(result.maxRung, rung);
+        float const halfTimestep = sign * 0.5f * rungDt[rung] * float(baseTimestep);
+        Vector3<float> before;
+        Vector3<float> after;
+        for (int dimension = 0; dimension < kDimensions; ++dimension) {
+            before[dimension] = particlesVel(dimension, index);
+            after[dimension] = std::fma(
+                detail::globalAccelerations[dimension][index], halfTimestep, before[dimension]);
+            particlesVel(dimension, index) = after[dimension];
+        }
+        flops += 9;
+        double const mass = particlesMass(index);
+        double const kineticChange = 0.5 * mass * (after.dot(after) - before.dot(before));
+        result.dkin += kineticChange;
+        result.darkMatterKineticCorrection -= kineticChange;
+        result.darkMatterXMomentumCorrection += mass * (before[kXDimension] - after[kXDimension]);
+        result.darkMatterYMomentumCorrection += mass * (before[kYDimension] - after[kYDimension]);
+        result.darkMatterZMomentumCorrection += mass * (before[kZDimension] - after[kZDimension]);
+        result.darkMatterMomentumNormCorrection += mass * (before.norm() - after.norm());
+    }
+    addCpuFlops(flops, FlopPrecision::Single);
+#endif
+    for (int dimension = 0; dimension < kDimensions; ++dimension) {
+        freeManagedMemory(detail::globalAccelerations[dimension]);
+        detail::globalAccelerations[dimension] = nullptr;
+    }
+    detail::globalAccelerationCount = 0;
+    hpx::wait_all(futures.begin(), futures.end());
+    for (auto& future : futures) {
+        result += future.get();
+    }
+    return result;
 }
 
 double gravityFinishGlobalKick(double timestep) {

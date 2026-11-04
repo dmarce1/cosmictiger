@@ -45,7 +45,6 @@ double sphParticlesThermalScaleFactor = 1.0;
 
 static ParticleInteger capacity = 0;
 static ParticleInteger size = 0;
-static bool gravityStorageEnabled = true;
 
 static Vector3<Position> const* sphParticlesCacheReadLine(detail::SphCacheLineId lineId);
 static Pair<float> const* sphParticlesReadThermodynamicCacheLine(detail::SphCacheLineId lineId);
@@ -112,58 +111,6 @@ static Array<SpinlockType, kParticleCacheSize> energyMutexes;
 static Array<SpinlockType, kParticleCacheSize> rungMutexes;
 static Array<SpinlockType, kParticleCacheSize> velocityMutexes;
 static Array<SpinlockType, kParticleCacheSize> densityMutexes;
-namespace detail {
-
-// Between the predictor (phase 0) and the closing kick (phase 1) of a step, the staged
-// velocity and entropy of each active gas particle are predicted to the end of
-// its closing interval from the stored rates. The particle state itself stays at the
-// half step, so the closing kick needs no record of the rates it replaces.
-struct SphPrediction {
-    bool open = false;
-    int minimumRung = 0;
-    float timeStepScale = 0.0f;
-    double explicitTimestep = -1.0;
-};
-static SphPrediction prediction;
-
-static double sphHalfStep(float timeStepScale, double explicitTimestep, int rung) {
-    return explicitTimestep >= 0.0 ? 0.5 * explicitTimestep :
-                                     std::ldexp(double(timeStepScale), -1 - rung);
-}
-
-// Zero unless the prediction is open and the particle closes in this step.
-static double predictionHalfStep(ParticleInteger gas) {
-    if (!prediction.open || sphParticlesRung(gas) < prediction.minimumRung) {
-        return 0.0;
-    }
-    return sphHalfStep(
-        prediction.timeStepScale, prediction.explicitTimestep, sphParticlesRung(gas));
-}
-
-static float predictedVelocity(int dimension, ParticleInteger gas, double halfStep) {
-    if (sphMidpointEnabled()) {
-        return particlesVel(dimension, sphParticlesParticleIndex(gas));
-    }
-    return particlesVel(dimension, sphParticlesParticleIndex(gas)) +
-        sphParticlesAcceleration(dimension, gas) * halfStep;
-}
-
-static float predictedInternalEnergy(ParticleInteger gas, double halfStep) {
-    if (!sphParticlesEntropyInitialized) {
-        return sphParticlesInternalEnergy(gas);
-    }
-    double const entropy = sphMidpointEnabled() ?
-        sphParticlesEntropy(gas) :
-        sphParticlesEntropy(gas) + sphParticlesEntropyRate(gas) * halfStep;
-    ALWAYS_ASSERT(entropy > 0.0);
-    float const energy = sph_entropy::storedEnergy(entropy, sphParticlesDensity(gas),
-        getOptions().hydro.gamma, sphParticlesThermalScaleFactor);
-    ALWAYS_ASSERT(energy > 0.0f);
-    return energy;
-}
-
-}    // namespace detail
-
 HPX_PLAIN_ACTION(sphParticlesPrepareThermodynamics, SphParticlesPrepareThermodynamicsAction);
 void sphParticlesPrepareThermodynamics(double scaleFactor, bool initializeEntropy) {
     ALWAYS_ASSERT(scaleFactor > 0.0);
@@ -178,192 +125,11 @@ void sphParticlesPrepareThermodynamics(double scaleFactor, bool initializeEntrop
             ALWAYS_ASSERT(sphParticlesDensity(gas) > 0.0f && sphParticlesEntropies[gas] > 0.0f);
             sphParticlesEntropies[gas] = sph_entropy::fromStoredEnergy(sphParticlesEntropies[gas],
                 sphParticlesDensity(gas), getOptions().hydro.gamma, scaleFactor);
-            sphParticlesEntropyRates[gas] = 0.0f;
         }
         sphParticlesEntropyInitialized = true;
     }
     for (auto& child : children) {
         child.get();
-    }
-}
-
-HPX_PLAIN_ACTION(sphParticlesApplyUpdates, SphParticlesApplyUpdatesAction);
-EnergiesT sphParticlesApplyUpdates(
-    int minimumRung, int phase, float timeStepScale, float time, double explicitTimestep) {
-    // Midpoint integration applies one full hydro kick through its own helper.
-    // Legacy predictor/corrector calls must not add another kick or prediction.
-    bool const midpoint = sphMidpointEnabled();
-    if (midpoint && phase < 2) {
-        return {};
-    }
-    // At time zero no step has opened yet, so there is no half-kick to predict or close.
-    if (!(phase >= 2 || time > 0.0)) {
-        return {};
-    }
-    Vector<hpx::future<EnergiesT>> futures;
-    for (auto& child : hpxChildren()) {
-        futures.push_back(hpx::async<SphParticlesApplyUpdatesAction>(
-            child, minimumRung, phase, timeStepScale, time, explicitTimestep));
-    }
-    if (phase == 0) {
-        detail::prediction = {true, minimumRung, timeStepScale, explicitTimestep};
-    } else if (phase == 1) {
-        detail::prediction = {};
-    }
-    bool const savePotential = saveParticlePotential(getOptions().analysis);
-    int const numberOfThreads = hpxHardwareConcurrency();
-    for (int threadIndex = 0; threadIndex < numberOfThreads; threadIndex++) {
-        futures.push_back(hpx::async(hpx::annotated_function(
-            [timeStepScale, numberOfThreads, threadIndex, phase, minimumRung, explicitTimestep,
-                savePotential, midpoint]() {
-                ParticleInteger const rangeBegin =
-                    (size_t) threadIndex * sphParticlesSize() / numberOfThreads;
-                ParticleInteger const rangeEnd =
-                    (size_t) (threadIndex + 1) * sphParticlesSize() / numberOfThreads;
-                sph_flops::Counter flops;
-                EnergiesT energies;
-                for (int gasIndex = rangeBegin; gasIndex < rangeEnd; gasIndex++) {
-                    ParticleInteger const gravityIndex = sphParticlesParticleIndex(gasIndex);
-                    auto const rung = sphParticlesRung(gasIndex);
-                    if (phase >= 2) {
-                        // Every gas particle at the synchronized state, before any opening
-                        // kick, as particlesSumEnergies would count it.
-                        float const vx = particlesVel(kXDimension, gravityIndex);
-                        float const vy = particlesVel(kYDimension, gravityIndex);
-                        float const vz = particlesVel(kZDimension, gravityIndex);
-                        float const m = particlesMass(gravityIndex);
-                        if (savePotential) {
-                            energies.pot += 0.5 * m * particlesPot(gravityIndex);
-                        }
-                        energies.kin += 0.5 * m * (sqr(vx) + sqr(vy) + sqr(vz));
-                        energies.xmom += m * vx;
-                        energies.ymom += m * vy;
-                        energies.zmom += m * vz;
-                        energies.nmom += m * std::sqrt(sqr(vx) + sqr(vy) + sqr(vz));
-                        energies.therm += m * sphParticlesInternalEnergy(gasIndex);
-                        if (phase == 3 || midpoint) {
-                            continue;
-                        }
-                    }
-                    double const halfTimeStep =
-                        detail::sphHalfStep(timeStepScale, explicitTimestep, rung);
-                    flops.doublePrecision += explicitTimestep >= 0.0 ? 1 : 2;
-                    // Each active particle gets two half-kicks per step: one closes the step
-                    // that just drifted, one opens the next. The predictor (phase 0) only
-                    // opens the stage-time prediction above, so the hydro run sees end-of-
-                    // drift velocities and entropies; the closing kick (phase 1) then applies
-                    // the fresh rates to the unchanged half-step state.
-                    if (phase == 1 || phase == 2) {
-                        // Phase 1 follows the hydro force run; phase 2 follows rung commit
-                        // and limiting and opens the next step ahead of the drift.
-                        if (rung >= minimumRung) {
-                            // Each mixed multiply/add promotes two float values and narrows
-                            // the stored result, in addition to two double arithmetic ops.
-                            flops.doublePrecision += 5 * (kDimensions + 1);
-                            for (int dimension = 0; dimension < kDimensions; dimension++) {
-                                particlesVel(dimension, gravityIndex) +=
-                                    sphParticlesAcceleration(dimension, gasIndex) * halfTimeStep;
-                            }
-                            ALWAYS_ASSERT(sphParticlesEntropy(gasIndex) > 0.0f);
-                            sphParticlesEntropy(gasIndex) +=
-                                sphParticlesEntropyRate(gasIndex) * halfTimeStep;
-                            ALWAYS_ASSERT(sphParticlesEntropy(gasIndex) > 0.0f);
-                        }
-                    }
-                }
-                addCpuFlops(flops.counts());
-                return energies;
-            },
-            phase == 0     ? "sph.particles.predictKick" :
-                phase == 1 ? "sph.particles.closeKick" :
-                phase == 2 ? "sph.particles.openKick" :
-                phase == 3 ? "sph.particles.sumEnergies" :
-                             "sph.particles.unknownKickPhase")));
-    }
-    EnergiesT energies;
-    for (auto& future : futures) {
-        energies += future.get();
-    }
-    return energies;
-}
-
-HPX_PLAIN_ACTION(sphParticlesCommitProposedRungs, SphParticlesCommitProposedRungsAction);
-
-void sphParticlesCommitProposedRungs(int minimumRung) {
-    ALWAYS_ASSERT(!sphMidpointEnabled());
-    Vector<hpx::future<void>> pending;
-    for (auto const& child : hpxChildren()) {
-        pending.push_back(hpx::async<SphParticlesCommitProposedRungsAction>(child, minimumRung));
-    }
-    int const workers = std::max(1, hpxHardwareConcurrency());
-    for (int worker = 0; worker < workers; ++worker) {
-        pending.push_back(hpx::async(hpx::annotated_function(
-            [minimumRung, workers, worker]() {
-                ParticleInteger const begin = size_t(worker) * sphParticlesSize() / workers;
-                ParticleInteger const end = size_t(worker + 1) * sphParticlesSize() / workers;
-                for (ParticleInteger gas = begin; gas < end; ++gas) {
-                    char& proposed = sphParticlesProposedRungs[gas];
-                    if (sphParticlesRung(gas) >= minimumRung) {
-                        ALWAYS_ASSERT(proposed >= 0);
-                    }
-                    if (proposed >= 0) {
-                        sphParticlesRung(gas) = proposed;
-                        proposed = -1;
-                    }
-                }
-            },
-            "sph.particles.commitProposedRungs")));
-    }
-    hpx::wait_all(pending.begin(), pending.end());
-    for (auto& future : pending) {
-        future.get();
-    }
-}
-
-HPX_PLAIN_ACTION(sphParticlesCompleteForces, SphParticlesCompleteForcesAction);
-
-void sphParticlesCompleteForces(SphRunParameters const& parameters) {
-    ALWAYS_ASSERT(parameters.phase == 0 && parameters.deferAccelerationSources);
-    Vector<hpx::future<void>> pending;
-    for (auto const& child : hpxChildren()) {
-        pending.push_back(hpx::async<SphParticlesCompleteForcesAction>(child, parameters));
-    }
-    int const workers = std::max(1, hpxHardwareConcurrency());
-    for (int worker = 0; worker < workers; ++worker) {
-        pending.push_back(hpx::async(hpx::annotated_function(
-            [parameters, workers, worker]() {
-                sph_flops::Counter flops;
-                auto const& options = getOptions();
-                ParticleInteger const begin = size_t(worker) * sphParticlesSize() / workers;
-                ParticleInteger const end = size_t(worker + 1) * sphParticlesSize() / workers;
-                for (ParticleInteger gas = begin; gas < end; ++gas) {
-                    if (sphParticlesRung(gas) < parameters.minimumRung) {
-                        continue;
-                    }
-                    Vector3<Position> position;
-                    Vector3<float> velocity;
-                    Vector3<float> gravityAcceleration(0.0f);
-                    for (int dim = 0; dim < kDimensions; ++dim) {
-                        position[dim] = sphParticlesPosition(dim, gas);
-                        velocity[dim] = sphParticlesVelocity(dim, gas);
-#if COSMICTIGER_WITH_GRAVITY
-                        if (options.gravity.enabled) {
-                            gravityAcceleration[dim] = sphParticlesGravityAcceleration(dim, gas);
-                        }
-#endif
-                    }
-                    auto& acceleration = sphParticlesAccelerationState(gas);
-                    acceleration = sphCompleteAcceleration(parameters, position, velocity,
-                        acceleration, gravityAcceleration, options.hydro.centralAcceleration,
-                        options.hydro.centralSupportRadius, flops);
-                }
-                addCpuFlops(flops.counts());
-            },
-            "sph.particles.completeForces")));
-    }
-    hpx::wait_all(pending.begin(), pending.end());
-    for (auto& future : pending) {
-        future.get();
     }
 }
 
@@ -373,12 +139,10 @@ template <typename Visitor>
 void visitSphCheckpointArrays(
     Visitor&& visit, bool includeChemistry = true, bool includeViscosity = true) {
     size_t const count = sphParticlesSize();
-    // Keep stage fields as well as the physical fields: fine rungs may be staggered at checkpoints.
+    // Persistent physical state and timestep/viscosity history only; force rates are event-local.
     visit(sphParticlesEntropies, count);
     visit(sphParticlesSupportRadii, count);
-    visit(sphParticlesAccelerationStates, count);
     visit(sphParticlesParticleIndices, count);
-    visit(sphParticlesEntropyRates, count);
     visit(sphParticlesDensities, count);
     visit(sphParticlesConvergenceFlags, count);
     visit(sphParticlesSemiactiveFlags, count);
@@ -399,12 +163,6 @@ void visitSphCheckpointArrays(
 void sphParticlesSwap(ParticleInteger i, ParticleInteger j) {
     if (i != j) {
         sphTreeInvalidate();
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            if (sphParticlesGravityAccelerations[dim] != nullptr) {
-                std::swap(sphParticlesGravityAccelerations[dim][i],
-                    sphParticlesGravityAccelerations[dim][j]);
-            }
-        }
     }
     if (sphParticlesBalsaraFactors != nullptr) {
         std::swap(sphParticlesBalsaraFactors[i], sphParticlesBalsaraFactors[j]);
@@ -450,37 +208,6 @@ void sphParticlesArrayResize(T*& ptr, ParticleInteger newCapacity) {
     ptr = newPtr;
 }
 
-// Legacy standalone gravity/hydro passes use this handoff. Midpoint events
-// release it because gravity applies its own kicks directly.
-void sphParticlesEnsureGravityStorage() {
-    static MutexType mutex;
-    std::lock_guard<MutexType> lock(mutex);
-    gravityStorageEnabled = true;
-    for (int dim = 0; dim < kDimensions; ++dim) {
-        if (sphParticlesGravityAccelerations[dim] == nullptr && capacity != 0) {
-            sphParticlesGravityAccelerations[dim] =
-                static_cast<float*>(allocateManagedMemory(sizeof(float) * capacity));
-            std::fill_n(sphParticlesGravityAccelerations[dim], size, 0.0f);
-        }
-    }
-}
-
-HPX_PLAIN_ACTION(sphParticlesReleaseGravityStorage, SphParticlesReleaseGravityStorageAction);
-void sphParticlesReleaseGravityStorage() {
-    Vector<hpx::future<void>> futures;
-    for (auto const& child : hpxChildren()) {
-        futures.push_back(hpx::async<SphParticlesReleaseGravityStorageAction>(child));
-    }
-    gravityStorageEnabled = false;
-    for (int dim = 0; dim < kDimensions; ++dim) {
-        freeManagedMemory(sphParticlesGravityAccelerations[dim]);
-        sphParticlesGravityAccelerations[dim] = nullptr;
-    }
-    for (auto& future : futures) {
-        future.get();
-    }
-}
-
 void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticles) {
     if (particleCount != size) {
         sphTreeInvalidate();
@@ -512,16 +239,9 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         }
         sphParticlesArrayResize(sphParticlesEntropies, newCapacity);
         sphParticlesArrayResize(sphParticlesSupportRadii, newCapacity);
-        sphParticlesArrayResize(sphParticlesAccelerationStates, newCapacity);
         sphParticlesArrayResize(sphParticlesConvergenceFlags, newCapacity);
         sphParticlesArrayResize(sphParticlesSemiactiveFlags, newCapacity);
         sphParticlesArrayResize(sphParticlesParticleIndices, newCapacity);
-        sphParticlesArrayResize(sphParticlesEntropyRates, newCapacity);
-        for (int dim = 0; dim < kDimensions; dim++) {
-            if (gravityStorageEnabled) {
-                sphParticlesArrayResize(sphParticlesGravityAccelerations[dim], newCapacity);
-            }
-        }
         if (getOptions().chemistry.enabled) {
             sphParticlesArrayResize(sphParticlesElectronFractions, newCapacity);
         }
@@ -579,9 +299,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         if (getOptions().chemistry.enabled) {
             sphParticlesElectronFractions[slot] = 1.0f;
         }
-        sphParticlesAccelerationStates[slot] = {};
         sphParticlesParticleIndices[slot] = kNoParticleIndex;
-        sphParticlesEntropyRates[slot] = 0.0f;
         sphParticlesDensities[slot] = 0.0f;
         if (getOptions().hydro.balsaraSwitch) {
             sphParticlesBalsaraFactors[slot] = 0.0f;
@@ -598,11 +316,6 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         }
         sphParticlesConvergenceFlags[slot] = 0;
         sphParticlesSemiactiveFlags[slot] = 0;
-        for (int dim = 0; dim < kDimensions; dim++) {
-            if (sphParticlesGravityAccelerations[dim] != nullptr) {
-                sphParticlesGravityAccelerations[dim][slot] = 0.0f;
-            }
-        }
         if (resizeGravityParticles) {
             particlesCatIndex(offset + i) = previousSize + i;
             particlesType(offset + i) = kSphType;
@@ -623,11 +336,6 @@ void sphParticlesRemove(ParticleInteger index) {
 
 void sphParticlesFree() {
     sphTreeInvalidate();
-    for (int dim = 0; dim < kDimensions; ++dim) {
-        freeManagedMemory(sphParticlesGravityAccelerations[dim]);
-        sphParticlesGravityAccelerations[dim] = nullptr;
-    }
-    gravityStorageEnabled = true;
     sphParticlesEntropyInitialized = false;
     sphParticlesThermalScaleFactor = 1.0;
     if (sphParticlesBalsaraFactors != nullptr) {
@@ -730,8 +438,7 @@ void sphParticlesGlobalReadInternalEnergyAndSupportRadius(ParticleGlobalRange ra
             for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
                 int const j = offset + i - range.range.first;
                 if (internalEnergy) {
-                    internalEnergy[j] =
-                        detail::predictedInternalEnergy(i, detail::predictionHalfStep(i));
+                    internalEnergy[j] = sphParticlesInternalEnergy(i);
                 }
                 if (supportRadius) {
                     supportRadius[j] = sphParticlesSupportRadius(i);
@@ -774,7 +481,7 @@ static Vector<Pair<float>> sphParticlesFetchThermodynamicCacheLine(ParticleInteg
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; i++) {
-        line[i - begin].first = detail::predictedInternalEnergy(i, detail::predictionHalfStep(i));
+        line[i - begin].first = sphParticlesInternalEnergy(i);
         line[i - begin].second = sphParticlesSupportRadius(i);
     }
     return line;
@@ -836,10 +543,9 @@ void sphParticlesGlobalReadVelocities(
             ParticleInteger const particleCount = range.range.second - range.range.first;
             for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
                 int const j = offset + i - range.range.first;
-                double const halfStep = detail::predictionHalfStep(i);
-                vx[j] = detail::predictedVelocity(kXDimension, i, halfStep);
-                vy[j] = detail::predictedVelocity(kYDimension, i, halfStep);
-                vz[j] = detail::predictedVelocity(kZDimension, i, halfStep);
+                vx[j] = sphParticlesVelocity(kXDimension, i);
+                vy[j] = sphParticlesVelocity(kYDimension, i);
+                vz[j] = sphParticlesVelocity(kZDimension, i);
             }
         } else {
             detail::SphCacheLineId lineId;
@@ -875,9 +581,8 @@ static Vector<Vector3<float>> sphParticlesFetchVelocityCacheLine(ParticleInteger
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; i++) {
-        double const halfStep = detail::predictionHalfStep(i);
         for (int dimension = 0; dimension < kDimensions; ++dimension) {
-            line[i - begin][dimension] = detail::predictedVelocity(dimension, i, halfStep);
+            line[i - begin][dimension] = sphParticlesVelocity(dimension, i);
         }
     }
     return line;
@@ -1000,7 +705,8 @@ uint32_t sphCheckpointVersion() {
     // From 50000 the transient gravity handoff is no longer checkpointed.
     // From 60000 the hydro rung bound is persistent and the hierarchical
     // predictor/position-clock structure is removed for chronological drifts.
-    return 60000U +
+    // From 70000 no force rates persist; gradient switches checkpoint sample time/divergence.
+    return 70000U +
         (options.starFormation.enabled ? 110U : (options.chemistry.enabled ? 100U : 2U)) +
         (options.hydro.viscosityEvolution == "hu_etal" ?
                 8U :
@@ -1020,9 +726,9 @@ void sphParticlesLoad(FILE* fp) {
     FREAD(header, sizeof(uint32_t), 7, fp);
     FREAD(&savedCount, sizeof(ParticleInteger), 1, fp);
     if (header[0] != 0x43545350U || header[1] != detail::sphCheckpointVersion() ||
-        header[2] != sizeof(ParticleInteger) || header[3] != sizeof(float) ||
-        header[4] != sizeof(SphAcceleration) || header[5] != kDimensions ||
-        header[6] != sizeof(float) || savedCount != sphParticlesSize()) {
+        header[2] != sizeof(ParticleInteger) || header[3] != sizeof(float) || header[4] != 0U ||
+        header[5] != kDimensions || header[6] != sizeof(float) ||
+        savedCount != sphParticlesSize()) {
         THROW_ERROR("Incompatible SPH checkpoint payload (requires matching "
                     "integrator/viscosity/chemistry layout)\n");
     }
@@ -1047,7 +753,26 @@ void sphParticlesLoad(FILE* fp) {
             if (getOptions().hydro.viscosityGradientSwitch()) {
                 float divergence;
                 FREAD(&divergence, sizeof(float), 1, fp);
-                sphParticlesCullenDehnenStates[index] = {divergence, 0.0f, 0.0f, 0.0f};
+                auto& state = sphParticlesCullenDehnenStates[index];
+                state = {};
+                state.divergence = divergence;
+                FREAD(&state.sampleTime, sizeof(double), 1, fp);
+                FREAD(&state.sampleDivergence, sizeof(float), 1, fp);
+                // Check IEEE exponent bits because finite-math optimization may remove
+                // floating-point isfinite tests from checkpoint validation.
+                uint64_t sampleTimeBits;
+                uint32_t sampleDivergenceBits, divergenceBits;
+                std::memcpy(&sampleTimeBits, &state.sampleTime, sizeof(sampleTimeBits));
+                std::memcpy(
+                    &sampleDivergenceBits, &state.sampleDivergence, sizeof(sampleDivergenceBits));
+                std::memcpy(&divergenceBits, &state.divergence, sizeof(divergenceBits));
+                if ((sampleTimeBits & UINT64_C(0x7ff0000000000000)) ==
+                        UINT64_C(0x7ff0000000000000) ||
+                    (sampleDivergenceBits & UINT32_C(0x7f800000)) == UINT32_C(0x7f800000) ||
+                    (divergenceBits & UINT32_C(0x7f800000)) == UINT32_C(0x7f800000) ||
+                    (state.sampleTime < 0.0 && state.sampleTime != -1.0)) {
+                    THROW_ERROR("Invalid SPH divergence history in checkpoint\n");
+                }
             }
         }
     }
@@ -1065,7 +790,7 @@ void sphParticlesLoad(FILE* fp) {
 
 void sphParticlesSave(FILE* fp) {
     uint32_t header[7] = {0x43545350U, detail::sphCheckpointVersion(), sizeof(ParticleInteger),
-        sizeof(float), sizeof(SphAcceleration), kDimensions, sizeof(float)};
+        sizeof(float), 0U, kDimensions, sizeof(float)};
     ParticleInteger count = sphParticlesSize();
     FWRITE(header, sizeof(uint32_t), 7, fp);
     FWRITE(&count, sizeof(ParticleInteger), 1, fp);
@@ -1085,6 +810,10 @@ void sphParticlesSave(FILE* fp) {
             if (getOptions().hydro.viscosityGradientSwitch()) {
                 float divergence = sphParticlesCullenDehnenStates[index].divergence;
                 FWRITE(&divergence, sizeof(float), 1, fp);
+                double sampleTime = sphParticlesCullenDehnenStates[index].sampleTime;
+                float sampleDivergence = sphParticlesCullenDehnenStates[index].sampleDivergence;
+                FWRITE(&sampleTime, sizeof(double), 1, fp);
+                FWRITE(&sampleDivergence, sizeof(float), 1, fp);
             }
         }
     }
@@ -1264,8 +993,7 @@ void sphParticlesResetSemiactive() {
 }
 
 HPX_PLAIN_ACTION(sphParticlesUpdateTargetAlpha, SphParticlesUpdateTargetAlphaAction);
-void sphParticlesUpdateTargetAlpha(
-    int minimumRung, float timeStepScale, float time, double explicitTimestep) {
+void sphParticlesUpdateTargetAlpha(SphRunParameters const& parameters) {
     if (!getOptions().hydro.viscosityGradientSwitch()) {
         return;
     }
@@ -1273,23 +1001,25 @@ void sphParticlesUpdateTargetAlpha(
     bool const huEtAl = getOptions().hydro.viscosityEvolution == "hu_etal";
     Vector<hpx::future<void>> pending;
     for (auto const& child : hpxChildren()) {
-        pending.push_back(hpx::async<SphParticlesUpdateTargetAlphaAction>(
-            child, minimumRung, timeStepScale, time, explicitTimestep));
+        pending.push_back(hpx::async<SphParticlesUpdateTargetAlphaAction>(child, parameters));
     }
     sph_flops::Counter flops;
     for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
-        int const rung = sphParticlesRung(index);
-        bool const active = rung >= minimumRung;
+        bool const measured =
+            parameters.isActiveRung(sphParticlesRung(index)) || sphParticlesSemiactive(index);
         auto& diagnostic = sphParticlesCullenDehnenStates[index];
-        if (active || sphParticlesSemiactive(index)) {
+        if (measured && sphParticlesConverged(index) &&
+            parameters.viscositySampleTime > diagnostic.sampleTime) {
+            double const elapsed = diagnostic.sampleTime >= 0.0 ?
+                parameters.viscositySampleTime - diagnostic.sampleTime :
+                0.0;
+            float const timeStep = static_cast<float>(elapsed);
             diagnostic.divergence = diagnostic.pendingDivergence;
-        }
-        if (active) {
-            float const timeStep = explicitTimestep >= 0.0 ?
-                explicitTimestep :
-                (time > 0.0f ? timeStepScale / (1 << rung) : 0.0f);
-            flops.doublePrecision += explicitTimestep >= 0.0 ? 1 : 2;
-            flops += explicitTimestep < 0.0 && time > 0.0f ? 1 : 0;
+            diagnostic.sampleDivergence = diagnostic.pendingSampleDivergence;
+            diagnostic.sampleTime = parameters.viscositySampleTime;
+            if (elapsed == 0.0) {
+                continue;
+            }
             auto& bulkViscosityCoefficient = sphParticlesBulkViscosityCoefficients[index];
             bool const increasing =
                 bulkViscosityCoefficient < diagnostic.targetBulkViscosityCoefficient;

@@ -27,9 +27,6 @@ struct NeighborActivity {
     float velocityX;
     float velocityY;
     float velocityZ;
-    float accelerationX;
-    float accelerationY;
-    float accelerationZ;
     float divergence;
     float internalEnergy;
 };
@@ -126,20 +123,19 @@ __global__ void sphCudaPrehydro1(
 /*
  * Density and gradient sums: Monaghan (1992), ARA&A 30, 543, equation (3.8),
  * doi:10.1146/annurev.aa.30.090192.002551; Cullen & Dehnen (2010), equations
- * (15), (17), (B2), (B4), (B7), (B12), https://arxiv.org/abs/1006.1524.
+ * (15), (17), (B2), (B4), (B7), https://arxiv.org/abs/1006.1524.
  *   ρ_a = Σ_b m_b W_ab(H_a), W_ab = H_a⁻³ w(q_ab), q_ab = |r_ab|/H_a,
  *   ρ_a ∇·v_a = −Σ_b m_b v_ab · ∇_a W_ab,
  *   ρ_a ∇×v_a = Σ_b m_b v_ab × ∇_a W_ab,
  *   R_a = ρ_a⁻¹ Σ_b m_b W_ab sign(∇·v_b),
  *   T = Σ_b r_ab ⊗ r_ab w̄_ab, D = Σ_b v_ab ⊗ r_ab w̄_ab, V = D T⁻¹.
- * Derived acceleration analogue: C = Σ_b a_ab ⊗ r_ab w̄_ab, G = C T⁻¹.
  * Symbol directory (Pack denotes SIMD partial sums):
  *   H_a → sinkKernelSupportRadius; q_ab → normalizedRadius; w(q_ab) → kernelWeight
  *   ρ_a → density; ρ_a ∇·v_a → densityWeightedDivergence
  *   ρ_a ∇×v_a → densityWeightedCurl; ρ_a R_a → densityWeightedSignAverage
- *   r_ab, v_ab, a_ab → separation, physicalVelocityDifference, accelerationDifference
+ *   r_ab, v_ab → separation, physicalVelocityDifference
  *   m_b ∇_a W_ab → massWeightedKernelGradient
- *   T, D, C → gradientSums.moment, gradientSums.velocity, gradientSums.acceleration
+ *   T, D → gradientSums.moment, gradientSums.velocity
  *   Σ_b w → kernelSum; Σ_b q_ab w′ → kernelDerivativeMoment
  *   v_sig,a → signalSpeed (CUDA), signalSpeedPack (CPU)
  *   w̄_ab = −m_b F_a → gradientWeight inside the corrected-gradient branch.
@@ -210,15 +206,6 @@ __global__ void sphCudaPrehydro2(
                         (parameters.balsaraSwitch || parameters.variableViscosity ||
                             data.sinkLogDensityRate) ?
                             data.sourceVelocityZ[sourceParticleIndex] :
-                            0.0f,
-                        parameters.gradientSwitch() ?
-                            data.sourceAccelerationX[sourceParticleIndex] :
-                            0.0f,
-                        parameters.gradientSwitch() ?
-                            data.sourceAccelerationY[sourceParticleIndex] :
-                            0.0f,
-                        parameters.gradientSwitch() ?
-                            data.sourceAccelerationZ[sourceParticleIndex] :
                             0.0f,
                         parameters.cullenDehnen ?
                             data.sourceVelocityDivergence[sourceParticleIndex] :
@@ -306,7 +293,7 @@ __global__ void sphCudaPrehydro2(
             float densityDerivativeSum = 0.0f;
             float densityWeightedDivergence = 0.0f;
             Vector3<float> densityWeightedCurl(0.0f);
-            cullen_and_dehnen::GradientSums<float> gradientSums{};
+            cullen_and_dehnen::VelocityGradientSums<float> gradientSums{};
             float densityWeightedSignAverage = 0.0f;
             float signalSpeed = 0.0f;
             // clang-format off
@@ -405,29 +392,23 @@ __global__ void sphCudaPrehydro2(
                         }
                         if (parameters.gradientSwitch()) {
                             /*
-                             * Cullen & Dehnen (2010), equations (B2), (B4), (B7), (B12), which
-                             * Price et al. (2018) equations (51)-(53) also use.
-                             * Equation (B7) permits mass/kernel-gradient weights, independent
-                             * of densities being updated by other MPI ranks in this pass.
+                             * Cullen & Dehnen (2010), equations (B2), (B4), (B7), which
+                             * Price et al. (2018) equations (51)-(52) also use; Appendix B3 time
+                             * differences supply the material divergence derivative without
+                             * acceleration sources. Equation (B7) permits mass/kernel-gradient
+                             * weights, independent of densities being updated by other MPI ranks in
+                             * this pass.
                              */
                             float const gradientWeight = -massWeightedGradientFactor;
-                            Vector3<float> const accelerationDifference =
-                                Vector3<float>(data.sourceAccelerationX[particleIndex],
-                                    data.sourceAccelerationY[particleIndex],
-                                    data.sourceAccelerationZ[particleIndex]) -
-                                Vector3<float>(particle.accelerationX, particle.accelerationY,
-                                    particle.accelerationZ);
                             for (int i = 0; i < kDimensions; ++i) {
                                 for (int j = 0; j < kDimensions; ++j) {
                                     gradientSums.moment[i][j] +=
                                         gradientWeight * separation[i] * separation[j];
                                     gradientSums.velocity[i][j] += gradientWeight *
                                         physicalVelocityDifference[i] * separation[j];
-                                    gradientSums.acceleration[i][j] +=
-                                        gradientWeight * accelerationDifference[i] * separation[j];
                                 }
                             }
-                            flops += 84;
+                            flops += 54;
                         }
                         if (parameters.cullenDehnen || parameters.huEtAl) {
                             // CD (15) and Hu (18): maximum approaching-pair signal speed.
@@ -481,11 +462,9 @@ __global__ void sphCudaPrehydro2(
                     for (int j = 0; j < kDimensions; ++j) {
                         sharedReduceAdd<float, kPrehydro2BlockSize>(gradientSums.moment[i][j]);
                         sharedReduceAdd<float, kPrehydro2BlockSize>(gradientSums.velocity[i][j]);
-                        sharedReduceAdd<float, kPrehydro2BlockSize>(
-                            gradientSums.acceleration[i][j]);
                     }
                 }
-                flops += 27 * detail::sphReductionFlops<kPrehydro2BlockSize>();
+                flops += 18 * detail::sphReductionFlops<kPrehydro2BlockSize>();
             }
 
             if (threadIndex == 0) {
@@ -576,21 +555,23 @@ __global__ void sphCudaPrehydro2(
                     flops.doublePrecision += actualInterval ? 1 : 2;
                 }
                 if (parameters.gradientSwitch()) {
+                    auto& state = data.sinkCullenDehnenStates[sinkIndex];
                     cullen_and_dehnen::Result<float> diagnostics;
                     if (parameters.cullenDehnen) {
-                        diagnostics = cullen_and_dehnen::diagnostics(gradientSums,
-                            parameters.scaleFactor, parameters.expansionAcceleration,
+                        diagnostics = cullen_and_dehnen::diagnosticsFromHistory(gradientSums,
+                            parameters.scaleFactor, state, parameters.viscositySampleTime,
                             densityWeightedSignAverage / density, sinkKernelSupportRadius,
                             fmaxf(soundSpeedForSwitch, signalSpeed),
                             parameters.maximumBulkViscosityCoefficient, parameters.viscosityDecayCD,
                             flops);
                         flops += 1;
                     } else if (parameters.huEtAl) {
-                        diagnostics = hu_etal::diagnostics(gradientSums, parameters.scaleFactor,
-                            parameters.expansionAcceleration, sinkKernelSupportRadius,
-                            soundSpeedForSwitch, fmaxf(soundSpeedForSwitch, signalSpeed),
-                            parameters.maximumBulkViscosityCoefficientHu,
-                            parameters.viscosityDecayHu, flops);
+                        diagnostics =
+                            hu_etal::diagnosticsFromHistory(gradientSums, parameters.scaleFactor,
+                                state, parameters.viscositySampleTime, sinkKernelSupportRadius,
+                                soundSpeedForSwitch, fmaxf(soundSpeedForSwitch, signalSpeed),
+                                parameters.maximumBulkViscosityCoefficientHu,
+                                parameters.viscosityDecayHu, flops);
                     } else {
                         /*
                          * Price et al. (2018), equations (46)-(48): the paper's smoothing
@@ -600,14 +581,15 @@ __global__ void sphCudaPrehydro2(
                             float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
                             float(monaghan::kViscosityWidthScale);
                         flops.doublePrecision += 1;
-                        diagnostics = price_etal::diagnostics(gradientSums, parameters.scaleFactor,
-                            parameters.expansionRate, smoothingLength, soundSpeedForSwitch,
+                        diagnostics = price_etal::diagnosticsFromHistory(gradientSums,
+                            parameters.scaleFactor, parameters.expansionRate, state,
+                            parameters.viscositySampleTime, smoothingLength, soundSpeedForSwitch,
                             parameters.maximumBulkViscosityCoefficientPrice,
                             parameters.viscosityDecayPrice, flops);
                         flops += 2;
                     }
-                    auto& state = data.sinkCullenDehnenStates[sinkIndex];
                     state.pendingDivergence = diagnostics.divergence;
+                    state.pendingSampleDivergence = diagnostics.sampleDivergence;
                     state.targetBulkViscosityCoefficient =
                         diagnostics.targetBulkViscosityCoefficient;
                     state.inverseDecayTime = diagnostics.inverseDecayTime;

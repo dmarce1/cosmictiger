@@ -108,14 +108,7 @@ void sphParticlesPrepareThermodynamics(double scaleFactor, bool initializeEntrop
 SPH_PARTICLES_EXTERN float* sphParticlesEntropies;
 // Compact support radius of the SPH smoothing kernel.
 SPH_PARTICLES_EXTERN float* sphParticlesSupportRadii;
-SPH_PARTICLES_EXTERN SphAcceleration* sphParticlesAccelerationStates;
 SPH_PARTICLES_EXTERN ParticleInteger* sphParticlesParticleIndices;
-// Optional handoff for legacy standalone gravity/hydro passes. Midpoint events
-// release it because gravity applies its own kicks directly.
-void sphParticlesEnsureGravityStorage();
-void sphParticlesReleaseGravityStorage();
-SPH_PARTICLES_EXTERN Array<float*, kDimensions> sphParticlesGravityAccelerations;
-SPH_PARTICLES_EXTERN float* sphParticlesEntropyRates;
 SPH_PARTICLES_EXTERN float* sphParticlesDensities;
 // Density diagnostics, rebuilt by every density pass.
 SPH_PARTICLES_EXTERN float* sphParticlesBalsaraFactors;
@@ -161,18 +154,9 @@ void sphParticlesResetSemiactive();
 void sphParticlesLoad(FILE* fp);
 void sphParticlesSave(FILE* fp);
 void sphCheckpointTest();
-// Phase 0 opens the stage-time prediction of the active gas, phase 1 closes the step with
-// the fresh rates, phase 2 opens the next step, and phase 3 only sums. Phases 2 and 3
-// return the gas energies and momenta at the synchronized state, before any opening kick.
-EnergiesT sphParticlesApplyUpdates(
-    int minimumRung, int phase, float timeStepScale, float time, double explicitTimestep = -1.0);
-// Move every staged proposal into particlesRung on all localities and clear it. Each gas
-// particle at or above minimumRung must have one.
-void sphParticlesCommitProposedRungs(int minimumRung);
-// Cullen-Dehnen and Price et al.: commit the pending divergences and move alpha toward the
-// density pass's target before the force pass snapshots it.
-void sphParticlesUpdateTargetAlpha(
-    int minimumRung, float timeStepScale, float time, double explicitTimestep = -1.0);
+struct SphRunParameters;
+// Commit one converged event's timestamped divergence and viscosity coefficient.
+void sphParticlesUpdateTargetAlpha(SphRunParameters const& parameters);
 
 inline float sphParticlesMass(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
@@ -185,10 +169,6 @@ inline char& sphParticlesConverged(ParticleInteger index) {
 
 inline char& sphParticlesSemiactive(ParticleInteger index) {
     return sphParticlesSemiactiveFlags[index];
-}
-
-inline SphAcceleration& sphParticlesAccelerationState(ParticleInteger index) {
-    return sphParticlesAccelerationStates[index];
 }
 
 inline ParticleInteger& sphParticlesParticleIndex(ParticleInteger index) {
@@ -230,21 +210,6 @@ inline void sphParticlesSetInternalEnergy(ParticleInteger index, float energy) {
         sph_entropy::fromStoredEnergy(energy, sphParticlesDensities[index],
             getOptions().hydro.gamma, sphParticlesThermalScaleFactor) :
         energy;
-}
-
-inline float& sphParticlesEntropyRate(ParticleInteger index) {
-    CHECK_SPH_PART_BOUNDS(index);
-    return sphParticlesEntropyRates[index];
-}
-
-inline float& sphParticlesAcceleration(int dim, ParticleInteger index) {
-    CHECK_SPH_PART_BOUNDS(index);
-    return sphParticlesAccelerationStates[index][dim];
-}
-
-inline float& sphParticlesGravityAcceleration(int dim, ParticleInteger index) {
-    CHECK_SPH_PART_BOUNDS(index);
-    return sphParticlesGravityAccelerations[dim][index];
 }
 
 inline float& sphParticlesSupportRadius(ParticleInteger index) {

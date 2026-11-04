@@ -51,9 +51,7 @@ struct PmmmSample {
     Vector3<double> position{};
     Vector3<PositionInteger> rawPosition{};
     Vector3<float> acceleration{};
-    Vector3<float> hydroAcceleration{};
     Vector3<float> velocity{};
-    bool gas{};
     int rung{};
     float potential{};
     float mass{};
@@ -64,7 +62,7 @@ struct PmmmSample {
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & position & rawPosition & acceleration & potential & mass & id & rank & cellKey &
-            velocity & rung & gas & hydroAcceleration;
+            velocity & rung;
     }
 };
 
@@ -102,15 +100,9 @@ void reservePmmmCudaFixture() {
     // Reserve the largest fixture on every rank before temporary CPU execution.
     // The application's retained particle/tree arenas assume a fixed backend.
     particlesResize(320);
-#if COSMICTIGER_WITH_SPH
-    sphParticlesResize(160, false);
-#endif
     fmmGhostReserve(320);
     fmmGhostClear();
     particlesResize(0);
-#if COSMICTIGER_WITH_SPH
-    sphParticlesResize(0, false);
-#endif
 }
 
 #endif
@@ -366,21 +358,13 @@ void initializePmmmFixture(int fixture, int ownership) {
     int const total = pmmmFixtureParticleCount(fixture);
     auto owner = [ownership](int id) { return ownership == 0 ? id % hpxSize() : 0; };
     int count = 0;
-    int gasCount = 0;
     for (int id = 0; id < total; ++id) {
         if (owner(id) == hpxRank()) {
             ++count;
-            gasCount += getOptions().hydro.enabled && fixture != 4 && id % 2 != 0;
         }
     }
     particlesResize(count);
-#if COSMICTIGER_WITH_SPH
-    if (getOptions().hydro.enabled) {
-        sphParticlesResize(gasCount, false);
-    }
-#endif
     int local = 0;
-    int gas = 0;
     for (int id = total - 1; id >= 0; --id) {
         if (owner(id) != hpxRank()) {
             continue;
@@ -442,21 +426,6 @@ void initializePmmmFixture(int fixture, int ownership) {
         }
         particlesPot(local) = -0.25f * float(id + 1);
         particlesRung(local) = 1 + id % 4;
-#if COSMICTIGER_WITH_SPH
-        if (getOptions().hydro.enabled) {
-            bool const isGas = fixture != 4 && id % 2 != 0;
-            particlesType(local) = isGas ? kSphType : kDarkMatterType;
-            particlesCatIndex(local) = isGas ? gas : kNoParticleIndex;
-            if (isGas) {
-                sphParticlesParticleIndex(gas) = local;
-                sphParticlesSupportRadius(gas) = 0.01f;
-                for (int dim = 0; dim < kDimensions; ++dim) {
-                    sphParticlesGravityAcceleration(dim, gas) = 0.0f;
-                }
-                ++gas;
-            }
-        }
-#endif
         ++local;
     }
 }
@@ -495,16 +464,6 @@ Vector<PmmmSample> readPmmmFixture() {
             sample.cellKey = sample.cellKey * getOptions().gravity.meshSize +
                 particleMeshCoordinate(particlesPos(dim, i).raw(), getOptions().gravity.meshSize);
         }
-#if COSMICTIGER_WITH_SPH
-        if (getOptions().hydro.enabled && particlesType(i) == kSphType) {
-            requirePmmm(sphParticlesParticleIndex(particlesCatIndex(i)) == i,
-                "gas reverse index was not repaired after sorting");
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                requirePmmm(sphParticlesGravityAcceleration(dim, particlesCatIndex(i)) == 0.0f,
-                    "force solve changed gas acceleration");
-            }
-        }
-#endif
     }
     return samples;
 }
@@ -523,15 +482,6 @@ Vector<PmmmSample> readPmmmKickFixture() {
         }
         sample.mass = particlesMass(i);
         sample.rung = particlesRung(i);
-#if COSMICTIGER_WITH_SPH
-        sample.gas = getOptions().hydro.enabled && particlesType(i) == kSphType;
-        if (sample.gas) {
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                sample.hydroAcceleration[dim] =
-                    sphParticlesGravityAcceleration(dim, particlesCatIndex(i));
-            }
-        }
-#endif
         if (saveParticlePotential(getOptions().analysis)) {
             sample.potential = particlesPot(i);
         }
@@ -645,7 +595,7 @@ size_t verifyPmmmTreeCell(TreeId id, uint64_t key, int meshSize) {
             using WideInteger = __int128;
             WideInteger constexpr kBoundaryScale = WideInteger(1) << (kPositionBits - 29);
             for (ParticleInteger i = node->particleRange.first; i < node->particleRange.second;
-                ++i) {
+                 ++i) {
                 long double radiusSquared = 0.0;
                 for (int dim = 0; dim < kDimensions; ++dim) {
                     WideInteger const raw = particlesPos(dim, i).raw();
@@ -1183,9 +1133,9 @@ void checkPmmmTraditionalKicks() {
         auto const activeReference =
             active ? directPmmmReference(activeIndex++, activeSources) : std::array<double, 4>{};
         int const expectedRung =
-            active && !initial.gas ? std::max(initial.rung - 1, parameters.minRung) : initial.rung;
+            active ? std::max(initial.rung - 1, parameters.minRung) : initial.rung;
         requirePmmm(after[i].rung == expectedRung,
-            "traditional kick changed an inactive/gas rung or selected a common DM rung");
+            "traditional kick changed an inactive rung or selected a common active rung");
         if (active) {
             minimumActiveRung = std::min(minimumActiveRung, after[i].rung);
             maximumActiveRung = std::max(maximumActiveRung, after[i].rung);
@@ -1199,17 +1149,13 @@ void checkPmmmTraditionalKicks() {
                 requirePmmm(std::abs(after[i].acceleration[dim] - field) <
                         1.0e-3 * std::max(1.0, std::abs(field)),
                     "traditional active force differs from the all-source Ewald field");
-                if (initial.gas) {
-                    requirePmmm(after[i].hydroAcceleration[dim] == after[i].acceleration[dim],
-                        "traditional gas did not receive its combined gravity acceleration");
-                }
             } else {
                 requirePmmm(after[i].acceleration[dim] == initial.acceleration[dim],
                     "traditional kick changed an inactive acceleration");
             }
-            if (!active || initial.gas) {
+            if (!active) {
                 requirePmmm(after[i].velocity[dim] == initial.velocity[dim],
-                    "traditional gravity kicked an inactive or hydro-owned velocity");
+                    "traditional gravity kicked an inactive velocity");
             } else {
                 double const interval =
                     std::ldexp(0.5, -initial.rung) + std::ldexp(0.5, -expectedRung);
@@ -1223,13 +1169,8 @@ void checkPmmmTraditionalKicks() {
     }
     requirePmmm(inactiveSourceMatters,
         "traditional fixture cannot distinguish all-particle from active-only sources");
-#if COSMICTIGER_WITH_SPH
     requirePmmm(minimumActiveRung < maximumActiveRung && result.maxRung == maximumActiveRung,
-        "traditional kick flattened distinct active gas and DM rungs");
-#else
-    requirePmmm(result.maxRung == maximumActiveRung,
-        "traditional kick reported the wrong maximum active rung");
-#endif
+        "traditional kick flattened distinct active rungs or reported their maximum incorrectly");
     particlesSortByRung(0);
     // Unlike the cell-center oracle above, fixture zero puts active and
     // inactive particles in the same source leaf. Its full solve supplies a
@@ -1268,10 +1209,8 @@ void checkPmmmTraditionalKicks() {
     particlesSortByRung(0);
     pmmmDestroy();
     setOptions(saved);
-    std::cout
-        << "PMMM traditional all-source forces, active-only individual kicks, and gas handoff "
-           "checks passed\n"
-        << std::flush;
+    std::cout << "PMMM traditional all-source forces and active-only individual kicks passed\n"
+              << std::flush;
 }
 
 void checkPmmmPpBatchTargets() {
@@ -1832,9 +1771,9 @@ void checkPmmmFmmNear() {
     }
     auto const saved = getOptions();
     auto options = saved;
-    // Isolated force fixtures exercise unequal masses without enabling an SPH
-    // evolution. Startup continues to reject PMMM gravity in SPH simulations.
-    options.hydro.enabled = COSMICTIGER_WITH_SPH;
+    // Coupled mesh/SPH evolution is deferred. Explicit-mass source permutation
+    // and near-field algebra are covered independently above.
+    options.hydro.enabled = false;
     options.compute.bucketSize = 8;
     options.gravity.fmmOrder = fmmOrder();
     options.gravity.pmmmOrder = options.gravity.fmmOrder;
@@ -1966,10 +1905,8 @@ void pmmmTest() {
     // Every PMMM mesh side is a power of two; the legacy force oracles cover
     // sides 8 and 16 at every near width, and the default coarse mesh (zero).
     options.gravity.pmmmCoarseMeshSize = 0;
-    // Allocate type/category storage before the first fixture. Particle arrays
-    // keep a shared capacity and cannot gain the optional hydro arrays after
-    // allocation. This isolated force test performs no SPH evolution.
-    options.hydro.enabled = COSMICTIGER_WITH_SPH;
+    // Keep the live kick fixtures collisionless while mesh/SPH coupling is deferred.
+    options.hydro.enabled = false;
     options.gravity.gm = 0.125;
     options.gravity.supportRadius = 0.001;
     options.gravity.fmmOrder = fmmOrder();

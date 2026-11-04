@@ -78,21 +78,17 @@ fetched from other MPI ranks.
 Particle drift independently uses the CPU when `drift.cuda=false`. Each available
 initialization or analysis backend has its own CUDA selector. All selectors default
 to `false`; the complete executable can run without a CUDA device.
-With FMM gravity, tree sorting finishes before the gravity future starts. Density,
-support and viscosity-target preparation then run alongside gravity; the step joins
-gravity before its hydro pair-force pass. That single pass closes the step: it adds
-gravity, external acceleration and damping to the hydro rates, and proposes the next
-rungs. The proposals are staged in `sphParticlesProposedRungs` while the closing kick
-and the source closes integrate over the closing rung, then committed before the rung
-limiter. The opening kick reuses the pass's rates. A step whose cooling or star
-formation changed the gas repeats the pass after the sources (and after rebuilding the
-densities when gas converted to stars), so the opening kick and rungs use the sourced
-state (`docs/sph_single_pass_kick.md`). With several localities the force pass stages
-every locality before any runs its kernels, because staging predicts from the rates
-those kernels overwrite.
-The gravity walks do not sum gas energies; the opening kick sums every gas particle at
-the synchronized state, and `particlesSumEnergies(false)` adds the collisionless ones. PMMM and distributed CUDA FMM retain serial
-execution because their current sorting/source staging can change shared storage.
+Global, traditional, and hierarchical integration share the chronological
+midpoint hydro operator. Gravity applies its own kicks. Each hydro event freezes
+its source velocities, entropies, densities and viscosity coefficients before any
+CPU/CUDA worker changes particles. The finer-rung endpoint owns each interacting
+pair; its impulse is accumulated with equal and opposite signs, including the
+reaction on an inactive neighbor. Event-local velocity and entropy increments are
+returned to their owning MPI ranks and committed after the force pass. Timestep
+selection retains only the scalar hydro rung bound (or the global raw timestep).
+No per-gas acceleration or entropy-rate array survives an event. Chemistry,
+star formation, and mesh gravity coupled to SPH are currently rejected.
+
 The standalone `sph_cpu_test` target can be built with
 `COSMICTIGER_WITH_CUDA=OFF` and does not call a CUDA device. The installed HPX
 library may itself link the CUDA runtime.
@@ -315,16 +311,32 @@ where \(\mathbf S_i=\tfrac12(\mathbf V_i+\mathbf V_i^T)
 (B2), (B4), and (B7), using mass/kernel-gradient weights so they do not read
 densities being updated concurrently on other ranks. A symmetric pseudoinverse
 handles planar or collinear neighborhoods on their resolved subspace.
-Equation (B12) computes the material divergence derivative as
-\(\operatorname{tr}(\nabla\mathbf a-\mathbf V^2)\), using the previous accelerations;
-it does not finite-difference stored divergence values.
+The production material derivative uses the first alternative in Appendix B3:
+the change of a particle's measured divergence between two sampling times. With
+physical divergence θ and conformal time dτ = dt/a, the locally derived
+first-order estimate in the stored cosmological units is
 
-CD nevertheless retains the previous divergence for the immutable neighbor-sign
-snapshot in equation (17), following the sweep order in Appendix A4. CD and the
-Price et al. switch below allocate this extra state and write the physical velocity
-divergence as `divv` in Silo, with inverse-time units. Every evolution scheme writes
-dimensionless `alpha`; selecting `none` allocates neither α evolution state nor
-divergence state. Under CD, β follows α as described above.
+\[
+ a_n^4\frac{D\theta}{Dt}\simeq
+ a_n^3\frac{\theta_n-\theta_{\rm previous}}
+ {\tau_n-\tau_{\rm previous}}.
+\]
+
+The denominator is the actual elapsed sample time, including changes of rung and
+semiactive neighbor evaluations. It is not inferred from the current rung.
+Repeated density solves use unchanged committed history. After convergence, every
+measured active or semiactive particle commits its sample and evolves α over that
+same elapsed conformal interval. First samples initialize history without evolving
+α; repeated calls at the same time do not advance it twice. Density-only output
+refreshes commit neither samples nor viscosity. No acceleration history is needed.
+
+CD also retains the physical divergence for the immutable neighbor-sign snapshot
+in equation (17), following the sweep order in Appendix A4. CD, Price, and Hu
+write physical velocity divergence as `divv` in Silo, with inverse-time units.
+Their committed sample time and divergence survive sorting, migration and
+checkpoints; target α, decay rate and limiter are reconstructed. Every evolution
+scheme writes dimensionless `alpha`; selecting `none` allocates neither α
+evolution state nor divergence state. Under CD, β follows α as described above.
 
 ## Hu et al. variable viscosity
 
@@ -395,13 +407,15 @@ equation (49) is integrated with the backward Euler step of equation (50),
 \(\alpha^{n+1}=(\alpha^n+\alpha_{\rm loc}\Delta t/\tau)/(1+\Delta t/\tau)\), otherwise α
 is set to \(\alpha_{\rm loc}\) immediately. The paper's \(h_i\) is the smoothing length
 with support \(2h_i\) for the cubic spline, so the code uses the same calibrated
-viscosity length \(h_{M,i}\) as Morris–Monaghan. The velocity gradient, its curl, and
-\(d(\nabla\cdot\mathbf v)/dt=\operatorname{tr}(\nabla\mathbf a-\mathbf V^2)\)
-(their equations (51)–(54)) come from the same CD appendix-B matrix reconstruction,
-with the previous accelerations and the cosmological terms described above. The
-initial α is zero, and the paper's quadratic coefficient is the constant
-`hydro.viscosityBeta` of their equation (41). α and the
-previous divergence share the CD storage, migration, checkpoint, and Silo fields.
+viscosity length \(h_{M,i}\) as Morris–Monaghan. The velocity gradient and curl retain the CD appendix-B matrix reconstruction.
+The material derivative now uses the same timestamped difference as CD and Hu.
+For Price it samples θ = ∇·v_physical − 3H, preserving the existing homogeneous
+background subtraction; the limiter and `divv` output still use the physical
+divergence. This replaces the acceleration-gradient estimator in equations
+(53)–(54), without changing the target, limiter or directed pair forces.
+The initial α is zero, and the paper's quadratic coefficient is the constant
+`hydro.viscosityBeta` of equation (41). Its scalar history shares CD's migration
+and checkpoint lifecycle.
 
 The pair force uses Phantom's equations (39)–(41). Write
 \(w_{ab}=\mathbf v_{ab}\cdot\widehat{\mathbf r}_{ab}\); then
@@ -440,19 +454,30 @@ No artificial thermal conductivity is added by this viscosity option.
 
 ## Time integration and cosmological variables
 
-Individual-rung kick-drift-kick integration with a staged predictor is used.
-Between the predictor and the closing kick, the staging of every pass predicts each
-active particle's velocity and entropy to the end of its closing interval
-from the stored rates (`v + a Δt/2`, `A + Ȧ Δt/2`, with energy derived from predicted entropy, also for remote cache lines); the
-particle state stays at the half step. The closing kick then applies the fresh rates
-once, so no predicted rates are stored, migrated or checkpointed. Inactive neighbours
-are staged at their stored state, as before. Section 10.3, p.563, permits leapfrog
-and predictor/corrector methods.
-Neighbor rung limiting uses the union of the two supports and immutable source-rung
-snapshots during each pass; it does not wake inactive particles. The support radius
-is held fixed during drift; active particles and selected inactive neighbors solve
-the neighbor constraint before hydro;
-there is no separate radius predictor or divergence timestep bound.
+All integrators use chronological midpoint SPH, with the split
+`K_gravity(Δt/2) D(Δt/2) K_hydro(Δt) D(Δt/2) K_gravity(Δt/2)`.
+There are no persistent hydro acceleration, gas gravity acceleration, or entropy-rate
+arrays and no per-particle predictor clocks. Every event stages an immutable snapshot
+of the current split state across all ranks before applying any impulse.
+
+Each pair is evaluated once at the finer endpoint's midpoint; equal-rung pairs have
+one owner selected by rank and gas index. Its identical impulse is accumulated with
+opposite signs for both endpoints, including an inactive coarse neighbor. Directed
+viscous heating is applied separately to each endpoint. Event-local increments are
+exchanged before committing particle state, so internal momentum is conserved up to
+accumulation and float-storage roundoff. External forces have no reciprocal gas
+endpoint. The velocity-dependent viscosity update need only be first order in time.
+
+Gas rungs change only at common all-particle synchronization boundaries. One
+enforcement phase iterates immutable candidate-rung snapshots to a fixed point over
+the union of both supports, including inactive neighbors, until every interacting
+pair differs by at most one rung. It then opens the new intervals. New contacts
+between boundaries need not satisfy the cap until the next common boundary; there
+are no retroactive wakeups or rollback snapshots. Hierarchical gravity selects gas
+rungs from total top-level gravity and the hydro bound, then freezes those rungs
+through its correction ladder. The support radius is held fixed during drift;
+active particles and selected inactive neighbors solve the neighbor constraint
+before hydro. There is no separate radius predictor or divergence timestep bound.
 
 The Courant-viscous limit uses
 
@@ -584,9 +609,10 @@ are rejected. The next two bytes encode independent gravity and hydro kernel
 selections. Bit 24 identifies the compact gas layout after removal of stellar,
 chemistry, and obsolete solver fields. Older SPH checkpoints lack this bit and
 are rejected before particle data are loaded. The gas payload has a separate
-version: base 50000 omits the transient gravity handoff, and hierarchical SPH
-adds 1000 for its predictor and drift-clock record, before the existing physics
-and viscosity suffixes. Earlier gas payloads are rejected. See the
+version: base 70000 omits all three persistent force-rate arrays and records the
+committed divergence sample and conformal sample time for gradient viscosity,
+before the existing physics and viscosity suffixes. Earlier gas payloads are
+rejected. See the [pair-midpoint design](sph_pair_midpoint_plan.md) and
 [SPH octree design](sph_octree_plan.md) for the retained tree and kick schedule.
 Compatible dark-matter checkpoint layouts remain unchanged.
 Historical kernel marker values retain their original meanings; the Ferrers F2

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 
 #include <hpx/threading_base/annotated_function.hpp>
 
@@ -15,27 +16,196 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/sph/flops.hpp>
 #include <cosmictiger/sph/particles.hpp>
+#include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/time_integration.hpp>
+#include <cosmictiger/sph/tree.hpp>
 
 namespace detail {
 
 static bool midpointEventActive = false;
+static bool rungBalanceActive = false;
+static char* rungCandidates = nullptr;
+static Vector<char> rungSnapshot;
 
 }    // namespace detail
 
 void sphMidpointSetEventActive(bool active);
 HPX_PLAIN_ACTION(sphMidpointSetEventActive, SphMidpointSetEventActiveAction);
 HPX_PLAIN_ACTION(sphMidpointTargetCount, SphMidpointTargetCountAction);
-HPX_PLAIN_ACTION(sphParticlesApplyMidpointUpdates, SphParticlesApplyMidpointUpdatesAction);
 HPX_PLAIN_ACTION(sphParticlesSelectMidpointRungs, SphParticlesSelectMidpointRungsAction);
+HPX_PLAIN_ACTION(sphSeedRungProposals, SphSeedRungProposalsAction);
+HPX_PLAIN_ACTION(sphCommitBalancedRungs, SphCommitBalancedRungsAction);
+
+void sphSeedRungProposals() {
+    ALWAYS_ASSERT(!detail::rungBalanceActive);
+    Vector<hpx::future<void>> children;
+    for (auto const& child : hpxChildren()) {
+        children.push_back(hpx::async<SphSeedRungProposalsAction>(child));
+    }
+    for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
+        sphParticlesProposedRungs[gas] = sphParticlesRung(gas);
+    }
+    for (auto& child : children) {
+        child.get();
+    }
+}
+
+int sphCommitBalancedRungs() {
+    ALWAYS_ASSERT(!detail::rungBalanceActive);
+    Vector<hpx::future<int>> children;
+    for (auto const& child : hpxChildren()) {
+        children.push_back(hpx::async<SphCommitBalancedRungsAction>(child));
+    }
+    int maximumRung = 0;
+    for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
+        auto const candidate = sphParticlesProposedRungs[gas];
+        ALWAYS_ASSERT(candidate >= 0 && candidate < kMaxRung);
+        sphParticlesRung(gas) = candidate;
+        maximumRung = std::max(maximumRung, int(candidate));
+    }
+    for (auto& child : children) {
+        maximumRung = std::max(maximumRung, child.get());
+    }
+    return maximumRung;
+}
+
+void sphPrepareRungCandidates(bool initialize);
+SphRungBalanceReturn sphFinishRungCandidates(bool publish);
+Vector<char> sphFetchRungCandidates(Pair<ParticleInteger> range);
+HPX_PLAIN_ACTION(sphPrepareRungCandidates, SphPrepareRungCandidatesAction);
+HPX_PLAIN_ACTION(sphFinishRungCandidates, SphFinishRungCandidatesAction);
+HPX_PLAIN_ACTION(sphFetchRungCandidates, SphFetchRungCandidatesAction);
+
+bool sphRungBalanceActive() {
+    return detail::rungBalanceActive;
+}
+
+char* sphRungCandidatesData() {
+    return detail::rungCandidates;
+}
+
+void sphPrepareRungCandidates(bool initialize) {
+    Vector<hpx::future<void>> children;
+    for (auto const& child : hpxChildren()) {
+        children.push_back(hpx::async<SphPrepareRungCandidatesAction>(child, initialize));
+    }
+    if (initialize) {
+        ALWAYS_ASSERT(!detail::rungBalanceActive);
+        detail::rungBalanceActive = true;
+        detail::rungSnapshot.resize(sphParticlesSize());
+        if (particlesSize() != 0) {
+            detail::rungCandidates = static_cast<char*>(allocateManagedMemory(particlesSize()));
+        }
+    }
+    for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
+        auto const particle = sphParticlesParticleIndex(gas);
+        if (initialize) {
+            auto const seed = sphParticlesProposedRungs[gas];
+            ALWAYS_ASSERT(seed >= 0 && seed < kMaxRung);
+            detail::rungCandidates[particle] = seed;
+        }
+        detail::rungSnapshot[gas] = detail::rungCandidates[particle];
+    }
+    for (auto& child : children) {
+        child.get();
+    }
+}
+
+Vector<char> sphFetchRungCandidates(Pair<ParticleInteger> range) {
+    ALWAYS_ASSERT(detail::rungBalanceActive && range.first >= 0 &&
+        range.second <= detail::rungSnapshot.size());
+    return Vector<char>(
+        detail::rungSnapshot.begin() + range.first, detail::rungSnapshot.begin() + range.second);
+}
+
+void sphReadRungCandidates(ParticleGlobalRange range, char* rungs, ParticleInteger offset) {
+    if (range.range.first == range.range.second) {
+        return;
+    }
+    if (range.proc == hpxRank()) {
+        ALWAYS_ASSERT(detail::rungBalanceActive);
+        std::copy(detail::rungSnapshot.begin() + range.range.first,
+            detail::rungSnapshot.begin() + range.range.second, rungs + offset);
+    } else {
+        auto const values =
+            hpx::async<SphFetchRungCandidatesAction>(hpxLocalities()[range.proc], range.range)
+                .get();
+        std::copy(values.begin(), values.end(), rungs + offset);
+    }
+}
+
+SphRungBalanceReturn sphFinishRungCandidates(bool publish) {
+    Vector<hpx::future<SphRungBalanceReturn>> children;
+    for (auto const& child : hpxChildren()) {
+        children.push_back(hpx::async<SphFinishRungCandidatesAction>(child, publish));
+    }
+    SphRungBalanceReturn result;
+    if (publish) {
+        for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
+            auto const candidate = detail::rungCandidates[sphParticlesParticleIndex(gas)];
+            result.changedParticles += candidate != sphParticlesProposedRungs[gas];
+            result.maximumRung = std::max(result.maximumRung, int(candidate));
+            sphParticlesProposedRungs[gas] = candidate;
+        }
+    }
+    if (detail::rungCandidates != nullptr) {
+        freeManagedMemory(detail::rungCandidates);
+        detail::rungCandidates = nullptr;
+    }
+    detail::rungSnapshot.clear();
+    detail::rungBalanceActive = false;
+    for (auto& child : children) {
+        auto const remote = child.get();
+        result.maximumRung = std::max(result.maximumRung, remote.maximumRung);
+        result.changedParticles += remote.changedParticles;
+    }
+    return result;
+}
+
+SphRungBalanceReturn sphBalanceRungs(TreeId root, float scaleFactor, bool cuda) {
+    ALWAYS_ASSERT(hpxRank() == 0 && sphTreeAllValid());
+    SphTreeNeighborParameters neighbors;
+    neighbors.runType = kSphTreeNeighborBoxes;
+    neighbors.innerSelection = neighbors.outerSelection = kSphSetAll;
+    sphTreeNeighbor(neighbors, root, {}).get();
+    neighbors.runType = kSphTreeNeighborNeighbors;
+    neighbors.innerSelection = kSphInteractionsIJ;
+    sphTreeNeighbor(neighbors, root, Vector<TreeId>{root}).get();
+
+    try {
+        sphPrepareRungCandidates(true);
+        SphRunParameters parameters;
+        parameters.runType = kSphRunRungs;
+        parameters.phase = 0;
+        parameters.minimumRung = 0;
+        parameters.baseTimestep = 1.0f;
+        parameters.scaleFactor = scaleFactor;
+        parameters.expansionRate = 0.0f;
+        parameters.courantFactor = getOptions().hydro.cfl;
+        // Locally derived graph closure:
+        //   r_i* = max_j (r_j^0 - dist(i,j), 0).
+        // r_j^0 -> caller proposal; dist -> touching-kernel graph distance.
+        // Each Jacobi pass crosses one edge. Since 0 <= r < kMaxRung, at most
+        // kMaxRung-1 propagation passes and one unchanged pass suffice.
+        for (int pass = 1; pass <= kMaxRung; ++pass) {
+            auto const result = sphRun(parameters, cuda);
+            if (!result.needsAnotherPass) {
+                auto balanced = sphFinishRungCandidates(true);
+                balanced.passes = pass;
+                return balanced;
+            }
+            sphPrepareRungCandidates(false);
+        }
+        throw std::runtime_error("SPH rung closure did not reach its bounded fixed point");
+    } catch (...) {
+        sphFinishRungCandidates(false);
+        throw;
+    }
+}
 
 bool sphMidpointEnabled() {
     auto const& options = getOptions();
-    return options.hydro.enabled && options.hydro.method == "sph" && !options.chemistry.enabled &&
-        !options.starFormation.enabled &&
-        (options.hydro.viscosityEvolution == "none" ||
-            options.hydro.viscosityEvolution == "morrisAndMonaghan") &&
-        (!options.gravity.enabled || options.gravity.method == "fmm");
+    return options.hydro.enabled && options.hydro.method == "sph";
 }
 
 bool sphMidpointEventActive() {
@@ -56,7 +226,6 @@ void sphMidpointSetEventActive(bool active) {
 
 void sphMidpointBeginEvent() {
     ALWAYS_ASSERT(sphMidpointEnabled() && !detail::midpointEventActive);
-    sphParticlesReleaseGravityStorage();
     sphMidpointSetEventActive(true);
 }
 
@@ -78,53 +247,6 @@ size_t sphMidpointTargetCount(int exactRung) {
         count += child.get();
     }
     return count;
-}
-
-void sphParticlesApplyMidpointUpdates(int exactRung, double timestep) {
-    ALWAYS_ASSERT(detail::midpointEventActive && std::isfinite(timestep) && timestep >= 0.0);
-    if (timestep == 0.0) {
-        return;
-    }
-    Vector<hpx::future<void>> pending;
-    for (auto const& child : hpxChildren()) {
-        pending.push_back(
-            hpx::async<SphParticlesApplyMidpointUpdatesAction>(child, exactRung, timestep));
-    }
-    int const workers = std::max(1, hpxHardwareConcurrency());
-    for (int worker = 0; worker < workers; ++worker) {
-        pending.push_back(hpx::async(hpx::annotated_function(
-            [exactRung, timestep, workers, worker]() {
-                ParticleInteger const begin = size_t(worker) * sphParticlesSize() / workers;
-                ParticleInteger const end = size_t(worker + 1) * sphParticlesSize() / workers;
-                sph_flops::Counter flops;
-                for (ParticleInteger gas = begin; gas < end; ++gas) {
-                    if (exactRung >= 0 && sphParticlesRung(gas) != exactRung) {
-                        continue;
-                    }
-                    // Locally derived midpoint operator at fixed positions:
-                    //   v ← v + Δt a_hydro; A ← A + Δt Ȧ.
-                    // v → sphParticlesVelocity; Δt → timestep;
-                    // a_hydro → sphParticlesAcceleration; A → sphParticlesEntropy;
-                    // Ȧ → sphParticlesEntropyRate. The driver supplies the symmetric
-                    // gravity/drift composition; viscosity uses a first-order kick.
-                    for (int dimension = 0; dimension < kDimensions; ++dimension) {
-                        sphParticlesVelocity(dimension, gas) +=
-                            sphParticlesAcceleration(dimension, gas) * timestep;
-                    }
-                    ALWAYS_ASSERT(sphParticlesEntropy(gas) > 0.0f);
-                    sphParticlesEntropy(gas) += sphParticlesEntropyRate(gas) * timestep;
-                    ALWAYS_ASSERT(
-                        std::isfinite(sphParticlesEntropy(gas)) && sphParticlesEntropy(gas) > 0.0f);
-                    flops.doublePrecision += 5 * (kDimensions + 1);
-                }
-                addCpuFlops(flops.counts());
-            },
-            "sph.particles.midpointKick")));
-    }
-    hpx::wait_all(pending.begin(), pending.end());
-    for (auto& future : pending) {
-        future.get();
-    }
 }
 
 int sphParticlesSelectMidpointRungs(int minimumRung) {

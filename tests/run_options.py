@@ -31,6 +31,10 @@ def main():
     parser.add_argument("--without-sph", action="store_true")
     parser.add_argument("--without-chemistry", action="store_true")
     parser.add_argument("--with-star-formation", action="store_true")
+    parser.add_argument("--without-entropy-sources", action="store_true",
+                        help="Compiled cooling/star capabilities cannot yet couple to SPH entropy")
+    parser.add_argument("--concurrent-cases", type=int, choices=range(1, kConcurrentCases + 1),
+                        default=kConcurrentCases, help="Concurrent two-thread application cases")
     parser.add_argument("--without-rockstar", action="store_true")
     parser.add_argument("--hydro-methods-only", action="store_true",
                         help="Check hydrodynamics method selection without the full option suite")
@@ -44,6 +48,7 @@ def main():
         parser.error("order=0 requires gravity-method=none")
     chemistryAvailable = not args.without_sph and not args.without_chemistry
     starFormationAvailable = not args.without_sph and args.with_star_formation
+    coupledSourcesAvailable = not args.without_entropy_sources
     args.workdir.mkdir(parents=True, exist_ok=True)
     unused_view = args.workdir / "view.txt"
     unused_view.unlink(missing_ok=True)
@@ -101,7 +106,7 @@ def main():
         Each launch is dominated by runtime startup, so overlapping a few of them
         shortens the suite; the outputs are returned in case order.
         """
-        with ThreadPoolExecutor(kConcurrentCases) as pool:
+        with ThreadPoolExecutor(args.concurrent_cases) as pool:
             return list(pool.map(lambda case: run(*case), cases))
 
     def assertResolvedOptions(output):
@@ -823,15 +828,15 @@ mapSize = 8
             assertCompiledSettings(output)
             if not re.search(r"^hydro\.enabled\s*:\s*T\s*$", output, re.MULTILINE):
                 raise RuntimeError("SPH INI request was not enabled")
-    if sph_controls_available and args.time_integrator == "hierarchical":
+    if sph_controls_available and not coupledSourcesAvailable:
         for field in ("chemistry.enabled", "starFormation.enabled"):
-            output = run("hierarchical_source_rejected_" + field, sph_options + [
+            output = run("midpoint_source_rejected_" + field, sph_options + [
                 "--hydro.enabled=true", "--gravity.enabled=true", f"--{field}=true"], success=False)
-            expected = "Hierarchical SPH does not yet support chemistry or star formation"
+            expected = "Midpoint SPH does not yet support chemistry or star formation"
             if field == "chemistry.enabled" and not chemistryAvailable:
                 expected = "COSMICTIGER_ENABLE_CHEMISTRY=ON"
             if expected not in output:
-                raise RuntimeError("hierarchical deferred source rejection lacked guidance")
+                raise RuntimeError("midpoint deferred source rejection lacked guidance")
     if sph_controls_available:
         if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_default, re.MULTILINE):
             raise RuntimeError("Balsara switch must default to enabled")
@@ -941,6 +946,11 @@ mapSize = 8
             success=False)
         if "COSMICTIGER_ENABLE_CHEMISTRY=ON" not in rejected and "pending SPH entropy source conversions" not in rejected:
             raise RuntimeError("star formation without compiled chemistry lacked build guidance")
+    elif not coupledSourcesAvailable:
+        rejected = run("deferred_star_formation", metadata_options + ["--starFormation.enabled=true"],
+                       success=False)
+        if "pending SPH entropy source conversions" not in rejected:
+            raise RuntimeError("compiled star formation lacked deferred-coupling guidance")
     elif not hydro_rejected and args.time_integrator != "hierarchical":
         star_options = [option for option in metadata_options
                         if not option.startswith("--hydro.enabled=")] + [
@@ -993,6 +1003,14 @@ mapSize = 8
             rejected = run("disabled_chemistry_" + label, metadata_options + options, success=False)
             if "COSMICTIGER_ENABLE_CHEMISTRY=ON" not in rejected and "pending SPH entropy source conversions" not in rejected:
                 raise RuntimeError("disabled chemistry request lacked build guidance")
+    elif chemistryAvailable and not coupledSourcesAvailable:
+        chemistryConfig = args.workdir / "deferred_chemistry.ini"
+        chemistryConfig.write_text("[chemistry]\nenabled = true\n")
+        for label, options in (("cli", ["--chemistry.enabled=true"]),
+                               ("ini", [f"--configuration={chemistryConfig.resolve()}"])):
+            rejected = run("deferred_chemistry_" + label, metadata_options + options, success=False)
+            if "pending SPH entropy source conversions" not in rejected:
+                raise RuntimeError("compiled chemistry lacked deferred-coupling guidance")
 
     if sph_controls_available:
         # Both checkpoint layouts round-trip: zero retains the existing SPH block,
@@ -1008,7 +1026,8 @@ mapSize = 8
             if "Checkpoint state and mode validation passed" not in output:
                 raise RuntimeError("z-plane acceleration checkpoint state did not round-trip")
 
-    if chemistryAvailable and not hydro_rejected and args.time_integrator != "hierarchical":
+    if (chemistryAvailable and coupledSourcesAvailable and not hydro_rejected and
+            args.time_integrator != "hierarchical"):
         cooling_options = [option for option in metadata_options
                            if not option.startswith("--hydro.enabled=")] + [
                                "--hydro.enabled=true", "--chemistry.enabled=true"]
@@ -1415,7 +1434,7 @@ mapSize = 8
         output = run(f"complete_{case_name}", metadata_options + preset_options)
         if "Checkpoint state and mode validation passed" not in output:
             raise RuntimeError(f"{relative_path} did not finish metadata validation")
-        if (ini["run"]["scenario"] == "cosmology" and chemistryAvailable and
+        if (ini["run"]["scenario"] == "cosmology" and coupledSourcesAvailable and chemistryAvailable and
                 starFormationAvailable and args.time_integrator != "hierarchical"):
             enabled_options = [option for option in metadata_options
                                if not option.startswith("--hydro.enabled=")]

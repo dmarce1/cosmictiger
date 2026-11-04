@@ -11,6 +11,7 @@
 #include <memory>
 #include <mutex>
 #include <stack>
+#include <type_traits>
 #include <vector>
 
 #include <hpx/threading_base/annotated_function.hpp>
@@ -28,6 +29,7 @@
 #include <cosmictiger/sph/cpu.hpp>
 #include <cosmictiger/sph/flops.hpp>
 #include <cosmictiger/sph/sph.hpp>
+#include <cosmictiger/sph/time_integration.hpp>
 #ifdef USE_CUDA
 #include <cosmictiger/sph/cuda.hpp>
 #endif
@@ -54,6 +56,8 @@ inline bool rangeIntersect(
 
 struct SphRunWorkspace {
     SphRunParameters params;
+    Vector<SphPairSourceId, PinnedAllocator<SphPairSourceId>> hostSourceIds;
+    Vector<SphPairUpdate, PinnedAllocator<SphPairUpdate>> hostPairUpdates;
     Vector<float, PinnedAllocator<float>> hostVelocityX;
     Vector<float, PinnedAllocator<float>> hostVelocityY;
     Vector<float, PinnedAllocator<float>> hostVelocityZ;
@@ -79,6 +83,8 @@ struct SphRunWorkspace {
     MutexType mutex;
     template <class Copy>
     void copySources(SphRunData& runData, Copy&& copy) {
+        copy(runData.sourceIds, hostSourceIds);
+        copy(runData.sourcePairUpdates, hostPairUpdates);
         copy(runData.sourcePositionX, hostPositionX);
         copy(runData.sourcePositionY, hostPositionY);
         copy(runData.sourcePositionZ, hostPositionZ);
@@ -105,6 +111,7 @@ struct SphRunWorkspace {
     // stage() gathers every source, including remote cache lines; compute() runs the
     // kernels, which update sink arrays that remote localities may still be staging.
     void stage();
+    void deliverPairUpdates();
     SphRunReturn compute(bool useCuda);
     SphRunReturn run(bool useCuda) {
         stage();
@@ -284,7 +291,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
             flops.doublePrecision += 4 * kDimensions;    // Empty-bound conversions.
             bool factive = false;
             for (ParticleInteger i = selfPtr->particleRange.first;
-                 i < selfPtr->particleRange.second; i++) {
+                i < selfPtr->particleRange.second; i++) {
                 bool const active = sphParticlesRung(i) >= params.minimumRung;
                 float const h = params.supportRadiusMultiplier * sphParticlesSupportRadius(i);
                 auto const myx = sphParticlesPosition(kXDimension, i);
@@ -390,7 +397,7 @@ static std::shared_ptr<SphRunWorkspace> collectSphRunWork(SphRunParameters const
                     bool test = false;
                     switch (params.runType) {
                     case kSphRunRungs:
-                        test = self->numberOfActiveParticles > 0;
+                        test = self->numberOfParticles() > 0;
                         break;
 
                     case kSphRunPrehydro1:
@@ -424,9 +431,6 @@ static std::shared_ptr<SphRunWorkspace> collectSphRunWork(SphRunParameters const
 static SphRunParameters prepareSphRunParameters(SphRunParameters params, bool& cuda) {
     ALWAYS_ASSERT(params.minimumRung >= 0 && params.maximumRung < kMaxRung &&
         params.minimumRung <= params.maximumRung);
-    if (params.midpointHydro && params.gradientSwitch()) {
-        THROW_ERROR("Midpoint SPH supports Morris-Monaghan or fixed viscosity only\n");
-    }
     params.courantFactor = getOptions().hydro.cfl;
     if (getOptions().hydro.cuda == false) {
         cuda = false;
@@ -439,6 +443,94 @@ static SphRunParameters prepareSphRunParameters(SphRunParameters params, bool& c
 static std::shared_ptr<SphRunWorkspace> stagedSphRun;
 
 }    // namespace detail
+
+// Only event-local increments cross ranks. Receive all messages before committing
+// any float particle state; every pair used the same immutable source snapshot.
+struct SphOwnedPairUpdate {
+    ParticleInteger index;
+    SphPairUpdate update;
+    template <class Archive>
+    void serialize(Archive& archive, unsigned) {
+        archive & index & update;
+    }
+};
+namespace detail {
+static MutexType pairUpdateMutex;
+static Vector<SphOwnedPairUpdate> pendingPairUpdates;
+}    // namespace detail
+void sphReceivePairUpdates(Vector<SphOwnedPairUpdate> updates) {
+    std::lock_guard<MutexType> lock(detail::pairUpdateMutex);
+    detail::pendingPairUpdates.insert(
+        detail::pendingPairUpdates.end(), updates.begin(), updates.end());
+}
+HPX_PLAIN_ACTION(sphReceivePairUpdates, SphReceivePairUpdatesAction);
+void sphCommitPairUpdates();
+HPX_PLAIN_ACTION(sphCommitPairUpdates, SphCommitPairUpdatesAction);
+void sphCommitPairUpdates() {
+    Vector<hpx::future<void>> children;
+    for (auto const& child : hpxChildren()) {
+        children.push_back(hpx::async<SphCommitPairUpdatesAction>(child));
+    }
+    auto& updates = detail::pendingPairUpdates;
+    std::sort(updates.begin(), updates.end(),
+        [](auto const& a, auto const& b) { return a.index < b.index; });
+    for (size_t first = 0; first < updates.size();) {
+        ParticleInteger const gas = updates[first].index;
+        ALWAYS_ASSERT(gas >= 0 && gas < sphParticlesSize());
+        SphPairUpdate total;
+        size_t next = first;
+        do {
+            for (int dimension = 0; dimension < kDimensions; ++dimension) {
+                total.velocity[dimension] += updates[next].update.velocity[dimension];
+            }
+            total.entropy += updates[next].update.entropy;
+            ++next;
+        } while (next < updates.size() && updates[next].index == gas);
+        for (int dimension = 0; dimension < kDimensions; ++dimension) {
+            sphParticlesVelocity(dimension, gas) += total.velocity[dimension];
+        }
+        sphParticlesEntropy(gas) += total.entropy;
+        ALWAYS_ASSERT(std::isfinite(sphParticlesEntropy(gas)) && sphParticlesEntropy(gas) > 0.0f);
+        first = next;
+    }
+    Vector<SphOwnedPairUpdate>().swap(updates);
+    for (auto& child : children) {
+        child.get();
+    }
+}
+
+void SphRunWorkspace::deliverPairUpdates() {
+    if (hostPairUpdates.empty()) {
+        return;
+    }
+    Vector<Vector<SphOwnedPairUpdate>> destinations(hpxSize());
+    for (size_t i = 0; i < hostPairUpdates.size(); ++i) {
+        auto const& value = hostPairUpdates[i];
+        bool nonzero = value.entropy != 0.0;
+        for (int dimension = 0; dimension < kDimensions; ++dimension) {
+            nonzero = nonzero || value.velocity[dimension] != 0.0;
+        }
+        if (nonzero) {
+            auto const& owner = hostSourceIds[i];
+            destinations[owner.rank].push_back({owner.index, value});
+        }
+    }
+    Vector<hpx::future<void>> deliveries;
+    for (int rank = 0; rank < hpxSize(); ++rank) {
+        if (destinations[rank].empty()) {
+            continue;
+        }
+        if (rank == hpxRank()) {
+            sphReceivePairUpdates(std::move(destinations[rank]));
+        } else {
+            deliveries.push_back(hpx::async<SphReceivePairUpdatesAction>(
+                hpxLocalities()[rank], std::move(destinations[rank])));
+        }
+    }
+    for (auto& delivery : deliveries) {
+        delivery.get();
+    }
+}
 
 void sphRunStage(SphRunParameters params, bool cuda);
 SphRunReturn sphRunCompute(bool cuda);
@@ -474,6 +566,7 @@ SphRunReturn sphRunCompute(bool cuda) {
     ALWAYS_ASSERT(workspacePtr != nullptr);
     if (!workspacePtr->hostTargetNodeIndices.empty()) {
         rc += workspacePtr->compute(cuda);
+        workspacePtr->deliverPairUpdates();
     }
     for (auto& f : children) {
         rc += f.get();
@@ -487,10 +580,14 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
         sphParticlesPrepareThermodynamics(params.scaleFactor, params.runType == kSphRunHydro);
     }
     // Each phase consumes gas fields updated by the preceding phase on every locality.
-    if (hpxRank() == 0 && hpxSize() > 1) {
+    if (hpxRank() == 0 && (hpxSize() > 1 || params.midpointHydro)) {
         sphParticlesClearCaches();
         sphRunStage(params, cuda);
-        return sphRunCompute(cuda);
+        auto result = sphRunCompute(cuda);
+        if (params.midpointHydro && params.runType == kSphRunHydro) {
+            sphCommitPairUpdates();
+        }
+        return result;
     }
     params = detail::prepareSphRunParameters(params, cuda);
     Vector<hpx::future<SphRunReturn>> futs;
@@ -514,8 +611,8 @@ SphRunReturn sphMidpointForces(SphRunParameters params, bool cuda) {
     params.midpointHydro = true;
     params.deferAccelerationSources = false;
     // The surrounding drifts already placed sources at this split-operator
-    // stage. This is one frozen RHS evaluation, including viscous heating;
-    // the caller applies its rates once over the full positive hydro interval.
+    // stage. This frozen RHS evaluation commits reciprocal impulses and viscous
+    // heating once over the full positive hydro interval.
     return sphRun(params, cuda);
 }
 
@@ -561,6 +658,10 @@ void SphRunWorkspace::stage() {
     for (auto const& node : hostTrees) {
         particleStorageSize += node.particleRange.second - node.particleRange.first;
     }
+    if (params.runType == kSphRunHydro && params.midpointHydro) {
+        hostSourceIds.resize(particleStorageSize);
+        hostPairUpdates.resize(particleStorageSize);
+    }
     hostPositionX.resize(particleStorageSize);
     hostPositionY.resize(particleStorageSize);
     hostPositionZ.resize(particleStorageSize);
@@ -575,9 +676,6 @@ void SphRunWorkspace::stage() {
         hostBalsaraFactor.resize(particleStorageSize);
     }
     if (params.runType == kSphRunPrehydro2 && params.gradientSwitch()) {
-        hostAccelerationX.resize(particleStorageSize);
-        hostAccelerationY.resize(particleStorageSize);
-        hostAccelerationZ.resize(particleStorageSize);
         if (params.cullenDehnen) {
             // Only Cullen-Dehnen equation (17) reads the neighbors' previous divergences.
             hostVelocityDivergence.resize(particleStorageSize);
@@ -617,6 +715,13 @@ void SphRunWorkspace::stage() {
                     ParticleInteger const size =
                         node.particleRange.second - node.particleRange.first;
                     ParticleInteger const offset = (particleIndex += size) - size;
+                    if (!hostSourceIds.empty()) {
+                        auto const range = node.globalParticleRange();
+                        for (ParticleInteger gas = range.range.first; gas < range.range.second;
+                            ++gas) {
+                            hostSourceIds[offset + gas - range.range.first] = {range.proc, gas};
+                        }
+                    }
                     sphParticlesGlobalReadPositions(node.globalParticleRange(),
                         hostPositionX.data(), hostPositionY.data(), hostPositionZ.data(), offset);
                     if (params.runType == kSphRunPrehydro2 || params.runType == kSphRunRungs) {
@@ -624,8 +729,13 @@ void SphRunWorkspace::stage() {
                             node.globalParticleRange(),
                             hostInternalEnergy.empty() ? nullptr : hostInternalEnergy.data(),
                             hostSupportRadius.data(), offset);
-                        sphParticlesGlobalReadRungs(
-                            node.globalParticleRange(), hostRungs.data(), offset);
+                        if (params.runType == kSphRunRungs && sphRungBalanceActive()) {
+                            sphReadRungCandidates(
+                                node.globalParticleRange(), hostRungs.data(), offset);
+                        } else {
+                            sphParticlesGlobalReadRungs(
+                                node.globalParticleRange(), hostRungs.data(), offset);
+                        }
                     } else if (params.runType == kSphRunHydro) {
                         sphParticlesGlobalReadInternalEnergyAndSupportRadius(
                             node.globalParticleRange(), hostInternalEnergy.data(),
@@ -644,8 +754,6 @@ void SphRunWorkspace::stage() {
                     }
                     if (params.runType == kSphRunPrehydro2 && params.gradientSwitch()) {
                         sphParticlesGlobalReadViscosityDiagnostics(node.globalParticleRange(),
-                            hostAccelerationX.data(), hostAccelerationY.data(),
-                            hostAccelerationZ.data(),
                             params.cullenDehnen ? hostVelocityDivergence.data() : nullptr, offset);
                     }
                     if (!hostVelocityX.empty()) {
@@ -675,6 +783,9 @@ SphRunData SphRunWorkspace::data() {
     runData.sinkParticleIndices = &sphParticlesParticleIndex(0);
     runData.sinkSemiactive = &sphParticlesSemiactive(0);
     runData.sinkParticleRungs = &particlesRung(0);
+    if (params.runType == kSphRunRungs && sphRungBalanceActive()) {
+        runData.sinkRungCandidates = sphRungCandidatesData();
+    }
     if (params.runType == kSphRunHydro && params.phase == 1) {
         runData.sinkProposedRungs = sphParticlesProposedRungs;
     }
@@ -684,11 +795,11 @@ SphRunData SphRunWorkspace::data() {
     runData.sinkBulkViscosityCoefficient = sphParticlesBulkViscosityCoefficients;
     runData.sinkCullenDehnenStates = sphParticlesCullenDehnenStates;
     runData.sinkSupportRadius = sphParticlesSupportRadii;
-    runData.sinkEntropyRate = sphParticlesEntropyRates;
+    runData.sinkEntropyRate = nullptr;
 #if COSMICTIGER_WITH_GRAVITY
-    runData.sinkGravityAccelerationX = sphParticlesGravityAccelerations[kXDimension];
-    runData.sinkGravityAccelerationY = sphParticlesGravityAccelerations[kYDimension];
-    runData.sinkGravityAccelerationZ = sphParticlesGravityAccelerations[kZDimension];
+    runData.sinkGravityAccelerationX = nullptr;
+    runData.sinkGravityAccelerationY = nullptr;
+    runData.sinkGravityAccelerationZ = nullptr;
     runData.gravityEffectiveRadius = getOptions().gravity.supportRadius /
         selectedGravityKernel().supportRadiusPerEffectiveRadius;
 #if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
@@ -697,12 +808,12 @@ SphRunData SphRunWorkspace::data() {
     }
 #endif
     addCpuFlops(2, FlopPrecision::Double);
-    runData.selfGravityEnabled = getOptions().gravity.enabled && !params.midpointHydro;
+    runData.selfGravityEnabled = false;
 #endif
     runData.adiabaticIndex = getOptions().hydro.gamma;
     runData.numberOfTargetNodes = hostTargetNodeIndices.size();
     runData.sinkSmoothingConverged = &sphParticlesConverged(0);
-    runData.sinkAccelerations = &sphParticlesAccelerationState(0);
+    runData.sinkAccelerations = nullptr;
     runData.centralAcceleration = getOptions().hydro.centralAcceleration;
     runData.centralSupportRadius = getOptions().hydro.centralSupportRadius;
     runData.targetNeighborCount = getOptions().hydro.neighborNumber;
@@ -739,7 +850,7 @@ SphRunReturn SphRunWorkspace::compute(bool useCuda) {
                     [&]() {
                         SphRunReturn result;
                         for (int nodeIndex = nextNode++; nodeIndex < runData.numberOfTargetNodes;
-                             nodeIndex = nextNode++) {
+                            nodeIndex = nextNode++) {
                             result += sphRunCpuNode(params, runData, nodeIndex);
                         }
                         return result;
@@ -773,12 +884,18 @@ SphRunReturn SphRunWorkspace::compute(bool useCuda) {
         device = nullptr;
         if (!host.empty()) {
             size_t const bytes = sizeof(*device) * host.size();
-            CUDA_CHECK(cudaMalloc(&device, bytes));
-            sourceBuffers.emplace_back(device, cudaFree);
-            stream.copyAsync(device, host.data(), bytes, cudaMemcpyHostToDevice);
+            void* allocation = nullptr;
+            CUDA_CHECK(cudaMalloc(&allocation, bytes));
+            device = static_cast<std::remove_reference_t<decltype(device)>>(allocation);
+            sourceBuffers.emplace_back(allocation, cudaFree);
+            stream.copyAsync(allocation, host.data(), bytes, cudaMemcpyHostToDevice);
         }
     });
     auto rc = sphRunCuda(params, runData, stream);
+    if (!hostPairUpdates.empty()) {
+        stream.copyAsync(hostPairUpdates.data(), runData.sourcePairUpdates,
+            hostPairUpdates.size() * sizeof(SphPairUpdate), cudaMemcpyDeviceToHost);
+    }
     stream.wait();
 
     return rc;

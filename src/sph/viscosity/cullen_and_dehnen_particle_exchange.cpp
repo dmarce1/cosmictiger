@@ -10,37 +10,30 @@
 
 #include "../particle_cache.hpp"
 
-static Vector<Array<float, kDimensions + 1>> sphParticlesFetchViscosityDiagnosticsCacheLine(
-    ParticleInteger index);
+static Vector<float> sphParticlesFetchViscosityDiagnosticsCacheLine(ParticleInteger index);
 
 HPX_PLAIN_ACTION(sphParticlesFetchViscosityDiagnosticsCacheLine,
     SphParticlesFetchViscosityDiagnosticsCacheLineAction);
 
 static Array<std::unordered_map<detail::SphCacheLineId,
-                 std::shared_ptr<hpx::shared_future<Vector<Array<float, kDimensions + 1>>>>,
-                 detail::SphCacheLineHashHi>,
+                 std::shared_ptr<hpx::shared_future<Vector<float>>>, detail::SphCacheLineHashHi>,
     kParticleCacheSize>
     viscosityDiagnosticsParticleCache;
 static Array<SpinlockType, kParticleCacheSize> viscosityDiagnosticsMutexes;
 
-static Vector<Array<float, kDimensions + 1>> sphParticlesFetchViscosityDiagnosticsCacheLine(
-    ParticleInteger index) {
+static Vector<float> sphParticlesFetchViscosityDiagnosticsCacheLine(ParticleInteger index) {
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    Vector<Array<float, kDimensions + 1>> line(lineSize);
+    Vector<float> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; ++i) {
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            line[i - begin][dim] = sphParticlesAcceleration(dim, i);
-        }
-        line[i - begin][kDimensions] = sphParticlesCullenDehnenStates[i].divergence;
+        line[i - begin] = sphParticlesCullenDehnenStates[i].divergence;
     }
     return line;
 }
 
-void sphParticlesGlobalReadViscosityDiagnostics(ParticleGlobalRange range, float* accelerationX,
-    float* accelerationY, float* accelerationZ, float* divergence, ParticleInteger offset) {
-    float* const acceleration[kDimensions] = {accelerationX, accelerationY, accelerationZ};
+void sphParticlesGlobalReadViscosityDiagnostics(
+    ParticleGlobalRange range, float* divergence, ParticleInteger offset) {
     ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
     if (range.range.first == range.range.second) {
         return;
@@ -48,11 +41,6 @@ void sphParticlesGlobalReadViscosityDiagnostics(ParticleGlobalRange range, float
     if (range.proc == hpxRank()) {
         for (ParticleInteger i = range.range.first; i < range.range.second; ++i) {
             ParticleInteger const destination = offset + i - range.range.first;
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                if (acceleration[dim]) {
-                    acceleration[dim][destination] = sphParticlesAcceleration(dim, i);
-                }
-            }
             if (divergence) {
                 divergence[destination] = sphParticlesCullenDehnenStates[i].divergence;
             }
@@ -69,13 +57,8 @@ void sphParticlesGlobalReadViscosityDiagnostics(ParticleGlobalRange range, float
             ParticleInteger const begin = std::max(line, range.range.first);
             ParticleInteger const end = std::min(line + lineSize, range.range.second);
             for (ParticleInteger i = begin; i < end; ++i) {
-                for (int dim = 0; dim < kDimensions; ++dim) {
-                    if (acceleration[dim]) {
-                        acceleration[dim][destination] = values[i - line][dim];
-                    }
-                }
                 if (divergence) {
-                    divergence[destination] = values[i - line][kDimensions];
+                    divergence[destination] = values[i - line];
                 }
                 ++destination;
             }

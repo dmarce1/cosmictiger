@@ -130,10 +130,7 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
         // gravity-only rung update. The long half-kicks of an outer boundary
         // are applied directly; their diagnostic corrections report through the
         // dark-matter channels so the synchronized energies stay consistent.
-        ParticleInteger const gasIndex = particlesCatIndex(index);
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            sphParticlesGravityAcceleration(dim, gasIndex) = acceleration[dim];
-        }
+        THROW_ERROR("Mesh gravity with midpoint SPH is deferred\n");
         if (!parameters.firstCall) {
             applyLong(parameters.sign, longKick.closeHalf);
         }

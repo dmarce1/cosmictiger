@@ -10,8 +10,8 @@
 
 #include <cosmictiger/particles/particles.hpp>
 
-void sphParticlesGlobalReadViscosityDiagnostics(ParticleGlobalRange range, float* accelerationX,
-    float* accelerationY, float* accelerationZ, float* divergence, ParticleInteger offset);
+void sphParticlesGlobalReadViscosityDiagnostics(
+    ParticleGlobalRange range, float* divergence, ParticleInteger offset);
 
 namespace cullen_and_dehnen {
 

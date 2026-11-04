@@ -15,6 +15,7 @@
 #include <cstring>
 #include <format>
 #include <iostream>
+#include <limits>
 #include <numbers>
 #include <stdexcept>
 #include <string>
@@ -138,7 +139,6 @@ float migrationElectronFraction(int target) {
 void initializePair(double separation) {
     particlesResize(2);
     sphParticlesResize(1, false);
-    sphParticlesEnsureGravityStorage();
     for (ParticleInteger i = 0; i < 2; i++) {
         for (int dim = 0; dim < kDimensions; dim++) {
             particlesPos(dim, i) = dim == kXDimension ? 0.375 - i * separation : 0.375;
@@ -151,9 +151,14 @@ void initializePair(double separation) {
     sphParticlesParticleIndex(0) = 1;
     sphParticlesSupportRadius(0) = 0.02;
     sphParticlesEntropies[0] = 4.0;
-    sphParticlesEntropyRate(0) = 0.125;
     sphParticlesProposedRungs[0] = sphMidpointEnabled() ? 4 : -1;
-    sphParticlesGravityAcceleration(kXDimension, 0) = 0.0;
+    if (getOptions().hydro.viscosityGradientSwitch()) {
+        auto& state = sphParticlesCullenDehnenStates[0];
+        state = {};
+        state.divergence = -1.5f;
+        state.sampleTime = 0.25;
+        state.sampleDivergence = -1.75f;
+    }
 }
 TreeId findLeaf(TreeId node, ParticleInteger particle) {
     auto const* ptr = treeGetNode(node);
@@ -231,19 +236,6 @@ void verifyKick(
                 particlesVel(kYDimension, i), 0.25);
             requireClose("midpoint gravity leaves the thermal seed unchanged",
                 sphParticlesEntropies[0], 4.0);
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                if (sphParticlesGravityAccelerations[dim] != nullptr) {
-                    throw std::runtime_error(
-                        "Midpoint gravity allocated persistent gas acceleration");
-                }
-            }
-        } else if (gas) {
-            requireClose("legacy gas acceleration handoff",
-                sphParticlesGravityAcceleration(kXDimension, particlesCatIndex(i)), acceleration);
-            for (int dim = 0; dim < kDimensions; dim++) {
-                requireClose("legacy gas velocity remains owned by hydro", particlesVel(dim, i),
-                    0.125 * (dim + 1));
-            }
         } else if (particlesVel(kXDimension, i) == 0.0) {
             throw std::runtime_error("Ordinary DM kick did not update velocity");
         }
@@ -344,9 +336,6 @@ void verifyBhPotentials(bool useCuda) {
 void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
     double const nominalSeparation = softened ? 0.25 * getOptions().gravity.supportRadius : 0.25;
     initializePair(nominalSeparation);
-    if (sphMidpointEnabled()) {
-        sphParticlesReleaseGravityStorage();
-    }
     float const gasMass = particlesMass(sphParticlesParticleIndex(0));
     sphParticlesSupportRadius(0) = hydroSupport;
     auto const built = treeCreate(TreeCreateParameters(0, 0.5, getOptions().gravity.supportRadius));
@@ -448,6 +437,93 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
         throw std::runtime_error("CUDA regression requested from a non-CUDA build");
     }
 #endif
+    if (sphMidpointEnabled()) {
+        auto execute = [&](KickParameters const& parameters, bool gpu) {
+#ifdef USE_CUDA
+            if (gpu) {
+                KickWorkitem item;
+                item.l = local;
+                item.pos = origin;
+                item.self = built.id;
+                item.dchecklist.push_back(built.id);
+                return cudaExecuteKicks(parameters, particlesX[kXDimension],
+                    particlesX[kYDimension], particlesX[kZDimension], treeData(),
+                    Vector<KickWorkitem>{item});
+            }
+#else
+            ALWAYS_ASSERT(!gpu);
+#endif
+            return kick(parameters, local, origin, built.id, Vector<TreeId>{built.id},
+                Vector<TreeId>{}, nullptr);
+        };
+        ParticleInteger const gasIndex = sphParticlesParticleIndex(0);
+        double const gasAcceleration =
+            kGravityScale * getOptions().initial.darkMatterMass * separation * inverseCube;
+        for (int backend = 0; backend <= int(useCuda); ++backend) {
+            resetKickState();
+            auto deferred = params;
+            deferred.deferGasOpening = true;
+            gravityBeginGlobalKick();
+            auto result = execute(deferred, backend != 0);
+            requireClose("deferred gas opening leaves the synchronized velocity",
+                particlesVel(kXDimension, gasIndex), 0.125, 1e-7);
+            requireClose(
+                "deferred gas selection retains the hydro floor", particlesRung(gasIndex), 4);
+            // Stand in for neighbor closure after the fresh gravity choice.
+            particlesRung(gasIndex) = 6;
+            result += gravityFinishBalancedGasKick(params.t0, params.sign);
+            requireClose("balanced opening uses the final gas rung",
+                particlesVel(kXDimension, gasIndex),
+                0.125 + 0.5 * rungDt[6] * params.t0 * gasAcceleration, 1e-6);
+            requireClose("balanced opening publishes the final rung", result.maxRung, 6);
+            for (int dimension = 0; dimension < kDimensions; ++dimension) {
+                if (gravityGlobalAcceleration(dimension) != nullptr) {
+                    throw std::runtime_error("Balanced opening retained its event force buffer");
+                }
+            }
+
+            resetKickState();
+            auto frozen = params;
+            frozen.freezeGasRungs = true;
+            execute(frozen, backend != 0);
+            requireClose("traditional gas rung remains frozen between common boundaries",
+                particlesRung(gasIndex), 1);
+            requireClose("frozen gas leaves dark-matter selection unchanged",
+                particlesRung(darkMatterIndex), 2);
+            requireClose("frozen traditional opening uses the existing interval",
+                particlesVel(kXDimension, gasIndex),
+                0.125 + 0.5 * rungDt[1] * params.t0 * gasAcceleration, 1e-6);
+
+            resetKickState();
+            sphParticlesProposedRungs[0] = 0;
+            auto fullSelection = params;
+            fullSelection.htime = true;
+            fullSelection.fullGasRungSelection = true;
+            execute(fullSelection, backend != 0);
+            double const gasTimestep =
+                params.eta * std::sqrt(gravityEffectiveRadius / gasAcceleration);
+            int const expectedRung = int(std::ceil(std::log2(params.t0 / gasTimestep)));
+            if (expectedRung <= 1) {
+                throw std::runtime_error("Full-force rung fixture did not require a direct jump");
+            }
+            requireClose("hierarchical gas selects the full-force rung in the top walk",
+                particlesRung(gasIndex), expectedRung);
+            requireClose("full gas choice leaves hierarchical dark-matter selection unchanged",
+                particlesRung(darkMatterIndex), 1);
+            sphParticlesProposedRungs[0] = 7;
+            auto correction = fullSelection;
+            correction.fullGasRungSelection = false;
+            correction.freezeGasRungs = true;
+            correction.top = correction.ascending = false;
+            correction.minRung = 1;
+            execute(correction, backend != 0);
+            requireClose("hierarchical correction preserves balanced gas rung",
+                particlesRung(gasIndex), expectedRung);
+            requireClose("hierarchical correction still selects dark-matter rung",
+                particlesRung(darkMatterIndex), 2);
+            sphParticlesProposedRungs[0] = 4;
+        }
+    }
     requireClose(
         "gravity leaves hydro smoothing unchanged", sphParticlesSupportRadius(0), hydroSupport);
     treeDestroy(true);
@@ -464,7 +540,10 @@ void checkpointPair() {
     particlesPos(kXDimension, gas) = 0.9;
     sphParticlesSupportRadius(0) = 0.5;
     sphParticlesEntropies[0] = 99.0;
-    sphParticlesEntropyRate(0) = 99.0;
+    sphParticlesProposedRungs[0] = 9;
+    if (getOptions().hydro.viscosityGradientSwitch()) {
+        sphParticlesCullenDehnenStates[0] = {};
+    }
     std::rewind(file);
     particlesLoad(file);
     std::fclose(file);
@@ -475,7 +554,14 @@ void checkpointPair() {
         particlesPos(kXDimension, sphParticlesParticleIndex(0)).toDouble(), position.toDouble());
     requireClose("checkpoint hydro length", sphParticlesSupportRadius(0), 0.02);
     requireClose("checkpoint internal energy", sphParticlesEntropies[0], 4.0);
-    requireClose("checkpoint thermal stage", sphParticlesEntropyRate(0), 0.125);
+    requireClose("checkpoint persistent hydro rung", sphParticlesProposedRungs[0], 4);
+    if (getOptions().hydro.viscosityGradientSwitch()) {
+        auto const& state = sphParticlesCullenDehnenStates[0];
+        requireClose("checkpoint physical divergence", state.divergence, -1.5);
+        requireClose("checkpoint divergence sample time", state.sampleTime, 0.25);
+        requireClose("checkpoint divergence sample", state.sampleDivergence, -1.75);
+        requireClose("checkpoint derived target reset", state.targetBulkViscosityCoefficient, 0.0);
+    }
 }
 }    // namespace detail
 
@@ -487,15 +573,17 @@ void initializeSphDomainRegression() {
         particlesPos(kXDimension, i) = (target + (i == 0 ? 0.25 : 0.75)) / hpxSize();
         particlesPos(kXDimension, i).raw() += 17;
     }
-    sphParticlesEntropyRate(0) = 20.0 + target;
-    sphParticlesAccelerationStates[0][kXDimension] = 30.0 + target;
-    sphParticlesGravityAccelerations[kZDimension][0] = 50.0 + target;
+    sphParticlesEntropies[0] = 20.0 + target;
     sphParticlesProposedRungs[0] = 5 + target % 4;
     if (getOptions().hydro.viscosityEvolution != "none") {
         sphParticlesBulkViscosityCoefficients[0] = 0.5f + target / 16.0f;
     }
     if (getOptions().hydro.viscosityGradientSwitch()) {
-        sphParticlesCullenDehnenStates[0] = {-1.5f + target / 8.0f, 77.0f, 88.0f, 99.0f};
+        auto& state = sphParticlesCullenDehnenStates[0];
+        state = {-1.5f + target / 8.0f, 77.0f, 88.0f, 99.0f};
+        state.sampleTime = 0.125 + target / 32.0;
+        state.sampleDivergence = -2.0f + target / 16.0f;
+        state.pendingSampleDivergence = 66.0f;
     }
     if (getOptions().chemistry.enabled) {
         sphParticlesElectronFractions[0] = migrationElectronFraction(target);
@@ -544,11 +632,7 @@ void validateSphDomainRegression() {
         }
     }
     requireClose("migration persistent hydro rung", sphParticlesProposedRungs[0], 5 + target % 4);
-    requireClose("migration thermal stage", sphParticlesEntropyRate(0), 20.0 + target);
-    requireClose("migration acceleration stage", sphParticlesAccelerationStates[0][kXDimension],
-        30.0 + target);
-    requireClose(
-        "migration gravity", sphParticlesGravityAccelerations[kZDimension][0], 50.0 + target);
+    requireClose("migration canonical thermal state", sphParticlesEntropies[0], 20.0 + target);
     if (getOptions().hydro.viscosityEvolution != "none") {
         requireClose("migration viscosity alpha", sphParticlesBulkViscosityCoefficients[0],
             0.5 + target / 16.0);
@@ -557,6 +641,9 @@ void validateSphDomainRegression() {
         auto const& state = sphParticlesCullenDehnenStates[0];
         requireClose(
             "migration preserves physical divergence", state.divergence, -1.5 + target / 8.0);
+        requireClose("migration divergence sample time", state.sampleTime, 0.125 + target / 32.0);
+        requireClose("migration divergence sample", state.sampleDivergence, -2.0 + target / 16.0);
+        requireClose("migration resets pending sample", state.pendingSampleDivergence, 0.0);
         requireClose("migration resets pending divergence", state.pendingDivergence, 0.0);
         requireClose("migration resets target alpha", state.targetBulkViscosityCoefficient, 0.0);
         requireClose("migration resets decay time", state.inverseDecayTime, 0.0);
@@ -580,12 +667,10 @@ void validateSphDomainRegression() {
         requireClose("remote viscosity upper padding", bulkViscosityCoefficient[2], -9.0);
     }
     if (getOptions().hydro.viscosityGradientSwitch()) {
-        float acceleration[kDimensions][3]{};
-        float divergence[3]{};
-        sphParticlesGlobalReadViscosityDiagnostics(remote, acceleration[kXDimension],
-            acceleration[kYDimension], acceleration[kZDimension], divergence, 1);
-        requireClose(
-            "remote prior acceleration cache", acceleration[kXDimension][1], 30.0 + remote.proc);
+        float divergence[3] = {-9.0f, -9.0f, -9.0f};
+        sphParticlesGlobalReadViscosityDiagnostics(remote, divergence, 1);
+        requireClose("remote divergence lower padding", divergence[0], -9.0);
+        requireClose("remote divergence upper padding", divergence[2], -9.0);
         requireClose("remote prior divergence cache", divergence[1], -1.5 + remote.proc / 8.0);
     }
     float velocity[kDimensions][3]{};
@@ -617,6 +702,136 @@ void validateSphRemoteTreeCache() {
     }
 }
 HPX_PLAIN_ACTION(validateSphRemoteTreeCache, ValidateSphRemoteTreeCacheAction);
+
+// These endpoints deliberately live on different ranks in the MPI fixture.
+// The fine endpoint owns the interaction and must return the reciprocal impulse
+// to a coarse source that is not a target of this midpoint force pass.
+void initializeSphMidpointPairRegression() {
+    sphParticlesFree();
+    particlesResize(0);
+    ParticleInteger const localCount =
+        hpxSize() == 1 ? 2 : (hpxRank() == 0 || hpxRank() == hpxSize() - 1 ? 1 : 0);
+    sphParticlesResize(localCount);
+    for (ParticleInteger gas = 0; gas < localCount; ++gas) {
+        int const endpoint = hpxSize() == 1 ? int(gas) : int(hpxRank() != 0);
+        for (int dimension = 0; dimension < kDimensions; ++dimension) {
+            double const offset = 0.01 * (dimension + 1);
+            sphParticlesPosition(dimension, gas) = 0.5 + (endpoint == 0 ? -offset : offset);
+            sphParticlesVelocity(dimension, gas) =
+                0.025f * (dimension + 1) + (endpoint == 0 ? 0.1f : -0.1f);
+        }
+        particlesRung(sphParticlesParticleIndex(gas)) = endpoint == 0 ? 1 : 3;
+        sphParticlesSetInternalEnergy(gas, 2.0f + endpoint);
+        sphParticlesDensity(gas) = 1.0f;
+        sphParticlesSupportRadius(gas) = 0.25f;
+    }
+}
+HPX_PLAIN_ACTION(initializeSphMidpointPairRegression, InitializeSphMidpointPairRegressionAction);
+
+Array<double, 14> readSphMidpointPairRegression() {
+    Array<double, 14> result{};
+    for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
+        int const rung = particlesRung(sphParticlesParticleIndex(gas));
+        if (rung != 1 && rung != 3) {
+            throw std::runtime_error("Midpoint pair changed a live endpoint rung");
+        }
+        int const offset = rung == 1 ? 0 : 7;
+        result[offset] += 1.0;
+        for (int dimension = 0; dimension < kDimensions; ++dimension) {
+            result[offset + 1 + dimension] += sphParticlesVelocity(dimension, gas);
+        }
+        result[offset + 4] += sphParticlesEntropy(gas);
+        result[offset + 5] += hpxRank();
+        result[offset + 6] += sphParticlesSupportRadius(gas);
+    }
+    return result;
+}
+HPX_PLAIN_ACTION(readSphMidpointPairRegression, ReadSphMidpointPairRegressionAction);
+
+void runSphMidpointPairRegression(bool useCuda) {
+    auto options = getOptions();
+    options.chemistry.enabled = false;
+    options.starFormation.enabled = false;
+    options.run.scenario = "soundWave";
+    options.run.minRung = 0;
+    options.hydro.viscosityEvolution = "none";
+    options.hydro.bulkViscosityCoefficient = 1.0;
+    options.hydro.vonNeumannRichtmyerCoefficient = 2.0;
+    options.hydro.balsaraSwitch = false;
+    options.hydro.minSupportRadius = options.hydro.maxSupportRadius = 0.25;
+    options.hydro.damping = options.hydro.centralAcceleration = 0.0;
+    options.hydro.yAcceleration = options.hydro.zPlaneAcceleration = 0.0;
+    options.initial.numberOfParticles = 2;
+    auto const collect = []() {
+        Array<double, 14> total{};
+        Vector<hpx::future<Array<double, 14>>> pending;
+        for (auto const& locality : hpxLocalities()) {
+            pending.push_back(hpx::async<ReadSphMidpointPairRegressionAction>(locality));
+        }
+        for (auto& future : pending) {
+            auto const local = future.get();
+            for (size_t component = 0; component < total.size(); ++component) {
+                total[component] += local[component];
+            }
+        }
+        if (total[0] != 1.0 || total[7] != 1.0 || total[5] != 0.0 || total[12] != hpxSize() - 1) {
+            throw std::runtime_error("Midpoint pair lost endpoint identity or rank ownership");
+        }
+        return total;
+    };
+    auto const requireUnchanged = [](auto const& before, auto const& after) {
+        for (int component = 0; component < before.size(); ++component) {
+            if (before[component] != after[component]) {
+                throw std::runtime_error("An unowned or zero-duration midpoint pair changed state");
+            }
+        }
+    };
+    for (int backend = 0; backend <= int(useCuda); ++backend) {
+        options.hydro.cuda = backend != 0;
+        sphTreeDestroy(true);
+        setOptions(options);
+        Vector<hpx::future<void>> pending;
+        for (auto const& locality : hpxLocalities()) {
+            pending.push_back(hpx::async<InitializeSphMidpointPairRegressionAction>(locality));
+        }
+        for (auto& future : pending) {
+            future.get();
+        }
+        EnergiesT energies{};
+        // Initialize both densities and canonical entropies before measuring.
+        sphMidpointStep(-1, 0.0, 0.0, 0.001, 1.0, 0.0, energies);
+        auto const initial = collect();
+        sphMidpointStep(3, 0.0, 0.0, 0.001, 1.0, 0.0, energies);
+        requireUnchanged(initial, collect());
+        sphMidpointStep(1, 0.00025, 0.0005, 0.001, 1.0, 0.0, energies);
+        requireUnchanged(initial, collect());
+        sphMidpointStep(3, 0.0000625, 0.000125, 0.001, 1.0, 0.0, energies);
+        auto const kicked = collect();
+        for (int dimension = 0; dimension < kDimensions; ++dimension) {
+            double const coarse = kicked[1 + dimension] - initial[1 + dimension];
+            double const fine = kicked[8 + dimension] - initial[8 + dimension];
+            double const scale = std::abs(initial[1 + dimension]) +
+                std::abs(initial[8 + dimension]) + std::abs(kicked[1 + dimension]) +
+                std::abs(kicked[8 + dimension]);
+            double const tolerance = 2.0 * std::numeric_limits<float>::epsilon() * scale;
+            if (!(std::abs(coarse) > 100.0 * tolerance && std::abs(coarse + fine) <= tolerance)) {
+                throw std::runtime_error(
+                    "Mixed-rung midpoint pair lost its reciprocal impulse at float precision");
+            }
+        }
+        for (int offset : {0, 7}) {
+            if (!(kicked[offset + 4] > initial[offset + 4] && std::isfinite(kicked[offset + 4]))) {
+                throw std::runtime_error("Mixed-rung pair failed to heat both endpoints");
+            }
+            detail::requireClose("fixed pair support", kicked[offset + 6], 0.25, 1.e-7);
+        }
+        std::cout << std::format(
+                         "Conservative mixed-rung SPH pair passed ({:s}, {:d} localities)\n",
+                         backend ? "CUDA" : "CPU", hpxSize())
+                  << std::flush;
+    }
+    sphTreeDestroy(true);
+}
 
 void sphGravityTest() {
 #ifdef USE_CUDA
@@ -655,15 +870,12 @@ void sphGravityTest() {
             verifyBhPotentials(true);
         }
 #endif
-        if (sphMidpointEnabled() &&
-            (integration::kBuildHasTraditional || integration::kBuildHasGlobal)) {
-            auto legacy = opts;
-            legacy.run.timeIntegrator =
-                integration::kBuildHasTraditional ? "traditional" : "global";
-            legacy.run.hierarchicalGravity = false;
-            legacy.hydro.viscosityEvolution = "cullenAndDehnen";
-            setOptions(legacy);
+        for (char const* viscosity : {"cullenAndDehnen", "priceEtAl", "hu_etal"}) {
+            auto selected = opts;
+            selected.hydro.viscosityEvolution = viscosity;
+            setOptions(selected);
             runPairCase(useCuda, false);
+            checkpointPair();
             sphParticlesFree();
             setOptions(opts);
         }
@@ -720,6 +932,7 @@ void sphGravityTest() {
         }
         treeDestroy(true);
     }
+    runSphMidpointPairRegression(useCuda);
     std::cout << std::format("SPH gravity regression passed ({:s}, {:d} localities)\n",
                      useCuda ? "CPU and CUDA" : "CPU", hpxSize())
               << std::flush;

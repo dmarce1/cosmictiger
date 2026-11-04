@@ -100,23 +100,49 @@ def main():
     # is small. Natural timesteps exercise multiple gravity source sets.
     probe = run("nonuniform", {"run.maxIterations": 2})
     require(len(set(probe.rungs)) > 1, "self-gravitating probe did not use multiple rungs")
-    # Derived first-step accounting, with initially zero velocity and a uniform
-    # step: v_checkpoint=(h/2) G_initial+h H_midpoint. This measures both applied
-    # forces without reconstructing or storing any per-particle gravity vector.
+    # Derived short-step accounting with initially zero velocities:
+    #   v(h)/h = G/2 + H + O(h), x(h) = x(0) + h²(G+H)/2 + O(h³).
+    # Two first-step runs eliminate the unknown initial position:
+    #   C = [x(h)-x(h/2)]/[h²-(h/2)²], W=v(h)/h;
+    #   G ≈ 4C-2W, H ≈ 2(W-C).
+    # These finite-step estimates establish comparable force scales; they are
+    # not an accuracy test of either force. No force/rate array is checkpointed.
     first_step = run("force_balance", {"run.endTime": 40000, "run.minRung": 4,
                                        "run.maxIterations": 1})
     step = 20000 / 16
     require(first_step.driver.tau == step and set(first_step.rungs) == {4},
             "force-balance fixture did not perform one uniform step")
-    hydro_maximum = max(abs(value) for gas in first_step.gas for value in gas[2:5])
-    gravity_maximum = max(abs(2 * first_step.velocities[3 * particle + dimension] / step -
-                              2 * first_step.gas[gas][2 + dimension])
-                          for gas, particle in enumerate(first_step.gravity_indices)
-                          for dimension in range(3))
+    half_step = run("force_balance_half", {"run.endTime": 40000, "run.minRung": 5,
+                                           "run.maxIterations": 1})
+    require(half_step.driver.tau == step / 2 and set(half_step.rungs) == {5},
+            "force-balance refinement did not halve its uniform first interval")
+    coarse, fine = physical_records(first_step), physical_records(half_step)
+    require(len(coarse) == len(fine), "force-balance refinement changed the gas population")
+    unused = set(range(len(fine)))
+    gravity_maximum = hydro_maximum = 0.0
+    maximum_displacement = 0.0
+    for row in coarse:
+        matches = [index for index in unused
+                   if sum((row[dimension] - fine[index][dimension]) ** 2
+                          for dimension in range(3)) < 1e-6]
+        require(len(matches) == 1, "force-balance runs lack a unique nearby particle match")
+        other = fine[matches[0]]
+        unused.remove(matches[0])
+        for dimension in range(3):
+            displacement = row[dimension] - other[dimension]
+            maximum_displacement = max(maximum_displacement, abs(displacement))
+            coefficient = displacement / (step ** 2 - (step / 2) ** 2)
+            momentum_rate = row[dimension + 3] / step
+            gravity_maximum = max(gravity_maximum, abs(4 * coefficient - 2 * momentum_rate))
+            hydro_maximum = max(hydro_maximum, abs(2 * (momentum_rate - coefficient)))
+    require(maximum_displacement > 32 / 2 ** (8 * first_step.position_bytes),
+            "force-balance displacement is hidden by fixed-point rounding")
     require(hydro_maximum > 0, "force-balance fixture did not evaluate midpoint hydro")
     ratio = gravity_maximum / hydro_maximum
     require(0.05 < ratio < 20, "regression did not exercise comparable gravity and hydro forces")
-    evidence = {"force_ratio": ratio, "natural_rungs": sorted(set(probe.rungs)), "convergence": {}}
+    evidence = {"estimated_force_ratio": ratio,
+                "force_balance_displacement": maximum_displacement,
+                "natural_rungs": sorted(set(probe.rungs)), "convergence": {}}
 
     # Polytropic-star stages prescribe fixed viscosity even when the user keeps
     # the normal Morris-Monaghan default. Migration may release its unused alpha
@@ -226,7 +252,6 @@ def main():
             "cosmological hierarchy did not exercise the gravity rung merge")
     lifecycle = validate_events(output, "hierarchical_cosmology", "hierarchical")
     scales, minimum_rungs = [], []
-    maximum_acceleration = 0.0
     for iteration in range(1, 9):
         state = decode_checkpoint((mixed_directory / f"checkpoint.{iteration}" /
                                    "checkpoint.0.dat").read_bytes())
@@ -236,19 +261,16 @@ def main():
         minimum_rungs.append(state.driver.min_rung)
         base_timestep = state.driver.tau_max / state.header.steps
         check_midpoint_state(state)
-        for gas in range(state.gas_count):
-            maximum_acceleration = max(maximum_acceleration, *(abs(value) for value in state.gas[gas][2:5]))
     midpoint_events = validate_midpoints(output, "hierarchical_cosmology", base_timestep,
                                         mixed.driver.tau)
-    require(scales[-1] > scales[0] and max(minimum_rungs) == 10 and maximum_acceleration > 0,
-            "cosmological case missed expansion, rung merging, or hydro acceleration")
+    require(scales[-1] > scales[0] and max(minimum_rungs) == 10,
+            "cosmological case missed expansion or rung merging")
     run("cosmology_restart", dict(mixed_options, **{"run.maxIterations": 1, "checkpoint.readIndex": 7}),
         source_checkpoint=mixed_directory / "checkpoint.7")
     restart_errors = compare_restart(checkpoint_state(mixed_directory, 8, 1),
                                      checkpoint_state(root / "cosmology_restart", 8, 1))
     evidence["cosmology"] = {**lifecycle, "scale_range": [scales[0], scales[-1]],
                             "midpoints": midpoint_events, "minimum_rungs": minimum_rungs,
-                            "maximum_acceleration": maximum_acceleration,
                             "restart_maximum_errors": restart_errors}
     evidence["boundary_thermal_scale"] = {}
     for integrator in (name for name in ("hierarchical", "traditional")
@@ -270,14 +292,14 @@ def main():
         gas_mass = previous.header.physics[1]
         # Derived from cosmictiger/sph/entropy.hpp and the energy units:
         #   u = A ρ^(γ−1) a^(5−3γ)/(γ−1), E_thermal = Σ m u/a².
-        # Symbols: γ -> gamma; A -> gas[0]; ρ -> gas[6]; m -> gas_mass;
+        # Symbols: γ -> gamma; A -> entropy; ρ -> density; m -> gas_mass;
         # a -> conversion_scale in u, scale in the boundary energy units.
         # No hydro event intervenes at this gravity boundary, so checkpoint
         # one's gas state determines checkpoint two's thermal diagnostic.
         def thermal_energy(conversion_scale):
-            return math.fsum(gas_mass * gas[0] * gas[6] ** (gamma - 1) *
+            return math.fsum(gas_mass * entropy * density ** (gamma - 1) *
                              conversion_scale ** (5 - 3 * gamma) / (gamma - 1)
-                             for gas in previous.gas) / scale ** 2
+                             for entropy, density in zip(previous.entropies, previous.densities)) / scale ** 2
         expected = thermal_energy(scale)
         stale = thermal_energy(previous.thermal_scale_factor)
         relative_error = abs(current.driver.energies[0] - expected) / expected

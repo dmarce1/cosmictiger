@@ -149,15 +149,16 @@ def main():
                                   "run.scenario": "cosmology" if hydro else "plummer"})
         if hydro:
             options["hydro.viscosityEvolution"] = args.viscosity_evolution
-        if hydro and (not args.with_sph or args.time_integrator == "hierarchical"):
+        if hydro:
             rejected = prepareCase(root, label + "_rejected")
             log = run(rejected, dict(options, **{"run.maxIterations": 0}), False)
-            diagnostic = ("run.timeIntegrator"
-                          if args.time_integrator == "hierarchical" else
-                          "COSMICTIGER_ENABLE_SPH=ON")
+            diagnostic = ("hierarchical SPH requires FMM gravity"
+                          if args.with_sph and args.time_integrator == "hierarchical" else
+                          "Midpoint SPH currently requires FMM or disabled gravity"
+                          if args.with_sph else "COSMICTIGER_ENABLE_SPH=ON")
             require(diagnostic in log or "COSMICTIGER_ENABLE_SPH=ON" in log,
                     "unavailable SPH was not rejected with the expected diagnostic")
-            print(f"{label}: unavailable SPH rejected at startup")
+            print(f"{label}: deferred mesh/SPH coupling rejected at startup")
             continue
         baseline = prepareCase(root, label + "_baseline")
         log = run(baseline, dict(options, **{"run.maxIterations": 4}))

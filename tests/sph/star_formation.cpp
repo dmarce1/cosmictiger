@@ -48,7 +48,7 @@ float sfStoredDensity(double density) {
     return float(units::toStoredDensity(units::ProperDensity(units::Density::from_value(density)),
         units::scalesFromOptions(options),
         units::CosmologicalContext(kSfScale, options.cosmology.hubble))
-            .value());
+                     .value());
 }
 float sfStoredEnergy(double energy) {
     auto const& options = getOptions();
@@ -56,7 +56,7 @@ float sfStoredEnergy(double energy) {
         units::PhysicalSpecificEnergy(units::SpecificEnergy::from_value(energy)),
         units::scalesFromOptions(options),
         units::CosmologicalContext(kSfScale, options.cosmology.hubble))
-            .value());
+                     .value());
 }
 double sfStep() {
     return 1.e11 / (kSfScale * getOptions().units.timeSeconds);
@@ -76,13 +76,10 @@ void initializeSfFixture() {
             sfStoredDensity((index == 2 ? 0.5 : 10.0) * model.thresholdDensity);
         sphParticlesSetInternalEnergy(index, sfStoredEnergy(model.parameters.coldEnergy));
         sphParticlesSupportRadius(index) = 0.125f;
-        sphParticlesEntropyRate(index) = 0.0f;
         sphParticlesElectronFractions[index] = 1.0f;
         for (int dim = 0; dim < kDimensions; ++dim) {
             particlesPos(dim, index) = 0.25 + index * 0.125;
             particlesVel(dim, index) = float(dim - 1) / 4.0f;
-            sphParticlesAcceleration(dim, index) = 0.0f;
-            sphParticlesGravityAcceleration(dim, index) = 0.0f;
         }
     }
 }

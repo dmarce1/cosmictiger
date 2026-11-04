@@ -13,6 +13,7 @@
 
 #include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/matrix_eigen.hpp>
+#include <cosmictiger/sph/viscosity/cullen_and_dehnen_state.hpp>
 
 // L. Cullen and W. Dehnen, "Inviscid smoothed particle hydrodynamics",
 // MNRAS 408 (2010), 669-683, doi:10.1111/j.1365-2966.2010.17158.x.
@@ -23,9 +24,14 @@ float evolvedBulkViscosityCoefficient(float bulkViscosityCoefficient,
     float targetBulkViscosityCoefficient, float inverseDecayTime, float timeStep);
 
 template <typename Real>
-struct GradientSums {
+struct VelocityGradientSums {
     Real moment[3][3]{};
     Real velocity[3][3]{};
+};
+
+// Acceleration-gradient reference estimator; production uses divergence history.
+template <typename Real>
+struct GradientSums : VelocityGradientSums<Real> {
     Real acceleration[3][3]{};
 };
 
@@ -35,6 +41,7 @@ struct Result {
     Real targetBulkViscosityCoefficient;
     Real inverseDecayTime;
     Real limiter = Real(1);    // Hu et al. applies this after the alpha update.
+    Real sampleDivergence = Real(0);
 };
 
 namespace detail {
@@ -137,6 +144,62 @@ namespace detail {
 }    // namespace detail
 
 /*
+ * Cullen & Dehnen (2010), Appendix B2, equations (B2), (B4), (B7):
+ *   T = Σ_j r_ij ⊗ r_ij w̄_ij, D = Σ_j v_ij ⊗ r_ij w̄_ij, V = D T⁻¹.
+ * T, D → sums.moment, sums.velocity; V → velocityGradient.
+ * This velocity-only reconstruction also supplies the shear/vorticity limiters.
+ */
+template <typename Real, typename Counter>
+#if defined(__GNUC__) && !defined(__clang__) && !defined(__CUDACC__)
+// GCC's fast-math vectorization of this 3x3 product can spill two floats,
+// reload four, then evaluate unused stack lanes. Those lanes can overflow
+// with floating-point traps enabled even though every matrix entry is finite.
+__attribute__((optimize("no-tree-loop-vectorize", "no-tree-slp-vectorize")))
+#endif
+CUDA_EXPORT inline int reconstructVelocityGradient(VelocityGradientSums<Real> const& sums,
+    Real (&velocityGradient)[3][3], Counter& floatingPointOperations) {
+    math::SymmetricMatrix<Real, 3> inverseMomentMatrix;
+    int const rank =
+        detail::inverseMoment(sums.moment, inverseMomentMatrix, floatingPointOperations);
+    // Keep the product here: an inlined generic matrix operator can carry
+    // vectorized instructions produced before this function's GCC safeguard.
+    for (int row = 0; row < 3; ++row) {
+        for (int column = 0; column < 3; ++column) {
+            Real component = sums.velocity[row][0] * inverseMomentMatrix(0, column);
+            for (int inner = 1; inner < 3; ++inner) {
+                component += sums.velocity[row][inner] * inverseMomentMatrix(inner, column);
+            }
+            velocityGradient[row][column] = component;
+        }
+    }
+    floatingPointOperations += 45;
+    return rank;
+}
+
+/*
+ * Cullen & Dehnen (2010), Appendix B3's first alternative: difference successive
+ * divergence estimates along the same particle trajectory. Locally derived
+ * first-order conversion for conformal time dτ = dt/a:
+ *   a⁴ Dθ/Dt ≈ a³ (θ_n − θ_previous)/(τ_n − τ_previous).
+ * θ → sampleDivergence; τ_n → sampleTime; a → scaleFactor;
+ * θ_previous, τ_previous → state.sampleDivergence, state.sampleTime.
+ * CD/Hu use physical θ = ∇·v; Price samples θ = ∇·v − 3H to retain its
+ * homogeneous-background subtraction. Missing or same-time history gives zero,
+ * and density retries never modify the committed history used here.
+ */
+template <typename Real, typename Counter>
+CUDA_EXPORT inline Real divergenceTimeDerivative(Real sampleDivergence, Real scaleFactor,
+    SphCullenDehnenState const& state, double sampleTime, Counter& floatingPointOperations) {
+    if (!(state.sampleTime >= 0.0 && sampleTime > state.sampleTime)) {
+        return Real(0);
+    }
+    double const elapsed = sampleTime - state.sampleTime;
+    double const derivative = (double(sampleDivergence) - double(state.sampleDivergence)) / elapsed;
+    floatingPointOperations += 6;
+    return Real(double(scaleFactor) * double(scaleFactor) * double(scaleFactor) * derivative);
+}
+
+/*
  * Equations (B2), (B4), and (B7): D = Σ_j v_ij ⊗ r_ij w̄_ij,
  * T = Σ_j r_ij ⊗ r_ij w̄_ij, V = D T^-1. Apply the same inverse to the
  * acceleration sums for equation (B12). All three sums use identical weights.
@@ -236,9 +299,10 @@ CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
  */
 // clang-format on
 template <typename Real, typename Counter>
-CUDA_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums, Real scaleFactor,
-    Real expansionAcceleration, Real signAverage, Real supportRadius, Real signalSpeed,
-    Real maximumBulkViscosityCoefficient, Real decayCoefficient, Counter& floatingPointOperations) {
+CUDA_EXPORT inline Result<Real> diagnosticsFromGradient(Real const (&velocityGradientMatrix)[3][3],
+    Real scaleFactor, Real divergenceDerivative, Real signAverage, Real supportRadius,
+    Real signalSpeed, Real maximumBulkViscosityCoefficient, Real decayCoefficient,
+    Counter& floatingPointOperations) {
     Real const localScaleFactor = scaleFactor;
     Real const kernelSupportRadius = supportRadius;
     Real const localSignalSpeed = signalSpeed;
@@ -248,32 +312,21 @@ CUDA_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums, Real
     }
     result.inverseDecayTime =
         Real(2) * decayCoefficient * localSignalSpeed / (localScaleFactor * kernelSupportRadius);
-    Real velocityGradientMatrix[3][3];
-    Real accelerationGradientMatrix[3][3];
     floatingPointOperations += 4;
-    if (reconstructGradients(sums, velocityGradientMatrix, accelerationGradientMatrix,
-            floatingPointOperations) == 0) {
-        return result;
-    }
     Real const velocityDivergence =
         velocityGradientMatrix[0][0] + velocityGradientMatrix[1][1] + velocityGradientMatrix[2][2];
-    Real const accelerationDivergence = accelerationGradientMatrix[0][0] +
-        accelerationGradientMatrix[1][1] + accelerationGradientMatrix[2][2];
-    Real gradientSquareTrace = Real(0);
     Real shearMagnitudeSquared = Real(0);
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
-            gradientSquareTrace += velocityGradientMatrix[i][j] * velocityGradientMatrix[j][i];
             Real const shearComponent =
                 Real(0.5) * (velocityGradientMatrix[i][j] + velocityGradientMatrix[j][i]) -
                 (i == j ? velocityDivergence / Real(3) : Real(0));
             shearMagnitudeSquared += shearComponent * shearComponent;
         }
     }
-    floatingPointOperations += 70;    // Two traces and the full tr(V²), S, and tr(SS^T) loop.
+    floatingPointOperations += 48;    // Velocity trace, symmetric shear and its squared norm.
     result.divergence = velocityDivergence / (localScaleFactor * localScaleFactor);
-    Real const divergenceDerivative = localScaleFactor * accelerationDivergence +
-        Real(3) * expansionAcceleration - gradientSquareTrace;
+    result.sampleDivergence = result.divergence;
     Real const divergenceSignAverage = signAverage;
     Real const squaredSignComplement =
         (Real(1) - divergenceSignAverage) * (Real(1) - divergenceSignAverage);
@@ -294,6 +347,46 @@ CUDA_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums, Real
     floatingPointOperations +=
         19 + (limiterDenominator > Real(0) ? 1 : 0) + (denominator > Real(0) ? 2 : 0);
     return result;
+}
+
+template <typename Real, typename Counter>
+CUDA_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums, Real scaleFactor,
+    Real expansionAcceleration, Real signAverage, Real supportRadius, Real signalSpeed,
+    Real maximumBulkViscosityCoefficient, Real decayCoefficient, Counter& floatingPointOperations) {
+    Real velocityGradient[3][3];
+    Real accelerationGradient[3][3];
+    reconstructGradients(sums, velocityGradient, accelerationGradient, floatingPointOperations);
+    Real derivative = Real(3) * expansionAcceleration;
+    for (int i = 0; i < 3; ++i) {
+        derivative += scaleFactor * accelerationGradient[i][i];
+        for (int j = 0; j < 3; ++j) {
+            derivative -= velocityGradient[i][j] * velocityGradient[j][i];
+        }
+    }
+    floatingPointOperations += 25;
+    return diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, signAverage,
+        supportRadius, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient,
+        floatingPointOperations);
+}
+
+// Production Appendix-B3 time-difference route; no acceleration samples are read.
+template <typename Real, typename Counter>
+CUDA_EXPORT inline Result<Real> diagnosticsFromHistory(VelocityGradientSums<Real> const& sums,
+    Real scaleFactor, SphCullenDehnenState const& state, double sampleTime, Real signAverage,
+    Real supportRadius, Real signalSpeed, Real maximumBulkViscosityCoefficient,
+    Real decayCoefficient, Counter& floatingPointOperations) {
+    Real velocityGradient[3][3];
+    int const rank = reconstructVelocityGradient(sums, velocityGradient, floatingPointOperations);
+    Real const divergence =
+        (velocityGradient[0][0] + velocityGradient[1][1] + velocityGradient[2][2]) /
+        (scaleFactor * scaleFactor);
+    floatingPointOperations += 4;
+    Real const derivative = rank == 0 ? Real(0) :
+                                        divergenceTimeDerivative(divergence, scaleFactor, state,
+                                            sampleTime, floatingPointOperations);
+    return diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, signAverage,
+        supportRadius, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient,
+        floatingPointOperations);
 }
 
 template <typename Real>

@@ -4,6 +4,7 @@ import argparse
 import itertools
 import json
 import math
+import struct
 from pathlib import Path
 import sys
 
@@ -35,6 +36,7 @@ def comparison_records(state):
 
 
 def compare_restart(reference, resumed, *, position_units=0, accumulation_units=4,
+                    entropy_accumulation_units=2, viscosity_accumulation_ulps=0,
                     position_period=2 ** 32):
     require(reference[2:] == resumed[2:], "restart changed particle counts or driver clocks")
     first, second = reference[0], resumed[0]
@@ -42,14 +44,17 @@ def compare_restart(reference, resumed, *, position_units=0, accumulation_units=
     # Restart reconstructs the octree and can change float neighbor accumulation
     # order. Only force/density-derived float fields may differ at this level;
     # rungs, flags and hydro timestep bounds stay exact. Positive
-    # viscosity heating can change entropy by one float rounding unit when the
-    # recomputed rate changes; constrain entropy locally as well as globally.
+    # viscosity heating can amplify small source changes in cold gas. Constrain
+    # entropy locally with an explicit case-specific allowance and globally
+    # with the original accumulation bound; the default local limit stays tight.
     # CUDA rebuilding can perturb the live velocity by float accumulation
     # rounding. Two subsequent half-drifts can then move fixed32 positions by
     # two units. This explicit GPU regression tolerance is not an error bound;
     # CPU positions remain exact. Match uniquely within the periodic allowance
     # so canonical xyz sorting cannot exchange particles in equal-x columns.
     maximum_position_units = 0
+    maximum_entropy_ulps = 0
+    maximum_viscosity_ulps = 0
     if position_units:
         require(position_units == 2 and position_period % 4 == 0,
                 "unsupported restart position tolerance")
@@ -78,7 +83,10 @@ def compare_restart(reference, resumed, *, position_units=0, accumulation_units=
         require(not any(grid.values()), "GPU restart left unmatched particles")
         second = tuple(matched)
     particle_fields = (4, 5, 6)
-    gas_fields = (0, 1, 2, 3, 4, 5, 6)
+    # Version 70000 stores A, support, density, flags, proposal, then optional
+    # viscosity history. Removed forces/rates must not shift discrete fields
+    # into the float-tolerated set. Viscosity history remains exact here.
+    gas_fields = (0, 1, 2)
     scales = {}
     for field in particle_fields:
         scales[("particle", field)] = max(abs(row[field]) for row in first + second)
@@ -96,16 +104,30 @@ def compare_restart(reference, resumed, *, position_units=0, accumulation_units=
         for field, (old, new) in enumerate(zip(left[-1], right[-1])):
             if field in gas_fields:
                 if field == 0:
-                    require(abs(old - new) <= 2 * 2 ** -23 * max(abs(old), abs(new)),
+                    maximum_entropy_ulps = max(maximum_entropy_ulps, abs(
+                        struct.unpack("=I", struct.pack("=f", old))[0] -
+                        struct.unpack("=I", struct.pack("=f", new))[0]))
+                    require(abs(old - new) <= entropy_accumulation_units * 2 ** -23 *
+                            max(abs(old), abs(new)),
                             "restart changed entropy beyond local float rounding")
                 key = ("gas", field)
                 errors[key] = max(errors[key], abs(old - new))
+            elif field == 6 and viscosity_accumulation_ulps:
+                # Optional alpha-only bound; divergence histories and timestamps
+                # at later fields retain their exact restart requirement.
+                ulps = abs(struct.unpack("=I", struct.pack("=f", old))[0] -
+                           struct.unpack("=I", struct.pack("=f", new))[0])
+                maximum_viscosity_ulps = max(maximum_viscosity_ulps, ulps)
+                require(ulps <= viscosity_accumulation_ulps,
+                        "restart changed alpha beyond its explicit float rounding allowance")
             else:
                 require(old == new, f"restart changed exact gas field {field}")
     for key, error in errors.items():
         require(error <= accumulation_units * 2 ** -23 * scales[key],
                 f"restart changed {key} beyond float accumulation tolerance: {error}")
     return {"maximum_position_units": maximum_position_units,
+            "maximum_entropy_ulps": maximum_entropy_ulps,
+            "maximum_viscosity_ulps": maximum_viscosity_ulps,
             "maximum_accumulation_float_units": max(
                 (error / (2 ** -23 * scales[key]) if scales[key] else 0)
                 for key, error in errors.items()),
@@ -165,6 +187,8 @@ def main():
         require("SPH hierarchical out-of-domain rebuild regression passed: "
                 "active=6 total=16 inactive_outside=10" in output,
                 "two-rank hierarchy did not rebuild around inactive out-of-domain gas")
+        require("SPH common-boundary rung closure regression passed: ranks=2 passes=7 inactive=6"
+                in output, "two-rank inactive-neighbor rung closure fixture did not finish")
 
     # A localized blast supplies hot fine-rung gas and cold coarse-rung sources.
     # Stop before the endpoint so restart resumes the boundary gravity ladder
@@ -196,8 +220,15 @@ def main():
     run(resumed, dict(options, **{"run.maxIterations": 1}), restart=restart_iteration)
     continued = checkpoint_state(resumed, options["run.maxIterations"], ranks)
     gpu = args.cuda or args.gravity_cuda or args.hydro_cuda
+    # Retained-vs-rebuilt density/support sums differ by 1--3 float ULPs.
+    # In the cold blast shell this perturbs positive heating by 52--54 local
+    # entropy ULPs, while hot-cell errors stay within the global 4/8-eps bound.
+    # Repeating the rebuilt CPU case with one and two threads reproduced entropy
+    # exactly. MM alpha changes by at most one ULP in this comparison. Scope
+    # both explicit allowances to this conditioned blast case; histories stay exact.
     restart_errors = compare_restart(final, continued, position_units=2 if gpu else 0,
                                      accumulation_units=8 if gpu else 4,
+                                     entropy_accumulation_units=64, viscosity_accumulation_ulps=2,
                                      position_period=2 ** (8 * states[0].position_bytes))
     for state in read_states(resumed, options["run.maxIterations"], ranks):
         check_midpoint_state(state)

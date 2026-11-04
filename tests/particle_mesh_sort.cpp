@@ -104,7 +104,7 @@ void initializeMeshSortFixture(ParticleInteger count, int pattern) {
     particlesResize(count);
     particlesGravitySamplesBegin(count);
 #if COSMICTIGER_WITH_SPH
-    sphParticlesResize((count + 1) / 2, false);
+    sphParticlesResize(getOptions().hydro.enabled ? (count + 1) / 2 : 0, false);
 #endif
     for (ParticleInteger i = 0; i < count; ++i) {
         for (int dim = 0; dim < kDimensions; ++dim) {
@@ -124,21 +124,24 @@ void initializeMeshSortFixture(ParticleInteger count, int pattern) {
         particlesTracer(i) = i % 2;
         particlesGravitySample(i) = i % 3 == 0 ? i : -1;
 #if COSMICTIGER_WITH_SPH
-        particlesType(i) = i % 2 == 0 ? kSphType : kDarkMatterType;
-        particlesCatIndex(i) = i % 2 == 0 ? i / 2 : kNoParticleIndex;
-        if (i % 2 == 0) {
-            ParticleInteger const gasIndex = i / 2;
-            sphParticlesParticleIndex(gasIndex) = i;
-            sphParticlesSetInternalEnergy(gasIndex, float(i) + 0.5f);
-            sphParticlesSupportRadius(gasIndex) = float(i) + 0.75f;
-            sphParticlesDensities[gasIndex] = float(i) + 1.0f;
-            sphParticlesBalsaraFactors[gasIndex] = float(i) + 1.25f;
-            sphParticlesEntropyRates[gasIndex] = float(i) + 1.5f;
-            sphParticlesConvergenceFlags[gasIndex] = i % 7;
-            sphParticlesSemiactiveFlags[gasIndex] = i % 5;
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                sphParticlesAcceleration(dim, gasIndex) = float(i) + 2.0f + dim;
-                sphParticlesGravityAcceleration(dim, gasIndex) = float(i) + 4.0f + dim;
+        if (getOptions().hydro.enabled) {
+            particlesType(i) = i % 2 == 0 ? kSphType : kDarkMatterType;
+            particlesCatIndex(i) = i % 2 == 0 ? i / 2 : kNoParticleIndex;
+            if (i % 2 == 0) {
+                ParticleInteger const gasIndex = i / 2;
+                sphParticlesParticleIndex(gasIndex) = i;
+                sphParticlesSetInternalEnergy(gasIndex, float(i) + 0.5f);
+                sphParticlesSupportRadius(gasIndex) = float(i) + 0.75f;
+                sphParticlesDensities[gasIndex] = float(i) + 1.0f;
+                sphParticlesBalsaraFactors[gasIndex] = float(i) + 1.25f;
+                sphParticlesProposedRungs[gasIndex] = i % 11;
+                sphParticlesBulkViscosityCoefficients[gasIndex] = float(i) + 1.5f;
+                auto& history = sphParticlesCullenDehnenStates[gasIndex];
+                history.divergence = float(i) + 2.0f;
+                history.sampleTime = double(i) + 0.125;
+                history.sampleDivergence = float(i) + 2.5f;
+                sphParticlesConvergenceFlags[gasIndex] = i % 7;
+                sphParticlesSemiactiveFlags[gasIndex] = i % 5;
             }
         }
 #endif
@@ -183,7 +186,7 @@ void checkMeshSortFixture(int meshSize, int pattern) {
                 particlesTracer(i) == identity % 2 &&
                 particlesGravitySample(i) == (identity % 3 == 0 ? identity : -1) &&
                 particlesType(i) ==
-                    (COSMICTIGER_WITH_SPH && identity % 2 == 0 ? kSphType : kDarkMatterType),
+                    (getOptions().hydro.enabled && identity % 2 == 0 ? kSphType : kDarkMatterType),
             "Particle mesh sort detached a particle field");
         if constexpr (COSMICTIGER_ENABLE_ROCKSTAR) {
             requireParticleMeshSort(particlesLastgroup(i) == 100000 + identity,
@@ -200,28 +203,29 @@ void checkMeshSortFixture(int meshSize, int pattern) {
                 "Sorted particle gravity capture used the wrong sample slot");
         }
 #if COSMICTIGER_WITH_SPH
-        if (identity % 2 == 0) {
-            ParticleInteger const gasIndex = identity / 2;
-            requireParticleMeshSort(particlesCatIndex(i) == gasIndex &&
-                    sphParticlesParticleIndex(gasIndex) == i &&
-                    sphParticlesInternalEnergy(gasIndex) == float(identity) + 0.5f &&
-                    sphParticlesSupportRadius(gasIndex) == float(identity) + 0.75f &&
-                    sphParticlesDensities[gasIndex] == float(identity) + 1.0f &&
-                    sphParticlesBalsaraFactors[gasIndex] == float(identity) + 1.25f &&
-                    sphParticlesEntropyRates[gasIndex] == float(identity) + 1.5f &&
-                    sphParticlesConvergenceFlags[gasIndex] == identity % 7 &&
-                    sphParticlesSemiactiveFlags[gasIndex] == identity % 5,
-                "Particle mesh sort changed gas state or broke its reverse map");
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                requireParticleMeshSort(
-                    sphParticlesAcceleration(dim, gasIndex) == float(identity) + 2.0f + dim &&
-                        sphParticlesGravityAcceleration(dim, gasIndex) ==
-                            float(identity) + 4.0f + dim,
-                    "Particle mesh sort changed a gas acceleration");
+        if (getOptions().hydro.enabled) {
+            if (identity % 2 == 0) {
+                ParticleInteger const gasIndex = identity / 2;
+                requireParticleMeshSort(particlesCatIndex(i) == gasIndex &&
+                        sphParticlesParticleIndex(gasIndex) == i &&
+                        sphParticlesInternalEnergy(gasIndex) == float(identity) + 0.5f &&
+                        sphParticlesSupportRadius(gasIndex) == float(identity) + 0.75f &&
+                        sphParticlesDensities[gasIndex] == float(identity) + 1.0f &&
+                        sphParticlesBalsaraFactors[gasIndex] == float(identity) + 1.25f &&
+                        sphParticlesProposedRungs[gasIndex] == identity % 11 &&
+                        sphParticlesBulkViscosityCoefficients[gasIndex] == float(identity) + 1.5f &&
+                        sphParticlesConvergenceFlags[gasIndex] == identity % 7 &&
+                        sphParticlesSemiactiveFlags[gasIndex] == identity % 5,
+                    "Particle mesh sort changed gas state or broke its reverse map");
+                auto const& history = sphParticlesCullenDehnenStates[gasIndex];
+                requireParticleMeshSort(history.divergence == float(identity) + 2.0f &&
+                        history.sampleTime == double(identity) + 0.125 &&
+                        history.sampleDivergence == float(identity) + 2.5f,
+                    "Particle mesh sort changed committed viscosity history");
+            } else {
+                requireParticleMeshSort(particlesCatIndex(i) == ParticleInteger(kNoParticleIndex),
+                    "Particle mesh sort changed a dark matter category index");
             }
-        } else {
-            requireParticleMeshSort(particlesCatIndex(i) == ParticleInteger(kNoParticleIndex),
-                "Particle mesh sort changed a dark matter category index");
         }
 #endif
     }
@@ -262,7 +266,17 @@ void particleMeshSortTest() {
 
     auto const originalOptions = getOptions();
     auto options = originalOptions;
-    options.hydro.enabled = COSMICTIGER_WITH_SPH != 0;
+    // Exercise storage permutation only; mesh gravity coupled to SPH is deferred.
+    options.gravity.enabled = false;
+    if constexpr (integration::kBuildHasTraditional) {
+        options.run.timeIntegrator = "traditional";
+        options.run.hierarchicalGravity = false;
+    } else if constexpr (integration::kBuildHasGlobal) {
+        options.run.timeIntegrator = "global";
+        options.run.hierarchicalGravity = false;
+    }
+    options.hydro.enabled = COSMICTIGER_WITH_SPH && !usesHierarchicalIntegration(options.run);
+    options.hydro.viscosityEvolution = "cullenAndDehnen";
     options.analysis.saveForce = true;
     options.analysis.tracers = true;
     options.analysis.groups = COSMICTIGER_ENABLE_ROCKSTAR != 0;

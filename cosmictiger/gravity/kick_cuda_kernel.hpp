@@ -145,12 +145,6 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             minimumTimestep = fminf(minimumTimestep, timestep);
 #if COSMICTIGER_WITH_SPH
             bool const gas = data.sph && data.type[sinkIndex] == kSphType;
-            if (gas && !data.midpointHydro) {
-                ParticleInteger const k = data.catIndex[sinkIndex];
-                data.sphGravityAccelerationX[k] = gx;
-                data.sphGravityAccelerationY[k] = gy;
-                data.sphGravityAccelerationZ[k] = gz;
-            }
 #else
             bool const gas = false;
 #endif
@@ -224,7 +218,19 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                         rung - 1);
 #if COSMICTIGER_WITH_SPH
                 if (data.midpointHydro && data.sph && data.type[sinkIndex] == kSphType) {
-                    nextRung = max(nextRung, int(data.sphHydroRungs[data.catIndex[sinkIndex]]));
+                    if (params.freezeGasRungs) {
+                        nextRung = rung;
+                    } else {
+                        if (params.fullGasRungSelection) {
+                            ALWAYS_ASSERT(params.top);
+                            // Derived full-force quantization:
+                            // r = max(ceil(log₂(Δτ₀/Δτ_G)), r_old−1, r_min).
+                            // Δτ₀ -> params.t0; Δτ_G -> dt; r -> nextRung.
+                            nextRung = max((int) ceilf(log2f(params.t0 / dt)),
+                                max(rung - 1, params.minRung));
+                        }
+                        nextRung = max(nextRung, int(data.sphHydroRungs[data.catIndex[sinkIndex]]));
+                    }
                 }
 #endif
                 maxRung = max(nextRung, maxRung);
@@ -240,14 +246,6 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             bool const gas = data.sph && data.type[sinkIndex] == kSphType;
 #else
             bool const gas = false;
-#endif
-#if COSMICTIGER_WITH_SPH
-            if (gas && !data.midpointHydro) {
-                ParticleInteger const k = data.catIndex[sinkIndex];
-                data.sphGravityAccelerationX[k] = gx;
-                data.sphGravityAccelerationY[k] = gy;
-                data.sphGravityAccelerationZ[k] = gz;
-            }
 #endif
             if ((!gas || data.midpointHydro) && !params.firstCall) {
                 float const dt = params.sign * 0.5f * rungDt[rungs[sinkIndex]] * params.t0;
@@ -274,17 +272,19 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             }
             if (!gas || data.midpointHydro) {
                 float const syncVx = vx, syncVy = vy, syncVz = vz;
+                int const previousRung = rungs[sinkIndex];
                 float const g2 = sqr(gx, gy, gz) + 1e-35f;
                 float dt =
                     fminf(params.eta * sqrtf(params.a) * sqrtf(gravityEffectiveRadius / sqrtf(g2)),
                         params.t0);
                 dt = fminf(dt, params.maxDt);
                 rung = max(max((int) ceilf(log2f(params.t0 / dt)),
-                               max((int) rungs[sinkIndex] - 1, params.minRung)),
+                               max(previousRung - 1, params.minRung)),
                     1);
 #if COSMICTIGER_WITH_SPH
                 if (gas && data.midpointHydro) {
-                    rung = max(rung, int(data.sphHydroRungs[data.catIndex[sinkIndex]]));
+                    rung = params.freezeGasRungs ? previousRung :
+                        max(rung, int(data.sphHydroRungs[data.catIndex[sinkIndex]]));
                 }
 #endif
                 if (params.fixedRung != 0) {
@@ -294,9 +294,15 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                 ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
                 rungs[sinkIndex] = rung;
                 dt = params.sign * 0.5f * rungDt[rung] * params.t0;
-                vx = fmaf(gx, dt, vx);
-                vy = fmaf(gy, dt, vy);
-                vz = fmaf(gz, dt, vz);
+                if (gas && params.deferGasOpening) {
+                    data.globalAcceleration[kXDimension][sinkIndex] = gx;
+                    data.globalAcceleration[kYDimension][sinkIndex] = gy;
+                    data.globalAcceleration[kZDimension][sinkIndex] = gz;
+                } else {
+                    vx = fmaf(gx, dt, vx);
+                    vy = fmaf(gy, dt, vy);
+                    vz = fmaf(gz, dt, vz);
+                }
                 darkMatterKineticCorrection +=
                     0.5f * mass * (sqr(syncVx, syncVy, syncVz) - sqr(vx, vy, vz));
                 darkMatterXMomentumCorrection += mass * (syncVx - vx);

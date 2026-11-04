@@ -36,9 +36,6 @@ struct CudaKickData {
     Position* z;
     FmmSourceView ghostSources;
     Vector3<float>* vel;
-    float* sphGravityAccelerationX;
-    float* sphGravityAccelerationY;
-    float* sphGravityAccelerationZ;
     bool midpointHydro = false;
     char const* sphHydroRungs = nullptr;
     ParticleInteger* catIndex;
@@ -102,6 +99,15 @@ struct KickParameters {
     bool forceOnly = false;
     bool profileCoordinator = true;
     bool globalTimestep = false;
+    // Traditional SPH common boundaries select and balance gas rungs before
+    // opening. The current force is retained only until that event finishes.
+    bool deferGasOpening = false;
+    // At all-particle common boundaries, gas uses the full top force to choose
+    // a rung. Neighbor closure follows before any descending subset is built.
+    bool fullGasRungSelection = false;
+    // Hold those balanced gas rungs through correction walks and intervening
+    // boundaries. Dark-matter rung selection remains unchanged.
+    bool freezeGasRungs = false;
     double previousTimestep = 0.0;
     bool htime;
     float sign;
@@ -169,6 +175,9 @@ struct KickParameters {
         arc & forceOnly;
         arc & profileCoordinator;
         arc & globalTimestep;
+        arc & deferGasOpening;
+        arc & fullGasRungSelection;
+        arc & freezeGasRungs;
         arc & previousTimestep;
         arc & outputOffset;
         arc & closingBaseTimestep;
@@ -181,6 +190,7 @@ struct KickParameters {
 // has been reduced. Begin after domain redistribution, before the force walk.
 void gravityBeginGlobalKick();
 double gravityFinishGlobalKick(double timestep);
+KickReturn gravityFinishBalancedGasKick(double baseTimestep, float sign);
 float* gravityGlobalAcceleration(int dimension);
 
 struct KickWorkitem {

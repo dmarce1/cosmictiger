@@ -116,13 +116,7 @@ SphRunReturn sphMidpointStep(int rung, double time, double timestep, double base
     double scale, double scaleDerivative, EnergiesT& energies, bool global = false,
     double maximumTimestep = 0.0);
 SphTreeCreateReturn sphStep1(int minrung, bool verbose = true);
-SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
-    EnergiesT* energies, bool verbose = true, int uniformMinimumRung = -1, bool closingOnly = false,
-    double previousTimestep = 0.0, double maximumGlobalTimestep = 0.0,
-    bool predictorPrepared = false, std::function<double()> const& joinGravity = {},
-    double closingTimeStepScale = 0.0,
-    std::function<SphRunReturn(SphRunParameters const&)> const& combinedForces = {},
-    bool midpointHydro = false, int maximumHydroRung = kMaxRung - 1, double hydroTimestep = 0.0);
+
 #endif
 #if COSMICTIGER_WITH_GRAVITY
 ForceStepResult kickStep(int minrung, double scale, double, double t0, double theta, bool firstCall,

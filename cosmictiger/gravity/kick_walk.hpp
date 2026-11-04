@@ -485,12 +485,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     double const oldKinetic = 0.5 * mass * sqr(vx, vy, vz);
 #if COSMICTIGER_WITH_SPH
                     bool const gas = getOptions().hydro.enabled && particlesType(i) == kSphType;
-                    if (gas && !midpointHydro) {
-                        ParticleInteger const k = particlesCatIndex(i);
-                        sphParticlesGravityAcceleration(kXDimension, k) = gx;
-                        sphParticlesGravityAcceleration(kYDimension, k) = gy;
-                        sphParticlesGravityAcceleration(kZDimension, k) = gz;
-                    }
 #else
                     bool const gas = false;
 #endif
@@ -554,8 +548,20 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                             int(rung) - 1);
 #if COSMICTIGER_WITH_SPH
                         if (midpointHydro && particlesType(i) == kSphType) {
-                            nextRung =
-                                std::max(nextRung, sphParticlesHydroRung(particlesCatIndex(i)));
+                            if (params.freezeGasRungs) {
+                                nextRung = int(rung);
+                            } else {
+                                if (params.fullGasRungSelection) {
+                                    ALWAYS_ASSERT(params.top);
+                                    // Derived quantization of the full-force bound:
+                                    // r = max(ceil(log₂(Δτ₀/Δτ_G)), r_old−1, r_min).
+                                    // Δτ₀ -> params.t0; Δτ_G -> dt; r -> nextRung.
+                                    nextRung = std::max(int(ceilf(log2f(params.t0 / dt))),
+                                        std::max(int(rung) - 1, params.minRung));
+                                }
+                                nextRung =
+                                    std::max(nextRung, sphParticlesHydroRung(particlesCatIndex(i)));
+                            }
                         }
 #endif
                         kr.maxRung = std::max(nextRung, kr.maxRung);
@@ -578,12 +584,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
 #endif
                     float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
 #if COSMICTIGER_WITH_SPH
-                    if (gas && !midpointHydro) {
-                        ParticleInteger const k = particlesCatIndex(i);
-                        sphParticlesGravityAcceleration(kXDimension, k) = forces.gx[j];
-                        sphParticlesGravityAcceleration(kYDimension, k) = forces.gy[j];
-                        sphParticlesGravityAcceleration(kZDimension, k) = forces.gz[j];
-                    }
 #endif
                     if ((!gas || midpointHydro) && !params.firstCall) {
                         flops += 9;
@@ -603,17 +603,19 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     if (!gas || midpointHydro) {
                         flops += 24;    // Timestep/rung selection and signed velocity kick.
                         float const syncVx = vx, syncVy = vy, syncVz = vz;
+                        int const previousRung = int(rung);
                         float const g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;
                         float dt = std::min(
                             eta * sqrtf(params.a) * sqrtf(gravityEffectiveRadius / sqrtf(g2)),
                             params.t0);
                         dt = std::min(dt, params.maxDt);
                         rung = std::max(std::max((int) ceilf(log2f(params.t0 / dt)),
-                                            std::max((int) rung - 1, params.minRung)),
+                                            std::max(previousRung - 1, params.minRung)),
                             1);
 #if COSMICTIGER_WITH_SPH
                         if (gas && midpointHydro) {
-                            rung = std::max(int(rung), sphParticlesHydroRung(particlesCatIndex(i)));
+                            rung = params.freezeGasRungs ? previousRung :
+                                std::max(int(rung), sphParticlesHydroRung(particlesCatIndex(i)));
                         }
 #endif
                         if (params.fixedRung != 0) {
@@ -624,9 +626,15 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                         }
                         ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
                         dt = params.sign * 0.5f * rungDt[rung] * params.t0;
-                        vx = fmaf(forces.gx[j], dt, vx);
-                        vy = fmaf(forces.gy[j], dt, vy);
-                        vz = fmaf(forces.gz[j], dt, vz);
+                        if (gas && params.deferGasOpening) {
+                            gravityGlobalAcceleration(kXDimension)[i] = forces.gx[j];
+                            gravityGlobalAcceleration(kYDimension)[i] = forces.gy[j];
+                            gravityGlobalAcceleration(kZDimension)[i] = forces.gz[j];
+                        } else {
+                            vx = fmaf(forces.gx[j], dt, vx);
+                            vy = fmaf(forces.gy[j], dt, vy);
+                            vz = fmaf(forces.gz[j], dt, vz);
+                        }
                         kr.darkMatterKineticCorrection +=
                             0.5f * mass * (sqr(syncVx, syncVy, syncVz) - sqr(vx, vy, vz));
                         kr.darkMatterXMomentumCorrection += mass * (syncVx - vx);

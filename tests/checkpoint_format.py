@@ -165,8 +165,8 @@ def read_prefix(data):
                 and result.driver.outer_interval >= 0 and result.driver.outer_start >= 0,
                 "invalid checkpoint particle-mesh interval extension")
     result.particle_start = reader.offset
-    # Version 60000 stores the hydro rung bound and removes hierarchical predictor clocks.
-    result.gas_version = 60000 + (110 if stars else 100 if cooling else 2) + viscosity_offset
+    # Version 70000 removes force rates and timestamps gradient-switch divergence samples.
+    result.gas_version = 70000 + (110 if stars else 100 if cooling else 2) + viscosity_offset
     result.reader = reader
     return result
 
@@ -194,7 +194,7 @@ def decode_checkpoint(data, ranks=1):
     if result.hydro:
         result.gas_start = reader.offset
         gas_header = reader.take("I", 7)
-        require(gas_header == (0x43545350, result.gas_version, result.integer_bytes, 4, 12, 3, 4),
+        require(gas_header == (0x43545350, result.gas_version, result.integer_bytes, 4, 0, 3, 4),
                 f"unsupported checkpoint gas layout: {gas_header}")
         require(reader.take(integer_code)[0] == gas_count, "checkpoint gas counts disagree")
         result.entropy_initialized = reader.take("I")[0]
@@ -204,20 +204,41 @@ def decode_checkpoint(data, ranks=1):
                 "invalid entropy checkpoint context")
         result.entropies = reader.take("f", gas_count)
         result.support_radii = reader.take("f", gas_count)
-        accelerations = reader.take("f", 3 * gas_count)
         result.gravity_indices = reader.take(integer_code, gas_count)
-        scalars = [reader.take("f", gas_count) for _ in range(2)]
+        result.densities = reader.take("f", gas_count)
         gamma = result.header.physics[2]
         factor = result.thermal_scale_factor ** (5 - 3 * gamma) / (gamma - 1)
         result.internal_energies = tuple(a * rho ** (gamma - 1) * factor
-            for a, rho in zip(result.entropies, scalars[1])) if result.entropy_initialized else result.entropies
+            for a, rho in zip(result.entropies, result.densities)) if result.entropy_initialized else result.entropies
         flags = [reader.take("B", gas_count) for _ in range(2)]
         result.proposed_rungs = reader.take("b", gas_count)
         require(all(-1 <= rung < 64 for rung in result.proposed_rungs),
                 "invalid checkpoint hydro rung bound")
-        delta = (result.gas_version - 60000 - (110 if result.has_stars else 100 if result.has_cooling else 2))
-        width = {0: 0, 2: 1, 4: 2, 6: 2, 8: 2}[delta]
-        viscosity = reader.take("f", width * gas_count)
+        delta = (result.gas_version - 70000 -
+                 (110 if result.has_stars else 100 if result.has_cooling else 2))
+        require(delta in (0, 2, 4, 6, 8), "unsupported checkpoint viscosity payload")
+        viscosity = []
+        result.bulk_viscosity_coefficients = []
+        result.divergence_histories = []
+        for _ in range(gas_count):
+            values = ()
+            if delta:
+                alpha = reader.take("f")[0]
+                require(math.isfinite(alpha) and alpha >= 0,
+                        "invalid checkpoint viscosity coefficient")
+                result.bulk_viscosity_coefficients.append(alpha)
+                values = (alpha,)
+            if delta >= 4:
+                divergence = reader.take("f")[0]
+                sample_time = reader.take("d")[0]
+                sample_divergence = reader.take("f")[0]
+                require(all(math.isfinite(value) for value in
+                            (divergence, sample_time, sample_divergence)) and
+                        (sample_time == -1 or sample_time >= 0),
+                        "invalid checkpoint divergence history")
+                result.divergence_histories.append((divergence, sample_time, sample_divergence))
+                values += (divergence, sample_time, sample_divergence)
+            viscosity.append(values)
         if result.has_cooling:
             result.cooling = tuple(reader.take("f", 1) for _ in range(gas_count))
         result.gas_end = reader.offset
@@ -229,11 +250,10 @@ def decode_checkpoint(data, ranks=1):
             require(result.gas_indices[particle] == gas_index, "inconsistent checkpoint gas mapping")
             result.gas[gas_index] = (
                 result.entropies[gas_index], result.support_radii[gas_index],
-                *accelerations[3 * gas_index:3 * gas_index + 3],
-                *(field[gas_index] for field in scalars),
+                result.densities[gas_index],
                 *(field[gas_index] for field in flags),
                 result.proposed_rungs[gas_index],
-                *viscosity[width * gas_index:width * (gas_index + 1)],
+                *viscosity[gas_index],
                 *(result.cooling[gas_index] if result.has_cooling else ()))
     if result.has_stars:
         require(reader.take("Q", 2) == (0x4354534650415254, 2),

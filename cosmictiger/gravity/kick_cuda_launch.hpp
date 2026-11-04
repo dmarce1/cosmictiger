@@ -496,8 +496,9 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     data.midpointHydro = !kparams.forceOnly && sphMidpointEnabled();
 #endif
     for (int dim = 0; dim < kDimensions; ++dim) {
-        data.globalAcceleration[dim] =
-            kparams.globalTimestep ? gravityGlobalAcceleration(dim) : nullptr;
+        data.globalAcceleration[dim] = (kparams.globalTimestep || kparams.deferGasOpening) ?
+            gravityGlobalAcceleration(dim) :
+            nullptr;
     }
     data.x = devX;
     data.y = devY;
@@ -518,17 +519,8 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     bool const gasKick = data.sph && !kparams.forceOnly;
     data.catIndex = gasKick ? &particlesCatIndex(0) : nullptr;
     data.sphHydroRungs = gasKick && data.midpointHydro ? sphParticlesProposedRungs : nullptr;
-    data.sphGravityAccelerationX =
-        gasKick && !data.midpointHydro ? sphParticlesGravityAccelerations[kXDimension] : nullptr;
-    data.sphGravityAccelerationY =
-        gasKick && !data.midpointHydro ? sphParticlesGravityAccelerations[kYDimension] : nullptr;
-    data.sphGravityAccelerationZ =
-        gasKick && !data.midpointHydro ? sphParticlesGravityAccelerations[kZDimension] : nullptr;
 #else
     data.catIndex = nullptr;
-    data.sphGravityAccelerationX = nullptr;
-    data.sphGravityAccelerationY = nullptr;
-    data.sphGravityAccelerationZ = nullptr;
 #endif
     if (kparams.forceOnly) {
         ALWAYS_ASSERT(output.potential != nullptr && output.acceleration[kXDimension] != nullptr);

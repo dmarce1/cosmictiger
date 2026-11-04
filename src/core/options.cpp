@@ -345,16 +345,12 @@ void setOptions(Options const& opts) {
             (!opts.gravity.enabled || opts.gravity.method != "fmm"))) {
         throw std::invalid_argument("run.timeIntegrator is unavailable or inconsistent");
     }
-    if (opts.run.hierarchicalGravity && opts.hydro.enabled &&
-        (opts.chemistry.enabled || opts.starFormation.enabled)) {
+    if (opts.hydro.enabled && (opts.chemistry.enabled || opts.starFormation.enabled)) {
         throw std::invalid_argument(
-            "Hierarchical SPH does not yet support chemistry or star formation");
+            "Midpoint SPH does not yet support chemistry or star formation");
     }
-    if (opts.run.hierarchicalGravity && opts.hydro.enabled &&
-        opts.hydro.viscosityEvolution != "none" &&
-        opts.hydro.viscosityEvolution != "morrisAndMonaghan") {
-        throw std::invalid_argument(
-            "Midpoint hierarchical SPH currently supports Morris-Monaghan or fixed viscosity");
+    if (opts.hydro.enabled && opts.gravity.enabled && opts.gravity.method != "fmm") {
+        throw std::invalid_argument("Midpoint SPH currently requires FMM or disabled gravity");
     }
 #if COSMICTIGER_WITH_GRAVITY
     if (opts.gravity.fmmOrder != opts.gravity.pmmmOrder) {
@@ -1793,16 +1789,11 @@ bool processOptions(int argc, char* argv[]) {
         detail::throwOptionError(
             "run.minRung must be nonnegative and less than %i for rung integrators\n", kMaxRung);
     }
-    if (opts.run.hierarchicalGravity && opts.hydro.enabled &&
-        (opts.chemistry.enabled || opts.starFormation.enabled)) {
-        detail::throwOptionError(
-            "Hierarchical SPH does not yet support chemistry or star formation\n");
+    if (opts.hydro.enabled && (opts.chemistry.enabled || opts.starFormation.enabled)) {
+        detail::throwOptionError("Midpoint SPH does not yet support chemistry or star formation\n");
     }
-    if (opts.run.hierarchicalGravity && opts.hydro.enabled &&
-        opts.hydro.viscosityEvolution != "none" &&
-        opts.hydro.viscosityEvolution != "morrisAndMonaghan") {
-        detail::throwOptionError(
-            "Midpoint hierarchical SPH currently supports Morris-Monaghan or fixed viscosity\n");
+    if (opts.hydro.enabled && opts.gravity.enabled && opts.gravity.method != "fmm") {
+        detail::throwOptionError("Midpoint SPH currently requires FMM or disabled gravity\n");
     }
 
     if (opts.gravity.enabled && usesParticleMesh(opts.gravity) &&

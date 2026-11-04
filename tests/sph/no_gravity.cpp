@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string>
 
+#include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/file_handle.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -25,6 +26,16 @@ void sphOnlyDiagnosticsTest() {
     options.analysis.saveForce = true;
     options.analysis.groups = false;
     options.analysis.tracers = false;
+    options.hydro.cuda = false;
+    options.hydro.viscosityEvolution = "morrisAndMonaghan";
+    options.hydro.minSupportRadius = 0.25;
+    options.hydro.maxSupportRadius = 0.25;
+    options.hydro.damping = 0.0;
+    options.hydro.centralAcceleration = 0.0;
+    options.hydro.yAcceleration = 0.0;
+    options.hydro.zPlaneAcceleration = 0.0;
+    options.initial.gasMass = 0.125;
+    options.run.minRung = 0;
     setOptions(options);
     constexpr ParticleInteger kParticleCount = 8;
     auto const checkDiagnostics = [](ParticleInteger begin, ParticleInteger end,
@@ -61,13 +72,12 @@ void sphOnlyDiagnosticsTest() {
         for (int dim = 0; dim < kDimensions; ++dim) {
             particlesPos(dim, index) = 0.125 * index;
             particlesVel(dim, index) = 0.25f * (dim + 1);
-            sphParticlesAcceleration(dim, index) = 0.5f * (dim + 1);
         }
         particlesRung(index) = 1;
         sphParticlesSetInternalEnergy(index, 2.0f + index);
         sphParticlesSupportRadius(index) = 0.25f;
         sphParticlesDensity(index) = 1.0f;
-        sphParticlesEntropyRate(index) = 0.125f;
+        sphParticlesProposedRungs[index] = 3;
     }
     UniqueFile checkpoint(std::tmpfile());
     if (checkpoint == nullptr) {
@@ -76,17 +86,19 @@ void sphOnlyDiagnosticsTest() {
     particlesSave(checkpoint.get());
     poisonDiagnostics();
     sphParticlesSetInternalEnergy(0, 99.0f);
-    sphParticlesAcceleration(kXDimension, 0) = 99.0f;
+    particlesVel(kXDimension, 0) = 99.0f;
+    sphParticlesProposedRungs[0] = 9;
     std::rewind(checkpoint.get());
     // This deliberately retains the same particle count, bypassing allocation.
     particlesLoad(checkpoint.get());
     checkDiagnostics(0, kParticleCount, "same-size checkpoint load");
     if (particlesSize() != kParticleCount || sphParticlesSize() != kParticleCount ||
-        sphParticlesInternalEnergy(0) != 2.0f || sphParticlesAcceleration(kXDimension, 0) != 0.5f) {
+        sphParticlesInternalEnergy(0) != 2.0f || particlesVel(kXDimension, 0) != 0.25f ||
+        sphParticlesProposedRungs[0] != 3) {
         throw std::runtime_error("SPH-only checkpoint failed to preserve the gas payload");
     }
     sphCheckpointTest();
-    // Exercise the actual entropy initialization, staged prediction, and both kick phases.
+    // Exercise canonical entropy, live source staging, and the actual frozen midpoint pass.
     sphParticlesPrepareThermodynamics(0.5, true);
     float const initialEntropy = sphParticlesEntropy(0);
     float const initialEnergy = sphParticlesInternalEnergy(0);
@@ -96,33 +108,62 @@ void sphOnlyDiagnosticsTest() {
             std::pow(8.0, options.hydro.gamma - 1.0)) > 1.e-5) {
         throw std::runtime_error("Adiabatic compression did not preserve entropy");
     }
-    sphParticlesEntropyRate(0) = 0.25f;
-    float const velocity = sphParticlesVelocity(kXDimension, 0);
-    sphParticlesApplyUpdates(1, 0, 1.0f, 1.0f, 0.2);
-    if (sphParticlesEntropy(0) != initialEntropy ||
-        sphParticlesVelocity(kXDimension, 0) != velocity) {
-        throw std::runtime_error("Entropy predictor mutated the staggered particle state");
-    }
     float predictedEnergy, support;
     ParticleGlobalRange range;
     range.proc = hpxRank();
     range.range.first = 0;
     range.range.second = 1;
     sphParticlesGlobalReadInternalEnergyAndSupportRadius(range, &predictedEnergy, &support, 0);
-    double const expectedEnergy = sph_entropy::storedEnergy(
-        initialEntropy + 0.025, sphParticlesDensity(0), options.hydro.gamma, 0.5);
+    double const expectedEnergy =
+        sph_entropy::storedEnergy(initialEntropy, sphParticlesDensity(0), options.hydro.gamma, 0.5);
     if (std::abs(predictedEnergy - expectedEnergy) > 1.e-5 * expectedEnergy) {
-        throw std::runtime_error("Staging did not derive energy from predicted entropy");
+        throw std::runtime_error("Staging did not derive energy from live canonical entropy");
     }
-    sphParticlesEntropyRate(0) = 0.5f;
-    sphParticlesApplyUpdates(1, 1, 1.0f, 1.0f, 0.2);
-    // Opening may use a different interval; reuse the fresh closing rate.
-    sphParticlesApplyUpdates(1, 2, 1.0f, 1.0f, 0.4);
-    if (std::abs(sphParticlesEntropy(0) - (initialEntropy + 0.15)) > 1.e-6) {
-        throw std::runtime_error("Entropy closing/opening kicks used the wrong rates or intervals");
+    for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
+        for (int dimension = 0; dimension < kDimensions; ++dimension) {
+            // The neighboring diagonal particles lie near the edge of H=0.25.
+            // A weak compression heats by less than one float entropy unit at
+            // dt=0.0005; use a resolved shock without changing that short step.
+            sphParticlesVelocity(dimension, gas) =
+                -10.0f * (sphParticlesPosition(dimension, gas).toDouble() - 0.5);
+        }
     }
+    auto const totals = []() {
+        Array<double, 4> values{};
+        for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
+            for (int dimension = 0; dimension < kDimensions; ++dimension) {
+                values[dimension] += sphParticlesVelocity(dimension, gas);
+            }
+            values[3] += sphParticlesEntropy(gas);
+        }
+        return values;
+    };
+    auto const initial = totals();
+    EnergiesT energies{};
+    auto const estimate = sphMidpointStep(1, 0.0, 0.0, 0.001, 0.5, 0.0, energies);
+    auto const estimated = totals();
+    for (int component = 0; component < 4; ++component) {
+        if (std::abs(estimated[component] - initial[component]) > 1.0e-7) {
+            throw std::runtime_error("Zero-duration SPH force estimate changed physical state");
+        }
+    }
+    if (!(estimate.minimumTimestep > 0.0 && std::isfinite(estimate.minimumTimestep))) {
+        throw std::runtime_error("SPH-only estimate did not return a positive timestep");
+    }
+    sphMidpointStep(1, 0.00025, 0.0005, 0.001, 0.5, 0.0, energies);
+    auto const kicked = totals();
+    for (int dimension = 0; dimension < kDimensions; ++dimension) {
+        if (std::abs(kicked[dimension] - initial[dimension]) > 3.0e-6) {
+            throw std::runtime_error("SPH midpoint pair impulses failed momentum conservation");
+        }
+    }
+    if (!(kicked[3] > initial[3])) {
+        throw std::runtime_error("Converging midpoint SPH flow produced no irreversible heating");
+    }
+    std::printf("SPH-only midpoint entropy increment: %.9e\n", kicked[3] - initial[3]);
+    checkDiagnostics(0, kParticleCount, "midpoint kick");
     sphCheckpointTest();
-    std::cout
-        << "SPH-only diagnostics and entropy lifecycle passed (prediction, kicks, checkpoint)\n"
-        << std::flush;
+    std::cout << "SPH-only diagnostics and entropy lifecycle passed (live sources, midpoint pairs, "
+                 "checkpoint)\n"
+              << std::flush;
 }
