@@ -15,6 +15,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -47,6 +48,42 @@ namespace detail {
     size_t releaseCalls = 0;
     bool invalidRelease = false;
     bool backendEnabled = true;
+    size_t liveHostAllocations = 0;
+
+    struct ThrowingElement {
+        inline static int attempts = 0;
+        inline static int failAttempt = 0;
+        inline static int live = 0;
+        int value = 17;
+
+        ThrowingElement() {
+            if (++attempts == failAttempt) {
+                throw std::runtime_error("injected element construction failure");
+            }
+            ++live;
+        }
+
+        ThrowingElement(ThrowingElement&& other) noexcept
+          : value(other.value) {
+            ++live;
+        }
+
+        ~ThrowingElement() {
+            --live;
+        }
+    };
+
+    struct TrivialThrowingElement {
+        inline static bool failConstruction = false;
+        int value = 17;
+
+        TrivialThrowingElement() {
+            if (failConstruction) {
+                throw std::runtime_error("injected trivial element construction failure");
+            }
+        }
+    };
+    static_assert(std::is_trivially_copyable_v<TrivialThrowingElement>);
 
     void require(bool condition, char const* message) {
         if (!condition) {
@@ -453,10 +490,17 @@ bool cudaEnabled() {
 }
 
 void* allocateManagedMemory(size_t bytes) {
-    return std::malloc(bytes);
+    void* pointer = std::malloc(bytes);
+    if (pointer != nullptr) {
+        ++cuda_memory_test::detail::liveHostAllocations;
+    }
+    return pointer;
 }
 
 void freeManagedMemory(void* pointer) noexcept {
+    if (pointer != nullptr) {
+        --cuda_memory_test::detail::liveHostAllocations;
+    }
     std::free(pointer);
 }
 
@@ -545,6 +589,111 @@ TEST(CudaMemory, NestedVectorOwnershipRecyclesEveryAllocation) {
         destination = std::move(destination);
         EXPECT_EQ(destination.size(), 3);
     }
+}
+
+TEST(CudaMemory, VectorSelfAppendSurvivesReallocation) {
+    using namespace cuda_memory_test::detail;
+    PublishedPoolCleanup cleanup;
+    backendEnabled = false;
+    size_t const before = liveHostAllocations;
+    for (bool move : {false, true}) {
+        DeviceVector<int> values(1);
+        values.resize(values.capacity());
+        values[0] = 42;
+        int const previousSize = values.size();
+        if (move) {
+            values.pushBack(std::move(values[0]));
+        } else {
+            values.pushBack(values[0]);
+        }
+        EXPECT_EQ(values.size(), previousSize + 1);
+        EXPECT_EQ(values.back(), 42);
+        EXPECT_EQ(values[0], 42);
+    }
+    EXPECT_EQ(liveHostAllocations, before);
+}
+
+TEST(CudaMemory, NestedVectorSelfAppendSurvivesReallocation) {
+    using namespace cuda_memory_test::detail;
+    PublishedPoolCleanup cleanup;
+    backendEnabled = false;
+    size_t const before = liveHostAllocations;
+    for (bool move : {false, true}) {
+        DeviceVector<DeviceVector<int>> values(1);
+        values.resize(values.capacity());
+        values[0].pushBack(42);
+        int const previousSize = values.size();
+        if (move) {
+            values.pushBack(std::move(values[0]));
+            EXPECT_TRUE(values[0].empty());
+        } else {
+            values.pushBack(values[0]);
+            EXPECT_NE(values.back().data(), values[0].data());
+            EXPECT_EQ(values[0][0], 42);
+        }
+        EXPECT_EQ(values.size(), previousSize + 1);
+        ASSERT_EQ(values.back().size(), 1);
+        EXPECT_EQ(values.back()[0], 42);
+    }
+    EXPECT_EQ(liveHostAllocations, before);
+}
+
+TEST(CudaMemory, VectorResizeRollsBackThrowingConstruction) {
+    using namespace cuda_memory_test::detail;
+    PublishedPoolCleanup cleanup;
+    backendEnabled = false;
+    size_t const before = liveHostAllocations;
+    for (bool grow : {false, true}) {
+        ThrowingElement::attempts = 0;
+        ThrowingElement::failAttempt = 3;
+        {
+            DeviceVector<ThrowingElement> values(1);
+            values[0].value = 42;
+            int const requestedSize = grow ? values.capacity() + 1 : 4;
+            EXPECT_THROW(values.resize(requestedSize), std::runtime_error);
+            EXPECT_EQ(values.size(), 1);
+            EXPECT_EQ(ThrowingElement::live, 1);
+            EXPECT_EQ(values[0].value, 42);
+            // A failed growth must leave the vector usable, including shrink.
+            ThrowingElement::failAttempt = 0;
+            values.resize(3);
+            EXPECT_EQ(ThrowingElement::live, 3);
+            values.resize(0);
+            EXPECT_EQ(ThrowingElement::live, 0);
+        }
+        EXPECT_EQ(ThrowingElement::live, 0);
+        EXPECT_EQ(liveHostAllocations, before);
+    }
+}
+
+TEST(CudaMemory, VectorConstructorCleansUpThrowingConstruction) {
+    using namespace cuda_memory_test::detail;
+    PublishedPoolCleanup cleanup;
+    backendEnabled = false;
+    size_t const before = liveHostAllocations;
+    for (int failAttempt : {1, 2, 3}) {
+        ThrowingElement::attempts = 0;
+        ThrowingElement::failAttempt = failAttempt;
+        EXPECT_THROW(DeviceVector<ThrowingElement> values(3), std::runtime_error);
+        EXPECT_EQ(ThrowingElement::live, 0);
+        EXPECT_EQ(liveHostAllocations, before);
+    }
+    ThrowingElement::failAttempt = 0;
+}
+
+TEST(CudaMemory, VectorCopyConstructorCleansUpThrowingConstruction) {
+    using namespace cuda_memory_test::detail;
+    PublishedPoolCleanup cleanup;
+    backendEnabled = false;
+    DeviceVector<TrivialThrowingElement> source(1);
+    source[0].value = 42;
+    size_t const before = liveHostAllocations;
+    TrivialThrowingElement::failConstruction = true;
+    EXPECT_THROW(DeviceVector<TrivialThrowingElement> copy(source), std::runtime_error);
+    TrivialThrowingElement::failConstruction = false;
+    EXPECT_EQ(liveHostAllocations, before);
+    EXPECT_EQ(source.size(), 1);
+    EXPECT_EQ(source[0].value, 42);
 }
 
 TEST(CudaMemory, GlobalAllocationFailureIsCheckedAndNullReleaseIsSafe) {

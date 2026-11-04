@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <cstdint>
 #include <format>
 #include <iostream>
 #include <memory>
@@ -70,7 +71,6 @@ class DeviceVector {
         // Nontrivial owners may contain block-collective constructors. They
         // are managed on the host; per-thread placement construction is unsafe.
         ALWAYS_ASSERT(std::is_trivially_copyable_v<T>);
-#endif
         ThreadIndex tid;
         BlockSize bsz;
         syncthreads();
@@ -78,6 +78,19 @@ class DeviceVector {
             new (ptr_ + i) T;
         }
         syncthreads();
+#else
+        if (a < b) {
+            // The standard algorithm destroys the constructed prefix on failure.
+            std::uninitialized_default_construct(ptr_ + a, ptr_ + b);
+        }
+#endif
+    }
+
+    CUDA_EXPORT
+    inline int elementIndex(T const& item) const {
+        // Compare addresses without ordering or subtracting unrelated pointers.
+        auto const offset = reinterpret_cast<uintptr_t>(&item) - reinterpret_cast<uintptr_t>(ptr_);
+        return offset < sizeof(T) * size_t(size_) ? int(offset / sizeof(T)) : -1;
     }
 
     CUDA_EXPORT
@@ -194,8 +207,8 @@ public:
         initialize();
     }
     CUDA_EXPORT
-    inline DeviceVector(DeviceVector const& other) {
-        initialize();
+    inline DeviceVector(DeviceVector const& other)
+      : DeviceVector() {
         *this = other;
     }
     CUDA_EXPORT
@@ -234,8 +247,9 @@ public:
         swap(other);
     }
     CUDA_EXPORT
-    inline DeviceVector(int initialSize) {
-        initialize();
+    inline DeviceVector(int initialSize)
+      : DeviceVector() {
+        // Delegation makes the destructor run if element construction throws.
         resize(initialSize);
     }
     // Collective: an empty vector on caller-provided storage; see attach().
@@ -361,12 +375,12 @@ public:
         if (newSize > capacity_) {
             grow(newSize);
         }
+        construct(previousSize, newSize);
         syncthreads();
         if (tid == 0) {
             size_ = newSize;
         }
         syncthreads();
-        construct(previousSize, size_);
     }
     CUDA_EXPORT
     inline T& back() {
@@ -391,9 +405,11 @@ public:
     inline void pushBack(T const& item) {
         ThreadIndex tid;
         ALWAYS_ASSERT(size() < INT_MAX);
+        int const sourceIndex = elementIndex(item);
         resize(size() + 1);
         if (tid == 0) {
-            back() = item;
+            // Growth invalidates references into the previous storage.
+            back() = sourceIndex >= 0 ? ptr_[sourceIndex] : item;
         }
         syncthreads();
     }
@@ -401,9 +417,10 @@ public:
     inline void pushBack(T&& item) {
         ThreadIndex tid;
         ALWAYS_ASSERT(size() < INT_MAX);
+        int const sourceIndex = elementIndex(item);
         resize(size() + 1);
         if (tid == 0) {
-            back() = std::move(item);
+            back() = std::move(sourceIndex >= 0 ? ptr_[sourceIndex] : item);
         }
         syncthreads();
     }
