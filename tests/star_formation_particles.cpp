@@ -39,18 +39,16 @@ void requireFixtureChemistry(ParticleInteger gasIndex, int rank, int originalGas
         float(2 + originalGasIndex), float(3 + originalGasIndex), getOptions().hydro.gamma, 1.0);
     requireStarParticles(sphParticlesEntropyInitialized &&
             sphParticlesEntropies[gasIndex] == thermal.entropy &&
-            sphParticlesProposedRungs[gasIndex] == 3 + originalGasIndex,
+            sphParticlesProposedRung(gasIndex) == 3 + originalGasIndex,
         "compaction, checkpoint or migration changed canonical entropy or hydro proposal");
     if (sphParticlesBulkViscosityCoefficients != nullptr) {
         requireStarParticles(
             sphParticlesBulkViscosityCoefficients[gasIndex] == 0.25f + 0.125f * originalGasIndex,
             "compaction, checkpoint or migration changed viscosity coefficient");
     }
-    if (sphParticlesCullenDehnenStates != nullptr) {
-        auto const& history = sphParticlesCullenDehnenStates[gasIndex];
-        requireStarParticles(history.physicalDivergence() == float(-2 - originalGasIndex) &&
-                history.sampleRung == 1 + originalGasIndex &&
-                history.sampledDivergence() == float(-4 - originalGasIndex),
+    if (sphScaledDivergence != nullptr) {
+        auto const& history = sphScaledDivergence[gasIndex];
+        requireStarParticles(sphDecodeDivergence(history, 1.0) == float(-4 - originalGasIndex),
             "compaction, checkpoint or migration changed committed viscosity history");
     }
 }
@@ -73,18 +71,17 @@ void initializeStarParticleFixture() {
         if (index > 0) {
             ParticleInteger const gasIndex = index - 1;
             sphParticlesParticleIndex(gasIndex) = index;
-            sphParticlesSupportRadius(gasIndex) = 0.125f;
+            sphParticlesSmoothingLength(gasIndex) = 0.125f;
             sphParticlesDensity(gasIndex) = 2.0f + index;
             sphParticlesSetInternalEnergy(gasIndex, 1.0f + index);
-            sphParticlesProposedRungs[gasIndex] = char(3 + gasIndex);
+            sphParticlesSetProposedRung(gasIndex, char(3 + gasIndex));
             if (sphParticlesBulkViscosityCoefficients != nullptr) {
                 sphParticlesBulkViscosityCoefficients[gasIndex] = 0.25f + 0.125f * gasIndex;
             }
-            if (sphParticlesCullenDehnenStates != nullptr) {
-                auto& history = sphParticlesCullenDehnenStates[gasIndex];
+            if (sphScaledDivergence != nullptr) {
+                auto& history = sphScaledDivergence[gasIndex];
                 history = {};
-                history.setDivergences(float(-2 - gasIndex), float(-4 - gasIndex));
-                history.sampleRung = int8_t(1 + gasIndex);
+                ALWAYS_ASSERT(sphEncodeDivergence(history, float(-4 - gasIndex), 1.0));
             }
             sphParticlesElectronFractions[gasIndex] = fixtureElectronFraction(hpxRank(), gasIndex);
         }
@@ -217,7 +214,7 @@ void initializeNewbornGravityFixture(bool convert) {
         sphParticlesParticleIndex(0) = 1;
         sphParticlesDensity(0) = 1.0f;
         sphParticlesSetInternalEnergy(0, 2.0f);
-        sphParticlesSupportRadius(0) = 0.05f;
+        sphParticlesSmoothingLength(0) = 0.05f;
         sphParticlesElectronFractions[0] = 1.0f;
     }
 }

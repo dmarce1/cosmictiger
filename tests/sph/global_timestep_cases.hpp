@@ -21,7 +21,7 @@ void testGlobalRawTimestep() {
     data.sourcePositionX[source] = data.sourcePositionY[source] = data.sourcePositionZ[source] =
         0.5;
     data.sourceInternalEnergy[source] = 1.0e-12f;
-    data.sinkSmoothingConverged[sink] = true;
+    data.sinkFlags[sink].setConverged(true);
     parameters.minimumRung = 0;
     parameters.globalTimestep = true;
     parameters.maximumTimestep = 0.073123f;

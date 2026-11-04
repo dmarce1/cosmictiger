@@ -398,7 +398,7 @@ void distributedOutputParticleFixture(int activeRanks, bool verify, bool segrega
         particlesType(i) = kSphType;
         particlesCatIndex(i) = i;
         sphParticlesParticleIndex(i) = i;
-        sphParticlesSupportRadius(i) = 0.03125 + global / 4096.0;
+        sphParticlesSmoothingLength(i) = 0.03125 + global / 4096.0;
         sphParticlesDensity(i) = 1000.0f + global;
         sphParticlesEntropy(i) = 10.0f + global;
     }

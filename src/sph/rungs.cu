@@ -17,7 +17,7 @@ struct RungsWorkspace {
     SharedNeighborBuffer<Position, kSharedCapacity> positionX;
     SharedNeighborBuffer<Position, kSharedCapacity> positionY;
     SharedNeighborBuffer<Position, kSharedCapacity> positionZ;
-    SharedNeighborBuffer<float, kSharedCapacity> supportRadius;
+    SharedNeighborBuffer<float, kSharedCapacity> smoothingLength;
     SharedNeighborBuffer<char, kSharedCapacity> rungs;
 };
 
@@ -41,7 +41,7 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
         workspace.positionX.resize(0);
         workspace.positionY.resize(0);
         workspace.positionZ.resize(0);
-        workspace.supportRadius.resize(0);
+        workspace.smoothingLength.resize(0);
         workspace.rungs.resize(0);
         SphTreeNode const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
         for (int neighborNodeIndex = targetNode.neighborRange.first;
@@ -67,7 +67,7 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
                         contains = true;
                     } else {
                         contains = sphSupportIntersects(targetNode.innerBox, position,
-                            data.sourceSupportRadius[sourceParticleIndex], &flops);
+                            data.sourceSmoothingLength[sourceParticleIndex], &flops);
                     }
                 }
                 neighborIndex = contains;
@@ -78,7 +78,7 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
                 workspace.positionX.resize(nextSize);
                 workspace.positionY.resize(nextSize);
                 workspace.positionZ.resize(nextSize);
-                workspace.supportRadius.resize(nextSize);
+                workspace.smoothingLength.resize(nextSize);
                 workspace.rungs.resize(nextSize);
                 if (contains) {
                     ASSERT(neighborIndex < total);
@@ -86,7 +86,7 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
                     workspace.positionX[k] = position[kXDimension];
                     workspace.positionY[k] = position[kYDimension];
                     workspace.positionZ[k] = position[kZDimension];
-                    workspace.supportRadius[k] = data.sourceSupportRadius[sourceParticleIndex];
+                    workspace.smoothingLength[k] = data.sourceSmoothingLength[sourceParticleIndex];
                     workspace.rungs[k] = rung;
                 }
             }
@@ -99,9 +99,9 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
             auto const sinkPositionX = data.sourcePositionX[particleIndex];
             auto const sinkPositionY = data.sourcePositionY[particleIndex];
             auto const sinkPositionZ = data.sourcePositionZ[particleIndex];
-            auto const sinkSupportRadius = data.sinkSupportRadius[sinkIndex];
+            auto const sinkSmoothingLength = data.sinkSmoothingLength[sinkIndex];
             int const sinkRung = data.sourceRungs[particleIndex];
-            auto const squaredSinkSupportRadius = sqr(sinkSupportRadius);
+            auto const squaredSinkSupportRadius = sqr(sinkSmoothingLength);
             flops += 1;
             int const roundedNeighborEnd = roundUp(workspace.positionX.size(), blockSize);
             int maximumNeighborRung = 0;
@@ -118,7 +118,7 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
                     float const squaredSeparation =
                         sqr(separationX, separationY, separationZ);    // 5
                     if (squaredSeparation <= fmaxf(squaredSinkSupportRadius,
-                                                 sqr(workspace.supportRadius[neighborIndex]))) {
+                                                 sqr(workspace.smoothingLength[neighborIndex]))) {
                         maximumNeighborRung = max(maximumNeighborRung, neighborRung);
                     }
                     flops += 9;

@@ -35,7 +35,7 @@ float* sphParticlesEntropies;
 float* sphParticlesDensities;
 bool sphParticlesEntropyInitialized = false;
 double sphParticlesThermalScaleFactor = 1.0;
-float* sphParticlesSupportRadii;
+float* sphParticlesSmoothingLengths;
 
 namespace detail {
 
@@ -46,7 +46,7 @@ std::vector<Vector3<float>> velocities;
 std::vector<char> rungs;
 std::vector<ParticleInteger> indices;
 std::vector<float> internalEnergies;
-std::vector<float> supportRadii;
+std::vector<float> smoothingLengths;
 
 void require(bool condition, char const* label) {
     if (!condition) {
@@ -96,12 +96,12 @@ void sphParticlesResize(ParticleInteger count, bool) {
     detail::rungs.resize(count);
     detail::indices.resize(count);
     detail::internalEnergies.resize(count);
-    detail::supportRadii.resize(count);
+    detail::smoothingLengths.resize(count);
     particlesV = detail::velocities.data();
     particlesR = detail::rungs.data();
     sphParticlesParticleIndices = detail::indices.data();
     sphParticlesEntropies = detail::internalEnergies.data();
-    sphParticlesSupportRadii = detail::supportRadii.data();
+    sphParticlesSmoothingLengths = detail::smoothingLengths.data();
     for (ParticleInteger i = oldCount; i < count; i++) {
         sphParticlesParticleIndices[i] = i;
     }
@@ -158,7 +158,7 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
         if (!inserted) {
             requireClose("pressure depends only on z", pressure, position->second);
         }
-        double const support = sphParticlesSupportRadius(i);
+        double const support = sphParticlesSmoothingLength(i);
         requireClose("support radius encodes layer density",
             mass * configured.hydro.neighborNumber /
                 (4.0 * kPi / 3.0 * support * support * support),
@@ -193,7 +193,7 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
         require(sphParticlesVelocity(kZDimension, i) == -sphParticlesVelocity(kZDimension, i + 1),
             "normal velocities are exactly odd about the midplane");
         require(sphParticlesInternalEnergy(i) == sphParticlesInternalEnergy(i + 1) &&
-                sphParticlesSupportRadius(i) == sphParticlesSupportRadius(i + 1),
+                sphParticlesSmoothingLength(i) == sphParticlesSmoothingLength(i + 1),
             "thermodynamic state is exactly even about the midplane");
     }
     for (auto previous = pressureByHeight.begin(), current = std::next(previous);

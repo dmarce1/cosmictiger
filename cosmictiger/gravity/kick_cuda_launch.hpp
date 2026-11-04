@@ -518,7 +518,8 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
 #if COSMICTIGER_WITH_SPH
     bool const gasKick = data.sph && !kparams.forceOnly;
     data.catIndex = gasKick ? &particlesCatIndex(0) : nullptr;
-    data.sphHydroRungs = gasKick && data.midpointHydro ? sphParticlesProposedRungs : nullptr;
+    data.sphHydroFlags = gasKick && data.midpointHydro ? sphParticlesFlags : nullptr;
+    data.sphScaledDivergence = gasKick && data.midpointHydro ? sphScaledDivergence : nullptr;
 #else
     data.catIndex = nullptr;
 #endif

@@ -70,7 +70,7 @@ struct SphRunWorkspace {
     Vector<float, PinnedAllocator<float>> hostAccelerationY;
     Vector<float, PinnedAllocator<float>> hostAccelerationZ;
     Vector<float, PinnedAllocator<float>> hostVelocityDivergence;
-    Vector<float, PinnedAllocator<float>> hostSupportRadius;
+    Vector<float, PinnedAllocator<float>> hostSmoothingLength;
     Vector<char, PinnedAllocator<char>> hostRungs;
     Vector<SphTreeNode, PinnedAllocator<SphTreeNode>> hostTrees;
     Vector<Position, PinnedAllocator<Position>> hostPositionX;
@@ -88,7 +88,7 @@ struct SphRunWorkspace {
         copy(runData.sourcePositionX, hostPositionX);
         copy(runData.sourcePositionY, hostPositionY);
         copy(runData.sourcePositionZ, hostPositionZ);
-        copy(runData.sourceSupportRadius, hostSupportRadius);
+        copy(runData.sourceSmoothingLength, hostSmoothingLength);
         copy(runData.sourceRungs, hostRungs);
         copy(runData.sourceInternalEnergy, hostInternalEnergy);
         copy(runData.sourceDensity, hostDensity);
@@ -293,7 +293,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
             for (ParticleInteger i = selfPtr->particleRange.first;
                 i < selfPtr->particleRange.second; i++) {
                 bool const active = sphParticlesRung(i) >= params.minimumRung;
-                float const h = params.supportRadiusMultiplier * sphParticlesSupportRadius(i);
+                float const h = params.supportRadiusMultiplier * sphParticlesSmoothingLength(i);
                 auto const myx = sphParticlesPosition(kXDimension, i);
                 auto const myy = sphParticlesPosition(kYDimension, i);
                 auto const myz = sphParticlesPosition(kZDimension, i);
@@ -695,7 +695,7 @@ void SphRunWorkspace::stage() {
     hostPositionY.resize(particleStorageSize);
     hostPositionZ.resize(particleStorageSize);
     if (params.runType != kSphRunPrehydro1) {
-        hostSupportRadius.resize(particleStorageSize);
+        hostSmoothingLength.resize(particleStorageSize);
     }
     if (params.runType == kSphRunPrehydro2 || params.runType == kSphRunRungs ||
         (params.runType == kSphRunHydro && params.midpointHydro)) {
@@ -704,7 +704,8 @@ void SphRunWorkspace::stage() {
     if (params.runType == kSphRunHydro && params.balsaraSwitch) {
         hostBalsaraFactor.resize(particleStorageSize);
     }
-    if (params.runType == kSphRunPrehydro2 && params.gradientSwitch()) {
+    if (params.runType == kSphRunPrehydro2 && params.gradientSwitch() &&
+        sphParticlesViscosityDiagnostics != nullptr) {
         if (params.cullenDehnen) {
             // Only Cullen-Dehnen equation (17) reads the neighbors' previous divergences.
             hostVelocityDivergence.resize(particleStorageSize);
@@ -756,10 +757,10 @@ void SphRunWorkspace::stage() {
                     sphParticlesGlobalReadPositions(node.globalParticleRange(),
                         hostPositionX.data(), hostPositionY.data(), hostPositionZ.data(), offset);
                     if (params.runType == kSphRunPrehydro2 || params.runType == kSphRunRungs) {
-                        sphParticlesGlobalReadInternalEnergyAndSupportRadius(
+                        sphParticlesGlobalReadInternalEnergyAndSmoothingLength(
                             node.globalParticleRange(),
                             hostInternalEnergy.empty() ? nullptr : hostInternalEnergy.data(),
-                            hostSupportRadius.data(), offset);
+                            hostSmoothingLength.data(), offset);
                         if (params.runType == kSphRunRungs && sphRungBalanceActive()) {
                             sphReadRungCandidates(
                                 node.globalParticleRange(), hostRungs.data(), offset);
@@ -768,9 +769,9 @@ void SphRunWorkspace::stage() {
                                 node.globalParticleRange(), hostRungs.data(), offset);
                         }
                     } else if (params.runType == kSphRunHydro) {
-                        sphParticlesGlobalReadInternalEnergyAndSupportRadius(
+                        sphParticlesGlobalReadInternalEnergyAndSmoothingLength(
                             node.globalParticleRange(), hostInternalEnergy.data(),
-                            hostSupportRadius.data(), offset);
+                            hostSmoothingLength.data(), offset);
                         // The correction shares the density's cache line, so a remote
                         // source's ζ is from the same density pass as its ρ.
                         sphParticlesGlobalReadDensity(node.globalParticleRange(),
@@ -783,7 +784,8 @@ void SphRunWorkspace::stage() {
                                 node.globalParticleRange(), hostRungs.data(), offset);
                         }
                     }
-                    if (params.runType == kSphRunPrehydro2 && params.gradientSwitch()) {
+                    if (params.runType == kSphRunPrehydro2 && params.gradientSwitch() &&
+                        sphParticlesViscosityDiagnostics != nullptr) {
                         sphParticlesGlobalReadViscosityDiagnostics(node.globalParticleRange(),
                             params.cullenDehnen ? hostVelocityDivergence.data() : nullptr, offset);
                     }
@@ -812,21 +814,21 @@ SphRunData SphRunWorkspace::data() {
         destination = source.empty() ? nullptr : source.data();
     });
     runData.sinkParticleIndices = &sphParticlesParticleIndex(0);
-    runData.sinkSemiactive = &sphParticlesSemiactive(0);
+    runData.sinkFlags = sphParticlesFlags;
     runData.sinkParticleRungs = &particlesRung(0);
     if (params.runType == kSphRunRungs && sphRungBalanceActive()) {
         runData.sinkRungCandidates = sphRungCandidatesData();
     }
     if (params.runType == kSphRunHydro && params.phase == 1) {
-        runData.sinkProposedRungs = sphParticlesProposedRungs;
+        runData.proposeRungs = true;
     }
     runData.sinkDensity = &sphParticlesDensity(0);
     runData.sinkGradHCorrection = sphParticlesGradHCorrections;
     runData.sinkBalsaraFactor = sphParticlesBalsaraFactors;
     runData.sinkBulkViscosityCoefficient = sphParticlesBulkViscosityCoefficients;
-    runData.sinkCullenDehnenStates = sphParticlesCullenDehnenStates;
+    runData.sinkScaledDivergence = sphScaledDivergence;
     runData.sinkViscosityDiagnostics = sphParticlesViscosityDiagnostics;
-    runData.sinkSupportRadius = sphParticlesSupportRadii;
+    runData.sinkSmoothingLength = sphParticlesSmoothingLengths;
     runData.sinkEntropyRate = nullptr;
 #if COSMICTIGER_WITH_GRAVITY
     runData.sinkGravityAccelerationX = nullptr;
@@ -844,7 +846,6 @@ SphRunData SphRunWorkspace::data() {
 #endif
     runData.adiabaticIndex = getOptions().hydro.gamma;
     runData.numberOfTargetNodes = hostTargetNodeIndices.size();
-    runData.sinkSmoothingConverged = &sphParticlesConverged(0);
     runData.sinkAccelerations = nullptr;
     runData.centralAcceleration = getOptions().hydro.centralAcceleration;
     runData.centralSupportRadius = getOptions().hydro.centralSupportRadius;

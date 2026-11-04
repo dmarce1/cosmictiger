@@ -185,7 +185,7 @@ bool sphCpuHasActiveNeighbor(SphRunParameters const& parameters, SphRunData cons
     for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
         auto const separation = sphCpuSeparations(data, particleIndex, neighbors, first);
         auto const squaredSeparation = separation.dot(separation);
-        auto const neighborSupport = sphCpuLoad(data.sourceSupportRadius, neighbors, first, 0.0f);
+        auto const neighborSupport = sphCpuLoad(data.sourceSmoothingLength, neighbors, first, 0.0f);
         SimdFloat const neighborRung([&](auto lane) {
             size_t const index = first + size_t(lane);
             return index < neighbors.size() ? float(data.sourceRungs[neighbors[index]]) : 0.0f;
@@ -211,16 +211,16 @@ SphRunReturn sphCpuPrehydro1(
     auto const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
     auto const neighbors = detail::sphCpuNeighbors(data, targetNode, false, flops);
     for (int particleIndex = targetNode.particleRange.first;
-         particleIndex < targetNode.particleRange.second; ++particleIndex) {
+        particleIndex < targetNode.particleRange.second; ++particleIndex) {
         int const sinkIndex =
             targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
         bool const active =
             parameters.isActiveRung(data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]]);
-        if (active && !data.sinkSmoothingConverged[sinkIndex]) {
-            float& supportRadius = data.sinkSupportRadius[sinkIndex];
+        if (active && !data.sinkFlags[sinkIndex].converged()) {
+            float& supportRadius = data.sinkSmoothingLength[sinkIndex];
             bool const converged = detail::solveSphCpuSupportRadius(
                 parameters, data, targetNode, neighbors, particleIndex, supportRadius, flops);
-            data.sinkSmoothingConverged[sinkIndex] = converged;
+            data.sinkFlags[sinkIndex].setConverged(converged);
             if (converged) {
                 result.minimumSupportRadius = std::min(result.minimumSupportRadius, supportRadius);
                 result.maximumSupportRadius = std::max(result.maximumSupportRadius, supportRadius);
@@ -248,43 +248,52 @@ SphRunReturn sphCpuPrehydro1(
  *   H_a → sinkKernelSupportRadius; q_ab → normalizedRadius; w(q_ab) → kernelWeight
  *   ρ_a → density; ρ_a ∇·v_a → densityWeightedDivergence
  *   ρ_a ∇×v_a → densityWeightedCurl; ρ_a R_a → densityWeightedSignAverage
- *   r_ab, v_ab → separation, physicalVelocityDifference
+ *   r_ab, v_ab → separation, velocityDifference (peculiar stored velocity)
  *   m_b ∇_a W_ab → massWeightedKernelGradient
  *   T, D → gradientSums.moment, gradientSums.velocity
  *   Σ_b w → kernelSum; Σ_b q_ab w′ → kernelDerivativeMoment
  *   v_sig,a → signalSpeed (CUDA), signalSpeedPack (CPU)
  *   w̄_ab = −m_b F_a → gradientWeight inside the corrected-gradient branch.
- * Physical pair velocities include the Hubble flow in stored units. Peculiar velocities
- * alone enter densityDerivativeSum; division by a ρ_a Ω_a gives d ln ρ_a/dτ
+ * Peculiar velocities enter all switch gradients and densityDerivativeSum.
+ * Dividing densityDerivativeSum by a ρ_a Ω_a gives d ln ρ_a/dτ
  * (Price 2012, equation (27), https://arxiv.org/abs/1012.1885).
+ * Physical pair velocities include Hubble flow in the signal-speed estimate.
  */
 // clang-format on
 SphRunReturn sphCpuPrehydro2(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
+    bool const computeGradientHistory =
+        parameters.gradientSwitch() && data.sinkViscosityDiagnostics != nullptr;
+    bool const computeSphBalsara = parameters.balsaraSwitch && !parameters.gradientSwitch();
+    bool const evolveMorrisMonaghan = parameters.variableViscosity &&
+        !parameters.gradientSwitch() && parameters.viscosityTimestep > 0.0;
     sph_flops::Counter flops = 1;    // γ − 1.
     float const gasAdiabaticIndex = data.adiabaticIndex;
     float const pressureEnergyRatio = gasAdiabaticIndex - 1.0f;    // P/(ρu) for every gas particle
     auto const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
     auto const neighbors = detail::sphCpuNeighbors(data, targetNode, true, flops);
     for (int particleIndex = targetNode.particleRange.first;
-         particleIndex < targetNode.particleRange.second; ++particleIndex) {
+        particleIndex < targetNode.particleRange.second; ++particleIndex) {
         int const sinkIndex =
             targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
         bool const active =
             parameters.isActiveRung(data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]]);
-        float& supportRadius = data.sinkSupportRadius[sinkIndex];
+        float& supportRadius = data.sinkSmoothingLength[sinkIndex];
         bool const semiactive = active ||
             detail::sphCpuHasActiveNeighbor(
                 parameters, data, neighbors, particleIndex, supportRadius, flops);
-        data.sinkSemiactive[sinkIndex] = semiactive;
+        data.sinkFlags[sinkIndex].setSemiactive(semiactive);
         if (!semiactive) {
             continue;
         }
-        if (!active && !data.sinkSmoothingConverged[sinkIndex] &&
+        bool const updateMorrisMonaghan =
+            evolveMorrisMonaghan && active && !data.sinkFlags[sinkIndex].converged();
+        bool const computeSphDivergence = computeSphBalsara || updateMorrisMonaghan;
+        if (!active && !data.sinkFlags[sinkIndex].converged() &&
             !detail::solveSphCpuSupportRadius(
                 parameters, data, targetNode, neighbors, particleIndex, supportRadius, flops)) {
-            data.sinkSmoothingConverged[sinkIndex] = false;
+            data.sinkFlags[sinkIndex].setConverged(false);
             result.needsAnotherPass = true;
             continue;
         }
@@ -327,7 +336,7 @@ SphRunReturn sphCpuPrehydro2(
         SimdFloat kernelDerivativeMomentPack(0.0f);
         float soundSpeedForSwitch =
             0.0f;    // Sound speed for the CD signal speed or the Price target.
-        if (parameters.gradientSwitch()) {
+        if (computeGradientHistory) {
             soundSpeedForSwitch = std::sqrt(
                 gasAdiabaticIndex * pressureEnergyRatio * data.sourceInternalEnergy[particleIndex]);
         }
@@ -348,17 +357,16 @@ SphRunReturn sphCpuPrehydro2(
                 inside, normalizedRadius * dkernelWDq(normalizedRadius), SimdFloat(0.0f));
             flops += 3 * SimdFloat::size() +
                 sph_flops::densityKernelOperations(selectedHydroKernel(), normalizedRadius, true);
-            if (parameters.balsaraSwitch || parameters.variableViscosity ||
-                data.sinkLogDensityRate) {
+            if (computeSphDivergence || computeGradientHistory || data.sinkLogDensityRate) {
                 // clang-format off
                 /*
-                 * GADGET-4 equation (72): accumulate ρ_a div(v)_a and ρ_a curl(v)_a
-                 * as −Σ_b m_b v_ab·gradW_ab and Σ_b m_b v_ab×gradW_ab.
-                 * Their common ρ_a cancels from f_a^AV.
+                 * For constant viscosity and Morris & Monaghan, GADGET-4 equation
+                 * (72) uses −Σ_b m_b v_ab·gradW_ab and Σ_b m_b v_ab×gradW_ab.
+                 * Gradient switches instead reuse V = D T⁻¹ below. The independent
+                 * density derivative keeps its variational SPH sum.
                  *
                  * Symbol directory (in the code below):
                  *   v_ab → velocityDifference
-                 *   f_a → accelerationMagnitude
                  *   m_b → data.gasMass
                  *   ρ_a → density
                  */
@@ -370,8 +378,6 @@ SphRunReturn sphCpuPrehydro2(
                         dkernelWDq(normalizedRadius) /
                         simdSelect(contributes, radius, SimdFloat(1.0f)),
                     SimdFloat(0.0f));
-                Vector3<SimdFloat> const massWeightedKernelGradient =
-                    massWeightedGradientFactor * separation;
                 Vector3<SimdFloat> const velocityDifference = simdSelect(contributes,
                     Vector3<SimdFloat>(SimdFloat(data.sourceVelocityX[particleIndex]),
                         SimdFloat(data.sourceVelocityY[particleIndex]),
@@ -379,50 +385,55 @@ SphRunReturn sphCpuPrehydro2(
                         detail::sphCpuLoad3(data.sourceVelocityX, data.sourceVelocityY,
                             data.sourceVelocityZ, neighbors, first, 0.0f),
                     Vector3<SimdFloat>(SimdFloat(0)));
-                if (data.sinkLogDensityRate) {
-                    // Differentiate the comoving density with peculiar motion.
-                    // The grad-H factor and conformal-time scale are applied below.
-                    densityDerivativeSumPack += velocityDifference.dot(massWeightedKernelGradient);
-                    flops += 6 * SimdFloat::size();
-                }
-                if (parameters.balsaraSwitch || parameters.variableViscosity) {
-                    Vector3<SimdFloat> const physicalVelocityDifference =
-                        velocityDifference + SimdFloat(parameters.expansionRate) * separation;
-                    densityWeightedDivergencePack -=
-                        physicalVelocityDifference.dot(massWeightedKernelGradient);
-                    if (parameters.balsaraSwitch) {
+                // Kernel-gradient coefficient (3) and relative velocity (3).
+                flops += 6 * SimdFloat::size() +
+                    sph_flops::densityKernelOperations(
+                        selectedHydroKernel(), normalizedRadius, true);
+                if (computeSphDivergence || data.sinkLogDensityRate) {
+                    Vector3<SimdFloat> const massWeightedKernelGradient =
+                        massWeightedGradientFactor * separation;
+                    flops += 3 * SimdFloat::size();
+                    if (data.sinkLogDensityRate) {
+                        // Grad-H and conformal-time factors are applied below.
+                        densityDerivativeSumPack +=
+                            velocityDifference.dot(massWeightedKernelGradient);
+                        flops += 6 * SimdFloat::size();
+                    }
+                    if (computeSphDivergence) {
+                        densityWeightedDivergencePack -=
+                            velocityDifference.dot(massWeightedKernelGradient);
+                        flops += 6 * SimdFloat::size();
+                    }
+                    if (computeSphBalsara) {
                         for (int dim = 0; dim < kDimensions; ++dim) {
                             int const next = (dim + 1) % kDimensions;
                             int const last = (dim + 2) % kDimensions;
-                            densityWeightedCurlPack[dim] += physicalVelocityDifference[next] *
-                                    massWeightedKernelGradient[last] -
-                                physicalVelocityDifference[last] * massWeightedKernelGradient[next];
+                            densityWeightedCurlPack[dim] +=
+                                velocityDifference[next] * massWeightedKernelGradient[last] -
+                                velocityDifference[last] * massWeightedKernelGradient[next];
+                        }
+                        flops += 12 * SimdFloat::size();
+                    }
+                }
+                if (computeGradientHistory) {
+                    /*
+                     * Cullen & Dehnen (2010), equations (B2), (B4), (B7), and
+                     * Price et al. (2018), equations (51)-(52): V = D T⁻¹.
+                     * Equation (B7) allows the common mass/kernel-gradient
+                     * weights, independent of densities changing on other ranks.
+                     */
+                    SimdFloat const gradientWeight = -massWeightedGradientFactor;
+                    for (int i = 0; i < kDimensions; ++i) {
+                        for (int j = 0; j < kDimensions; ++j) {
+                            gradientSums.moment[i][j] +=
+                                gradientWeight * separation[i] * separation[j];
+                            gradientSums.velocity[i][j] +=
+                                gradientWeight * velocityDifference[i] * separation[j];
                         }
                     }
-                    if (parameters.gradientSwitch()) {
-                        /*
-                         * Cullen & Dehnen (2010), equations (B2), (B4), (B7), which
-                         * Price et al. (2018) equations (51)-(52) also use; Appendix B3 time
-                         * differences supply the material divergence derivative without
-                         * acceleration sources. Positive weights are equivalent to reversing the
-                         * sign of W'/q. B7 allows arbitrary scalar weights. Mass/kernel-gradient
-                         * weights avoid reading remote densities while this pass is updating them.
-                         */
-                        SimdFloat const gradientWeight = -massWeightedGradientFactor;
-                        for (int i = 0; i < kDimensions; ++i) {
-                            for (int j = 0; j < kDimensions; ++j) {
-                                gradientSums.moment[i][j] +=
-                                    gradientWeight * separation[i] * separation[j];
-                                gradientSums.velocity[i][j] +=
-                                    gradientWeight * physicalVelocityDifference[i] * separation[j];
-                            }
-                        }
-                        flops += 54 * SimdFloat::size();
-                    }
+                    flops += 54 * SimdFloat::size();
                     if (parameters.cullenDehnen) {
-                        /*
-                         * Equations (15), (17): use previous neighbor divergence signs.
-                         */
+                        // Equations (15), (17): prior neighbor signs, including self.
                         SimdFloat const neighborVelocityDivergence = detail::sphCpuLoad(
                             data.sourceVelocityDivergence, neighbors, first, 0.0f);
                         SimdFloat const neighborDivergenceSign =
@@ -431,11 +442,14 @@ SphRunReturn sphCpuPrehydro2(
                                     SimdFloat(0)));
                         densityWeightedSignAveragePack +=
                             simdSelect(detail::sphCpuValidLanes(neighbors, first),
-                                massOverSupportVolume * kernelW(normalizedRadius) *
-                                    neighborDivergenceSign,
+                                massOverSupportVolume * kernelWeight * neighborDivergenceSign,
                                 SimdFloat(0));
+                        flops += 3 * SimdFloat::size();
                     }
                     if (parameters.cullenDehnen || parameters.huEtAl) {
+                        // Hubble flow enters the approaching-pair signal speed only.
+                        Vector3<SimdFloat> const physicalVelocityDifference =
+                            velocityDifference + SimdFloat(parameters.expansionRate) * separation;
                         SimdFloat const neighborSoundSpeed =
                             simdSqrt(SimdFloat(gasAdiabaticIndex) * SimdFloat(pressureEnergyRatio) *
                                 simdSelect(contributes,
@@ -451,21 +465,8 @@ SphRunReturn sphCpuPrehydro2(
                                         (SimdFloat(soundSpeedForSwitch) + neighborSoundSpeed) -
                                     simdMin(radialVelocity, SimdFloat(0)),
                                 SimdFloat(0)));
-                        flops += 16 * SimdFloat::size();
+                        flops += 18 * SimdFloat::size();
                     }
-                    if (parameters.cullenDehnen) {
-                        flops += 9 * SimdFloat::size() +
-                            sph_flops::densityKernelOperations(
-                                selectedHydroKernel(), normalizedRadius);
-                    }
-                    flops += (21 + (parameters.balsaraSwitch ? 12 : 0)) * SimdFloat::size() +
-                        sph_flops::densityKernelOperations(
-                            selectedHydroKernel(), normalizedRadius, true);
-                } else {
-                    // Gradient coefficient (3), vector (3), and relative velocity (3).
-                    flops += 9 * SimdFloat::size() +
-                        sph_flops::densityKernelOperations(
-                            selectedHydroKernel(), normalizedRadius, true);
                 }
             }
         }
@@ -500,18 +501,17 @@ SphRunReturn sphCpuPrehydro2(
                 (parameters.scaleFactor * density * gradH.correction.supportJacobian);
             flops += SimdFloat::size() - 1 + 3;
         }
-        if (parameters.balsaraSwitch) {
+        if (computeSphBalsara && data.sinkBalsaraFactor) {
             Vector3<float> const densityWeightedCurl(simdSum(densityWeightedCurlPack[kXDimension]),
                 simdSum(densityWeightedCurlPack[kYDimension]),
                 simdSum(densityWeightedCurlPack[kZDimension]));
-            data.sinkBalsaraFactor[sinkIndex] = balsara::balsaraFactor(
-                simdSum(densityWeightedDivergencePack), densityWeightedCurl.norm());
+            data.sinkBalsaraFactor[sinkIndex] = balsara::encodeFactor(balsara::balsaraFactor(
+                simdSum(densityWeightedDivergencePack), densityWeightedCurl.norm()));
             flops += 4 * (SimdFloat::size() - 1) + 8;
-        } else if (data.sinkBalsaraFactor) {
-            data.sinkBalsaraFactor[sinkIndex] = 1.0f;
+        } else if (!parameters.balsaraSwitch && data.sinkBalsaraFactor) {
+            data.sinkBalsaraFactor[sinkIndex] = 255;
         }
-        if (parameters.variableViscosity && !parameters.gradientSwitch() && active &&
-            !data.sinkSmoothingConverged[sinkIndex] && parameters.viscosityTimestep > 0.0) {
+        if (updateMorrisMonaghan) {
             /*
              * Morris & Monaghan (1997), equations (5), (6), (13).
              * The sum/rho is a² div_phys(v); conformal-time rates divide by a.
@@ -527,7 +527,7 @@ SphRunReturn sphCpuPrehydro2(
             float const inverseDecayTime =
                 parameters.viscosityDecay * soundSpeed / (parameters.scaleFactor * smoothingLength);
             int const rung = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]];
-            bool const actualInterval = parameters.globalTimestep || parameters.midpointHydro;
+            bool const actualInterval = parameters.globalTimestep;
             float const timeStep = actualInterval ? parameters.viscosityTimestep :
                                                     parameters.viscosityTimestep / (1 << rung);
             auto& bulkViscosityCoefficient = data.sinkBulkViscosityCoefficient[sinkIndex];
@@ -537,7 +537,7 @@ SphRunReturn sphCpuPrehydro2(
             flops += SimdFloat::size() - 1 + 19;
             flops.doublePrecision += actualInterval ? 1 : 2;
         }
-        if (parameters.gradientSwitch()) {
+        if (computeGradientHistory) {
             cullen_and_dehnen::VelocityGradientSums<float> sums{};
             for (int i = 0; i < kDimensions; ++i) {
                 for (int j = 0; j < kDimensions; ++j) {
@@ -545,27 +545,47 @@ SphRunReturn sphCpuPrehydro2(
                     sums.velocity[i][j] = simdSum(gradientSums.velocity[i][j]);
                 }
             }
-            auto const& state = data.sinkCullenDehnenStates[sinkIndex];
+            auto const& state = data.sinkScaledDivergence[sinkIndex];
             int const currentRung = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]];
-            double const sampleInterval = sphViscositySampleInterval(
-                state, currentRung, parameters.viscositySampleInterval, parameters.globalTimestep);
+            double const sampleInterval =
+                sphViscositySampleInterval(currentRung, parameters.viscositySampleInterval,
+                    parameters.globalTimestep, parameters.viscosityInitializeHistory);
+            double const previousSampleTimestep =
+                sphViscosityStoredSampleTimestep(currentRung, parameters.viscosityBaseTimestep,
+                    parameters.viscosityPreviousTimestep, parameters.globalTimestep);
             if (!parameters.globalTimestep && sampleInterval > 0.0) {
                 flops.doublePrecision += 2;
             }
+            // Reconstruct V once for the viscosity model and optional Balsara factor.
+            float velocityGradient[kDimensions][kDimensions];
+            int const rank =
+                cullen_and_dehnen::reconstructVelocityGradient(sums, velocityGradient, flops);
+            float const canonicalDivergence =
+                velocityGradient[0][0] + velocityGradient[1][1] + velocityGradient[2][2];
+            flops += 2;
+            float const divergenceDerivative = rank == 0 ?
+                0.0f :
+                cullen_and_dehnen::divergenceTimeDerivative(canonicalDivergence,
+                    parameters.scaleFactor, state, sampleInterval, previousSampleTimestep, flops);
+            if (parameters.balsaraSwitch && data.sinkBalsaraFactor) {
+                data.sinkBalsaraFactor[sinkIndex] = balsara::encodeFactor(
+                    balsara::factorFromVelocityGradient(velocityGradient, flops));
+            }
             cullen_and_dehnen::Result<float> diagnostics;
             if (parameters.cullenDehnen) {
-                diagnostics = cullen_and_dehnen::diagnosticsFromHistory(sums,
-                    parameters.scaleFactor, state, sampleInterval,
+                diagnostics = cullen_and_dehnen::diagnosticsFromGradient(velocityGradient,
+                    parameters.scaleFactor, divergenceDerivative,
                     simdSum(densityWeightedSignAveragePack) / density, sinkKernelSupportRadius,
                     std::max(soundSpeedForSwitch, simdMaximum(signalSpeedPack)),
                     parameters.maximumBulkViscosityCoefficient, parameters.viscosityDecayCD, flops);
                 flops += SimdFloat::size() - 1;
             } else if (parameters.huEtAl) {
-                diagnostics = hu_etal::diagnosticsFromHistory(sums, parameters.scaleFactor, state,
-                    sampleInterval, sinkKernelSupportRadius, soundSpeedForSwitch,
-                    std::max(soundSpeedForSwitch, simdMaximum(signalSpeedPack)),
-                    parameters.maximumBulkViscosityCoefficientHu, parameters.viscosityDecayHu,
-                    flops);
+                diagnostics =
+                    hu_etal::diagnosticsFromGradient(velocityGradient, parameters.scaleFactor,
+                        divergenceDerivative, sinkKernelSupportRadius, soundSpeedForSwitch,
+                        std::max(soundSpeedForSwitch, simdMaximum(signalSpeedPack)),
+                        parameters.maximumBulkViscosityCoefficientHu, parameters.viscosityDecayHu,
+                        flops);
             } else {
                 /*
                  * Price et al. (2018), equations (46)-(48): the paper's smoothing length is
@@ -575,23 +595,23 @@ SphRunReturn sphCpuPrehydro2(
                     float(selectedHydroKernel().supportRadiusPerEffectiveRadius) *
                     float(monaghan::kViscosityWidthScale);
                 flops.doublePrecision += 1;
-                diagnostics = price_etal::diagnosticsFromHistory(sums, parameters.scaleFactor,
-                    parameters.expansionRate, state, sampleInterval, smoothingLength,
+                diagnostics = price_etal::diagnosticsFromGradient(velocityGradient,
+                    parameters.scaleFactor, divergenceDerivative, smoothingLength,
                     soundSpeedForSwitch, parameters.maximumBulkViscosityCoefficientPrice,
                     parameters.viscosityDecayPrice, flops);
                 flops += 2;
             }
+            diagnostics.divergence = canonicalDivergence;
             if (data.sinkViscosityDiagnostics != nullptr) {
                 auto& pending = data.sinkViscosityDiagnostics[sinkIndex];
                 pending.pendingDivergence = diagnostics.divergence;
-                pending.pendingSampleDivergence = diagnostics.sampleDivergence;
                 pending.targetBulkViscosityCoefficient = diagnostics.targetBulkViscosityCoefficient;
                 pending.inverseDecayTime = diagnostics.inverseDecayTime;
                 pending.limiter = diagnostics.limiter;
             }
             flops += 18 * (SimdFloat::size() - 1);
         }
-        data.sinkSmoothingConverged[sinkIndex] = true;
+        data.sinkFlags[sinkIndex].setConverged(true);
         result.minimumSupportRadius =
             std::min(result.minimumSupportRadius, sinkKernelSupportRadius);
         result.maximumSupportRadius =

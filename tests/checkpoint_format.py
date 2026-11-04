@@ -165,9 +165,12 @@ def read_prefix(data):
                 and result.driver.outer_interval >= 0 and result.driver.outer_start >= 0,
                 "invalid checkpoint particle-mesh interval extension")
     result.particle_start = reader.offset
-    # Version 90000 stores half alpha and two signed-int16 divergence samples plus
-    # the previous own-midpoint rung; no event diagnostics or absolute clocks.
-    result.gas_version = 90000 + (110 if stars else 100 if cooling else 2) + viscosity_offset
+    # Version 130000 packs convergence, semiactivity and the proposed rung into
+    # one byte, while retaining enabled gradient-model Balsara bytes.
+    # Normalization follows the live rung or shared previous global interval.
+    result.retained_balsara = viscosity_offset >= 4 and bool(flags & (1 << 13))
+    result.gas_version = (130000 + (110 if stars else 100 if cooling else 2) + viscosity_offset +
+                          int(result.retained_balsara))
     result.reader = reader
     return result
 
@@ -204,23 +207,28 @@ def decode_checkpoint(data, ranks=1):
                 math.isfinite(result.thermal_scale_factor) and result.thermal_scale_factor > 0,
                 "invalid entropy checkpoint context")
         result.entropies = reader.take("f", gas_count)
-        result.support_radii = reader.take("f", gas_count)
+        result.smoothing_lengths = reader.take("f", gas_count)
         result.gravity_indices = reader.take(integer_code, gas_count)
         result.densities = reader.take("f", gas_count)
         gamma = result.header.physics[2]
         factor = result.thermal_scale_factor ** (5 - 3 * gamma) / (gamma - 1)
         result.internal_energies = tuple(a * rho ** (gamma - 1) * factor
             for a, rho in zip(result.entropies, result.densities)) if result.entropy_initialized else result.entropies
-        flags = [reader.take("B", gas_count) for _ in range(2)]
-        result.proposed_rungs = reader.take("b", gas_count)
-        require(all(-1 <= rung < 64 for rung in result.proposed_rungs),
+        result.gas_flags = reader.take("B", gas_count)
+        result.converged = tuple(bool(value & 1) for value in result.gas_flags)
+        result.semiactive = tuple(bool(value & 2) for value in result.gas_flags)
+        encoded_rungs = tuple(value >> 2 for value in result.gas_flags)
+        require(all(rung < 16 for rung in encoded_rungs),
                 "invalid checkpoint hydro rung bound")
-        delta = (result.gas_version - 90000 -
+        result.proposed_rungs = encoded_rungs
+        flags = (result.converged, result.semiactive)
+        delta = (result.gas_version - 130000 - int(result.retained_balsara) -
                  (110 if result.has_stars else 100 if result.has_cooling else 2))
         require(delta in (0, 2, 4, 6, 8), "unsupported checkpoint viscosity payload")
         viscosity = []
         result.bulk_viscosity_coefficients = []
         result.divergence_histories = []
+        result.balsara_factors = []
         for _ in range(gas_count):
             values = ()
             if delta:
@@ -230,23 +238,17 @@ def decode_checkpoint(data, ranks=1):
                 result.bulk_viscosity_coefficients.append(alpha)
                 values = (alpha,)
             if delta >= 4:
-                divergence_significand, sample_significand = reader.take("h", 2)
-                divergence_exponent, sample_exponent, sample_rung = reader.take("b", 3)
-                encoded_samples = ((divergence_significand, divergence_exponent),
-                                   (sample_significand, sample_exponent))
-                # x = q * 2**(e-14). Zero has the unique representation (0, 0);
-                # normal float inputs have 16384 <= abs(q) <= 32767 and
-                # -126 <= e <= 127. Float subnormals are stored as zero.
-                # Startup (-2) and missing (-1) sample rungs remain valid.
-                require(all((significand == 0 and exponent == 0) or
-                            (16384 <= abs(significand) <= 32767 and -126 <= exponent <= 127)
-                            for significand, exponent in encoded_samples) and
-                        -2 <= sample_rung < 16,
+                scaled_divergence = reader.take("e")[0]
+                require(math.isfinite(scaled_divergence),
                         "invalid checkpoint divergence history")
-                divergence = math.ldexp(divergence_significand, divergence_exponent - 14)
-                sample_divergence = math.ldexp(sample_significand, sample_exponent - 14)
-                result.divergence_histories.append((divergence, sample_rung, sample_divergence))
-                values += (divergence, sample_rung, sample_divergence)
+                # Preserve the stored sample exactly for restart comparisons.
+                # Decoding requires the integrator's base/global timestep.
+                result.divergence_histories.append(scaled_divergence)
+                values += (scaled_divergence,)
+                if result.retained_balsara:
+                    factor = reader.take("B")[0]
+                    result.balsara_factors.append(factor)
+                    values += (factor,)
             viscosity.append(values)
         if result.has_cooling:
             result.cooling = tuple(reader.take("f", 1) for _ in range(gas_count))
@@ -258,7 +260,7 @@ def decode_checkpoint(data, ranks=1):
         for gas_index, particle in enumerate(result.gravity_indices):
             require(result.gas_indices[particle] == gas_index, "inconsistent checkpoint gas mapping")
             result.gas[gas_index] = (
-                result.entropies[gas_index], result.support_radii[gas_index],
+                result.entropies[gas_index], result.smoothing_lengths[gas_index],
                 result.densities[gas_index],
                 *(field[gas_index] for field in flags),
                 result.proposed_rungs[gas_index],

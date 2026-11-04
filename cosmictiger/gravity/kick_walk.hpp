@@ -567,6 +567,14 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                         kr.maxRung = std::max(nextRung, kr.maxRung);
                         ALWAYS_ASSERT(nextRung >= 0 && nextRung < kMaxRung);
                         flops += 15;
+#if COSMICTIGER_WITH_SPH
+                        if (sphScaledDivergence != nullptr && rung != nextRung &&
+                            particlesType(i) == kSphType &&
+                            !sphRescaleDivergence(
+                                sphScaledDivergence[particlesCatIndex(i)], rung, nextRung)) {
+                            THROW_ERROR("SPH rung change overflows timestep-scaled divergence\n");
+                        }
+#endif
                         rung = nextRung;
                         dt = 0.5f * rungDt[params.minRung] * params.t0;
                         applyKick(sgn * dt);
@@ -625,6 +633,13 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                             rung = params.fixedRung;
                         }
                         ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
+#if COSMICTIGER_WITH_SPH
+                        if (sphScaledDivergence != nullptr && previousRung != rung && gas &&
+                            !sphRescaleDivergence(
+                                sphScaledDivergence[particlesCatIndex(i)], previousRung, rung)) {
+                            THROW_ERROR("SPH rung change overflows timestep-scaled divergence\n");
+                        }
+#endif
                         dt = params.sign * 0.5f * rungDt[rung] * params.t0;
                         if (gas && params.deferGasOpening) {
                             gravityGlobalAcceleration(kXDimension)[i] = forces.gx[j];

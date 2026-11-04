@@ -583,7 +583,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         auto const tiny = 2.0 * RangeFixed::min().toDouble();
         flops.doublePrecision += 4 * kDimensions + 2;
         for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
-            float const h = params.supportRadiusMultiplier * sphParticlesSupportRadius(i);
+            float const h = params.supportRadiusMultiplier * sphParticlesSmoothingLength(i);
             flops.singlePrecision += 1;
             Vector3<Position> xValue;
             for (int dim = 0; dim < kDimensions; dim++) {
@@ -731,7 +731,7 @@ static SphTreeCreateReturn sphTreeRefreshNode(
             bool const active = sphParticlesRung(particle) >= params.minimumRung;
             result.numberOfActiveParticles += active;
             float const support =
-                params.supportRadiusMultiplier * sphParticlesSupportRadius(particle);
+                params.supportRadiusMultiplier * sphParticlesSmoothingLength(particle);
             flops.singlePrecision += 1;
             for (int dim = 0; dim < kDimensions; ++dim) {
                 double const position = sphParticlesPosition(dim, particle).toDouble();

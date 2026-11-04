@@ -252,7 +252,8 @@ void runFixedScenario() {
                 } else if (outputDue) {
                     // Refresh density at the output coordinates without another
                     // force evaluation, viscosity update, or entropy kick.
-                    sphMidpointStep(-1, state.tau, -1.0, baseTimestep, 1.0, 0.0, state.energies);
+                    sphMidpointStep(-1, state.tau, -1.0, baseTimestep, 1.0, 0.0, state.energies,
+                        global, global ? baseTimestep : 0.0, state.globalTimestep);
                 }
             }
 #endif
@@ -260,7 +261,8 @@ void runFixedScenario() {
                 lastOutputStep = outputStep;
                 profile::profileBegin("output");
                 viewOutputViews(outputStep, 1.0, false,
-                    state.tau * getOptions().units.timeSeconds * constants::kSecondsToYears);
+                    state.tau * getOptions().units.timeSeconds * constants::kSecondsToYears,
+                    duration / baseOptions.run.numberOfSteps, state.globalTimestep);
                 profile::profileEnd();
             }
             resetFlops();
@@ -335,12 +337,13 @@ void runFixedScenario() {
                     profile::ScopedPhase phase("drift");
                     drift(1.0, 0.5 * timestep, midpointTime, state.tau + timestep, duration);
                 }
-                if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
-                    int const closingRung =
-                        global ? 0 : minRung(inc(state.itime, state.maxRung));
-                    auto const sourceEstimate = sphCompleteSources(closingRung,
-                        state.tau + timestep, baseTimestep, 1.0, 0.0, state.energies,
-                        global ? timestep : -1.0, global ? baseTimestep : 0.0);
+                if (getOptions().chemistry.enabled || getOptions().starFormation.enabled ||
+                    getOptions().hydro.viscosityEvolution != "none") {
+                    int const closingRung = global ? 0 : minRung(inc(state.itime, state.maxRung));
+                    auto const sourceEstimate =
+                        sphCompleteSources(closingRung, state.tau + timestep, baseTimestep, 1.0,
+                            0.0, state.energies, global ? timestep : -1.0,
+                            global ? baseTimestep : 0.0, state.globalTimestep);
                     if (global) {
                         state.globalHydroTimestep = sourceEstimate.minimumTimestep;
                     }
@@ -445,13 +448,15 @@ void runFixedScenario() {
     setOptions(finalOptions);
 #if COSMICTIGER_WITH_SPH
     if (sphMidpointEnabled()) {
-        sphMidpointStep(-1, state.tau, -1.0, coarseInterval, 1.0, 0.0, state.energies);
+        sphMidpointStep(-1, state.tau, -1.0, coarseInterval, 1.0, 0.0, state.energies, global,
+            global ? coarseInterval : 0.0, state.globalTimestep);
     }
 #endif
     // Use the next cycle for a final partial coarse step, preserving earlier snapshots.
     profile::profileBegin("output");
     viewOutputViews(driverFinalOutputStep(state.tau, coarseInterval), 1.0, true,
-        state.tau * getOptions().units.timeSeconds * constants::kSecondsToYears);
+        state.tau * getOptions().units.timeSeconds * constants::kSecondsToYears,
+        duration / baseOptions.run.numberOfSteps, state.globalTimestep);
     profile::profileEnd();
     if (completed && !interrupted && iterations > 0) {
         // Only terminal diagnostics consume the outstanding gravity closing

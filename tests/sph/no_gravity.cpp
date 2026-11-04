@@ -75,9 +75,9 @@ void sphOnlyDiagnosticsTest() {
         }
         particlesRung(index) = 1;
         sphParticlesSetInternalEnergy(index, 2.0f + index);
-        sphParticlesSupportRadius(index) = 0.25f;
+        sphParticlesSmoothingLength(index) = 0.25f;
         sphParticlesDensity(index) = 1.0f;
-        sphParticlesProposedRungs[index] = 3;
+        sphParticlesSetProposedRung(index, 3);
     }
     UniqueFile checkpoint(std::tmpfile());
     if (checkpoint == nullptr) {
@@ -87,14 +87,14 @@ void sphOnlyDiagnosticsTest() {
     poisonDiagnostics();
     sphParticlesSetInternalEnergy(0, 99.0f);
     particlesVel(kXDimension, 0) = 99.0f;
-    sphParticlesProposedRungs[0] = 9;
+    sphParticlesSetProposedRung(0, 9);
     std::rewind(checkpoint.get());
     // This deliberately retains the same particle count, bypassing allocation.
     particlesLoad(checkpoint.get());
     checkDiagnostics(0, kParticleCount, "same-size checkpoint load");
     if (particlesSize() != kParticleCount || sphParticlesSize() != kParticleCount ||
         sphParticlesInternalEnergy(0) != 2.0f || particlesVel(kXDimension, 0) != 0.25f ||
-        sphParticlesProposedRungs[0] != 3) {
+        sphParticlesProposedRung(0) != 3) {
         throw std::runtime_error("SPH-only checkpoint failed to preserve the gas payload");
     }
     sphCheckpointTest();
@@ -113,7 +113,7 @@ void sphOnlyDiagnosticsTest() {
     range.proc = hpxRank();
     range.range.first = 0;
     range.range.second = 1;
-    sphParticlesGlobalReadInternalEnergyAndSupportRadius(range, &predictedEnergy, &support, 0);
+    sphParticlesGlobalReadInternalEnergyAndSmoothingLength(range, &predictedEnergy, &support, 0);
     double const expectedEnergy =
         sph_entropy::storedEnergy(initialEntropy, sphParticlesDensity(0), options.hydro.gamma, 0.5);
     if (std::abs(predictedEnergy - expectedEnergy) > 1.e-5 * expectedEnergy) {

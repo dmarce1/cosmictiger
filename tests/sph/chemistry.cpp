@@ -73,7 +73,7 @@ void initializeChemistryFixture(bool invalid) {
         }
         sphParticlesDensity(i) = density;
         sphParticlesSetInternalEnergy(i, energy);
-        sphParticlesSupportRadius(i) = 0.1f;
+        sphParticlesSmoothingLength(i) = 0.1f;
         sphChemistryInitializeParticle(i, kChemistryTestScale);
     }
     if (invalid && hpxRank() == hpxSize() - 1) {

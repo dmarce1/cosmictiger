@@ -30,7 +30,8 @@ void testInactiveRungCandidateClosure(Fixture& fixture, RunPass&& runPass) {
         double const position = 0.9 + 0.1 * index;
         data.sourcePositionX[source] = position - std::floor(position);
         data.sourcePositionY[source] = data.sourcePositionZ[source] = 0.5;
-        data.sourceSupportRadius[source] = data.sinkSupportRadius[sink] = index % 2 ? 0.11f : 0.06f;
+        data.sourceSmoothingLength[source] = data.sinkSmoothingLength[sink] =
+            index % 2 ? 0.11f : 0.06f;
         data.sourceRungs[source] = data.sinkParticleRungs[particle] = previous[index];
         data.sinkRungCandidates[particle] = previous[index];
     }
@@ -94,7 +95,7 @@ void testSupportBoundaryRungCandidates(Fixture& fixture, RunPass&& runPass) {
                 int const particle = fixture.particleIndex(index);
                 data.sourcePositionX[source] = 0.125 + index * separation;
                 data.sourcePositionY[source] = data.sourcePositionZ[source] = 0.5;
-                data.sourceSupportRadius[source] = data.sinkSupportRadius[sink] =
+                data.sourceSmoothingLength[source] = data.sinkSmoothingLength[sink] =
                     ((index == 0) == largeTargetSupport) ? 0.125f : 0.03125f;
                 data.sourceRungs[source] = data.sinkParticleRungs[particle] = index ? 5 : 0;
                 data.sinkRungCandidates[particle] = index ? 5 : 0;

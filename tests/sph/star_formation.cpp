@@ -24,7 +24,7 @@ constexpr double kSfScale = 0.25;
 struct SfRecord {
     uint64_t id{}, eventCounter{}, formationTime{}, specificRate{}, elapsedTime{};
     uint32_t energy{}, entropy{}, electrons{}, mass{}, bulkViscosity{};
-    std::array<uint64_t, 3> viscosityHistory{};
+    uint16_t viscosityHistory{};
     int proposedRung{};
     std::array<uint64_t, kDimensions> position{};
     std::array<uint32_t, kDimensions> velocity{};
@@ -84,17 +84,16 @@ void initializeSfFixture() {
         sphParticlesDensity(index) =
             sfStoredDensity((index == 2 ? 0.5 : 10.0) * model.thresholdDensity);
         sphParticlesSetInternalEnergy(index, sfStoredEnergy(model.parameters.coldEnergy));
-        sphParticlesSupportRadius(index) = 0.125f;
+        sphParticlesSmoothingLength(index) = 0.125f;
         sphParticlesElectronFractions[index] = 1.0f;
-        sphParticlesProposedRungs[index] = char(4 + index);
+        sphParticlesSetProposedRung(index, char(4 + index));
         if (sphParticlesBulkViscosityCoefficients != nullptr) {
             sphParticlesBulkViscosityCoefficients[index] = 0.25f + 0.125f * index;
         }
-        if (sphParticlesCullenDehnenStates != nullptr) {
-            auto& history = sphParticlesCullenDehnenStates[index];
+        if (sphScaledDivergence != nullptr) {
+            auto& history = sphScaledDivergence[index];
             history = {};
-            history.setDivergences(float(-2 - index), float(-4 - index));
-            history.sampleRung = int8_t(1 + index);
+            ALWAYS_ASSERT(sphEncodeDivergence(history, float(-4 - index), 1.0));
         }
         for (int dim = 0; dim < kDimensions; ++dim) {
             particlesPos(dim, index) = 0.25 + index * 0.125;
@@ -120,18 +119,14 @@ std::vector<SfRecord> sfSnapshot() {
         record.entropy = std::bit_cast<uint32_t>(gas ? sphParticlesEntropies[gasIndex] : 0.0f);
         record.mass = std::bit_cast<uint32_t>(particlesMass(index));
         if (gas) {
-            record.proposedRung = sphParticlesProposedRungs[gasIndex];
+            record.proposedRung = sphParticlesProposedRung(gasIndex);
             if (sphParticlesBulkViscosityCoefficients != nullptr) {
                 record.bulkViscosity =
                     uint32_t(sphParticlesBulkViscosityCoefficients[gasIndex].bits);
             }
-            if (sphParticlesCullenDehnenStates != nullptr) {
-                auto const& history = sphParticlesCullenDehnenStates[gasIndex];
-                record.viscosityHistory = {uint64_t(uint16_t(history.divergence)) |
-                        (uint64_t(uint8_t(history.divergenceExponent)) << 16),
-                    uint64_t(uint8_t(history.sampleRung)),
-                    uint64_t(uint16_t(history.sampleDivergence)) |
-                        (uint64_t(uint8_t(history.sampleDivergenceExponent)) << 16)};
+            if (sphScaledDivergence != nullptr) {
+                auto const& history = sphScaledDivergence[gasIndex];
+                record.viscosityHistory = history.bits;
             }
         }
         record.electrons =

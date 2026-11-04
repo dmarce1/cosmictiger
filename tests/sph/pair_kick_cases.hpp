@@ -49,7 +49,7 @@ void testConservativePairKick(Fixture& fixture, bool directedViscosity) {
         data.sourceVelocityZ[source] = velocities[index][2];
         data.sourceDensity[source] = 1.3f + 0.8f * index;
         data.sourceInternalEnergy[source] = 0.8f + 0.6f * index;
-        data.sourceSupportRadius[source] = 0.2f + 0.05f * index;
+        data.sourceSmoothingLength[source] = 0.2f + 0.05f * index;
         data.sourceGradHCorrection[source] = 0.0f;    // Fixed-support pair.
         if (directedViscosity) {
             data.sourceBulkViscosityCoefficient[source] = 0.4f + 0.5f * index;

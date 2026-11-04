@@ -242,7 +242,7 @@ struct LinearExperiment {
                 particlesCatIndex(index) = kind == 0 ? kNoParticleIndex : index - perSpecies;
                 if (kind == 1) {
                     sphParticlesParticleIndex(index - perSpecies) = index;
-                    sphParticlesSupportRadius(index - perSpecies) = 1.0 / side;
+                    sphParticlesSmoothingLength(index - perSpecies) = 1.0 / side;
                 }
             }
 #endif

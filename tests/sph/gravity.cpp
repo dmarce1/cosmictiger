@@ -136,6 +136,26 @@ float migrationElectronFraction(int target) {
     return electronFraction;
 }
 
+void initializePairDivergence() {
+    if (getOptions().hydro.viscosityGradientSwitch()) {
+        for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
+            ALWAYS_ASSERT(sphEncodeDivergence(
+                sphScaledDivergence[gas], -1.75f, std::ldexp(1.0, -sphParticlesRung(gas))));
+        }
+    }
+}
+
+void verifyPairDivergence(char const* label) {
+    if (getOptions().hydro.viscosityGradientSwitch()) {
+        for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
+            requireClose(label,
+                sphDecodeDivergence(
+                    sphScaledDivergence[gas], std::ldexp(1.0, -sphParticlesRung(gas))),
+                -1.75, 0.0);
+        }
+    }
+}
+
 void initializePair(double separation) {
     particlesResize(2);
     sphParticlesResize(1, false);
@@ -149,15 +169,10 @@ void initializePair(double separation) {
         particlesCatIndex(i) = i == 0 ? kNoParticleIndex : 0;
     }
     sphParticlesParticleIndex(0) = 1;
-    sphParticlesSupportRadius(0) = 0.02;
+    sphParticlesSmoothingLength(0) = 0.02;
     sphParticlesEntropies[0] = 4.0;
-    sphParticlesProposedRungs[0] = sphMidpointEnabled() ? 4 : -1;
-    if (getOptions().hydro.viscosityGradientSwitch()) {
-        auto& state = sphParticlesCullenDehnenStates[0];
-        state = {};
-        state.setDivergences(-1.5f, -1.75f);
-        state.sampleRung = 2;
-    }
+    sphParticlesSetProposedRung(0, sphMidpointEnabled() ? 4 : 0);
+    initializePairDivergence();
 }
 TreeId findLeaf(TreeId node, ParticleInteger particle) {
     auto const* ptr = treeGetNode(node);
@@ -213,9 +228,11 @@ void resetKickState() {
         }
         particlesPot(i) = 0.0;
     }
+    initializePairDivergence();
 }
 void verifyKick(
     double inverseCube, double inverseRadius, double separation, KickParameters const& parameters) {
+    verifyPairDivergence("gravity rung selection preserves decoded divergence");
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         bool const gas = particlesIsSph(i);
         double const sourceMass = particlesMass(1 - i);
@@ -336,7 +353,7 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
     double const nominalSeparation = softened ? 0.25 * getOptions().gravity.supportRadius : 0.25;
     initializePair(nominalSeparation);
     float const gasMass = particlesMass(sphParticlesParticleIndex(0));
-    sphParticlesSupportRadius(0) = hydroSupport;
+    sphParticlesSmoothingLength(0) = hydroSupport;
     auto const built = treeCreate(TreeCreateParameters(0, 0.5, getOptions().gravity.supportRadius));
     verifyMappings();
     requireClose("root mixed mass", nodeMass(treeGetNode(built.id)),
@@ -468,8 +485,12 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
                 particlesVel(kXDimension, gasIndex), 0.125, 1e-7);
             requireClose(
                 "deferred gas selection retains the hydro floor", particlesRung(gasIndex), 4);
+            verifyPairDivergence("deferred gas selection preserves decoded divergence");
             // Stand in for neighbor closure after the fresh gravity choice.
-            particlesRung(gasIndex) = 6;
+            sphParticlesSetProposedRung(0, 6);
+            requireClose("neighbor closure commits the final rung", sphCommitBalancedRungs(), 6);
+            sphParticlesSetProposedRung(0, 4);
+            verifyPairDivergence("neighbor closure preserves decoded divergence");
             result += gravityFinishBalancedGasKick(params.t0, params.sign);
             requireClose("balanced opening uses the final gas rung",
                 particlesVel(kXDimension, gasIndex),
@@ -492,9 +513,10 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
             requireClose("frozen traditional opening uses the existing interval",
                 particlesVel(kXDimension, gasIndex),
                 0.125 + 0.5 * rungDt[1] * params.t0 * gasAcceleration, 1e-6);
+            verifyPairDivergence("frozen traditional kick preserves decoded divergence");
 
             resetKickState();
-            sphParticlesProposedRungs[0] = 0;
+            sphParticlesSetProposedRung(0, 0);
             auto fullSelection = params;
             fullSelection.htime = true;
             fullSelection.fullGasRungSelection = true;
@@ -507,9 +529,10 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
             }
             requireClose("hierarchical gas selects the full-force rung in the top walk",
                 particlesRung(gasIndex), expectedRung);
+            verifyPairDivergence("hierarchical full-force choice preserves decoded divergence");
             requireClose("full gas choice leaves hierarchical dark-matter selection unchanged",
                 particlesRung(darkMatterIndex), 1);
-            sphParticlesProposedRungs[0] = 7;
+            sphParticlesSetProposedRung(0, 7);
             auto correction = fullSelection;
             correction.fullGasRungSelection = false;
             correction.freezeGasRungs = true;
@@ -520,11 +543,12 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
                 particlesRung(gasIndex), expectedRung);
             requireClose("hierarchical correction still selects dark-matter rung",
                 particlesRung(darkMatterIndex), 2);
-            sphParticlesProposedRungs[0] = 4;
+            verifyPairDivergence("hierarchical correction preserves decoded divergence");
+            sphParticlesSetProposedRung(0, 4);
         }
     }
     requireClose(
-        "gravity leaves hydro smoothing unchanged", sphParticlesSupportRadius(0), hydroSupport);
+        "gravity leaves hydro smoothing unchanged", sphParticlesSmoothingLength(0), hydroSupport);
     treeDestroy(true);
 }
 
@@ -535,13 +559,30 @@ void checkpointPair() {
     }
     ParticleInteger const gas = sphParticlesParticleIndex(0);
     auto const position = particlesPos(kXDimension, gas);
+    int const rung = particlesRung(gas);
+    uint16_t const scaledDivergenceBits =
+        getOptions().hydro.viscosityGradientSwitch() ? sphScaledDivergence[0].bits : 0;
+    bool const retainedBalsara =
+        getOptions().hydro.viscosityGradientSwitch() && getOptions().hydro.balsaraSwitch;
+    sphParticlesSetConverged(0, true);
+    sphParticlesSetSemiactive(0, false);
+    uint8_t const packedFlags = sphParticlesFlags[0].bits;
+    if (retainedBalsara) {
+        sphParticlesBalsaraFactors[0] = 173;
+    }
     particlesSave(file);
     particlesPos(kXDimension, gas) = 0.9;
-    sphParticlesSupportRadius(0) = 0.5;
+    particlesRung(gas) = 9;
+    sphParticlesSmoothingLength(0) = 0.5;
     sphParticlesEntropies[0] = 99.0;
-    sphParticlesProposedRungs[0] = 9;
+    sphParticlesSetProposedRung(0, 9);
+    sphParticlesSetConverged(0, false);
+    sphParticlesSetSemiactive(0, true);
     if (getOptions().hydro.viscosityGradientSwitch()) {
-        sphParticlesCullenDehnenStates[0] = {};
+        sphScaledDivergence[0] = {};
+    }
+    if (retainedBalsara) {
+        sphParticlesBalsaraFactors[0] = 0;
     }
     std::rewind(file);
     particlesLoad(file);
@@ -551,14 +592,19 @@ void checkpointPair() {
     requireClose("checkpoint gas count", sphParticlesSize(), 1);
     requireClose("checkpoint position",
         particlesPos(kXDimension, sphParticlesParticleIndex(0)).toDouble(), position.toDouble());
-    requireClose("checkpoint hydro length", sphParticlesSupportRadius(0), 0.02);
+    requireClose("checkpoint hydro length", sphParticlesSmoothingLength(0), 0.02);
     requireClose("checkpoint internal energy", sphParticlesEntropies[0], 4.0);
-    requireClose("checkpoint persistent hydro rung", sphParticlesProposedRungs[0], 4);
+    requireClose("checkpoint persistent hydro rung", sphParticlesProposedRung(0), 4);
+    requireClose("checkpoint packed working flags and hydro rung", sphParticlesFlags[0].bits,
+        packedFlags, 0.0);
+    requireClose("checkpoint live gas rung", sphParticlesRung(0), rung, 0.0);
+    if (retainedBalsara) {
+        requireClose("checkpoint retained Balsara byte", sphParticlesBalsaraFactors[0], 173, 0.0);
+    }
     if (getOptions().hydro.viscosityGradientSwitch()) {
-        auto const& state = sphParticlesCullenDehnenStates[0];
-        requireClose("checkpoint physical divergence", state.physicalDivergence(), -1.5);
-        requireClose("checkpoint divergence sample rung", state.sampleRung, 2);
-        requireClose("checkpoint divergence sample", state.sampledDivergence(), -1.75);
+        auto const& state = sphScaledDivergence[0];
+        requireClose("checkpoint divergence scalar bits", state.bits, scaledDivergenceBits, 0.0);
+        verifyPairDivergence("checkpoint preserves decoded divergence");
         requireClose("checkpoint excludes temporary viscosity diagnostics",
             sphParticlesViscosityDiagnostics == nullptr, true);
     }
@@ -574,15 +620,19 @@ void initializeSphDomainRegression() {
         particlesPos(kXDimension, i).raw() += 17;
     }
     sphParticlesEntropies[0] = 20.0 + target;
-    sphParticlesProposedRungs[0] = 5 + target % 4;
+    sphParticlesSetProposedRung(0, 5 + target % 4);
+    sphParticlesSetConverged(0, target % 2 != 0);
+    sphParticlesSetSemiactive(0, target % 3 != 0);
     if (getOptions().hydro.viscosityEvolution != "none") {
         sphParticlesBulkViscosityCoefficients[0] = 0.5f + target / 16.0f;
     }
     if (getOptions().hydro.viscosityGradientSwitch()) {
-        auto& state = sphParticlesCullenDehnenStates[0];
+        auto& state = sphScaledDivergence[0];
         state = {};
-        state.setDivergences(-1.5f + target / 8.0f, -2.0f + target / 16.0f);
-        state.sampleRung = int8_t(1 + target % 11);
+        ALWAYS_ASSERT(sphEncodeDivergence(state, -2.0f + target / 16.0f, 1.0));
+        if (getOptions().hydro.balsaraSwitch) {
+            sphParticlesBalsaraFactors[0] = uint8_t(64 + target);
+        }
     }
     if (getOptions().chemistry.enabled) {
         sphParticlesElectronFractions[0] = migrationElectronFraction(target);
@@ -630,21 +680,24 @@ void validateSphDomainRegression() {
             throw std::runtime_error("Migration changed native position bits");
         }
     }
-    requireClose("migration persistent hydro rung", sphParticlesProposedRungs[0], 5 + target % 4);
+    requireClose("migration persistent hydro rung", sphParticlesProposedRung(0), 5 + target % 4);
+    requireClose("migration convergence flag", sphParticlesConverged(0), target % 2 != 0, 0.0);
+    requireClose("migration semiactive flag", sphParticlesSemiactive(0), target % 3 != 0, 0.0);
     requireClose("migration canonical thermal state", sphParticlesEntropies[0], 20.0 + target);
     if (getOptions().hydro.viscosityEvolution != "none") {
         requireClose("migration viscosity alpha", sphParticlesBulkViscosityCoefficients[0],
             0.5 + target / 16.0);
     }
     if (getOptions().hydro.viscosityGradientSwitch()) {
-        auto const& state = sphParticlesCullenDehnenStates[0];
-        requireClose("migration preserves physical divergence", state.physicalDivergence(),
-            -1.5 + target / 8.0);
-        requireClose("migration divergence sample rung", state.sampleRung, 1 + target % 11);
+        auto const& state = sphScaledDivergence[0];
         requireClose(
-            "migration divergence sample", state.sampledDivergence(), -2.0 + target / 16.0);
+            "migration divergence sample", sphDecodeDivergence(state, 1.0), -2.0 + target / 16.0);
         requireClose("migration excludes temporary viscosity diagnostics",
             sphParticlesViscosityDiagnostics == nullptr, true);
+        if (getOptions().hydro.balsaraSwitch) {
+            requireClose(
+                "migration retained Balsara byte", sphParticlesBalsaraFactors[0], 64 + target, 0.0);
+        }
     }
     if (getOptions().chemistry.enabled) {
         auto const expected = migrationElectronFraction(target);
@@ -669,7 +722,10 @@ void validateSphDomainRegression() {
         sphParticlesGlobalReadViscosityDiagnostics(remote, divergence, 1);
         requireClose("remote divergence lower padding", divergence[0], -9.0);
         requireClose("remote divergence upper padding", divergence[2], -9.0);
-        requireClose("remote prior divergence cache", divergence[1], -1.5 + remote.proc / 8.0);
+        double const remoteDivergence = -2.0 + remote.proc / 16.0;
+        double const expectedSign =
+            remoteDivergence > 0.0 ? 1.0 : (remoteDivergence < 0.0 ? -1.0 : 0.0);
+        requireClose("remote prior divergence sign cache", divergence[1], expectedSign);
     }
     float velocity[kDimensions][3]{};
     sphParticlesGlobalReadVelocities(
@@ -721,7 +777,7 @@ void initializeSphMidpointPairRegression() {
         particlesRung(sphParticlesParticleIndex(gas)) = endpoint == 0 ? 1 : 3;
         sphParticlesSetInternalEnergy(gas, 2.0f + endpoint);
         sphParticlesDensity(gas) = 1.0f;
-        sphParticlesSupportRadius(gas) = 0.25f;
+        sphParticlesSmoothingLength(gas) = 0.25f;
     }
 }
 HPX_PLAIN_ACTION(initializeSphMidpointPairRegression, InitializeSphMidpointPairRegressionAction);
@@ -740,7 +796,7 @@ Array<double, 14> readSphMidpointPairRegression() {
         }
         result[offset + 4] += sphParticlesEntropy(gas);
         result[offset + 5] += hpxRank();
-        result[offset + 6] += sphParticlesSupportRadius(gas);
+        result[offset + 6] += sphParticlesSmoothingLength(gas);
     }
     return result;
 }

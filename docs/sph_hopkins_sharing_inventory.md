@@ -2,6 +2,30 @@
 
 Scope: the working tree of `/home/dmarce1/workspace/cosmictiger` as of 2026-11-03. Several files have uncommitted edits (`hopkins.cpp`, `hopkins_state.hpp`, `sph_particles.{hpp,cpp}`, `domain.cpp`, `drift.cu`, `drift_cpu.cpp`), so line numbers refer to the working tree, not HEAD. I re-read the code wherever the inputs disagreed; those places are marked **Confirmed**. Opinions are marked *(design opinion)*.
 
+November 4 viscosity storage update: the inventory below remains a historical
+sharing proposal except where explicitly updated. Current SPH stores one
+`Float16Storage* sphScaledDivergence` scalar per gas particle (two bytes), with no
+wrapper or previous-rung byte. Endpoint sampling before rung changes and scalar
+rescaling on each live-rung mutation recover the normalization. Alpha uses two
+bytes, optional Balsara one byte, and pending viscosity diagnostics sixteen
+temporary bytes. All evolving alpha, including Morris–Monaghan, advances at
+completed own interval endpoints; startup leaves it unchanged. Midpoint forces
+use the last endpoint's alpha. CD, Hu and Price also retain Balsara from their
+startup/endpoint velocity-gradient reconstruction: its trace and antisymmetric
+part replace the old uncorrected SPH divergence/curl sums. Their midpoint passes
+do neither calculation again. Only constant-α and Morris–Monaghan runs use
+separate midpoint SPH divergence/curl sums when Balsara is enabled.
+The retained byte is checkpointed and migrated only for CD, Hu and Price when
+enabled; the other models reconstruct it after restart or migration. SPH payload
+base 130000 also replaces convergence, semiactivity and proposed-rung byte arrays
+with one `SphParticleFlags` byte, saving two bytes per gas particle in memory,
+checkpoints and migration. Bits 0/1 hold the flags and bits 2–7 the proposed rung;
+current valid rungs are 0–15, with no unset sentinel. Explicit setters replace
+mutable references to individual fields. Balsara defaults off for CD/Hu/Price
+and on for constant α/MM; explicit enabling for a gradient model is honored
+with a warning about duplicate shear suppression.
+See [the current SPH design](sph_pair_midpoint_plan.md).
+
 ## 1. Verdict
 
 You can share the storage container, the particle bookkeeping and much of the leaf arithmetic today. Several parts are already one implementation:
@@ -203,12 +227,12 @@ Sizes are per particle.
 | acceleration x,y,z | 12 | sph | P (staggered rungs) | SPH | float×3 | `sph_particles.hpp:40-42`; comment at `sph_particles.cpp:310` |
 | predictedAcceleration x,y,z | 12 | sph | P | SPH (already SoA) | float×3 | — |
 | predictedInternalEnergyRate, internalEnergyRate | 8 | sph | P | SPH | float×2 | — |
-| convergence, semiactive flags | 2 | sph | T (but checkpointed) | SPH | char×2 | reset at `sph_particles.cpp:1483-1530` |
+| convergence, semiactivity, proposed rung | 1 | sph | T (but checkpointed/migrated) | SPH | SphParticleFlags | November 4 update; packed 1/1/6 bits, saving two bytes; explicit setters |
 | gradHCorrection | 4 | sph | T traditional; P hierarchical | SPH | float | `sph_particles.hpp:67-71` |
-| balsaraFactor | 4 | sph, by option | T traditional; P hierarchical | SPH | float | — |
-| bulkViscosityCoefficient (alpha) | 4 | sph | P | SPH | float | `sph_particles.hpp` |
-| C&D divergence | 4 | sph | P | SPH | float | `cullen_and_dehnen/state.hpp:13-18` |
-| C&D pendingDivergence, targetAlpha, inverseDecayTime | 12 | sph | T | SPH, scratch | float×3 | — |
+| balsaraFactor | 1 | sph, by option | P for CD/Hu/Price; T for constant α and MM | SPH | uint8_t | November 4 update; gradient models checkpoint/migrate the retained byte; float evaluation and source staging |
+| bulkViscosityCoefficient (alpha) | 2 | sph | P | SPH | Float16Storage | November 4 update; `sph/particles.hpp` |
+| CD/Hu/Price scaled divergence | 2 | sph | P | SPH | Float16Storage | November 4 update; scalar `sphScaledDivergence`, endpoint sampling, no extra rung |
+| pendingDivergence, target alpha, inverseDecayTime, limiter | 16 | sph | T | SPH, scratch | float×4 | November 4 update; density-event diagnostics |
 | SourceState fields (§5b) | 248 | sph hierarchical | P | SPH (hierarchical) | double / uint64 / int | `hierarchical_state.hpp:10-34` |
 | identifier | 8 | ML | P | ML | uint64 | `hopkins_state.hpp:53` |
 | mass | 8 | ML (fixed in MFM) | P | ML | double | still read in MFM (`hopkins.cpp:2867, 2926`) |
@@ -257,8 +281,8 @@ Totals derived from the rows: ML ≈ 359 B per cell. MFV adds 56 B plus the 4 B 
   The fields `minimumSupportRadius`, `maximumSupportRadius`, `pressureEnergyRatio` and `adiabaticIndex` copy option values. `liveSource` refreshes them every time (`hierarchical.cpp:79-80,96-97`), so they should be dropped from storage *(design opinion)*.
 
   Seven SourceState groups map one to one onto meshless fields: id↔identifier, position↔positionAnchor, driftVelocity↔meshVelocity, epoch↔sourceTime, validUntil↔endTime, driftScale↔positionDriftScale, rung↔hydroRung. A shared "trajectory anchor" array group is possible, but two things must be settled first: position type (double versus Fixed64) and kinematic order (linear versus quadratic) *(design opinion; see §7)*.
-- **Viscosity alpha** is already the scalar `sphParticlesBulkViscosityCoefficients` array; Morris-Monaghan uses backward Euler without a stored rate or predictor.
-- **`SphCullenDehnenState`** becomes divergence[] (persistent) plus pendingDivergence[], targetAlpha[] and inverseDecayTime[] (scratch). Migration and checkpoint already carry only the divergence (`domain.cpp:611-613`, `sph_particles.cpp:1188-1192`).
+- **Viscosity alpha (November 4 update)** is the scalar `sphParticlesBulkViscosityCoefficients` array. All evolving-alpha models update at completed own interval endpoints. Morris–Monaghan uses backward Euler with endpoint compression, without a stored rate, predictor or divergence history.
+- **Scaled divergence (November 4 update)** is the scalar `Float16Storage* sphScaledDivergence`, with no `SphScaledDivergence` wrapper or retained sample rung. Its two bytes migrate and checkpoint directly. Separate scratch holds pending divergence, target alpha, inverse decay time and limiter. `sph/viscosity/scaled_divergence.hpp` owns conversion and live-rung rescaling.
 - **Chemistry**: `gadget4::State` becomes electronFraction[]. `Pair<float>` EOS becomes two arrays, or is dropped (see the table). The audit flags "EOS with stars but no cooling is migrated but not checkpointed", but that case cannot occur: starFormation requires chemistry (**Confirmed** `options.cpp:246-247`).
 
 ### 5c. What `MeshlessFiniteMassParticleState` and `MeshlessFiniteVolumeParticleState` would mean

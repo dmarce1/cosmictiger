@@ -36,8 +36,8 @@ void testPhantomPairs(Fixture& fixture) {
     // Equation (39) must retain the two unequal kernels/densities/sound speeds and
     // equation (42) must assign directed local heating, even outside one support.
     for (float const supportA : {0.2f, 0.5f}) {
-        data.sourceSupportRadius[fixture.sourceIndex(0)] = supportA;
-        data.sourceSupportRadius[fixture.sourceIndex(1)] = 0.45f;
+        data.sourceSmoothingLength[fixture.sourceIndex(0)] = supportA;
+        data.sourceSmoothingLength[fixture.sourceIndex(1)] = 0.45f;
         for (float const scaleFactor : {0.4f, 1.0f, 2.0f}) {
             fixture.params_.scaleFactor = scaleFactor;
             for (float const expansionRate : {0.0f, 1.0f}) {
@@ -98,7 +98,7 @@ void testPhantomPairs(Fixture& fixture) {
                                     if (balsara) {
                                         directed[i] *= 0.5;
                                     }
-                                    float const support = data.sourceSupportRadius[source];
+                                    float const support = data.sourceSmoothingLength[source];
                                     gradient[i] = dkernelWDq(float(pairDistance) / support) /
                                         (std::pow(double(support), 4) * pairDistance);
                                 }

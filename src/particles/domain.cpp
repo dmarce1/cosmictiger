@@ -573,26 +573,26 @@ void domainsTransmitParticles(Vector<Particle> parts) {
 // Ordinary SPH timesteps migrate the complete gas state together with its
 // gravity particle. Category indices are local and are rebuilt at the receiver.
 struct GasMigrationState {
-    float supportRadius, entropy, density;
-    SphCullenDehnenState viscosityHistory;
-    char converged, semiactive, hydroRung;
+    float smoothingLength, entropy, density;
+    Float16Storage viscosityHistory;
+    uint8_t balsaraFactor = 0;
+    SphParticleFlags flags;
     Float16Storage bulkViscosityCoefficient;
     float electronFraction{1.0f};
     template <class Archive>
     void serialize(Archive& arc, unsigned) {
-        arc & supportRadius;
+        arc & smoothingLength;
         arc & entropy;
         arc & density;
-        arc & converged;
-        arc & semiactive;
-        arc & hydroRung;
+        arc & flags.bits;
         if (getOptions().hydro.viscosityEvolution != "none") {
             arc & bulkViscosityCoefficient.bits;
         }
         if (getOptions().hydro.viscosityGradientSwitch()) {
-            arc & viscosityHistory.divergence & viscosityHistory.sampleDivergence;
-            arc & viscosityHistory.divergenceExponent & viscosityHistory.sampleDivergenceExponent;
-            arc & viscosityHistory.sampleRung;
+            arc & viscosityHistory.bits;
+            if (getOptions().hydro.balsaraSwitch) {
+                arc & balsaraFactor;
+            }
         }
         if (getOptions().chemistry.enabled) {
             arc & electronFraction;
@@ -631,17 +631,18 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
     if (result.part.type == kSphType) {
         auto const i = particlesCatIndex(index);
         auto& gas = result.gas;
-        gas.supportRadius = sphParticlesSupportRadii[i];
+        gas.smoothingLength = sphParticlesSmoothingLengths[i];
         gas.density = sphParticlesDensities[i];
-        gas.converged = sphParticlesConvergenceFlags[i];
-        gas.semiactive = sphParticlesSemiactiveFlags[i];
+        gas.flags = sphParticlesFlags[i];
         gas.entropy = sphParticlesEntropies[i];
-        gas.hydroRung = sphParticlesProposedRungs[i];
         if (getOptions().hydro.viscosityEvolution != "none") {
             gas.bulkViscosityCoefficient = sphParticlesBulkViscosityCoefficients[i];
         }
         if (getOptions().hydro.viscosityGradientSwitch()) {
-            gas.viscosityHistory = sphParticlesCullenDehnenStates[i];
+            gas.viscosityHistory = sphScaledDivergence[i];
+            if (getOptions().hydro.balsaraSwitch) {
+                gas.balsaraFactor = sphParticlesBalsaraFactors[i];
+            }
         }
         if (getOptions().chemistry.enabled) {
             gas.electronFraction = sphParticlesElectronFractions[i];
@@ -659,17 +660,19 @@ static void unpackSphParticle(
         auto const i = gasIndex;
         auto const& gas = record.gas;
         sphParticlesParticleIndex(i) = index;
-        sphParticlesSupportRadii[i] = gas.supportRadius;
+        sphParticlesSmoothingLengths[i] = gas.smoothingLength;
         sphParticlesDensities[i] = gas.density;
-        sphParticlesConvergenceFlags[i] = gas.converged;
-        sphParticlesSemiactiveFlags[i] = gas.semiactive;
+        ALWAYS_ASSERT(gas.flags.valid());
+        sphParticlesFlags[i] = gas.flags;
         sphParticlesEntropies[i] = gas.entropy;
-        sphParticlesProposedRungs[i] = gas.hydroRung;
         if (getOptions().hydro.viscosityEvolution != "none") {
             sphParticlesBulkViscosityCoefficients[i] = gas.bulkViscosityCoefficient;
         }
         if (getOptions().hydro.viscosityGradientSwitch()) {
-            sphParticlesCullenDehnenStates[i] = gas.viscosityHistory;
+            sphScaledDivergence[i] = gas.viscosityHistory;
+            if (getOptions().hydro.balsaraSwitch) {
+                sphParticlesBalsaraFactors[i] = gas.balsaraFactor;
+            }
         }
         if (getOptions().chemistry.enabled) {
             sphParticlesElectronFractions[i] = gas.electronFraction;

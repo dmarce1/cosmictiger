@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <format>
 #include <iostream>
 
@@ -18,8 +19,9 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/sph/particle_flags.hpp>
 #include <cosmictiger/sph/thermodynamics.hpp>
-#include <cosmictiger/sph/viscosity/cullen_and_dehnen_state.hpp>
+#include <cosmictiger/sph/viscosity/scaled_divergence.hpp>
 
 #ifdef SPH_PARTICLES_CPP
 #define SPH_PARTICLES_EXTERN
@@ -50,28 +52,38 @@ extern bool sphParticlesEntropyInitialized;
 extern double sphParticlesThermalScaleFactor;
 void sphParticlesPrepareThermodynamics(double scaleFactor, bool initializeEntropy);
 SPH_PARTICLES_EXTERN float* sphParticlesEntropies;
-// Compact support radius of the SPH smoothing kernel.
-SPH_PARTICLES_EXTERN float* sphParticlesSupportRadii;
+// Stored smoothing length is the full compact-support radius H of the SPH kernel.
+// For the cubic spline H = 2h; renaming this storage does not rescale its values.
+SPH_PARTICLES_EXTERN float* sphParticlesSmoothingLengths;
 SPH_PARTICLES_EXTERN ParticleInteger* sphParticlesParticleIndices;
 SPH_PARTICLES_EXTERN float* sphParticlesDensities;
-// Density diagnostics, rebuilt by every density pass.
-SPH_PARTICLES_EXTERN float* sphParticlesBalsaraFactors;
+// Gradient models retain their endpoint factor; fixed-alpha and M&M density passes
+// rebuild it directly from weighted divergence and curl.
+SPH_PARTICLES_EXTERN uint8_t* sphParticlesBalsaraFactors;
 // Variational operator only: zeta_i of cosmictiger/sph/volume.hpp, written by the density
 // pass for every semiactive particle before each force pass. Never migrated or checkpointed.
 SPH_PARTICLES_EXTERN float* sphParticlesGradHCorrections;
 SPH_PARTICLES_EXTERN Float16Storage* sphParticlesBulkViscosityCoefficients;
-SPH_PARTICLES_EXTERN SphCullenDehnenState* sphParticlesCullenDehnenStates;
-// Temporary density/viscosity diagnostics, allocated only for one evaluation.
+SPH_PARTICLES_EXTERN Float16Storage* sphScaledDivergence;
+// Event-local density/viscosity diagnostics, allocated only for one evaluation.
 SPH_PARTICLES_EXTERN SphViscosityDiagnostics* sphParticlesViscosityDiagnostics;
-SPH_PARTICLES_EXTERN char* sphParticlesConvergenceFlags;
-SPH_PARTICLES_EXTERN char* sphParticlesSemiactiveFlags;
-// Latest hydro timestep requirement, separate from the live particle rung.
-// Retained until the next force estimate and applied only at common boundaries.
-// Migrated and checkpointed across intervening finer-rung events.
-SPH_PARTICLES_EXTERN char* sphParticlesProposedRungs;
+
+// Convergence and semiactive working flags share one byte with the latest hydro
+// timestep requirement. The proposed rung is separate from the live particle rung,
+// retained until the next estimate, and applied only at common boundaries.
+// This storage persists across SPH passes, migration, and checkpoints.
+SPH_PARTICLES_EXTERN SphParticleFlags* sphParticlesFlags;
+
+inline int sphParticlesProposedRung(ParticleInteger gas) {
+    return sphParticlesFlags[gas].proposedRung();
+}
+
+inline void sphParticlesSetProposedRung(ParticleInteger gas, int rung) {
+    sphParticlesFlags[gas].setProposedRung(rung);
+}
 
 inline int sphParticlesHydroRung(ParticleInteger gas) {
-    return std::max(0, int(sphParticlesProposedRungs[gas]));
+    return sphParticlesProposedRung(gas);
 }
 
 ParticleInteger sphParticlesSize();
@@ -86,8 +98,8 @@ ParticleInteger sphParticlesSort(
     Pair<ParticleInteger> particleRange, Position splitPosition, int splitDimension);
 void sphParticlesGlobalReadPositions(
     ParticleGlobalRange range, Position* x, Position* y, Position* z, ParticleInteger offset);
-void sphParticlesGlobalReadInternalEnergyAndSupportRadius(
-    ParticleGlobalRange range, float* internalEnergy, float* supportRadius, ParticleInteger offset);
+void sphParticlesGlobalReadInternalEnergyAndSmoothingLength(ParticleGlobalRange range,
+    float* internalEnergy, float* smoothingLength, ParticleInteger offset);
 void sphParticlesGlobalReadRungs(ParticleGlobalRange range, char*, ParticleInteger offset);
 void sphParticlesGlobalReadVelocities(
     ParticleGlobalRange range, float*, float*, float*, ParticleInteger offset);
@@ -102,7 +114,7 @@ void sphCheckpointTest();
 struct SphRunParameters;
 void sphParticlesBeginViscosityDiagnostics();
 void sphParticlesEndViscosityDiagnostics();
-// Commit history and viscosity only at the particle's own midpoint.
+// Commit history and viscosity only at the particle's completed endpoint.
 void sphParticlesUpdateTargetAlpha(SphRunParameters const& parameters);
 
 inline float sphParticlesMass(ParticleInteger index) {
@@ -110,12 +122,20 @@ inline float sphParticlesMass(ParticleInteger index) {
     return float(getOptions().initial.gasMass);
 }
 
-inline char& sphParticlesConverged(ParticleInteger index) {
-    return sphParticlesConvergenceFlags[index];
+inline bool sphParticlesConverged(ParticleInteger index) {
+    return sphParticlesFlags[index].converged();
 }
 
-inline char& sphParticlesSemiactive(ParticleInteger index) {
-    return sphParticlesSemiactiveFlags[index];
+inline void sphParticlesSetConverged(ParticleInteger index, bool value) {
+    sphParticlesFlags[index].setConverged(value);
+}
+
+inline bool sphParticlesSemiactive(ParticleInteger index) {
+    return sphParticlesFlags[index].semiactive();
+}
+
+inline void sphParticlesSetSemiactive(ParticleInteger index, bool value) {
+    sphParticlesFlags[index].setSemiactive(value);
 }
 
 inline ParticleInteger& sphParticlesParticleIndex(ParticleInteger index) {
@@ -159,9 +179,9 @@ inline void sphParticlesSetInternalEnergy(ParticleInteger index, float energy) {
         energy;
 }
 
-inline float& sphParticlesSupportRadius(ParticleInteger index) {
+inline float& sphParticlesSmoothingLength(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
-    return sphParticlesSupportRadii[index];
+    return sphParticlesSmoothingLengths[index];
 }
 
 inline float& sphParticlesDensity(ParticleInteger index) {

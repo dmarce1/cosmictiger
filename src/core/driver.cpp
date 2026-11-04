@@ -352,7 +352,8 @@ public:
 
 static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, double scale, double tau,
     double t0, double adot, double hydroTimestep, double maximumGlobalTimestep,
-    bool updateViscosityHistory = true, double previousGlobalTimestep = 0.0) {
+    bool updateViscosity = false, double previousGlobalTimestep = 0.0,
+    double viscosityHistoryInterval = 0.0, bool initializeViscosityHistory = false) {
     bool constexpr verbose = true;
     profile::ScopedPhase profilePhase("hydro.sph");
     bool const globalTimestep = maximumGlobalTimestep > 0.0;
@@ -361,12 +362,12 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
     }
     SphRunParameters runParameters;
     runParameters.midpointHydro = true;
-    // Successive global midpoint samples are separated by half of the old
-    // interval plus half of the new one. The old interval is zero at startup.
-    // Dyadic samples derive this same interval from each particle's rung pair.
-    runParameters.viscositySampleInterval = globalTimestep ?
-        (hydroTimestep > 0.0 ? 0.5 * (previousGlobalTimestep + hydroTimestep) : 0.0) :
-        t0;
+    // Endpoint samples span a completed interval. Live dyadic rungs still
+    // describe that interval; global integration supplies its exact duration.
+    runParameters.viscositySampleInterval = globalTimestep ? viscosityHistoryInterval : t0;
+    runParameters.viscosityInitializeHistory = initializeViscosityHistory;
+    runParameters.viscosityBaseTimestep = t0;
+    runParameters.viscosityPreviousTimestep = previousGlobalTimestep;
     runParameters.hydroKickTimestep = std::max(0.0, hydroTimestep);
     runParameters.maximumRung = maximumHydroRung;
 #if COSMICTIGER_WITH_GRAVITY
@@ -398,12 +399,16 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
 #endif
     runParameters.scaleFactor = scale;
     runParameters.baseTimestep = t0;
-    runParameters.viscosityTimestep = std::max(0.0, hydroTimestep);
+    // Evolve alpha only at a completed endpoint. For dyadic integration the
+    // density pass divides the base duration by each closing particle's rung.
+    runParameters.viscosityTimestep = updateViscosity && !initializeViscosityHistory ?
+        runParameters.viscositySampleInterval :
+        0.0;
     runParameters.minimumRung = minrung;
     // sphStep1 has already completed any gas sorting. These results survive
     // density retries, then disappear before a source conversion can compact gas.
     detail::SphViscosityDiagnosticsScope viscosityDiagnostics(
-        runParameters.gradientSwitch() && updateViscosityHistory && hydroTimestep >= 0.0);
+        runParameters.gradientSwitch() && updateViscosity);
     bool needsNeighborRefresh;
     SphRunReturn result;
 
@@ -548,16 +553,7 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
         sphParticlesClearCaches();
         sphParticlesResetSemiactive();
     };
-    if (hydroTimestep < 0.0) {
-        // Synchronized diagnostics need density at the output positions, but
-        // must not evaluate another hydro force or advance viscosity/entropy.
-        clearMidpointSources();
-        return result;
-    }
-    // Any later density preparation refreshes sources at this same event time.
-    runParameters.viscosityTimestep = 0.0;
-    Timer timer;
-    if (runParameters.gradientSwitch() && updateViscosityHistory) {
+    if (runParameters.gradientSwitch() && updateViscosity) {
         // Cullen & Dehnen (2010), equation (A15), or Price et al. (2018), equation (50),
         // after density convergence.
         {
@@ -565,6 +561,15 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
             sphParticlesUpdateTargetAlpha(runParameters);
         }
     }
+    if (hydroTimestep < 0.0) {
+        // Endpoint history can be committed above, without a force evaluation.
+        // Output-only callers leave updateViscosity false.
+        clearMidpointSources();
+        return result;
+    }
+    // Any later density preparation refreshes sources at this same event time.
+    runParameters.viscosityTimestep = 0.0;
+    Timer timer;
     // Each pair contributes once on its finer endpoint's midpoint cadence.
     auto const runForces = [&]() {
         profile::ScopedPhase forcePhase("hydro.force.midpoint");
@@ -608,9 +613,10 @@ SphRunReturn sphMidpointStep(int rung, double time, double timestep, double base
     sphMidpointBeginEvent();
     try {
         sphStep1(minimumRung);
+        bool const initializeHistory = timestep == 0.0 && time == 0.0;
         auto const result = sphMidpointEvaluate(minimumRung, maximumRung, scale, time, baseTimestep,
-            scaleDerivative, timestep, global ? maximumTimestep : 0.0, true,
-            previousGlobalTimestep);
+            scaleDerivative, timestep, global ? maximumTimestep : 0.0, initializeHistory,
+            previousGlobalTimestep, 0.0, initializeHistory);
         sphMidpointEndEvent();
         return result;
     } catch (...) {
@@ -621,9 +627,11 @@ SphRunReturn sphMidpointStep(int rung, double time, double timestep, double base
 
 SphRunReturn sphCompleteSources(int minimumClosingRung, double time, double baseTimestep,
     double scale, double scaleDerivative, EnergiesT& energies, double explicitTimestep,
-    double maximumGlobalTimestep) {
+    double maximumGlobalTimestep, double previousGlobalTimestep) {
     auto const& options = getOptions();
-    if (!options.starFormation.enabled && !options.chemistry.enabled) {
+    bool const sourcePhysics = options.starFormation.enabled || options.chemistry.enabled;
+    bool const evolvingViscosity = options.hydro.viscosityEvolution != "none";
+    if (!sourcePhysics && !evolvingViscosity) {
         return {};
     }
     ALWAYS_ASSERT(minimumClosingRung >= 0 && minimumClosingRung < kMaxRung);
@@ -640,8 +648,10 @@ SphRunReturn sphCompleteSources(int minimumClosingRung, double time, double base
         // the pair cadence is the finer endpoint's cadence. Refresh endpoint
         // density before consuming that particle's old rung and full duration.
         sphStep1(minimumClosingRung);
-        sphMidpointEvaluate(minimumClosingRung, kMaxRung - 1, scale, time, baseTimestep,
-            scaleDerivative, -1.0, maximumGlobalTimestep, false);
+        auto const endpointEstimate = sphMidpointEvaluate(minimumClosingRung, kMaxRung - 1, scale,
+            time, baseTimestep, scaleDerivative, sourcePhysics ? -1.0 : 0.0, maximumGlobalTimestep,
+            evolvingViscosity, previousGlobalTimestep,
+            maximumGlobalTimestep > 0.0 ? explicitTimestep : baseTimestep);
         // Kernel parameters carry a float scale, while the source transaction
         // and checkpoint clock use the exact double endpoint scale.
         sphParticlesPrepareThermodynamics(scale, false);
@@ -657,8 +667,8 @@ SphRunReturn sphCompleteSources(int minimumClosingRung, double time, double base
                 minimumClosingRung, scale, scaleDerivative, baseTimestep, explicitTimestep);
 #endif
         }
-        SphRunReturn result;
-        if (sphMidpointTargetCount(-1) != 0) {
+        SphRunReturn result = endpointEstimate;
+        if (sourcePhysics && sphMidpointTargetCount(-1) != 0) {
             // Heating and conversion change neighboring signal speeds too. An
             // all-gas, zero-kick estimate refreshes proposals and the global cap
             // without advancing viscosity history or changing live gas rungs.
@@ -1955,7 +1965,8 @@ void driver() {
                 global ? std::min(tauMax - tau, (outputStep + 1) * coarseInterval - tau) : 0.0;
 #if COSMICTIGER_WITH_SPH
             if (midpointHydro && outputDue && tau > 0.0) {
-                sphMidpointStep(-1, tau, -1.0, t0, a, a * adot, energies);
+                sphMidpointStep(-1, tau, -1.0, t0, a, a * adot, energies, global, global ? t0 : 0.0,
+                    params.globalTimestep);
             }
 #endif
             if (outputDue) {
@@ -1969,7 +1980,7 @@ void driver() {
                     outputSlice(number, years);
                 }
                 if (fullEval) {
-                    viewOutputViews(outputStep, a, false, years);
+                    viewOutputViews(outputStep, a, false, years, t0, params.globalTimestep);
                 }
                 if (getOptions().analysis.views) {
                     Timer tm;
@@ -2224,14 +2235,16 @@ void driver() {
                     cosmology::kineticExpansionWork(midpointScale, a, afterHydro.kin) +
                     (a - midpointScale) * (3.0 * getOptions().hydro.gamma - 4.0) *
                         afterHydro.therm / sqr(midpointScale);
-                if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
+                if (getOptions().chemistry.enabled || getOptions().starFormation.enabled ||
+                    getOptions().hydro.viscosityEvolution != "none") {
                     // Complete each old gas interval before the next gravity
                     // boundary changes its rung. Checkpoints therefore contain
                     // completed sources and restart never replays this event.
                     // Source heat is separate from the adiabatic work above.
                     int const minimumClosingRung = global ? 0 : int(minRung(nextIntegerTime));
-                    auto const source = sphCompleteSources(minimumClosingRung, nextTau, t0, a,
-                        a * adot, energies, global ? dt : -1.0, global ? t0 : 0.0);
+                    auto const source =
+                        sphCompleteSources(minimumClosingRung, nextTau, t0, a, a * adot, energies,
+                            global ? dt : -1.0, global ? t0 : 0.0, params.globalTimestep);
                     if (global) {
                         params.globalHydroTimestep = source.minimumTimestep;
                     }
@@ -2390,11 +2403,13 @@ void driver() {
     if (midpointHydro) {
         // Preserve restart state before refreshing density at the final output
         // positions. This also applies to interrupted and iteration-limit exits.
-        sphMidpointStep(-1, tau, -1.0, coarseInterval, a, a * adot, energies);
+        sphMidpointStep(-1, tau, -1.0, coarseInterval, a, a * adot, energies, global,
+            global ? coarseInterval : 0.0, params.globalTimestep);
     }
 #endif
     profile::profileBegin("output");
-    viewOutputViews(driverFinalOutputStep(tau, coarseInterval), a, true, years);
+    viewOutputViews(driverFinalOutputStep(tau, coarseInterval), a, true, years, coarseInterval,
+        params.globalTimestep);
     profile::profileEnd();
     if (!interrupted && thisIter > 0 && itime == 0 && cosmology::endTimeReached(tau, tauMax)) {
         // Finish the energy measurement only after all restart state and

@@ -12,11 +12,16 @@ Source integration does not restore persistent gas force rates.
 ## Implementation
 
 1. Restore Cullen–Dehnen, Price, and Hu viscosity using the divergence-history
-   alternative described in Cullen & Dehnen (2010), Appendix B3. Sample physical
-   divergence at each particle's own midpoint; preserve Price's background
-   subtraction. Commit histories only after density convergence. Semiactive
-   measurements, output preparation and post-source bound estimates do not commit
-   history or evolve alpha. Initial estimates seed only missing histories.
+   alternative described in Cullen & Dehnen (2010), Appendix B3. Sample canonical
+   peculiar divergence at each particle's completed interval endpoint for all three models,
+   with the cosmological derivative conversion used by GADGET-4.
+   Commit histories only after density convergence and before gas rung changes.
+   Midpoint force evaluations, semiactive measurements, output preparation and
+   post-source bound estimates do not commit gradient history or evolve its alpha.
+   All evolving-alpha models, including Morris–Monaghan, advance alpha only at
+   completed own interval endpoints; subsequent midpoint forces use that alpha.
+   Morris–Monaghan uses endpoint compression without retaining divergence history.
+   Startup seeds gradient history where required and never advances alpha.
 2. Remove persistent gas hydro acceleration, gravity acceleration, and entropy-rate
    arrays, including checkpoint and migration payloads. Kernels may retain nullable
    diagnostic outputs for focused tests. Production updates use event-local scratch.
@@ -42,34 +47,151 @@ Source integration does not restore persistent gas force rates.
    required so the top force includes every dark-matter source.
 
 The three deleted persistent arrays are absent from checkpoints and migration.
-Gradient viscosity retains physical and model-sampled divergence plus the previous
-sampled rung. Their finite difference replaces the acceleration-gradient estimator.
-For dyadic steps, the elapsed midpoint interval is half the sum of the old and new
-rung durations; raw global steps use the previous and current shared global step.
-No per-particle timestamp is needed. The live rung, latest hydro rung bound and
-previous sampled rung serve different purposes: interval scheduling, deferred
-boundary selection and viscosity sampling, respectively.
+Gradient viscosity retains one dimensionless divergence sample in the scalar
+`Float16Storage* sphScaledDivergence` array. Its decoded endpoint difference
+replaces the acceleration-gradient estimator. Sampling before rung changes makes
+the completed interval available from the live rung, so no wrapper, previous-rung
+byte, or per-particle timestamp is needed. The separate latest hydro rung bound
+still serves deferred timestep selection at common synchronization boundaries.
 
-Evolving alpha retains two bytes of binary16 storage. Each gradient-history
-divergence instead uses a signed 16-bit significand \(q\) and an independent
-signed 8-bit exponent \(e\), decoded as \(q\,2^{e-14}\). Normal values are
-truncated toward zero to \(16384\le|q|\le32767\), with
-\(-126\le e\le127\); float32 subnormals are flushed to zero. This stores 15
-significant bits including the leading one, compared with 11 in the preceding
-scaled binary16 representation. It retains the normal float range, but small
-divergence changes can still fall below the stored resolution.
+Evolving alpha retains two bytes of binary16 storage. The common history is
 
-Two significands, two exponents and a one-byte sampled rung occupy eight bytes
-including in-memory alignment. The five pending float diagnostics occupy twenty
-temporary bytes per gas particle only during a history-updating density event,
-after sorting and before source conversion. They do not migrate or enter
-checkpoints. The SPH checkpoint block is version 90000 plus its existing
-model/physics suffix, with history serialized fieldwise as `h,h,b,b,b` in seven
-bytes. Earlier gas payloads, including base 80000, are intentionally incompatible.
+\[
+ G_n=\nabla_{\mathbf x}\cdot\mathbf w_n=a_n^2\theta_{{\rm pec},n},
+ \qquad q_n=\delta\tau_n G_n,
+\]
+
+where \(\mathbf w=a\mathbf v_{\rm pec}\), \(\mathbf x\) is comoving, and
+\(\delta\tau_n\) is the particle's own conformal interval duration. Before
+each dyadic rung mutation, the live old rung identifies the stored normalization;
+changing to the new rung rescales the scalar without taking another sample:
+
+\[
+ q_{\rm new}=q_{\rm old}\,2^{r_{\rm old}-r_{\rm new}}.
+\]
+
+The rescaled scalar is then decoded using the live new rung. Global steps instead
+use the previous completed duration in shared driver state, with the base duration
+as the startup fallback before a completed step exists. No per-particle clock,
+exponent, derivative, or sampled rung is stored. The magnitude of \(q_n\) is not
+assumed bounded by one and is not clamped to that range.
+
+All viscosity sensors, including Morris–Monaghan compression, Balsara, and the
+gradient-model limiters, use peculiar gradients. Actual pair approach, viscous
+force/heating, and the compressive signal speed retain physical relative
+velocities including Hubble flow. Following GADGET-4, the shock sensor differences
+decoded canonical gradients before the current scale-factor conversion:
+
+\[
+ \mathcal D_n\simeq a_n^{-3}\frac{G_n-G_{n-1}}{\Delta\tau_n},
+ \qquad a_n^4\mathcal D_n\simeq
+ a_n\frac{G_n-G_{n-1}}{\Delta\tau_n}.
+\]
+
+Here \(\Delta\tau_n\) is the completed interval between endpoints; the second expression is the
+scaled slope passed to the model. Its continuum limit is
+\(D\theta_{\rm pec}/Dt+2H\theta_{\rm pec}\), as derived in
+[the viscosity documentation](monaghan_sph.md#cosmological-viscosity-conventions).
+The unchanged `divv` output key reports decoded canonical \(G\), with explicit
+metadata, because no previous-sample scale factor is retained.
+
+The endpoint difference estimates the slope centered on the completed interval's
+midpoint, but becomes available only at its end. Its updated alpha is used by the
+following hydro kick: this accepted viscosity timing is first order. Pressure and
+viscous pair forces are still evaluated at their scheduled midpoints. All evolving
+alpha, including Morris–Monaghan, follows this endpoint cadence. With cooling or
+star formation, the existing endpoint density/gradient pass supplies alpha and
+any required history before sources. Otherwise, every evolving-alpha model
+requires an additional endpoint pass.
+
+The history occupies exactly two bytes per gas particle in memory, checkpoint
+and migration payloads: one binary16 bit pattern (`H`). The
+Balsara factor occupies one `uint8_t`, decoded by dividing by 255; rounding to
+nearest bounds its absolute error by \(1/510\). Its evaluation and force/source
+staging remain float. With constant α or Morris–Monaghan, enabling Balsara adds
+the direct SPH divergence/curl sums to the current midpoint density pass. CD, Hu
+and Price instead derive Balsara from the trace and antisymmetric part of their
+existing matrix-corrected velocity gradient at startup and completed own endpoints,
+then retain it until the next gradient reconstruction. Their midpoint passes
+perform neither a separate direct sum nor a new gradient reconstruction. This
+changes the estimator from the former uncorrected kernel-weighted divergence/curl
+to the same corrected matrix used by their viscosity model.
+The retained Balsara byte follows reordering, checkpoints and migration only
+for CD, Hu and Price when enabled. For constant α and Morris–Monaghan it remains
+transient and is recomputed after restart or migration.
+Balsara defaults on for constant α and MM, and off for CD, Hu and Price, which
+already include their own shear limiters. Explicitly enabling the additional
+factor for a gradient model prints a warning and preserves the user's setting.
+The extra factor changes forces, including Price's independent beta contribution;
+see the [source-backed comparison](monaghan_sph.md) for the distinction.
+With all three arrays enabled, history, alpha and Balsara
+therefore use \(2+2+1=5\) bytes per gas particle, down from \(8+2+4=14\).
+Constant viscosity allocates no history or evolving-alpha array.
+
+Target alpha, inverse decay time, limiter and pending divergence are four float
+diagnostics, sixteen temporary bytes per gas particle during a history-updating
+density event. The redundant pending model-sampled divergence is removed. These
+buffers are allocated after sorting, released before source conversion, and do
+not migrate or enter checkpoints.
+
+Convergence, semiactivity and the proposed rung share one `SphParticleFlags`
+byte instead of three separate byte arrays. Bits 0 and 1 hold the two flags;
+bits 2–7 hold the proposed rung, with 0–15 currently valid and no unset sentinel.
+Other codes are rejected. Explicit setters preserve the other bits when a field
+changes; individual bits cannot supply mutable references. The byte is stored
+after density and before viscosity data, and is also migrated directly. This
+saves two bytes per gas particle in memory, checkpoints and migration.
+The SPH checkpoint block is version 130000
+plus its existing model/physics suffix. Earlier gas payloads, including base
+90000 and the intermediate bases 100000, 110000 and 120000, are intentionally incompatible.
 
 ## Validation
 
-The signed-significand/base-90000 follow-up passed fresh Release CPU and CUDA
+The subsequent sentinel cleanup keeps this same one-byte layout. Proposals are
+always nonnegative, with zero as the initial bound; the former code 63 is rejected.
+Fresh CPU/CUDA builds, 45 CPU and 27 CUDA kernel checks, 21 Python checks both
+normally and with `-O`, two CPU checkpoint/gravity tests, the explicit CD+Balsara
+CUDA checkpoint/reorder fixture, and three gradient-model two-rank migrations
+plus the empty-gas-rank fixture passed after this cleanup. Evidence is in
+`/tmp/sph_no_sentinel_*.log`.
+
+The final packed-flag/base-130000 implementation completed CPU and CUDA builds
+with exit status zero on November 4, 2026. All 45 selected CPU checks, 27 CUDA
+kernel checks and five Balsara checks passed. The Python suite passed all 21
+tests under both normal execution and `python3 -O`, including all 64 valid
+packed flag/rung combinations and all 192 combinations containing an invalid
+rung code. Fifteen focused Balsara option cases passed; the sixteen preset
+edits were statically audited, not individually run as simulations.
+
+All ten selected CPU application/lifecycle CTests passed, covering CPU and MPI
+source completion, three unit selections, gravity, checkpointing, hierarchical
+stepping, retained octrees and trees. The octree fixture's shared-global-duration
+normalization was corrected before the successful final run, recorded in
+`/tmp/sph_packed_flags_cpu_applications.log`. Both selected CUDA application
+CTests passed, as did an explicit CD-plus-Balsara CUDA fixture covering
+checkpointing, reordering and mixed rungs.
+
+Sixteen CPU restart combinations and rejection of an old base-90000 checkpoint
+passed. Each of the three gradient models passed history migration on two ranks,
+and the tree fixture passed with an empty gas rank. These checks validate the
+focused storage, option, kernel and integration paths exercised. They are not a
+full repository test suite, hosted-CI result, performance benchmark or
+long-duration scientific convergence study.
+
+Earlier base-120000 checks exercised the endpoint-history/Balsara implementation
+before packing; the final results above supersede that intermediate validation
+for the paths rerun. The historical records below describe older representations.
+
+The intermediate base-100000 Python checkpoint/runner suite passed 19 tests under both normal
+Python and `python3 -O` on November 4, 2026. Fixtures cover the base-100000 layout
+across particle widths, integrators, source models and viscosity selections,
+truncation, corrupt half coefficients/history, invalid sampled rungs, and exact
+preservation of finite half values including signed zero and subnormals. These
+are historical parser and runner checks for the superseded sampled-rung layout;
+they do not validate the scalar endpoint layout, C++ application or scientific accuracy.
+
+The following signed-significand/base-90000 results are historical validation of
+commit `1bc12b5f6`. That follow-up passed fresh Release CPU and CUDA
 application and test builds on November 4, 2026. All 64 selected CPU CTests
 passed (45 SPH units, 15 viscosity/storage units, and four lifecycle fixtures,
 including a two-rank source fixture). All 28 selected CUDA checks passed,
@@ -84,7 +206,7 @@ checkpoint reader rejected ten corrupt history encodings and a base-80000
 checkpoint. Two-rank signed-history migration passed separately for CD, Price,
 and Hu; own-midpoint history also passed with an empty gas rank.
 
-Current evidence is in `/tmp/sph_int16_{cpu_build,cuda_build,cpu_tests,cuda_tests,
+Historical evidence is in `/tmp/sph_int16_{cpu_build,cuda_build,cpu_tests,cuda_tests,
 extra,mpi}.log` and `/tmp/sph_int16_extra/evidence.json`. This is focused local
 validation: the full options suite, complete source-application matrix, full
 repository suite, hosted CI, long-duration accuracy, and performance were not
@@ -92,7 +214,7 @@ rerun for this storage follow-up.
 
 The following compact-history/source results are historical validation of
 commit `9ccd34a85`, with scaled binary16 divergences and checkpoint base 80000.
-They do not validate the subsequent signed-significand/base-90000 change.
+They do not validate either subsequent compact-history representation.
 
 That November 4 update passed fresh Release CPU and CUDA application builds.
 Focused units passed 75 CPU cases (one additional

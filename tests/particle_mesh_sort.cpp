@@ -131,17 +131,17 @@ void initializeMeshSortFixture(ParticleInteger count, int pattern) {
                 ParticleInteger const gasIndex = i / 2;
                 sphParticlesParticleIndex(gasIndex) = i;
                 sphParticlesSetInternalEnergy(gasIndex, float(i) + 0.5f);
-                sphParticlesSupportRadius(gasIndex) = float(i) + 0.75f;
+                sphParticlesSmoothingLength(gasIndex) = float(i) + 0.75f;
                 sphParticlesDensities[gasIndex] = float(i) + 1.0f;
-                sphParticlesBalsaraFactors[gasIndex] = float(i) + 1.25f;
-                sphParticlesProposedRungs[gasIndex] = i % 11;
+                sphParticlesBalsaraFactors[gasIndex] = uint8_t(i % 256);
+                sphParticlesSetProposedRung(gasIndex, i % 11);
                 sphParticlesBulkViscosityCoefficients[gasIndex] = float(i) + 1.5f;
-                auto& history = sphParticlesCullenDehnenStates[gasIndex];
-                history.setDivergences(float(i) + 2.0f, float(i) + 2.5f);
-                history.sampleRung = int8_t(i % 11);
+                auto& history = sphScaledDivergence[gasIndex];
+                requireParticleMeshSort(sphEncodeDivergence(history, float(i) + 2.5f, 1.0),
+                    "Particle mesh fixture history is not representable");
 
-                sphParticlesConvergenceFlags[gasIndex] = i % 7;
-                sphParticlesSemiactiveFlags[gasIndex] = i % 5;
+                sphParticlesSetConverged(gasIndex, i % 7 != 0);
+                sphParticlesSetSemiactive(gasIndex, i % 5 != 0);
             }
         }
 #endif
@@ -209,18 +209,17 @@ void checkMeshSortFixture(int meshSize, int pattern) {
                 requireParticleMeshSort(particlesCatIndex(i) == gasIndex &&
                         sphParticlesParticleIndex(gasIndex) == i &&
                         sphParticlesInternalEnergy(gasIndex) == float(identity) + 0.5f &&
-                        sphParticlesSupportRadius(gasIndex) == float(identity) + 0.75f &&
+                        sphParticlesSmoothingLength(gasIndex) == float(identity) + 0.75f &&
                         sphParticlesDensities[gasIndex] == float(identity) + 1.0f &&
-                        sphParticlesBalsaraFactors[gasIndex] == float(identity) + 1.25f &&
-                        sphParticlesProposedRungs[gasIndex] == identity % 11 &&
-                        sphParticlesBulkViscosityCoefficients[gasIndex] == float(identity) + 1.5f &&
-                        sphParticlesConvergenceFlags[gasIndex] == identity % 7 &&
-                        sphParticlesSemiactiveFlags[gasIndex] == identity % 5,
+                        sphParticlesBalsaraFactors[gasIndex] == uint8_t(identity % 256) &&
+                        sphParticlesProposedRung(gasIndex) == identity % 11 &&
+                        sphParticlesBulkViscosityCoefficients[gasIndex].bits ==
+                            Float16Storage(float(identity) + 1.5f).bits &&
+                        sphParticlesConverged(gasIndex) == (identity % 7 != 0) &&
+                        sphParticlesSemiactive(gasIndex) == (identity % 5 != 0),
                     "Particle mesh sort changed gas state or broke its reverse map");
-                auto const& history = sphParticlesCullenDehnenStates[gasIndex];
-                requireParticleMeshSort(history.physicalDivergence() == float(identity) + 2.0f &&
-                        history.sampleRung == identity % 11 &&
-                        history.sampledDivergence() == float(identity) + 2.5f,
+                auto const& history = sphScaledDivergence[gasIndex];
+                requireParticleMeshSort(history.bits == Float16Storage(float(identity) + 2.5f).bits,
                     "Particle mesh sort changed committed viscosity history");
             } else {
                 requireParticleMeshSort(particlesCatIndex(i) == ParticleInteger(kNoParticleIndex),

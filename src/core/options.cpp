@@ -972,8 +972,9 @@ bool processOptions(int argc, char* argv[]) {
         "cullenAndDehnen and hu_etal, constant for none and priceEtAl")("hydro.viscosityEpsilon",
         po::value<double>(&opts.hydro.viscosityEpsilon)->default_value(0.01),
         "viscosity regularization relative to the calibrated radius sqrt(5/6) effectiveRadius")(
-        "hydro.balsaraSwitch", po::value<bool>(&opts.hydro.balsaraSwitch)->default_value(true),
-        "suppress artificial viscosity in shear flows with the Balsara switch")(
+        "hydro.balsaraSwitch", po::value<bool>(&opts.hydro.balsaraSwitch),
+        "Balsara shear suppression: defaults to true for none/morrisAndMonaghan and false for "
+        "cullenAndDehnen/hu_etal/priceEtAl; explicit true adds redundant shear suppression")(
         "hydro.viscosityEvolution",
         po::value<std::string>(&opts.hydro.viscosityEvolution)->default_value("morrisAndMonaghan"),
         "viscosity evolution: none, morrisAndMonaghan, cullenAndDehnen, priceEtAl, or hu_etal")(
@@ -1648,6 +1649,17 @@ bool processOptions(int argc, char* argv[]) {
         detail::throwOptionError(
             "hydro.viscosityEvolution must be none, morrisAndMonaghan, cullenAndDehnen, "
             "priceEtAl, or hu_etal\n");
+    }
+    // Resolve the model-dependent default after CLI/INI precedence. An explicit
+    // boolean remains authoritative even when the viscosity model is overridden.
+    if (!isExplicit("hydro.balsaraSwitch")) {
+        opts.hydro.balsaraSwitch = !opts.hydro.viscosityGradientSwitch();
+    } else if (opts.hydro.balsaraSwitch && opts.hydro.viscosityGradientSwitch()) {
+        std::cout << std::format("Warning: hydro.balsaraSwitch=true adds redundant shear "
+                                 "suppression: hydro.viscosityEvolution={:s} already includes "
+                                 "a shear limiter. The explicit setting is retained.\n",
+                         opts.hydro.viscosityEvolution)
+                  << std::flush;
     }
     if (!detail::isPositiveFloatOption(opts.hydro.minimumBulkViscosityCoefficient) ||
         !detail::isPositiveFloatOption(opts.hydro.viscosityDecay)) {

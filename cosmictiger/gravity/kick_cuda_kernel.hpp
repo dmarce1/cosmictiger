@@ -28,6 +28,10 @@
 #include <cosmictiger/gravity/kick_cuda.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#if COSMICTIGER_WITH_SPH
+#include <cosmictiger/sph/particle_flags.hpp>
+#include <cosmictiger/sph/viscosity/scaled_divergence.hpp>
+#endif
 
 namespace detail {
 
@@ -226,16 +230,24 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                             // Derived full-force quantization:
                             // r = max(ceil(log₂(Δτ₀/Δτ_G)), r_old−1, r_min).
                             // Δτ₀ -> params.t0; Δτ_G -> dt; r -> nextRung.
-                            nextRung = max((int) ceilf(log2f(params.t0 / dt)),
-                                max(rung - 1, params.minRung));
+                            nextRung = max(
+                                (int) ceilf(log2f(params.t0 / dt)), max(rung - 1, params.minRung));
                         }
-                        nextRung = max(nextRung, int(data.sphHydroRungs[data.catIndex[sinkIndex]]));
+                        nextRung = max(
+                            nextRung, data.sphHydroFlags[data.catIndex[sinkIndex]].proposedRung());
                     }
                 }
 #endif
                 maxRung = max(nextRung, maxRung);
                 ALWAYS_ASSERT(nextRung >= 0 && nextRung < kMaxRung);
                 flops += 13;
+#if COSMICTIGER_WITH_SPH
+                if (data.sphScaledDivergence != nullptr && rung != nextRung &&
+                    data.type[sinkIndex] == kSphType) {
+                    ALWAYS_ASSERT(sphRescaleDivergence(
+                        data.sphScaledDivergence[data.catIndex[sinkIndex]], rung, nextRung));
+                }
+#endif
                 rungs[sinkIndex] = nextRung;
                 dt = 0.5f * rungDt[params.minRung] * params.t0;
                 applyKick(sgn * dt);
@@ -278,13 +290,14 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                     fminf(params.eta * sqrtf(params.a) * sqrtf(gravityEffectiveRadius / sqrtf(g2)),
                         params.t0);
                 dt = fminf(dt, params.maxDt);
-                rung = max(max((int) ceilf(log2f(params.t0 / dt)),
-                               max(previousRung - 1, params.minRung)),
+                rung = max(
+                    max((int) ceilf(log2f(params.t0 / dt)), max(previousRung - 1, params.minRung)),
                     1);
 #if COSMICTIGER_WITH_SPH
                 if (gas && data.midpointHydro) {
-                    rung = params.freezeGasRungs ? previousRung :
-                        max(rung, int(data.sphHydroRungs[data.catIndex[sinkIndex]]));
+                    rung = params.freezeGasRungs ?
+                        previousRung :
+                        max(rung, data.sphHydroFlags[data.catIndex[sinkIndex]].proposedRung());
                 }
 #endif
                 if (params.fixedRung != 0) {
@@ -292,6 +305,12 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                     rung = params.fixedRung;
                 }
                 ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
+#if COSMICTIGER_WITH_SPH
+                if (data.sphScaledDivergence != nullptr && previousRung != rung && gas) {
+                    ALWAYS_ASSERT(sphRescaleDivergence(
+                        data.sphScaledDivergence[data.catIndex[sinkIndex]], previousRung, rung));
+                }
+#endif
                 rungs[sinkIndex] = rung;
                 dt = params.sign * 0.5f * rungDt[rung] * params.t0;
                 if (gas && params.deferGasOpening) {

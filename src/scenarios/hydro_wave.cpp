@@ -45,7 +45,7 @@ ScenarioPlan initializeHydroWave() {
                     x -= 0.99 * dx;
                 }
                 sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSupportRadius(i) = h;
+                sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x;
                 sphParticlesPosition(kYDimension, i) = y;
                 sphParticlesPosition(kZDimension, i) = z;

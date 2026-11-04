@@ -210,21 +210,21 @@ def checkViscosityRestarts(executable, baseWorkdir):
             final_state = decode_checkpoint(
                 (reference / "checkpoint.2" / "checkpoint.0.dat").read_bytes())
             if model in ("cullenAndDehnen", "priceEtAl", "hu_etal"):
-                # The checkpoint carries only the last committed own-midpoint
-                # divergence sample and its rung. The uniform wave has completed
-                # a midpoint for every gas particle in each saved interval.
+                # Each scalar stores the last committed endpoint gradient,
+                # normalized by its live rung or shared actual global duration.
                 for state in (first_state, final_state):
-                    if len(state.divergence_histories) != state.gas_count or any(
-                            sample_rung != state.rungs[state.gravity_indices[gas]] or
-                            sample_rung < 0
-                            for gas, (_, sample_rung, _) in enumerate(state.divergence_histories)):
-                        raise RuntimeError(f"{name} has missing or mismatched own-midpoint history")
+                    if len(state.divergence_histories) != state.gas_count:
+                        raise RuntimeError(f"{name} has missing endpoint history")
+                    if len(state.balsara_factors) != (state.gas_count if limiter else 0):
+                        raise RuntimeError(f"{name} has an incorrect retained Balsara payload")
                 events = re.findall(r"SPH midpoint: time=(\S+) rung=(-?\d+) dt=(\S+)",
                                     (reference / "run.log").read_text())
                 if len(events) < 2 or not final_state.driver.tau > first_state.driver.tau:
-                    raise RuntimeError(f"{name} did not complete successive midpoint samples")
+                    raise RuntimeError(f"{name} did not complete successive hydro steps")
             elif first_state.divergence_histories or final_state.divergence_histories:
                 raise RuntimeError(f"{name} unexpectedly checkpointed divergence history")
+            elif first_state.balsara_factors or final_state.balsara_factors:
+                raise RuntimeError(f"{name} unexpectedly checkpointed transient Balsara factors")
             resumed = prepareCase(baseWorkdir, name + "_restart", checkpoint)
             output = runSimulation(options + ["--run.maxIterations=1", "--checkpoint.readIndex=1"],
                                    resumed, "restart.log")

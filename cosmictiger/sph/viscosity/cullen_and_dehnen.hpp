@@ -13,7 +13,7 @@
 
 #include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/matrix_eigen.hpp>
-#include <cosmictiger/sph/viscosity/cullen_and_dehnen_state.hpp>
+#include <cosmictiger/sph/viscosity/scaled_divergence.hpp>
 
 // L. Cullen and W. Dehnen, "Inviscid smoothed particle hydrodynamics",
 // MNRAS 408 (2010), 669-683, doi:10.1111/j.1365-2966.2010.17158.x.
@@ -41,7 +41,6 @@ struct Result {
     Real targetBulkViscosityCoefficient;
     Real inverseDecayTime;
     Real limiter = Real(1);    // Hu et al. applies this after the alpha update.
-    Real sampleDivergence = Real(0);
 };
 
 namespace detail {
@@ -178,25 +177,37 @@ CUDA_EXPORT inline int reconstructVelocityGradient(VelocityGradientSums<Real> co
 
 /*
  * Cullen & Dehnen (2010), Appendix B3's first alternative: difference successive
- * divergence estimates along the same particle trajectory. Locally derived
- * first-order conversion for conformal time dτ = dt/a:
- *   a⁴ Dθ/Dt ≈ a³ (θ_n − θ_previous)/Δτ.
- * θ → sampleDivergence; Δτ → sampleInterval; a → scaleFactor;
- * θ_previous → state.sampledDivergence() (decoded from its scaled-integer storage).
- * CD/Hu use physical θ = ∇·v; Price samples θ = ∇·v − 3H to retain its
- * homogeneous-background subtraction. Missing history or a zero interval gives
- * zero. Density retries never modify the previous own-midpoint sample used here.
+ * divergence estimates along the same particle trajectory. As in GADGET-4's
+ * artificial_viscosity.cc, difference G = ∇_x·w before converting to a physical
+ * rate: https://wwwmpa.mpa-garching.mpg.de/gadget4/doxygen/artificial__viscosity_8cc_source.html
+ * Derived first-order conversion for conformal time dτ = dt/a:
+ *   G_previous = q_previous/Δτ_previous,
+ *   S = a⁻² DG/Dt ≈ (G_n − G_previous)/(a³ Δτ),
+ *   a⁴ S ≈ a (G_n − G_previous)/Δτ.
+ * G → sampleDivergence; Δτ → sampleInterval; a → scaleFactor;
+ * q_previous → state; Δτ_previous → previousSampleTimestep.
+ * All three cosmological sensors use the peculiar stored-velocity gradient.
+ * Since G = a² θ_pec, this estimates Dθ_pec/Dt + 2Hθ_pec, not Dθ_pec/Dt alone.
+ * Pure Hubble flow has G = 0 without subtracting a background after differencing.
+ * A zero interval suppresses the startup derivative. Density retries never modify
+ * the previous endpoint sample used here. Δτ is the completed conformal step;
+ * the endpoint difference estimates its midpoint derivative and drives the
+ * following kick with first-order viscosity timing.
  */
 template <typename Real, typename Counter>
 CUDA_EXPORT inline Real divergenceTimeDerivative(Real sampleDivergence, Real scaleFactor,
-    SphCullenDehnenState const& state, double sampleInterval, Counter& floatingPointOperations) {
-    if (state.sampleRung == -1 || state.sampleRung < -2 || !(sampleInterval > 0.0)) {
+    Float16Storage const& state, double sampleInterval, double previousSampleTimestep,
+    Counter& floatingPointOperations) {
+    if (!sph_viscosity::detail::isFinite(sampleInterval) ||
+        !sph_viscosity::detail::isFinite(previousSampleTimestep) || !(sampleInterval > 0.0) ||
+        !(previousSampleTimestep > 0.0)) {
         return Real(0);
     }
     double const derivative =
-        (double(sampleDivergence) - double(state.sampledDivergence())) / sampleInterval;
-    floatingPointOperations += 5;
-    return Real(double(scaleFactor) * double(scaleFactor) * double(scaleFactor) * derivative);
+        (double(sampleDivergence) - sphDecodeDivergence(state, previousSampleTimestep)) /
+        sampleInterval;
+    floatingPointOperations += 4;
+    return Real(double(scaleFactor) * derivative);
 }
 
 /*
@@ -259,12 +270,15 @@ CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
 /*
  * Equations (13)-(18) and (B12), with comoving coordinates x, stored velocity
  * w = a v_pec, conformal time dτ = dt/a, and stored acceleration F = dw/dτ.
- * The velocity sums use w_ij + a da/dt x_ij, giving V' = a² ∇_r v_phys;
+ * The acceleration-gradient reference estimator uses w_ij + a da/dt x_ij,
+ * giving V' = a² ∇_r v_phys;
  * the acceleration sums give G = ∇_x F. Therefore
  *
  *   a⁴ D(div v_phys)/Dt = a tr(G) + 3 a³ d²a/dt² − tr(V'²).
  *
- * expansionAcceleration supplies a³ d²a/dt². The limiter is invariant under the
+ * Production instead uses peculiar gradients V' = ∇_x w = a² ∇_r v_pec and the
+ * GADGET-4 history derivative above. The reference path supplies a³ ä.
+ * The limiter is invariant under the
  * common a² scaling of V'. Equation (17)'s weighted sign average R_i is supplied
  * by the density loop using an immutable snapshot of previous divergences.
  * This paper's h is the full support radius H (its footnote 2), not M&M's H/2.
@@ -280,9 +294,11 @@ CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
  *   τ_i = h_i/(2ℓ v_sig,i),                                          (16)
  *   R_i = ρ_i⁻¹ Σ_j m_j W_ij sign(∇·v_j),                            (17)
  *   ξ_i = |2(1 − R_i)⁴ ∇·v_i|²/(|2(1 − R_i)⁴ ∇·v_i|² + tr(S_i S_iᵀ)). (18)
- * Derived comoving conversion, also used by the code below:
+ * Derived comoving conversion for the acceleration-gradient reference:
  *   V′ = a² ∇_r v_phys, G = ∇_x F,
  *   a⁴ D(∇·v_phys)/Dt = a tr(G) + 3a³ ä − tr(V′²).
+ * Production history instead supplies V′ = a² ∇_r v_pec and differences its trace
+ * before unit conversion; the target and limiter retain the same scaled form.
  * Symbol directory:
  *   a → scaleFactor/localScaleFactor; h_i → supportRadius/kernelSupportRadius
  *   v_sig,i → signalSpeed/localSignalSpeed; ℓ → decayCoefficient
@@ -326,7 +342,6 @@ CUDA_EXPORT inline Result<Real> diagnosticsFromGradient(Real const (&velocityGra
     }
     floatingPointOperations += 48;    // Velocity trace, symmetric shear and its squared norm.
     result.divergence = velocityDivergence / (localScaleFactor * localScaleFactor);
-    result.sampleDivergence = result.divergence;
     Real const divergenceSignAverage = signAverage;
     Real const squaredSignComplement =
         (Real(1) - divergenceSignAverage) * (Real(1) - divergenceSignAverage);
@@ -369,24 +384,26 @@ CUDA_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums, Real
         floatingPointOperations);
 }
 
-// Production Appendix-B3 time-difference route; no acceleration samples are read.
+// Production time differences of G = ∇_x·w; no acceleration samples are read.
 template <typename Real, typename Counter>
 CUDA_EXPORT inline Result<Real> diagnosticsFromHistory(VelocityGradientSums<Real> const& sums,
-    Real scaleFactor, SphCullenDehnenState const& state, double sampleInterval, Real signAverage,
-    Real supportRadius, Real signalSpeed, Real maximumBulkViscosityCoefficient,
-    Real decayCoefficient, Counter& floatingPointOperations) {
+    Real scaleFactor, Float16Storage const& state, double sampleInterval,
+    double previousSampleTimestep, Real signAverage, Real supportRadius, Real signalSpeed,
+    Real maximumBulkViscosityCoefficient, Real decayCoefficient, Counter& floatingPointOperations) {
     Real velocityGradient[3][3];
     int const rank = reconstructVelocityGradient(sums, velocityGradient, floatingPointOperations);
     Real const divergence =
-        (velocityGradient[0][0] + velocityGradient[1][1] + velocityGradient[2][2]) /
-        (scaleFactor * scaleFactor);
-    floatingPointOperations += 4;
-    Real const derivative = rank == 0 ? Real(0) :
-                                        divergenceTimeDerivative(divergence, scaleFactor, state,
-                                            sampleInterval, floatingPointOperations);
-    return diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, signAverage,
+        velocityGradient[0][0] + velocityGradient[1][1] + velocityGradient[2][2];
+    floatingPointOperations += 2;
+    Real const derivative = rank == 0 ?
+        Real(0) :
+        divergenceTimeDerivative(divergence, scaleFactor, state, sampleInterval,
+            previousSampleTimestep, floatingPointOperations);
+    auto result = diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, signAverage,
         supportRadius, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient,
         floatingPointOperations);
+    result.divergence = divergence;
+    return result;
 }
 
 template <typename Real>

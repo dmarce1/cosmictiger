@@ -115,14 +115,14 @@ struct MeshKickSchedule {
 SphRunReturn sphMidpointStep(int rung, double time, double timestep, double baseTimestep,
     double scale, double scaleDerivative, EnergiesT& energies, bool global = false,
     double maximumTimestep = 0.0, double previousGlobalTimestep = 0.0);
-// Complete cooling or the combined cooling/star-formation source once, after
-// the final drift and before changing old rungs or writing the endpoint state.
+// Evolve endpoint viscosity coefficients/history and cooling/star-formation sources once,
+// after the final drift and before changing old rungs or writing the endpoint state.
 // Global steps pass their actual completed duration; rung steps use the base
-// duration and each selected particle's old rung. The return value estimates
-// all surviving gas bounds without another kick or viscosity-history update.
+// duration and each selected particle's old rung. Return refreshed timestep
+// bounds, including all surviving gas after source heating or conversion.
 SphRunReturn sphCompleteSources(int minimumClosingRung, double time, double baseTimestep,
     double scale, double scaleDerivative, EnergiesT& energies, double explicitTimestep = -1.0,
-    double maximumGlobalTimestep = 0.0);
+    double maximumGlobalTimestep = 0.0, double previousGlobalTimestep = 0.0);
 SphTreeCreateReturn sphStep1(int minrung, bool verbose = true);
 
 #endif

@@ -8,12 +8,14 @@
 
 #pragma once
 
+#include <cstdint>
 #include <numbers>
 
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/sph/flops.hpp>
 #include <cosmictiger/sph/pair_kick.hpp>
+#include <cosmictiger/sph/particle_flags.hpp>
 #include <cosmictiger/sph/particles.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/tree.hpp>
@@ -35,7 +37,7 @@ struct SphRunData {
     float* sourceAccelerationY;
     float* sourceAccelerationZ;
     float* sourceVelocityDivergence;
-    float* sourceSupportRadius;
+    float* sourceSmoothingLength;    // Full compact-support H, as in particle storage.
     // Variational operator: zeta_i of cosmictiger/sph/volume.hpp from this step's density
     // pass.
     float* sourceGradHCorrection;
@@ -55,23 +57,22 @@ struct SphRunData {
     // correction. Requires the source velocity arrays even with viscosity off.
     float* sinkLogDensityRate = nullptr;
     float* sinkGradHCorrection;    // Rebuilt with the density on every preparation pass.
-    float* sinkBalsaraFactor;
+    uint8_t* sinkBalsaraFactor;
     Float16Storage* sinkBulkViscosityCoefficient;
-    SphCullenDehnenState const* sinkCullenDehnenStates;
+    Float16Storage const* sinkScaledDivergence;
     // Event-local density results; absent when this pass will not update history.
     SphViscosityDiagnostics* sinkViscosityDiagnostics = nullptr;
-    char* sinkSemiactive;
-    char* sinkSmoothingConverged;
-    float* sinkSupportRadius;
+    SphParticleFlags* sinkFlags;
+    float* sinkSmoothingLength;    // Full compact-support H, as in particle storage.
     SphAcceleration* sinkAccelerations;
     float* sinkGravityAccelerationX;
     float* sinkGravityAccelerationY;
     float* sinkGravityAccelerationZ;
     ParticleInteger* sinkParticleIndices;
     char* sinkParticleRungs;    // Indexed through sinkParticleIndices into the full particle array.
-    // Optional: a phase-1 hydro pass writes its rung proposals here instead of into
-    // sinkParticleRungs, so the closing rung stays in place until the driver commits them.
-    char* sinkProposedRungs = nullptr;
+    // A phase-1 hydro pass can store its rung proposals in sinkFlags instead of
+    // sinkParticleRungs, preserving the closing rung until the driver commits it.
+    bool proposeRungs = false;
     // Optional globally closed rung candidates, indexed by full particle index.
     char* sinkRungCandidates = nullptr;
 

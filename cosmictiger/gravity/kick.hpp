@@ -29,6 +29,9 @@ static_assert(
     kMaxBucketSize >= 32 && kMaxBucketSize <= 1024 && (kMaxBucketSize & (kMaxBucketSize - 1)) == 0,
     "MAX_BUCKET_SIZE must be a power of two from 32 to 1024");
 
+struct Float16Storage;
+struct SphParticleFlags;
+
 struct CudaKickData {
     TreeNode* treeNodes;
     Position* x;
@@ -37,7 +40,8 @@ struct CudaKickData {
     FmmSourceView ghostSources;
     Vector3<float>* vel;
     bool midpointHydro = false;
-    char const* sphHydroRungs = nullptr;
+    SphParticleFlags const* sphHydroFlags = nullptr;
+    Float16Storage* sphScaledDivergence = nullptr;
     ParticleInteger* catIndex;
     char* type;
     bool sph;

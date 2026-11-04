@@ -954,7 +954,7 @@ static void initX0() {
                 particlesStarFormationStates[count + i].id = 2 * sourceIds[i] + 2;
             }
             sphParticlesSetInternalEnergy(i, storedThermalEnergy);
-            sphParticlesSupportRadius(i) = smoothLength;
+            sphParticlesSmoothingLength(i) = smoothLength;
             sphParticlesDensity(i) = density;
 #if COSMICTIGER_ENABLE_CHEMISTRY
             if (getOptions().chemistry.enabled) {

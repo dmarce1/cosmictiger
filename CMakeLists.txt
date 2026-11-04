@@ -342,6 +342,7 @@ set(cosmictiger_header_files
     cosmictiger/sph/neighbor_buffer.hpp
     cosmictiger/sph/run_data.hpp
     cosmictiger/sph/particles.hpp
+    cosmictiger/sph/particle_flags.hpp
     cosmictiger/sph/tree.hpp
     cosmictiger/scenarios/sphere.hpp
     cosmictiger/core/tree_id.hpp
@@ -370,7 +371,7 @@ set(cosmictiger_header_files
     cosmictiger/gravity/tree_build.hpp
     cosmictiger/sph/viscosity/balsara.hpp
     cosmictiger/sph/viscosity/cullen_and_dehnen_particle_exchange.hpp
-    cosmictiger/sph/viscosity/cullen_and_dehnen_state.hpp
+    cosmictiger/sph/viscosity/scaled_divergence.hpp
     cosmictiger/sph/viscosity/cullen_and_dehnen.hpp
     cosmictiger/sph/viscosity/monaghan.hpp
     cosmictiger/sph/viscosity/morris_and_monaghan.hpp
@@ -381,7 +382,6 @@ set(cosmictiger_header_files
     cosmictiger/sph/volume.hpp
     cosmictiger/sph/thermodynamics.hpp
     cosmictiger/math/float16_storage.hpp
-    cosmictiger/math/scaled_int16_storage.hpp
 )
 
 # Completed midpoint intervals apply cooling and star formation to entropy.
