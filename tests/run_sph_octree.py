@@ -59,7 +59,7 @@ def checkpoint_state(directory, iteration, ranks):
         state = decode_checkpoint(path.read_bytes(), ranks=ranks)
         require(state.hydro and not state.has_cooling and not state.has_stars,
                 f"{path}: expected ideal-gas SPH without additional sources")
-        require(80000 <= state.gas_version < 81000, f"{path}: obsolete SPH rate checkpoint")
+        require(90000 <= state.gas_version < 91000, f"{path}: obsolete SPH rate checkpoint")
         clocks.append((state.driver.tau, state.driver.integer_time,
                        state.driver.global_timestep, state.driver.global_hydro_timestep,
                        state.driver.iteration))

@@ -178,14 +178,22 @@ gas population. Source payloads already carry particle ID, event counter, birth
 time, saved specific formation rate and elapsed physical time; this integration
 adds no persistent per-particle fields or force-rate arrays.
 
-The SPH payload uses base version 80000 for compact viscosity storage: two bytes
-for evolving alpha and, for CD, Price and Hu, eight bytes of in-memory committed
-history (seven serialized bytes). Source counters and elapsed source time retain
-their existing meanings; no viscosity timestamp is added. Older SPH payload
-versions are rejected rather than interpreted as this layout.
+The SPH payload uses base version 90000 for compact viscosity storage. Evolving
+alpha remains two-byte binary16. CD, Price and Hu use eight bytes of in-memory
+committed history: two signed 16-bit divergence significands, two independent
+signed one-byte exponents and the previous sampled rung. Each nonzero divergence
+decodes as \(q\,2^{e-14}\), with \(16384\le|q|\le32767\) and
+\(-126\le e\le127\). Normal float32 inputs are truncated to 15 significant
+bits; subnormals are flushed to zero. Fieldwise serialization is `h,h,b,b,b`
+(seven bytes). Source counters and elapsed source time retain their existing
+meanings; no viscosity timestamp is added. Older SPH payload versions, including
+base 80000's scaled binary16 divergences, are rejected.
 
-On November 4, 2026, after the compact-history update, source timing and
-conversion fixtures passed on CPU, CUDA and two MPI ranks. The star-formation
+The following results are historical validation of commit `9ccd34a85`, using
+checkpoint base 80000. They do not validate the subsequent signed-significand
+representation or its base-90000 payload. On November 4, 2026, after that
+compact-history update, source timing and conversion fixtures passed on CPU,
+CUDA and two MPI ranks. The star-formation
 application passed traditional, hierarchical and global evolution/restart cases
 on each backend. Every controlled-conversion case converted all 512 gas
 particles and restarted exactly with no gas remaining. CPU and CUDA cooling

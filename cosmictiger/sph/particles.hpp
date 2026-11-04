@@ -14,6 +14,7 @@
 
 #include <cosmictiger/chemistry/gadget4_cooling.hpp>
 #include <cosmictiger/cuda/cuda_export.hpp>
+#include <cosmictiger/math/float16_storage.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>

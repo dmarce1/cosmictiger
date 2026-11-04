@@ -165,9 +165,9 @@ def read_prefix(data):
                 and result.driver.outer_interval >= 0 and result.driver.outer_start >= 0,
                 "invalid checkpoint particle-mesh interval extension")
     result.particle_start = reader.offset
-    # Version 80000 stores half alpha and two scaled-half divergence samples plus
+    # Version 90000 stores half alpha and two signed-int16 divergence samples plus
     # the previous own-midpoint rung; no event diagnostics or absolute clocks.
-    result.gas_version = 80000 + (110 if stars else 100 if cooling else 2) + viscosity_offset
+    result.gas_version = 90000 + (110 if stars else 100 if cooling else 2) + viscosity_offset
     result.reader = reader
     return result
 
@@ -215,7 +215,7 @@ def decode_checkpoint(data, ranks=1):
         result.proposed_rungs = reader.take("b", gas_count)
         require(all(-1 <= rung < 64 for rung in result.proposed_rungs),
                 "invalid checkpoint hydro rung bound")
-        delta = (result.gas_version - 80000 -
+        delta = (result.gas_version - 90000 -
                  (110 if result.has_stars else 100 if result.has_cooling else 2))
         require(delta in (0, 2, 4, 6, 8), "unsupported checkpoint viscosity payload")
         viscosity = []
@@ -230,19 +230,21 @@ def decode_checkpoint(data, ranks=1):
                 result.bulk_viscosity_coefficients.append(alpha)
                 values = (alpha,)
             if delta >= 4:
-                divergence_mantissa, sample_mantissa = reader.take("e", 2)
+                divergence_significand, sample_significand = reader.take("h", 2)
                 divergence_exponent, sample_exponent, sample_rung = reader.take("b", 3)
-                divergence = math.ldexp(divergence_mantissa, divergence_exponent)
-                sample_divergence = math.ldexp(sample_mantissa, sample_exponent)
-                float_maximum = float.fromhex("0x1.fffffep127")
-                float_minimum_subnormal = float.fromhex("0x1p-149")
-                require(all(math.isfinite(value) and abs(value) <= float_maximum and
-                            (value == 0 or abs(value) >= float_minimum_subnormal) for value in
-                            (divergence, sample_divergence)) and
-                        # Startup (-2) and missing (-1) histories are valid;
-                        # occupied own-midpoint rungs use kMaxRung = 16.
+                encoded_samples = ((divergence_significand, divergence_exponent),
+                                   (sample_significand, sample_exponent))
+                # x = q * 2**(e-14). Zero has the unique representation (0, 0);
+                # normal float inputs have 16384 <= abs(q) <= 32767 and
+                # -126 <= e <= 127. Float subnormals are stored as zero.
+                # Startup (-2) and missing (-1) sample rungs remain valid.
+                require(all((significand == 0 and exponent == 0) or
+                            (16384 <= abs(significand) <= 32767 and -126 <= exponent <= 127)
+                            for significand, exponent in encoded_samples) and
                         -2 <= sample_rung < 16,
                         "invalid checkpoint divergence history")
+                divergence = math.ldexp(divergence_significand, divergence_exponent - 14)
+                sample_divergence = math.ldexp(sample_significand, sample_exponent - 14)
                 result.divergence_histories.append((divergence, sample_rung, sample_divergence))
                 values += (divergence, sample_rung, sample_divergence)
             viscosity.append(values)

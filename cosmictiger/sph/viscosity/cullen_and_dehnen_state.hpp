@@ -12,34 +12,34 @@
 #include <cstdint>
 
 #include <cosmictiger/cuda/cuda_export.hpp>
-#include <cosmictiger/math/float16_storage.hpp>
+#include <cosmictiger/math/scaled_int16_storage.hpp>
 
 // Cullen & Dehnen (2010), equations (14)-(17), (A15), and Appendix B3's
 // time-difference estimator. Only committed history survives density events,
 // checkpoints, migration, and particle sorting.
 struct SphCullenDehnenState {
-    Float16Storage divergence;    // Scaled physical velocity divergence.
+    int16_t divergence = 0;    // Scaled physical velocity divergence.
     // Physical divergence for CD/Hu; physical divergence minus 3H for Price.
-    Float16Storage sampleDivergence;
+    int16_t sampleDivergence = 0;
     int8_t divergenceExponent = 0;
     int8_t sampleDivergenceExponent = 0;
     // -1: no history; -2: startup boundary sample; otherwise the previous own midpoint rung.
     int8_t sampleRung = -1;
 
     CUDA_EXPORT float physicalDivergence() const {
-        return float16_storage::decodeScaled(divergence, divergenceExponent);
+        return scaled_int16_storage::decode(divergence, divergenceExponent);
     }
 
     CUDA_EXPORT float sampledDivergence() const {
-        return float16_storage::decodeScaled(sampleDivergence, sampleDivergenceExponent);
+        return scaled_int16_storage::decode(sampleDivergence, sampleDivergenceExponent);
     }
 
     CUDA_EXPORT void setDivergences(float physical, float sampled) {
-        auto const physicalStorage = float16_storage::encodeScaled(physical);
-        auto const sampledStorage = float16_storage::encodeScaled(sampled);
-        divergence = physicalStorage.mantissa;
+        auto const physicalStorage = scaled_int16_storage::encode(physical);
+        auto const sampledStorage = scaled_int16_storage::encode(sampled);
+        divergence = physicalStorage.significand;
         divergenceExponent = physicalStorage.exponent;
-        sampleDivergence = sampledStorage.mantissa;
+        sampleDivergence = sampledStorage.significand;
         sampleDivergenceExponent = sampledStorage.exponent;
     }
 };

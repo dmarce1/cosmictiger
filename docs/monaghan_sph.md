@@ -352,17 +352,30 @@ CD also retains the physical divergence for the immutable neighbor-sign snapshot
 in equation (17), following the sweep order in Appendix A4. CD, Price, and Hu
 write physical velocity divergence as `divv` in Silo, with inverse-time units.
 The two committed divergences and previous sampled rung survive sorting,
-migration and checkpoints. Each divergence uses a binary16 mantissa and its own
-signed one-byte power-of-two exponent, preserving float's range without forcing
-Price's physical and background-subtracted values to share a scale. The history
-occupies eight bytes per gas particle including alignment, in addition to the
-two-byte α. This reduces precision: small changes between samples can fall below
-the stored mantissa resolution. It is a storage choice, not a property of the
-published switch. Target α, decay rate, limiter and the two pending divergences
-are five float scratch fields, allocated only for a history-updating density
-event and released after its update. Every evolution scheme writes dimensionless
-`alpha`; selecting `none` allocates neither α evolution state nor divergence
-state. Under CD, β follows α as described above.
+migration and checkpoints. Each divergence uses a signed `int16_t` significand
+\(q\) and its own signed one-byte exponent \(e\). The locally defined storage
+conversion for a normal float value \(x\) is
+
+\[
+ e=\left\lfloor\log_2|x|\right\rfloor,\qquad
+ q=\operatorname{trunc}\!\left(x\,2^{14-e}\right),\qquad
+ \widehat{x}=q\,2^{e-14}.
+\]
+
+Nonzero encodings have \(16384\le |q|\le32767\) and
+\(-126\le e\le127\). Float32 subnormals are flushed to zero. This retains the
+normal float range with 15 significant bits, including the leading one, instead
+of the previous scaled binary16 representation's 11. Independent exponents
+prevent Price's physical and background-subtracted values from sharing a scale.
+The history still occupies eight bytes per gas particle including alignment,
+in addition to the unchanged two-byte binary16 α. Truncation reduces precision:
+small changes between samples can fall below the stored significand resolution.
+It is a storage choice, not a property of the published switch. Target α, decay
+rate, limiter and the two pending divergences are five float scratch fields,
+allocated only for a history-updating density event and released after its
+update. Every evolution scheme writes dimensionless `alpha`; selecting `none`
+allocates neither α evolution state nor divergence state. Under CD, β follows α
+as described above.
 
 ## Hu et al. variable viscosity
 
@@ -647,12 +660,14 @@ are rejected. The next two bytes encode independent gravity and hydro kernel
 selections. Bit 24 identifies the compact gas layout after removal of stellar,
 chemistry, and obsolete solver fields. Older SPH checkpoints lack this bit and
 are rejected before particle data are loaded. The gas payload has a separate
-version: base 80000 omits all three persistent force-rate arrays and stores
-binary16 alpha plus, for gradient viscosity, two scaled binary16 divergence
-samples and their previous sampled rung. The history is serialized fieldwise
-in seven bytes, excluding its in-memory alignment byte. There is no sample
-timestamp or pending diagnostic payload. The existing physics and viscosity
-suffixes remain; earlier gas payloads are rejected. See the
+version: base 90000 omits all three persistent force-rate arrays and stores
+binary16 alpha plus, for gradient viscosity, two signed 16-bit divergence
+significands, their independent signed 8-bit exponents and the previous sampled
+rung. The history is serialized fieldwise as `h,h,b,b,b` in seven bytes,
+excluding its in-memory alignment byte. There is no sample timestamp or pending
+diagnostic payload. The existing physics and viscosity suffixes remain; earlier
+gas payloads, including base 80000's scaled binary16 divergences, are rejected.
+See the
 [pair-midpoint design](sph_pair_midpoint_plan.md) and
 [SPH octree design](sph_octree_plan.md) for the retained tree and kick schedule.
 Compatible dark-matter checkpoint layouts remain unchanged.
@@ -670,6 +685,12 @@ The `run.scenario=polytropicStar` scenario is a self-gravitating gas sphere; it 
 not use stellar particles or star formation.
 
 ## Validation scope
+
+The [pair-midpoint design](sph_pair_midpoint_plan.md) records the current
+signed-significand/base-90000 checks: fresh CPU/CUDA builds, 64 CPU and 28 CUDA
+checks, restart/corruption coverage, and two-rank history migration. Its broader
+compact-history/source results are labeled separately as historical validation
+of commit `9ccd34a85` and its base-80000 representation.
 
 The independent `sph_kernels` and `monaghan_sph` CTest targets retain the reference cubic checks:
 float and double kernel normalization, spline joins, analytic versus

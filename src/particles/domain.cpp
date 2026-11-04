@@ -590,7 +590,7 @@ struct GasMigrationState {
             arc & bulkViscosityCoefficient.bits;
         }
         if (getOptions().hydro.viscosityGradientSwitch()) {
-            arc & viscosityHistory.divergence.bits & viscosityHistory.sampleDivergence.bits;
+            arc & viscosityHistory.divergence & viscosityHistory.sampleDivergence;
             arc & viscosityHistory.divergenceExponent & viscosityHistory.sampleDivergenceExponent;
             arc & viscosityHistory.sampleRung;
         }

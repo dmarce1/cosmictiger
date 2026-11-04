@@ -118,10 +118,10 @@ std::vector<SourceTimingRecord> sourceTimingSnapshot() {
             record.bulkViscosity = uint32_t(sphParticlesBulkViscosityCoefficients[gas].bits);
             if (sphParticlesCullenDehnenStates != nullptr) {
                 auto const& history = sphParticlesCullenDehnenStates[gas];
-                record.viscosityHistory = {uint64_t(history.divergence.bits) |
+                record.viscosityHistory = {uint64_t(uint16_t(history.divergence)) |
                         (uint64_t(uint8_t(history.divergenceExponent)) << 16),
                     uint64_t(uint8_t(history.sampleRung)),
-                    uint64_t(history.sampleDivergence.bits) |
+                    uint64_t(uint16_t(history.sampleDivergence)) |
                         (uint64_t(uint8_t(history.sampleDivergenceExponent)) << 16)};
             }
         }

@@ -712,7 +712,8 @@ uint32_t sphCheckpointVersion() {
     // predictor/position-clock structure is removed for chronological drifts.
     // From 70000 no force rates persist; gradient switches checkpoint sample time/divergence.
     // From 80000 own-midpoint viscosity history stores the previous sample rung.
-    return 80000U +
+    // From 90000 divergences use signed integer significands instead of scaled binary16.
+    return 90000U +
         (options.starFormation.enabled ? 110U : (options.chemistry.enabled ? 100U : 2U)) +
         (options.hydro.viscosityEvolution == "hu_etal" ?
                 8U :
@@ -764,24 +765,16 @@ void sphParticlesLoad(FILE* fp) {
             if (getOptions().hydro.viscosityGradientSwitch()) {
                 auto& state = sphParticlesCullenDehnenStates[index];
                 state = {};
-                FREAD(&state.divergence.bits, sizeof(uint16_t), 1, fp);
-                FREAD(&state.sampleDivergence.bits, sizeof(uint16_t), 1, fp);
+                FREAD(&state.divergence, sizeof(int16_t), 1, fp);
+                FREAD(&state.sampleDivergence, sizeof(int16_t), 1, fp);
                 FREAD(&state.divergenceExponent, sizeof(int8_t), 1, fp);
                 FREAD(&state.sampleDivergenceExponent, sizeof(int8_t), 1, fp);
                 FREAD(&state.sampleRung, sizeof(int8_t), 1, fp);
-                float const divergence = state.physicalDivergence();
-                float const sampleDivergence = state.sampledDivergence();
-                // Check IEEE exponent bits because finite-math optimization may remove
-                // floating-point isfinite tests from checkpoint validation.
-                uint32_t sampleDivergenceBits, divergenceBits;
-                std::memcpy(&sampleDivergenceBits, &sampleDivergence, sizeof(sampleDivergenceBits));
-                std::memcpy(&divergenceBits, &divergence, sizeof(divergenceBits));
-                if ((sampleDivergenceBits & UINT32_C(0x7f800000)) == UINT32_C(0x7f800000) ||
-                    (divergenceBits & UINT32_C(0x7f800000)) == UINT32_C(0x7f800000) ||
-                    ((state.divergence.bits & 0x7fffU) != 0U &&
-                        (divergenceBits & UINT32_C(0x7fffffff)) == 0U) ||
-                    ((state.sampleDivergence.bits & 0x7fffU) != 0U &&
-                        (sampleDivergenceBits & UINT32_C(0x7fffffff)) == 0U) ||
+                // Integer checks survive finite-math optimization and reject
+                // noncanonical significands/exponents before reconstruction.
+                if (!scaled_int16_storage::isValid(state.divergence, state.divergenceExponent) ||
+                    !scaled_int16_storage::isValid(
+                        state.sampleDivergence, state.sampleDivergenceExponent) ||
                     state.sampleRung < -2 || state.sampleRung >= kMaxRung) {
                     THROW_ERROR("Invalid SPH divergence history in checkpoint\n");
                 }
@@ -821,8 +814,8 @@ void sphParticlesSave(FILE* fp) {
             FWRITE(&sphParticlesBulkViscosityCoefficients[index].bits, sizeof(uint16_t), 1, fp);
             if (getOptions().hydro.viscosityGradientSwitch()) {
                 auto const& state = sphParticlesCullenDehnenStates[index];
-                FWRITE(&state.divergence.bits, sizeof(uint16_t), 1, fp);
-                FWRITE(&state.sampleDivergence.bits, sizeof(uint16_t), 1, fp);
+                FWRITE(&state.divergence, sizeof(int16_t), 1, fp);
+                FWRITE(&state.sampleDivergence, sizeof(int16_t), 1, fp);
                 FWRITE(&state.divergenceExponent, sizeof(int8_t), 1, fp);
                 FWRITE(&state.sampleDivergenceExponent, sizeof(int8_t), 1, fp);
                 FWRITE(&state.sampleRung, sizeof(int8_t), 1, fp);
@@ -849,8 +842,8 @@ void sphCheckpointTest() {
                 if constexpr (std::is_same_v<std::remove_reference_t<decltype(*values)>,
                                   SphCullenDehnenState>) {
                     auto& history = values[index];
-                    visitValue(history.divergence.bits);
-                    visitValue(history.sampleDivergence.bits);
+                    visitValue(history.divergence);
+                    visitValue(history.sampleDivergence);
                     visitValue(history.divergenceExponent);
                     visitValue(history.sampleDivergenceExponent);
                     visitValue(history.sampleRung);
@@ -956,22 +949,22 @@ void sphCheckpointTest() {
     if (getOptions().hydro.viscosityGradientSwitch() && sphParticlesSize() != 0) {
         auto const validHistory = sphParticlesCullenDehnenStates[0];
         struct CorruptSample {
-            uint16_t mantissa;
+            int16_t significand;
             int8_t exponent;
         };
-        // Tiny nonzero encodings must not silently become zero, and neither
-        // nonfinite half values nor finite-half/exponent overflow may load.
+        // Reject non-normalized significands, reserved exponents and
+        // noncanonical zero rather than silently changing their meaning.
         CorruptSample const invalidSamples[] = {
-            {0x0001, -128}, {0x8001, -128}, {0x7c00, 0}, {0x7e00, 0}, {0x4000, 127}};
+            {1, 0}, {-32768, 0}, {16384, -127}, {0, -128}, {0, 1}};
         for (bool const sampled : {false, true}) {
             for (auto const invalid : invalidSamples) {
                 auto& history = sphParticlesCullenDehnenStates[0];
                 history = validHistory;
                 if (sampled) {
-                    history.sampleDivergence.bits = invalid.mantissa;
+                    history.sampleDivergence = invalid.significand;
                     history.sampleDivergenceExponent = invalid.exponent;
                 } else {
-                    history.divergence.bits = invalid.mantissa;
+                    history.divergence = invalid.significand;
                     history.divergenceExponent = invalid.exponent;
                 }
                 FILE* corruptFile = std::tmpfile();

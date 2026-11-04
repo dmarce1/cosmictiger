@@ -380,6 +380,7 @@ set(cosmictiger_header_files
     cosmictiger/sph/volume.hpp
     cosmictiger/sph/thermodynamics.hpp
     cosmictiger/math/float16_storage.hpp
+    cosmictiger/math/scaled_int16_storage.hpp
 )
 
 # Completed midpoint intervals apply cooling and star formation to entropy.

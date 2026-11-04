@@ -13,6 +13,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cosmictiger/math/float16_storage.hpp>
 #include <cosmictiger/sph/viscosity/cullen_and_dehnen.hpp>
 #include <cosmictiger/sph/viscosity/hu_etal.hpp>
 #include <cosmictiger/sph/viscosity/price_etal.hpp>
@@ -235,32 +236,68 @@ TEST(CullenAndDehnen, EveryFiniteHalfStorageValueRoundTripsExactly) {
     }
 }
 
-TEST(CullenAndDehnen, ScaledHalfRetainsFiniteFloatRangeAndSign) {
-    // Inspect IEEE encodings instead of arithmetic comparisons: this also checks
-    // float32 subnormals when the application enables flush-to-zero arithmetic.
-    for (uint32_t exponent = 0; exponent < 255; ++exponent) {
-        for (uint32_t const fraction : {0U, 1U, 0x1fffU, 0x2000U, 0x3fffffU, 0x7fffffU}) {
+TEST(CullenAndDehnen, ScaledInt16RetainsNormalFloatRangeAndSign) {
+    for (uint32_t exponent = 1; exponent < 255; ++exponent) {
+        for (uint32_t const fraction : {0U, 1U, 0x1ffU, 0x200U, 0x3fffffU, 0x7fffffU}) {
             uint32_t const magnitude = (exponent << 23) | fraction;
             for (uint32_t const sign : {0U, 0x80000000U}) {
                 uint32_t const originalBits = sign | magnitude;
                 auto const stored =
-                    float16_storage::encodeScaled(std::bit_cast<float>(originalBits));
+                    scaled_int16_storage::encode(std::bit_cast<float>(originalBits));
                 uint32_t const restoredBits = std::bit_cast<uint32_t>(
-                    float16_storage::decodeScaled(stored.mantissa, stored.exponent));
+                    scaled_int16_storage::decode(stored.significand, stored.exponent));
                 SCOPED_TRACE(originalBits);
+                EXPECT_TRUE(scaled_int16_storage::isValid(stored.significand, stored.exponent));
                 EXPECT_EQ(restoredBits & 0x80000000U, sign);
                 uint32_t const restoredMagnitude = restoredBits & 0x7fffffffU;
                 EXPECT_LE(restoredMagnitude, magnitude);
-                if (magnitude == 0) {
-                    EXPECT_EQ(restoredMagnitude, 0U);
-                    continue;
-                }
-                EXPECT_NE(restoredMagnitude, 0U);
+                EXPECT_GE(restoredMagnitude, 0x00800000U);
                 EXPECT_NE(restoredBits & 0x7f800000U, 0x7f800000U);
-                double const significand =
-                    exponent == 0 ? double(fraction) : double(0x800000U | fraction);
-                EXPECT_LE(double(magnitude - restoredMagnitude), significand / 1024.0);
+                double const significand = double(0x800000U | fraction);
+                EXPECT_LT(double(magnitude - restoredMagnitude), significand / 16384.0);
             }
+        }
+    }
+}
+
+TEST(CullenAndDehnen, ScaledInt16FlushesSignedZeroAndSubnormals) {
+    // Inspect encodings directly so the test also works with flush-to-zero
+    // arithmetic enabled, and both signs must produce the same canonical zero.
+    for (uint32_t const magnitude : {0U, 1U, 0x1ffU, 0x200U, 0x400000U, 0x7fffffU}) {
+        for (uint32_t const sign : {0U, 0x80000000U}) {
+            auto const stored =
+                scaled_int16_storage::encode(std::bit_cast<float>(sign | magnitude));
+            EXPECT_EQ(stored.significand, 0);
+            EXPECT_EQ(stored.exponent, 0);
+            EXPECT_TRUE(scaled_int16_storage::isValid(stored.significand, stored.exponent));
+            EXPECT_EQ(std::bit_cast<uint32_t>(
+                          scaled_int16_storage::decode(stored.significand, stored.exponent)),
+                0U);
+        }
+    }
+}
+
+TEST(CullenAndDehnen, ScaledInt16RejectsMalformedAndNonfiniteValues) {
+    scaled_int16_storage::ScaledValue const malformed[] = {{1, 0}, {-1, 0}, {16383, 0}, {-16383, 0},
+        {-32768, 0}, {16384, -127}, {-16384, -128}, {0, 1}, {0, -128}, {0, 127}};
+    for (auto const& stored : malformed) {
+        EXPECT_FALSE(scaled_int16_storage::isValid(stored.significand, stored.exponent));
+        EXPECT_EQ(std::bit_cast<uint32_t>(
+                      scaled_int16_storage::decode(stored.significand, stored.exponent)),
+            0x7fc00000U);
+    }
+    for (uint32_t const bits : {0x7f800000U, 0xff800000U, 0x7fc00000U, 0x7f800001U, 0xffc00001U}) {
+        auto const stored = scaled_int16_storage::encode(std::bit_cast<float>(bits));
+        EXPECT_EQ(stored.significand, 0);
+        EXPECT_EQ(stored.exponent, scaled_int16_storage::kInvalidExponent);
+        EXPECT_FALSE(scaled_int16_storage::isValid(stored.significand, stored.exponent));
+        EXPECT_EQ(std::bit_cast<uint32_t>(
+                      scaled_int16_storage::decode(stored.significand, stored.exponent)),
+            0x7fc00000U);
+    }
+    for (int8_t const exponent : {-126, -1, 0, 127}) {
+        for (int16_t const significand : {-32767, -16384, 16384, 32767}) {
+            EXPECT_TRUE(scaled_int16_storage::isValid(significand, exponent));
         }
     }
 }
@@ -269,16 +306,16 @@ TEST(CullenAndDehnen, DivergenceStorageUsesIndependentScales) {
     SphCullenDehnenState state{};
     state.sampleRung = 3;
     float const largest = std::numeric_limits<float>::max();
-    float const smallest = std::bit_cast<float>(1U);
+    float const smallest = std::numeric_limits<float>::min();
     state.setDivergences(largest, smallest);
     EXPECT_EQ(state.divergenceExponent, 127);
-    EXPECT_EQ(state.sampleDivergenceExponent, -128);
-    EXPECT_EQ(std::bit_cast<uint32_t>(state.sampledDivergence()), 1U);
+    EXPECT_EQ(state.sampleDivergenceExponent, -126);
+    EXPECT_EQ(std::bit_cast<uint32_t>(state.sampledDivergence()), 0x00800000U);
     uint32_t const largestStored = std::bit_cast<uint32_t>(state.physicalDivergence());
     EXPECT_LE(largestStored, 0x7f7fffffU);
-    EXPECT_GE(largestStored, 0x7f7fe000U);
-    state.setDivergences(std::bit_cast<float>(0x80000001U), -largest);
-    EXPECT_EQ(std::bit_cast<uint32_t>(state.physicalDivergence()), 0x80000001U);
+    EXPECT_EQ(largestStored, 0x7f7ffe00U);
+    state.setDivergences(-smallest, -largest);
+    EXPECT_EQ(std::bit_cast<uint32_t>(state.physicalDivergence()), 0x80800000U);
     EXPECT_EQ(std::bit_cast<uint32_t>(state.sampledDivergence()), largestStored | 0x80000000U);
     EXPECT_EQ(state.sampleRung, 3);
 }

@@ -50,21 +50,52 @@ No per-particle timestamp is needed. The live rung, latest hydro rung bound and
 previous sampled rung serve different purposes: interval scheduling, deferred
 boundary selection and viscosity sampling, respectively.
 
-Evolving alpha uses two bytes of binary16 storage. Gradient history uses two
-binary16 mantissas, independent one-byte scaling exponents and a one-byte sampled
-rung: eight bytes including in-memory alignment. Its five pending float
-diagnostics occupy twenty temporary bytes per gas particle only during a
-history-updating density event, after sorting and before source conversion. They
-do not migrate or enter checkpoints. Half precision reduces the resolution of
-small divergence changes even though the scaled representation retains float's
-range. The SPH checkpoint block is version 80000 plus its existing model/physics
-suffix, with the history serialized fieldwise in seven bytes. Earlier gas
-payloads are intentionally incompatible.
+Evolving alpha retains two bytes of binary16 storage. Each gradient-history
+divergence instead uses a signed 16-bit significand \(q\) and an independent
+signed 8-bit exponent \(e\), decoded as \(q\,2^{e-14}\). Normal values are
+truncated toward zero to \(16384\le|q|\le32767\), with
+\(-126\le e\le127\); float32 subnormals are flushed to zero. This stores 15
+significant bits including the leading one, compared with 11 in the preceding
+scaled binary16 representation. It retains the normal float range, but small
+divergence changes can still fall below the stored resolution.
+
+Two significands, two exponents and a one-byte sampled rung occupy eight bytes
+including in-memory alignment. The five pending float diagnostics occupy twenty
+temporary bytes per gas particle only during a history-updating density event,
+after sorting and before source conversion. They do not migrate or enter
+checkpoints. The SPH checkpoint block is version 90000 plus its existing
+model/physics suffix, with history serialized fieldwise as `h,h,b,b,b` in seven
+bytes. Earlier gas payloads, including base 80000, are intentionally incompatible.
 
 ## Validation
 
-The November 4 compact-history and source update passed fresh Release CPU and
-CUDA application builds. Focused units passed 75 CPU cases (one additional
+The signed-significand/base-90000 follow-up passed fresh Release CPU and CUDA
+application and test builds on November 4, 2026. All 64 selected CPU CTests
+passed (45 SPH units, 15 viscosity/storage units, and four lifecycle fixtures,
+including a two-rank source fixture). All 28 selected CUDA checks passed,
+including the production GPU kernels and source-history fixture.
+
+Storage units cover all 254 normal binary32 exponents, both signs, canonical
+zero/subnormal handling, nonfinite and malformed encodings, and unchanged
+own-midpoint sample intervals. Ten viscosity/Balsara restart combinations and
+six additional global/hierarchical gradient-model restarts passed with exact
+committed histories and the existing velocity-roundoff allowance. The actual
+checkpoint reader rejected ten corrupt history encodings and a base-80000
+checkpoint. Two-rank signed-history migration passed separately for CD, Price,
+and Hu; own-midpoint history also passed with an empty gas rank.
+
+Current evidence is in `/tmp/sph_int16_{cpu_build,cuda_build,cpu_tests,cuda_tests,
+extra,mpi}.log` and `/tmp/sph_int16_extra/evidence.json`. This is focused local
+validation: the full options suite, complete source-application matrix, full
+repository suite, hosted CI, long-duration accuracy, and performance were not
+rerun for this storage follow-up.
+
+The following compact-history/source results are historical validation of
+commit `9ccd34a85`, with scaled binary16 divergences and checkpoint base 80000.
+They do not validate the subsequent signed-significand/base-90000 change.
+
+That November 4 update passed fresh Release CPU and CUDA application builds.
+Focused units passed 75 CPU cases (one additional
 GPU-only cooling case skipped) and 30 CUDA cases. They include exhaustive finite
 binary16 round trips, scaled divergence range checks, changing-rung/global
 sample intervals, and production CPU/CUDA viscosity comparisons.

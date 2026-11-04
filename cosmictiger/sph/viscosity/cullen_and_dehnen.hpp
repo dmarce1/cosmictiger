@@ -182,7 +182,7 @@ CUDA_EXPORT inline int reconstructVelocityGradient(VelocityGradientSums<Real> co
  * first-order conversion for conformal time dτ = dt/a:
  *   a⁴ Dθ/Dt ≈ a³ (θ_n − θ_previous)/Δτ.
  * θ → sampleDivergence; Δτ → sampleInterval; a → scaleFactor;
- * θ_previous → state.sampledDivergence() (decoded from its scaled-half storage).
+ * θ_previous → state.sampledDivergence() (decoded from its scaled-integer storage).
  * CD/Hu use physical θ = ∇·v; Price samples θ = ∇·v − 3H to retain its
  * homogeneous-background subtraction. Missing history or a zero interval gives
  * zero. Density retries never modify the previous own-midpoint sample used here.
