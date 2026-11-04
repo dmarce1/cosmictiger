@@ -27,7 +27,7 @@ static Vector<float> sphParticlesFetchViscosityDiagnosticsCacheLine(ParticleInte
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; ++i) {
-        line[i - begin] = sphParticlesCullenDehnenStates[i].divergence;
+        line[i - begin] = sphParticlesCullenDehnenStates[i].physicalDivergence();
     }
     return line;
 }
@@ -42,7 +42,7 @@ void sphParticlesGlobalReadViscosityDiagnostics(
         for (ParticleInteger i = range.range.first; i < range.range.second; ++i) {
             ParticleInteger const destination = offset + i - range.range.first;
             if (divergence) {
-                divergence[destination] = sphParticlesCullenDehnenStates[i].divergence;
+                divergence[destination] = sphParticlesCullenDehnenStates[i].physicalDivergence();
             }
         }
     } else {

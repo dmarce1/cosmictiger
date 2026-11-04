@@ -86,8 +86,9 @@ pair; its impulse is accumulated with equal and opposite signs, including the
 reaction on an inactive neighbor. Event-local velocity and entropy increments are
 returned to their owning MPI ranks and committed after the force pass. Timestep
 selection retains only the scalar hydro rung bound (or the global raw timestep).
-No per-gas acceleration or entropy-rate array survives an event. Chemistry,
-star formation, and mesh gravity coupled to SPH are currently rejected.
+No per-gas acceleration or entropy-rate array survives an event. Enabled cooling
+and star formation run at each gas particle's completed interval endpoint;
+mesh gravity coupled to SPH is currently rejected.
 
 The standalone `sph_cpu_test` target can be built with
 `COSMICTIGER_WITH_CUDA=OFF` and does not call a CUDA device. The installed HPX
@@ -255,11 +256,16 @@ The derivative-of-divergence indicator described after equation (72) in GADGET-4
 belongs to a later switch, not to Morris–Monaghan equation (13).
 
 Only the scalar `bulkViscosityCoefficient` (α) survives sorting, domain migration,
-and checkpoints; no rate or predictor is stored. The density convergence flag
-ensures retries do not advance α twice. Source refreshes and the initial-time
-density solve use a zero viscosity interval, and semiactive neighbors retain α. Silo writes a dimensionless
-`alpha` gas field when viscosity evolution is enabled. Morris–Monaghan retains
-and writes no divergence field; Cullen–Dehnen has additional state described below.
+and checkpoints; no rate or predictor is stored. It occupies two bytes in IEEE
+binary16, while the update arithmetic uses float. The configured MM minimum, or
+the selected gradient model's maximum, must lie in `[2^-24, 65504]`. Constant-alpha
+viscosity has no per-particle alpha array and keeps its float range. The density
+convergence flag ensures retries do not advance α twice. Updates occur only at
+each particle's own midpoint; semiactive neighbors retain α. Source refreshes and
+the initial-time density solve use a zero viscosity interval. Silo writes a
+dimensionless `alpha` gas field when viscosity evolution is enabled.
+Morris–Monaghan retains and writes no divergence field; Cullen–Dehnen has
+additional state described below.
 
 In the cosmological variables below, the normalized density derivative sum is
 \(D_i=a^2\nabla_{\rm physical}\cdot\mathbf v_{\rm physical}\). Thus
@@ -322,21 +328,41 @@ first-order estimate in the stored cosmological units is
  {\tau_n-\tau_{\rm previous}}.
 \]
 
-The denominator is the actual elapsed sample time, including changes of rung and
-semiactive neighbor evaluations. It is not inferred from the current rung.
-Repeated density solves use unchanged committed history. After convergence, every
-measured active or semiactive particle commits its sample and evolves α over that
-same elapsed conformal interval. First samples initialize history without evolving
-α; repeated calls at the same time do not advance it twice. Density-only output
-refreshes commit neither samples nor viscosity. No acceleration history is needed.
+History is committed only at each particle's own midpoint, after density
+convergence; semiactive neighbor measurements retain the previous history and α.
+This cadence makes the elapsed time derivable from the previous sampled rung and
+the current rung. For dyadic intervals with base duration \(T\), the locally
+derived midpoint separation is
+
+\[
+ \Delta\tau=\frac{T}{2}
+ \left(2^{-r_{\rm previous}}+2^{-r_{\rm current}}\right).
+\]
+
+The first midpoint follows the initialization boundary sample by half its current
+interval. Global stepping instead supplies half the sum of the previous and
+current actual global steps, using the shared driver state. No per-particle
+absolute sample time is stored. Repeated density solves read unchanged committed
+history. Initial zero-kick estimates initialize only missing history without
+evolving α, so restarting or repeating an estimate does not overwrite an existing
+sample. Density-only output and post-source timestep estimates commit neither
+samples nor viscosity. No acceleration history is needed.
 
 CD also retains the physical divergence for the immutable neighbor-sign snapshot
 in equation (17), following the sweep order in Appendix A4. CD, Price, and Hu
 write physical velocity divergence as `divv` in Silo, with inverse-time units.
-Their committed sample time and divergence survive sorting, migration and
-checkpoints; target α, decay rate and limiter are reconstructed. Every evolution
-scheme writes dimensionless `alpha`; selecting `none` allocates neither α
-evolution state nor divergence state. Under CD, β follows α as described above.
+The two committed divergences and previous sampled rung survive sorting,
+migration and checkpoints. Each divergence uses a binary16 mantissa and its own
+signed one-byte power-of-two exponent, preserving float's range without forcing
+Price's physical and background-subtracted values to share a scale. The history
+occupies eight bytes per gas particle including alignment, in addition to the
+two-byte α. This reduces precision: small changes between samples can fall below
+the stored mantissa resolution. It is a storage choice, not a property of the
+published switch. Target α, decay rate, limiter and the two pending divergences
+are five float scratch fields, allocated only for a history-updating density
+event and released after its update. Every evolution scheme writes dimensionless
+`alpha`; selecting `none` allocates neither α evolution state nor divergence
+state. Under CD, β follows α as described above.
 
 ## Hu et al. variable viscosity
 
@@ -408,7 +434,7 @@ equation (49) is integrated with the backward Euler step of equation (50),
 is set to \(\alpha_{\rm loc}\) immediately. The paper's \(h_i\) is the smoothing length
 with support \(2h_i\) for the cubic spline, so the code uses the same calibrated
 viscosity length \(h_{M,i}\) as Morris–Monaghan. The velocity gradient and curl retain the CD appendix-B matrix reconstruction.
-The material derivative now uses the same timestamped difference as CD and Hu.
+The material derivative uses the same own-midpoint history difference as CD and Hu.
 For Price it samples θ = ∇·v_physical − 3H, preserving the existing homogeneous
 background subtraction; the limiter and `divv` output still use the physical
 divergence. This replaces the acceleration-gradient estimator in equations
@@ -468,6 +494,15 @@ exchanged before committing particle state, so internal momentum is conserved up
 accumulation and float-storage roundoff. External forces have no reciprocal gas
 endpoint. The velocity-dependent viscosity update need only be first order in time.
 
+Enabled cooling and star formation run once at each gas particle's own completed
+interval endpoint, after the second drift and before the next gravity boundary.
+They update canonical entropy using the endpoint density. Star conversion
+preserves mass, position, velocity and old rung; ordinary gravity handles the
+new collisionless particle. Sources use first-order splitting, and an all-gas
+zero-kick estimate refreshes timestep bounds afterward without another viscosity
+history update. See [star formation](star_formation.md) and
+[equilibrium cooling](primordial_chemistry.md) for the source state contract.
+
 Gas rungs change only at common all-particle synchronization boundaries. One
 enforcement phase iterates immutable candidate-rung snapshots to a fixed point over
 the union of both supports, including inactive neighbors, until every interacting
@@ -478,6 +513,9 @@ rungs from total top-level gravity and the hydro bound, then freezes those rungs
 through its correction ladder. The support radius is held fixed during drift;
 active particles and selected inactive neighbors solve the neighbor constraint
 before hydro. There is no separate radius predictor or divergence timestep bound.
+The one-byte hydro rung proposal retains the latest force-based timestep bound
+until that synchronization point. It is distinct from the live rung that defines
+the already-open interval, and from the previous sampled rung used by viscosity.
 
 The Courant-viscous limit uses
 
@@ -609,10 +647,13 @@ are rejected. The next two bytes encode independent gravity and hydro kernel
 selections. Bit 24 identifies the compact gas layout after removal of stellar,
 chemistry, and obsolete solver fields. Older SPH checkpoints lack this bit and
 are rejected before particle data are loaded. The gas payload has a separate
-version: base 70000 omits all three persistent force-rate arrays and records the
-committed divergence sample and conformal sample time for gradient viscosity,
-before the existing physics and viscosity suffixes. Earlier gas payloads are
-rejected. See the [pair-midpoint design](sph_pair_midpoint_plan.md) and
+version: base 80000 omits all three persistent force-rate arrays and stores
+binary16 alpha plus, for gradient viscosity, two scaled binary16 divergence
+samples and their previous sampled rung. The history is serialized fieldwise
+in seven bytes, excluding its in-memory alignment byte. There is no sample
+timestamp or pending diagnostic payload. The existing physics and viscosity
+suffixes remain; earlier gas payloads are rejected. See the
+[pair-midpoint design](sph_pair_midpoint_plan.md) and
 [SPH octree design](sph_octree_plan.md) for the retained tree and kick schedule.
 Compatible dark-matter checkpoint layouts remain unchanged.
 Historical kernel marker values retain their original meanings; the Ferrers F2
@@ -676,19 +717,22 @@ or evidence of long-time accuracy. No performance claim follows from them.
 
 Common particle storage, source staging, neighbor traversal, CPU/CUDA execution,
 and timestep scheduling stay directly in `cosmictiger/sph/` and `src/sph/`.
-The numerical components live in separate formulation and author directories:
+The pressure formulation uses `variable_smoothing_lengths.hpp` and `volume.hpp`.
+Artificial-viscosity policies live in `cosmictiger/sph/viscosity/`:
 
-- `variational/equations.hpp`: compatible pressure force and thermal work with grad-H corrections; the shared volume and support algebra stays in `volume.hpp`.
-- `monaghan/`: the baseline artificial-viscosity formula.
-- `morris_and_monaghan/`: compression/decay equation with a backward Euler alpha update.
-- `hu_etal/`: Hu strong-limiter diagnostics and alpha update.
-- `cullen_and_dehnen/`: gradient reconstruction, shock detection, alpha updates, and model diagnostics.
-- `price_etal/`: the Phantom shock detector and backward Euler alpha update, reusing the CD gradient reconstruction and state.
-- `balsara/`: the shear limiter, composable with every evolving-alpha model.
+- `monaghan.hpp`: the baseline artificial-viscosity formula.
+- `morris_and_monaghan.hpp`: compression/decay equation with a backward Euler alpha update.
+- `hu_etal.hpp`: Hu strong-limiter diagnostics and alpha update.
+- `cullen_and_dehnen.hpp`: gradient reconstruction, shock detection, alpha updates, and model diagnostics.
+- `price_etal.hpp`: the Phantom shock detector and backward Euler alpha update, reusing the CD gradient reconstruction and state.
+- `balsara.hpp`: the shear limiter, composable with every evolving-alpha model.
 
-A scalar bulk viscosity coefficient array stores alpha for all evolution
-models; the Cullen–Dehnen diagnostic state is shared with Hu and Price et al. Allocation,
-
-reordering, migration, and checkpoint traversal remain in common particle code.
+A two-byte bulk viscosity coefficient array stores alpha for all evolution
+models. Cullen–Dehnen, Hu and Price share an eight-byte committed history and a
+separate twenty-byte temporary diagnostic entry. The temporary array is allocated
+after tree sorting, retained through density retries, and freed before source
+conversion; it is absent from density-only and post-source bound refreshes.
+Only alpha and committed history participate in reordering, migration and
+checkpoints. Their lifecycle remains in common particle code.
 The shared density and hydro passes call these policies without duplicating
 neighbor walks. Standalone policy tests use the same author-directory organization.

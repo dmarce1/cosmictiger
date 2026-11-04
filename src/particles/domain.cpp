@@ -574,11 +574,9 @@ void domainsTransmitParticles(Vector<Particle> parts) {
 // gravity particle. Category indices are local and are rebuilt at the receiver.
 struct GasMigrationState {
     float supportRadius, entropy, density;
-    double divergenceSampleTime = -1.0;
-    float sampledDivergence = 0.0f;
+    SphCullenDehnenState viscosityHistory;
     char converged, semiactive, hydroRung;
-    float bulkViscosityCoefficient;
-    float divergence;    // Previous physical divergence for Cullen-Dehnen and Price et al.
+    Float16Storage bulkViscosityCoefficient;
     float electronFraction{1.0f};
     template <class Archive>
     void serialize(Archive& arc, unsigned) {
@@ -589,12 +587,12 @@ struct GasMigrationState {
         arc & semiactive;
         arc & hydroRung;
         if (getOptions().hydro.viscosityEvolution != "none") {
-            arc & bulkViscosityCoefficient;
+            arc & bulkViscosityCoefficient.bits;
         }
         if (getOptions().hydro.viscosityGradientSwitch()) {
-            arc & divergence;
-            arc & divergenceSampleTime;
-            arc & sampledDivergence;
+            arc & viscosityHistory.divergence.bits & viscosityHistory.sampleDivergence.bits;
+            arc & viscosityHistory.divergenceExponent & viscosityHistory.sampleDivergenceExponent;
+            arc & viscosityHistory.sampleRung;
         }
         if (getOptions().chemistry.enabled) {
             arc & electronFraction;
@@ -643,9 +641,7 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
             gas.bulkViscosityCoefficient = sphParticlesBulkViscosityCoefficients[i];
         }
         if (getOptions().hydro.viscosityGradientSwitch()) {
-            gas.divergence = sphParticlesCullenDehnenStates[i].divergence;
-            gas.divergenceSampleTime = sphParticlesCullenDehnenStates[i].sampleTime;
-            gas.sampledDivergence = sphParticlesCullenDehnenStates[i].sampleDivergence;
+            gas.viscosityHistory = sphParticlesCullenDehnenStates[i];
         }
         if (getOptions().chemistry.enabled) {
             gas.electronFraction = sphParticlesElectronFractions[i];
@@ -673,11 +669,7 @@ static void unpackSphParticle(
             sphParticlesBulkViscosityCoefficients[i] = gas.bulkViscosityCoefficient;
         }
         if (getOptions().hydro.viscosityGradientSwitch()) {
-            auto& state = sphParticlesCullenDehnenStates[i];
-            state = {};
-            state.divergence = gas.divergence;
-            state.sampleTime = gas.divergenceSampleTime;
-            state.sampleDivergence = gas.sampledDivergence;
+            sphParticlesCullenDehnenStates[i] = gas.viscosityHistory;
         }
         if (getOptions().chemistry.enabled) {
             sphParticlesElectronFractions[i] = gas.electronFraction;

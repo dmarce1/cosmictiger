@@ -155,8 +155,10 @@ struct SphRunParameters {
     // A midpoint hydro operator uses the current split-stage sources and owns
     // only nongravitational rates. Gravity supplies its own scalar timestep bound.
     bool midpointHydro = false;
-    // Actual event time and positive interval; zero interval only estimates bounds.
-    double viscositySampleTime = 0.0;
+    // Dyadic integration: base interval used with the current and previous
+    // sample rungs. Global integration: actual elapsed time between midpoints.
+    double viscositySampleInterval = 0.0;
+    // Positive hydro interval; zero only estimates forces/timestep bounds.
     double hydroKickTimestep = 0.0;
     // Phase zero may publish pair rates before the fresh gravity field arrives.
     // Source acceleration is then assembled before the closing corrector.
@@ -249,7 +251,7 @@ struct SphRunParameters {
         arc & maximumTimestep;
         arc & globalTimestep;
         arc & midpointHydro;
-        arc & viscositySampleTime;
+        arc & viscositySampleInterval;
         arc & hydroKickTimestep;
         arc & deferAccelerationSources;
         arc & refreshConvergedDensity;

@@ -623,7 +623,7 @@ ViewSnapshot collectViewParticles(double a) {
                 gas.alpha = sphParticlesBulkViscosityCoefficients[index];
             }
             if (getOptions().hydro.viscosityGradientSwitch()) {
-                gas.divergence = sphParticlesCullenDehnenStates[index].divergence;
+                gas.divergence = sphParticlesCullenDehnenStates[index].physicalDivergence();
             }
 #if COSMICTIGER_ENABLE_CHEMISTRY
             if (getOptions().chemistry.enabled) {

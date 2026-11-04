@@ -155,9 +155,8 @@ void initializePair(double separation) {
     if (getOptions().hydro.viscosityGradientSwitch()) {
         auto& state = sphParticlesCullenDehnenStates[0];
         state = {};
-        state.divergence = -1.5f;
-        state.sampleTime = 0.25;
-        state.sampleDivergence = -1.75f;
+        state.setDivergences(-1.5f, -1.75f);
+        state.sampleRung = 2;
     }
 }
 TreeId findLeaf(TreeId node, ParticleInteger particle) {
@@ -557,10 +556,11 @@ void checkpointPair() {
     requireClose("checkpoint persistent hydro rung", sphParticlesProposedRungs[0], 4);
     if (getOptions().hydro.viscosityGradientSwitch()) {
         auto const& state = sphParticlesCullenDehnenStates[0];
-        requireClose("checkpoint physical divergence", state.divergence, -1.5);
-        requireClose("checkpoint divergence sample time", state.sampleTime, 0.25);
-        requireClose("checkpoint divergence sample", state.sampleDivergence, -1.75);
-        requireClose("checkpoint derived target reset", state.targetBulkViscosityCoefficient, 0.0);
+        requireClose("checkpoint physical divergence", state.physicalDivergence(), -1.5);
+        requireClose("checkpoint divergence sample rung", state.sampleRung, 2);
+        requireClose("checkpoint divergence sample", state.sampledDivergence(), -1.75);
+        requireClose("checkpoint excludes temporary viscosity diagnostics",
+            sphParticlesViscosityDiagnostics == nullptr, true);
     }
 }
 }    // namespace detail
@@ -580,10 +580,9 @@ void initializeSphDomainRegression() {
     }
     if (getOptions().hydro.viscosityGradientSwitch()) {
         auto& state = sphParticlesCullenDehnenStates[0];
-        state = {-1.5f + target / 8.0f, 77.0f, 88.0f, 99.0f};
-        state.sampleTime = 0.125 + target / 32.0;
-        state.sampleDivergence = -2.0f + target / 16.0f;
-        state.pendingSampleDivergence = 66.0f;
+        state = {};
+        state.setDivergences(-1.5f + target / 8.0f, -2.0f + target / 16.0f);
+        state.sampleRung = int8_t(1 + target % 11);
     }
     if (getOptions().chemistry.enabled) {
         sphParticlesElectronFractions[0] = migrationElectronFraction(target);
@@ -639,14 +638,13 @@ void validateSphDomainRegression() {
     }
     if (getOptions().hydro.viscosityGradientSwitch()) {
         auto const& state = sphParticlesCullenDehnenStates[0];
+        requireClose("migration preserves physical divergence", state.physicalDivergence(),
+            -1.5 + target / 8.0);
+        requireClose("migration divergence sample rung", state.sampleRung, 1 + target % 11);
         requireClose(
-            "migration preserves physical divergence", state.divergence, -1.5 + target / 8.0);
-        requireClose("migration divergence sample time", state.sampleTime, 0.125 + target / 32.0);
-        requireClose("migration divergence sample", state.sampleDivergence, -2.0 + target / 16.0);
-        requireClose("migration resets pending sample", state.pendingSampleDivergence, 0.0);
-        requireClose("migration resets pending divergence", state.pendingDivergence, 0.0);
-        requireClose("migration resets target alpha", state.targetBulkViscosityCoefficient, 0.0);
-        requireClose("migration resets decay time", state.inverseDecayTime, 0.0);
+            "migration divergence sample", state.sampledDivergence(), -2.0 + target / 16.0);
+        requireClose("migration excludes temporary viscosity diagnostics",
+            sphParticlesViscosityDiagnostics == nullptr, true);
     }
     if (getOptions().chemistry.enabled) {
         auto const expected = migrationElectronFraction(target);

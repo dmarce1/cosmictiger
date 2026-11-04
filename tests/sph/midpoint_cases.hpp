@@ -138,15 +138,17 @@ void testMidpointMorrisInterval(Fixture& fixture) {
     double const inverseDecayTime =
         parameters.viscosityDecay * soundSpeed / (parameters.scaleFactor * smoothingLength);
     double const expected = parameters.minimumBulkViscosityCoefficient +
-        (0.7 - parameters.minimumBulkViscosityCoefficient) /
+        (double(float(Float16Storage(0.7f))) - parameters.minimumBulkViscosityCoefficient) /
             (1.0 + parameters.viscosityTimestep * inverseDecayTime);
-    midpointRequire(std::abs(data.sinkBulkViscosityCoefficient[active] - expected) < 2.0e-6,
+    midpointRequire(std::abs(data.sinkBulkViscosityCoefficient[active] -
+                        float(Float16Storage(float(expected)))) < 2.0e-6,
         "midpoint Morris-Monaghan interval was scaled by its rung twice");
     for (int index = 0; index < 3; ++index) {
         int const sink = fixture.sinkIndex(index);
         midpointRequire(data.sinkSemiactive[sink], "midpoint fixture lost a touching neighbor");
         if (index != 1) {
-            midpointRequire(data.sinkBulkViscosityCoefficient[sink] == 0.7f,
+            midpointRequire(
+                float(data.sinkBulkViscosityCoefficient[sink]) == float(Float16Storage(0.7f)),
                 "midpoint advanced the viscosity coefficient on another rung");
         }
         midpointRequire(data.sourceBulkViscosityCoefficient[fixture.sourceIndex(index)] == 0.7f,

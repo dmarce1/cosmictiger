@@ -104,7 +104,6 @@ double driftTime = 0.0;
 double flopsPerNode = 1e6;
 double flopsPerParticle = 1e5;
 bool usedGpu;
-static double synchronizedChemistryPressure = 0.0;
 
 struct Timing {
     double numberOfParticles;
@@ -314,6 +313,9 @@ static bool sphCommonBoundary(int minimumRung) {
 
 static int sphBalanceBoundaryRungs(double scale) {
     profile::ScopedPhase phase("hydro.rungs.balance");
+    if (sphMidpointTargetCount(-1) == 0) {
+        return 0;
+    }
     // Refresh all supports, including inactive neighbors. Creating this octree
     // reorders only gas records; base-particle-indexed gravity scratch is stable.
     auto const tree = sphStep1(0);
@@ -325,17 +327,46 @@ static int sphBalanceBoundaryRungs(double scale) {
     return maximumRung;
 }
 
+namespace detail {
+
+class SphViscosityDiagnosticsScope {
+    bool enabled_;
+
+public:
+    explicit SphViscosityDiagnosticsScope(bool enabled)
+      : enabled_(enabled) {
+        if (enabled_) {
+            sphParticlesBeginViscosityDiagnostics();
+        }
+    }
+    ~SphViscosityDiagnosticsScope() {
+        if (enabled_) {
+            sphParticlesEndViscosityDiagnostics();
+        }
+    }
+    SphViscosityDiagnosticsScope(SphViscosityDiagnosticsScope const&) = delete;
+    SphViscosityDiagnosticsScope& operator=(SphViscosityDiagnosticsScope const&) = delete;
+};
+
+}    // namespace detail
+
 static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, double scale, double tau,
-    double t0, double adot, double hydroTimestep, double maximumGlobalTimestep) {
+    double t0, double adot, double hydroTimestep, double maximumGlobalTimestep,
+    bool updateViscosityHistory = true, double previousGlobalTimestep = 0.0) {
     bool constexpr verbose = true;
     profile::ScopedPhase profilePhase("hydro.sph");
     bool const globalTimestep = maximumGlobalTimestep > 0.0;
     if (verbose) {
-        terminal::detailPrint("Doing SPH step with minrung = %i\n", minrung);
+        terminal::detailPrint("Doing SPH step with minrung = %i time=%.17g\n", minrung, tau);
     }
     SphRunParameters runParameters;
     runParameters.midpointHydro = true;
-    runParameters.viscositySampleTime = tau;
+    // Successive global midpoint samples are separated by half of the old
+    // interval plus half of the new one. The old interval is zero at startup.
+    // Dyadic samples derive this same interval from each particle's rung pair.
+    runParameters.viscositySampleInterval = globalTimestep ?
+        (hydroTimestep > 0.0 ? 0.5 * (previousGlobalTimestep + hydroTimestep) : 0.0) :
+        t0;
     runParameters.hydroKickTimestep = std::max(0.0, hydroTimestep);
     runParameters.maximumRung = maximumHydroRung;
 #if COSMICTIGER_WITH_GRAVITY
@@ -369,6 +400,10 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
     runParameters.baseTimestep = t0;
     runParameters.viscosityTimestep = std::max(0.0, hydroTimestep);
     runParameters.minimumRung = minrung;
+    // sphStep1 has already completed any gas sorting. These results survive
+    // density retries, then disappear before a source conversion can compact gas.
+    detail::SphViscosityDiagnosticsScope viscosityDiagnostics(
+        runParameters.gradientSwitch() && updateViscosityHistory && hydroTimestep >= 0.0);
     bool needsNeighborRefresh;
     SphRunReturn result;
 
@@ -522,7 +557,7 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
     // Any later density preparation refreshes sources at this same event time.
     runParameters.viscosityTimestep = 0.0;
     Timer timer;
-    if (runParameters.gradientSwitch()) {
+    if (runParameters.gradientSwitch() && updateViscosityHistory) {
         // Cullen & Dehnen (2010), equation (A15), or Price et al. (2018), equation (50),
         // after density convergence.
         {
@@ -538,6 +573,9 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
     timer.reset();
     timer.start();
     result = runForces();
+    if (globalTimestep) {
+        result.minimumTimestep = std::min(result.minimumTimestep, maximumGlobalTimestep);
+    }
     timer.stop();
     if (verbose) {
         terminal::detailPrint(
@@ -552,9 +590,9 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
 }
 
 SphRunReturn sphMidpointStep(int rung, double time, double timestep, double baseTimestep,
-    double scale, double scaleDerivative, EnergiesT& energies, bool global,
-    double maximumTimestep) {
-    if (rung >= 0 && sphMidpointTargetCount(rung) == 0) {
+    double scale, double scaleDerivative, EnergiesT& energies, bool global, double maximumTimestep,
+    double previousGlobalTimestep) {
+    if (sphMidpointTargetCount(rung) == 0) {
         // Gas on coarser rungs still contributes to the expansion-work ledger.
         sphParticlesPrepareThermodynamics(scale, false);
         return {};
@@ -571,7 +609,66 @@ SphRunReturn sphMidpointStep(int rung, double time, double timestep, double base
     try {
         sphStep1(minimumRung);
         auto const result = sphMidpointEvaluate(minimumRung, maximumRung, scale, time, baseTimestep,
-            scaleDerivative, timestep, global ? maximumTimestep : 0.0);
+            scaleDerivative, timestep, global ? maximumTimestep : 0.0, true,
+            previousGlobalTimestep);
+        sphMidpointEndEvent();
+        return result;
+    } catch (...) {
+        sphMidpointEndEvent();
+        throw;
+    }
+}
+
+SphRunReturn sphCompleteSources(int minimumClosingRung, double time, double baseTimestep,
+    double scale, double scaleDerivative, EnergiesT& energies, double explicitTimestep,
+    double maximumGlobalTimestep) {
+    auto const& options = getOptions();
+    if (!options.starFormation.enabled && !options.chemistry.enabled) {
+        return {};
+    }
+    ALWAYS_ASSERT(minimumClosingRung >= 0 && minimumClosingRung < kMaxRung);
+    ALWAYS_ASSERT(explicitTimestep != 0.0);
+    if (sphMidpointTargetCount(-1) == 0) {
+        sphParticlesPrepareThermodynamics(scale, false);
+        energies.therm = 0.0;
+        return {};
+    }
+    profile::ScopedPhase phase("hydro.sources.close");
+    sphMidpointBeginEvent();
+    try {
+        // Every pair involving a closing particle has finished its old interval:
+        // the pair cadence is the finer endpoint's cadence. Refresh endpoint
+        // density before consuming that particle's old rung and full duration.
+        sphStep1(minimumClosingRung);
+        sphMidpointEvaluate(minimumClosingRung, kMaxRung - 1, scale, time, baseTimestep,
+            scaleDerivative, -1.0, maximumGlobalTimestep, false);
+        // Kernel parameters carry a float scale, while the source transaction
+        // and checkpoint clock use the exact double endpoint scale.
+        sphParticlesPrepareThermodynamics(scale, false);
+        if (options.starFormation.enabled) {
+#if COSMICTIGER_ENABLE_STAR_FORMATION
+            auto const update = starFormationClose(
+                minimumClosingRung, scale, scaleDerivative, baseTimestep, explicitTimestep);
+            energies.heating += update.heating;
+#endif
+        } else if (options.chemistry.enabled) {
+#if COSMICTIGER_ENABLE_CHEMISTRY
+            energies.heating += sphChemistryClose(
+                minimumClosingRung, scale, scaleDerivative, baseTimestep, explicitTimestep);
+#endif
+        }
+        SphRunReturn result;
+        if (sphMidpointTargetCount(-1) != 0) {
+            // Heating and conversion change neighboring signal speeds too. An
+            // all-gas, zero-kick estimate refreshes proposals and the global cap
+            // without advancing viscosity history or changing live gas rungs.
+            // Rung changes still wait for the next common gravity boundary.
+            sphStep1(0);
+            result = sphMidpointEvaluate(0, kMaxRung - 1, scale, time, baseTimestep,
+                scaleDerivative, 0.0, maximumGlobalTimestep, false);
+        }
+        sphParticlesPrepareThermodynamics(scale, false);
+        energies.therm = particlesSumEnergies().therm / sqr(scale);
         sphMidpointEndEvent();
         return result;
     } catch (...) {
@@ -2038,6 +2135,12 @@ void driver() {
             if (!(dt > 0.0) || !std::isfinite(dt) || tau + dt == tau) {
                 THROW_ERROR("Selected timestep cannot advance the evolution clock\n");
             }
+            TimeType const nextIntegerTime = global ? 0 : inc(itime, maxRung);
+            double const integerPhase =
+                nextIntegerTime == 0 ? 1.0 : std::ldexp(double(nextIntegerTime), -64);
+            double const nextTau = global ? tau + dt :
+                                            (particleMesh ? params.outerStart + t0 * integerPhase :
+                                                            t0 * (double(step) + integerPhase));
 
             double a0 = a;
             double physicalInterval = a * dt;
@@ -2068,14 +2171,10 @@ void driver() {
             // For monatomic gamma=5/3 this reduces to the historical -(K+U).
             // Peebles, Large-Scale Structure of the Universe (1980), energy
             // equation; the gas term follows directly from dU=-P dV.
-            double driftThermal = energies.therm;
-            bool const sourcePressure =
-                getOptions().chemistry.enabled || getOptions().starFormation.enabled;
+            double const driftThermal = energies.therm;
             double const workEndScale = midpointHydro ? midpointScale : a;
             energies.cosmic += cosmology::kineticExpansionWork(a0, workEndScale, energies.tckin) +
-                (workEndScale - a0) *
-                    (sourcePressure ? -driftThermal + 3.0 * synchronizedChemistryPressure :
-                                      (3.0 * getOptions().hydro.gamma - 4.0) * driftThermal);
+                (workEndScale - a0) * (3.0 * getOptions().hydro.gamma - 4.0) * driftThermal;
             double const dyears =
                 physicalInterval * getOptions().units.timeSeconds / constants::kSpyr;
             auto const z0 = 1.0 / a0 - 1.0;
@@ -2111,7 +2210,7 @@ void driver() {
                 }
                 auto const hydro = sphMidpointStep(global ? -1 : maxRung, midpointTime, dt, t0,
                     midpointScale, midpointScale * midpointScaleDerivative, energies, global,
-                    global ? t0 : 0.0);
+                    global ? t0 : 0.0, params.globalTimestep);
                 if (global) {
                     params.globalHydroTimestep = hydro.minimumTimestep;
                 }
@@ -2125,6 +2224,18 @@ void driver() {
                     cosmology::kineticExpansionWork(midpointScale, a, afterHydro.kin) +
                     (a - midpointScale) * (3.0 * getOptions().hydro.gamma - 4.0) *
                         afterHydro.therm / sqr(midpointScale);
+                if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
+                    // Complete each old gas interval before the next gravity
+                    // boundary changes its rung. Checkpoints therefore contain
+                    // completed sources and restart never replays this event.
+                    // Source heat is separate from the adiabatic work above.
+                    int const minimumClosingRung = global ? 0 : int(minRung(nextIntegerTime));
+                    auto const source = sphCompleteSources(minimumClosingRung, nextTau, t0, a,
+                        a * adot, energies, global ? dt : -1.0, global ? t0 : 0.0);
+                    if (global) {
+                        params.globalHydroTimestep = source.minimumTimestep;
+                    }
+                }
             } else
 #endif
                 if (!getOptions().run.hierarchicalGravity) {
@@ -2165,12 +2276,6 @@ void driver() {
                     "Tflops", "time", "GPU close", "GPU direct", "Tflops32", "Tflops64");
             }
             stepTm.stop();
-            TimeType const nextIntegerTime = global ? 0 : inc(itime, maxRung);
-            double const integerPhase =
-                nextIntegerTime == 0 ? 1.0 : std::ldexp(double(nextIntegerTime), -64);
-            double const nextTau = global ? tau + dt :
-                                            (particleMesh ? params.outerStart + t0 * integerPhase :
-                                                            t0 * (double(step) + integerPhase));
             double const nextYears = years + dyears;
             double const outputRedshift = 1.0 / a - 1.0;
             int const displayedMinimumRung = minrung;

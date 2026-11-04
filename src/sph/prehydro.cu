@@ -548,30 +548,36 @@ __global__ void sphCudaPrehydro2(
                         parameters.viscosityTimestep / (1 << rung);
                     auto& bulkViscosityCoefficient = data.sinkBulkViscosityCoefficient[sinkIndex];
                     bulkViscosityCoefficient = morris_and_monaghan::evolvedBulkViscosityCoefficient(
-                        bulkViscosityCoefficient, parameters.minimumBulkViscosityCoefficient,
+                        float(bulkViscosityCoefficient), parameters.minimumBulkViscosityCoefficient,
                         inverseDecayTime, velocityDivergence, timeStep);
 
                     flops += 19;
                     flops.doublePrecision += actualInterval ? 1 : 2;
                 }
                 if (parameters.gradientSwitch()) {
-                    auto& state = data.sinkCullenDehnenStates[sinkIndex];
+                    auto const& state = data.sinkCullenDehnenStates[sinkIndex];
+                    int const currentRung =
+                        data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]];
+                    double const sampleInterval = sphViscositySampleInterval(state, currentRung,
+                        parameters.viscositySampleInterval, parameters.globalTimestep);
+                    if (!parameters.globalTimestep && sampleInterval > 0.0) {
+                        flops.doublePrecision += 2;
+                    }
                     cullen_and_dehnen::Result<float> diagnostics;
                     if (parameters.cullenDehnen) {
                         diagnostics = cullen_and_dehnen::diagnosticsFromHistory(gradientSums,
-                            parameters.scaleFactor, state, parameters.viscositySampleTime,
+                            parameters.scaleFactor, state, sampleInterval,
                             densityWeightedSignAverage / density, sinkKernelSupportRadius,
                             fmaxf(soundSpeedForSwitch, signalSpeed),
                             parameters.maximumBulkViscosityCoefficient, parameters.viscosityDecayCD,
                             flops);
                         flops += 1;
                     } else if (parameters.huEtAl) {
-                        diagnostics =
-                            hu_etal::diagnosticsFromHistory(gradientSums, parameters.scaleFactor,
-                                state, parameters.viscositySampleTime, sinkKernelSupportRadius,
-                                soundSpeedForSwitch, fmaxf(soundSpeedForSwitch, signalSpeed),
-                                parameters.maximumBulkViscosityCoefficientHu,
-                                parameters.viscosityDecayHu, flops);
+                        diagnostics = hu_etal::diagnosticsFromHistory(gradientSums,
+                            parameters.scaleFactor, state, sampleInterval, sinkKernelSupportRadius,
+                            soundSpeedForSwitch, fmaxf(soundSpeedForSwitch, signalSpeed),
+                            parameters.maximumBulkViscosityCoefficientHu,
+                            parameters.viscosityDecayHu, flops);
                     } else {
                         /*
                          * Price et al. (2018), equations (46)-(48): the paper's smoothing
@@ -582,18 +588,21 @@ __global__ void sphCudaPrehydro2(
                             float(monaghan::kViscosityWidthScale);
                         flops.doublePrecision += 1;
                         diagnostics = price_etal::diagnosticsFromHistory(gradientSums,
-                            parameters.scaleFactor, parameters.expansionRate, state,
-                            parameters.viscositySampleTime, smoothingLength, soundSpeedForSwitch,
+                            parameters.scaleFactor, parameters.expansionRate, state, sampleInterval,
+                            smoothingLength, soundSpeedForSwitch,
                             parameters.maximumBulkViscosityCoefficientPrice,
                             parameters.viscosityDecayPrice, flops);
                         flops += 2;
                     }
-                    state.pendingDivergence = diagnostics.divergence;
-                    state.pendingSampleDivergence = diagnostics.sampleDivergence;
-                    state.targetBulkViscosityCoefficient =
-                        diagnostics.targetBulkViscosityCoefficient;
-                    state.inverseDecayTime = diagnostics.inverseDecayTime;
-                    state.limiter = diagnostics.limiter;
+                    if (data.sinkViscosityDiagnostics != nullptr) {
+                        auto& pending = data.sinkViscosityDiagnostics[sinkIndex];
+                        pending.pendingDivergence = diagnostics.divergence;
+                        pending.pendingSampleDivergence = diagnostics.sampleDivergence;
+                        pending.targetBulkViscosityCoefficient =
+                            diagnostics.targetBulkViscosityCoefficient;
+                        pending.inverseDecayTime = diagnostics.inverseDecayTime;
+                        pending.limiter = diagnostics.limiter;
+                    }
                 }
                 data.sinkSmoothingConverged[sinkIndex] = true;
                 atomicMin(&reduction->minimumSupportRadius, supportRadius);

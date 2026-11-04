@@ -6,8 +6,10 @@
 #include <cstdio>
 #include <format>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <cosmictiger/chemistry/sph.hpp>
@@ -21,13 +23,15 @@ constexpr double kChemistryTestScale = 0.02;
 struct ChemistryRecord {
     uint32_t electronFractionBits;
     uint32_t energyBits;
+    uint32_t entropyBits;
+    uint32_t densityBits;
     uint64_t rung;
 
     bool operator==(ChemistryRecord const&) const = default;
 
     template <typename Archive>
     void serialize(Archive& archive, unsigned) {
-        archive & electronFractionBits & energyBits & rung;
+        archive & electronFractionBits & energyBits & entropyBits & densityBits & rung;
     }
 };
 using ChemistryLocalSnapshot = std::vector<ChemistryRecord>;
@@ -45,6 +49,8 @@ void requireChemistry(bool condition, char const* message) {
 void initializeChemistryFixture(bool invalid) {
     particlesResize(3);
     sphParticlesResize(3, false);
+    sphParticlesEntropyInitialized = false;
+    sphParticlesThermalScaleFactor = kChemistryTestScale;
     auto const& options = getOptions();
     auto const scales = units::scalesFromOptions(options);
     units::CosmologicalContext const context(kChemistryTestScale, options.cosmology.hubble);
@@ -72,14 +78,18 @@ void initializeChemistryFixture(bool invalid) {
     }
     if (invalid && hpxRank() == hpxSize() - 1) {
         // Last sink on the last rank fails after other ranks can prepare.
-        sphParticlesSetInternalEnergy(2, -1.0f);
+        sphParticlesElectronFractions[2] = std::numeric_limits<float>::quiet_NaN();
     }
 }
 ChemistryLocalSnapshot chemistryFixtureSnapshot() {
+    requireChemistry(sphParticlesViscosityDiagnostics == nullptr,
+        "temporary viscosity diagnostics survived the cooling source");
     ChemistryLocalSnapshot records;
     for (ParticleInteger i = 0; i < 3; ++i) {
         records.push_back({std::bit_cast<uint32_t>(sphParticlesElectronFractions[i]),
-            std::bit_cast<uint32_t>(sphParticlesInternalEnergy(i)), uint64_t(sphParticlesRung(i))});
+            std::bit_cast<uint32_t>(sphParticlesInternalEnergy(i)),
+            std::bit_cast<uint32_t>(sphParticlesEntropy(i)),
+            std::bit_cast<uint32_t>(sphParticlesDensity(i)), uint64_t(sphParticlesRung(i))});
     }
     return records;
 }
@@ -95,11 +105,49 @@ void roundtripChemistryFixture() {
     sphParticlesLoad(file);
     std::fclose(file);
 }
+void commitChemistryAgain() {
+    sphCoolingCommitLocal();
+}
+void rejectDuplicateCoolingTargets() {
+    auto const before = chemistryFixtureSnapshot();
+    bool rejected = false;
+    try {
+        double const interval = chemistryTestTimestep() / 8.0;
+        sphCoolingPrepareLocal({1, 1}, {interval, interval}, kChemistryTestScale);
+    } catch (std::invalid_argument const&) {
+        rejected = true;
+    }
+    requireChemistry(rejected, "duplicate gas slots did not reject the source batch");
+    sphCoolingCommitLocal();
+    requireChemistry(before == chemistryFixtureSnapshot(), "duplicate source changed gas state");
+}
+void checkThermalProjection() {
+    double const gamma = getOptions().hydro.gamma;
+    auto const prepared = sph_entropy::prepareStoredEnergy(3.0f, 7.0f, gamma, kChemistryTestScale);
+    double const expectedEntropy = (gamma - 1.0) * 3.0 * std::pow(7.0, 1.0 - gamma);
+    requireChemistry(std::abs(double(prepared.entropy) - expectedEntropy) <
+            2.0 * std::numeric_limits<float>::epsilon() * expectedEntropy,
+        "source projection does not produce canonical entropy");
+    for (auto const& input :
+        std::vector<std::pair<float, float>>{{std::numeric_limits<float>::quiet_NaN(), 1.0f},
+            {std::numeric_limits<float>::max(), std::numeric_limits<float>::min()},
+            {std::numeric_limits<float>::min(), std::numeric_limits<float>::max()}}) {
+        bool rejected = false;
+        try {
+            sph_entropy::prepareStoredEnergy(input.first, input.second, gamma, kChemistryTestScale);
+        } catch (std::exception const&) {
+            rejected = true;
+        }
+        requireChemistry(rejected, "invalid or unrepresentable source entropy was accepted");
+    }
+}
 }    // namespace detail
 
 HPX_PLAIN_ACTION(detail::initializeChemistryFixture, InitializeChemistryFixtureAction);
 HPX_PLAIN_ACTION(detail::chemistryFixtureSnapshot, ChemistryFixtureSnapshotAction);
 HPX_PLAIN_ACTION(detail::roundtripChemistryFixture, RoundtripChemistryFixtureAction);
+HPX_PLAIN_ACTION(detail::commitChemistryAgain, CommitChemistryAgainAction);
+HPX_PLAIN_ACTION(detail::rejectDuplicateCoolingTargets, RejectDuplicateCoolingTargetsAction);
 
 namespace detail {
 template <typename Action, typename... Arguments>
@@ -136,11 +184,23 @@ void requireCompletedSource(ChemistrySnapshot const& before, ChemistrySnapshot c
             auto const& newRecord = after[rank][particle];
             requireChemistry(oldRecord.energyBits != newRecord.energyBits,
                 "completed cooling did not change energy");
+            requireChemistry(oldRecord.entropyBits != newRecord.entropyBits,
+                "completed cooling did not change entropy");
+            requireChemistry(oldRecord.densityBits == newRecord.densityBits,
+                "cooling changed the endpoint density");
             requireChemistry(oldRecord.rung == newRecord.rung, "cooling reselected a hydro rung");
             float const oldEnergy = std::bit_cast<float>(oldRecord.energyBits);
             float const newEnergy = std::bit_cast<float>(newRecord.energyBits);
-            expectedHeating -=
-                getOptions().initial.gasMass * double(newEnergy - oldEnergy) / kChemistryTestScale;
+            double const density = std::bit_cast<float>(newRecord.densityBits);
+            double const entropy = std::bit_cast<float>(newRecord.entropyBits);
+            double const gamma = getOptions().hydro.gamma;
+            double const expectedEntropy =
+                (gamma - 1.0) * double(newEnergy) * std::pow(density, 1.0 - gamma);
+            requireChemistry(std::abs(entropy - expectedEntropy) <=
+                    4.0 * std::numeric_limits<float>::epsilon() * expectedEntropy,
+                "committed source energy and entropy are inconsistent");
+            expectedHeating -= getOptions().initial.gasMass * (double(newEnergy) - oldEnergy) /
+                kChemistryTestScale;
         }
     }
     requireChemistry(
@@ -155,11 +215,16 @@ void sphChemistryTimestepsTest() {
     requireChemistry(options.hydro.enabled && options.chemistry.enabled && !options.chemistry.cuda,
         "fixture requires CPU SPH cooling");
     double const baseTimestep = chemistryTestTimestep();
+    checkThermalProjection();
     onChemistryLocalities<InitializeChemistryFixtureAction>(false);
+    sphParticlesPrepareThermodynamics(kChemistryTestScale, true);
     auto const initial = chemistrySnapshot();
     double const heating = sphChemistryClose(3, kChemistryTestScale, 0.0, baseTimestep);
     auto const mixed = chemistrySnapshot();
     requireCompletedSource(initial, mixed, heating, 1);
+    onChemistryLocalities<CommitChemistryAgainAction>();
+    requireChemistry(mixed == chemistrySnapshot(), "consumed cooling results were applied twice");
+    onChemistryLocalities<RejectDuplicateCoolingTargetsAction>();
     for (auto const& rank : mixed) {
         requireChemistry(rank[1].energyBits != rank[2].energyBits,
             "different completed intervals produced identical cooling");
@@ -169,6 +234,7 @@ void sphChemistryTimestepsTest() {
         mixed == chemistrySnapshot(), "checkpoint lost the saved electron guess or energy");
 
     onChemistryLocalities<InitializeChemistryFixtureAction>(false);
+    sphParticlesPrepareThermodynamics(kChemistryTestScale, true);
     auto const globalInitial = chemistrySnapshot();
     double const explicitTimestep = baseTimestep / 37.0;
     double const globalHeating =
@@ -182,6 +248,7 @@ void sphChemistryTimestepsTest() {
         }
     }
     onChemistryLocalities<InitializeChemistryFixtureAction>(true);
+    sphParticlesPrepareThermodynamics(kChemistryTestScale, true);
     auto const invalid = chemistrySnapshot();
     bool rejected = false;
     try {
@@ -192,14 +259,19 @@ void sphChemistryTimestepsTest() {
     requireChemistry(rejected, "invalid source state did not reject the batch");
     requireChemistry(
         invalid == chemistrySnapshot(), "failed distributed source partially committed");
+    onChemistryLocalities<CommitChemistryAgainAction>();
+    requireChemistry(
+        invalid == chemistrySnapshot(), "failed distributed source left committable results");
     onChemistryLocalities<InitializeChemistryFixtureAction>(false);
+    sphParticlesPrepareThermodynamics(kChemistryTestScale, true);
     sphChemistryClose(3, kChemistryTestScale, 0.0, baseTimestep);
     requireChemistry(
         mixed == chemistrySnapshot(), "failed source left stale results in a subsequent batch");
     std::cout
         << std::format(
                "SPH chemistry timesteps passed: completed mixed/global intervals, inactive state, "
-               "checkpoint, energy ledger and failed-batch atomicity ({:d} localities)\n",
+               "canonical entropy, checkpoint, energy ledger, consumed commits and failed-batch "
+               "atomicity ({:d} localities)\n",
                hpxSize())
         << std::flush;
 }

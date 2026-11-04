@@ -377,6 +377,27 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
 
 namespace detail {
 
+// Keep event storage and captured stack variables alive through every launched
+// operation, including when launching later work or retrieving a result throws.
+// Reserve the future vector before submitting work so insertion cannot orphan
+// an already launched operation through an allocation failure.
+template <class Future>
+class SphRunFutureDrain {
+    Vector<Future>& futures_;
+
+public:
+    explicit SphRunFutureDrain(Vector<Future>& futures)
+      : futures_(futures) {}
+
+    ~SphRunFutureDrain() {
+        for (auto& future : futures_) {
+            if (future.valid()) {
+                future.wait();
+            }
+        }
+    }
+};
+
 // Collect this locality's target leaves for the pass into a fresh workspace.
 static std::shared_ptr<SphRunWorkspace> collectSphRunWork(SphRunParameters const& params) {
     auto workspacePtr = std::make_shared<SphRunWorkspace>(params);
@@ -387,6 +408,8 @@ static std::shared_ptr<SphRunWorkspace> collectSphRunWork(SphRunParameters const
     static std::atomic<int> next;
     next = 0;
     Vector<hpx::future<void>> futures;
+    futures.reserve(numberOfThreads);
+    SphRunFutureDrain drain(futures);
     for (int proc = 0; proc < numberOfThreads; proc++) {
         futures.push_back(hpx::async(hpx::annotated_function(
             [params, workspacePtr]() {
@@ -540,6 +563,8 @@ HPX_PLAIN_ACTION(sphRunCompute, SphRunComputeAction);
 void sphRunStage(SphRunParameters params, bool cuda) {
     params = detail::prepareSphRunParameters(params, cuda);
     Vector<hpx::future<void>> children;
+    children.reserve(hpxChildren().size());
+    detail::SphRunFutureDrain drain(children);
     for (auto& c : hpxChildren()) {
         children.push_back(hpx::async<SphRunStageAction>(c, params, cuda));
     }
@@ -558,6 +583,8 @@ SphRunReturn sphRunCompute(bool cuda) {
         cuda = false;
     }
     Vector<hpx::future<SphRunReturn>> children;
+    children.reserve(hpxChildren().size());
+    detail::SphRunFutureDrain drain(children);
     for (auto& c : hpxChildren()) {
         children.push_back(hpx::async<SphRunComputeAction>(c, cuda));
     }
@@ -591,6 +618,8 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     }
     params = detail::prepareSphRunParameters(params, cuda);
     Vector<hpx::future<SphRunReturn>> futs;
+    futs.reserve(hpxChildren().size());
+    detail::SphRunFutureDrain drain(futs);
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<SphRunAction>(c, params, cuda));
     }
@@ -703,6 +732,8 @@ void SphRunWorkspace::stage() {
     int const numberOfThreads = 8 * hpxHardwareConcurrency();
     std::atomic<int> index(0);
     std::atomic<ParticleInteger> particleIndex(0);
+    futs.reserve(numberOfThreads);
+    detail::SphRunFutureDrain drain(futs);
     for (int i = 0; i < hostTargetNodeIndices.size(); i++) {
         hostTrees[hostTargetNodeIndices[i]].neighborRange = neighborRanges[i];
     }
@@ -794,6 +825,7 @@ SphRunData SphRunWorkspace::data() {
     runData.sinkBalsaraFactor = sphParticlesBalsaraFactors;
     runData.sinkBulkViscosityCoefficient = sphParticlesBulkViscosityCoefficients;
     runData.sinkCullenDehnenStates = sphParticlesCullenDehnenStates;
+    runData.sinkViscosityDiagnostics = sphParticlesViscosityDiagnostics;
     runData.sinkSupportRadius = sphParticlesSupportRadii;
     runData.sinkEntropyRate = nullptr;
 #if COSMICTIGER_WITH_GRAVITY

@@ -133,24 +133,3 @@ TEST(StarFormationCuda, RejectsInvalidSourceBeforeCommit) {
         EXPECT_EQ(outputs[index].status, original[index].status);
     }
 }
-
-TEST(StarFormationCuda, NewStarRungAndOpeningKick) {
-    int deviceCount = 0;
-    auto const deviceResult = deviceStatus(deviceCount);
-    if (deviceResult == cudaErrorNoDevice || (deviceResult == cudaSuccess && deviceCount == 0)) {
-        GTEST_SKIP() << "CUDA device unavailable";
-    }
-    ASSERT_EQ(deviceResult, cudaSuccess) << cudaGetErrorString(deviceResult);
-    auto p = parameters();
-    p.effectiveRadius = 0.125f;
-    p.timestepBase = 1.0f;
-    p.timestepCap = 0.125f;
-    p.timestepFactor = 0.2f;
-    p.baseTimestep = 1.0;
-    p.minimumRung = 2;
-    p.rungLimit = 32;
-    auto star = input(p, 1.0, 1);
-    star.gravity[0] = 1.0f;
-    star.gravity[1] = -2.0f;
-    parity(sf::Operation::openNewStar, {star}, p);
-}

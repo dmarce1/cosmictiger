@@ -193,7 +193,7 @@ def checkViscosityRestarts(executable, baseWorkdir):
     common = [str(executable), f"--configuration={configuration}", "--hpx:threads=2",
               "--hpx:bind=none", "--initial.particlesPerDimension=8",
               *[f"--{key}={value}" for key, value in cpu_backend_options().items()],
-              "--run.endTime=0.00001", "--checkpoint.intervalSeconds=0",
+              "--run.endTime=0.00001", "--run.verbose=true", "--checkpoint.intervalSeconds=0",
               "--output.directory=.", "--output.silo=false", "--analysis.views=false",
               "--analysis.power=false", "--analysis.groups=false", "--lightcone.enabled=false"]
     for model in ("none", "morrisAndMonaghan", "cullenAndDehnen", "priceEtAl", "hu_etal"):
@@ -210,17 +210,19 @@ def checkViscosityRestarts(executable, baseWorkdir):
             final_state = decode_checkpoint(
                 (reference / "checkpoint.2" / "checkpoint.0.dat").read_bytes())
             if model in ("cullenAndDehnen", "priceEtAl", "hu_etal"):
-                # The checkpoint carries the last committed divergence sample, not
-                # output-only density diagnostics or a force-stage rate. All wave
-                # particles have been sampled by the first completed interval.
+                # The checkpoint carries only the last committed own-midpoint
+                # divergence sample and its rung. The uniform wave has completed
+                # a midpoint for every gas particle in each saved interval.
                 for state in (first_state, final_state):
                     if len(state.divergence_histories) != state.gas_count or any(
-                            not 0 <= sample_time <= state.driver.tau
-                            for _, sample_time, _ in state.divergence_histories):
-                        raise RuntimeError(f"{name} has missing or out-of-time divergence history")
-                if max(sample[1] for sample in final_state.divergence_histories) <= max(
-                        sample[1] for sample in first_state.divergence_histories):
-                    raise RuntimeError(f"{name} did not advance committed divergence samples")
+                            sample_rung != state.rungs[state.gravity_indices[gas]] or
+                            sample_rung < 0
+                            for gas, (_, sample_rung, _) in enumerate(state.divergence_histories)):
+                        raise RuntimeError(f"{name} has missing or mismatched own-midpoint history")
+                events = re.findall(r"SPH midpoint: time=(\S+) rung=(-?\d+) dt=(\S+)",
+                                    (reference / "run.log").read_text())
+                if len(events) < 2 or not final_state.driver.tau > first_state.driver.tau:
+                    raise RuntimeError(f"{name} did not complete successive midpoint samples")
             elif first_state.divergence_histories or final_state.divergence_histories:
                 raise RuntimeError(f"{name} unexpectedly checkpointed divergence history")
             resumed = prepareCase(baseWorkdir, name + "_restart", checkpoint)

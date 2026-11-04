@@ -73,10 +73,22 @@ half steps. The local implicit solve consumes that interval; it does not change
 an already selected outer SPH step or request an outer retry. Every time integrator
 supplies the interval it actually closed.
 
+With chronological midpoint SPH this is the endpoint after the second drift,
+before checkpointing and the next gravity opening. Endpoint density is refreshed
+first. Traditional and hierarchical integration close each gas particle's own
+old-rung interval; global integration supplies its actual selected interval.
+The source uses the fixed endpoint scale to convert `Delta tau` into physical
+seconds. This retains first-order operator splitting without extra source clocks.
+
 The bridge prepares all updated gas states, checks the results and only then
 commits them. The electron estimate follows gas particles through sorting,
-migration and checkpoints. The single hydrodynamic thermal energy remains
-authoritative. Checkpoint model/version metadata distinguishes this state from
+migration and checkpoints. Hydrodynamic entropy is authoritative: the backend's
+updated `a^2 u` is converted to a representable float entropy before any commit,
+and the energy ledger uses the reconstructed energy of that same stored value.
+Failed preparation discards staged results on every locality. A subsequent
+zero-kick hydro estimate refreshes timestep bounds without advancing viscosity
+history; gas rung changes retain the common-boundary policy.
+Checkpoint model/version metadata distinguishes this state from
 the retired multi-species layout. Cooling fingerprint version 6 contains six
 doubles and no radiation checksum; earlier cooling fingerprints are rejected.
 
@@ -89,7 +101,8 @@ when particle cooling is disabled.
 
 `gadget4_cooling` exercises the core equilibrium and implicit-cooling routines.
 `sph_chemistry_timesteps_cpu` exercises source integration and particle state;
-`gadget4_cooling_integration_cpu` and `gadget4_cooling_integration_global_cpu`
+`gadget4_cooling_integration_cpu`, `gadget4_cooling_integration_hierarchical_cpu`,
+and `gadget4_cooling_integration_global_cpu`
 exercise the application when their required capabilities are built. CUDA
 coverage uses the production cooling implementation and strict floating-point
 compilation. The existence of these targets is not a statement that a particular

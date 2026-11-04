@@ -83,7 +83,7 @@ def compare_restart(reference, resumed, *, position_units=0, accumulation_units=
         require(not any(grid.values()), "GPU restart left unmatched particles")
         second = tuple(matched)
     particle_fields = (4, 5, 6)
-    # Version 70000 stores A, support, density, flags, proposal, then optional
+    # Version 80000 stores A, support, density, flags, proposal, then optional
     # viscosity history. Removed forces/rates must not shift discrete fields
     # into the float-tolerated set. Viscosity history remains exact here.
     gas_fields = (0, 1, 2)

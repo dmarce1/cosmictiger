@@ -10,15 +10,16 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include <cosmictiger/chemistry/sph.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/cuda/cuda.hpp>
-#include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/simulation_units.hpp>
-#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/sph/particles.hpp>
+#include <cosmictiger/sph/thermodynamics.hpp>
+#include <cosmictiger/sph/tree.hpp>
 #include <cosmictiger/stars/star_formation.hpp>
 #ifdef USE_CUDA
 #include <cosmictiger/stars/star_formation_cuda.hpp>
@@ -138,13 +139,52 @@ std::vector<Output> run(
 struct Pending {
     ParticleInteger particle;
     Output output;
-};
-struct NewStar {
-    ParticleInteger particle;
-    Vector3<float> gravity;
+    float entropy;
 };
 std::vector<Pending> pending;
-std::vector<NewStar> newStars;
+
+StarFormationUpdate stage(std::vector<ParticleInteger> const& gasIndices,
+    std::vector<Input> const& inputs, std::vector<Output> const& outputs, double scaleFactor) {
+    if (!sphParticlesEntropyInitialized || sphParticlesThermalScaleFactor != scaleFactor) {
+        throw std::logic_error("Star formation requires endpoint density and canonical entropy");
+    }
+    StarFormationUpdate result;
+    std::vector<Pending> staged;
+    staged.reserve(outputs.size());
+    for (size_t index = 0; index < outputs.size(); ++index) {
+        auto output = outputs[index];
+        auto const& input = inputs[index];
+        float entropy = 0.0f;
+        if (output.state.id != input.state.id ||
+            (output.convert &&
+                (!(output.state.formationTime >= 0.0) ||
+                    !star_formation_backend::detail::finite(output.state.formationTime) ||
+                    output.state.specificStarFormationRate != 0.0))) {
+            throw std::invalid_argument("Invalid prepared star-formation identity or birth state");
+        }
+        // Validate even a converting particle before any rank may commit.
+        auto const original = sph_entropy::prepareStoredEnergy(
+            input.energy, input.density, getOptions().hydro.gamma, scaleFactor);
+        (void) original;
+        if (!output.convert) {
+            auto const prepared = sph_entropy::prepareStoredEnergy(
+                output.energy, input.density, getOptions().hydro.gamma, scaleFactor);
+            entropy = prepared.entropy;
+            output.energy = prepared.storedEnergy;
+        }
+        // Derived source ledger in the existing a(K+W+U) normalization:
+        // ΔQ = −m (E_after − E_before)/a, E = a²u.
+        // m -> gasMass; E_after -> output.energy; E_before -> input.energy;
+        // a -> scaleFactor. Use the actual representable committed entropy.
+        output.value = -getOptions().initial.gasMass *
+            (double(output.energy) - double(input.energy)) / scaleFactor;
+        result.heating += output.value;
+        result.converted += output.convert;
+        staged.push_back({sphParticlesParticleIndex(gasIndices[index]), output, entropy});
+    }
+    pending = std::move(staged);
+    return result;
+}
 }    // namespace detail
 
 uint64_t starFormationRandomBits(uint64_t identity, uint64_t event, uint64_t stream) {
@@ -186,6 +226,18 @@ void starFormationInitialize() {
 StarFormationUpdate starFormationPrepare(
     int minimumRung, double scaleFactor, double baseTimestep, double explicitTimestep);
 void starFormationCommit();
+void starFormationDiscardPrepared();
+HPX_PLAIN_ACTION(starFormationDiscardPrepared, StarFormationDiscardPreparedAction);
+void starFormationDiscardPrepared() {
+    std::vector<hpx::future<void>> children;
+    for (auto const& child : hpxChildren()) {
+        children.push_back(hpx::async<StarFormationDiscardPreparedAction>(child));
+    }
+    detail::pending.clear();
+    for (auto& child : children) {
+        child.get();
+    }
+}
 HPX_PLAIN_ACTION(starFormationPrepare, StarFormationPrepareAction);
 HPX_PLAIN_ACTION(starFormationCommit, StarFormationCommitAction);
 StarFormationUpdate starFormationPrepare(
@@ -211,18 +263,7 @@ StarFormationUpdate starFormationPrepare(
             }
         }
         auto const outputs = detail::run(detail::Operation::advance, inputs, parameters);
-        detail::pending.reserve(outputs.size());
-        for (size_t index = 0; index < outputs.size(); ++index) {
-            auto const gas = gasIndices[index];
-            auto const& output = outputs[index];
-            detail::pending.push_back({sphParticlesParticleIndex(gas), output});
-            result.heating += output.value;
-            if (output.convert) {
-                ++result.converted;
-                result.maximumNewStarRung =
-                    std::max(result.maximumNewStarRung, int(sphParticlesRung(gas)));
-            }
-        }
+        result = detail::stage(gasIndices, inputs, outputs, scaleFactor);
     } catch (...) {
         failure = std::current_exception();
     }
@@ -231,8 +272,6 @@ StarFormationUpdate starFormationPrepare(
             auto const child = future.get();
             result.heating += child.heating;
             result.converted += child.converted;
-            result.maximumNewStarRung =
-                std::max(result.maximumNewStarRung, child.maximumNewStarRung);
         } catch (...) {
             if (!failure) {
                 failure = std::current_exception();
@@ -246,7 +285,16 @@ StarFormationUpdate starFormationPrepare(
     return result;
 }
 void starFormationConvertGas(ParticleInteger gas, StarFormationState const& state) {
-    THROW_ERROR("Star formation is deferred for midpoint SPH\n");
+    ParticleInteger const particle = sphParticlesParticleIndex(gas);
+    if (state.id != particlesStarFormationStates[particle].id ||
+        state.specificStarFormationRate != 0.0) {
+        throw std::invalid_argument(
+            "Conversion changed the particle identity or retained a gas source");
+    }
+    // Gas compaction preserves the main particle slot, velocity, mass and old rung.
+    // Its next ordinary gravity boundary closes and opens the collisionless step.
+    particlesConvertToStar(particle, state.formationTime);
+    particlesStarFormationStates[particle] = state;
 }
 std::vector<star_formation_backend::Output> starFormationAdvanceBatch(
     std::vector<star_formation_backend::Input> const& inputs, std::vector<double> const& intervals,
@@ -297,27 +345,15 @@ StarFormationUpdate starFormationPrepareLocal(std::vector<ParticleInteger> const
     detail::pending.clear();
     std::vector<detail::Input> inputs;
     inputs.reserve(gasIndices.size());
+    std::unordered_set<ParticleInteger> selected;
     for (auto const gas : gasIndices) {
+        if (!selected.insert(gas).second) {
+            throw std::invalid_argument("Star-formation batch repeats a gas particle");
+        }
         inputs.push_back(detail::input(gas));
     }
     auto const outputs = starFormationAdvanceBatch(inputs, intervals, scaleFactor);
-    StarFormationUpdate result;
-    std::vector<detail::Pending> staged;
-    staged.reserve(outputs.size());
-    for (size_t index = 0; index < outputs.size(); ++index) {
-        auto const gas = gasIndices[index];
-        auto const& output = outputs[index];
-        // Commit order follows these main-particle indices, which conversions keep.
-        staged.push_back({sphParticlesParticleIndex(gas), output});
-        result.heating += output.value;
-        if (output.convert) {
-            ++result.converted;
-            result.maximumNewStarRung =
-                std::max(result.maximumNewStarRung, int(sphParticlesRung(gas)));
-        }
-    }
-    detail::pending = std::move(staged);
-    return result;
+    return detail::stage(gasIndices, inputs, outputs, scaleFactor);
 }
 void starFormationCommitLocal() {
     for (auto const& update : detail::pending) {
@@ -327,7 +363,7 @@ void starFormationCommitLocal() {
             starFormationConvertGas(gas, output.state);
         } else {
             particlesStarFormationStates[update.particle] = output.state;
-            sphParticlesSetInternalEnergy(gas, output.energy);
+            sphParticlesEntropies[gas] = update.entropy;
             sphParticlesElectronFractions[gas] = output.electronFraction;
         }
     }
@@ -335,78 +371,25 @@ void starFormationCommitLocal() {
 }
 StarFormationUpdate starFormationClose(
     int minimumRung, double scaleFactor, double, double baseTimestep, double explicitTimestep) {
-    auto const result =
-        starFormationPrepare(minimumRung, scaleFactor, baseTimestep, explicitTimestep);
-    starFormationCommit();
-    if (result.converted != 0) {
-        particlesCacheFree();
-    }
-    sphParticlesClearHydroCaches();
-    return result;
-}
-HPX_PLAIN_ACTION(starFormationOpenNewStars, StarFormationOpenNewStarsAction);
-int starFormationOpenNewStars(double baseTimestep, double scaleFactor, double maximumTimestep,
-    int minimumRung, bool kickGravity) {
-    std::vector<hpx::future<int>> remote;
-    for (auto const& child : hpxChildren()) {
-        remote.push_back(hpx::async<StarFormationOpenNewStarsAction>(
-            child, baseTimestep, scaleFactor, maximumTimestep, minimumRung, kickGravity));
-    }
-    int maximumRung = 0;
+    StarFormationUpdate result;
     try {
-        if (kickGravity) {
-            auto const& options = getOptions();
-            float const effectiveRadius = float(options.gravity.supportRadius) /
-                selectedGravityKernel().supportRadiusPerEffectiveRadius;
-            float const timestepBase = float(baseTimestep);
-            float const timestepCap = float(maximumTimestep);
-            float const factor = float(options.gravity.timestepEta) * std::sqrt(float(scaleFactor));
-            float const sign = options.run.scenario == "glass" ? -1.0f : 1.0f;
-            star_formation_backend::Parameters parameters;
-            parameters.baseTimestep = baseTimestep;
-            parameters.scaleFactor = scaleFactor;
-            parameters.timeSeconds = options.units.timeSeconds;
-            parameters.densityScale = parameters.energyScale = 1.0;
-            parameters.effectiveRadius = effectiveRadius;
-            parameters.timestepBase = timestepBase;
-            parameters.timestepCap = timestepCap;
-            parameters.timestepFactor = factor;
-            parameters.kickSign = sign;
-            parameters.rungLimit = kMaxRung;
-            parameters.minimumRung = minimumRung;
-            std::vector<star_formation_backend::Input> inputs(detail::newStars.size());
-            for (size_t index = 0; index < detail::newStars.size(); ++index) {
-                auto const& star = detail::newStars[index];
-                auto& input = inputs[index];
-                input.state = particlesStarFormationStates[star.particle];
-                input.rung = particlesRung(star.particle);
-                for (int dim = 0; dim < kDimensions; ++dim) {
-                    input.gravity[dim] = star.gravity[dim];
-                    input.velocity[dim] = particlesVel(dim, star.particle);
-                }
-            }
-            auto const outputs =
-                detail::run(star_formation_backend::Operation::openNewStar, inputs, parameters);
-            // A failed batch leaves all local newborn rungs and velocities unchanged.
-            for (size_t index = 0; index < detail::newStars.size(); ++index) {
-                auto const particle = detail::newStars[index].particle;
-                auto const& output = outputs[index];
-                particlesRung(particle) = output.rung;
-                maximumRung = std::max(maximumRung, output.rung);
-                for (int dim = 0; dim < kDimensions; ++dim) {
-                    particlesVel(dim, particle) = output.velocity[dim];
-                }
-            }
-        }
+        result = starFormationPrepare(minimumRung, scaleFactor, baseTimestep, explicitTimestep);
     } catch (...) {
-        hpx::wait_all(remote);
+        // A successful sibling must not retain a commit-able partial transaction.
+        starFormationDiscardPrepared();
         throw;
     }
-    detail::newStars.clear();
-    for (auto& future : remote) {
-        maximumRung = std::max(maximumRung, future.get());
+    starFormationCommit();
+    if (result.converted != 0) {
+        // Gas slots have compacted: position/rung cache keys and every retained
+        // leaf range are stale, including cached copies on gas-empty localities.
+        sphTreeDestroy(false);
+        particlesCacheFree();
+        sphParticlesClearCaches();
+    } else {
+        sphParticlesClearHydroCaches();
     }
-    return maximumRung;
+    return result;
 }
 HPX_PLAIN_ACTION(starFormationPressureIntegral, StarFormationPressureIntegralAction);
 double starFormationPressureIntegral(double scaleFactor) {

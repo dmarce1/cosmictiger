@@ -57,10 +57,43 @@ CosmicTiger follows that ordering. There are no opening source half steps,
 accumulated half-step formation optical depths, wind clocks, or source-driven
 outer-step retries.
 
+For chronological midpoint SPH the source is applied after the second drift of
+each particle's completed interval, before checkpointing or selecting its next
+gravity interval. Dyadic integration selects old rungs at or above the endpoint's
+closing rung; global integration supplies the actual completed step. A coincident
+coarser hydro midpoint executes afterward in the next boundary pass. A source is
+never called merely to initialize forces, refresh output, or reload a checkpoint.
+
+The endpoint density solve supplies the thermal conversion. The backend consumes
+temporary `E = a²u` and returns an updated energy; the bridge stages canonical
+float entropy `A = (gamma-1) E rho_c^(1-gamma)` for the required `gamma=5/3`.
+Every rank must prepare and validate successfully before any rank commits.
+The source energy ledger uses the energy reconstructed from the staged entropy,
+including its storage rounding. Only entropy and the electron estimate change
+for surviving gas. The fixed-endpoint physical duration `a Δtau` retains the
+existing first-order source splitting; it is not a second-order cooling scheme.
+
+After sources, an all-gas zero-kick estimate refreshes hydro timestep proposals
+and the global timestep limit, including neighbors whose sound-speed bounds
+changed. It does not advance committed viscosity history. As with inviscid SPH,
+gas rungs still change only at common all-particle boundaries: abrupt heating or
+new contacts do not trigger immediate wakeups or rollback between boundaries.
+This policy does not guarantee an immediate CFL response to new source heating.
+Viscosity histories advance only at each surviving particle's own hydro midpoint;
+their previous sampled rung determines the next sampling interval. The five
+pending viscosity diagnostics are temporary density-event scratch, released
+before source conversion and not allocated by the post-source bound estimate.
+
 For gas mass `m`, the event probability is `1-exp(-SFR dt/m)`. A successful event
 converts the whole gas particle into a star; gas mass is not continuously
 removed before the event. Position, velocity and particle mass are retained,
-and the star continues its gravitational evolution. Birth time is the scale
+as is the old rung. The next ordinary gravity pass completes its old closing
+kick and selects/opens its new collisionless interval; no saved gravitational
+acceleration or additional newborn-star kick is used. All pair impulses involving
+the converting particle's completed interval have already been delivered.
+Conversion invalidates the SPH topology and caches, including on other ranks,
+so the next walk rebuilds even below the ordinary activity threshold.
+The star continues its gravitational evolution. Birth time is the scale
 factor in cosmological runs and elapsed physical seconds in noncosmological
 runs, matching GADGET-4. No kinetic wind kick is
 part of the standard implementation.
@@ -85,7 +118,9 @@ point trajectories or event times across decompositions.
 
 Build with `COSMICTIGER_ENABLE_SPH=ON`,
 `COSMICTIGER_ENABLE_CHEMISTRY=ON`, and `COSMICTIGER_ENABLE_STARS=ON`.
-Choose traditional or global integration with `hydro.method=sph`. A starting configuration is
+Choose traditional, hierarchical, or global integration with `hydro.method=sph`.
+Hierarchical integration requires FMM gravity; traditional and global also support
+disabled gravity. Mesh gravity with SPH remains deferred. A starting configuration is
 [`configurations/star_formation/lcdm.ini`](../configurations/star_formation/lcdm.ini).
 
 ```ini
@@ -132,3 +167,34 @@ restart tests cover different parts of the integration. Agreement with the
 pinned equations does not establish identical SPH force discretization,
 random streams, or galaxy statistics between codes. Report the actual builds,
 backends and application runs used when assessing a change.
+
+The endpoint regression checks mixed-rung source counts and durations, unchanged
+committed viscosity history, and no mechanical kick from the post-source estimate.
+The particle fixture compares a converted star with an identical existing star
+through a nonzero ordinary gravity update for each compiled integrator.
+Application restart tests include a controlled saved rate that guarantees
+conversion, testing the final source event and subsequent evolution with an empty
+gas population. Source payloads already carry particle ID, event counter, birth
+time, saved specific formation rate and elapsed physical time; this integration
+adds no persistent per-particle fields or force-rate arrays.
+
+The SPH payload uses base version 80000 for compact viscosity storage: two bytes
+for evolving alpha and, for CD, Price and Hu, eight bytes of in-memory committed
+history (seven serialized bytes). Source counters and elapsed source time retain
+their existing meanings; no viscosity timestamp is added. Older SPH payload
+versions are rejected rather than interpreted as this layout.
+
+On November 4, 2026, after the compact-history update, source timing and
+conversion fixtures passed on CPU, CUDA and two MPI ranks. The star-formation
+application passed traditional, hierarchical and global evolution/restart cases
+on each backend. Every controlled-conversion case converted all 512 gas
+particles and restarted exactly with no gas remaining. CPU and CUDA cooling
+evolution/restarts passed all three integrators. The tests also compare newborn
+and existing stars through their next nonzero ordinary gravity update, and
+verify source completion does not change committed viscosity state.
+
+Evidence is in `/tmp/sph_compact_cpu_lifecycle.log`,
+`/tmp/sph_compact_cpu_apps.log`, `/tmp/sph_compact_cuda_apps.log`, and
+`/tmp/sph_compact_mpi_apps.log`, with structured results under the corresponding
+build trees' `tests/star_formation_application*/evidence.json`. These are source
+and scheduling regressions, not long-duration galaxy-statistics validation.

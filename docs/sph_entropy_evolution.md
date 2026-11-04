@@ -1,9 +1,11 @@
 # SPH entropy evolution
 
-Implementation scope: November 3, 2026. The user requested changing the evolved
-thermal variable from internal energy to the GADGET-style entropic function,
-with minimal testing. Cooling and star formation, including their tests, are
-temporarily disabled pending separate source conversions.
+Historical implementation record: November 3, 2026. This describes the initial
+change from internal energy to the GADGET-style entropic function and its
+validation at that time. The integration sequence and source restrictions below
+were subsequently superseded by [midpoint SPH](monaghan_sph.md),
+[endpoint cooling](primordial_chemistry.md), and [star formation](star_formation.md).
+Cooling and star formation now update canonical entropy at completed endpoints.
 
 ## Equations and state
 

@@ -120,6 +120,33 @@ bool isPositiveFloatOption(double value) {
     return isFiniteFloatOption(value) && value >= std::numeric_limits<float>::min();
 }
 
+void validateViscosityStorage(Options const& opts) {
+    double coefficient;
+    char const* option;
+    if (opts.hydro.viscosityEvolution == "morrisAndMonaghan") {
+        coefficient = opts.hydro.minimumBulkViscosityCoefficient;
+        option = "hydro.viscosityAlphaMin";
+    } else if (opts.hydro.viscosityEvolution == "cullenAndDehnen") {
+        coefficient = opts.hydro.maximumBulkViscosityCoefficient;
+        option = "hydro.viscosityAlphaMax";
+    } else if (opts.hydro.viscosityEvolution == "priceEtAl") {
+        coefficient = opts.hydro.maximumBulkViscosityCoefficientPrice;
+        option = "hydro.viscosityAlphaMaxPrice";
+    } else if (opts.hydro.viscosityEvolution == "hu_etal") {
+        coefficient = opts.hydro.maximumBulkViscosityCoefficientHu;
+        option = "hydro.viscosityAlphaMaxHu";
+    } else {
+        // Constant-alpha viscosity has no per-particle binary16 storage.
+        return;
+    }
+    constexpr double kMinimumHalfCoefficient = 0x1p-24;
+    constexpr double kMaximumHalfCoefficient = 65504.0;
+    if (!isFiniteOption(coefficient) || coefficient < kMinimumHalfCoefficient ||
+        coefficient > kMaximumHalfCoefficient) {
+        throwOptionError("%s must lie in [2^-24, 65504] for binary16 viscosity storage\n", option);
+    }
+}
+
 void validateRockstar(Options const& opts) {
 #if !COSMICTIGER_ENABLE_ROCKSTAR
     if (opts.analysis.groups || opts.analysis.groupsCuda || opts.lightcone.enabled ||
@@ -187,10 +214,6 @@ void validateFlatCosmology(Options const& opts) {
 }
 
 void validateCooling(Options const& opts) {
-    if (opts.chemistry.enabled || opts.starFormation.enabled) {
-        throw std::invalid_argument("Chemistry and star formation are temporarily disabled "
-                                    "pending SPH entropy source conversions");
-    }
     if (!opts.chemistry.enabled) {
         return;
     }
@@ -289,6 +312,7 @@ void setOptions(Options const& opts) {
     detail::validateRockstar(opts);
     detail::validateCudaBackends(opts);
     detail::validateHydroMethod(opts);
+    detail::validateViscosityStorage(opts);
     detail::validateFlatCosmology(opts);
     detail::validateCooling(opts);
     detail::validateStarFormation(opts);
@@ -344,10 +368,6 @@ void setOptions(Options const& opts) {
         (opts.run.hierarchicalGravity && opts.hydro.enabled &&
             (!opts.gravity.enabled || opts.gravity.method != "fmm"))) {
         throw std::invalid_argument("run.timeIntegrator is unavailable or inconsistent");
-    }
-    if (opts.hydro.enabled && (opts.chemistry.enabled || opts.starFormation.enabled)) {
-        throw std::invalid_argument(
-            "Midpoint SPH does not yet support chemistry or star formation");
     }
     if (opts.hydro.enabled && opts.gravity.enabled && opts.gravity.method != "fmm") {
         throw std::invalid_argument("Midpoint SPH currently requires FMM or disabled gravity");
@@ -1653,6 +1673,7 @@ bool processOptions(int argc, char* argv[]) {
             "hydro.viscosityAlphaMaxHu and hydro.viscosityDecayHu must be finite "
             "and positive in single precision\n");
     }
+    detail::validateViscosityStorage(opts);
     if (opts.hydro.viscosityBetaFollowsAlpha() &&
         !detail::isFiniteFloatOption(opts.hydro.vonNeumannRichtmyerCoefficient *
             (opts.hydro.viscosityEvolution == "morrisAndMonaghan" ?
@@ -1788,9 +1809,6 @@ bool processOptions(int argc, char* argv[]) {
         (!usesGlobalIntegration(opts.run) && opts.run.minRung >= kMaxRung)) {
         detail::throwOptionError(
             "run.minRung must be nonnegative and less than %i for rung integrators\n", kMaxRung);
-    }
-    if (opts.hydro.enabled && (opts.chemistry.enabled || opts.starFormation.enabled)) {
-        detail::throwOptionError("Midpoint SPH does not yet support chemistry or star formation\n");
     }
     if (opts.hydro.enabled && opts.gravity.enabled && opts.gravity.method != "fmm") {
         detail::throwOptionError("Midpoint SPH currently requires FMM or disabled gravity\n");

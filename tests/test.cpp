@@ -731,6 +731,7 @@ void bhTest() {
 void sphGravityTest();
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION
 void starFormationTest();
+void sphSourceTimingTest();
 void starFormationParticlesTest();
 #endif
 void sphChemistryTimestepsTest();
@@ -769,6 +770,7 @@ ApplicationTest const applicationTests[] = {
 #endif
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION
     {"star_formation", starFormationTest},
+    {"sphSourceTiming", sphSourceTimingTest},
     {"starFormationParticles", starFormationParticlesTest},
 #endif
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY

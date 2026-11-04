@@ -180,22 +180,22 @@ CUDA_EXPORT inline int reconstructVelocityGradient(VelocityGradientSums<Real> co
  * Cullen & Dehnen (2010), Appendix B3's first alternative: difference successive
  * divergence estimates along the same particle trajectory. Locally derived
  * first-order conversion for conformal time dτ = dt/a:
- *   a⁴ Dθ/Dt ≈ a³ (θ_n − θ_previous)/(τ_n − τ_previous).
- * θ → sampleDivergence; τ_n → sampleTime; a → scaleFactor;
- * θ_previous, τ_previous → state.sampleDivergence, state.sampleTime.
+ *   a⁴ Dθ/Dt ≈ a³ (θ_n − θ_previous)/Δτ.
+ * θ → sampleDivergence; Δτ → sampleInterval; a → scaleFactor;
+ * θ_previous → state.sampledDivergence() (decoded from its scaled-half storage).
  * CD/Hu use physical θ = ∇·v; Price samples θ = ∇·v − 3H to retain its
- * homogeneous-background subtraction. Missing or same-time history gives zero,
- * and density retries never modify the committed history used here.
+ * homogeneous-background subtraction. Missing history or a zero interval gives
+ * zero. Density retries never modify the previous own-midpoint sample used here.
  */
 template <typename Real, typename Counter>
 CUDA_EXPORT inline Real divergenceTimeDerivative(Real sampleDivergence, Real scaleFactor,
-    SphCullenDehnenState const& state, double sampleTime, Counter& floatingPointOperations) {
-    if (!(state.sampleTime >= 0.0 && sampleTime > state.sampleTime)) {
+    SphCullenDehnenState const& state, double sampleInterval, Counter& floatingPointOperations) {
+    if (state.sampleRung == -1 || state.sampleRung < -2 || !(sampleInterval > 0.0)) {
         return Real(0);
     }
-    double const elapsed = sampleTime - state.sampleTime;
-    double const derivative = (double(sampleDivergence) - double(state.sampleDivergence)) / elapsed;
-    floatingPointOperations += 6;
+    double const derivative =
+        (double(sampleDivergence) - double(state.sampledDivergence())) / sampleInterval;
+    floatingPointOperations += 5;
     return Real(double(scaleFactor) * double(scaleFactor) * double(scaleFactor) * derivative);
 }
 
@@ -372,7 +372,7 @@ CUDA_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums, Real
 // Production Appendix-B3 time-difference route; no acceleration samples are read.
 template <typename Real, typename Counter>
 CUDA_EXPORT inline Result<Real> diagnosticsFromHistory(VelocityGradientSums<Real> const& sums,
-    Real scaleFactor, SphCullenDehnenState const& state, double sampleTime, Real signAverage,
+    Real scaleFactor, SphCullenDehnenState const& state, double sampleInterval, Real signAverage,
     Real supportRadius, Real signalSpeed, Real maximumBulkViscosityCoefficient,
     Real decayCoefficient, Counter& floatingPointOperations) {
     Real velocityGradient[3][3];
@@ -383,7 +383,7 @@ CUDA_EXPORT inline Result<Real> diagnosticsFromHistory(VelocityGradientSums<Real
     floatingPointOperations += 4;
     Real const derivative = rank == 0 ? Real(0) :
                                         divergenceTimeDerivative(divergence, scaleFactor, state,
-                                            sampleTime, floatingPointOperations);
+                                            sampleInterval, floatingPointOperations);
     return diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, signAverage,
         supportRadius, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient,
         floatingPointOperations);

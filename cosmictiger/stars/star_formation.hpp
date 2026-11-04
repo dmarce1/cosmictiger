@@ -10,10 +10,9 @@
 struct StarFormationUpdate {
     double heating{};
     uint64_t converted{};
-    int maximumNewStarRung{};
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
-        archive & heating & converted & maximumNewStarRung;
+        archive & heating & converted;
     }
 };
 
@@ -30,16 +29,12 @@ StarFormationUpdate starFormationClose(int minimumRung, double scaleFactor, doub
 std::vector<star_formation_backend::Output> starFormationAdvanceBatch(
     std::vector<star_formation_backend::Input> const& inputs, std::vector<double> const& intervals,
     double scaleFactor);
-// Convert one local gas particle into a star with the saved source state, and
-// register it for starFormationOpenNewStars exactly as starFormationClose does.
+// Convert a closed gas interval without changing the main slot, velocity or rung.
 void starFormationConvertGas(ParticleInteger gas, StarFormationState const& state);
-// FMM traditional kicks defer gas gravity to SPH. Newly converted stars need
-// exactly the opening gravity half kick; global/mesh finish routines own theirs.
-int starFormationOpenNewStars(double baseTimestep, double scaleFactor, double maximumTimestep,
-    int minimumRung, bool kickGravity);
 // Rank-local source of the listed gas slots, each over its own completed code-time
 // interval. Prepare stages the outcome; commit converts or updates the particles and
-// registers newborn stars. Callers run every locality's prepare before any commit.
+// retains their existing gravity step. Run every locality's prepare before any commit.
+// After conversion, callers must invalidate topology and clear all gas caches collectively.
 StarFormationUpdate starFormationPrepareLocal(std::vector<ParticleInteger> const& gasIndices,
     std::vector<double> const& intervals, double scaleFactor);
 void starFormationCommitLocal();

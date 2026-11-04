@@ -56,8 +56,10 @@ struct SphRunData {
     float* sinkLogDensityRate = nullptr;
     float* sinkGradHCorrection;    // Rebuilt with the density on every preparation pass.
     float* sinkBalsaraFactor;
-    float* sinkBulkViscosityCoefficient;
-    SphCullenDehnenState* sinkCullenDehnenStates;
+    Float16Storage* sinkBulkViscosityCoefficient;
+    SphCullenDehnenState const* sinkCullenDehnenStates;
+    // Event-local density results; absent when this pass will not update history.
+    SphViscosityDiagnostics* sinkViscosityDiagnostics = nullptr;
     char* sinkSemiactive;
     char* sinkSmoothingConverged;
     float* sinkSupportRadius;

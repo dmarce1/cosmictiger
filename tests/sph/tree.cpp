@@ -904,9 +904,9 @@ void verifyDistributedSphHierarchyMigration(bool afterMigration) {
             }
             if (sphParticlesCullenDehnenStates) {
                 auto& state = sphParticlesCullenDehnenStates[gas];
-                state.divergence = identity / 32.0f;
-                state.sampleDivergence = identity / 64.0f;
-                state.sampleTime = identity / 128.0;
+                state.setDivergences(identity / 32.0f, identity / 64.0f);
+
+                state.sampleRung = int8_t(int(identity) % 11);
             }
             // The last midpoint's hydro timestep bound must survive migration
             // until the next gravity boundary consumes it.
@@ -925,9 +925,9 @@ void verifyDistributedSphHierarchyMigration(bool afterMigration) {
             "migration changed midpoint gas scalars or the hydro rung bound");
         if (sphParticlesCullenDehnenStates) {
             auto const& state = sphParticlesCullenDehnenStates[gas];
-            detail::requireSphTree(state.divergence == identity / 32.0f &&
-                    state.sampleDivergence == identity / 64.0f &&
-                    state.sampleTime == identity / 128.0,
+            detail::requireSphTree(state.physicalDivergence() == identity / 32.0f &&
+                    state.sampledDivergence() == identity / 64.0f &&
+                    state.sampleRung == int(identity) % 11,
                 "migration changed committed viscosity samples");
         }
         if (particle < range.first) {
@@ -1208,7 +1208,133 @@ void distributedSphOctreeTest() {
     sphRungChainTest();
 }
 
+namespace detail {
+
+void initializeSphViscosityHistoryRegression() {
+    sphParticlesFree();
+    particlesResize(0);
+    sphParticlesResize(hpxRank() == 0 ? 2 : 0);
+    for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
+        sphParticlesRung(gas) = gas == 0 ? 1 : 3;
+        sphParticlesSemiactive(gas) = true;
+        sphParticlesConverged(gas) = true;
+        sphParticlesBulkViscosityCoefficients[gas] = 0.7f;
+        sphParticlesCullenDehnenStates[gas] = {};
+    }
+}
+
+void stageSphViscosityHistoryRegression(int stage) {
+    requireSphTree((sphParticlesViscosityDiagnostics != nullptr) == (sphParticlesSize() != 0),
+        "diagnostic allocation did not match this locality's gas count");
+    for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
+        if (stage == 3 && gas == 1) {
+            sphParticlesRung(gas) = 2;
+        }
+        auto& diagnostics = sphParticlesViscosityDiagnostics[gas];
+        diagnostics.pendingDivergence = -float(10 * stage + gas + 1);
+        diagnostics.pendingSampleDivergence = diagnostics.pendingDivergence - 0.25f;
+        diagnostics.targetBulkViscosityCoefficient = 0.2f;
+        diagnostics.inverseDecayTime = 0.4f;
+        diagnostics.limiter = 1.0f;
+    }
+}
+
+void verifySphViscosityHistoryRegression(int stage) {
+    requireSphTree(sphParticlesViscosityDiagnostics == nullptr,
+        "temporary viscosity diagnostics survived the completed event");
+    for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
+        auto const& history = sphParticlesCullenDehnenStates[gas];
+        int const committedStage = stage == 4 ? 4 : gas == 0 ? 0 : stage == 2 ? 1 : stage;
+        int const expectedRung = committedStage == 0 ? -2 : gas == 0 ? 1 : stage >= 3 ? 2 : 3;
+        float const divergence = -float(10 * committedStage + gas + 1);
+        requireSphTree(history.physicalDivergence() == divergence &&
+                history.sampledDivergence() == divergence - 0.25f &&
+                history.sampleRung == expectedRung,
+            "viscosity history committed a semiactive or zero-kick diagnostic sample");
+        // CD (2010), equation (A15), with a constant target and decay rate:
+        //   α(Δτ) = α_tar + (α₀ − α_tar) exp(−Δτ/τ_decay).
+        // Derived midpoint gaps: startup to rung 3 is 1/16; rung 3 to rung 2
+        // adds (1/8 + 1/4)/2 = 3/16. The global gap is the supplied 0.137.
+        // Round the expected alpha to half only at each committed update.
+        // Symbol directory: Δτ → elapsed; α(Δτ) → expectedAlpha;
+        // α_tar = float(0.2); α₀ = half(0.7); τ_decay⁻¹ = float(0.4).
+        Float16Storage expectedAlpha(0.7f);
+        auto const decay = [&](double elapsed) {
+            expectedAlpha = float(double(0.2f) +
+                (double(float(expectedAlpha)) - double(0.2f)) * std::exp(-double(0.4f) * elapsed));
+        };
+        if (gas == 1 && stage >= 1) {
+            decay(0.0625);
+        }
+        if (gas == 1 && stage >= 3) {
+            decay(0.1875);
+        }
+        if (stage == 4) {
+            decay(double(float(0.137)));
+        }
+        requireSphTree(sphParticlesBulkViscosityCoefficients[gas].bits == expectedAlpha.bits,
+            "viscosity alpha used the wrong own-midpoint or global interval");
+    }
+}
+
+}    // namespace detail
+
+HPX_PLAIN_ACTION(
+    detail::initializeSphViscosityHistoryRegression, InitializeSphViscosityHistoryRegressionAction);
+HPX_PLAIN_ACTION(
+    detail::stageSphViscosityHistoryRegression, StageSphViscosityHistoryRegressionAction);
+HPX_PLAIN_ACTION(
+    detail::verifySphViscosityHistoryRegression, VerifySphViscosityHistoryRegressionAction);
+
+void sphViscosityHistoryTest() {
+    auto const savedOptions = getOptions();
+    auto options = savedOptions;
+    options.hydro.enabled = true;
+    options.hydro.viscosityEvolution = "cullenAndDehnen";
+    options.chemistry.enabled = false;
+    options.starFormation.enabled = false;
+    setOptions(options);
+    std::vector<hpx::future<void>> pending;
+    for (auto const& locality : hpxLocalities()) {
+        pending.push_back(hpx::async<InitializeSphViscosityHistoryRegressionAction>(locality));
+    }
+    for (auto& future : pending) {
+        future.get();
+    }
+    for (int stage = 0; stage < 5; ++stage) {
+        sphParticlesBeginViscosityDiagnostics();
+        pending.clear();
+        for (auto const& locality : hpxLocalities()) {
+            pending.push_back(
+                hpx::async<StageSphViscosityHistoryRegressionAction>(locality, stage));
+        }
+        for (auto& future : pending) {
+            future.get();
+        }
+        SphRunParameters parameters{};
+        parameters.minimumRung = stage == 1 ? 3 : stage == 3 ? 2 : 0;
+        parameters.maximumRung = stage == 1 ? 3 : stage == 3 ? 2 : kMaxRung - 1;
+        parameters.hydroKickTimestep = stage == 0 || stage == 2 ? 0.0 : 0.125;
+        parameters.viscositySampleInterval = stage == 4 ? 0.137 : 1.0;
+        parameters.globalTimestep = stage == 4;
+        sphParticlesUpdateTargetAlpha(parameters);
+        sphParticlesEndViscosityDiagnostics();
+        pending.clear();
+        for (auto const& locality : hpxLocalities()) {
+            pending.push_back(
+                hpx::async<VerifySphViscosityHistoryRegressionAction>(locality, stage));
+        }
+        for (auto& future : pending) {
+            future.get();
+        }
+    }
+    std::cout << "SPH viscosity own-midpoint history and temporary scratch regression passed\n"
+              << std::flush;
+    setOptions(savedOptions);
+}
+
 void sphTreeTest() {
+    sphViscosityHistoryTest();
     if (hpxSize() > 1) {
         distributedSphOctreeTest();
         return;

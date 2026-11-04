@@ -6,8 +6,8 @@
 #include <cstdint>
 
 #include <cosmictiger/math/vector3.hpp>
-#include <cosmictiger/stars/star_formation_state.hpp>
 #include <cosmictiger/stars/springel_and_hernquist/cooling.hpp>
+#include <cosmictiger/stars/star_formation_state.hpp>
 
 namespace star_formation_backend {
 
@@ -22,20 +22,12 @@ struct Parameters {
     double scaleDerivative{};
     double baseTimestep{};
     double explicitTimestep{-1.0};
-    float effectiveRadius{};
-    float timestepBase{};
-    float timestepCap{};
-    float timestepFactor{};
-    float kickSign{1.0f};
-    int rungLimit{};
     uint64_t seed{};
-    int minimumRung{};
 };
 struct Input {
     StarFormationState state;
     float electronFraction{1.0f};
     Vector3<float> velocity{};
-    Vector3<float> gravity{};
     float energy{};
     float density{};
     float pressureRatio{};
@@ -59,7 +51,7 @@ struct Output {
     bool starForming{};
     bool convert{};
 };
-enum class Operation { eos, diagnostics, advance, pressure, openNewStar };
+enum class Operation { eos, diagnostics, advance, pressure };
 inline char const* statusName(int status) {
     switch (status) {
     case 0:
@@ -74,8 +66,6 @@ inline char const* statusName(int status) {
         return "invalid_source_state_or_interval";
     case 7:
         return "unknown_operation";
-    case 8:
-        return "new_star_timestep_out_of_range";
     default:
         return "unknown_status";
     }
@@ -268,45 +258,6 @@ CUDA_EXPORT inline Output advance(Input const& input, Parameters const& paramete
         -parameters.gasMass * (double(output.energy) - input.energy) / parameters.scaleFactor;
     return output;
 }
-// A converted particle missed the collisionless gravity timestep proposal.
-// Apply that criterion and its first opening kick before the next drift.
-CUDA_EXPORT inline Output openNewStar(Input const& input, Parameters const& parameters) {
-    Output output = detail::initial(input);
-    float accelerationSquared = 1.0e-35f;
-    for (int dim = 0; dim < 3; ++dim) {
-        accelerationSquared += input.gravity[dim] * input.gravity[dim];
-    }
-    float const gravityTimestep = parameters.timestepFactor *
-        ::sqrtf(parameters.effectiveRadius / ::sqrtf(accelerationSquared));
-    float const boundedTimestep =
-        parameters.timestepBase < gravityTimestep ? parameters.timestepBase : gravityTimestep;
-    float const timestep =
-        boundedTimestep < parameters.timestepCap ? boundedTimestep : parameters.timestepCap;
-    float const requestedRung = ::ceilf(::log2f(parameters.timestepBase / timestep));
-    if (!(timestep > 0.0f) || !detail::finite(timestep) || !detail::finite(requestedRung) ||
-        requestedRung >= parameters.rungLimit) {
-        output.status = 8;
-        return output;
-    }
-    int rung = int(requestedRung);
-    if (rung < input.rung - 1) {
-        rung = input.rung - 1;
-    }
-    if (rung < parameters.minimumRung) {
-        rung = parameters.minimumRung;
-    }
-    if (rung < 1) {
-        rung = 1;
-    }
-    output.rung = rung;
-    double const half = parameters.kickSign * ::ldexp(0.5 * parameters.baseTimestep, -rung);
-    for (int dim = 0; dim < 3; ++dim) {
-        // Explicit FMA matches the host kick even with contraction disabled.
-        output.velocity[dim] =
-            float(::fma(double(input.gravity[dim]), half, double(input.velocity[dim])));
-    }
-    return output;
-}
 CUDA_EXPORT inline Output evaluate(
     Operation operation, Input const& input, Output output, Parameters const& parameters) {
     switch (operation) {
@@ -316,8 +267,6 @@ CUDA_EXPORT inline Output evaluate(
         return diagnostics(input, parameters);
     case Operation::advance:
         return advance(input, parameters);
-    case Operation::openNewStar:
-        return openNewStar(input, parameters);
     case Operation::pressure:
         output.value = parameters.gasMass * double(input.pressureRatio) * input.energy /
             (parameters.scaleFactor * parameters.scaleFactor);

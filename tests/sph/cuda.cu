@@ -124,6 +124,7 @@ class Fixture {
 
 public:
     int count_;
+    SphCullenDehnenState* history_ = nullptr;
     SphRunParameters params_;
     SphRunCudaData data_{};
     SphReduction* reduction_;
@@ -254,12 +255,14 @@ public:
         params_.maximumBulkViscosityCoefficientPrice = 1.0f;
         params_.viscosityDecayPrice = 0.1f;
         data_.sourceBulkViscosityCoefficient = allocate<float>(count_);
-        data_.sinkBulkViscosityCoefficient = allocate<float>(count_);
+        data_.sinkBulkViscosityCoefficient = allocate<Float16Storage>(count_);
         if (cullenDehnen || priceEtAl || huEtAl) {
             if (cullenDehnen) {
                 data_.sourceVelocityDivergence = allocate<float>(count_);
             }
-            data_.sinkCullenDehnenStates = allocate<SphCullenDehnenState>(count_);
+            history_ = allocate<SphCullenDehnenState>(count_);
+            data_.sinkCullenDehnenStates = history_;
+            data_.sinkViscosityDiagnostics = allocate<SphViscosityDiagnostics>(count_);
         }
         for (int i = 0; i < count_; ++i) {
             data_.sourceBulkViscosityCoefficient[sourceIndex(i)] = 0.7f;
@@ -331,7 +334,8 @@ public:
     void hydro(int phase = 0) {
         params_.phase = phase;
         resetReduction();
-        sphCudaHydro<<<data_.sourcePairUpdates ? 2 : 1, kHydroBlockSize>>>(params_, data_, reduction_);
+        sphCudaHydro<<<data_.sourcePairUpdates ? 2 : 1, kHydroBlockSize>>>(
+            params_, data_, reduction_);
         checkCuda(cudaGetLastError(), "hydro launch");
         checkCuda(cudaDeviceSynchronize(), "hydro execution");
         checkFlops();
@@ -431,8 +435,9 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
     std::vector<float> const sourceSupport(
         data.sourceSupportRadius, data.sourceSupportRadius + fixture.count_);
     std::vector<char> const sourceRungs(data.sourceRungs, data.sourceRungs + fixture.count_);
-    std::vector<float> bulkViscosityCoefficients;
+    std::vector<Float16Storage> bulkViscosityCoefficients;
     std::vector<SphCullenDehnenState> cullenDehnenStates;
+    std::vector<SphViscosityDiagnostics> viscosityDiagnostics;
     std::vector<float> sourceAlpha;
     std::vector<float> sourceDivergence;
     if (fixture.params_.variableViscosity) {
@@ -446,11 +451,13 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
         cullenDehnenStates.assign(
             data.sinkCullenDehnenStates, data.sinkCullenDehnenStates + fixture.count_);
         cpuData.sinkCullenDehnenStates = cullenDehnenStates.data();
+        viscosityDiagnostics.assign(
+            data.sinkViscosityDiagnostics, data.sinkViscosityDiagnostics + fixture.count_);
+        cpuData.sinkViscosityDiagnostics = viscosityDiagnostics.data();
         if (data.sourceVelocityDivergence) {
             sourceDivergence.assign(
                 data.sourceVelocityDivergence, data.sourceVelocityDivergence + fixture.count_);
         }
-
     }
     cpuData.sinkDensity = density.data();
     cpuData.sinkBalsaraFactor = balsaraFactor.data();
@@ -535,19 +542,25 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
         if (fixture.params_.gradientSwitch()) {
             auto const& cpu = cullenDehnenStates[i];
             auto const& gpu = data.sinkCullenDehnenStates[i];
-            requireClose("CPU/CUDA previous divergence", cpu.divergence, gpu.divergence, 0.0);
-            requireClose("CPU/CUDA reconstructed divergence", cpu.pendingDivergence,
-                gpu.pendingDivergence, 3.0e-4);
-            requireClose("CPU/CUDA CD viscosity target", cpu.targetBulkViscosityCoefficient,
-                gpu.targetBulkViscosityCoefficient, 3.0e-4);
-            requireClose(
-                "CPU/CUDA CD decay rate", cpu.inverseDecayTime, gpu.inverseDecayTime, 7.0e-5);
+            auto const& cpuDiagnostics = viscosityDiagnostics[i];
+            auto const& gpuDiagnostics = data.sinkViscosityDiagnostics[i];
+            requireClose("CPU/CUDA previous divergence", cpu.physicalDivergence(),
+                gpu.physicalDivergence(), 0.0);
+            requireClose("CPU/CUDA reconstructed divergence", cpuDiagnostics.pendingDivergence,
+                gpuDiagnostics.pendingDivergence, 3.0e-4);
+            requireClose("CPU/CUDA CD viscosity target",
+                cpuDiagnostics.targetBulkViscosityCoefficient,
+                gpuDiagnostics.targetBulkViscosityCoefficient, 3.0e-4);
+            requireClose("CPU/CUDA CD decay rate", cpuDiagnostics.inverseDecayTime,
+                gpuDiagnostics.inverseDecayTime, 7.0e-5);
             require(data.sourceVelocityDivergence == nullptr ||
                     sourceDivergence[i] == data.sourceVelocityDivergence[i],
                 "CPU/CUDA phases preserve CD neighbor history");
-            requireClose("CPU/CUDA pending divergence sample", cpu.pendingSampleDivergence,
-                gpu.pendingSampleDivergence, 3.0e-4);
-            require(cpu.sampleTime == gpu.sampleTime && cpu.sampleDivergence == gpu.sampleDivergence,
+            requireClose("CPU/CUDA pending divergence sample",
+                cpuDiagnostics.pendingSampleDivergence, gpuDiagnostics.pendingSampleDivergence,
+                3.0e-4);
+            require(cpu.sampleRung == gpu.sampleRung &&
+                    cpu.sampledDivergence() == gpu.sampledDivergence(),
                 "CPU/CUDA density preserves committed history");
         }
         requireClose("CPU/CUDA density", density[i], data.sinkDensity[i], 5.0e-5);
@@ -565,7 +578,8 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
             require(proposedRungs[i] == data.sinkProposedRungs[i], "CPU/CUDA proposed-rung parity");
         }
         if (data.sinkRungCandidates) {
-            require(rungCandidates[i] == data.sinkRungCandidates[i], "CPU/CUDA candidate-rung parity");
+            require(
+                rungCandidates[i] == data.sinkRungCandidates[i], "CPU/CUDA candidate-rung parity");
         }
         for (int dim = 0; dim < kDimensions; dim++) {
             requireClose("CPU/CUDA acceleration", acceleration[i][dim],
@@ -641,10 +655,9 @@ void testCpuCudaParity(int viscosityMode = 0) {
             if (viscosityMode == 2) {
                 data.sourceVelocityDivergence[source] = divergence;
             }
-            data.sinkCullenDehnenStates[sink] = {divergence, 0.0f, 0.0f, 0.0f};
-            data.sinkCullenDehnenStates[sink].sampleDivergence = divergence;
-            data.sinkCullenDehnenStates[sink].sampleTime = 0.125;
-            fixture.params_.viscositySampleTime = 0.25;
+            fixture.history_[sink].setDivergences(divergence, divergence);
+            fixture.history_[sink].sampleRung = data.sinkParticleRungs[particle];
+            fixture.params_.viscositySampleInterval = 0.25;
         }
         data.sinkGravityAccelerationX[sink] = 0.01f * (source % 3 - 1);
         data.sinkGravityAccelerationY[sink] = -0.005f;
@@ -789,13 +802,15 @@ void testMorrisMonaghanDensity() {
                     double const timeStep = globalTimestep ? 0.08 : 0.04;
                     double const source =
                         std::max(-densityDivergence / (density * scaleFactor), 0.0);
-                    double const expected = (0.7 + timeStep * (source + 0.1 * inverseDecayTime)) /
+                    double const expected = (double(float(Float16Storage(0.7f))) +
+                                                timeStep * (source + 0.1 * inverseDecayTime)) /
                         (1.0 + timeStep * inverseDecayTime);
                     data.sinkBulkViscosityCoefficient[center] = 0.7f;
                     data.sinkSmoothingConverged[center] = false;
                     fixture.densityPass();
                     requireClose("M&M backward Euler source and conformal decay",
-                        data.sinkBulkViscosityCoefficient[center], expected, 2.0e-5);
+                        data.sinkBulkViscosityCoefficient[center],
+                        float(Float16Storage(float(expected))), 2.0e-5);
                     float const bulkViscosityCoefficient =
                         data.sinkBulkViscosityCoefficient[center];
                     fixture.densityPass();
@@ -813,7 +828,8 @@ void testMorrisMonaghanDensity() {
                         if (i != 13) {
                             int const sink = fixture.sinkIndex(i);
                             require(data.sinkSemiactive[sink] &&
-                                    data.sinkBulkViscosityCoefficient[sink] == 0.7f,
+                                    float(data.sinkBulkViscosityCoefficient[sink]) ==
+                                        float(Float16Storage(0.7f)),
                                 "semiactive M&M neighbors retain their viscosity coefficient");
                         }
                     }
@@ -825,8 +841,8 @@ void testMorrisMonaghanDensity() {
     data.sourceBulkViscosityCoefficient = nullptr;
     data.sinkBulkViscosityCoefficient = nullptr;
     fixture.densityPass();
-    require(data.sourceVelocityDivergence == nullptr &&
-            data.sinkCullenDehnenStates == nullptr,
+    require(data.sourceVelocityDivergence == nullptr && data.sinkCullenDehnenStates == nullptr &&
+            data.sinkViscosityDiagnostics == nullptr,
         "M&M needs no persistent divergence or acceleration snapshot");
 }
 
@@ -875,14 +891,18 @@ void testCullenDehnenDensity() {
                     }
                     data.sourceVelocityDivergence[source] =
                         history == 2 ? (i == 13 ? -1.0f : 0.0f) : float(history);
-                    data.sinkCullenDehnenStates[sink] = {9.0f, 8.0f, 7.0f, 6.0f};
-                    auto& state = data.sinkCullenDehnenStates[sink];
-                    fixture.params_.viscositySampleTime = 0.5;
-                    state.sampleTime = i % 2 ? 0.25 : 0.375;
+                    data.sinkViscosityDiagnostics[sink] = {8.0f, 7.0f, 6.0f};
+                    auto& state = fixture.history_[sink];
+                    fixture.params_.viscositySampleInterval = 1.0;
+                    state.sampleRung = i % 2 ? 0 : 1;
                     double const physicalDivergence = flow < 2 ? -3.0 : (flow == 2 ? -1.0 : 0.0);
                     double const steepening = flow == 0 ? 3.0 : (flow == 2 ? 1.0 : 0.0);
-                    state.sampleDivergence = float(physicalDivergence +
-                        steepening * scaleFactor * (fixture.params_.viscositySampleTime - state.sampleTime));
+                    state.setDivergences(9.0f,
+                        float(physicalDivergence +
+                            steepening * scaleFactor *
+                                (0.5 *
+                                    (std::ldexp(1.0, -state.sampleRung) +
+                                        std::ldexp(1.0, -(i == 13 ? 1 : 0))))));
                     data.sourceRungs[source] = data.sinkParticleRungs[fixture.particleIndex(i)] =
                         i == 13 ? 1 : 0;
                 }
@@ -891,19 +911,21 @@ void testCullenDehnenDensity() {
                     int const source = fixture.sourceIndex(i);
                     int const sink = fixture.sinkIndex(i);
                     auto const& state = data.sinkCullenDehnenStates[sink];
+                    auto const& diagnostics = data.sinkViscosityDiagnostics[sink];
                     double const expectedDivergence = flow < 2 ? -3.0 : (flow == 2 ? -1.0 : 0.0);
-                    requireClose("CD affine physical divergence", state.pendingDivergence,
+                    requireClose("CD affine physical divergence", diagnostics.pendingDivergence,
                         expectedDivergence, 3.0e-5);
-                    require(state.divergence == 9.0f,
+                    require(state.physicalDivergence() == 9.0f,
                         "CD density preserves previous divergence until all sinks finish");
                     require(data.sourceVelocityDivergence[source] ==
                             (history == 2 ? (i == 13 ? -1.0f : 0.0f) : float(history)),
                         "CD source divergence remains immutable");
-                    require(data.sinkBulkViscosityCoefficient[sink] == 0.7f,
+                    require(float(data.sinkBulkViscosityCoefficient[sink]) ==
+                            float(Float16Storage(0.7f)),
                         "CD density does not apply the M&M update");
                     if (flow == 1 || flow == 3 || history == 1) {
                         requireClose("nonsteepening flow and expanding neighbor history",
-                            state.targetBulkViscosityCoefficient, 0.0, 3.0e-5);
+                            diagnostics.targetBulkViscosityCoefficient, 0.0, 3.0e-5);
                     }
                 }
                 int const center = fixture.sinkIndex(13);
@@ -918,7 +940,17 @@ void testCullenDehnenDensity() {
                     std::pow(2.0 * std::pow(1.0 - signAverage, 4) * divergence, 2);
                 double const limiter =
                     numerator + shearSquared > 0 ? numerator / (numerator + shearSquared) : 0.0;
-                double const detector = flow == 0 ? 3.0 : (flow == 2 ? 1.0 : 0.0);
+                // The analytic flow is unchanged; its prior divergence has been
+                // rounded once into compact history. Derived physical shock rate:
+                // A = max((θ_previous − θ_current)/(a Δτ), 0).
+                // θ_previous → centerHistory.sampledDivergence(); θ_current → divergence;
+                // a → scaleFactor; Δτ → sampleInterval; A → detector.
+                auto const& centerHistory = data.sinkCullenDehnenStates[center];
+                double const sampleInterval =
+                    0.5 * (std::ldexp(1.0, -centerHistory.sampleRung) + 0.5);
+                double const detector = std::max(0.0,
+                    (double(centerHistory.sampledDivergence()) - divergence) /
+                        (scaleFactor * sampleInterval));
                 double signal =
                     std::sqrt(double(data.adiabaticIndex) * (data.adiabaticIndex - 1.0) * 0.9);
                 for (int i = 0; i < fixture.count_; ++i) {
@@ -943,30 +975,34 @@ void testCullenDehnenDensity() {
                 double const expectedTarget =
                     2.0 * supportSquaredDetector / (signal * signal + supportSquaredDetector);
                 requireClose("CD shock target including self history and pair signal",
-                    data.sinkCullenDehnenStates[center].targetBulkViscosityCoefficient,
+                    data.sinkViscosityDiagnostics[center].targetBulkViscosityCoefficient,
                     expectedTarget, 4.0e-5);
                 requireClose("CD conformal decay uses full support",
-                    data.sinkCullenDehnenStates[center].inverseDecayTime,
+                    data.sinkViscosityDiagnostics[center].inverseDecayTime,
                     0.1 * signal / (scaleFactor * 0.25), 3.0e-5);
                 float const oldTarget =
-                    data.sinkCullenDehnenStates[center].targetBulkViscosityCoefficient;
+                    data.sinkViscosityDiagnostics[center].targetBulkViscosityCoefficient;
                 fixture.densityPass();
                 requireClose("CD repeated density preserves its source history",
-                    data.sinkCullenDehnenStates[center].targetBulkViscosityCoefficient, oldTarget,
+                    data.sinkViscosityDiagnostics[center].targetBulkViscosityCoefficient, oldTarget,
                     0.0);
-                // A first sample, duplicate event or stale event cannot infer a time derivative.
-                for (double const sampleTime : {-1.0, 0.5, 0.625}) {
+                // Missing history and suppressed diagnostic intervals cannot infer a time
+                // derivative.
+                for (int const historyCase : {0, 1, 2}) {
+                    int const sampleRung = historyCase == 0 ? -1 : 1;
+                    fixture.params_.viscositySampleInterval =
+                        historyCase == 0 ? 1.0 : (historyCase == 1 ? 0.0 : -1.0);
                     for (int i = 0; i < fixture.count_; ++i) {
-                        auto& state = data.sinkCullenDehnenStates[fixture.sinkIndex(i)];
-                        state.sampleTime = sampleTime;
-                        state.sampleDivergence = -100.0f;
+                        auto& state = fixture.history_[fixture.sinkIndex(i)];
+                        state.sampleRung = sampleRung;
+                        state.setDivergences(state.physicalDivergence(), -100.0f);
                     }
                     fixture.densityPass();
-                    requireClose("CD missing or nonforward history has no shock target",
-                        data.sinkCullenDehnenStates[center].targetBulkViscosityCoefficient,
-                        0.0, 0.0);
-                    require(data.sinkCullenDehnenStates[center].sampleTime == sampleTime &&
-                            data.sinkCullenDehnenStates[center].sampleDivergence == -100.0f,
+                    requireClose("CD missing history or suppressed interval has no shock target",
+                        data.sinkViscosityDiagnostics[center].targetBulkViscosityCoefficient, 0.0,
+                        0.0);
+                    require(data.sinkCullenDehnenStates[center].sampleRung == sampleRung &&
+                            data.sinkCullenDehnenStates[center].sampledDivergence() == -100.0f,
                         "CD density does not commit history");
                 }
             }
@@ -1015,14 +1051,18 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
                     }
                     velocity[dim][source] = float(value);
                 }
-                data.sinkCullenDehnenStates[sink] = {9.0f, 8.0f, 7.0f, 6.0f};
-                auto& state = data.sinkCullenDehnenStates[sink];
-                fixture.params_.viscositySampleTime = 0.5;
-                state.sampleTime = i % 2 ? 0.25 : 0.375;
+                data.sinkViscosityDiagnostics[sink] = {8.0f, 7.0f, 6.0f};
+                auto& state = fixture.history_[sink];
+                fixture.params_.viscositySampleInterval = 1.0;
+                state.sampleRung = i % 2 ? 0 : 1;
                 double const physicalDivergence = flow < 2 ? -3.0 : (flow == 2 ? -1.0 : 0.0);
                 double const steepening = flow == 0 ? 3.0 : (flow == 2 ? 1.0 : 0.0);
-                state.sampleDivergence = float(physicalDivergence - (huEtAl ? 0.0 : 3.0 * expansion / a2) +
-                    steepening * scaleFactor * (fixture.params_.viscositySampleTime - state.sampleTime));
+                state.setDivergences(9.0f,
+                    float(physicalDivergence - (huEtAl ? 0.0 : 3.0 * expansion / a2) +
+                        steepening * scaleFactor *
+                            (0.5 *
+                                (std::ldexp(1.0, -state.sampleRung) +
+                                    std::ldexp(1.0, -(i == 13 ? 1 : 0))))));
                 data.sourceRungs[source] = data.sinkParticleRungs[fixture.particleIndex(i)] =
                     i == 13 ? 1 : 0;
             }
@@ -1030,16 +1070,20 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
             for (int i = 0; i < fixture.count_; ++i) {
                 int const sink = fixture.sinkIndex(i);
                 auto const& state = data.sinkCullenDehnenStates[sink];
+                auto const& diagnostics = data.sinkViscosityDiagnostics[sink];
                 double const expectedDivergence = flow < 2 ? -3.0 : (flow == 2 ? -1.0 : 0.0);
-                requireClose("gradient-switch affine physical divergence", state.pendingDivergence,
-                    expectedDivergence, 3.0e-5);
-                require(state.divergence == 9.0f,
+                requireClose("gradient-switch affine physical divergence",
+                    diagnostics.pendingDivergence, expectedDivergence, 3.0e-5);
+                require(state.physicalDivergence() == 9.0f,
                     "gradient-switch density preserves previous divergence until all sinks finish");
-                require(data.sinkBulkViscosityCoefficient[sink] == 0.7f,
+                require(
+                    float(data.sinkBulkViscosityCoefficient[sink]) == float(Float16Storage(0.7f)),
                     "gradient-switch density does not apply the M&M update");
-                if (flow == 1 || flow == 3) {
-                    requireClose("nonsteepening flow has no shock target",
-                        state.targetBulkViscosityCoefficient, 0.0, 3.0e-5);
+                double const expectedSample =
+                    expectedDivergence - (huEtAl ? 0.0 : 3.0 * expansion / a2);
+                if ((flow == 1 || flow == 3) && state.sampledDivergence() <= expectedSample) {
+                    requireClose("nonsteepening represented history has no shock target",
+                        diagnostics.targetBulkViscosityCoefficient, 0.0, 3.0e-5);
                 }
             }
             // Equation (47) from the reconstructed gradient: |curl v|² is 100 for the sheared
@@ -1050,7 +1094,16 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
             double const limiter = divergence != 0.0 ?
                 divergence * divergence / (divergence * divergence + curlSquared) :
                 0.0;
-            double const detector = flow == 0 ? 3.0 : (flow == 2 ? 1.0 : 0.0);
+            // Account only for the quantized previous sample in the independent
+            // Appendix-B3 derivative. Derived A = max((θ_previous − θ_current)/(a Δτ), 0).
+            // θ_previous → centerHistory.sampledDivergence(); θ_current → expectedSample;
+            // a → scaleFactor; Δτ → sampleInterval; A → detector.
+            auto const& centerHistory = data.sinkCullenDehnenStates[center];
+            double const sampleInterval = 0.5 * (std::ldexp(1.0, -centerHistory.sampleRung) + 0.5);
+            double const expectedSample = divergence - (huEtAl ? 0.0 : 3.0 * expansion / a2);
+            double const detector = std::max(0.0,
+                (double(centerHistory.sampledDivergence()) - expectedSample) /
+                    (scaleFactor * sampleInterval));
             double const soundSpeed =
                 std::sqrt(double(data.adiabaticIndex) * (data.adiabaticIndex - 1.0) * 0.9);
             double const smoothingLength = 0.25 /
@@ -1063,8 +1116,8 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
                     10.0 * smoothingLength * smoothingLength * a2 * a2 * limiter * detector /
                         (soundSpeed * soundSpeed));
             requireClose("gradient-switch shock target",
-                data.sinkCullenDehnenStates[center].targetBulkViscosityCoefficient, expectedTarget,
-                4.0e-5);
+                data.sinkViscosityDiagnostics[center].targetBulkViscosityCoefficient,
+                expectedTarget, 4.0e-5);
             double signalSpeed = soundSpeed;
             for (int i = 0; i < fixture.count_; ++i) {
                 int const source = fixture.sourceIndex(i);
@@ -1085,7 +1138,7 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
                 }
             }
             requireClose("gradient-switch conformal decay",
-                data.sinkCullenDehnenStates[center].inverseDecayTime,
+                data.sinkViscosityDiagnostics[center].inverseDecayTime,
                 huEtAl ? 0.1 * signalSpeed / (scaleFactor * 0.25) :
                          0.1 * soundSpeed / (scaleFactor * smoothingLength),
                 3.0e-5);
@@ -1094,25 +1147,27 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
                     ((divergence * divergence + curlSquared) * a2 * a2 +
                         1.0e-4 * soundSpeed * soundSpeed / (0.25 * 0.25));
                 requireClose("Hu quadratic vorticity limiter with sound-speed regularization",
-                    data.sinkCullenDehnenStates[center].limiter, expectedLimiter, 4.0e-5);
+                    data.sinkViscosityDiagnostics[center].limiter, expectedLimiter, 4.0e-5);
             }
             require(data.sourceVelocityDivergence == nullptr,
                 "Hu and Price need no neighbor divergence snapshot");
             requireClose("model-specific divergence sample",
-                data.sinkCullenDehnenStates[center].pendingSampleDivergence,
+                data.sinkViscosityDiagnostics[center].pendingSampleDivergence,
                 divergence - (huEtAl ? 0.0 : 3.0 * expansion / a2), 4.0e-5);
-            for (double const sampleTime : {-1.0, 0.5, 0.625}) {
+            for (int const historyCase : {0, 1, 2}) {
+                int const sampleRung = historyCase == 0 ? -1 : 1;
+                fixture.params_.viscositySampleInterval =
+                    historyCase == 0 ? 1.0 : (historyCase == 1 ? 0.0 : -1.0);
                 for (int i = 0; i < fixture.count_; ++i) {
-                    auto& state = data.sinkCullenDehnenStates[fixture.sinkIndex(i)];
-                    state.sampleTime = sampleTime;
-                    state.sampleDivergence = -100.0f;
+                    auto& state = fixture.history_[fixture.sinkIndex(i)];
+                    state.sampleRung = sampleRung;
+                    state.setDivergences(state.physicalDivergence(), -100.0f);
                 }
                 fixture.densityPass();
-                requireClose("Hu/Price missing or nonforward history has no shock target",
-                    data.sinkCullenDehnenStates[center].targetBulkViscosityCoefficient,
-                    0.0, 0.0);
-                require(data.sinkCullenDehnenStates[center].sampleTime == sampleTime &&
-                        data.sinkCullenDehnenStates[center].sampleDivergence == -100.0f,
+                requireClose("Hu/Price missing history or suppressed interval has no shock target",
+                    data.sinkViscosityDiagnostics[center].targetBulkViscosityCoefficient, 0.0, 0.0);
+                require(data.sinkCullenDehnenStates[center].sampleRung == sampleRung &&
+                        data.sinkCullenDehnenStates[center].sampledDivergence() == -100.0f,
                     "Hu/Price density does not commit history");
             }
         }
@@ -1191,7 +1246,8 @@ void testCullenDehnenExcludedThermodynamics() {
         data.sourceBulkViscosityCoefficient[source] = i == 0 ? 0.7f : 1.0e38f;
         data.sinkSmoothingConverged[sink] = true;
         data.sinkDensity[sink] = -9.0f;
-        data.sinkCullenDehnenStates[sink] = {3.0f, 4.0f, 5.0f, 6.0f};
+        fixture.history_[sink].setDivergences(3.0f, 0.0f);
+        data.sinkViscosityDiagnostics[sink] = {4.0f, 5.0f, 6.0f};
     }
     // The invalid energy and enormous alpha belong to a gathered source outside
     // every support. Neither its sound speed nor its beta may be evaluated.
@@ -1201,13 +1257,26 @@ void testCullenDehnenExcludedThermodynamics() {
     requireClose("isolated active CD density", data.sinkDensity[active],
         data.gasMass * kernelW(0.0) / std::pow(0.1, 3), 2.0e-5);
     requireClose("unresolved CD neighborhood divergence",
-        data.sinkCullenDehnenStates[active].pendingDivergence, 0.0, 0.0);
+        data.sinkViscosityDiagnostics[active].pendingDivergence, 0.0, 0.0);
     require(data.sinkDensity[inactive] == -9.0f && !data.sinkSemiactive[inactive],
         "excluded inactive thermodynamics remain untouched");
     auto const& state = data.sinkCullenDehnenStates[inactive];
-    require(state.divergence == 3.0f && state.pendingDivergence == 4.0f &&
-            state.targetBulkViscosityCoefficient == 5.0f && state.inverseDecayTime == 6.0f,
+    auto const& diagnostics = data.sinkViscosityDiagnostics[inactive];
+    require(state.physicalDivergence() == 3.0f && diagnostics.pendingDivergence == 4.0f &&
+            diagnostics.targetBulkViscosityCoefficient == 5.0f &&
+            diagnostics.inverseDecayTime == 6.0f,
         "excluded inactive CD history remains untouched");
+    // Output-only density passes have no event scratch. They may recompute
+    // density while leaving both committed histories and the unused buffer intact.
+    auto* savedDiagnostics = data.sinkViscosityDiagnostics;
+    data.sinkViscosityDiagnostics = nullptr;
+    fixture.densityPass();
+    require(data.sinkCullenDehnenStates[active].physicalDivergence() == 3.0f &&
+            data.sinkCullenDehnenStates[active].sampleRung == -1 &&
+            data.sinkCullenDehnenStates[inactive].physicalDivergence() == 3.0f &&
+            savedDiagnostics[inactive].pendingDivergence == 4.0f,
+        "density without event scratch changed committed or unused viscosity state");
+    data.sinkViscosityDiagnostics = savedDiagnostics;
     fixture.hydro();
     requireClose("excluded alpha leaves isolated heating zero", data.sinkInternalEnergyRate[active],
         0.0, 0.0);

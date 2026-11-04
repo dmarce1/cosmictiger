@@ -228,7 +228,7 @@ function(cosmictiger_feature_sources output)
             endif()
             if(COSMICTIGER_ENABLE_STAR_FORMATION)
                 list(APPEND cosmictiger_source_files tests/sph/star_formation.cpp
-                    tests/star_formation_particles.cpp)
+                    tests/star_formation_particles.cpp tests/sph/source_timing.cpp)
             endif()
             if(COSMICTIGER_ENABLE_FMM)
                 list(APPEND cosmictiger_source_files tests/sph/gravity.cpp

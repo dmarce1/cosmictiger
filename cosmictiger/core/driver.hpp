@@ -114,7 +114,15 @@ struct MeshKickSchedule {
 // Negative: density-only synchronized diagnostics. A negative rung selects all gas.
 SphRunReturn sphMidpointStep(int rung, double time, double timestep, double baseTimestep,
     double scale, double scaleDerivative, EnergiesT& energies, bool global = false,
-    double maximumTimestep = 0.0);
+    double maximumTimestep = 0.0, double previousGlobalTimestep = 0.0);
+// Complete cooling or the combined cooling/star-formation source once, after
+// the final drift and before changing old rungs or writing the endpoint state.
+// Global steps pass their actual completed duration; rung steps use the base
+// duration and each selected particle's old rung. The return value estimates
+// all surviving gas bounds without another kick or viscosity-history update.
+SphRunReturn sphCompleteSources(int minimumClosingRung, double time, double baseTimestep,
+    double scale, double scaleDerivative, EnergiesT& energies, double explicitTimestep = -1.0,
+    double maximumGlobalTimestep = 0.0);
 SphTreeCreateReturn sphStep1(int minrung, bool verbose = true);
 
 #endif

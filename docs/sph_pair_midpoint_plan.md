@@ -3,17 +3,20 @@
 Authorized November 4, 2026. Baseline: c6c37211a on main.
 
 The common SPH operator remains a midpoint hydro kick between chronological
-half-drifts, independently of the gravity integrator. Chemistry, star formation,
-and mesh-gravity/SPH combinations are explicitly deferred at the user's request.
-Their obsolete predictor/corrector must not keep persistent gas force rates alive.
+half-drifts, independently of the gravity integrator. The original pair-kick
+implementation deferred cooling and star formation; the subsequent source
+integration applies them at completed particle intervals, as described in
+[star formation](star_formation.md). Mesh-gravity/SPH combinations remain deferred.
+Source integration does not restore persistent gas force rates.
 
 ## Implementation
 
 1. Restore Cullen–Dehnen, Price, and Hu viscosity using the divergence-history
    alternative described in Cullen & Dehnen (2010), Appendix B3. Sample physical
-   divergence at the actual event time; preserve Price's background subtraction.
-   Commit histories only after density convergence. Repeated same-time evaluations
-   and output-only density preparation must not advance viscosity twice.
+   divergence at each particle's own midpoint; preserve Price's background
+   subtraction. Commit histories only after density convergence. Semiactive
+   measurements, output preparation and post-source bound estimates do not commit
+   history or evolve alpha. Initial estimates seed only missing histories.
 2. Remove persistent gas hydro acceleration, gravity acceleration, and entropy-rate
    arrays, including checkpoint and migration payloads. Kernels may retain nullable
    diagnostic outputs for focused tests. Production updates use event-local scratch.
@@ -39,14 +42,53 @@ Their obsolete predictor/corrector must not keep persistent gas force rates aliv
    required so the top force includes every dark-matter source.
 
 The three deleted persistent arrays are absent from checkpoints and migration.
-Gradient viscosity retains a committed divergence sample and its conformal time;
-their finite difference replaces the previous acceleration-gradient estimator.
-The SPH checkpoint block is version 70000 plus its existing model/physics suffix,
-and old force-rate checkpoints are intentionally incompatible.
+Gradient viscosity retains physical and model-sampled divergence plus the previous
+sampled rung. Their finite difference replaces the acceleration-gradient estimator.
+For dyadic steps, the elapsed midpoint interval is half the sum of the old and new
+rung durations; raw global steps use the previous and current shared global step.
+No per-particle timestamp is needed. The live rung, latest hydro rung bound and
+previous sampled rung serve different purposes: interval scheduling, deferred
+boundary selection and viscosity sampling, respectively.
+
+Evolving alpha uses two bytes of binary16 storage. Gradient history uses two
+binary16 mantissas, independent one-byte scaling exponents and a one-byte sampled
+rung: eight bytes including in-memory alignment. Its five pending float
+diagnostics occupy twenty temporary bytes per gas particle only during a
+history-updating density event, after sorting and before source conversion. They
+do not migrate or enter checkpoints. Half precision reduces the resolution of
+small divergence changes even though the scaled representation retains float's
+range. The SPH checkpoint block is version 80000 plus its existing model/physics
+suffix, with the history serialized fieldwise in seven bytes. Earlier gas
+payloads are intentionally incompatible.
 
 ## Validation
 
-Completed locally on November 4, 2026:
+The November 4 compact-history and source update passed fresh Release CPU and
+CUDA application builds. Focused units passed 75 CPU cases (one additional
+GPU-only cooling case skipped) and 30 CUDA cases. They include exhaustive finite
+binary16 round trips, scaled divergence range checks, changing-rung/global
+sample intervals, and production CPU/CUDA viscosity comparisons.
+
+Seven CPU lifecycle fixtures, ten viscosity/Balsara restart combinations, and
+six additional gradient-model restarts across global and hierarchical stepping
+passed. Committed history remains exact across those restarts; only velocity
+accumulation has the existing bounded float allowance. Ten corrupt history
+encodings were rejected by the actual checkpoint reader. The own-midpoint and
+scratch-lifetime fixture also passed with two MPI ranks, one without gas.
+Retained-octree evolution/restarts passed on CPU, CUDA and two MPI ranks, and MPI
+migration passed. The complete grouped option suite passed, including eighteen
+binary16 storage-bound cases. See `star_formation.md` for the source tests.
+
+Evidence logs are `/tmp/sph_compact_cpu_units.log`,
+`/tmp/sph_compact_cuda_units.log`, `/tmp/sph_compact_cpu_lifecycle.log`,
+`/tmp/sph_compact_extra.log`, `/tmp/sph_compact_tree_mpi.log`,
+`/tmp/sph_compact_tree_cpu_mpi.log`, `/tmp/sph_compact_tree_cuda.log`, and
+`/tmp/sph_compact_options.log`. These are focused local regressions, with no
+full-suite, hosted-CI, long-duration accuracy, or performance claim.
+
+The following validation was completed locally for the original pair-kick
+implementation on November 4, 2026, before the source and compact-history
+follow-ups described above. It does not establish validation of those follow-ups:
 
 - CPU application and unit targets compile/link; all 45 SPH kernel tests and
   seven viscosity tests pass. Coverage includes unequal-rung reciprocal impulses,
@@ -92,9 +134,9 @@ and `/tmp/sph_pair_options_{startup,grouped}.log`. Self-gravity evidence is in
 `build/molecular_hot_cuda/tests/sph_hierarchical_gravity/evidence.json`.
 
 Momentum is bounded by floating-point accumulation and float velocity storage;
-there is no bitwise global-conservation claim. No full repository suite, hosted
-CI, long-duration scientific validation, performance benchmark, or deferred
-chemistry/star/mesh-SPH execution was run.
+there is no bitwise global-conservation claim. That baseline validation included
+no full repository suite, hosted CI, long-duration scientific validation,
+performance benchmark, or chemistry/star/mesh-SPH execution.
 
 ## Sources
 

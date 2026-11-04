@@ -327,13 +327,23 @@ void runFixedScenario() {
                 }
                 auto const hydro = sphMidpointStep(global ? -1 : state.maxRung, midpointTime,
                     timestep, baseTimestep, 1.0, 0.0, state.energies, global,
-                    global ? baseTimestep : 0.0);
+                    global ? baseTimestep : 0.0, state.globalTimestep);
                 if (global) {
                     state.globalHydroTimestep = hydro.minimumTimestep;
                 }
                 {
                     profile::ScopedPhase phase("drift");
                     drift(1.0, 0.5 * timestep, midpointTime, state.tau + timestep, duration);
+                }
+                if (getOptions().chemistry.enabled || getOptions().starFormation.enabled) {
+                    int const closingRung =
+                        global ? 0 : minRung(inc(state.itime, state.maxRung));
+                    auto const sourceEstimate = sphCompleteSources(closingRung,
+                        state.tau + timestep, baseTimestep, 1.0, 0.0, state.energies,
+                        global ? timestep : -1.0, global ? baseTimestep : 0.0);
+                    if (global) {
+                        state.globalHydroTimestep = sourceEstimate.minimumTimestep;
+                    }
                 }
                 state.energies.tckin = particlesSumEnergies().kin;
             }

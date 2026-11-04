@@ -378,10 +378,12 @@ set(cosmictiger_header_files
     cosmictiger/sph/flops.hpp
     cosmictiger/sph/variable_smoothing_lengths.hpp
     cosmictiger/sph/volume.hpp
+    cosmictiger/sph/thermodynamics.hpp
+    cosmictiger/math/float16_storage.hpp
 )
 
-# Source conversions to the evolved entropy variable are deliberately deferred.
-set(cosmictiger_entropy_sources_ready OFF)
+# Completed midpoint intervals apply cooling and star formation to entropy.
+set(cosmictiger_entropy_sources_ready ON)
 if(BUILD_TESTING)
     set(cosmictiger_rockstar_test_args)
     if(NOT COSMICTIGER_WITH_ROCKSTAR)
@@ -391,9 +393,7 @@ if(BUILD_TESTING)
     if(NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_ENABLE_CHEMISTRY OR NOT cosmictiger_entropy_sources_ready)
         list(APPEND cosmictiger_chemistry_test_args --without-chemistry)
     endif()
-    # Help and build metadata describe compiled scalar capabilities even while
-    # their coupling to evolved SPH entropy is unavailable. Keep that distinction
-    # separate from the evolution-script selection above.
+    # Help and build metadata describe compiled scalar capabilities.
     set(cosmictiger_options_capability_args)
     if(NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_ENABLE_CHEMISTRY)
         list(APPEND cosmictiger_options_capability_args --without-chemistry)
@@ -450,7 +450,7 @@ if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
     endif()
 endif()
 set_source_files_properties(src/chemistry/sph.cpp src/io/view.cpp tests/sph/chemistry.cpp
-    src/stars/star_formation.cpp tests/sph/star_formation.cpp
+    src/stars/star_formation.cpp tests/sph/star_formation.cpp tests/sph/source_timing.cpp
     PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 # Star-formation device physics shares the chemistry rounding contract.
 set_source_files_properties(src/stars/star_formation_cuda.cu PROPERTIES COMPILE_OPTIONS
@@ -968,12 +968,14 @@ if(BUILD_TESTING)
         target_compile_options(springel_and_hernquist_test PRIVATE -fno-fast-math -ffp-contract=off)
         cosmictiger_add_gtest(NAME springel_and_hernquist TARGET springel_and_hernquist_test
             PROPERTIES TIMEOUT 120 PROCESSORS 1)
-        # Coupled particle evolution remains deferred; scalar/backend tests stay active.
+        # Coupled particle evolution shares the endpoint source contract.
         if(cosmictiger_entropy_sources_ready)
             if(COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
                 set(star_formation_test_integrator traditional)
-            else()
+            elseif(COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
                 set(star_formation_test_integrator global)
+            else()
+                set(star_formation_test_integrator hierarchical)
             endif()
             set(star_formation_workdir "${PROJECT_BINARY_DIR}/tests/star_formation_cpu")
             file(MAKE_DIRECTORY "${star_formation_workdir}")
@@ -995,13 +997,50 @@ if(BUILD_TESTING)
                 --hpx:threads=1 --hpx:bind=none)
             set_tests_properties(star_formation_particles_cpu PROPERTIES
                 WORKING_DIRECTORY "${star_formation_particles_workdir}" RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 1)
+            foreach(source_backend IN ITEMS cpu mpi cuda)
+                if((source_backend STREQUAL "mpi" AND NOT cosmictiger_mpi_tests) OR
+                        (source_backend STREQUAL "cuda" AND NOT COSMICTIGER_WITH_CUDA))
+                    continue()
+                endif()
+                set(source_timing_name "sph_source_timing_${source_backend}")
+                set(source_timing_workdir "${PROJECT_BINARY_DIR}/tests/${source_timing_name}")
+                file(MAKE_DIRECTORY "${source_timing_workdir}")
+                set(source_timing_launcher)
+                set(source_timing_postflags)
+                set(source_timing_args)
+                set(source_timing_cuda false)
+                if(source_backend STREQUAL "mpi")
+                    set(source_timing_launcher ${MPIEXEC_EXECUTABLE}
+                        ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS})
+                    set(source_timing_postflags ${MPIEXEC_POSTFLAGS})
+                    set(source_timing_args --hpx:localities=2 ${cosmictiger_mpi_transport_args})
+                elseif(source_backend STREQUAL "cuda")
+                    set(source_timing_cuda true)
+                endif()
+                add_test(NAME ${source_timing_name} COMMAND ${source_timing_launcher}
+                    $<TARGET_FILE:cosmictiger> ${source_timing_postflags} --run.test=sphSourceTiming
+                    --hydro.enabled=true --chemistry.enabled=true --starFormation.enabled=true
+                    --initial.particlesPerDimension=8 --chemistry.initializationTemperature=10000
+                    --gravity.cuda=${source_timing_cuda} --hydro.cuda=${source_timing_cuda}
+                    --drift.cuda=${source_timing_cuda} --chemistry.cuda=${source_timing_cuda}
+                    --starFormation.cuda=${source_timing_cuda}
+                    --run.timeIntegrator=${star_formation_test_integrator}
+                    ${cosmictiger_test_gravity_args} ${cosmictiger_test_selection_args}
+                    --hpx:threads=1 --hpx:bind=none ${source_timing_args})
+                set_tests_properties(${source_timing_name} PROPERTIES
+                    WORKING_DIRECTORY "${source_timing_workdir}" RUN_SERIAL TRUE TIMEOUT 180
+                    PROCESSORS 2 LABELS "sph;star_formation;${source_backend}")
+            endforeach()
             if(cosmictiger_mpi_tests)
                 foreach(star_mpi_fixture IN ITEMS star_formation star_formation_particles)
                     set(star_mpi_test "${star_mpi_fixture}_mpi")
                     set(star_mpi_workdir "${PROJECT_BINARY_DIR}/tests/${star_mpi_test}")
                     file(MAKE_DIRECTORY "${star_mpi_workdir}")
                     set(star_mpi_run_test star_formation)
-                    set(star_mpi_gravity_args --gravity.enabled=false)
+                    set(star_mpi_gravity_args)
+                    if(NOT star_formation_test_integrator STREQUAL "hierarchical")
+                        set(star_mpi_gravity_args --gravity.enabled=false)
+                    endif()
                     if(star_mpi_fixture STREQUAL "star_formation_particles")
                         set(star_mpi_run_test starFormationParticles)
                         set(star_mpi_gravity_args)
@@ -1034,6 +1073,21 @@ if(BUILD_TESTING)
                 ${PROJECT_BINARY_DIR}/tests/star_formation_application)
             set_tests_properties(star_formation_application PROPERTIES
                 RUN_SERIAL TRUE TIMEOUT 1200 PROCESSORS 2 LABELS "integration;star_formation;cpu")
+            if(cosmictiger_mpi_tests AND COSMICTIGER_ENABLE_FMM)
+                add_test(NAME star_formation_application_mpi COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/run_star_formation.py $<TARGET_FILE:cosmictiger>
+                    ${PROJECT_BINARY_DIR}/tests/star_formation_application_mpi
+                    --skip-fixtures ${cosmictiger_python_mpi_args})
+                set_tests_properties(star_formation_application_mpi PROPERTIES
+                    RUN_SERIAL TRUE TIMEOUT 1200 PROCESSORS 2 LABELS "integration;star_formation;mpi")
+            endif()
+            if(COSMICTIGER_WITH_CUDA AND COSMICTIGER_ENABLE_FMM)
+                add_test(NAME star_formation_application_cuda COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/run_star_formation.py $<TARGET_FILE:cosmictiger>
+                    ${PROJECT_BINARY_DIR}/tests/star_formation_application_cuda --skip-fixtures --cuda)
+                set_tests_properties(star_formation_application_cuda PROPERTIES
+                    RUN_SERIAL TRUE TIMEOUT 1200 PROCESSORS 2 LABELS "integration;star_formation;cuda")
+            endif()
         endif()
         if(COSMICTIGER_WITH_CUDA)
             add_executable(star_formation_cuda_test tests/sph/star_formation_cuda.cu
@@ -1135,7 +1189,7 @@ if(BUILD_TESTING)
         endif()
     endif()
     if(COSMICTIGER_WITH_CHEMISTRY AND COSMICTIGER_ENABLE_FMM AND cosmictiger_entropy_sources_ready)
-        foreach(integrator IN ITEMS traditional global)
+        foreach(integrator IN ITEMS traditional hierarchical global)
             string(TOUPPER "${integrator}" integrator_upper)
             if(NOT COSMICTIGER_ENABLE_INTEGRATOR_${integrator_upper})
                 continue()

@@ -130,7 +130,7 @@ CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnostics(
 template <typename Real, typename Counter>
 CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnosticsFromHistory(
     cullen_and_dehnen::VelocityGradientSums<Real> const& sums, Real scaleFactor,
-    SphCullenDehnenState const& state, double sampleTime, Real supportRadius, Real soundSpeed,
+    SphCullenDehnenState const& state, double sampleInterval, Real supportRadius, Real soundSpeed,
     Real signalSpeed, Real maximumBulkViscosityCoefficient, Real decayCoefficient,
     Counter& floatingPointOperations) {
     Real velocityGradient[3][3];
@@ -144,7 +144,7 @@ CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnosticsFromHistory(
     Real const derivative = rank == 0 ?
         Real(0) :
         cullen_and_dehnen::divergenceTimeDerivative(
-            sampleDivergence, scaleFactor, state, sampleTime, floatingPointOperations);
+            sampleDivergence, scaleFactor, state, sampleInterval, floatingPointOperations);
     auto result = diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, supportRadius,
         soundSpeed, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient,
         floatingPointOperations);

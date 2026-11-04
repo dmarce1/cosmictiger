@@ -894,6 +894,54 @@ mapSize = 8
         if not re.search(r"^hydro\.viscosityEvolution\s*:\s*hu_etal\s*$", hu_ini, re.MULTILINE):
             raise RuntimeError("Hu viscosity INI selector was not applied")
 
+    # Metadata-only cases exercise the storage range without integrating a flow
+    # with extreme viscosity. Each model limits only its stored floor or maximum.
+    viscosityStorageModels = (
+        ("morrisAndMonaghan", "hydro.viscosityAlphaMin"),
+        ("cullenAndDehnen", "hydro.viscosityAlphaMax"),
+        ("priceEtAl", "hydro.viscosityAlphaMaxPrice"),
+        ("hu_etal", "hydro.viscosityAlphaMaxHu"),
+    )
+    halfMinimum = 2.0 ** -24
+    halfMaximum = 65504.0
+    halfOutsideValues = (2.0 ** -25, 65505.0)
+    invalidHalfCases = []
+    for model, key in viscosityStorageModels:
+        for bound, value in zip(("below", "above"), halfOutsideValues):
+            invalidHalfCases.append((key, (
+                f"viscosity_half_{model}_{bound}", metadata_options + [
+                    f"--hydro.viscosityEvolution={model}", f"--{key}={value:.17g}"], False)))
+    for (key, _), output in zip(invalidHalfCases,
+                               runAll([case for _, case in invalidHalfCases])):
+        if key not in output or "binary16 viscosity storage" not in output:
+            raise RuntimeError(f"invalid binary16 {key} lacked its storage diagnostic")
+
+    acceptedHalfCases = []
+    for model, selectedKey in viscosityStorageModels:
+        for bound, value, unusedValue in zip(
+                ("minimum", "maximum"), (halfMinimum, halfMaximum), halfOutsideValues):
+            settings = {key: unusedValue for _, key in viscosityStorageModels}
+            settings[selectedKey] = value
+            acceptedHalfCases.append((settings, (
+                f"viscosity_half_{model}_{bound}", metadata_options + [
+                    f"--hydro.viscosityEvolution={model}",
+                    *[f"--{key}={setting:.17g}" for key, setting in settings.items()]], True)))
+    # Fixed alpha has no per-particle binary16 array; neither its value nor any
+    # unused evolution coefficient acquires the narrower storage restriction.
+    for bound, value in zip(("below", "above"), halfOutsideValues):
+        settings = {key: value for _, key in viscosityStorageModels}
+        settings["hydro.viscosityAlpha"] = value
+        acceptedHalfCases.append((settings, (
+            f"viscosity_half_none_{bound}", metadata_options + [
+                "--hydro.viscosityEvolution=none",
+                *[f"--{key}={setting:.17g}" for key, setting in settings.items()]], True)))
+    for (settings, _), output in zip(acceptedHalfCases,
+                                    runAll([case for _, case in acceptedHalfCases])):
+        if "Checkpoint state and mode validation passed" not in output:
+            raise RuntimeError("binary16 range case did not finish metadata validation")
+        for key, value in settings.items():
+            assertNumericSetting(output, key, value)
+
     verbose_config = args.workdir / "verbose.ini"
     verbose_config.write_text("[run]\nverbose = true\n")
     verbose_output = run("verbose_ini", metadata_options + [
@@ -951,7 +999,7 @@ mapSize = 8
                        success=False)
         if "pending SPH entropy source conversions" not in rejected:
             raise RuntimeError("compiled star formation lacked deferred-coupling guidance")
-    elif not hydro_rejected and args.time_integrator != "hierarchical":
+    elif not hydro_rejected:
         star_options = [option for option in metadata_options
                         if not option.startswith("--hydro.enabled=")] + [
                             "--hydro.enabled=true", "--starFormation.enabled=true",
@@ -1026,8 +1074,7 @@ mapSize = 8
             if "Checkpoint state and mode validation passed" not in output:
                 raise RuntimeError("z-plane acceleration checkpoint state did not round-trip")
 
-    if (chemistryAvailable and coupledSourcesAvailable and not hydro_rejected and
-            args.time_integrator != "hierarchical"):
+    if chemistryAvailable and coupledSourcesAvailable and not hydro_rejected:
         cooling_options = [option for option in metadata_options
                            if not option.startswith("--hydro.enabled=")] + [
                                "--hydro.enabled=true", "--chemistry.enabled=true"]
@@ -1435,7 +1482,7 @@ mapSize = 8
         if "Checkpoint state and mode validation passed" not in output:
             raise RuntimeError(f"{relative_path} did not finish metadata validation")
         if (ini["run"]["scenario"] == "cosmology" and coupledSourcesAvailable and chemistryAvailable and
-                starFormationAvailable and args.time_integrator != "hierarchical"):
+                starFormationAvailable and not hydro_rejected):
             enabled_options = [option for option in metadata_options
                                if not option.startswith("--hydro.enabled=")]
             enabled = run(f"enabled_physics_{case_name}", enabled_options +

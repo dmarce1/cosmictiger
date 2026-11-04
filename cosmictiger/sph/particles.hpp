@@ -17,65 +17,8 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/sph/thermodynamics.hpp>
 #include <cosmictiger/sph/viscosity/cullen_and_dehnen_state.hpp>
-
-namespace sph_entropy {
-
-// A = P_physical / rho_physical^adiabaticIndex, rho_c = a^3 rho_physical,
-// E = a^2 u_physical. Therefore E = A rho_c^(adiabaticIndex-1) a^(5-3
-// adiabaticIndex)/(adiabaticIndex-1). Treat the representable monatomic adiabaticIndex exactly,
-// including on the GPU.
-// clang-format off
-/*
- * Derived ideal-gas conversion from A = P_phys/ρ_phys^γ,
- * ρ_c = a³ ρ_phys, E = a² u_phys and P_phys = (γ−1)ρ_phys u_phys.
- *   E/A = ρ_c^(γ−1) a^(5−3γ)/(γ−1).
- * This is a local derivation, not a numbered source equation.
- * Symbol directory:
- *   ρ_c → density; γ → adiabaticIndex; a → scaleFactor; 5−3γ → exponent; E/A → return value.
- */
-// clang-format on
-CUDA_EXPORT inline double energyPerEntropy(
-    double density, double adiabaticIndex, double scaleFactor) {
-    double const exponent =
-        (adiabaticIndex == 5.0 / 3.0 || adiabaticIndex == double(float(5.0 / 3.0))) ?
-        0.0 :
-        5.0 - 3.0 * adiabaticIndex;
-    return std::pow(density, adiabaticIndex - 1.0) * std::pow(scaleFactor, exponent) /
-        (adiabaticIndex - 1.0);
-}
-
-// clang-format off
-/*
- * Derived ideal-gas conversion from A = P_phys/ρ_phys^γ,
- * ρ_c = a³ ρ_phys, E = a² u_phys and P_phys = (γ−1)ρ_phys u_phys.
- *   E = A ρ_c^(γ−1) a^(5−3γ)/(γ−1).
- * This is a local derivation, not a numbered source equation.
- * Symbol directory:
- *   A → entropy; ρ_c → density; γ → adiabaticIndex; a → scaleFactor; E → return value.
- */
-// clang-format on
-CUDA_EXPORT inline double storedEnergy(
-    double entropy, double density, double adiabaticIndex, double scaleFactor) {
-    return entropy * energyPerEntropy(density, adiabaticIndex, scaleFactor);
-}
-
-// clang-format off
-/*
- * Derived ideal-gas conversion from A = P_phys/ρ_phys^γ,
- * ρ_c = a³ ρ_phys, E = a² u_phys and P_phys = (γ−1)ρ_phys u_phys.
- *   A = (γ−1) E ρ_c^(1−γ) a^(3γ−5).
- * This is a local derivation, not a numbered source equation.
- * Symbol directory:
- *   E → energy; ρ_c → density; γ → adiabaticIndex; a → scaleFactor; A → return value.
- */
-// clang-format on
-CUDA_EXPORT inline double fromStoredEnergy(
-    double energy, double density, double adiabaticIndex, double scaleFactor) {
-    return energy / energyPerEntropy(density, adiabaticIndex, scaleFactor);
-}
-
-}    // namespace sph_entropy
 
 #ifdef SPH_PARTICLES_CPP
 #define SPH_PARTICLES_EXTERN
@@ -97,7 +40,7 @@ CUDA_EXPORT inline double fromStoredEnergy(
 
 using SphAcceleration = Vector3<float>;
 
-// Deferred cooling stores an equilibrium electron-fraction guess; hydro owns entropy.
+// Cooling stores an equilibrium electron-fraction guess; hydro owns entropy.
 SPH_PARTICLES_EXTERN float* sphParticlesElectronFractions;
 
 // Canonical A=P_physical/rho_physical^gamma. Before the first density solve these
@@ -115,14 +58,15 @@ SPH_PARTICLES_EXTERN float* sphParticlesBalsaraFactors;
 // Variational operator only: zeta_i of cosmictiger/sph/volume.hpp, written by the density
 // pass for every semiactive particle before each force pass. Never migrated or checkpointed.
 SPH_PARTICLES_EXTERN float* sphParticlesGradHCorrections;
-SPH_PARTICLES_EXTERN float* sphParticlesBulkViscosityCoefficients;
+SPH_PARTICLES_EXTERN Float16Storage* sphParticlesBulkViscosityCoefficients;
 SPH_PARTICLES_EXTERN SphCullenDehnenState* sphParticlesCullenDehnenStates;
+// Temporary density/viscosity diagnostics, allocated only for one evaluation.
+SPH_PARTICLES_EXTERN SphViscosityDiagnostics* sphParticlesViscosityDiagnostics;
 SPH_PARTICLES_EXTERN char* sphParticlesConvergenceFlags;
 SPH_PARTICLES_EXTERN char* sphParticlesSemiactiveFlags;
-// Midpoint integration retains the most recent hydro timestep bound until its
-// next force pass; gravity reads it when selecting a new rung. Legacy integration
-// stages a next-rung proposal here and clears it after commit. Migrated and
-// checkpointed so a midpoint bound survives intervening finer-rung events.
+// Latest hydro timestep requirement, separate from the live particle rung.
+// Retained until the next force estimate and applied only at common boundaries.
+// Migrated and checkpointed across intervening finer-rung events.
 SPH_PARTICLES_EXTERN char* sphParticlesProposedRungs;
 
 inline int sphParticlesHydroRung(ParticleInteger gas) {
@@ -155,7 +99,9 @@ void sphParticlesLoad(FILE* fp);
 void sphParticlesSave(FILE* fp);
 void sphCheckpointTest();
 struct SphRunParameters;
-// Commit one converged event's timestamped divergence and viscosity coefficient.
+void sphParticlesBeginViscosityDiagnostics();
+void sphParticlesEndViscosityDiagnostics();
+// Commit history and viscosity only at the particle's own midpoint.
 void sphParticlesUpdateTargetAlpha(SphRunParameters const& parameters);
 
 inline float sphParticlesMass(ParticleInteger index) {
