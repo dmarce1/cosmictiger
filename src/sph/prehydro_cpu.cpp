@@ -105,12 +105,28 @@ bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData c
                 sph_flops::densityKernelOperations(selectedHydroKernel(), normalizedRadius) +
                 sph_flops::densityKernelOperations(selectedHydroKernel(), normalizedRadius, true);
         }
-        float const residual = simdSum(kernelSumPack) - targetKernelSum;
+        float const kernelSum = simdSum(kernelSumPack);
+        auto const publishInitialDensity = [&]() {
+            if (parameters.initializeDensity) {
+                // Derived from Monaghan (1992), equation (3.8), cited above:
+                // ρ_a = m H_a⁻³ Σ_b w(q_ab), including bounded supports.
+                // ρ_a -> sinkDensity; m -> gasMass; H_a -> sinkKernelSmoothingLength;
+                // Σ_b w(q_ab) -> kernelSum. No target-count approximation is used.
+                int const sinkIndex = targetNode.sinkParticleRange.first -
+                    targetNode.particleRange.first + particleIndex;
+                float const inverseSupport = 1.0f / sinkKernelSmoothingLength;
+                data.sinkDensity[sinkIndex] =
+                    data.gasMass * inverseSupport * inverseSupport * inverseSupport * kernelSum;
+                flops += 5;
+            }
+        };
+        float const residual = kernelSum - targetKernelSum;
         flops += SimdFloat::size() - 1 +
             2;    // Reduction, residual and tolerance; abs is a sign operation.
         if (std::abs(residual) <= kSphSmoothingLengthTolerance * targetKernelSum ||
             (sinkKernelSmoothingLength <= minimumSmoothingLength && residual >= 0.0f) ||
             (sinkKernelSmoothingLength >= maximumSmoothingLength && residual <= 0.0f)) {
+            publishInitialDensity();
             return true;
         }
         if (residual > 0.0f) {
@@ -131,6 +147,7 @@ bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData c
             flops += 2;
         }
         if (next == sinkKernelSmoothingLength) {
+            publishInitialDensity();
             return true;
         }
         sinkKernelSmoothingLength = next;

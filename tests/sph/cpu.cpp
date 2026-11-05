@@ -3003,6 +3003,37 @@ TEST_F(SphCpuTest, Lattice) {
     detail::testLattice();
 }
 
+TEST_F(SphCpuTest, InitialSmoothingDensityMatchesKernelSum) {
+    constexpr int kSide = 5;
+    for (auto const bounds : {std::array<float, 2>{0.1f, 0.49f}, std::array<float, 2>{0.1f, 0.24f},
+             std::array<float, 2>{0.43f, 0.49f}, std::array<float, 2>{0.3f, 0.3f}}) {
+        detail::Fixture fixture(kSide * kSide * kSide);
+        detail::initializeLattice(fixture, kSide);
+        fixture.params_.initializeDensity = true;
+        fixture.solveSmoothing(bounds[0], bounds[1], 0.2f);
+        std::vector<float> initialDensities(fixture.count_);
+        for (int i = 0; i < fixture.count_; ++i) {
+            initialDensities[i] = fixture.data_.sinkDensity[fixture.sinkIndex(i)];
+            EXPECT_GT(initialDensities[i], 0.0f);
+        }
+        // The independent production density pass sums m W rather than using
+        // the target neighbor count. Agreement must also hold at either bound.
+        fixture.params_.initializeDensity = false;
+        fixture.density();
+        for (int i = 0; i < fixture.count_; ++i) {
+            EXPECT_NEAR(initialDensities[i], fixture.data_.sinkDensity[fixture.sinkIndex(i)],
+                2.0e-6f * initialDensities[i]);
+        }
+        fixture.solveSmoothing(bounds[0], bounds[1], 0.2f);
+        for (int i = 0; i < fixture.count_; ++i) {
+            // Ordinary evolution must keep the previous density until its
+            // density/gradient pass; initializing density is strictly opt-in.
+            EXPECT_EQ(fixture.data_.sinkDensity[fixture.sinkIndex(i)],
+                fixture.data_.sourceDensity[fixture.sourceIndex(i)]);
+        }
+    }
+}
+
 TEST_F(SphCpuTest, UnequalSupports) {
     detail::testUnequalSupports();
 }

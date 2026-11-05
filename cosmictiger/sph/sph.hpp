@@ -183,6 +183,9 @@ struct SphRunParameters {
     bool deferAccelerationSources = false;
     bool refreshConvergedDensity =
         false;    // Recompute diagnostics with fixed, converged supports.
+    // Initialization only: publish the converged kernel-sum density alongside H.
+    // This pass uses the CPU solver before any thermal state is initialized.
+    bool initializeDensity = false;
     float bulkViscosityCoefficient;
     float vonNeumannRichtmyerCoefficient;
     float viscosityEpsilon;
@@ -289,6 +292,7 @@ struct SphRunParameters {
         arc & currentGradientDivergence;
         arc & deferAccelerationSources;
         arc & refreshConvergedDensity;
+        arc & initializeDensity;
         arc & uniformAccelerationY;
         arc & baseTimestep;
         arc & phase;

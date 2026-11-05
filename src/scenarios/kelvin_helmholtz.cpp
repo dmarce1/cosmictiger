@@ -15,8 +15,66 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/kelvin_helmholtz.hpp>
 #include <cosmictiger/sph/particles.hpp>
+#include <cosmictiger/sph/sph.hpp>
+#include <cosmictiger/sph/tree.hpp>
 
 namespace scenarios {
+
+namespace detail {
+
+    void initializeKelvinHelmholtzThermodynamics(float pressure) {
+        constexpr float kSupportSearchMultiplier = 1.2f;
+        // All scenario particles are still on rank zero. The tree may sort gas
+        // records, but does not migrate them; assign energies only after this pass.
+        SphTreeCreateParameters treeParameters;
+        treeParameters.minimumRung = 0;
+        treeParameters.smoothingLengthMultiplier = kSupportSearchMultiplier;
+        sphTreeCreate(treeParameters);
+        SphRunParameters parameters;
+        parameters.runType = kSphRunSmoothingLengths;
+        parameters.phase = 0;
+        parameters.minimumRung = 0;
+        parameters.scaleFactor = 1.0f;
+        parameters.expansionRate = 0.0f;
+        parameters.baseTimestep = 0.0f;
+        parameters.initializeDensity = true;
+        SphTreeNeighborParameters neighbors;
+        neighbors.minimumRung = 0;
+        neighbors.smoothingLengthMultiplier = kSupportSearchMultiplier;
+        neighbors.interactionDirection = SphInteractionDirection::TargetSupport;
+        TreeId const root{0, 0};
+        sphParticlesResetConverged();
+        int passes = 0;
+        while (true) {
+            if (++passes > 256) {
+                throw std::runtime_error("K-H initial smoothing lengths did not converge");
+            }
+            neighbors.operation = SphNeighborOperation::FindNeighbors;
+            sphTreeNeighbor(neighbors, root, Vector<TreeId>{root}).get();
+            // CPU dispatch calls sphCpuSmoothingLengths for each target leaf and
+            // retains its actual kernel-sum density, including at support bounds.
+            if (!sphRun(parameters, false).needsAnotherPass) {
+                break;
+            }
+            neighbors.operation = SphNeighborOperation::RefreshBounds;
+            sphTreeNeighbor(neighbors, root, Vector<TreeId>{}).get();
+        }
+        float const gammaMinusOne = getOptions().hydro.gamma - 1.0f;
+        for (ParticleInteger particle = 0; particle < sphParticlesSize(); ++particle) {
+            // Derived ideal-gas conversion, using the EOS in sphParticlesPressure:
+            // P = (γ − 1) ρ u  =>  u = P / [(γ − 1) ρ].
+            // P -> pressure; γ − 1 -> gammaMinusOne; ρ -> density;
+            // u -> sphParticlesSetInternalEnergy. All quantities are in code units.
+            float const density = sphParticlesDensity(particle);
+            ALWAYS_ASSERT(density > 0.0f);
+            sphParticlesSetInternalEnergy(particle, pressure / (gammaMinusOne * density));
+        }
+        sphTreeFreeNeighborList();
+        sphTreeDestroy();
+        sphParticlesClearCaches();
+    }
+
+}    // namespace detail
 
 ScenarioPlan initializeKelvinHelmholtz() {
     ParticleInteger totalNumberOfParticles = pow(getOptions().initial.particlesPerDimension, 3);
@@ -24,8 +82,6 @@ ScenarioPlan initializeKelvinHelmholtz() {
     double rho0 = 1.0;
     double vy1 = 1.0;
     double vy0 = -1.0;
-    double p1 = 19.2;
-    double p0 = 19.2;
     constexpr double kEta = 1e-1;
     constexpr double kFreq = 2.0;
     ParticleInteger leftDim =
@@ -56,7 +112,6 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 double x = (ix + 0.5) * dx;
                 double y = (iy + 0.5) * dx;
                 double z = (iz + 0.5) * dx;
-                double eint = p1 / rho1 / (getOptions().hydro.gamma - 1);
                 double h = pow(
                     m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * rho1),
                     1.0 / 3.0);
@@ -70,7 +125,6 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 sphParticlesVelocity(kYDimension, i) = vy1;
                 sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
-                sphParticlesSetInternalEnergy(i, eint);
 
                 i++;
                 x = (ix) *dx;
@@ -86,7 +140,6 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 sphParticlesVelocity(kYDimension, i) = vy1;
                 sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
-                sphParticlesSetInternalEnergy(i, eint);
 
                 i++;
             }
@@ -100,7 +153,6 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 double x = (ix + 0.5) * dx;
                 double y = (iy + 0.5) * dx;
                 double z = (iz + 0.5) * dx;
-                double eint = p0 / rho0 / (getOptions().hydro.gamma - 1);
                 double h = pow(
                     m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * rho0),
                     1.0 / 3.0);
@@ -114,7 +166,6 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 sphParticlesVelocity(kYDimension, i) = vy0;
                 sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
-                sphParticlesSetInternalEnergy(i, eint);
 
                 i++;
                 x = (ix) *dx;
@@ -130,7 +181,6 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 sphParticlesVelocity(kYDimension, i) = vy0;
                 sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
-                sphParticlesSetInternalEnergy(i, eint);
 
                 i++;
             }
@@ -140,6 +190,7 @@ ScenarioPlan initializeKelvinHelmholtz() {
         throw std::runtime_error("The Kelvin-Helmholtz scenario produced no gas particles; "
                                  "increase initial.particlesPerDimension");
     }
+    detail::initializeKelvinHelmholtzThermodynamics(19.2f);
     return ScenarioPlan{{{10.0, 1024}}};
 }
 

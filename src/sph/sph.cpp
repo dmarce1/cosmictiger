@@ -739,6 +739,8 @@ SphRunReturn sphRunCompute(bool cuda) {
 }
 
 SphRunReturn sphRun(SphRunParameters params, bool cuda) {
+    // Initial density publication is provided by the CPU smoothing solver.
+    cuda = cuda && !params.initializeDensity;
     if (hpxRank() == 0) {
         // Complete this collective before remote sources can be staged.
         sphParticlesPrepareThermodynamics(params.scaleFactor, params.runType == kSphRunHydro);
