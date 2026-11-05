@@ -11,8 +11,10 @@
 #include <stdexcept>
 
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/particle_count.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/hydro_wave.hpp>
+#include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/particles.hpp>
 
 namespace scenarios {
@@ -21,23 +23,22 @@ ScenarioPlan initializeHydroWave() {
     double rho = 1.0;
     double p0 = 0.845154255;
     auto opts = getOptions();
-    ParticleInteger const ndim = getOptions().initial.particlesPerDimension;
-    ParticleInteger const numberOfParticles = std::pow(ndim, kDimensions);
+    ParticleInteger const ndim = particle_count::roundLattice(opts.run.gasParticleCount).side;
+    ParticleInteger const numberOfParticles = particle_count::spatialPower(ndim);
+    opts.run.gasParticleCount = numberOfParticles;
     opts.initial.gasMass = rho / numberOfParticles;
     double const m = opts.initial.gasMass;
     setOptions(opts);
     ParticleInteger i = 0;
     double const dx = 1.0 / ndim;
     for (int ix = 0; ix < ndim; ix++) {
-        for (int iy = 0; iy < ndim; iy++) {
-            for (int iz = 0; iz < ndim; iz++) {
+        for (int iy = 0; iy < (kSpatialDimensions >= 2 ? ndim : 1); iy++) {
+            for (int iz = 0; iz < (kSpatialDimensions >= 3 ? ndim : 1); iz++) {
                 double x = (ix + 0.5) * dx;
                 double y = (iy + 0.5) * dx;
                 double z = (iz + 0.5) * dx;
                 double eint = p0 / rho / (getOptions().hydro.gamma - 1);
-                double h = pow(
-                    m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * rho),
-                    1.0 / 3.0);
+                double h = sph_geometry::supportRadius(m, rho, getOptions().hydro.neighborNumber);
 
                 if (ix == ndim / 2) {
                     x += 0.99 * dx;
@@ -47,8 +48,8 @@ ScenarioPlan initializeHydroWave() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x;
-                sphParticlesPosition(kYDimension, i) = y;
-                sphParticlesPosition(kZDimension, i) = z;
+                sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
                 sphParticlesVelocity(kXDimension, i) = 0.f;
                 sphParticlesVelocity(kYDimension, i) = 0.f;
                 sphParticlesVelocity(kZDimension, i) = 0.f;
@@ -60,7 +61,7 @@ ScenarioPlan initializeHydroWave() {
     }
     if (sphParticlesSize() == 0) {
         throw std::runtime_error("The hydro wave scenario produced no gas particles; "
-                                 "increase initial.particlesPerDimension");
+                                 "increase run.gasParticleCount");
     }
     return ScenarioPlan{{{0.5, 64}}};
 }

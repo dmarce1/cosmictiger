@@ -66,13 +66,15 @@ bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData c
     for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
         Vector3<SimdFloat> const separation =
             sphCpuSeparations(data, particleIndex, neighbors, first);
-        separationMagnitudePacks.push_back(simdSqrt(separation.dot(separation)));
-        flops += 9 * SimdFloat::size();    // Three fixed scales, dot product, square root.
+        separationMagnitudePacks.push_back(
+            simdSqrt(sph_geometry::spatialDot(separation, separation)));
+        flops +=
+            (2 * kSpatialDimensions + 3) * SimdFloat::size();    // XYZ scales, spatial dot, root.
     }
     float lower = minimumSmoothingLength;
     float upper = maximumSmoothingLength;
     float const targetKernelSum =
-        data.targetNeighborCount * (3.0f / (4.0f * std::numbers::pi_v<float>) );
+        data.targetNeighborCount * float(1.0 / sph_geometry::kUnitBallVolume);
     flops += 1;
     for (int iteration = 0; iteration < 128; ++iteration) {
         for (int dim = 0; dim < kDimensions; ++dim) {
@@ -116,7 +118,7 @@ bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData c
                     targetNode.particleRange.first + particleIndex;
                 float const inverseSupport = 1.0f / sinkKernelSmoothingLength;
                 data.sinkDensity[sinkIndex] =
-                    data.gasMass * inverseSupport * inverseSupport * inverseSupport * kernelSum;
+                    data.gasMass * sph_geometry::inverseVolume(inverseSupport) * kernelSum;
                 flops += 5;
             }
         };
@@ -201,7 +203,7 @@ bool sphCpuHasActiveNeighbor(SphRunParameters const& parameters, SphRunData cons
     flops += 1;
     for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
         auto const separation = sphCpuSeparations(data, particleIndex, neighbors, first);
-        auto const squaredSeparation = separation.dot(separation);
+        auto const squaredSeparation = sph_geometry::spatialDot(separation, separation);
         auto const neighborSupport = sphCpuLoad(data.sourceSmoothingLength, neighbors, first, 0.0f);
         SimdFloat const neighborRung([&](auto lane) {
             size_t const index = first + size_t(lane);
@@ -339,9 +341,9 @@ SphRunReturn sphCpuDensityAndGradients(
         // clang-format on
         float const sinkKernelSmoothingLength = smoothingLength;
         float const inverseSmoothingLength = 1.0f / sinkKernelSmoothingLength;
-        SimdFloat const massOverSupportVolume(data.gasMass * inverseSmoothingLength *
-            inverseSmoothingLength * inverseSmoothingLength);
-        flops += 4;    // Reciprocal and three mass/support products.
+        SimdFloat const massOverSupportVolume(
+            data.gasMass * sph_geometry::inverseVolume(inverseSmoothingLength));
+        flops += kSpatialDimensions + 1;    // Reciprocal and mass/support products.
         SimdFloat densityPack(0.0f);
         SimdFloat densityDerivativeSumPack(0.0f);
         SimdFloat densityWeightedDivergencePack(0.0f);
@@ -371,7 +373,7 @@ SphRunReturn sphCpuDensityAndGradients(
         for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
             Vector3<SimdFloat> const separation =
                 detail::sphCpuSeparations(data, particleIndex, neighbors, first);
-            SimdFloat const radius = simdSqrt(separation.dot(separation));
+            SimdFloat const radius = simdSqrt(sph_geometry::spatialDot(separation, separation));
             SimdFloat const normalizedRadius = radius * SimdFloat(inverseSmoothingLength);
             SimdFloat const kernelWeight = kernelW(normalizedRadius);
             densityPack += simdSelect(detail::sphCpuValidLanes(neighbors, first),
@@ -423,13 +425,13 @@ SphRunReturn sphCpuDensityAndGradients(
                     flops += 3 * SimdFloat::size();
                     if (data.sinkLogDensityRate) {
                         // Grad-H and conformal-time factors are applied below.
-                        densityDerivativeSumPack +=
-                            velocityDifference.dot(massWeightedKernelGradient);
+                        densityDerivativeSumPack += sph_geometry::spatialDot(
+                            velocityDifference, massWeightedKernelGradient);
                         flops += 6 * SimdFloat::size();
                     }
                     if (computeSphDivergence) {
-                        densityWeightedDivergencePack -=
-                            velocityDifference.dot(massWeightedKernelGradient);
+                        densityWeightedDivergencePack -= sph_geometry::spatialDot(
+                            velocityDifference, massWeightedKernelGradient);
                         flops += 6 * SimdFloat::size();
                     }
                     if (computeSphBalsara) {
@@ -451,15 +453,15 @@ SphRunReturn sphCpuDensityAndGradients(
                      * weights, independent of densities changing on other ranks.
                      */
                     SimdFloat const gradientWeight = -massWeightedGradientFactor;
-                    for (int i = 0; i < kDimensions; ++i) {
-                        for (int j = 0; j < kDimensions; ++j) {
+                    for (int i = 0; i < kSpatialDimensions; ++i) {
+                        for (int j = 0; j < kSpatialDimensions; ++j) {
                             gradientSums.moment[i][j] +=
                                 gradientWeight * separation[i] * separation[j];
                             gradientSums.velocity[i][j] +=
                                 gradientWeight * velocityDifference[i] * separation[j];
                         }
                     }
-                    flops += 54 * SimdFloat::size();
+                    flops += 6 * kSpatialDimensions * kSpatialDimensions * SimdFloat::size();
                     if (computeAccelerationGradient) {
                         Vector3<SimdFloat> const accelerationDifference = simdSelect(contributes,
                             Vector3<SimdFloat>(SimdFloat(data.sourceAccelerationX[particleIndex]),
@@ -469,13 +471,14 @@ SphRunReturn sphCpuDensityAndGradients(
                                     data.sourceAccelerationY, data.sourceAccelerationZ, neighbors,
                                     first, 0.0f),
                             Vector3<SimdFloat>(SimdFloat(0)));
-                        for (int row = 0; row < kDimensions; ++row) {
-                            for (int column = 0; column < kDimensions; ++column) {
+                        for (int row = 0; row < kSpatialDimensions; ++row) {
+                            for (int column = 0; column < kSpatialDimensions; ++column) {
                                 gradientSums.acceleration[row][column] += gradientWeight *
                                     accelerationDifference[row] * separation[column];
                             }
                         }
-                        flops += 30 * SimdFloat::size();
+                        flops +=
+                            (3 + 3 * kSpatialDimensions * kSpatialDimensions) * SimdFloat::size();
                     }
                     if (parameters.cullenDehnen && data.sourceVelocityDivergence) {
                         // Equations (15), (17): prior neighbor signs, including self.
@@ -502,7 +505,7 @@ SphRunReturn sphCpuDensityAndGradients(
                                         data.sourceInternalEnergy, neighbors, first, 1.0f),
                                     SimdFloat(1)));
                         SimdFloat const radialVelocity =
-                            physicalVelocityDifference.dot(separation) /
+                            sph_geometry::spatialDot(physicalVelocityDifference, separation) /
                             simdSelect(contributes, radius, SimdFloat(1));
                         signalSpeedPack = simdMax(signalSpeedPack,
                             simdSelect(contributes,
@@ -566,9 +569,8 @@ SphRunReturn sphCpuDensityAndGradients(
             float const soundSpeed = std::sqrt(
                 gasAdiabaticIndex * pressureEnergyRatio * data.sourceInternalEnergy[particleIndex]);
             float const smoothingLength = sinkKernelSmoothingLength /
-                float(selectedHydroKernel().smoothingLengthPerEffectiveRadius) *
+                selectedHydroKernel().smoothingLengthPerEffectiveRadius *
                 float(monaghan::kViscosityWidthScale);
-            flops.doublePrecision += 1;    // Runtime kernel-table coefficient narrowing.
             float const inverseDecayTime =
                 parameters.viscosityDecay * soundSpeed / (parameters.scaleFactor * smoothingLength);
             int const rung = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]];
@@ -584,8 +586,8 @@ SphRunReturn sphCpuDensityAndGradients(
         }
         if (computeGradientDiagnostics) {
             cullen_and_dehnen::GradientSums<float> sums{};
-            for (int i = 0; i < kDimensions; ++i) {
-                for (int j = 0; j < kDimensions; ++j) {
+            for (int i = 0; i < kSpatialDimensions; ++i) {
+                for (int j = 0; j < kSpatialDimensions; ++j) {
                     sums.moment[i][j] = simdSum(gradientSums.moment[i][j]);
                     sums.velocity[i][j] = simdSum(gradientSums.velocity[i][j]);
                     if (computeAccelerationGradient) {
@@ -657,9 +659,8 @@ SphRunReturn sphCpuDensityAndGradients(
                  * the same calibrated viscosity length as Morris & Monaghan's h.
                  */
                 float const smoothingLength = sinkKernelSmoothingLength /
-                    float(selectedHydroKernel().smoothingLengthPerEffectiveRadius) *
+                    selectedHydroKernel().smoothingLengthPerEffectiveRadius *
                     float(monaghan::kViscosityWidthScale);
-                flops.doublePrecision += 1;
                 diagnostics = price_etal::diagnosticsFromGradient(velocityGradient,
                     parameters.scaleFactor, divergenceDerivative, smoothingLength,
                     soundSpeedForSwitch, parameters.maximumBulkViscosityCoefficientPrice,

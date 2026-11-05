@@ -25,14 +25,17 @@
  */
 #pragma once
 
+#include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 
 namespace monaghan {
 
-// sqrt(5/6): converts the common effective kernel radius (2 sigma) to the
-// historical cubic-spline smoothing length used for viscosity.
-inline constexpr double kViscosityWidthScale = 0.9128709291752769;
+// Dimension-dependent cubic calibration (H/2); in 3D sqrt(5/6). Converts the common effective
+// kernel radius (2 sigma) to the historical cubic-spline smoothing length used for viscosity.
+inline constexpr double kViscosityWidthScale =
+    (kSpatialDimensions == 1 ? 0.8660254037844386 :
+                               (kSpatialDimensions == 2 ? 0.8890008890013335 : 0.9128709291752769));
 
 /*
  * Equation 4.2, p. 550, with the regularization of p. 551:

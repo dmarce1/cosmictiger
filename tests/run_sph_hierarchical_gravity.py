@@ -71,7 +71,7 @@ def main():
     require("fmm" in available["far"] and "hierarchical" in available["integrator"],
             "self-gravitating SPH regression requires FMM and hierarchical integration")
     common = {"hpx:threads": args.threads, "hpx:bind": "none", **cpu_backend_options(),
-              "initial.particlesPerDimension": 8, "initial.useGlass": "false",
+              "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.useGlass": "false",
               "hydro.enabled": "true", "gravity.enabled": "true",
               "chemistry.enabled": "false", "starFormation.enabled": "false",
               "analysis.groups": "false", "analysis.tracers": "false", "analysis.views": "false",
@@ -240,7 +240,7 @@ def main():
     # The gravity work criterion N_n <= 3 N_(n+1) then promotes rung nine into ten;
     # this criterion is independent of the SPH octree rebuild fraction.
     mixed_options = {"run.scenario": "cosmology", "run.numberOfSteps": 64,
-                     "cosmology.sigma8": 0, "initial.particlesPerDimension": 4,
+                     "cosmology.sigma8": 0, "run.darkMatterParticleCount": 64, "run.gasParticleCount": 64,
                      "initial.closePack": "false", "run.minRung": 9,
                      "hydro.cfl": 5e-6,
                      "run.maxIterations": 8, "checkpoint.intervalSeconds": 0,

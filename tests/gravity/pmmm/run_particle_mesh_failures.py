@@ -38,7 +38,7 @@ def run_case(args, name, marker, blocker):
                + args.mpi_preflag + [str(args.executable.resolve())]
                + args.mpi_postflag
                + [f"--run.test={name}", "--gravity.meshSize=8",
-                  "--initial.particlesPerDimension=8", "--hydro.enabled=false",
+                  "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512", "--hydro.enabled=false",
                   "--gravity.cuda=false", "--hpx:threads=2", "--hpx:bind=none",
                   "--hpx:localities=2", "--hpx:ini=hpx.parcel.mpi.enable=1",
                   "--hpx:ini=hpx.threadpools.io_pool_size=1"])

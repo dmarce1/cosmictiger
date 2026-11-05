@@ -23,7 +23,7 @@ void requireCount(char const* label, FlopCount reported, FlopCount executed) {
     }
 }
 
-void checkSoftening(radial_kernel::KernelTable const& kernel, double radius, bool doPhi) {
+void checkSoftening(radial_kernel::KernelTable<double> const& kernel, double radius, bool doPhi) {
     using Real = CountingReal;
     gravityKernel = kernel;
     Real force;

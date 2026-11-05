@@ -78,7 +78,7 @@ def read_header(data):
     header = Reader(data).native(Header)
     require(header.magic == 0x4354535048303031 and header.version == 3,
             "unsupported checkpoint header")
-    supported = sum(1 << bit for bit in (0, 6, 7, 8, 9, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 25))
+    supported = sum(1 << bit for bit in (0, 6, 7, 8, 9, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 25, 26))
     require(not header.flags & (1 << 16), "retired particle-mesh checkpoint")
     require(not header.flags & ~supported, "unsupported checkpoint feature flags")
     return header
@@ -89,12 +89,14 @@ def read_prefix(data):
     header = read_header(data)
     reader.skip(ctypes.sizeof(Header))
     flags = header.flags
+    dimension_count = 3 - ((header.reserved >> 28) & 3)
+    require(dimension_count in (1, 2, 3), "invalid checkpoint dimension count")
     hydro, cooling, stars = (bool(flags & (1 << bit)) for bit in (0, 11, 20))
     require(not cooling or hydro, "cooling checkpoint requires SPH")
     require(not stars or cooling, "star formation checkpoint requires cooling")
     require(hydro or not flags & ((1 << 12) | (1 << 13) | (1 << 14) | (1 << 25)),
             "SPH parameter flags require SPH")
-    result = SimpleNamespace(header=header, hydro=hydro, has_cooling=cooling, has_stars=stars,
+    result = SimpleNamespace(header=header, dimension_count=dimension_count, hydro=hydro, has_cooling=cooling, has_stars=stars,
                              position_bytes=8 if flags & (1 << 15) else 4,
                              integer_bytes=8 if flags & (1 << 21) else 4,
                              algorithms=(), pmmm=(), particle_mesh=(), viscosity=(),
@@ -118,6 +120,7 @@ def read_prefix(data):
         result.particle_mesh = reader.take("Q", 12)
         require(result.particle_mesh[0] == 1 and result.particle_mesh[11] == 1,
                 "unsupported particle-mesh checkpoint version or force convention")
+    result.initial_counts = reader.take("Q", 2) if flags & (1 << 26) else ()
     viscosity_offset = 0
     if hydro:
         result.sph_parameters = reader.take("d", 13)

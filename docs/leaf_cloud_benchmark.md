@@ -82,7 +82,7 @@ The saved `run_comparison.py` contains the exact environment, process ordering a
 
 ```sh
 taskset -c 1,2 /absolute/path/to/cosmictiger_before_or_after \
-  --run.test=stfBenchmark --initial.particlesPerDimension=32 \
+  --run.test=stfBenchmark --run.darkMatterParticleCount=32768 --run.gasParticleCount=32768 \
   --hydro.enabled=false --gravity.openingAngle=0.8 \
   --gravity.effectiveRadius=0.01876988456953534 \
   --gravity.kernelFamily=ferrers --gravity.kernelDegree=4 \

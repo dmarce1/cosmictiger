@@ -168,7 +168,7 @@ CUDA_EXPORT inline Vector3<double> gravityReferenceCorrection(
 // Unit-source acceleration with the production compact-support convention.
 // Only the nearest image is softened, even when support exceeds half a box.
 CUDA_EXPORT inline Vector3<double> directGravityReference(Vector3<double> const& displacement,
-    radial_kernel::KernelTable const& kernel, double smoothingLength, bool periodic,
+    radial_kernel::KernelTable<double> const& kernel, double smoothingLength, bool periodic,
     GravityReferenceTables const& tables) {
     double const radiusSquared = displacement[0] * displacement[0] +
         displacement[1] * displacement[1] + displacement[2] * displacement[2];
@@ -192,7 +192,8 @@ CUDA_EXPORT inline Vector3<double> directGravityReference(Vector3<double> const&
 }
 
 inline Vector3<double> directGravityReference(Vector3<double> const& displacement,
-    radial_kernel::KernelTable const& kernel, double smoothingLength, bool periodic = true) {
+    radial_kernel::KernelTable<double> const& kernel, double smoothingLength,
+    bool periodic = true) {
     return directGravityReference(
         displacement, kernel, smoothingLength, periodic, gravityReferenceTables());
 }

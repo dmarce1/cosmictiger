@@ -12,11 +12,13 @@
 
 void setKernelSelections(
     radial_kernel::KernelSpec gravity, radial_kernel::KernelSpec hydro, bool useCuda) {
-    if (!radial_kernel::isValid(gravity) || !radial_kernel::isValid(hydro)) {
+    if (!radial_kernel::isValid(gravity) ||
+        !radial_kernel::isValidDensity<kSpatialDimensions>(hydro)) {
         throw std::invalid_argument("Unsupported radial kernel family or polynomial degree");
     }
     detail::gravityKernel = radial_kernel::makeKernelTable(gravity);
-    detail::hydroKernel = radial_kernel::makeKernelTable(hydro);
+    detail::sphGravityKernel = radial_kernel::makeKernelTable<float>(gravity);
+    detail::hydroKernel = makeHydroKernelTable(hydro);
     if (useCuda) {
 #ifdef USE_CUDA
         uploadKernelSelections();

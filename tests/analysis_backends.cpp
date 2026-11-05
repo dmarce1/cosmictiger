@@ -148,7 +148,7 @@ Vector<LightconeParticle> analysisLightconeFixture(int nside) {
 // dark-matter site, offset by half a spacing, carrying the complementary mass.
 void analysisPowerSetup(bool perturb) {
     bool const hydro = getOptions().hydro.enabled;
-    int const side = getOptions().initial.particlesPerDimension;
+    int const side = getOptions().initial.latticeSide;
     int const count = side * side * side;
     int const begin = hpxRank() * count / hpxSize();
     int const end = (hpxRank() + 1) * count / hpxSize();
@@ -357,8 +357,8 @@ void analysisBackendsTest() {
     using detail::requireAnalysis;
     requireAnalysis(!cudaEnabled(), "analysisBackends requires every module CUDA option false");
     detail::analysisCheckHostContainers();
-    requireAnalysis(getOptions().initial.particlesPerDimension == 8 &&
-            !getOptions().initial.closePack && hpxSize() <= 2,
+    requireAnalysis(
+        getOptions().initial.latticeSide == 8 && !getOptions().initial.closePack && hpxSize() <= 2,
         "analysisBackends requires an 8-cubed lattice and at most two localities");
     for (auto const& locality : hpxLocalities()) {
         hpx::async<AnalysisPowerSetupAction>(locality, false).get();

@@ -268,7 +268,7 @@ standard library.
 SOURCE=/path/to/cosmictiger
 COSMICTIGER_LINEAR_GROWTH_MODES='1,0,0;2,0,0;3,0,0;1,1,0;2,2,0;1,1,1;2,2,2;2,1,0' \
 "$SOURCE/build/release/cosmictiger" --run.test=linearGrowth \
-  --initial.particlesPerDimension=8 --hydro.enabled=true --gravity.cuda=true --hydro.cuda=true --drift.cuda=true \
+  --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true --gravity.cuda=true --hydro.cuda=true --drift.cuda=true \
   --gravity.openingAngle=0.1 --hpx:threads=4 --hpx:bind=none > run.log 2>&1
 
 python3 "$SOURCE/tests/analyze_linear_growth.py" \
@@ -278,7 +278,7 @@ python3 "$SOURCE/tests/analyze_linear_growth.py" \
 COSMICTIGER_LINEAR_GROWTH_SKIP_RESPONSE=1 \
 COSMICTIGER_LINEAR_GROWTH_EVOLVE_FILE="$PWD/analysis/linear_growth_evolution_requests.csv" \
 "$SOURCE/build/release/cosmictiger" --run.test=linearGrowth \
-  --initial.particlesPerDimension=8 --hydro.enabled=true --gravity.cuda=true --hydro.cuda=true --drift.cuda=true \
+  --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true --gravity.cuda=true --hydro.cuda=true --drift.cuda=true \
   --gravity.openingAngle=0.1 --hpx:threads=4 --hpx:bind=none > evolution.log 2>&1
 
 python3 "$SOURCE/tests/analyze_linear_growth.py" \

@@ -81,7 +81,7 @@ def main():
     selections = application_arguments(executable, hydro=True)
     common = [str(executable), '--hpx:threads=1', '--hpx:bind=none', *selections,
         '--run.scenario=cosmology', '--run.endTime=0.0001', '--run.numberOfSteps=16',
-        '--run.maxIterations=1', '--initial.particlesPerDimension=8', '--initial.useGlass=false',
+        '--run.maxIterations=1', '--run.darkMatterParticleCount=512', '--run.gasParticleCount=512', '--initial.useGlass=false',
         '--cosmology.sigma8=0', '--gravity.enabled=false', '--hydro.enabled=true',
         '--chemistry.enabled=true', '--starFormation.enabled=true',
         '--chemistry.initializationTemperature=10000', '--gravity.cuda=false',

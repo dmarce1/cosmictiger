@@ -96,13 +96,14 @@ __global__ void sphCudaHydro(
     // defaults after gravity eta and smoothing lengths adopt the common width.
     constexpr float kHydroAccelerationScale = 0.7115965735877551f;
     float const smoothingLengthPerEffectiveRadius =
-        float(selectedHydroKernel().smoothingLengthPerEffectiveRadius);
-    flops.doublePrecision += 1;
+        selectedHydroKernel().smoothingLengthPerEffectiveRadius;
     float const gasMass = data.gasMass;    // every gas particle has the same mass
     float const scaledGasMass = gasMass * inverseScaleFactor;
     float const viscosityRegularization = parameters.viscosityEpsilon;    // η²/h² of p. 551
     float const expansionRate = parameters.expansionRate;    // a·da/dt, the Hubble flow of a pair
     bool const applyPairKicks = data.sourcePairUpdates && parameters.hydroKickTimestep > 0.0;
+    float const kickTimestep = applyPairKicks ? float(parameters.hydroKickTimestep) : 0.0f;
+    flops.doublePrecision += int(applyPairKicks);
     ALWAYS_ASSERT(!applyPairKicks || (parameters.midpointHydro && data.sourceIds));
     int maximumHydroRung = 0;
     int maximumGravityRung = 0;
@@ -199,8 +200,8 @@ __global__ void sphCudaHydro(
             Vector3<float> const velocity(data.sourceVelocityX[particleIndex],
                 data.sourceVelocityY[particleIndex], data.sourceVelocityZ[particleIndex]);
             float const inverseSmoothingLength = 1.0f / sinkKernelSmoothingLength;
-            float const inverseSmoothingLengthFourth =
-                sqr(sqr(inverseSmoothingLength));    // 1/H_a⁴
+            float const inverseSmoothingLengthGradientScale =
+                sph_geometry::inverseGradientScale(inverseSmoothingLength);    // H_a^-(D+1)
             flops += 8;
             // clang-format off
             /*
@@ -240,7 +241,8 @@ __global__ void sphCudaHydro(
                 Vector3<float> const separation(distance(positionX, neighbor.positionX),
                     distance(positionY, neighbor.positionY),
                     distance(positionZ, neighbor.positionZ));
-                float const separationSquared = separation.dot(separation);    // |r_ab|²
+                float const separationSquared =
+                    sph_geometry::spatialDot(separation, separation);    // |r_ab|²
                 float const neighborSmoothingLength = neighbor.smoothingLength;
                 flops +=
                     8 + (separationSquared == 0.0f ? 0 : 2);    // Distances, dot, support squares.
@@ -276,17 +278,19 @@ __global__ void sphCudaHydro(
                 float const normalizedSinkRadius = pairDistance * inverseSmoothingLength;
                 float const normalizedNeighborRadius =
                     pairDistance * inverseNeighborSmoothingLength;
-                float const sinkGradientFactor =
-                    dkernelWDq(normalizedSinkRadius) * inverseSmoothingLengthFourth / pairDistance;
+                float const sinkGradientFactor = dkernelWDq(normalizedSinkRadius) *
+                    inverseSmoothingLengthGradientScale / pairDistance;
                 float const neighborGradientFactor = dkernelWDq(normalizedNeighborRadius) *
-                    sqr(sqr(inverseNeighborSmoothingLength)) / pairDistance;
+                    sph_geometry::inverseGradientScale(inverseNeighborSmoothingLength) /
+                    pairDistance;
                 float const symmetricGradientFactor =
                     0.5f * (sinkGradientFactor + neighborGradientFactor);
                 // v_ab = v_a − v_b from the stored peculiar velocities. The physical relative
                 // velocity adds the Hubble flow (a da/dt) r_ab and enters only the viscosity.
                 Vector3<float> const velocityDifference = velocity -
                     Vector3<float>(neighbor.velocityX, neighbor.velocityY, neighbor.velocityZ);
-                float const velocityDotSeparation = velocityDifference.dot(separation);
+                float const velocityDotSeparation =
+                    sph_geometry::spatialDot(velocityDifference, separation);
                 float const physicalVelocityDotSeparation =
                     velocityDotSeparation + expansionRate * separationSquared;
                 // Phantom uses radial approach speed, without Monaghan's h/eta regularization.
@@ -416,17 +420,16 @@ __global__ void sphCudaHydro(
                         data.sourceIds[neighbor.sourceIndex], previousRung, neighbor.rung)) {
                     Vector3<float> const pairAcceleration(
                         -pairForce[kXDimension], -pairForce[kYDimension], -pairForce[kZDimension]);
-                    double const targetEntropyRate =
+                    float const targetEntropyRate =
                         sph_entropy::fromStoredEnergy(targetDissipativeEnergyRate, density,
                             adiabaticIndex, parameters.scaleFactor);
-                    double const neighborEntropyRate =
+                    float const neighborEntropyRate =
                         sph_entropy::fromStoredEnergy(neighborDissipativeEnergyRate,
                             neighborDensity, adiabaticIndex, parameters.scaleFactor);
-                    sphAccumulatePairKick(data.sourcePairUpdates[particleIndex],
+                    flops += sphAccumulatePairKick(data.sourcePairUpdates[particleIndex],
                         data.sourcePairUpdates[neighbor.sourceIndex], pairAcceleration,
-                        targetEntropyRate, neighborEntropyRate, parameters.hydroKickTimestep);
-                    flops.doublePrecision +=
-                        13 + 2 * (adiabaticIndex == float(5.0 / 3.0) ? 12 : 14);
+                        targetEntropyRate, neighborEntropyRate, kickTimestep);
+                    flops += 2 * sph_flops::entropyConversionFlops(adiabaticIndex);
                 }
                 internalEnergyRate += inverseScaleFactor *
                     variational::pairWork(
@@ -488,9 +491,8 @@ __global__ void sphCudaHydro(
                         Vector3<Position>(positionX, positionY, positionZ), velocity,
                         Vector3<float>(0.0f), Vector3<float>(0.0f), data.centralAcceleration,
                         data.centralSmoothingLength, flops);
-                    sphAccumulateExternalKick(data.sourcePairUpdates[particleIndex],
-                        externalAcceleration, parameters.hydroKickTimestep);
-                    flops.doublePrecision += 6;
+                    flops += sphAccumulateExternalKick(
+                        data.sourcePairUpdates[particleIndex], externalAcceleration, kickTimestep);
                 }
                 if (data.sinkAccelerations) {
                     for (int dim = 0; dim < kDimensions; dim++) {
@@ -516,7 +518,7 @@ __global__ void sphCudaHydro(
                     // Reversible PdV and homogeneous expansion leave A unchanged.
                     data.sinkEntropyRate[sinkIndex] = sph_entropy::fromStoredEnergy(
                         dissipativeEnergyRate, density, adiabaticIndex, parameters.scaleFactor);
-                    flops.doublePrecision += adiabaticIndex == float(5.0 / 3.0) ? 12 : 14;
+                    flops += sph_flops::entropyConversionFlops(adiabaticIndex);
                 }
                 if (parameters.phase == 1) {
                     // clang-format off
@@ -613,7 +615,8 @@ __global__ void sphCudaHydro(
                         nextRung = 0;
                     }
                     if (nextRung >= kMaxRung &&
-                        atomicCAS(&reduction->timestepFailureReported, 0, 1) == 0) {
+                        reduction->timestepError.record(
+                            {data.sinkParticleIndices[sinkIndex], nextRung})) {
                         printf(
                             "SPH timestep exceeds rung range: particle=%lli rung=%i hydroRung=%i "
                             "previousRung=%i minimumRung=%i baseDt=%e selectedDt=%e capDt=%e "
@@ -640,14 +643,17 @@ __global__ void sphCudaHydro(
                             int(data.selfGravityEnabled), gravityRung, gravityTimestep);
 #endif
                     }
-                    ALWAYS_ASSERT(nextRung < kMaxRung);
-                    if (data.proposeRungs) {
-                        if (parameters.retainProposedRungs) {
-                            nextRung = max(nextRung, data.sinkFlags[sinkIndex].proposedRung());
+                    // Publish only representable rungs. Every thread still reaches
+                    // the block barriers; the host throws after stream completion.
+                    if (nextRung < kMaxRung) {
+                        if (data.proposeRungs) {
+                            if (parameters.retainProposedRungs) {
+                                nextRung = max(nextRung, data.sinkFlags[sinkIndex].proposedRung());
+                            }
+                            data.sinkFlags[sinkIndex].setProposedRung(nextRung);
+                        } else {
+                            data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] = nextRung;
                         }
-                        data.sinkFlags[sinkIndex].setProposedRung(nextRung);
-                    } else {
-                        data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] = nextRung;
                     }
                     maximumHydroRung = max(maximumHydroRung, hydroRung);
                     maximumRung = max(maximumRung, nextRung);
@@ -663,7 +669,11 @@ __global__ void sphCudaHydro(
         }
         __syncthreads();
         if (threadIndex == 0) {
-            targetNodeIndex = atomicAdd(&reduction->nextNodeIndex, 1);
+            // Stop assigning nodes after a failed timestep. This decision is
+            // block-uniform, so shared workspace cleanup and barriers stay valid.
+            targetNodeIndex = reduction->timestepError.pending() ?
+                data.numberOfTargetNodes :
+                atomicAdd(&reduction->nextNodeIndex, 1);
         }
         __syncthreads();
     }

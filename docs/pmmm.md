@@ -47,7 +47,7 @@ threads so waiting for the shared planner lock cannot block HPX workers.
 ./build_pmmm/cosmictiger --gravity.method.far=pmmm --gravity.method.near=pp \
   --gravity.expansionDegree=6 --run.timeIntegrator=traditional \
   --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
-  --initial.particlesPerDimension=32 --hydro.enabled=false \
+  --run.darkMatterParticleCount=32768 --run.gasParticleCount=32768 --hydro.enabled=false \
   --gravity.cuda=false --hpx:threads=12
 ```
 
@@ -583,7 +583,7 @@ regression can be selected explicitly:
 ```sh
 ./build_pmmm/cosmictiger --run.test=pmmm --gravity.method.far=pmmm \
   --gravity.method.near=pp --run.timeIntegrator=traditional --gravity.meshSize=8 \
-  --initial.particlesPerDimension=8 --hydro.enabled=false \
+  --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=false \
   --gravity.cuda=false --hpx:threads=2 --hpx:bind=none
 ```
 

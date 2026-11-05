@@ -11,6 +11,7 @@
 #include <stdexcept>
 
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/particle_count.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/rayleigh_taylor.hpp>
 #include <cosmictiger/sph/particles.hpp>
@@ -19,14 +20,10 @@ namespace scenarios {
 
 ScenarioPlan initializeRayleighTaylor() {
     auto opts = getOptions();
-    double const requestedSide = opts.initial.particlesPerDimension;
-    // Resolve each quarter of the box with whole cells. The heavy layers have
-    // two equal-mass particles per cell; the light layer has one.
-    int const quarterDim =
-        std::lround(std::cbrt(requestedSide * requestedSide * requestedSide / 96.0));
-    if (quarterDim < 1) {
-        throw std::runtime_error("The Rayleigh-Taylor scenario needs a resolved lattice; "
-                                 "increase initial.particlesPerDimension");
+    // Each complete mirrored light/heavy layer group contains 96 n³ particles.
+    int const quarterDim = particle_count::roundLattice(opts.run.gasParticleCount, 96).side;
+    if (quarterDim == 0) {
+        throw std::runtime_error("run.gasParticleCount must be positive");
     }
     int const dim = 2 * quarterDim;
     ParticleInteger const lightCount = ParticleInteger(4) * dim * dim * dim;
@@ -40,6 +37,7 @@ ScenarioPlan initializeRayleighTaylor() {
         throw std::invalid_argument(
             "The Rayleigh-Taylor scenario requires hydro.zPlaneAcceleration > 0");
     }
+    opts.run.gasParticleCount = particleCount;
     opts.initial.gasMass = 0.5 * kLightDensity / lightCount;
     setOptions(opts);
     double const mass = opts.initial.gasMass;

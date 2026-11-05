@@ -250,7 +250,7 @@ size_t lcTimeToFlush(double tau, double requestedTauMax) {
     }
     if (hpxRank() == 0) {
         tauMax = requestedTauMax;
-        size_t const particlesPerRank = getOptions().initial.numberOfParticles / hpxSize();
+        size_t const particlesPerRank = darkMatterReferenceCount(getOptions()) / hpxSize();
         /*		double factor = 1.0 / 8.0;
          double tm = tau / tau_max * 64;
          if (tm > 63.0) {
@@ -627,7 +627,7 @@ size_t lcFindNeighbors() {
     }
     size_t rc = 0;
     double const linkingLength = getOptions().lightcone.linkingLength *
-        pow(getOptions().initial.numberOfParticles, -1.0 / kDimensions);
+        pow(darkMatterReferenceCount(getOptions()), -1.0 / kDimensions);
     for (int pix = myPixRange.first; pix < myPixRange.second; pix++) {
         futs.push_back(hpx::async(hpx::annotated_function(
             [pix, linkingLength, &treeMap]() {
@@ -657,7 +657,7 @@ size_t lcFindGroups() {
     }
     size_t rc = 0;
     double const linkingLength = getOptions().lightcone.linkingLength *
-        pow(getOptions().initial.numberOfParticles, -1.0 / kDimensions);
+        pow(darkMatterReferenceCount(getOptions()), -1.0 / kDimensions);
     prepareLightconeGroupIteration(leafNodes, treeMap, myPixRange);
 
 #ifdef USE_CUDA
@@ -894,7 +894,7 @@ static int computeNside(double tau) {
     // inner radius in the same box units as the linking length.
     double const w0 = std::max(tauMax - tau, 0.0);
     nside = std::min(nside,
-        (pow(getOptions().initial.numberOfParticles, 1.0 / kDimensions) * std::sqrt(3) /
+        (pow(darkMatterReferenceCount(getOptions()), 1.0 / kDimensions) * std::sqrt(3) /
             getOptions().lightcone.linkingLength / 2.0 * w0));
     int result = 1;
     while (result < nside) {

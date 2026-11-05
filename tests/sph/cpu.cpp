@@ -18,6 +18,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -2839,14 +2840,14 @@ TEST_F(SphCpuTest, DensityAndRungsCountPaddedPackets) {
     // four scalar setup operations and a width-1 additive reduction per sink.
     // Grad-H adds both quadratic derivative spans, three sums per lane, two
     // reductions, and eight scalar operations for its residual and correction.
-    // Each two-span density/derivative pair adds 40 table narrowing conversions
-    // per packet (44 double operations including its four width subtractions).
+    // Float tables add four scalar FP32 width subtractions per packet;
+    // there are no table precision conversions. Geometry still contributes FP64.
     // The single target node also computes gamma - 1 once.
     detail::submittedSphFlops = {};
     auto const density = fixture.run(kSphRunDensityAndGradients);
-    EXPECT_EQ(density.floatingPointOperations, double(fixture.count_) * (103 + 173 * width) + 1);
-    EXPECT_EQ(detail::submittedSphFlops.singlePrecision, fixture.count_ * (9 + 173 * width) + 1);
-    EXPECT_EQ(detail::submittedSphFlops.doublePrecision, 94 * fixture.count_);
+    EXPECT_EQ(density.floatingPointOperations, double(fixture.count_) * (23 + 173 * width) + 1);
+    EXPECT_EQ(detail::submittedSphFlops.singlePrecision, fixture.count_ * (17 + 173 * width) + 1);
+    EXPECT_EQ(detail::submittedSphFlops.doublePrecision, 6 * fixture.count_);
     EXPECT_EQ(detail::submittedSphFlops.unclassified, 0);
 }
 
@@ -3184,15 +3185,59 @@ TEST_F(SphCpuTest, EntropyThermodynamics) {
         for (double scale : {0.1, 0.5, 1.0}) {
             double const density = 2.3;
             double const energy = sph_entropy::storedEnergy(entropy, density, gamma, scale);
-            EXPECT_NEAR(
-                sph_entropy::fromStoredEnergy(energy, density, gamma, scale), entropy, 1.e-12);
+            EXPECT_NEAR(sph_entropy::fromStoredEnergy(energy, density, gamma, scale), entropy,
+                8 * std::numeric_limits<float>::epsilon());
             double const physicalDensity = density / (scale * scale * scale);
             double const pressure = (gamma - 1) * physicalDensity * energy / (scale * scale);
-            EXPECT_NEAR(pressure / std::pow(physicalDensity, gamma), entropy, 1.e-12);
+            EXPECT_NEAR(pressure / std::pow(physicalDensity, gamma), entropy,
+                8 * std::numeric_limits<float>::epsilon());
             double const compressed = sph_entropy::storedEnergy(entropy, 8 * density, gamma, scale);
-            EXPECT_NEAR(compressed / energy, std::pow(8.0, gamma - 1), 1.e-12);
+            EXPECT_NEAR(compressed / energy, std::pow(8.0, gamma - 1),
+                8 * std::numeric_limits<float>::epsilon());
         }
     }
+}
+
+TEST_F(SphCpuTest, CompensatedFloatPairAccumulation) {
+    // Each increment is below half an ULP of the starting sum. Naive float
+    // summation loses every increment; Kahan must retain their exact total.
+    SphCompensatedSum sum;
+    EXPECT_EQ(sum.add(1.0f), 4);
+    for (int i = 0; i < 4096; ++i) {
+        EXPECT_EQ(sum.add(0x1p-25f), 4);
+    }
+    EXPECT_EQ(float(sum), 1.0f + 0x1p-13f);
+    SphCompensatedSum partial;
+    partial.add(1.0f);
+    partial.add(0x1p-25f);
+    SphCompensatedSum merged;
+    merged.add(-1.0f);
+    EXPECT_EQ(merged.merge(partial), 8);
+    EXPECT_EQ(float(merged), 0x1p-25f);    // The residual must cross leaf/rank merges.
+
+    SphCompensatedSum concurrent;
+    concurrent.add(1.0f);
+    std::array<std::thread, 4> workers;
+    std::array<FlopCount, 4> counts{};
+    for (size_t worker = 0; worker < workers.size(); ++worker) {
+        workers[worker] = std::thread([&, worker] {
+            for (int i = 0; i < 4096; ++i) {
+                counts[worker] += concurrent.add(0x1p-25f);
+            }
+        });
+    }
+    for (auto& worker : workers) {
+        worker.join();
+    }
+    EXPECT_EQ(float(concurrent), 1.0f + 0x1p-11f);
+    for (auto count : counts) {
+        EXPECT_GE(count, 4 * 4096);
+        EXPECT_EQ(count % 4, 0);
+    }
+    SphPairUpdate target, neighbor;
+    EXPECT_EQ(sphAccumulatePairKick(target, neighbor, Vector3<float>(1.0f), 2.0f, 3.0f, 0.5f),
+        37);    // Five products and eight four-operation compensated additions.
+    EXPECT_EQ(sphAccumulateExternalKick(target, Vector3<float>(1.0f), 0.5f), 15);
 }
 
 TEST_F(SphCpuTest, EntropyProduction) {

@@ -57,12 +57,22 @@ convention; call-site conversions are counted separately.
 
 SPH density, support-radius, viscosity and force equations, SIMD/CUDA reductions,
 and particle support multipliers use FP32. Tree boxes and periodic fixed-bound
-geometry use FP64. Runtime radial-table widths are subtracted in FP64, and the
-double bounds and coefficients narrow once per scalar broadcast, rather than once
-per SIMD lane. Host particle half-kicks use double timesteps and count their
-float promotions and narrowing stores as FP64. CPU timestep minima promote the
-selected float timestep to double; CUDA retains a float reduction. Fixed64 host
-midpoint construction also counts the arithmetic used to separate its limbs.
+geometry use FP64. SPH uses `KernelTable<float>` on CPU and CUDA, generated
+with long-double intermediates and rounded once at setup. Runtime widths, bounds,
+coefficients, and polynomial arithmetic are FP32, including the optional central-force table.
+Gravity retains `KernelTable<double>` and its existing precision accounting.
+
+Conservative pair kicks use float timesteps and float Kahan accumulation.
+The event timestep narrows from double once per CPU call/CUDA thread when pair
+kicks are enabled. Each atomic sum/correction attempt costs four FP32 operations,
+including unsuccessful CAS retries. A pair adds five FP32 products plus eight
+compensated additions (37 operations without retries); an external-force kick
+adds three products and three compensated additions (15 without retries).
+Each received partial sum merges both its sum and negative correction (eight
+FP32 operations per component), and the final velocity/entropy commit adds four.
+Both floats are serialized and transferred together across leaves and ranks.
+CPU timestep minima promote the selected float timestep to double; CUDA retains
+a float reduction. Fixed64 host midpoint construction also counts the arithmetic used to separate its limbs.
 
 ## SPH audit
 
@@ -74,8 +84,8 @@ Rayleigh–Taylor baseline consequently reported zero TFLOP/s.
 Each production function now counts the branches and iterations it executes.
 `W` below denotes CPU SIMD width; `B(n)=3n(n+1)/2` is a Bernstein polynomial's
 arithmetic count. Kernel degree and span count come from the selected table.
-Kernel arithmetic terms below are supplemented by the runtime table and
-floating-precision conversions described above.
+Kernel arithmetic uses the float tables described above; coordinate and
+event-timestep conversions retain their own precision classifications.
 
 | Function | Counted work |
 | --- | --- |
@@ -89,7 +99,8 @@ floating-precision conversions described above.
 | `sphCudaHydro` | One γ − 1 per executing thread; sink setup per executing thread, including 5 for its directed pressure coefficient; 8 per candidate, another 2 for nonzero separation; 79 per accepted pair plus both derivative kernels and enabled viscosity switches; actual block sums; external accelerations, damping, thermal work and timestep/rung selection. |
 | Hydro timestep selection | 25 per active phase-1 sink plus 13 when self-gravity constrains the rung; another 3 when the thermal limiter executes. Signal-speed reporting and gravity-only diagnostic calculations with self-gravity disabled are excluded. |
 | `sphCpuRungs`, `sphCudaRungs` | Support squares, actual distance/dot products and neighbor geometry; integer rung propagation costs zero. |
-| `sphParticlesApplyUpdates` | Half-step construction costs one FP64 operation for an explicit step, two for a rung step. The predictor only opens the staged prediction; an active closing or opening kick adds 20 FP64 operations including conversions. The staged prediction of velocities and energies and the gas energy sums are not counted. |
+| `sphAccumulatePairKick`, `sphAccumulateExternalKick` | FP32 products plus four operations per actual Kahan CAS attempt, including retries; 37 and 15 operations respectively without contention. |
+| `sphCommitPairUpdates` | Merge each partial velocity/entropy sum and its negative correction with Kahan (eight FP32 operations per component without contention); four FP32 additions commit the particle state. |
 | `sphTreeCreate` | Local splitting, fixed-coordinate bounds, support multipliers and active support boxes. Each node submits only its own work. |
 | `sphTreeNeighbor` | Actual search intersections and refreshed support boxes. Self-box validation checks are excluded. |
 | `SphRunWorkspace::run` | Gravity effective-radius division and its narrowing store are FP64; staging/copies and dispatch have no arithmetic count. |
@@ -243,9 +254,12 @@ cases. Distributed arena rebuilding and CUDA runtime behavior were not retested
 in this follow-up. Logs and the before/after comparison are under
 `/tmp/cosmictiger_flops_throughput/`.
 
-Entropy evolution (November 3, 2026): production force kernels convert viscous
-heating to Adot, adding 12 FP64 source operations per active sink at gamma=5/3,
-14 otherwise, including precision conversions and elementary power results.
+Entropy evolution: production force kernels convert dissipative heating to Adot
+entirely in float, adding seven FP32 source operations per conversion at
+gamma=5/3, nine otherwise (including elementary power results). Pair impulses
+perform one conversion for each endpoint; optional sink entropy-rate output
+performs one additional conversion. No float/double conversions remain inside
+these thermodynamic helpers.
 The optional total-energy-rate diagnostic remains for spatial-kernel tests.
 On-demand thermodynamic conversions during staging and energy diagnostics remain
 outside the kernel counters, as staging/diagnostics were before this change.

@@ -45,13 +45,13 @@ def validateFlopRates(outputLog, rows):
     if any(not math.isfinite(value) for row in rows for value in row):
         raise RuntimeError("progress contains nonfinite values")
     if not re.search(
-            r"^\s*Step\s+z.*\s+FP32 TF/s\s+FP64 TF/s\s+TFLOP/s\s*$",
+            r"^\s*Step\s+z.*\s+FP32 GF/s\s+FP64 GF/s\s+GFLOP/s(?:\s+\d+)+\s*$",
             outputLog, re.MULTILINE):
         raise RuntimeError("terminal progress is missing the precision FLOP rate columns")
     terminalRows = re.findall(
         r"^\s*\d+(?:\s+[+\-]?[\d.]+e[+\-]\d+){4}"
         r"\s+\d+\s+\d+(?:\s+\d{2,}:\d{2}:\d{2}\.\d{2}){2}"
-        r"\s+(\S+)\s+(\S+)\s+(\S+)\s*$",
+        r"\s+(\S+)\s+(\S+)\s+(\S+)(?:\s+\d+)+\s*$",
         outputLog, re.MULTILINE)
     if len(terminalRows) != len(rows):
         raise RuntimeError("terminal FLOP rate rows disagree with progress.txt")
@@ -102,7 +102,7 @@ def main():
     analysis = str(args.mode == "sph_analysis").lower()
     analysis_cuda = str(args.mode == "sph_analysis" and not args.cpu).lower()
     command = [str(args.executable), f"--hpx:threads={args.threads}", "--hpx:bind=none",
-               "--initial.particlesPerDimension=8", "--analysis.views=false",
+               "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512", "--analysis.views=false",
                f"--lightcone.enabled={analysis}", "--analysis.power=false",
                f"--analysis.groups={analysis}",
                f"--analysis.groups.cuda={analysis_cuda}", f"--lightcone.cuda={analysis_cuda}"]

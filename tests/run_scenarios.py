@@ -126,7 +126,8 @@ def main():
             # Solver-dispatch assertions below inspect detailed phase messages.
             "run.verbose": "true",
             **cpu_backend_options(),
-            "initial.particlesPerDimension": "16" if scenario == "disc" else "8",
+            "run.darkMatterParticleCount": "512",
+            "run.gasParticleCount": "4096" if scenario == "disc" else "512",
             "run.maxIterations": "1",
             # The cold disc must support its actual configured coarse timestep.
             "run.endTime": "0" if scenario == "disc" else "0.00001",
@@ -181,7 +182,7 @@ def main():
         print(f"{name or scenario}: solver selection, finite diagnostics, and output containment passed")
         return directory, destination, options
 
-    results = {case[1]: exercise(*case, overrides={"initial.closePack": "true"}
+    results = {case[1]: exercise(*case, overrides={"initial.closePack": "true", "run.gasParticleCount": str(4 * 8**3)}
                                 if case[1] == "gresho" else None) for case in SCENARIOS}
 
     gresho_log = (results["gresho"][0] / "run.log").read_text()

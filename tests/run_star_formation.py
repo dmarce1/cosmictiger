@@ -147,7 +147,7 @@ def main():
     common = {"gravity.cuda": device, "hydro.cuda": device, "drift.cuda": device,
               "chemistry.cuda": device, "starFormation.cuda": device, "hydro.enabled": "true",
               "starFormation.enabled": "true", "chemistry.enabled": "true",
-              "initial.particlesPerDimension": 8, "initial.closePack": "false",
+              "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.closePack": "false",
               "initial.useGlass": "false", "analysis.groups": "false",
               "analysis.views": "false", "analysis.tracers": "false",
               "analysis.power": "false", "lightcone.enabled": "false",

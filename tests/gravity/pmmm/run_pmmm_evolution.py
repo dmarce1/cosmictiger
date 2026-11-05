@@ -98,7 +98,7 @@ def main():
     parser.add_argument("--order", type=int, choices=range(3, 10), required=True)
     parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"), required=True)
     parser.add_argument("--viscosity-evolution",
-                        choices=("none", "morrisAndMonaghan", "cullenAndDehnen", "priceEtAl", "hu_etal"),
+                        choices=("none", "morrisAndMonaghan", "cullenAndDehnen", "priceEtAl", "huEtal"),
                         default="morrisAndMonaghan")
     parser.add_argument("--with-sph", action="store_true",
                         help="exercise mixed gas/dark-matter evolution in an SPH-enabled build")
@@ -121,7 +121,7 @@ def main():
               "gravity.enabled": "true", "gravity.cuda": str(args.cuda).lower(),
               "drift.cuda": str(args.cuda).lower(),
               "compute.positionType": args.position_type,
-              "initial.particlesPerDimension": 8, "initial.closePack": "false",
+              "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.closePack": "false",
               "initial.useGlass": "false", "chemistry.enabled": "false",
               "run.endTime": 0.005, "run.numberOfSteps": 4,
               "analysis.groups": "false", "analysis.tracers": "false",

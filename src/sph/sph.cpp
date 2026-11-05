@@ -607,6 +607,7 @@ void sphFinishPairStages(bool restore) {
 
 // stage 0: ordinary estimate/forward increment; 1: RK predictor; 2: corrector.
 void sphCommitPairUpdates(int stage) {
+    sph_flops::Counter flops;
     Vector<hpx::future<void>> children;
     for (auto const& child : hpxChildren()) {
         children.push_back(hpx::async<SphCommitPairUpdatesAction>(child, stage));
@@ -635,9 +636,9 @@ void sphCommitPairUpdates(int stage) {
         size_t next = first;
         do {
             for (int dimension = 0; dimension < kDimensions; ++dimension) {
-                total.velocity[dimension] += updates[next].update.velocity[dimension];
+                flops += total.velocity[dimension].merge(updates[next].update.velocity[dimension]);
             }
-            total.entropy += updates[next].update.entropy;
+            flops += total.entropy.merge(updates[next].update.entropy);
             ++next;
         } while (next < updates.size() && updates[next].index == gas);
         if (stage == 1) {
@@ -650,10 +651,12 @@ void sphCommitPairUpdates(int stage) {
             sphParticlesVelocity(dimension, gas) += total.velocity[dimension];
         }
         sphParticlesEntropy(gas) += total.entropy;
+        flops += kDimensions + 1;
         ALWAYS_ASSERT(std::isfinite(sphParticlesEntropy(gas)) && sphParticlesEntropy(gas) > 0.0f);
         first = next;
     }
     Vector<SphOwnedPairUpdate>().swap(updates);
+    addCpuFlops(flops.counts());
     for (auto& child : children) {
         child.get();
     }
@@ -666,9 +669,9 @@ void SphRunWorkspace::deliverPairUpdates() {
     Vector<Vector<SphOwnedPairUpdate>> destinations(hpxSize());
     for (size_t i = 0; i < hostPairUpdates.size(); ++i) {
         auto const& value = hostPairUpdates[i];
-        bool nonzero = value.entropy != 0.0;
+        bool nonzero = !value.entropy.isZero();
         for (int dimension = 0; dimension < kDimensions; ++dimension) {
-            nonzero = nonzero || value.velocity[dimension] != 0.0;
+            nonzero = nonzero || !value.velocity[dimension].isZero();
         }
         if (nonzero) {
             auto const& owner = hostSourceIds[i];

@@ -52,7 +52,9 @@ void close(double actual, double expected, double tolerance, char const* label) 
     }
 }
 
-__global__ void evaluate(KernelTable const* tables, float const* radii, Result* results) {
+template <class TableReal>
+__global__ void evaluate(
+    KernelTable<TableReal> const* tables, float const* radii, Result* results) {
     int const index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index >= kSampleCount) {
         return;
@@ -70,12 +72,13 @@ __global__ void evaluate(KernelTable const* tables, float const* radii, Result* 
     result.doublePotential = radial_kernel::potential(table, double(q));
 }
 
+template <class TableReal>
 void run() {
-    std::array<KernelTable, kKernelCount> tables{};
+    std::array<KernelTable<TableReal>, kKernelCount> tables{};
     std::array<float, kSampleCount> radii{};
     std::array<Result, kSampleCount> results{};
     for (int kernel = 0; kernel < kKernelCount; ++kernel) {
-        tables[kernel] = radial_kernel::makeKernelTable(kSpecifications[kernel]);
+        tables[kernel] = radial_kernel::makeKernelTable<TableReal>(kSpecifications[kernel]);
         int const base = kernel * kSamplesPerKernel;
         for (int sample = 0; sample < kSamplesPerKernel; ++sample) {
             radii[base + sample] = static_cast<float>(sample) / 100;
@@ -90,7 +93,7 @@ void run() {
             radii[base + 6 + 3 * piece] = std::nextafter(join, 2.0f);
         }
     }
-    KernelTable* deviceTables = nullptr;
+    KernelTable<TableReal>* deviceTables = nullptr;
     float* deviceRadii = nullptr;
     Result* deviceResults = nullptr;
     check(cudaMalloc(&deviceTables, sizeof(tables)));
@@ -209,7 +212,8 @@ void runDensityDimension() {
 using RadialKernelCuda = detail::CudaTest;
 
 TEST_F(RadialKernelCuda, FloatAndDoubleMatchHost) {
-    detail::run();
+    detail::run<double>();
+    detail::run<float>();
 }
 
 TEST_F(RadialKernelCuda, DensityDimension1) {

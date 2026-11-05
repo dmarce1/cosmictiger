@@ -33,7 +33,7 @@ def main():
     workdir.mkdir(parents=True, exist_ok=True)
     common = ["--hpx:threads=2", "--hpx:bind=none", "--gravity.cuda=false",
               "--hydro.enabled=false", "--chemistry.enabled=false",
-              "--initial.particlesPerDimension=4", "--analysis.groups=false",
+              "--run.darkMatterParticleCount=64", "--run.gasParticleCount=64", "--analysis.groups=false",
               "--analysis.tracers=false", "--analysis.views=false", "--analysis.power=false",
               "--lightcone.enabled=false", "--output.silo=false", "--output.directory=."]
     common += [f"--gravity.method.far={args.gravity_method}",
@@ -160,14 +160,14 @@ def main():
     # Exercise the SPH analysis reader using the configured representation.
     hydro = prepareCase(workdir, "hydro")
     hydro_options = [option for option in common if not option.startswith(
-        ("--hydro.enabled=", "--initial.particlesPerDimension="))]
+        ("--hydro.enabled=", "--run.darkMatterParticleCount=", "--run.gasParticleCount="))]
     hierarchicalHydro = args.time_integrator == "hierarchical"
     hydroSupported = not args.without_sph and (not hierarchicalHydro or args.gravity_method == "fmm")
     if hierarchicalHydro:
         hydro_options.append("--gravity.enabled=true")
     output = runSimulation([str(executable), *hydro_options, f"--compute.positionType={selected}",
                             "--hydro.enabled=true",
-                            "--initial.particlesPerDimension=8", "--run.scenario=sod",
+                            "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512", "--run.scenario=sod",
                             "--run.endTime=0.00001", "--run.numberOfSteps=2", "--run.maxIterations=1",
                             "--checkpoint.intervalSeconds=1000000000"], hydro, "run.log",
                            expectSuccess=hydroSupported)

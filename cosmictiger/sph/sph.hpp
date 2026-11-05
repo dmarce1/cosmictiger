@@ -225,7 +225,7 @@ struct SphRunParameters {
         variableViscosity = opts.hydro.viscosityEvolution != "none";
         cullenDehnen = opts.hydro.viscosityEvolution == "cullenAndDehnen";
         priceEtAl = opts.hydro.viscosityEvolution == "priceEtAl";
-        huEtAl = opts.hydro.viscosityEvolution == "hu_etal";
+        huEtAl = opts.hydro.viscosityEvolution == "huEtal";
         maximumBulkViscosityCoefficientHu = opts.hydro.maximumBulkViscosityCoefficientHu;
         viscosityDecayHu = opts.hydro.viscosityDecayHu;
         maximumBulkViscosityCoefficient = opts.hydro.maximumBulkViscosityCoefficient;

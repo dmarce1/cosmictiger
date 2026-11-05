@@ -121,7 +121,7 @@ def main():
               "gravity.error.cuda": str(args.cuda).lower(),
               "compute.positionType": args.position_type,
               "hydro.enabled": "false", "chemistry.enabled": "false", "gravity.enabled": "true",
-              "initial.particlesPerDimension": 4, "initial.closePack": "false",
+              "run.darkMatterParticleCount": 64, "run.gasParticleCount": 64, "initial.closePack": "false",
               "initial.useGlass": "false", "run.endTime": duration, "run.numberOfSteps": 5,
               "run.minRung": 1, "run.maxIterations": 100, "analysis.groups": "false",
               "analysis.tracers": "false", "analysis.views": "false", "analysis.power": "false",
@@ -136,7 +136,7 @@ def main():
             # launch. The eight-cell power-of-two mesh with width two gives each
             # cell a 5**3 neighbor cube; 512 particles and a 4096-particle batch
             # keep the candidate pairs on the GPU rather than falling back to CPU.
-            common.update({"initial.particlesPerDimension": 8, "gravity.meshSize": 8,
+            common.update({"run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "gravity.meshSize": 8,
                            "gravity.pmmmNearWidth": 2, "gravity.pmmmBatchParticles": 4096})
     elif args.cuda:
         common["run.verbose"] = "true"
@@ -163,7 +163,7 @@ def main():
     run(baseline, {})
     require(not (baseline / "gravity_error.csv").exists(), "disabled diagnostics wrote output")
     baselineState = readState(checkpoints(baseline)[-1], ranks)
-    particleCount = common["initial.particlesPerDimension"] ** 3
+    particleCount = common["run.darkMatterParticleCount"]
     require(len(baselineState[1]) == particleCount,
             f"fixture did not initialize {particleCount} particles")
     sampled = prepareCase(workdir, "sampled")
@@ -196,7 +196,7 @@ def main():
 
     capped = prepareCase(workdir, "capped")
     run(capped, {"gravity.errorInterval": 100, "gravity.errorSampleSize": 1000,
-                 "initial.particlesPerDimension": 4, "run.maxIterations": 1})
+                 "run.darkMatterParticleCount": 64, "run.gasParticleCount": 64, "run.maxIterations": 1})
     readErrors(capped, [0], 64, duration)
     print(f"Gravity error sampling passed: cadence, 7/{particleCount} samples, restart, unchanged physics, "
           f"and count cap ({args.gravity_method}, {'CUDA' if args.cuda else 'CPU'}, "

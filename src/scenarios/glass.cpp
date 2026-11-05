@@ -33,7 +33,7 @@ void initializeGlass(DriverParameters& state) {
 }
 
 void saveGlass() {
-    int const side = getOptions().initial.particlesPerDimension;
+    int const side = getOptions().initial.latticeSide;
     if (uint64_t(particlesSize()) != uint64_t(side) * side * side) {
         THROW_ERROR("Glass particle count does not match its lattice dimensions\n");
     }

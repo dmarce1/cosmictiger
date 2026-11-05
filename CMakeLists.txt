@@ -386,7 +386,7 @@ set(cosmictiger_header_files
 
 # Completed midpoint intervals apply cooling and star formation to entropy.
 set(cosmictiger_entropy_sources_ready ON)
-if(BUILD_TESTING)
+if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     set(cosmictiger_rockstar_test_args)
     if(NOT COSMICTIGER_WITH_ROCKSTAR)
         list(APPEND cosmictiger_rockstar_test_args --without-rockstar)
@@ -582,7 +582,7 @@ if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
     endif()
 endif()
 
-if(BUILD_TESTING)
+if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     foreach(profile_mode IN ITEMS enabled disabled host_only)
         add_executable(phase_profiler_${profile_mode}_test
             tests/phase_profiler.cpp src/core/profiler.cpp)
@@ -873,6 +873,15 @@ if(BUILD_TESTING)
     add_executable(safe_io_test tests/safe_io.cpp)
     target_include_directories(safe_io_test PRIVATE ${PROJECT_SOURCE_DIR})
     cosmictiger_add_gtest(NAME safe_io TARGET safe_io_test PROPERTIES TIMEOUT 10)
+    if(COSMICTIGER_ENABLE_FMM AND COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+        add_test(NAME particle_count_application COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_particle_counts.py $<TARGET_FILE:cosmictiger>
+            ${PROJECT_BINARY_DIR}/tests/particle_count_application)
+        set_tests_properties(particle_count_application PROPERTIES RUN_SERIAL TRUE TIMEOUT 900 PROCESSORS 2)
+    endif()
+    add_executable(particle_count_test tests/particle_count.cpp)
+    target_include_directories(particle_count_test PRIVATE ${PROJECT_SOURCE_DIR})
+    cosmictiger_add_gtest(NAME particle_count TARGET particle_count_test PROPERTIES TIMEOUT 10)
     add_executable(terminal_test tests/terminal.cpp)
     target_include_directories(terminal_test PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_options(terminal_test PRIVATE -ffast-math)
@@ -983,7 +992,7 @@ if(BUILD_TESTING)
             file(MAKE_DIRECTORY "${star_formation_workdir}")
             add_test(NAME star_formation_cpu COMMAND cosmictiger --run.test=star_formation
                 --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true --chemistry.initializationTemperature=10000
-                --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --initial.particlesPerDimension=8
+                --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --run.darkMatterParticleCount=512 --run.gasParticleCount=512
                 --run.timeIntegrator=${star_formation_test_integrator}
                 ${cosmictiger_test_gravity_args} ${cosmictiger_test_selection_args}
                 --hpx:threads=1 --hpx:bind=none)
@@ -993,7 +1002,7 @@ if(BUILD_TESTING)
             file(MAKE_DIRECTORY "${star_formation_particles_workdir}")
             add_test(NAME star_formation_particles_cpu COMMAND cosmictiger --run.test=starFormationParticles
                 --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true --chemistry.initializationTemperature=10000
-                --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --initial.particlesPerDimension=8
+                --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --run.darkMatterParticleCount=512 --run.gasParticleCount=512
                 --run.timeIntegrator=${star_formation_test_integrator}
                 ${cosmictiger_test_gravity_args} ${cosmictiger_test_selection_args}
                 --hpx:threads=1 --hpx:bind=none)
@@ -1022,7 +1031,7 @@ if(BUILD_TESTING)
                 add_test(NAME ${source_timing_name} COMMAND ${source_timing_launcher}
                     $<TARGET_FILE:cosmictiger> ${source_timing_postflags} --run.test=sphSourceTiming
                     --hydro.enabled=true --chemistry.enabled=true --starFormation.enabled=true
-                    --initial.particlesPerDimension=8 --chemistry.initializationTemperature=10000
+                    --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --chemistry.initializationTemperature=10000
                     --gravity.cuda=${source_timing_cuda} --hydro.cuda=${source_timing_cuda}
                     --drift.cuda=${source_timing_cuda} --chemistry.cuda=${source_timing_cuda}
                     --starFormation.cuda=${source_timing_cuda}
@@ -1052,7 +1061,7 @@ if(BUILD_TESTING)
                         $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
                         --run.test=${star_mpi_run_test}
                         --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true --chemistry.initializationTemperature=10000
-                        --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --initial.particlesPerDimension=8
+                        --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --run.darkMatterParticleCount=512 --run.gasParticleCount=512
                         --run.timeIntegrator=${star_formation_test_integrator}
                         ${cosmictiger_test_gravity_args} ${cosmictiger_test_selection_args}
                         ${star_mpi_gravity_args}
@@ -1109,7 +1118,7 @@ if(BUILD_TESTING)
                     --hydro.enabled=true --starFormation.enabled=true --chemistry.enabled=true
                     --chemistry.initializationTemperature=10000
                     --gravity.cuda=true --hydro.cuda=true --drift.cuda=true
-                    --chemistry.cuda=true --starFormation.cuda=true --initial.particlesPerDimension=8
+                    --chemistry.cuda=true --starFormation.cuda=true --run.darkMatterParticleCount=512 --run.gasParticleCount=512
                     --run.timeIntegrator=${star_formation_test_integrator}
                     ${cosmictiger_test_gravity_args} ${cosmictiger_test_selection_args}
                     --hpx:threads=1 --hpx:bind=none)
@@ -1166,7 +1175,7 @@ if(BUILD_TESTING)
         file(MAKE_DIRECTORY "${chemistry_timesteps_workdir}")
         add_test(NAME sph_chemistry_timesteps_cpu COMMAND cosmictiger
             --run.test=sphChemistryTimesteps --run.scenario=cosmology
-            --initial.particlesPerDimension=8 --hydro.enabled=true --chemistry.enabled=true
+            --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true --chemistry.enabled=true
             --chemistry.initializationTemperature=10000
             --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
@@ -1179,7 +1188,7 @@ if(BUILD_TESTING)
                 ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
                 $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
                 --run.test=sphChemistryTimesteps --run.scenario=cosmology
-                --initial.particlesPerDimension=8 --hydro.enabled=true --chemistry.enabled=true
+                --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true --chemistry.enabled=true
                 --starFormation.enabled=false --chemistry.initializationTemperature=10000
                 --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hpx:threads=1 --hpx:localities=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args}
@@ -1413,7 +1422,7 @@ if(BUILD_TESTING)
             set(fft_workdir "${PROJECT_BINARY_DIR}/tests/${fft_mode}_cpu")
             file(MAKE_DIRECTORY "${fft_workdir}")
             add_test(NAME ${fft_mode}_cpu COMMAND $<TARGET_FILE:cosmictiger>
-                --run.test=${fft_mode} ${cosmictiger_test_gravity_args} --initial.particlesPerDimension=8
+                --run.test=${fft_mode} ${cosmictiger_test_gravity_args} --run.darkMatterParticleCount=512 --run.gasParticleCount=512
                 --hydro.enabled=false --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
             set_tests_properties(${fft_mode}_cpu PROPERTIES TIMEOUT 120 PROCESSORS 2
@@ -1425,7 +1434,7 @@ if(BUILD_TESTING)
                 add_test(NAME ${fft_mode}_mpi COMMAND ${MPIEXEC_EXECUTABLE}
                     ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
                     $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
-                    --run.test=${fft_mode} ${cosmictiger_test_gravity_args} --initial.particlesPerDimension=8
+                    --run.test=${fft_mode} ${cosmictiger_test_gravity_args} --run.darkMatterParticleCount=512 --run.gasParticleCount=512
                     --hydro.enabled=false --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
                     --hpx:threads=2 --hpx:bind=none --hpx:localities=2
                     ${cosmictiger_mpi_transport_args}
@@ -1505,7 +1514,7 @@ if(BUILD_TESTING)
                 file(MAKE_DIRECTORY "${halo_workdir}")
                 add_test(NAME ${halo_mode}_${halo_backend} COMMAND cosmictiger
                     --run.test=${halo_mode} ${cosmictiger_test_gravity_args} --analysis.groups.cuda=${halo_cuda} --gravity.cuda=${halo_cuda} --hydro.cuda=false --drift.cuda=${halo_cuda} --hydro.enabled=false
-                    --initial.particlesPerDimension=8 --analysis.groups=true
+                    --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --analysis.groups=true
                     --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
                 set_tests_properties(${halo_mode}_${halo_backend} PROPERTIES
@@ -1519,7 +1528,7 @@ if(BUILD_TESTING)
             file(MAKE_DIRECTORY "${halo_workdir}")
             add_test(NAME groupsCatalogue_hydro_cpu COMMAND cosmictiger
                 --run.test=groupsCatalogue ${cosmictiger_test_gravity_args} --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hydro.enabled=true
-                --initial.particlesPerDimension=8 --analysis.groups=true
+                --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --analysis.groups=true
                 --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
             set_tests_properties(groupsCatalogue_hydro_cpu PROPERTIES
@@ -1544,7 +1553,7 @@ if(BUILD_TESTING)
                     ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger>
                     ${cosmictiger_mpi_transport_args}
                     --run.test=groupsCatalogueDistributed ${cosmictiger_test_gravity_args} --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hydro.enabled=${halo_mpi_hydro}
-                    --initial.particlesPerDimension=8 --analysis.groups=true
+                    --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --analysis.groups=true
                     --hpx:threads=2 --hpx:bind=none --hpx:localities=2 ${MPIEXEC_POSTFLAGS}
                     ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
                 set_tests_properties(${halo_mpi_test} PROPERTIES
@@ -1735,7 +1744,7 @@ if(BUILD_TESTING)
         set(units_output_workdir "${PROJECT_BINARY_DIR}/tests/units_output")
         file(MAKE_DIRECTORY "${units_output_workdir}")
         add_test(NAME units_output COMMAND cosmictiger --run.test=unitsOutput
-            --initial.particlesPerDimension=8 --hydro.enabled=true --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
+            --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
             --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
         set_tests_properties(units_output PROPERTIES
@@ -1745,7 +1754,7 @@ if(BUILD_TESTING)
             if(units_viscosity STREQUAL "none")
                 set(units_viscosity_option none)
             elseif(units_viscosity STREQUAL "hu_etal")
-                set(units_viscosity_option hu_etal)
+                set(units_viscosity_option huEtal)
             elseif(units_viscosity STREQUAL "price_etal")
                 set(units_viscosity_option priceEtAl)
             else()
@@ -1757,7 +1766,7 @@ if(BUILD_TESTING)
             add_test(NAME ${units_test} COMMAND cosmictiger --run.test=unitsOutput
                 --compute.positionType=${COSMICTIGER_POSITION_TYPE}
                 --hydro.viscosityEvolution=${units_viscosity_option}
-                --initial.particlesPerDimension=8 --hydro.enabled=true --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
+                --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
                 --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
             set_tests_properties(${units_test} PROPERTIES
@@ -1767,7 +1776,7 @@ if(BUILD_TESTING)
         set(distributed_output_workdir "${PROJECT_BINARY_DIR}/tests/distributed_output")
         file(MAKE_DIRECTORY "${distributed_output_workdir}")
         add_test(NAME distributed_output COMMAND cosmictiger --run.test=distributedOutput
-            --initial.particlesPerDimension=8 --hydro.enabled=true --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
+            --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
             --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
         set_tests_properties(distributed_output PROPERTIES WORKING_DIRECTORY "${distributed_output_workdir}"
@@ -1989,7 +1998,7 @@ if(BUILD_TESTING)
         endif()
         # The P3M search mesh must hold distinct periodic neighbor cells, which at
         # the default split and cutoff needs at least 32 PM cells per axis.
-        set(particle_mesh_common_args --initial.particlesPerDimension=8
+        set(particle_mesh_common_args --run.darkMatterParticleCount=512 --run.gasParticleCount=512
             --hydro.enabled=false --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
             --compute.positionType=${COSMICTIGER_POSITION_TYPE} --hpx:threads=2 --hpx:bind=none
             --run.timeIntegrator=traditional)
@@ -2094,7 +2103,7 @@ if(BUILD_TESTING)
         set(pmmm_workdir "${PROJECT_BINARY_DIR}/tests/pmmm_cpu")
         file(MAKE_DIRECTORY "${pmmm_workdir}")
         add_test(NAME pmmm_cpu COMMAND $<TARGET_FILE:cosmictiger>
-            --run.test=pmmm --gravity.method.far=pmmm --initial.particlesPerDimension=8
+            --run.test=pmmm --gravity.method.far=pmmm --run.darkMatterParticleCount=512 --run.gasParticleCount=512
             --gravity.meshSize=8 --hydro.enabled=false --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
             --compute.positionType=${COSMICTIGER_POSITION_TYPE} --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args} --gravity.method.near=${cosmictiger_default_near_method})
@@ -2109,7 +2118,7 @@ if(BUILD_TESTING)
             file(MAKE_DIRECTORY "${near_workdir}")
             add_test(NAME pmmm_near_${near_method} COMMAND cosmictiger --run.test=pmmm
                 --gravity.method.far=pmmm --gravity.method.near=${near_method}
-                --gravity.meshSize=8 --initial.particlesPerDimension=8 --hydro.enabled=false
+                --gravity.meshSize=8 --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=false
                 --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args})
             set_tests_properties(pmmm_near_${near_method} PROPERTIES TIMEOUT 300 PROCESSORS 2
@@ -2118,7 +2127,7 @@ if(BUILD_TESTING)
         set(mesh_domain_workdir "${PROJECT_BINARY_DIR}/tests/mesh_domains_cpu")
         file(MAKE_DIRECTORY "${mesh_domain_workdir}")
         add_test(NAME mesh_domains_cpu COMMAND $<TARGET_FILE:cosmictiger>
-            --run.test=meshDomains --gravity.method.far=pmmm --initial.particlesPerDimension=8
+            --run.test=meshDomains --gravity.method.far=pmmm --run.darkMatterParticleCount=512 --run.gasParticleCount=512
             --gravity.meshSize=8 --hydro.enabled=false
             --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --compute.positionType=${COSMICTIGER_POSITION_TYPE}
             --hpx:threads=2 --hpx:bind=none
@@ -2148,7 +2157,7 @@ if(BUILD_TESTING)
                 RUN_SERIAL TRUE LABELS "pmmm;cuda")
             file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/tests/pmmm_cuda")
             add_test(NAME pmmm_cuda COMMAND $<TARGET_FILE:cosmictiger>
-                --run.test=pmmm --gravity.method.far=pmmm --initial.particlesPerDimension=8
+                --run.test=pmmm --gravity.method.far=pmmm --run.darkMatterParticleCount=512 --run.gasParticleCount=512
                 --gravity.meshSize=8 --hydro.enabled=false --gravity.cuda=true --hydro.cuda=false --drift.cuda=true
                 --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args} --gravity.method.near=${cosmictiger_default_near_method})
@@ -2160,7 +2169,7 @@ if(BUILD_TESTING)
             set(pm_test_workdir "${PROJECT_BINARY_DIR}/tests/${pm_test_name}")
             file(MAKE_DIRECTORY "${pm_test_workdir}")
             add_test(NAME ${pm_test_name} COMMAND $<TARGET_FILE:cosmictiger>
-                --run.test=${pm_check} --gravity.method.far=pmmm --initial.particlesPerDimension=8
+                --run.test=${pm_check} --gravity.method.far=pmmm --run.darkMatterParticleCount=512 --run.gasParticleCount=512
                 --gravity.meshSize=8 --hydro.enabled=false
                 --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --compute.positionType=${COSMICTIGER_POSITION_TYPE}
                 --hpx:threads=2 --hpx:bind=none
@@ -2185,7 +2194,7 @@ if(BUILD_TESTING)
             add_test(NAME pmmm_mpi_threads COMMAND ${MPIEXEC_EXECUTABLE}
                 ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
                 $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
-                --run.test=pmmm --gravity.method.far=pmmm --initial.particlesPerDimension=8
+                --run.test=pmmm --gravity.method.far=pmmm --run.darkMatterParticleCount=512 --run.gasParticleCount=512
                 --gravity.meshSize=8 --hydro.enabled=false --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
                 --hpx:threads=2 --hpx:bind=none --hpx:localities=2
                 ${cosmictiger_mpi_transport_args}
@@ -2200,7 +2209,7 @@ if(BUILD_TESTING)
                 add_test(NAME pmmm_mpi_${pmmm_ranks} COMMAND ${MPIEXEC_EXECUTABLE}
                     ${MPIEXEC_NUMPROC_FLAG} ${pmmm_ranks} ${MPIEXEC_PREFLAGS}
                     $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
-                    --run.test=pmmm --gravity.method.far=pmmm --initial.particlesPerDimension=8
+                    --run.test=pmmm --gravity.method.far=pmmm --run.darkMatterParticleCount=512 --run.gasParticleCount=512
                     --gravity.meshSize=8 --hydro.enabled=false --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
                     --hpx:threads=1 --hpx:bind=none --hpx:localities=${pmmm_ranks}
                     ${cosmictiger_mpi_transport_args}
@@ -2215,7 +2224,7 @@ if(BUILD_TESTING)
                 add_test(NAME ${mesh_domain_name} COMMAND ${MPIEXEC_EXECUTABLE}
                     ${MPIEXEC_NUMPROC_FLAG} ${mesh_domain_ranks} ${MPIEXEC_PREFLAGS}
                     $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
-                    --run.test=meshDomains --gravity.method.far=pmmm --initial.particlesPerDimension=8
+                    --run.test=meshDomains --gravity.method.far=pmmm --run.darkMatterParticleCount=512 --run.gasParticleCount=512
                     --gravity.meshSize=8 --hydro.enabled=false
                     --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --compute.positionType=${COSMICTIGER_POSITION_TYPE}
                     --hpx:threads=1 --hpx:bind=none --hpx:localities=${mesh_domain_ranks}
@@ -2245,7 +2254,7 @@ if(BUILD_TESTING)
                 file(MAKE_DIRECTORY "${pm_timestep_workdir}")
                 add_test(NAME particle_mesh_timestep_mpi COMMAND ${MPIEXEC_EXECUTABLE}
                     ${MPIEXEC_NUMPROC_FLAG} 4 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger>
-                    ${MPIEXEC_POSTFLAGS} --run.test=particleMeshTimestep --gravity.method.far=pmmm --gravity.method.near=pp --initial.particlesPerDimension=8
+                    ${MPIEXEC_POSTFLAGS} --run.test=particleMeshTimestep --gravity.method.far=pmmm --gravity.method.near=pp --run.darkMatterParticleCount=512 --run.gasParticleCount=512
                     --gravity.meshSize=8 --hydro.enabled=false
                     --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hpx:threads=2 --hpx:bind=none --hpx:localities=4
                     ${cosmictiger_mpi_transport_args}
@@ -2427,8 +2436,9 @@ if(BUILD_TESTING)
         if(COMPILER_SUPPORTS_MARCH_NATIVE)
             target_compile_options(sph_cpu_test PRIVATE -march=native)
         endif()
+        # The compensated accumulation regression exercises four concurrent CPU writers.
         cosmictiger_add_gtest(NAME sph_cpu TARGET sph_cpu_test
-            PROPERTIES TIMEOUT 120)
+            PROPERTIES TIMEOUT 120 PROCESSORS 4)
 
     endif()
 
@@ -2705,7 +2715,7 @@ if(BUILD_TESTING)
             endif()
             set(test_position_type ${COSMICTIGER_POSITION_TYPE})
             add_test(NAME ${test_name} COMMAND cosmictiger
-                --run.test=${test_mode} ${cosmictiger_test_gravity_args} --initial.particlesPerDimension=8 --hydro.enabled=${test_sph}
+                --run.test=${test_mode} ${cosmictiger_test_gravity_args} --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=${test_sph}
                 --gravity.cuda=${test_cuda} --hydro.cuda=${test_cuda} --drift.cuda=${test_cuda} --compute.positionType=${test_position_type}
                 --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
@@ -2776,7 +2786,7 @@ if(BUILD_TESTING)
             set(sph_tree_workdir "${PROJECT_BINARY_DIR}/tests/sph_tree")
             file(MAKE_DIRECTORY "${sph_tree_workdir}")
             add_test(NAME sph_tree COMMAND cosmictiger --run.test=sphTree
-                --initial.particlesPerDimension=8 --hydro.enabled=true --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
+                --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
                 --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
             set_tests_properties(sph_tree PROPERTIES
@@ -2786,7 +2796,7 @@ if(BUILD_TESTING)
         set(fmm_tree_workdir "${PROJECT_BINARY_DIR}/tests/fmm_tree")
         file(MAKE_DIRECTORY "${fmm_tree_workdir}")
         add_test(NAME fmm_tree COMMAND cosmictiger --run.test=fmmTree
-            --initial.particlesPerDimension=8 --hydro.enabled=false --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
+            --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=false --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
             --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
         set_tests_properties(fmm_tree PROPERTIES
@@ -2796,7 +2806,7 @@ if(BUILD_TESTING)
             file(MAKE_DIRECTORY "${degree_workdir}")
             add_test(NAME fmm_degree_${degree} COMMAND cosmictiger --run.test=fmmTree
                 --gravity.method.far=fmm --gravity.expansionDegree=${degree}
-                --initial.particlesPerDimension=8 --hydro.enabled=false --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
+                --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=false --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
                 --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args})
             set_tests_properties(fmm_degree_${degree} PROPERTIES
@@ -2815,7 +2825,7 @@ if(BUILD_TESTING)
             set(fmm_walk_workdir "${PROJECT_BINARY_DIR}/tests/fmm_walk_${fmm_backend}")
             file(MAKE_DIRECTORY "${fmm_walk_workdir}")
             add_test(NAME fmm_walk_${fmm_backend} COMMAND cosmictiger --run.test=fmmWalk
-                --initial.particlesPerDimension=8 --hydro.enabled=false --gravity.cuda=${fmm_cuda} --hydro.cuda=false --drift.cuda=${fmm_cuda}
+                --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=false --gravity.cuda=${fmm_cuda} --hydro.cuda=false --drift.cuda=${fmm_cuda}
                 --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
             set_tests_properties(fmm_walk_${fmm_backend} PROPERTIES
@@ -2871,7 +2881,7 @@ if(BUILD_TESTING)
         set(sph_only_tree_workdir "${PROJECT_BINARY_DIR}/tests/sph_tree_cpu")
         file(MAKE_DIRECTORY "${sph_only_tree_workdir}")
         add_test(NAME sph_tree_cpu COMMAND $<TARGET_FILE:cosmictiger>
-            --run.test=sphTree --initial.particlesPerDimension=8 --hydro.enabled=true
+            --run.test=sphTree --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true
             --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hpx:threads=2 --hpx:bind=none
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
         set_tests_properties(sph_tree_cpu PROPERTIES WORKING_DIRECTORY "${sph_only_tree_workdir}"
@@ -2888,7 +2898,7 @@ if(BUILD_TESTING)
                 FIXTURES_SETUP sph_only_mpi_directory LABELS "sph;cpu;gravity_free;mpi")
             add_test(NAME sph_only_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
                 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
-                --run.scenario=hydroWave --initial.particlesPerDimension=8 --hydro.enabled=true
+                --run.scenario=hydroWave --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true
                 --run.maxIterations=1 --run.endTime=1e-5 --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
                 --chemistry.enabled=false --output.directory=. --output.silo=false
                 --analysis.groups=false --analysis.views=false --analysis.power=false
@@ -2917,7 +2927,7 @@ if(BUILD_TESTING)
                 file(MAKE_DIRECTORY "${distributed_output_mpi_workdir}")
                 add_test(NAME distributed_output_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
-                    --run.test=distributedOutput --initial.particlesPerDimension=8 --hydro.enabled=true
+                    --run.test=distributedOutput --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true
                     --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hpx:threads=2 --hpx:bind=none --hpx:localities=2
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
                 set_tests_properties(distributed_output_mpi PROPERTIES
@@ -2927,7 +2937,7 @@ if(BUILD_TESTING)
             file(MAKE_DIRECTORY "${fmm_tree_mpi_workdir}")
             add_test(NAME fmm_tree_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3
                 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
-                --run.test=fmmTree --initial.particlesPerDimension=8 --hydro.enabled=false
+                --run.test=fmmTree --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=false
                 --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hpx:threads=2 --hpx:bind=none --hpx:localities=3
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
             set_tests_properties(fmm_tree_mpi PROPERTIES
@@ -2937,7 +2947,7 @@ if(BUILD_TESTING)
                 file(MAKE_DIRECTORY "${fmm_walk_mpi_workdir}")
                 add_test(NAME fmm_walk_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
-                    --run.test=fmmWalk --initial.particlesPerDimension=8 --hydro.enabled=false
+                    --run.test=fmmWalk --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=false
                     --gravity.cuda=true --hydro.cuda=false --drift.cuda=true --hpx:threads=2 --hpx:bind=none --hpx:localities=3
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
                 set_tests_properties(fmm_walk_mpi PROPERTIES
@@ -2949,7 +2959,7 @@ if(BUILD_TESTING)
                 file(MAKE_DIRECTORY "${units_mpi_workdir}")
                 add_test(NAME units_output_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
-                    --run.test=unitsOutput --initial.particlesPerDimension=8 --hydro.enabled=true
+                    --run.test=unitsOutput --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true
                     --gravity.cuda=false --hydro.cuda=false --drift.cuda=false --hpx:threads=2 --hpx:bind=none --hpx:localities=2
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
                 set_tests_properties(units_output_mpi PROPERTIES
@@ -2958,7 +2968,7 @@ if(BUILD_TESTING)
                 file(MAKE_DIRECTORY "${migration_workdir}")
                 add_test(NAME sph_migration_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
-                    --run.test=sphGravity --initial.particlesPerDimension=8 --hydro.enabled=true --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
+                    --run.test=sphGravity --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
                     --hpx:threads=2 --hpx:bind=none --hpx:localities=2
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
                 set_tests_properties(sph_migration_mpi PROPERTIES WORKING_DIRECTORY "${migration_workdir}"
@@ -3089,7 +3099,7 @@ if(BUILD_TESTING)
 
 endif()
 
-if(BUILD_TESTING)
+if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     get_property(cosmictiger_targets_after_tests DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
     list(REMOVE_ITEM cosmictiger_targets_after_tests ${cosmictiger_targets_before_tests})
     cosmictiger_finalize_test_layout(${cosmictiger_targets_after_tests})
@@ -3102,5 +3112,25 @@ if(BUILD_TESTING)
         if(NOT test_type STREQUAL "UTILITY")
             target_link_libraries(${test_target} PRIVATE cosmictiger_default_config)
         endif()
+    endforeach()
+endif()
+
+# Dimensional mathematical checks are independent of HPX and the 3D fixture suite.
+if(BUILD_TESTING AND COSMICTIGER_WITH_SPH)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    add_test(NAME sph_dimension_configuration COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/tests/check_sph_dimensions.py ${PROJECT_SOURCE_DIR})
+    if(COSMICTIGER_DIMENSION_COUNT LESS 3)
+        add_test(NAME sph_dimension_application COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_sph_dimensions.py $<TARGET_FILE:cosmictiger>
+            ${PROJECT_BINARY_DIR}/tests/dimensions ${COSMICTIGER_DIMENSION_COUNT}
+            --integrator=${cosmictiger_default_integrator})
+        set_tests_properties(sph_dimension_application PROPERTIES PROCESSORS 2 TIMEOUT 300 RUN_SERIAL TRUE)
+    endif()
+    foreach(dimension RANGE 1 3)
+        add_executable(sph_dimension_${dimension}_test tests/sph/dimensions.cpp)
+        target_include_directories(sph_dimension_${dimension}_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_definitions(sph_dimension_${dimension}_test PRIVATE COSMICTIGER_DIMENSION_COUNT=${dimension})
+        add_test(NAME sph_dimension_${dimension} COMMAND sph_dimension_${dimension}_test)
     endforeach()
 endif()

@@ -119,7 +119,7 @@ static PowerSpectrumReturn powerSpectrumBin(Vector<float> const& kbins) {
     for (auto c : hpxChildren()) {
         futs.push_back(hpx::async<PowerSpectrumBinAction>(c, kbins));
     }
-    int64_t const n = getOptions().initial.particlesPerDimension;
+    int64_t const n = getOptions().initial.fourierSize;
     float const boxSize =
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     auto const box = fft3dComplexRange();
@@ -195,7 +195,7 @@ static PowerSpectrumReturn powerSpectrumBinDeviation(
     for (auto c : hpxChildren()) {
         futs.push_back(hpx::async<PowerSpectrumBinDeviationAction>(c, rc, kbins));
     }
-    int64_t const n = getOptions().initial.particlesPerDimension;
+    int64_t const n = getOptions().initial.fourierSize;
     float const boxSize =
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     auto const box = fft3dComplexRange();

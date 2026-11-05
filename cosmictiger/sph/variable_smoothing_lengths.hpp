@@ -19,7 +19,7 @@
  *
  * Particle i has mass m_i, fixed volume weight x_i, weighted density y_i and volume
  * V_i = x_i/y_i. cosmictiger/sph/volume.hpp evaluates y_i and the grad-H correction
- * ζ_i for the support constraint H_i^3 n_i = constant. Its spatial derivative is
+ * ζ_i for the support constraint H_i^D n_i = constant. Its spatial derivative is
  *
  *   dy_i = Σ_j (x_j - ζ_i) g_i . dr_ij,   g_i = grad_i W_ij(H_i).
  *

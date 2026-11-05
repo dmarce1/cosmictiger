@@ -98,6 +98,8 @@ void runFixedScenario() {
     profile::profileEnd();
     profile::checkForInterrupt();
     auto baseOptions = getOptions();
+    baseOptions.run.gasParticleCount = sphParticlesSize();
+    setOptions(baseOptions);
     bool const fixedViscosityStage = std::any_of(plan.stages.begin(), plan.stages.end(),
         [](auto const& stage) { return stage.bulkViscosityCoefficient >= 0.0; });
     bool const inheritedViscosityStage = std::any_of(plan.stages.begin(), plan.stages.end(),

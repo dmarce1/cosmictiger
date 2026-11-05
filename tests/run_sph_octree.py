@@ -107,7 +107,7 @@ def main():
                                           if name in available["integrator"]]
     require(integrators, "global or traditional integration is required")
     common = {"hpx:threads": args.threads, "hpx:bind": "none", **cpu_backend_options(),
-              "initial.particlesPerDimension": 8, "initial.useGlass": "false",
+              "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.useGlass": "false",
               "initial.closePack": "false", "hydro.enabled": "true",
               "gravity.enabled": "true", "chemistry.enabled": "false",
               "starFormation.enabled": "false", "analysis.groups": "false",
@@ -149,7 +149,7 @@ def main():
         cases = [("wave", {"run.scenario": "hydroWave", "run.endTime": 0.5,
                            "run.numberOfSteps": 1, "run.maxIterations": 8}, 1)]
         cases += [("mixed", {"run.scenario": "cosmology", "cosmology.sigma8": 0,
-                             "initial.particlesPerDimension": 4, "run.maxIterations": 2}, 1)]
+                             "run.darkMatterParticleCount": 64, "run.gasParticleCount": 64, "run.maxIterations": 2}, 1)]
         if args.mpi_exec:
             cases.append(("mixed_mpi", dict(cases[-1][1]), 2))
         for name, options, ranks in cases:

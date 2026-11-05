@@ -7,6 +7,7 @@
  */
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <complex>
@@ -28,6 +29,7 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/interrupt_profile.hpp>
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/particle_count.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/cosmology/boltzmann.hpp>
@@ -293,7 +295,7 @@ void initialize(double z0) {
     terminal::detailPrint("D2 = %e\n", d2Value);
     terminal::detailPrint("Linear velocity factor = %e\n", linearVelocityFactor / a0);
     terminal::detailPrint("prefac2 = %e\n", prefac2 / a0);
-    int const latticePhases = getOptions().initial.useGlass ?
+    int const latticePhases = interpolatedInitialConditions(getOptions().initial) ?
         1 :
         (getOptions().initial.closePack ? 2 : 1) * (getOptions().hydro.enabled ? 2 : 1);
     for (int dim = 0; dim < kDimensions; dim++) {
@@ -503,7 +505,7 @@ void twolptCorrection2(int dim, int latticePhase) {
                                 Vector3<float> const kValue = {kx, ky, kz};
                                 yValue[index] =
                                     -ComplexFloat(0, 1) * kValue[dim] * yValue[index] / k2;
-                                if (getOptions().initial.useGlass) {
+                                if (interpolatedInitialConditions(getOptions().initial)) {
                                     yValue[index] *= cloudFilter(kx * boxSize / n);
                                     yValue[index] *= cloudFilter(ky * boxSize / n);
                                     yValue[index] *= cloudFilter(kz * boxSize / n);
@@ -568,7 +570,7 @@ void twolptGenerate(int dim1, int dim2, bool velocity = false, int latticePhase 
                             factor * derivative[dim1] * derivative[dim2] / k2;
                         yValue[index] = lpt::interpolationCorrectedDerivative(
                             yValue[index], dim1, dim2, [=](ComplexFloat value) {
-                                if (getOptions().initial.useGlass) {
+                                if (interpolatedInitialConditions(getOptions().initial)) {
                                     value *= cloudFilter(kx * boxSize / n);
                                     value *= cloudFilter(ky * boxSize / n);
                                     value *= cloudFilter(kz * boxSize / n);
@@ -705,260 +707,194 @@ static void initX0() {
     for (auto const& child : hpxChildren()) {
         remoteFutures.push_back(hpx::async<InitX0Action>(child));
     }
-    Vector<hpx::future<void>> futs;
-    double const ninv = 1.0 / getOptions().initial.particlesPerDimension;
-    auto const ibox = findMyBox();
-    auto const glass = getOptions().initial.useGlass;
-    auto const closePack = getOptions().initial.closePack;
-    // Origin identities precede displacements and partitioning. The same lattice
-    // cell (or glass tile/file index) always receives the same random stream.
-    bool const identify = getOptions().starFormation.enabled;
-    if (identify &&
-        getOptions().initial.numberOfParticles > std::numeric_limits<uint64_t>::max() / 2) {
+    auto const& options = getOptions();
+    auto const integerBox = findMyBox();
+    bool const interpolate = interpolatedInitialConditions(options.initial);
+    bool const identify = options.starFormation.enabled;
+    size_t const largestCount =
+        std::max(options.run.darkMatterParticleCount, options.run.gasParticleCount);
+    if (identify && largestCount > std::numeric_limits<uint64_t>::max() / 2) {
         throw std::overflow_error(
             "Initial particle population exceeds the star-formation ID range");
     }
-    Vector<uint64_t> sourceIds;
-    if (!glass) {
-        auto box = findMyBox();
-        Array<int64_t, kDimensions> iValue;
-        ParticleInteger index = 0;
-        size_t total = box.volume();
-        if (closePack) {
-            total *= 2;
+    std::array<std::vector<Position>, kDimensions> positions;
+    std::vector<uint64_t> sourceIds;
+    int glassSide = 0;
+    size_t glassCount = 0;
+    std::array<std::vector<Fixed32>, kDimensions> glassPositions;
+    if (options.initial.useGlass) {
+        std::ifstream glassFile("glass.bin", std::ios::binary);
+        glassFile.read(reinterpret_cast<char*>(&glassSide), sizeof(glassSide));
+        if (!glassFile || glassSide <= 0) {
+            THROW_ERROR("Unable to read glass.bin dimensions\n");
         }
-        for (int dim = 0; dim < kDimensions; dim++) {
-            x0Value[dim].resize(total);
+        glassCount = particle_count::roundLattice(size_t(glassSide) * glassSide * glassSide).count;
+        for (auto& axis : glassPositions) {
+            axis.resize(glassCount);
+            glassFile.read(reinterpret_cast<char*>(axis.data()), glassCount * sizeof(Fixed32));
         }
-        if (identify) {
-            sourceIds.resize(total);
+        if (!glassFile) {
+            THROW_ERROR("Unable to read glass.bin positions\n");
         }
-        uint64_t const side = getOptions().initial.particlesPerDimension;
-        for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
-            for (iValue[1] = box.begin[1]; iValue[1] != box.end[1]; iValue[1]++) {
-                for (iValue[2] = box.begin[2]; iValue[2] != box.end[2]; iValue[2]++) {
-                    uint64_t const cell =
-                        (uint64_t(iValue[0]) * side + uint64_t(iValue[1])) * side +
-                        uint64_t(iValue[2]);
-                    if (identify) {
-                        sourceIds[index] = closePack ? 2 * cell : cell;
-                        if (closePack) {
-                            sourceIds[index + 1] = 2 * cell + 1;
+    }
+    auto const appendSpecies = [&](int side, bool gas) {
+        if (side == 0) {
+            return;
+        }
+        double const gasOffset = gas ? (options.initial.closePack ? 0.25 : 0.5) / side : 0.0;
+        auto const append = [&](std::array<double, kDimensions> position, uint64_t sourceId) {
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                position[dim] -= std::floor(position[dim]);
+                position[dim] = Position(position[dim]).toDouble();
+                // Interpolated samples belong to the FFT box containing their
+                // actual coordinates. Exact phase samples retain cell ownership.
+                if (interpolate &&
+                    (position[dim] < double(integerBox.begin[dim]) / options.initial.fourierSize ||
+                        position[dim] >=
+                            double(integerBox.end[dim]) / options.initial.fourierSize)) {
+                    return;
+                }
+            }
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                positions[dim].push_back(Position(position[dim]));
+            }
+            if (identify) {
+                sourceIds.push_back(2 * sourceId + (gas ? 2 : 1));
+            }
+        };
+        if (options.initial.useGlass) {
+            if (side % glassSide != 0) {
+                THROW_ERROR("Resolved particle lattice is not a whole number of glass tiles\n");
+            }
+            int const tiles = side / glassSide;
+            std::array<std::vector<int>, kDimensions> tileIndices;
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                int const begin = int(std::floor(
+                    (double(integerBox.begin[dim]) / options.initial.fourierSize - gasOffset) *
+                    tiles));
+                int const end = int(std::ceil(
+                    (double(integerBox.end[dim]) / options.initial.fourierSize - gasOffset) *
+                    tiles));
+                for (int tile = begin; tile < end && tile < begin + tiles; ++tile) {
+                    tileIndices[dim].push_back((tile % tiles + tiles) % tiles);
+                }
+            }
+            for (auto const ix : tileIndices[0]) {
+                for (auto const iy : tileIndices[1]) {
+                    for (auto const iz : tileIndices[2]) {
+                        uint64_t const tile = (uint64_t(ix) * tiles + iy) * tiles + iz;
+                        for (size_t sample = 0; sample < glassCount; ++sample) {
+                            append(
+                                {(ix + glassPositions[0][sample].toDouble()) / tiles + gasOffset,
+                                    (iy + glassPositions[1][sample].toDouble()) / tiles + gasOffset,
+                                    (iz + glassPositions[2][sample].toDouble()) / tiles +
+                                        gasOffset},
+                                tile * glassCount + sample);
                         }
                     }
-                    if (closePack) {
-                        for (int dim1 = 0; dim1 < kDimensions; dim1++) {
-                            double position = iValue[dim1] * ninv;
-                            x0Value[dim1][index] = position + 0.25 * ninv;
-                            x0Value[dim1][index + 1] = position + 0.75 * ninv;
+                }
+            }
+        } else {
+            int const phases = options.initial.closePack ? 2 : 1;
+            for (int phase = 0; phase < phases; ++phase) {
+                double const offset = options.initial.closePack ? 0.25 + 0.5 * phase : 0.0;
+                double const shiftedOffset = offset + gasOffset * side;
+                std::array<int, kDimensions> begin;
+                std::array<int, kDimensions> end;
+                for (int dim = 0; dim < kDimensions; ++dim) {
+                    double const lower =
+                        double(integerBox.begin[dim]) * side / options.initial.fourierSize;
+                    double const upper =
+                        double(integerBox.end[dim]) * side / options.initial.fourierSize;
+                    begin[dim] =
+                        interpolate ? int(std::floor(lower - shiftedOffset)) - 1 : int(lower);
+                    end[dim] = interpolate ? int(std::ceil(upper - shiftedOffset)) + 1 : int(upper);
+                }
+                for (int ix = begin[0]; ix < end[0] && ix < begin[0] + side; ++ix) {
+                    for (int iy = begin[1]; iy < end[1] && iy < begin[1] + side; ++iy) {
+                        for (int iz = begin[2]; iz < end[2] && iz < begin[2] + side; ++iz) {
+                            uint64_t const cell = (uint64_t((ix % side + side) % side) * side +
+                                                      (iy % side + side) % side) *
+                                    side +
+                                (iz % side + side) % side;
+                            append({(ix + shiftedOffset) / side, (iy + shiftedOffset) / side,
+                                       (iz + shiftedOffset) / side},
+                                cell * phases + phase);
                         }
-                        index += 2;
-                    } else {
-                        for (int dim1 = 0; dim1 < kDimensions; dim1++) {
-                            double position = iValue[dim1] * ninv;
-                            x0Value[dim1][index] = position;
-                        }
-                        index++;
                     }
                 }
             }
         }
-    } else {
-        Range<double> box;
-        FILE* fp = fopen("glass.bin", "rb");
-        if (!fp) {
-            THROW_ERROR("Unable to open glass.bin\n");
+    };
+    appendSpecies(options.initial.darkMatterLatticeSide, false);
+    size_t const darkMatterCount = positions[0].size();
+    appendSpecies(options.initial.gasLatticeSide, true);
+    size_t const gasCount = positions[0].size() - darkMatterCount;
+    if (!interpolate && options.initial.closePack) {
+        for (auto const range : {std::pair<size_t, size_t>{0, darkMatterCount},
+                 {darkMatterCount, darkMatterCount + gasCount}}) {
+            size_t const half = (range.second - range.first) / 2;
+            for (auto& axis : positions) {
+                auto const copy = axis;
+                for (size_t cell = 0; cell < half; ++cell) {
+                    axis[range.first + 2 * cell] = copy[range.first + cell];
+                    axis[range.first + 2 * cell + 1] = copy[range.first + half + cell];
+                }
+            }
+            if (identify) {
+                auto const copy = sourceIds;
+                for (size_t cell = 0; cell < half; ++cell) {
+                    sourceIds[range.first + 2 * cell] = copy[range.first + cell];
+                    sourceIds[range.first + 2 * cell + 1] = copy[range.first + half + cell];
+                }
+            }
         }
-        int glassParticlesPerDimension;
-        int particlesPerDimension = getOptions().initial.particlesPerDimension;
-        for (int dim = 0; dim < kDimensions; dim++) {
-            box.begin[dim] = (double) ibox.begin[dim] / particlesPerDimension;
-            box.end[dim] = (double) ibox.end[dim] / particlesPerDimension;
-        }
-        FREAD(&glassParticlesPerDimension, sizeof(int), 1, fp);
-        if (glassParticlesPerDimension <= 0 ||
-            particlesPerDimension % glassParticlesPerDimension != 0) {
-            std::fclose(fp);
-            THROW_ERROR("parts_dim (=%i) must be a multiple of the glass dim (%i)\n",
-                particlesPerDimension, glassParticlesPerDimension);
-        }
-        int nf = particlesPerDimension / glassParticlesPerDimension;
-        terminal::detailPrint("glass factor = %i\n", nf);
-        uint64_t const numberOfGlassParticles = uint64_t(glassParticlesPerDimension) *
-            glassParticlesPerDimension * glassParticlesPerDimension;
-        uint64_t const expectedBytes = sizeof(int) + 3 * sizeof(Fixed32) * numberOfGlassParticles;
-        if (std::fseek(fp, 0, SEEK_END) != 0 || std::ftell(fp) < 0 ||
-            uint64_t(std::ftell(fp)) != expectedBytes ||
-            std::fseek(fp, sizeof(int), SEEK_SET) != 0) {
-            std::fclose(fp);
-            THROW_ERROR(
-                "Invalid glass.bin size: expected a side^3 Q0.32 coordinate array per axis\n");
-        }
-        Vector<Fixed32> x(numberOfGlassParticles);
-        Vector<Fixed32> y(numberOfGlassParticles);
-        Vector<Fixed32> z(numberOfGlassParticles);
-        FREAD(x.data(), sizeof(Fixed32), numberOfGlassParticles, fp);
-        FREAD(y.data(), sizeof(Fixed32), numberOfGlassParticles, fp);
-        FREAD(z.data(), sizeof(Fixed32), numberOfGlassParticles, fp);
-        fclose(fp);
-
-        int const jb = box.begin[kXDimension] * nf;
-        int const lb = box.begin[kZDimension] * nf;
-        int const kb = box.begin[kYDimension] * nf;
-        int const je = std::min(int(std::ceil(box.end[kXDimension] * nf)), nf);
-        int const ke = std::min(int(std::ceil(box.end[kYDimension] * nf)), nf);
-        int const le = std::min(int(std::ceil(box.end[kZDimension] * nf)), nf);
-        MutexType mutex;
-        Vector<ParticleInteger> counts(je - jb);
-        for (int j = jb; j < je; j++) {
-            futs.push_back(hpx::async(hpx::annotated_function(
-                [j, lb, le, jb, kb, ke, numberOfGlassParticles, &mutex, box, nf, &counts, &x, &y,
-                    &z]() {
-                    ParticleInteger thisCount = 0;
-                    for (int k = kb; k < ke; k++) {
-                        for (int l = lb; l < le; l++) {
-                            for (size_t i = 0; i < numberOfGlassParticles; i++) {
-                                double x0 = x[i].toDouble();
-                                double y0 = y[i].toDouble();
-                                double z0 = z[i].toDouble();
-                                double const xValue = (j + x0) / nf;
-                                if (xValue >= box.begin[kXDimension] &&
-                                    xValue < box.end[kXDimension]) {
-                                    double const yValue = (k + y0) / nf;
-                                    if (yValue >= box.begin[kYDimension] &&
-                                        yValue < box.end[kYDimension]) {
-                                        double const zValue = (l + z0) / nf;
-                                        if (zValue >= box.begin[kZDimension] &&
-                                            zValue < box.end[kZDimension]) {
-                                            thisCount++;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    counts[j - jb] = thisCount;
-                },
-                "cosmology.countGlassParticles")));
-        }
-        hpx::wait_all(futs.begin(), futs.end());
-        futs.resize(0);
-        size_t total = 0;
-        for (int i = 0; i < counts.size(); i++) {
-            auto const thisCount = counts[i];
-            counts[i] = total;
-            total += thisCount;
-        }
-        for (int dim = 0; dim < kDimensions; dim++) {
-            x0Value[dim].resize(total);
-        }
-        if (identify) {
-            sourceIds.resize(total);
-        }
-        for (int j = jb; j < je; j++) {
-            ParticleInteger const indexBegin = counts[j - jb];
-            futs.push_back(hpx::async(hpx::annotated_function(
-                [j, lb, le, kb, ke, numberOfGlassParticles, &mutex, box, nf, indexBegin, &x, &y, &z,
-                    &sourceIds, identify]() {
-                    ParticleInteger iii = indexBegin;
-                    for (int k = kb; k < ke; k++) {
-                        for (int l = lb; l < le; l++) {
-                            for (size_t i = 0; i < numberOfGlassParticles; i++) {
-                                double x0 = x[i].toDouble();
-                                double y0 = y[i].toDouble();
-                                double z0 = z[i].toDouble();
-                                double const xValue = (j + x0) / nf;
-                                if (xValue >= box.begin[kXDimension] &&
-                                    xValue < box.end[kXDimension]) {
-                                    double const yValue = (k + y0) / nf;
-                                    if (yValue >= box.begin[kYDimension] &&
-                                        yValue < box.end[kYDimension]) {
-                                        double const zValue = (l + z0) / nf;
-                                        if (zValue >= box.begin[kZDimension] &&
-                                            zValue < box.end[kZDimension]) {
-                                            x0Value[kXDimension][iii] = xValue;
-                                            x0Value[kYDimension][iii] = yValue;
-                                            x0Value[kZDimension][iii] = zValue;
-                                            if (identify) {
-                                                uint64_t const tile =
-                                                    (uint64_t(j) * nf + uint64_t(k)) * nf +
-                                                    uint64_t(l);
-                                                sourceIds[iii] = tile * numberOfGlassParticles + i;
-                                            }
-                                            iii++;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                "cosmology.initializeGlassParticles")));
-        }
-        for (auto& future : futs) {
-            future.get();
-        }
-        futs.clear();
     }
-    hpx::wait_all(futs.begin(), futs.end());
-    particlesResize(x0Value[kXDimension].size());
-    for (ParticleInteger i = 0; i < x0Value[kXDimension].size(); i++) {
-        particlesPos(kXDimension, i) = x0Value[kXDimension][i];
-        particlesPos(kYDimension, i) = x0Value[kYDimension][i];
-        particlesPos(kZDimension, i) = x0Value[kZDimension][i];
-        particlesVel(kXDimension, i) = 0.0;
-        particlesVel(kYDimension, i) = 0.0;
-        particlesVel(kZDimension, i) = 0.0;
+    if (positions[0].size() > size_t(std::numeric_limits<ParticleInteger>::max())) {
+        THROW_ERROR("Local initial particle count exceeds ParticleInteger range\n");
+    }
+    particlesResize(darkMatterCount);
+#if COSMICTIGER_WITH_SPH
+    if (options.hydro.enabled) {
+        sphParticlesResize(gasCount);
+    }
+#endif
+    for (int dim = 0; dim < kDimensions; ++dim) {
+        x0Value[dim].resize(positions[dim].size());
+        for (size_t i = 0; i < positions[dim].size(); ++i) {
+            x0Value[dim][i] = positions[dim][i];
+            particlesPos(dim, i) = positions[dim][i];
+            particlesVel(dim, i) = 0.0;
+        }
+    }
+    for (ParticleInteger i = 0; i < particlesSize(); ++i) {
         particlesRung(i) = 0;
         if (identify) {
-            particlesStarFormationStates[i].id = 2 * sourceIds[i] + 1;
+            particlesStarFormationStates[i].id = sourceIds[i];
         }
     }
 #if COSMICTIGER_WITH_SPH
-    if (getOptions().hydro.enabled) {
-        // numberOfParticles counts one species; the two species carry complementary mass fractions.
-        ParticleInteger const count = particlesSize();
-        sphParticlesResize(count);
-        double const gasOffset = (closePack ? 0.25 : 0.5) * ninv;
-        for (int dim = 0; dim < kDimensions; dim++) {
-            x0Value[dim].resize(2 * size_t(count));
-            for (ParticleInteger i = 0; i < count; i++) {
-                double position = x0Value[dim][i].toDouble() + gasOffset;
-                if (position >= 1.0) {
-                    position -= 1.0;
-                }
-                x0Value[dim][count + i] = position;
-                particlesPos(dim, count + i) = position;
-                particlesVel(dim, count + i) = 0.0;
-            }
-        }
-        double const scale = 1.0 / (1.0 + getOptions().cosmology.startRedshift);
-        auto const unitScales = units::scalesFromOptions(getOptions());
-        units::CosmologicalContext const context(scale, getOptions().cosmology.hubble);
-        // Without chemistry, the cosmological gas starts neutral at 1000 K.
-        // Generated cooling ICs have no supplied energy; InitGasTemp initializes them below.
-        double const neutralNumber = 1.0 - 0.75 * getOptions().cosmology.heliumFraction;
+    if (options.hydro.enabled) {
+        double const scale = 1.0 / (1.0 + options.cosmology.startRedshift);
+        auto const unitScales = units::scalesFromOptions(options);
+        units::CosmologicalContext const context(scale, options.cosmology.hubble);
+        double const neutralNumber = 1.0 - 0.75 * options.cosmology.heliumFraction;
         auto const initialTemperature = units::Temperature::from_value(1000.0);
         units::SpecificEnergy const physicalEnergy =
             1.5 * units::kBoltzmann * units::kParticlesPerGram * neutralNumber * initialTemperature;
         double const storedThermalEnergy = units::toStoredSpecificEnergy(
             units::PhysicalSpecificEnergy(physicalEnergy), unitScales, context)
                                                .value();
-        double const density =
-            getOptions().initial.gasMass * getOptions().initial.numberOfParticles;
-        float const smoothLength = std::cbrt(getOptions().hydro.neighborNumber /
-            ((4.0 * std::numbers::pi / 3.0) * getOptions().initial.numberOfParticles));
-        for (ParticleInteger i = 0; i < count; i++) {
-            particlesRung(count + i) = 0;
-            if (identify) {
-                particlesStarFormationStates[count + i].id = 2 * sourceIds[i] + 2;
-            }
+        double const density = options.initial.gasMass * options.run.gasParticleCount;
+        float const smoothLength = std::cbrt(options.hydro.neighborNumber /
+            ((4.0 * std::numbers::pi / 3.0) * options.run.gasParticleCount));
+        for (ParticleInteger i = 0; i < gasCount; ++i) {
             sphParticlesSetInternalEnergy(i, storedThermalEnergy);
             sphParticlesSmoothingLength(i) = smoothLength;
             sphParticlesDensity(i) = density;
 #if COSMICTIGER_ENABLE_CHEMISTRY
-            if (getOptions().chemistry.enabled) {
-                if (getOptions().chemistry.initializationTemperature > 0.0) {
+            if (options.chemistry.enabled) {
+                if (options.chemistry.initializationTemperature > 0.0) {
                     sphParticlesSetInternalEnergy(i, 0.0f);
                 }
                 sphChemistryInitializeParticle(i, scale);
@@ -980,11 +916,11 @@ static float zeldovichEnd(
     double const boxSize =
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     auto box = findMyBox();
-    bool const glass = getOptions().initial.useGlass;
+    bool const glass = interpolatedInitialConditions(getOptions().initial);
     if (glass) {
         for (int dim = 0; dim < kDimensions; dim++) {
-            box.end[dim] += kCloudMax + (getOptions().hydro.enabled ? 1 : 0);
-            box.begin[dim] += kCloudMin - 1;
+            box.end[dim] += kCloudMax;
+            box.begin[dim] += kCloudMin;
         }
     }
     Vector<hpx::future<float>> futs;
@@ -1011,8 +947,12 @@ static float zeldovichEnd(
                     double dx = 0.0;
                     if (!glass) {
                         int const sublattices = getOptions().initial.closePack ? 2 : 1;
-                        size_t const speciesCount =
-                            particlesSize() / (getOptions().hydro.enabled ? 2 : 1);
+                        size_t speciesCount = particlesSize();
+#if COSMICTIGER_WITH_SPH
+                        if (getOptions().hydro.enabled) {
+                            speciesCount -= sphParticlesSize();
+                        }
+#endif
                         int const phase =
                             int(i % sublattices) + (size_t(i) >= speciesCount ? sublattices : 0);
                         if (phase != latticePhase) {

@@ -18,6 +18,7 @@
 #include <cosmictiger/cuda/cuda_memory.hpp>
 #include <cosmictiger/cuda/cuda_reduce.hpp>
 #include <cosmictiger/cuda/device_vector.hpp>
+#include <cosmictiger/cuda/kernel_error.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
@@ -36,11 +37,16 @@ inline constexpr int kDensityAndGradientsBlockSize = 64;
 inline constexpr int kHydroBlockSize = 96;
 inline constexpr int kRungsBlockSize = 256;
 
+struct SphTimestepFailure {
+    ParticleInteger particleIndex;
+    int requestedRung;
+};
+
 struct SphReduction {
     float minimumTimestep;
     int nextNodeIndex;
     int pendingChanges;
-    int timestepFailureReported;
+    CudaKernelError<SphTimestepFailure> timestepError;
     float minimumSmoothingLength;
     float maximumSmoothingLength;
     float maximumSignalSpeed;
@@ -148,8 +154,7 @@ inline __device__ bool solveSphSmoothingLength(float& smoothingLength, float min
     __syncthreads();
     float lower = minimumSmoothingLength;
     float upper = maximumSmoothingLength;
-    float const targetKernelSum =
-        targetNeighborCount * (3.0f / (4.0f * std::numbers::pi_v<float>) );
+    float const targetKernelSum = targetNeighborCount * float(1.0 / sph_geometry::kUnitBallVolume);
     flops += 1;
     for (int iteration = 0; iteration < 128; iteration++) {
         int boxExceeded = false;
@@ -182,7 +187,7 @@ inline __device__ bool solveSphSmoothingLength(float& smoothingLength, float min
                 distance(position[kYDimension], neighbor.positionY),
                 distance(position[kZDimension], neighbor.positionZ));
             float const normalizedRadius =
-                sqrtf(separation.dot(separation)) * inverseSmoothingLength;
+                sqrtf(sph_geometry::spatialDot(separation, separation)) * inverseSmoothingLength;
             flops += 10;    // Three fixed distances, dot, root, normalized radius.
             if (normalizedRadius < 1.0f) {
                 kernelSum += kernelW(normalizedRadius);

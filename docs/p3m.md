@@ -18,7 +18,7 @@ cmake -S . -B build_p3m -DCOSMICTIGER_ENABLE_PM=ON -DCOSMICTIGER_ENABLE_P3M_PP=O
   -DCOSMICTIGER_ENABLE_P3M_FMM=ON -DCOSMICTIGER_EXPANSION_DEGREE=5
 ./build_p3m/cosmictiger --gravity.method.far=p3m --gravity.method.near=pp \
   --gravity.meshSize=64 --gravity.cloud=pcs --run.timeIntegrator=traditional \
-  --initial.particlesPerDimension=32 --hydro.enabled=false
+  --run.darkMatterParticleCount=32768 --run.gasParticleCount=32768 --hydro.enabled=false
 ```
 
 ## Options

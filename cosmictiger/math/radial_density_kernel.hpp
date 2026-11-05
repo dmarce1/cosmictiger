@@ -11,18 +11,18 @@
 namespace radial_kernel {
 
 // Density-only tables keep arbitrary-dimensional kernels distinct from the
-// three-dimensional mass, force, and potential contract of KernelTable.
-template <size_t dimension>
+// three-dimensional mass, force, and potential contract of KernelTable<double>.
+template <size_t dimension, class TableReal = double>
 struct DensityKernelTable {
     static_assert(dimension > 0);
     static constexpr size_t kDimension = dimension;
     KernelSpec spec{};
     int degree = 0;
     int pieceCount = 0;
-    double changePoints[kMaximumPieces + 1]{};
-    double coefficients[kMaximumPieces][kMaximumDegree + 1]{};
-    double derivativeCoefficients[kMaximumPieces][kMaximumDegree]{};
-    double smoothingLengthPerEffectiveRadius = 0;
+    TableReal changePoints[kMaximumPieces + 1]{};
+    TableReal coefficients[kMaximumPieces][kMaximumDegree + 1]{};
+    TableReal derivativeCoefficients[kMaximumPieces][kMaximumDegree]{};
+    TableReal smoothingLengthPerEffectiveRadius = 0;
 };
 
 template <size_t dimension>
@@ -72,9 +72,9 @@ namespace detail {
         return area;
     }
 
-    template <size_t dimension, typename Real>
+    template <size_t dimension, class TableReal, typename Real>
     CUDA_EXPORT inline auto densityMask(
-        DensityKernelTable<dimension> const& table, int piece, Real q) {
+        DensityKernelTable<dimension, TableReal> const& table, int piece, Real q) {
         auto const upper = q < simdBroadcast<Real>(table.changePoints[piece + 1]);
         return piece == 0 ? upper : upper && (q >= simdBroadcast<Real>(table.changePoints[piece]));
     }
@@ -84,10 +84,10 @@ namespace detail {
 // W(r,H) = H^-dimension * value(table,r/H). Returns pieceCount == 0 for an
 // invalid family/degree or a normalization unrepresentable by this double table.
 // Extremely large dimensions can also exceed compiler constexpr/storage limits.
-template <size_t dimension>
-constexpr DensityKernelTable<dimension> makeDensityKernelTable(KernelSpec spec) {
+template <size_t dimension, class TableReal = double>
+constexpr DensityKernelTable<dimension, TableReal> makeDensityKernelTable(KernelSpec spec) {
     static_assert(dimension > 0);
-    DensityKernelTable<dimension> result{};
+    DensityKernelTable<dimension, TableReal> result{};
     result.spec = spec;
     if (!isValidDensity<dimension>(spec)) {
         return result;
@@ -139,39 +139,39 @@ constexpr DensityKernelTable<dimension> makeDensityKernelTable(KernelSpec spec) 
     long double const denominator = detail::sphereArea<dimension>() * integral;
     if (!(denominator > 0 && denominator <= std::numeric_limits<long double>::max() &&
             secondMoment > 0)) {
-        return DensityKernelTable<dimension>{};
+        return DensityKernelTable<dimension, TableReal>{};
     }
     long double const normalization = 1 / denominator;
     long double const support = detail::squareRoot(dimension * integral / (4 * secondMoment));
-    if (!(support > 0 && support <= std::numeric_limits<double>::max())) {
-        return DensityKernelTable<dimension>{};
+    if (!(support > 0 && support <= std::numeric_limits<TableReal>::max())) {
+        return DensityKernelTable<dimension, TableReal>{};
     }
     result.degree = degree;
-    result.smoothingLengthPerEffectiveRadius = static_cast<double>(support);
+    result.smoothingLengthPerEffectiveRadius = static_cast<TableReal>(support);
     for (int piece = 0; piece < result.pieceCount; ++piece) {
         double const width = result.changePoints[piece + 1] - result.changePoints[piece];
         for (int i = 0; i <= degree; ++i) {
             long double const coefficient = normalization * raw[piece][i];
-            if (!(coefficient >= 0 && coefficient <= std::numeric_limits<double>::max())) {
-                return DensityKernelTable<dimension>{};
+            if (!(coefficient >= 0 && coefficient <= std::numeric_limits<TableReal>::max())) {
+                return DensityKernelTable<dimension, TableReal>{};
             }
-            result.coefficients[piece][i] = static_cast<double>(coefficient);
+            result.coefficients[piece][i] = static_cast<TableReal>(coefficient);
         }
         for (int i = 0; i < degree; ++i) {
             long double const coefficient =
                 degree * normalization * (raw[piece][i + 1] - raw[piece][i]) / width;
-            if (!(coefficient >= -std::numeric_limits<double>::max() &&
-                    coefficient <= std::numeric_limits<double>::max())) {
-                return DensityKernelTable<dimension>{};
+            if (!(coefficient >= -std::numeric_limits<TableReal>::max() &&
+                    coefficient <= std::numeric_limits<TableReal>::max())) {
+                return DensityKernelTable<dimension, TableReal>{};
             }
-            result.derivativeCoefficients[piece][i] = static_cast<double>(coefficient);
+            result.derivativeCoefficients[piece][i] = static_cast<TableReal>(coefficient);
         }
     }
     return result;
 }
 
-template <size_t dimension, typename Real>
-CUDA_EXPORT inline Real value(DensityKernelTable<dimension> const& table, Real q) {
+template <size_t dimension, class TableReal, typename Real>
+CUDA_EXPORT inline Real value(DensityKernelTable<dimension, TableReal> const& table, Real q) {
     Real result = simdBroadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
@@ -189,8 +189,8 @@ CUDA_EXPORT inline Real value(DensityKernelTable<dimension> const& table, Real q
     return result;
 }
 
-template <size_t dimension, typename Real>
-CUDA_EXPORT inline Real derivative(DensityKernelTable<dimension> const& table, Real q) {
+template <size_t dimension, class TableReal, typename Real>
+CUDA_EXPORT inline Real derivative(DensityKernelTable<dimension, TableReal> const& table, Real q) {
     Real result = simdBroadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {

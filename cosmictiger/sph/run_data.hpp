@@ -48,7 +48,7 @@ struct SphRunData {
     float* sourceGradHCorrection;
     // Frozen before sink writes; required by prehydro and rung limiting.
     char* sourceRungs;
-    // Optional conservative midpoint output. Source identities and double
+    // Optional conservative midpoint output. Source identities and compensated float
     // increments live only for the frozen pass and its reverse MPI exchange.
     SphPairSourceId const* sourceIds = nullptr;
     SphPairUpdate* sourcePairUpdates = nullptr;
@@ -118,10 +118,11 @@ CUDA_EXPORT inline Vector3<float> sphCompleteAcceleration(SphRunParameters const
         float const inverseSmoothingLength = 1.0f / centralSmoothingLength;
         float const normalizedRadius = radius * inverseSmoothingLength;
         float const force = centralAcceleration *
-            radial_kernel::forceFactor(selectedGravityKernel(), normalizedRadius) *
-            inverseSmoothingLength * inverseSmoothingLength * inverseSmoothingLength;
+            radial_kernel::forceFactor(selectedGravityKernel<float>(), normalizedRadius) *
+            sph_geometry::inverseVolume(inverseSmoothingLength);
         acceleration -= force * separation;
-        flops += 21 + sph_flops::forceKernelOperations(selectedGravityKernel(), normalizedRadius);
+        flops +=
+            21 + sph_flops::forceKernelOperations(selectedGravityKernel<float>(), normalizedRadius);
         flops.doublePrecision += 3 * sph_flops::positionConstructionFlops();
     }
     acceleration -= parameters.velocityDampingRate * velocity;
@@ -134,7 +135,7 @@ inline constexpr float kSphSmoothingLengthTolerance = float(1.0e-4);
 
 // Target of the support solves: ΣW = Σ_b w(q_ab) = 3 N_target/(4π).
 CUDA_EXPORT inline float sphTargetKernelSum(float targetNeighborCount) {
-    return targetNeighborCount * (3.0f / (4.0f * std::numbers::pi_v<float>) );
+    return targetNeighborCount * float(1.0 / sph_geometry::kUnitBallVolume);
 }
 
 struct SphGradHEvaluation {

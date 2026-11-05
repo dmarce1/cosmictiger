@@ -55,6 +55,14 @@ namespace detail {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
 
+__global__ void accumulateCompensatedFloat(SphCompensatedSum* sum, FlopCount* counts) {
+    FlopCount operations = 0;
+    for (int i = 0; i < 256; ++i) {
+        operations += sum->add(0x1p-25f);
+    }
+    counts[blockIdx.x * blockDim.x + threadIdx.x] = operations;
+}
+
 // Count additions inside the production block reduction independently of its
 // analytic cost. This catches the extra work in 96- and 160-thread SPH blocks.
 struct CountedReductionValue {
@@ -348,6 +356,9 @@ public:
             params_, data_, reduction_);
         checkCuda(cudaGetLastError(), "hydro launch");
         checkCuda(cudaDeviceSynchronize(), "hydro execution");
+        reduction_->timestepError.throwIfFailed([](SphTimestepFailure const&) {
+            throw std::runtime_error("SPH timestep exceeds rung range");
+        });
         checkFlops();
         for (int i = 0; i < count_; i++) {
             if (data_.sinkInternalEnergyRate) {
@@ -2065,6 +2076,30 @@ TEST_F(SphCudaTest, ZPlaneAcceleration) {
     detail::testZPlaneAcceleration();
 }
 
+TEST_F(SphCudaTest, TimestepFailureReturnsNormallyAndThrowsOnHost) {
+    detail::Fixture fixture(125);
+    fixture.params_.minimumSmoothingLength = fixture.params_.maximumSmoothingLength;
+    for (int i = 0; i < fixture.count_; ++i) {
+        fixture.data_.sourcePositionX[i] = (i % 5 + 0.5) / 5.0;
+        fixture.data_.sourcePositionY[i] = ((i / 5) % 5 + 0.5) / 5.0;
+        fixture.data_.sourcePositionZ[i] = (i / 25 + 0.5) / 5.0;
+        fixture.data_.sinkFlags[i].setConverged(true);
+    }
+    fixture.density();
+    auto const originalTimestep = fixture.params_.baseTimestep;
+    fixture.params_.baseTimestep = 1.0e20;
+    EXPECT_THROW(fixture.hydro(1), std::runtime_error);
+    EXPECT_TRUE(fixture.reduction_->timestepError.pending());
+    EXPECT_EQ(cudaGetLastError(), cudaSuccess);
+    for (int i = 0; i < fixture.count_; ++i) {
+        EXPECT_LT(fixture.data_.sourceRungs[i], kMaxRung);
+    }
+    // A caught host exception must leave the CUDA context usable.
+    fixture.params_.baseTimestep = originalTimestep;
+    EXPECT_NO_THROW(fixture.hydro(1));
+    EXPECT_FALSE(fixture.reduction_->timestepError.pending());
+}
+
 TEST_F(SphCudaTest, DefaultTimestepCalibration) {
     detail::testDefaultTimestepCalibration();
 }
@@ -2134,6 +2169,25 @@ TEST_F(SphCudaTest, EndpointMorrisMonaghanUsesCompletedIntervalsAndClosingRungs)
 TEST_F(SphCudaTest, ConservativeMixedRungPairKicks) {
     detail::Fixture fixture(2, 2, true);
     detail::testConservativePairKick(fixture, false);
+}
+
+TEST_F(SphCudaTest, CompensatedFloatAtomicContention) {
+    SphCompensatedSum* sum = nullptr;
+    FlopCount* counts = nullptr;
+    ASSERT_EQ(cudaMallocManaged(&sum, sizeof(*sum)), cudaSuccess);
+    ASSERT_EQ(cudaMallocManaged(&counts, 512 * sizeof(*counts)), cudaSuccess);
+    new (sum) SphCompensatedSum();
+    sum->add(1.0f);
+    detail::accumulateCompensatedFloat<<<4, 128>>>(sum, counts);
+    EXPECT_EQ(cudaGetLastError(), cudaSuccess);
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+    EXPECT_EQ(float(*sum), 1.0f + 0x1p-8f);
+    for (int i = 0; i < 512; ++i) {
+        EXPECT_GE(counts[i], 4 * 256);
+        EXPECT_EQ(counts[i] % 4, 0);
+    }
+    EXPECT_EQ(cudaFree(counts), cudaSuccess);
+    EXPECT_EQ(cudaFree(sum), cudaSuccess);
 }
 
 TEST_F(SphCudaTest, ConservativeDirectedViscosityPairKicks) {

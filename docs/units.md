@@ -22,16 +22,22 @@ Choose one input for the cosmological normalization:
 
 The code derives the other quantity from the present-day mean matter density:
 `L_comoving^3 = N_reference * massSolar / rho_m,0`, with consistent physical
-units. Here `N_reference = initial.particlesPerDimension^3`, doubled when
-`initial.closePack=true`. With hydro enabled, the reference mass is split
-between gas and dark matter according to their cosmological density fractions;
-adding the second species does not double the total mass or box volume.
+units. Here `N_reference = max(run.darkMatterParticleCount, run.gasParticleCount)`
+uses the resolved populations after rounding each requested count to its valid
+layout. With both species present, each particle has mass
+`m_s = f_s * N_reference * massSolar / N_s`, where `f_s` is the cosmic mass
+fraction and `N_s` the species population. A sole populated species carries the
+whole matter density. Adding an equally populated second species does not
+double the total mass or box volume.
 
 For a 128³ collisionless run in a 100 Mpc/h comoving box, use:
 
 ```ini
+[run]
+darkMatterParticleCount = 2097152
+gasParticleCount = 0
+
 [initial]
-particlesPerDimension = 128
 closePack = false
 
 [units]
@@ -51,7 +57,9 @@ header supplies the physical units.
 When restarting an existing checkpoint, retain the same units selector and
 value used to create it. Restart validation requires exact equality of the
 physical unit scales; switching between mathematically equivalent mass and
-length inputs can change rounding. The checkpoint format is unchanged.
+length inputs can change rounding. Unequal cosmological species populations
+add a flagged checkpoint extension that preserves both resolved initial counts
+for restart validation.
 
 At fixed `boxLength` and cosmology, changing the resolution automatically
 changes the reference mass. The proper box length at redshift `z` is the
@@ -256,3 +264,10 @@ payload without requiring Boost quantity arithmetic inside kernels.
 Output settings are distributed with `Options` to HPX localities. They do not
 add fields to the on-disk checkpoint header or particle payload, and changing
 the requested output views does not change the simulation's restart contract.
+
+Silo particle meshes and fields carry standard float/double time and cycle metadata.
+Each master and locality file also carries root `time` (float), `dtime` (double),
+and `cycle` (integer), which VisIt reads for its database time slider. Frame
+directories carry the same clock pair. Native noncosmological output uses elapsed code time; cosmological and converted
+output uses physical age or elapsed physical time in Gyr. The root `time_unit`
+and `time_convention` metadata identify the stored clock.

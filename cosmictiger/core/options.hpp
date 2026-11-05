@@ -18,6 +18,8 @@
 // Public data groups mirror the CLI/INI category names. Radius aliases are
 // resolved during parsing; canonical radii and unit conversions are stored below.
 struct Run {
+    size_t darkMatterParticleCount{};
+    size_t gasParticleCount{};
     std::string scenario{gravity::kBuildHasGravity ? "cosmology" : "sod"};
     double endTime{};
     std::string test{};
@@ -70,13 +72,26 @@ struct Initial {
     double plummerRadius{};
     bool closePack{};
     bool twoLpt{};
-    int particlesPerDimension{};
+    // Derived geometry and mass-normalization population, never public options.
+    int latticeSide{};
+    int darkMatterLatticeSide{};
+    int gasLatticeSide{};
     size_t numberOfParticles{};
-    // Derived initial-condition mesh and particle population.
+    // Derived FFT mesh. numberOfParticles is the reference population used by
+    // code mass/length units: max(darkMatterParticleCount, gasParticleCount).
     int fourierSize{};
     double darkMatterMass{};
     double gasMass{};
 };
+
+// Equal even lattices retain exact spectral phase sampling. Other resolutions
+// use the existing interpolation-corrected LPT sampling on a common even FFT.
+inline bool interpolatedInitialConditions(Initial const& initial) {
+    return initial.useGlass ||
+        (initial.darkMatterLatticeSide != 0 &&
+            initial.darkMatterLatticeSide != initial.fourierSize) ||
+        (initial.gasLatticeSide != 0 && initial.gasLatticeSide != initial.fourierSize);
+}
 
 struct Output {
     bool silo{};
@@ -255,7 +270,7 @@ struct Hydro {
     double viscosityEpsilon{};
     double conductionCoefficient{0.0};
     bool balsaraSwitch{false};
-    std::string viscosityEvolution{"hu_etal"};
+    std::string viscosityEvolution{"huEtal"};
     double minimumBulkViscosityCoefficient{0.1};
     double viscosityDecay{0.2};
     double maximumBulkViscosityCoefficient{2.0};
@@ -267,13 +282,13 @@ struct Hydro {
     // Cullen-Dehnen, Hu, and Price et al. share gradient reconstruction and its state.
     bool viscosityGradientSwitch() const {
         return viscosityEvolution == "cullenAndDehnen" || viscosityEvolution == "priceEtAl" ||
-            viscosityEvolution == "hu_etal";
+            viscosityEvolution == "huEtal";
     }
     // Morris-Monaghan, Cullen-Dehnen, and Hu et al. use beta_ij = viscosityBeta alpha_ij; the fixed
     // Monaghan coefficients and Price et al. use beta_ij = viscosityBeta.
     bool viscosityBetaFollowsAlpha() const {
         return viscosityEvolution == "morrisAndMonaghan" ||
-            viscosityEvolution == "cullenAndDehnen" || viscosityEvolution == "hu_etal";
+            viscosityEvolution == "cullenAndDehnen" || viscosityEvolution == "huEtal";
     }
     double gamma{};
     double cfl{};
@@ -406,7 +421,7 @@ struct Options {
         arc & initial.twoLpt;
         arc & lightcone.directory;
         arc & analysis.tracerCount;
-        arc & initial.particlesPerDimension;
+        arc & initial.latticeSide;
         arc & compute.treeCacheLineSize;
         arc & compute.treeAllocLineSize;
         arc & compute.particleCacheLineSize;
@@ -509,8 +524,25 @@ struct Options {
         arc & compute.sphTreeRebuildFraction;
         arc & run.rungMergeFraction;
         arc & hydro.conductionCoefficient;
+        arc & run.darkMatterParticleCount;
+        arc & run.gasParticleCount;
+        arc & initial.darkMatterLatticeSide;
+        arc & initial.gasLatticeSide;
     }
 };
+
+// Halo and lightcone samples represent dark matter alone. The mass conversion
+// also supports fixtures that set an explicit reference mass normalization.
+inline double darkMatterReferenceCount(Options const& options) {
+    if (!options.hydro.enabled) {
+        return options.initial.numberOfParticles;
+    }
+    double const fraction =
+        options.cosmology.omegaM > 0.0 ? options.cosmology.omegaC / options.cosmology.omegaM : 1.0;
+    return options.initial.darkMatterMass > 0.0 ?
+        options.initial.numberOfParticles * fraction / options.initial.darkMatterMass :
+        0.0;
+}
 
 // Device resources are shared, but each module selects its own execution backend.
 inline bool usesCuda(Options const& options) {

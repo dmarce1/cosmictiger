@@ -28,7 +28,7 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
         reduction, releaseReduction);
     reduction->minimumTimestep = std::numeric_limits<float>::max();
     reduction->nextNodeIndex = reduction->pendingChanges = 0;
-    reduction->timestepFailureReported = 0;
+    reduction->timestepError.clear();
     reduction->minimumSmoothingLength = std::numeric_limits<float>::max();
     reduction->maximumSmoothingLength = 0.0f;
     reduction->floatingPointOperations = 0;
@@ -104,6 +104,10 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
             parameters, data, reduction);
         stream.checkLaunch();
         stream.wait();
+        reduction->timestepError.throwIfFailed([](SphTimestepFailure const& error) {
+            THROW_ERROR("SPH timestep exceeds rung range: particle=%lli rung=%i maximumRung=%i\n",
+                static_cast<long long>(error.particleIndex), error.requestedRung, kMaxRung - 1);
+        });
         result.maximumSignalSpeed = reduction->maximumSignalSpeed;
         result.maximumGravityRung = reduction->maximumGravityRung;
         result.maximumHydroRung = reduction->maximumHydroRung;

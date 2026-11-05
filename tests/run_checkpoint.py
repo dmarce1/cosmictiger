@@ -188,16 +188,16 @@ def check_velocity_roundoff_restart(reference, resumed):
 
 
 def checkViscosityRestarts(executable, baseWorkdir):
-    """Check every viscosity switch with and without the independent shear limiter."""
+    """Check every viscosity switch and both permitted constant/MM shear settings."""
     configuration = Path(__file__).resolve().parents[1] / "configurations/hydro_wave.ini"
     common = [str(executable), f"--configuration={configuration}", "--hpx:threads=2",
-              "--hpx:bind=none", "--initial.particlesPerDimension=8",
+              "--hpx:bind=none", "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512",
               *[f"--{key}={value}" for key, value in cpu_backend_options().items()],
               "--run.endTime=0.00001", "--run.verbose=true", "--checkpoint.intervalSeconds=0",
               "--output.directory=.", "--output.silo=false", "--analysis.views=false",
               "--analysis.power=false", "--analysis.groups=false", "--lightcone.enabled=false"]
-    for model in ("none", "morrisAndMonaghan", "cullenAndDehnen", "priceEtAl", "hu_etal"):
-        for limiter in (False, True):
+    for model in ("none", "morrisAndMonaghan", "cullenAndDehnen", "priceEtAl", "huEtal"):
+        for limiter in ((False, True) if model in ("none", "morrisAndMonaghan") else (False,)):
             name = f"viscosity_{model}_{int(limiter)}"
             options = common + [f"--hydro.viscosityEvolution={model}",
                                 f"--hydro.balsaraSwitch={str(limiter).lower()}"]
@@ -211,7 +211,7 @@ def checkViscosityRestarts(executable, baseWorkdir):
             first_state = decode_checkpoint((checkpoint / "checkpoint.0.dat").read_bytes())
             final_state = decode_checkpoint(
                 (reference / "checkpoint.2" / "checkpoint.0.dat").read_bytes())
-            if model in ("cullenAndDehnen", "priceEtAl", "hu_etal"):
+            if model in ("cullenAndDehnen", "priceEtAl", "huEtal"):
                 # Each scalar stores the last committed endpoint gradient,
                 # normalized by its live rung or shared actual global duration.
                 for state in (first_state, final_state):
@@ -252,7 +252,7 @@ def checkViscosityRestarts(executable, baseWorkdir):
                 if model == "cullenAndDehnen":
                     mutations.update({"maximum": "--hydro.viscosityAlphaMax=3",
                                       "decay": "--hydro.viscosityDecayCD=0.1"})
-                if model == "hu_etal":
+                if model == "huEtal":
                     mutations.update({"maximum": "--hydro.viscosityAlphaMaxHu=0.5",
                                       "decay": "--hydro.viscosityDecayHu=0.1"})
                 if model == "priceEtAl":
@@ -286,7 +286,7 @@ def checkVariationalPressureRestart(executable, baseWorkdir):
     """
     configuration = Path(__file__).resolve().parents[1] / "configurations/hydro_wave.ini"
     options = [str(executable), f"--configuration={configuration}", "--hpx:threads=2",
-               "--hpx:bind=none", "--initial.particlesPerDimension=8",
+               "--hpx:bind=none", "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512",
                *[f"--{key}={value}" for key, value in cpu_backend_options().items()],
                "--run.endTime=0.00001", "--checkpoint.intervalSeconds=0",
                "--output.directory=.", "--output.silo=false", "--analysis.views=false",
@@ -351,7 +351,7 @@ def main():
 
     options = [str(executable), "--hpx:threads=2", "--hpx:bind=none",
                "--run.timeIntegrator=traditional", "--gravity.method.far=fmm",
-               "--initial.particlesPerDimension=8", "--hydro.enabled=false",
+               "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512", "--hydro.enabled=false",
                "--gravity.cuda=false", "--analysis.views=false",
                "--lightcone.enabled=false", "--analysis.power=false",
                "--analysis.groups=false", "--gravity.kernelDegree=8", "--output.directory=.",

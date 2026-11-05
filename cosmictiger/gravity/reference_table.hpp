@@ -164,7 +164,7 @@ CUDA_EXPORT inline Vector3<double> gravityReferenceTableCorrection(
 // softening kernel; periodic images remain Newtonian, including when the
 // support radius exceeds half the box. Mass and G belong to the caller.
 CUDA_EXPORT inline Vector3<double> tabulatedGravityReference(Vector3<double> const& displacement,
-    radial_kernel::KernelTable const& kernel, double smoothingLength,
+    radial_kernel::KernelTable<double> const& kernel, double smoothingLength,
     Vector3<double> const* values) {
     double const radiusSquared = displacement[0] * displacement[0] +
         displacement[1] * displacement[1] + displacement[2] * displacement[2];

@@ -69,13 +69,13 @@ public:
 };
 
 // W(r, H) = H^-3 w(r/H).
-double kernel(radial_kernel::KernelTable const& table, double radius, double support) {
+double kernel(radial_kernel::KernelTable<double> const& table, double radius, double support) {
     double const q = radius / support;
     return q < 1.0 ? radial_kernel::value(table, q) / (support * support * support) : 0.0;
 }
 
 struct System {
-    radial_kernel::KernelTable table;
+    radial_kernel::KernelTable<double> table;
     std::vector<Vector> position;
     std::vector<double> mass;
     std::vector<double> weight;

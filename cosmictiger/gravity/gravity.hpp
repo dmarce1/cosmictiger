@@ -72,7 +72,7 @@ CUDA_EXPORT inline FlopCount bernsteinFlops(int degree) {
 // span and the outside expression. Width subtractions are scalar in both cases.
 template <class T>
 CUDA_EXPORT inline FlopCount gravitySofteningFlops(
-    radial_kernel::KernelTable const& kernel, T const& q, bool doPhi) {
+    radial_kernel::KernelTable<double> const& kernel, T const& q, bool doPhi) {
     FlopCount const central = bernsteinFlops(kernel.degree);
     FlopCount const mass = bernsteinFlops(kernel.degree + 3);
     FlopCount const shell = bernsteinFlops(kernel.degree + 2);
@@ -101,7 +101,7 @@ CUDA_EXPORT inline FlopCount gravitySofteningFlops(
 // broadcast, not once per SIMD lane; polynomial evaluation remains FP32.
 template <class T>
 CUDA_EXPORT inline FlopCounts gravitySofteningOperations(
-    radial_kernel::KernelTable const& kernel, T const& q, bool doPhi) {
+    radial_kernel::KernelTable<double> const& kernel, T const& q, bool doPhi) {
     FlopCount const arithmetic = gravitySofteningFlops(kernel, q, doPhi);
     if constexpr (std::is_same_v<SimdScalar<T>, double>) {
         return {0, arithmetic, 0};

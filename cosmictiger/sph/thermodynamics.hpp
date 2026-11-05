@@ -17,6 +17,9 @@
 
 namespace sph_entropy {
 
+// Cosmological scale-factor conversions below deliberately retain their 3D
+// convention. Lower-dimensional SPH is noncosmological (a = 1).
+
 // A = P_physical / rho_physical^adiabaticIndex, rho_c = a^3 rho_physical,
 // E = a^2 u_physical. Therefore E = A rho_c^(adiabaticIndex-1) a^(5-3
 // adiabaticIndex)/(adiabaticIndex-1). Treat the representable monatomic adiabaticIndex exactly,
@@ -31,14 +34,10 @@ namespace sph_entropy {
  *   ρ_c → density; γ → adiabaticIndex; a → scaleFactor; 5−3γ → exponent; E/A → return value.
  */
 // clang-format on
-CUDA_EXPORT inline double energyPerEntropy(
-    double density, double adiabaticIndex, double scaleFactor) {
-    double const exponent =
-        (adiabaticIndex == 5.0 / 3.0 || adiabaticIndex == double(float(5.0 / 3.0))) ?
-        0.0 :
-        5.0 - 3.0 * adiabaticIndex;
-    return std::pow(density, adiabaticIndex - 1.0) * std::pow(scaleFactor, exponent) /
-        (adiabaticIndex - 1.0);
+CUDA_EXPORT inline float energyPerEntropy(float density, float adiabaticIndex, float scaleFactor) {
+    float const exponent = (adiabaticIndex == 5.0f / 3.0f) ? 0.0f : 5.0f - 3.0f * adiabaticIndex;
+    return std::pow(density, adiabaticIndex - 1.0f) * std::pow(scaleFactor, exponent) /
+        (adiabaticIndex - 1.0f);
 }
 
 // clang-format off
@@ -51,8 +50,8 @@ CUDA_EXPORT inline double energyPerEntropy(
  *   A → entropy; ρ_c → density; γ → adiabaticIndex; a → scaleFactor; E → return value.
  */
 // clang-format on
-CUDA_EXPORT inline double storedEnergy(
-    double entropy, double density, double adiabaticIndex, double scaleFactor) {
+CUDA_EXPORT inline float storedEnergy(
+    float entropy, float density, float adiabaticIndex, float scaleFactor) {
     return entropy * energyPerEntropy(density, adiabaticIndex, scaleFactor);
 }
 
@@ -66,8 +65,8 @@ CUDA_EXPORT inline double storedEnergy(
  *   E → energy; ρ_c → density; γ → adiabaticIndex; a → scaleFactor; A → return value.
  */
 // clang-format on
-CUDA_EXPORT inline double fromStoredEnergy(
-    double energy, double density, double adiabaticIndex, double scaleFactor) {
+CUDA_EXPORT inline float fromStoredEnergy(
+    float energy, float density, float adiabaticIndex, float scaleFactor) {
     return energy / energyPerEntropy(density, adiabaticIndex, scaleFactor);
 }
 
@@ -77,11 +76,10 @@ struct PreparedThermalState {
 };
 
 namespace detail {
-    inline bool finiteThermalValue(double value) {
-        return (std::bit_cast<uint64_t>(value) & UINT64_C(0x7ff0000000000000)) !=
-            UINT64_C(0x7ff0000000000000);
+    inline bool finiteThermalValue(float value) {
+        return (std::bit_cast<uint32_t>(value) & UINT32_C(0x7f800000)) != UINT32_C(0x7f800000);
     }
-    inline float thermalStorageValue(double value) {
+    inline float thermalStorageValue(float value) {
         // Sources must remain usable under the application's fast-math build;
         // subnormal storage is not reliable when the processor flushes it to zero.
         if (!finiteThermalValue(value) || value < std::numeric_limits<float>::min() ||
@@ -96,21 +94,21 @@ namespace detail {
 // Stage the canonical float A before changing any particle. Reconstruct E from
 // that exact representation so the source ledger matches the committed state.
 inline PreparedThermalState prepareStoredEnergy(
-    float energy, float density, double adiabaticIndex, double scaleFactor) {
+    float energy, float density, float adiabaticIndex, float scaleFactor) {
     if (!detail::finiteThermalValue(energy) || !(energy > 0.0f) ||
         !detail::finiteThermalValue(density) || !(density > 0.0f) ||
-        !detail::finiteThermalValue(adiabaticIndex) || !(adiabaticIndex > 1.0) ||
-        !detail::finiteThermalValue(scaleFactor) || !(scaleFactor > 0.0)) {
+        !detail::finiteThermalValue(adiabaticIndex) || !(adiabaticIndex > 1.0f) ||
+        !detail::finiteThermalValue(scaleFactor) || !(scaleFactor > 0.0f)) {
         throw std::invalid_argument(
             "SPH source requires finite positive energy, density and scale");
     }
-    double const factor = energyPerEntropy(density, adiabaticIndex, scaleFactor);
-    if (!detail::finiteThermalValue(factor) || !(factor > 0.0)) {
+    float const factor = energyPerEntropy(density, adiabaticIndex, scaleFactor);
+    if (!detail::finiteThermalValue(factor) || !(factor > 0.0f)) {
         throw std::range_error("SPH source has an invalid entropy conversion factor");
     }
     PreparedThermalState result;
-    result.entropy = detail::thermalStorageValue(double(energy) / factor);
-    result.storedEnergy = detail::thermalStorageValue(double(result.entropy) * factor);
+    result.entropy = detail::thermalStorageValue(energy / factor);
+    result.storedEnergy = detail::thermalStorageValue(result.entropy * factor);
     return result;
 }
 

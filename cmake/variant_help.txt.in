@@ -1,3 +1,4 @@
+Spatial dimensions: @COSMICTIGER_DIMENSION_COUNT@
 CosmicTiger build targets
 
   cosmictiger       Build the application with the enabled capabilities.

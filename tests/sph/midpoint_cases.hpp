@@ -277,8 +277,11 @@ void testFineNeighborsOfCoarseParticle() {
                 total += increment;
                 absolute += std::abs(increment);
             }
+            // Opposite impulses are identical; independent endpoint sums round
+            // to float. Kahan bounds summation error at O(epsilon_float), not
+            // epsilon_double, including cancellation among several neighbors.
             midpointRequire(
-                std::abs(total) <= 64.0 * std::numeric_limits<double>::epsilon() * absolute,
+                std::abs(total) <= 4.0 * std::numeric_limits<float>::epsilon() * absolute,
                 "multiple fine neighbors lost reciprocal coarse recoil");
         }
         for (int index = 0; index < 4; ++index) {
@@ -286,7 +289,8 @@ void testFineNeighborsOfCoarseParticle() {
             if (firstOrdering) {
                 reference[index] = update;
             } else {
-                double const entropyScale = std::max(1.0e-12, std::abs(reference[index].entropy));
+                double const entropyScale =
+                    std::max(1.0e-12f, std::abs(float(reference[index].entropy)));
                 midpointRequire(std::abs(update.entropy - reference[index].entropy) <=
                         32.0 * std::numeric_limits<float>::epsilon() * entropyScale,
                     "fine-neighbor evaluation order changed corrected entropy");

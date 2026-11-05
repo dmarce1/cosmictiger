@@ -33,7 +33,7 @@ def main():
     workdir.mkdir(parents=True, exist_ok=True)
     backend = 'cuda' if args.cuda else 'cpu'
     command = [str(executable), '--run.test=sphGravity',
-               '--initial.particlesPerDimension=8', '--hydro.enabled=true',
+               '--run.darkMatterParticleCount=512', '--run.gasParticleCount=512', '--hydro.enabled=true',
                f'--gravity.cuda={str(args.cuda).lower()}', f'--hydro.cuda={str(args.cuda).lower()}', f'--drift.cuda={str(args.cuda).lower()}',
                '--hydro.neighborNumber=200', '--hpx:threads=2', '--hpx:bind=none']
     command += application_arguments(executable, far="fmm", hydro=True)

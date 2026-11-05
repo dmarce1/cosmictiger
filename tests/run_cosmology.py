@@ -289,7 +289,7 @@ def main():
         "run.verbose": "false",
         "run.numberOfSteps": "32",
         "run.maxIterations": "10000",
-        "initial.particlesPerDimension": "8",
+        "run.darkMatterParticleCount": "512", "run.gasParticleCount": "512",
         "initial.closePack": "false",
         "initial.twoLpt": "false",
         "gravity.cuda": "true" if args.cuda else "false", "hydro.cuda": "true" if args.cuda and not args.collisionless_only else "false", "drift.cuda": "true" if args.cuda else "false",

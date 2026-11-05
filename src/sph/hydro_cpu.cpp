@@ -75,8 +75,7 @@ SphRunReturn sphCpuHydro(
     // after gravity eta and smoothing lengths adopt the common width.
     constexpr float kHydroAccelerationScale = 0.7115965735877551f;
     float const smoothingLengthPerEffectiveRadius =
-        float(selectedHydroKernel().smoothingLengthPerEffectiveRadius);
-    flops.doublePrecision += 1;
+        selectedHydroKernel().smoothingLengthPerEffectiveRadius;
     SimdFloat const zero(0.0f);
     SimdFloat const one(1.0f);
     SimdFloat const half(0.5f);
@@ -85,6 +84,8 @@ SphRunReturn sphCpuHydro(
     float const viscosityRegularization = parameters.viscosityEpsilon;    // η²/h² of p. 551
     float const expansionRate = parameters.expansionRate;    // a·da/dt, the Hubble flow of a pair
     bool const applyPairKicks = data.sourcePairUpdates && parameters.hydroKickTimestep > 0.0;
+    float const kickTimestep = applyPairKicks ? float(parameters.hydroKickTimestep) : 0.0f;
+    flops.doublePrecision += int(applyPairKicks);
     ALWAYS_ASSERT(!applyPairKicks || (parameters.midpointHydro && data.sourceIds));
     for (int particleIndex = targetNode.particleRange.first;
         particleIndex < targetNode.particleRange.second; particleIndex++) {
@@ -147,7 +148,8 @@ SphRunReturn sphCpuHydro(
         float const sinkPressureCoefficient = variational::directedCoefficient(
             variational::pressureVolumeFactor(pressure, 1.0f, density), gasMass, gradHCorrection);
         flops += 5;
-        float const inverseSmoothingLengthFourth = sqr(sqr(inverseSmoothingLength));    // 1/H_a⁴
+        float const inverseSmoothingLengthGradientScale =
+            sph_geometry::inverseGradientScale(inverseSmoothingLength);    // H_a^-(D+1)
         Vector3<SimdFloat> accelerationPack(zero);    // lane partial sums of acceleration
         SimdFloat dissipativeEnergyRatePack(zero);
         SimdFloat conductionExchangeRatePack(zero);
@@ -160,7 +162,8 @@ SphRunReturn sphCpuHydro(
             // before any division or square root; masking only the result can still trap.
             Vector3<SimdFloat> const separation =
                 detail::sphCpuSeparations(data, particleIndex, neighbors, first);    // r_a − r_b
-            SimdFloat const stagedSeparationSquared = separation.dot(separation);
+            SimdFloat const stagedSeparationSquared =
+                sph_geometry::spatialDot(separation, separation);
             SimdFloat const stagedNeighborSmoothingLength =
                 detail::sphCpuLoad(data.sourceSmoothingLength, neighbors, first, 1.0f);
             auto const supportsIntersect = detail::sphCpuValidLanes(neighbors, first) &
@@ -211,9 +214,9 @@ SphRunReturn sphCpuHydro(
             SimdFloat const normalizedNeighborRadius =
                 pairDistance * inverseNeighborSmoothingLength;
             SimdFloat const sinkGradientFactor = dkernelWDq(normalizedSinkRadius) *
-                SimdFloat(inverseSmoothingLengthFourth) / pairDistance;
+                SimdFloat(inverseSmoothingLengthGradientScale) / pairDistance;
             SimdFloat const neighborGradientFactor = dkernelWDq(normalizedNeighborRadius) *
-                sqr(sqr(inverseNeighborSmoothingLength)) / pairDistance;
+                sph_geometry::inverseGradientScale(inverseNeighborSmoothingLength) / pairDistance;
             flops += sph_flops::densityKernelOperations(
                          selectedHydroKernel(), normalizedSinkRadius, true) +
                 sph_flops::densityKernelOperations(
@@ -227,7 +230,8 @@ SphRunReturn sphCpuHydro(
                     detail::sphCpuLoad3(data.sourceVelocityX, data.sourceVelocityY,
                         data.sourceVelocityZ, neighbors, first, 0.0f),
                 Vector3<SimdFloat>(zero));
-            SimdFloat const velocityDotSeparation = velocityDifference.dot(separation);
+            SimdFloat const velocityDotSeparation =
+                sph_geometry::spatialDot(velocityDifference, separation);
             SimdFloat const physicalVelocityDotSeparation = velocityDotSeparation +
                 SimdFloat(expansionRate) * simdSelect(interacts, separationSquared, zero);
             /*
@@ -398,17 +402,16 @@ SphRunReturn sphCpuHydro(
                     Vector3<float> const pairAcceleration(-float(pairForcePack[kXDimension][lane]),
                         -float(pairForcePack[kYDimension][lane]),
                         -float(pairForcePack[kZDimension][lane]));
-                    double const targetEntropyRate =
-                        sph_entropy::fromStoredEnergy(double(targetDissipativeEnergyRate[lane]),
+                    float const targetEntropyRate =
+                        sph_entropy::fromStoredEnergy(float(targetDissipativeEnergyRate[lane]),
                             density, gasAdiabaticIndex, parameters.scaleFactor);
-                    double const neighborEntropyRate = sph_entropy::fromStoredEnergy(
-                        double(neighborDissipativeEnergyRate[lane]), double(neighborDensity[lane]),
+                    float const neighborEntropyRate = sph_entropy::fromStoredEnergy(
+                        float(neighborDissipativeEnergyRate[lane]), float(neighborDensity[lane]),
                         gasAdiabaticIndex, parameters.scaleFactor);
-                    sphAccumulatePairKick(data.sourcePairUpdates[particleIndex],
+                    flops += sphAccumulatePairKick(data.sourcePairUpdates[particleIndex],
                         data.sourcePairUpdates[neighborIndex], pairAcceleration, targetEntropyRate,
-                        neighborEntropyRate, parameters.hydroKickTimestep);
-                    flops.doublePrecision +=
-                        13 + 2 * (gasAdiabaticIndex == float(5.0 / 3.0) ? 12 : 14);
+                        neighborEntropyRate, kickTimestep);
+                    flops += 2 * sph_flops::entropyConversionFlops(gasAdiabaticIndex);
                 }
             }
             internalEnergyRatePack += SimdFloat(inverseScaleFactor) *
@@ -475,9 +478,8 @@ SphRunReturn sphCpuHydro(
                     data.sourcePositionY[particleIndex], data.sourcePositionZ[particleIndex]),
                 velocity, Vector3<float>(0.0f), Vector3<float>(0.0f), data.centralAcceleration,
                 data.centralSmoothingLength, flops);
-            sphAccumulateExternalKick(data.sourcePairUpdates[particleIndex], externalAcceleration,
-                parameters.hydroKickTimestep);
-            flops.doublePrecision += 6;
+            flops += sphAccumulateExternalKick(
+                data.sourcePairUpdates[particleIndex], externalAcceleration, kickTimestep);
         }
         if (data.sinkAccelerations) {
             for (int dim = 0; dim < kDimensions; dim++) {
@@ -510,7 +512,7 @@ SphRunReturn sphCpuHydro(
             data.sinkEntropyRate[sinkIndex] =
                 sph_entropy::fromStoredEnergy(simdSum(dissipativeEnergyRatePack), density,
                     gasAdiabaticIndex, parameters.scaleFactor);
-            flops.doublePrecision += gasAdiabaticIndex == float(5.0 / 3.0) ? 12 : 14;
+            flops += sph_flops::entropyConversionFlops(gasAdiabaticIndex);
             flops += SimdFloat::size() - 1;
         }
         if (parameters.phase == 1) {

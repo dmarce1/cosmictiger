@@ -16,11 +16,13 @@
 #include <stdexcept>
 
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/particle_count.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/blast.hpp>
 #include <cosmictiger/scenarios/diagnostics.hpp>
 #include <cosmictiger/scenarios/sedov.hpp>
+#include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/particles.hpp>
 
 namespace scenarios {
@@ -46,7 +48,7 @@ namespace detail {
             double r = sqrt(sqr(x, y, z));
             double rmax = sqrt(1.5);
             double d, velocity, p;
-            int ndim = 3;
+            int ndim = kSpatialDimensions;
             sedov::solution(time, r, rmax, d, velocity, p, ndim, getOptions().hydro.gamma);
             double dif = fabs(rho - d);
             norm1 += sample.weight * d;
@@ -68,14 +70,10 @@ namespace detail {
 ScenarioPlan initializeBlast() {
     double rho0 = 1.0;
     auto opts = getOptions();
-    ParticleInteger ndim = getOptions().initial.particlesPerDimension;
-    ParticleInteger numberOfParticles = std::pow(ndim, kDimensions);
-    ndim = pow(numberOfParticles / 2, 1. / 3.);
-    if (ndim < 1) {
-        throw std::runtime_error("The blast scenario needs a resolved lattice; "
-                                 "increase initial.particlesPerDimension");
-    }
-    numberOfParticles = 2 * ndim * ndim * ndim;
+    auto const layout = particle_count::roundLattice(opts.run.gasParticleCount, 2);
+    ParticleInteger const ndim = layout.side;
+    ParticleInteger const numberOfParticles = layout.count;
+    opts.run.gasParticleCount = layout.count;
     opts.initial.gasMass = rho0 / numberOfParticles;
     double const m = opts.initial.gasMass;
     setOptions(opts);
@@ -83,27 +81,26 @@ ScenarioPlan initializeBlast() {
     double const dx = 1.0 / ndim;
     double sigma = .015;
     for (int ix = 0; ix < ndim; ix++) {
-        for (int iy = 0; iy < ndim; iy++) {
-            for (int iz = 0; iz < ndim; iz++) {
+        for (int iy = 0; iy < (kSpatialDimensions >= 2 ? ndim : 1); iy++) {
+            for (int iz = 0; iz < (kSpatialDimensions >= 3 ? ndim : 1); iz++) {
                 double x = (ix + 0.5) * dx;
                 double y = (iy + 0.5) * dx;
                 double z = (iz + 0.5) * dx;
-                double r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
-                double eint = std::max(1.0 / sigma / sigma / sigma /
-                        sqrt(8.0 * std::numbers::pi * std::numbers::pi * std::numbers::pi) *
+                double r = sqrt(sqr(x - 0.5) + (kSpatialDimensions >= 2 ? sqr(y - 0.5) : 0.0) +
+                    (kSpatialDimensions >= 3 ? sqr(z - 0.5) : 0.0));
+                double eint = std::max(
+                    std::pow(2.0 * std::numbers::pi * sigma * sigma, -0.5 * kSpatialDimensions) *
                         exp(-0.5 * sqr(r / sigma)),
                     1e-20);
                 double vx = 0.0;
                 double vy = 0.0;
                 double vz = 0.0;
-                double h = pow(
-                    m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * rho0),
-                    1.0 / 3.0);
+                double h = sph_geometry::supportRadius(m, rho0, getOptions().hydro.neighborNumber);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x;
-                sphParticlesPosition(kYDimension, i) = y;
-                sphParticlesPosition(kZDimension, i) = z;
+                sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
                 sphParticlesVelocity(kXDimension, i) = vx;
                 sphParticlesVelocity(kYDimension, i) = vy;
                 sphParticlesVelocity(kZDimension, i) = vz;
@@ -114,9 +111,10 @@ ScenarioPlan initializeBlast() {
                 x = (ix + 0.0) * dx;
                 y = (iy + 0.0) * dx;
                 z = (iz + 0.0) * dx;
-                r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
-                eint = std::max(1.0 / sigma / sigma / sigma /
-                        sqrt(8.0 * std::numbers::pi * std::numbers::pi * std::numbers::pi) *
+                r = sqrt(sqr(x - 0.5) + (kSpatialDimensions >= 2 ? sqr(y - 0.5) : 0.0) +
+                    (kSpatialDimensions >= 3 ? sqr(z - 0.5) : 0.0));
+                eint = std::max(
+                    std::pow(2.0 * std::numbers::pi * sigma * sigma, -0.5 * kSpatialDimensions) *
                         exp(-0.5 * sqr(r / sigma)),
                     1e-20);
                 vx = 0.0;
@@ -125,8 +123,8 @@ ScenarioPlan initializeBlast() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x;
-                sphParticlesPosition(kYDimension, i) = y;
-                sphParticlesPosition(kZDimension, i) = z;
+                sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
                 sphParticlesVelocity(kXDimension, i) = vx;
                 sphParticlesVelocity(kYDimension, i) = vy;
                 sphParticlesVelocity(kZDimension, i) = vz;
@@ -139,7 +137,7 @@ ScenarioPlan initializeBlast() {
     }
     if (sphParticlesSize() == 0) {
         throw std::runtime_error("The blast scenario produced no gas particles; "
-                                 "increase initial.particlesPerDimension");
+                                 "increase run.gasParticleCount");
     }
     double depositedEnergy = 0.0;
     for (ParticleInteger particle = 0; particle < sphParticlesSize(); ++particle) {

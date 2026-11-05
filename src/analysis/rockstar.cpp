@@ -292,7 +292,7 @@ void rockstarFindAllLinkLens(
         p.minDist2 = std::numeric_limits<float>::max();
     }
     double maximumLinkingLength = getOptions().lightcone.linkingLength *
-        pow(getOptions().initial.numberOfParticles, -1.0 / kDimensions);
+        pow(darkMatterReferenceCount(getOptions()), -1.0 / kDimensions);
     bool gpu = getOptions().analysis.groupsCuda && parts.size() > 4 * 1024;
 #ifdef USE_CUDA
     if (gpu) {

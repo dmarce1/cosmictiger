@@ -6,6 +6,7 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 #include <stdexcept>
@@ -18,7 +19,7 @@
 namespace scenarios {
 
 ScenarioPlan initializeDisc() {
-    ParticleInteger totalNumberOfParticles = pow(getOptions().initial.particlesPerDimension, 3);
+    ParticleInteger totalNumberOfParticles = getOptions().run.gasParticleCount;
     double const innerRadius = 0.2;
     double const outerRadius = 0.3;
     double const rho = totalNumberOfParticles;
@@ -36,11 +37,30 @@ ScenarioPlan initializeDisc() {
         m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * rho), 1.0 / 3.0);
     int i = 0;
     int const nz = 3;
-    int dim = sqrt(totalNumberOfParticles) / nz;
-    if (dim < 1) {
-        throw std::runtime_error("The disc scenario needs a resolved lattice; "
-                                 "increase initial.particlesPerDimension");
+    // A complete six-plane annular lattice is the valid resolution unit.
+    auto const population = [&](int side) {
+        size_t count = 0;
+        double const spacing = 1.0 / side;
+        for (int plane = side / 2 - nz; plane < side / 2 + nz; ++plane) {
+            for (int row = 0; row < side; ++row) {
+                for (int column = 0; column < side; ++column) {
+                    double const radius = std::sqrt(
+                        sqr(spacing * row - 0.5, spacing * column - 0.5, spacing * plane - 0.5));
+                    count += radius > innerRadius && radius < outerRadius ? 1 : 0;
+                }
+            }
+        }
+        return count;
+    };
+    int dim = std::max(1,
+        int(std::sqrt(double(totalNumberOfParticles) /
+            (2 * nz * std::numbers::pi *
+                (outerRadius * outerRadius - innerRadius * innerRadius)))));
+    while (population(dim) < size_t(totalNumberOfParticles)) {
+        ++dim;
     }
+    opts.run.gasParticleCount = population(dim);
+    setOptions(opts);
     double dx = 1.0 / dim;
     for (int iz = dim / 2 - nz; iz < dim / 2 + nz; iz++) {
         for (int k = 0; k < dim; k++) {
@@ -74,7 +94,7 @@ ScenarioPlan initializeDisc() {
     double const t = 16.0;
     if (sphParticlesSize() == 0) {
         throw std::runtime_error("The disc scenario produced no gas particles; "
-                                 "increase initial.particlesPerDimension");
+                                 "increase run.gasParticleCount");
     }
     return ScenarioPlan{{{t, 1024}}};
 }

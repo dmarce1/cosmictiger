@@ -25,9 +25,9 @@ constexpr size_t kGravityErrorSourceBatch = 65536;
 constexpr size_t kGravityErrorSinkBatch = 128;
 
 __global__ void gravityErrorReferenceKernel(GravityErrorPosition const* sinks,
-    GravityErrorSource const* sources, size_t sourceCount, radial_kernel::KernelTable const* kernel,
-    double smoothingLength, GravityErrorForce const* correctionValues,
-    GravityErrorForce* partials) {
+    GravityErrorSource const* sources, size_t sourceCount,
+    radial_kernel::KernelTable<double> const* kernel, double smoothingLength,
+    GravityErrorForce const* correctionValues, GravityErrorForce* partials) {
     __shared__ double threadForces[3][kGravityErrorBlockSize];
     GravityErrorPosition const sink = sinks[blockIdx.y];
     size_t const sourceBegin = size_t(blockIdx.x) * kGravityErrorSourcesPerBlock;
@@ -95,7 +95,7 @@ std::unique_ptr<Value, GravityErrorDeviceDeleter> allocateGravityErrorBuffer(
 
 std::vector<GravityErrorForce> gravityErrorDirectCuda(std::span<GravityErrorPosition const> sinks,
     size_t sourceCount, GravityErrorSourceLoader const& loadSources,
-    radial_kernel::KernelTable const& kernel, double smoothingLength,
+    radial_kernel::KernelTable<double> const& kernel, double smoothingLength,
     std::span<GravityErrorForce const> correctionValues) {
     std::vector<GravityErrorForce> result(sinks.size());
     if (sinks.empty() || sourceCount == 0) {
@@ -121,14 +121,14 @@ std::vector<GravityErrorForce> gravityErrorDirectCuda(std::span<GravityErrorPosi
     auto deviceSinks = allocateGravityErrorBuffer<GravityErrorPosition>(sinkCapacity, device);
     auto deviceSources = allocateGravityErrorBuffer<GravityErrorSource>(sourceCapacity, device);
     auto devicePartials = allocateGravityErrorBuffer<GravityErrorForce>(partialCapacity, device);
-    auto deviceKernel = allocateGravityErrorBuffer<radial_kernel::KernelTable>(1, device);
+    auto deviceKernel = allocateGravityErrorBuffer<radial_kernel::KernelTable<double>>(1, device);
     auto deviceCorrections =
         allocateGravityErrorBuffer<GravityErrorForce>(correctionValues.size(), device);
     // Declared last so all pending transfers drain before host or device buffers
     // are released, including exceptions from source loading or CUDA submission.
     CudaStream stream(device);
-    stream.copyAsync(
-        deviceKernel.get(), &kernel, sizeof(radial_kernel::KernelTable), cudaMemcpyHostToDevice);
+    stream.copyAsync(deviceKernel.get(), &kernel, sizeof(radial_kernel::KernelTable<double>),
+        cudaMemcpyHostToDevice);
     stream.copyAsync(deviceCorrections.get(), correctionValues.data(),
         correctionValues.size_bytes(), cudaMemcpyHostToDevice);
     for (size_t sourceBegin = 0; sourceBegin < sourceCount;) {

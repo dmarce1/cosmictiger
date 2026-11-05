@@ -6,6 +6,7 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -16,6 +17,7 @@
 #include <utility>
 
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/particle_count.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/diagnostics.hpp>
@@ -152,7 +154,7 @@ namespace detail {
 }    // namespace detail
 
 ScenarioPlan initializePolytropicStar() {
-    ParticleInteger totalNumberOfParticles = pow(getOptions().initial.particlesPerDimension, 3);
+    ParticleInteger totalNumberOfParticles = getOptions().run.gasParticleCount;
     double const r0 = detail::kRadiusScale;
     int const nValue = totalNumberOfParticles;
     auto opts = getOptions();
@@ -161,7 +163,7 @@ ScenarioPlan initializePolytropicStar() {
     }
     std::cout << "  Initializing: polytropic star and particle shells\n" << std::flush;
     opts.initial.gasMass = 203. / nValue / (r0 * r0 * r0) / 5.99071;
-    double const m = opts.initial.gasMass;
+    double m = opts.initial.gasMass;
     setOptions(opts);
     double const rho0 = detail::kCentralDensity;
     double const npoly = detail::kPolytropicIndex;
@@ -175,32 +177,48 @@ ScenarioPlan initializePolytropicStar() {
     double const rmax = detail::kMaximumRadius;
     Vector<Array<Vector<float>, kDimensions>> xValue;
     Vector<float> radius;
-    do {
-        d = rho(r * r0);
-        double dr1 = pow(m / d, 1.0 / 3.0);
-        double dr2;
-        r += 0.5 * dr1;
-        if (r < rmax) {
+    for (;;) {
+        r = 0.0;
+        ntot = 0;
+        nr = 0;
+        xValue.clear();
+        radius.clear();
+        do {
             d = rho(r * r0);
-            dr2 = pow(m / d, 1.0 / 3.0);
-            r += 0.5 * (dr2 - dr1);
+            double dr1 = pow(m / d, 1.0 / 3.0);
+            double dr2;
+            r += 0.5 * dr1;
             if (r < rmax) {
-                dr1 = dr2;
-                int const nValue = 4.0 * std::numbers::pi * r * r * dr2 * (d / m) + 0.5;
-                Array<Vector<float>, kDimensions> positions;
-                for (int dim = 0; dim < kDimensions; dim++) {
-                    positions[dim].resize(nValue);
+                d = rho(r * r0);
+                dr2 = pow(m / d, 1.0 / 3.0);
+                r += 0.5 * (dr2 - dr1);
+                if (r < rmax) {
+                    dr1 = dr2;
+                    int const nValue = 4.0 * std::numbers::pi * r * r * dr2 * (d / m) + 0.5;
+                    Array<Vector<float>, kDimensions> positions;
+                    for (int dim = 0; dim < kDimensions; dim++) {
+                        positions[dim].resize(nValue);
+                    }
+                    xValue.push_back(std::move(positions));
+                    terminal::detailPrint(
+                        "Star shell %i: radius=%e particles=%i thickness=%e\n", nr, r, nValue, dr1);
+                    ntot += nValue;
+                    radius.push_back(r);
+                    r += 0.5 * dr1;
+                    nr++;
                 }
-                xValue.push_back(std::move(positions));
-                terminal::detailPrint(
-                    "Star shell %i: radius=%e particles=%i thickness=%e\n", nr, r, nValue, dr1);
-                ntot += nValue;
-                radius.push_back(r);
-                r += 0.5 * dr1;
-                nr++;
             }
+        } while (r < rmax);
+        if (size_t(ntot) >= opts.run.gasParticleCount) {
+            break;
         }
-    } while (r < rmax);
+        // Whole spherical shells can undershoot the requested population.
+        // Refine their mass spacing before solving any shell positions.
+        m *= std::min(0.95, 0.99 * double(std::max(ntot, 1)) / opts.run.gasParticleCount);
+    }
+    opts.initial.gasMass = m;
+    opts.run.gasParticleCount = ntot;
+    setOptions(opts);
     terminal::detailPrint("Star particles: %i\n", ntot);
     solveSphereSurfaceProblem(xValue);
     for (int i = 0; i < xValue.size(); i++) {
@@ -229,7 +247,7 @@ ScenarioPlan initializePolytropicStar() {
 
     if (sphParticlesSize() == 0) {
         throw std::runtime_error("The polytropic star scenario produced no gas particles; "
-                                 "increase initial.particlesPerDimension");
+                                 "increase run.gasParticleCount");
     }
     // Damp on the dynamical time before the undamped evolution stage.
     return ScenarioPlan{{{10.0 * tdyn, 25, 1.0 / tdyn, 0.0}, {100.0 * tdyn, 250, 0.0, 0.05}},

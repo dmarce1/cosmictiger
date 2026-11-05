@@ -76,12 +76,20 @@ ScenarioDefinition const& definition(std::string const& name) {
 #if COSMICTIGER_WITH_SPH
         {"sod", false, true, true, 20, initializeSod},
         {"blast", false, true, true, 16, initializeBlast},
+#if COSMICTIGER_DIMENSION_COUNT == 3
         {"rayleighTaylor", true, true, true, 256, initializeRayleighTaylor},
+#endif
+#if COSMICTIGER_DIMENSION_COUNT >= 2
         {"kelvinHelmholtz", false, true, true, 1024, initializeKelvinHelmholtz},
+#endif
+#if COSMICTIGER_DIMENSION_COUNT == 3
         {"disc", true, true, true, 1024, initializeDisc},
         {"polytropicStar", true, true, true, 275, initializePolytropicStar},
+#endif
         {"hydroWave", false, true, true, 64, initializeHydroWave},
+#if COSMICTIGER_DIMENSION_COUNT >= 2
         {"gresho", false, true, true, 16, initializeGresho},
+#endif
 #endif
 #if COSMICTIGER_WITH_GRAVITY
         {"cosmology", true, COSMICTIGER_WITH_SPH != 0, false, 64, nullptr},

@@ -179,6 +179,15 @@ function(cosmictiger_feature_sources output)
             src/sph/viscosity/cullen_and_dehnen.cpp
             src/sph/viscosity/price_etal.cpp
         )
+        if(COSMICTIGER_DIMENSION_COUNT LESS 3)
+            list(REMOVE_ITEM cosmictiger_source_files src/scenarios/rayleigh_taylor.cpp
+                src/scenarios/disc.cpp src/scenarios/polytropic_star.cpp
+                src/scenarios/sphere.cpp src/scenarios/sphere.cu)
+        endif()
+        if(COSMICTIGER_DIMENSION_COUNT LESS 2)
+            list(REMOVE_ITEM cosmictiger_source_files src/scenarios/kelvin_helmholtz.cpp
+                src/scenarios/gresho.cpp)
+        endif()
         if(COSMICTIGER_ENABLE_CHEMISTRY)
             list(APPEND cosmictiger_source_files src/chemistry/sph.cpp)
         endif()
@@ -188,7 +197,7 @@ function(cosmictiger_feature_sources output)
         endif()
     endif()
 
-    if(BUILD_TESTING)
+    if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         list(APPEND cosmictiger_source_files
             tests/test.cpp)
         if(COSMICTIGER_WITH_ROCKSTAR)

@@ -34,8 +34,12 @@ static_assert(kQuadratic.changePoints[1] == 1.0 / 3 && kQuadratic.changePoints[2
 static_assert(kQuadratic.centralPotential == 39.0 / 16);
 static_assert(kCubic.pieceCount == 2 && kCubic.changePoints[1] == 0.5);
 static_assert(kFerrers.centralPotential == 693.0 / 256);
-static_assert(std::is_trivially_copyable_v<KernelTable>);
-static_assert(std::is_standard_layout_v<KernelTable>);
+static_assert(std::is_trivially_copyable_v<KernelTable<double>>);
+static_assert(std::is_standard_layout_v<KernelTable<double>>);
+static_assert(std::is_trivially_copyable_v<KernelTable<float>>);
+static_assert(std::is_standard_layout_v<KernelTable<float>>);
+static_assert(
+    std::is_same_v<decltype(radial_kernel::makeKernelTable<float>({}).centralPotential), float>);
 static_assert(!radial_kernel::isValid({Family::Spline, 1}));
 static_assert(!radial_kernel::isValid({Family::Wendland, 9}));
 static_assert(!radial_kernel::isValid({Family::Ferrers, 3}));
@@ -56,7 +60,7 @@ void close(double actual, double expected, double tolerance, char const* label) 
 }
 
 template <typename Function>
-double integrate(KernelTable const& table, double lower, double upper, Function function) {
+double integrate(KernelTable<double> const& table, double lower, double upper, Function function) {
     // Eight-point Gauss integration is exact for every polynomial moment used
     // here when split at the kernel's change points (degree at most thirteen).
     constexpr double kNodes[4] = {0.18343464249564980494, 0.52553240991632898582,
@@ -110,6 +114,15 @@ long double referenceShape(KernelSpec spec, long double q) {
 
 void testTable(KernelSpec spec) {
     auto const table = radial_kernel::makeKernelTable(spec);
+    auto const floatTable = radial_kernel::makeKernelTable<float>(spec);
+    auto const preciseTable = radial_kernel::makeKernelTable<long double>(spec);
+    for (int piece = 0; piece < table.pieceCount; ++piece) {
+        for (int coefficient = 0; coefficient <= table.degree; ++coefficient) {
+            require(floatTable.coefficients[piece][coefficient] ==
+                    float(preciseTable.coefficients[piece][coefficient]),
+                "float coefficients must round directly from long double generation");
+        }
+    }
     double const fourPi = 4 * std::numbers::pi;
     auto density = [&](double q) { return radial_kernel::value(table, q); };
     double const mass =
@@ -157,22 +170,22 @@ void testTable(KernelSpec spec) {
     }
     for (int i = 0; i <= 2000; ++i) {
         float const q = static_cast<float>(i) / 1000;
-        float const value = radial_kernel::value(table, q);
+        float const value = radial_kernel::value(floatTable, q);
         require(value >= 0 && std::isfinite(value), "nonnegative float density");
         close(value, density(q), 4e-6, "float density accuracy");
-        close(radial_kernel::derivative(table, q), radial_kernel::derivative(table, double(q)),
+        close(radial_kernel::derivative(floatTable, q), radial_kernel::derivative(table, double(q)),
             5e-6, "float derivative accuracy");
-        close(radial_kernel::forceFactor(table, q), radial_kernel::forceFactor(table, double(q)),
-            5e-6, "float force accuracy");
-        close(radial_kernel::potential(table, q), radial_kernel::potential(table, double(q)), 5e-6,
-            "float potential accuracy");
+        close(radial_kernel::forceFactor(floatTable, q),
+            radial_kernel::forceFactor(table, double(q)), 5e-6, "float force accuracy");
+        close(radial_kernel::potential(floatTable, q), radial_kernel::potential(table, double(q)),
+            5e-6, "float potential accuracy");
     }
     for (int exponent = 0; exponent <= 40; ++exponent) {
         float const q = static_cast<float>(std::pow(10.0, -exponent));
-        close(radial_kernel::forceFactor(table, q), radial_kernel::forceFactor(table, double(q)),
-            5e-6, "near-origin float force");
-        close(radial_kernel::potential(table, q), radial_kernel::potential(table, double(q)), 5e-6,
-            "near-origin float potential");
+        close(radial_kernel::forceFactor(floatTable, q),
+            radial_kernel::forceFactor(table, double(q)), 5e-6, "near-origin float force");
+        close(radial_kernel::potential(floatTable, q), radial_kernel::potential(table, double(q)),
+            5e-6, "near-origin float potential");
     }
     for (int piece = 1; piece <= table.pieceCount; ++piece) {
         double const q = table.changePoints[piece];
@@ -209,18 +222,19 @@ void testTable(KernelSpec spec) {
             simdSetLane(radius, 1, 1e-30f);
             simdSetLane(radius, 2, 1e30f);
         }
-        auto const values = radial_kernel::value(table, radius);
-        auto const derivatives = radial_kernel::derivative(table, radius);
-        auto const forces = radial_kernel::forceFactor(table, radius);
-        auto const potentials = radial_kernel::potential(table, radius);
+        auto const values = radial_kernel::value(floatTable, radius);
+        auto const derivatives = radial_kernel::derivative(floatTable, radius);
+        auto const forces = radial_kernel::forceFactor(floatTable, radius);
+        auto const potentials = radial_kernel::potential(floatTable, radius);
         for (int lane = 0; lane < kSimdFloatSize; ++lane) {
             float const scalarRadius = radius[lane];
-            close(values[lane], radial_kernel::value(table, scalarRadius), 5e-6, "SIMD density");
-            close(derivatives[lane], radial_kernel::derivative(table, scalarRadius), 5e-6,
-                "SIMD derivative");
             close(
-                forces[lane], radial_kernel::forceFactor(table, scalarRadius), 5e-6, "SIMD force");
-            close(potentials[lane], radial_kernel::potential(table, scalarRadius), 5e-6,
+                values[lane], radial_kernel::value(floatTable, scalarRadius), 5e-6, "SIMD density");
+            close(derivatives[lane], radial_kernel::derivative(floatTable, scalarRadius), 5e-6,
+                "SIMD derivative");
+            close(forces[lane], radial_kernel::forceFactor(floatTable, scalarRadius), 5e-6,
+                "SIMD force");
+            close(potentials[lane], radial_kernel::potential(floatTable, scalarRadius), 5e-6,
                 "SIMD potential");
         }
     }

@@ -59,7 +59,7 @@ def main():
     ranks = 2 if args.mpi_exec else 1
     options = [str(executable), *args.hpx_argument,
                f"--hpx:threads={1 if args.mpi_exec else 2}", "--hpx:bind=none",
-               "--run.scenario=cosmology", "--initial.particlesPerDimension=8",
+               "--run.scenario=cosmology", "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512",
                "--hydro.enabled=true", "--chemistry.enabled=true", "--starFormation.enabled=false",
                "--chemistry.initializationTemperature=1000000", "--chemistry.minimumSpecificEnergy=0",
                f"--gravity.cuda={str(args.cuda).lower()}",

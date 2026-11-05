@@ -73,7 +73,7 @@ using GravityErrorLoadCalls = std::vector<std::pair<size_t, size_t>>;
 
 std::vector<GravityErrorForce> evaluateGravityErrorCuda(
     std::vector<GravityErrorPosition> const& sinks, std::vector<GravityErrorSource> const& sources,
-    radial_kernel::KernelTable const& kernel, double smoothingLength,
+    radial_kernel::KernelTable<double> const& kernel, double smoothingLength,
     GravityErrorLoadCalls* calls = nullptr) {
     return gravityErrorDirectCuda(
         sinks, sources.size(),
@@ -91,7 +91,7 @@ std::vector<GravityErrorForce> evaluateGravityErrorCuda(
 
 std::vector<GravityErrorForce> evaluateGravityErrorCpu(
     std::vector<GravityErrorPosition> const& sinks, std::vector<GravityErrorSource> const& sources,
-    radial_kernel::KernelTable const& kernel, double smoothingLength) {
+    radial_kernel::KernelTable<double> const& kernel, double smoothingLength) {
     auto const& corrections = gravityReferenceCorrectionTable();
     std::vector<GravityErrorForce> result(sinks.size());
     for (size_t sink = 0; sink < sinks.size(); ++sink) {

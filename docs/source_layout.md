@@ -183,7 +183,7 @@ with the particle array named `sphParticlesElectronFractions`. The default guess
 remains `1.0f`, and checkpoints retain one float per gas particle.
 
 The runtime selector remains
-`hydro.viscosityEvolution=none|morrisAndMonaghan|cullenAndDehnen|priceEtAl|hu_etal`. Model-specific
+`hydro.viscosityEvolution=none|morrisAndMonaghan|cullenAndDehnen|priceEtAl|huEtal`. Model-specific
 state allocation, migration, checkpoint identity, and output are handled at the
 existing storage and integration boundaries. Cullen–Dehnen's additional
 particle exchange is owned by its module.

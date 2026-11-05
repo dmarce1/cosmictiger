@@ -52,7 +52,7 @@ def main():
     require(all(name in available["integrator"] for name in integrators),
             "a requested integrator was not compiled")
     common = {"hpx:threads": args.threads, "hpx:bind": "none", **cpu_backend_options(),
-              "initial.particlesPerDimension": 8, "initial.useGlass": "false",
+              "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.useGlass": "false",
               "initial.closePack": "false", "hydro.enabled": "true",
               "gravity.enabled": "true", "chemistry.enabled": "false",
               "starFormation.enabled": "false", "analysis.groups": "false",
@@ -116,7 +116,7 @@ def main():
     # the global integrator remains fully active regardless of the threshold.
     blast = {"run.scenario": "blast", "run.endTime": 0.005,
              "run.numberOfSteps": 1, "run.maxIterations": 4,
-             "initial.particlesPerDimension": 16}
+             "run.darkMatterParticleCount": 4096, "run.gasParticleCount": 4096}
     for integrator in integrators:
         for name, fraction in (("zero", 0), ("default", 1.0 / 3.0), ("one", 1)):
             label = f"{integrator}_{name}"
@@ -147,7 +147,7 @@ def main():
     # the reported denominator against the actual checkpoint species counts,
     # including across MPI ranks rather than using a per-rank or gas-only count.
     mixed = {"run.scenario": "cosmology", "cosmology.sigma8": 0,
-             "initial.particlesPerDimension": 4, "run.maxIterations": 2, OPTION: 1}
+             "run.darkMatterParticleCount": 64, "run.gasParticleCount": 64, "run.maxIterations": 2, OPTION: 1}
     directory, output = run("mixed_total_particles", mixed)
     counts = validate_events(output, "mixed_total_particles", integrators[0], 1)
     _, _, _, species = checkpoint_state(directory, mixed["run.maxIterations"], ranks)

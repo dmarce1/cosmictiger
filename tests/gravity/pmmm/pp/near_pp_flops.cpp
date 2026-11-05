@@ -15,11 +15,11 @@ namespace detail {
 // CountingReal is deliberately not a built-in arithmetic type. Select the
 // scalar radial branch here, then execute the actual production expressions
 // with overloaded arithmetic instead of the eager SIMD path.
-struct CountingNearKernel : radial_kernel::KernelTable {
+struct CountingNearKernel : radial_kernel::KernelTable<double> {
     mutable uint64_t widthOperations = 0;
 
-    explicit CountingNearKernel(radial_kernel::KernelTable const& table)
-      : radial_kernel::KernelTable(table) {}
+    explicit CountingNearKernel(radial_kernel::KernelTable<double> const& table)
+      : radial_kernel::KernelTable<double>(table) {}
 };
 
 CountingReal forceFactor(CountingNearKernel const& kernel, CountingReal q) {
@@ -43,7 +43,7 @@ CountingReal potential(CountingNearKernel const& kernel, CountingReal q) {
     return CountingReal(1) / q;
 }
 
-void checkNearPairCounts(radial_kernel::KernelTable const& table, double radius) {
+void checkNearPairCounts(radial_kernel::KernelTable<double> const& table, double radius) {
     using Real = CountingReal;
     PmmmNearParticle const sink{{0, 0, 0}, 2, 0, 1};
     PmmmNearParticle const source{{radius, 0, 0}, 1.75, 0, 2};

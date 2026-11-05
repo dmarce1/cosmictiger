@@ -44,7 +44,7 @@ def main():
         environment["LD_PRELOAD"] = str(args.guard.resolve())
     command = [str(args.executable.resolve()), "--run.test=analysisBackends",
                "--gravity.cuda=false", f"--hydro.enabled={str(args.hydro).lower()}",
-               "--initial.particlesPerDimension=8", "--initial.closePack=false",
+               "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512", "--initial.closePack=false",
                "--analysis.views=false", "--analysis.groups=false", "--analysis.power=true",
                "--lightcone.enabled=true", f"--lightcone.directory={output}",
                "--lightcone.mapSize=1", "--lightcone.linkingLength=0.28",

@@ -31,7 +31,7 @@ def runDiagnostic(executable, workdir):
     environment["COSMICTIGER_LINEAR_GROWTH_MODES"] = "1,0,0"
     environment["COSMICTIGER_LINEAR_GROWTH_AMPLITUDES"] = "0.01,0.005"
     command = [str(executable), "--hpx:threads=2", "--hpx:bind=none",
-               "--run.test=linearGrowth", "--initial.particlesPerDimension=8",
+               "--run.test=linearGrowth", "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512",
                "--initial.closePack=false", "--initial.useGlass=false",
                "--hydro.enabled=true", "--gravity.cuda=false",
                "--gravity.kernelFamily=ferrers", "--gravity.kernelDegree=4",

@@ -11,7 +11,7 @@
 
 namespace detail {
 
-void checkSphRadialCounts(radial_kernel::KernelTable const& table, double radius) {
+void checkSphRadialCounts(radial_kernel::KernelTable<double> const& table, double radius) {
     using Real = CountingReal;
     Real const q(radius);
     for (bool derivative : {false, true}) {
@@ -84,6 +84,21 @@ TEST(SphFlops, FloatKernelArithmeticAndDoubleTableConversions) {
     auto const doubleDensity = sph_flops::densityKernelOperations(table, 0.25);
     EXPECT_EQ(doubleDensity.singlePrecision, 0);
     EXPECT_EQ(doubleDensity.doublePrecision, 23);
+}
+
+TEST(SphFlops, FloatTablesHaveNoDoubleOperations) {
+    auto const table = radial_kernel::makeKernelTable<float>({radial_kernel::Family::Spline, 3});
+    for (float radius : {0.25f, 0.75f, 1.25f}) {
+        auto const density = sph_flops::densityKernelOperations(table, radius);
+        auto const derivative = sph_flops::densityKernelOperations(table, radius, true);
+        auto const force = sph_flops::forceKernelOperations(table, radius);
+        EXPECT_EQ(density.singlePrecision, radius < 1.0f ? 23 : 0);
+        EXPECT_EQ(derivative.singlePrecision, radius < 1.0f ? 14 : 0);
+        EXPECT_EQ(force.singlePrecision, sph_flops::forceKernelFlops(table, radius));
+        EXPECT_EQ(density.doublePrecision, 0);
+        EXPECT_EQ(derivative.doublePrecision, 0);
+        EXPECT_EQ(force.doublePrecision, 0);
+    }
 }
 
 TEST(SphFlops, EveryRadialFamilySpanAndOutsideBranch) {

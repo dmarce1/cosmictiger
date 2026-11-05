@@ -148,6 +148,7 @@ constexpr uint32_t kVariationalSph = 2;
 constexpr uint32_t kSphFormationMask = 0xffU;
 constexpr uint32_t kCompactSphLayout = 1U << 24;
 constexpr uint32_t kArtificialConduction = 1U << 25;
+constexpr uint32_t kIndependentParticleCounts = 1U << 26;
 constexpr uint32_t kChemistry = 1U << 11;
 constexpr uint32_t kZPlaneAcceleration = 1U << 12;
 constexpr uint32_t kBalsaraSwitch = 1U << 13;
@@ -458,7 +459,11 @@ uint32_t checkpointFlags(Options const& opts) {
     constexpr uint32_t kGroups = 1U << 8;
     constexpr uint32_t kTracers = 1U << 9;
     // Leave retired option bits unused so old incompatible headers remain rejected.
-    return kRuntimeAlgorithms | (sizeof(ParticleInteger) == 8 ? kWideParticleIndices : 0U) |
+    return (opts.run.scenario == "cosmology" && opts.hydro.enabled &&
+                       opts.run.darkMatterParticleCount != opts.run.gasParticleCount ?
+                   kIndependentParticleCounts :
+                   0U) |
+        kRuntimeAlgorithms | (sizeof(ParticleInteger) == 8 ? kWideParticleIndices : 0U) |
         (usesGlobalIntegration(opts.run) ? kGlobalIntegrator : 0U) |
         (opts.hydro.enabled ? kSph : 0U) | (opts.run.hierarchicalGravity ? kHierarchical : 0U) |
         (opts.lightcone.enabled ? kLightcone : 0U) | (opts.analysis.groups ? kGroups : 0U) |
@@ -518,7 +523,7 @@ uint32_t checkpointPhysicsCode(Options const& opts) {
         checkpointKernelCode("spline", 3);
     // Bit 24 identifies compact gas storage.
     return (opts.hydro.enabled ? kVariationalSph | kCompactSphLayout : 0U) | (gravityCode << 8) |
-        (hydroCode << 16);
+        (hydroCode << 16) | (uint32_t(3 - kSpatialDimensions) << 28);
 }
 
 bool legacyCheckpointCompatible(Options const& opts) {
@@ -574,12 +579,12 @@ std::array<double, 7> viscosityCheckpointParameters(Options const& opts) {
         1.0 :
         (opts.hydro.viscosityEvolution == "priceEtAl" ?
                 2.0 :
-                (opts.hydro.viscosityEvolution == "hu_etal" ? 3.0 : 0.0));
+                (opts.hydro.viscosityEvolution == "huEtal" ? 3.0 : 0.0));
     return {opts.hydro.minimumBulkViscosityCoefficient, opts.hydro.viscosityDecay, model,
-        opts.hydro.viscosityEvolution == "hu_etal" ? opts.hydro.maximumBulkViscosityCoefficientHu :
-                                                     opts.hydro.maximumBulkViscosityCoefficient,
-        opts.hydro.viscosityEvolution == "hu_etal" ? opts.hydro.viscosityDecayHu :
-                                                     opts.hydro.viscosityDecayCD,
+        opts.hydro.viscosityEvolution == "huEtal" ? opts.hydro.maximumBulkViscosityCoefficientHu :
+                                                    opts.hydro.maximumBulkViscosityCoefficient,
+        opts.hydro.viscosityEvolution == "huEtal" ? opts.hydro.viscosityDecayHu :
+                                                    opts.hydro.viscosityDecayCD,
         opts.hydro.maximumBulkViscosityCoefficientPrice, opts.hydro.viscosityDecayPrice};
 }
 
@@ -734,6 +739,13 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
             THROW_ERROR("Unable to write particle-mesh checkpoint parameters\n");
         }
     }
+    if ((header.flags & kIndependentParticleCounts) != 0U) {
+        std::array<uint64_t, 2> const counts{
+            getOptions().run.darkMatterParticleCount, getOptions().run.gasParticleCount};
+        if (fwrite(counts.data(), sizeof(uint64_t), counts.size(), fp) != counts.size()) {
+            THROW_ERROR("Unable to write independent particle counts\n");
+        }
+    }
     if (getOptions().hydro.enabled) {
         auto const sphParameters = sphCheckpointParameters(getOptions());
         if (fwrite(sphParameters.data(), sizeof(double), sphParameters.size(), fp) !=
@@ -808,6 +820,11 @@ DriverParameters readDriverState(FILE* fp) {
     }
     if (magic == kCheckpointMagic) {
         FREAD(&header, sizeof(header), 1, fp);
+        unsigned const savedDimensions = 3 - ((header.reserved >> 28) & 3);
+        if (savedDimensions != kSpatialDimensions) {
+            THROW_ERROR("Checkpoint spatial dimension %u does not match this build (%d)\n",
+                savedDimensions, kSpatialDimensions);
+        }
         if ((header.flags & kRetiredParticleMesh) != 0U) {
             THROW_ERROR("Ordinary PM gravity checkpoints are no longer supported\n");
         }
@@ -857,6 +874,16 @@ DriverParameters readDriverState(FILE* fp) {
             if (parameters != particleMeshCheckpointParameters(getOptions())) {
                 THROW_ERROR("Particle-mesh checkpoint mesh, cloud, short solver, split/cutoff "
                             "geometry, timestep parameters or force convention differs from the "
+                            "requested run\n");
+            }
+        }
+        if ((header.flags & kIndependentParticleCounts) != 0U) {
+            std::array<uint64_t, 2> counts{};
+            FREAD(counts.data(), sizeof(uint64_t), counts.size(), fp);
+            if (counts !=
+                std::array<uint64_t, 2>{
+                    getOptions().run.darkMatterParticleCount, getOptions().run.gasParticleCount}) {
+                THROW_ERROR("Checkpoint dark-matter or gas particle count differs from the "
                             "requested run\n");
             }
         }
@@ -1041,6 +1068,10 @@ CheckpointSelection readCheckpointSelection(std::string const& outputDirectory, 
             }
             if ((header.flags & detail::kParticleMeshInterval) != 0U) {
                 detail::readParticleMeshCheckpointParameters(file.get());
+            }
+            if ((header.flags & detail::kIndependentParticleCounts) != 0U) {
+                std::array<uint64_t, 2> counts{};
+                FREAD(counts.data(), sizeof(uint64_t), counts.size(), file.get());
             }
             std::array<double, 13> sphParameters{};
             FREAD(sphParameters.data(), sizeof(double), sphParameters.size(), file.get());
@@ -1405,6 +1436,7 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(!detail::checkpointCompatible(conductionHeader, conductionOptions));
     auto balsaraOptions = getOptions();
     balsaraOptions.hydro.enabled = true;
+    balsaraOptions.hydro.viscosityEvolution = "none";
     balsaraOptions.hydro.balsaraSwitch = true;
     auto const balsaraHeader = detail::checkpointHeader(balsaraOptions);
     ALWAYS_ASSERT(detail::checkpointCompatible(balsaraHeader, balsaraOptions));
@@ -1414,6 +1446,20 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(detail::checkpointCompatible(unlimitedHeader, balsaraOptions));
     balsaraOptions.hydro.balsaraSwitch = true;
     ALWAYS_ASSERT(!detail::checkpointCompatible(unlimitedHeader, balsaraOptions));
+    // Programmatic updates must enforce the same combinations as CLI/INI parsing.
+    for (char const* model : {"cullenAndDehnen", "huEtal", "priceEtAl"}) {
+        auto invalidOptions = getOptions();
+        invalidOptions.hydro.viscosityEvolution = model;
+        invalidOptions.hydro.balsaraSwitch = true;
+        bool rejected = false;
+        try {
+            setOptions(invalidOptions);
+        } catch (std::invalid_argument const& error) {
+            rejected = std::string(error.what()).find("hydro.balsaraSwitch=true requires") !=
+                std::string::npos;
+        }
+        ALWAYS_ASSERT(rejected);
+    }
     // Variational checkpoints round-trip; retired Monaghan pressure is never reinterpreted.
     auto operatorOptions = getOptions();
     operatorOptions.hydro.enabled = true;
@@ -1462,7 +1508,7 @@ void checkpointStateTest() {
         ALWAYS_ASSERT(viscosityParameters != detail::viscosityCheckpointParameters(altered));
     }
     auto huOptions = viscosityOptions;
-    huOptions.hydro.viscosityEvolution = "hu_etal";
+    huOptions.hydro.viscosityEvolution = "huEtal";
     auto const huParameters = detail::viscosityCheckpointParameters(huOptions);
     ALWAYS_ASSERT(huParameters[2] == 3.0 && huParameters != viscosityParameters);
     huOptions.hydro.maximumBulkViscosityCoefficientHu += 0.125;

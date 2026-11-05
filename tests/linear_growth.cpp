@@ -81,7 +81,7 @@ struct LinearExperiment {
     std::string loadFile;
 
     explicit LinearExperiment(Options const& options)
-      : side(options.initial.particlesPerDimension)
+      : side(options.initial.latticeSide)
       , species(options.hydro.enabled ? 2 : 1)
       , perSpecies(size_t(side) * side * side)
       , reference(perSpecies * species)
@@ -860,9 +860,8 @@ void evolveLinearModes(LinearExperiment const& experiment, std::string const& fi
 
 void linearGrowthTest() {
     auto options = getOptions();
-    if (hpxSize() != 1 || options.initial.particlesPerDimension < 4 ||
-        options.initial.particlesPerDimension > 32 || options.initial.closePack ||
-        options.initial.useGlass) {
+    if (hpxSize() != 1 || options.initial.latticeSide < 4 || options.initial.latticeSide > 32 ||
+        options.initial.closePack || options.initial.useGlass) {
         throw std::runtime_error(
             "linearGrowth requires one locality, 4 <= N <= 32 and no standard glass/close-pack "
             "loader; "
@@ -875,8 +874,8 @@ void linearGrowthTest() {
 
     options.analysis.groups = false;
     options.analysis.tracers = false;
-    options.initial.numberOfParticles = size_t(options.initial.particlesPerDimension) *
-        options.initial.particlesPerDimension * options.initial.particlesPerDimension;
+    options.initial.numberOfParticles = size_t(options.initial.latticeSide) *
+        options.initial.latticeSide * options.initial.latticeSide;
     // G rho_comoving = 1 makes the measured response independent of code units.
     double const massSum = options.hydro.enabled ?
         double(float(options.initial.darkMatterMass)) + double(float(options.initial.gasMass)) :

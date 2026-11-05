@@ -132,7 +132,7 @@ rejects duplicate positions. This is a generated and relaxed glass, not a
 jittered lattice.
 
 The retained generation used `configurations/createGlass.ini`, overriding
-`initial.particlesPerDimension=8`, `output.silo=false`, and four HPX threads.
+`run.darkMatterParticleCount=512, run.gasParticleCount=512`, `output.silo=false`, and four HPX threads.
 The first stage used `run.maxIterations=500`; a continuation read checkpoint
 501 and used `run.maxIterations=3000`. The generator stopped at iteration 601
 with relative potential-energy change `6.570487e-6`, below its `1e-5` stopping

@@ -25,6 +25,13 @@ inline constexpr int kSphTreeNodeAllocationSize = 4;
 #define DOMAINS_CHECK
 #endif
 
+// XYZ transport, output and checkpoint records retain their padded layout.
+// Spatial operators use kSpatialDimensions; standalone math consumers default to 3D.
+#ifndef COSMICTIGER_DIMENSION_COUNT
+#define COSMICTIGER_DIMENSION_COUNT 3
+#endif
+inline constexpr int kSpatialDimensions = COSMICTIGER_DIMENSION_COUNT;
+static_assert(kSpatialDimensions >= 1 && kSpatialDimensions <= 3);
 inline constexpr int kDimensions = 3;
 inline constexpr int kXDimension = 0;
 inline constexpr int kYDimension = 1;

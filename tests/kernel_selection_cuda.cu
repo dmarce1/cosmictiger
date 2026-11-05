@@ -31,8 +31,9 @@ struct KernelSelectionProbe {
     float potential;
 };
 
+template <class Real>
 __device__ void probeKernelTable(
-    radial_kernel::KernelTable const& table, KernelSelectionProbe& result) {
+    radial_kernel::KernelTable<Real> const& table, KernelSelectionProbe& result) {
     result.family = static_cast<int>(table.spec.family);
     result.degree = table.spec.degree;
     result.pieceCount = table.pieceCount;
@@ -54,8 +55,9 @@ void checkKernelProbeCuda(cudaError_t status, char const* operation) {
     }
 }
 
+template <class Real>
 void verifyKernelProbe(char const* label, KernelSelectionProbe const& actual,
-    radial_kernel::KernelTable const& expected) {
+    radial_kernel::KernelTable<Real> const& expected) {
     if (actual.family != static_cast<int>(expected.spec.family) ||
         actual.degree != expected.spec.degree || actual.pieceCount != expected.pieceCount ||
         actual.smoothingLengthPerEffectiveRadius != expected.smoothingLengthPerEffectiveRadius ||

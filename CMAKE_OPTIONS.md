@@ -37,6 +37,7 @@ direct formulas. See [matrix algorithms and measurements](docs/matrix.md).
 | `COSMICTIGER_ENABLE_PM` | `OFF` | Compile pure particle-mesh gravity (`gravity.method.far=pm`) with the mandatory outer PM interval; see `docs/p3m.md`. |
 | `COSMICTIGER_ENABLE_P3M_PP` | `OFF` | Compile PP-PM gravity (`gravity.method.far=p3m`, `gravity.method.near=pp`): Gaussian-split mesh force plus direct screened short-range pairs. |
 | `COSMICTIGER_ENABLE_P3M_FMM` | `OFF` | Compile FMM-PM gravity (`gravity.method.far=p3m`, `gravity.method.near=fmm`): the same split with a screened full-Cartesian short-range FMM (CPU only). Includes the shared tree machinery. |
+| `COSMICTIGER_DIMENSION_COUNT` | `3` | Spatial dimensions: 1, 2, or 3. Below 3 requires SPH, all gravity solvers OFF, chemistry OFF, and stars OFF. See [dimensional SPH](docs/sph_dimensions.md). |
 | `COSMICTIGER_ENABLE_SPH` | `ON` | Compile SPH and hydro problems. |
 | `COSMICTIGER_ENABLE_CHEMISTRY` | `ON` | Compile equilibrium cooling when SPH is also enabled. Inactive with SPH disabled. |
 | `COSMICTIGER_ENABLE_STARS` | `OFF` | Compile GADGET-4 multiphase star formation. Requires equilibrium cooling; inactive with SPH disabled. |

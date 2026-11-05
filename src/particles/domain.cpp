@@ -137,7 +137,7 @@ Vector<double> alignedDomainCuts(
     Vector<DomainGlobal> const& domains, int depth, int coarseMeshSize) {
     auto const histograms = countDomainCoarseSlabs(depth, coarseMeshSize);
     ALWAYS_ASSERT(histograms.size() == domains.size());
-    int const axis = depth % kDimensions;
+    int const axis = depth % kSpatialDimensions;
     auto const coarseIndex = [coarseMeshSize](double coordinate) {
         auto const index = std::llround(coordinate * coarseMeshSize);
         ALWAYS_ASSERT(
@@ -161,7 +161,7 @@ Vector<double> alignedDomainCuts(
         }
         int remainingCuts = 0;
         for (int level = 1; level < levels; ++level) {
-            if ((depth + level) % kDimensions == axis) {
+            if ((depth + level) % kSpatialDimensions == axis) {
                 ++remainingCuts;
             }
         }
@@ -298,7 +298,7 @@ Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
                             hpxHardwareConcurrency() / (size_t) particlesSize(),
                         (size_t) 1);
                     Vector<hpx::future<void>> futs;
-                    int const xdim = depth % kDimensions;
+                    int const xdim = depth % kSpatialDimensions;
                     Position const xmid(bounds[i]);
                     std::atomic<size_t> count(0);
                     auto const func = [numberOfThreads, rng, xdim, xmid, &count](int proc) {
@@ -336,7 +336,7 @@ Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
 std::vector<std::vector<size_t>> domainsCountCoarseSlabs(int depth, int coarseMeshSize) {
     std::vector<std::vector<size_t>> counts(localDomains.size());
     Vector<hpx::future<void>> futs;
-    int const xdim = depth % kDimensions;
+    int const xdim = depth % kSpatialDimensions;
     for (int i = 0; i < localDomains.size(); i++) {
         if (localDomains[i].depth != depth) {
             continue;
@@ -393,7 +393,7 @@ void domainsReboundSort(Vector<double> bounds, int depth) {
             futs.push_back(hpx::async(hpx::annotated_function(
                 [i, &bounds, depth, &mids]() {
                     mids[i] = particlesSort(
-                        localDomains[i].particleRange, bounds[i], depth % kDimensions);
+                        localDomains[i].particleRange, bounds[i], depth % kSpatialDimensions);
                 },
                 "particles.domainsReboundSort")));
         }
@@ -406,7 +406,8 @@ void domainsReboundSort(Vector<double> bounds, int depth) {
             DomainLocal right;
             left = localDomains[i];
             right = localDomains[i];
-            left.box.end[depth % kDimensions] = right.box.begin[depth % kDimensions] = bounds[i];
+            left.box.end[depth % kSpatialDimensions] = right.box.begin[depth % kSpatialDimensions] =
+                bounds[i];
             left.particleRange.second = right.particleRange.first = mids[i];
             left.processRange.second = right.processRange.first =
                 (localDomains[i].processRange.first + localDomains[i].processRange.second) / 2;
@@ -526,12 +527,12 @@ void domainsRebound() {
                 DomainGlobal right;
                 left = domains[i];
                 right = domains[i];
-                left.box.end[depth % kDimensions] = right.box.begin[depth % kDimensions] =
-                    bounds[i];
+                left.box.end[depth % kSpatialDimensions] =
+                    right.box.begin[depth % kSpatialDimensions] = bounds[i];
                 left.processRange.second = right.processRange.first =
                     (domains[i].processRange.first + domains[i].processRange.second) / 2;
-                int const leftdim = (depth + 1) % kDimensions;
-                int const rightdim = (depth + 1) % kDimensions;
+                int const leftdim = (depth + 1) % kSpatialDimensions;
+                int const rightdim = (depth + 1) % kSpatialDimensions;
                 left.totalCount = counts[i];
                 right.totalCount = domains[i].totalCount - counts[i];
                 left.midhi = left.box.end[leftdim];
@@ -1091,7 +1092,7 @@ static void domainsCheck() {
 static int findParticleDomain(Vector3<double> const& position, size_t key, int depth) {
     auto const& entry = boxesByKey[key];
     if (entry.rank == -1) {
-        int const xdim = depth % kDimensions;
+        int const xdim = depth % kSpatialDimensions;
         key <<= 1;
         if (position[xdim] >= entry.midx) {
             key += 1;

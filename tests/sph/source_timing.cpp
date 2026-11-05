@@ -257,7 +257,7 @@ void sphSourceTimingTest() {
     options.hydro.zPlaneAcceleration = 0.0;
     options.hydro.centralAcceleration = 0.0;
     double const baseTimestep = 1.0e8 / (detail::kSourceScale * options.units.timeSeconds);
-    for (auto const* viscosity : {"morrisAndMonaghan", "cullenAndDehnen", "priceEtAl", "hu_etal"}) {
+    for (auto const* viscosity : {"morrisAndMonaghan", "cullenAndDehnen", "priceEtAl", "huEtal"}) {
         sphTreeDestroy(true);
         options.hydro.viscosityEvolution = viscosity;
         setOptions(options);

@@ -46,9 +46,9 @@ def main():
         return directory
 
     def execute(directory, options, success=True, executable=None, omitChemistryDefault=False):
-        particleCount = ([] if any(option.startswith("--initial.particlesPerDimension=")
+        particleCount = ([] if any(option.startswith(("--run.darkMatterParticleCount=", "--run.gasParticleCount="))
                                     for option in options)
-                         else ["--initial.particlesPerDimension=8"])
+                         else ["--run.darkMatterParticleCount=512", "--run.gasParticleCount=512"])
         defaults = [option for option in common
                     if not (omitChemistryDefault and option.startswith("--chemistry.enabled="))]
         command = [str((executable or args.executable).resolve()), *defaults, *particleCount, *options]
@@ -153,7 +153,7 @@ def main():
 
     reject("polytrope_without_gravity", ["--run.scenario=polytropicStar"], "requires gravity.enabled=true")
     for scenario in ("sod", "blast", "rayleighTaylor", "disc"):
-        extra = ["--initial.particlesPerDimension=16"] if scenario == "disc" else []
+        extra = ["--run.darkMatterParticleCount=4096", "--run.gasParticleCount=4096"] if scenario == "disc" else []
         if scenario == "rayleighTaylor":
             extra.append("--hydro.zPlaneAcceleration=0.5")
         if scenario == "disc":

@@ -7,13 +7,14 @@
 
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <variant>
 #include <vector>
 
 struct Options;
 
-using OptionsMetadataValue = std::variant<bool, int, double, std::string>;
+using OptionsMetadataValue = std::variant<bool, int, size_t, double, std::string>;
 
 struct OptionsMetadataEntry {
     std::string name;

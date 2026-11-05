@@ -156,7 +156,7 @@ def main():
     require("fmm" in available["far"] and "hierarchical" in available["integrator"],
             "hierarchical SPH regression requires FMM and hierarchical integration")
     common = {"hpx:threads": args.threads, "hpx:bind": "none", **cpu_backend_options(),
-              "initial.particlesPerDimension": 8, "initial.useGlass": "false",
+              "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.useGlass": "false",
               "initial.closePack": "false", "hydro.enabled": "true", "gravity.enabled": "true",
               "chemistry.enabled": "false", "starFormation.enabled": "false",
               "analysis.groups": "false", "analysis.tracers": "false", "analysis.views": "false",
@@ -195,7 +195,7 @@ def main():
     # with all particle positions at the same chronological time.
     options = {"run.scenario": "blast", "run.endTime": 0.005,
                "run.numberOfSteps": 1, "run.maxIterations": 8,
-               "initial.particlesPerDimension": 16}
+               "run.darkMatterParticleCount": 4096, "run.gasParticleCount": 4096}
     directory = prepareCase(root, "blast")
     output = run(directory, options)
     require("SPH midpoint:" in output, "blast driver did not execute midpoint hydro")

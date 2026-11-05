@@ -70,8 +70,8 @@ float nodeMass(TreeNode const* node) {
 }
 
 void verifyKernelSelections() {
-    auto const verify = [](char const* label, radial_kernel::KernelTable const& table,
-                            std::string const& family, int degree) {
+    auto const verify = [](char const* label, auto const& table, std::string const& family,
+                            int degree) {
         bool const familyMatches =
             (family == "spline" && table.spec.family == radial_kernel::Family::Spline) ||
             (family == "wendland" && table.spec.family == radial_kernel::Family::Wendland) ||
@@ -910,10 +910,10 @@ void runSphMidpointPairRegression(bool useCuda) {
         // The third fixture exchanges current Cullen-Dehnen divergence signs
         // across ranks, rather than the retained endpoint-history signs.
         bool const emptyRoot = fixture == 1;
-        options.hydro.viscosityEvolution = fixture == 1 ? "hu_etal" :
+        options.hydro.viscosityEvolution = fixture == 1 ? "huEtal" :
             fixture == 2                                ? "cullenAndDehnen" :
                                                           "none";
-        options.hydro.balsaraSwitch = fixture != 0;
+        options.hydro.balsaraSwitch = false;
         for (int backend = 0; backend <= int(useCuda); ++backend) {
             options.hydro.cuda = backend != 0;
             sphTreeDestroy(true);
@@ -964,7 +964,7 @@ void runSphMidpointPairRegression(bool useCuda) {
                 << std::format(
                        "Conservative mixed-rung SPH pair passed ({:s}, {:d} localities{:s})\n",
                        backend ? "CUDA" : "CPU", hpxSize(),
-                       emptyRoot        ? ", empty root with Hu/Balsara diagnostics" :
+                       emptyRoot        ? ", empty root with Hu diagnostics" :
                            fixture == 2 ? ", cross-rank Cullen-Dehnen diagnostics" :
                                           "")
                 << std::flush;
@@ -1175,7 +1175,7 @@ void sphGravityTest() {
             verifyBhPotentials(true);
         }
 #endif
-        for (char const* viscosity : {"cullenAndDehnen", "priceEtAl", "hu_etal"}) {
+        for (char const* viscosity : {"cullenAndDehnen", "priceEtAl", "huEtal"}) {
             auto selected = opts;
             selected.hydro.viscosityEvolution = viscosity;
             setOptions(selected);

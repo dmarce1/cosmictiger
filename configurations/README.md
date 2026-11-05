@@ -61,8 +61,8 @@ To run a collisionless cosmology, set
 | [star_formation/lcdm.ini](star_formation/lcdm.ini) | `cosmology` | Gravity, SPH, equilibrium cooling, and star formation; CPU, 64 coarse intervals | `./output/star_formation/` |
 
 For Gresho, `initial.closePack=true` uses a periodic face-centered cubic lattice
-with four particles per conventional cell, or `4 * particlesPerDimension^3`
-particles. The false setting uses one particle per cell. The cosmological
+with four particles per conventional cell. `run.gasParticleCount` is rounded
+up to the next `4*n^3` population. The false setting uses one particle per cell. The cosmological
 initializer's existing two-particle lattice is body-centered cubic.
 
 Run from a build directory containing the executable and any runtime inputs:
@@ -98,7 +98,7 @@ to `false` for a CPU run. Gravity tuning is under `gravity.cuda.*`.
 HPX thread and locality options
 stay on the command line. The examples use nominal resolution 32, except the
 blast and disc profiles, which use 64. Override it with
-`--initial.particlesPerDimension=64`. These are starting resolutions for
+`--run.darkMatterParticleCount=262144 --run.gasParticleCount=262144`. These are starting resolutions for
 experimentation, not convergence results.
 
 ## Output
@@ -179,9 +179,10 @@ while its internal energy uses the configured `hydro.gamma`. The blast deposits
 unit total energy on the realized particle lattice and its reference solution
 uses the configured `hydro.gamma`.
 
-The cosmological configuration creates `N^3` gas and `N^3` dark-matter particles
-for `initial.particlesPerDimension=N`. Class masses are fixed within each
-species, with relative gas and dark-matter weights set by `omegaB` and `omegaC`.
+The cosmological configuration sets `run.darkMatterParticleCount` and
+`run.gasParticleCount` independently. Each count rounds up to a complete
+cubic lattice (or `2*n^3` for cosmological close packing). Class masses preserve
+the total gas and dark-matter weights set by `omegaB` and `omegaC`.
 It enables GADGET-4 equilibrium atomic cooling; see
 [the cooling options](../docs/primordial_chemistry.md). A collisionless
 cosmological run can disable both `hydro.enabled` and `chemistry.enabled`.
@@ -215,7 +216,7 @@ not years, and are normalized to the reference mass and resolution in each
 file to preserve the stated physical endpoint. To keep a fixed box while
 changing resolution, remove or comment out
 `units.massSolar` and set `units.boxLength` to the comoving side length in Mpc/h.
-For example, `initial.particlesPerDimension=128` and `units.boxLength=100` give a
+For example, `run.darkMatterParticleCount=2097152` and `units.boxLength=100` give a
 100 Mpc/h box with 128³ collisionless particles when `initial.closePack=false`.
 The reference mass is derived automatically from the resolution and cosmology.
 Alternatively, keep `units.massSolar` in solar masses without `/h`; changing the

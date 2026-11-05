@@ -112,7 +112,7 @@ namespace detail {
 void testInitialization(int resolution, ParticleInteger expectedCount, double acceleration) {
     sphParticlesResize(0);
     Options configured{};
-    configured.initial.particlesPerDimension = resolution;
+    configured.run.gasParticleCount = size_t(resolution) * resolution * resolution;
     configured.hydro.enabled = true;
     configured.hydro.gamma = 5.0 / 3.0;
     configured.hydro.neighborNumber = 42.0;
@@ -214,7 +214,7 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
 void testUnresolvedLattice() {
     for (int resolution : {1, 2}) {
         sphParticlesResize(0);
-        options.initial.particlesPerDimension = resolution;
+        options.run.gasParticleCount = 0;
         bool rejected = false;
         try {
             scenarios::initializeRayleighTaylor();
@@ -236,7 +236,7 @@ TEST(RayleighTaylor, Resolution8) {
 
 TEST(RayleighTaylor, Resolution16) {
     for (double acceleration : {0.5, 1000.0}) {
-        detail::testInitialization(16, 2592, acceleration);
+        detail::testInitialization(16, 6144, acceleration);
     }
 }
 
@@ -254,7 +254,7 @@ TEST(RayleighTaylor, RequiresDrivingAcceleration) {
     for (double acceleration : {0.0, -0.5}) {
         sphParticlesResize(0);
         Options configured{};
-        configured.initial.particlesPerDimension = 8;
+        configured.run.gasParticleCount = 512;
         configured.hydro.zPlaneAcceleration = acceleration;
         setOptions(configured);
         EXPECT_THROW(scenarios::initializeRayleighTaylor(), std::invalid_argument);

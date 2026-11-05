@@ -275,7 +275,7 @@ def main():
     compiled = compiled_algorithms(str(executable))
     integrators = [name for name in ("traditional", "global") if name in compiled["integrator"]]
     require(bool(integrators), "phase-profile regression requires a hydro-capable integrator")
-    common = {"gravity.cuda": "false", "initial.particlesPerDimension": 8,
+    common = {"gravity.cuda": "false", "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512,
               "initial.useGlass": "false", "initial.closePack": "false",
               "gravity.enabled": "false", "gravity.meshSize": 8,
               "hydro.enabled": "true", "hydro.method": "sph",
@@ -305,9 +305,9 @@ def main():
                                                   integrator=integrators[0])
                 options = dict(common, **selections)
                 options.update({"run.scenario": "plummer", "gravity.enabled": "true",
-                                "hydro.enabled": "false", "initial.particlesPerDimension": 4})
+                                "hydro.enabled": "false", "run.darkMatterParticleCount": 64, "run.gasParticleCount": 64})
                 if far == "fmm":
-                    options.update({"initial.particlesPerDimension": 8, "compute.bucketSize": 32})
+                    options.update({"run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "compute.bucketSize": 32})
                 if far == "p3m":
                     # The P3M search mesh needs 32 PM cells at the default split and cutoff.
                     options["gravity.meshSize"] = 32
@@ -339,7 +339,7 @@ def main():
         selections = application_options(executable, far="fmm", integrator=integrators[0])
         options = dict(common, **selections)
         options.update({"run.scenario": "plummer", "gravity.enabled": "true",
-                        "hydro.enabled": "false", "initial.particlesPerDimension": 8,
+                        "hydro.enabled": "false", "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512,
                         "compute.bucketSize": 32, "gravity.cuda": "true"})
         rows, detail_rows = run_case(executable, base / label, options, deadline)
         require_phases(rows, ("treeCreate.allocate", "treeCreate.build", "kick.walk"), label)

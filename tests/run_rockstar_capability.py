@@ -84,7 +84,7 @@ def main():
         "hydro.enabled": "true" if far == "none" else "false",
         "chemistry.enabled": "false",
         "starFormation.enabled": "false",
-        "initial.particlesPerDimension": "8",
+        "run.darkMatterParticleCount": "512", "run.gasParticleCount": "512",
         "analysis.groups": "false",
         "analysis.views": "false",
         "analysis.tracers": "false",

@@ -24,21 +24,22 @@ struct KernelSpec {
     int degree = 3;
 };
 
+template <class Real>
 struct KernelTable {
     KernelSpec spec{};
     int degree = 0;
     int pieceCount = 0;
-    double changePoints[kMaximumPieces + 1]{};
+    Real changePoints[kMaximumPieces + 1]{};
     // Bernstein coefficients on the local coordinate of each radial span.
-    double coefficients[kMaximumPieces][kMaximumDegree + 1]{};
-    double derivativeCoefficients[kMaximumPieces][kMaximumDegree]{};
-    double massCoefficients[kMaximumPieces][kMaximumDegree + 4]{};
-    double shellCoefficients[kMaximumPieces][kMaximumDegree + 3]{};
+    Real coefficients[kMaximumPieces][kMaximumDegree + 1]{};
+    Real derivativeCoefficients[kMaximumPieces][kMaximumDegree]{};
+    Real massCoefficients[kMaximumPieces][kMaximumDegree + 4]{};
+    Real shellCoefficients[kMaximumPieces][kMaximumDegree + 3]{};
     // Factoring the first span analytically avoids division by q near zero.
-    double centralForceCoefficients[kMaximumDegree + 1]{};
-    double centralPotentialDropCoefficients[kMaximumDegree + 1]{};
-    double smoothingLengthPerEffectiveRadius = 0;
-    double centralPotential = 0;
+    Real centralForceCoefficients[kMaximumDegree + 1]{};
+    Real centralPotentialDropCoefficients[kMaximumDegree + 1]{};
+    Real smoothingLengthPerEffectiveRadius = 0;
+    Real centralPotential = 0;
 };
 
 constexpr bool isValid(KernelSpec spec) {
@@ -113,17 +114,17 @@ namespace detail {
         }
     }
 
-    template <typename Real>
-    CUDA_EXPORT inline Real clamp(Real value, double lower, double upper) {
+    template <typename Real, class TableReal>
+    CUDA_EXPORT inline Real clamp(Real value, TableReal lower, TableReal upper) {
         Real const lowerBound = simdBroadcast<Real>(lower);
         Real const upperBound = simdBroadcast<Real>(upper);
         return simdSelect(
             value < lowerBound, lowerBound, simdSelect(value > upperBound, upperBound, value));
     }
 
-    template <typename Real>
+    template <typename Real, class TableReal>
     CUDA_EXPORT inline Real evaluate(
-        double const* coefficients, int degree, Real leftWeight, Real rightWeight) {
+        TableReal const* coefficients, int degree, Real leftWeight, Real rightWeight) {
         Real work[kMaximumDegree + 4];
         for (int i = 0; i <= degree; ++i) {
             work[i] = simdBroadcast<Real>(coefficients[i]);
@@ -136,31 +137,32 @@ namespace detail {
         return work[0];
     }
 
-    template <typename Real>
-    CUDA_EXPORT inline Real evaluate(double const* coefficients, int degree, Real t) {
+    template <typename Real, class TableReal>
+    CUDA_EXPORT inline Real evaluate(TableReal const* coefficients, int degree, Real t) {
         return evaluate(coefficients, degree, simdBroadcast<Real>(1) - t, t);
     }
 
     // Compute both Bernstein weights directly: forming 1-t loses relative
     // accuracy near a span's right endpoint, notably for the M3 derivative.
-    template <typename Real>
+    template <typename Real, class TableReal>
     CUDA_EXPORT inline Real evaluateDensitySpan(
-        double const* coefficients, int degree, Real q, double a, double b) {
+        TableReal const* coefficients, int degree, Real q, TableReal a, TableReal b) {
         Real const radius = clamp(q, a, b);
         Real const width = simdBroadcast<Real>(b - a);
         return evaluate(coefficients, degree, (simdBroadcast<Real>(b) - radius) / width,
             (radius - simdBroadcast<Real>(a)) / width);
     }
 
-    template <typename Real>
-    CUDA_EXPORT inline Real localCoordinate(KernelTable const& table, int piece, Real q) {
-        double const a = table.changePoints[piece];
-        double const b = table.changePoints[piece + 1];
+    template <typename Real, class TableReal>
+    CUDA_EXPORT inline Real localCoordinate(
+        KernelTable<TableReal> const& table, int piece, Real q) {
+        TableReal const a = table.changePoints[piece];
+        TableReal const b = table.changePoints[piece + 1];
         return (clamp(q, a, b) - simdBroadcast<Real>(a)) / simdBroadcast<Real>(b - a);
     }
 
-    template <typename Real>
-    CUDA_EXPORT inline auto pieceMask(KernelTable const& table, int piece, Real q) {
+    template <typename Real, class TableReal>
+    CUDA_EXPORT inline auto pieceMask(KernelTable<TableReal> const& table, int piece, Real q) {
         auto const upper = q < simdBroadcast<Real>(table.changePoints[piece + 1]);
         if (piece == 0) {
             return upper;
@@ -172,9 +174,11 @@ namespace detail {
 
 // Invalid specifications return a table with pieceCount == 0. Call isValid()
 // before accepting a user selection. Generation is suitable for constexpr use;
-// runtime evaluation has no allocation and is shared by CPU, SIMD, and CUDA.
-constexpr KernelTable makeKernelTable(KernelSpec spec) {
-    KernelTable result{};
+// Coefficients and normalization are computed in long double and rounded only
+// when stored in Real. Runtime evaluation has no allocation and is shared by CPU, SIMD, and CUDA.
+template <class Real = double>
+constexpr KernelTable<Real> makeKernelTable(KernelSpec spec) {
+    KernelTable<Real> result{};
     result.spec = spec;
     if (!isValid(spec)) {
         return result;
@@ -250,31 +254,31 @@ constexpr KernelTable makeKernelTable(KernelSpec spec) {
     }
     long double const normalization = 1 / (detail::kFourPi * massMoment);
     result.smoothingLengthPerEffectiveRadius =
-        static_cast<double>(detail::squareRoot(3 * massMoment / (4 * varianceMoment)));
+        static_cast<Real>(detail::squareRoot(3 * massMoment / (4 * varianceMoment)));
     long double massPrefix = 0;
     for (int piece = 0; piece < result.pieceCount; ++piece) {
         long double const a = points[piece];
         long double const b = points[piece + 1];
-        result.changePoints[piece] = static_cast<double>(a);
-        result.changePoints[piece + 1] = static_cast<double>(b);
+        result.changePoints[piece] = static_cast<Real>(a);
+        result.changePoints[piece + 1] = static_cast<Real>(b);
         long double weighted[kMaximumDegree + 4]{};
         for (int i = 0; i <= degree; ++i) {
             raw[piece][i] *= normalization;
-            result.coefficients[piece][i] = static_cast<double>(raw[piece][i]);
+            result.coefficients[piece][i] = static_cast<Real>(raw[piece][i]);
             weighted[i] = detail::kFourPi * raw[piece][i];
         }
         for (int i = 0; i < degree; ++i) {
             result.derivativeCoefficients[piece][i] =
-                static_cast<double>(degree * (raw[piece][i + 1] - raw[piece][i]) / (b - a));
+                static_cast<Real>(degree * (raw[piece][i + 1] - raw[piece][i]) / (b - a));
         }
         detail::multiplyRadius(weighted, degree, a, b);
         detail::multiplyRadius(weighted, degree + 1, a, b);
         long double mass[kMaximumDegree + 4]{};
         mass[0] = massPrefix;
-        result.massCoefficients[piece][0] = static_cast<double>(massPrefix);
+        result.massCoefficients[piece][0] = static_cast<Real>(massPrefix);
         for (int i = 0; i <= degree + 2; ++i) {
             mass[i + 1] = mass[i] + (b - a) * weighted[i] / (degree + 3);
-            result.massCoefficients[piece][i + 1] = static_cast<double>(mass[i + 1]);
+            result.massCoefficients[piece][i + 1] = static_cast<Real>(mass[i + 1]);
         }
         massPrefix = mass[degree + 3];
         if (piece == 0) {
@@ -282,7 +286,7 @@ constexpr KernelTable makeKernelTable(KernelSpec spec) {
             for (int i = 0; i <= degree; ++i) {
                 force[i] = mass[i + 3] * detail::binomial(degree + 3, i + 3) /
                     detail::binomial(degree, i) / (b * b * b);
-                result.centralForceCoefficients[i] = static_cast<double>(force[i]);
+                result.centralForceCoefficients[i] = static_cast<Real>(force[i]);
             }
             detail::multiplyRadius(force, degree, 0, 1);
             long double primitive[kMaximumDegree + 3]{};
@@ -290,7 +294,7 @@ constexpr KernelTable makeKernelTable(KernelSpec spec) {
                 primitive[i + 1] = primitive[i] + force[i] / (degree + 2);
             }
             for (int i = 0; i <= degree; ++i) {
-                result.centralPotentialDropCoefficients[i] = static_cast<double>(primitive[i + 2] *
+                result.centralPotentialDropCoefficients[i] = static_cast<Real>(primitive[i + 2] *
                     detail::binomial(degree + 2, i + 2) / detail::binomial(degree, i));
             }
         }
@@ -302,18 +306,18 @@ constexpr KernelTable makeKernelTable(KernelSpec spec) {
             weighted[i] = detail::kFourPi * raw[piece][i];
         }
         detail::multiplyRadius(weighted, degree, points[piece], points[piece + 1]);
-        result.shellCoefficients[piece][degree + 2] = static_cast<double>(shellTail);
+        result.shellCoefficients[piece][degree + 2] = static_cast<Real>(shellTail);
         for (int i = degree + 1; i >= 0; --i) {
             shellTail += (points[piece + 1] - points[piece]) * weighted[i] / (degree + 2);
-            result.shellCoefficients[piece][i] = static_cast<double>(shellTail);
+            result.shellCoefficients[piece][i] = static_cast<Real>(shellTail);
         }
     }
-    result.centralPotential = static_cast<double>(shellTail);
+    result.centralPotential = static_cast<Real>(shellTail);
     return result;
 }
 
-template <typename Real>
-CUDA_EXPORT inline Real value(KernelTable const& table, Real q) {
+template <typename Real, class TableReal>
+CUDA_EXPORT inline Real value(KernelTable<TableReal> const& table, Real q) {
     Real result = simdBroadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
@@ -331,8 +335,8 @@ CUDA_EXPORT inline Real value(KernelTable const& table, Real q) {
     return result;
 }
 
-template <typename Real>
-CUDA_EXPORT inline Real derivative(KernelTable const& table, Real q) {
+template <typename Real, class TableReal>
+CUDA_EXPORT inline Real derivative(KernelTable<TableReal> const& table, Real q) {
     Real result = simdBroadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
@@ -352,8 +356,8 @@ CUDA_EXPORT inline Real derivative(KernelTable const& table, Real q) {
 
 namespace detail {
 
-    template <typename Real>
-    CUDA_EXPORT inline Real forceOnPiece(KernelTable const& table, int piece, Real q) {
+    template <typename Real, class TableReal>
+    CUDA_EXPORT inline Real forceOnPiece(KernelTable<TableReal> const& table, int piece, Real q) {
         Real const t = localCoordinate(table, piece, q);
         if (piece == 0) {
             return evaluate(table.centralForceCoefficients, table.degree, t);
@@ -364,11 +368,12 @@ namespace detail {
             inverseRadius * inverseRadius;
     }
 
-    template <typename Real>
-    CUDA_EXPORT inline Real potentialOnPiece(KernelTable const& table, int piece, Real q) {
+    template <typename Real, class TableReal>
+    CUDA_EXPORT inline Real potentialOnPiece(
+        KernelTable<TableReal> const& table, int piece, Real q) {
         Real const t = localCoordinate(table, piece, q);
         if (piece == 0) {
-            Real const radius = clamp(q, 0, table.changePoints[1]);
+            Real const radius = clamp(q, TableReal(0), table.changePoints[1]);
             return simdBroadcast<Real>(table.centralPotential) -
                 radius * radius * evaluate(table.centralPotentialDropCoefficients, table.degree, t);
         }
@@ -382,8 +387,8 @@ namespace detail {
 
 // Acceleration = -G m/H^3 * forceFactor(q) * displacement. The finite origin
 // value is 4 pi W(0)/3; the actual central acceleration is zero.
-template <typename Real>
-CUDA_EXPORT inline Real forceFactor(KernelTable const& table, Real q) {
+template <typename Real, class TableReal>
+CUDA_EXPORT inline Real forceFactor(KernelTable<TableReal> const& table, Real q) {
     Real result = simdBroadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
@@ -408,8 +413,8 @@ CUDA_EXPORT inline Real forceFactor(KernelTable const& table, Real q) {
 
 // Positive potential magnitude: physical gravitational potential is -Gm/H
 // times this value, with zero at infinity and exactly 1/q outside support.
-template <typename Real>
-CUDA_EXPORT inline Real potential(KernelTable const& table, Real q) {
+template <typename Real, class TableReal>
+CUDA_EXPORT inline Real potential(KernelTable<TableReal> const& table, Real q) {
     Real result = simdBroadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {

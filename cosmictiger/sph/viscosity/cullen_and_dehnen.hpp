@@ -11,6 +11,7 @@
 #include <cmath>
 #include <limits>
 
+#include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/cuda/cuda_export.hpp>
 #include <cosmictiger/math/matrix_eigen.hpp>
 #include <cosmictiger/sph/viscosity/scaled_divergence.hpp>
@@ -25,14 +26,14 @@ float evolvedBulkViscosityCoefficient(float bulkViscosityCoefficient,
 
 template <typename Real>
 struct VelocityGradientSums {
-    Real moment[3][3]{};
-    Real velocity[3][3]{};
+    math::Matrix<Real, kSpatialDimensions> moment{};
+    math::Matrix<Real, kSpatialDimensions> velocity{};
 };
 
 // Common corrected reconstruction for direct acceleration-gradient sensors.
 template <typename Real>
 struct GradientSums : VelocityGradientSums<Real> {
-    Real acceleration[3][3]{};
+    math::Matrix<Real, kSpatialDimensions> acceleration{};
 };
 
 template <typename Real>
@@ -53,44 +54,48 @@ namespace detail {
      * remaining cases without assigning an artificial length scale to missing axes.
      */
     template <typename Real, typename Counter>
-    CUDA_EXPORT inline int inverseMoment(Real const (&moment)[3][3],
-        math::SymmetricMatrix<Real, 3>& inverse, Counter& floatingPointOperations) {
-        math::SymmetricMatrix<Real, 3> momentMatrix;
-        inverse = math::SymmetricMatrix<Real, 3>{};
+    CUDA_EXPORT inline int inverseMoment(math::Matrix<Real, kSpatialDimensions> const& moment,
+        math::SymmetricMatrix<Real, kSpatialDimensions>& inverse,
+        Counter& floatingPointOperations) {
+        math::SymmetricMatrix<Real, kSpatialDimensions> momentMatrix;
+        inverse = math::SymmetricMatrix<Real, kSpatialDimensions>{};
         Real scale = Real(0);
-        for (int i = 0; i < 3; ++i) {
-            for (int j = 0; j < 3; ++j) {
+        for (int i = 0; i < kSpatialDimensions; ++i) {
+            for (int j = 0; j < kSpatialDimensions; ++j) {
                 Real const magnitude = std::abs(moment[i][j]);
                 scale = magnitude > scale ? magnitude : scale;
             }
         }
-        floatingPointOperations += 9;
+        floatingPointOperations += kSpatialDimensions * kSpatialDimensions;
         if (!(scale > Real(0))) {
             return 0;
         }
-        for (int i = 0; i < 3; ++i) {
+        for (int i = 0; i < kSpatialDimensions; ++i) {
             for (int j = 0; j <= i; ++j) {
                 momentMatrix(i, j) = (Real(0.5) * moment[i][j] + Real(0.5) * moment[j][i]) / scale;
             }
         }
-        floatingPointOperations += 24;    // Six independent symmetric entries.
+        floatingPointOperations += 2 * kSpatialDimensions * (kSpatialDimensions + 1);
         auto const momentAdjugate = math::adjugate(momentMatrix);
-        Real const momentDeterminant = momentMatrix(0, 0) * momentAdjugate(0, 0) +
-            momentMatrix(0, 1) * momentAdjugate(0, 1) + momentMatrix(0, 2) * momentAdjugate(0, 2);
+        Real momentDeterminant = momentMatrix(0, 0) * momentAdjugate(0, 0);
+        for (int dim = 1; dim < kSpatialDimensions; ++dim) {
+            momentDeterminant += momentMatrix(0, dim) * momentAdjugate(0, dim);
+        }
         constexpr Real kRoundoff = std::numeric_limits<Real>::epsilon();
         constexpr Real kDeterminantTolerance = Real(128) * kRoundoff;
         constexpr Real kOffDiagonalTolerance = Real(4) * kRoundoff;
         constexpr Real kEigenvalueTolerance = Real(64) * kRoundoff;
-        floatingPointOperations += 24;
+        floatingPointOperations += kSpatialDimensions == 3 ? 24 : 2 * kSpatialDimensions;
         if (std::abs(momentDeterminant) > kDeterminantTolerance) {
-            if constexpr (math::DefaultMatrixPolicy::kSymmetricInverseThreshold >= 3) {
-                for (int i = 0; i < 3; ++i) {
+            if constexpr (math::DefaultMatrixPolicy::kSymmetricInverseThreshold >=
+                kSpatialDimensions) {
+                for (int i = 0; i < kSpatialDimensions; ++i) {
                     for (int j = 0; j <= i; ++j) {
                         inverse(i, j) = (momentAdjugate(i, j) / momentDeterminant) / scale;
                     }
                 }
-                floatingPointOperations += 12;
-                return 3;
+                floatingPointOperations += kSpatialDimensions * (kSpatialDimensions + 1);
+                return kSpatialDimensions;
             } else {
                 // Keep the physical rank gate above while honoring the build's
                 // algorithm selection for full-rank neighborhoods.
@@ -100,13 +105,13 @@ namespace detail {
                 floatingPointOperations += operations;
                 if (status == math::MatrixStatus::Success) {
                     inverse /= scale;
-                    floatingPointOperations += 6;
-                    return 3;
+                    floatingPointOperations += kSpatialDimensions * (kSpatialDimensions + 1) / 2;
+                    return kSpatialDimensions;
                 }
             }
         }
 
-        math::Matrix<Real, 3> eigenvectors;
+        math::Matrix<Real, kSpatialDimensions> eigenvectors;
         math::SymmetricEigenOptions<Real> options;
         options.pivot = math::JacobiPivot::Cyclic;
         options.maxIterations = 8;
@@ -115,26 +120,27 @@ namespace detail {
         options.useHypot = false;
         math::jacobiDiagonalize(momentMatrix, eigenvectors, options, floatingPointOperations);
         Real maximumEigenvalueMagnitude = Real(0);
-        for (int k = 0; k < 3; ++k) {
+        for (int k = 0; k < kSpatialDimensions; ++k) {
             Real const magnitude = std::abs(momentMatrix(k, k));
             maximumEigenvalueMagnitude =
                 magnitude > maximumEigenvalueMagnitude ? magnitude : maximumEigenvalueMagnitude;
         }
-        floatingPointOperations += 3;
+        floatingPointOperations += kSpatialDimensions;
         int rank = 0;
-        for (int k = 0; k < 3; ++k) {
+        for (int k = 0; k < kSpatialDimensions; ++k) {
             Real const eigenvalue = momentMatrix(k, k);
             floatingPointOperations += 2;
             if (std::abs(eigenvalue) > kEigenvalueTolerance * maximumEigenvalueMagnitude) {
                 ++rank;
                 Real const inverseEigenvalue = (Real(1) / eigenvalue) / scale;
-                for (int i = 0; i < 3; ++i) {
+                for (int i = 0; i < kSpatialDimensions; ++i) {
                     for (int j = 0; j <= i; ++j) {
                         inverse(i, j) +=
                             eigenvectors(i, k) * eigenvectors(j, k) * inverseEigenvalue;
                     }
                 }
-                floatingPointOperations += 20;
+                floatingPointOperations +=
+                    2 + 3 * kSpatialDimensions * (kSpatialDimensions + 1) / 2;
             }
         }
         return rank;
@@ -157,21 +163,27 @@ __attribute__((optimize("no-tree-loop-vectorize", "no-tree-slp-vectorize")))
 #endif
 CUDA_EXPORT inline int reconstructVelocityGradient(VelocityGradientSums<Real> const& sums,
     Real (&velocityGradient)[3][3], Counter& floatingPointOperations) {
-    math::SymmetricMatrix<Real, 3> inverseMomentMatrix;
+    for (int row = 0; row < 3; ++row) {
+        for (int column = 0; column < 3; ++column) {
+            velocityGradient[row][column] = Real(0);
+        }
+    }
+    math::SymmetricMatrix<Real, kSpatialDimensions> inverseMomentMatrix;
     int const rank =
         detail::inverseMoment(sums.moment, inverseMomentMatrix, floatingPointOperations);
     // Keep the product here: an inlined generic matrix operator can carry
     // vectorized instructions produced before this function's GCC safeguard.
-    for (int row = 0; row < 3; ++row) {
-        for (int column = 0; column < 3; ++column) {
+    for (int row = 0; row < kSpatialDimensions; ++row) {
+        for (int column = 0; column < kSpatialDimensions; ++column) {
             Real component = sums.velocity[row][0] * inverseMomentMatrix(0, column);
-            for (int inner = 1; inner < 3; ++inner) {
+            for (int inner = 1; inner < kSpatialDimensions; ++inner) {
                 component += sums.velocity[row][inner] * inverseMomentMatrix(inner, column);
             }
             velocityGradient[row][column] = component;
         }
     }
-    floatingPointOperations += 45;
+    floatingPointOperations +=
+        kSpatialDimensions * kSpatialDimensions * (2 * kSpatialDimensions - 1);
     return rank;
 }
 
@@ -240,14 +252,24 @@ __attribute__((optimize("no-tree-loop-vectorize", "no-tree-slp-vectorize")))
 CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
     Real (&velocityGradient)[3][3], Real (&accelerationGradient)[3][3],
     Counter& floatingPointOperations) {
-    math::SymmetricMatrix<Real, 3> inverseMomentMatrix;
-    int const rank =
-        detail::inverseMoment(sums.moment, inverseMomentMatrix, floatingPointOperations);
     for (int row = 0; row < 3; ++row) {
         for (int column = 0; column < 3; ++column) {
+            accelerationGradient[row][column] = Real(0);
+        }
+    }
+    for (int row = 0; row < 3; ++row) {
+        for (int column = 0; column < 3; ++column) {
+            velocityGradient[row][column] = Real(0);
+        }
+    }
+    math::SymmetricMatrix<Real, kSpatialDimensions> inverseMomentMatrix;
+    int const rank =
+        detail::inverseMoment(sums.moment, inverseMomentMatrix, floatingPointOperations);
+    for (int row = 0; row < kSpatialDimensions; ++row) {
+        for (int column = 0; column < kSpatialDimensions; ++column) {
             Real velocityComponent = sums.velocity[row][0] * inverseMomentMatrix(0, column);
             Real accelerationComponent = sums.acceleration[row][0] * inverseMomentMatrix(0, column);
-            for (int inner = 1; inner < 3; ++inner) {
+            for (int inner = 1; inner < kSpatialDimensions; ++inner) {
                 velocityComponent += sums.velocity[row][inner] * inverseMomentMatrix(inner, column);
                 accelerationComponent +=
                     sums.acceleration[row][inner] * inverseMomentMatrix(inner, column);
@@ -256,7 +278,8 @@ CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
             accelerationGradient[row][column] = accelerationComponent;
         }
     }
-    floatingPointOperations += 90;    // Two products: three multiplies/two adds per entry.
+    floatingPointOperations += 2 * kSpatialDimensions * kSpatialDimensions *
+        (2 * kSpatialDimensions - 1);    // Two products: three multiplies/two adds per entry.
     return rank;
 }
 
@@ -286,9 +309,9 @@ template <typename Real, typename Counter>
 CUDA_EXPORT inline Real peculiarDivergenceDerivative(Real const (&velocityGradient)[3][3],
     Real const (&accelerationGradient)[3][3], Real scaleFactor, Counter& floatingPointOperations) {
     Real derivative = Real(0);
-    for (int row = 0; row < 3; ++row) {
+    for (int row = 0; row < kSpatialDimensions; ++row) {
         derivative += scaleFactor * accelerationGradient[row][row];
-        for (int column = 0; column < 3; ++column) {
+        for (int column = 0; column < kSpatialDimensions; ++column) {
             derivative -= velocityGradient[row][column] * velocityGradient[column][row];
         }
     }
@@ -363,11 +386,11 @@ CUDA_EXPORT inline Result<Real> diagnosticsFromGradient(Real const (&velocityGra
     Real const velocityDivergence =
         velocityGradientMatrix[0][0] + velocityGradientMatrix[1][1] + velocityGradientMatrix[2][2];
     Real shearMagnitudeSquared = Real(0);
-    for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 3; ++j) {
+    for (int i = 0; i < kSpatialDimensions; ++i) {
+        for (int j = 0; j < kSpatialDimensions; ++j) {
             Real const shearComponent =
                 Real(0.5) * (velocityGradientMatrix[i][j] + velocityGradientMatrix[j][i]) -
-                (i == j ? velocityDivergence / Real(3) : Real(0));
+                (i == j ? velocityDivergence / Real(kSpatialDimensions) : Real(0));
             shearMagnitudeSquared += shearComponent * shearComponent;
         }
     }
@@ -403,13 +426,13 @@ CUDA_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums, Real
     Real accelerationGradient[3][3];
     reconstructGradients(sums, velocityGradient, accelerationGradient, floatingPointOperations);
     Real derivative = Real(3) * expansionAcceleration;
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < kSpatialDimensions; ++i) {
         derivative += scaleFactor * accelerationGradient[i][i];
-        for (int j = 0; j < 3; ++j) {
+        for (int j = 0; j < kSpatialDimensions; ++j) {
             derivative -= velocityGradient[i][j] * velocityGradient[j][i];
         }
     }
-    floatingPointOperations += 25;
+    floatingPointOperations += 1 + 2 * kSpatialDimensions * (kSpatialDimensions + 1);
     return diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, signAverage,
         smoothingLength, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient,
         floatingPointOperations);

@@ -66,6 +66,12 @@ CUDA_EXPORT constexpr FlopCount positionConstructionFlops() {
 constexpr FlopCount kViscosityMu = 9;
 constexpr FlopCount kArtificialViscosity = 10;
 
+// Two gamma-1 subtractions, two powers, multiplication, and two divisions.
+// A non-monatomic gas additionally forms 5-3*gamma.
+CUDA_EXPORT constexpr FlopCount entropyConversionFlops(float adiabaticIndex) {
+    return adiabaticIndex == 5.0f / 3.0f ? 7 : 9;
+}
+
 CUDA_EXPORT inline FlopCount bernsteinFlops(int degree) {
     return FlopCount(3) * degree * (degree + 1) / 2;
 }
@@ -73,10 +79,10 @@ CUDA_EXPORT inline FlopCount bernsteinFlops(int degree) {
 // Density and its derivative use two explicitly formed Bernstein weights.
 // Scalar evaluation visits only the selected span (none outside support),
 // whereas SIMD eagerly evaluates every span, including padded lanes. Each
-// span also forms its scalar double width once, outside the SIMD arithmetic.
-template <class Real>
+// span also forms its scalar table-precision width once, outside the SIMD arithmetic.
+template <class Real, class Kernel>
 CUDA_EXPORT inline FlopCount densityKernelFlops(
-    radial_kernel::KernelTable const& kernel, Real const& q, bool derivative = false) {
+    Kernel const& kernel, Real const& q, bool derivative = false) {
     auto const polynomial = bernsteinFlops(kernel.degree - int(derivative));
     if constexpr (std::is_arithmetic_v<Real>) {
         return q < Real(kernel.changePoints[kernel.pieceCount]) ? 5 + polynomial : 0;
@@ -86,9 +92,9 @@ CUDA_EXPORT inline FlopCount densityKernelFlops(
 }
 
 // The optional central force uses the same selected gravity radial table.
-template <class Real>
+template <class Real, class TableReal>
 CUDA_EXPORT inline FlopCount forceKernelFlops(
-    radial_kernel::KernelTable const& kernel, Real const& q) {
+    radial_kernel::KernelTable<TableReal> const& kernel, Real const& q) {
     if constexpr (std::is_arithmetic_v<Real>) {
         for (int piece = 0; piece < kernel.pieceCount; ++piece) {
             if (q < Real(kernel.changePoints[piece + 1])) {
@@ -106,12 +112,13 @@ CUDA_EXPORT inline FlopCount forceKernelFlops(
 }
 
 // Arithmetic-only helpers above support the CountingReal references. Production
-// counts additionally classify every runtime double-to-float table conversion.
+// counts additionally classify runtime conversions when table and lane precisions differ.
 // simdBroadcast narrows once before broadcasting, so these are per span, not
 // per SIMD lane. Polynomial arithmetic remains at the scalar/lane precision.
-template <class Real>
+template <class Real, class Kernel>
 CUDA_EXPORT inline Operations densityKernelOperations(
-    radial_kernel::KernelTable const& kernel, Real const& q, bool derivative = false) {
+    Kernel const& kernel, Real const& q, bool derivative = false) {
+    using TableReal = std::remove_cvref_t<decltype(kernel.coefficients[0][0])>;
     int const degree = kernel.degree - int(derivative);
     FlopCount spans = 0;
     FlopCount comparisons = 0;
@@ -128,16 +135,26 @@ CUDA_EXPORT inline Operations densityKernelOperations(
         comparisons = 2 * spans - 1;
     }
     FlopCount const arithmetic = densityKernelFlops(kernel, q, derivative);
+    Operations result;
     if constexpr (std::is_same_v<SimdScalar<Real>, double>) {
-        return {0, arithmetic};
+        result.doublePrecision = arithmetic - spans;
     } else {
-        return {arithmetic - spans, spans * (degree + 7) + comparisons};
+        result.singlePrecision = arithmetic - spans;
     }
+    if constexpr (std::is_same_v<TableReal, double>) {
+        result.doublePrecision += spans;
+    } else {
+        result.singlePrecision += spans;
+    }
+    if constexpr (!std::is_same_v<SimdScalar<Real>, TableReal>) {
+        result.doublePrecision += spans * (degree + 6) + comparisons;
+    }
+    return result;
 }
 
-template <class Real>
+template <class Real, class TableReal>
 CUDA_EXPORT inline Operations forceKernelOperations(
-    radial_kernel::KernelTable const& kernel, Real const& q) {
+    radial_kernel::KernelTable<TableReal> const& kernel, Real const& q) {
     FlopCount spans = 0;
     FlopCount conversions = 0;
     if constexpr (std::is_arithmetic_v<Real>) {
@@ -154,11 +171,21 @@ CUDA_EXPORT inline Operations forceKernelOperations(
         conversions = 2 * spans - 1 + kernel.degree + 5 + (spans - 1) * (kernel.degree + 10);
     }
     FlopCount const arithmetic = forceKernelFlops(kernel, q);
+    Operations result;
     if constexpr (std::is_same_v<SimdScalar<Real>, double>) {
-        return {0, arithmetic};
+        result.doublePrecision = arithmetic - spans;
     } else {
-        return {arithmetic - spans, spans + conversions};
+        result.singlePrecision = arithmetic - spans;
     }
+    if constexpr (std::is_same_v<TableReal, double>) {
+        result.doublePrecision += spans;
+    } else {
+        result.singlePrecision += spans;
+    }
+    if constexpr (!std::is_same_v<SimdScalar<Real>, TableReal>) {
+        result.doublePrecision += conversions;
+    }
+    return result;
 }
 
 }    // namespace sph_flops

@@ -1,5 +1,8 @@
 # Build one application with the configured capabilities.
 add_library(cosmictiger_platform INTERFACE)
+# Kernel tables in the shared core have dimension-dependent layouts too.
+target_compile_definitions(cosmictiger_platform INTERFACE
+    COSMICTIGER_DIMENSION_COUNT=${COSMICTIGER_DIMENSION_COUNT})
 target_include_directories(cosmictiger_platform INTERFACE ${PROJECT_SOURCE_DIR})
 target_include_directories(cosmictiger_platform SYSTEM INTERFACE ${SILO_INCLUDE_DIR})
 target_link_libraries(cosmictiger_platform INTERFACE
@@ -48,6 +51,7 @@ target_compile_definitions(cosmictiger_default_config INTERFACE
     COSMICTIGER_ENABLE_STAR_FORMATION=$<BOOL:${COSMICTIGER_WITH_STARS}>
     COSMICTIGER_WITH_GRAVITY=$<BOOL:${COSMICTIGER_WITH_GRAVITY}>
     COSMICTIGER_WITH_SPH=$<BOOL:${COSMICTIGER_WITH_SPH}>
+    COSMICTIGER_DIMENSION_COUNT=${COSMICTIGER_DIMENSION_COUNT}
     COSMICTIGER_POSITION_BITS=${COSMICTIGER_POSITION_BITS}
     ORDER=${cosmictiger_default_fmm_order}
     FMM_MIN_ORDER=${COSMICTIGER_FMM_MIN_ORDER}

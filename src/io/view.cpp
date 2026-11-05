@@ -212,6 +212,11 @@ void writeViewCommandLine(DBfile* db) {
                 using Value = std::decay_t<decltype(value)>;
                 if constexpr (std::is_same_v<Value, std::string>) {
                     writeViewText(db, name.c_str(), value.c_str());
+                } else if constexpr (std::is_same_v<Value, size_t>) {
+                    long long const count = static_cast<long long>(value);
+                    int const dimension = 1;
+                    checkViewWrite(DBWrite(db, name.c_str(), &count, &dimension, 1, DB_LONG_LONG),
+                        name.c_str());
                 } else if constexpr (std::is_same_v<Value, double>) {
                     writeViewScalar(db, name.c_str(), value);
                 } else {
@@ -262,6 +267,10 @@ public:
     }
 
     double density(double value) const {
+        if constexpr (kSpatialDimensions < 3) {
+            return value * getOptions().units.massG /
+                std::pow(getOptions().units.lengthCm, kSpatialDimensions);
+        }
         units::StoredDensity const density(value);
         return lab_ ? displayValue(units::toProperDensity(density, scales_, context_)) :
                       displayValue(units::toComovingDensity(density, scales_));
@@ -269,7 +278,8 @@ public:
 
     double entropy(double value) const {
         double energyScale = scales_.specificEnergyScale().value();
-        double densityScale = scales_.densityScale().value();
+        double densityScale = scales_.densityScale().value() *
+            std::pow(getOptions().units.lengthCm, 3 - kSpatialDimensions);
         if (cosmological_) {
             energyScale *= 1e-10;
             densityScale *= std::pow(constants::kMpcToCm, 3) /
@@ -502,9 +512,14 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
     char const* lengthUnit = cosmological ? "Mpc/h" : "cm";
     char const* velocityUnit = cosmological ? "km/s" : "cm/s";
     char const* massUnit = cosmological ? "Msun/h" : "g";
-    char const* densityUnit = cosmological ? "(Msun/h)/(Mpc/h)^3" : "g/cm^3";
-    char const* entropyUnit =
-        cosmological ? "(km/s)^2/((Msun/h)/(Mpc/h)^3)^(gamma-1)" : "(erg/g)/(g/cm^3)^(gamma-1)";
+    char const* densityUnit = cosmological ?
+        "(Msun/h)/(Mpc/h)^3" :
+        (kSpatialDimensions == 1 ? "g/cm" : (kSpatialDimensions == 2 ? "g/cm^2" : "g/cm^3"));
+    char const* entropyUnit = cosmological ?
+        "(km/s)^2/((Msun/h)/(Mpc/h)^3)^(gamma-1)" :
+        (kSpatialDimensions == 1 ? "(erg/g)/(g/cm)^(gamma-1)" :
+                                   (kSpatialDimensions == 2 ? "(erg/g)/(g/cm^2)^(gamma-1)" :
+                                                              "(erg/g)/(g/cm^3)^(gamma-1)"));
     ViewUnitConversion const conversion(a, cosmological, lab);
     writeViewText(db, "unit_system", cosmological ? "cosmological" : "cgs");
     writeViewText(db, "frame", lab ? "lab" : "comoving");
@@ -805,6 +820,7 @@ void writeParticleMetadata(DBfile* db) {
 #if COSMICTIGER_WITH_SPH
     writeViewText(db, "gas_geometry", "SPH particle point mesh");
     writeViewText(db, "gas_field_convention", "Node-centered SPH particle values.");
+    writeViewInteger(db, "dimension_count", kSpatialDimensions);
     writeViewText(db, "gas_entropy_convention", "A = P_physical / rho_physical^gamma");
     writeViewText(db, "gas_rung_convention",
         "Committed integration rung after hydro, enabled gravity and timestep limits.");

@@ -1562,7 +1562,7 @@ double doPowerSpectrum(int num, double a, double adot) {
         //	}
         double const c1 = h * h * h * factor;
         double const kshot =
-            2.0 * std::numbers::pi * getOptions().initial.particlesPerDimension / boxSize;
+            2.0 * std::numbers::pi * getOptions().initial.fourierSize / boxSize;
         for (int i = 0; i < power0.p.size(); i++) {
             double const k = power0.k[i];
             if (k >= kmin && k <= kmax) {
@@ -1883,7 +1883,7 @@ void driver() {
             tm.reset();
             tm.start();
             double const linkingLength = getOptions().lightcone.linkingLength *
-                pow(getOptions().initial.numberOfParticles, -1.0 / kDimensions);
+                pow(darkMatterReferenceCount(getOptions()), -1.0 / kDimensions);
             {
                 profile::ScopedPhase phase("lightcone.treeCreate");
                 lcFormTrees(tau, linkingLength);

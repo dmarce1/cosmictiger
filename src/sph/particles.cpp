@@ -722,7 +722,7 @@ uint32_t sphCheckpointVersion() {
     return 130000U +
         (options.starFormation.enabled ? 110U : (options.chemistry.enabled ? 100U : 2U)) +
         (options.hydro.viscosityGradientSwitch() && options.hydro.balsaraSwitch ? 1U : 0U) +
-        (options.hydro.viscosityEvolution == "hu_etal" ?
+        (options.hydro.viscosityEvolution == "huEtal" ?
                 8U :
                 (options.hydro.viscosityEvolution == "cullenAndDehnen" ?
                         4U :
@@ -1163,7 +1163,7 @@ void sphParticlesUpdateTargetAlpha(SphRunParameters const& parameters) {
         return;
     }
     bool const cullenDehnen = getOptions().hydro.viscosityEvolution == "cullenAndDehnen";
-    bool const huEtAl = getOptions().hydro.viscosityEvolution == "hu_etal";
+    bool const huEtAl = getOptions().hydro.viscosityEvolution == "huEtal";
     Vector<hpx::future<void>> pending;
     for (auto const& child : hpxChildren()) {
         pending.push_back(hpx::async<SphParticlesUpdateTargetAlphaAction>(child, parameters));

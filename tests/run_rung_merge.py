@@ -42,7 +42,7 @@ def run_case(executable, base, name, fraction):
         "run.endTime": "0.0016",
         "run.maxIterations": "400",
         "run.rungMergeFraction": fraction,
-        "initial.particlesPerDimension": "12",
+        "run.darkMatterParticleCount": "1728", "run.gasParticleCount": "1728",
         "analysis.groups": "false",
         "analysis.power": "false",
         "analysis.views": "false",

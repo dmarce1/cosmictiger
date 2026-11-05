@@ -510,8 +510,8 @@ void unitsOutputTest() {
         selectedGravityKernel().smoothingLengthPerEffectiveRadius /
         std::pow(double(options.initial.numberOfParticles), 1.0 / kDimensions);
     options.gravity.timestepEta = 0.3;
-    options.hydro.minSmoothingLength = 0.2 / options.initial.particlesPerDimension;
-    options.hydro.maxSmoothingLength = 0.4 / options.initial.particlesPerDimension;
+    options.hydro.minSmoothingLength = 0.2 / std::cbrt(double(options.run.gasParticleCount));
+    options.hydro.maxSmoothingLength = 0.4 / std::cbrt(double(options.run.gasParticleCount));
     options.configuration = "input with spaces.ini";
     setOptions(options);
     unitsOutputParticleFixture(true);

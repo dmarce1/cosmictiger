@@ -318,7 +318,7 @@ void internalHierarchy(Vector<Subgroup>& groups) {
 
 void measureMasses(Vector<Subgroup>& groups, double scale) {
     auto const density = haloOverdensity(scale);
-    double const mean = getOptions().initial.numberOfParticles;
+    double const mean = darkMatterReferenceCount(getOptions());
     for (size_t i = 0; i < groups.size(); ++i) {
         auto particles = rockstarGatherParticles(groups, i);
         auto const radii = sortedRadii(particles, groups[i]);
@@ -433,7 +433,7 @@ void rockstarUpdateStatistics(
     group.vzb = velocity[2];
     auto const density = detail::haloOverdensity(scale);
     auto const radii = detail::sortedRadii(group.parts, group, positionFactor);
-    double const numberDensity = getOptions().initial.numberOfParticles * density.virialMeanMatter;
+    double const numberDensity = darkMatterReferenceCount(getOptions()) * density.virialMeanMatter;
     auto const virial = rockstar::sphericalOverdensity(radii, numberDensity);
     double const radius = virial.count ?
         virial.radius :
@@ -676,7 +676,7 @@ RockstarRecord rockstarMakeRecord(Vector<Subgroup> const& groups, int index, flo
     Subgroup const& group = groups[index];
     auto candidates = inclusive ? rockstarGatherParticles(groups, index) : group.parts;
     auto const density = detail::haloOverdensity(scale);
-    double const mean = getOptions().initial.numberOfParticles;
+    double const mean = darkMatterReferenceCount(getOptions());
     auto const allRadii = detail::sortedRadii(candidates, group);
     auto const virial = rockstar::sphericalOverdensity(allRadii, mean * density.virialMeanMatter);
     auto const so200 =
@@ -856,7 +856,7 @@ GroupEntry rockstarMakeGroupEntry(
     auto const candidates = detail::sortedRadii(allParticles, group);
     auto const density = detail::haloOverdensity(scale);
     auto const virial = rockstar::sphericalOverdensity(
-        candidates, getOptions().initial.numberOfParticles * density.virialMeanMatter);
+        candidates, darkMatterReferenceCount(getOptions()) * density.virialMeanMatter);
     auto const particles = detail::withinRadius(allParticles, group, virial.radius);
     auto const radii = detail::sortedRadii(particles, group);
     auto const bulk = detail::bulkVelocity(particles);

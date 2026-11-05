@@ -137,7 +137,7 @@ def buildCommand(spec, launcher):
         options = dict(kCommonOptions)
         options.update({
             "gravity.cuda": "true" if spec.backend == "cuda" else "false", "hydro.cuda": "true" if spec.backend == "cuda" else "false", "drift.cuda": "true" if spec.backend == "cuda" else "false",
-            "initial.particlesPerDimension": str(spec.resolution),
+            "run.darkMatterParticleCount": str((spec.resolution) ** 3), "run.gasParticleCount": str((spec.resolution) ** 3),
         })
         options.update(spec.overrides)
         command += [f"--{key}={value}" for key, value in options.items()]
@@ -515,7 +515,7 @@ def main():
         keys[mpiSpecs[-1].name] = ("hydroWave", "mpi", 8, waveIntegrator)
         # Mirrors the sph_migration_mpi CTest command.
         migration = [str(executable), "--run.test=sphGravity",
-                     "--initial.particlesPerDimension=8", "--hydro.enabled=true",
+                     "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512", "--hydro.enabled=true",
                      "--gravity.cuda=false", "--hpx:threads=2", "--hpx:bind=none"]
         migration += application_arguments(executable, far="fmm", hydro=True)
         mpiSpecs.append(RunSpec("mpi_sph_migration", None, executable,

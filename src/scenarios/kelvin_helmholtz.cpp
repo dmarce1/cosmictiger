@@ -6,14 +6,18 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 #include <stdexcept>
+#include <vector>
 
 #include <cosmictiger/core/options.hpp>
+#include <cosmictiger/core/particle_count.hpp>
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/kelvin_helmholtz.hpp>
+#include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/particles.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/tree.hpp>
@@ -77,28 +81,23 @@ namespace detail {
 }    // namespace detail
 
 ScenarioPlan initializeKelvinHelmholtz() {
-    ParticleInteger totalNumberOfParticles = pow(getOptions().initial.particlesPerDimension, 3);
+    ParticleInteger totalNumberOfParticles = getOptions().run.gasParticleCount;
     double rho1 = 0.5;
     double rho0 = 1.0;
     double vy1 = 1.0;
     double vy0 = -1.0;
     constexpr double kEta = 1e-1;
     constexpr double kFreq = 2.0;
-    ParticleInteger leftDim =
-        pow(0.25 * totalNumberOfParticles * rho1 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
-    ParticleInteger rightDim =
-        pow(0.25 * totalNumberOfParticles * rho0 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
-    if (leftDim < 1 || rightDim < 1) {
-        throw std::runtime_error(
-            "The Kelvin-Helmholtz scenario needs a resolved lattice in both layers; "
-            "increase initial.particlesPerDimension");
-    }
-    ParticleInteger numberOfLeftParticles = 2 * leftDim * sqr(2 * leftDim);
-    ParticleInteger numberOfRightParticles = 2 * rightDim * sqr(2 * rightDim);
+    auto const layout = particle_count::roundKelvinHelmholtz(totalNumberOfParticles);
+    ParticleInteger const leftDim = layout.lightSide;
+    ParticleInteger const rightDim = layout.heavySide;
+    ParticleInteger numberOfLeftParticles = particle_count::spatialPower(2 * leftDim);
+    ParticleInteger numberOfRightParticles = particle_count::spatialPower(2 * rightDim);
     totalNumberOfParticles = numberOfLeftParticles + numberOfRightParticles;
     double dx = 0.5 / leftDim;
     ParticleInteger i = 0;
     auto opts = getOptions();
+    opts.run.gasParticleCount = totalNumberOfParticles;
     opts.initial.gasMass = rho1 * 0.5 / numberOfLeftParticles;
     double const m = opts.initial.gasMass;
     setOptions(opts);
@@ -107,21 +106,18 @@ ScenarioPlan initializeKelvinHelmholtz() {
     terminal::detailPrint("Kelvin-Helmholtz realized densities: left=%e right=%e ratio=%e\n", rho1,
         rho0, rho0 / rho1);
     for (int ix = 0; ix < leftDim; ix++) {
-        for (int iy = 0; iy < 2 * leftDim; iy++) {
-            for (int iz = 0; iz < 2 * leftDim; iz++) {
+        for (int iy = 0; iy < (kSpatialDimensions >= 2 ? 2 * leftDim : 1); iy++) {
+            for (int iz = 0; iz < (kSpatialDimensions >= 3 ? 2 * leftDim : 1); iz++) {
                 double x = (ix + 0.5) * dx;
                 double y = (iy + 0.5) * dx;
                 double z = (iz + 0.5) * dx;
-                double h = pow(
-                    m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * rho1),
-                    1.0 / 3.0);
+                double h = sph_geometry::supportRadius(m, rho1, getOptions().hydro.neighborNumber);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x;
-                sphParticlesPosition(kYDimension, i) = y;
-                sphParticlesPosition(kZDimension, i) = z;
-                sphParticlesVelocity(kXDimension, i) =
-                    kEta * sin(kFreq * 2.0 * std::numbers::pi * y);
+                sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                sphParticlesVelocity(kXDimension, i) = kEta * sin(kFreq * 2.0 * std::numbers::pi * y);
                 sphParticlesVelocity(kYDimension, i) = vy1;
                 sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
@@ -133,10 +129,9 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x;
-                sphParticlesPosition(kYDimension, i) = y;
-                sphParticlesPosition(kZDimension, i) = z;
-                sphParticlesVelocity(kXDimension, i) =
-                    kEta * sin(kFreq * 2.0 * std::numbers::pi * y);
+                sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                sphParticlesVelocity(kXDimension, i) = kEta * sin(kFreq * 2.0 * std::numbers::pi * y);
                 sphParticlesVelocity(kYDimension, i) = vy1;
                 sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
@@ -148,21 +143,18 @@ ScenarioPlan initializeKelvinHelmholtz() {
     dx = 0.5 / rightDim;
     for (int ix0 = rightDim; ix0 < 2 * rightDim; ix0++) {
         int ix = ix0;
-        for (int iy = 0; iy < 2 * rightDim; iy++) {
-            for (int iz = 0; iz < 2 * rightDim; iz++) {
+        for (int iy = 0; iy < (kSpatialDimensions >= 2 ? 2 * rightDim : 1); iy++) {
+            for (int iz = 0; iz < (kSpatialDimensions >= 3 ? 2 * rightDim : 1); iz++) {
                 double x = (ix + 0.5) * dx;
                 double y = (iy + 0.5) * dx;
                 double z = (iz + 0.5) * dx;
-                double h = pow(
-                    m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * rho0),
-                    1.0 / 3.0);
+                double h = sph_geometry::supportRadius(m, rho0, getOptions().hydro.neighborNumber);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x;
-                sphParticlesPosition(kYDimension, i) = y;
-                sphParticlesPosition(kZDimension, i) = z;
-                sphParticlesVelocity(kXDimension, i) =
-                    kEta * sin(kFreq * 2.0 * std::numbers::pi * y);
+                sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                sphParticlesVelocity(kXDimension, i) = kEta * sin(kFreq * 2.0 * std::numbers::pi * y);
                 sphParticlesVelocity(kYDimension, i) = vy0;
                 sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
@@ -174,10 +166,9 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x;
-                sphParticlesPosition(kYDimension, i) = y;
-                sphParticlesPosition(kZDimension, i) = z;
-                sphParticlesVelocity(kXDimension, i) =
-                    kEta * sin(kFreq * 2.0 * std::numbers::pi * y);
+                sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                sphParticlesVelocity(kXDimension, i) = kEta * sin(kFreq * 2.0 * std::numbers::pi * y);
                 sphParticlesVelocity(kYDimension, i) = vy0;
                 sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
@@ -188,7 +179,7 @@ ScenarioPlan initializeKelvinHelmholtz() {
     }
     if (sphParticlesSize() == 0) {
         throw std::runtime_error("The Kelvin-Helmholtz scenario produced no gas particles; "
-                                 "increase initial.particlesPerDimension");
+                                 "increase run.gasParticleCount");
     }
     detail::initializeKelvinHelmholtzThermodynamics(19.2f);
     return ScenarioPlan{{{10.0, 1024}}};

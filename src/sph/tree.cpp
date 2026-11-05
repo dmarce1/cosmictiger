@@ -137,7 +137,7 @@ double sphTreeVolumeRatio(SphTreeNode const& node, sph_flops::Counter& flops) {
     // clang-format on
     double partitionVolume = 1.0;
     double sweptVolume = 1.0;
-    for (int dim = 0; dim < kDimensions; ++dim) {
+    for (int dim = 0; dim < kSpatialDimensions; ++dim) {
         double const partitionSpan = node.box.end[dim].toDouble() - node.box.begin[dim].toDouble();
         double const sweptSpan =
             node.driftBox.end[dim].toDouble() - node.driftBox.begin[dim].toDouble();
@@ -145,7 +145,7 @@ double sphTreeVolumeRatio(SphTreeNode const& node, sph_flops::Counter& flops) {
         partitionVolume *= partitionSpan;
         sweptVolume *= sweptSpan;
     }
-    flops.doublePrecision += 8 * kDimensions + 1;
+    flops.doublePrecision += 8 * kSpatialDimensions + 1;
     return sweptVolume / partitionVolume;
 }
 
@@ -547,11 +547,12 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
             } else if (particleCount > 2 * bucketCount) {
                 splitDimensions = 2;
             }
+            splitDimensions = std::min(splitDimensions, kSpatialDimensions);
             int splitMask = 0;
             for (int split = 0; split < splitDimensions; ++split) {
                 int longestDimension = -1;
                 double longestSpan = -1.0;
-                for (int dim = 0; dim < kDimensions; ++dim) {
+                for (int dim = 0; dim < kSpatialDimensions; ++dim) {
                     double const span = box.end[dim] - box.begin[dim];
                     flops.doublePrecision += 1;
                     if ((splitMask & (1 << dim)) == 0 && span > longestSpan) {

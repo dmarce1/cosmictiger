@@ -147,7 +147,7 @@ def main():
     if help_option_names != sorted(option_names):
         raise RuntimeError("help options were not alphabetical and unique")
     required = {"help", "configuration", "run.scenario", "run.endTime", "run.verbose",
-                "initial.particlesPerDimension", "compute.bucketSize",
+                "run.darkMatterParticleCount", "run.gasParticleCount", "compute.bucketSize",
                 "compute.sphBucketSize", "compute.sphTreeRebuildFraction", "compute.positionType",
                 "hydro.enabled", "hydro.method", "hydro.viscosityAlpha", "hydro.viscosityBeta",
                 "hydro.viscosityEpsilon", "hydro.balsaraSwitch", "hydro.conductionCoefficient",
@@ -201,7 +201,7 @@ def main():
                           if args.gravity_method == "none" else ["--hydro.enabled=false"])
         output = run("startup_options", [
             "--run.verbose=false", *startupPhysics,
-            f"--hydro.method={hydroMethod}", "--initial.particlesPerDimension=8",
+            f"--hydro.method={hydroMethod}", "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512",
             "--cosmology.sigma8=0", "--run.maxIterations=0", "--output.silo=false",
             "--analysis.power=false", "--analysis.groups=false", "--analysis.tracers=false",
             "--lightcone.enabled=false", f"--output.directory={startupDirectory.resolve()}",
@@ -229,7 +229,8 @@ def main():
 
     removed_options = {"compute.cuda", "hydro.chemistry", "hydro.conduction", "hydro.diffusion",
                        "hydro.yReflect", "gravity.sphSmoothing", "cosmology.omegaK",
-                       "initial.usePowerFile", "gravity.method",
+                       "initial.usePowerFile", "initial.particlesPerDimension",
+                       "initial.darkMatterParticleCount", "initial.gasParticleCount", "gravity.method",
                        "gravity.pmmmNearMethod", "gravity.pmmmOrder", "gravity.fmmOrder",
                        "run.hierarchicalGravity", "initial.createGlass", "initial.plummer",
                        "hydro.pressureOperator", "chemistry.network", "chemistry.initialization",
@@ -258,8 +259,8 @@ def main():
 [run]
 test = checkpointState
 maxIterations = 7
-[initial]
-particlesPerDimension = 8
+darkMatterParticleCount = 512
+gasParticleCount = 512
 [compute]
 bucketSize = 64
 sphBucketSize = 73
@@ -289,7 +290,8 @@ mapSize = 8
 """)
     configured = run("config", [f"--configuration={config.resolve()}",
                                 "--run.maxIterations=3", "--hydro.viscosityAlpha=1.25"] + sph_control_options)
-    expected = {"run.maxIterations": 3.0, "initial.particlesPerDimension": 8.0,
+    expected = {"run.maxIterations": 3.0, "run.darkMatterParticleCount": 512,
+                "run.gasParticleCount": 512 if sph_controls_available else 0,
                 "analysis.tracerCount": 41.0, "hydro.viscosityAlpha": 1.25,
                 "hydro.viscosityBeta": 1.5, "hydro.viscosityEpsilon": 0.02,
                 "hydro.conductionCoefficient": 0.3,
@@ -311,69 +313,80 @@ mapSize = 8
         raise RuntimeError("configuration run did not finish the checkpoint regression")
 
     metadata_options = ["--run.test=checkpointState",
-                        "--hydro.enabled=false", "--initial.particlesPerDimension=8"]
+                        "--hydro.enabled=false", "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512"]
 
     def checkBalsaraOptions():
-        gradientModels = ("cullenAndDehnen", "hu_etal", "priceEtAl")
+        models = ("none", "morrisAndMonaghan", "cullenAndDehnen", "huEtal", "priceEtAl")
         cases = []
         expected = []
 
-        def addCase(name, options, enabled, warningModel=None):
-            cases.append((name, metadata_options + options, True))
-            expected.append((name, enabled, warningModel))
+        def addCase(name, options, enabled, success=True):
+            cases.append((name, metadata_options + options, success))
+            expected.append((name, enabled, success))
 
-        for model in ("none", "morrisAndMonaghan", *gradientModels):
-            addCase("balsara_default_" + model, [f"--hydro.viscosityEvolution={model}"],
-                    model not in gradientModels)
         automaticConfigs = {}
         enabledConfigs = {}
-        for model in gradientModels:
+        for model in models:
+            allowed = model in ("none", "morrisAndMonaghan")
+            addCase("balsara_default_" + model, [f"--hydro.viscosityEvolution={model}"], allowed)
             automatic = args.workdir / f"balsara_automatic_{model}.ini"
             automatic.write_text(f"[hydro]\nviscosityEvolution = {model}\n")
             automaticConfigs[model] = automatic
             addCase("balsara_automatic_ini_" + model,
-                    [f"--configuration={automatic.resolve()}"], False)
-            enabled = args.workdir / f"balsara_enabled_{model}.ini"
-            enabled.write_text(f"[hydro]\nviscosityEvolution = {model}\nbalsaraSwitch = true\n")
-            enabledConfigs[model] = enabled
-            addCase("balsara_enabled_ini_" + model,
-                    [f"--configuration={enabled.resolve()}"], True, model)
+                    [f"--configuration={automatic.resolve()}"], allowed)
+            for enabled in (False, True):
+                addCase(f"balsara_cli_{model}_{enabled}",
+                        [f"--hydro.viscosityEvolution={model}",
+                         f"--hydro.balsaraSwitch={str(enabled).lower()}"],
+                        enabled, allowed or not enabled)
+                config = args.workdir / f"balsara_{model}_{enabled}.ini"
+                config.write_text(f"[hydro]\nviscosityEvolution = {model}\n"
+                                  f"balsaraSwitch = {str(enabled).lower()}\n")
+                addCase(f"balsara_ini_{model}_{enabled}",
+                        [f"--configuration={config.resolve()}"], enabled, allowed or not enabled)
+                if enabled:
+                    enabledConfigs[model] = config
 
-        disabled = args.workdir / "balsara_disabled_price.ini"
-        disabled.write_text("[hydro]\nviscosityEvolution = priceEtAl\nbalsaraSwitch = false\n")
-        # Preserve numeric bool spellings as well as true/false. Explicit CLI
-        # wins over INI, while an omitted bool follows the final model selection.
-        addCase("balsara_enabled_cli_override", [f"--configuration={disabled.resolve()}",
-                "--hydro.balsaraSwitch=1"], True, "priceEtAl")
+        # Validate only after CLI/INI precedence: a CLI false or constant/MM selection
+        # can repair an otherwise invalid INI; enabling a forbidden pair fails.
+        addCase("balsara_enabled_cli_override", [
+            f"--configuration={automaticConfigs['priceEtAl'].resolve()}",
+            "--hydro.balsaraSwitch=1"], True, False)
         addCase("balsara_disabled_cli_override", [
             f"--configuration={enabledConfigs['priceEtAl'].resolve()}",
             "--hydro.balsaraSwitch=0"], False)
         addCase("balsara_automatic_model_override", [
-            f"--configuration={automaticConfigs['hu_etal'].resolve()}",
-            "--hydro.viscosityEvolution=none"], True)
+            f"--configuration={automaticConfigs['huEtal'].resolve()}",
+            "--hydro.viscosityEvolution=morrisAndMonaghan"], True)
+        addCase("balsara_automatic_model_override_off", [
+            f"--configuration={automaticConfigs['morrisAndMonaghan'].resolve()}",
+            "--hydro.viscosityEvolution=huEtal"], False)
         addCase("balsara_explicit_model_override", [
+            f"--configuration={enabledConfigs['morrisAndMonaghan'].resolve()}",
+            "--hydro.viscosityEvolution=huEtal"], True, False)
+        addCase("balsara_explicit_model_override_repaired", [
             f"--configuration={enabledConfigs['cullenAndDehnen'].resolve()}",
-            "--hydro.viscosityEvolution=priceEtAl"], True, "priceEtAl")
+            "--hydro.viscosityEvolution=morrisAndMonaghan"], True)
 
-        warningPrefix = "Warning: hydro.balsaraSwitch=true adds redundant shear suppression:"
-        for (name, enabled, warningModel), output in zip(expected, runAll(cases)):
+        for (name, enabled, success), output in zip(expected, runAll(cases)):
+            if not success:
+                if "hydro.balsaraSwitch=true requires hydro.viscosityEvolution=none or morrisAndMonaghan" not in output:
+                    raise RuntimeError(f"{name}: missing Balsara model rejection")
+                continue
             resolved = "T" if enabled else "F"
             if not re.search(r"^hydro\.balsaraSwitch\s*:\s*" + resolved + r"\s*$",
                              output, re.MULTILINE):
                 raise RuntimeError(f"{name}: incorrect resolved Balsara switch")
-            warnings = [line for line in output.splitlines() if line.startswith(warningPrefix)]
-            if warningModel is None:
-                if warnings:
-                    raise RuntimeError(f"{name}: unexpected redundant-suppression warning")
-            elif (len(warnings) != 1 or f"hydro.viscosityEvolution={warningModel}" not in warnings[0]
-                  or "already includes a shear limiter" not in warnings[0]):
-                raise RuntimeError(f"{name}: missing model-specific redundancy warning")
             if "Checkpoint state and mode validation passed" not in output:
                 raise RuntimeError(f"{name}: metadata validation did not finish")
 
     if args.balsara_options_only:
+        rejected = run("obsolete_hu_selector", metadata_options + [
+            "--hydro.viscosityEvolution=hu_etal"], success=False)
+        if "hydro.viscosityEvolution must be" not in rejected:
+            raise RuntimeError("obsolete Hu selector was not rejected with valid choices")
         checkBalsaraOptions()
-        print("Balsara model defaults, explicit overrides, and redundancy warnings passed")
+        print("Balsara model defaults, explicit overrides, and invalid combinations passed")
         return
 
     for key in cuda_keys:
@@ -515,9 +528,9 @@ mapSize = 8
     for resolution, closePack in ((16, False), (8, True), (16, True)):
         count = resolution**3 * (2 if closePack else 1)
         options = [option for option in normalizationOptions
-                   if not option.startswith("--initial.particlesPerDimension=")]
+                   if not option.startswith(("--run.darkMatterParticleCount=", "--run.gasParticleCount="))]
         normalized = run(f"units_box_resolution_{resolution}_close_pack_{closePack}", options + [
-            f"--initial.particlesPerDimension={resolution}",
+            f"--run.darkMatterParticleCount={count}", f"--run.gasParticleCount={count}",
             f"--initial.closePack={str(closePack).lower()}", f"--units.boxLength={boxLength}"])
         assertNormalization(normalized, boxLength, massSolar * 8**3 / count)
     if sph_controls_available:
@@ -856,7 +869,7 @@ mapSize = 8
             raise RuntimeError("disabled SPH INI request lacked build guidance")
         rejected = run("disabled_sph_scenario", [
             "--run.scenario=sod", "--run.maxIterations=0",
-            "--initial.particlesPerDimension=8"], success=False)
+            "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512"], success=False)
         if sph_build_error not in rejected:
             raise RuntimeError("disabled SPH scenario request lacked build guidance")
         forced_sph = [option for option in metadata_options
@@ -908,11 +921,12 @@ mapSize = 8
         if not re.search(r"^hydro\.balsaraSwitch\s*:\s*F\s*$", balsara_default, re.MULTILINE):
             raise RuntimeError("Balsara switch must default to disabled for Hu et al.")
         balsara_override = run("balsara_cli_override", [f"--configuration={config.resolve()}",
+                                                     "--hydro.viscosityEvolution=morrisAndMonaghan",
                                                      "--hydro.balsaraSwitch=true"] + sph_control_options)
         if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_override, re.MULTILINE):
             raise RuntimeError("CLI hydro.balsaraSwitch did not override INI")
 
-        for output, expected_value in ((configured, "none"), (balsara_default, "hu_etal")):
+        for output, expected_value in ((configured, "none"), (balsara_default, "huEtal")):
             if not re.search(r"^hydro\.viscosityEvolution\s*:\s*" + expected_value + r"\s*$",
                              output, re.MULTILINE):
                 raise RuntimeError("unexpected hydro.viscosityEvolution setting")
@@ -947,19 +961,19 @@ mapSize = 8
 
     if sph_controls_available:
         hu_override = run("hu_viscosity_cli_override", [
-            f"--configuration={config.resolve()}", "--hydro.viscosityEvolution=hu_etal",
+            f"--configuration={config.resolve()}", "--hydro.viscosityEvolution=huEtal",
             "--hydro.viscosityAlphaMaxHu=1.2", "--hydro.viscosityDecayHu=0.08"] + sph_control_options)
-        for key, value in (("hydro.viscosityEvolution", "hu_etal"),
+        for key, value in (("hydro.viscosityEvolution", "huEtal"),
                            ("hydro.viscosityAlphaMaxHu", "1.2"), ("hydro.viscosityDecayHu", "0.08")):
             match = re.search(r"^" + re.escape(key) + r"\s*:\s*(\S+)", hu_override, re.MULTILINE)
             if match is None or (match[1] != value if key == "hydro.viscosityEvolution"
                                  else float(match[1]) != float(value)):
                 raise RuntimeError(f"Hu CLI {key} did not override INI")
         hu_config = args.workdir / "hu_viscosity.ini"
-        hu_config.write_text("[hydro]\nviscosityEvolution = hu_etal\n")
+        hu_config.write_text("[hydro]\nviscosityEvolution = huEtal\n")
         hu_ini = run("hu_viscosity_ini", sph_options +
                      [f"--configuration={hu_config.resolve()}"] + sph_control_options)
-        if not re.search(r"^hydro\.viscosityEvolution\s*:\s*hu_etal\s*$", hu_ini, re.MULTILINE):
+        if not re.search(r"^hydro\.viscosityEvolution\s*:\s*huEtal\s*$", hu_ini, re.MULTILINE):
             raise RuntimeError("Hu viscosity INI selector was not applied")
 
     # Metadata-only cases exercise the storage range without integrating a flow
@@ -968,7 +982,7 @@ mapSize = 8
         ("morrisAndMonaghan", "hydro.viscosityAlphaMin"),
         ("cullenAndDehnen", "hydro.viscosityAlphaMax"),
         ("priceEtAl", "hydro.viscosityAlphaMaxPrice"),
-        ("hu_etal", "hydro.viscosityAlphaMaxHu"),
+        ("huEtal", "hydro.viscosityAlphaMaxHu"),
     )
     halfMinimum = 2.0 ** -24
     halfMaximum = 65504.0
@@ -1695,7 +1709,7 @@ mapSize = 8
             for value in ("0", "-0.1", "nan", "inf"):
                 output = run(f"invalid_class_mass_{parameter}_{value}", [
                     "--run.test=sphGravity", "--hydro.enabled=true",
-                    "--initial.particlesPerDimension=8", f"--cosmology.{parameter}={value}"],
+                    "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512", f"--cosmology.{parameter}={value}"],
                     success=False)
                 # Negative and nonfinite densities fail the common cosmology guard;
                 # zero is allowed there but cannot supply an SPH particle class.

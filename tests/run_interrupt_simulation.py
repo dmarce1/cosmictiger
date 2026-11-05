@@ -115,7 +115,7 @@ def run_regression(args, directory):
     (directory / "apex").mkdir()
     options = {"configuration": source / "configurations" / f"{preset}.ini",
                **cpu_backend_options(),
-               "initial.particlesPerDimension": 8, "initial.closePack": "false",
+               "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.closePack": "false",
                "initial.useGlass": "false", "chemistry.enabled": "false",
                "gravity.enabled": str(args.scenario == "plummer").lower(),
                "gravity.meshSize": 8, "gravity.pmmmNearWidth": 2,

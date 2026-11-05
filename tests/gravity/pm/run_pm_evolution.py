@@ -150,7 +150,7 @@ def main():
               "run.timeIntegrator": args.time_integrator, "gravity.enabled": "true",
               "gravity.cuda": "false", "drift.cuda": "false", "hydro.cuda": "false",
               "compute.positionType": args.position_type,
-              "initial.particlesPerDimension": 8, "initial.closePack": "false",
+              "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.closePack": "false",
               "initial.useGlass": "false", "chemistry.enabled": "false",
               # A small eta makes the PM acceleration bound select the interval of
               # the Plummer case; the split long force is smoother, so p3m keeps

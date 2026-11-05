@@ -88,7 +88,7 @@ CUDA_EXPORT inline FlopCount nearPairFlops(Kernel const& kernel, Real const& q, 
     return 21 + forceFlops + (doPotential ? 3 + potentialFlops : 0);
 }
 
-// ADL resolves forceFactor/potential to the selected radial_kernel::KernelTable.
+// ADL resolves forceFactor/potential to the selected radial_kernel::KernelTable<double>.
 // Real also permits independent arithmetic-counting tests of this exact path.
 template <bool countFlops = kCountFlops, class Kernel, class Real>
 CUDA_EXPORT inline FlopCount accumulateNearPair(PmmmNearParticle const& sink,

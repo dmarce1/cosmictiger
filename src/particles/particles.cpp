@@ -1766,7 +1766,7 @@ void particlesSave(FILE* fp) {
 
 void particlesSaveGlass(char const* filename) {
     FILE* fp = fopen(outputPath(filename).c_str(), "wb");
-    ParticleInteger size = getOptions().initial.particlesPerDimension;
+    ParticleInteger size = getOptions().initial.latticeSide;
     fwrite(&size, sizeof(ParticleInteger), 1, fp);
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         if (particlesType(i) == kDarkMatterType) {

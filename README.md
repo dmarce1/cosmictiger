@@ -45,7 +45,7 @@ accepted input. See [background evolution](docs/cosmology.md).
 
 The old ungrouped and snake_case option names have been replaced. For example,
 `--parts_dim=16 --max_iter=2 --cuda=true` is now
-`--initial.particlesPerDimension=16 --run.maxIterations=2 --gravity.cuda=true`,
+`--run.darkMatterParticleCount=4096 --run.gasParticleCount=4096 --run.maxIterations=2 --gravity.cuda=true`,
 and `--hydro.sph=true` is now `--hydro.enabled=true`.
 
 CUDA selection is independent for each module. All backend selectors default to
@@ -64,8 +64,9 @@ INI sections work; explicit command-line values override configuration values
 for the same key. Radius representations use the precedence described below:
 
 ```ini
-[initial]
-particlesPerDimension = 16
+[run]
+darkMatterParticleCount = 4096
+gasParticleCount = 4096
 [compute]
 cuda = true
 [hydro]
@@ -286,6 +287,10 @@ The conversion utilities use the same grouping style:
 
 ## SPH
 
+`COSMICTIGER_DIMENSION_COUNT` defaults to 3; SPH-only builds also support
+1D and 2D Cartesian flow. See [dimensional SPH](docs/sph_dimensions.md) for
+build flags, equations, and supported scenarios.
+
 The gas solver reconstructs density and evolves canonical entropy, using the
 [variational pressure operator](docs/variational_sph.md) with grad-H corrections
 for all SPH runs. It uses Monaghan artificial viscosity, or Phantom's directed
@@ -318,15 +323,20 @@ and HPX workers, including rung filtering, glass damping, and lightcone crossing
 CPU runs can also use a build configured with `COSMICTIGER_WITH_CUDA=OFF`.
 
 Cosmological gas runs initialize a displaced gas lattice alongside the dark
-matter lattice. `initial.particlesPerDimension` specifies the lattice size for each species. With
-SPH enabled, the total particle count doubles, while the gas and dark-matter
-masses are weighted by `omega_b / omega_m` and `omega_c / omega_m` respectively.
+matter lattice. Set `run.darkMatterParticleCount` and `run.gasParticleCount`
+independently. Structured initial conditions round each requested population up to the
+next valid layout: a cubic request of 999 becomes 1000, while 1001 becomes 1331.
+Cosmological close packing uses `2*n^3` sites and Gresho FCC uses `4*n^3` sites.
+Layered problems round to complete layer groups; glass loads round to whole tiles.
+Hydrodynamics must be enabled to create gas; gas-only problems create no dark matter.
+The per-particle masses preserve the cosmic gas and dark-matter mass fractions even
+when the two species have different populations. Resolved counts appear at startup.
 The power-spectrum deposition uses these masses too.
 
 For a small cosmological run using the native Einstein–Boltzmann power spectrum:
 
 ```sh
-./cosmictiger --hydro.enabled=true --gravity.cuda=true --hydro.cuda=true --drift.cuda=true --initial.particlesPerDimension=16 --run.maxIterations=2 --hpx:threads=4
+./cosmictiger --hydro.enabled=true --gravity.cuda=true --hydro.cuda=true --drift.cuda=true --run.darkMatterParticleCount=4096 --run.gasParticleCount=4096 --run.maxIterations=2 --hpx:threads=4
 ```
 
 `hydro.method` accepts only `sph`. The Hopkins MFM/MFV solver was removed on

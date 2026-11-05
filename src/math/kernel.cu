@@ -14,13 +14,18 @@
 #include <cosmictiger/math/kernel.hpp>
 
 namespace detail {
-__device__ __constant__ radial_kernel::KernelTable deviceHydroKernel;
-__device__ __constant__ radial_kernel::KernelTable deviceGravityKernel;
+__device__ __constant__ HydroKernelTable deviceHydroKernel;
+__device__ __constant__ radial_kernel::KernelTable<double> deviceGravityKernel;
+__device__ __constant__ radial_kernel::KernelTable<float> deviceSphGravityKernel;
 }    // namespace detail
 
 void uploadKernelSelections() {
     auto status = cudaMemcpyToSymbol(
         detail::deviceGravityKernel, &detail::gravityKernel, sizeof(detail::gravityKernel));
+    if (status == cudaSuccess) {
+        status = cudaMemcpyToSymbol(detail::deviceSphGravityKernel, &detail::sphGravityKernel,
+            sizeof(detail::sphGravityKernel));
+    }
     if (status == cudaSuccess) {
         status = cudaMemcpyToSymbol(
             detail::deviceHydroKernel, &detail::hydroKernel, sizeof(detail::hydroKernel));
