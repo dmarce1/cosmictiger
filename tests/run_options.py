@@ -150,7 +150,7 @@ def main():
                 "initial.particlesPerDimension", "compute.bucketSize",
                 "compute.sphBucketSize", "compute.sphTreeRebuildFraction", "compute.positionType",
                 "hydro.enabled", "hydro.method", "hydro.viscosityAlpha", "hydro.viscosityBeta",
-                "hydro.viscosityEpsilon", "hydro.balsaraSwitch",
+                "hydro.viscosityEpsilon", "hydro.balsaraSwitch", "hydro.conductionCoefficient",
                 "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
                 "gravity.meshSize", "gravity.pmmmNearWidth", "gravity.pmmmCoarseMeshSize",
@@ -269,6 +269,7 @@ enabled = false
 viscosityAlpha = 0.75
 viscosityBeta = 1.5
 viscosityEpsilon = 0.02
+conductionCoefficient = 0.3
 balsaraSwitch = false
 viscosityEvolution = none
 viscosityAlphaMin = 0.15
@@ -291,6 +292,7 @@ mapSize = 8
     expected = {"run.maxIterations": 3.0, "initial.particlesPerDimension": 8.0,
                 "analysis.tracerCount": 41.0, "hydro.viscosityAlpha": 1.25,
                 "hydro.viscosityBeta": 1.5, "hydro.viscosityEpsilon": 0.02,
+                "hydro.conductionCoefficient": 0.3,
                 "hydro.viscosityAlphaMin": 0.15, "hydro.viscosityDecay": 0.3,
                 "hydro.viscosityAlphaMax": 1.5, "hydro.viscosityDecayCD": 0.1,
                 "hydro.viscosityAlphaMaxPrice": 0.8, "hydro.viscosityDecayPrice": 0.15,
@@ -1288,6 +1290,7 @@ mapSize = 8
     defaults = run("independent_defaults", balsara_options)
     for key, value in (("gravity.kernelDegree", 4),
                        ("hydro.neighborNumber", 42), ("hydro.kernelDegree", 3),
+                       ("hydro.conductionCoefficient", 0),
                        ("hydro.viscosityAlphaMin", 0.1), ("hydro.viscosityDecay", 0.2),
                        ("hydro.viscosityAlphaMax", 2), ("hydro.viscosityDecayCD", 0.05),
                        ("hydro.viscosityAlphaMaxPrice", 1), ("hydro.viscosityDecayPrice", 0.1),
@@ -1591,6 +1594,11 @@ mapSize = 8
         ("silo_reversed", "--output.zMax=-0.1", "output.zMin"),
         ("gamma_nan", "--hydro.gamma=nan", "hydro.gamma"),
         ("gamma_inf", "--hydro.gamma=inf", "hydro.gamma"),
+        ("conduction_negative", "--hydro.conductionCoefficient=-0.1", "hydro.conductionCoefficient"),
+        ("conduction_nan", "--hydro.conductionCoefficient=nan", "hydro.conductionCoefficient"),
+        ("conduction_inf", "--hydro.conductionCoefficient=inf", "hydro.conductionCoefficient"),
+        ("conduction_overflow", "--hydro.conductionCoefficient=1e100", "single precision"),
+        ("conduction_underflow", "--hydro.conductionCoefficient=1e-100", "single precision"),
         ("alpha_nan", "--hydro.viscosityAlpha=nan", "hydro.viscosityAlpha"),
         ("epsilon_inf", "--hydro.viscosityEpsilon=inf", "hydro.viscosityEpsilon"),
         ("cfl_nan", "--hydro.cfl=nan", "hydro.cfl"),

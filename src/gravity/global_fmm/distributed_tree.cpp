@@ -6,6 +6,7 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
+#include <algorithm>
 #include <cmath>
 
 #include <hpx/threading_base/annotated_function.hpp>
@@ -74,7 +75,25 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         treeAllocateNodes();
     }
     if (localRoot) {
-        particleRange = particlesCurrentRange();
+        particleRange = params.allParticles ? Pair<ParticleInteger>(0, particlesOwnedSize()) :
+                                              particlesCurrentRange();
+        if (params.allParticles && particleRange.second > particleRange.first) {
+            // A diagnostic full-source solve preserves ownership between domain
+            // migrations. Its gas may have crossed the stored rank box, so the
+            // Ewald leaf-size requirement must use the actual source bounds.
+            for (int dimension = 0; dimension < kDimensions; ++dimension) {
+                double const position = particlesPos(dimension, particleRange.first).toDouble();
+                box.begin[dimension] = box.end[dimension] = position;
+            }
+            for (ParticleInteger particle = particleRange.first + 1;
+                particle < particleRange.second; ++particle) {
+                for (int dimension = 0; dimension < kDimensions; ++dimension) {
+                    double const position = particlesPos(dimension, particle).toDouble();
+                    box.begin[dimension] = std::min(box.begin[dimension], position);
+                    box.end[dimension] = std::max(box.end[dimension], position);
+                }
+            }
+        }
     }
     TreeBuildPolicy policy;
     policy.representedProcessRange = processRange;

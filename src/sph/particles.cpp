@@ -1101,6 +1101,14 @@ HPX_PLAIN_ACTION(
     sphParticlesBeginViscosityDiagnostics, SphParticlesBeginViscosityDiagnosticsAction);
 HPX_PLAIN_ACTION(sphParticlesEndViscosityDiagnostics, SphParticlesEndViscosityDiagnosticsAction);
 
+namespace detail {
+static bool viscosityDiagnosticsActive = false;
+}
+
+bool sphParticlesViscosityDiagnosticsActive() {
+    return detail::viscosityDiagnosticsActive;
+}
+
 void sphParticlesEndViscosityDiagnostics() {
     Vector<hpx::future<void>> pending;
     for (auto const& child : hpxChildren()) {
@@ -1108,6 +1116,7 @@ void sphParticlesEndViscosityDiagnostics() {
     }
     freeManagedMemory(sphParticlesViscosityDiagnostics);
     sphParticlesViscosityDiagnostics = nullptr;
+    detail::viscosityDiagnosticsActive = false;
     hpx::wait_all(pending.begin(), pending.end());
     for (auto& future : pending) {
         future.get();
@@ -1121,7 +1130,9 @@ void sphParticlesBeginViscosityDiagnostics() {
     }
     std::exception_ptr failure;
     try {
-        ALWAYS_ASSERT(sphParticlesViscosityDiagnostics == nullptr);
+        ALWAYS_ASSERT(
+            !detail::viscosityDiagnosticsActive && sphParticlesViscosityDiagnostics == nullptr);
+        detail::viscosityDiagnosticsActive = true;
         if (getOptions().hydro.viscosityGradientSwitch() && sphParticlesSize() != 0) {
             sphParticlesViscosityDiagnostics = static_cast<SphViscosityDiagnostics*>(
                 allocateManagedMemory(sizeof(SphViscosityDiagnostics) * sphParticlesSize()));
@@ -1160,20 +1171,25 @@ void sphParticlesUpdateTargetAlpha(SphRunParameters const& parameters) {
     sph_flops::Counter flops;
     for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
         int const rung = sphParticlesRung(index);
-        bool const measured = parameters.isActiveRung(rung);
+        bool const measured = parameters.accelerationGradientViscosity ?
+            parameters.isPairRungDue(rung) :
+            parameters.isActiveRung(rung);
         bool const initializing = parameters.viscosityInitializeHistory;
         auto& history = sphScaledDivergence[index];
         if (measured && sphParticlesConverged(index)) {
             ALWAYS_ASSERT(sphParticlesViscosityDiagnostics != nullptr);
             auto const& diagnostic = sphParticlesViscosityDiagnostics[index];
-            double const elapsed = sphViscositySampleInterval(
-                rung, parameters.viscositySampleInterval, parameters.globalTimestep, initializing);
+            double const elapsed = parameters.accelerationGradientViscosity ?
+                parameters.hydroKickTimestep :
+                sphViscositySampleInterval(rung, parameters.viscositySampleInterval,
+                    parameters.globalTimestep, initializing);
             float const timeStep = static_cast<float>(elapsed);
             double const sampleTimestep = initializing ?
                 sphViscosityStoredSampleTimestep(
                     rung, parameters.viscosityBaseTimestep, 0.0, parameters.globalTimestep) :
                 elapsed;
-            if (!sphEncodeDivergence(history, diagnostic.pendingDivergence, sampleTimestep)) {
+            if (!parameters.accelerationGradientViscosity &&
+                !sphEncodeDivergence(history, diagnostic.pendingDivergence, sampleTimestep)) {
                 THROW_ERROR("SPH timestep-scaled divergence exceeds finite float16 storage\n");
             }
             if (elapsed == 0.0) {

@@ -142,6 +142,9 @@ struct TreeCreateReturn {
 };
 
 struct TreeCreateParameters {
+    // Diagnostic full-source solve; preserve rung partitions by restoring any
+    // temporary particle permutation after the force walk.
+    bool allParticles = false;
     int minRung{};
     double theta{};
     ParticleInteger parallelParticleThreshold{};
@@ -155,6 +158,7 @@ struct TreeCreateParameters {
     TreeCreateParameters(int minRung, double theta, double hmax);
     template <class A>
     void serialize(A&& arc, unsigned) {
+        arc & allParticles;
         arc & parallelParticleThreshold;
         arc & doLeafSizes;
         arc & leafPushed;

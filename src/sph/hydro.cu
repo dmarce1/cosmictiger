@@ -7,6 +7,7 @@
  */
 
 #include <cosmictiger/math/vector3.hpp>
+#include <cosmictiger/sph/conduction.hpp>
 #include <cosmictiger/sph/cuda.hpp>
 #include <cosmictiger/sph/variable_smoothing_lengths.hpp>
 #include <cosmictiger/sph/viscosity/monaghan.hpp>
@@ -224,7 +225,8 @@ __global__ void sphCudaHydro(
             flops += 5;
             Vector3<float> acceleration(0.0f);    // this thread's acceleration sum
             float internalEnergyRate = 0.0f;
-            float viscousHeatingRate = 0.0f;    // this thread's thermal work sum
+            float dissipativeEnergyRate = 0.0f;    // this thread's viscous/conductive sum
+            float conductionExchangeRate = 0.0f;
             float const bulkViscosityCoefficient = parameters.variableViscosity ?
                 data.sourceBulkViscosityCoefficient[particleIndex] :
                 parameters.bulkViscosityCoefficient;
@@ -391,18 +393,35 @@ __global__ void sphCudaHydro(
                     neighborViscousHeating = viscousHeating;
                     flops += sph_flops::kViscosityMu + sph_flops::kArtificialViscosity + 6;
                 }
+                float targetDissipativeEnergyRate = viscousHeating;
+                float neighborDissipativeEnergyRate = neighborViscousHeating;
+                if (parameters.conductionCoefficient > 0.0f) {
+                    float const exchangeRate = sph_conduction::exchangeRate(density,
+                        neighborDensity, soundSpeed, neighborSoundSpeed, sinkKernelSmoothingLength,
+                        neighborSmoothingLength, separationSquared, physicalVelocityDotSeparation,
+                        symmetricGradientFactor, parameters.conductionCoefficient,
+                        viscosityRegularization, smoothingLengthPerEffectiveRadius, scaledGasMass);
+                    float const conductiveEnergyRate =
+                        exchangeRate * (neighborInternalEnergy - internalEnergy);
+                    targetDissipativeEnergyRate += conductiveEnergyRate;
+                    neighborDissipativeEnergyRate -= conductiveEnergyRate;
+                    conductionExchangeRate += exchangeRate;
+                    flops += 27;    // 22 exchange + 5 heating/row-sum operations.
+                }
                 Vector3<float> const pairForce = (pressureForce + viscousForce) * separation;
                 acceleration -= pairForce;
                 if (applyPairKicks &&
+                    parameters.isPairRungDue(max(previousRung, int(neighbor.rung))) &&
                     sphOwnsPairKick(data.sourceIds[particleIndex],
                         data.sourceIds[neighbor.sourceIndex], previousRung, neighbor.rung)) {
                     Vector3<float> const pairAcceleration(
                         -pairForce[kXDimension], -pairForce[kYDimension], -pairForce[kZDimension]);
-                    double const targetEntropyRate = sph_entropy::fromStoredEnergy(
-                        viscousHeating, density, adiabaticIndex, parameters.scaleFactor);
-                    double const neighborEntropyRate =
-                        sph_entropy::fromStoredEnergy(neighborViscousHeating, neighborDensity,
+                    double const targetEntropyRate =
+                        sph_entropy::fromStoredEnergy(targetDissipativeEnergyRate, density,
                             adiabaticIndex, parameters.scaleFactor);
+                    double const neighborEntropyRate =
+                        sph_entropy::fromStoredEnergy(neighborDissipativeEnergyRate,
+                            neighborDensity, adiabaticIndex, parameters.scaleFactor);
                     sphAccumulatePairKick(data.sourcePairUpdates[particleIndex],
                         data.sourcePairUpdates[neighbor.sourceIndex], pairAcceleration,
                         targetEntropyRate, neighborEntropyRate, parameters.hydroKickTimestep);
@@ -412,7 +431,7 @@ __global__ void sphCudaHydro(
                 internalEnergyRate += inverseScaleFactor *
                     variational::pairWork(
                         sinkPressureCoefficient, sinkGradientFactor, velocityDotSeparation);
-                viscousHeatingRate += viscousHeating;
+                dissipativeEnergyRate += targetDissipativeEnergyRate;
                 flops += 54;    // common geometry, pressure, and accumulation
                 maximumCompressionSpeed = fmaxf(maximumCompressionSpeed, -viscosityVelocity);
                 flops += sph_flops::densityKernelOperations(
@@ -424,7 +443,11 @@ __global__ void sphCudaHydro(
             sharedReduceAdd<float, kHydroBlockSize>(acceleration[kYDimension]);
             sharedReduceAdd<float, kHydroBlockSize>(acceleration[kZDimension]);
             sharedReduceAdd<float, kHydroBlockSize>(internalEnergyRate);
-            sharedReduceAdd<float, kHydroBlockSize>(viscousHeatingRate);
+            sharedReduceAdd<float, kHydroBlockSize>(dissipativeEnergyRate);
+            if (parameters.conductionCoefficient > 0.0f) {
+                sharedReduceAdd<float, kHydroBlockSize>(conductionExchangeRate);
+                flops += detail::sphReductionFlops<kHydroBlockSize>();
+            }
             sharedReduceMax<kHydroBlockSize>(maximumCompressionSpeed);
             sharedReduceMax<kHydroBlockSize>(maximumBulkViscosityCoefficient);
             if (parameters.midpointHydro && parameters.phase == 1) {
@@ -436,7 +459,8 @@ __global__ void sphCudaHydro(
                 // density pass has not rebuilt hold NaN, so a stale source cannot pass silently.
                 if (!(sph_volume::isFiniteValue(acceleration.dot(acceleration)) &&
                         sph_volume::isFiniteValue(internalEnergyRate) &&
-                        sph_volume::isFiniteValue(viscousHeatingRate))) {
+                        sph_volume::isFiniteValue(dissipativeEnergyRate) &&
+                        sph_volume::isFiniteValue(conductionExchangeRate))) {
                     printf("SPH variational rates are not finite: smoothingLength=%e density=%e "
                            "ζ=%e\n",
                         sinkKernelSmoothingLength, density, gradHCorrection);
@@ -459,7 +483,7 @@ __global__ void sphCudaHydro(
                 } else {
                     ALWAYS_ASSERT(parameters.phase == 0);
                 }
-                if (applyPairKicks) {
+                if (applyPairKicks && parameters.isPairRungDue(previousRung)) {
                     Vector3<float> const externalAcceleration = sphCompleteAcceleration(parameters,
                         Vector3<Position>(positionX, positionY, positionZ), velocity,
                         Vector3<float>(0.0f), Vector3<float>(0.0f), data.centralAcceleration,
@@ -470,7 +494,11 @@ __global__ void sphCudaHydro(
                 }
                 if (data.sinkAccelerations) {
                     for (int dim = 0; dim < kDimensions; dim++) {
-                        data.sinkAccelerations[sinkIndex][dim] = acceleration[dim];
+                        if (parameters.accelerationGradientViscosity) {
+                            data.sinkAccelerations[sinkIndex][dim] += acceleration[dim];
+                        } else {
+                            data.sinkAccelerations[sinkIndex][dim] = acceleration[dim];
+                        }
                     }
                 }
                 // E=a^2 u and homogeneous work du/dt=-3 H P/rho give
@@ -481,13 +509,13 @@ __global__ void sphCudaHydro(
                 flops += 6;    // Homogeneous thermal expansion; force sources count separately.
                 if (data.sinkInternalEnergyRate) {
                     data.sinkInternalEnergyRate[sinkIndex] =
-                        internalEnergyRate + viscousHeatingRate;
+                        internalEnergyRate + dissipativeEnergyRate;
                     flops += 1;
                 }
                 if (data.sinkEntropyRate) {
                     // Reversible PdV and homogeneous expansion leave A unchanged.
                     data.sinkEntropyRate[sinkIndex] = sph_entropy::fromStoredEnergy(
-                        viscousHeatingRate, density, adiabaticIndex, parameters.scaleFactor);
+                        dissipativeEnergyRate, density, adiabaticIndex, parameters.scaleFactor);
                     flops.doublePrecision += adiabaticIndex == float(5.0 / 3.0) ? 12 : 14;
                 }
                 if (parameters.phase == 1) {
@@ -539,6 +567,11 @@ __global__ void sphCudaHydro(
                         timeStep = fminf(timeStep,
                             parameters.courantFactor / float(monaghan::kViscosityWidthScale) *
                                 internalEnergy / fabsf(internalEnergyRate));
+                    }
+                    // Derived positivity bound, matching the CPU sum over all neighbors.
+                    if (conductionExchangeRate > 0.0f) {
+                        timeStep = fminf(timeStep, 0.5f / conductionExchangeRate);
+                        flops += 1;
                     }
                     ALWAYS_ASSERT(isfinite(timeStep) && timeStep > 0.0f);
                     atomicMin(&reduction->minimumTimestep, timeStep);
@@ -609,6 +642,9 @@ __global__ void sphCudaHydro(
                     }
                     ALWAYS_ASSERT(nextRung < kMaxRung);
                     if (data.proposeRungs) {
+                        if (parameters.retainProposedRungs) {
+                            nextRung = max(nextRung, data.sinkFlags[sinkIndex].proposedRung());
+                        }
                         data.sinkFlags[sinkIndex].setProposedRung(nextRung);
                     } else {
                         data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] = nextRung;

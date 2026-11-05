@@ -147,6 +147,7 @@ constexpr uint32_t kRetiredMonaghanSph = 1;
 constexpr uint32_t kVariationalSph = 2;
 constexpr uint32_t kSphFormationMask = 0xffU;
 constexpr uint32_t kCompactSphLayout = 1U << 24;
+constexpr uint32_t kArtificialConduction = 1U << 25;
 constexpr uint32_t kChemistry = 1U << 11;
 constexpr uint32_t kZPlaneAcceleration = 1U << 12;
 constexpr uint32_t kBalsaraSwitch = 1U << 13;
@@ -464,6 +465,8 @@ uint32_t checkpointFlags(Options const& opts) {
         (opts.analysis.tracers ? kTracers : 0U) | (opts.chemistry.enabled ? kChemistry : 0U) |
         (opts.hydro.enabled && opts.hydro.zPlaneAcceleration != 0.0 ? kZPlaneAcceleration : 0U) |
         (opts.hydro.enabled && opts.hydro.balsaraSwitch ? kBalsaraSwitch : 0U) |
+        (opts.hydro.enabled && opts.hydro.conductionCoefficient > 0.0 ? kArtificialConduction :
+                                                                        0U) |
         (opts.hydro.enabled && opts.hydro.viscosityEvolution != "none" ? kVariableViscosity : 0U) |
         (opts.compute.positionType == "fixed64" ? kFixed64Positions : 0U) |
         (opts.gravity.enabled && opts.gravity.method == "pmmm" ? kParticleMultipoleMesh : 0U) |
@@ -737,6 +740,11 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
             sphParameters.size()) {
             THROW_ERROR("Unable to write SPH checkpoint parameters\n");
         }
+        // Zero conduction preserves the existing SPH checkpoint layout.
+        if ((header.flags & kArtificialConduction) != 0U &&
+            fwrite(&getOptions().hydro.conductionCoefficient, sizeof(double), 1, fp) != 1) {
+            THROW_ERROR("Unable to write SPH conduction coefficient\n");
+        }
         // Optional extension: preserve the historical block and zero-force layout.
         if ((header.flags & kZPlaneAcceleration) != 0U &&
             fwrite(&getOptions().hydro.zPlaneAcceleration, sizeof(double), 1, fp) != 1) {
@@ -857,6 +865,14 @@ DriverParameters readDriverState(FILE* fp) {
             FREAD(sphParameters.data(), sizeof(double), sphParameters.size(), fp);
             if (sphParameters != sphCheckpointParameters(getOptions())) {
                 THROW_ERROR("SPH checkpoint parameters differ from the requested run\n");
+            }
+            if ((header.flags & kArtificialConduction) != 0U) {
+                double conductionCoefficient;
+                FREAD(&conductionCoefficient, sizeof(conductionCoefficient), 1, fp);
+                if (conductionCoefficient != getOptions().hydro.conductionCoefficient) {
+                    THROW_ERROR("SPH checkpoint hydro.conductionCoefficient differs from the "
+                                "requested run\n");
+                }
             }
             if ((header.flags & kZPlaneAcceleration) != 0U) {
                 double acceleration;
@@ -1376,6 +1392,17 @@ void checkpointStateTest() {
     alteredStarOptions = starOptions;
     alteredStarOptions.starFormation.seed ^= uint64_t{1} << 63;
     ALWAYS_ASSERT(starParameters != detail::starFormationCheckpointParameters(alteredStarOptions));
+    auto conductionOptions = getOptions();
+    conductionOptions.hydro.enabled = true;
+    conductionOptions.hydro.conductionCoefficient = 0.0;
+    auto const noConductionHeader = detail::checkpointHeader(conductionOptions);
+    ALWAYS_ASSERT((noConductionHeader.flags & detail::kArtificialConduction) == 0U);
+    conductionOptions.hydro.conductionCoefficient = 0.3;
+    ALWAYS_ASSERT(!detail::checkpointCompatible(noConductionHeader, conductionOptions));
+    auto const conductionHeader = detail::checkpointHeader(conductionOptions);
+    ALWAYS_ASSERT(detail::checkpointCompatible(conductionHeader, conductionOptions));
+    conductionOptions.hydro.conductionCoefficient = 0.0;
+    ALWAYS_ASSERT(!detail::checkpointCompatible(conductionHeader, conductionOptions));
     auto balsaraOptions = getOptions();
     balsaraOptions.hydro.enabled = true;
     balsaraOptions.hydro.balsaraSwitch = true;

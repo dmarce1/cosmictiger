@@ -201,6 +201,8 @@ def checkViscosityRestarts(executable, baseWorkdir):
             name = f"viscosity_{model}_{int(limiter)}"
             options = common + [f"--hydro.viscosityEvolution={model}",
                                 f"--hydro.balsaraSwitch={str(limiter).lower()}"]
+            if model == "none" and not limiter:
+                options += ["--hydro.conductionCoefficient=0.3"]
             reference = prepareCase(baseWorkdir, name)
             runSimulation(options + ["--run.maxIterations=2"], reference, "run.log")
             checkpoint = reference / "checkpoint.1"
@@ -241,6 +243,9 @@ def checkViscosityRestarts(executable, baseWorkdir):
                 mutations = {"model": "--hydro.viscosityEvolution=" + (
                     "morrisAndMonaghan" if model == "none" else "none"),
                              "beta": "--hydro.viscosityBeta=3"}
+                if model == "none":
+                    mutations.update({"conduction_off": "--hydro.conductionCoefficient=0",
+                                      "conduction_changed": "--hydro.conductionCoefficient=0.6"})
                 if model == "morrisAndMonaghan":
                     mutations.update({"floor": "--hydro.viscosityAlphaMin=0.2",
                                       "decay": "--hydro.viscosityDecay=0.3"})
@@ -265,6 +270,7 @@ def checkViscosityRestarts(executable, baseWorkdir):
                         "Checkpoint physics, particle layout or integrator differs",
                         "SPH checkpoint parameters differ",
                         "SPH checkpoint variable-viscosity parameters differ",
+                        "SPH checkpoint hydro.conductionCoefficient differs",
                     )
                     if not any(diagnostic in output for diagnostic in diagnostics):
                         raise RuntimeError(f"{name}/{label} lacked a viscosity compatibility diagnostic")

@@ -25,6 +25,7 @@
 #include <cosmictiger/gravity/kick_cuda_kernel.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/particles.hpp>
+#include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/time_integration.hpp>
 #endif
 
@@ -493,13 +494,15 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     eindices[workitems.size()] = ecount;
     CudaKickData data;
 #if COSMICTIGER_WITH_SPH
-    data.midpointHydro = !kparams.forceOnly && sphMidpointEnabled();
+    data.midpointHydro = !kparams.forceOnly && !kparams.sphAccelerationOnly && sphMidpointEnabled();
+    data.sphStageAccelerations = kparams.sphAccelerationOnly ? sphStageAccelerations() : nullptr;
 #endif
     for (int dim = 0; dim < kDimensions; ++dim) {
         data.globalAcceleration[dim] = (kparams.globalTimestep || kparams.deferGasOpening) ?
             gravityGlobalAcceleration(dim) :
             nullptr;
     }
+    data.deferredGasOpening = kparams.deferHydroOpening ? gravityDeferredGasOpeningData() : nullptr;
     data.x = devX;
     data.y = devY;
     data.z = devZ;

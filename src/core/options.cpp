@@ -120,6 +120,18 @@ bool isPositiveFloatOption(double value) {
     return isFiniteFloatOption(value) && value >= std::numeric_limits<float>::min();
 }
 
+void validateConduction(Options const& opts) {
+    if (!isFiniteOption(opts.hydro.conductionCoefficient) ||
+        opts.hydro.conductionCoefficient < 0.0) {
+        throwOptionError("hydro.conductionCoefficient must be finite and nonnegative\n");
+    }
+    if (!isFiniteFloatOption(opts.hydro.conductionCoefficient) ||
+        (opts.hydro.conductionCoefficient > 0.0 &&
+            !isPositiveFloatOption(opts.hydro.conductionCoefficient))) {
+        throwOptionError("hydro.conductionCoefficient must be representable in single precision\n");
+    }
+}
+
 void validateViscosityStorage(Options const& opts) {
     double coefficient;
     char const* option;
@@ -313,6 +325,7 @@ void setOptions(Options const& opts) {
     detail::validateCudaBackends(opts);
     detail::validateHydroMethod(opts);
     detail::validateViscosityStorage(opts);
+    detail::validateConduction(opts);
     detail::validateFlatCosmology(opts);
     detail::validateCooling(opts);
     detail::validateStarFormation(opts);
@@ -577,6 +590,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"hydro.viscosityAlpha", options.hydro.bulkViscosityCoefficient},
         {"hydro.viscosityBeta", options.hydro.vonNeumannRichtmyerCoefficient},
         {"hydro.viscosityEpsilon", options.hydro.viscosityEpsilon},
+        {"hydro.conductionCoefficient", options.hydro.conductionCoefficient},
         {"hydro.balsaraSwitch", options.hydro.balsaraSwitch},
         {"hydro.viscosityEvolution", options.hydro.viscosityEvolution},
         {"hydro.viscosityAlphaMin", options.hydro.minimumBulkViscosityCoefficient},
@@ -972,6 +986,9 @@ bool processOptions(int argc, char* argv[]) {
         "cullenAndDehnen and hu_etal, constant for none and priceEtAl")("hydro.viscosityEpsilon",
         po::value<double>(&opts.hydro.viscosityEpsilon)->default_value(0.01),
         "viscosity regularization relative to the calibrated radius sqrt(5/6) effectiveRadius")(
+        "hydro.conductionCoefficient",
+        po::value<double>(&opts.hydro.conductionCoefficient)->default_value(0.0),
+        "Monaghan artificial thermal conduction coefficient g; zero disables conduction")(
         "hydro.balsaraSwitch", po::value<bool>(&opts.hydro.balsaraSwitch),
         "Balsara shear suppression: defaults to true for none/morrisAndMonaghan and false for "
         "cullenAndDehnen/hu_etal/priceEtAl; explicit true adds redundant shear suppression")(
@@ -1642,6 +1659,7 @@ bool processOptions(int argc, char* argv[]) {
             "hydro.viscosityAlpha and hydro.viscosityBeta must be finite and nonnegative; "
             "hydro.viscosityEpsilon must be finite and positive\n");
     }
+    detail::validateConduction(opts);
     if (opts.hydro.viscosityEvolution != "none" &&
         opts.hydro.viscosityEvolution != "morrisAndMonaghan" &&
         opts.hydro.viscosityEvolution != "cullenAndDehnen" &&

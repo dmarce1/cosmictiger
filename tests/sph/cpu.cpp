@@ -26,6 +26,7 @@
 #include <cosmictiger/sph/cpu.hpp>
 #include <cosmictiger/sph/viscosity/balsara.hpp>
 #include <cosmictiger/sph/viscosity/monaghan.hpp>
+#include <tests/sph/conduction_cases.hpp>
 #include <tests/sph/global_timestep_cases.hpp>
 #include <tests/sph/midpoint_cases.hpp>
 #include <tests/sph/pair_kick_cases.hpp>
@@ -3203,4 +3204,9 @@ TEST_F(SphCpuTest, EntropyProduction) {
     data.sinkInternalEnergyRate = nullptr;
     sphCpuHydro(fixture.params_, data, 0);
     EXPECT_GT(rates[0], 0.0f);
+}
+
+TEST_F(SphCpuTest, ArtificialConduction) {
+    detail::Fixture fixture(2, 2);
+    detail::testConductionPair(fixture);
 }

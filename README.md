@@ -286,7 +286,7 @@ The conversion utilities use the same grouping style:
 
 ## SPH
 
-The gas solver evolves density and internal energy, using the
+The gas solver reconstructs density and evolves canonical entropy, using the
 [variational pressure operator](docs/variational_sph.md) with grad-H corrections
 for all SPH runs. It uses Monaghan artificial viscosity, or Phantom's directed
 viscous-pressure force with `hydro.viscosityEvolution=priceEtAl`, alongside FMM or
@@ -302,6 +302,17 @@ hierarchical gravity retains its signed kick ladder. Chemistry and star formatio
 are not yet supported with hierarchical SPH. See the
 [SPH octree design](docs/sph_octree_plan.md).
 Select SIMD CPU SPH with `--hydro.cuda=false` or CUDA SPH with `--hydro.cuda=true`.
+Positive-duration hydro events use two-call explicit-midpoint RK2 by default,
+with no legacy one-call integration option. Each stage exchanges equal and
+opposite pair impulses on the finer neighbor's timestep, including recoil on
+coarse neighbors. Gravity and hydro remain separate driver-scheduled operators.
+See the [cross-rung equations and integration contract](docs/sph_rk2_time_integration.md)
+for the chronological schedule, shared stage snapshots, conservation properties,
+and accuracy conditions. The smooth fixed-coefficient hydro update is second
+order; retained viscosity-switch projections and split cooling/source updates
+have separate accuracy limitations. Focused CPU, CUDA and two-rank MPI checks,
+including temporal refinement and restart, passed; the linked contract records
+their scope and numerical limits.
 Particle drift selects its backend with `drift.cuda`: the CPU path uses SIMD position updates
 and HPX workers, including rung filtering, glass damping, and lightcone crossings.
 CPU runs can also use a build configured with `COSMICTIGER_WITH_CUDA=OFF`.
@@ -335,7 +346,12 @@ bulk-energy relaxation, and stochastic whole-particle conversion. Converted
 stars retain gravitational interactions. See [star formation](docs/star_formation.md)
 for source ordering, thresholds and configuration. The former reaction networks,
 manual species fractions, Anninos controls and wind options are not accepted.
-Diffusion and conduction remain unsupported. Their former options, the obsolete `hydro.chemistry` switch,
+Optional artificial thermal conduction is controlled by
+`hydro.conductionCoefficient` (Monaghan's dimensionless g), default `0`/off.
+For example, `--hydro.conductionCoefficient=0.5` enables conservative pairwise
+energy exchange in the existing SPH kick; see [artificial conduction](docs/monaghan_sph.md#optional-artificial-thermal-conduction).
+Physical conduction and general diffusion remain unsupported. The former boolean
+`hydro.conduction`/`hydro.diffusion` options, the obsolete `hydro.chemistry` switch,
 `hydro.yReflect`, and `gravity.sphSmoothing` are no longer accepted, including
 false entries in older INI files. Gas smoothing lengths remain adaptive;
 FMM gravity uses one fixed comoving radius for gas and dark matter. With SPH on,

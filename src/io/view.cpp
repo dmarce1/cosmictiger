@@ -563,7 +563,7 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
                 });
             writeViewText(db, "divv_convention",
                 "Stored peculiar velocity gradient G = div_x(a v_pec) = a_sample^2 div_r(v_pec); "
-                "last completed endpoint sample, excluding Hubble flow.");
+                "current output-coordinate sample, excluding Hubble flow.");
         }
         writeViewField(db, metadata, "rho", "mesh", gas, densityUnit,
             [&conversion](
@@ -886,7 +886,7 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
                 [](SphParticleInfo const& particle) { return double(particle.divergence); });
             writeViewText(db, "divv_convention",
                 "Stored peculiar velocity gradient G = div_x(a v_pec) = a_sample^2 div_r(v_pec); "
-                "last completed endpoint sample, excluding Hubble flow.");
+                "current output-coordinate sample, excluding Hubble flow.");
         }
         checkViewWrite(DBSetDir(db, ".."), "..");
     }

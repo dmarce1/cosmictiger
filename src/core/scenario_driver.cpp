@@ -20,6 +20,7 @@
 #if COSMICTIGER_ENABLE_FMM
 #include <cosmictiger/gravity/global_fmm/execution.hpp>
 #endif
+#include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
 #endif
 #include <cosmictiger/io/checkpoint.hpp>
@@ -276,6 +277,12 @@ void runFixedScenario() {
                 std::min(globalStepCap, state.globalHydroTimestep) :
                 globalStepCap;
             ForceStepResult result;
+            bool deferHydroOpening = false;
+#if COSMICTIGER_WITH_SPH
+            int const coincidentHydroRung = global ? -1 : sphMidpointRung(state.itime);
+            deferHydroOpening = midpointHydro && baseOptions.gravity.enabled &&
+                coincidentHydroRung >= 0 && sphMidpointTargetCount(coincidentHydroRung) != 0;
+#endif
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
             if (hierarchical) {
                 int activeRung = std::max(minimumRung, state.minrung0);
@@ -283,22 +290,30 @@ void runFixedScenario() {
                 schedule.endTime = stageEnd;
                 result = kickStepHierarchical(activeRung, state.maxRung, 1.0, 0.0, state.tau,
                     baseTimestep, baseOptions.gravity.openingAngle, &state.energies, state.minrung0,
-                    fullEvaluation, nullptr, true, 0.0, gravityErrorStep, false, schedule);
+                    fullEvaluation, nullptr, true, 0.0, gravityErrorStep, false, schedule,
+                    deferHydroOpening);
             } else
 #endif
             {
                 result = advanceForces(minimumRung, 1.0, 0.0, state.tau, baseTimestep,
                     baseOptions.gravity.openingAngle, state.iter == 0, fullEvaluation,
-                    state.energies, gravityErrorStep, false, state.globalTimestep, forceStepCap);
+                    state.energies, gravityErrorStep, false, state.globalTimestep, forceStepCap, {},
+                    deferHydroOpening);
             }
 #if COSMICTIGER_WITH_SPH
             if (midpointHydro && !global) {
                 int const hydroRung = sphMidpointRung(state.itime);
                 if (hydroRung >= 0) {
-                    // Gravity close/open kicks at this boundary precede the
-                    // coincident coarse hydro pulse; viscosity is first order.
+                    // Keep the coincident coarse hydro between finer gravity
+                    // closing and opening half-kicks in the driver sequence.
                     sphMidpointStep(hydroRung, state.tau, std::ldexp(baseTimestep, -hydroRung),
                         baseTimestep, 1.0, 0.0, state.energies);
+#if COSMICTIGER_WITH_GRAVITY
+                    if (deferHydroOpening) {
+                        gravityFinishDeferredGasOpening();
+                        state.energies.tckin = particlesSumEnergies().kin;
+                    }
+#endif
                 }
             }
 #endif

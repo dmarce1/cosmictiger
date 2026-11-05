@@ -273,6 +273,11 @@ void particlesGlobalReadPosAndGroup(ParticleGlobalRange range, Position* x, Posi
 ParticleInteger particlesSort(Pair<ParticleInteger> rng, double xm, int xdim);
 // Swap all attached fields without reading uninitialized saved-force values.
 void particlesSwap(ParticleInteger first, ParticleInteger second);
+// Local-only temporary geometric sorting. No migration, owned-population change,
+// or gas sorting may intervene. Ending restores every base-particle field and gas inverse
+// index to its original order, leaving persisted hierarchical rung ranges valid.
+void particlesBeginTemporarySort();
+void particlesEndTemporarySort();
 GadgetIoHeader particlesReadGadget4Header(std::string const&);
 GadgetIoHeader particlesReadGadget4(std::string);
 #ifndef __CUDACC__

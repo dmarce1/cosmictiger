@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <exception>
 #include <memory>
 #include <stack>
 #include <utility>
@@ -16,10 +17,16 @@
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
+#if COSMICTIGER_ENABLE_FMM
+#include <cosmictiger/gravity/global_fmm/distributed_tree.hpp>
+#include <cosmictiger/gravity/global_fmm/execution.hpp>
+#endif
 #include <cosmictiger/gravity/kick_walk.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
+#include <cosmictiger/sph/particles.hpp>
+#include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/time_integration.hpp>
 #endif
 
@@ -28,6 +35,17 @@ namespace detail {
 static thread_local std::stack<KickLists> localLists;
 static Array<float*, kDimensions> globalAccelerations{};
 static size_t globalAccelerationCount = 0;
+
+enum class GasOpeningState { Disabled, Collecting, Sealed };
+struct GasOpeningImpulse {
+    ParticleInteger particleIndex;
+    Vector3<float> velocityIncrement;
+};
+static GasOpeningState gasOpeningState = GasOpeningState::Disabled;
+static Vector3<float>* gasOpeningIncrements = nullptr;
+static size_t gasOpeningCount = 0;
+static size_t gasOpeningParticleCount = 0;
+static Vector<GasOpeningImpulse> gasOpeningImpulses;
 
 KickLists kickAcquireLists() {
     if (localLists.empty()) {
@@ -200,4 +218,254 @@ double gravityFinishGlobalKick(double timestep) {
         kinetic += future.get();
     }
     return kinetic;
+}
+
+HPX_PLAIN_ACTION(gravityBeginDeferredGasOpening, GravityBeginDeferredGasOpeningAction);
+HPX_PLAIN_ACTION(gravitySealDeferredGasOpening, GravitySealDeferredGasOpeningAction);
+HPX_PLAIN_ACTION(gravityFinishDeferredGasOpening, GravityFinishDeferredGasOpeningAction);
+HPX_PLAIN_ACTION(gravityDiscardDeferredGasOpening, GravityDiscardDeferredGasOpeningAction);
+
+bool gravityGasOpeningDeferred() {
+    return detail::gasOpeningState == detail::GasOpeningState::Collecting;
+}
+
+Vector3<float>* gravityDeferredGasOpeningData() {
+    ALWAYS_ASSERT(gravityGasOpeningDeferred());
+    return detail::gasOpeningIncrements;
+}
+
+void gravityBeginDeferredGasOpening() {
+    ALWAYS_ASSERT(detail::gasOpeningState == detail::GasOpeningState::Disabled);
+    Vector<hpx::future<void>> futures;
+    for (auto const& child : hpxChildren()) {
+        futures.push_back(hpx::async<GravityBeginDeferredGasOpeningAction>(child));
+    }
+    try {
+#if COSMICTIGER_WITH_SPH
+        ALWAYS_ASSERT(sphMidpointEnabled() && !usesGlobalIntegration(getOptions().run));
+        size_t const count = sphParticlesSize();
+        auto* increments = count == 0 ?
+            nullptr :
+            static_cast<Vector3<float>*>(allocateManagedMemory(count * sizeof(Vector3<float>)));
+        if (count != 0) {
+            std::fill_n(increments, count, Vector3<float>(0.0f));
+        }
+        detail::gasOpeningIncrements = increments;
+        detail::gasOpeningCount = count;
+        detail::gasOpeningState = detail::GasOpeningState::Collecting;
+#else
+        THROW_ERROR("Deferred gas opening requires SPH support\n");
+#endif
+    } catch (...) {
+        auto const failure = std::current_exception();
+        hpx::wait_all(futures.begin(), futures.end());
+        std::rethrow_exception(failure);
+    }
+    hpx::wait_all(futures.begin(), futures.end());
+    for (auto& future : futures) {
+        future.get();
+    }
+}
+
+void gravitySealDeferredGasOpening() {
+    ALWAYS_ASSERT(gravityGasOpeningDeferred());
+    Vector<hpx::future<void>> futures;
+    for (auto const& child : hpxChildren()) {
+        futures.push_back(hpx::async<GravitySealDeferredGasOpeningAction>(child));
+    }
+    try {
+#if COSMICTIGER_WITH_SPH
+        ALWAYS_ASSERT(detail::gasOpeningCount == size_t(sphParticlesSize()));
+        detail::gasOpeningImpulses.reserve(detail::gasOpeningCount);
+        for (ParticleInteger gasIndex = 0; gasIndex < sphParticlesSize(); ++gasIndex) {
+            auto const increment = detail::gasOpeningIncrements[gasIndex];
+            if (increment[kXDimension] != 0.0f || increment[kYDimension] != 0.0f ||
+                increment[kZDimension] != 0.0f) {
+                detail::gasOpeningImpulses.push_back(
+                    {sphParticlesParticleIndex(gasIndex), increment});
+            }
+        }
+#endif
+        freeManagedMemory(detail::gasOpeningIncrements);
+        detail::gasOpeningIncrements = nullptr;
+        detail::gasOpeningCount = 0;
+        detail::gasOpeningParticleCount = particlesOwnedSize();
+        detail::gasOpeningState = detail::GasOpeningState::Sealed;
+    } catch (...) {
+        auto const failure = std::current_exception();
+        hpx::wait_all(futures.begin(), futures.end());
+        std::rethrow_exception(failure);
+    }
+    hpx::wait_all(futures.begin(), futures.end());
+    for (auto& future : futures) {
+        future.get();
+    }
+}
+
+KickReturn gravityFinishDeferredGasOpening() {
+    ALWAYS_ASSERT(detail::gasOpeningState == detail::GasOpeningState::Sealed);
+    ALWAYS_ASSERT(detail::gasOpeningParticleCount == size_t(particlesOwnedSize()));
+    Vector<hpx::future<KickReturn>> futures;
+    for (auto const& child : hpxChildren()) {
+        futures.push_back(hpx::async<GravityFinishDeferredGasOpeningAction>(child));
+    }
+    KickReturn result;
+    // Derived split ordering at a coincident hydro event:
+    // Δv_G = Σ_l s_l (Δτ_l/2) a_l;  v_after = v_after_H + Δv_G.
+    // The signed hierarchical ladder supplies s_l; traditional gravity has one
+    // opening term. Accumulation changes no momentum until the hydro operator
+    // has completed. Diagnostic corrections retain the pre-opening state.
+    // Δv_G -> impulse.velocityIncrement; v_after_H -> before; v_after -> after.
+    for (auto const& impulse : detail::gasOpeningImpulses) {
+        ParticleInteger const index = impulse.particleIndex;
+        ALWAYS_ASSERT(particlesType(index) == kSphType);
+        Vector3<float> before;
+        Vector3<float> after;
+        for (int dimension = 0; dimension < kDimensions; ++dimension) {
+            before[dimension] = particlesVel(dimension, index);
+            after[dimension] = before[dimension] + impulse.velocityIncrement[dimension];
+            particlesVel(dimension, index) = after[dimension];
+        }
+        double const mass = particlesMass(index);
+        double const kineticChange = 0.5 * mass * (after.dot(after) - before.dot(before));
+        result.dkin += kineticChange;
+        result.darkMatterKineticCorrection -= kineticChange;
+        result.darkMatterXMomentumCorrection += mass * (before[kXDimension] - after[kXDimension]);
+        result.darkMatterYMomentumCorrection += mass * (before[kYDimension] - after[kYDimension]);
+        result.darkMatterZMomentumCorrection += mass * (before[kZDimension] - after[kZDimension]);
+        result.darkMatterMomentumNormCorrection += mass * (before.norm() - after.norm());
+        result.maxRung = std::max(result.maxRung, int(particlesRung(index)));
+    }
+    addCpuFlops(3 * detail::gasOpeningImpulses.size(), FlopPrecision::Single);
+    Vector<detail::GasOpeningImpulse>().swap(detail::gasOpeningImpulses);
+    detail::gasOpeningParticleCount = 0;
+    detail::gasOpeningState = detail::GasOpeningState::Disabled;
+    hpx::wait_all(futures.begin(), futures.end());
+    for (auto& future : futures) {
+        result += future.get();
+    }
+    return result;
+}
+
+void gravityDiscardDeferredGasOpening() {
+    Vector<hpx::future<void>> futures;
+    for (auto const& child : hpxChildren()) {
+        futures.push_back(hpx::async<GravityDiscardDeferredGasOpeningAction>(child));
+    }
+    freeManagedMemory(detail::gasOpeningIncrements);
+    detail::gasOpeningIncrements = nullptr;
+    detail::gasOpeningCount = 0;
+    detail::gasOpeningParticleCount = 0;
+    Vector<detail::GasOpeningImpulse>().swap(detail::gasOpeningImpulses);
+    detail::gasOpeningState = detail::GasOpeningState::Disabled;
+    hpx::wait_all(futures.begin(), futures.end());
+    for (auto& future : futures) {
+        future.get();
+    }
+}
+
+#if COSMICTIGER_ENABLE_FMM && COSMICTIGER_WITH_SPH
+namespace detail {
+void beginSphGravitySort();
+void endSphGravitySort();
+}    // namespace detail
+
+HPX_PLAIN_ACTION(detail::beginSphGravitySort, BeginSphGravitySortAction);
+HPX_PLAIN_ACTION(detail::endSphGravitySort, EndSphGravitySortAction);
+
+namespace detail {
+
+void beginSphGravitySort() {
+    Vector<hpx::future<void>> futures;
+    for (auto const& child : hpxChildren()) {
+        futures.push_back(hpx::async<BeginSphGravitySortAction>(child));
+    }
+    try {
+        ALWAYS_ASSERT(sphParticlesSize() == 0 || sphStageAccelerations() != nullptr);
+        particlesBeginTemporarySort();
+    } catch (...) {
+        auto const failure = std::current_exception();
+        hpx::wait_all(futures.begin(), futures.end());
+        std::rethrow_exception(failure);
+    }
+    hpx::wait_all(futures.begin(), futures.end());
+    for (auto& future : futures) {
+        future.get();
+    }
+}
+
+void endSphGravitySort() {
+    Vector<hpx::future<void>> futures;
+    for (auto const& child : hpxChildren()) {
+        futures.push_back(hpx::async<EndSphGravitySortAction>(child));
+    }
+    particlesEndTemporarySort();
+    hpx::wait_all(futures.begin(), futures.end());
+    for (auto& future : futures) {
+        future.get();
+    }
+}
+
+}    // namespace detail
+#endif
+
+void gravityRefreshSphAcceleration(double theta) {
+#if COSMICTIGER_ENABLE_FMM && COSMICTIGER_WITH_SPH
+    auto const& options = getOptions();
+    ALWAYS_ASSERT(hpxRank() == 0 && options.hydro.enabled && options.gravity.enabled &&
+        options.gravity.method == "fmm" && !gravityGasOpeningDeferred());
+    // Derived canonical-force conversion (docs/monaghan_sph.md, cosmological
+    // conventions): w = a v_pec, dt = a dτ, dw/dτ = a² g_phys;
+    // g_phys = −G m Δx/(a² |Δx|³), hence dw/dτ = −G m Δx/|Δx|³.
+    // No additional 1/a belongs on this gm-scaled gravity force. The hydro
+    // pressure force's m/a factor follows its separate E = a² u conversion.
+    // w -> stored particlesVel; Gm -> parameters.gm; dw/dτ -> sphStageAccelerations.
+    // The gas buffer belongs to the current hydro stage. A full-source force
+    // tree temporarily permutes base particles while keeping gas records fixed;
+    // restore that permutation before any retained SPH tree/stage resumes.
+    // The hierarchy's rungBegin/rungBegins are never modified.
+    try {
+        detail::beginSphGravitySort();
+        particlesCacheFree();
+        TreeCreateParameters treeParameters(0, theta, 0.0);
+        treeParameters.allParticles = true;
+        treeCreate(treeParameters);
+        KickParameters parameters;
+        parameters.sphAccelerationOnly = true;
+        parameters.htime = false;
+        parameters.ascending = parameters.descending = parameters.top = false;
+        parameters.doPhi = false;
+        parameters.gpu = options.gravity.cuda;
+        parameters.minLevel = treeParameters.minLevel;
+        parameters.minRung = 0;
+        parameters.gm = options.gravity.gm;
+        parameters.gravitySmoothingLength = options.gravity.smoothingLength;
+        parameters.theta = theta;
+        parameters.nodeLoad = 0.0f;
+        parameters.firstCall = true;
+        ExpansionBuffer expansion;
+        expansion.zero();
+        Vector3<Position> center;
+        for (int dimension = 0; dimension < kDimensions; ++dimension) {
+            center[dimension] = 0.0;
+        }
+        TreeId root;
+        root.proc = 0;
+        root.index = 0;
+        Vector<TreeId> checks;
+        checks.push_back(root);
+        kick(parameters, expansion, center, root, checks, checks, nullptr);
+        treeDestroy();
+        particlesCacheFree();
+        detail::endSphGravitySort();
+    } catch (...) {
+        auto const failure = std::current_exception();
+        treeDestroy();
+        particlesCacheFree();
+        detail::endSphGravitySort();
+        std::rethrow_exception(failure);
+    }
+#else
+    THROW_ERROR("SPH gravity sensor requires FMM and SPH support\n");
+#endif
 }

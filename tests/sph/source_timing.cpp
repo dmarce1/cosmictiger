@@ -100,6 +100,8 @@ std::vector<SourceTimingRecord> sourceTimingSnapshot() {
     requireSourceTiming(sphParticlesEntropyInitialized, "entropy was not canonical");
     requireSourceTiming(sphParticlesViscosityDiagnostics == nullptr,
         "temporary viscosity diagnostics survived source evaluation");
+    requireSourceTiming(!sphParticlesViscosityDiagnosticsActive(),
+        "temporary viscosity diagnostic scope survived source evaluation");
     requireSourceTiming(sphParticlesThermalScaleFactor == kSourceScale,
         "source estimate lost the exact endpoint scale");
     std::vector<SourceTimingRecord> records;
@@ -218,6 +220,10 @@ void verifySourceTiming(std::vector<SourceTimingRecord> const& before,
                         "M&M endpoint failed to evolve the coefficient over its completed "
                         "interval");
                 }
+                if (getOptions().hydro.viscosityGradientSwitch()) {
+                    requireSourceTiming(current.bulkViscosity == previous.bulkViscosity,
+                        "source close replayed a gradient-switch RK alpha update");
+                }
             }
             if (!selected) {
                 requireSourceTiming(current.entropy == previous.entropy,
@@ -275,6 +281,17 @@ void sphSourceTimingTest() {
         sphMidpointStep(-1, 0.0, -1.0, baseTimestep, detail::kSourceScale, 0.0, energies);
         sphParticlesPrepareThermodynamics(detail::kSourceScale, false);
         auto const beforeMidpoint = detail::collectSourceTiming();
+        if (options.hydro.viscosityGradientSwitch()) {
+            Float16Storage sentinel;
+            ALWAYS_ASSERT(sphEncodeDivergence(sentinel, -0.5f, 1.0));
+            bool publishedCurrentDivergence = false;
+            for (auto const& record : beforeMidpoint) {
+                publishedCurrentDivergence =
+                    publishedCurrentDivergence || record.viscosityHistory != sentinel.bits;
+            }
+            detail::requireSourceTiming(publishedCurrentDivergence,
+                "diagnostic density refresh retained the deliberately stale divergence sample");
+        }
         sphMidpointStep(2, baseTimestep / 8.0, baseTimestep / 4.0, baseTimestep,
             detail::kSourceScale, 0.0, energies);
         // Hydro kernels use a float scale. Restore the fixture's double context
@@ -283,9 +300,13 @@ void sphSourceTimingTest() {
         auto const afterMidpoint = detail::collectSourceTiming();
         for (size_t index = 0; index < beforeMidpoint.size(); ++index) {
             detail::requireSourceTiming(
-                afterMidpoint[index].bulkViscosity == beforeMidpoint[index].bulkViscosity &&
-                    afterMidpoint[index].viscosityHistory == beforeMidpoint[index].viscosityHistory,
-                "hydro midpoint advanced endpoint viscosity state");
+                afterMidpoint[index].viscosityHistory == beforeMidpoint[index].viscosityHistory,
+                "hydro midpoint committed a diagnostic divergence sample");
+            if (!options.hydro.viscosityGradientSwitch() || beforeMidpoint[index].rung != 2) {
+                detail::requireSourceTiming(
+                    afterMidpoint[index].bulkViscosity == beforeMidpoint[index].bulkViscosity,
+                    "hydro midpoint advanced endpoint-only or inactive viscosity");
+            }
         }
         for (int event = 1; event <= 4; ++event) {
             // Arm a coarse particle after its first close. The intervening fine
@@ -308,9 +329,23 @@ void sphSourceTimingTest() {
             auto const diagnostic = detail::collectSourceTiming();
             for (size_t index = 0; index < after.size(); ++index) {
                 detail::requireSourceTiming(
-                    diagnostic[index].bulkViscosity == after[index].bulkViscosity &&
-                        diagnostic[index].viscosityHistory == after[index].viscosityHistory,
+                    diagnostic[index].bulkViscosity == after[index].bulkViscosity,
                     "diagnostic density refresh replayed an endpoint viscosity update");
+                detail::requireSourceTiming(
+                    (diagnostic[index].viscosityHistory & 0x7c00U) != 0x7c00U,
+                    "diagnostic density refresh published a nonfinite divergence");
+            }
+            if (event == 1 && options.hydro.viscosityGradientSwitch()) {
+                sphMidpointStep(-1, event * baseTimestep / 4.0, -1.0, baseTimestep,
+                    detail::kSourceScale, 0.0, energies);
+                sphParticlesPrepareThermodynamics(detail::kSourceScale, false);
+                auto const repeated = detail::collectSourceTiming();
+                for (size_t index = 0; index < diagnostic.size(); ++index) {
+                    detail::requireSourceTiming(
+                        repeated[index].bulkViscosity == diagnostic[index].bulkViscosity &&
+                            repeated[index].viscosityHistory == diagnostic[index].viscosityHistory,
+                        "repeated diagnostic density refresh was not idempotent");
+                }
             }
         }
         detail::sourceTimingAll<SetSourceTimingRatesAction>(uint64_t{0});
@@ -328,6 +363,6 @@ void sphSourceTimingTest() {
     setOptions(savedOptions);
     std::cout << "SPH source timing passed: old-rung intervals, inactive gas, own-close "
                  "conversion, raw global interval, exact endpoint scale, unchanged mechanical "
-                 "state and momentum, and endpoint-only viscosity history\n"
+                 "state and momentum, stage-owned alpha and current divergence output\n"
               << std::flush;
 }

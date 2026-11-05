@@ -84,14 +84,20 @@ Particle drift independently uses the CPU when `drift.cuda=false`. Each availabl
 initialization or analysis backend has its own CUDA selector. All selectors default
 to `false`; the complete executable can run without a CUDA device.
 Global, traditional, and hierarchical integration share the chronological
-midpoint hydro operator. Gravity applies its own kicks. Each hydro event freezes
-its source velocities, entropies, densities and viscosity coefficients before any
+two-call explicit-midpoint RK2 hydro operator; it is the only positive-duration
+hydro integration scheme. Gravity applies its own driver-scheduled kicks and
+never invokes SPH from a gravity kick. Each of the two hydro stages freezes its
+source velocities, entropies, densities and viscosity coefficients before any
 CPU/CUDA worker changes particles. The finer-rung endpoint owns each interacting
 pair; its impulse is accumulated with equal and opposite signs, including the
-reaction on an inactive neighbor. Event-local velocity and entropy increments are
-returned to their owning MPI ranks and committed after the force pass. Timestep
-selection retains only the scalar hydro rung bound (or the global raw timestep).
-No per-gas acceleration or entropy-rate array survives an event. Enabled cooling
+reaction on an inactive neighbor. Event-local velocity and entropy increments
+are returned to their owning MPI ranks and summed before publishing the predictor
+or the final state. A gas-indexed acceleration vector and entropy-rate scalar,
+plus sparse baseline records for recipients, exist only within the event.
+Timestep selection retains the scalar hydro rung bound (or the global raw
+timestep); force-rate scratch is released before migration and checkpoints.
+See [the complete time-integration contract](sph_rk2_time_integration.md) for the
+equations and current validation limits. Enabled cooling
 and star formation run at each gas particle's completed interval endpoint;
 mesh gravity coupled to SPH is currently rejected.
 
@@ -221,7 +227,7 @@ for Morris–Monaghan's endpoint compression source.
 
 When extra Balsara is explicitly enabled, Cullen–Dehnen, Hu and Price obtain both derivatives from the same
 matrix-corrected velocity gradient \(\mathbf V\) already reconstructed for their
-endpoint viscosity update. In canonical cosmological variables,
+stage viscosity diagnostics. In canonical cosmological variables,
 
 \[
  \mathbf V=\nabla_{\mathbf x}\mathbf w,\qquad
@@ -245,14 +251,15 @@ passes, encoded as one `uint8_t` per gas particle:
 
 The endpoints zero and one are exact; the maximum absolute rounding error is
 \(1/510\). Evaluation and force/source staging use float. Constant-α and
-Morris–Monaghan runs recompute Balsara from the current midpoint density pass.
-CD, Hu and Price compute it with \(\mathbf V\) at startup and completed own
-endpoints, retaining the factor until the next such reconstruction. Their
-midpoint passes perform neither separate divergence/curl sums nor a new
-\(\mathbf V\) reconstruction. The derivative scratch is then discarded.
+Morris–Monaghan runs recompute Balsara from the baseline and predictor velocity
+states. CD, Hu and Price use matrix-corrected \(\mathbf V\) at those same two
+states. The second hydro evaluation requires the predictor's limiter rather
+than a retained baseline value; updating the limiter does not advance alpha
+again. Gradient scratch is discarded after the event.
 For CD, Hu and Price, the retained byte follows particle reordering, migration
-and checkpoints when Balsara is enabled, preserving the sampled factor without
-an extra gradient reconstruction. Constant-α and Morris–Monaghan factors remain
+and checkpoints when Balsara is enabled, preserving the last sampled factor;
+force stages still refresh it for their current velocity state. Constant-α
+and Morris–Monaghan factors remain
 transient and are recomputed after restart or migration. Checkpoint metadata
 records whether the limiter is enabled and rejects a restart with a different setting.
 Use `--hydro.balsaraSwitch=false` to disable this shear correction.
@@ -319,12 +326,14 @@ and checkpoints; no rate or predictor is stored. It occupies two bytes in IEEE
 binary16, while the update arithmetic uses float. The configured MM minimum, or
 the selected gradient model's maximum, must lie in `[2^-24, 65504]`. Constant-alpha
 viscosity has no per-particle alpha array and keeps its float range. The density
-convergence flag ensures retries do not advance α twice. Updates occur only at
+convergence flag ensures retries do not advance α twice. Morris–Monaghan updates occur only at
 each particle's completed own interval endpoint, before gas rung changes and
 source conversion. Subsequent midpoint force evaluations use the last endpoint's
 α. Startup, semiactive measurements, output preparation and post-source bound
-estimates do not advance α. This endpoint update gives the accepted first-order
-viscosity timing. Silo writes a
+estimates do not advance α. This retained backward-Euler endpoint update is first
+order; it limits the accuracy of the coupled variable-coefficient calculation
+even though the velocity/entropy hydro operator uses RK2. CD, Hu and Price instead
+evaluate their switches at the RK stages, as described below. Silo writes a
 dimensionless `alpha` gas field when viscosity evolution is enabled.
 Morris–Monaghan retains and writes no divergence field; Cullen–Dehnen has
 additional state described below.
@@ -380,58 +389,45 @@ where \(\mathbf S_i=\tfrac12(\mathbf V_i+\mathbf V_i^T)
 (B2), (B4), and (B7), using mass/kernel-gradient weights so they do not read
 densities being updated concurrently on other ranks. A symmetric pseudoinverse
 handles planar or collinear neighborhoods on their resolved subspace.
-The production shock slope uses the first alternative in Appendix B3:
-the change of a particle's measured divergence between two sampling times.
-Cosmological integration follows GADGET-4 by sampling the canonical gradient
-\(G=\nabla_{\mathbf x}\cdot\mathbf w=a^2\theta_{\rm pec}\). With conformal
-time \(d\tau=dt/a\), the locally derived conversion is
+Positive-duration RK2 events use the direct acceleration-gradient alternative
+in Appendix B3. Define the canonical velocity gradient \(\mathbf V\), total
+instantaneous canonical acceleration \(\mathbf F=D\mathbf w/D\tau\), and
+\(G=\operatorname{tr}\mathbf V=a^2\theta_{\rm pec}\). The local conversion to
+the stored switch slope is
 
 \[
- \mathcal D_n=\frac{1}{a_n^2}\frac{DG}{Dt}\simeq
- \frac{G_n-G_{\rm previous}}{a_n^3(\tau_n-\tau_{\rm previous})},
- \qquad
- a_n^4\mathcal D_n\simeq
- a_n\frac{G_n-G_{\rm previous}}{\tau_n-\tau_{\rm previous}}.
+ Q=a\frac{DG}{D\tau}
+   =a\operatorname{tr}(\nabla_{\mathbf x}\mathbf F)
+      -\operatorname{tr}(\mathbf V^2).
 \]
 
-The second expression is the slope passed to the viscosity model in stored
-units. It includes the \(2H\theta_{\rm pec}\) term derived below; it is not
-the finite difference of physical peculiar divergence.
+Here \(\operatorname{tr}(\mathbf V^2)=\sum_{p,q}V_{pq}V_{qp}\), not the sum
+of squared matrix entries. The force diagnostic includes every hydrodynamic
+neighbor, instantaneous gravity and external acceleration, even when a pair's
+impulse is not due at this rung event. The driver supplies gravity diagnostics;
+gravity kicks do not call SPH. Force values are exchanged before reconstructing
+their gradients. CD additionally obtains a current immutable neighbor-sign
+snapshot for equation (17). This requires diagnostic gradient passes beyond
+the two hydro evolution evaluations.
 
-Gradient history and its alpha update are committed at each particle's completed
-interval endpoint, after density convergence and before gas rung changes.
-The old live rung therefore gives the endpoint separation directly. For dyadic
-intervals with base duration \(T\),
+The direct slope replaces differencing stored endpoint samples. It retains the
+canonical cosmological convention, including the \(2H\theta_{\rm pec}\) term
+derived below. CD, Hu and Price update alpha at the RK stages using their
+published projection and decay rules. The predictor uses the half interval;
+the accepted coefficient is recomputed from its saved incoming value over the
+full interval, so the predictor does not cause a second independent decay or
+Hu limiter application. There is no additional completed-endpoint alpha update
+for these three models. Startup and zero-duration estimates do not advance
+alpha through a finite interval. Morris–Monaghan retains its endpoint update.
 
-\[
- \Delta\tau=T\,2^{-r_{\rm live}}.
-\]
-
-Global stepping supplies the actual completed interval. The endpoint difference
-estimates the slope centered on that interval's midpoint but is available only
-at its end; its updated alpha is used by the following hydro kick. This accepted
-viscosity timing is first order. Pressure and viscous pair-force evaluations
-remain at their scheduled midpoints. Startup seeds the initial endpoint sample
-without evolving alpha. Midpoint force solves, output preparation, semiactive
-measurements and post-source timestep estimates do not commit gradient history.
-Repeated density retries read unchanged committed history. No acceleration history
-is needed.
-
-All evolving-alpha models, including Morris–Monaghan, use this endpoint cadence;
-only CD, Hu and Price require divergence history. When cooling or star formation
-is active, the existing endpoint density/gradient pass supplies the update before
-sources run. Without those sources, every evolving-alpha model performs an
-additional endpoint pass. The post-source bound refresh advances neither alpha
-nor history a second time.
-
-CD uses the decoded canonical gradient for the immutable neighbor-sign snapshot
-in equation (17), following the sweep order in Appendix A4. All three gradient
-models share one committed scalar sample; no wrapper, second divergence or
-previous sampled rung is retained. The `divv` output
-key is unchanged and reports decoded canonical \(G\) at the last committed
-endpoint, with inverse-code-time units and explicit convention metadata. The
-previous sample's scale factor is not retained, so output does not divide that
-sample by the current \(a^2\). The locally derived
+The retained compact divergence scalar supports `divv` output and checkpoint
+compatibility; it is not the derivative source for the direct RK-stage sensor.
+All three gradient models share this scalar, with no wrapper, second divergence
+or previous sampled rung. The `divv` output key reports decoded canonical
+\(G\) at the current output coordinates, with inverse-code-time units
+and explicit convention metadata. A density-only output refresh publishes that
+diagnostic without evolving alpha. Output remains canonical \(G\), rather than
+the physical peculiar divergence \(G/a^2\). The locally derived
 dimensionless storage normalization is
 
 \[
@@ -460,11 +456,13 @@ step, so startup normalization need not produce an order-one value.
 
 The history occupies exactly two bytes per gas particle in memory, checkpoints
 and migration, down from eight, in addition to the unchanged two-byte binary16 α.
-Half precision can conceal small changes between samples;
-this is a storage choice, not a property of the published switch. Target α, decay
+Half precision limits the stored diagnostic accuracy; the direct stage slope
+does not subtract those quantized samples. Target α, decay
 rate, limiter and pending divergence are four float scratch fields (sixteen bytes),
-allocated only for a history-updating density event and released after its
-update. Every evolution scheme writes dimensionless `alpha`; selecting `none`
+allocated for gradient-switch diagnostics and released after the event.
+The retained instantaneous target increases and finite-step decay/projection
+rules are not a general second-order integrator for alpha. Every evolution
+scheme writes dimensionless `alpha`; selecting `none`
 allocates neither α evolution state nor divergence state. Under CD, β follows α
 as described above.
 
@@ -506,9 +504,8 @@ enabling it preserves the setting and warns about duplicate shear suppression.
 Pair beta follows alpha as for CD; the existing Monaghan pair operator is retained.
 Hu shares the gradient-state lifecycle, including `divv` output and migration,
 but does not require a neighbor divergence-sign snapshot. Its strong limiter is
-transient and reconstructed with the endpoint/startup velocity gradient. Optional
-Balsara uses that same gradient and retains its factor for subsequent midpoint
-forces. Checkpoints identify Hu separately and
+transient and reconstructed with the current RK-stage velocity gradient. Optional
+Balsara is refreshed at the baseline and predictor states. Checkpoints identify Hu separately and
 reject a change of viscosity model, maximum, or decay setting on restart.
 
 ## Price et al. (Phantom) variable viscosity
@@ -542,12 +539,13 @@ equation (49) is integrated with the backward Euler step of equation (50),
 is set to \(\alpha_{\rm loc}\) immediately. The paper's \(h_i\) is the smoothing length
 with support \(2h_i\) for the cubic spline, so the code uses the same calibrated
 viscosity length \(h_{M,i}\) as Morris–Monaghan. The velocity gradient and curl retain the CD appendix-B matrix reconstruction.
-The shock slope uses the same completed-endpoint canonical-gradient difference and
-GADGET-4 cosmological conversion as CD and Hu. All three models sample
+The shock slope uses the same direct canonical acceleration-gradient expression
+and cosmological conversion as CD and Hu. All three models use
 \(G=a^2(\nabla\cdot\mathbf v_{\rm physical}-3H)\) and use peculiar gradients
 in their limiters. Price therefore no longer needs a separate background-subtracted
-sample alongside a total-divergence sample. This replaces the acceleration-gradient estimator in equations
-(53)–(54), without changing the target, limiter or directed pair forces.
+sample alongside a total-divergence sample. The direct identity follows the
+acceleration-gradient construction in equations (53)–(54), expressed in the
+stored canonical variables, without changing the target, limiter or directed pair forces.
 The initial α is zero, and the paper's quadratic coefficient is the constant
 `hydro.viscosityBeta` of equation (41). Its scalar history shares CD's migration
 and checkpoint lifecycle.
@@ -587,21 +585,116 @@ the maximum individual alpha instead of its pair average. This retains CosmicTig
 timestep calibration rather than replacing its integrator with Phantom's.
 No artificial thermal conductivity is added by this viscosity option.
 
+## Optional artificial thermal conduction
+
+`hydro.conductionCoefficient` is the dimensionless coefficient \(g\) in
+Monaghan (1992), equation (4.8). It defaults to **0**, which disables conduction.
+A finite positive value enables equations (4.5)/(4.8) independently of the
+viscosity model, variable alpha, and Balsara limiter. For example,
+`--hydro.conductionCoefficient=0.5` uses the approximate value discussed on p.552.
+This models artificial thermal diffusion, rather than a physical conductivity.
+
+Using the symmetric kernel gradient and the same calibrated pair length
+\(\bar h\) and regularization \(\eta^2=\epsilon\bar h^2\) as Monaghan viscosity,
+
+\[
+ q_i+q_j=g\bar h(\bar c+4|\mu_{ij}|),\qquad
+ C_{ij}=-\frac{m_j(q_i+q_j)\,\mathbf r_{ij}\cdot\nabla_i\widetilde W_{ij}}
+ {\bar\rho_{ij}(r_{ij}^2+\eta^2)}\ge0,\qquad
+ \left(\frac{du_i}{dt}\right)_{\rm cond}=\sum_j C_{ij}(u_j-u_i).
+\]
+
+Here \(\mu_{ij}\) is the regularized Monaghan velocity measure even when
+Phantom viscosity is selected. It vanishes for separating pairs. The sound-speed
+part remains active for stationary and separating pairs; constant positive
+\(g\) therefore also diffuses smooth thermal gradients. No additional switch
+restricts this option to shocks. The sign above follows the diffusion equation
+(4.4) and its Gaussian example (4.6): with our gradient convention, the printed
+leading minus in (4.5) multiplying \(u_i-u_j\) would instead cause antidiffusion.
+
+Derived conversion to stored variables \(E=a^2u\), \(\rho_c=a^3\rho\), and
+conformal time \(dt=a\,d\tau\): evaluate \(C_{ij}\) using comoving lengths,
+comoving densities, and the stored sound/relative velocities, then use
+\(\Lambda_{ij}=C_{ij}/a\) and
+\(\dot E_i=\sum_j\Lambda_{ij}(E_j-E_i)\). Each equal-mass pair adds identical
+opposite energy increments to both endpoints in each hydro stage,
+including inactive coarse neighbors. Each increment is converted separately:
+
+\[
+ \dot A_i\big|_{\rm cond}=(\gamma-1)a^{3\gamma-5}
+ \rho_{c,i}^{1-\gamma}\dot E_i\big|_{\rm cond}.
+\]
+
+Consequently a hot particle's \(A\) can decrease while total thermodynamic
+entropy increases. Conduction participates in the same two-stage RK2 update
+as velocity and viscous entropy production, with no separate conduction pass
+or persistent conduction-rate array. Each stage's immutable snapshot supplies
+both sides of every exchange; the final increment is taken from the predictor
+rates and applied to the original event baseline.
+
+A derived explicit-diffusion timestep cap is applied in both global and rung
+selection: \(\Delta\tau\le1/(2\sum_j\Lambda_{ij})\). It uses the sum of
+nonnegative exchange coefficients even if the net energy rate is zero, and
+provides a safety factor of two relative to the frozen-density forward-Euler
+positivity bound. It supplements the existing hydrodynamic bounds.
+
 ## Time integration and cosmological variables
 
-All integrators use chronological midpoint SPH, with the split
-`K_gravity(Δt/2) D(Δt/2) K_hydro(Δt) D(Δt/2) K_gravity(Δt/2)`.
-There are no persistent hydro acceleration, gas gravity acceleration, or entropy-rate
-arrays and no per-particle predictor clocks. Every event stages an immutable snapshot
-of the current split state across all ranks before applying any impulse.
+All integrators use chronological midpoint events. Each positive-duration hydro
+event advances \(Y=(\mathbf w,A)\) with explicit-midpoint RK2:
 
-Each pair is evaluated once at the finer endpoint's midpoint; equal-rung pairs have
-one owner selected by rank and gas index. Its identical impulse is accumulated with
-opposite signs for both endpoints, including an inactive coarse neighbor. Directed
-viscous heating is applied separately to each endpoint. Event-local increments are
-exchanged before committing particle state, so internal momentum is conserved up to
-accumulation and float-storage roundoff. External forces have no reciprocal gas
-endpoint. The velocity-dependent viscosity update need only be first order in time.
+\[
+ k_1=F_r(Y^0),\qquad Y^*=Y^0+\frac{h_r}{2}k_1,\qquad
+ k_2=F_r(Y^*),\qquad Y^+=Y^0+h_r k_2.
+\]
+
+This is the default and only hydro evolution scheme; no selector retains the
+old one-call Euler kick. A zero-duration force/timestep estimate needs only one
+evaluation and does not advance the state. Positions and scale factor stay at
+the event's physical midpoint during both RK stages; the predictor is an
+operator-stage state, not a future position or a separately advanced clock.
+
+Each pair belongs to \(r=\max(r_i,r_j)\), with interval
+\(h_r=T2^{-r}\). It is evaluated once per RK stage at that rung's events;
+equal-rung pairs have one owner selected by rank and gas index. Both endpoints
+receive the same impulse with opposite signs, including an inactive coarse
+neighbor. Every pair in a stage reads the same immutable source state across
+all ranks. Local and remote contributions are summed before publishing any
+predictor or final state. The corrector restores each recipient's saved
+baseline and adds the full second-stage increment; it does not add a full kick
+on top of the predictor. Directed viscous heating and conductive entropy rates
+are accumulated separately for the two endpoints.
+
+For a coarse interval \(H\) and fine interval \(H/2\), the chronological
+left-to-right composition is
+
+\[
+ D(H/4)\ K_f(H/2)\ D(H/4)\ K_c(H)\ D(H/4)\ K_f(H/2)\ D(H/4).
+\]
+
+Fine pairs run at \(H/4\) and \(3H/4\); coarse pairs run at \(H/2\).
+Fine recoil reaches the coarse live state at each fine event and remains
+present in later events. The driver orders coincident gravity operations as
+closing gravity kick, hydro event, opening gravity kick. Gravity never calls
+SPH. Its individual/global/hierarchical scheduling remains separate from the
+hydro rung partition.
+
+One acceleration vector and one entropy-rate scalar per gas particle are
+event-local scratch, with sparse original-state records for reciprocal
+recipients. They are released before sorting, migration, checkpoint or output;
+there are no persistent force-rate arrays or per-particle predictor clocks.
+Internal momentum is conserved up to accumulation and float-storage roundoff.
+Finite-step total energy is not exactly conserved, and external forces have
+no reciprocal gas endpoint.
+
+With fixed rung/support topology and smooth, stage-consistent coefficients,
+the RK2 event and palindromic drift/rung composition have second-order temporal
+accuracy. The published alpha projections, Morris–Monaghan endpoint update,
+adaptive rung/contact changes and source splitting have separate limitations;
+the two-call hydro formula does not establish second-order accuracy for every
+such coupled calculation. See the [full derivation and implementation contract](sph_rk2_time_integration.md),
+including the alternative nested endpoint construction and focused validation
+results.
 
 Enabled cooling and star formation run once at each gas particle's own completed
 interval endpoint, after the second drift and before the next gravity boundary.
@@ -724,11 +817,12 @@ approach test. GADGET-4 disables the extra Balsara multiplier when its Hu-style
 time-dependent viscosity is enabled; CosmicTiger retains the user's independent
 `hydro.balsaraSwitch` option.
 
-CosmicTiger follows GADGET-4's
+The canonical continuum convention matches GADGET-4's
 [time-dependent viscosity update, lines 139–140](https://wwwmpa.mpa-garching.mpg.de/gadget4/doxygen/artificial__viscosity_8cc_source.html#l00139)
-by differencing \(G\) in physical time before multiplying by the current
-\(a^{-2}\), or equivalently by differencing in conformal time and multiplying
-by current \(a^{-3}\). The continuum comparison below is locally derived:
+which differences \(G\) in physical time before multiplying by current
+\(a^{-2}\). CosmicTiger's RK-stage sensor obtains the same continuum quantity
+directly from velocity and acceleration gradients, without that endpoint
+difference. The comparison below is locally derived:
 
 \[
  \frac{1}{a^2}\frac{DG}{Dt}
@@ -736,7 +830,7 @@ by current \(a^{-3}\). The continuum comparison below is locally derived:
 \]
 
 Thus the switch contains an additional \(2H\theta_{\rm pec}\) term relative to
-differencing physical peculiar divergence. All three gradient models use this
+the material derivative of physical peculiar divergence. All three gradient models use this
 same convention. The cited pages are the official published source documentation;
 they are not a verification of the latest GitLab commit.
 
@@ -762,6 +856,7 @@ hydrodynamic controls are:
 | `hydro.viscosityDecayCD` | `0.05` | Cullen–Dehnen decay coefficient \(\ell\) |
 | `hydro.viscosityAlphaMaxPrice` | `1` | Price et al. maximum α in equation (48) |
 | `hydro.viscosityDecayPrice` | `0.1` | Price et al. decay coefficient \(\sigma_{\rm decay}\) |
+| `hydro.conductionCoefficient` | `0` | Artificial thermal diffusion coefficient g; zero disables it |
 | `hydro.viscosityEpsilon` | `0.01` | Denominator coefficient multiplying \(\bar\ell^2\) |
 | `hydro.balsaraSwitch` | model-dependent | `true` for `none`/`morrisAndMonaghan`, `false` for CD/Hu/Price; explicit `true` for a gradient model is retained with a warning |
 | `hydro.neighborNumber` | `42` | Kernel-weighted support-sphere count |
@@ -801,9 +896,9 @@ are rejected. The next two bytes encode independent gravity and hydro kernel
 selections. Bit 24 identifies the compact gas layout after removal of stellar,
 chemistry, and obsolete solver fields. Older SPH checkpoints lack this bit and
 are rejected before particle data are loaded. The gas payload has a separate
-version: base 130000 omits all three persistent force-rate arrays and stores
+version: base 130000 omits serialized force-rate arrays and stores
 binary16 alpha plus, for gradient viscosity, one dimensionless binary16
-canonical-divergence scalar. The history is serialized as `H` in two bytes,
+canonical-divergence scalar. The diagnostic sample is serialized as `H` in two bytes,
 matching memory and migration. Its normalization is recovered from the live rung
 or shared completed global duration, with a global startup base fallback.
 There is no previous-rung byte, sample timestamp, exponent or pending
@@ -816,6 +911,10 @@ after density and also migrates as one byte, saving two bytes per gas particle
 in memory and these payloads. Explicit setters update the packed fields because
 an individual bit cannot be returned as a mutable reference.
 
+Enabled conduction adds feature flag bit 25 and one double coefficient after the
+base SPH parameter block. Restarts require the same coefficient and enabled state.
+With conduction disabled, the existing checkpoint layout is unchanged.
+
 Enabled Balsara adds one retained byte for CD, Hu and Price
 only; their migration payload carries the same byte. Constant-α and
 Morris–Monaghan Balsara factors remain transient. The existing physics and
@@ -826,7 +925,9 @@ unpacked-flag representations,
 are rejected.
 See the
 [pair-midpoint design](sph_pair_midpoint_plan.md) and
-[SPH octree design](sph_octree_plan.md) for the retained tree and kick schedule.
+[SPH octree design](sph_octree_plan.md) for the retained tree. The
+[RK2 contract](sph_rk2_time_integration.md) supersedes the earlier one-call
+hydro kick description.
 Compatible dark-matter checkpoint layouts remain unchanged.
 Historical kernel marker values retain their original meanings; the Ferrers F2
 default changes the selected gravity marker. A change of kernel selection on
@@ -842,6 +943,37 @@ The `run.scenario=polytropicStar` scenario is a self-gravitating gas sphere; it 
 not use stellar particles or star formation.
 
 ## Validation scope
+
+Two-call RK2 revision (November 4, 2026): Release CPU and CUDA applications
+built and linked; all 46 focused CPU and 31 enabled CUDA SPH unit tests passed
+(one pre-existing CUDA test disabled). All 14 focused application checks passed,
+covering temporal refinement, CPU/CUDA gravity, two-rank reciprocal migration,
+hierarchical CPU/MPI/CUDA evolution, moving self-gravitating gas, global
+integration/restart, source timing, retained octrees and Sod. Independent
+standalone CPU checks also passed. Tests demonstrate the smooth fixed-coefficient
+hydro update's temporal order, immutable shared coarse sources and conservative
+recoil. They do not establish second order for instantaneous switch projections
+or first-order chemistry/star-formation splitting. See the
+[validation table and numerical limits](sph_rk2_time_integration.md#8-implementation-and-validation).
+The earlier results below retain their stated historical scope. No full
+repository suite or performance-scaling study was run for this revision.
+
+Artificial-conduction addition (November 4, 2026): the Release CPU application
+build/link, 46 CPU SPH tests, and all 31 enabled CUDA SPH regressions passed
+(one pre-existing CUDA test disabled). The new shared fixture checks the scalar
+paper formula, hot-to-cold transfer, unequal densities/supports, cosmological
+scaling, unchanged pressure acceleration, uniform-temperature cancellation,
+conductive timestep scaling, mixed-rung pair ownership, energy conservation,
+positive thermal state, and increasing total thermodynamic entropy. A separate
+CPU/CUDA parity case includes variable viscosity and SIMD tails. Focused CLI
+checks cover the zero default, positive values, INI/CLI precedence and invalid
+inputs. The existing restart fixture passes with g=0.3, rejects changed/disabled
+conduction, and retains its other viscosity/pressure restart checks. Three-step
+576-particle CPU Sod runs with g=0.5 completed under traditional and global
+integration with finite positive entropy. This is focused validation; no full
+repository suite, conduction convergence study, MPI conduction evolution, or
+CUDA application evolution was run.
+
 
 The [pair-midpoint design](sph_pair_midpoint_plan.md#validation) records successful
 CPU/CUDA builds and focused base-130000 checks: 45 CPU, 27 CUDA kernel and five
@@ -911,14 +1043,16 @@ Artificial-viscosity policies live in `cosmictiger/sph/viscosity/`:
 
 A two-byte bulk viscosity coefficient array stores alpha for all evolution
 models. Cullen–Dehnen, Hu and Price share the two-byte scalar `sphScaledDivergence`
-array, with no wrapper or previous-rung byte, and a
-separate sixteen-byte temporary diagnostic entry. Optional Balsara storage is
+output/checkpoint array, with no wrapper or previous-rung byte, and a
+separate sixteen-byte temporary switch diagnostic entry. Optional Balsara storage is
 one byte per gas particle; evaluation and staged sources use float. The combined
 history, alpha and Balsara arrays therefore use five bytes per gas particle
 instead of fourteen when all are enabled. Constant viscosity allocates neither
 history nor evolving alpha. The temporary diagnostic array is allocated
-after tree sorting, retained through density retries, and freed before source
-conversion; it is absent from density-only and post-source bound refreshes.
+after tree sorting for stage or output-gradient work, retained through density
+retries, and freed before source conversion. RK2 also uses one event-local
+acceleration vector and entropy-rate scalar, plus sparse baseline records;
+these are not part of the five-byte persistent coefficient/diagnostic count.
 Alpha and committed history participate in reordering, migration and checkpoints,
 as does enabled Balsara for CD, Hu and Price. Constant-α and Morris–Monaghan
 Balsara factors remain transient and are recomputed after restart or migration.

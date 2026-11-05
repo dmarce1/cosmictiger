@@ -29,7 +29,7 @@ struct VelocityGradientSums {
     Real velocity[3][3]{};
 };
 
-// Acceleration-gradient reference estimator; production uses divergence history.
+// Common corrected reconstruction for direct acceleration-gradient sensors.
 template <typename Real>
 struct GradientSums : VelocityGradientSums<Real> {
     Real acceleration[3][3]{};
@@ -233,26 +233,27 @@ CUDA_EXPORT inline Real divergenceTimeDerivative(Real sampleDivergence, Real sca
  */
 // clang-format on
 template <typename Real, typename Counter>
+#if defined(__GNUC__) && !defined(__clang__) && !defined(__CUDACC__)
+// As in reconstructVelocityGradient, avoid arithmetic on unused SIMD stack lanes.
+__attribute__((optimize("no-tree-loop-vectorize", "no-tree-slp-vectorize")))
+#endif
 CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
     Real (&velocityGradient)[3][3], Real (&accelerationGradient)[3][3],
     Counter& floatingPointOperations) {
     math::SymmetricMatrix<Real, 3> inverseMomentMatrix;
     int const rank =
         detail::inverseMoment(sums.moment, inverseMomentMatrix, floatingPointOperations);
-    math::Matrix<Real, 3> velocityMoment;
-    math::Matrix<Real, 3> accelerationMoment;
-    for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 3; ++j) {
-            velocityMoment(i, j) = sums.velocity[i][j];
-            accelerationMoment(i, j) = sums.acceleration[i][j];
-        }
-    }
-    auto const velocityGradientMatrix = velocityMoment * inverseMomentMatrix;
-    auto const accelerationGradientMatrix = accelerationMoment * inverseMomentMatrix;
-    for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 3; ++j) {
-            velocityGradient[i][j] = velocityGradientMatrix(i, j);
-            accelerationGradient[i][j] = accelerationGradientMatrix(i, j);
+    for (int row = 0; row < 3; ++row) {
+        for (int column = 0; column < 3; ++column) {
+            Real velocityComponent = sums.velocity[row][0] * inverseMomentMatrix(0, column);
+            Real accelerationComponent = sums.acceleration[row][0] * inverseMomentMatrix(0, column);
+            for (int inner = 1; inner < 3; ++inner) {
+                velocityComponent += sums.velocity[row][inner] * inverseMomentMatrix(inner, column);
+                accelerationComponent +=
+                    sums.acceleration[row][inner] * inverseMomentMatrix(inner, column);
+            }
+            velocityGradient[row][column] = velocityComponent;
+            accelerationGradient[row][column] = accelerationComponent;
         }
     }
     floatingPointOperations += 90;    // Two products: three multiplies/two adds per entry.
@@ -267,6 +268,34 @@ CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
         sums, velocityGradient, accelerationGradient, floatingPointOperations);
 }
 
+// clang-format off
+/*
+ * Derived peculiar-gradient conversion of Cullen & Dehnen (2010), equation (B12),
+ * https://arxiv.org/abs/1006.1524, preserving the history sensor's convention:
+ *   w = a v_pec, dτ = dt/a, dx/dτ = w/a, F = dw/dτ, V = ∇_x w, C = ∇_x F,
+ *   D tr(V)/Dτ = tr(C) − tr(V²)/a,
+ *   a⁴ [Dθ_pec/Dt + 2Hθ_pec] = a tr(C) − tr(V²),  θ_pec = tr(V)/a².
+ * F includes the full hydrodynamic, gravitational and imposed acceleration at
+ * the same stage as w. No homogeneous expansion term is added to either gradient.
+ * Symbol directory:
+ *   a → scaleFactor; V → velocityGradient; C → accelerationGradient;
+ *   a⁴ [Dθ_pec/Dt + 2Hθ_pec] → derivative (returned scaled shock sensor).
+ */
+// clang-format on
+template <typename Real, typename Counter>
+CUDA_EXPORT inline Real peculiarDivergenceDerivative(Real const (&velocityGradient)[3][3],
+    Real const (&accelerationGradient)[3][3], Real scaleFactor, Counter& floatingPointOperations) {
+    Real derivative = Real(0);
+    for (int row = 0; row < 3; ++row) {
+        derivative += scaleFactor * accelerationGradient[row][row];
+        for (int column = 0; column < 3; ++column) {
+            derivative -= velocityGradient[row][column] * velocityGradient[column][row];
+        }
+    }
+    floatingPointOperations += 24;
+    return derivative;
+}
+
 /*
  * Equations (13)-(18) and (B12), with comoving coordinates x, stored velocity
  * w = a v_pec, conformal time dτ = dt/a, and stored acceleration F = dw/dτ.
@@ -276,11 +305,13 @@ CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
  *
  *   a⁴ D(div v_phys)/Dt = a tr(G) + 3 a³ d²a/dt² − tr(V'²).
  *
- * Production instead uses peculiar gradients V' = ∇_x w = a² ∇_r v_pec and the
- * GADGET-4 history derivative above. The reference path supplies a³ ä.
+ * Production uses peculiar gradients V' = ∇_x w = a² ∇_r v_pec with either
+ * peculiarDivergenceDerivative or the legacy GADGET-4 history derivative above.
+ * The physical-gradient reference path supplies a³ ä.
  * The limiter is invariant under the
  * common a² scaling of V'. Equation (17)'s weighted sign average R_i is supplied
- * by the density loop using an immutable snapshot of previous divergences.
+ * by the density loop using an immutable snapshot of stage divergences (direct
+ * mode) or previous endpoint divergences (legacy mode).
  * This paper's h is the full support radius H (its footnote 2), not M&M's H/2.
  * The optional counter follows the repository's source-operation convention:
  * arithmetic and math results cost one, FMA costs two, and selections/signs cost zero.
@@ -297,8 +328,8 @@ CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
  * Derived comoving conversion for the acceleration-gradient reference:
  *   V′ = a² ∇_r v_phys, G = ∇_x F,
  *   a⁴ D(∇·v_phys)/Dt = a tr(G) + 3a³ ä − tr(V′²).
- * Production history instead supplies V′ = a² ∇_r v_pec and differences its trace
- * before unit conversion; the target and limiter retain the same scaled form.
+ * Production supplies V′ = a² ∇_r v_pec with the derived peculiar conversion above,
+ * or legacy endpoint differences; the target and limiter keep the same scaled form.
  * Symbol directory:
  *   a → scaleFactor/localScaleFactor; h_i → smoothingLength/kernelSmoothingLength
  *   v_sig,i → signalSpeed/localSignalSpeed; ℓ → decayCoefficient

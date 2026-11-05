@@ -114,6 +114,8 @@ void sphCheckpointTest();
 struct SphRunParameters;
 void sphParticlesBeginViscosityDiagnostics();
 void sphParticlesEndViscosityDiagnostics();
+// Scope ownership remains active on a locality with no gas and no allocation.
+bool sphParticlesViscosityDiagnosticsActive();
 // Commit history and viscosity only at the particle's completed endpoint.
 void sphParticlesUpdateTargetAlpha(SphRunParameters const& parameters);
 

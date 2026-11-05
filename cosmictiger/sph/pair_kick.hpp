@@ -57,7 +57,7 @@ CUDA_EXPORT inline void sphPairAtomicAdd(double& destination, double increment) 
  *   Δv_a = Δτ a_ab, Δv_b = −Δv_a, ΔA_a = Δτ Ȧ_ab, ΔA_b = Δτ Ȧ_ba.
  * All production gas masses are equal. Evaluate a pair once at the midpoint of
  * its finer endpoint's interval and reuse the identical impulse with opposite
- * signs. Only irreversible heating contributes to Ȧ; directed viscous heating
+ * signs. Only nonadiabatic energy exchange contributes to Ȧ; directed viscous heating
  * can differ between endpoints. The scheduling and accumulation are local
  * derivations, not a time integrator prescribed by the cited paper.
  * Symbol directory:

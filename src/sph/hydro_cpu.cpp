@@ -15,6 +15,7 @@
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
+#include <cosmictiger/sph/conduction.hpp>
 #include <cosmictiger/sph/cpu.hpp>
 #include <cosmictiger/sph/variable_smoothing_lengths.hpp>
 #include <cosmictiger/sph/viscosity/monaghan.hpp>
@@ -148,7 +149,8 @@ SphRunReturn sphCpuHydro(
         flops += 5;
         float const inverseSmoothingLengthFourth = sqr(sqr(inverseSmoothingLength));    // 1/H_a⁴
         Vector3<SimdFloat> accelerationPack(zero);    // lane partial sums of acceleration
-        SimdFloat viscousHeatingPack(zero);
+        SimdFloat dissipativeEnergyRatePack(zero);
+        SimdFloat conductionExchangeRatePack(zero);
         SimdFloat internalEnergyRatePack(zero);         // lane partial sums of thermal work
         SimdFloat maximumCompressionSpeedPack(zero);    // lane maxima of −μ_ab for δt_cv
         SimdFloat maximumNeighborRungPack(zero);
@@ -362,6 +364,22 @@ SphRunReturn sphCpuHydro(
                 flops += (sph_flops::kViscosityMu + sph_flops::kArtificialViscosity + 6) *
                     SimdFloat::size();
             }
+            SimdFloat targetDissipativeEnergyRate = viscousHeating;
+            SimdFloat neighborDissipativeEnergyRate = neighborViscousHeating;
+            if (parameters.conductionCoefficient > 0.0f) {
+                SimdFloat const exchangeRate = sph_conduction::exchangeRate(SimdFloat(density),
+                    neighborDensity, SimdFloat(soundSpeed), neighborSoundSpeed,
+                    SimdFloat(sinkKernelSmoothingLength), neighborSmoothingLength,
+                    separationSquared, physicalVelocityDotSeparation, symmetricGradientFactor,
+                    SimdFloat(parameters.conductionCoefficient), SimdFloat(viscosityRegularization),
+                    SimdFloat(smoothingLengthPerEffectiveRadius), scaledGasMass);
+                SimdFloat const conductiveEnergyRate =
+                    exchangeRate * (neighborInternalEnergy - SimdFloat(internalEnergy));
+                targetDissipativeEnergyRate += conductiveEnergyRate;
+                neighborDissipativeEnergyRate -= conductiveEnergyRate;
+                conductionExchangeRatePack += exchangeRate;
+                flops += 27 * SimdFloat::size();    // 22 exchange + 5 heating/row-sum operations.
+            }
             Vector3<SimdFloat> const pairForcePack = (pressureForce + viscousForce) * separation;
             accelerationPack -= pairForcePack;
             if (applyPairKicks) {
@@ -370,7 +388,9 @@ SphRunReturn sphCpuHydro(
                         continue;
                     }
                     int const neighborIndex = neighbors[first + lane];
-                    if (!sphOwnsPairKick(data.sourceIds[particleIndex],
+                    if (!parameters.isPairRungDue(
+                            std::max(previousRung, int(data.sourceRungs[neighborIndex]))) ||
+                        !sphOwnsPairKick(data.sourceIds[particleIndex],
                             data.sourceIds[neighborIndex], previousRung,
                             data.sourceRungs[neighborIndex])) {
                         continue;
@@ -379,10 +399,10 @@ SphRunReturn sphCpuHydro(
                         -float(pairForcePack[kYDimension][lane]),
                         -float(pairForcePack[kZDimension][lane]));
                     double const targetEntropyRate =
-                        sph_entropy::fromStoredEnergy(double(viscousHeating[lane]), density,
-                            gasAdiabaticIndex, parameters.scaleFactor);
+                        sph_entropy::fromStoredEnergy(double(targetDissipativeEnergyRate[lane]),
+                            density, gasAdiabaticIndex, parameters.scaleFactor);
                     double const neighborEntropyRate = sph_entropy::fromStoredEnergy(
-                        double(neighborViscousHeating[lane]), double(neighborDensity[lane]),
+                        double(neighborDissipativeEnergyRate[lane]), double(neighborDensity[lane]),
                         gasAdiabaticIndex, parameters.scaleFactor);
                     sphAccumulatePairKick(data.sourcePairUpdates[particleIndex],
                         data.sourcePairUpdates[neighborIndex], pairAcceleration, targetEntropyRate,
@@ -394,20 +414,26 @@ SphRunReturn sphCpuHydro(
             internalEnergyRatePack += SimdFloat(inverseScaleFactor) *
                 variational::pairWork(SimdFloat(sinkPressureCoefficient), maskedSinkGradientFactor,
                     velocityDotSeparation);
-            viscousHeatingPack += viscousHeating;
+            dissipativeEnergyRatePack += targetDissipativeEnergyRate;
             flops += 54 * SimdFloat::size();    // common geometry, pressure, and accumulation
             maximumCompressionSpeedPack = simdMax(maximumCompressionSpeedPack, -viscosityVelocity);
         }
         Vector3<float> acceleration(simdSum(accelerationPack[kXDimension]),
             simdSum(accelerationPack[kYDimension]), simdSum(accelerationPack[kZDimension]));
         float internalEnergyRate = simdSum(internalEnergyRatePack);
+        float const conductionExchangeRate =
+            parameters.conductionCoefficient > 0.0f ? simdSum(conductionExchangeRatePack) : 0.0f;
+        if (parameters.conductionCoefficient > 0.0f) {
+            flops += SimdFloat::size() - 1;
+        }
         flops +=
             4 * (SimdFloat::size() - 1);    // Four additive reductions; maxima are comparisons.
         // Corrections are derived, never checkpointed or migrated; slots that the density
         // pass has not rebuilt hold NaN, so a stale source cannot pass silently.
         if (!(sph_volume::isFiniteValue(acceleration.dot(acceleration)) &&
                 sph_volume::isFiniteValue(internalEnergyRate) &&
-                sph_volume::isFiniteValue(simdSum(viscousHeatingPack)))) {
+                sph_volume::isFiniteValue(simdSum(dissipativeEnergyRatePack)) &&
+                sph_volume::isFiniteValue(conductionExchangeRate))) {
             std::cout << std::format("SPH variational rates are not finite: smoothingLength={:e} "
                                      "density={:e} \u03b6={:e}\n",
                              sinkKernelSmoothingLength, density, gradHCorrection)
@@ -441,7 +467,7 @@ SphRunReturn sphCpuHydro(
         } else {
             ALWAYS_ASSERT(parameters.phase == 0);
         }
-        if (applyPairKicks) {
+        if (applyPairKicks && parameters.isPairRungDue(previousRung)) {
             // External forces have no reciprocal gas endpoint. Integrate them
             // once on the target's own rung, separately from pair reductions.
             Vector3<float> const externalAcceleration = sphCompleteAcceleration(parameters,
@@ -455,7 +481,11 @@ SphRunReturn sphCpuHydro(
         }
         if (data.sinkAccelerations) {
             for (int dim = 0; dim < kDimensions; dim++) {
-                data.sinkAccelerations[sinkIndex][dim] = acceleration[dim];
+                if (parameters.accelerationGradientViscosity) {
+                    data.sinkAccelerations[sinkIndex][dim] += acceleration[dim];
+                } else {
+                    data.sinkAccelerations[sinkIndex][dim] = acceleration[dim];
+                }
             }
         }
         // E=a^2 u and homogeneous adiabatic work du/dt=-3 H P/rho give
@@ -472,13 +502,14 @@ SphRunReturn sphCpuHydro(
         flops += 6;    // Homogeneous thermal expansion; force sources count separately.
         if (data.sinkInternalEnergyRate) {
             data.sinkInternalEnergyRate[sinkIndex] =
-                internalEnergyRate + simdSum(viscousHeatingPack);
+                internalEnergyRate + simdSum(dissipativeEnergyRatePack);
             flops += SimdFloat::size();
         }
         if (data.sinkEntropyRate) {
             // Reversible PdV and homogeneous expansion leave A unchanged.
-            data.sinkEntropyRate[sinkIndex] = sph_entropy::fromStoredEnergy(
-                simdSum(viscousHeatingPack), density, gasAdiabaticIndex, parameters.scaleFactor);
+            data.sinkEntropyRate[sinkIndex] =
+                sph_entropy::fromStoredEnergy(simdSum(dissipativeEnergyRatePack), density,
+                    gasAdiabaticIndex, parameters.scaleFactor);
             flops.doublePrecision += gasAdiabaticIndex == float(5.0 / 3.0) ? 12 : 14;
             flops += SimdFloat::size() - 1;
         }
@@ -526,6 +557,12 @@ SphRunReturn sphCpuHydro(
                     parameters.courantFactor / float(monaghan::kViscosityWidthScale) *
                         internalEnergy / std::fabs(internalEnergyRate));
                 flops += 3;    // Two divisions and a product; abs is a sign operation.
+            }
+            // Derived forward-Euler diffusion bound: Δτ Σ_b C_ab/a ≤ 1/2.
+            // It uses the sum of positive exchange rates, even when net heating cancels.
+            if (conductionExchangeRate > 0.0f) {
+                timeStep = std::fmin(timeStep, 0.5f / conductionExchangeRate);
+                flops += 1;
             }
             ALWAYS_ASSERT(std::isfinite(timeStep) && timeStep > 0.0f);
             result.minimumTimestep = std::min(result.minimumTimestep, double(timeStep));
@@ -603,6 +640,9 @@ SphRunReturn sphCpuHydro(
             }
             ALWAYS_ASSERT(nextRung < kMaxRung);
             if (data.proposeRungs) {
+                if (parameters.retainProposedRungs) {
+                    nextRung = std::max(nextRung, data.sinkFlags[sinkIndex].proposedRung());
+                }
                 data.sinkFlags[sinkIndex].setProposedRung(nextRung);
             } else {
                 data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]] = nextRung;

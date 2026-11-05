@@ -10,12 +10,14 @@
 #define SPH_HPP_
 
 #include <atomic>
+#include <functional>
 
 #include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/stack_vector.hpp>
 #include <cosmictiger/core/tree_id.hpp>
 #include <cosmictiger/math/range.hpp>
+#include <cosmictiger/math/vector3.hpp>
 
 #ifndef __CUDACC__
 // Reversed unit-box bounds seed min/max accumulation for particle positions
@@ -168,6 +170,14 @@ struct SphRunParameters {
     double viscosityPreviousTimestep = 0.0;
     // Positive hydro interval; zero only estimates forces/timestep bounds.
     double hydroKickTimestep = 0.0;
+    // Force targets and due pair impulses are distinct for gradient diagnostics.
+    // Negative bounds retain the ordinary force-target rung selection.
+    int pairMinimumRung = -1;
+    int pairMaximumRung = -1;
+    bool deferPairCommit = false;
+    bool retainProposedRungs = false;
+    bool accelerationGradientViscosity = false;
+    bool currentGradientDivergence = false;
     // Phase zero may publish pair rates before the fresh gravity field arrives.
     // Source acceleration is then assembled before the closing corrector.
     bool deferAccelerationSources = false;
@@ -176,6 +186,7 @@ struct SphRunParameters {
     float bulkViscosityCoefficient;
     float vonNeumannRichtmyerCoefficient;
     float viscosityEpsilon;
+    float conductionCoefficient = 0.0f;
     bool balsaraSwitch;
     bool variableViscosity;
     bool cullenDehnen;
@@ -206,6 +217,7 @@ struct SphRunParameters {
         bulkViscosityCoefficient = opts.hydro.bulkViscosityCoefficient;
         vonNeumannRichtmyerCoefficient = opts.hydro.vonNeumannRichtmyerCoefficient;
         viscosityEpsilon = opts.hydro.viscosityEpsilon;
+        conductionCoefficient = opts.hydro.conductionCoefficient;
         balsaraSwitch = opts.hydro.balsaraSwitch;
         variableViscosity = opts.hydro.viscosityEvolution != "none";
         cullenDehnen = opts.hydro.viscosityEvolution == "cullenAndDehnen";
@@ -227,6 +239,10 @@ struct SphRunParameters {
     }
     CUDA_EXPORT bool isActiveRung(int rung) const {
         return rung >= minimumRung && rung <= maximumRung;
+    }
+    CUDA_EXPORT bool isPairRungDue(int rung) const {
+        return rung >= (pairMinimumRung < 0 ? minimumRung : pairMinimumRung) &&
+            rung <= (pairMaximumRung < 0 ? maximumRung : pairMaximumRung);
     }
     // Morris-Monaghan, Cullen-Dehnen, and Hu et al. pairs use beta_ab = viscosityBeta alpha_ab;
     // fixed Monaghan coefficients and Price et al. (2018) equation (41) use the constant beta.
@@ -265,6 +281,12 @@ struct SphRunParameters {
         arc & viscosityBaseTimestep;
         arc & viscosityPreviousTimestep;
         arc & hydroKickTimestep;
+        arc & pairMinimumRung;
+        arc & pairMaximumRung;
+        arc & deferPairCommit;
+        arc & retainProposedRungs;
+        arc & accelerationGradientViscosity;
+        arc & currentGradientDivergence;
         arc & deferAccelerationSources;
         arc & refreshConvergedDensity;
         arc & uniformAccelerationY;
@@ -277,6 +299,7 @@ struct SphRunParameters {
         arc & scaleFactor;
         arc & courantFactor;
         arc & zPlaneAcceleration;
+        arc & conductionCoefficient;
     }
     CUDA_EXPORT
     float midplaneAccelerationZ(Position const z) const {
@@ -291,10 +314,17 @@ inline constexpr int kSphRunHydro = 2;
 inline constexpr int kSphRunRungs = 3;
 
 SphRunReturn sphRun(SphRunParameters params, bool cuda = false);
-// Collective, after density/neighbor preparation at the hydro midpoint. Freeze
-// all source states once, then publish H, irreversible entropy rates and scalar
-// timestep proposals. The caller applies the full positive kick duration.
-SphRunReturn sphMidpointForces(SphRunParameters params, bool cuda = true);
+// Collective explicit-midpoint RK2 at fixed positions. Both force stages read
+// immutable all-locality snapshots; the final increment is relative to the
+// saved incoming state, including every inactive recipient of a pair impulse.
+// A zero interval performs only a nonmutating force/timestep estimate.
+using SphGravityStage = std::function<void()>;
+SphRunReturn sphMidpointForces(
+    SphRunParameters params, bool cuda = true, SphGravityStage const& gravityStage = {});
+// Event-local, gas-indexed complete acceleration and irreversible entropy rate.
+// Allocated after gas sorting and released before migration/checkpoint/output.
+Vector3<float>* sphStageAccelerations();
+float* sphStageEntropyRates();
 #ifndef __CUDACC__
 hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     SphTreeNeighborParameters params, TreeId self, Vector<TreeId> checklist, int level = 0);

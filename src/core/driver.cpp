@@ -91,6 +91,7 @@
 #endif
 #include <cosmictiger/sph/time_integration.hpp>
 #include <cosmictiger/sph/tree.hpp>
+#include <cosmictiger/sph/viscosity/cullen_and_dehnen_particle_exchange.hpp>
 #include <cosmictiger/sph/volume.hpp>
 #endif
 
@@ -406,18 +407,21 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
     runParameters.viscosityTimestep = updateViscosity && !initializeViscosityHistory ?
         runParameters.viscositySampleInterval :
         0.0;
-    runParameters.minimumRung = minrung;
+    bool const directGradientStages = runParameters.gradientSwitch() && hydroTimestep > 0.0;
+    runParameters.minimumRung = directGradientStages ? 0 : minrung;
+    runParameters.maximumRung = directGradientStages ? kMaxRung - 1 : maximumHydroRung;
     // sphStep1 has already completed any gas sorting. These results survive
     // density retries, then disappear before a source conversion can compact gas.
-    detail::SphViscosityDiagnosticsScope viscosityDiagnostics(
-        runParameters.gradientSwitch() && updateViscosity);
+    // Reconstruct B(Y₀) for the first RK stage even when alpha is not advanced
+    // here. Output-only density passes also need a current divergence sample.
+    detail::SphViscosityDiagnosticsScope viscosityDiagnostics(runParameters.gradientSwitch());
     bool needsNeighborRefresh;
     SphRunReturn result;
 
     runParameters.phase = 1;
     SphTreeNeighborParameters neighborParameters;
     neighborParameters.smoothingLengthMultiplier = (1.0 + kSmoothLengthBuffer);
-    neighborParameters.minimumRung = minrung;
+    neighborParameters.minimumRung = runParameters.minimumRung;
     TreeId rootId;
     rootId.proc = 0;
     rootId.index = 0;
@@ -567,18 +571,34 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
         }
     }
     if (hydroTimestep < 0.0) {
-        // Endpoint history can be committed above, without a force evaluation.
-        // Output-only callers leave updateViscosity false.
+        if (runParameters.gradientSwitch()) {
+            sphParticlesPublishDivergence(runParameters);
+        }
+        // This publishes an output diagnostic without a force evaluation or
+        // alpha evolution; the production sensor uses acceleration gradients.
         clearMidpointSources();
         return result;
     }
     // Any later density preparation refreshes sources at this same event time.
     runParameters.viscosityTimestep = 0.0;
+    runParameters.minimumRung = minrung;
+    runParameters.maximumRung = maximumHydroRung;
     Timer timer;
     // Each pair contributes once on its finer endpoint's midpoint cadence.
     auto const runForces = [&]() {
         profile::ScopedPhase forcePhase("hydro.force.midpoint");
-        return sphMidpointForces(runParameters, true);
+        SphGravityStage gravityStage;
+#if COSMICTIGER_ENABLE_FMM
+        if (getOptions().gravity.enabled && runParameters.gradientSwitch()) {
+            // Driver-owned diagnostic evaluation: no gravity kick calls hydro.
+            // This fills the full acceleration needed by the shock sensor,
+            // without changing velocities, rung stacks, or particle ordering.
+            gravityStage = []() {
+                gravityRefreshSphAcceleration(getOptions().gravity.openingAngle);
+            };
+        }
+#endif
+        return sphMidpointForces(runParameters, true, gravityStage);
     };
     timer.reset();
     timer.start();
@@ -617,7 +637,7 @@ SphRunReturn sphMidpointStep(int rung, double time, double timestep, double base
     int const maximumRung = rung < 0 ? kMaxRung - 1 : rung;
     sphMidpointBeginEvent();
     try {
-        sphStep1(minimumRung);
+        sphStep1(getOptions().hydro.viscosityGradientSwitch() && timestep > 0.0 ? 0 : minimumRung);
         bool const initializeHistory = timestep == 0.0 && time == 0.0;
         auto const result = sphMidpointEvaluate(minimumRung, maximumRung, scale, time, baseTimestep,
             scaleDerivative, timestep, global ? maximumTimestep : 0.0, initializeHistory,
@@ -635,7 +655,10 @@ SphRunReturn sphCompleteSources(int minimumClosingRung, double time, double base
     double maximumGlobalTimestep, double previousGlobalTimestep) {
     auto const& options = getOptions();
     bool const sourcePhysics = options.starFormation.enabled || options.chemistry.enabled;
-    bool const evolvingViscosity = options.hydro.viscosityEvolution != "none";
+    // Gradient-model coefficients are advanced by the RK stage sensor, not
+    // again by an endpoint history update. Morris-Monaghan keeps its published
+    // endpoint relaxation prescription and its documented accuracy limit.
+    bool const evolvingViscosity = options.hydro.viscosityEvolution == "morrisAndMonaghan";
     if (!sourcePhysics && !evolvingViscosity) {
         return {};
     }
@@ -809,7 +832,8 @@ void finishFmmKick() {
 }    // namespace detail
 
 ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, double theta,
-    bool firstCall, bool fullEval, double previousTimestep, double maximumGlobalTimestep) {
+    bool firstCall, bool fullEval, double previousTimestep, double maximumGlobalTimestep,
+    bool deferHydroOpening) {
     auto parameters = detail::prepareFmmKick(minrung, scale, dadt, t0, theta, firstCall, fullEval,
         previousTimestep, maximumGlobalTimestep);
 #if COSMICTIGER_WITH_SPH
@@ -820,6 +844,11 @@ ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, doub
             gravityBeginGlobalKick();
         }
     }
+    if (deferHydroOpening) {
+        ALWAYS_ASSERT(!parameters.deferGasOpening && !parameters.globalTimestep);
+        gravityBeginDeferredGasOpening();
+        parameters.deferHydroOpening = true;
+    }
 #endif
     try {
         auto result = detail::evaluateFmmKick(parameters);
@@ -828,10 +857,18 @@ ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, doub
             result.maxRung = std::max(result.maxRung, sphBalanceBoundaryRungs(scale));
             result += gravityFinishBalancedGasKick(t0, parameters.sign);
         }
+        if (deferHydroOpening) {
+            gravitySealDeferredGasOpening();
+        }
 #endif
         detail::finishFmmKick();
         return result;
     } catch (...) {
+#if COSMICTIGER_WITH_SPH
+        if (deferHydroOpening) {
+            gravityDiscardDeferredGasOpening();
+        }
+#endif
         detail::finishFmmKick();
         throw;
     }
@@ -842,7 +879,7 @@ ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, doub
 ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative, double time,
     double baseTimestep, double theta, bool firstCall, bool fullEvaluation, EnergiesT& energies,
     int gravityErrorStep, bool closingOnly, double previousTimestep, double maximumGlobalTimestep,
-    MeshKickSchedule const& schedule) {
+    MeshKickSchedule const& schedule, bool deferHydroOpening) {
     ForceStepResult result{};
     bool const global = maximumGlobalTimestep > 0.0;
     bool const meshGravity = getOptions().gravity.enabled && usesMeshGravity(getOptions().gravity);
@@ -991,7 +1028,7 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
 #if COSMICTIGER_ENABLE_FMM
         if (!meshGravity && !particleMesh) {
             result = kickStep(minRung, scale, scaleDerivative, baseTimestep, theta, firstCall,
-                fullEvaluation, previousTimestep, maximumGlobalTimestep);
+                fullEvaluation, previousTimestep, maximumGlobalTimestep, deferHydroOpening);
         }
 #endif
     } else
@@ -1120,7 +1157,7 @@ void driftRungEverywhere(
 ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, double adot,
     double tau, double t0, double theta, EnergiesT* energies, int minrung0, bool doPhi,
     hpx::future<void>* lcFut, bool nocrop, double drag, int gravityErrorStep, bool closingOnly,
-    MeshKickSchedule const& schedule) {
+    MeshKickSchedule const& schedule, bool deferHydroOpening) {
     // A terminal energy evaluation consumes only the outstanding closing
     // ladder. The saved checkpoint retains the original staggered momenta.
     nocrop = nocrop || closingOnly;
@@ -1274,6 +1311,13 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         }
         kparams.theta = theta;
 #if COSMICTIGER_WITH_SPH
+        if (deferHydroOpening && top) {
+            ALWAYS_ASSERT(!balanceHydro && !closingOnly);
+            // This is after the final boundary migration. Later ladder levels
+            // reorder base particles only; gas-indexed impulse storage survives.
+            gravityBeginDeferredGasOpening();
+        }
+        kparams.deferHydroOpening = deferHydroOpening && !ascending;
         if (hierarchicalHydro) {
             // At a common all-particle boundary the top walk supplies total G.
             // Choose the full gas rung there, close its neighbor constraints,
@@ -1438,6 +1482,11 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
     if (clipTop) {
         minrung++;
     }
+#if COSMICTIGER_WITH_SPH
+    if (deferHydroOpening) {
+        gravitySealDeferredGasOpening();
+    }
+#endif
     if (hierarchicalHydro) {
         sphParticlesPrepareThermodynamics(scale, false);
         auto const gas = particlesSumEnergies();
@@ -2094,26 +2143,37 @@ void driver() {
             double const forceStepCap = global && midpointHydro ?
                 std::min(globalStepCap, params.globalHydroTimestep) :
                 globalStepCap;
+            bool deferHydroOpening = false;
+#if COSMICTIGER_WITH_SPH
+            int const coincidentHydroRung = global ? -1 : sphMidpointRung(itime);
+            deferHydroOpening = midpointHydro && getOptions().gravity.enabled &&
+                coincidentHydroRung >= 0 && sphMidpointTargetCount(coincidentHydroRung) != 0;
+#endif
             if (!getOptions().run.hierarchicalGravity) {
                 tmp = advanceForces(minrung, a, a * adot, tau, t0, theta, tau == 0.0, fullEval,
                     energies, gravityErrorStep, false, params.globalTimestep, forceStepCap,
-                    schedule);
+                    schedule, deferHydroOpening);
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
             } else {
                 tmp = kickStepHierarchical(om, maxRung, a, adot, tau, t0, theta, &energies,
                     minrung0, fullEval, &lcFut, nocrop, sqrt(glassError), gravityErrorStep, false,
-                    schedule);
+                    schedule, deferHydroOpening);
 #endif
             }
 #if COSMICTIGER_WITH_SPH
             if (midpointHydro && !global) {
                 int const hydroRung = sphMidpointRung(itime);
                 if (hydroRung >= 0) {
-                    // Closing/opening gravity kicks are combined at this
-                    // boundary. The resulting viscosity ordering is first
-                    // order; the inviscid pressure and gravity kicks commute.
+                    // A coarse hydro event lies between the finer gravity
+                    // closing and opening half-kicks. Source velocities must
+                    // see the closing side only during both RK stages.
                     sphMidpointStep(
                         hydroRung, tau, std::ldexp(t0, -hydroRung), t0, a, a * adot, energies);
+#if COSMICTIGER_WITH_GRAVITY
+                    if (deferHydroOpening) {
+                        gravityFinishDeferredGasOpening();
+                    }
+#endif
                     auto const afterHydro = particlesSumEnergies();
                     energies.tckin = afterHydro.kin;
                     energies.therm = afterHydro.therm / sqr(a);

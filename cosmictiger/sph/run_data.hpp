@@ -33,9 +33,14 @@ struct SphRunData {
     float* sourceDensity;
     float* sourceBalsaraFactor;
     float* sourceBulkViscosityCoefficient;
+    // Full canonical F = dw/dτ at the same stage as the source velocities.
+    // Direct viscosity gradients require all three arrays, including gravity and
+    // imposed forces. These are immutable snapshots, never partial pair impulses.
     float* sourceAccelerationX;
     float* sourceAccelerationY;
     float* sourceAccelerationZ;
+    // CD uses only its sign. Direct stages consume a preceding, completed
+    // all-gas gradient pass; null is allowed only while seeding that pass.
     float* sourceVelocityDivergence;
     float* sourceSmoothingLength;    // Full compact-support H, as in particle storage.
     // Variational operator: zeta_i of cosmictiger/sph/volume.hpp from this step's density
@@ -51,7 +56,7 @@ struct SphRunData {
     // Local sink arrays indexed by the SPH particle index.
     // Optional total dE/dtau diagnostic; it is not integrated by production kicks.
     float* sinkInternalEnergyRate = nullptr;
-    float* sinkEntropyRate = nullptr;    // dA/dtau from irreversible heating only.
+    float* sinkEntropyRate = nullptr;    // dA/dtau from nonadiabatic heating and conduction.
     float* sinkDensity;
     // Optional d(log rho_comoving)/d(tau), including the adaptive-support
     // correction. Requires the source velocity arrays even with viscosity off.
@@ -60,7 +65,7 @@ struct SphRunData {
     uint8_t* sinkBalsaraFactor;
     Float16Storage* sinkBulkViscosityCoefficient;
     Float16Storage const* sinkScaledDivergence;
-    // Event-local density results; absent when this pass will not update history.
+    // Event-local model diagnostics; direct stages never commit endpoint history.
     SphViscosityDiagnostics* sinkViscosityDiagnostics = nullptr;
     SphParticleFlags* sinkFlags;
     float* sinkSmoothingLength;    // Full compact-support H, as in particle storage.

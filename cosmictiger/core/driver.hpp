@@ -128,12 +128,14 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose = true);
 #endif
 #if COSMICTIGER_WITH_GRAVITY
 ForceStepResult kickStep(int minrung, double scale, double, double t0, double theta, bool firstCall,
-    bool fullEval, double previousTimestep = 0.0, double maximumGlobalTimestep = 0.0);
+    bool fullEval, double previousTimestep = 0.0, double maximumGlobalTimestep = 0.0,
+    bool deferHydroOpening = false);
 #if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
 ForceStepResult kickStepHierarchical(int& minimumRung, int maximumRung, double scale,
     double scaleDerivative, double time, double baseTimestep, double theta, EnergiesT* energies,
     int minimumRungFloor, bool doPotential, hpx::future<void>* lightcone, bool keepTop, double drag,
-    int gravityErrorStep = -1, bool closingOnly = false, MeshKickSchedule const& schedule = {});
+    int gravityErrorStep = -1, bool closingOnly = false, MeshKickSchedule const& schedule = {},
+    bool deferHydroOpening = false);
 #endif
 
 #endif
@@ -141,7 +143,8 @@ ForceStepResult kickStepHierarchical(int& minimumRung, int maximumRung, double s
 ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative, double time,
     double baseTimestep, double theta, bool firstCall, bool fullEvaluation, EnergiesT& energies,
     int gravityErrorStep = -1, bool closingOnly = false, double previousTimestep = 0.0,
-    double maximumGlobalTimestep = 0.0, MeshKickSchedule const& schedule = {});
+    double maximumGlobalTimestep = 0.0, MeshKickSchedule const& schedule = {},
+    bool deferHydroOpening = false);
 
 void runFixedScenario();
 void driver();

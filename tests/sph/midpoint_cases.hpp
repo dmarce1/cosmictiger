@@ -4,11 +4,17 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
+#include <vector>
 
 #include <cosmictiger/sph/run_data.hpp>
+#include <cosmictiger/sph/thermodynamics.hpp>
 #include <cosmictiger/sph/viscosity/balsara.hpp>
+#include <cosmictiger/sph/viscosity/cullen_and_dehnen.hpp>
+#include <cosmictiger/sph/viscosity/hu_etal.hpp>
 #include <cosmictiger/sph/viscosity/monaghan.hpp>
+#include <cosmictiger/sph/viscosity/price_etal.hpp>
 
 namespace detail {
 
@@ -32,6 +38,139 @@ void requireAffineBalsaraFactor(Fixture& fixture, int flow) {
 }
 
 template <typename Fixture>
+void testDirectAccelerationGradient(Fixture& fixture) {
+    auto& data = fixture.data_;
+    auto& parameters = fixture.params_;
+    auto const savedParameters = parameters;
+    auto* history = data.sinkScaledDivergence;
+    std::vector<Float16Storage> savedHistory(fixture.count_);
+    std::vector<Float16Storage> savedCoefficient(fixture.count_);
+    for (int index = 0; index < fixture.count_; ++index) {
+        int const sink = fixture.sinkIndex(index);
+        savedHistory[index] = history[sink];
+        savedCoefficient[index] = data.sinkBulkViscosityCoefficient[sink];
+    }
+    float* savedAcceleration[] = {
+        data.sourceAccelerationX, data.sourceAccelerationY, data.sourceAccelerationZ};
+    // These source fields are unused by density reconstruction and already use
+    // the fixture's host/device allocation and deliberately shifted indexing.
+    data.sourceAccelerationX = data.sourceDensity;
+    data.sourceAccelerationY = data.sourceGradHCorrection;
+    data.sourceAccelerationZ = data.sourceBalsaraFactor;
+    data.sinkScaledDivergence = nullptr;
+    parameters.accelerationGradientViscosity = true;
+    parameters.minimumRung = 0;
+    parameters.maximumRung = kMaxRung - 1;
+    parameters.balsaraSwitch = true;
+    parameters.expansionRate = 0.0f;
+    parameters.viscosityTimestep = 0.0;
+    // Non-symmetric affine V tests tr(V²), including the off-diagonal cross
+    // products: tr(V)=-6, tr(V²)=13. tr(C)=-3, so a tr(C)-tr(V²)=-3a-13.
+    float const velocityGradient[3][3] = {
+        {-1.0f, 2.0f, 0.0f}, {-0.25f, -2.0f, 0.0f}, {0.0f, 0.0f, -3.0f}};
+    float const accelerationGradient[3][3] = {
+        {-4.0f, 0.5f, 0.0f}, {1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 2.0f}};
+    float* velocity[] = {data.sourceVelocityX, data.sourceVelocityY, data.sourceVelocityZ};
+    float* acceleration[] = {
+        data.sourceAccelerationX, data.sourceAccelerationY, data.sourceAccelerationZ};
+    for (float const scaleFactor : {1.0f, 0.6f}) {
+        parameters.scaleFactor = scaleFactor;
+        for (float const accelerationOffset : {0.0f, 0.75f}) {
+            for (int index = 0; index < fixture.count_; ++index) {
+                int const source = fixture.sourceIndex(index);
+                int const sink = fixture.sinkIndex(index);
+                double const position[3] = {data.sourcePositionX[source].toDouble() - 0.5,
+                    data.sourcePositionY[source].toDouble() - 0.5,
+                    data.sourcePositionZ[source].toDouble() - 0.5};
+                for (int row = 0; row < kDimensions; ++row) {
+                    double speed = 0.125 * (row + 1);
+                    double force = accelerationOffset * (row + 1);
+                    for (int column = 0; column < kDimensions; ++column) {
+                        speed += velocityGradient[row][column] * position[column];
+                        force += accelerationGradient[row][column] * position[column];
+                    }
+                    velocity[row][source] = float(speed);
+                    acceleration[row][source] = float(force);
+                }
+                data.sourceInternalEnergy[source] = 1.2f;
+                if (data.sourceVelocityDivergence) {
+                    data.sourceVelocityDivergence[source] = -1.0f;
+                }
+                data.sinkFlags[sink].setConverged(true);
+            }
+            fixture.densityPass();
+            float const soundSpeed =
+                std::sqrt(data.adiabaticIndex * (data.adiabaticIndex - 1.0f) * 1.2f);
+            for (int index = 0; index < fixture.count_; ++index) {
+                int const source = fixture.sourceIndex(index);
+                int const sink = fixture.sinkIndex(index);
+                auto const& diagnostics = data.sinkViscosityDiagnostics[sink];
+                midpointRequire(std::abs(diagnostics.pendingDivergence + 6.0f) < 2.0e-4f,
+                    "direct acceleration sensor lost the affine peculiar divergence");
+                midpointRequire(data.sinkBalsaraFactor[sink] == balsara::encodeFactor(8.0f / 11.0f),
+                    "direct acceleration sensor used the wrong affine shear factor");
+                float signalSpeed = soundSpeed;
+                for (int neighbor = 0; neighbor < fixture.count_; ++neighbor) {
+                    int const other = fixture.sourceIndex(neighbor);
+                    Vector3<float> const separation(
+                        distance(data.sourcePositionX[source], data.sourcePositionX[other]),
+                        distance(data.sourcePositionY[source], data.sourcePositionY[other]),
+                        distance(data.sourcePositionZ[source], data.sourcePositionZ[other]));
+                    float const radius = separation.norm();
+                    if (radius > 0.0f && radius < data.sinkSmoothingLength[sink]) {
+                        Vector3<float> const relativeVelocity(
+                            velocity[0][source] - velocity[0][other],
+                            velocity[1][source] - velocity[1][other],
+                            velocity[2][source] - velocity[2][other]);
+                        signalSpeed = std::max(signalSpeed,
+                            soundSpeed - std::min(0.0f, relativeVelocity.dot(separation) / radius));
+                    }
+                }
+                unsigned long long operations = 0;
+                float const sensor = -3.0f * scaleFactor - 13.0f;
+                cullen_and_dehnen::Result<float> expected;
+                if (parameters.cullenDehnen) {
+                    expected = cullen_and_dehnen::diagnosticsFromGradient(velocityGradient,
+                        scaleFactor, sensor, -1.0f, data.sinkSmoothingLength[sink], signalSpeed,
+                        parameters.maximumBulkViscosityCoefficient, parameters.viscosityDecayCD,
+                        operations);
+                } else if (parameters.huEtAl) {
+                    expected = hu_etal::diagnosticsFromGradient(velocityGradient, scaleFactor,
+                        sensor, data.sinkSmoothingLength[sink], soundSpeed, signalSpeed,
+                        parameters.maximumBulkViscosityCoefficientHu, parameters.viscosityDecayHu,
+                        operations);
+                } else {
+                    float const viscosityLength = data.sinkSmoothingLength[sink] /
+                        float(selectedHydroKernel().smoothingLengthPerEffectiveRadius) *
+                        float(monaghan::kViscosityWidthScale);
+                    expected = price_etal::diagnosticsFromGradient(velocityGradient, scaleFactor,
+                        sensor, viscosityLength, soundSpeed,
+                        parameters.maximumBulkViscosityCoefficientPrice,
+                        parameters.viscosityDecayPrice, operations);
+                }
+                midpointRequire(std::abs(diagnostics.targetBulkViscosityCoefficient -
+                                    expected.targetBulkViscosityCoefficient) < 2.0e-4f,
+                    "direct acceleration sensor used a stale or incorrectly scaled derivative");
+                midpointRequire(
+                    std::abs(diagnostics.inverseDecayTime - expected.inverseDecayTime) < 2.0e-4f &&
+                        std::abs(diagnostics.limiter - expected.limiter) < 2.0e-4f,
+                    "direct acceleration sensor changed the published viscosity diagnostics");
+                midpointRequire(history[sink].bits == savedHistory[index].bits,
+                    "direct acceleration sensor modified endpoint history");
+                midpointRequire(
+                    data.sinkBulkViscosityCoefficient[sink].bits == savedCoefficient[index].bits,
+                    "direct acceleration sensor evolved the viscosity coefficient");
+            }
+        }
+    }
+    data.sourceAccelerationX = savedAcceleration[0];
+    data.sourceAccelerationY = savedAcceleration[1];
+    data.sourceAccelerationZ = savedAcceleration[2];
+    data.sinkScaledDivergence = history;
+    parameters = savedParameters;
+}
+
+template <typename Fixture>
 void testGradientBalsaraPreservation(Fixture& fixture) {
     auto& data = fixture.data_;
     auto* diagnostics = data.sinkViscosityDiagnostics;
@@ -48,6 +187,126 @@ void testGradientBalsaraPreservation(Fixture& fixture) {
         }
     }
     data.sinkViscosityDiagnostics = diagnostics;
+    testDirectAccelerationGradient(fixture);
+}
+
+template <typename Fixture>
+void testFineNeighborsOfCoarseParticle() {
+    Fixture fixture(4, 4);
+    fixture.enableMidpointOutputs();
+    auto& data = fixture.data_;
+    auto& parameters = fixture.params_;
+    parameters.midpointHydro = true;
+    parameters.minimumRung = parameters.maximumRung = 2;
+    parameters.minimumProposedRung = 0;
+    parameters.baseTimestep = 1.0e-6f;
+    parameters.hydroKickTimestep = 1.0e-5;
+    parameters.scaleFactor = 0.7f;
+    parameters.expansionRate = 0.03f;
+    parameters.balsaraSwitch = false;
+    parameters.variableViscosity = false;
+    parameters.uniformAccelerationY = 0.0f;
+    parameters.zPlaneAcceleration = 0.0f;
+    parameters.velocityDampingRate = 0.0f;
+    data.selfGravityEnabled = false;
+    data.centralAcceleration = 0.0f;
+    auto* identities = fixture.enablePairKickOutputs();
+    std::array<std::array<float, 3>, 4> const positions{{{0.50f, 0.50f, 0.50f},
+        {0.46f, 0.49f, 0.50f}, {0.51f, 0.55f, 0.49f}, {0.49f, 0.50f, 0.44f}}};
+    std::array<std::array<float, 3>, 4> const velocities{{{0.03f, -0.02f, 0.01f},
+        {0.20f, 0.01f, 0.00f}, {0.00f, -0.10f, 0.05f}, {-0.02f, 0.00f, 0.15f}}};
+    std::array<float, 4> const energies{0.8f, 1.0f, 1.3f, 0.9f};
+    std::array<double, 4> entropy;
+    float* velocity[] = {data.sourceVelocityX, data.sourceVelocityY, data.sourceVelocityZ};
+    for (int index = 0; index < 4; ++index) {
+        int const source = fixture.sourceIndex(index);
+        data.sourcePositionX[source] = positions[index][0];
+        data.sourcePositionY[source] = positions[index][1];
+        data.sourcePositionZ[source] = positions[index][2];
+        data.sourceDensity[source] = 1.0f + 0.2f * index;
+        data.sourceGradHCorrection[source] = 0.0f;
+        data.sourceSmoothingLength[source] = 0.2f;
+        data.sourceRungs[source] = data.sinkParticleRungs[fixture.particleIndex(index)] =
+            index == 0 ? 1 : 2;
+        identities[source] = {index % 3, 27 - index};
+        entropy[index] = sph_entropy::fromStoredEnergy(energies[index], data.sourceDensity[source],
+            data.adiabaticIndex, parameters.scaleFactor);
+    }
+    std::array<SphPairUpdate, 4> reference;
+    std::array<int, 4> order{0, 1, 2, 3};
+    bool firstOrdering = true;
+    do {
+        for (int node = 0; node < 4; ++node) {
+            data.targetNodeIndices[node] = order[node];
+            data.neighborNodeIndices[node] = order[3 - node];
+        }
+        for (int index = 0; index < 4; ++index) {
+            int const source = fixture.sourceIndex(index);
+            for (int dimension = 0; dimension < kDimensions; ++dimension) {
+                velocity[dimension][source] = velocities[index][dimension];
+            }
+            data.sourceInternalEnergy[source] = energies[index];
+            data.sourcePairUpdates[source] = {};
+        }
+        // All fine targets read the same initial coarse state. Only after every
+        // fine-owned pair has deposited do both endpoints enter the predictor.
+        fixture.hydro(1);
+        bool coarseMoved = false;
+        for (int index = 0; index < 4; ++index) {
+            int const source = fixture.sourceIndex(index);
+            auto const predictor = data.sourcePairUpdates[source];
+            for (int dimension = 0; dimension < kDimensions; ++dimension) {
+                coarseMoved = coarseMoved || (index == 0 && predictor.velocity[dimension] != 0.0);
+                velocity[dimension][source] = float(
+                    double(velocities[index][dimension]) + 0.5 * predictor.velocity[dimension]);
+            }
+            data.sourceInternalEnergy[source] =
+                float(sph_entropy::storedEnergy(entropy[index] + 0.5 * predictor.entropy,
+                    data.sourceDensity[source], data.adiabaticIndex, parameters.scaleFactor));
+            data.sourcePairUpdates[source] = {};
+        }
+        midpointRequire(
+            coarseMoved, "fine neighbors did not predict their inactive coarse endpoint");
+        fixture.hydro(1);
+        for (int dimension = 0; dimension < kDimensions; ++dimension) {
+            double total = 0.0;
+            double absolute = 0.0;
+            for (int index = 0; index < 4; ++index) {
+                double const increment =
+                    data.sourcePairUpdates[fixture.sourceIndex(index)].velocity[dimension];
+                total += increment;
+                absolute += std::abs(increment);
+            }
+            midpointRequire(
+                std::abs(total) <= 64.0 * std::numeric_limits<double>::epsilon() * absolute,
+                "multiple fine neighbors lost reciprocal coarse recoil");
+        }
+        for (int index = 0; index < 4; ++index) {
+            auto const& update = data.sourcePairUpdates[fixture.sourceIndex(index)];
+            if (firstOrdering) {
+                reference[index] = update;
+            } else {
+                double const entropyScale = std::max(1.0e-12, std::abs(reference[index].entropy));
+                midpointRequire(std::abs(update.entropy - reference[index].entropy) <=
+                        32.0 * std::numeric_limits<float>::epsilon() * entropyScale,
+                    "fine-neighbor evaluation order changed corrected entropy");
+                for (int dimension = 0; dimension < kDimensions; ++dimension) {
+                    double scale = 1.0e-12;
+                    for (int particle = 0; particle < 4; ++particle) {
+                        scale += std::abs(reference[particle].velocity[dimension]);
+                    }
+                    midpointRequire(std::abs(update.velocity[dimension] -
+                                        reference[index].velocity[dimension]) <=
+                            32.0 * std::numeric_limits<float>::epsilon() * scale,
+                        "fine-neighbor evaluation order changed the corrected pair impulse");
+                }
+            }
+            midpointRequire(
+                data.sinkParticleRungs[fixture.particleIndex(index)] == (index == 0 ? 1 : 2),
+                "shared-coarse correction changed an interval's live rung");
+        }
+        firstOrdering = false;
+    } while (std::next_permutation(order.begin(), order.end()));
 }
 
 template <typename Fixture>
@@ -140,6 +399,7 @@ void testMidpointHydroTargets(Fixture& fixture) {
             data.sinkEntropyRate[fixture.sinkIndex(2)] == -123.0f &&
             data.sinkFlags[fixture.sinkIndex(2)].proposedRung() == kMaxRung - 1,
         "midpoint neighbor limiter updated a target above the selected rung");
+    testFineNeighborsOfCoarseParticle<Fixture>();
 }
 
 template <typename Fixture>

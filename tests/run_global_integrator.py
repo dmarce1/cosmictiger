@@ -1,4 +1,4 @@
-"""Check raw global steps, synchronized ranks, endpoint clipping, and exact restarts."""
+"""Check raw global steps, synchronized ranks, endpoint clipping, and restart state."""
 
 import argparse
 import math
@@ -11,7 +11,7 @@ sys.dont_write_bytecode = True
 
 from application_selection import application_arguments, compiled_algorithms
 from checkpoint_format import decode_checkpoint, require
-from run_checkpoint import fnv1a64, prepareCase, runSimulation
+from run_checkpoint import check_velocity_roundoff_restart, fnv1a64, prepareCase, runSimulation
 
 
 def checkpoint_state(directory, iteration, rank=0, integer_bytes=None):
@@ -35,6 +35,30 @@ def checkpoint_state(directory, iteration, rank=0, integer_bytes=None):
         require(driver.global_hydro_timestep > 0,
                 f"{path}: midpoint global hydro bound was not persisted")
     return driver, driver.global_timestep, decoded.physical
+
+
+def check_hydro_restart_roundoff(reference, resumed):
+    """Keep clocks/nonvelocity bytes exact and use the established per-axis float bound."""
+    states = [decode_checkpoint((path / "checkpoint.0.dat").read_bytes())
+              for path in (reference, resumed)]
+
+    def ordered_float(value):
+        # Map binary32 values to consecutive integers across both signs, treating
+        # signed zero equally; a double-precision math.ulp is not the stored ULP.
+        bits = struct.unpack("=i", struct.pack("=f", value))[0]
+        return -0x80000000 - bits if bits < 0 else bits
+
+    maximum_ulps = 0
+    for index, (old, new) in enumerate(zip(states[0].velocities, states[1].velocities)):
+        require(math.isfinite(old) and math.isfinite(new),
+                f"restart velocity {index} is nonfinite")
+        ulps = abs(ordered_float(old) - ordered_float(new))
+        maximum_ulps = max(maximum_ulps, ulps)
+    # Near cancellation, a tiny absolute reduction error can span many ULPs of
+    # the residual. Bound against the velocity axis scale, not that residual;
+    # retain local ULP distance as evidence rather than widening a ULP cutoff.
+    errors = check_velocity_roundoff_restart(reference, resumed)
+    return maximum_ulps, errors
 
 
 def main():
@@ -117,8 +141,18 @@ def main():
         if not (checkpoint_iterations(resumed) == [1, 2]):
             raise RuntimeError(f'{label}: restart ran an extra iteration')
         continued, next_timestep, continued_physical = read_state(resumed, 2)
-        if not (continued.tau == final.tau and continued_physical == physical):
-            raise RuntimeError(label)
+        require(continued.tau == final.tau, f"{label}: restart changed the exact clock")
+        restart_kind = "exact"
+        if continued_physical != physical:
+            require(hydro, f"{label}: restart changed exact collisionless particle state")
+            # Pair reductions need not retain their floating addition order when
+            # a restart rebuilds the SPH tree. Keep all nonvelocity bytes exact;
+            # use the existing four-float-epsilon bound per velocity axis, which
+            # also handles tiny transverse residuals from cancellation.
+            maximum_ulps, errors = check_hydro_restart_roundoff(
+                baseline / "checkpoint.2", resumed / "checkpoint.2")
+            restart_kind = (f"velocity-roundoff (max local ULP distance={maximum_ulps}; "
+                            f"errors={errors})")
         if not (math.isclose(continued.tau - first.tau, next_timestep, rel_tol=1e-14)):
             raise RuntimeError('Check failed: math.isclose(continued.tau - first.tau, next_timestep, rel_tol=1e-14)')
 
@@ -172,7 +206,7 @@ def main():
                 raise RuntimeError('ranks selected different timesteps')
             if not (math.isclose(states[0][1], timestep, rel_tol=2e-05)):
                 raise RuntimeError('distributed minimum differs from serial minimum')
-        print(f"{label}: raw dt={timestep:.12g}, exact restart and endpoint passed")
+        print(f"{label}: raw dt={timestep:.12g}, {restart_kind} restart and exact endpoint passed")
     return 0
 
 

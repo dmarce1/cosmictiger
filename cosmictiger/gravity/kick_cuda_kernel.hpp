@@ -123,6 +123,18 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
         gy *= params.gm;
         gx *= params.gm;
         phi *= params.gm;
+        if (params.sphAccelerationOnly) {
+#if COSMICTIGER_WITH_SPH
+            if (data.type[sinkIndex] == kSphType) {
+                ParticleInteger const gasIndex = data.catIndex[sinkIndex];
+                data.sphStageAccelerations[gasIndex] = Vector3<float>(gx, gy, gz);
+            }
+#endif
+            flops += cosmictiger::gravity::cartesian::tracefree::detail::L2P<fmmLocalDegree(order),
+                         true>::kFlops_ +
+                18;
+            continue;
+        }
         if (data.gravitySampleAccelerations != nullptr) {
             ParticleInteger const slot = data.gravitySampleIndices[sinkIndex];
             if (slot >= 0) {
@@ -250,7 +262,20 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
 #endif
                 rungs[sinkIndex] = nextRung;
                 dt = 0.5f * rungDt[params.minRung] * params.t0;
-                applyKick(sgn * dt);
+#if COSMICTIGER_WITH_SPH
+                if (params.deferHydroOpening && data.midpointHydro && data.sph &&
+                    data.type[sinkIndex] == kSphType) {
+                    auto& increment = data.deferredGasOpening[data.catIndex[sinkIndex]];
+                    float const signedHalfStep = sgn * dt;
+                    increment[kXDimension] = fmaf(gx, signedHalfStep, increment[kXDimension]);
+                    increment[kYDimension] = fmaf(gy, signedHalfStep, increment[kYDimension]);
+                    increment[kZDimension] = fmaf(gz, signedHalfStep, increment[kZDimension]);
+                    flops += 7;
+                } else
+#endif
+                {
+                    applyKick(sgn * dt);
+                }
                 flops += 2;
             }
         } else {
@@ -317,6 +342,11 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                     data.globalAcceleration[kXDimension][sinkIndex] = gx;
                     data.globalAcceleration[kYDimension][sinkIndex] = gy;
                     data.globalAcceleration[kZDimension][sinkIndex] = gz;
+                } else if (gas && params.deferHydroOpening) {
+                    auto& increment = data.deferredGasOpening[data.catIndex[sinkIndex]];
+                    increment[kXDimension] = fmaf(gx, dt, increment[kXDimension]);
+                    increment[kYDimension] = fmaf(gy, dt, increment[kYDimension]);
+                    increment[kZDimension] = fmaf(gz, dt, increment[kZDimension]);
                 } else {
                     vx = fmaf(gx, dt, vx);
                     vy = fmaf(gy, dt, vy);

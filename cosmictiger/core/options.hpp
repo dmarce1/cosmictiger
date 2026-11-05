@@ -253,6 +253,7 @@ struct Hydro {
     double bulkViscosityCoefficient{};
     double vonNeumannRichtmyerCoefficient{};
     double viscosityEpsilon{};
+    double conductionCoefficient{0.0};
     bool balsaraSwitch{false};
     std::string viscosityEvolution{"hu_etal"};
     double minimumBulkViscosityCoefficient{0.1};
@@ -507,6 +508,7 @@ struct Options {
         arc & gravity.p3mMeshSize;
         arc & compute.sphTreeRebuildFraction;
         arc & run.rungMergeFraction;
+        arc & hydro.conductionCoefficient;
     }
 };
 

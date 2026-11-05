@@ -10,8 +10,17 @@
 
 #include <cosmictiger/particles/particles.hpp>
 
-void sphParticlesGlobalReadViscosityDiagnostics(
-    ParticleGlobalRange range, float* divergence, ParticleInteger offset);
+struct SphRunParameters;
+
+// currentGradient selects pendingDivergence from a completed all-gas diagnostic
+// pass. The caller must clear diagnostic caches between source stages. No history
+// is committed by either read mode; the default preserves the legacy endpoint signs.
+void sphParticlesGlobalReadViscosityDiagnostics(ParticleGlobalRange range, float* divergence,
+    ParticleInteger offset, bool currentGradient = false);
+
+// Publish the completed density pass for output, using the existing checkpoint
+// normalization. This does not evolve alpha or feed the direct-gradient sensor.
+void sphParticlesPublishDivergence(SphRunParameters const& parameters);
 
 namespace cullen_and_dehnen {
 

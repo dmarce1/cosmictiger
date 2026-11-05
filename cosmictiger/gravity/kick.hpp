@@ -54,6 +54,8 @@ struct CudaKickData {
     float* gz;
     float* pot;
     Array<float*, kDimensions> globalAcceleration{};
+    Vector3<float>* deferredGasOpening = nullptr;
+    Vector3<float>* sphStageAccelerations = nullptr;
     ParticleInteger const* gravitySampleIndices;
     Vector3<float>* gravitySampleAccelerations;
 };
@@ -101,11 +103,16 @@ struct KickParameters {
     FmmGeometry geometry{};
     ParticleInteger outputOffset = 0;
     bool forceOnly = false;
+    // Full-tree current gravity for an SPH acceleration-gradient sensor.
+    bool sphAccelerationOnly = false;
     bool profileCoordinator = true;
     bool globalTimestep = false;
     // Traditional SPH common boundaries select and balance gas rungs before
     // opening. The current force is retained only until that event finishes.
     bool deferGasOpening = false;
+    // At a coarse hydro event, collect gas opening impulses until hydro finishes.
+    // This is independent of the common-boundary rung-balancing deferral above.
+    bool deferHydroOpening = false;
     // At all-particle common boundaries, gas uses the full top force to choose
     // a rung. Neighbor closure follows before any descending subset is built.
     bool fullGasRungSelection = false;
@@ -177,9 +184,11 @@ struct KickParameters {
         arc & openLargerCell;
         arc & geometry;
         arc & forceOnly;
+        arc & sphAccelerationOnly;
         arc & profileCoordinator;
         arc & globalTimestep;
         arc & deferGasOpening;
+        arc & deferHydroOpening;
         arc & fullGasRungSelection;
         arc & freezeGasRungs;
         arc & previousTimestep;
@@ -196,6 +205,23 @@ void gravityBeginGlobalKick();
 double gravityFinishGlobalKick(double timestep);
 KickReturn gravityFinishBalancedGasKick(double baseTimestep, float sign);
 float* gravityGlobalAcceleration(int dimension);
+
+// Collective noncommon-boundary protocol: begin after migration, collect during
+// gravity walks, seal before any gas sort, and finish after hydro. Base-particle
+// ordering must remain fixed between seal and finish. No global/shared step or
+// common-boundary rung balance may occur while collecting.
+void gravityBeginDeferredGasOpening();
+void gravitySealDeferredGasOpening();
+KickReturn gravityFinishDeferredGasOpening();
+void gravityDiscardDeferredGasOpening();
+bool gravityGasOpeningDeferred();
+Vector3<float>* gravityDeferredGasOpeningData();
+
+// Collective FMM-only force evaluation into sphStageAccelerations(). The caller
+// allocates that gas-indexed stage buffer first. No kicks, rung changes, domain
+// migration, or gas sorting occur; a temporary base-particle permutation is
+// restored exactly before returning, preserving hierarchical rung partitions.
+void gravityRefreshSphAcceleration(double theta);
 
 struct KickWorkitem {
     FmmGeometry geometry{};

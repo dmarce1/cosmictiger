@@ -1,5 +1,6 @@
 /* CosmicTiger - common particle permutation; BSL-1.0. */
 
+#include <algorithm>
 #include <cstring>
 #include <type_traits>
 
@@ -9,6 +10,10 @@
 #endif
 
 namespace detail {
+
+static bool temporarySortActive = false;
+static Vector<ParticleInteger> originalIndices;
+static Vector<ParticleInteger> restoredIndices;
 
 template <class Value>
 void swapParticleBytes(Value& first, Value& second) {
@@ -27,6 +32,13 @@ void particlesSwap(ParticleInteger first, ParticleInteger second) {
     }
     CHECK_PART_BOUNDS(first);
     CHECK_PART_BOUNDS(second);
+    if (detail::temporarySortActive) {
+        ParticleInteger const originalFirst = detail::originalIndices[first];
+        ParticleInteger const originalSecond = detail::originalIndices[second];
+        std::swap(detail::originalIndices[first], detail::originalIndices[second]);
+        detail::restoredIndices[originalFirst] = second;
+        detail::restoredIndices[originalSecond] = first;
+    }
     for (int dim = 0; dim < kDimensions; ++dim) {
         detail::swapParticleBytes(particlesX[dim][first], particlesX[dim][second]);
     }
@@ -82,4 +94,37 @@ void particlesSwap(ParticleInteger first, ParticleInteger second) {
         detail::swapParticleBytes(
             particlesStarFormationStates[first], particlesStarFormationStates[second]);
     }
+}
+
+void particlesBeginTemporarySort() {
+    ALWAYS_ASSERT(!detail::temporarySortActive);
+    size_t const count = particlesOwnedSize();
+    detail::originalIndices.resize(count);
+    detail::restoredIndices.resize(count);
+    for (ParticleInteger index = 0; index < count; ++index) {
+        detail::originalIndices[index] = detail::restoredIndices[index] = index;
+    }
+    detail::temporarySortActive = true;
+}
+
+void particlesEndTemporarySort() {
+    if (!detail::temporarySortActive) {
+        return;
+    }
+    ALWAYS_ASSERT(detail::originalIndices.size() == size_t(particlesOwnedSize()));
+    for (ParticleInteger index = 0; index < particlesOwnedSize(); ++index) {
+        particlesSwap(index, detail::restoredIndices[index]);
+    }
+    detail::temporarySortActive = false;
+#if COSMICTIGER_WITH_SPH
+    if (getOptions().hydro.enabled) {
+        for (ParticleInteger index = 0; index < particlesOwnedSize(); ++index) {
+            if (particlesType(index) == kSphType) {
+                sphParticlesParticleIndex(particlesCatIndex(index)) = index;
+            }
+        }
+    }
+#endif
+    Vector<ParticleInteger>().swap(detail::originalIndices);
+    Vector<ParticleInteger>().swap(detail::restoredIndices);
 }

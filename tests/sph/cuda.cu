@@ -27,6 +27,7 @@
 #include <cosmictiger/sph/viscosity/balsara.hpp>
 #include <cosmictiger/sph/viscosity/monaghan.hpp>
 #include <tests/cuda_test.hpp>
+#include <tests/sph/conduction_cases.hpp>
 #include <tests/sph/global_timestep_cases.hpp>
 #include <tests/sph/midpoint_cases.hpp>
 #include <tests/sph/pair_kick_cases.hpp>
@@ -586,9 +587,10 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
     }
 }
 
-void testCpuCudaParity(int viscosityMode = 0) {
+void testCpuCudaParity(int viscosityMode = 0, float conductionCoefficient = 0.0f) {
     // Three unequal leaves and 19 neighbors exercise indirection and SIMD tails.
     Fixture fixture(19, 3, true);
+    fixture.params_.conductionCoefficient = conductionCoefficient;
     if (viscosityMode != 0) {
         fixture.enableVariableViscosity(viscosityMode == 2, viscosityMode == 3);
         fixture.params_.vonNeumannRichtmyerCoefficient = 3.5f;
@@ -2308,4 +2310,14 @@ TEST_F(SphCudaTest, SharedNeighborStorageAndResize) {
     detail::checkCuda(cudaDeviceSynchronize(), "shared neighbor test completion");
     EXPECT_EQ(*errors, 0);
     detail::checkCuda(cudaFree(errors), "shared neighbor test release");
+}
+
+TEST_F(SphCudaTest, ArtificialConduction) {
+    detail::Fixture fixture(2, 2, true);
+    detail::testConductionPair(fixture);
+}
+
+TEST_F(SphCudaTest, ArtificialConductionCpuParity) {
+    detail::testCpuCudaParity(0, 0.3f);
+    detail::testCpuCudaParity(3, 0.3f);
 }

@@ -78,7 +78,7 @@ def read_header(data):
     header = Reader(data).native(Header)
     require(header.magic == 0x4354535048303031 and header.version == 3,
             "unsupported checkpoint header")
-    supported = sum(1 << bit for bit in (0, 6, 7, 8, 9, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22))
+    supported = sum(1 << bit for bit in (0, 6, 7, 8, 9, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 25))
     require(not header.flags & (1 << 16), "retired particle-mesh checkpoint")
     require(not header.flags & ~supported, "unsupported checkpoint feature flags")
     return header
@@ -92,7 +92,7 @@ def read_prefix(data):
     hydro, cooling, stars = (bool(flags & (1 << bit)) for bit in (0, 11, 20))
     require(not cooling or hydro, "cooling checkpoint requires SPH")
     require(not stars or cooling, "star formation checkpoint requires cooling")
-    require(hydro or not flags & ((1 << 12) | (1 << 13) | (1 << 14)),
+    require(hydro or not flags & ((1 << 12) | (1 << 13) | (1 << 14) | (1 << 25)),
             "SPH parameter flags require SPH")
     result = SimpleNamespace(header=header, hydro=hydro, has_cooling=cooling, has_stars=stars,
                              position_bytes=8 if flags & (1 << 15) else 4,
@@ -121,6 +121,9 @@ def read_prefix(data):
     viscosity_offset = 0
     if hydro:
         result.sph_parameters = reader.take("d", 13)
+        result.conduction_coefficient = reader.take("d")[0] if flags & (1 << 25) else 0.0
+        require(math.isfinite(result.conduction_coefficient) and
+                result.conduction_coefficient >= 0.0, "invalid checkpoint conduction coefficient")
         if flags & (1 << 12):
             result.z_plane_acceleration = reader.take("d")[0]
         if flags & (1 << 14):

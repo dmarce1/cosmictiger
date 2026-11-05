@@ -795,6 +795,355 @@ void verifySphMidpointUpdates() {
     std::cout << "SPH midpoint pair, source and positive-kick regression passed\n" << std::flush;
 }
 
+using SphTemporalState = std::array<double, 4>;
+
+SphTemporalState sphTemporalState() {
+    return {sphParticlesVelocity(0, 0), sphParticlesVelocity(0, 1), sphParticlesEntropy(0),
+        sphParticlesEntropy(1)};
+}
+
+void verifySphTemporalOrder() {
+    auto const savedOptions = getOptions();
+    bool const savedEntropyInitialized = sphParticlesEntropyInitialized;
+    double const savedThermalScale = sphParticlesThermalScaleFactor;
+    auto options = savedOptions;
+    options.hydro.enabled = true;
+    options.hydro.method = "sph";
+    options.hydro.viscosityEvolution = "none";
+    options.hydro.balsaraSwitch = false;
+    options.hydro.gamma = 5.0 / 3.0;
+    options.hydro.bulkViscosityCoefficient = 0.7;
+    options.hydro.vonNeumannRichtmyerCoefficient = 1.0;
+    options.hydro.viscosityEpsilon = 0.01;
+    options.hydro.yAcceleration = 0.0;
+    options.hydro.zPlaneAcceleration = 0.0;
+    options.hydro.centralAcceleration = 0.0;
+    options.chemistry.enabled = false;
+    options.starFormation.enabled = false;
+    options.gravity.enabled = false;
+    options.initial.gasMass = 1.0e-4;
+    std::array<int, 3> const stepCounts{4, 8, 16};
+    SphTemporalState const initialState{0.5, -0.3, 0.8, 1.2};
+
+    // These are production fixed-position hydro events, including source staging,
+    // reciprocal updates and commits. Hold supports, densities and viscosity
+    // coefficients fixed to isolate the temporal order of the hydro operator;
+    // this does not test drift splitting or the endpoint viscosity switches.
+    for (int testCase = 0; testCase < 3; ++testCase) {
+        bool const damping = testCase == 0;
+        options.hydro.damping = damping ? 1.25 : 0.0;
+        options.hydro.conductionCoefficient = testCase == 2 ? 0.3 : 0.0;
+        setOptions(options);
+        sphTreeDestroy(true);
+        sphParticlesEntropyInitialized = false;
+        initializeSphTreeParticles(2, 0);
+        for (ParticleInteger gas = 0; gas < 2; ++gas) {
+            sphParticlesDensities[gas] = 1.3f + 0.8f * gas;
+            sphParticlesGradHCorrections[gas] = 0.0f;
+            sphParticlesSmoothingLength(gas) = damping ? 0.1f : 0.2f + 0.05f * gas;
+            sphParticlesRung(gas) = gas == 0 ? 0 : 2;
+            sphParticlesSetProposedRung(gas, sphParticlesRung(gas));
+            for (int dimension = 0; dimension < kDimensions; ++dimension) {
+                sphParticlesPosition(dimension, gas) =
+                    dimension == 0 ? (damping ? 0.25 + 0.5 * gas : 0.47 + 0.06 * gas) : 0.5;
+                sphParticlesVelocity(dimension, gas) = 0.0f;
+            }
+        }
+        sphParticlesPrepareThermodynamics(1.0, true);
+        SphTreeCreateParameters treeParameters{};
+        treeParameters.minimumRung = damping ? 0 : 2;
+        treeParameters.smoothingLengthMultiplier = 1.0f;
+        auto const tree = sphTreeCreate(treeParameters);
+        SphTreeNeighborParameters neighbors{};
+        neighbors.minimumRung = treeParameters.minimumRung;
+        neighbors.operation = SphNeighborOperation::RefreshBounds;
+        neighbors.innerParticleSelection = neighbors.outerParticleSelection =
+            SphParticleSelection::All;
+        neighbors.smoothingLengthMultiplier = 1.0f;
+        sphTreeNeighbor(neighbors, tree.id, Vector<TreeId>{}).get();
+        neighbors.operation = SphNeighborOperation::FindNeighbors;
+        neighbors.interactionDirection = SphInteractionDirection::EitherSupport;
+        sphTreeNeighbor(neighbors, tree.id, Vector<TreeId>{tree.id}).get();
+
+        auto const run = [&](int steps, double duration) {
+            for (ParticleInteger gas = 0; gas < 2; ++gas) {
+                sphParticlesVelocity(0, gas) = float(initialState[gas]);
+                sphParticlesEntropy(gas) = float(initialState[gas + 2]);
+                sphParticlesSetProposedRung(gas, sphParticlesRung(gas));
+            }
+            SphRunParameters parameters;
+            parameters.minimumRung = damping ? 0 : 2;
+            parameters.maximumRung = damping ? kMaxRung - 1 : 2;
+            parameters.globalTimestep = damping;
+            parameters.baseTimestep = float(duration);
+            parameters.scaleFactor = 1.0f;
+            parameters.expansionRate = 0.0f;
+            parameters.hydroKickTimestep = duration / steps;
+            double const initialMomentum =
+                double(float(initialState[0])) + double(float(initialState[1]));
+            for (int step = 0; step < steps; ++step) {
+                sphMidpointBeginEvent();
+                sphMidpointForces(parameters, false);
+                sphMidpointEndEvent();
+                for (ParticleInteger gas = 0; gas < 2; ++gas) {
+                    requireSphTree(sphParticlesEntropy(gas) > 0.0f &&
+                            sphParticlesRung(gas) == (gas == 0 ? 0 : 2),
+                        "temporal refinement changed rungs or lost positive entropy");
+                }
+                if (!damping) {
+                    double const momentum =
+                        double(sphParticlesVelocity(0, 0)) + double(sphParticlesVelocity(0, 1));
+                    requireSphTree(std::abs(momentum - initialMomentum) < 2.0e-6,
+                        "temporal refinement lost the inactive neighbor's recoil");
+                }
+            }
+            return sphTemporalState();
+        };
+
+        double duration = 1.0;
+        if (!damping) {
+            // Derived conditioning: choose a fixed final time from the initial
+            // complete production RHS, so the pair loses an appreciable fraction
+            // of its approach speed before the viscosity's separating branch.
+            // T = 0.35 (v₀-v₁)/|a₀-a₁|; a is estimated by one short RK2 probe δ.
+            // Symbol directory: T → duration; δ → kProbeDuration;
+            // v₀,v₁ → initialState[0,1]; a₀-a₁ → relativeAcceleration.
+            constexpr double kProbeDuration = 1.0e-4;
+            auto const probe = run(1, kProbeDuration);
+            double const initialRelativeVelocity =
+                double(float(initialState[0])) - double(float(initialState[1]));
+            double const relativeAcceleration =
+                (probe[0] - probe[1] - initialRelativeVelocity) / kProbeDuration;
+            requireSphTree(relativeAcceleration < 0.0,
+                "temporal pair fixture does not oppose the approaching flow");
+            duration = 0.35 * initialRelativeVelocity / -relativeAcceleration;
+        }
+        auto const reference = run(damping ? 1 : 256, duration);
+        requireSphTree(damping ||
+                (reference[0] < initialState[0] && reference[1] > initialState[1] &&
+                    reference[0] > reference[1]),
+            "temporal pair fixture did not remain viscous and approaching");
+        if (testCase == 1) {
+            requireSphTree(reference[2] > initialState[2] && reference[3] > initialState[3],
+                "temporal pair fixture did not exercise viscosity heating");
+        }
+        {
+            std::array<double, 3> velocityErrors{};
+            std::array<double, 3> entropyErrors{};
+            for (size_t refinement = 0; refinement < stepCounts.size(); ++refinement) {
+                auto const state = run(stepCounts[refinement], duration);
+                for (size_t gas = 0; gas < 2; ++gas) {
+                    // Derived exact solution of dv/dt = -λv:
+                    // v(T) = v(0) exp(-λT). λ → options.hydro.damping;
+                    // T → duration; v(0) → float(initialState[gas]).
+                    double const expectedVelocity = damping ? double(float(initialState[gas])) *
+                            std::exp(-options.hydro.damping * duration) :
+                                                              reference[gas];
+                    velocityErrors[refinement] = std::max(
+                        velocityErrors[refinement], std::abs(state[gas] - expectedVelocity));
+                    entropyErrors[refinement] = std::max(
+                        entropyErrors[refinement], std::abs(state[gas + 2] - reference[gas + 2]));
+                    if (damping) {
+                        requireSphTree(state[gas + 2] == double(float(initialState[gas + 2])),
+                            "isolated damping changed the entropy");
+                    }
+                }
+            }
+            for (size_t refinement = 1; refinement < stepCounts.size(); ++refinement) {
+                double const minimumRatio = 3.2;
+                double const maximumRatio = 5.5;
+                double const velocityRatio =
+                    velocityErrors[refinement - 1] / velocityErrors[refinement];
+                double const entropyRatio =
+                    damping ? 0.0 : entropyErrors[refinement - 1] / entropyErrors[refinement];
+                std::cout << "SPH production temporal order: case=" << testCase
+                          << " integrator=rk2 steps=" << stepCounts[refinement]
+                          << " velocity_error=" << velocityErrors[refinement]
+                          << " velocity_ratio=" << velocityRatio
+                          << " entropy_error=" << entropyErrors[refinement]
+                          << " entropy_ratio=" << entropyRatio << '\n'
+                          << std::flush;
+                requireSphTree(velocityRatio > minimumRatio && velocityRatio < maximumRatio,
+                    "production hydro velocity has the wrong temporal order");
+                requireSphTree(
+                    damping || (entropyRatio > minimumRatio && entropyRatio < maximumRatio),
+                    "production hydro entropy has the wrong temporal order");
+            }
+        }
+    }
+    {
+        // Derived Strang composition at fixed positions: over a coarse interval H,
+        // K_f(H/2) K_c(H) K_f(H/2) approximates F_f + F_c through second order.
+        // The three-particle chain has one coarse/coarse pair and one coarse/fine
+        // pair sharing the middle particle, so these velocity/entropy-dependent
+        // operators do not commute. Production RK2 implements every K call.
+        // Symbol directory: H -> coarseTimestep; K -> advanceRung;
+        // F_c,F_f -> the production due-pair operators on rungs 0 and 1.
+        constexpr ParticleInteger kParticleCount = 3;
+        using SplitState = std::array<double, 2 * kParticleCount>;
+        SplitState const initialSplitState{0.6, 0.1, -0.35, 0.08, 0.1, 0.12};
+        std::array<int, 3> const splitStepCounts{4, 8, 16};
+        options.hydro.damping = 0.0;
+        // Lower entropy and stronger conduction keep the thermal O(h²) signal
+        // above binary32 accumulation noise without crossing the approach branch.
+        options.hydro.conductionCoefficient = 3.0;
+        setOptions(options);
+        sphTreeDestroy(true);
+        sphParticlesEntropyInitialized = false;
+        initializeSphTreeParticles(kParticleCount, 0);
+        for (ParticleInteger gas = 0; gas < kParticleCount; ++gas) {
+            sphParticlesDensities[gas] = 1.6f;
+            sphParticlesGradHCorrections[gas] = 0.0f;
+            sphParticlesSmoothingLength(gas) = 0.1f;
+            sphParticlesRung(gas) = gas == 2 ? 1 : 0;
+            sphParticlesSetProposedRung(gas, sphParticlesRung(gas));
+            for (int dimension = 0; dimension < kDimensions; ++dimension) {
+                sphParticlesPosition(dimension, gas) = dimension == 0 ? 0.44 + 0.06 * gas : 0.5;
+                sphParticlesVelocity(dimension, gas) = 0.0f;
+            }
+        }
+        sphParticlesPrepareThermodynamics(1.0, true);
+        SphTreeCreateParameters treeParameters{};
+        treeParameters.minimumRung = 0;
+        treeParameters.smoothingLengthMultiplier = 1.0f;
+        auto const tree = sphTreeCreate(treeParameters);
+        SphTreeNeighborParameters neighbors{};
+        neighbors.minimumRung = 0;
+        neighbors.operation = SphNeighborOperation::RefreshBounds;
+        neighbors.innerParticleSelection = neighbors.outerParticleSelection =
+            SphParticleSelection::All;
+        neighbors.smoothingLengthMultiplier = 1.0f;
+        sphTreeNeighbor(neighbors, tree.id, Vector<TreeId>{}).get();
+        neighbors.operation = SphNeighborOperation::FindNeighbors;
+        neighbors.interactionDirection = SphInteractionDirection::EitherSupport;
+        sphTreeNeighbor(neighbors, tree.id, Vector<TreeId>{tree.id}).get();
+
+        auto const resetState = [&]() {
+            for (ParticleInteger gas = 0; gas < kParticleCount; ++gas) {
+                sphParticlesVelocity(0, gas) = float(initialSplitState[gas]);
+                sphParticlesEntropy(gas) = float(initialSplitState[kParticleCount + gas]);
+                sphParticlesSetProposedRung(gas, sphParticlesRung(gas));
+            }
+        };
+        auto const captureState = [&]() {
+            SplitState state{};
+            for (ParticleInteger gas = 0; gas < kParticleCount; ++gas) {
+                state[gas] = sphParticlesVelocity(0, gas);
+                state[kParticleCount + gas] = sphParticlesEntropy(gas);
+            }
+            return state;
+        };
+        auto const advanceRung = [&](int rung, double timestep) {
+            SphRunParameters parameters;
+            parameters.minimumRung = parameters.maximumRung = rung;
+            parameters.baseTimestep = std::ldexp(timestep, rung);
+            parameters.scaleFactor = 1.0f;
+            parameters.expansionRate = 0.0f;
+            parameters.hydroKickTimestep = timestep;
+            sphMidpointBeginEvent();
+            sphMidpointForces(parameters, false);
+            sphMidpointEndEvent();
+        };
+        constexpr double kProbeDuration = 1.0e-5;
+        resetState();
+        advanceRung(0, kProbeDuration);
+        auto const coarseProbe = captureState();
+        requireSphTree(coarseProbe[0] < float(initialSplitState[0]) &&
+                coarseProbe[1] > float(initialSplitState[1]) &&
+                coarseProbe[2] == float(initialSplitState[2]),
+            "split refinement fixture did not isolate its coarse-owned pair");
+        resetState();
+        advanceRung(1, kProbeDuration);
+        auto const fineProbe = captureState();
+        requireSphTree(fineProbe[0] == float(initialSplitState[0]) &&
+                fineProbe[1] < float(initialSplitState[1]) &&
+                fineProbe[2] > float(initialSplitState[2]),
+            "split refinement fixture did not isolate its fine-owned pair");
+
+        auto const runSplit = [&](int steps, double duration) {
+            resetState();
+            double const coarseTimestep = duration / steps;
+            double initialMomentum = 0.0;
+            for (ParticleInteger gas = 0; gas < kParticleCount; ++gas) {
+                initialMomentum += float(initialSplitState[gas]);
+            }
+            for (int step = 0; step < steps; ++step) {
+                advanceRung(1, 0.5 * coarseTimestep);
+                advanceRung(0, coarseTimestep);
+                advanceRung(1, 0.5 * coarseTimestep);
+                double momentum = 0.0;
+                for (ParticleInteger gas = 0; gas < kParticleCount; ++gas) {
+                    momentum += sphParticlesVelocity(0, gas);
+                    requireSphTree(sphParticlesEntropy(gas) > 0.0f &&
+                            sphParticlesRung(gas) == (gas == 2 ? 1 : 0),
+                        "split refinement changed rungs or lost positive entropy");
+                }
+                requireSphTree(std::abs(momentum - initialMomentum) < 8.0e-6,
+                    "split refinement lost reciprocal coarse/fine momentum");
+            }
+            return captureState();
+        };
+        auto const probe = runSplit(1, kProbeDuration);
+        double duration = std::numeric_limits<double>::infinity();
+        for (ParticleInteger gas = 0; gas + 1 < kParticleCount; ++gas) {
+            double const relativeVelocity =
+                double(float(initialSplitState[gas])) - float(initialSplitState[gas + 1]);
+            double const relativeAcceleration =
+                (probe[gas] - probe[gas + 1] - relativeVelocity) / kProbeDuration;
+            requireSphTree(relativeAcceleration < 0.0,
+                "split refinement fixture does not oppose each approaching pair");
+            duration = std::min(duration, 0.4 * relativeVelocity / -relativeAcceleration);
+        }
+        auto const reference = runSplit(64, duration);
+        auto const refinedReference = runSplit(128, duration);
+        requireSphTree(reference[0] > reference[1] && reference[1] > reference[2],
+            "split refinement crossed the viscosity approach branch");
+        std::array<double, 3> velocityErrors{};
+        std::array<double, 3> entropyErrors{};
+        for (size_t refinement = 0; refinement < splitStepCounts.size(); ++refinement) {
+            auto const state = runSplit(splitStepCounts[refinement], duration);
+            for (ParticleInteger gas = 0; gas < kParticleCount; ++gas) {
+                velocityErrors[refinement] =
+                    std::max(velocityErrors[refinement], std::abs(state[gas] - reference[gas]));
+                entropyErrors[refinement] = std::max(entropyErrors[refinement],
+                    std::abs(state[kParticleCount + gas] - reference[kParticleCount + gas]));
+            }
+        }
+        for (ParticleInteger gas = 0; gas < kParticleCount; ++gas) {
+            requireSphTree(
+                std::abs(reference[gas] - refinedReference[gas]) < 0.1 * velocityErrors.back(),
+                "split velocity reference uncertainty masks the refinement signal");
+            requireSphTree(std::abs(reference[kParticleCount + gas] -
+                               refinedReference[kParticleCount + gas]) < 0.1 * entropyErrors.back(),
+                "split entropy reference uncertainty masks the refinement signal");
+        }
+        for (size_t refinement = 1; refinement < splitStepCounts.size(); ++refinement) {
+            double const velocityRatio =
+                velocityErrors[refinement - 1] / velocityErrors[refinement];
+            double const entropyRatio = entropyErrors[refinement - 1] / entropyErrors[refinement];
+            std::cout << "SPH production temporal order: case=mixed_rung_split steps="
+                      << splitStepCounts[refinement]
+                      << " velocity_error=" << velocityErrors[refinement]
+                      << " velocity_ratio=" << velocityRatio
+                      << " entropy_error=" << entropyErrors[refinement]
+                      << " entropy_ratio=" << entropyRatio << '\n'
+                      << std::flush;
+            requireSphTree(velocityRatio > 3.2 && velocityRatio < 5.5,
+                "production fine/coarse composition has the wrong velocity order");
+            requireSphTree(entropyRatio > 3.2 && entropyRatio < 5.5,
+                "production fine/coarse composition has the wrong entropy order");
+        }
+    }
+    sphTreeDestroy(true);
+    sphParticlesResize(0, false);
+    particlesResize(0);
+    setOptions(savedOptions);
+    sphParticlesEntropyInitialized = savedEntropyInitialized;
+    sphParticlesThermalScaleFactor = savedThermalScale;
+    std::cout << "SPH production RK2 temporal refinement passed (fixed coefficients, CPU)\n"
+              << std::flush;
+}
+
 void verifyRetainedSphOctree(SphTreeCreateParameters const& params) {
     sphTreeDestroy();
     initializeSphTreeParticles(8, 0);
@@ -1759,6 +2108,7 @@ void sphTreeTest() {
     detail::verifySphTreeBuild(empty, 0);
     sphTreeDestroy(true);
     detail::verifySphMidpointUpdates();
+    detail::verifySphTemporalOrder();
     sphRungChainTest();
     std::cout << "SPH tree arena regression passed (CPU, one locality)\n" << std::flush;
 }
