@@ -100,6 +100,20 @@ double readUnitsOutputScalar(DBfile* file, std::string const& name) {
     return value;
 }
 
+double readUnitsOutputClock(DBfile* file, std::string const& path) {
+    double const time = readUnitsOutputScalar(file, path + "dtime");
+    std::string const name = path + "time";
+    requireUnitsOutput(DBGetVarType(file, name.c_str()) == DB_FLOAT, "VisIt float time datatype");
+    requireUnitsOutput(DBGetVarLength(file, name.c_str()) == 1, "VisIt float time length");
+    float singleTime = 0.0f;
+    requireUnitsOutput(DBReadVar(file, name.c_str(), &singleTime) >= 0, "VisIt float time read");
+    requireUnitsOutput(singleTime == static_cast<float>(time), "VisIt float/double clocks agree");
+    if (!path.empty()) {
+        requireUnitsOutputClose(readUnitsOutputScalar(file, "/dtime"), time, "leaf root clock");
+    }
+    return time;
+}
+
 int readUnitsOutputInteger(DBfile* file, std::string const& name) {
     requireUnitsOutput(DBGetVarType(file, name.c_str()) == DB_INT, name + " integer datatype");
     requireUnitsOutput(DBGetVarLength(file, name.c_str()) == 1, name + " scalar length");
@@ -330,7 +344,7 @@ void checkConvertedUnitsOutput(DBfile* file, bool cosmological, bool lab) {
     requireUnitsOutput(readUnitsOutputText(file, path + "time_unit") == "Gyr", "time unit");
     requireUnitsOutput(readUnitsOutputText(file, path + "time_convention") == "cosmological_age",
         "cosmological age convention");
-    double const epoch = readUnitsOutputScalar(file, path + "time");
+    double const epoch = readUnitsOutputClock(file, path);
     requireUnitsOutput(epoch > 0.0, "positive cosmological age");
     double const entropyScale = energyScale * a * a *
         std::pow(densityScale * (lab ? a * a * a : 1.0), 1.0 - getOptions().hydro.gamma);
@@ -609,6 +623,36 @@ void unitsOutputTest() {
         }
     }
 #endif
+
+    options.output.units = "code";
+    options.output.frame = "comoving";
+    options.run.scenario = "hydroWave";
+    setOptions(options);
+    double const elapsedCodeTime = 0.123456789;
+    double const elapsedYears =
+        elapsedCodeTime * options.units.timeSeconds * constants::kSecondsToYears;
+    viewOutputViews(
+        6, 1.0, true, elapsedYears, kUnitsOutputBaseTimestep, kUnitsOutputGlobalTimestep);
+    for (int rank = 0; rank < hpxSize(); ++rank) {
+        auto file = openUnitsOutput(6, rank);
+        requireUnitsOutputClose(readUnitsOutputClock(file.get(), ""), elapsedCodeTime,
+            "native problem scalar time is elapsed code time");
+        requireUnitsOutput(
+            readUnitsOutputText(file.get(), "time_unit") == "code", "native problem time unit");
+        UnitsOutputMesh mesh(DBGetPointmesh(file.get(), "gas/mesh"), DBFreePointmesh);
+        requireUnitsOutput(bool(mesh), "native problem gas mesh");
+        requireUnitsOutputClose(mesh->dtime, elapsedCodeTime, "native mesh double time");
+        requireUnitsOutputClose(
+            mesh->time, static_cast<float>(elapsedCodeTime), "native mesh float time");
+        requireUnitsOutput(mesh->cycle == 6, "native mesh cycle");
+        UnitsOutputField variable(DBGetPointvar(file.get(), "gas/rho"), DBFreePointvar);
+        requireUnitsOutput(bool(variable), "native problem gas density");
+        requireUnitsOutputClose(variable->dtime, elapsedCodeTime, "native field double time");
+        requireUnitsOutputClose(
+            variable->time, static_cast<float>(elapsedCodeTime), "native field float time");
+        requireUnitsOutput(variable->cycle == 6, "native field cycle");
+    }
+
     sphParticlesEntropyInitialized = originalEntropyInitialized;
     sphParticlesThermalScaleFactor = originalThermalScaleFactor;
     setOptions(originalOptions);

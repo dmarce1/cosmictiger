@@ -143,6 +143,24 @@ double checkDistributedMassExpression(DBfile* file, std::string const& path, dou
     return mass;
 }
 
+void checkDistributedOutputClock(DBfile* file, double expectedTime, int expectedCycle) {
+    requireDistributedOutput(DBGetVarType(file, "/time") == DB_FLOAT &&
+            DBGetVarType(file, "/dtime") == DB_DOUBLE && DBGetVarType(file, "/cycle") == DB_INT,
+        "VisIt file-level clock types");
+    requireDistributedOutput(DBGetVarLength(file, "/time") == 1 &&
+            DBGetVarLength(file, "/dtime") == 1 && DBGetVarLength(file, "/cycle") == 1,
+        "VisIt file-level clock lengths");
+    float singleTime = 0.0f;
+    double time = 0.0;
+    int cycle = -1;
+    requireDistributedOutput(DBReadVar(file, "/time", &singleTime) >= 0 &&
+            DBReadVar(file, "/dtime", &time) >= 0 && DBReadVar(file, "/cycle", &cycle) >= 0,
+        "read VisIt file-level clocks");
+    nearDistributedOutput(time, expectedTime, "VisIt database and mesh double time agree");
+    requireDistributedOutput(singleTime == static_cast<float>(time) && cycle == expectedCycle,
+        "VisIt database float time and cycle agree");
+}
+
 std::string checkDistributedOutput(int cycle, std::string const& prefix, int activeRanks,
     bool cropped, DistributedOutputScales const& scales = {}, bool segregated = false) {
     auto const masterPath = distributedMasterPath(cycle);
@@ -167,6 +185,7 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
     requireDistributedOutput(
         masterCycle && *masterCycle == cycle && masterTime && *masterTime > 0.0,
         "master carries cycle and time");
+    checkDistributedOutputClock(master.get(), *masterTime, cycle);
     std::vector<std::string> const fields = {"rho", "A", "vx", "vy", "vz", "rung", "r"};
     checkDistributedMassExpression(master.get(), prefix + "gas/", 0.25 * scales.mass);
     std::vector<DistributedOutputMultivar> multivars;
@@ -219,6 +238,7 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
             "one point for each local selected particle");
         requireDistributedOutput(mesh->cycle == cycle, "leaf mesh cycle metadata");
         nearDistributedOutput(mesh->dtime, *masterTime, "master and leaf time agree");
+        checkDistributedOutputClock(leaf.get(), *masterTime, cycle);
         std::map<std::string, DistributedOutputVariable> variables;
         for (size_t field = 0; field < fields.size(); field++) {
             auto const& name = fields[field];
@@ -229,6 +249,9 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
                 "multivar refers to matching leaf field " + name);
             DistributedOutputVariable variable(
                 DBGetPointvar(leaf.get(), name.c_str()), DBFreePointvar);
+            requireDistributedOutput(bool(variable), "leaf variable exists");
+            nearDistributedOutput(variable->dtime, mesh->dtime, "field and mesh times agree");
+            requireDistributedOutput(variable->cycle == cycle, "leaf field cycle metadata");
             requireDistributedOutput(variable && variable->nels == count && variable->nvals == 1 &&
                     variable->datatype == DB_DOUBLE && variable->meshname &&
                     std::filesystem::path(variable->meshname).filename() == "mesh",
@@ -445,9 +468,9 @@ void distributedOutputTest() {
     setOptions(options);
     distributedOutputParticleFixture(hpxSize(), false, false);
     viewConfigure();
-    viewOutputViews(0, 0.25);
+    viewOutputViews(0, 0.25, false, -1.0, 1.0);
     auto const initialGeneration = detail::checkDistributedOutput(0, "", hpxSize(), false);
-    viewOutputViews(0, 0.25);
+    viewOutputViews(0, 0.25, false, -1.0, 1.0);
     auto const replacementGeneration = detail::checkDistributedOutput(0, "", hpxSize(), false);
     detail::requireDistributedOutput(initialGeneration != replacementGeneration,
         "republishing a cycle uses a new immutable generation");
@@ -463,7 +486,7 @@ void distributedOutputTest() {
     options.output.xMax = 0.45;
     setOptions(options);
     viewConfigure();
-    viewOutputViews(1, 0.25);
+    viewOutputViews(1, 0.25, false, -1.0, 1.0);
     detail::checkDistributedOutput(1, "", hpxSize(), true);
 
     options.output.xMin = 0.0;
@@ -472,7 +495,7 @@ void distributedOutputTest() {
     options.output.frame = "both";
     setOptions(options);
     viewConfigure();
-    viewOutputViews(2, 0.25);
+    viewOutputViews(2, 0.25, false, -1.0, 1.0);
     for (bool const cosmological : {false, true}) {
         for (bool const lab : {false, true}) {
             std::string const prefix =
@@ -491,12 +514,12 @@ void distributedOutputTest() {
     auto const skipped = detail::distributedMasterPath(4);
     detail::requireDistributedOutput(
         !std::filesystem::exists(skipped), "cadence probe starts unpublished");
-    viewOutputViews(4, 0.25);
+    viewOutputViews(4, 0.25, false, -1.0, 1.0);
     detail::requireDistributedOutput(
         !std::filesystem::exists(skipped), "cadence skips nonoutput cycle");
     // The same scale can occur on either side of a cosmological turnaround.
     // Preserve the caller's actual age through both master and remote leaves.
-    viewOutputViews(4, 0.25, true, 4.2e9);
+    viewOutputViews(4, 0.25, true, 4.2e9, 1.0);
     detail::checkDistributedOutput(4, "", hpxSize(), false);
     {
         auto const masterPath = detail::distributedMasterPath(4);
@@ -510,14 +533,14 @@ void distributedOutputTest() {
 
     int const activeRanks = std::max(1, hpxSize() - 1);
     distributedOutputParticleFixture(activeRanks, false, false);
-    viewOutputViews(6, 0.25);
+    viewOutputViews(6, 0.25, false, -1.0, 1.0);
     detail::checkDistributedOutput(6, "", activeRanks, false);
     distributedOutputParticleFixture(activeRanks, true, false);
     options.output.xMin = 0.2;
     options.output.xMax = 0.3;
     setOptions(options);
     viewConfigure();
-    viewOutputViews(9, 0.25);
+    viewOutputViews(9, 0.25, false, -1.0, 1.0);
     {
         auto const masterPath = detail::distributedMasterPath(9);
         detail::DistributedOutputFile master(
@@ -532,7 +555,7 @@ void distributedOutputTest() {
         setOptions(options);
         viewConfigure();
         distributedOutputParticleFixture(1, false, true);
-        viewOutputViews(12, 0.25);
+        viewOutputViews(12, 0.25, false, -1.0, 1.0);
         detail::checkDistributedOutput(12, "", 1, false, {}, true);
         distributedOutputParticleFixture(1, true, true);
     }

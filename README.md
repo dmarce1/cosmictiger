@@ -828,3 +828,7 @@ cosmological SPH run with restart. Simulation runs in the CUDA-enabled executabl
 initialize the GPU even when selecting CPU gravity. The full suite therefore
 requires an available CUDA device; help and option validation do not. These are correctness and integration checks, not a
 resolution-convergence study or a performance benchmark.
+
+Particle Silo output carries cycle and both single- and double-precision time metadata
+on meshes and fields. Native problem snapshots use elapsed code time; cosmological
+snapshots retain cosmological age in Gyr. Converted physical output uses Gyr.

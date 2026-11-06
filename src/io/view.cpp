@@ -180,6 +180,21 @@ void writeViewInteger(DBfile* db, char const* name, int value) {
     checkViewWrite(DBWrite(db, name, &value, &size, 1, DB_INT), name);
 }
 
+// VisIt's Silo reader GetTime() queries file-level dtime (double), then time
+// (float). Mesh DBOPT_TIME/DBOPT_DTIME alone do not set the database time slider.
+// https://github.com/visit-dav/visit/blob/develop/src/databases/Silo/avtSiloFileFormat.C
+void writeViewClock(DBfile* db, double time, int cycle) {
+    int const size = 1;
+    float const singleTime = static_cast<float>(time);
+    checkViewWrite(DBWrite(db, "time", &singleTime, &size, 1, DB_FLOAT), "time");
+    writeViewScalar(db, "dtime", time);
+    writeViewInteger(db, "cycle", cycle);
+    bool const codeClock =
+        getOptions().output.units == "code" && getOptions().run.scenario != "cosmology";
+    writeViewText(db, "time_unit", codeClock ? "code" : "Gyr");
+    writeViewText(db, "time_convention", codeClock ? "elapsed_code_time" : "cosmological_age");
+}
+
 void writeViewCommandLine(DBfile* db) {
     checkViewWrite(DBMkDir(db, "cli"), "cli");
     checkViewWrite(DBSetDir(db, "cli"), "cli");
@@ -302,6 +317,8 @@ public:
 
 struct ViewDirectoryMetadata {
     std::string path;
+    double time{};
+    int cycle{};
     bool gas = false;
     bool darkMatter = false;
     bool stars = false;
@@ -311,7 +328,7 @@ struct ViewDirectoryMetadata {
     template <typename Archive>
     void serialize(Archive& archive, unsigned) {
         archive & path & gas & darkMatter & stars & gasVariables & darkMatterVariables &
-            starVariables;
+            starVariables & time & cycle;
     }
 };
 
@@ -386,8 +403,12 @@ void writeViewField(DBfile* db, ViewDirectoryMetadata& metadata, char const* nam
     for (auto const& particle : particles) {
         values.push_back(value(particle));
     }
-    auto* options = DBMakeOptlist(1);
+    auto* options = DBMakeOptlist(4);
+    float singleTime = static_cast<float>(metadata.time);
     DBAddOption(options, DBOPT_UNITS, const_cast<char*>(unitName));
+    DBAddOption(options, DBOPT_TIME, &singleTime);
+    DBAddOption(options, DBOPT_DTIME, &metadata.time);
+    DBAddOption(options, DBOPT_CYCLE, &metadata.cycle);
     checkViewWrite(
         DBPutPointvar1(db, name, mesh, values.data(), int(values.size()), DB_DOUBLE, options),
         name);
@@ -428,7 +449,9 @@ void writeViewSpecies(DBfile* db, ViewDirectoryMetadata& metadata, char const* s
     double time, int cycle) {
     enterViewSpecies(db, species);
     char const* mesh = "mesh";
-    auto* options = DBMakeOptlist(5);
+    auto* options = DBMakeOptlist(6);
+    float singleTime = static_cast<float>(time);
+    DBAddOption(options, DBOPT_TIME, &singleTime);
     DBAddOption(options, DBOPT_XUNITS, const_cast<char*>(lengthUnit));
     DBAddOption(options, DBOPT_YUNITS, const_cast<char*>(lengthUnit));
     DBAddOption(options, DBOPT_ZUNITS, const_cast<char*>(lengthUnit));
@@ -509,6 +532,8 @@ void writeChemistryFields(
 #endif
 void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticles const& particles,
     double a, double time, bool cosmological, bool lab, int cycle) {
+    metadata.time = time;
+    metadata.cycle = cycle;
     char const* lengthUnit = cosmological ? "Mpc/h" : "cm";
     char const* velocityUnit = cosmological ? "km/s" : "cm/s";
     char const* massUnit = cosmological ? "Msun/h" : "g";
@@ -539,9 +564,7 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
     writeViewText(db, "density_unit", densityUnit);
     writeViewText(db, "entropy_unit", entropyUnit);
     writeViewScalar(db, "adiabatic_index", getOptions().hydro.gamma);
-    writeViewText(db, "time_unit", "Gyr");
-    writeViewText(db, "time_convention", "cosmological_age");
-    writeViewScalar(db, "time", time);
+    writeViewClock(db, time, cycle);
     writeViewScalar(db, "scale_factor", a);
     writeViewScalar(db, "hubble_parameter", getOptions().cosmology.hubble);
     writeViewScalar(db, "code_length_cm", getOptions().units.lengthCm);
@@ -831,7 +854,12 @@ void writeParticleMetadata(DBfile* db) {
 
 void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
     ViewParticles const& particles, double a, double time, int cycle) {
-    auto* options = DBMakeOptlist(2);
+    metadata.time = time;
+    metadata.cycle = cycle;
+    writeViewClock(db, time, cycle);
+    auto* options = DBMakeOptlist(3);
+    float singleTime = static_cast<float>(time);
+    DBAddOption(options, DBOPT_TIME, &singleTime);
     DBAddOption(options, DBOPT_DTIME, &time);
     DBAddOption(options, DBOPT_CYCLE, &cycle);
     auto const& darkMatter = particles.darkMatter;
@@ -925,6 +953,7 @@ ViewLeafMetadata writeParticleLeaf(Vector<Range<double>> const& boxes, int cycle
             std::filesystem::path(particleMasterPath(box, cycle).string() + ".data");
         auto const filename = directory / generation / (locality + ".silo");
         auto file = createParticleViewFile(filename);
+        writeViewClock(file.get(), time, cycle);
         ViewParticles particles;
         auto selectParticles = [&](auto const& source, auto& selected) {
             for (auto const& particle : source) {
@@ -971,6 +1000,7 @@ void writeParticleMaster(size_t box, int cycle, double a, double time,
     auto const filename = particleMasterPath(box, cycle);
     auto const temporary = std::filesystem::path(filename.string() + ".tmp." + generation);
     auto file = createParticleViewFile(temporary);
+    writeViewClock(file.get(), time, cycle);
     writeViewText(file.get(), "leaf_generation", generation.c_str());
     auto const frames = particleViewFrames();
     ViewParticles empty;
@@ -1027,6 +1057,8 @@ void writeParticleMaster(size_t box, int cycle, double a, double time,
                     names.push_back(object.c_str());
                 }
                 auto* options = DBMakeOptlist(5);
+                float singleTime = static_cast<float>(time);
+                DBAddOption(options, DBOPT_TIME, &singleTime);
                 DBAddOption(options, DBOPT_DTIME, &time);
                 DBAddOption(options, DBOPT_CYCLE, &cycle);
                 if (variable) {
@@ -1102,6 +1134,11 @@ void viewOutputViews(int cycle, double a, bool force, double physicalYears,
             cosmosTime(1e-6, a) * getOptions().units.timeSeconds * constants::kSecondsToYears / 1e9;
     }
 #endif
+    if (getOptions().output.units == "code" && getOptions().run.scenario != "cosmology") {
+        time = physicalYears >= 0.0 ?
+            physicalYears / (getOptions().units.timeSeconds * constants::kSecondsToYears) :
+            0.0;
+    }
     detail::writeDistributedParticleViews(
         cycle, a, time, viscosityBaseTimestep, viscosityGlobalTimestep);
 }
