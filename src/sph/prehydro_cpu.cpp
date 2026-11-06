@@ -284,7 +284,10 @@ SphRunReturn sphCpuSmoothingLengths(
  * Physical pair velocities include Hubble flow in the signal-speed estimate.
  */
 // clang-format on
-SphRunReturn sphCpuDensityAndGradients(
+namespace detail {
+
+template <bool retainHydroDiagnostics>
+SphRunReturn sphCpuDensityAndGradientsImpl(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
     bool const computeGradientDiagnostics =
@@ -387,7 +390,8 @@ SphRunReturn sphCpuDensityAndGradients(
                 inside, normalizedRadius * dkernelWDq(normalizedRadius), SimdFloat(0.0f));
             flops += 3 * SimdFloat::size() +
                 sph_flops::densityKernelOperations(selectedHydroKernel(), normalizedRadius, true);
-            if (computeSphDivergence || computeGradientDiagnostics || data.sinkLogDensityRate) {
+            if (computeSphDivergence || computeGradientDiagnostics ||
+                (data.sinkLogDensityRate || retainHydroDiagnostics)) {
                 // clang-format off
                 /*
                  * For constant viscosity and Morris & Monaghan, GADGET-4 equation
@@ -419,11 +423,11 @@ SphRunReturn sphCpuDensityAndGradients(
                 flops += 6 * SimdFloat::size() +
                     sph_flops::densityKernelOperations(
                         selectedHydroKernel(), normalizedRadius, true);
-                if (computeSphDivergence || data.sinkLogDensityRate) {
+                if (computeSphDivergence || (data.sinkLogDensityRate || retainHydroDiagnostics)) {
                     Vector3<SimdFloat> const massWeightedKernelGradient =
                         massWeightedGradientFactor * separation;
                     flops += 3 * SimdFloat::size();
-                    if (data.sinkLogDensityRate) {
+                    if (data.sinkLogDensityRate || retainHydroDiagnostics) {
                         // Grad-H and conformal-time factors are applied below.
                         densityDerivativeSumPack += sph_geometry::spatialDot(
                             velocityDifference, massWeightedKernelGradient);
@@ -534,20 +538,36 @@ SphRunReturn sphCpuDensityAndGradients(
         detail::recordSphCpuGradH(
             gradH, sinkKernelSmoothingLength, density, kernelSum, kernelDerivativeMoment, result);
         data.sinkGradHCorrection[sinkIndex] = gradH.correction.weightedSupportCorrection;
-        if (data.sinkLogDensityRate) {
+        if (data.sinkLogDensityRate || retainHydroDiagnostics) {
             // clang-format off
             /*
-             * Price (2012), equation (27): d rho/d tau = sum m v_ab.grad W /
-             * (a Omega). Held supports use Omega=1; no Hubble velocity belongs
-             * in the derivative of the stored comoving density.
+             * Price (2012), equation (27), in the stored comoving variables:
+             *   dρ_c/dτ = Σ_b m_b (w_a−w_b)·∇_aW_ab / (a Ω_a).
+             * Held supports use Ω_a=1. This is peculiar compression, excluding
+             * homogeneous Hubble dilution; w=a v_pec and dt=a dτ.
              *
-             * Symbol directory (in the code below):
-             *   v_ab → velocityDifference
+             * Symbol directory:
+             *   ρ_c → density; dρ_c/dτ → densityRate;
+             *   w_a−w_b → velocityDifference; a → parameters.scaleFactor;
+             *   Ω_a → gradH.correction.supportJacobian;
+             *   Σ_b m_b (w_a−w_b)·∇_aW_ab → simdSum(densityDerivativeSumPack).
              */
             // clang-format on
-            data.sinkLogDensityRate[sinkIndex] = simdSum(densityDerivativeSumPack) /
-                (parameters.scaleFactor * density * gradH.correction.supportJacobian);
-            flops += SimdFloat::size() - 1 + 3;
+            if constexpr (retainHydroDiagnostics) {
+                float const densityRate = simdSum(densityDerivativeSumPack) /
+                    (parameters.scaleFactor * gradH.correction.supportJacobian);
+                data.sinkHydroDiagnostics[sinkIndex].densityRate = densityRate;
+                if (data.sinkLogDensityRate) {
+                    data.sinkLogDensityRate[sinkIndex] = densityRate / density;
+                    flops += 1;
+                }
+                flops += SimdFloat::size() - 1 + 2;
+            } else {
+                // Preserve the original single-division predictor path when diagnostics are off.
+                data.sinkLogDensityRate[sinkIndex] = simdSum(densityDerivativeSumPack) /
+                    (parameters.scaleFactor * density * gradH.correction.supportJacobian);
+                flops += SimdFloat::size() - 1 + 3;
+            }
         }
         if (computeSphBalsara && data.sinkBalsaraFactor) {
             Vector3<float> const densityWeightedCurl(simdSum(densityWeightedCurlPack[kXDimension]),
@@ -686,4 +706,14 @@ SphRunReturn sphCpuDensityAndGradients(
     result.floatingPointOperations = FlopCount(flops);
     addCpuFlops(flops.counts());
     return result;
+}
+
+}    // namespace detail
+
+SphRunReturn sphCpuDensityAndGradients(
+    SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
+    // One dispatch per target node; the disabled specialization contains no diagnostic work.
+    return data.sinkHydroDiagnostics ?
+        detail::sphCpuDensityAndGradientsImpl<true>(parameters, data, targetNodeIndex) :
+        detail::sphCpuDensityAndGradientsImpl<false>(parameters, data, targetNodeIndex);
 }

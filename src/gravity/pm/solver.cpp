@@ -742,6 +742,10 @@ LocalSolveReturn interpolate(bool doPotential) {
                     acceleration[axis] = float(value[axis]);
                     accelerationSquared += value[axis] * value[axis];
                 }
+                if (particlesGravityDiagnostics != nullptr) {
+                    auto& output = particlesGravityDiagnostics[particle];
+                    output.longAcceleration = output.acceleration = acceleration;
+                }
                 if (writeParticles) {
                     for (int axis = 0; axis < kDimensions; ++axis) {
                         particlesLongAcceleration(axis, particle) = acceleration[axis];
@@ -755,6 +759,10 @@ LocalSolveReturn interpolate(bool doPotential) {
                     // The same discrete compensated Green function is used for
                     // the source and sink cloud, including subcell dependence.
                     double const potential = value[3] - gm * mass * selfPotential(cloud);
+                    if (particlesGravityDiagnostics != nullptr) {
+                        auto& output = particlesGravityDiagnostics[particle];
+                        output.longPotential = output.potential = float(potential);
+                    }
                     local.potentialEnergy += 0.5 * mass * potential;
                     if (!state.potential.empty()) {
                         state.potential[particle] = float(potential);

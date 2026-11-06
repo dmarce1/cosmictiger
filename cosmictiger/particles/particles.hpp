@@ -205,6 +205,20 @@ struct ParticleSample {
 #define CHECK_PART_BOUNDS(i)
 #endif
 
+// Derived snapshot fields, gm-scaled like the canonical gravity RHS.
+// Allocated only while output.siloTimeDerivatives output is being evaluated/written.
+struct GravityDiagnostics {
+    ParticleVector<float> acceleration{};
+    ParticleVector<float> longAcceleration{};
+    ParticleVector<float> nearAcceleration{};
+    float potential{};
+    float longPotential{};
+    float nearPotential{};
+};
+PARTICLES_EXTERN GravityDiagnostics* particlesGravityDiagnostics;
+void particlesAllocateGravityDiagnostics();
+void particlesFreeGravityDiagnostics();
+
 PARTICLES_EXTERN Array<Position*, kSpatialDimensions> particlesX;
 PARTICLES_EXTERN ParticleVector<float>* particlesV;
 PARTICLES_EXTERN char* particlesR;

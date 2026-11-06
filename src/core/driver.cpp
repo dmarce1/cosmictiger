@@ -575,8 +575,15 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
         if (runParameters.gradientSwitch()) {
             sphParticlesPublishDivergence(runParameters);
         }
-        // This publishes an output diagnostic without a force evaluation or
-        // alpha evolution; the production sensor uses acceleration gradients.
+        if (sphParticlesHydroDiagnostics != nullptr) {
+            // A full, zero-kick pressure/viscosity evaluation at output coordinates.
+            // Phase zero neither proposes rungs nor advances viscosity or entropy.
+            auto diagnostics = runParameters;
+            diagnostics.runType = kSphRunHydro;
+            diagnostics.phase = 0;
+            diagnostics.viscosityTimestep = 0.0;
+            sphRun(diagnostics, true);
+        }
         clearMidpointSources();
         return result;
     }
@@ -1487,7 +1494,6 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
     if (deferHydroOpening) {
         gravitySealDeferredGasOpening();
     }
-#endif
     if (hierarchicalHydro) {
         sphParticlesPrepareThermodynamics(scale, false);
         auto const gas = particlesSumEnergies();
@@ -1496,6 +1502,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         }
         energies->therm = gas.therm / sqr(scale);
     }
+#endif
     totalTime.stop();
     int bucketSize = getOptions().compute.bucketSize;
     if (timings.size() <= bucketSize) {
@@ -2035,7 +2042,8 @@ void driver() {
                     outputSlice(number, years);
                 }
                 if (fullEval) {
-                    viewOutputViews(outputStep, a, false, years, t0, params.globalTimestep);
+                    viewOutputViews(
+                        outputStep, a, false, years, t0, params.globalTimestep, tau, a * adot);
                 }
                 if (getOptions().analysis.views) {
                     Timer tm;
@@ -2482,7 +2490,7 @@ void driver() {
 #endif
     profile::profileBegin("output");
     viewOutputViews(driverFinalOutputStep(tau, coarseInterval), a, true, years, coarseInterval,
-        params.globalTimestep);
+        params.globalTimestep, tau, a * adot);
     profile::profileEnd();
     if (!interrupted && thisIter > 0 && itime == 0 && cosmology::endTimeReached(tau, tauMax)) {
         // Finish the energy measurement only after all restart state and

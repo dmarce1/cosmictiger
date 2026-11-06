@@ -21,7 +21,15 @@ void consumeField(ParticleInteger index, std::array<double, 4> const& field, Kic
     float const potential = state.request.doPotential ? gm * field[0] : 0.0f;
     // Each retained component is scaled in double and narrowed to float.
     doubleFlops += 2 * (kDimensions + (state.request.doPotential ? 1 : 0));
-    if (state.request.applyKick) {
+    if (particlesGravityDiagnostics != nullptr) {
+        auto& output = particlesGravityDiagnostics[index];
+        output.acceleration = acceleration;
+        output.potential = potential;
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            output.nearAcceleration[dim] = acceleration[dim] - output.longAcceleration[dim];
+        }
+        output.nearPotential = potential - output.longPotential;
+    } else if (state.request.applyKick) {
         result += particleMeshApplyField(
             index, acceleration, potential, state.request.parameters, nullptr, &kickFlops);
     } else {
@@ -88,6 +96,14 @@ void evaluateParticles(bool doPotential) {
                     flops += evaluate(cache.order, field, cell.coefficients.data(), localTrace,
                         sinks[sink].offset, h);
                     auto const index = ParticleInteger(sinks[sink].index);
+                    if (particlesGravityDiagnostics != nullptr) {
+                        auto& output = particlesGravityDiagnostics[index];
+                        double const gm = getOptions().gravity.gm;
+                        output.longPotential = gm * field[0];
+                        for (int dim = 0; dim < kDimensions; ++dim) {
+                            output.longAcceleration[dim] = gm * field[dim + 1];
+                        }
+                    }
                     for (int component = 0; component < 4; ++component) {
                         field[component] += nearFields[sink][component];
                     }

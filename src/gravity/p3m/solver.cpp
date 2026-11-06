@@ -85,7 +85,7 @@ void prepare(SolveRequest const& request) {
     state.diagnostics = {};
     state.diagnostics.solveCount = previous.solveCount;
     state.diagnostics.meshSize = state.meshSize;
-    if (request.applyKick) {
+    if (request.applyKick || particlesGravityDiagnostics != nullptr) {
         Vector<Vector3<float>>().swap(state.acceleration);
         Vector<float>().swap(state.potential);
     } else {
@@ -246,7 +246,15 @@ void consumeField(ParticleInteger index, std::array<double, 4> const& field, Kic
     }
     float const potential = state.request.doPotential ? gm * field[0] : 0.0f;
     doubleFlops += 2 * (kDimensions + (state.request.doPotential ? 1 : 0));
-    if (state.request.applyKick) {
+    if (particlesGravityDiagnostics != nullptr) {
+        auto& output = particlesGravityDiagnostics[index];
+        output.nearAcceleration = acceleration;
+        output.nearPotential = potential;
+        for (int dim = 0; dim < kDimensions; ++dim) {
+            output.acceleration[dim] = output.longAcceleration[dim] + acceleration[dim];
+        }
+        output.potential = output.longPotential + potential;
+    } else if (state.request.applyKick) {
         result += particleMeshApplyField(
             index, acceleration, potential, state.request.parameters, nullptr, &kickFlops);
     } else {

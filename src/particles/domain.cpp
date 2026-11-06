@@ -749,6 +749,11 @@ static void endSphMigration() {
     }
     particlesResize(retainedSphParticles.size());
     sphParticlesResize(gasCount, false);
+    // Derived output rates are refreshed after redistribution, before snapshots.
+    // Keep them out of both the ordinary migration records and the wire payload.
+    if (sphParticlesHydroDiagnostics) {
+        std::fill_n(sphParticlesHydroDiagnostics, gasCount, SphHydroDiagnostics{});
+    }
     ParticleInteger gasIndex = 0;
     for (ParticleInteger i = 0; i < retainedSphParticles.size(); i++) {
         unpackSphParticle(retainedSphParticles[i], i, gasIndex);

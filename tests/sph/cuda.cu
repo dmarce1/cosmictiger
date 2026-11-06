@@ -297,10 +297,21 @@ public:
 
     void densityPass() {
         resetReduction();
+        float* const previousRates = data_.sinkLogDensityRate;
+        if (data_.sinkHydroDiagnostics && !previousRates) {
+            data_.sinkLogDensityRate = allocate<float>(count_);
+        }
         sphCudaDensityAndGradients<<<1, kDensityAndGradientsBlockSize>>>(
             params_, data_, reduction_);
         checkCuda(cudaGetLastError(), "viscosity density launch");
         checkCuda(cudaDeviceSynchronize(), "viscosity density execution");
+        if (data_.sinkHydroDiagnostics) {
+            for (int index = 0; index < count_; ++index) {
+                data_.sinkHydroDiagnostics[index].densityRate =
+                    data_.sinkLogDensityRate[index] * data_.sinkDensity[index];
+            }
+        }
+        data_.sinkLogDensityRate = previousRates;
         checkFlops();
         require(reduction_->pendingChanges == 0, "viscosity density needs no refresh");
     }
@@ -312,6 +323,10 @@ public:
         checkCuda(cudaDeviceSynchronize(), "midpoint support execution");
         checkFlops();
         require(reduction_->pendingChanges == 0, "midpoint support needs no refresh");
+    }
+
+    void enableHydroDiagnostics() {
+        data_.sinkHydroDiagnostics = allocate<SphHydroDiagnostics>(count_);
     }
 
     void enableMidpointOutputs() {
@@ -352,8 +367,13 @@ public:
     void hydro(int phase = 0) {
         params_.phase = phase;
         resetReduction();
-        sphCudaHydro<<<data_.sourcePairUpdates ? 2 : 1, kHydroBlockSize>>>(
-            params_, data_, reduction_);
+        if (data_.sinkHydroDiagnostics) {
+            sphCudaHydro<true>
+                <<<data_.sourcePairUpdates ? 2 : 1, kHydroBlockSize>>>(params_, data_, reduction_);
+        } else {
+            sphCudaHydro<false>
+                <<<data_.sourcePairUpdates ? 2 : 1, kHydroBlockSize>>>(params_, data_, reduction_);
+        }
         checkCuda(cudaGetLastError(), "hydro launch");
         checkCuda(cudaDeviceSynchronize(), "hydro execution");
         reduction_->timestepError.throwIfFailed([](SphTimestepFailure const&) {
@@ -499,7 +519,7 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
             fixture.params_, data, fixture.reduction_);
         break;
     case kSphRunHydro:
-        sphCudaHydro<<<1, kHydroBlockSize>>>(fixture.params_, data, fixture.reduction_);
+        sphCudaHydro<false><<<1, kHydroBlockSize>>>(fixture.params_, data, fixture.reduction_);
         break;
     case kSphRunRungs:
         sphCudaRungs<<<1, kRungsBlockSize>>>(fixture.params_, data, fixture.reduction_);
@@ -2261,7 +2281,7 @@ TEST_F(SphCudaTest, DISABLED_NeighborStagingBenchmark) {
     cudaDeviceProp device{};
     detail::checkCuda(cudaGetDeviceProperties(&device, 0), "benchmark device properties");
     void const* const kernels[] = {(void const*) sphCudaSmoothingLengths,
-        (void const*) sphCudaDensityAndGradients, (void const*) sphCudaHydro,
+        (void const*) sphCudaDensityAndGradients, (void const*) sphCudaHydro<false>,
         (void const*) sphCudaRungs};
     int const blockSizes[] = {kSmoothingLengthsBlockSize, kDensityAndGradientsBlockSize,
         kHydroBlockSize, kRungsBlockSize};
@@ -2374,4 +2394,16 @@ TEST_F(SphCudaTest, ArtificialConduction) {
 TEST_F(SphCudaTest, ArtificialConductionCpuParity) {
     detail::testCpuCudaParity(0, 0.3f);
     detail::testCpuCudaParity(3, 0.3f);
+}
+
+TEST_F(SphCudaTest, HydroDiagnostics) {
+    for (bool const directedViscosity : {false, true}) {
+        detail::Fixture fixture(2, 2, true);
+        detail::testHydroDiagnostics(fixture, directedViscosity);
+    }
+}
+
+TEST_F(SphCudaTest, HydroDensityDiagnostics) {
+    detail::Fixture fixture(2, 2, true);
+    detail::testHydroDensityDiagnostics(fixture);
 }

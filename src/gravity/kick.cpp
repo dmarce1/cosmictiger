@@ -22,6 +22,15 @@
 #include <cosmictiger/gravity/global_fmm/execution.hpp>
 #endif
 #include <cosmictiger/gravity/kick_walk.hpp>
+#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
+#include <cosmictiger/gravity/pmmm/solver.hpp>
+#endif
+#if COSMICTIGER_WITH_PARTICLE_MESH
+#include <cosmictiger/gravity/pm/solver.hpp>
+#endif
+#if COSMICTIGER_WITH_P3M
+#include <cosmictiger/gravity/p3m/solver.hpp>
+#endif
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
@@ -80,6 +89,10 @@ KickReturn kickWalkDispatch(KickParameters params, ExpansionBuffer l, Vector3<Po
     TreeId self, Vector<TreeId> direct, Vector<TreeId> periodic,
     std::shared_ptr<KickWorkspace> workspace, KickContext const& context) {
     return fmmDispatch([&](auto orderTag) {
+        if (params.snapshotDiagnostics) {
+            return kickWalk<decltype(orderTag)::value, true>(params, std::move(l), pos, self,
+                std::move(direct), std::move(periodic), std::move(workspace), context);
+        }
         return kickWalk<decltype(orderTag)::value>(params, std::move(l), pos, self,
             std::move(direct), std::move(periodic), std::move(workspace), context);
     });
@@ -364,24 +377,23 @@ void gravityDiscardDeferredGasOpening() {
     }
 }
 
-#if COSMICTIGER_ENABLE_FMM && COSMICTIGER_WITH_SPH
+#if COSMICTIGER_WITH_GRAVITY
 namespace detail {
-void beginSphGravitySort();
-void endSphGravitySort();
+void beginGravityDiagnosticSort();
+void endGravityDiagnosticSort();
 }    // namespace detail
 
-HPX_PLAIN_ACTION(detail::beginSphGravitySort, BeginSphGravitySortAction);
-HPX_PLAIN_ACTION(detail::endSphGravitySort, EndSphGravitySortAction);
+HPX_PLAIN_ACTION(detail::beginGravityDiagnosticSort, BeginGravityDiagnosticSortAction);
+HPX_PLAIN_ACTION(detail::endGravityDiagnosticSort, EndGravityDiagnosticSortAction);
 
 namespace detail {
 
-void beginSphGravitySort() {
+void beginGravityDiagnosticSort() {
     Vector<hpx::future<void>> futures;
     for (auto const& child : hpxChildren()) {
-        futures.push_back(hpx::async<BeginSphGravitySortAction>(child));
+        futures.push_back(hpx::async<BeginGravityDiagnosticSortAction>(child));
     }
     try {
-        ALWAYS_ASSERT(sphParticlesSize() == 0 || sphStageAccelerations() != nullptr);
         particlesBeginTemporarySort();
     } catch (...) {
         auto const failure = std::current_exception();
@@ -394,10 +406,10 @@ void beginSphGravitySort() {
     }
 }
 
-void endSphGravitySort() {
+void endGravityDiagnosticSort() {
     Vector<hpx::future<void>> futures;
     for (auto const& child : hpxChildren()) {
-        futures.push_back(hpx::async<EndSphGravitySortAction>(child));
+        futures.push_back(hpx::async<EndGravityDiagnosticSortAction>(child));
     }
     particlesEndTemporarySort();
     hpx::wait_all(futures.begin(), futures.end());
@@ -425,7 +437,7 @@ void gravityRefreshSphAcceleration(double theta) {
     // restore that permutation before any retained SPH tree/stage resumes.
     // The hierarchy's rungBegin/rungBegins are never modified.
     try {
-        detail::beginSphGravitySort();
+        detail::beginGravityDiagnosticSort();
         particlesCacheFree();
         TreeCreateParameters treeParameters(0, theta, 0.0);
         treeParameters.allParticles = true;
@@ -457,15 +469,91 @@ void gravityRefreshSphAcceleration(double theta) {
         kick(parameters, expansion, center, root, checks, checks, nullptr);
         treeDestroy();
         particlesCacheFree();
-        detail::endSphGravitySort();
+        detail::endGravityDiagnosticSort();
     } catch (...) {
         auto const failure = std::current_exception();
         treeDestroy();
         particlesCacheFree();
-        detail::endSphGravitySort();
+        detail::endGravityDiagnosticSort();
         std::rethrow_exception(failure);
     }
 #else
     THROW_ERROR("SPH gravity sensor requires FMM and SPH support\n");
 #endif
+}
+
+void gravityRefreshSnapshotDiagnostics(double theta) {
+    auto const& options = getOptions();
+    ALWAYS_ASSERT(hpxRank() == 0 && options.gravity.enabled &&
+        particlesGravityDiagnostics != nullptr && !gravityGasOpeningDeferred());
+    // All force backends may sort locally. Preserve the integrator's particle
+    // order/rung partitions and mesh long accelerations; never migrate or kick.
+    try {
+        detail::beginGravityDiagnosticSort();
+#if COSMICTIGER_ENABLE_FMM
+        if (options.gravity.method == "fmm") {
+            particlesCacheFree();
+            TreeCreateParameters treeParameters(0, theta, 0.0);
+            treeParameters.allParticles = true;
+            treeCreate(treeParameters);
+            KickParameters parameters;
+            parameters.snapshotDiagnostics = true;
+            parameters.htime = false;
+            parameters.ascending = parameters.descending = parameters.top = false;
+            parameters.doPhi = true;
+            parameters.gpu = options.gravity.cuda;
+            parameters.minLevel = treeParameters.minLevel;
+            parameters.minRung = 0;
+            parameters.gm = options.gravity.gm;
+            parameters.gravitySmoothingLength = options.gravity.smoothingLength;
+            parameters.theta = theta;
+            parameters.nodeLoad = 0.0f;
+            parameters.firstCall = true;
+            ExpansionBuffer expansion;
+            expansion.zero();
+            Vector3<Position> center;
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                center[dim] = 0.0;
+            }
+            TreeId root;
+            root.proc = 0;
+            root.index = 0;
+            Vector<TreeId> checks;
+            checks.push_back(root);
+            kick(parameters, expansion, center, root, checks, checks, nullptr);
+            treeDestroy();
+            particlesCacheFree();
+        }
+#endif
+#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
+        if (usesMeshGravity(options.gravity)) {
+            pmmmSolve(true);
+        }
+#endif
+#if COSMICTIGER_WITH_PARTICLE_MESH
+        if (usesParticleMesh(options.gravity)) {
+            PmSolveRequest request;
+            request.doPotential = true;
+            request.storeFields = false;
+            request.applyToParticles = false;
+            pmSolve(request);
+#if COSMICTIGER_WITH_P3M
+            if (usesSplitParticleMesh(options.gravity)) {
+                p3mSolve(true);
+            }
+#endif
+        }
+#endif
+        detail::endGravityDiagnosticSort();
+    } catch (...) {
+        auto const failure = std::current_exception();
+#if COSMICTIGER_ENABLE_FMM
+        if (options.gravity.method == "fmm") {
+            treeDestroy();
+            particlesCacheFree();
+        }
+#endif
+        detail::endGravityDiagnosticSort();
+        std::rethrow_exception(failure);
+    }
 }

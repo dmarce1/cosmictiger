@@ -33,6 +33,10 @@ void particlesSwap(ParticleInteger first, ParticleInteger second) {
     CHECK_PART_BOUNDS(first);
     CHECK_PART_BOUNDS(second);
     if (detail::temporarySortActive) {
+        if (particlesGravityDiagnostics != nullptr) {
+            detail::swapParticleBytes(
+                particlesGravityDiagnostics[first], particlesGravityDiagnostics[second]);
+        }
         ParticleInteger const originalFirst = detail::originalIndices[first];
         ParticleInteger const originalSecond = detail::originalIndices[second];
         std::swap(detail::originalIndices[first], detail::originalIndices[second]);

@@ -8,13 +8,17 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <filesystem>
 #include <format>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <numbers>
 #include <random>
 #include <stdexcept>
 #include <string>
+
+#include <silo.h>
 
 #include <cosmictiger/core/build_config.hpp>
 #include <cosmictiger/core/driver.hpp>
@@ -34,6 +38,7 @@
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/particles.hpp>
 #endif
+#include <cosmictiger/io/view.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/drift.hpp>
@@ -1005,6 +1010,122 @@ FmmWalkPeriodicField fmmWalkDirectPeriodicReference(ParticleInteger sink) {
     return fmmWalkDirectPeriodicReference(sink - range.first, positions, masses);
 }
 
+void fmmWalkSnapshotDiagnostics(bool useCuda) {
+    auto const originalOptions = getOptions();
+    auto options = originalOptions;
+    options.gravity.gm = 0.7;
+    options.compute.bucketSize = 64;
+    options.initial.numberOfParticles = 96;
+    options.gravity.openingAngle = 0.1;
+    // The output switch must not enable legacy persistent force buffers.
+    options.analysis.saveForce = false;
+    options.analysis.saveAcceleration = false;
+    options.analysis.savePotential = false;
+    options.output.siloTimeDerivatives = true;
+    setOptions(options);
+    Vector<Vector3<Position>> positions(96);
+    Vector<Vector3<float>> velocities(96);
+    Vector<char> rungs(96);
+    Vector<double> masses(96, 1.0);
+    particlesResize(96);
+    for (size_t index = 0; index < positions.size(); ++index) {
+        positions[index] = fmmWalkPosition(0.12 + 0.19 * (3 - index % 4),
+            0.14 + 0.17 * (index / 4 % 4), 0.13 + 0.13 * (index / 16));
+        velocities[index] = Vector3<float>(0.01 * index, -0.02 * index, 0.03 * index);
+        rungs[index] = 1 + index % 4;
+    }
+    for (int backend = 0; backend < (useCuda ? 2 : 1); ++backend) {
+        options.gravity.cuda = backend != 0;
+        setOptions(options);
+        for (size_t index = 0; index < positions.size(); ++index) {
+            fmmWalkSetParticlePosition(index, positions[index]);
+            particlesRung(index) = rungs[index];
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                particlesVel(dim, index) = velocities[index][dim];
+            }
+        }
+        if (particlesGravityDiagnostics != nullptr) {
+            throw std::runtime_error("Snapshot diagnostics allocated outside output scope");
+        }
+        particlesAllocateGravityDiagnostics();
+        gravityRefreshSnapshotDiagnostics(options.gravity.openingAngle);
+        for (size_t index = 0; index < positions.size(); ++index) {
+            auto const& output = particlesGravityDiagnostics[index];
+            if (particlesRung(index) != rungs[index]) {
+                throw std::runtime_error("Snapshot gravity changed a rung");
+            }
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                if (particlesPos(dim, index).raw() != positions[index][dim].raw() ||
+                    particlesVel(dim, index) != velocities[index][dim]) {
+                    throw std::runtime_error("Snapshot gravity changed order/position/velocity");
+                }
+                fmmWalkRequireClose("snapshot force split", output.acceleration[dim],
+                    double(output.longAcceleration[dim]) + output.nearAcceleration[dim], 2e-6);
+            }
+            fmmWalkRequireClose("snapshot potential split", output.potential,
+                double(output.longPotential) + output.nearPotential, 2e-6);
+        }
+        for (size_t index : {size_t{0}, size_t{37}, size_t{95}}) {
+            auto const reference = fmmWalkDirectPeriodicReference(index, positions, masses);
+            auto const& output = particlesGravityDiagnostics[index];
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                fmmWalkRequireClose("snapshot independent periodic force", output.acceleration[dim],
+                    options.gravity.gm * reference.acceleration[dim], 2e-4);
+            }
+            fmmWalkRequireClose("snapshot independent periodic potential", output.potential,
+                options.gravity.gm * reference.potential, 2e-4);
+        }
+        particlesFreeGravityDiagnostics();
+        if (particlesGravityDiagnostics != nullptr) {
+            throw std::runtime_error("Snapshot diagnostics were not released");
+        }
+    }
+    options.output.silo = true;
+    options.output.units = "code";
+    options.output.siloInterval = 2;
+    options.output.directory = "snapshot_derivative_scope";
+    setOptions(options);
+    viewConfigure();
+    viewOutputViews(0, 1.0, true, 0.0);
+    if (particlesGravityDiagnostics != nullptr) {
+        throw std::runtime_error("Silo retained gravity diagnostic storage after output");
+    }
+    auto* master = DBOpen("snapshot_derivative_scope/view.0.0.silo", DB_UNKNOWN, DB_READ);
+    if (!master) {
+        throw std::runtime_error("Snapshot diagnostic master is missing");
+    }
+    bool const hasFields = DBInqVarExists(master, "dark_matter/gravity_ax") &&
+        DBInqVarExists(master, "dark_matter/gravity_long_phi") &&
+        DBInqVarExists(master, "dark_matter/gravity_near_phi");
+    DBClose(master);
+    if (!hasFields) {
+        throw std::runtime_error("Snapshot gravity fields missing from Silo master");
+    }
+    // A skipped output must not allocate buffers or produce a snapshot.
+    std::filesystem::remove("snapshot_derivative_scope/view.0.1.silo");
+    viewOutputViews(1, 1.0, false, 0.0);
+    if (particlesGravityDiagnostics != nullptr ||
+        std::filesystem::exists("snapshot_derivative_scope/view.0.1.silo")) {
+        throw std::runtime_error("Skipped snapshot allocated/wrote diagnostics");
+    }
+    // Fail after force evaluation, while opening the output directory. Every
+    // locality must release its managed diagnostic buffers on this path too.
+    std::ofstream("snapshot_derivative_scope/blocked") << "not a directory";
+    options.output.directory = "snapshot_derivative_scope/blocked/child";
+    setOptions(options);
+    bool failed = false;
+    try {
+        viewOutputViews(2, 1.0, true, 0.0);
+    } catch (std::filesystem::filesystem_error const&) {
+        failed = true;
+    }
+    if (!failed || particlesGravityDiagnostics != nullptr) {
+        throw std::runtime_error("Failed snapshot did not release diagnostic storage");
+    }
+    setOptions(originalOptions);
+    viewConfigure();
+}
+
 void fmmWalkOrdinaryTimesteps(bool useCuda) {
     auto const saved = getOptions();
     auto options = saved;
@@ -1718,6 +1839,7 @@ void fmmWalkTest() {
         }
 #endif
         detail::fmmWalkOpenLargerCell(useCuda);
+        detail::fmmWalkSnapshotDiagnostics(useCuda);
     } else {
         Vector<hpx::future<void>> pending;
         for (auto const& locality : hpxLocalities()) {

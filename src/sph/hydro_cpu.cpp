@@ -60,7 +60,10 @@
  *   SIMD partial sums append Pack; CUDA partial sums are reduced in place.
  */
 // clang-format on
-SphRunReturn sphCpuHydro(
+namespace detail {
+
+template <bool retainHydroDiagnostics>
+SphRunReturn sphCpuHydroImpl(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
     sph_flops::Counter flops = 3;    // Scale-factor reciprocal, gas mass scaling and γ − 1.
@@ -151,7 +154,11 @@ SphRunReturn sphCpuHydro(
         float const inverseSmoothingLengthGradientScale =
             sph_geometry::inverseGradientScale(inverseSmoothingLength);    // H_a^-(D+1)
         Vector3<SimdFloat> accelerationPack(zero);    // lane partial sums of acceleration
+        Vector3<SimdFloat> pressureAccelerationPack(zero);
+        Vector3<SimdFloat> viscosityAccelerationPack(zero);
         SimdFloat dissipativeEnergyRatePack(zero);
+        SimdFloat viscosityEnergyRatePack(zero);
+        SimdFloat conductionEnergyRatePack(zero);
         SimdFloat conductionExchangeRatePack(zero);
         SimdFloat internalEnergyRatePack(zero);         // lane partial sums of thermal work
         SimdFloat maximumCompressionSpeedPack(zero);    // lane maxima of −μ_ab for δt_cv
@@ -368,6 +375,10 @@ SphRunReturn sphCpuHydro(
                 flops += (sph_flops::kViscosityMu + sph_flops::kArtificialViscosity + 6) *
                     SimdFloat::size();
             }
+            if constexpr (retainHydroDiagnostics) {
+                viscosityEnergyRatePack += viscousHeating;
+                flops += SimdFloat::size();
+            }
             SimdFloat targetDissipativeEnergyRate = viscousHeating;
             SimdFloat neighborDissipativeEnergyRate = neighborViscousHeating;
             if (parameters.conductionCoefficient > 0.0f) {
@@ -379,6 +390,10 @@ SphRunReturn sphCpuHydro(
                     SimdFloat(smoothingLengthPerEffectiveRadius), scaledGasMass);
                 SimdFloat const conductiveEnergyRate =
                     exchangeRate * (neighborInternalEnergy - SimdFloat(internalEnergy));
+                if constexpr (retainHydroDiagnostics) {
+                    conductionEnergyRatePack += conductiveEnergyRate;
+                    flops += SimdFloat::size();
+                }
                 targetDissipativeEnergyRate += conductiveEnergyRate;
                 neighborDissipativeEnergyRate -= conductiveEnergyRate;
                 conductionExchangeRatePack += exchangeRate;
@@ -386,6 +401,17 @@ SphRunReturn sphCpuHydro(
             }
             Vector3<SimdFloat> const pairForcePack = (pressureForce + viscousForce) * separation;
             accelerationPack -= pairForcePack;
+            if constexpr (retainHydroDiagnostics) {
+                // Decompose the existing pair operator: a_s = −Σ_b F_s,ab r_ab,
+                // s ∈ {pressure, viscosity}. F_s,ab is pressureForce/viscousForce;
+                // r_ab is separation. Accumulate each term independently to avoid
+                // subtracting large forces when the pressure residual is small.
+                for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+                    pressureAccelerationPack[dim] -= pressureForce * separation[dim];
+                    viscosityAccelerationPack[dim] -= viscousForce * separation[dim];
+                }
+                flops += 4 * kSpatialDimensions * SimdFloat::size();
+            }
             if (applyPairKicks) {
                 for (size_t lane = 0; lane < SimdFloat::size(); ++lane) {
                     if (!interacts[lane]) {
@@ -451,6 +477,32 @@ SphRunReturn sphCpuHydro(
             parameters.vonNeumannRichtmyerCoefficient;
         float const maximumCompressionSpeed =
             simdMaximum(maximumCompressionSpeedPack);    // max_b(−μ_ab) over approaching pairs
+        if constexpr (retainHydroDiagnostics) {
+            auto& diagnostic = data.sinkHydroDiagnostics[sinkIndex];
+            // Hydro pair force only: capture before gravity, imposed forces, and damping.
+            for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+                diagnostic.acceleration[dim] = acceleration[dim];
+                diagnostic.pressureAcceleration[dim] = simdSum(pressureAccelerationPack[dim]);
+                diagnostic.viscosityAcceleration[dim] = simdSum(viscosityAccelerationPack[dim]);
+            }
+            flops += 2 * kSpatialDimensions * (SimdFloat::size() - 1);
+            // Derived from the A↔E conversion in thermodynamics.hpp:
+            // (dA/dτ)_s = (γ−1) ρ_c^(1−γ) a^(3γ−5) (dE/dτ)_s,
+            // s ∈ {viscosity, conduction}; their sum is the hydro entropy rate.
+            // Here density=ρ_c, parameters.scaleFactor=a, and each accumulated
+            // dissipative energy rate is (dE/dτ)_s. Reversible work contributes zero.
+            diagnostic.entropyRate =
+                sph_entropy::fromStoredEnergy(simdSum(dissipativeEnergyRatePack), density,
+                    gasAdiabaticIndex, parameters.scaleFactor);
+            diagnostic.viscosityEntropyRate =
+                sph_entropy::fromStoredEnergy(simdSum(viscosityEnergyRatePack), density,
+                    gasAdiabaticIndex, parameters.scaleFactor);
+            diagnostic.conductionEntropyRate =
+                sph_entropy::fromStoredEnergy(simdSum(conductionEnergyRatePack), density,
+                    gasAdiabaticIndex, parameters.scaleFactor);
+            flops +=
+                3 * (SimdFloat::size() - 1 + sph_flops::entropyConversionFlops(gasAdiabaticIndex));
+        }
         // The pair calculation can overlap gravity. Only source assembly and
         // the following corrector require the fresh endpoint acceleration.
         Vector3<float> gravityAcceleration(0.0f);
@@ -667,4 +719,14 @@ SphRunReturn sphCpuHydro(
     result.floatingPointOperations = FlopCount(flops);
     addCpuFlops(flops.counts());
     return result;
+}
+
+}    // namespace detail
+
+SphRunReturn sphCpuHydro(
+    SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
+    // One dispatch per target node; the disabled specialization contains no diagnostic work.
+    return data.sinkHydroDiagnostics ?
+        detail::sphCpuHydroImpl<true>(parameters, data, targetNodeIndex) :
+        detail::sphCpuHydroImpl<false>(parameters, data, targetNodeIndex);
 }

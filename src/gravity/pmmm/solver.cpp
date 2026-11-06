@@ -82,7 +82,7 @@ void prepare(SolveRequest const& request) {
         state.diagnostics.meshSize = request.meshSize;
         state.diagnostics.activeParticles = request.activeParticles;
         state.diagnostics.totalParticles = request.totalParticles;
-        if (request.applyKick) {
+        if (request.applyKick || particlesGravityDiagnostics != nullptr) {
             Vector<Vector3<float>>().swap(state.acceleration);
             Vector<float>().swap(state.potential);
         } else {

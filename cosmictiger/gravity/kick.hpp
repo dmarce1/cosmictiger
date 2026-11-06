@@ -55,7 +55,12 @@ struct CudaKickData {
     float* pot;
     Array<float*, kDimensions> globalAcceleration{};
     Vector3<float>* deferredGasOpening = nullptr;
-    Vector3<float>* sphStageAccelerations = nullptr;
+    // These evaluation modes are mutually exclusive. Sharing their pointer
+    // keeps the ordinary CUDA launch data and per-thread stack unchanged.
+    union {
+        Vector3<float>* sphStageAccelerations = nullptr;
+        GravityDiagnostics* snapshotDiagnostics;
+    };
     ParticleInteger const* gravitySampleIndices;
     Vector3<float>* gravitySampleAccelerations;
 };
@@ -105,6 +110,7 @@ struct KickParameters {
     bool forceOnly = false;
     // Full-tree current gravity for an SPH acceleration-gradient sensor.
     bool sphAccelerationOnly = false;
+    bool snapshotDiagnostics = false;
     bool profileCoordinator = true;
     bool globalTimestep = false;
     // Traditional SPH common boundaries select and balance gas rungs before
@@ -185,6 +191,7 @@ struct KickParameters {
         arc & geometry;
         arc & forceOnly;
         arc & sphAccelerationOnly;
+        arc & snapshotDiagnostics;
         arc & profileCoordinator;
         arc & globalTimestep;
         arc & deferGasOpening;
@@ -222,6 +229,9 @@ Vector3<float>* gravityDeferredGasOpeningData();
 // migration, or gas sorting occur; a temporary base-particle permutation is
 // restored exactly before returning, preserving hierarchical rung partitions.
 void gravityRefreshSphAcceleration(double theta);
+// Fresh all-particle fields; preserves velocities, rungs, ownership and ordering.
+// Caller owns snapshot storage on every locality.
+void gravityRefreshSnapshotDiagnostics(double theta);
 
 struct KickWorkitem {
     FmmGeometry geometry{};

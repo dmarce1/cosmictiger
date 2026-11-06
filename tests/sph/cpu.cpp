@@ -268,6 +268,10 @@ public:
         run(kSphRunSmoothingLengths);
     }
 
+    void enableHydroDiagnostics() {
+        data_.sinkHydroDiagnostics = allocate<SphHydroDiagnostics>(count_ + sinkOffset_ + 3);
+    }
+
     void enableMidpointOutputs() {
         data_.sinkEntropyRate = allocate<float>(count_ + sinkOffset_ + 3);
         data_.proposeRungs = true;
@@ -2881,6 +2885,7 @@ TEST_F(SphCpuTest, DensityPredictionUsesPeculiarMotionAndGradHWithoutViscosity) 
         auto& data = fixture.data_;
         std::vector<float> logDensityRate(fixture.count_ + fixture.sinkOffset_ + 3, -19.0f);
         data.sinkLogDensityRate = logDensityRate.data();
+        fixture.enableHydroDiagnostics();
         if (freeSupport) {
             fixture.solveSmoothing(0.04f, 0.45f, 0.2f);
         } else {
@@ -2949,6 +2954,8 @@ TEST_F(SphCpuTest, DensityPredictionUsesPeculiarMotionAndGradHWithoutViscosity) 
                         double const expected = densityRate / (scale * density * supportJacobian);
                         EXPECT_NEAR(data.sinkLogDensityRate[sink], expected,
                             3.0e-5 * std::max(1.0, std::abs(expected)));
+                        EXPECT_NEAR(data.sinkHydroDiagnostics[sink].densityRate, expected * density,
+                            3.0e-5 * std::max(1.0, std::abs(expected * density)));
                         if (compression == 0.0f) {
                             // A Hubble flow does not change the stored comoving density.
                             EXPECT_FLOAT_EQ(data.sinkLogDensityRate[sink], 0.0f);
@@ -2956,6 +2963,15 @@ TEST_F(SphCpuTest, DensityPredictionUsesPeculiarMotionAndGradHWithoutViscosity) 
                     }
                 }
             }
+        }
+        // Diagnostics must also request velocities without the integrator predictor.
+        data.sinkLogDensityRate = nullptr;
+        fixture.densityPass();
+        for (int particle = 0; particle < fixture.count_; ++particle) {
+            int const sink = fixture.sinkIndex(particle);
+            EXPECT_NEAR(data.sinkHydroDiagnostics[sink].densityRate,
+                logDensityRate[sink] * data.sinkDensity[sink],
+                3.0e-5 * std::max(1.0f, std::abs(data.sinkHydroDiagnostics[sink].densityRate)));
         }
         EXPECT_EQ(sawFreeCorrection, freeSupport);
         for (int index = 0; index < fixture.sinkOffset_; ++index) {
@@ -3285,4 +3301,16 @@ TEST_F(SphCpuTest, EntropyProduction) {
 TEST_F(SphCpuTest, ArtificialConduction) {
     detail::Fixture fixture(2, 2);
     detail::testConductionPair(fixture);
+}
+
+TEST_F(SphCpuTest, HydroDiagnostics) {
+    for (bool const directedViscosity : {false, true}) {
+        detail::Fixture fixture(2, 2);
+        detail::testHydroDiagnostics(fixture, directedViscosity);
+    }
+}
+
+TEST_F(SphCpuTest, HydroDensityDiagnostics) {
+    detail::Fixture fixture(2, 2);
+    detail::testHydroDensityDiagnostics(fixture);
 }

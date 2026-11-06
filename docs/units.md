@@ -154,6 +154,55 @@ box `[0, 1]`, regardless of output selection. For example, `xMin=0.25` selects
 the same particles in all four views. The scale factor stretches the output
 coordinates without changing this selection.
 
+## Optional hydro diagnostics
+
+`output.siloTimeDerivatives=true` evaluates hydro and gravity diagnostics for each written
+Silo snapshot (default: false). Gas particles receive these fields:
+
+| Gas field | Meaning |
+| --- | --- |
+| `hydro_ax`, `hydro_ay`, `hydro_az` | Pressure plus artificial-viscosity acceleration; only active dimensions are written |
+| `pressure_ax`, `pressure_ay`, `pressure_az` | Pressure acceleration only, in active dimensions |
+| `viscosity_ax`, `viscosity_ay`, `viscosity_az` | Artificial-viscosity acceleration only, in active dimensions |
+| `drhodt` | Material density rate from the SPH continuity sum, including the adaptive-support correction |
+| `dAdt` | Total hydrodynamic rate of the entropic function A |
+| `dAdt_viscosity` | Artificial-viscosity contribution to dA/dt |
+| `dAdt_conduction` | Artificial-conduction contribution to dA/dt |
+
+Pressure and viscosity accelerations are accumulated independently and sum to
+`hydro_a` up to floating-point reduction roundoff. These are forces per unit mass.
+The two entropy components sum to `dAdt` up to floating-point reduction roundoff.
+Reversible pressure work leaves A unchanged. Cooling, imposed forces, gravity,
+and damping are excluded. A conducting particle can have a negative `dAdt_conduction`
+when it loses heat; A is the entropic function, not total thermodynamic entropy.
+
+Rates are reevaluated at snapshot positions, including the initial and final
+snapshots, using the stored velocity and entropy stages. This adds a zero-kick
+force evaluation at output; it does not synchronize the integration stages or
+advance viscosity. Diagnostic arrays are allocated immediately before evaluation
+and freed after the Silo writers finish, including on errors. No diagnostic
+arrays are retained between snapshots, migrated, or saved in checkpoints.
+The temporary hydro storage is `(3*D + 4) * sizeof(float)` per gas particle;
+immutable output records use a temporary side array with the same fields.
+When disabled, no diagnostic particle arrays or snapshot side arrays are allocated,
+and migration records retain their ordinary size. CPU/CUDA hydro and CPU
+density kernels select a compiled specialization outside
+their particle loops. CUDA density keeps its original kernel and uses its existing
+optional log-density-rate output, with a temporary float array and conversion
+only when enabled. The disabled paths have no added diagnostic accumulators,
+reductions, or neighbor-loop branches. Extra snapshot force evaluations occur
+only when enabled.
+
+Native rates differentiate with respect to conformal code time τ. In a standalone
+hydro problem a=1, so these are ordinary code-time derivatives. Converted entropy
+and density rates use the corresponding field conversion divided by `a*T0`, and
+converted hydro acceleration is always physical force per mass in cm/s²:
+`(L0/T0²) * hydro_a / a²`, even in cosmological-unit views. The density rate includes
+peculiar compression only: lab output does not add the homogeneous `-3 H rho`
+Hubble-dilution term. Each gas directory records this in `hydro_rates_convention`.
+Existing cosmological factors retain their 3D convention; lower-dimensional SPH
+uses a=1, as described in [SPH dimensions](sph_dimensions.md).
+
 ## Native state and CGS conversions
 
 Let `L0=codeToCm`, `M0=codeToG`, and `T0=codeToS` be the run's base scales in
@@ -271,3 +320,42 @@ and `cycle` (integer), which VisIt reads for its database time slider. Frame
 directories carry the same clock pair. Native noncosmological output uses elapsed code time; cosmological and converted
 output uses physical age or elapsed physical time in Gyr. The root `time_unit`
 and `time_convention` metadata identify the stored clock.
+
+## Optional gravity diagnostics
+
+With gravity enabled, `output.siloTimeDerivatives=true` also writes these fields for
+**every species** (gas, dark matter, and stars):
+
+| Field | Meaning |
+| --- | --- |
+| `gravity_ax/ay/az` | Total gravitational acceleration |
+| `gravity_long_ax/ay/az` | Long-field acceleration |
+| `gravity_near_ax/ay/az` | Near-field acceleration |
+| `gravity_phi` | Total gravitational potential per unit mass |
+| `gravity_long_phi` | Long-field potential |
+| `gravity_near_phi` | Near-field potential |
+
+These are fresh all-source evaluations at snapshot positions, including the
+initial snapshot. They neither kick particles nor propose rungs. Local force-tree
+sorting is undone before returning, preserving particle order, ownership, and
+integration state. The physical long acceleration retained by the PM/P3M
+integrator is not overwritten by the diagnostic solve.
+
+The split follows the solver. FMM's long contribution comprises M2P and local
+expansions, including periodic corrections; its near contribution is explicit
+softened P2P, with the self potential removed. PMMM separates the mesh local
+expansion from the neighboring-cell solve. P3M separates its mesh field from the
+short-range correction. Pure PM has a zero near field. These are numerical
+solver partitions, not a universal radial cutoff. Total equals long plus near
+up to floating-point roundoff. The potential fields are potentials, **not dphi/dt**.
+
+Native accelerations have the same conformal/canonical convention as hydro;
+native potential is gm-scaled. Converted gravity acceleration is always in
+`cm/s^2`, and potential in `cm^2/s^2`, independent of the selected length frame.
+The conversions are `L0/(a^2 T0^2)` and `L0^2/(a T0^2)`, respectively. Potential
+zero points and periodic background corrections follow the selected solver.
+Temporary gravity storage is `12 * sizeof(float)` per particle in 3D, plus an
+output side array. No additional field arrays or force passes exist when the
+switch is false, or when no Silo snapshot is due. The older `analysis.saveForce`,
+`analysis.saveAcceleration`, and `analysis.savePotential` retain their independent
+legacy solver-diagnostic behavior; they do not activate these snapshot fields.

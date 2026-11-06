@@ -1320,7 +1320,21 @@ void particlesGravitySamplesBegin(size_t sampleCount) {
     }
 }
 
+void particlesAllocateGravityDiagnostics() {
+    ALWAYS_ASSERT(particlesGravityDiagnostics == nullptr);
+    size_t const count = std::max(size_t{1}, size_t(particlesOwnedSize()));
+    particlesGravityDiagnostics =
+        static_cast<GravityDiagnostics*>(allocateManagedMemory(sizeof(GravityDiagnostics) * count));
+    std::fill_n(particlesGravityDiagnostics, count, GravityDiagnostics{});
+}
+
+void particlesFreeGravityDiagnostics() {
+    freeManagedMemory(particlesGravityDiagnostics);
+    particlesGravityDiagnostics = nullptr;
+}
+
 void particlesFree() {
+    particlesFreeGravityDiagnostics();
     for (auto hook : particleReleaseHooks) {
         hook();
     }

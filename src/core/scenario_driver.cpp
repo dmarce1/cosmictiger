@@ -100,7 +100,11 @@ void runFixedScenario() {
     profile::profileEnd();
     profile::checkForInterrupt();
     auto baseOptions = getOptions();
+#if COSMICTIGER_WITH_SPH
     baseOptions.run.gasParticleCount = sphParticlesSize();
+#else
+    baseOptions.run.gasParticleCount = 0;
+#endif
     setOptions(baseOptions);
     bool const fixedViscosityStage = std::any_of(plan.stages.begin(), plan.stages.end(),
         [](auto const& stage) { return stage.bulkViscosityCoefficient >= 0.0; });
@@ -256,8 +260,8 @@ void runFixedScenario() {
                         global ? baseTimestep : std::ldexp(baseTimestep, -baseOptions.run.minRung));
                     state.globalHydroTimestep = estimate.minimumTimestep;
                 } else if (outputDue) {
-                    // Refresh density at the output coordinates without another
-                    // force evaluation, viscosity update, or entropy kick.
+                    // Refresh snapshot density and optional hydro rates without
+                    // a viscosity update or entropy/velocity kick.
                     sphMidpointStep(-1, state.tau, -1.0, baseTimestep, 1.0, 0.0, state.energies,
                         global, global ? baseTimestep : 0.0, state.globalTimestep);
                 }
@@ -268,7 +272,7 @@ void runFixedScenario() {
                 profile::profileBegin("output");
                 viewOutputViews(outputStep, 1.0, false,
                     state.tau * getOptions().units.timeSeconds * constants::kSecondsToYears,
-                    duration / baseOptions.run.numberOfSteps, state.globalTimestep);
+                    duration / baseOptions.run.numberOfSteps, state.globalTimestep, state.tau);
                 profile::profileEnd();
             }
             resetFlops();
@@ -483,7 +487,7 @@ void runFixedScenario() {
     profile::profileBegin("output");
     viewOutputViews(driverFinalOutputStep(state.tau, coarseInterval), 1.0, true,
         state.tau * getOptions().units.timeSeconds * constants::kSecondsToYears,
-        duration / baseOptions.run.numberOfSteps, state.globalTimestep);
+        duration / baseOptions.run.numberOfSteps, state.globalTimestep, state.tau);
     profile::profileEnd();
     if (completed && !interrupted && iterations > 0) {
         // Only terminal diagnostics consume the outstanding gravity closing

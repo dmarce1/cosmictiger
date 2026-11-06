@@ -175,6 +175,9 @@ void sphParticlesSwap(ParticleInteger i, ParticleInteger j) {
         std::swap(sphParticlesBalsaraFactors[i], sphParticlesBalsaraFactors[j]);
     }
     std::swap(sphParticlesGradHCorrections[i], sphParticlesGradHCorrections[j]);
+    if (sphParticlesHydroDiagnostics) {
+        std::swap(sphParticlesHydroDiagnostics[i], sphParticlesHydroDiagnostics[j]);
+    }
     detail::visitSphCheckpointArrays(
         [i, j](auto* values, size_t) { std::swap(values[i], values[j]); });
 }
@@ -215,6 +218,19 @@ void sphParticlesArrayResize(T*& ptr, ParticleInteger newCapacity) {
     ptr = newPtr;
 }
 
+void sphParticlesAllocateHydroDiagnostics() {
+    ALWAYS_ASSERT(sphParticlesHydroDiagnostics == nullptr);
+    auto const count = std::max(ParticleInteger{1}, capacity);
+    sphParticlesHydroDiagnostics = static_cast<SphHydroDiagnostics*>(
+        allocateManagedMemory(sizeof(SphHydroDiagnostics) * count));
+    std::fill_n(sphParticlesHydroDiagnostics, count, SphHydroDiagnostics{});
+}
+
+void sphParticlesFreeHydroDiagnostics() {
+    freeManagedMemory(sphParticlesHydroDiagnostics);
+    sphParticlesHydroDiagnostics = nullptr;
+}
+
 void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticles) {
     if (particleCount != size) {
         sphTreeInvalidate();
@@ -233,6 +249,9 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
             newCapacity = size_t(101) * newCapacity / size_t(100);
         }
         sphParticlesArrayResize(sphParticlesDensities, newCapacity);
+        if (sphParticlesHydroDiagnostics != nullptr) {
+            sphParticlesArrayResize(sphParticlesHydroDiagnostics, newCapacity);
+        }
         if (getOptions().hydro.balsaraSwitch) {
             sphParticlesArrayResize(sphParticlesBalsaraFactors, newCapacity);
         }
@@ -306,6 +325,9 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         }
         sphParticlesParticleIndices[slot] = kNoParticleIndex;
         sphParticlesDensities[slot] = 0.0f;
+        if (sphParticlesHydroDiagnostics) {
+            sphParticlesHydroDiagnostics[slot] = {};
+        }
         if (getOptions().hydro.balsaraSwitch) {
             sphParticlesBalsaraFactors[slot] = 0;
         }
@@ -340,6 +362,8 @@ void sphParticlesRemove(ParticleInteger index) {
 
 void sphParticlesFree() {
     sphTreeInvalidate();
+    freeManagedMemory(sphParticlesHydroDiagnostics);
+    sphParticlesHydroDiagnostics = nullptr;
     freeManagedMemory(sphParticlesViscosityDiagnostics);
     sphParticlesViscosityDiagnostics = nullptr;
     sphParticlesEntropyInitialized = false;

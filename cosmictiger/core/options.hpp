@@ -95,6 +95,7 @@ inline bool interpolatedInitialConditions(Initial const& initial) {
 
 struct Output {
     bool silo{};
+    bool siloTimeDerivatives{};
     int siloInterval{};
     std::string directory{};
     std::string units{"code"};
@@ -528,6 +529,7 @@ struct Options {
         arc & run.gasParticleCount;
         arc & initial.darkMatterLatticeSide;
         arc & initial.gasLatticeSide;
+        arc & output.siloTimeDerivatives;
     }
 };
 
