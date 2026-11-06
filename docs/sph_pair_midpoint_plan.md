@@ -92,7 +92,7 @@ Here \(\Delta\tau_n\) is the completed interval between endpoints; the second ex
 scaled slope passed to the model. Its continuum limit is
 \(D\theta_{\rm pec}/Dt+2H\theta_{\rm pec}\), as derived in
 [the viscosity documentation](monaghan_sph.md#cosmological-viscosity-conventions).
-The unchanged `divv` output key reports decoded canonical \(G\), with explicit
+The `velocityDivergence` output key reports decoded canonical \(G\), with explicit
 metadata, because no previous-sample scale factor is retained.
 
 The endpoint difference estimates the slope centered on the completed interval's

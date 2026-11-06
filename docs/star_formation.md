@@ -212,7 +212,7 @@ uses the live rung. Startup seeds history without advancing alpha. There is no
 wrapper or retained sampled-rung byte. Checkpoint and migration both store `H`
 (two bytes). As in GADGET-4, the sensor differences decoded canonical
 gradients before converting with the current scale factor; the derivative is
-not retained. The `divv` output reports the last endpoint's canonical \(G\), explicitly identified
+not retained. The `velocityDivergence` output reports the last endpoint's canonical \(G\), explicitly identified
 by its metadata. Four float pending diagnostics occupy sixteen
 temporary bytes only during density events.
 

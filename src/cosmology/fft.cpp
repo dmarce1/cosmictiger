@@ -86,7 +86,7 @@ void fft3d2silo(bool real) {
         int dims[kDimensions] = {(int) n, (int) n, (int) n};
         DBPutQuadmesh(
             db, "real_mesh", coordnames, coords, dims, kDimensions, DB_FLOAT, DB_COLLINEAR, NULL);
-        DBPutQuadvar1(db, "real_data", "real_mesh", rValue.data(), dims, kDimensions, NULL, 0,
+        DBPutQuadvar1(db, "realSpaceValue", "real_mesh", rValue.data(), dims, kDimensions, NULL, 0,
             DB_FLOAT, DB_NODECENT, NULL);
         DBClose(db);
     } else {
@@ -116,10 +116,10 @@ void fft3d2silo(bool real) {
             i.push_back(yValue[j].imag());
             r.push_back(yValue[j].real());
         }
-        DBPutQuadvar1(db, "complex_real", "complex_mesh", r.data(), dims, kDimensions, NULL, 0,
-            DB_FLOAT, DB_NODECENT, NULL);
-        DBPutQuadvar1(db, "complex_imag", "complex_mesh", i.data(), dims, kDimensions, NULL, 0,
-            DB_FLOAT, DB_NODECENT, NULL);
+        DBPutQuadvar1(db, "fourierRealComponent", "complex_mesh", r.data(), dims, kDimensions, NULL,
+            0, DB_FLOAT, DB_NODECENT, NULL);
+        DBPutQuadvar1(db, "fourierImaginaryComponent", "complex_mesh", i.data(), dims, kDimensions,
+            NULL, 0, DB_FLOAT, DB_NODECENT, NULL);
         DBClose(db);
     }
 }

@@ -312,7 +312,7 @@ estimates do not advance α. This retained backward-Euler endpoint update is fir
 order; it limits the accuracy of the coupled variable-coefficient calculation
 even though the velocity/entropy hydro operator uses RK2. CD, Hu and Price instead
 evaluate their switches at the RK stages, as described below. Silo writes a
-dimensionless `alpha` gas field when viscosity evolution is enabled.
+dimensionless `bulkViscosityCoefficient` gas field when viscosity evolution is enabled.
 Morris–Monaghan retains and writes no divergence field; Cullen–Dehnen has
 additional state described below.
 
@@ -398,10 +398,10 @@ Hu limiter application. There is no additional completed-endpoint alpha update
 for these three models. Startup and zero-duration estimates do not advance
 alpha through a finite interval. Morris–Monaghan retains its endpoint update.
 
-The retained compact divergence scalar supports `divv` output and checkpoint
+The retained compact divergence scalar supports `velocityDivergence` output and checkpoint
 compatibility; it is not the derivative source for the direct RK-stage sensor.
 All three gradient models share this scalar, with no wrapper, second divergence
-or previous sampled rung. The `divv` output key reports decoded canonical
+or previous sampled rung. The `velocityDivergence` output key reports decoded canonical
 \(G\) at the current output coordinates, with inverse-code-time units
 and explicit convention metadata. A density-only output refresh publishes that
 diagnostic without evolving alpha. Output remains canonical \(G\), rather than
@@ -440,7 +440,7 @@ rate, limiter and pending divergence are four float scratch fields (sixteen byte
 allocated for gradient-switch diagnostics and released after the event.
 The retained instantaneous target increases and finite-step decay/projection
 rules are not a general second-order integrator for alpha. Every evolution
-scheme writes dimensionless `alpha`; selecting `none`
+scheme writes dimensionless `bulkViscosityCoefficient`; selecting `none`
 allocates neither α evolution state nor divergence state. Under CD, β follows α
 as described above.
 
@@ -479,7 +479,7 @@ full support radius. The switch starts at zero and imposes no extra alpha floor,
 as in the equations above; Hu's separate 0.1 floor used in their test suite is
 not imposed. `hydro.balsaraSwitch` must be false for Hu; enabling it is an error.
 Pair beta follows alpha as for CD; the existing Monaghan pair operator is retained.
-Hu shares the gradient-state lifecycle, including `divv` output and migration,
+Hu shares the gradient-state lifecycle, including `velocityDivergence` output and migration,
 but does not require a neighbor divergence-sign snapshot. Its strong limiter is
 transient and reconstructed with the current RK-stage velocity gradient. Optional
 Checkpoints identify Hu separately and

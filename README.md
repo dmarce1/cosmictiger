@@ -258,25 +258,27 @@ owned particles independently; the master is published after all particle files
 are closed. Open the master in VisIt, and keep its `.silo.data` directory beside
 it when copying or moving a snapshot.
 
-Particle views use species directories `gas/`, `dark_matter/`, and (when present)
-`stars/`, each with a point mesh named `mesh` and fields such as `vx` and `rung`.
-Gas exports the entropy tracer `A` and kernel support radius `r`; its `mass` is a
-constant field expression with one shared mass value, rather than a particle
-array. Positions and support radii follow the selected output units and frame.
-The viscosity field stays `alpha` because Silo rejects Unicode object names.
-Set `output.siloTimeDerivatives=true` to evaluate and export hydro acceleration
-(`hydro_ax`,
-`hydro_ay`, and `hydro_az` only for active dimensions), `drhodt`, and the entropy
-rates `dAdt`, `dAdt_viscosity`, and `dAdt_conduction`. This defaults to false.
-Separate pressure and viscous accelerations use `pressure_ax/ay/az` and
-`viscosity_ax/ay/az`, also restricted to active dimensions.
-The initial snapshot includes these rates, allowing a static interface's
-pressure-force residual to be inspected with viscosity disabled.
-The same switch exports fresh gravity acceleration and potential for every species,
-split into `gravity_long_*` and `gravity_near_*` fields alongside `gravity_*` totals.
+Particle views use `gas/`, `darkMatter/`, and `stars/` directories, with a
+point mesh named `mesh`. State fields have descriptive names: `xVelocity`,
+`yVelocity`, `zVelocity` (active axes only), `timestepRung`, `density`,
+`entropyTracer`, `kernelSupportRadius`, `pressure`, and `temperature`.
+Temperature is in kelvin, including without chemistry; that case uses the existing
+neutral H/He ideal-gas convention. Pressure, neutral temperature, constant mass,
+and algebraic diagnostic combinations are Silo expressions evaluated by VisIt.
+
+Set `output.siloTimeDerivatives=true` to add each species' `timeDerivatives/`
+subdirectory (default: false). For gas, `timeDerivatives/xVelocity` sums the
+enabled hydro and gravity forces per mass; `hydro/`, `pressure/`, `viscosity/`,
+and `gravity/` underneath it expose the contributions. Density and entropy
+rates are `timeDerivatives/density` and `timeDerivatives/entropyTracer`;
+viscosity and conduction entropy rates are in their respective subdirectories.
+Gravity fields also provide `longField/` and `nearField/` splits. Species-level
+`potentialEnergy` is gravitational potential per unit mass, with long/near splits.
 Diagnostic storage exists only during snapshot evaluation and writing. With the
-switch off, no extra fields, buffers, or force evaluations are produced.
-See [units and output fields](docs/units.md) for paths and conventions.
+switch off, no extra diagnostic buffers or force evaluations are produced.
+The initial snapshot includes these diagnostics. See [units and field paths](docs/units.md)
+for the complete directory layout and conventions. Saved VisIt sessions using
+abbreviated names or `dark_matter/` need their variable paths updated.
 
 Particle positions retain the fixed-point representation used by the solver and
 checkpoints. Set `output.units=cgs` for CGS quantities or

@@ -93,7 +93,7 @@ void outputParticles(std::string const filename, Vector<OutputParticle> const& p
         for (int i = 0; i < parts.size(); i++) {
             velocities[i] = parts[i].velocity[dim];
         }
-        std::string nm = std::string() + "v_" + char('x' + char(dim));
+        std::string nm = std::string(1, char('x' + dim)) + "Velocity";
         detail::checkOutputWrite(DBPutPointvar1(db, nm.c_str(), "points", velocities.data(),
                                      numberOfParticles, DB_FLOAT, nullptr),
             "particle velocity");
@@ -103,7 +103,7 @@ void outputParticles(std::string const filename, Vector<OutputParticle> const& p
         r[i] = parts[i].rung;
     }
     detail::checkOutputWrite(
-        DBPutPointvar1(db, "rung", "points", r.data(), numberOfParticles, DB_INT, nullptr),
+        DBPutPointvar1(db, "timestepRung", "points", r.data(), numberOfParticles, DB_INT, nullptr),
         "particle rungs");
     detail::checkOutputWrite(DBClose(file.release()), "close particle output");
 }

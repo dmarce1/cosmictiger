@@ -89,7 +89,7 @@ selects CGS and cosmological output together. `output.frame` accepts `comoving`,
 
 Either selector can use `both` while the other selects one value. Each view
 contains gas and dark-matter point meshes with node-centered point variables,
-including the gas kernel support radius `gas/r`. Positions and support radii
+including the gas kernel support radius `gas/kernelSupportRadius`. Positions and support radii
 use the selected units and frame. Converted floating-point arrays use double
 precision. The directories above are in the master Silo file, whose
 multimeshes and multivariables reference locality files under the sibling
@@ -98,42 +98,69 @@ keep the master and its `.silo.data` directory together when moving a snapshot.
 Metadata records the selected units, frame, scale factor, Hubble parameter,
 and the peculiar-velocity convention.
 
-Each view contains separate `gas/`, `dark_matter/`, and (when present) `stars/`
-directories. Each species has a point mesh named `mesh` and unprefixed fields
-`vx`, `vy`, `vz`, and `rung`. Thus gas velocity is `gas/vx` and dark-matter
-velocity is `dark_matter/vx`; converted views add their unit/frame prefix.
-`rung` is the committed integration rung. Gas uses the stricter enabled
-hydrodynamic and gravitational requirements together with step and neighbor
-limits, rather than keeping two separately integrated rung fields.
+Each view contains separate `gas/`, `darkMatter/`, and (when present) `stars/`
+directories. Each species has a point mesh named `mesh` and fields `xVelocity`,
+`yVelocity`, `zVelocity` (only active axes), `timestepRung`, and `mass`. For example,
+`gas/xVelocity` and `darkMatter/xVelocity` are distinct fields. Converted views
+add their unit/frame prefix. `timestepRung` remains the committed integration rung.
 
-Gas fields include `rho`, entropy tracer `A`, and kernel support radius `r`.
-For freely converged supports, the solver enforces
-`rho = 3 * neighborNumber * particle_mass / (4*pi*r^3)` to its support tolerance.
-`rho` remains a stored field because support-radius bounds can break that relation.
-`A = P_physical / rho_physical^gamma` is the stored entropic function, not
-internal or total energy. Its conversion factor is
-`(lengthCm/timeSeconds)^2 * (massG/lengthCm^3)^(1-gamma)` in CGS;
-cosmological output expresses the same quantity in
-`(km/s)^2 / ((Msun/h)/(Mpc/h)^3)^(gamma-1)`. It has no additional scale-factor
-or lab/comoving-frame factor. Metadata records the adiabatic index.
-Viscosity remains `alpha`: Silo restricts object names to ASCII alphanumerics
-and underscores and rejects Greek alpha.
+Gas state also includes `density`, `entropyTracer`, `kernelSupportRadius`,
+`pressure`, `temperature`, `meanMolecularWeight`, and `adiabaticIndex`.
+The entropy tracer is A = P_phys/rho_phys^gamma, with the existing CGS conversion
+`(lengthCm/timeSeconds)^2 * (massG/lengthCm^D)^(1-gamma)` and no extra frame factor.
+The evolving viscosity coefficient is `bulkViscosityCoefficient`, and the
+stored velocity-divergence diagnostic is `velocityDivergence` when selected.
+Density remains stored: support-radius bounds can break the unconstrained
+neighbor-number relation, so reconstructing density from radius would be incorrect.
 
-`gas/mass` is a Silo scalar expression,
-`nodal_constant(<gas/mesh>, particle_mass)`, with the fully qualified mesh path
-for that view. Only one mass literal is stored per expression, with no
-per-particle mass array or mass multivariable. The master expression operates
-on the gas multimesh, including empty-locality blocks. `gas/mass_unit` records
-its units. Expressions use VisIt's
-[`nodal_constant` function](https://visit-sphinx-github-user-manual.readthedocs.io/en/develop/using_visit/Quantitative/Expressions.html)
-and Silo's
-[`DBPutDefvars` definitions](https://silo.readthedocs.io/latest/objects.html#dbputdefvars).
+With chemistry enabled, gas also has `neutralHydrogenAbundance`,
+`ionizedHydrogenAbundance`, `neutralHeliumAbundance`,
+`singlyIonizedHeliumAbundance`, `doublyIonizedHeliumAbundance`, and
+`electronAbundance`, all measured per hydrogen nucleus. The electron abundance
+is the sum of the ion charges, and `meanMolecularWeight` is derived from it using
+the cooling model's fixed hydrogen mass fraction X=0.76. Individual species stay
+stored so subtraction does not erase small trace abundances. Chemistry temperature
+stays stored because reconstructing it from the final abundances need not reproduce
+the iterative temperature solve within floating-point roundoff.
 
-This layout replaces the former flat `hydro_*`, `star_*`, `eint`, and
-`kernel_smoothing_length` output fields. Saved visualization sessions and scripts
-using those paths need updating. Mesh time and `time` metadata retain the
-existing cosmological-age convention in Gyr (`time_unit=Gyr`,
-`time_convention=cosmological_age`); this is not elapsed standalone hydro time.
+Star formation adds `particleIdLow`, `particleIdHigh`, and `formationTime` to
+particle species, plus gas `coldGasMassFraction`, `hotGasTemperature`, and
+`specificStarFormationRate`. The two ID limbs retain exact 64-bit identities.
+Tracer velocities use the same axis names and `timestepRung`. Light-cone point
+exports use those velocity names plus `subgroupId` and `hostGroupId`; FFT dumps
+use `realSpaceValue`, `fourierRealComponent`, and `fourierImaginaryComponent`.
+
+Pressure and neutral temperature are derived expressions:
+
+- Native pressure: `A * rho_c^gamma * a^(5-3*gamma)`, matching stored hydro pressure.
+- Converted pressure: physical pressure in **both** frames. It is
+  `entropyTracer * density^gamma` in the lab frame, with an additional
+  `a^(-3*gamma)` in a comoving-density view.
+- CGS pressure units are `erg/cm^D`; cosmological pressure units are
+  `(km/s)^2*(Msun/h)/(Mpc/h)^3`.
+- Temperature is always in kelvin. With chemistry enabled, the existing
+  equilibrium temperature remains a stored field. Without chemistry,
+  `T = (gamma-1)*u_phys / (k_B*N_A*(1-3*Y/4))`, where Y is
+  `cosmology.heliumFraction`; this is the existing neutral H/He convention.
+  `meanMolecularWeight=1/(1-3*Y/4)` is then constant. This convention does not
+  infer ionization from temperature.
+
+Mass and constant thermodynamic parameters are `nodal_constant` expressions.
+Pressure, neutral temperature, chemistry electron abundance and molecular weight,
+hydro/entropy totals, and near-field gravity
+are also [Silo derived-variable definitions](https://silo.readthedocs.io/latest/objects.html#dbputdefvars).
+They contain fully qualified field paths in both master and locality files;
+VisIt evaluates them pointwise on the corresponding particle mesh. Expression
+names occupy the same logical subdirectories as stored fields. Each expression's
+`<name>_unit` metadata records its units; it has no redundant particle array.
+The mass expression remains in `mass_expression`. Other definitions use
+`<name>_expression`. These are storage objects, not additional plot variables.
+Expression sums and differences can differ from former directly accumulated
+float fields by rounding. Standard VisIt `time`, `dtime`, and `cycle` names remain.
+
+This replaces abbreviated field names (`vx`, `rho`, `A`, `r`, `alpha`, `divv`),
+flat diagnostic names, and the former `dark_matter/` directory. Existing saved
+VisIt sessions and scripts need their paths updated.
 
 The output cadence selects coarse output epochs; it does not synchronize the
 individual-rung particle fields. Converted views record
@@ -154,54 +181,42 @@ box `[0, 1]`, regardless of output selection. For example, `xMin=0.25` selects
 the same particles in all four views. The scale factor stretches the output
 coordinates without changing this selection.
 
-## Optional hydro diagnostics
+## Optional time derivatives
 
-`output.siloTimeDerivatives=true` evaluates hydro and gravity diagnostics for each written
-Silo snapshot (default: false). Gas particles receive these fields:
+`output.siloTimeDerivatives=true` evaluates hydro and gravity diagnostics at
+written snapshot positions (default: false). Paths below are relative to `gas/`:
 
-| Gas field | Meaning |
+| Path | Meaning |
 | --- | --- |
-| `hydro_ax`, `hydro_ay`, `hydro_az` | Pressure plus artificial-viscosity acceleration; only active dimensions are written |
-| `pressure_ax`, `pressure_ay`, `pressure_az` | Pressure acceleration only, in active dimensions |
-| `viscosity_ax`, `viscosity_ay`, `viscosity_az` | Artificial-viscosity acceleration only, in active dimensions |
-| `drhodt` | Material density rate from the SPH continuity sum, including the adaptive-support correction |
-| `dAdt` | Total hydrodynamic rate of the entropic function A |
-| `dAdt_viscosity` | Artificial-viscosity contribution to dA/dt |
-| `dAdt_conduction` | Artificial-conduction contribution to dA/dt |
+| `timeDerivatives/xVelocity` | Enabled hydro plus gravity acceleration; y/z likewise in active dimensions |
+| `timeDerivatives/hydro/xVelocity` | Pressure plus artificial viscosity |
+| `timeDerivatives/pressure/xVelocity` | Pressure contribution |
+| `timeDerivatives/viscosity/xVelocity` | Artificial-viscosity contribution |
+| `timeDerivatives/gravity/xVelocity` | Gravity contribution, when enabled |
+| `timeDerivatives/density` | Adaptive-support material density rate from peculiar motion |
+| `timeDerivatives/entropyTracer` | Viscosity plus conduction entropy rate |
+| `timeDerivatives/viscosity/entropyTracer` | Artificial-viscosity entropy rate |
+| `timeDerivatives/conduction/entropyTracer` | Artificial-conduction entropy rate |
 
-Pressure and viscosity accelerations are accumulated independently and sum to
-`hydro_a` up to floating-point reduction roundoff. These are forces per unit mass.
-The two entropy components sum to `dAdt` up to floating-point reduction roundoff.
-Reversible pressure work leaves A unchanged. Cooling, imposed forces, gravity,
-and damping are excluded. A conducting particle can have a negative `dAdt_conduction`
-when it loses heat; A is the entropic function, not total thermodynamic entropy.
+The velocity derivatives are force per unit mass, excluding imposed forces,
+damping, and Hubble drag. Reversible pressure work leaves the entropy tracer
+unchanged. Cooling is excluded from the entropy rates; conduction may be negative.
+Native derivatives use conformal code time. Converted entropy/density rates use
+physical seconds and their respective field units/frame. Converted velocity
+rates are **always cm/s²**, including views whose velocity itself is in km/s.
+Lab density rates do not add homogeneous Hubble dilution.
 
-Rates are reevaluated at snapshot positions, including the initial and final
-snapshots, using the stored velocity and entropy stages. This adds a zero-kick
-force evaluation at output; it does not synchronize the integration stages or
-advance viscosity. Diagnostic arrays are allocated immediately before evaluation
-and freed after the Silo writers finish, including on errors. No diagnostic
-arrays are retained between snapshots, migrated, or saved in checkpoints.
-The temporary hydro storage is `(3*D + 4) * sizeof(float)` per gas particle;
-immutable output records use a temporary side array with the same fields.
-When disabled, no diagnostic particle arrays or snapshot side arrays are allocated,
-and migration records retain their ordinary size. CPU/CUDA hydro and CPU
-density kernels select a compiled specialization outside
-their particle loops. CUDA density keeps its original kernel and uses its existing
-optional log-density-rate output, with a temporary float array and conversion
-only when enabled. The disabled paths have no added diagnostic accumulators,
-reductions, or neighbor-loop branches. Extra snapshot force evaluations occur
-only when enabled.
-
-Native rates differentiate with respect to conformal code time τ. In a standalone
-hydro problem a=1, so these are ordinary code-time derivatives. Converted entropy
-and density rates use the corresponding field conversion divided by `a*T0`, and
-converted hydro acceleration is always physical force per mass in cm/s²:
-`(L0/T0²) * hydro_a / a²`, even in cosmological-unit views. The density rate includes
-peculiar compression only: lab output does not add the homogeneous `-3 H rho`
-Hubble-dilution term. Each gas directory records this in `hydro_rates_convention`.
-Existing cosmological factors retain their 3D convention; lower-dimensional SPH
-uses a=1, as described in [SPH dimensions](sph_dimensions.md).
+Output evaluations do not kick particles or advance viscosity. They use the
+stored velocity and entropy stages and do not synchronize them in time.
+Managed diagnostics and immutable output side arrays exist only during snapshot
+evaluation/writing and are freed on failure as well. When disabled or no snapshot
+is due, no extra diagnostic storage or force pass is used. CPU/CUDA kernel
+specializations keep diagnostic accumulation out of ordinary force loops.
+The temporary hydro storage remains `(3*D + 4) * sizeof(float)` per gas particle,
+with an equivalent immutable output side array. These arrays are neither migrated
+nor checkpointed. CUDA density keeps its existing kernel and optional log-density
+rate output; conversion scratch is allocated only when diagnostics are selected.
+Existing cosmological factors retain their 3D convention; D1/D2 SPH uses a=1.
 
 ## Native state and CGS conversions
 
@@ -225,7 +240,7 @@ expanding background. There is no `H(a)*r` term. A stationary comoving particle
 therefore has zero output velocity even as its proper position increases.
 Specific internal energy is also physical in both converted frames; the
 comoving selector does not restore the stored `a^2` factor. Native `code` output
-instead preserves `w`, `rho_c`, and `E` for compatibility.
+instead uses the stored `w`, `rho_c`, and entropy-tracer normalization.
 
 The scale factor `a` and the dimensionless Hubble parameter `h` are distinct
 runtime values. `h=cosmology.hubble` sets astronomical unit scales; it is not
@@ -261,7 +276,7 @@ application settings under `/cli`. Dots in CLI names become directories: for
 example, `hydro.viscosityAlpha` is the single double-precision value
 `/cli/hydro/viscosityAlpha`. Integer and boolean settings use single integer
 values (booleans are 0 or 1); strings use null-terminated character arrays.
-The constant viscosity coefficient is not repeated as a particle `alpha` field.
+The constant viscosity coefficient is not repeated as a particle `bulkViscosityCoefficient` field.
 
 These are the effective settings at the snapshot, including defaults,
 configuration-file values, and runtime overrides or caps, expressed in the CLI's
@@ -321,41 +336,34 @@ directories carry the same clock pair. Native noncosmological output uses elapse
 output uses physical age or elapsed physical time in Gyr. The root `time_unit`
 and `time_convention` metadata identify the stored clock.
 
-## Optional gravity diagnostics
+## Gravity fields and splits
 
-With gravity enabled, `output.siloTimeDerivatives=true` also writes these fields for
-**every species** (gas, dark matter, and stars):
+When gravity and `output.siloTimeDerivatives` are enabled, every species has:
 
-| Field | Meaning |
+| Path relative to species | Meaning |
 | --- | --- |
-| `gravity_ax/ay/az` | Total gravitational acceleration |
-| `gravity_long_ax/ay/az` | Long-field acceleration |
-| `gravity_near_ax/ay/az` | Near-field acceleration |
-| `gravity_phi` | Total gravitational potential per unit mass |
-| `gravity_long_phi` | Long-field potential |
-| `gravity_near_phi` | Near-field potential |
+| `potentialEnergy` | Total gravitational potential **per unit mass**, not particle mass times potential |
+| `longField/potentialEnergy` | Long-field potential per unit mass |
+| `nearField/potentialEnergy` | Total minus long-field potential |
 
-These are fresh all-source evaluations at snapshot positions, including the
-initial snapshot. They neither kick particles nor propose rungs. Local force-tree
-sorting is undone before returning, preserving particle order, ownership, and
-integration state. The physical long acceleration retained by the PM/P3M
-integrator is not overwritten by the diagnostic solve.
+For dark matter and stars, acceleration is `timeDerivatives/xVelocity`, with
+`timeDerivatives/longField/xVelocity` and `timeDerivatives/nearField/xVelocity`.
+For gas, the gravity-only values are under `timeDerivatives/gravity/`, including
+its `longField/` and `nearField/` subdirectories. All active axes follow this layout.
 
-The split follows the solver. FMM's long contribution comprises M2P and local
-expansions, including periodic corrections; its near contribution is explicit
-softened P2P, with the self potential removed. PMMM separates the mesh local
-expansion from the neighboring-cell solve. P3M separates its mesh field from the
-short-range correction. Pure PM has a zero near field. These are numerical
-solver partitions, not a universal radial cutoff. Total equals long plus near
-up to floating-point roundoff. The potential fields are potentials, **not dphi/dt**.
+FMM's long field contains M2P and local expansions including periodic corrections;
+near is softened explicit P2P with self potential removed. PMMM separates its mesh
+local expansion from neighboring-cell forces. P3M separates mesh force from the
+short-range correction. Pure PM has zero near field. These are solver partitions,
+not a universal radial cutoff. Total equals long plus near up to roundoff.
 
-Native accelerations have the same conformal/canonical convention as hydro;
-native potential is gm-scaled. Converted gravity acceleration is always in
-`cm/s^2`, and potential in `cm^2/s^2`, independent of the selected length frame.
-The conversions are `L0/(a^2 T0^2)` and `L0^2/(a T0^2)`, respectively. Potential
-zero points and periodic background corrections follow the selected solver.
-Temporary gravity storage is `12 * sizeof(float)` per particle in 3D, plus an
-output side array. No additional field arrays or force passes exist when the
-switch is false, or when no Silo snapshot is due. The older `analysis.saveForce`,
-`analysis.saveAcceleration`, and `analysis.savePotential` retain their independent
-legacy solver-diagnostic behavior; they do not activate these snapshot fields.
+Converted acceleration is cm/s² and potential is cm²/s² in either frame. Native
+force and potential follow the existing canonical convention, with conversions
+`L0/(a^2*T0^2)` and `L0^2/(a*T0^2)`. Potential zero points follow the solver.
+Fresh evaluations preserve particle order, ownership, integration state, and
+retained PM/P3M integrator fields. Legacy `analysis.saveForce`,
+`analysis.saveAcceleration`, and `analysis.savePotential` remain independent.
+
+Temporary gravity storage remains `12 * sizeof(float)` per particle in 3D, plus
+an output side array. The expression changes remove redundant Silo arrays; they
+do not alter force-kernel arithmetic or diagnostic allocation lifetimes.

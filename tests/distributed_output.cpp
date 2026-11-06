@@ -186,7 +186,8 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
         masterCycle && *masterCycle == cycle && masterTime && *masterTime > 0.0,
         "master carries cycle and time");
     checkDistributedOutputClock(master.get(), *masterTime, cycle);
-    std::vector<std::string> const fields = {"rho", "A", "vx", "vy", "vz", "rung", "r"};
+    std::vector<std::string> const fields = {"density", "entropyTracer", "xVelocity", "yVelocity",
+        "zVelocity", "timestepRung", "kernelSupportRadius"};
     checkDistributedMassExpression(master.get(), prefix + "gas/", 0.25 * scales.mass);
     std::vector<DistributedOutputMultivar> multivars;
     for (auto const& field : fields) {
@@ -266,7 +267,7 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
             };
             // Recover the fixture identity from the stored density rather than assume
             // collection order; each owned particle must appear exactly once.
-            int const global = int(std::llround(value("rho") / scales.density)) - 1000;
+            int const global = int(std::llround(value("density") / scales.density)) - 1000;
             requireDistributedOutput(
                 std::find(localGlobals.begin(), localGlobals.end(), global) != localGlobals.end(),
                 "particle remains with its owning locality and inside the selected crop");
@@ -279,17 +280,19 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
                     "point position follows the particle");
             }
             nearDistributedOutput(
-                value("rho"), (1000.0 + global) * scales.density, "SPH density association");
+                value("density"), (1000.0 + global) * scales.density, "SPH density association");
+            nearDistributedOutput(value("entropyTracer"), (10.0 + global) * scales.entropy,
+                "entropy tracer association");
+            nearDistributedOutput(value("xVelocity"), (0.125 + global / 256.0) * scales.velocity,
+                "velocity association");
             nearDistributedOutput(
-                value("A"), (10.0 + global) * scales.entropy, "entropy tracer association");
+                value("yVelocity"), -0.25 * scales.velocity, "y velocity conversion");
             nearDistributedOutput(
-                value("vx"), (0.125 + global / 256.0) * scales.velocity, "velocity association");
-            nearDistributedOutput(value("vy"), -0.25 * scales.velocity, "y velocity conversion");
-            nearDistributedOutput(value("vz"), 0.5 * scales.velocity, "z velocity conversion");
-            nearDistributedOutput(value("rung"), global % 5, "rung association");
+                value("zVelocity"), 0.5 * scales.velocity, "z velocity conversion");
+            nearDistributedOutput(value("timestepRung"), global % 5, "timestepRung association");
             double const smoothingLength = (0.03125 + global / 4096.0) * scales.length;
-            nearDistributedOutput(
-                value("r"), smoothingLength, "SPH support radius remains a field");
+            nearDistributedOutput(value("kernelSupportRadius"), smoothingLength,
+                "SPH support radius remains a field");
             double const mass = particleMass;
             nearDistributedOutput(mass, 0.25, "each output particle retains its full mass");
             totalMass += mass;
@@ -300,22 +303,21 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
         "all selected particles represented exactly once");
     if (cropped) {
         requireDistributedOutput(
-            !DBInqVarExists(master.get(), (prefix + "dark_matter/mesh").c_str()),
+            !DBInqVarExists(master.get(), (prefix + "darkMatter/mesh").c_str()),
             "species outside crop is omitted from master");
-        for (char const* name : {"vx", "vy", "vz", "rung"}) {
+        for (char const* name : {"xVelocity", "yVelocity", "zVelocity", "timestepRung"}) {
             requireDistributedOutput(
-                !DBInqVarExists(master.get(), (prefix + "dark_matter/" + name).c_str()),
+                !DBInqVarExists(master.get(), (prefix + "darkMatter/" + name).c_str()),
                 "cropped-out dark matter contributes no multivars");
         }
     } else {
         DistributedOutputMultimesh darkMatter(
-            DBGetMultimesh(master.get(), (prefix + "dark_matter/mesh").c_str()), DBFreeMultimesh);
+            DBGetMultimesh(master.get(), (prefix + "darkMatter/mesh").c_str()), DBFreeMultimesh);
         requireDistributedOutput(
             darkMatter && darkMatter->nblocks == hpxSize(), "dark matter multimesh");
-        std::vector<std::string> darkFields = {"vx", "vy", "vz", "rung"};
-        if (!prefix.empty()) {
-            darkFields.push_back("mass");
-        }
+        std::vector<std::string> darkFields = {
+            "xVelocity", "yVelocity", "zVelocity", "timestepRung"};
+        checkDistributedMassExpression(master.get(), prefix + "darkMatter/", 0.75 * scales.mass);
         for (int rank = 0; rank < hpxSize(); rank++) {
             bool const empty = segregated ? rank == 0 : rank >= activeRanks;
             std::string const meshReference(darkMatter->meshnames[rank]);
@@ -323,7 +325,7 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
             auto const leafPath = std::filesystem::path(masterPath.string() + ".data") /
                 generation.data() / ("locality_" + std::to_string(rank) + ".silo");
             std::string const directory =
-                "/locality_" + std::to_string(rank) + "/" + prefix + "dark_matter/";
+                "/locality_" + std::to_string(rank) + "/" + prefix + "darkMatter/";
             if (empty) {
                 requireDistributedOutput(
                     meshReference == "EMPTY", "empty dark-matter locality marked EMPTY");
@@ -339,9 +341,12 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
                         (empty ? "/locality_" + std::to_string(rank) + "/" + prefix : directory)
                             .c_str()) >= 0,
                 "open dark matter locality directory");
+            if (!empty) {
+                checkDistributedMassExpression(leaf.get(), "", 0.75 * scales.mass);
+            }
             for (auto const& name : darkFields) {
                 DistributedOutputMultivar variable(
-                    DBGetMultivar(master.get(), (prefix + "dark_matter/" + name).c_str()),
+                    DBGetMultivar(master.get(), (prefix + "darkMatter/" + name).c_str()),
                     DBFreeMultivar);
                 requireDistributedOutput(variable && variable->nvars == hpxSize() &&
                         variable->mmesh_name &&
@@ -349,7 +354,7 @@ std::string checkDistributedOutput(int cycle, std::string const& prefix, int act
                     "dark matter field attaches to its own multimesh: " + name);
                 if (empty) {
                     requireDistributedOutput(std::string(variable->varnames[rank]) == "EMPTY" &&
-                            !DBInqVarExists(leaf.get(), ("dark_matter/" + name).c_str()),
+                            !DBInqVarExists(leaf.get(), ("darkMatter/" + name).c_str()),
                         "missing dark matter has no local fields");
                 } else {
                     std::string const expectedReference =
@@ -546,7 +551,7 @@ void distributedOutputTest() {
         detail::DistributedOutputFile master(
             DBOpen(masterPath.c_str(), DB_UNKNOWN, DB_READ), DBClose);
         detail::requireDistributedOutput(master && !DBInqVarExists(master.get(), "gas/mesh") &&
-                !DBInqVarExists(master.get(), "dark_matter/mesh"),
+                !DBInqVarExists(master.get(), "darkMatter/mesh"),
             "view containing no particle centers publishes an empty master");
     }
     if (hpxSize() > 1) {

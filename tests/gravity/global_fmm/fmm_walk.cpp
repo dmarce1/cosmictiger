@@ -290,7 +290,7 @@ void fmmWalkEmptyLocalRoot(bool useCuda) {
             Vector<TreeId>{root}, Vector<TreeId>{root}, nullptr);
         fmmWalkRequireClose("empty local root potential", result.pot, 0.0);
         fmmWalkRequireClose("empty local root kinetic energy", result.kin, 0.0);
-        fmmWalkRequireClose("empty local root maximum rung", result.maxRung, 0.0);
+        fmmWalkRequireClose("empty local root maximum timestepRung", result.maxRung, 0.0);
     }
     treeDestroy();
 }
@@ -1052,7 +1052,7 @@ void fmmWalkSnapshotDiagnostics(bool useCuda) {
         for (size_t index = 0; index < positions.size(); ++index) {
             auto const& output = particlesGravityDiagnostics[index];
             if (particlesRung(index) != rungs[index]) {
-                throw std::runtime_error("Snapshot gravity changed a rung");
+                throw std::runtime_error("Snapshot gravity changed a timestepRung");
             }
             for (int dim = 0; dim < kDimensions; ++dim) {
                 if (particlesPos(dim, index).raw() != positions[index][dim].raw() ||
@@ -1094,9 +1094,9 @@ void fmmWalkSnapshotDiagnostics(bool useCuda) {
     if (!master) {
         throw std::runtime_error("Snapshot diagnostic master is missing");
     }
-    bool const hasFields = DBInqVarExists(master, "dark_matter/gravity_ax") &&
-        DBInqVarExists(master, "dark_matter/gravity_long_phi") &&
-        DBInqVarExists(master, "dark_matter/gravity_near_phi");
+    bool const hasFields = DBInqVarExists(master, "darkMatter/timeDerivatives/xVelocity") &&
+        DBInqVarExists(master, "darkMatter/longField/potentialEnergy") &&
+        DBInqVarExists(master, "darkMatter/nearField/potentialEnergy_expression");
     DBClose(master);
     if (!hasFields) {
         throw std::runtime_error("Snapshot gravity fields missing from Silo master");
@@ -1214,7 +1214,7 @@ void fmmWalkOrdinaryTimesteps(bool useCuda) {
                     int const oldRung = id == 0 ? 2 : 3;
                     bool const active = oldRung >= minimumRung;
                     int const newRung = active ? (fullEvaluation ? 2 : 3) : oldRung;
-                    fmmWalkRequireClose(label + " rung", particlesRung(i), newRung, 0.0);
+                    fmmWalkRequireClose(label + " timestepRung", particlesRung(i), newRung, 0.0);
                     double speedSquared = 0.0;
                     for (int dim = 0; dim < kDimensions; ++dim) {
                         float expected = initialVelocity(id, dim);
@@ -1386,7 +1386,7 @@ void fmmWalkHierarchicalTerminalEnergy(bool useCuda) {
         if (particlesSize() != positions.size()) {
             throw std::runtime_error(label + " changed particle count");
         }
-        fmmWalkRequireClose(label + " minimum rung", minimumRung, 2, 0.0);
+        fmmWalkRequireClose(label + " minimum timestepRung", minimumRung, 2, 0.0);
         auto const range = particlesCurrentRange();
         fmmWalkRequireClose(
             label + " restored full range", range.second - range.first, positions.size(), 0.0);
@@ -1407,7 +1407,8 @@ void fmmWalkHierarchicalTerminalEnergy(bool useCuda) {
                 throw std::runtime_error(label + " changed a particle position");
             }
             found[id] = true;
-            fmmWalkRequireClose(label + " unchanged rung", particlesRung(i), id == 0 ? 2 : 3, 0.0);
+            fmmWalkRequireClose(
+                label + " unchanged timestepRung", particlesRung(i), id == 0 ? 2 : 3, 0.0);
             for (int dim = 0; dim < kDimensions; ++dim) {
                 fmmWalkRequireClose(label + " closing half kicks", particlesVel(dim, i),
                     synchronizedVelocity[id][dim], kKickTolerance);
@@ -1495,7 +1496,8 @@ void fmmWalkPeriodicBackground(bool useCuda) {
         for (int backend = 0; backend < (useCuda ? 2 : 1); backend++) {
             for (int potentialMode = 0; potentialMode < 2; potentialMode++) {
                 std::string const label = std::string("periodic root background ") +
-                    (translated ? "translated " : (selectedSubset ? "rung subset " : "original ")) +
+                    (translated ? "translated " :
+                                  (selectedSubset ? "timestepRung subset " : "original ")) +
                     (backend ? "CUDA " : "CPU ") + (potentialMode ? "potential" : "force only");
                 fmmWalkResetKickState();
                 // Finite sentinels remain observable under production fast-math;

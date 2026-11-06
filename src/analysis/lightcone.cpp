@@ -1068,11 +1068,11 @@ void lcSiloOut(char const* filename, Vector<Subgroup> const& subgroups) {
         DBfile* db = DBCreateReal(outputFilename.c_str(), DB_CLOBBER, DB_LOCAL, "Meshless", DB_PDB);
         float* coords[] = {x.data(), y.data(), z.data()};
         DBPutPointmesh(db, "points", kDimensions, coords, x.size(), DB_FLOAT, NULL);
-        DBPutPointvar1(db, "vx", "points", vx.data(), vx.size(), DB_FLOAT, NULL);
-        DBPutPointvar1(db, "vy", "points", vy.data(), vy.size(), DB_FLOAT, NULL);
-        DBPutPointvar1(db, "vz", "points", vz.data(), vz.size(), DB_FLOAT, NULL);
-        DBPutPointvar1(db, "id", "points", id.data(), id.size(), DB_INT, NULL);
-        DBPutPointvar1(db, "hostid", "points", hostid.data(), hostid.size(), DB_INT, NULL);
+        DBPutPointvar1(db, "xVelocity", "points", vx.data(), vx.size(), DB_FLOAT, NULL);
+        DBPutPointvar1(db, "yVelocity", "points", vy.data(), vy.size(), DB_FLOAT, NULL);
+        DBPutPointvar1(db, "zVelocity", "points", vz.data(), vz.size(), DB_FLOAT, NULL);
+        DBPutPointvar1(db, "subgroupId", "points", id.data(), id.size(), DB_INT, NULL);
+        DBPutPointvar1(db, "hostGroupId", "points", hostid.data(), hostid.size(), DB_INT, NULL);
         DBClose(db);
     }
 }
