@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <random>
 #include <stdexcept>
 #include <vector>
 
@@ -86,11 +87,56 @@ ScenarioPlan initializeKelvinHelmholtz() {
     double rho0 = 1.0;
     double vy1 = 1.0;
     double vy0 = -1.0;
-    constexpr double kEta = 1e-1;
-    constexpr double kFreq = 2.0;
+    constexpr double kPerturbationAmplitude = 0.01;
+    constexpr unsigned kPerturbationSeed = 42;
     auto const layout = particle_count::roundKelvinHelmholtz(totalNumberOfParticles);
     ParticleInteger const leftDim = layout.lightSide;
     ParticleInteger const rightDim = layout.heavySide;
+    // Derived sampling limit for this y-only field: the two offset lattices
+    // provide 4n distinct y planes, Δy = 1/(4n), and mode n_Nyquist = 2n.
+    // Use the coarser fluid's limit and exclude the Nyquist mode itself and DC.
+    // n -> leftDim or rightDim; retained mode count -> maximumPerturbationMode.
+    int const maximumPerturbationMode = 2 * std::min(layout.lightSide, layout.heavySide) - 1;
+    struct ModeAmplitudes {
+        double sine;
+        double cosine;
+    };
+    std::mt19937 generator(kPerturbationSeed);
+    std::uniform_real_distribution<double> amplitude(
+        -kPerturbationAmplitude, kPerturbationAmplitude);
+    std::vector<ModeAmplitudes> modeAmplitudes(maximumPerturbationMode);
+    // Derived RMS² = (1/2) Σ_k (a_k²+b_k²) -> velocityVariance.
+    double velocityVariance = 0.0;
+    for (auto& mode : modeAmplitudes) {
+        mode.sine = amplitude(generator);
+        mode.cosine = amplitude(generator);
+        velocityVariance += 0.5 * (sqr(mode.sine) + sqr(mode.cosine));
+    }
+    // Prescribed random K-H spectrum (code units):
+    // δv_x(y) = Σ_{k=1}^{K} [a_k sin(2πky) + b_k cos(2πky)],
+    // a_k, b_k independently uniform on [−η,+η].
+    // K -> maximumPerturbationMode; η -> kPerturbationAmplitude;
+    // a_k, b_k -> modeAmplitudes[k−1].sine, .cosine; y -> streamwisePosition.
+    // One reproducible coefficient set is shared by both fluids. Precompute
+    // each y plane once; particle placement and tree ordering cannot reseed it.
+    auto const transverseVelocities = [&](ParticleInteger halfBoxSide) {
+        std::vector<double> velocities(4 * halfBoxSide, 0.0);
+        for (size_t plane = 0; plane < velocities.size(); ++plane) {
+            double const streamwisePosition = double(plane) / velocities.size();
+            for (int mode = 1; mode <= maximumPerturbationMode; ++mode) {
+                double const angle = 2.0 * std::numbers::pi * mode * streamwisePosition;
+                velocities[plane] += modeAmplitudes[mode - 1].sine * std::sin(angle) +
+                    modeAmplitudes[mode - 1].cosine * std::cos(angle);
+            }
+        }
+        return velocities;
+    };
+    auto const leftTransverseVelocities = transverseVelocities(leftDim);
+    auto const rightTransverseVelocities = transverseVelocities(rightDim);
+    terminal::detailPrint(
+        "K-H perturbation: seed=%u modes=1..%i coefficient_range=[%g,%g] rms=%e\n",
+        kPerturbationSeed, maximumPerturbationMode, -kPerturbationAmplitude, kPerturbationAmplitude,
+        std::sqrt(velocityVariance));
     ParticleInteger numberOfLeftParticles = particle_count::spatialPower(2 * leftDim);
     ParticleInteger numberOfRightParticles = particle_count::spatialPower(2 * rightDim);
     totalNumberOfParticles = numberOfLeftParticles + numberOfRightParticles;
@@ -117,7 +163,7 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 sphParticlesPosition(kXDimension, i) = x;
                 sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
                 sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
-                sphParticlesVelocity(kXDimension, i) = kEta * sin(kFreq * 2.0 * std::numbers::pi * y);
+                sphParticlesVelocity(kXDimension, i) = leftTransverseVelocities[2 * iy + 1];
                 sphParticlesVelocity(kYDimension, i) = vy1;
                 sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
@@ -131,7 +177,7 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 sphParticlesPosition(kXDimension, i) = x;
                 sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
                 sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
-                sphParticlesVelocity(kXDimension, i) = kEta * sin(kFreq * 2.0 * std::numbers::pi * y);
+                sphParticlesVelocity(kXDimension, i) = leftTransverseVelocities[2 * iy];
                 sphParticlesVelocity(kYDimension, i) = vy1;
                 sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
@@ -154,7 +200,7 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 sphParticlesPosition(kXDimension, i) = x;
                 sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
                 sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
-                sphParticlesVelocity(kXDimension, i) = kEta * sin(kFreq * 2.0 * std::numbers::pi * y);
+                sphParticlesVelocity(kXDimension, i) = rightTransverseVelocities[2 * iy + 1];
                 sphParticlesVelocity(kYDimension, i) = vy0;
                 sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
@@ -168,7 +214,7 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 sphParticlesPosition(kXDimension, i) = x;
                 sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
                 sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
-                sphParticlesVelocity(kXDimension, i) = kEta * sin(kFreq * 2.0 * std::numbers::pi * y);
+                sphParticlesVelocity(kXDimension, i) = rightTransverseVelocities[2 * iy];
                 sphParticlesVelocity(kYDimension, i) = vy0;
                 sphParticlesVelocity(kZDimension, i) = 0.0;
                 sphParticlesRung(i) = 0;
