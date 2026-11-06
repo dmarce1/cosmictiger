@@ -156,7 +156,7 @@ def main():
     require("fmm" in available["far"] and "hierarchical" in available["integrator"],
             "hierarchical SPH regression requires FMM and hierarchical integration")
     common = {"hpx:threads": args.threads, "hpx:bind": "none", **cpu_backend_options(),
-              "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.useGlass": "false",
+              "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.cosmology.useGlass": "false",
               "initial.closePack": "false", "hydro.enabled": "true", "gravity.enabled": "true",
               "chemistry.enabled": "false", "starFormation.enabled": "false",
               "analysis.groups": "false", "analysis.tracers": "false", "analysis.views": "false",

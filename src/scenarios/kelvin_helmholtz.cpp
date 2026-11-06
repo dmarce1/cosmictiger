@@ -18,6 +18,7 @@
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/kelvin_helmholtz.hpp>
+#include <cosmictiger/scenarios/kelvin_helmholtz_lattice.hpp>
 #include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/particles.hpp>
 #include <cosmictiger/sph/sph.hpp>
@@ -82,21 +83,26 @@ namespace detail {
 }    // namespace detail
 
 ScenarioPlan initializeKelvinHelmholtz() {
-    ParticleInteger totalNumberOfParticles = getOptions().run.gasParticleCount;
-    double rho1 = 0.5;
-    double rho0 = 1.0;
-    double vy1 = 1.0;
-    double vy0 = -1.0;
+    auto opts = getOptions();
+    auto const packing =
+        parseKelvinHelmholtzPacking(opts.initial.kelvinHelmholz.packing, kSpatialDimensions);
+    auto const layout = particle_count::roundKelvinHelmholtz(
+        opts.run.gasParticleCount, packing.low.sitesPerCell(kSpatialDimensions));
+    int const halfBoxCells = layout.side;
+    double const cellSpacing = 0.5 / halfBoxCells;
+    constexpr double kLowDensity = 0.5;
+    constexpr double kHighDensity = 2.0 * kLowDensity;
     constexpr double kPerturbationAmplitude = 0.01;
     constexpr unsigned kPerturbationSeed = 42;
-    auto const layout = particle_count::roundKelvinHelmholtz(totalNumberOfParticles);
-    ParticleInteger const leftDim = layout.lightSide;
-    ParticleInteger const rightDim = layout.heavySide;
-    // Derived sampling limit for this y-only field: the two offset lattices
-    // provide 4n distinct y planes, Δy = 1/(4n), and mode n_Nyquist = 2n.
-    // Use the coarser fluid's limit and exclude the Nyquist mode itself and DC.
-    // n -> leftDim or rightDim; retained mode count -> maximumPerturbationMode.
-    int const maximumPerturbationMode = 2 * std::min(layout.lightSide, layout.heavySide) - 1;
+
+    // Derived sampling limit: a lattice with p distinct y offsets per cell has
+    // 2np equally spaced y planes, so its Nyquist mode is np. Retain positive
+    // modes below both fluids' limits, excluding DC and the Nyquist endpoint.
+    // n -> halfBoxCells; p -> planesPerCell; K -> maximumPerturbationMode.
+    int const maximumPerturbationMode = halfBoxCells *
+            std::min(packing.low.planesPerCell(kSpatialDimensions, kYDimension),
+                packing.high.planesPerCell(kSpatialDimensions, kYDimension)) -
+        1;
     struct ModeAmplitudes {
         double sine;
         double cosine;
@@ -117,148 +123,59 @@ ScenarioPlan initializeKelvinHelmholtz() {
     // a_k, b_k independently uniform on [−η,+η].
     // K -> maximumPerturbationMode; η -> kPerturbationAmplitude;
     // a_k, b_k -> modeAmplitudes[k−1].sine, .cosine; y -> streamwisePosition.
-    // One reproducible coefficient set is shared by both fluids. Precompute
-    // each y plane once; particle placement and tree ordering cannot reseed it.
-    auto const transverseVelocities = [&](ParticleInteger halfBoxSide) {
-        std::vector<double> velocities(4 * halfBoxSide, 0.0);
-        for (size_t plane = 0; plane < velocities.size(); ++plane) {
-            double const streamwisePosition = double(plane) / velocities.size();
-            for (int mode = 1; mode <= maximumPerturbationMode; ++mode) {
-                double const angle = 2.0 * std::numbers::pi * mode * streamwisePosition;
-                velocities[plane] += modeAmplitudes[mode - 1].sine * std::sin(angle) +
-                    modeAmplitudes[mode - 1].cosine * std::cos(angle);
-            }
+    // Precompute all possible half-cell y planes once for both fluids.
+    std::vector<double> transverseVelocities(size_t(4) * halfBoxCells, 0.0);
+    for (size_t plane = 0; plane < transverseVelocities.size(); ++plane) {
+        double const streamwisePosition = double(plane) / transverseVelocities.size();
+        for (int mode = 1; mode <= maximumPerturbationMode; ++mode) {
+            double const angle = 2.0 * std::numbers::pi * mode * streamwisePosition;
+            transverseVelocities[plane] += modeAmplitudes[mode - 1].sine * std::sin(angle) +
+                modeAmplitudes[mode - 1].cosine * std::cos(angle);
         }
-        return velocities;
-    };
-    auto const leftTransverseVelocities = transverseVelocities(leftDim);
-    auto const rightTransverseVelocities = transverseVelocities(rightDim);
+    }
     terminal::detailPrint(
-        "K-H perturbation: seed=%u modes=1..%i coefficient_range=[%g,%g] rms=%e\n",
+        "K-H perturbation: seed=%u positive_modes=%i coefficient_range=[%g,%g] rms=%e\n",
         kPerturbationSeed, maximumPerturbationMode, -kPerturbationAmplitude, kPerturbationAmplitude,
         std::sqrt(velocityVariance));
-    ParticleInteger numberOfLeftParticles = particle_count::spatialPower(2 * leftDim);
-    ParticleInteger numberOfRightParticles = particle_count::spatialPower(2 * rightDim);
-    totalNumberOfParticles = numberOfLeftParticles + numberOfRightParticles;
-    double dx = 0.5 / leftDim;
-    ParticleInteger i = 0;
-    auto opts = getOptions();
-    opts.run.gasParticleCount = totalNumberOfParticles;
-    opts.initial.gasMass = rho1 * 0.5 / numberOfLeftParticles;
-    double const m = opts.initial.gasMass;
+
+    // Derived equal-mass normalization for half-box volume V=1/2:
+    // m = ρ₀ V/N_low; N_high = 2 N_low ⇒ ρ_high = 2ρ₀ exactly in cell averages.
+    // ρ₀ -> kLowDensity; N_low -> layout.lowCount; m -> opts.initial.gasMass.
+    opts.run.gasParticleCount = layout.count;
+    opts.initial.gasMass = kLowDensity * 0.5 / layout.lowCount;
     setOptions(opts);
-    rho1 = numberOfLeftParticles * m / 0.5f;
-    rho0 = numberOfRightParticles * m / 0.5f;
-    terminal::detailPrint("Kelvin-Helmholtz realized densities: left=%e right=%e ratio=%e\n", rho1,
-        rho0, rho0 / rho1);
-    for (int ix = 0; ix < leftDim; ix++) {
-        for (int iy = 0; iy < (kSpatialDimensions >= 2 ? 2 * leftDim : 1); iy++) {
-            for (int iz = 0; iz < (kSpatialDimensions >= 3 ? 2 * leftDim : 1); iz++) {
-                double x = (ix + 0.5) * dx;
-                double y = (iy + 0.5) * dx;
-                double z = (iz + 0.5) * dx;
-                double h = sph_geometry::supportRadius(m, rho1, getOptions().hydro.neighborNumber);
-                sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSmoothingLength(i) = h;
-                sphParticlesPosition(kXDimension, i) = x;
-                if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
-                }
-                if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
-                }
-                sphParticlesVelocity(kXDimension, i) = leftTransverseVelocities[2 * iy + 1];
-                if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesVelocity(kYDimension, i) = vy1;
-                }
-                if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesVelocity(kZDimension, i) = 0.0;
-                }
-                sphParticlesRung(i) = 0;
+    terminal::detailPrint(
+        "Kelvin-Helmholtz packing: %s cell_spacing=%e low_count=%zu high_count=%zu\n",
+        packing.name().c_str(), cellSpacing, layout.lowCount, layout.highCount);
+    terminal::detailPrint("Kelvin-Helmholtz realized densities: left=%e right=%e ratio=%e\n",
+        kLowDensity, kHighDensity, kHighDensity / kLowDensity);
 
-                i++;
-                x = (ix) *dx;
-                y = (iy) *dx;
-                z = (iz) *dx;
-                sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSmoothingLength(i) = h;
-                sphParticlesPosition(kXDimension, i) = x;
-                if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
+    cell_lattice::CellLattice::CellCounts cells{
+        halfBoxCells, 2 * halfBoxCells, kSpatialDimensions == 3 ? 2 * halfBoxCells : 1};
+    sphParticlesResize(layout.count);
+    ParticleInteger particle = 0;
+    auto const addLayer = [&](cell_lattice::CellLattice const& lattice, double originX,
+                              double density, double streamwiseVelocity) {
+        double const supportRadius =
+            sph_geometry::supportRadius(opts.initial.gasMass, density, opts.hydro.neighborNumber);
+        lattice.generate(kSpatialDimensions, cells, cellSpacing, {originX, 0.0, 0.0},
+            [&](cell_lattice::CellLattice::Position const& position) {
+                for (int axis = 0; axis < kSpatialDimensions; ++axis) {
+                    sphParticlesPosition(axis, particle) = position[axis];
+                    sphParticlesVelocity(axis, particle) = 0.0;
                 }
-                if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
-                }
-                sphParticlesVelocity(kXDimension, i) = leftTransverseVelocities[2 * iy];
-                if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesVelocity(kYDimension, i) = vy1;
-                }
-                if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesVelocity(kZDimension, i) = 0.0;
-                }
-                sphParticlesRung(i) = 0;
-
-                i++;
-            }
-        }
-    }
-    dx = 0.5 / rightDim;
-    for (int ix0 = rightDim; ix0 < 2 * rightDim; ix0++) {
-        int ix = ix0;
-        for (int iy = 0; iy < (kSpatialDimensions >= 2 ? 2 * rightDim : 1); iy++) {
-            for (int iz = 0; iz < (kSpatialDimensions >= 3 ? 2 * rightDim : 1); iz++) {
-                double x = (ix + 0.5) * dx;
-                double y = (iy + 0.5) * dx;
-                double z = (iz + 0.5) * dx;
-                double h = sph_geometry::supportRadius(m, rho0, getOptions().hydro.neighborNumber);
-                sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSmoothingLength(i) = h;
-                sphParticlesPosition(kXDimension, i) = x;
-                if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
-                }
-                if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
-                }
-                sphParticlesVelocity(kXDimension, i) = rightTransverseVelocities[2 * iy + 1];
-                if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesVelocity(kYDimension, i) = vy0;
-                }
-                if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesVelocity(kZDimension, i) = 0.0;
-                }
-                sphParticlesRung(i) = 0;
-
-                i++;
-                x = (ix) *dx;
-                y = (iy) *dx;
-                z = (iz) *dx;
-                sphParticlesResize(sphParticlesSize() + 1);
-                sphParticlesSmoothingLength(i) = h;
-                sphParticlesPosition(kXDimension, i) = x;
-                if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
-                }
-                if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
-                }
-                sphParticlesVelocity(kXDimension, i) = rightTransverseVelocities[2 * iy];
-                if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesVelocity(kYDimension, i) = vy0;
-                }
-                if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesVelocity(kZDimension, i) = 0.0;
-                }
-                sphParticlesRung(i) = 0;
-
-                i++;
-            }
-        }
-    }
-    if (sphParticlesSize() == 0) {
-        throw std::runtime_error("The Kelvin-Helmholtz scenario produced no gas particles; "
-                                 "increase run.gasParticleCount");
-    }
+                size_t const plane =
+                    size_t(std::llround(position[kYDimension] * transverseVelocities.size()));
+                sphParticlesVelocity(kXDimension, particle) = transverseVelocities.at(plane);
+                sphParticlesVelocity(kYDimension, particle) = streamwiseVelocity;
+                sphParticlesSmoothingLength(particle) = supportRadius;
+                sphParticlesRung(particle) = 0;
+                ++particle;
+            });
+    };
+    addLayer(packing.low, 0.0, kLowDensity, 1.0);
+    addLayer(packing.high, 0.5, kHighDensity, -1.0);
+    ALWAYS_ASSERT(size_t(particle) == layout.count);
     detail::initializeKelvinHelmholtzThermodynamics(19.2f);
     return ScenarioPlan{{{10.0, 1024}}};
 }

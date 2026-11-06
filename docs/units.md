@@ -51,7 +51,7 @@ INI. If neither is supplied, the default reference mass of
 `3.58e9` solar masses is used.
 
 `boxLength` is rejected for glass generation, which uses a fixed synthetic
-length and Hubble parameter, and for `initial.gadget4Restart` input, whose
+length and Hubble parameter, and for `initial.cosmology.gadget4Restart` input, whose
 header supplies the physical units.
 
 When restarting an existing checkpoint, retain the same units selector and

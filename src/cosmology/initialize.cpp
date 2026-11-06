@@ -322,7 +322,7 @@ void initialize(double z0) {
             }
         }
     }
-    if (getOptions().initial.twoLpt) {
+    if (getOptions().initial.cosmology.twoLpt) {
         profile::ScopedPhase profilePhase("initialize.twoLpt");
         twolptInit();
 
@@ -722,7 +722,7 @@ static void initX0() {
     int glassSide = 0;
     size_t glassCount = 0;
     std::array<std::vector<Fixed32>, kDimensions> glassPositions;
-    if (options.initial.useGlass) {
+    if (options.initial.cosmology.useGlass) {
         std::ifstream glassFile("glass.bin", std::ios::binary);
         glassFile.read(reinterpret_cast<char*>(&glassSide), sizeof(glassSide));
         if (!glassFile || glassSide <= 0) {
@@ -762,7 +762,7 @@ static void initX0() {
                 sourceIds.push_back(2 * sourceId + (gas ? 2 : 1));
             }
         };
-        if (options.initial.useGlass) {
+        if (options.initial.cosmology.useGlass) {
             if (side % glassSide != 0) {
                 THROW_ERROR("Resolved particle lattice is not a whole number of glass tiles\n");
             }

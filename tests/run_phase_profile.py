@@ -276,7 +276,7 @@ def main():
     integrators = [name for name in ("traditional", "global") if name in compiled["integrator"]]
     require(bool(integrators), "phase-profile regression requires a hydro-capable integrator")
     common = {"gravity.cuda": "false", "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512,
-              "initial.useGlass": "false", "initial.closePack": "false",
+              "initial.cosmology.useGlass": "false", "initial.closePack": "false",
               "gravity.enabled": "false", "gravity.meshSize": 8,
               "hydro.enabled": "true", "hydro.method": "sph",
               "chemistry.enabled": "false", "starFormation.enabled": "false",

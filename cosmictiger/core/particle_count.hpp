@@ -53,55 +53,37 @@ inline Lattice roundLattice(size_t requested, size_t multiplicity = 1, int tileS
         }
     }
     size_t const side = (lower / tileSide + (lower % tileSide != 0)) * tileSide;
+    size_t const cellCount = spatialPower(side);
+    // spatialPower saturates on overflow; the sentinel is never a valid grid.
     if (side > size_t(std::numeric_limits<int>::max()) ||
-        spatialPower(side) > std::numeric_limits<size_t>::max() / multiplicity ||
-        spatialPower(side) < cells) {
+        cellCount == std::numeric_limits<size_t>::max() ||
+        cellCount > std::numeric_limits<size_t>::max() / multiplicity || cellCount < cells) {
         throw std::overflow_error("Rounded particle count exceeds the supported range");
     }
-    return {int(side), multiplicity * spatialPower(side)};
+    return {int(side), multiplicity * cellCount};
 }
 
-struct Layers {
-    int lightSide;
-    int heavySide;
+struct KelvinHelmholtzLayout {
+    int side;
     size_t count;
+    size_t lowCount;
+    size_t highCount;
 };
 
-// Kelvin–Helmholtz uses two interleaved lattices in each half-box:
-// N = 2ᴰ (n_lightᴰ + n_heavyᴰ), n_light = round((1/2)^(1/D) n_heavy).
-inline Layers roundKelvinHelmholtz(size_t requested) {
-    auto const layout = [](int heavySide) {
-        size_t const lightSide =
-            std::max(1L, std::lround(std::pow(0.5, 1.0 / kSpatialDimensions) * heavySide));
-        size_t const heavy = heavySide;
-        size_t const maximum = std::numeric_limits<size_t>::max();
-        if (spatialPower(heavy) > maximum / (1 << kSpatialDimensions)) {
-            return Layers{int(lightSide), heavySide, maximum};
-        }
-        size_t const lightCount = (1 << kSpatialDimensions) * spatialPower(lightSide);
-        size_t const heavyCount = (1 << kSpatialDimensions) * spatialPower(heavy);
-        if (heavyCount > std::numeric_limits<size_t>::max() - lightCount) {
-            return Layers{int(lightSide), heavySide, maximum};
-        }
-        return Layers{int(lightSide), heavySide, lightCount + heavyCount};
-    };
-    // This upper bound is checked before multiplying the half-box populations.
-    int const upperSide = roundLattice(requested, 2 << kSpatialDimensions).side;
-    int lower = 1;
-    int upper = std::max(1, upperSide * 2);
-    while (lower < upper) {
-        int const middle = lower + (upper - lower) / 2;
-        if (layout(middle).count >= requested) {
-            upper = middle;
-        } else {
-            lower = middle + 1;
-        }
+// Derived common-cell geometry, with n cells across each half-box:
+// N_low = s_low 2ᴰ⁻¹ nᴰ, N_high = 2 N_low, N = 3 s_low 2ᴰ⁻¹ nᴰ.
+// s_low -> lowSitesPerCell; n -> side. Round upward using whole shared cells;
+// neither fluid changes cell size to approximate the density ratio.
+inline KelvinHelmholtzLayout roundKelvinHelmholtz(size_t requested, size_t lowSitesPerCell) {
+    constexpr size_t kHalfBoxFactor = size_t(1) << (kSpatialDimensions - 1);
+    if (lowSitesPerCell == 0 || lowSitesPerCell > (size_t(1) << kSpatialDimensions)) {
+        throw std::invalid_argument("Invalid Kelvin-Helmholtz cell population");
     }
-    auto const result = layout(lower);
-    if (result.count == std::numeric_limits<size_t>::max()) {
-        throw std::overflow_error("Rounded layered particle count exceeds the supported range");
+    auto const lattice = roundLattice(requested, 3 * lowSitesPerCell * kHalfBoxFactor);
+    if (lattice.side > std::numeric_limits<int>::max() / 2) {
+        throw std::overflow_error("Kelvin-Helmholtz cell count exceeds the supported range");
     }
-    return result;
+    return {lattice.side, lattice.count, lattice.count / 3, 2 * (lattice.count / 3)};
 }
 
 }    // namespace particle_count

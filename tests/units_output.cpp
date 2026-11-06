@@ -154,7 +154,7 @@ void checkUnitsOutputCommandLine(DBfile* file) {
             readUnitsOutputText(file, "/cli/output/frame") == getOptions().output.frame,
         "effective current output options");
     requireUnitsOutput(
-        readUnitsOutputText(file, "/cli/initial/gadget4Restart").empty(), "empty string option");
+        readUnitsOutputText(file, "/cli/initial/cosmology/gadget4Restart").empty(), "empty string option");
     int const argc = readUnitsOutputInteger(file, "/cli/argc");
     requireUnitsOutput(argc > 1, "original process argument count");
     bool foundHpxThreads = false;

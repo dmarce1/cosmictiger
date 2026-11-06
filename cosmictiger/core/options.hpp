@@ -65,13 +65,26 @@ struct Checkpoint {
     int intervalSeconds{};
 };
 
-struct Initial {
-    bool cuda{};
+struct CosmologyInitial {
     std::string gadget4Restart{};
     bool useGlass{};
-    double plummerRadius{};
-    bool closePack{};
     bool twoLpt{};
+};
+
+struct PlummerInitial {
+    double radius{};
+};
+
+struct KelvinHelmholtzInitial {
+    std::string packing{"CV/C"};
+};
+
+struct Initial {
+    bool cuda{};
+    bool closePack{};
+    CosmologyInitial cosmology{};
+    PlummerInitial plummer{};
+    KelvinHelmholtzInitial kelvinHelmholz{};
     // Derived geometry and mass-normalization population, never public options.
     int latticeSide{};
     int darkMatterLatticeSide{};
@@ -87,7 +100,7 @@ struct Initial {
 // Equal even lattices retain exact spectral phase sampling. Other resolutions
 // use the existing interpolation-corrected LPT sampling on a common even FFT.
 inline bool interpolatedInitialConditions(Initial const& initial) {
-    return initial.useGlass ||
+    return initial.cosmology.useGlass ||
         (initial.darkMatterLatticeSide != 0 &&
             initial.darkMatterLatticeSide != initial.fourierSize) ||
         (initial.gasLatticeSide != 0 && initial.gasLatticeSide != initial.fourierSize);
@@ -387,13 +400,13 @@ struct Options {
         arc & hydro.centralSmoothingLength;
         arc & initial.closePack;
         arc & initial.numberOfParticles;
-        arc & initial.useGlass;
+        arc & initial.cosmology.useGlass;
         arc & retiredGlassSelector;
-        arc & initial.gadget4Restart;
+        arc & initial.cosmology.gadget4Restart;
         arc & run.minRung;
         arc & run.treeOpeningAngle;
         arc & retiredPlummerSelector;
-        arc & initial.plummerRadius;
+        arc & initial.plummer.radius;
         arc & cosmology.omegaK;
         arc & cosmology.omegaLambda;
         arc & compute.bucketSize;
@@ -419,7 +432,7 @@ struct Options {
         arc & output.yMax;
         arc & output.zMin;
         arc & output.zMax;
-        arc & initial.twoLpt;
+        arc & initial.cosmology.twoLpt;
         arc & lightcone.directory;
         arc & analysis.tracerCount;
         arc & initial.latticeSide;
@@ -530,6 +543,7 @@ struct Options {
         arc & initial.darkMatterLatticeSide;
         arc & initial.gasLatticeSide;
         arc & output.siloTimeDerivatives;
+        arc & initial.kelvinHelmholz.packing;
     }
 };
 

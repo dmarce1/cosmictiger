@@ -80,7 +80,7 @@ def main():
     if not ('global' in available['integrator']):
         raise RuntimeError('global integrator is not compiled')
     common = {"hpx:threads": 2, "hpx:bind": "none", "gravity.cuda": "false",
-              "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.useGlass": "false",
+              "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.cosmology.useGlass": "false",
               "initial.closePack": "false", "chemistry.enabled": "false",
               "analysis.groups": "false", "analysis.views": "false",
               "analysis.tracers": "false", "analysis.power": "false",

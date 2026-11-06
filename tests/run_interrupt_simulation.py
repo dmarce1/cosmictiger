@@ -116,7 +116,7 @@ def run_regression(args, directory):
     options = {"configuration": source / "configurations" / f"{preset}.ini",
                **cpu_backend_options(),
                "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.closePack": "false",
-               "initial.useGlass": "false", "chemistry.enabled": "false",
+               "initial.cosmology.useGlass": "false", "chemistry.enabled": "false",
                "gravity.enabled": str(args.scenario == "plummer").lower(),
                "gravity.meshSize": 8, "gravity.pmmmNearWidth": 2,
                "run.endTime": END_TIME, "run.numberOfSteps": STEP_COUNT,

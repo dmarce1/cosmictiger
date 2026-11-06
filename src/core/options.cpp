@@ -48,6 +48,7 @@
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/scenarios/kelvin_helmholtz_lattice.hpp>
 #include <cosmictiger/scenarios/scenario.hpp>
 #include <cosmictiger/sph/geometry.hpp>
 #if !COSMICTIGER_WITH_GRAVITY && COSMICTIGER_WITH_SPH
@@ -341,6 +342,7 @@ Options const& getOptions() {
 }
 
 void setOptions(Options const& opts) {
+    scenarios::parseKelvinHelmholtzPacking(opts.initial.kelvinHelmholz.packing, kSpatialDimensions);
     detail::validateRockstar(opts);
     detail::validateCudaBackends(opts);
     detail::validateHydroMethod(opts);
@@ -521,11 +523,12 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"gravity.cuda.kickListReserve", options.gravity.cudaKickListReserve},
         {"checkpoint.readIndex", options.checkpoint.readIndex},
         {"checkpoint.intervalSeconds", options.checkpoint.intervalSeconds},
-        {"initial.gadget4Restart", options.initial.gadget4Restart},
-        {"initial.useGlass", options.initial.useGlass},
-        {"initial.plummerRadius", options.initial.plummerRadius},
+        {"initial.cosmology.gadget4Restart", options.initial.cosmology.gadget4Restart},
+        {"initial.cosmology.useGlass", options.initial.cosmology.useGlass},
+        {"initial.plummer.radius", options.initial.plummer.radius},
         {"initial.closePack", options.initial.closePack},
-        {"initial.twoLpt", options.initial.twoLpt},
+        {"initial.cosmology.twoLpt", options.initial.cosmology.twoLpt},
+        {"initial.kelvinHelmholz.packing", options.initial.kelvinHelmholz.packing},
         {"run.darkMatterParticleCount", options.run.darkMatterParticleCount},
         {"run.gasParticleCount", options.run.gasParticleCount},
         {"output.silo", options.output.silo},
@@ -785,20 +788,31 @@ bool processOptions(int argc, char* argv[]) {
         "requested gas population when hydrodynamics is enabled; rounded up for structured initial "
         "conditions");
 
-    po::options_description initialOpts("Initial conditions");
+    po::options_description initialOpts("Shared initial conditions");
     initialOpts.add_options()("initial.cuda",
         po::value<bool>(&opts.initial.cuda)->default_value(false),
-        "use CUDA for spherical initial-condition preparation");
-    initialOpts.add_options()("initial.gadget4Restart",
-        po::value<std::string>(&opts.initial.gadget4Restart)->default_value(""),
-        "Gadget4 input file for power-spectrum analysis")("initial.useGlass",
-        po::value<bool>(&opts.initial.useGlass)->default_value(false),
-        "initialize from a glass file")("initial.plummerRadius",
-        po::value<double>(&opts.initial.plummerRadius)->default_value(1.0e-2), "Plummer radius")(
-        "initial.closePack", po::value<bool>(&opts.initial.closePack)->default_value(false),
-        "use a close-packed particle lattice")("initial.twoLpt",
-        po::value<bool>(&opts.initial.twoLpt)->default_value(false),
+        "use CUDA for spherical initial-condition preparation")("initial.closePack",
+        po::value<bool>(&opts.initial.closePack)->default_value(false),
+        "use a close-packed particle lattice where supported; K-H uses its packing selector");
+
+    po::options_description cosmologyInitialOpts("Cosmology initial conditions");
+    cosmologyInitialOpts.add_options()("initial.cosmology.gadget4Restart",
+        po::value<std::string>(&opts.initial.cosmology.gadget4Restart)->default_value(""),
+        "Gadget4 input file for power-spectrum analysis")("initial.cosmology.useGlass",
+        po::value<bool>(&opts.initial.cosmology.useGlass)->default_value(false),
+        "initialize from a glass file")("initial.cosmology.twoLpt",
+        po::value<bool>(&opts.initial.cosmology.twoLpt)->default_value(false),
         "use second-order Lagrangian initial conditions");
+
+    po::options_description plummerInitialOpts("Plummer initial conditions");
+    plummerInitialOpts.add_options()("initial.plummer.radius",
+        po::value<double>(&opts.initial.plummer.radius)->default_value(1.0e-2), "Plummer radius");
+
+    po::options_description kelvinHelmholtzInitialOpts("Kelvin-Helmholtz initial conditions");
+    kelvinHelmholtzInitialOpts.add_options()("initial.kelvinHelmholz.packing",
+        po::value<std::string>(&opts.initial.kelvinHelmholz.packing)->default_value("CV/C"),
+        "high/low cell sites (C,F,E,V), case insensitive with any punctuation/space separator; "
+        "both lattices must be uniform and dimensionally valid, with a 2:1 site count");
 
     po::options_description outputOpts("Particle output");
     outputOpts.add_options()("output.silo",
@@ -1131,6 +1145,9 @@ bool processOptions(int argc, char* argv[]) {
         .add(sortOpts)
         .add(checkpointOpts)
         .add(initialOpts)
+        .add(cosmologyInitialOpts)
+        .add(plummerInitialOpts)
+        .add(kelvinHelmholtzInitialOpts)
         .add(outputOpts)
         .add(analysisOpts)
         .add(lightconeOpts)
@@ -1142,7 +1159,7 @@ bool processOptions(int argc, char* argv[]) {
         .add(starFormationOpts);
     terminal::detailPrint("Processing options\n");
     po::variables_map vm;
-    // Require exact names: retired initial.plummer must not abbreviate plummerRadius.
+    // Require exact names; category prefixes and retired keys are not aliases.
     po::store(po::parse_command_line(argc, argv, commandOpts,
                   po::command_line_style::default_style & ~po::command_line_style::allow_guessing),
         vm);
@@ -1659,16 +1676,22 @@ bool processOptions(int argc, char* argv[]) {
         opts.run.gasParticleCount > size_t(std::numeric_limits<ptrdiff_t>::max())) {
         detail::throwOptionError("Initial particle counts exceed the supported range\n");
     }
-    if (opts.initial.useGlass && opts.initial.closePack) {
-        detail::throwOptionError("initial.useGlass cannot be combined with initial.closePack; "
-                                 "glass files already define the particle lattice\n");
+    if (opts.initial.cosmology.useGlass && opts.initial.closePack) {
+        detail::throwOptionError(
+            "initial.cosmology.useGlass cannot be combined with initial.closePack; "
+            "glass files already define the particle lattice\n");
     }
+    // Validate explicit selectors even for other scenarios, before allocating particles.
+    opts.initial.kelvinHelmholz.packing = scenarios::parseKelvinHelmholtzPacking(
+        opts.initial.kelvinHelmholz.packing, kSpatialDimensions)
+                                              .name();
     int glassTileSide = 1;
-    if (opts.initial.useGlass) {
+    if (opts.initial.cosmology.useGlass) {
         std::ifstream glassFile("glass.bin", std::ios::binary);
         glassFile.read(reinterpret_cast<char*>(&glassTileSide), sizeof(glassTileSide));
         if (!glassFile || glassTileSide <= 0) {
-            detail::throwOptionError("initial.useGlass requires a valid glass.bin tile\n");
+            detail::throwOptionError(
+                "initial.cosmology.useGlass requires a valid glass.bin tile\n");
         }
     }
     try {
@@ -1689,7 +1712,11 @@ bool processOptions(int argc, char* argv[]) {
         auto gasLayout =
             particle_count::roundLattice(opts.run.gasParticleCount, gasMultiplicity, glassTileSide);
         if (opts.run.scenario == "kelvinHelmholtz") {
-            gasLayout.count = particle_count::roundKelvinHelmholtz(opts.run.gasParticleCount).count;
+            auto const packing = scenarios::parseKelvinHelmholtzPacking(
+                opts.initial.kelvinHelmholz.packing, kSpatialDimensions);
+            auto const layout = particle_count::roundKelvinHelmholtz(
+                opts.run.gasParticleCount, packing.low.sitesPerCell(kSpatialDimensions));
+            gasLayout = {2 * layout.side, layout.count};
         } else if (opts.run.scenario == "disc" || opts.run.scenario == "polytropicStar") {
             gasLayout.count = opts.run.gasParticleCount;
         }
@@ -1831,7 +1858,7 @@ bool processOptions(int argc, char* argv[]) {
             detail::throwOptionError(
                 "Lower-dimensional SPH supports code or CGS output, not cosmological units\n");
         }
-        if (opts.initial.useGlass) {
+        if (opts.initial.cosmology.useGlass) {
             detail::throwOptionError("The glass input format is three-dimensional\n");
         }
         if (opts.hydro.centralAcceleration != 0.0 || opts.hydro.zPlaneAcceleration != 0.0 ||
@@ -1987,7 +2014,7 @@ bool processOptions(int argc, char* argv[]) {
     detail::validateStarFormation(opts);
     if (opts.hydro.enabled) {
         if (opts.run.scenario == "glass" || opts.run.scenario == "plummer" ||
-            !opts.initial.gadget4Restart.empty()) {
+            !opts.initial.cosmology.gadget4Restart.empty()) {
             detail::throwOptionError(
                 "SPH cannot use the dark-matter-only glass, Plummer or Gadget loaders\n");
         }
@@ -2003,16 +2030,17 @@ bool processOptions(int argc, char* argv[]) {
             "gravity.timestepEta must remain finite and positive in single precision "
             "after normalization\n");
     }
-    if (opts.initial.useGlass && opts.initial.closePack) {
-        detail::throwOptionError("initial.useGlass cannot be combined with initial.closePack; "
-                                 "glass files already define the particle lattice\n");
+    if (opts.initial.cosmology.useGlass && opts.initial.closePack) {
+        detail::throwOptionError(
+            "initial.cosmology.useGlass cannot be combined with initial.closePack; "
+            "glass files already define the particle lattice\n");
     }
-    if (!opts.initial.gadget4Restart.empty()) {
+    if (!opts.initial.cosmology.gadget4Restart.empty()) {
         if (hasBoxLength) {
-            detail::throwOptionError(
-                "initial.gadget4Restart supplies its own units; do not set units.boxLength\n");
+            detail::throwOptionError("initial.cosmology.gadget4Restart supplies its own units; do "
+                                     "not set units.boxLength\n");
         }
-        auto const header = particlesReadGadget4Header(opts.initial.gadget4Restart);
+        auto const header = particlesReadGadget4Header(opts.initial.cosmology.gadget4Restart);
         opts.initial.numberOfParticles = size_t(header.npartTotal[1]);
         opts.run.darkMatterParticleCount = opts.initial.numberOfParticles;
         opts.run.gasParticleCount = 0;
@@ -2076,7 +2104,7 @@ bool processOptions(int argc, char* argv[]) {
     }
 
     if (hasBoxLength) {
-        if (opts.run.scenario == "glass" || !opts.initial.gadget4Restart.empty()) {
+        if (opts.run.scenario == "glass" || !opts.initial.cosmology.gadget4Restart.empty()) {
             detail::throwOptionError(
                 "units.boxLength cannot be used with glass generation or Gadget4 input, "
                 "which supply their own length scale\n");
@@ -2180,7 +2208,7 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.run.scenario == "plummer" && !explicitGravityRadius) {
         opts.gravity.smoothingLength = gravityTable.smoothingLengthPerEffectiveRadius *
             1.5015907655628273 *
-            pow((4.0 / 3.0 * std::numbers::pi * pow(opts.initial.plummerRadius, 3.0)) /
+            pow((4.0 / 3.0 * std::numbers::pi * pow(opts.initial.plummer.radius, 3.0)) /
                     opts.initial.numberOfParticles,
                 1.0 / 3.0);
     }

@@ -107,7 +107,7 @@ def main():
                                           if name in available["integrator"]]
     require(integrators, "global or traditional integration is required")
     common = {"hpx:threads": args.threads, "hpx:bind": "none", **cpu_backend_options(),
-              "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.useGlass": "false",
+              "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.cosmology.useGlass": "false",
               "initial.closePack": "false", "hydro.enabled": "true",
               "gravity.enabled": "true", "chemistry.enabled": "false",
               "starFormation.enabled": "false", "analysis.groups": "false",

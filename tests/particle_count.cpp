@@ -23,15 +23,16 @@ TEST(ParticleCount, ClosePackedAndLayeredLayoutsKeepWholeCells) {
     EXPECT_EQ(particle_count::roundLattice(1728, 1, 4).count, 1728);
 }
 
-TEST(ParticleCount, KelvinHelmholtzUsesTheNextResolvedLayerPair) {
-    for (size_t requested : {1, 511, 512, 999, 1000, 1001, 262144}) {
-        auto const layout = particle_count::roundKelvinHelmholtz(requested);
-        EXPECT_GE(layout.count, requested);
-        EXPECT_EQ(layout.count,
-            size_t(8) *
-                (size_t(layout.lightSide) * layout.lightSide * layout.lightSide +
-                    size_t(layout.heavySide) * layout.heavySide * layout.heavySide));
-        EXPECT_EQ(particle_count::roundKelvinHelmholtz(layout.count).count, layout.count);
+TEST(ParticleCount, KelvinHelmholtzUsesCommonCellsWithAnExactDensityRatio) {
+    for (size_t sites : {1, 2, 4}) {
+        for (size_t requested : {1, 511, 512, 999, 1000, 1001, 262144}) {
+            auto const layout = particle_count::roundKelvinHelmholtz(requested, sites);
+            EXPECT_GE(layout.count, requested);
+            EXPECT_EQ(layout.count, 12 * sites * particle_count::spatialPower(layout.side));
+            EXPECT_EQ(layout.highCount, 2 * layout.lowCount);
+            EXPECT_EQ(
+                particle_count::roundKelvinHelmholtz(layout.count, sites).count, layout.count);
+        }
     }
 }
 
@@ -40,6 +41,6 @@ TEST(ParticleCount, OverflowIsRejectedBeforeMultiplication) {
         particle_count::roundLattice(std::numeric_limits<size_t>::max()), std::overflow_error);
     EXPECT_THROW(particle_count::roundLattice(1, 0), std::invalid_argument);
     EXPECT_THROW(particle_count::roundLattice(1, 1, 0), std::invalid_argument);
-    EXPECT_THROW(particle_count::roundKelvinHelmholtz(std::numeric_limits<size_t>::max()),
+    EXPECT_THROW(particle_count::roundKelvinHelmholtz(std::numeric_limits<size_t>::max(), 1),
         std::overflow_error);
 }

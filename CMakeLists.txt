@@ -327,6 +327,8 @@ set(cosmictiger_header_files
     cosmictiger/scenarios/sod.hpp
     cosmictiger/scenarios/blast.hpp
     cosmictiger/scenarios/rayleigh_taylor.hpp
+    cosmictiger/math/cell_lattice.hpp
+    cosmictiger/scenarios/kelvin_helmholtz_lattice.hpp
     cosmictiger/scenarios/kelvin_helmholtz.hpp
     cosmictiger/scenarios/disc.hpp
     cosmictiger/scenarios/polytropic_star.hpp
@@ -1408,7 +1410,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 add_test(NAME ${boltzmann_smoke} COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/run_smoke.py dm_cpu $<TARGET_FILE:cosmictiger>
                     ${PROJECT_BINARY_DIR}/tests/${boltzmann_smoke}
-                    --extra-option=--initial.twoLpt=${boltzmann_two_lpt}
+                    --extra-option=--initial.cosmology.twoLpt=${boltzmann_two_lpt}
                     --extra-option=--run.timeIntegrator=${cosmictiger_default_integrator}
                     --extra-option=--gravity.method.far=fmm)
                 set_tests_properties(${boltzmann_smoke}
@@ -3133,4 +3135,22 @@ if(BUILD_TESTING AND COSMICTIGER_WITH_SPH)
         target_compile_definitions(sph_dimension_${dimension}_test PRIVATE COSMICTIGER_DIMENSION_COUNT=${dimension})
         add_test(NAME sph_dimension_${dimension} COMMAND sph_dimension_${dimension}_test)
     endforeach()
+endif()
+
+# Cell-lattice geometry and selector validation do not depend on HPX or gravity.
+if(BUILD_TESTING)
+    add_executable(cell_lattice_test tests/cell_lattice.cpp)
+    target_include_directories(cell_lattice_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_compile_definitions(cell_lattice_test PRIVATE COSMICTIGER_DIMENSION_COUNT=${COSMICTIGER_DIMENSION_COUNT})
+    add_test(NAME cell_lattice COMMAND cell_lattice_test)
+    set_tests_properties(cell_lattice PROPERTIES TIMEOUT 30 LABELS "scenarios;cpu")
+endif()
+
+if(BUILD_TESTING AND COSMICTIGER_WITH_SPH AND COSMICTIGER_DIMENSION_COUNT GREATER_EQUAL 2
+        AND COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
+    add_test(NAME kelvin_helmholtz_packing_application COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/tests/run_kelvin_helmholtz_packings.py $<TARGET_FILE:cosmictiger>
+        ${PROJECT_BINARY_DIR}/tests/kelvin_helmholtz_packings ${COSMICTIGER_DIMENSION_COUNT})
+    set_tests_properties(kelvin_helmholtz_packing_application PROPERTIES
+        PROCESSORS 2 TIMEOUT 300 RUN_SERIAL TRUE LABELS "scenarios;sph;cpu")
 endif()

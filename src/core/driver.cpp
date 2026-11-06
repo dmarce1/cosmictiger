@@ -1753,10 +1753,10 @@ void driver() {
         } else
 #endif
         {
-            if (getOptions().initial.gadget4Restart.empty()) {
+            if (getOptions().initial.cosmology.gadget4Restart.empty()) {
                 scenarios::initializeCosmology(params);
             } else {
-                particlesReadGadget4(getOptions().initial.gadget4Restart);
+                particlesReadGadget4(getOptions().initial.cosmology.gadget4Restart);
                 params.a = a0;
                 params.adot = cosmosDadt(a0);
                 params.tauMax = cosmology::configuredDuration(a0);
@@ -2135,7 +2135,7 @@ void driver() {
                 }
 #endif
             }
-            if (getOptions().initial.useGlass && minrung == minrung0) {
+            if (getOptions().initial.cosmology.useGlass && minrung == minrung0) {
                 //			particles_displace(rand1(), rand1(), rand1());
             }
             resetFlops();

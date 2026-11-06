@@ -240,3 +240,64 @@ Cooling initialization uses `chemistry.initializationTemperature`; zero preserve
 initial-condition energy. Set gravity radius through `gravity.effectiveRadius`,
 `gravity.smoothingLength`, or the legacy `gravity.softening` alias. Alternative
 radius representations remain commented to avoid conflicting inputs.
+
+## Scenario initial-condition groups
+
+Shared controls remain in `[initial]`: `cuda` and `closePack`. Scenario-specific
+controls now use nested categories:
+
+| Previous key | Current key |
+| --- | --- |
+| `initial.gadget4Restart` | `initial.cosmology.gadget4Restart` |
+| `initial.useGlass` | `initial.cosmology.useGlass` |
+| `initial.twoLpt` | `initial.cosmology.twoLpt` |
+| `initial.plummerRadius` | `initial.plummer.radius` |
+
+Update older local INIs/CLI commands to the new keys; the previous keys are no
+longer registered. The same dot hierarchy appears in the Silo CLI metadata.
+Scenarios without dedicated controls continue to use their fixed initial profiles.
+
+### Kelvin–Helmholtz packing
+
+```ini
+[initial.kelvinHelmholz]
+packing = CV/C
+```
+
+The category spelling is `kelvinHelmholz` as requested; the existing scenario
+selector remains `run.scenario=kelvinHelmholtz`. The packing's first part is the
+high-density region and its second is the low-density region. C, F, E and V mean
+cell centers, face centers, edge centers and vertices. Letter order and case do
+not matter. Any punctuation or whitespace separator is accepted, for example
+`--initial.kelvinHelmholz.packing=CEV-cV` in 2D; quote whitespace or shell
+metacharacters. Startup prints the normalized spelling.
+
+The reusable `cell_lattice::CellLattice` class accepts every nonempty subset of
+C/F/E/V. `appliesToDimension`, `sitesPerCell`, `planesPerCell`, `offsets`,
+`isUniform` and `generate` expose its geometry. C/V apply in 1D–3D, E in 2D/3D,
+and F in 3D. Shared boundary sites are emitted once, in half-open cells.
+Uniformity means every site is related by a symmetry of the infinite periodic
+point set, so all radial neighbor shells agree. Nonuniform subsets remain
+available to the general class, but K–H rejects them.
+
+K–H accepts any pair that is dimensionally applicable, uniform in each region,
+and has exactly twice as many sites per cell on the high-density side:
+
+| Dimension | Original surviving pairs |
+| --- | --- |
+| 2D | `CEV/CV`, `CEV/E`, `CV/C`, `CV/V`, `E/C`, `E/V` |
+| 3D | `CFEV/FV`, `CFEV/CE`, `VF/CV`, `CE/CV`, `CV/V`, `CV/C` |
+
+Equivalent letter permutations are accepted; so are other pairs satisfying the
+same rules, such as `FE/E` and `FE/F` in 3D. `VE/CV` and `CF/CV` in 3D fail the
+uniformity check. Unknown letters, missing or extra lattice parts, unsupported
+dimensions, and incorrect high/low ratios are errors. `CV/C` is the default in
+both 2D and 3D. `initial.closePack` does not select K–H packing.
+
+Both regions use the same cell width. For n cells across a half-box and s sites
+per low-density cell, the total population is `3*s*2^(D-1)*n^D`; requested counts
+round upward to the next complete grid. Equal masses give exact cell-average
+densities 0.5 and 1.0. The previous unequal-grid packing is removed. The random
+perturbation retains positive modes strictly below both lattices' y-sampling
+Nyquist limit. Uniform pressure still uses the solved SPH density. Interface
+kernel overlap and kernel normalization can differ from the exact bulk means.

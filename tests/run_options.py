@@ -176,6 +176,9 @@ def main():
                      "hydro.viscosityDecay", "hydro.viscosityAlphaMax",
                      "hydro.viscosityDecayCD", "hydro.viscosityAlphaMaxPrice",
                      "hydro.viscosityDecayPrice", "hydro.viscosityAlphaMaxHu", "hydro.viscosityDecayHu"})
+    required.update({"initial.cosmology.gadget4Restart", "initial.cosmology.useGlass",
+                     "initial.cosmology.twoLpt", "initial.plummer.radius",
+                     "initial.kelvinHelmholz.packing"})
     required.update(cuda_keys)
     required.update({"cosmology.omegaLambda", "cosmology.startRedshift", "lightcone.enabled"})
     required.update("gravity.cuda." + key for key in cuda_tunings)
@@ -211,7 +214,10 @@ def main():
             "--analysis.saveForce=true"])
         assertStartupOptions(output, hydroMethod)
         assertNumericSetting(output, "compute.sphBucketSize", 106)
-        assertNumericSetting(output, "hydro.maxSmoothingLength", 4)
+        dimension = int(re.search(r"^build\.dimensionCount\s*:\s*(\d+)", output, re.MULTILINE)[1])
+        population = int(re.search(r"^initial\.numberOfParticles\s*:\s*(\d+)", output, re.MULTILINE)[1])
+        # The half-box support cap is reported in reference particle spacings.
+        assertNumericSetting(output, "hydro.maxSmoothingLength", 0.5 * population**(1 / dimension))
         assertNumericSetting(output, "units.boxLength", 20)
         assertNumericSetting(output, "hydro.centralSmoothingLength", 0.02)
         assertNumericSetting(output, "hydro.minEffectiveRadius", 0.001)
@@ -245,6 +251,7 @@ def main():
                        "starFormation.windDecouplingMyr", "starFormation.windRecoupleDensityFraction",
                        "starFormation.windDirection", "hydro.dualEnergyPressureSwitch",
                        "hydro.dualEnergyUpdateSwitch", "hydro.treeRebuildActiveFraction"}
+    removed_options.update({"initial.gadget4Restart", "initial.useGlass", "initial.twoLpt", "initial.plummerRadius"})
     removed_options.update("compute.cuda" + key[0].upper() + key[1:] for key in cuda_tunings)
     if removed_options & option_names:
         raise RuntimeError(f"removed options remain in help: {sorted(removed_options & option_names)}")
@@ -573,8 +580,8 @@ mapSize = 8
             ("glass", "--run.scenario=glass",
              "units.boxLength cannot be used with glass generation or Gadget4 input, "
              "which supply their own length scale"),
-            ("gadget", "--initial.gadget4Restart=missing.gadget",
-             "initial.gadget4Restart supplies its own units; do not set units.boxLength")):
+            ("gadget", "--initial.cosmology.gadget4Restart=missing.gadget",
+             "initial.cosmology.gadget4Restart supplies its own units; do not set units.boxLength")):
         rejected = run(f"units_box_unsupported_{name}", normalizationOptions + [
             option, f"--units.boxLength={boxLength}"], success=False)
         # Gadget input rejects the unit conflict before attempting to read its header.
@@ -1695,7 +1702,7 @@ mapSize = 8
                  "run.timeIntegrator": args.time_integrator
                  }.get(option, "false")
         group, name = option.split(".")
-        # Numeric legacy booleans must not abbreviate the surviving plummerRadius option.
+        # Numeric legacy booleans must not abbreviate the plummer scenario category.
         values = [value, "0", "1"] if option == "initial.plummer" else [value]
         for value in values:
             # Concurrent cases need their own INI rather than one rewritten file.
