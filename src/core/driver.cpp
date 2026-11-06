@@ -14,6 +14,7 @@
 #include <iostream>
 #include <limits>
 #include <numbers>
+#include <span>
 #include <string>
 
 #if COSMICTIGER_ENABLE_ROCKSTAR
@@ -1561,8 +1562,7 @@ double doPowerSpectrum(int num, double a, double adot) {
         //		kmax = sqrt(power0.k.front() * kmax * M);
         //	}
         double const c1 = h * h * h * factor;
-        double const kshot =
-            2.0 * std::numbers::pi * getOptions().initial.fourierSize / boxSize;
+        double const kshot = 2.0 * std::numbers::pi * getOptions().initial.fourierSize / boxSize;
         for (int i = 0; i < power0.p.size(); i++) {
             double const k = power0.k[i];
             if (k >= kmin && k <= kmax) {
@@ -1835,6 +1835,7 @@ void driver() {
     double pot;
     int thisIter = 0;
     size_t progressRows = 0;
+    std::string progressRungHeader;
     terminal::section(getOptions().run.scenario.c_str());
     std::cout << "  tau is conformal time / coarse interval; dt is in code units.\n"
                  "  Wall durations use hh:mm:ss.ss; initialization is excluded.\n"
@@ -2351,7 +2352,7 @@ void driver() {
                     "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s "
                     "%10s\n",
                     "runtime", "i", "z", "a", "adot", "timestep", "years", "mnr", "mxr", "bs",
-                    "Tflops", "time", "GPU close", "GPU direct", "Tflops32", "Tflops64");
+                    "Gflops", "time", "GPU close", "GPU direct", "Gflops32", "Gflops64");
             }
             stepTm.stop();
             double const nextYears = years + dyears;
@@ -2361,33 +2362,40 @@ void driver() {
                 "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10i %10.3e %10.3e "
                 "%10.3e %10.3e %10.3e %10.3e \n",
                 runtime, iter - 1, outputRedshift, a, adot, nextTau / coarseInterval, nextYears,
-                displayedMinimumRung, maxRung, bucketSize, flops * 1e-12, stepTm.read(), close,
-                direct, flopRates.singlePrecision * 1e-12, flopRates.doublePrecision * 1e-12);
+                displayedMinimumRung, maxRung, bucketSize, flops * 1e-9, stepTm.read(), close,
+                direct, flopRates.singlePrecision * 1e-9, flopRates.doublePrecision * 1e-9);
             if (progressRows == 0) {
                 std::cout
-                    << "  TFLOP/s uses counted gravity and SPH operations divided by force "
+                    << "  GFLOP/s uses counted gravity and SPH operations divided by force "
                        "advancement wall time.\n"
                        "  FP32/FP64 separate arithmetic precision.\n"
+                       "  Columns after GFLOP/s give particle populations by rung.\n"
                        "  Chemistry and star formation operations are excluded; their wall time "
                        "is included.\n"
                     << std::flush;
             }
-            if (progressRows % 25 == 0) {
+            auto const rungCounts = particlesRungCounts();
+            std::span<size_t const> const rungPopulations{rungCounts.data(), rungCounts.size()};
+            auto const rungHeader = terminal::formatRungPopulations(rungPopulations, true);
+            if (progressRows % 25 == 0 || progressRungHeader != rungHeader) {
                 std::cout << std::format("\n{:>8s} {:>10s} {:>10s} {:>10s} {:>10s} {:>7s} {:>7s} "
-                                         "{:>13s} {:>13s} {:>10s} {:>10s} {:>10s}\n",
+                                         "{:>13s} {:>13s} {:>10s} {:>10s} {:>10s}",
                                  "Step", "z", "a", "tau", "dt", "MinRung", "MaxRung", "Wall",
-                                 "Step time", "FP32 TF/s", "FP64 TF/s", "TFLOP/s")
+                                 "Step time", "FP32 GF/s", "FP64 GF/s", "GFLOP/s")
+                          << rungHeader << '\n'
                           << std::flush;
             }
             std::cout << std::format("{:8d} {:10.3e} {:10.3e} {:10.3e} {:10.3e} {:7d} {:7d} "
-                                     "{:>13s} {:>13s} {:10.3e} {:10.3e} {:10.3e}\n",
+                                     "{:>13s} {:>13s} {:10.3e} {:10.3e} {:10.3e}",
                              iter, outputRedshift, a, nextTau / coarseInterval, dt,
                              displayedMinimumRung, maxRung,
                              terminal::formatDuration(runtime).c_str(),
                              terminal::formatDuration(stepTm.read()).c_str(),
-                             flopRates.singlePrecision * 1e-12, flopRates.doublePrecision * 1e-12,
-                             flops * 1e-12)
+                             flopRates.singlePrecision * 1e-9, flopRates.doublePrecision * 1e-9,
+                             flops * 1e-9)
+                      << terminal::formatRungPopulations(rungPopulations) << '\n'
                       << std::flush;
+            progressRungHeader = rungHeader;
             progressRows++;
             fclose(textfp);
             totalTime.reset();

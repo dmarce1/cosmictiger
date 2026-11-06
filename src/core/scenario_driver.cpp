@@ -4,7 +4,9 @@
 #include <format>
 #include <iostream>
 #include <numeric>
+#include <span>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include <cosmictiger/core/driver.hpp>
@@ -177,6 +179,7 @@ void runFixedScenario() {
     double const restoredRuntime = state.runtime;
     int iterations = 0;
     size_t progressRows = 0;
+    std::string progressRungHeader;
     if (hpxRank() == 0) {
         terminal::section(definition.name);
         std::cout << std::format("{:<38s}: {:e} code time units\n", "Scenario duration", duration)
@@ -408,30 +411,37 @@ void runFixedScenario() {
                 runtime.start();
                 if (progressRows == 0) {
                     std::cout
-                        << "  TFLOP/s uses counted gravity and SPH operations divided by force "
+                        << "  GFLOP/s uses counted gravity and SPH operations divided by force "
                            "advancement wall time.\n"
                            "  FP32/FP64 separate arithmetic precision.\n"
+                           "  Columns after GFLOP/s give particle populations by rung.\n"
                            "  Chemistry and star formation operations are excluded; their wall "
                            "time is included.\n"
                         << std::flush;
                 }
-                if (progressRows % 25 == 0) {
+                auto const rungCounts = particlesRungCounts();
+                std::span<size_t const> const rungPopulations{rungCounts.data(), rungCounts.size()};
+                auto const rungHeader = terminal::formatRungPopulations(rungPopulations, true);
+                if (progressRows % 25 == 0 || progressRungHeader != rungHeader) {
                     std::cout << std::format("\n{:>8s} {:>13s} {:>13s} {:>7s} {:>13s} {:>13s} "
-                                             "{:>13s} {:>10s} {:>10s} {:>10s}\n",
+                                             "{:>13s} {:>10s} {:>10s} {:>10s}",
                                      "Step", "Time", "dt", "Done %", "Rung(min/max)", "Wall",
-                                     "Step time", "FP32 TF/s", "FP64 TF/s", "TFLOP/s")
+                                     "Step time", "FP32 GF/s", "FP64 GF/s", "GFLOP/s")
+                              << rungHeader << '\n'
                               << std::flush;
                 }
                 std::cout << std::format("{:8d} {:13.6e} {:13.6e} {:7.2f} {:6d}/{:<6d} {:>13s} "
-                                         "{:>13s} {:10.3e} {:10.3e} {:10.3e}\n",
+                                         "{:>13s} {:10.3e} {:10.3e} {:10.3e}",
                                  state.iter, state.tau, timestep,
                                  std::clamp(100.0 * state.tau / duration, 0.0, 100.0),
                                  displayedMinimumRung, state.maxRung,
                                  terminal::formatDuration(displayedRuntime).c_str(),
                                  terminal::formatDuration(stepTimer.read()).c_str(),
-                                 flopRates.singlePrecision * 1e-12,
-                                 flopRates.doublePrecision * 1e-12, flops * 1e-12)
+                                 flopRates.singlePrecision * 1e-9, flopRates.doublePrecision * 1e-9,
+                                 flops * 1e-9)
+                          << terminal::formatRungPopulations(rungPopulations) << '\n'
                           << std::flush;
+                progressRungHeader = rungHeader;
                 progressRows++;
             }
         }

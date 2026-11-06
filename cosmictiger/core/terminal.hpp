@@ -8,9 +8,12 @@
 #include <atomic>
 #include <bit>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <format>
 #include <limits>
+#include <span>
 #include <string>
 
 namespace terminal {
@@ -27,6 +30,21 @@ inline void setVerbose(bool enabled) {
 
 inline bool verbose() {
     return detail::verboseEnabled.load(std::memory_order_relaxed);
+}
+
+// Every population fits in the decimal width of the total; reserve one more
+// character per column for separation. Header entries are the rung numbers.
+inline std::string formatRungPopulations(std::span<size_t const> counts, bool header = false) {
+    size_t total = 0;
+    for (auto const count : counts) {
+        total += count;
+    }
+    auto const width = std::to_string(total).size() + 1;
+    std::string result;
+    for (size_t rung = 0; rung < counts.size(); ++rung) {
+        result += std::format("{:>{}}", header ? rung : counts[rung], width);
+    }
+    return result;
 }
 
 // Wall-clock durations use hundredths of a second and hours do not wrap at 24.
