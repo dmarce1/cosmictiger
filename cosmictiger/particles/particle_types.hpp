@@ -8,6 +8,16 @@
 
 #pragma once
 
+#include <type_traits>
+
+#include <cosmictiger/core/defs.hpp>
+#include <cosmictiger/math/vector3.hpp>
+
+// Preserve the exact 3D ABI; lower-dimensional records contain only active axes.
+template <class Real>
+using ParticleVector = std::conditional_t<kSpatialDimensions == 3, Vector3<Real>,
+    math::Vector<Real, kSpatialDimensions>>;
+
 // Particle species stored in particlesType(). Kept apart from particles.hpp so
 // lightweight headers shared with CUDA kernels can name a species.
 inline constexpr int kDarkMatterType = 0;

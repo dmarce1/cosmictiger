@@ -96,7 +96,9 @@ def read_prefix(data):
     require(not stars or cooling, "star formation checkpoint requires cooling")
     require(hydro or not flags & ((1 << 12) | (1 << 13) | (1 << 14) | (1 << 25)),
             "SPH parameter flags require SPH")
-    result = SimpleNamespace(header=header, dimension_count=dimension_count, hydro=hydro, has_cooling=cooling, has_stars=stars,
+    result = SimpleNamespace(header=header, dimension_count=dimension_count,
+                             storage_dimensions=dimension_count if header.reserved & (1 << 30) else 3,
+                             hydro=hydro, has_cooling=cooling, has_stars=stars,
                              position_bytes=8 if flags & (1 << 15) else 4,
                              integer_bytes=8 if flags & (1 << 21) else 4,
                              algorithms=(), pmmm=(), particle_mesh=(), viscosity=(),
@@ -190,8 +192,8 @@ def decode_checkpoint(data, ranks=1):
     require(0 <= gas_count <= count <= result.header.particles_per_species * (2 if result.hydro else 1),
             "invalid checkpoint particle counts")
     result.positions = [reader.take("Q" if result.position_bytes == 8 else "I", count)
-                        for _ in range(3)]
-    result.velocities = reader.take("f", 3 * count)
+                        for _ in range(result.storage_dimensions)]
+    result.velocities = reader.take("f", result.storage_dimensions * count)
     result.rungs = reader.take("b", count)
     if result.header.flags & (1 << 8):
         result.groups = reader.take("q", count)
@@ -204,7 +206,7 @@ def decode_checkpoint(data, ranks=1):
     if result.hydro:
         result.gas_start = reader.offset
         gas_header = reader.take("I", 7)
-        require(gas_header == (0x43545350, result.gas_version, result.integer_bytes, 4, 0, 3, 4),
+        require(gas_header == (0x43545350, result.gas_version, result.integer_bytes, 4, 0, result.storage_dimensions, 4),
                 f"unsupported checkpoint gas layout: {gas_header}")
         require(reader.take(integer_code)[0] == gas_count, "checkpoint gas counts disagree")
         result.entropy_initialized = reader.take("I")[0]

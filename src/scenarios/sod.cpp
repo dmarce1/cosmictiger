@@ -129,13 +129,21 @@ ScenarioPlan initializeSod() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x + rand1() * dx * kEta;
-                sphParticlesPosition(kYDimension, i) =
-                    kSpatialDimensions >= 2 ? y + rand1() * dx * kEta : 0.5;
-                sphParticlesPosition(kZDimension, i) =
-                    kSpatialDimensions >= 3 ? z + rand1() * dx * kEta : 0.5;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesPosition(kYDimension, i) =
+                        kSpatialDimensions >= 2 ? y + rand1() * dx * kEta : 0.5;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesPosition(kZDimension, i) =
+                        kSpatialDimensions >= 3 ? z + rand1() * dx * kEta : 0.5;
+                }
                 sphParticlesVelocity(kXDimension, i) = vx0;
-                sphParticlesVelocity(kYDimension, i) = vy0;
-                sphParticlesVelocity(kZDimension, i) = vz0;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesVelocity(kYDimension, i) = vy0;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesVelocity(kZDimension, i) = vz0;
+                }
                 sphParticlesRung(i) = 0;
                 sphParticlesSetInternalEnergy(i, p1 / (getOptions().hydro.gamma - 1.0) / rho1);
                 i++;
@@ -145,13 +153,21 @@ ScenarioPlan initializeSod() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x + rand1() * dx * kEta;
-                sphParticlesPosition(kYDimension, i) =
-                    kSpatialDimensions >= 2 ? y + rand1() * dx * kEta : 0.5;
-                sphParticlesPosition(kZDimension, i) =
-                    kSpatialDimensions >= 3 ? z + rand1() * dx * kEta : 0.5;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesPosition(kYDimension, i) =
+                        kSpatialDimensions >= 2 ? y + rand1() * dx * kEta : 0.5;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesPosition(kZDimension, i) =
+                        kSpatialDimensions >= 3 ? z + rand1() * dx * kEta : 0.5;
+                }
                 sphParticlesVelocity(kXDimension, i) = vx0;
-                sphParticlesVelocity(kYDimension, i) = vy0;
-                sphParticlesVelocity(kZDimension, i) = vz0;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesVelocity(kYDimension, i) = vy0;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesVelocity(kZDimension, i) = vz0;
+                }
                 sphParticlesRung(i) = 0;
                 sphParticlesSetInternalEnergy(i, p1 / (getOptions().hydro.gamma - 1.0) / rho1);
                 i++;
@@ -172,13 +188,21 @@ ScenarioPlan initializeSod() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x + rand1() * dx * kEta;
-                sphParticlesPosition(kYDimension, i) =
-                    kSpatialDimensions >= 2 ? y + rand1() * dx * kEta : 0.5;
-                sphParticlesPosition(kZDimension, i) =
-                    kSpatialDimensions >= 3 ? z + rand1() * dx * kEta : 0.5;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesPosition(kYDimension, i) =
+                        kSpatialDimensions >= 2 ? y + rand1() * dx * kEta : 0.5;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesPosition(kZDimension, i) =
+                        kSpatialDimensions >= 3 ? z + rand1() * dx * kEta : 0.5;
+                }
                 sphParticlesVelocity(kXDimension, i) = 0;
-                sphParticlesVelocity(kYDimension, i) = 0;
-                sphParticlesVelocity(kZDimension, i) = 0;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesVelocity(kYDimension, i) = 0;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesVelocity(kZDimension, i) = 0;
+                }
 
                 sphParticlesRung(i) = 0;
                 sphParticlesSetInternalEnergy(i, p0 / (getOptions().hydro.gamma - 1.0) / rho0);
@@ -190,13 +214,21 @@ ScenarioPlan initializeSod() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x + rand1() * dx * kEta;
-                sphParticlesPosition(kYDimension, i) =
-                    kSpatialDimensions >= 2 ? y + rand1() * dx * kEta : 0.5;
-                sphParticlesPosition(kZDimension, i) =
-                    kSpatialDimensions >= 3 ? z + rand1() * dx * kEta : 0.5;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesPosition(kYDimension, i) =
+                        kSpatialDimensions >= 2 ? y + rand1() * dx * kEta : 0.5;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesPosition(kZDimension, i) =
+                        kSpatialDimensions >= 3 ? z + rand1() * dx * kEta : 0.5;
+                }
                 sphParticlesVelocity(kXDimension, i) = 0;
-                sphParticlesVelocity(kYDimension, i) = 0;
-                sphParticlesVelocity(kZDimension, i) = 0;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesVelocity(kYDimension, i) = 0;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesVelocity(kZDimension, i) = 0;
+                }
 
                 sphParticlesRung(i) = 0;
                 sphParticlesSetInternalEnergy(i, p0 / (getOptions().hydro.gamma - 1.0) / rho0);

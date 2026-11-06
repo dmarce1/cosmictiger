@@ -18,6 +18,7 @@
 #include <cosmictiger/core/tree_id.hpp>
 #include <cosmictiger/math/range.hpp>
 #include <cosmictiger/math/vector3.hpp>
+#include <cosmictiger/particles/particle_types.hpp>
 
 #ifndef __CUDACC__
 // Reversed unit-box bounds seed min/max accumulation for particle positions
@@ -327,7 +328,7 @@ SphRunReturn sphMidpointForces(
     SphRunParameters params, bool cuda = true, SphGravityStage const& gravityStage = {});
 // Event-local, gas-indexed complete acceleration and irreversible entropy rate.
 // Allocated after gas sorting and released before migration/checkpoint/output.
-Vector3<float>* sphStageAccelerations();
+ParticleVector<float>* sphStageAccelerations();
 float* sphStageEntropyRates();
 #ifndef __CUDACC__
 hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(

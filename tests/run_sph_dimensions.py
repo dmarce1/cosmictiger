@@ -1,4 +1,4 @@
-"""Exercise Cartesian SPH startup, evolution, padded storage, and restart."""
+"""Exercise Cartesian SPH startup, evolution, compact particle storage, and restart."""
 import argparse
 import math
 import os
@@ -23,7 +23,7 @@ common = [str(args.executable.resolve()), "--hpx:threads=2", "--hpx:bind=none",
           f"--run.gasParticleCount={128 if args.dimension == 1 else 1024}",
           "--gravity.enabled=false", "--chemistry.enabled=false", "--starFormation.enabled=false",
           "--hydro.enabled=true", f"--hydro.cuda={'true' if args.cuda else 'false'}",
-          "--drift.cuda=false", "--output.silo=false", "--output.directory=.",
+          f"--drift.cuda={'true' if args.cuda else 'false'}", "--output.silo=false", "--output.directory=.",
           "--run.endTime=0.001", "--run.numberOfSteps=2", "--checkpoint.intervalSeconds=0"]
 environment = dict(os.environ, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1")
 
@@ -33,7 +33,9 @@ def run(name, scenario="hydroWave", options=(), succeeds=True, directory=None):
         if directory.exists():
             shutil.rmtree(directory)
     directory.mkdir(exist_ok=True)
-    result = subprocess.run(common + [f"--run.scenario={scenario}", *options], cwd=directory,
+    overrides = {option.split("=", 1)[0] for option in options}
+    base = [option for option in common if option.split("=", 1)[0] not in overrides]
+    result = subprocess.run(base + [f"--run.scenario={scenario}", *options], cwd=directory,
                             env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, timeout=120)
     (directory / f"{name}.log").write_text(result.stdout)
@@ -50,11 +52,11 @@ def state(directory):
     assert all(math.isfinite(value) and value > 0 for value in result.densities)
     assert all(math.isfinite(value) and value > 0 for value in result.entropies)
     assert result.thermal_scale_factor == 1
-    for dim in range(args.dimension, 3):
-        assert set(result.positions[dim]) == {1 << (8 * result.position_bytes - 1)}
-        assert all(result.velocities[3 * particle + dim] == 0 for particle in range(result.count))
+    assert result.storage_dimensions == args.dimension
+    assert len(result.positions) == args.dimension
+    assert len(result.velocities) == args.dimension * result.count
     for dim in range(args.dimension):
-        assert abs(sum(result.velocities[dim::3])) / result.count < 2e-5
+        assert abs(sum(result.velocities[dim::args.dimension])) / result.count < 2e-5
     return result
 
 for viscosity in ("none", "morrisAndMonaghan", "cullenAndDehnen", "huEtal", "priceEtAl"):
@@ -67,9 +69,13 @@ for scenario in ("sod", "blast") + (("kelvinHelmholtz", "gresho") if args.dimens
         checkpoint = sorted(directory.glob("checkpoint.*/checkpoint.0.dat"))[-1]
         result = decode_checkpoint(checkpoint.read_bytes())
         assert all(math.isfinite(value) and value > 0 for value in result.densities)
-        assert all(value == 0 for value in result.velocities[2::3])
+        assert result.storage_dimensions == 2
+        assert len(result.velocities) == 2 * result.count
     else:
         state(directory)
+
+# Exercise three-axis visualization adapters with compact particle records.
+state(run("output", options=("--output.silo=true",)))
 
 continuous = state(root / "wave_none")
 stopped = run("restart", options=("--hydro.viscosityEvolution=none", "--run.maxIterations=1"))
@@ -108,8 +114,19 @@ run("wrong_dimension", options=("--hydro.viscosityEvolution=none",
     succeeds=False, directory=mismatched)
 assert "Checkpoint spatial dimension" in (mismatched / "wrong_dimension.log").read_text()
 
+# The earlier lower-dimensional implementation wrote padded XYZ records.
+# A cleared compact-layout bit must fail before any particle payload is read.
+header.reserved = (header.reserved & ~(7 << 28)) | ((3 - args.dimension) << 28)
+checkpoint.write_bytes(data)
+lines[1] = f"0 {len(data)} {fnv1a64(data):016x}"
+manifest.write_text("\n".join(lines) + "\n")
+run("padded_layout", options=("--hydro.viscosityEvolution=none",
+    f"--checkpoint.readIndex={checkpoint.parent.name.split('.')[1]}"),
+    succeeds=False, directory=mismatched)
+assert "Checkpoint particle storage differs" in (mismatched / "padded_layout.log").read_text()
+
 # Runtime capability rejection complements the configure-time gravity checks.
 run("central_gravity_rejected", options=("--hydro.centralAcceleration=1",), succeeds=False)
 if args.dimension == 1:
     run("gresho_rejected", "gresho", succeeds=False)
-print(f"D={args.dimension} SPH scenarios, viscosity modes, inactive components, and restart within float accumulation roundoff passed")
+print(f"D={args.dimension} SPH scenarios, viscosity modes, compact storage, and restart within float accumulation roundoff passed")

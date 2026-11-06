@@ -39,20 +39,20 @@ void particlesSwap(ParticleInteger first, ParticleInteger second) {
         detail::restoredIndices[originalFirst] = second;
         detail::restoredIndices[originalSecond] = first;
     }
-    for (int dim = 0; dim < kDimensions; ++dim) {
+    for (int dim = 0; dim < kSpatialDimensions; ++dim) {
         detail::swapParticleBytes(particlesX[dim][first], particlesX[dim][second]);
     }
     detail::swapParticleBytes(particlesV[first], particlesV[second]);
     detail::swapParticleBytes(particlesR[first], particlesR[second]);
     auto const& options = getOptions();
     if (saveParticleAcceleration(options.analysis)) {
-        for (int dim = 0; dim < kDimensions; ++dim) {
+        for (int dim = 0; dim < kSpatialDimensions; ++dim) {
             detail::swapParticleBytes(particlesGravityAccelerations[dim][first],
                 particlesGravityAccelerations[dim][second]);
         }
     }
     if (particlesHasLongAcceleration(options)) {
-        for (int dim = 0; dim < kDimensions; ++dim) {
+        for (int dim = 0; dim < kSpatialDimensions; ++dim) {
             detail::swapParticleBytes(
                 particlesLongAccelerations[dim][first], particlesLongAccelerations[dim][second]);
         }

@@ -523,7 +523,8 @@ uint32_t checkpointPhysicsCode(Options const& opts) {
         checkpointKernelCode("spline", 3);
     // Bit 24 identifies compact gas storage.
     return (opts.hydro.enabled ? kVariationalSph | kCompactSphLayout : 0U) | (gravityCode << 8) |
-        (hydroCode << 16) | (uint32_t(3 - kSpatialDimensions) << 28);
+        (hydroCode << 16) | (uint32_t(3 - kSpatialDimensions) << 28) |
+        (kSpatialDimensions < 3 ? (1U << 30) : 0U);
 }
 
 bool legacyCheckpointCompatible(Options const& opts) {
@@ -824,6 +825,11 @@ DriverParameters readDriverState(FILE* fp) {
         if (savedDimensions != kSpatialDimensions) {
             THROW_ERROR("Checkpoint spatial dimension %u does not match this build (%d)\n",
                 savedDimensions, kSpatialDimensions);
+        }
+        bool const compactDimensions = (header.reserved & (1U << 30)) != 0U;
+        if (compactDimensions != (kSpatialDimensions < 3)) {
+            THROW_ERROR("Checkpoint particle storage differs: lower-dimensional builds require "
+                        "compact D-component particle records\n");
         }
         if ((header.flags & kRetiredParticleMesh) != 0U) {
             THROW_ERROR("Ordinary PM gravity checkpoints are no longer supported\n");
@@ -1598,7 +1604,7 @@ void checkpointStateTest() {
                 PositionInteger const expected = (PositionInteger(1) << (kPositionBits - 1)) +
                     PositionInteger(17 * particle + dim + 1);
                 ALWAYS_ASSERT(particlesPos(dim, particle).raw() == expected);
-                ALWAYS_ASSERT(particlesVel(dim, particle) == float(particle + dim));
+                ALWAYS_ASSERT(particlesVelocityValue(dim, particle) == float(particle + dim));
             }
             ALWAYS_ASSERT(particlesRung(particle) == char(particle));
         }

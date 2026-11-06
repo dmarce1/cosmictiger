@@ -77,7 +77,7 @@ void appendDriftLightconeEntries(Vector3<double> const& before, Vector3<double> 
 }    // namespace detail
 #endif
 
-void cpuDriftKernel(Position* x, Position* y, Position* z, Vector3<float>* velocities,
+void cpuDriftKernel(Position* x, Position* y, Position* z, ParticleVector<float>* velocities,
     char const* rungs, char const* types, size_t count, DriftParameters const& parameters,
     std::vector<LightconeEntry>* entries) {
     if (count == 0) {
@@ -100,7 +100,7 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Vector3<float>* veloc
         using DriftPack = NativeSimdVector<double>;
         constexpr size_t kWidth = DriftPack::size();
         for (; count - index >= kWidth; index += kWidth) {
-            for (int dim = 0; dim < kDimensions; ++dim) {
+            for (int dim = 0; dim < kSpatialDimensions; ++dim) {
                 DriftPack const velocity([&](auto lane) {
                     size_t const particle = index + lane;
                     return parameters.rung < 0 || rungs[particle] == parameters.rung ?
@@ -137,7 +137,7 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Vector3<float>* veloc
 #if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
         auto const driftVelocity = velocities[index];
 #endif
-        for (int dim = 0; dim < kDimensions; ++dim) {
+        for (int dim = 0; dim < kSpatialDimensions; ++dim) {
             double const velocity = velocities[index][dim];
             before[dim] = positions[dim][index].toDouble();
             after[dim] = std::fma(velocity, driftFactor, before[dim]);
@@ -153,7 +153,7 @@ void cpuDriftKernel(Position* x, Position* y, Position* z, Vector3<float>* veloc
                 before, after, driftVelocity, velocities[index], type, parameters, *entries);
         }
 #endif
-        for (int dim = 0; dim < kDimensions; ++dim) {
+        for (int dim = 0; dim < kSpatialDimensions; ++dim) {
             if constexpr (kPositionBits == 64) {
                 positions[dim][index] += Position(displacement[dim]);
             } else {

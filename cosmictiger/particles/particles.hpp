@@ -54,18 +54,18 @@ inline constexpr GroupInteger kNoParticleGroup = static_cast<GroupInteger>(0x7FF
 #define PARTICLES_EXTERN extern
 #endif
 
-// Raw checkpoint and CUDA buffers retain the legacy three-component layout.
-static_assert(sizeof(Vector3<float>) == sizeof(Array<float, kDimensions>));
-static_assert(alignof(Vector3<float>) == alignof(Array<float, kDimensions>));
-static_assert(sizeof(Vector3<Position>) == sizeof(Array<Position, kDimensions>));
-static_assert(alignof(Vector3<Position>) == alignof(Array<Position, kDimensions>));
-static_assert(std::is_trivially_copyable_v<Vector3<float>>);
-static_assert(std::is_standard_layout_v<Vector3<float>>);
-static_assert(std::is_trivially_copyable_v<Vector3<Position>>);
-static_assert(std::is_standard_layout_v<Vector3<Position>>);
+// Native particle/checkpoint vectors contain exactly the active dimensions.
+static_assert(sizeof(ParticleVector<float>) == sizeof(Array<float, kSpatialDimensions>));
+static_assert(alignof(ParticleVector<float>) == alignof(Array<float, kSpatialDimensions>));
+static_assert(sizeof(ParticleVector<Position>) == sizeof(Array<Position, kSpatialDimensions>));
+static_assert(alignof(ParticleVector<Position>) == alignof(Array<Position, kSpatialDimensions>));
+static_assert(std::is_trivially_copyable_v<ParticleVector<float>>);
+static_assert(std::is_standard_layout_v<ParticleVector<float>>);
+static_assert(std::is_trivially_copyable_v<ParticleVector<Position>>);
+static_assert(std::is_standard_layout_v<ParticleVector<Position>>);
 
 struct GroupParticle {
-    Vector3<Position> position;
+    ParticleVector<Position> position;
     GroupInteger groupNumber;
     template <class A>
     void serialize(A&& arc, unsigned) {
@@ -75,8 +75,8 @@ struct GroupParticle {
 };
 
 struct OutputParticle {
-    Vector3<Position> position;
-    Vector3<float> velocity;
+    ParticleVector<Position> position;
+    ParticleVector<float> velocity;
     char rung;
     template <class A>
     void serialize(A&& a, unsigned) {
@@ -127,9 +127,9 @@ inline bool particlesHasLongAcceleration(Options const& options) {
 }
 
 struct Particle {
-    Vector3<Position> position;
-    Vector3<float> velocity;
-    Vector3<float> longAcceleration;
+    ParticleVector<Position> position;
+    ParticleVector<float> velocity;
+    ParticleVector<float> longAcceleration;
     GroupInteger groupNumber;
     ParticleInteger catalogIndex;
     char rung;
@@ -142,7 +142,7 @@ struct Particle {
         auto const& options = getOptions();
         static bool doGroups = options.analysis.groups;
         static bool doTracers = options.analysis.tracers;
-        for (int dim = 0; dim < kDimensions; dim++) {
+        for (int dim = 0; dim < kSpatialDimensions; dim++) {
             a& position[dim];
             a& velocity[dim];
         }
@@ -164,7 +164,7 @@ struct Particle {
             a & starFormation;
         }
         if (particlesHasLongAcceleration(options)) {
-            for (int dim = 0; dim < kDimensions; dim++) {
+            for (int dim = 0; dim < kSpatialDimensions; dim++) {
                 a& longAcceleration[dim];
             }
         }
@@ -175,16 +175,16 @@ struct Particle {
 // particlesSample() for comparison against a direct-summation reference.
 struct ParticleSample {
     // Particle position.
-    Vector3<Position> position;
+    ParticleVector<Position> position;
     // Gravitational acceleration from the last kick; zero unless the analysis options
     // save particle accelerations.
-    Vector3<float> acceleration;
+    ParticleVector<float> acceleration;
     // Gravitational potential from the last kick; zero unless the analysis options save
     // particle potentials.
     float potential;
     template <class A>
     void serialize(A&& a, unsigned) {
-        for (int dim = 0; dim < kDimensions; dim++) {
+        for (int dim = 0; dim < kSpatialDimensions; dim++) {
             a& position[dim];
             a& acceleration[dim];
         }
@@ -205,14 +205,14 @@ struct ParticleSample {
 #define CHECK_PART_BOUNDS(i)
 #endif
 
-PARTICLES_EXTERN Array<Position*, kDimensions> particlesX;
-PARTICLES_EXTERN Vector3<float>* particlesV;
+PARTICLES_EXTERN Array<Position*, kSpatialDimensions> particlesX;
+PARTICLES_EXTERN ParticleVector<float>* particlesV;
 PARTICLES_EXTERN char* particlesR;
-PARTICLES_EXTERN Array<float*, kDimensions> particlesGravityAccelerations;
+PARTICLES_EXTERN Array<float*, kSpatialDimensions> particlesGravityAccelerations;
 // Long-range (mesh) acceleration of the particle-mesh solvers, scaled by gm. It
 // is produced at an outer PM boundary and consumed by the next kick, so it
 // follows particle permutations and migration but is never checkpointed.
-PARTICLES_EXTERN Array<float*, kDimensions> particlesLongAccelerations;
+PARTICLES_EXTERN Array<float*, kSpatialDimensions> particlesLongAccelerations;
 PARTICLES_EXTERN float* particlesP;
 PARTICLES_EXTERN std::atomic<GroupInteger>* particlesGrp
 #ifdef PARTICLES_CPP
@@ -226,7 +226,7 @@ PARTICLES_EXTERN char* particlesTy;
 PARTICLES_EXTERN StarFormationState* particlesStarFormationStates;
 // Transient gravity-check attributes: -1 is unselected, otherwise the global sample slot.
 PARTICLES_EXTERN ParticleInteger* particlesGravitySampleIndices;
-PARTICLES_EXTERN Vector3<float>* particlesGravitySampleAccelerations;
+PARTICLES_EXTERN ParticleVector<float>* particlesGravitySampleAccelerations;
 PARTICLES_EXTERN size_t particlesGlobalOffset;
 
 struct ParticleGlobalRange {
@@ -349,15 +349,29 @@ inline float& particlesPot(ParticleInteger index) {
 
 inline Position& particlesPos(int dim, ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
+    ALWAYS_ASSERT(dim >= 0 && dim < kSpatialDimensions);
     return particlesX[dim][index];
 }
 
 inline float& particlesVel(int dim, ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
+    ALWAYS_ASSERT(dim >= 0 && dim < kSpatialDimensions);
     return particlesV[index][dim];
 }
 
-inline Vector3<float>* particlesVelData() {
+// Cartesian adapters are for three-axis geometry/visualization scratch only;
+// inactive coordinates and velocities have no particle allocation.
+inline Position particlesPositionValue(int dim, ParticleInteger index) {
+    return dim < kSpatialDimensions ? particlesPos(dim, index) : Position(0.5);
+}
+inline float particlesVelocityValue(int dim, ParticleInteger index) {
+    return dim < kSpatialDimensions ? particlesVel(dim, index) : 0.0f;
+}
+inline Position* particlesPositionData(int dim, ParticleInteger offset = 0) {
+    return dim < kSpatialDimensions ? particlesX[dim] + offset : nullptr;
+}
+
+inline ParticleVector<float>* particlesVelData() {
     return particlesV;
 }
 
@@ -408,8 +422,12 @@ inline void particlesCaptureGravitySample(ParticleInteger index, float gx, float
         ParticleInteger const slot = particlesGravitySample(index);
         if (slot >= 0) {
             particlesGravitySampleAccelerations[slot][kXDimension] = gx;
-            particlesGravitySampleAccelerations[slot][kYDimension] = gy;
-            particlesGravitySampleAccelerations[slot][kZDimension] = gz;
+            if constexpr (kSpatialDimensions > 1) {
+                particlesGravitySampleAccelerations[slot][kYDimension] = gy;
+            }
+            if constexpr (kSpatialDimensions > 2) {
+                particlesGravitySampleAccelerations[slot][kZDimension] = gz;
+            }
         }
     }
 }
@@ -424,7 +442,7 @@ inline Particle particlesGetParticle(ParticleInteger index) {
     static bool doTracers = getOptions().analysis.tracers;
     CHECK_PART_BOUNDS(index);
     Particle p;
-    for (int dim = 0; dim < kDimensions; dim++) {
+    for (int dim = 0; dim < kSpatialDimensions; dim++) {
         p.position[dim] = particlesPos(dim, index);
         p.velocity[dim] = particlesVel(dim, index);
     }
@@ -446,7 +464,7 @@ inline Particle particlesGetParticle(ParticleInteger index) {
         p.starFormation = particlesStarFormationStates[index];
     }
     if (particlesHasLongAcceleration(getOptions())) {
-        for (int dim = 0; dim < kDimensions; dim++) {
+        for (int dim = 0; dim < kSpatialDimensions; dim++) {
             p.longAcceleration[dim] = particlesLongAcceleration(dim, index);
         }
     }
@@ -457,7 +475,7 @@ inline void particlesSetParticle(Particle p, ParticleInteger index) {
     static bool doGroups = getOptions().analysis.groups;
     static bool doTracers = getOptions().analysis.tracers;
     CHECK_PART_BOUNDS(index);
-    for (int dim = 0; dim < kDimensions; dim++) {
+    for (int dim = 0; dim < kSpatialDimensions; dim++) {
         particlesPos(dim, index) = p.position[dim];
         particlesVel(dim, index) = p.velocity[dim];
     }
@@ -479,7 +497,7 @@ inline void particlesSetParticle(Particle p, ParticleInteger index) {
         particlesStarFormationStates[index] = p.starFormation;
     }
     if (particlesHasLongAcceleration(getOptions())) {
-        for (int dim = 0; dim < kDimensions; dim++) {
+        for (int dim = 0; dim < kSpatialDimensions; dim++) {
             particlesLongAcceleration(dim, index) = p.longAcceleration[dim];
         }
     }

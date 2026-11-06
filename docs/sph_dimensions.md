@@ -32,20 +32,34 @@ and star formation require three-dimensional volumetric source physics.
 
 ## Geometry and storage
 
-`kSpatialDimensions` is the configured D. `kDimensions` retains its historical
-value three for padded XYZ storage, transport, and output records. Inactive
-coordinates are initialized to 0.5 and inactive velocities to zero. Domain and
-SPH tree partitioning use only active axes; hydro dot products use
-`math::Vector<Real, kSpatialDimensions>`. Corrected velocity and acceleration
-moments use `math::Matrix`, and their inverse uses `math::SymmetricMatrix`,
-both of order D. Padded gradient outputs have zero inactive entries.
+`kSpatialDimensions` is the configured D. Positions allocate D coordinate arrays;
+velocities, retained SPH stage accelerations, pair increments, particle migration
+records, and position/velocity cache payloads contain D components. `ParticleVector`
+is an alias to the existing `math::Vector<Real, D>` (and to `Vector3<Real>` for
+D=3, preserving the existing 3D ABI). No additional vector class is introduced.
+
+`kDimensions` retains the value three for existing Cartesian geometry, temporary
+force-workspace arrays, and visualization adapters. These adapters synthesize
+inactive coordinates as 0.5 and velocities as zero; particles do not store them.
+Silo velocity fields include only active components: `vx` in 1D, `vx`/`vy` in
+2D, and `vx`/`vy`/`vz` in 3D, for both native and converted units.
+Domain and SPH tree partitioning use only active axes. Corrected velocity and
+acceleration moments use `math::Matrix`, and their inverse uses
+`math::SymmetricMatrix`, both of order D. Temporary gradient interfaces retain
+zero inactive entries.
 
 Checkpoints encode D in physics-code bits 28–29 (zero means the historical
-3D format). A different-dimensional executable rejects the header before
-loading particle payloads. Output includes `dimension_count` and
+3D format). Bit 30 identifies compact lower-dimensional particle records.
+A different-dimensional executable, or an old lower-dimensional XYZ-padded
+checkpoint, is rejected before particle payloads load. Three-dimensional records
+and their layout tag are unchanged. Output includes `dimension_count` and
 `build.dimensionCount` metadata. CGS density has units g/cm^D; the entropy
 conversion uses that density scale. Cosmological-unit output is unavailable
 below three dimensions.
+
+For fixed32 positions, position-plus-velocity storage is 8D bytes per particle:
+8 bytes in 1D, 16 in 2D, and 24 in 3D. For fixed64 it is 12D bytes. Scalar particle
+attributes and geometry/workspace overhead are additional.
 
 ## Equations
 
@@ -115,5 +129,23 @@ Focused implementation validation (November 5, 2026):
 
 Application runs used traditional integration and short smoke durations. These
 checks do not establish long-time convergence, global-integrator runtime coverage,
-1D GPU runtime coverage, or a full-suite/sanitizer result. XYZ storage and transport
-remain padded to three components.
+1D GPU runtime coverage, or a full-suite/sanitizer result. The initial implementation used XYZ-padded storage; the subsequent compact-storage
+validation is recorded separately below.
+
+Compact-storage validation (same date): CPU scenario suites passed in 1D and 2D,
+including Silo output, restart, and explicit rejection of the earlier padded
+layout. Two-rank runs and native checkpoint decoding passed in both dimensions.
+The 2D CUDA suite passed with both GPU hydro and GPU drift. All six relevant
+1D CUDA translation units, including drift, compiled; 1D GPU runtime is untested.
+The dimensional mathematical/configuration CTests passed. Measured checkpoint
+reductions match the removed coordinate and velocity fields exactly: 2,048 bytes
+for 128 1D particles and 8,192 bytes for 1,024 2D particles (fixed32).
+
+Compared with the preceding padded-layout hydro-wave runs, active coordinates
+and entropy matched exactly in both dimensions. The maximum velocity difference
+was zero in 1D and approximately 7e-10 in 2D, within float accumulation roundoff.
+
+The rebuilt 3D application passed a fresh wave run and loaded a checkpoint from
+the preceding padded-storage implementation. All 13 focused 3D checkpoint-state,
+CPU drift, and particle-selection tests passed. These are focused checks on the
+combined working tree, not full-suite or sanitizer coverage.

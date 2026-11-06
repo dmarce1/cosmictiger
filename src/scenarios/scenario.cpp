@@ -37,7 +37,7 @@ namespace detail {
                 size_t const particle = count <= maximum ? sample : distribution(generator);
                 DiagnosticSample value;
                 for (int dim = 0; dim < kDimensions; ++dim) {
-                    value.position[dim] = sphParticlesPosition(dim, particle).toDouble();
+                    value.position[dim] = sphParticlesPositionValue(dim, particle).toDouble();
                 }
                 value.density = sphParticlesDensity(particle);
                 value.pressure = (getOptions().hydro.gamma - 1.0) * value.density *

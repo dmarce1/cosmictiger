@@ -463,10 +463,14 @@ void writeViewSpecies(DBfile* db, ViewDirectoryMetadata& metadata, char const* s
     DBFreeOptlist(options);
     writeViewField(db, metadata, "vx", mesh, particles, velocityUnit,
         [&conversion](Particle const& particle) { return conversion.velocity(particle.vx); });
-    writeViewField(db, metadata, "vy", mesh, particles, velocityUnit,
-        [&conversion](Particle const& particle) { return conversion.velocity(particle.vy); });
-    writeViewField(db, metadata, "vz", mesh, particles, velocityUnit,
-        [&conversion](Particle const& particle) { return conversion.velocity(particle.vz); });
+    if constexpr (kSpatialDimensions > 1) {
+        writeViewField(db, metadata, "vy", mesh, particles, velocityUnit,
+            [&conversion](Particle const& particle) { return conversion.velocity(particle.vy); });
+    }
+    if constexpr (kSpatialDimensions > 2) {
+        writeViewField(db, metadata, "vz", mesh, particles, velocityUnit,
+            [&conversion](Particle const& particle) { return conversion.velocity(particle.vz); });
+    }
     writeViewField(db, metadata, "rung", mesh, particles, "1",
         [](Particle const& particle) { return double(particle.rung); });
 #if COSMICTIGER_WITH_SPH
@@ -631,12 +635,12 @@ ViewSnapshot collectViewParticles(
 #endif
     for (ParticleInteger i = 0; i < particlesSize(); ++i) {
         DarkMatterParticleInfo info{};
-        info.x = particlesPos(kXDimension, i);
-        info.y = particlesPos(kYDimension, i);
-        info.z = particlesPos(kZDimension, i);
-        info.vx = particlesVel(kXDimension, i);
-        info.vy = particlesVel(kYDimension, i);
-        info.vz = particlesVel(kZDimension, i);
+        info.x = particlesPositionValue(kXDimension, i);
+        info.y = particlesPositionValue(kYDimension, i);
+        info.z = particlesPositionValue(kZDimension, i);
+        info.vx = particlesVelocityValue(kXDimension, i);
+        info.vy = particlesVelocityValue(kYDimension, i);
+        info.vz = particlesVelocityValue(kZDimension, i);
         info.rung = particlesRung(i);
         if (getOptions().starFormation.enabled) {
             info.id = particlesStarFormationStates[i].id;
@@ -870,10 +874,14 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
             [](Position const& value) { return value.toDouble(); }, options);
         writeViewField(
             db, metadata, "vx", "mesh", darkMatter, "code", [](auto const& p) { return p.vx; });
-        writeViewField(
-            db, metadata, "vy", "mesh", darkMatter, "code", [](auto const& p) { return p.vy; });
-        writeViewField(
-            db, metadata, "vz", "mesh", darkMatter, "code", [](auto const& p) { return p.vz; });
+        if constexpr (kSpatialDimensions > 1) {
+            writeViewField(
+                db, metadata, "vy", "mesh", darkMatter, "code", [](auto const& p) { return p.vy; });
+        }
+        if constexpr (kSpatialDimensions > 2) {
+            writeViewField(
+                db, metadata, "vz", "mesh", darkMatter, "code", [](auto const& p) { return p.vz; });
+        }
         writeViewField(
             db, metadata, "rung", "mesh", darkMatter, "1", [](auto const& p) { return p.rung; });
         writeStarFormationFields(db, metadata, "mesh", "", darkMatter);
@@ -888,10 +896,14 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
             options);
         writeViewField(
             db, metadata, "vx", "mesh", stars, "code", [](auto const& p) { return p.vx; });
-        writeViewField(
-            db, metadata, "vy", "mesh", stars, "code", [](auto const& p) { return p.vy; });
-        writeViewField(
-            db, metadata, "vz", "mesh", stars, "code", [](auto const& p) { return p.vz; });
+        if constexpr (kSpatialDimensions > 1) {
+            writeViewField(
+                db, metadata, "vy", "mesh", stars, "code", [](auto const& p) { return p.vy; });
+        }
+        if constexpr (kSpatialDimensions > 2) {
+            writeViewField(
+                db, metadata, "vz", "mesh", stars, "code", [](auto const& p) { return p.vz; });
+        }
         writeViewField(
             db, metadata, "rung", "mesh", stars, "1", [](auto const& p) { return p.rung; });
         writeViewField(db, metadata, "mass", "mesh", stars, "code",
@@ -906,8 +918,12 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
             db, metadata, "mesh", gas, [](Position const& value) { return value.toDouble(); },
             options);
         writeViewField(db, metadata, "vx", "mesh", gas, "code", [](auto const& p) { return p.vx; });
-        writeViewField(db, metadata, "vy", "mesh", gas, "code", [](auto const& p) { return p.vy; });
-        writeViewField(db, metadata, "vz", "mesh", gas, "code", [](auto const& p) { return p.vz; });
+        if constexpr (kSpatialDimensions > 1) {
+            writeViewField(db, metadata, "vy", "mesh", gas, "code", [](auto const& p) { return p.vy; });
+        }
+        if constexpr (kSpatialDimensions > 2) {
+            writeViewField(db, metadata, "vz", "mesh", gas, "code", [](auto const& p) { return p.vz; });
+        }
         writeViewField(
             db, metadata, "rung", "mesh", gas, "1", [](auto const& p) { return p.rung; });
         writeGasMassExpression(db, getOptions().initial.gasMass, "code");
@@ -1209,9 +1225,12 @@ Vector<float> outputView(int number, double time) {
                             for (int zi = -1; zi <= 0; zi++) {
                                 Vector3<double> vec;
                                 long int ipix;
-                                vec[kXDimension] = particlesPos(kXDimension, i).toFloat() + xi;
-                                vec[kYDimension] = particlesPos(kYDimension, i).toFloat() + yi;
-                                vec[kZDimension] = particlesPos(kZDimension, i).toFloat() + zi;
+                                vec[kXDimension] =
+                                    particlesPositionValue(kXDimension, i).toFloat() + xi;
+                                vec[kYDimension] =
+                                    particlesPositionValue(kYDimension, i).toFloat() + yi;
+                                vec[kZDimension] =
+                                    particlesPositionValue(kZDimension, i).toFloat() + zi;
                                 float const r2 =
                                     sqr(vec[kXDimension], vec[kYDimension], vec[kZDimension]);
                                 if (r2 < 1.0 && r2 > 0.0) {

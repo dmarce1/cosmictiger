@@ -219,11 +219,11 @@ void updateLocalSphDriftBounds(TreeId id, double driftFactor, int rung) {
             particle < node.particleRange.second; ++particle) {
             bool const moving = rung < 0 || sphParticlesRung(particle) == rung;
             for (int dim = 0; dim < kDimensions; ++dim) {
-                double const position = sphParticlesPosition(dim, particle).toDouble();
+                double const position = sphParticlesPositionValue(dim, particle).toDouble();
                 positions.begin[dim] =
                     std::min(positions.begin[dim].toDouble(), position - padding);
                 positions.end[dim] = std::max(positions.end[dim].toDouble(), position + padding);
-                double const velocity = moving ? sphParticlesVelocity(dim, particle) : 0.0;
+                double const velocity = moving ? sphParticlesVelocityValue(dim, particle) : 0.0;
                 minimumVelocity[dim] = std::min(minimumVelocity[dim], velocity);
                 maximumVelocity[dim] = std::max(maximumVelocity[dim], velocity);
             }
@@ -669,7 +669,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
             flops.singlePrecision += 1;
             Vector3<Position> xValue;
             for (int dim = 0; dim < kDimensions; dim++) {
-                xValue[dim] = sphParticlesPosition(dim, i);
+                xValue[dim] = sphParticlesPositionValue(dim, i);
             }
             for (int dim = 0; dim < kDimensions; dim++) {
                 double const position = xValue[dim].toDouble();
@@ -818,8 +818,8 @@ static SphTreeCreateReturn sphTreeRefreshNode(
                 params.smoothingLengthMultiplier * sphParticlesSmoothingLength(particle);
             flops.singlePrecision += 1;
             for (int dim = 0; dim < kDimensions; ++dim) {
-                double const position = sphParticlesPosition(dim, particle).toDouble();
-                double const velocity = sphParticlesVelocity(dim, particle);
+                double const position = sphParticlesPositionValue(dim, particle).toDouble();
+                double const velocity = sphParticlesVelocityValue(dim, particle);
                 minimumVelocity[dim] = std::min(minimumVelocity[dim], velocity);
                 maximumVelocity[dim] = std::max(maximumVelocity[dim], velocity);
                 result.innerBox.begin[dim] =

@@ -41,7 +41,7 @@
 #define CHECK_SPH_PART_BOUNDS(i)
 #endif
 
-using SphAcceleration = Vector3<float>;
+using SphAcceleration = ParticleVector<float>;
 
 // Cooling stores an equilibrium electron-fraction guess; hydro owns entropy.
 SPH_PARTICLES_EXTERN float* sphParticlesElectronFractions;
@@ -151,6 +151,13 @@ inline Position& sphParticlesPosition(int dim, int index) {
 
 inline float& sphParticlesVelocity(int dim, int index) {
     return particlesVel(dim, sphParticlesParticleIndex(index));
+}
+
+inline Position sphParticlesPositionValue(int dim, int index) {
+    return particlesPositionValue(dim, sphParticlesParticleIndex(index));
+}
+inline float sphParticlesVelocityValue(int dim, int index) {
+    return particlesVelocityValue(dim, sphParticlesParticleIndex(index));
 }
 
 inline char& sphParticlesRung(int index) {

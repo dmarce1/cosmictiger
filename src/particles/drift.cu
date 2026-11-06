@@ -31,7 +31,7 @@ __managed__ ListType* listPtr;
 #endif
 
 __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __restrict__ const y,
-    Position* __restrict__ const z, Vector3<float>* const vels, char const* const rungs,
+    Position* __restrict__ const z, ParticleVector<float>* const vels, char const* const rungs,
     char const* const types, ParticleInteger count, int rung, double a, double dt, double tau0,
     double tau1, double tauMax, bool doLc, int nside, double drag) {
     auto const& tid = threadIdx.x;
@@ -75,17 +75,17 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                 vz = double(vel[kZDimension]) * ainv;
 #endif
                 x0 = x[i].toDouble();
-                y0 = y[i].toDouble();
-                z0 = z[i].toDouble();
+                y0 = kSpatialDimensions > 1 ? y[i].toDouble() : 0.5;
+                z0 = kSpatialDimensions > 2 ? z[i].toDouble() : 0.5;
                 displacementX = double(vel[kXDimension]) * c1;
-                displacementY = double(vel[kYDimension]) * c1;
-                displacementZ = double(vel[kZDimension]) * c1;
+                displacementY = kSpatialDimensions > 1 ? double(vel[kYDimension]) * c1 : 0.0;
+                displacementZ = kSpatialDimensions > 2 ? double(vel[kZDimension]) * c1 : 0.0;
                 x1 = x0 + displacementX;
                 y1 = y0 + displacementY;
                 z1 = z0 + displacementZ;
                 if (drag != 0.0) {
                     double const c0 = 1.0 / (1.0 + drag * dt);
-                    for (int dim = 0; dim < kDimensions; dim++) {
+                    for (int dim = 0; dim < kSpatialDimensions; dim++) {
                         vel[dim] *= c0;
                     }
                 }
@@ -164,15 +164,23 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
             if constexpr (kPositionBits == 64) {
                 // Preserve sub-double motion and the original low position bits.
                 x[i] += Position(displacementX);
-                y[i] += Position(displacementY);
-                z[i] += Position(displacementZ);
+                if constexpr (kSpatialDimensions > 1) {
+                    y[i] += Position(displacementY);
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    z[i] += Position(displacementZ);
+                }
             } else {
                 x[i].raw() +=
                     static_cast<PositionInteger>(llrint(remainder(displacementX, 1.0) * 0x1p32));
-                y[i].raw() +=
-                    static_cast<PositionInteger>(llrint(remainder(displacementY, 1.0) * 0x1p32));
-                z[i].raw() +=
-                    static_cast<PositionInteger>(llrint(remainder(displacementZ, 1.0) * 0x1p32));
+                if constexpr (kSpatialDimensions > 1) {
+                    y[i].raw() += static_cast<PositionInteger>(
+                        llrint(remainder(displacementY, 1.0) * 0x1p32));
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    z[i].raw() += static_cast<PositionInteger>(
+                        llrint(remainder(displacementZ, 1.0) * 0x1p32));
+                }
             }
         }
     }
@@ -213,9 +221,9 @@ void cudaDrift(
         listPtr->resize(numberOfBlocks);
     }
 #endif
-    Position* x = &particlesPos(kXDimension, rng.first);
-    Position* y = &particlesPos(kYDimension, rng.first);
-    Position* z = &particlesPos(kZDimension, rng.first);
+    Position* x = particlesPositionData(kXDimension, rng.first);
+    Position* y = particlesPositionData(kYDimension, rng.first);
+    Position* z = particlesPositionData(kZDimension, rng.first);
     auto* vels = particlesVelData() + rng.first;
     auto const* rungs = &particlesRung(rng.first);
     // particlesTy is managed memory; particlesType() returns a shared static when hydro is off.

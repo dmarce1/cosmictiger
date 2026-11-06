@@ -308,7 +308,7 @@ Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
                             (size_t) (proc + 1) * (rng.second - rng.first) / numberOfThreads;
                         size_t thisCount = 0;
                         for (size_t i = begin; i < end; i++) {
-                            if (particlesPos(xdim, i) < xmid) {
+                            if (particlesPositionValue(xdim, i) < xmid) {
                                 thisCount++;
                             }
                         }
@@ -361,7 +361,7 @@ std::vector<std::vector<size_t>> domainsCountCoarseSlabs(int depth, int coarseMe
                     auto& slabs = partial[proc];
                     for (size_t j = begin; j < end; j++) {
                         slabs[detail::particleMeshCoordinate(
-                            particlesPos(xdim, j).raw(), uint32_t(coarseMeshSize))]++;
+                            particlesPositionValue(xdim, j).raw(), uint32_t(coarseMeshSize))]++;
                     }
                 };
                 Vector<hpx::future<void>> chunks;
@@ -697,7 +697,7 @@ static void beginSphMigration(int rung) {
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         Vector3<double> position;
         for (int dim = 0; dim < kDimensions; dim++) {
-            position[dim] = positionDomainCoordinate(particlesPos(dim, i));
+            position[dim] = positionDomainCoordinate(particlesPositionValue(dim, i));
         }
         auto record = packSphParticle(i);
         bool const eligible = !getOptions().run.hierarchicalGravity ||
@@ -835,7 +835,8 @@ void domainsBegin(int rung) {
                             !getOptions().gravity.enabled || particlesRung(i) == rung) {
                             Vector3<double> position;
                             for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
-                                position[dim] = positionDomainCoordinate(particlesPos(dim, i));
+                                position[dim] =
+                                    positionDomainCoordinate(particlesPositionValue(dim, i));
                             }
                             if (!myDomain.contains(position)) {
                                 ParticleInteger const rank = findParticleDomain(position);
@@ -883,7 +884,7 @@ void domainsEnd() {
         futs.push_back(hpx::async<DomainsEndAction>(c));
     }
     auto const particleCompare = [](Particle a, Particle b) {
-        for (ParticleInteger dim = 0; dim < kDimensions; dim++) {
+        for (ParticleInteger dim = 0; dim < kSpatialDimensions; dim++) {
             if (a.position[dim] < b.position[dim]) {
                 return true;
             } else if (a.position[dim] > b.position[dim]) {
@@ -998,7 +999,7 @@ static void domainsCheck() {
                 for (ParticleInteger i = begin; i < end; i++) {
                     Vector3<double> position;
                     for (int dim = 0; dim < kDimensions; dim++) {
-                        position[dim] = positionDomainCoordinate(particlesPos(dim, i));
+                        position[dim] = positionDomainCoordinate(particlesPositionValue(dim, i));
                     }
                     if (!myDomain.contains(position)) {
                         std::cout

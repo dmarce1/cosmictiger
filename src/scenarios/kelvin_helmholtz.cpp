@@ -161,11 +161,19 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x;
-                sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
-                sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                }
                 sphParticlesVelocity(kXDimension, i) = leftTransverseVelocities[2 * iy + 1];
-                sphParticlesVelocity(kYDimension, i) = vy1;
-                sphParticlesVelocity(kZDimension, i) = 0.0;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesVelocity(kYDimension, i) = vy1;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesVelocity(kZDimension, i) = 0.0;
+                }
                 sphParticlesRung(i) = 0;
 
                 i++;
@@ -175,11 +183,19 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x;
-                sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
-                sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                }
                 sphParticlesVelocity(kXDimension, i) = leftTransverseVelocities[2 * iy];
-                sphParticlesVelocity(kYDimension, i) = vy1;
-                sphParticlesVelocity(kZDimension, i) = 0.0;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesVelocity(kYDimension, i) = vy1;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesVelocity(kZDimension, i) = 0.0;
+                }
                 sphParticlesRung(i) = 0;
 
                 i++;
@@ -198,11 +214,19 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x;
-                sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
-                sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                }
                 sphParticlesVelocity(kXDimension, i) = rightTransverseVelocities[2 * iy + 1];
-                sphParticlesVelocity(kYDimension, i) = vy0;
-                sphParticlesVelocity(kZDimension, i) = 0.0;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesVelocity(kYDimension, i) = vy0;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesVelocity(kZDimension, i) = 0.0;
+                }
                 sphParticlesRung(i) = 0;
 
                 i++;
@@ -212,11 +236,19 @@ ScenarioPlan initializeKelvinHelmholtz() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x;
-                sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
-                sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                }
                 sphParticlesVelocity(kXDimension, i) = rightTransverseVelocities[2 * iy];
-                sphParticlesVelocity(kYDimension, i) = vy0;
-                sphParticlesVelocity(kZDimension, i) = 0.0;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesVelocity(kYDimension, i) = vy0;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesVelocity(kZDimension, i) = 0.0;
+                }
                 sphParticlesRung(i) = 0;
 
                 i++;

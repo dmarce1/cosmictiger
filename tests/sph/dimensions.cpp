@@ -2,14 +2,23 @@
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
+#include <type_traits>
 #include <vector>
 
+#include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/radial_density_kernel.hpp>
+#include <cosmictiger/particles/particle_types.hpp>
 #include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/variable_smoothing_lengths.hpp>
 #include <cosmictiger/sph/viscosity/cullen_and_dehnen.hpp>
 #include <cosmictiger/sph/viscosity/monaghan.hpp>
 #include <cosmictiger/sph/volume.hpp>
+
+static_assert(sizeof(ParticleVector<float>) == kSpatialDimensions * sizeof(float));
+static_assert(sizeof(ParticleVector<double>) == kSpatialDimensions * sizeof(double));
+static_assert(std::is_trivially_copyable_v<ParticleVector<float>>);
+static_assert(sizeof(ParticleVector<Fixed32>) == kSpatialDimensions * sizeof(Fixed32));
+static_assert(sizeof(ParticleVector<Fixed64>) == kSpatialDimensions * sizeof(Fixed64));
 
 namespace detail {
 

@@ -25,8 +25,8 @@ inline constexpr int kSphTreeNodeAllocationSize = 4;
 #define DOMAINS_CHECK
 #endif
 
-// XYZ transport, output and checkpoint records retain their padded layout.
-// Spatial operators use kSpatialDimensions; standalone math consumers default to 3D.
+// Legacy Cartesian geometry/scratch uses three axes. Particle storage and
+// spatial operators use kSpatialDimensions; standalone math consumers default to 3D.
 #ifndef COSMICTIGER_DIMENSION_COUNT
 #define COSMICTIGER_DIMENSION_COUNT 3
 #endif

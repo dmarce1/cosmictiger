@@ -121,7 +121,7 @@ static_assert(sizeof(SphCompensatedSum) == 2 * sizeof(float));
 
 // Event-local scratch; both the sum and compensation travel in reverse exchanges.
 struct SphPairUpdate {
-    SphCompensatedSum velocity[kDimensions] = {};
+    SphCompensatedSum velocity[kSpatialDimensions] = {};
     SphCompensatedSum entropy;
 
     template <class Archive>
@@ -158,8 +158,8 @@ CUDA_EXPORT inline bool sphOwnsPairKick(SphPairSourceId const& target,
 CUDA_EXPORT inline FlopCount sphAccumulatePairKick(SphPairUpdate& target, SphPairUpdate& neighbor,
     Vector3<float> const& acceleration, float targetEntropyRate, float neighborEntropyRate,
     float timestep) {
-    FlopCount operations = kDimensions + 2;    // Impulse and entropy products.
-    for (int dimension = 0; dimension < kDimensions; ++dimension) {
+    FlopCount operations = kSpatialDimensions + 2;    // Impulse and entropy products.
+    for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
         float const increment = timestep * acceleration[dimension];
         operations += target.velocity[dimension].add(increment);
         operations += neighbor.velocity[dimension].add(-increment);
@@ -171,8 +171,8 @@ CUDA_EXPORT inline FlopCount sphAccumulatePairKick(SphPairUpdate& target, SphPai
 
 CUDA_EXPORT inline FlopCount sphAccumulateExternalKick(
     SphPairUpdate& target, Vector3<float> const& acceleration, float timestep) {
-    FlopCount operations = kDimensions;
-    for (int dimension = 0; dimension < kDimensions; ++dimension) {
+    FlopCount operations = kSpatialDimensions;
+    for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
         operations += target.velocity[dimension].add(timestep * acceleration[dimension]);
     }
     return operations;

@@ -302,9 +302,9 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
                 i < selfPtr->particleRange.second; i++) {
                 bool const active = sphParticlesRung(i) >= params.minimumRung;
                 float const h = params.smoothingLengthMultiplier * sphParticlesSmoothingLength(i);
-                auto const myx = sphParticlesPosition(kXDimension, i);
-                auto const myy = sphParticlesPosition(kYDimension, i);
-                auto const myz = sphParticlesPosition(kZDimension, i);
+                auto const myx = sphParticlesPositionValue(kXDimension, i);
+                auto const myy = sphParticlesPositionValue(kYDimension, i);
+                auto const myz = sphParticlesPositionValue(kZDimension, i);
                 Vector3<Position> xValue;
                 xValue[kXDimension] = myx;
                 xValue[kYDimension] = myy;
@@ -488,12 +488,12 @@ static MutexType pairUpdateMutex;
 static Vector<SphOwnedPairUpdate> pendingPairUpdates;
 struct SphPairBaseline {
     ParticleInteger index;
-    Vector3<float> velocity;
+    ParticleVector<float> velocity;
     float entropy;
     char proposedRung;
 };
 static Vector<SphPairBaseline> pairBaselines;
-static Vector3<float>* stageAccelerations = nullptr;
+static ParticleVector<float>* stageAccelerations = nullptr;
 static float* stageEntropyRates = nullptr;
 struct SphAlphaBaseline {
     ParticleInteger index;
@@ -502,7 +502,7 @@ struct SphAlphaBaseline {
 static Vector<SphAlphaBaseline> alphaBaselines;
 }    // namespace detail
 
-Vector3<float>* sphStageAccelerations() {
+ParticleVector<float>* sphStageAccelerations() {
     return detail::stageAccelerations;
 }
 float* sphStageEntropyRates() {
@@ -520,8 +520,8 @@ void sphPrepareStageRates(SphRunParameters parameters, bool initialize) {
         ALWAYS_ASSERT(
             detail::stageAccelerations == nullptr && detail::stageEntropyRates == nullptr);
         if (sphParticlesSize() != 0) {
-            detail::stageAccelerations = static_cast<Vector3<float>*>(
-                allocateManagedMemory(sphParticlesSize() * sizeof(Vector3<float>)));
+            detail::stageAccelerations = static_cast<ParticleVector<float>*>(
+                allocateManagedMemory(sphParticlesSize() * sizeof(ParticleVector<float>)));
             detail::stageEntropyRates =
                 static_cast<float*>(allocateManagedMemory(sphParticlesSize() * sizeof(float)));
         }
@@ -535,7 +535,7 @@ void sphPrepareStageRates(SphRunParameters parameters, bool initialize) {
         }
     }
     for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
-        detail::stageAccelerations[gas] = Vector3<float>(0.0f);
+        detail::stageAccelerations[gas] = ParticleVector<float>(0.0f);
         detail::stageEntropyRates[gas] = 0.0f;
     }
     for (auto& child : children) {
@@ -543,11 +543,11 @@ void sphPrepareStageRates(SphRunParameters parameters, bool initialize) {
     }
 }
 
-Vector<Vector3<float>> sphFetchStageAccelerations(Pair<ParticleInteger> range);
+Vector<ParticleVector<float>> sphFetchStageAccelerations(Pair<ParticleInteger> range);
 HPX_PLAIN_ACTION(sphFetchStageAccelerations, SphFetchStageAccelerationsAction);
-Vector<Vector3<float>> sphFetchStageAccelerations(Pair<ParticleInteger> range) {
+Vector<ParticleVector<float>> sphFetchStageAccelerations(Pair<ParticleInteger> range) {
     ALWAYS_ASSERT(range.first >= 0 && range.second <= sphParticlesSize());
-    return Vector<Vector3<float>>(
+    return Vector<ParticleVector<float>>(
         detail::stageAccelerations + range.first, detail::stageAccelerations + range.second);
 }
 
@@ -583,7 +583,7 @@ void sphFinishPairStages(bool restore) {
     }
     if (restore) {
         for (auto const& baseline : detail::pairBaselines) {
-            for (int dimension = 0; dimension < kDimensions; ++dimension) {
+            for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
                 sphParticlesVelocity(dimension, baseline.index) = baseline.velocity[dimension];
             }
             sphParticlesEntropy(baseline.index) = baseline.entropy;
@@ -618,7 +618,7 @@ void sphCommitPairUpdates(int stage) {
         // Restore exactly, rather than subtracting a rounded predictor. A
         // particle whose second-stage increment is zero still needs restoration.
         for (auto const& baseline : detail::pairBaselines) {
-            for (int dimension = 0; dimension < kDimensions; ++dimension) {
+            for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
                 sphParticlesVelocity(dimension, baseline.index) = baseline.velocity[dimension];
             }
             sphParticlesEntropy(baseline.index) = baseline.entropy;
@@ -635,23 +635,22 @@ void sphCommitPairUpdates(int stage) {
         SphPairUpdate total;
         size_t next = first;
         do {
-            for (int dimension = 0; dimension < kDimensions; ++dimension) {
+            for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
                 flops += total.velocity[dimension].merge(updates[next].update.velocity[dimension]);
             }
             flops += total.entropy.merge(updates[next].update.entropy);
             ++next;
         } while (next < updates.size() && updates[next].index == gas);
         if (stage == 1) {
-            detail::pairBaselines.push_back({gas,
-                Vector3<float>(sphParticlesVelocity(0, gas), sphParticlesVelocity(1, gas),
-                    sphParticlesVelocity(2, gas)),
-                sphParticlesEntropy(gas), char(sphParticlesProposedRung(gas))});
+            detail::pairBaselines.push_back(
+                {gas, particlesVelData()[sphParticlesParticleIndex(gas)], sphParticlesEntropy(gas),
+                    char(sphParticlesProposedRung(gas))});
         }
-        for (int dimension = 0; dimension < kDimensions; ++dimension) {
+        for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
             sphParticlesVelocity(dimension, gas) += total.velocity[dimension];
         }
         sphParticlesEntropy(gas) += total.entropy;
-        flops += kDimensions + 1;
+        flops += kSpatialDimensions + 1;
         ALWAYS_ASSERT(std::isfinite(sphParticlesEntropy(gas)) && sphParticlesEntropy(gas) > 0.0f);
         first = next;
     }
@@ -670,7 +669,7 @@ void SphRunWorkspace::deliverPairUpdates() {
     for (size_t i = 0; i < hostPairUpdates.size(); ++i) {
         auto const& value = hostPairUpdates[i];
         bool nonzero = !value.entropy.isZero();
-        for (int dimension = 0; dimension < kDimensions; ++dimension) {
+        for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
             nonzero = nonzero || !value.velocity[dimension].isZero();
         }
         if (nonzero) {
@@ -1051,8 +1050,10 @@ void SphRunWorkspace::stage() {
                                 .get();
                         for (ParticleInteger gas = 0; gas < size; ++gas) {
                             hostAccelerationX[offset + gas] = accelerations[gas][0];
-                            hostAccelerationY[offset + gas] = accelerations[gas][1];
-                            hostAccelerationZ[offset + gas] = accelerations[gas][2];
+                            hostAccelerationY[offset + gas] =
+                                kSpatialDimensions > 1 ? accelerations[gas][1] : 0.0f;
+                            hostAccelerationZ[offset + gas] =
+                                kSpatialDimensions > 2 ? accelerations[gas][2] : 0.0f;
                         }
                     }
                     if (!hostVelocityX.empty()) {

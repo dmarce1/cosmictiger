@@ -495,7 +495,7 @@ __global__ void sphCudaHydro(
                         data.sourcePairUpdates[particleIndex], externalAcceleration, kickTimestep);
                 }
                 if (data.sinkAccelerations) {
-                    for (int dim = 0; dim < kDimensions; dim++) {
+                    for (int dim = 0; dim < kSpatialDimensions; dim++) {
                         if (parameters.accelerationGradientViscosity) {
                             data.sinkAccelerations[sinkIndex][dim] += acceleration[dim];
                         } else {

@@ -40,13 +40,21 @@ ScenarioPlan initializeGresho() {
                         radius > 0.0 ? state.azimuthalVelocity / radius : 0.0;
                     sphParticlesSmoothingLength(i) = smoothingLength;
                     sphParticlesPosition(kXDimension, i) = position[0];
-                    sphParticlesPosition(kYDimension, i) =
-                        kSpatialDimensions >= 2 ? position[1] : 0.5;
-                    sphParticlesPosition(kZDimension, i) =
-                        kSpatialDimensions >= 3 ? position[2] : 0.5;
+                    if constexpr (kSpatialDimensions > 1) {
+                        sphParticlesPosition(kYDimension, i) =
+                            kSpatialDimensions >= 2 ? position[1] : 0.5;
+                    }
+                    if constexpr (kSpatialDimensions > 2) {
+                        sphParticlesPosition(kZDimension, i) =
+                            kSpatialDimensions >= 3 ? position[2] : 0.5;
+                    }
                     sphParticlesVelocity(kXDimension, i) = -angularVelocity * offsetY;
-                    sphParticlesVelocity(kYDimension, i) = angularVelocity * offsetX;
-                    sphParticlesVelocity(kZDimension, i) = 0.0;
+                    if constexpr (kSpatialDimensions > 1) {
+                        sphParticlesVelocity(kYDimension, i) = angularVelocity * offsetX;
+                    }
+                    if constexpr (kSpatialDimensions > 2) {
+                        sphParticlesVelocity(kZDimension, i) = 0.0;
+                    }
                     sphParticlesRung(i) = 0;
                     sphParticlesSetInternalEnergy(i, state.pressure / (opts.hydro.gamma - 1.0));
                     i++;

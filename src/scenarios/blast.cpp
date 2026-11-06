@@ -99,11 +99,19 @@ ScenarioPlan initializeBlast() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x;
-                sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
-                sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                }
                 sphParticlesVelocity(kXDimension, i) = vx;
-                sphParticlesVelocity(kYDimension, i) = vy;
-                sphParticlesVelocity(kZDimension, i) = vz;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesVelocity(kYDimension, i) = vy;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesVelocity(kZDimension, i) = vz;
+                }
                 sphParticlesRung(i) = 0;
                 sphParticlesSetInternalEnergy(i, eint);
 
@@ -123,11 +131,19 @@ ScenarioPlan initializeBlast() {
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
                 sphParticlesPosition(kXDimension, i) = x;
-                sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
-                sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                }
                 sphParticlesVelocity(kXDimension, i) = vx;
-                sphParticlesVelocity(kYDimension, i) = vy;
-                sphParticlesVelocity(kZDimension, i) = vz;
+                if constexpr (kSpatialDimensions > 1) {
+                    sphParticlesVelocity(kYDimension, i) = vy;
+                }
+                if constexpr (kSpatialDimensions > 2) {
+                    sphParticlesVelocity(kZDimension, i) = vz;
+                }
                 sphParticlesRung(i) = 0;
                 sphParticlesSetInternalEnergy(i, eint);
 

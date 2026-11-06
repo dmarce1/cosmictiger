@@ -77,8 +77,8 @@ void outputParticles(std::string const filename, Vector<OutputParticle> const& p
     Vector<double> z(parts.size());
     for (int i = 0; i < parts.size(); i++) {
         x[i] = parts[i].position[kXDimension].toDouble();
-        y[i] = parts[i].position[kYDimension].toDouble();
-        z[i] = parts[i].position[kZDimension].toDouble();
+        y[i] = kSpatialDimensions > 1 ? parts[i].position[kYDimension].toDouble() : 0.5;
+        z[i] = kSpatialDimensions > 2 ? parts[i].position[kZDimension].toDouble() : 0.5;
     }
     int const numberOfParticles = parts.size();
     double* coords[kDimensions] = {x.data(), y.data(), z.data()};
@@ -88,7 +88,7 @@ void outputParticles(std::string const filename, Vector<OutputParticle> const& p
     x = decltype(x)();
     y = decltype(y)();
     z = decltype(z)();
-    for (int dim = 0; dim < kDimensions; dim++) {
+    for (int dim = 0; dim < kSpatialDimensions; dim++) {
         Vector<float> velocities(parts.size());
         for (int i = 0; i < parts.size(); i++) {
             velocities[i] = parts[i].velocity[dim];
@@ -175,10 +175,10 @@ Vector<float> outputGetSlice() {
         futs.push_back(hpx::async<OutputGetSliceAction>(c));
     }
     for (int i = 0; i < particlesSize(); i++) {
-        double const z = particlesPos(kZDimension, i).toDouble();
+        double const z = particlesPositionValue(kZDimension, i).toDouble();
         if (z < getOptions().analysis.sliceSize) {
-            double const x = particlesPos(kXDimension, i).toDouble();
-            double const y = particlesPos(kYDimension, i).toDouble();
+            double const x = particlesPositionValue(kXDimension, i).toDouble();
+            double const y = particlesPositionValue(kYDimension, i).toDouble();
             int const xi = x * res;
             int const yi = y * res;
             int const j = yi * res + xi;
