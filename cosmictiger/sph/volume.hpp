@@ -110,25 +110,25 @@ CUDA_EXPORT inline SupportSums<Real> emptySupportSums() {
  * Symbol directory:
  *   x_j → weight; w → kernel value; w′ → kernel derivative; q → normalized radius
  *   Σw, Σqw′ → number sum, number moment
- *   Σxw, Σxqw′ → weighted sum, weighted moment.
- *   Code names: wʹ = w′.
+ *   Σxw, Σxqw′ → weighted sum, weighted moment; qw′ → one neighbor's number moment.
+ *   Code names: wʹ = w′; qwʹ = qw′.
  */
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline void accumulateSupportSums(
     SupportSums<Real>& sums, Real x_j, Real w, Real wʹ, Real q) {
-    Real const moment = q * wʹ;
+    Real const qwʹ = q * wʹ;
     sums.numberSum += w;
-    sums.numberMoment += moment;
+    sums.numberMoment += qwʹ;
     sums.weightedSum += x_j * w;
-    sums.weightedMoment += x_j * moment;
+    sums.weightedMoment += x_j * qwʹ;
 }
 
 // Production gas has one mass; its weighted sums are the number sums times x.
+// Σw, Σqw′ → number sum, number moment; x → common volume weight. Code names: Σqwʹ = Σqw′.
 template <typename Real>
-CUDA_EXPORT inline SupportSums<Real> equalWeightSupportSums(
-    Real numberSum, Real numberMoment, Real weight) {
-    return SupportSums<Real>{numberSum, numberMoment, weight * numberSum, weight * numberMoment};
+CUDA_EXPORT inline SupportSums<Real> equalWeightSupportSums(Real Σw, Real Σqwʹ, Real x) {
+    return SupportSums<Real>{Σw, Σqwʹ, x * Σw, x * Σqwʹ};
 }
 
 // clang-format off
@@ -284,16 +284,16 @@ enum class SupportConstraint : int {
 
 // relativeResidual is (sum_j w - target)/target at the stored H. A residual within
 // the solve tolerance satisfies the constraint and is free even at a bound.
-CUDA_EXPORT inline SupportConstraint classifySupport(float smoothingLength,
-    float minimumSmoothingLength, float maximumSmoothingLength, float relativeResidual,
-    float tolerance) {
-    if (minimumSmoothingLength == maximumSmoothingLength) {
+// H → stored support radius; H_min, H_max → its bounds.
+CUDA_EXPORT inline SupportConstraint classifySupport(
+    float H, float H_min, float H_max, float relativeResidual, float tolerance) {
+    if (H_min == H_max) {
         return SupportConstraint::Fixed;
     }
-    if (smoothingLength <= minimumSmoothingLength && relativeResidual > tolerance) {
+    if (H <= H_min && relativeResidual > tolerance) {
         return SupportConstraint::LowerBound;
     }
-    if (smoothingLength >= maximumSmoothingLength && relativeResidual < -tolerance) {
+    if (H >= H_max && relativeResidual < -tolerance) {
         return SupportConstraint::UpperBound;
     }
     return SupportConstraint::Free;

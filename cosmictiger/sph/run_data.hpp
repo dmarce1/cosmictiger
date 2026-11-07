@@ -14,6 +14,7 @@
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/sph/flops.hpp>
+#include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/pair_kick.hpp>
 #include <cosmictiger/sph/particle_flags.hpp>
 #include <cosmictiger/sph/particles.hpp>
@@ -49,9 +50,6 @@ struct SphRunData {
     float* sinkInternalEnergyRate = nullptr;
     float* sinkEntropyRate = nullptr;    // dA/dtau from nonadiabatic heating and conduction.
     float* sinkDensity;
-    // Optional d(log rho_comoving)/d(tau), including the adaptive-support
-    // correction. Requires the source velocity arrays even with viscosity off.
-    float* sinkLogDensityRate = nullptr;
     float* sinkGradHCorrection;    // Rebuilt with the density on every preparation pass.
     uint8_t* sinkBalsaraFactor;
     Float16Storage* sinkBulkViscosityCoefficient;
@@ -82,47 +80,97 @@ struct SphRunData {
     // Optional external central potential, used by the orbiting-disc problem.
     float centralAcceleration;       // Zero disables this force.
     float centralSmoothingLength;    // Support radius of the selected gravity kernel.
+
+    // One particle's vectors, read in one call from the component arrays above.
+    CUDA_EXPORT sph_geometry::SpatialVector<Position> sourcePosition(ParticleInteger index) const {
+        return sph_geometry::loadSpatialVector(
+            sourcePositionX, sourcePositionY, sourcePositionZ, index);
+    }
+    CUDA_EXPORT sph_geometry::SpatialVector<float> sourceVelocity(ParticleInteger index) const {
+        return sph_geometry::loadSpatialVector(
+            sourceVelocityX, sourceVelocityY, sourceVelocityZ, index);
+    }
+    CUDA_EXPORT sph_geometry::SpatialVector<float> sinkGravityAcceleration(
+        ParticleInteger index) const {
+        return sph_geometry::loadSpatialVector(
+            sinkGravityAccelerationX, sinkGravityAccelerationY, sinkGravityAccelerationZ, index);
+    }
+    // Box tests and source assembly take padded records, with the stored inactive-axis padding.
+    CUDA_EXPORT Vector3<Position> sourcePaddedPosition(ParticleInteger index) const {
+        return Vector3<Position>(
+            sourcePositionX[index], sourcePositionY[index], sourcePositionZ[index]);
+    }
 };
 
-// Preserve the force-source arithmetic order for both the unsplit kernels and
-// the post-gravity completion of a phase-zero pair pass.
+// clang-format off
+/*
+ * Preserve the force-source arithmetic order for both the unsplit kernels and
+ * the post-gravity completion of a phase-zero pair pass. Locally derived sum of the sources:
+ *   dv_a/dτ ← dv_a/dτ + (dv_a/dτ)_grav + g_y ŷ + g_z ẑ − g_c f(q_ac) H_c⁻ᴰ r_ac − λ v_a,
+ *   r_ac = x_a − x_c,  q_ac = |r_ac|/H_c.
+ * Symbol directory:
+ *   x_a, v_a → position, velocity; dv_a/dτ → acceleration; (dv_a/dτ)_grav → gravity acceleration
+ *   g_y, g_z → uniform y acceleration, midplane z acceleration; λ → velocity damping rate
+ *   g_c → central acceleration; H_c → central smoothing length; H_c⁻¹ → its inverse
+ *   x_c → box center; r_ac, |r_ac| → separation from the center, its magnitude
+ *   q_ac → normalized radius; f(q_ac) → gravity kernel force factor; f_ac → central force factor
+ *   Code names: dv_a_dτ = dv_a/dτ; dv_a_dτ_grav = (dv_a/dτ)_grav; H_inv_c = H_c⁻¹;
+ *     abs_r_ac = |r_ac|.
+ */
+// clang-format on
 CUDA_EXPORT inline Vector3<float> sphCompleteAcceleration(SphRunParameters const& parameters,
-    Vector3<Position> const& position, Vector3<float> const& velocity, Vector3<float> acceleration,
-    Vector3<float> const& gravityAcceleration, float centralAcceleration,
-    float centralSmoothingLength, sph_flops::Counter& flops) {
+    Vector3<Position> const& x_a, Vector3<float> const& v_a, Vector3<float> dv_a_dτ,
+    Vector3<float> const& dv_a_dτ_grav, float g_c, float H_c, sph_flops::Counter& flops) {
 #if COSMICTIGER_WITH_GRAVITY
-    acceleration += gravityAcceleration;
+    dv_a_dτ += dv_a_dτ_grav;
     flops += 3;
 #endif
-    acceleration[kYi] += parameters.uniformAccelerationY;
-    acceleration[kZi] += parameters.midplaneAccelerationZ(position[kZi]);
+    dv_a_dτ[kYi] += parameters.uniformAccelerationY;
+    dv_a_dτ[kZi] += parameters.midplaneAccelerationZ(x_a[kZi]);
     flops += 2;
     flops.doublePrecision += sph_flops::positionConstructionFlops();
-    if (centralAcceleration != 0.0f) {
-        Vector3<float> const separation(distance(position[kXi], Position(0.5)),
-            distance(position[kYi], Position(0.5)), distance(position[kZi], Position(0.5)));
-        float const radius = separation.norm();
-        float const inverseSmoothingLength = 1.0f / centralSmoothingLength;
-        float const normalizedRadius = radius * inverseSmoothingLength;
-        float const force = centralAcceleration *
-            radial_kernel::forceFactor(selectedGravityKernel<float>(), normalizedRadius) *
-            sph_geometry::inverseVolume(inverseSmoothingLength);
-        acceleration -= force * separation;
-        flops +=
-            21 + sph_flops::forceKernelOperations(selectedGravityKernel<float>(), normalizedRadius);
+    if (g_c != 0.0f) {
+        Vector3<float> const r_ac(distance(x_a[kXi], Position(0.5)),
+            distance(x_a[kYi], Position(0.5)), distance(x_a[kZi], Position(0.5)));
+        float const abs_r_ac = r_ac.norm();
+        float const H_inv_c = 1.0f / H_c;
+        float const q_ac = abs_r_ac * H_inv_c;
+        float const f_ac = g_c * radial_kernel::forceFactor(selectedGravityKernel<float>(), q_ac) *
+            sph_geometry::inverseVolume(H_inv_c);
+        dv_a_dτ -= f_ac * r_ac;
+        flops += 21 + sph_flops::forceKernelOperations(selectedGravityKernel<float>(), q_ac);
         flops.doublePrecision += 3 * sph_flops::positionConstructionFlops();
     }
-    acceleration -= parameters.velocityDampingRate * velocity;
+    dv_a_dτ -= parameters.velocityDampingRate * v_a;
     flops += 6;
-    return acceleration;
+    return dv_a_dτ;
+}
+
+// The one boundary between the spatial-vector kernels and the padded assembly above, which
+// also takes the padded position x_a. The result keeps the active axes.
+CUDA_EXPORT inline sph_geometry::SpatialVector<float> sphCompleteAcceleration(
+    SphRunParameters const& parameters, Vector3<Position> const& x_a,
+    sph_geometry::SpatialVector<float> const& v_a,
+    sph_geometry::SpatialVector<float> const& dv_a_dτ,
+    sph_geometry::SpatialVector<float> const& dv_a_dτ_grav, float g_c, float H_c,
+    sph_flops::Counter& flops) {
+    Vector3<float> const padded = sphCompleteAcceleration(parameters, x_a,
+        sph_geometry::paddedVector(v_a), sph_geometry::paddedVector(dv_a_dτ),
+        sph_geometry::paddedVector(dv_a_dτ_grav), g_c, H_c, flops);
+    sph_geometry::SpatialVector<float> result;
+    for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+        result[dim] = padded[dim];
+    }
+    return result;
 }
 
 inline constexpr int kMaxNeighborRungDifference = 1;
 inline constexpr float kSphSmoothingLengthTolerance = float(1.0e-4);
 
 // Target of the support solves: ΣW = Σ_b w(q_ab) = 3 N_target/(4π).
-CUDA_EXPORT inline float sphTargetKernelSum(float targetNeighborCount) {
-    return targetNeighborCount * float(1.0 / sph_geometry::kUnitBallVolume);
+// N_target → target neighbor count.
+CUDA_EXPORT inline float sphTargetKernelSum(float N_target) {
+    return N_target * float(1.0 / sph_geometry::kUnitBallVolume);
 }
 
 struct SphGradHEvaluation {
@@ -132,34 +180,36 @@ struct SphGradHEvaluation {
 };
 
 // The variational density pass's correction for one sink, from its unweighted sums
-// numberSum = Σ_b w(q_ab) and numberMoment = Σ_b q_ab w'(q_ab) at the converged support.
-// Every gas particle has the mass gasMass and the volume weight x = gasMass.
-CUDA_EXPORT inline SphGradHEvaluation sphGradHEvaluation(float smoothingLength,
-    float minimumSmoothingLength, float maximumSmoothingLength, float targetNeighborCount,
-    float gasMass, float numberSum, float numberMoment) {
-    float const target = sphTargetKernelSum(targetNeighborCount);
+// ΣW = Σ_b w(q_ab) and Σ_b q_ab w′(q_ab) at the converged support.
+// Every gas particle has the mass m and the volume weight x = m.
+// Symbol directory: H_a, H_min, H_max → support radius and its bounds; N_target → target neighbor
+// count; ΣW_target → target kernel sum; m → gas mass; Σ_b q_ab w′ → kernel derivative moment.
+// Code names: Σqwʹ = Σ_b q_ab w′.
+CUDA_EXPORT inline SphGradHEvaluation sphGradHEvaluation(
+    float H_a, float H_min, float H_max, float N_target, float m, float ΣW, float Σqwʹ) {
+    float const ΣW_target = sphTargetKernelSum(N_target);
     SphGradHEvaluation result;
-    result.relativeResidual = (numberSum - target) / target;
-    result.constraint = sph_volume::classifySupport(smoothingLength, minimumSmoothingLength,
-        maximumSmoothingLength, result.relativeResidual, kSphSmoothingLengthTolerance);
+    result.relativeResidual = (ΣW - ΣW_target) / ΣW_target;
+    result.constraint = sph_volume::classifySupport(
+        H_a, H_min, H_max, result.relativeResidual, kSphSmoothingLengthTolerance);
     result.correction = sph_volume::gradHCorrection(
-        sph_volume::equalWeightSupportSums(numberSum, numberMoment, gasMass), result.constraint);
+        sph_volume::equalWeightSupportSums(ΣW, Σqwʹ, m), result.constraint);
     return result;
 }
 
 // A source can reach any sink in this box through a periodic image. Expanding
 // the unwrapped interval before testing avoids inconsistent endpoint wrapping.
+// x_b → padded source position; H_b → source support radius.
 CUDA_EXPORT inline bool sphSupportIntersects(Fixed32Range const& sinkBox,
-    Vector3<Position> const& sourcePosition, float sourceSupport,
-    sph_flops::Counter* flops = nullptr) {
+    Vector3<Position> const& x_b, float H_b, sph_flops::Counter* flops = nullptr) {
     Fixed32Range expanded = sinkBox;
     for (int dim = 0; dim < kDimensions; dim++) {
-        expanded.begin[dim] -= RangeFixed(sourceSupport);
-        expanded.end[dim] += RangeFixed(sourceSupport);
+        expanded.begin[dim] -= RangeFixed(H_b);
+        expanded.end[dim] += RangeFixed(H_b);
     }
     if (flops) {
         // Each float support needs one single-precision fixed-point scale.
         flops->singlePrecision += 2 * kDimensions;
     }
-    return expanded.contains(sourcePosition, flops ? &flops->doublePrecision : nullptr);
+    return expanded.contains(x_b, flops ? &flops->doublePrecision : nullptr);
 }

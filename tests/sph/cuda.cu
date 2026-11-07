@@ -289,10 +289,6 @@ public:
         require(reduction_->pendingChanges == 0, "midpoint support needs no refresh");
     }
 
-    void enableLogDensityRates() {
-        data_.sinkLogDensityRate = allocate<float>(count_);
-    }
-
     void enableMidpointOutputs() {
         data_.sinkEntropyRate = allocate<float>(count_);
         data_.proposeRungs = true;
@@ -1814,9 +1810,4 @@ TEST_F(SphCudaTest, DissipativeRateSuperposition) {
         detail::Fixture fixture(2, 2, true);
         detail::testDissipativeRateSuperposition(fixture, morrisAndMonaghan);
     }
-}
-
-TEST_F(SphCudaTest, ContinuityDensityRate) {
-    detail::Fixture fixture(2, 2, true);
-    detail::testContinuityDensityRate(fixture);
 }

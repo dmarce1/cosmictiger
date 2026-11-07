@@ -90,22 +90,22 @@ namespace detail {
 
 // Stage the canonical float A before changing any particle. Reconstruct E from
 // that exact representation so the source ledger matches the committed state.
-inline PreparedThermalState prepareStoredEnergy(
-    float energy, float density, float adiabaticIndex, float scaleFactor) {
-    if (!detail::finiteThermalValue(energy) || !(energy > 0.0f) ||
-        !detail::finiteThermalValue(density) || !(density > 0.0f) ||
-        !detail::finiteThermalValue(adiabaticIndex) || !(adiabaticIndex > 1.0f) ||
-        !detail::finiteThermalValue(scaleFactor) || !(scaleFactor > 0.0f)) {
+// Symbol directory: E → energy; ρ_c → density; γ → adiabatic index; a → scale factor;
+// E/A → conversion factor. Code names: E_over_A = E/A.
+inline PreparedThermalState prepareStoredEnergy(float E, float ρ_c, float γ, float a) {
+    if (!detail::finiteThermalValue(E) || !(E > 0.0f) || !detail::finiteThermalValue(ρ_c) ||
+        !(ρ_c > 0.0f) || !detail::finiteThermalValue(γ) || !(γ > 1.0f) ||
+        !detail::finiteThermalValue(a) || !(a > 0.0f)) {
         throw std::invalid_argument(
             "SPH source requires finite positive energy, density and scale");
     }
-    float const factor = energyPerEntropy(density, adiabaticIndex, scaleFactor);
-    if (!detail::finiteThermalValue(factor) || !(factor > 0.0f)) {
+    float const E_over_A = energyPerEntropy(ρ_c, γ, a);
+    if (!detail::finiteThermalValue(E_over_A) || !(E_over_A > 0.0f)) {
         throw std::range_error("SPH source has an invalid entropy conversion factor");
     }
     PreparedThermalState result;
-    result.entropy = detail::thermalStorageValue(energy / factor);
-    result.storedEnergy = detail::thermalStorageValue(result.entropy * factor);
+    result.entropy = detail::thermalStorageValue(E / E_over_A);
+    result.storedEnergy = detail::thermalStorageValue(result.entropy * E_over_A);
     return result;
 }
 

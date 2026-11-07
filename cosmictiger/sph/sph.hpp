@@ -204,8 +204,8 @@ struct SphRunParameters {
     CUDA_EXPORT bool isActiveRung(int rung) const {
         return rung >= minimumRung && rung <= maximumRung;
     }
-    // Morris-Monaghan pairs use beta_ab = viscosityBeta alpha_ab; fixed Monaghan coefficients
-    // use the constant beta.
+    // Morris-Monaghan pairs use beta_ab = vonNeumannRichtmyerCoefficient alpha_ab; fixed
+    // Monaghan coefficients use the constant beta.
     CUDA_EXPORT bool vonNeumannRichtmyerCoefficientFollowsBulk() const {
         return variableViscosity;
     }

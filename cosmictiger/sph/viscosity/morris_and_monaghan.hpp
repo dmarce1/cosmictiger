@@ -25,20 +25,20 @@ namespace morris_and_monaghan {
  *   α_aⁿ → bulk viscosity coefficient; α* → minimum bulk viscosity coefficient
  *   τ_a⁻¹ → inverse decay time; ∇·v_a → divergence; Δt → time step
  *   S_a → source; Δt/τ_a → decay step; α_aⁿ⁺¹ → updated (return value).
- *   Code names: α_star = α*; τ_a_inv = τ_a⁻¹; div_v_a = ∇·v_a; Δt_over_τ_a = Δt/τ_a;
- *     α_aⁿ_plus_1 = α_aⁿ⁺¹.
+ *   Code names: αⁿ_a = α_aⁿ; α_star = α*; τ_inv_a = τ_a⁻¹; div_v_a = ∇·v_a;
+ *     Δt_over_τ_a = Δt/τ_a; αⁿ_plus_1_a = α_aⁿ⁺¹.
  * All rates use the integration time unit. The paper uses α* = 0.1 and C₁ = 0.2.
  * The shifted form preserves the floor; a zero interval returns the input exactly.
  */
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline Real evolvedBulkViscosityCoefficient(
-    Real α_aⁿ, Real α_star, Real τ_a_inv, Real div_v_a, Real Δt) {
+    Real αⁿ_a, Real α_star, Real τ_inv_a, Real div_v_a, Real Δt) {
     Real const S_a = simdMax(-div_v_a, Real(0));
-    Real const Δt_over_τ_a = Δt * τ_a_inv;
+    Real const Δt_over_τ_a = Δt * τ_inv_a;
     // Shift by the floor so its preservation does not depend on cancellation.
-    Real const α_aⁿ_plus_1 = α_star + (α_aⁿ - α_star + Δt * S_a) / (Real(1) + Δt_over_τ_a);
-    return simdSelect(Δt == Real(0), α_aⁿ, α_aⁿ_plus_1);
+    Real const αⁿ_plus_1_a = α_star + (αⁿ_a - α_star + Δt * S_a) / (Real(1) + Δt_over_τ_a);
+    return simdSelect(Δt == Real(0), αⁿ_a, αⁿ_plus_1_a);
 }
 
 }    // namespace morris_and_monaghan

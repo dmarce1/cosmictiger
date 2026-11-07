@@ -70,12 +70,12 @@ CUDA_EXPORT inline Real pressureVolumeFactor(Real P_i, Real x_i, Real y_i) {
  *   Q_ij = (P_i x_i/y_i²)(x_j − ζ_i).
  * Symbol directory:
  *   P_i x_i/y_i² → sink pressure volume factor; x_j → neighbor volume weight; ζ_i → sink grad-H correction; Q_ij → return value.
- *   Code names: P_i_x_i_over_y_i2 = P_i x_i/y_i².
+ *   Code names: P_i_x_i_over_y2_i = P_i x_i/y_i².
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real directedCoefficient(Real P_i_x_i_over_y_i2, Real x_j, Real ζ_i) {
-    return P_i_x_i_over_y_i2 * (x_j - ζ_i);
+CUDA_EXPORT inline Real directedCoefficient(Real P_i_x_i_over_y2_i, Real x_j, Real ζ_i) {
+    return P_i_x_i_over_y2_i * (x_j - ζ_i);
 }
 
 // Hopkins (2013), equation 12, or Price (2012), equation 30 in the equal-mass limit.

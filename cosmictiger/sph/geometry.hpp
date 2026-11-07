@@ -16,24 +16,33 @@ inline constexpr double kUnitBallVolume = kSpatialDimensions == 1 ?
 template <class Real>
 using SpatialVector = math::Vector<Real, kSpatialDimensions>;
 
-// Padded XYZ records are an I/O/storage convention, not extra spatial directions.
-template <class Real>
-CUDA_EXPORT inline SpatialVector<Real> spatialVector(Vector3<Real> const& padded) {
+// One particle's vector, gathered from separate component arrays over the active axes.
+template <class Real, class Index>
+CUDA_EXPORT inline SpatialVector<Real> loadSpatialVector(
+    Real const* x, Real const* y, Real const* z, Index index) {
+    Real const* const components[kDimensions] = {x, y, z};
     SpatialVector<Real> result;
     for (int dim = 0; dim < kSpatialDimensions; ++dim) {
-        result[dim] = padded[dim];
+        result[dim] = components[dim][index];
     }
     return result;
 }
 
+// Padded XYZ records are an I/O/storage convention, not extra spatial directions. Interfaces
+// outside the SPH kernels and the three-component curl still take them; pad only at those
+// boundaries. Inactive axes hold zero.
 template <class Real>
-CUDA_EXPORT inline Real spatialDot(Vector3<Real> const& left, Vector3<Real> const& right) {
-    return spatialVector(left).dot(spatialVector(right));
+CUDA_EXPORT inline Vector3<Real> paddedVector(SpatialVector<Real> const& spatial) {
+    Vector3<Real> padded(Real(0));
+    for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+        padded[dim] = spatial[dim];
+    }
+    return padded;
 }
 
 // Derived from W_D = H⁻ᴰ w_D(r/H): density scales as H⁻ᴰ and its
-// gradient as H⁻⁽ᴰ⁺¹⁾. D → spatial dimensions; H⁻¹ → inverse support.
-// Code names: H_inv = H⁻¹.
+// gradient as H⁻⁽ᴰ⁺¹⁾. D → spatial dimensions; H⁻¹, H⁻² → inverse support and its square.
+// Code names: H_inv = H⁻¹; H_inv2 = H⁻².
 // Hopkins (2013), https://arxiv.org/abs/1206.5006, equations (8)–(13),
 // generalized here from 3D. Retain the established 3D multiplication order.
 template <class Real>
@@ -50,15 +59,33 @@ CUDA_EXPORT inline Real inverseVolume(Real H_inv) {
 template <class Real>
 CUDA_EXPORT inline Real inverseGradientScale(Real H_inv) {
     if constexpr (kSpatialDimensions == 3) {
-        Real const squared = H_inv * H_inv;
-        return squared * squared;
+        Real const H_inv2 = H_inv * H_inv;
+        return H_inv2 * H_inv2;
     } else {
         return inverseVolume(H_inv) * H_inv;
     }
 }
 
-inline double supportRadius(double mass, double density, double neighbors) {
-    return std::pow(mass * neighbors / (kUnitBallVolume * density), 1.0 / kSpatialDimensions);
+// Derived from V_D Hᴰ ρ/m = N, the neighbor count of a uniform density:
+//   H = [m N/(V_D ρ)]^(1/D).
+// m → particle mass; ρ → density; N → neighbor count; V_D → unit ball volume;
+// D → spatial dimensions; H → support radius (return value).
+inline double supportRadius(double m, double ρ, double N) {
+    return std::pow(m * N / (kUnitBallVolume * ρ), 1.0 / kSpatialDimensions);
 }
 
 }    // namespace sph_geometry
+
+// Component separations r_ab = x_a − x_b of two position vectors over the active axes, using
+// the scalar distance() of the coordinate type. x_a, x_b → sink, neighbor position;
+// r_ab → separation (return value). Global so that distance(x_a, x_b) resolves in kernels.
+template <class Coordinate>
+CUDA_EXPORT inline sph_geometry::SpatialVector<float> distance(
+    sph_geometry::SpatialVector<Coordinate> const& x_a,
+    sph_geometry::SpatialVector<Coordinate> const& x_b) {
+    sph_geometry::SpatialVector<float> r_ab;
+    for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+        r_ab[dim] = distance(x_a[dim], x_b[dim]);
+    }
+    return r_ab;
+}

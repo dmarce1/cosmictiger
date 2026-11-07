@@ -7,8 +7,8 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/cuda/cuda_export.hpp>
-#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
+#include <cosmictiger/sph/geometry.hpp>
 
 // Event-local identities remain valid until the frozen pass and its reverse
 // exchange finish. No particle migration or reordering may intervene.
@@ -157,7 +157,7 @@ CUDA_EXPORT inline bool sphOwnsPairKick(SphPairSourceId const& target,
  */
 // clang-format on
 CUDA_EXPORT inline FlopCount sphAccumulatePairKick(SphPairUpdate& a, SphPairUpdate& b,
-    Vector3<float> const& a_ab, float Ȧ_ab, float Ȧ_ba, float Δτ) {
+    sph_geometry::SpatialVector<float> const& a_ab, float Ȧ_ab, float Ȧ_ba, float Δτ) {
     FlopCount operations = kSpatialDimensions + 2;    // Impulse and entropy products.
     for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
         float const Δv_a = Δτ * a_ab[dimension];
@@ -169,11 +169,13 @@ CUDA_EXPORT inline FlopCount sphAccumulatePairKick(SphPairUpdate& a, SphPairUpda
     return operations;
 }
 
+// Derived one-sided form of the kick above, Δv_a = Δτ dv/dτ, for forces without a gas partner.
+// Δτ → timestep; dv/dτ → external acceleration. Code names: dv_dτ = dv/dτ.
 CUDA_EXPORT inline FlopCount sphAccumulateExternalKick(
-    SphPairUpdate& target, Vector3<float> const& acceleration, float timestep) {
+    SphPairUpdate& target, sph_geometry::SpatialVector<float> const& dv_dτ, float Δτ) {
     FlopCount operations = kSpatialDimensions;
     for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
-        operations += target.velocity[dimension].add(timestep * acceleration[dimension]);
+        operations += target.velocity[dimension].add(Δτ * dv_dτ[dimension]);
     }
     return operations;
 }

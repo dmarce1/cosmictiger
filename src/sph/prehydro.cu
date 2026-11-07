@@ -8,9 +8,12 @@
 
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/sph/cuda.hpp>
+#include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/viscosity/balsara.hpp>
 #include <cosmictiger/sph/viscosity/monaghan.hpp>
 #include <cosmictiger/sph/viscosity/morris_and_monaghan.hpp>
+
+using sph_geometry::SpatialVector;
 
 namespace detail {
 
@@ -22,7 +25,7 @@ struct SmoothingWorkspace {
 struct NeighborActivity {
     float smoothingLength;
     char rung;
-    Vector3<float> velocity;
+    SpatialVector<float> v;
 };
 
 struct DensityWorkspace {
@@ -36,6 +39,7 @@ struct DensityWorkspace {
 
 }    // namespace detail
 
+// H_a → sink kernel smoothing length, solved in place.
 __global__ void sphCudaSmoothingLengths(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
     sph_flops::Counter flops = 0;
@@ -60,12 +64,9 @@ __global__ void sphCudaSmoothingLengths(
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
                 sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
-                Vector3<Position> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
-                    position[kXi] = data.sourcePositionX[sourceParticleIndex];
-                    position[kYi] = data.sourcePositionY[sourceParticleIndex];
-                    position[kZi] = data.sourcePositionZ[sourceParticleIndex];
-                    contains = targetNode.outerBox.contains(position, &flops.doublePrecision);
+                    contains = targetNode.outerBox.contains(
+                        data.sourcePaddedPosition(sourceParticleIndex), &flops.doublePrecision);
                 }
                 int slot = contains;
                 int total;
@@ -74,8 +75,7 @@ __global__ void sphCudaSmoothingLengths(
                 __syncthreads();
                 workspace.positions.resize(offset + total);
                 if (contains) {
-                    workspace.positions[offset + slot] = {
-                        position[kXi], position[kYi], position[kZi]};
+                    workspace.positions[offset + slot] = {data.sourcePosition(sourceParticleIndex)};
                 }
             }
         }
@@ -87,20 +87,17 @@ __global__ void sphCudaSmoothingLengths(
             bool const active = parameters.isActiveRung(
                 data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]]);
             if (active && !data.sinkFlags[sinkIndex].converged()) {
-                Vector3<Position> position;
-                position[kXi] = data.sourcePositionX[particleIndex];
-                position[kYi] = data.sourcePositionY[particleIndex];
-                position[kZi] = data.sourcePositionZ[particleIndex];
-                float& smoothingLength = data.sinkSmoothingLength[sinkIndex];
-                bool const converged = solveSphSmoothingLength<kSmoothingLengthsBlockSize>(
-                    smoothingLength, parameters.minimumSmoothingLength,
-                    parameters.maximumSmoothingLength, data.targetNeighborCount,
-                    workspace.positions, position, targetNode.outerBox, flops);
+                float& H_a = data.sinkSmoothingLength[sinkIndex];
+                bool const converged = solveSphSmoothingLength<kSmoothingLengthsBlockSize>(H_a,
+                    parameters.minimumSmoothingLength, parameters.maximumSmoothingLength,
+                    data.targetNeighborCount, workspace.positions,
+                    data.sourcePosition(particleIndex), data.sourcePaddedPosition(particleIndex),
+                    targetNode.outerBox, flops);
                 if (threadIndex == 0) {
                     data.sinkFlags[sinkIndex].setConverged(converged);
                     if (converged) {
-                        atomicMin(&reduction->minimumSmoothingLength, smoothingLength);
-                        atomicMax(&reduction->maximumSmoothingLength, smoothingLength);
+                        atomicMin(&reduction->minimumSmoothingLength, H_a);
+                        atomicMax(&reduction->maximumSmoothingLength, H_a);
                     } else {
                         atomicAdd(&reduction->pendingChanges, 1);
                     }
@@ -126,28 +123,33 @@ __global__ void sphCudaSmoothingLengths(
  *   ρ_a ∇·v_a = −Σ_b m_b v_ab · ∇_a W_ab,
  *   ρ_a ∇×v_a = Σ_b m_b v_ab × ∇_a W_ab.
  * Symbol directory (Pack denotes SIMD partial sums):
- *   H_a → sink kernel smoothing length; q_ab → normalized radius; w(q_ab) → kernel weight
+ *   H_a, H_a⁻¹ → sink kernel smoothing length, its inverse; q_ab → normalized radius
+ *   w(q_ab) → kernel weight; m_b/H_aᴰ → mass over support volume
  *   ρ_a → density; ρ_a ∇·v_a → density-weighted divergence
  *   ρ_a ∇×v_a → density-weighted curl
- *   r_ab, v_ab → separation, velocity difference (peculiar stored velocity)
- *   m_b ∇_a W_ab → mass-weighted kernel gradient
+ *   γ, γ − 1 → gas adiabatic index, P/(ρu) of all gas
+ *   x_a → sink position; paddedX_b → neighbor position as the record of the box tests
+ *   r_ab, |r_ab|, r_ab² → separation, distance, squared separation
+ *   H_b → neighbor kernel smoothing length
+ *   v_ab → velocity difference (peculiar stored velocity)
+ *   m_b F_a → mass-weighted kernel gradient factor; m_b ∇_a W_ab → mass-weighted kernel gradient
  *   Σ_b w → kernel sum; Σ_b q_ab w′ → kernel derivative moment
- *   Code names: w_q_ab = w(q_ab); ρ_a_div_v_a = ρ_a ∇·v_a; ρ_a_curl_v_a = ρ_a ∇×v_a;
- *     m_b_grad_a_W_ab = m_b ∇_a W_ab; ΣW = Σ_b w; Σqwʹ = Σ_b q_ab w′.
- * Peculiar velocities enter the divergence, the curl and densityDerivativeSum.
- * Dividing densityDerivativeSum by a ρ_a Ω_a gives d ln ρ_a/dτ
- * (Price 2012, equation (27), https://arxiv.org/abs/1012.1885).
+ *   H_a,stored → stored smoothing length, updated by the solver
+ *   Code names: H_inv_a = H_a⁻¹; H_a_stored = H_a,stored; m_b_over_Hᴰ_a = m_b/H_aᴰ;
+ *     γ_minus_1 = γ − 1; abs_r_ab = |r_ab|; r2_ab = r_ab²; w_q_ab = w(q_ab); ρ_a_div_v_a = ρ_a ∇·v_a; ρ_a_curl_v_a = ρ_a ∇×v_a;
+ *     m_b_F_a = m_b F_a; m_b_grad_a_W_ab = m_b ∇_a W_ab; ΣW = Σ_b w; Σqwʹ = Σ_b q_ab w′.
+ * Peculiar velocities enter the divergence and the curl.
+ * The curl stays a three-component record: a two-dimensional curl points along the inactive axis.
  */
 // clang-format on
 __global__ void sphCudaDensityAndGradients(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
     bool const evolveMorrisMonaghan =
         parameters.variableViscosity && parameters.viscosityTimestep > 0.0;
-    bool const loadVelocity =
-        parameters.balsaraSwitch || evolveMorrisMonaghan || data.sinkLogDensityRate;
+    bool const loadVelocity = parameters.balsaraSwitch || evolveMorrisMonaghan;
     sph_flops::Counter flops = 1;    // γ − 1.
-    float const adiabaticIndex = data.adiabaticIndex;
-    float const pressureEnergyRatio = adiabaticIndex - 1.0f;    // P/(ρu) for every particle.
+    float const γ = data.adiabaticIndex;
+    float const γ_minus_1 = γ - 1.0f;    // P/(ρu) for every particle.
     int const threadIndex = threadIdx.x;
     int const blockSize = blockDim.x;
     __shared__ int targetNodeIndex;
@@ -170,14 +172,12 @@ __global__ void sphCudaDensityAndGradients(
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
                 sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
-                Vector3<Position> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
-                    position[kXi] = data.sourcePositionX[sourceParticleIndex];
-                    position[kYi] = data.sourcePositionY[sourceParticleIndex];
-                    position[kZi] = data.sourcePositionZ[sourceParticleIndex];
-                    contains = targetNode.outerBox.contains(position, &flops.doublePrecision);
+                    Vector3<Position> const paddedX_b =
+                        data.sourcePaddedPosition(sourceParticleIndex);
+                    contains = targetNode.outerBox.contains(paddedX_b, &flops.doublePrecision);
                     if (!contains) {
-                        contains = sphSupportIntersects(targetNode.innerBox, position,
+                        contains = sphSupportIntersects(targetNode.innerBox, paddedX_b,
                             data.sourceSmoothingLength[sourceParticleIndex], &flops);
                     }
                 }
@@ -189,15 +189,12 @@ __global__ void sphCudaDensityAndGradients(
                 workspace.positions.resize(offset + total);
                 workspace.particles.resize(offset + total);
                 if (contains) {
-                    workspace.positions[offset + slot] = {
-                        position[kXi], position[kYi], position[kZi]};
+                    workspace.positions[offset + slot] = {data.sourcePosition(sourceParticleIndex)};
                     workspace.particles[offset + slot] = {
                         data.sourceSmoothingLength[sourceParticleIndex],
                         data.sourceRungs[sourceParticleIndex],
-                        loadVelocity ? Vector3<float>(data.sourceVelocityX[sourceParticleIndex],
-                                           data.sourceVelocityY[sourceParticleIndex],
-                                           data.sourceVelocityZ[sourceParticleIndex]) :
-                                       Vector3<float>(0.0f)};
+                        loadVelocity ? data.sourceVelocity(sourceParticleIndex) :
+                                       SpatialVector<float>(0.0f)};
                 }
             }
         }
@@ -208,11 +205,8 @@ __global__ void sphCudaDensityAndGradients(
                 targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
             bool const active = parameters.isActiveRung(
                 data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]]);
-            Vector3<Position> position;
-            position[kXi] = data.sourcePositionX[particleIndex];
-            position[kYi] = data.sourcePositionY[particleIndex];
-            position[kZi] = data.sourcePositionZ[particleIndex];
-            float& smoothingLength = data.sinkSmoothingLength[sinkIndex];
+            SpatialVector<Position> const x_a = data.sourcePosition(particleIndex);
+            float& H_a_stored = data.sinkSmoothingLength[sinkIndex];
             int semiactive = active;
             if (!active) {
                 for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
@@ -220,12 +214,12 @@ __global__ void sphCudaDensityAndGradients(
                     auto const& neighbor = workspace.positions[neighborIndex];
                     auto const& particle = workspace.particles[neighborIndex];
                     if (parameters.isActiveRung(particle.rung)) {
-                        float const separationX = distance(position[kXi], neighbor.positionX);
-                        float const separationY = distance(position[kYi], neighbor.positionY);
-                        float const separationZ = distance(position[kZi], neighbor.positionZ);
-                        flops += 10;    // Three fixed distances, squared norm, two supports.
-                        if (sqr(separationX, separationY, separationZ) <
-                            fmaxf(sqr(smoothingLength), sqr(particle.smoothingLength))) {
+                        auto const r_ab = distance(x_a, neighbor.x);
+                        float const r2_ab = r_ab.dot(r_ab);
+                        float const H_b = particle.smoothingLength;
+                        // Fixed distances, squared norm, two supports.
+                        flops += sph_flops::kVectorOperation + sph_flops::kDotProduct + 2;
+                        if (r2_ab < fmaxf(sqr(H_a_stored), sqr(H_b))) {
                             semiactive++;
                         }
                     }
@@ -246,10 +240,10 @@ __global__ void sphCudaDensityAndGradients(
             bool const computeSphDivergence = parameters.balsaraSwitch || updateMorrisMonaghan;
             bool converged = true;
             if (!active && !data.sinkFlags[sinkIndex].converged()) {
-                converged = solveSphSmoothingLength<kDensityAndGradientsBlockSize>(smoothingLength,
+                converged = solveSphSmoothingLength<kDensityAndGradientsBlockSize>(H_a_stored,
                     parameters.minimumSmoothingLength, parameters.maximumSmoothingLength,
-                    data.targetNeighborCount, workspace.positions, position, targetNode.outerBox,
-                    flops);
+                    data.targetNeighborCount, workspace.positions, x_a,
+                    data.sourcePaddedPosition(particleIndex), targetNode.outerBox, flops);
             }
             if (!converged) {
                 if (threadIndex == 0) {
@@ -272,15 +266,13 @@ __global__ void sphCudaDensityAndGradients(
              */
             // clang-format on
 
-            float const H_a = smoothingLength;
-            float const inverseSmoothingLength = 1.0f / H_a;
-            float const massOverSupportVolume =
-                data.gasMass * sph_geometry::inverseVolume(inverseSmoothingLength);
-            flops += 4;    // Reciprocal support and the mass/support-cubed scale.
+            float const H_a = H_a_stored;
+            float const H_inv_a = 1.0f / H_a;
+            float const m_b_over_Hᴰ_a = data.gasMass * sph_geometry::inverseVolume(H_inv_a);
+            flops += 2 + sph_flops::kInverseVolume;    // Reciprocal and mass/support products.
             float ρ_a = 0.0f;
-            float densityDerivativeSum = 0.0f;
             float ρ_a_div_v_a = 0.0f;
-            Vector3<float> ρ_a_curl_v_a(0.0f);
+            Vector3<float> ρ_a_curl_v_a(0.0f);    // padded: see the curl above
             // clang-format off
             /*
              * Variational operator: ΣW = Σ_b w(q_ab) and Σ_b q_ab w'(q_ab) give Ω_a and ζ_a.
@@ -296,58 +288,45 @@ __global__ void sphCudaDensityAndGradients(
             for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
                 neighborIndex += blockSize) {
                 auto const& neighbor = workspace.positions[neighborIndex];
-                Vector3<float> const r_ab(distance(position[kXi], neighbor.positionX),
-                    distance(position[kYi], neighbor.positionY),
-                    distance(position[kZi], neighbor.positionZ));
-                float const radius = sqrtf(sph_geometry::spatialDot(r_ab, r_ab));
-                float const q_ab = radius * inverseSmoothingLength;    // |r_ab|/H_a
+                auto const r_ab = distance(x_a, neighbor.x);
+                float const abs_r_ab = r_ab.norm();
+                float const q_ab = abs_r_ab * H_inv_a;    // |r_ab|/H_a
                 float const w_q_ab = kernelW(q_ab);
-                ρ_a += massOverSupportVolume * w_q_ab;
-                flops += 12 + sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab);
+                ρ_a += m_b_over_Hᴰ_a * w_q_ab;
+                // Fixed distances, norm, q_ab, density product and sum.
+                flops += sph_flops::kVectorOperation + sph_flops::kNorm + 3 +
+                    sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab);
                 if (q_ab < 1.0f) {
                     ΣW += w_q_ab;
                     Σqwʹ += q_ab * dkernelWDq(q_ab);
                     flops +=
                         3 + sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
                 }
-                if ((computeSphDivergence || data.sinkLogDensityRate) && radius > 0.0f &&
-                    q_ab < 1.0f) {
+                if (computeSphDivergence && abs_r_ab > 0.0f && q_ab < 1.0f) {
                     // clang-format off
                     /*
                      * GADGET-4 equation (72) uses −Σ_b m_b v_ab·gradW_ab and Σ_b m_b v_ab×gradW_ab.
-                     * The independent density derivative keeps its variational SPH sum.
                      *
                      * Symbol directory (in the code below):
-                     *   v_ab → velocity difference; m_b → gas mass; ρ_a → density.
+                     *   v_a, v_b → sink, neighbor stored velocity; v_ab → velocity difference;
+                     *   m_b → gas mass; ρ_a → density.
                      */
                     // clang-format on
-                    float const massWeightedGradientFactor =
-                        massOverSupportVolume * inverseSmoothingLength * dkernelWDq(q_ab) / radius;
+                    float const m_b_F_a = m_b_over_Hᴰ_a * H_inv_a * dkernelWDq(q_ab) / abs_r_ab;
                     auto const& particle = workspace.particles[neighborIndex];
-                    Vector3<float> const v_ab = Vector3<float>(data.sourceVelocityX[particleIndex],
-                                                    data.sourceVelocityY[particleIndex],
-                                                    data.sourceVelocityZ[particleIndex]) -
-                        particle.velocity;
-                    // Kernel-gradient coefficient (3) and relative velocity (3).
-                    flops +=
-                        6 + sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
-                    Vector3<float> const m_b_grad_a_W_ab = massWeightedGradientFactor * r_ab;
-                    flops += 3;
-                    if (data.sinkLogDensityRate) {
-                        densityDerivativeSum += sph_geometry::spatialDot(v_ab, m_b_grad_a_W_ab);
-                        flops += 6;
-                    }
-                    if (computeSphDivergence) {
-                        ρ_a_div_v_a -= sph_geometry::spatialDot(v_ab, m_b_grad_a_W_ab);
-                        flops += 6;
-                    }
+                    SpatialVector<float> const v_a = data.sourceVelocity(particleIndex);
+                    SpatialVector<float> const& v_b = particle.v;
+                    SpatialVector<float> const v_ab = v_a - v_b;
+                    // Kernel-gradient coefficient (3) and relative velocity.
+                    flops += 3 + sph_flops::kVectorOperation +
+                        sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
+                    SpatialVector<float> const m_b_grad_a_W_ab = m_b_F_a * r_ab;
+                    flops += sph_flops::kVectorOperation;
+                    ρ_a_div_v_a -= v_ab.dot(m_b_grad_a_W_ab);
+                    flops += sph_flops::kDotProduct + 1;
                     if (parameters.balsaraSwitch) {
-                        for (int dim = 0; dim < kDimensions; ++dim) {
-                            int const next = (dim + 1) % kDimensions;
-                            int const last = (dim + 2) % kDimensions;
-                            ρ_a_curl_v_a[dim] += v_ab[next] * m_b_grad_a_W_ab[last] -
-                                v_ab[last] * m_b_grad_a_W_ab[next];
-                        }
+                        ρ_a_curl_v_a += sph_geometry::paddedVector(v_ab).cross(
+                            sph_geometry::paddedVector(m_b_grad_a_W_ab));
                         flops += 12;
                     }
                 }
@@ -357,10 +336,6 @@ __global__ void sphCudaDensityAndGradients(
             sharedReduceAdd<float, kDensityAndGradientsBlockSize>(ΣW);
             sharedReduceAdd<float, kDensityAndGradientsBlockSize>(Σqwʹ);
             flops += 2 * detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
-            if (data.sinkLogDensityRate) {
-                sharedReduceAdd<float, kDensityAndGradientsBlockSize>(densityDerivativeSum);
-                flops += detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
-            }
             if (computeSphDivergence) {
                 sharedReduceAdd<float, kDensityAndGradientsBlockSize>(ρ_a_div_v_a);
                 flops += detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
@@ -406,20 +381,6 @@ __global__ void sphCudaDensityAndGradients(
                     }
                 }
                 data.sinkGradHCorrection[sinkIndex] = gradH.correction.weightedSupportCorrection;
-                if (data.sinkLogDensityRate) {
-                    // clang-format off
-                    /*
-                     * Price (2012), equation (27), with peculiar motion only:
-                     * d log(rho_comoving)/d tau = sum m v_ab.grad W/(a rho Omega).
-                     *
-                     * Symbol directory (in the code below):
-                     *   v_ab → velocity difference
-                     */
-                    // clang-format on
-                    data.sinkLogDensityRate[sinkIndex] = densityDerivativeSum /
-                        (parameters.scaleFactor * ρ_a * gradH.correction.supportJacobian);
-                    flops += 3;
-                }
 
                 if (parameters.balsaraSwitch && data.sinkBalsaraFactor) {
                     data.sinkBalsaraFactor[sinkIndex] = balsara::encodeFactor(
@@ -430,33 +391,36 @@ __global__ void sphCudaDensityAndGradients(
                 }
                 if (updateMorrisMonaghan) {
                     /*
-                     * Morris & Monaghan (1997), equations (5), (6), (13), in conformal time.
+                     * Morris & Monaghan (1997), equations (5), (6), (13), in conformal time; the
+                     * update is in cosmictiger/sph/viscosity/morris_and_monaghan.hpp. The sum/rho
+                     * is a² div_phys(v); conformal-time rates divide by a. τ_a⁻¹ = C₁ c_a/h_a,
+                     * ∇·v_a = ρ_a ∇·v_a/(a ρ_a). Symbol directory: ∇·v_a → divergence; c_a → sound
+                     * speed; h_a → viscosity smoothing length τ_a⁻¹ → inverse decay time; C₁ →
+                     * viscosity decay parameter; Δt → time step α_a → stored bulk viscosity
+                     * coefficient. Code names: div_v_a = ∇·v_a; τ_inv_a = τ_a⁻¹.
                      */
-
-                    float const velocityDivergence = ρ_a_div_v_a / (ρ_a * parameters.scaleFactor);
-                    float const soundSpeed = sqrtf(adiabaticIndex * pressureEnergyRatio *
-                        data.sourceInternalEnergy[particleIndex]);
-                    float const smoothingLength = H_a /
+                    float const div_v_a = ρ_a_div_v_a / (ρ_a * parameters.scaleFactor);
+                    float const c_a =
+                        sqrtf(γ * γ_minus_1 * data.sourceInternalEnergy[particleIndex]);
+                    float const h_a = H_a /
                         selectedHydroKernel().smoothingLengthPerEffectiveRadius *
                         float(monaghan::kViscosityWidthScale);
-                    float const inverseDecayTime = parameters.viscosityDecay * soundSpeed /
-                        (parameters.scaleFactor * smoothingLength);
+                    float const τ_inv_a =
+                        parameters.viscosityDecay * c_a / (parameters.scaleFactor * h_a);
                     int const rung = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]];
                     bool const actualInterval = parameters.globalTimestep;
-                    float const timeStep = actualInterval ?
-                        parameters.viscosityTimestep :
-                        parameters.viscosityTimestep / (1 << rung);
-                    auto& bulkViscosityCoefficient = data.sinkBulkViscosityCoefficient[sinkIndex];
-                    bulkViscosityCoefficient = morris_and_monaghan::evolvedBulkViscosityCoefficient(
-                        float(bulkViscosityCoefficient), parameters.minimumBulkViscosityCoefficient,
-                        inverseDecayTime, velocityDivergence, timeStep);
+                    float const Δt = actualInterval ? parameters.viscosityTimestep :
+                                                      parameters.viscosityTimestep / (1 << rung);
+                    auto& α_a = data.sinkBulkViscosityCoefficient[sinkIndex];
+                    α_a = morris_and_monaghan::evolvedBulkViscosityCoefficient(float(α_a),
+                        parameters.minimumBulkViscosityCoefficient, τ_inv_a, div_v_a, Δt);
 
                     flops += 19;
                     flops.doublePrecision += actualInterval ? 1 : 2;
                 }
                 data.sinkFlags[sinkIndex].setConverged(true);
-                atomicMin(&reduction->minimumSmoothingLength, smoothingLength);
-                atomicMax(&reduction->maximumSmoothingLength, smoothingLength);
+                atomicMin(&reduction->minimumSmoothingLength, H_a_stored);
+                atomicMax(&reduction->maximumSmoothingLength, H_a_stored);
             }
         }
         __syncthreads();

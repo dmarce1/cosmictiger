@@ -8,6 +8,9 @@
 
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/sph/cuda.hpp>
+#include <cosmictiger/sph/geometry.hpp>
+
+using sph_geometry::SpatialVector;
 
 namespace detail {
 
@@ -15,16 +18,20 @@ struct RungsWorkspace {
     // Fit 1024 fixed32 neighbors with little short-list cost in the RTX 3090 sweep.
     static constexpr int kSharedBytes = 20 * 1024;
     static constexpr int kSharedCapacity =
-        kSharedBytes / (3 * sizeof(Position) + sizeof(float) + sizeof(char));
-    SharedNeighborBuffer<Position, kSharedCapacity> positionX;
-    SharedNeighborBuffer<Position, kSharedCapacity> positionY;
-    SharedNeighborBuffer<Position, kSharedCapacity> positionZ;
+        kSharedBytes / (sizeof(SpatialVector<Position>) + sizeof(float) + sizeof(char));
+    SharedNeighborBuffer<SpatialVector<Position>, kSharedCapacity> x;
     SharedNeighborBuffer<float, kSharedCapacity> smoothingLength;
     SharedNeighborBuffer<char, kSharedCapacity> rungs;
 };
 
 }    // namespace detail
 
+// Locally derived monotone neighbor-graph closure of sphCpuRungs, including inactive endpoints:
+//   L_a⁽ᵏ⁺¹⁾ = max(L_a⁽ᵏ⁾, max_{b: |r_ab| ≤ max(H_a, H_b)} L_b⁽ᵏ⁾ − 1).
+// Symbol directory: L_a → sink rung; max L_b → maximum neighbor rung;
+// H_a, H_b → sink, neighbor kernel smoothing length; x_a, x_b → sink, neighbor position;
+// paddedX_b → neighbor position as the record of the box tests; r_ab → separation;
+// r_ab² → squared separation. Code names: r2_ab = r_ab²; H2_a = H_a².
 __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction* reduction) {
     int const threadIndex = threadIdx.x;
     int const blockSize = blockDim.x;
@@ -36,13 +43,10 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
     __syncthreads();
     new (&workspace) detail::RungsWorkspace();
     sph_flops::Counter flops = 0;
-    Vector3<Position> position;
     int changes = 0;
     while (targetNodeIndex < data.numberOfTargetNodes) {
         __syncthreads();
-        workspace.positionX.resize(0);
-        workspace.positionY.resize(0);
-        workspace.positionZ.resize(0);
+        workspace.x.resize(0);
         workspace.smoothingLength.resize(0);
         workspace.rungs.resize(0);
         SphTreeNode const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
@@ -62,32 +66,27 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
                 int rung;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
                     rung = data.sourceRungs[sourceParticleIndex];
-                    position[kXi] = data.sourcePositionX[sourceParticleIndex];
-                    position[kYi] = data.sourcePositionY[sourceParticleIndex];
-                    position[kZi] = data.sourcePositionZ[sourceParticleIndex];
-                    if (targetNode.outerBox.contains(position, &flops.doublePrecision)) {
+                    Vector3<Position> const paddedX_b =
+                        data.sourcePaddedPosition(sourceParticleIndex);
+                    if (targetNode.outerBox.contains(paddedX_b, &flops.doublePrecision)) {
                         contains = true;
                     } else {
-                        contains = sphSupportIntersects(targetNode.innerBox, position,
+                        contains = sphSupportIntersects(targetNode.innerBox, paddedX_b,
                             data.sourceSmoothingLength[sourceParticleIndex], &flops);
                     }
                 }
                 neighborIndex = contains;
                 computeIndices<kRungsBlockSize>(neighborIndex, total);
-                int const offset = workspace.positionX.size();
+                int const offset = workspace.x.size();
                 __syncthreads();
                 int const nextSize = offset + total;
-                workspace.positionX.resize(nextSize);
-                workspace.positionY.resize(nextSize);
-                workspace.positionZ.resize(nextSize);
+                workspace.x.resize(nextSize);
                 workspace.smoothingLength.resize(nextSize);
                 workspace.rungs.resize(nextSize);
                 if (contains) {
                     ASSERT(neighborIndex < total);
                     int const k = offset + neighborIndex;
-                    workspace.positionX[k] = position[kXi];
-                    workspace.positionY[k] = position[kYi];
-                    workspace.positionZ[k] = position[kZi];
+                    workspace.x[k] = data.sourcePosition(sourceParticleIndex);
                     workspace.smoothingLength[k] = data.sourceSmoothingLength[sourceParticleIndex];
                     workspace.rungs[k] = rung;
                 }
@@ -98,32 +97,26 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
             __syncthreads();
             int const sinkIndex =
                 targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
-            auto const sinkPositionX = data.sourcePositionX[particleIndex];
-            auto const sinkPositionY = data.sourcePositionY[particleIndex];
-            auto const sinkPositionZ = data.sourcePositionZ[particleIndex];
-            auto const sinkSmoothingLength = data.sinkSmoothingLength[sinkIndex];
+            auto const x_a = data.sourcePosition(particleIndex);
+            auto const H_a = data.sinkSmoothingLength[sinkIndex];
             int const sinkRung = data.sourceRungs[particleIndex];
-            auto const squaredSinkSmoothingLength = sqr(sinkSmoothingLength);
+            auto const H2_a = sqr(H_a);
             flops += 1;
-            int const roundedNeighborEnd = roundUp(workspace.positionX.size(), blockSize);
+            int const roundedNeighborEnd = roundUp(workspace.x.size(), blockSize);
             int maximumNeighborRung = 0;
             for (int neighborIndex = threadIndex; neighborIndex < roundedNeighborEnd;
                 neighborIndex += blockSize) {
-                if (neighborIndex < workspace.positionX.size()) {
-                    auto const neighborPositionX = workspace.positionX[neighborIndex];
-                    auto const neighborPositionY = workspace.positionY[neighborIndex];
-                    auto const neighborPositionZ = workspace.positionZ[neighborIndex];
+                if (neighborIndex < workspace.x.size()) {
+                    auto const x_b = workspace.x[neighborIndex];
                     int const neighborRung = workspace.rungs[neighborIndex];
-                    float const separationX = distance(sinkPositionX, neighborPositionX);    // 1
-                    float const separationY = distance(sinkPositionY, neighborPositionY);    // 1
-                    float const separationZ = distance(sinkPositionZ, neighborPositionZ);    // 1
-                    float const squaredSeparation =
-                        sqr(separationX, separationY, separationZ);    // 5
-                    if (squaredSeparation <= fmaxf(squaredSinkSmoothingLength,
-                                                 sqr(workspace.smoothingLength[neighborIndex]))) {
+                    auto const r_ab = distance(x_a, x_b);
+                    float const r2_ab = r_ab.dot(r_ab);
+                    float const H_b = workspace.smoothingLength[neighborIndex];
+                    if (r2_ab <= fmaxf(H2_a, sqr(H_b))) {
                         maximumNeighborRung = max(maximumNeighborRung, neighborRung);
                     }
-                    flops += 9;
+                    // Fixed distances, dot, H_b².
+                    flops += sph_flops::kVectorOperation + sph_flops::kDotProduct + 1;
                 }
             }
             sharedReduceMax<kRungsBlockSize>(maximumNeighborRung);

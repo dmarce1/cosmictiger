@@ -64,19 +64,17 @@ CUDA_EXPORT inline float decodeFactor(uint8_t q) {
  *   |∇·v_a| → absolute divergence
  *   |∇·v_a| + |∇×v_a| → limiter denominator; f_aᴬⱽ → shear limiter.
  *   Code names: div_v_a = ∇·v_a; abs_curl_v_a = |∇×v_a|; abs_div_v_a = |∇·v_a|;
- *     abs_div_v_a_plus_abs_curl_v_a = |∇·v_a| + |∇×v_a|.
+ *     abs_div_v_a_plus_abs_curl_v_a = |∇·v_a| + |∇×v_a|; fᴬⱽ_a = f_aᴬⱽ.
  * Density-weighted inputs are also valid because their common factor cancels.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real balsaraFactor(Real divergence, Real curlMagnitude) {
-    Real const div_v_a = divergence;
+CUDA_EXPORT inline Real balsaraFactor(Real div_v_a, Real abs_curl_v_a) {
     Real const abs_div_v_a = simdMax(div_v_a, -div_v_a);
-    Real const abs_curl_v_a = curlMagnitude;
     Real const abs_div_v_a_plus_abs_curl_v_a = abs_div_v_a + abs_curl_v_a;
-    Real const f_aᴬⱽ = abs_div_v_a /
+    Real const fᴬⱽ_a = abs_div_v_a /
         simdSelect(abs_div_v_a_plus_abs_curl_v_a > Real(0), abs_div_v_a_plus_abs_curl_v_a, Real(1));
-    return f_aᴬⱽ;
+    return fᴬⱽ_a;
 }
 
 }    // namespace balsara

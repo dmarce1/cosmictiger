@@ -62,21 +62,16 @@ inline constexpr double kViscosityWidthScale =
  *   h̄_ab → pair smoothing length; ε → viscosity epsilon
  *   η² → regularization length squared; μ_ab → viscosity velocity (return value)
  *   h_a = H_a / smoothingLengthPerEffectiveRadius × viscosityWidthScale.
- *   Code names: r_ab2 = r_ab²; v_ab_dot_r_ab = v_ab · r_ab; η2 = η².
+ *   Code names: r2_ab = r_ab²; v_ab_dot_r_ab = v_ab · r_ab; η2 = η².
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real viscosityMu(Real radiusSquared, Real velocityDotRadius,
-    Real smoothingLength, Real sourceSmoothingLength, Real ε,
+CUDA_EXPORT inline Real viscosityMu(Real r2_ab, Real v_ab_dot_r_ab, Real H_a, Real H_b, Real ε,
     Real smoothingLengthPerEffectiveRadius = Real(2), Real viscosityWidthScale = Real(1)) {
-    Real const r_ab2 = radiusSquared;    // |r_ab|²
-    Real const v_ab_dot_r_ab = velocityDotRadius;
-    Real const H_a = smoothingLength;
-    Real const H_b = sourceSmoothingLength;
     Real const h̄_ab = simdBroadcast<Real>(0.5) * (H_a + H_b) / smoothingLengthPerEffectiveRadius *
         viscosityWidthScale;
     Real const η2 = ε * h̄_ab * h̄_ab;    // η²
-    Real const μ_ab = h̄_ab * v_ab_dot_r_ab / (r_ab2 + η2);
+    Real const μ_ab = h̄_ab * v_ab_dot_r_ab / (r2_ab + η2);
     return simdSelect(v_ab_dot_r_ab < Real(0), μ_ab, Real(0));
 }
 
@@ -102,11 +97,8 @@ CUDA_EXPORT inline Real viscosityMu(Real radiusSquared, Real velocityDotRadius,
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real artificialViscosity(Real sinkDensity, Real sourceDensity, Real c_a,
-    Real c_b, Real compressionVelocity, Real α, Real β) {
-    Real const ρ_a = sinkDensity;
-    Real const ρ_b = sourceDensity;
-    Real const μ_ab = compressionVelocity;
+CUDA_EXPORT inline Real artificialViscosity(
+    Real ρ_a, Real ρ_b, Real c_a, Real c_b, Real μ_ab, Real α, Real β) {
     Real const c̄_ab = simdBroadcast<Real>(0.5) * (c_a + c_b);
     Real const ρ̄_ab = simdBroadcast<Real>(0.5) * (ρ_a + ρ_b);
     Real const Π_ab = (-α * c̄_ab * μ_ab + β * μ_ab * μ_ab) / ρ̄_ab;

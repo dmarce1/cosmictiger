@@ -12,6 +12,7 @@
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/sph/flops.hpp>
+#include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/run_data.hpp>
 
 // Each invocation owns one target leaf. Sources remain immutable for the entire
@@ -30,6 +31,7 @@ SphRunReturn sphCpuRungs(
 #ifndef __CUDACC__
 namespace detail {
 
+// paddedX_b → neighbor position as the record of the box tests.
 inline std::vector<int> sphCpuNeighbors(SphRunData const& data, SphTreeNode const& targetNode,
     bool symmetric, sph_flops::Counter& flops, bool activeOnly = false, int minimumRung = 0) {
     std::vector<int> neighbors;
@@ -41,13 +43,10 @@ inline std::vector<int> sphCpuNeighbors(SphRunData const& data, SphTreeNode cons
             if (activeOnly && data.sourceRungs[sourceIndex] < minimumRung) {
                 continue;
             }
-            Vector3<Position> position;
-            position[kXi] = data.sourcePositionX[sourceIndex];
-            position[kYi] = data.sourcePositionY[sourceIndex];
-            position[kZi] = data.sourcePositionZ[sourceIndex];
-            if (targetNode.outerBox.contains(position, &flops.doublePrecision) ||
+            Vector3<Position> const paddedX_b = data.sourcePaddedPosition(sourceIndex);
+            if (targetNode.outerBox.contains(paddedX_b, &flops.doublePrecision) ||
                 (symmetric &&
-                    sphSupportIntersects(targetNode.innerBox, position,
+                    sphSupportIntersects(targetNode.innerBox, paddedX_b,
                         data.sourceSmoothingLength[sourceIndex], &flops))) {
                 neighbors.push_back(sourceIndex);
             }
@@ -70,32 +69,57 @@ inline SimdFloat::mask_type sphCpuValidLanes(std::vector<int> const& neighbors, 
     }) > SimdFloat(0.0f);
 }
 
-inline Vector3<SimdFloat> sphCpuLoad3(float const* x, float const* y, float const* z,
-    std::vector<int> const& neighbors, size_t first, float padding) {
-    return Vector3<SimdFloat>(sphCpuLoad(x, neighbors, first, padding),
-        sphCpuLoad(y, neighbors, first, padding), sphCpuLoad(z, neighbors, first, padding));
+// A pack of neighbor vectors from the separate component arrays, over the active axes.
+inline sph_geometry::SpatialVector<SimdFloat> sphCpuLoad3(float const* x, float const* y,
+    float const* z, std::vector<int> const& neighbors, size_t first, float padding) {
+    float const* const components[kDimensions] = {x, y, z};
+    sph_geometry::SpatialVector<SimdFloat> result;
+    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        result[dim] = sphCpuLoad(components[dim], neighbors, first, padding);
+    }
+    return result;
 }
 
-// Sink minus source positions, r_a - r_b, for one pack of neighbors.
-inline Vector3<SimdFloat> sphCpuSeparations(
+// Separations r_ab = x_a - x_b for one pack of neighbors, over the active axes.
+// x_a, x_b → sink, neighbor coordinate along one axis; r_ab → separation (return value).
+inline sph_geometry::SpatialVector<SimdFloat> sphCpuSeparations(
     SphRunData const& data, int particleIndex, std::vector<int> const& neighbors, size_t first) {
     Position const* positions[kDimensions] = {
         data.sourcePositionX, data.sourcePositionY, data.sourcePositionZ};
-    Vector3<SimdFloat> separation;
-    for (int dim = 0; dim < kDimensions; dim++) {
-        SignedPositionInteger const sinkPosition =
+    sph_geometry::SpatialVector<SimdFloat> r_ab;
+    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        SignedPositionInteger const x_a =
             static_cast<SignedPositionInteger>(positions[dim][particleIndex].raw());
-        SimdPosition const sourcePosition([&](auto lane) {
+        SimdPosition const x_b([&](auto lane) {
             size_t const index = first + size_t(lane);
             return index < neighbors.size() ?
                 static_cast<SignedPositionInteger>(positions[dim][neighbors[index]].raw()) :
-                sinkPosition;
+                x_a;
         });
-        separation[dim] = simdCast<SimdFloat>(
-                              simdPositionDifference(SimdPosition(sinkPosition), sourcePosition)) *
+        r_ab[dim] = simdCast<SimdFloat>(simdPositionDifference(SimdPosition(x_a), x_b)) *
             SimdFloat(kPositionToFloat);
     }
-    return separation;
+    return r_ab;
+}
+
+// The component-wise additive reduction of a vector of SIMD partial sums.
+inline sph_geometry::SpatialVector<float> sphCpuSum(
+    sph_geometry::SpatialVector<SimdFloat> const& pack) {
+    sph_geometry::SpatialVector<float> sum;
+    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        sum[dim] = simdSum(pack[dim]);
+    }
+    return sum;
+}
+
+// One lane of a vector pack.
+inline sph_geometry::SpatialVector<float> sphCpuLane(
+    sph_geometry::SpatialVector<SimdFloat> const& pack, size_t lane) {
+    sph_geometry::SpatialVector<float> value;
+    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        value[dim] = float(pack[dim][lane]);
+    }
+    return value;
 }
 
 }    // namespace detail

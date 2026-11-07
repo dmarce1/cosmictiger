@@ -254,36 +254,4 @@ void testDissipativeRateSuperposition(Fixture& fixture, bool morrisAndMonaghan =
     }
 }
 
-template <class Fixture>
-void testContinuityDensityRate(Fixture& fixture) {
-    auto& data = fixture.data_;
-    auto& parameters = fixture.params_;
-    fixture.enableLogDensityRates();
-    parameters.minimumSmoothingLength = parameters.maximumSmoothingLength = 0.2f;
-    parameters.scaleFactor = 0.7f;
-    parameters.expansionRate = 0.3f;
-    for (int index = 0; index < 2; ++index) {
-        int const source = fixture.sourceIndex(index);
-        data.sourcePositionX[source] = index == 0 ? 0.47 : 0.53;
-        data.sourcePositionY[source] = data.sourcePositionZ[source] = 0.5;
-        data.sourceVelocityY[source] = data.sourceVelocityZ[source] = 0.0f;
-    }
-    for (float const approach : {0.0f, 0.15f, -0.15f}) {
-        data.sourceVelocityX[fixture.sourceIndex(0)] = approach;
-        data.sourceVelocityX[fixture.sourceIndex(1)] = -approach;
-        fixture.densityPass();
-        double const radius = std::abs(double(distance(data.sourcePositionX[fixture.sourceIndex(0)],
-            data.sourcePositionX[fixture.sourceIndex(1)])));
-        double const support = parameters.maximumSmoothingLength;
-        // Fixed-support continuity equation, evaluated independently for this pair.
-        double const expectedRate = data.gasMass * (-2.0 * approach) *
-            dkernelWDq(radius / support) / (parameters.scaleFactor * std::pow(support, 4));
-        for (int index = 0; index < 2; ++index) {
-            int const sink = fixture.sinkIndex(index);
-            pairKickClose(double(data.sinkLogDensityRate[sink]) * data.sinkDensity[sink],
-                expectedRate, "density rate differs from the continuity equation");
-        }
-    }
-}
-
 }    // namespace detail

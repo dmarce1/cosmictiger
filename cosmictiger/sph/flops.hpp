@@ -3,6 +3,7 @@
 
 #include <type_traits>
 
+#include <cosmictiger/core/defs.hpp>
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/math/position.hpp>
 #include <cosmictiger/math/radial_kernel.hpp>
@@ -60,6 +61,17 @@ CUDA_EXPORT constexpr FlopCount positionConstructionFlops() {
     return kPositionBits == 64 ? 4 : 1;
 #endif
 }
+
+// Spatial-vector costs over D = kSpatialDimensions active axes. A separation, sum, difference
+// or scalar product costs one operation per axis; a·b takes D products and D − 1 sums, and
+// |a| one more root. Padded Vector3 arithmetic always executes all three components.
+inline constexpr FlopCount kVectorOperation = kSpatialDimensions;
+inline constexpr FlopCount kDotProduct = 2 * kSpatialDimensions - 1;
+inline constexpr FlopCount kNorm = kDotProduct + 1;
+
+// Products of sph_geometry::inverseVolume and inverseGradientScale.
+inline constexpr FlopCount kInverseVolume = kSpatialDimensions - 1;
+inline constexpr FlopCount kInverseGradientScale = kSpatialDimensions == 1 ? 1 : 2;
 
 // Costs of the expressions in monaghan/viscosity.hpp. Selection and unary signs
 // are free; both expressions passed to simdSelect are evaluated.

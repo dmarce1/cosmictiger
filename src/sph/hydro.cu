@@ -9,20 +9,19 @@
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/sph/conduction.hpp>
 #include <cosmictiger/sph/cuda.hpp>
+#include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/variable_smoothing_lengths.hpp>
 #include <cosmictiger/sph/viscosity/monaghan.hpp>
 #include <cosmictiger/sph/volume.hpp>
 
+using sph_geometry::SpatialVector;
+
 namespace detail {
 
 struct HydroNeighbor {
-    Position positionX;
-    Position positionY;
-    Position positionZ;
+    SpatialVector<Position> x;
     float smoothingLength;
-    float velocityX;
-    float velocityY;
-    float velocityZ;
+    SpatialVector<float> v;
     float internalEnergy;
     float density;
     float balsaraFactor;
@@ -53,26 +52,54 @@ struct HydroWorkspace {
 /*
  * Production pair equations: Hopkins (2013), MNRAS 428, 2840, equations (12)–(13)
  * (https://arxiv.org/abs/1206.5006), and Price (2012), JCP 231, 759, (30), (35)
- * (https://arxiv.org/abs/1012.1885). Equal masses, x_a = m_a, y_a = ρ_a:
+ * (https://arxiv.org/abs/1012.1885). Equal masses make the volume weight m_a and the
+ * weighted density ρ_a:
  *   Q_ab/m_a = P_a(m_b − ζ_a)/ρ_a²,
  *   dv_a/dτ = −a⁻¹ Σ_b [(Q_ab/m_a)F_a + (Q_ba/m_a)F_b] r_ab,
  *   du_a/dτ = a⁻¹ Σ_b (Q_ab/m_a)F_a (v_ab · r_ab),
- *   ∇_a W_ab(H_a) = F_a r_ab, F_a = w′(r_ab/H_a)/(H_a⁴ |r_ab|).
+ *   ∇_a W_ab(H_a) = F_a r_ab, F_a = w′(q_a)/(H_a⁴ |r_ab|), q_a = |r_ab|/H_a.
  * These are derived comoving forms; the pair viscosity below adds to the same pair force.
  * Symbol directory:
- *   a → scale factor; m_b → gas mass; γ → gas adiabatic index
- *   ρ_a, P_a, u_a → density, pressure, internal energy
+ *   a, a⁻¹ → scale factor, its inverse; a ȧ → expansion rate, a da/dt = da/dτ
+ *   m_b, m_b/a → gas mass, scaled gas mass; γ, γ − 1 → gas adiabatic index, P/(ρu) of all gas
+ *   x_a → sink position; paddedX_b → neighbor position as the record of the box tests
+ *   v_a, v_b → sink stored velocity, neighbor stored velocity
+ *   ρ_a, P_a, u_a, c_a → density, pressure, internal energy, sound speed
+ *   ρ_b, P_b, u_b, c_b → neighbor density, pressure, internal energy, sound speed
  *   H_a, H_b → sink kernel smoothing length, neighbor smoothing length
- *   r_ab, |r_ab| → separation, pair distance; v_ab → velocity difference
- *   ζ_a → grad-H correction; Q_ab/m_a, Q_ba/m_a → sink pressure coefficient, neighbor pressure coefficient
- *   F_a, F_b → sink gradient factor, neighbor gradient factor
- *   dv_a/dτ, du_a/dτ → acceleration, internal energy rate
+ *   H_a⁻¹, H_b⁻¹ → inverse smoothing lengths; H_a⁻⁽ᴰ⁺¹⁾ → sink inverse gradient scale
+ *   r_ab, |r_ab|, r_ab² → separation, pair distance, squared separation
+ *   v_ab → velocity difference; v_ab · r_ab → velocity dot separation
+ *   (a v_phys,ab) · r_ab → velocity dot separation including the Hubble flow a ȧ r_ab
+ *   q_a, q_b → radius normalized by the sink support, by the neighbor support
+ *   ζ_a, ζ_b → sink grad-H correction, neighbor grad-H correction
+ *   Q_ab/m_a, Q_ba/m_a → sink pressure coefficient, neighbor pressure coefficient
+ *   F_a, F_b, F_ab → sink gradient factor, neighbor gradient factor, symmetric gradient factor
+ *   dv_a/dτ, du_a/dτ → acceleration, reversible internal energy rate
  *   α_a, α_b, α_ab → bulk viscosity coefficient, neighbor bulk viscosity coefficient, pair bulk viscosity coefficient
  *   β_ab → pair von Neumann–Richtmyer coefficient; Π_ab → pair artificial viscosity
- *   μ_ab → viscosity velocity
- *   Code names: abs_r_ab = |r_ab|; Q_ab_over_m_a = Q_ab/m_a; Q_ba_over_m_a = Q_ba/m_a;
- *     dv_a_dτ = dv_a/dτ; du_a_dτ = du_a/dτ.
- *   SIMD partial sums append Pack; CUDA partial sums are reduced in place.
+ *   μ_ab → viscosity velocity; ε → η²/h² of p. 551
+ *   fᴬⱽ_ab → pair shear factor, the mean of the two Balsara factors
+ *   f_P,ab, f_Π,ab → pressure force factor, viscous force factor of one pair
+ *   f_ab → pair force, (f_P,ab + f_Π,ab) r_ab; a_ab → pair acceleration of a, −f_ab
+ *   (du/dτ)_Π,ab → viscous heating of each endpoint by one pair
+ *   C_ab/a → pair conduction exchange rate; (du_a/dτ)_cond,ab → conductive heating of a by one pair
+ *   Σ_b C_ab/a → summed exchange rate, which sets the conduction timestep bound
+ *   (du_a/dτ)_diss,ab, (du_b/dτ)_diss,ab → sink, neighbor dissipative heating by one pair
+ *   (du_a/dτ)_diss → total dissipative heating, which becomes the entropy rate
+ *   Ȧ_ab, Ȧ_ba → sink, neighbor entropy rate of one pair; Δτ → pair kick interval
+ *   (dv_a/dτ)_grav, (dv_a/dτ)_ext → gravity acceleration, external acceleration
+ *   5 − 3γ → homogeneous expansion coefficient of the stored energy
+ *   Code names: a_inv = a⁻¹; aȧ = a ȧ; m_b_over_a = m_b/a; γ_minus_1 = γ − 1;
+ *     H_inv_a = H_a⁻¹; H_inv_b = H_b⁻¹; H_inv_D_plus_1_a = H_a⁻⁽ᴰ⁺¹⁾; abs_r_ab = |r_ab|;
+ *     r2_ab = r_ab²; v_ab_dot_r_ab = v_ab · r_ab; a_v_phys_ab_dot_r_ab = (a v_phys,ab) · r_ab;
+ *     Q_ab_over_m_a = Q_ab/m_a; Q_ba_over_m_a = Q_ba/m_a; dv_a_dτ = dv_a/dτ; du_a_dτ = du_a/dτ;
+ *     f_P_ab = f_P,ab; f_Π_ab = f_Π,ab; du_dτ_Π_ab = (du/dτ)_Π,ab; C_ab_over_a = C_ab/a;
+ *     du_a_dτ_cond_ab = (du_a/dτ)_cond,ab; ΣC_ab_over_a = Σ_b C_ab/a;
+ *     du_a_dτ_diss_ab = (du_a/dτ)_diss,ab; du_b_dτ_diss_ab = (du_b/dτ)_diss,ab;
+ *     du_a_dτ_diss = (du_a/dτ)_diss; dv_a_dτ_grav = (dv_a/dτ)_grav;
+ *     dv_a_dτ_ext = (dv_a/dτ)_ext; five_minus_3γ = 5 − 3γ.
+ *   SIMD values append Pack; CUDA partial sums are reduced in place.
  */
 // clang-format on
 __global__ void sphCudaHydro(
@@ -87,20 +114,20 @@ __global__ void sphCudaHydro(
         targetNodeIndex = atomicAdd(&reduction->nextNodeIndex, 1);
     }
     __syncthreads();
-    float const inverseScaleFactor = 1.0f / parameters.scaleFactor;
+    float const a_inv = 1.0f / parameters.scaleFactor;
     float const γ = data.adiabaticIndex;
-    float const pressureEnergyRatio = γ - 1.0f;    // P/(ρu) for every particle.
+    float const γ_minus_1 = γ - 1.0f;    // P/(ρu) for every particle.
     // Calibrate the hydro acceleration limit to the former cubic/Ferrers F4
     // defaults after gravity eta and smoothing lengths adopt the common width.
     constexpr float kHydroAccelerationScale = 0.7115965735877551f;
     float const smoothingLengthPerEffectiveRadius =
         selectedHydroKernel().smoothingLengthPerEffectiveRadius;
     float const m_b = data.gasMass;    // every gas particle has the same mass
-    float const scaledGasMass = m_b * inverseScaleFactor;
-    float const viscosityRegularization = parameters.viscosityEpsilon;    // η²/h² of p. 551
-    float const expansionRate = parameters.expansionRate;    // a·da/dt, the Hubble flow of a pair
+    float const m_b_over_a = m_b * a_inv;
+    float const ε = parameters.viscosityEpsilon;    // η²/h² of p. 551
+    float const aȧ = parameters.expansionRate;      // a·da/dt, the Hubble flow of a pair
     bool const applyPairKicks = data.sourcePairUpdates && parameters.hydroKickTimestep > 0.0;
-    float const kickTimestep = applyPairKicks ? float(parameters.hydroKickTimestep) : 0.0f;
+    float const Δτ = applyPairKicks ? float(parameters.hydroKickTimestep) : 0.0f;
     flops.doublePrecision += int(applyPairKicks);
     ALWAYS_ASSERT(!applyPairKicks || (parameters.midpointHydro && data.sourceIds));
     int maximumHydroRung = 0;
@@ -121,14 +148,12 @@ __global__ void sphCudaHydro(
             for (int sourceParticleIndex = neighborNode.particleRange.first + threadIndex;
                 sourceParticleIndex < end; sourceParticleIndex += blockSize) {
                 bool contains = false;
-                Vector3<Position> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
-                    position[kXi] = data.sourcePositionX[sourceParticleIndex];
-                    position[kYi] = data.sourcePositionY[sourceParticleIndex];
-                    position[kZi] = data.sourcePositionZ[sourceParticleIndex];
-                    contains = targetNode.outerBox.contains(position, &flops.doublePrecision);
+                    Vector3<Position> const paddedX_b =
+                        data.sourcePaddedPosition(sourceParticleIndex);
+                    contains = targetNode.outerBox.contains(paddedX_b, &flops.doublePrecision);
                     if (!contains) {
-                        contains = sphSupportIntersects(targetNode.innerBox, position,
+                        contains = sphSupportIntersects(targetNode.innerBox, paddedX_b,
                             data.sourceSmoothingLength[sourceParticleIndex], &flops);
                     }
                 }
@@ -139,11 +164,9 @@ __global__ void sphCudaHydro(
                 __syncthreads();
                 workspace.neighbors.resize(offset + total);
                 if (contains) {
-                    workspace.neighbors[offset + slot] = {position[kXi], position[kYi],
-                        position[kZi], data.sourceSmoothingLength[sourceParticleIndex],
-                        data.sourceVelocityX[sourceParticleIndex],
-                        data.sourceVelocityY[sourceParticleIndex],
-                        data.sourceVelocityZ[sourceParticleIndex],
+                    workspace.neighbors[offset + slot] = {data.sourcePosition(sourceParticleIndex),
+                        data.sourceSmoothingLength[sourceParticleIndex],
+                        data.sourceVelocity(sourceParticleIndex),
                         data.sourceInternalEnergy[sourceParticleIndex],
                         data.sourceDensity[sourceParticleIndex],
                         parameters.balsaraSwitch ? data.sourceBalsaraFactor[sourceParticleIndex] :
@@ -166,43 +189,38 @@ __global__ void sphCudaHydro(
             if (!parameters.isActiveRung(previousRung)) {
                 continue;
             }
-            float const sinkSmoothingLength = data.sourceSmoothingLength[particleIndex];
-            float const sinkDensity = data.sourceDensity[particleIndex];
-            float const sinkInternalEnergy = data.sourceInternalEnergy[particleIndex];
-            ALWAYS_ASSERT(
-                sinkSmoothingLength > 0.0f && sinkDensity > 0.0f && sinkInternalEnergy > 0.0f);
             // clang-format off
             /*
              * Particle a. Section 3.5 leaves the equation of state free; the ideal gas gives
-             * P_a = (γ − 1) ρ_a u_a and soundSpeed² = γ P_a/ρ_a with the single configured γ.
+             * P_a = (γ − 1) ρ_a u_a and c_a² = γ P_a/ρ_a with the single configured γ.
              *
              * Symbol directory (in the code below):
+             *   H_a → support radius, 2h_a for the cubic spline
              *   P_a → pressure
              *   u_a → internal energy
              *   ρ_a → density
+             *   c_a → sound speed
              *   γ → gas adiabatic index
              */
             // clang-format on
-            float const H_a = sinkSmoothingLength;    // support radius, 2h_a for the cubic spline
-            float const ρ_a = sinkDensity;
-            float const u_a = sinkInternalEnergy;
-            float const P_a = pressureEnergyRatio * ρ_a * u_a;
-            float const soundSpeed = sqrtf(γ * pressureEnergyRatio * u_a);
-            Position const positionX = data.sourcePositionX[particleIndex];
-            Position const positionY = data.sourcePositionY[particleIndex];
-            Position const positionZ = data.sourcePositionZ[particleIndex];
-            Vector3<float> const velocity(data.sourceVelocityX[particleIndex],
-                data.sourceVelocityY[particleIndex], data.sourceVelocityZ[particleIndex]);
-            float const inverseSmoothingLength = 1.0f / H_a;
-            float const inverseSmoothingLengthGradientScale =
-                sph_geometry::inverseGradientScale(inverseSmoothingLength);    // H_a^-(D+1)
-            flops += 8;
+            float const H_a = data.sourceSmoothingLength[particleIndex];
+            float const ρ_a = data.sourceDensity[particleIndex];
+            float const u_a = data.sourceInternalEnergy[particleIndex];
+            ALWAYS_ASSERT(H_a > 0.0f && ρ_a > 0.0f && u_a > 0.0f);
+            float const P_a = γ_minus_1 * ρ_a * u_a;
+            float const c_a = sqrtf(γ * γ_minus_1 * u_a);
+            SpatialVector<Position> const x_a = data.sourcePosition(particleIndex);
+            SpatialVector<float> const v_a = data.sourceVelocity(particleIndex);
+            float const H_inv_a = 1.0f / H_a;
+            float const H_inv_D_plus_1_a =
+                sph_geometry::inverseGradientScale(H_inv_a);    // H_a^-(D+1)
+            flops += 6 + sph_flops::kInverseGradientScale;
             // clang-format off
             /*
              * Variational operator (cosmictiger/sph/variable_smoothing_lengths.hpp): every
-             * gas particle has the mass m and the volume weight x = m, so y = ρ and
-             * Q_ab/m_a = (P_a/ρ_a²)(m − ζ_a). Comoving Q and kernel gradients give the rates
-             * dv_a/dτ = −(1/a) Σ_b (Q_ab g_a + Q_ba g_b)/m_a and
+             * gas particle has the mass m, which is also its volume weight, so the weighted
+             * density is ρ and Q_ab/m_a = (P_a/ρ_a²)(m − ζ_a). Comoving Q and kernel gradients
+             * give the rates dv_a/dτ = −(1/a) Σ_b (Q_ab g_a + Q_ba g_b)/m_a and
              * du_a/dτ = (1/a) Σ_b Q_ab v_ab·g_a/m_a.
              *
              * Symbol directory (in the code below):
@@ -217,41 +235,38 @@ __global__ void sphCudaHydro(
             float const Q_ab_over_m_a = variational::directedCoefficient(
                 variational::pressureVolumeFactor(P_a, 1.0f, ρ_a), m_b, ζ_a);
             flops += 5;
-            Vector3<float> dv_a_dτ(0.0f);    // this thread's acceleration sum
+            SpatialVector<float> dv_a_dτ(0.0f);    // this thread's acceleration sum
             float du_a_dτ = 0.0f;
-            float dissipativeEnergyRate = 0.0f;    // this thread's viscous/conductive sum
-            float conductionExchangeRate = 0.0f;
+            float du_a_dτ_diss = 0.0f;    // this thread's viscous/conductive sum
+            float ΣC_ab_over_a = 0.0f;
             float const α_a = parameters.variableViscosity ?
                 data.sourceBulkViscosityCoefficient[particleIndex] :
                 parameters.bulkViscosityCoefficient;
             float α = α_a;
-            float maximumCompressionSpeed = 0.0f;    // max_b(−μ_ab) for δt_cv
+            float max_b_μ_ab = 0.0f;    // max_b(−μ_ab) for δt_cv
             int maximumNeighborRung = 0;
             for (int neighborIndex = threadIndex; neighborIndex < workspace.neighbors.size();
                 neighborIndex += blockSize) {
                 auto const& neighbor = workspace.neighbors[neighborIndex];
                 // Particle b. Pairs outside both supports or at zero separation are skipped.
-                Vector3<float> const r_ab(distance(positionX, neighbor.positionX),
-                    distance(positionY, neighbor.positionY),
-                    distance(positionZ, neighbor.positionZ));
-                float const separationSquared = sph_geometry::spatialDot(r_ab, r_ab);    // |r_ab|²
+                auto const r_ab = distance(x_a, neighbor.x);
+                float const r2_ab = r_ab.dot(r_ab);    // |r_ab|²
                 float const H_b = neighbor.smoothingLength;
+                // Distances, dot, support squares.
                 flops +=
-                    8 + (separationSquared == 0.0f ? 0 : 2);    // Distances, dot, support squares.
-                bool const supportsIntersect = separationSquared < fmaxf(H_a * H_a, H_b * H_b);
+                    sph_flops::kVectorOperation + sph_flops::kDotProduct + (r2_ab == 0.0f ? 0 : 2);
+                bool const supportsIntersect = r2_ab < fmaxf(H_a * H_a, H_b * H_b);
                 if (parameters.midpointHydro && parameters.phase == 1 && supportsIntersect) {
                     maximumNeighborRung = max(maximumNeighborRung, neighbor.rung);
                 }
-                if (separationSquared == 0.0f || !supportsIntersect) {
+                if (r2_ab == 0.0f || !supportsIntersect) {
                     continue;
                 }
-                float const neighborDensity = neighbor.density;
-                float const neighborInternalEnergy = neighbor.internalEnergy;
-                float const neighborPressure =
-                    pressureEnergyRatio * neighborDensity * neighborInternalEnergy;
-                float const neighborSoundSpeed =
-                    sqrtf(γ * pressureEnergyRatio * neighborInternalEnergy);
-                float const abs_r_ab = sqrtf(separationSquared);    // |r_ab|
+                float const ρ_b = neighbor.density;
+                float const u_b = neighbor.internalEnergy;
+                float const P_b = γ_minus_1 * ρ_b * u_b;
+                float const c_b = sqrtf(γ * γ_minus_1 * u_b);
+                float const abs_r_ab = sqrtf(r2_ab);    // |r_ab|
                 // clang-format off
                 /*
                  * Symmetric kernel of p. 554: ∇_a W̃_ab = ½[∇_a W(r_ab, H_a) + ∇_a
@@ -264,23 +279,20 @@ __global__ void sphCudaHydro(
                  *   r_ab → separation
                  */
                 // clang-format on
-                float const inverseNeighborSmoothingLength = 1.0f / H_b;
-                float const normalizedSinkRadius = abs_r_ab * inverseSmoothingLength;
-                float const normalizedNeighborRadius = abs_r_ab * inverseNeighborSmoothingLength;
-                float const F_a = dkernelWDq(normalizedSinkRadius) *
-                    inverseSmoothingLengthGradientScale / abs_r_ab;
-                float const F_b = dkernelWDq(normalizedNeighborRadius) *
-                    sph_geometry::inverseGradientScale(inverseNeighborSmoothingLength) / abs_r_ab;
+                float const H_inv_b = 1.0f / H_b;
+                float const q_a = abs_r_ab * H_inv_a;
+                float const q_b = abs_r_ab * H_inv_b;
+                float const F_a = dkernelWDq(q_a) * H_inv_D_plus_1_a / abs_r_ab;
+                float const F_b =
+                    dkernelWDq(q_b) * sph_geometry::inverseGradientScale(H_inv_b) / abs_r_ab;
                 float const F_ab = 0.5f * (F_a + F_b);
                 // v_ab = v_a − v_b from the stored peculiar velocities. The physical relative
                 // velocity adds the Hubble flow (a da/dt) r_ab and enters only the viscosity.
-                Vector3<float> const v_ab = velocity -
-                    Vector3<float>(neighbor.velocityX, neighbor.velocityY, neighbor.velocityZ);
-                float const velocityDotSeparation = sph_geometry::spatialDot(v_ab, r_ab);
-                float const physicalVelocityDotSeparation =
-                    velocityDotSeparation + expansionRate * separationSquared;
-                float const μ_ab = monaghan::viscosityMu(separationSquared,
-                    physicalVelocityDotSeparation, H_a, H_b, viscosityRegularization,
+                SpatialVector<float> const& v_b = neighbor.v;
+                SpatialVector<float> const v_ab = v_a - v_b;
+                float const v_ab_dot_r_ab = v_ab.dot(r_ab);
+                float const a_v_phys_ab_dot_r_ab = v_ab_dot_r_ab + aȧ * r2_ab;
+                float const μ_ab = monaghan::viscosityMu(r2_ab, a_v_phys_ab_dot_r_ab, H_a, H_b, ε,
                     smoothingLengthPerEffectiveRadius, float(monaghan::kViscosityWidthScale));
                 float const α_b =
                     parameters.variableViscosity ? neighbor.bulkViscosityCoefficient : α_a;
@@ -291,9 +303,9 @@ __global__ void sphCudaHydro(
                 α = fmaxf(α, α_ab);
                 flops += 3 * int(parameters.variableViscosity) +
                     int(parameters.vonNeumannRichtmyerCoefficientFollowsBulk());
-                float shearFactor = 1.0f;
+                float fᴬⱽ_ab = 1.0f;
                 if (parameters.balsaraSwitch) {
-                    shearFactor =
+                    fᴬⱽ_ab =
                         0.5f * (data.sourceBalsaraFactor[particleIndex] + neighbor.balsaraFactor);
                     flops += 2;
                 }
@@ -313,113 +325,105 @@ __global__ void sphCudaHydro(
                  *   g_b → neighbor kernel gradient (F_b r_ab)
                  */
                 // clang-format on
+                float const ζ_b = neighbor.gradHCorrection;
                 float const Q_ba_over_m_a = variational::directedCoefficient(
-                    variational::pressureVolumeFactor(neighborPressure, 1.0f, neighborDensity), m_b,
-                    neighbor.gradHCorrection);
-                float const pressureForce = inverseScaleFactor *
-                    variational::pairForceFactor(Q_ab_over_m_a, Q_ba_over_m_a, F_a, F_b);
-                float Π_ab = monaghan::artificialViscosity(
-                    ρ_a, neighborDensity, soundSpeed, neighborSoundSpeed, μ_ab, α_ab, β_ab);
+                    variational::pressureVolumeFactor(P_b, 1.0f, ρ_b), m_b, ζ_b);
+                float const f_P_ab =
+                    a_inv * variational::pairForceFactor(Q_ab_over_m_a, Q_ba_over_m_a, F_a, F_b);
+                float Π_ab = monaghan::artificialViscosity(ρ_a, ρ_b, c_a, c_b, μ_ab, α_ab, β_ab);
                 if (parameters.balsaraSwitch) {
-                    Π_ab *= shearFactor;
+                    Π_ab *= fᴬⱽ_ab;
                     flops += 1;
                 }
-                float const viscousForce = scaledGasMass * Π_ab * F_ab;
-                float const viscousHeating =
-                    scaledGasMass * 0.5f * Π_ab * F_ab * physicalVelocityDotSeparation;
+                float const f_Π_ab = m_b_over_a * Π_ab * F_ab;
+                float const du_dτ_Π_ab = m_b_over_a * 0.5f * Π_ab * F_ab * a_v_phys_ab_dot_r_ab;
                 flops += sph_flops::kViscosityMu + sph_flops::kArtificialViscosity + 6;
-                float targetDissipativeEnergyRate = viscousHeating;
-                float neighborDissipativeEnergyRate = viscousHeating;
+                float du_a_dτ_diss_ab = du_dτ_Π_ab;
+                float du_b_dτ_diss_ab = du_dτ_Π_ab;
                 if (parameters.conductionCoefficient > 0.0f) {
-                    float const exchangeRate = sph_conduction::exchangeRate(ρ_a, neighborDensity,
-                        soundSpeed, neighborSoundSpeed, H_a, H_b, separationSquared,
-                        physicalVelocityDotSeparation, F_ab, parameters.conductionCoefficient,
-                        viscosityRegularization, smoothingLengthPerEffectiveRadius, scaledGasMass);
-                    float const conductiveEnergyRate =
-                        exchangeRate * (neighborInternalEnergy - u_a);
-                    targetDissipativeEnergyRate += conductiveEnergyRate;
-                    neighborDissipativeEnergyRate -= conductiveEnergyRate;
-                    conductionExchangeRate += exchangeRate;
+                    float const C_ab_over_a = sph_conduction::exchangeRate(ρ_a, ρ_b, c_a, c_b, H_a,
+                        H_b, r2_ab, a_v_phys_ab_dot_r_ab, F_ab, parameters.conductionCoefficient, ε,
+                        smoothingLengthPerEffectiveRadius, m_b_over_a);
+                    float const du_a_dτ_cond_ab = C_ab_over_a * (u_b - u_a);
+                    du_a_dτ_diss_ab += du_a_dτ_cond_ab;
+                    du_b_dτ_diss_ab -= du_a_dτ_cond_ab;
+                    ΣC_ab_over_a += C_ab_over_a;
                     flops += 27;    // 22 exchange + 5 heating/row-sum operations.
                 }
-                Vector3<float> const pairForce = (pressureForce + viscousForce) * r_ab;
-                dv_a_dτ -= pairForce;
+                SpatialVector<float> const f_ab = (f_P_ab + f_Π_ab) * r_ab;
+                dv_a_dτ -= f_ab;
                 if (applyPairKicks &&
                     parameters.isActiveRung(max(previousRung, int(neighbor.rung))) &&
                     sphOwnsPairKick(data.sourceIds[particleIndex],
                         data.sourceIds[neighbor.sourceIndex], previousRung, neighbor.rung)) {
-                    Vector3<float> const pairAcceleration(
-                        -pairForce[kXi], -pairForce[kYi], -pairForce[kZi]);
-                    float const targetEntropyRate = sph_entropy::fromStoredEnergy(
-                        targetDissipativeEnergyRate, ρ_a, γ, parameters.scaleFactor);
-                    float const neighborEntropyRate = sph_entropy::fromStoredEnergy(
-                        neighborDissipativeEnergyRate, neighborDensity, γ, parameters.scaleFactor);
+                    SpatialVector<float> const a_ab = -f_ab;
+                    float const Ȧ_ab = sph_entropy::fromStoredEnergy(
+                        du_a_dτ_diss_ab, ρ_a, γ, parameters.scaleFactor);
+                    float const Ȧ_ba = sph_entropy::fromStoredEnergy(
+                        du_b_dτ_diss_ab, ρ_b, γ, parameters.scaleFactor);
                     flops += sphAccumulatePairKick(data.sourcePairUpdates[particleIndex],
-                        data.sourcePairUpdates[neighbor.sourceIndex], pairAcceleration,
-                        targetEntropyRate, neighborEntropyRate, kickTimestep);
+                        data.sourcePairUpdates[neighbor.sourceIndex], a_ab, Ȧ_ab, Ȧ_ba, Δτ);
                     flops += 2 * sph_flops::entropyConversionFlops(γ);
                 }
-                du_a_dτ += inverseScaleFactor *
-                    variational::pairWork(Q_ab_over_m_a, F_a, velocityDotSeparation);
-                dissipativeEnergyRate += targetDissipativeEnergyRate;
-                flops += 54;    // common geometry, pressure, and accumulation
-                maximumCompressionSpeed = fmaxf(maximumCompressionSpeed, -μ_ab);
-                flops += sph_flops::densityKernelOperations(
-                             selectedHydroKernel(), normalizedSinkRadius, true) +
-                    sph_flops::densityKernelOperations(
-                        selectedHydroKernel(), normalizedNeighborRadius, true);
+                du_a_dτ += a_inv * variational::pairWork(Q_ab_over_m_a, F_a, v_ab_dot_r_ab);
+                du_a_dτ_diss += du_a_dτ_diss_ab;
+                // Common geometry, pressure, and accumulation; the vector terms are v_ab,
+                // v_ab · r_ab, the pair force and its sum.
+                flops += 38 + sph_flops::kInverseGradientScale + 3 * sph_flops::kVectorOperation +
+                    sph_flops::kDotProduct;
+                max_b_μ_ab = fmaxf(max_b_μ_ab, -μ_ab);
+                flops += sph_flops::densityKernelOperations(selectedHydroKernel(), q_a, true) +
+                    sph_flops::densityKernelOperations(selectedHydroKernel(), q_b, true);
             }
-            sharedReduceAdd<float, kHydroBlockSize>(dv_a_dτ[kXi]);
-            sharedReduceAdd<float, kHydroBlockSize>(dv_a_dτ[kYi]);
-            sharedReduceAdd<float, kHydroBlockSize>(dv_a_dτ[kZi]);
+            for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+                sharedReduceAdd<float, kHydroBlockSize>(dv_a_dτ[dim]);
+            }
             sharedReduceAdd<float, kHydroBlockSize>(du_a_dτ);
-            sharedReduceAdd<float, kHydroBlockSize>(dissipativeEnergyRate);
+            sharedReduceAdd<float, kHydroBlockSize>(du_a_dτ_diss);
             if (parameters.conductionCoefficient > 0.0f) {
-                sharedReduceAdd<float, kHydroBlockSize>(conductionExchangeRate);
+                sharedReduceAdd<float, kHydroBlockSize>(ΣC_ab_over_a);
                 flops += detail::sphReductionFlops<kHydroBlockSize>();
             }
-            sharedReduceMax<kHydroBlockSize>(maximumCompressionSpeed);
+            sharedReduceMax<kHydroBlockSize>(max_b_μ_ab);
             sharedReduceMax<kHydroBlockSize>(α);
             if (parameters.midpointHydro && parameters.phase == 1) {
                 sharedReduceMax<kHydroBlockSize>(maximumNeighborRung);
             }
-            flops += 5 * detail::sphReductionFlops<kHydroBlockSize>();
+            flops +=
+                (sph_flops::kVectorOperation + 2) * detail::sphReductionFlops<kHydroBlockSize>();
             if (threadIndex == 0) {
                 // Corrections are derived, never checkpointed or migrated; slots that the
                 // density pass has not rebuilt hold NaN, so a stale source cannot pass silently.
                 if (!(sph_volume::isFiniteValue(dv_a_dτ.dot(dv_a_dτ)) &&
                         sph_volume::isFiniteValue(du_a_dτ) &&
-                        sph_volume::isFiniteValue(dissipativeEnergyRate) &&
-                        sph_volume::isFiniteValue(conductionExchangeRate))) {
+                        sph_volume::isFiniteValue(du_a_dτ_diss) &&
+                        sph_volume::isFiniteValue(ΣC_ab_over_a))) {
                     printf("SPH variational rates are not finite: smoothingLength=%e density=%e "
                            "ζ=%e\n",
                         H_a, ρ_a, ζ_a);
                     __trap();
                 }
-                Vector3<float> gravityAcceleration(0.0f);
+                SpatialVector<float> dv_a_dτ_grav(0.0f);
 #if COSMICTIGER_WITH_GRAVITY
                 if (!parameters.midpointHydro && !parameters.deferAccelerationSources &&
                     data.selfGravityEnabled) {
-                    gravityAcceleration = Vector3<float>(data.sinkGravityAccelerationX[sinkIndex],
-                        data.sinkGravityAccelerationY[sinkIndex],
-                        data.sinkGravityAccelerationZ[sinkIndex]);
+                    dv_a_dτ_grav = data.sinkGravityAcceleration(sinkIndex);
                 }
 #endif
                 if (!parameters.deferAccelerationSources) {
                     dv_a_dτ = sphCompleteAcceleration(parameters,
-                        Vector3<Position>(positionX, positionY, positionZ), velocity, dv_a_dτ,
-                        gravityAcceleration, data.centralAcceleration, data.centralSmoothingLength,
-                        flops);
+                        data.sourcePaddedPosition(particleIndex), v_a, dv_a_dτ, dv_a_dτ_grav,
+                        data.centralAcceleration, data.centralSmoothingLength, flops);
                 } else {
                     ALWAYS_ASSERT(parameters.phase == 0);
                 }
                 if (applyPairKicks) {
-                    Vector3<float> const externalAcceleration = sphCompleteAcceleration(parameters,
-                        Vector3<Position>(positionX, positionY, positionZ), velocity,
-                        Vector3<float>(0.0f), Vector3<float>(0.0f), data.centralAcceleration,
+                    SpatialVector<float> const dv_a_dτ_ext = sphCompleteAcceleration(parameters,
+                        data.sourcePaddedPosition(particleIndex), v_a, SpatialVector<float>(0.0f),
+                        SpatialVector<float>(0.0f), data.centralAcceleration,
                         data.centralSmoothingLength, flops);
                     flops += sphAccumulateExternalKick(
-                        data.sourcePairUpdates[particleIndex], externalAcceleration, kickTimestep);
+                        data.sourcePairUpdates[particleIndex], dv_a_dτ_ext, Δτ);
                 }
                 if (data.sinkAccelerations) {
                     for (int dim = 0; dim < kSpatialDimensions; dim++) {
@@ -428,58 +432,59 @@ __global__ void sphCudaHydro(
                 }
                 // E=a^2 u and homogeneous work du/dt=-3 H P/rho give
                 // dE/dtau=(2-3 P/(rho*u)) (da/dtau)/a E = (5-3 gamma) (da/dtau)/a E.
-                float const expansionCoefficient = 5.0f - 3.0f * γ;
-                du_a_dτ += expansionCoefficient * expansionRate * inverseScaleFactor * u_a;
+                float const five_minus_3γ = 5.0f - 3.0f * γ;
+                du_a_dτ += five_minus_3γ * aȧ * a_inv * u_a;
                 flops += 6;    // Homogeneous thermal expansion; force sources count separately.
                 if (data.sinkInternalEnergyRate) {
-                    data.sinkInternalEnergyRate[sinkIndex] = du_a_dτ + dissipativeEnergyRate;
+                    data.sinkInternalEnergyRate[sinkIndex] = du_a_dτ + du_a_dτ_diss;
                     flops += 1;
                 }
                 if (data.sinkEntropyRate) {
                     // Reversible PdV and homogeneous expansion leave A unchanged.
-                    data.sinkEntropyRate[sinkIndex] = sph_entropy::fromStoredEnergy(
-                        dissipativeEnergyRate, ρ_a, γ, parameters.scaleFactor);
+                    data.sinkEntropyRate[sinkIndex] =
+                        sph_entropy::fromStoredEnergy(du_a_dτ_diss, ρ_a, γ, parameters.scaleFactor);
                     flops += sph_flops::entropyConversionFlops(γ);
                 }
                 if (parameters.phase == 1) {
                     // clang-format off
                     /*
                      * Section 10.3, p. 563:
-                     *   δt_f = min_a (smoothingLength/|f_a|),
-                     *   δt_cv = min_a smoothingLength/(soundSpeed + 0.6 (α soundSpeed + β max_b
-                     *   μ_ab)), δt = 0.25 min(δt_f, δt_cv).
-                     * smoothingLength is the common effective radius 2σ (docs/monaghan_sph.md). The
-                     * printed δt_f lacks a square root and is used as sqrt(smoothingLength/|f_a|);
+                     *   δt_f = min_a (h_a/|f_a|),
+                     *   δt_cv = min_a h_a/(c_a + 0.6 (α c_a + β max_b μ_ab)),
+                     *   δt = 0.25 min(δt_f, δt_cv).
+                     * h_a is the common effective radius 2σ (docs/monaghan_sph.md). The
+                     * printed δt_f lacks a square root and is used as sqrt(h_a/|f_a|);
                      * max_b μ_ab is read as max_b(−μ_ab); the Courant factor and the calibrated
                      * acceleration coefficient replace the fixed 0.25. The reciprocals are kept
                      * apart for the diagnostics.
                      *
                      * Symbol directory (in the code below):
-                     *   μ_ab → viscosity velocity
+                     *   μ_ab → viscosity velocity; max_b μ_ab → maximum compression speed
                      *   |f_a| → acceleration magnitude
-                     *   Code names: abs_f_a = |f_a|.
-                     *   δt → time step
+                     *   h_a → effective radius; c_a → sound speed
+                     *   δt → time step; δt_g → gravity time step
+                     *   δt_f⁻¹, δt_cv⁻¹ → inverse acceleration time step, inverse Courant time step
+                     *   δt_c⁻¹, δt_v⁻¹ → sound and viscosity terms of δt_cv⁻¹
                      *   α → maximum bulk viscosity coefficient
                      *   β → maximum von Neumann–Richtmyer coefficient
+                     *   Code names: abs_f_a = |f_a|; max_b_μ_ab = max_b μ_ab; δt_inv_f = δt_f⁻¹;
+                     *     δt_inv_cv = δt_cv⁻¹; δt_inv_c = δt_c⁻¹; δt_inv_v = δt_v⁻¹.
                      */
                     // clang-format on
-                    float const smoothingLength = H_a / smoothingLengthPerEffectiveRadius;
-                    float const inverseSoundTimestep = soundSpeed / smoothingLength;
+                    float const h_a = H_a / smoothingLengthPerEffectiveRadius;
+                    float const δt_inv_c = c_a / h_a;
                     float const β = parameters.vonNeumannRichtmyerCoefficientFollowsBulk() ?
                         parameters.vonNeumannRichtmyerCoefficient * α :
                         parameters.vonNeumannRichtmyerCoefficient;
-                    float const inverseViscosityTimestep =
-                        0.6f * (α * soundSpeed + β * maximumCompressionSpeed) / smoothingLength;
-                    float const inverseCourantTimestep =
-                        inverseSoundTimestep + inverseViscosityTimestep;
-                    float const abs_f_a = sqrtf(dv_a_dτ.dot(dv_a_dτ));
-                    float const inverseAccelerationTimestep = parameters.courantFactor *
-                        sqrtf(parameters.scaleFactor * abs_f_a / smoothingLength) /
+                    float const δt_inv_v = 0.6f * (α * c_a + β * max_b_μ_ab) / h_a;
+                    float const δt_inv_cv = δt_inv_c + δt_inv_v;
+                    float const abs_f_a = dv_a_dτ.norm();
+                    float const δt_inv_f = parameters.courantFactor *
+                        sqrtf(parameters.scaleFactor * abs_f_a / h_a) /
                         (data.accelerationTimestepFactor * kHydroAccelerationScale);
                     float δt = fminf(parameters.maximumTimestep,
                         parameters.courantFactor * parameters.scaleFactor /
-                            fmaxf(fmaxf(inverseCourantTimestep, inverseAccelerationTimestep),
-                                1.0e-30f));
+                            fmaxf(fmaxf(δt_inv_cv, δt_inv_f), 1.0e-30f));
                     // Bound reversible work; the approach-speed CFL term controls viscosity.
                     if (du_a_dτ != 0.0f) {
                         flops += 3;
@@ -488,8 +493,8 @@ __global__ void sphCudaHydro(
                                 fabsf(du_a_dτ));
                     }
                     // Derived positivity bound, matching the CPU sum over all neighbors.
-                    if (conductionExchangeRate > 0.0f) {
-                        δt = fminf(δt, 0.5f / conductionExchangeRate);
+                    if (ΣC_ab_over_a > 0.0f) {
+                        δt = fminf(δt, 0.5f / ΣC_ab_over_a);
                         flops += 1;
                     }
                     ALWAYS_ASSERT(isfinite(δt) && δt > 0.0f);
@@ -507,20 +512,19 @@ __global__ void sphCudaHydro(
                         nextRung = max(nextRung, maximumNeighborRung - kMaxNeighborRungDifference);
                     }
 #if COSMICTIGER_WITH_GRAVITY
-                    float gravityTimestep = parameters.maximumTimestep;
+                    float δt_g = parameters.maximumTimestep;
                     int gravityRung = 0;
                     if (!parameters.midpointHydro) {
-                        gravityTimestep = fminf(parameters.maximumTimestep,
+                        δt_g = fminf(parameters.maximumTimestep,
                             data.accelerationTimestepFactor *
                                 sqrtf(parameters.scaleFactor * data.gravityEffectiveRadius /
-                                    fmaxf(sqrtf(gravityAcceleration.dot(gravityAcceleration)),
-                                        1.0e-30f)));
+                                    fmaxf(dv_a_dτ_grav.norm(), 1.0e-30f)));
                         if (data.selfGravityEnabled) {
-                            atomicMin(&reduction->minimumTimestep, gravityTimestep);
+                            atomicMin(&reduction->minimumTimestep, δt_g);
                         }
                         gravityRung = parameters.globalTimestep ?
                             0 :
-                            max(1, int(ceilf(log2f(parameters.baseTimestep / gravityTimestep))));
+                            max(1, int(ceilf(log2f(parameters.baseTimestep / δt_g))));
                         nextRung = max(nextRung, data.selfGravityEnabled ? gravityRung : 1);
                         maximumGravityRung = max(maximumGravityRung, gravityRung);
                         // Exclude the bound computed only for disabled-gravity diagnostics.
@@ -544,17 +548,17 @@ __global__ void sphCudaHydro(
                             hydroRung, previousRung, parameters.minimumRung,
                             parameters.baseTimestep, δt, parameters.maximumTimestep,
                             parameters.courantFactor * parameters.scaleFactor /
-                                fmaxf(inverseCourantTimestep, 1.0e-30f),
+                                fmaxf(δt_inv_cv, 1.0e-30f),
                             parameters.courantFactor * parameters.scaleFactor /
-                                fmaxf(inverseAccelerationTimestep, 1.0e-30f),
+                                fmaxf(δt_inv_f, 1.0e-30f),
                             du_a_dτ != 0.0f ? parameters.courantFactor /
                                     float(monaghan::kViscosityWidthScale) * u_a / fabsf(du_a_dτ) :
                                               parameters.maximumTimestep,
-                            H_a, ρ_a, u_a, du_a_dτ, abs_f_a, soundSpeed, maximumCompressionSpeed, α,
-                            m_b / (m_b - ζ_a), parameters.scaleFactor);
+                            H_a, ρ_a, u_a, du_a_dτ, abs_f_a, c_a, max_b_μ_ab, α, m_b / (m_b - ζ_a),
+                            parameters.scaleFactor);
 #if COSMICTIGER_WITH_GRAVITY
                         printf("SPH gravity timestep: enabled=%i gravityRung=%i gravityDt=%e\n",
-                            int(data.selfGravityEnabled), gravityRung, gravityTimestep);
+                            int(data.selfGravityEnabled), gravityRung, δt_g);
 #endif
                     }
                     // Publish only representable rungs. Every thread still reaches
@@ -571,13 +575,12 @@ __global__ void sphCudaHydro(
                     }
                     maximumHydroRung = max(maximumHydroRung, hydroRung);
                     maximumRung = max(maximumRung, nextRung);
-                    maximumSignalSpeed =
-                        fmaxf(maximumSignalSpeed, inverseCourantTimestep * smoothingLength);
+                    maximumSignalSpeed = fmaxf(maximumSignalSpeed, δt_inv_cv * h_a);
                     // Exclude the signal-speed report.
-                    flops += parameters.globalTimestep ? 22 : 25;
-                    atomicMax(&reduction->inverseSoundTimestep, inverseSoundTimestep);
-                    atomicMax(&reduction->inverseViscosityTimestep, inverseViscosityTimestep);
-                    atomicMax(&reduction->inverseAccelerationTimestep, inverseAccelerationTimestep);
+                    flops += sph_flops::kNorm + (parameters.globalTimestep ? 16 : 19);
+                    atomicMax(&reduction->inverseSoundTimestep, δt_inv_c);
+                    atomicMax(&reduction->inverseViscosityTimestep, δt_inv_v);
+                    atomicMax(&reduction->inverseAccelerationTimestep, δt_inv_f);
                 }
             }
         }
