@@ -794,12 +794,12 @@ SphRunReturn sphMidpointForces(
      * Reference: Goodman, Numerical Methods II (2016), lecture 3, RK methods,
      * https://math.nyu.edu/~goodman/teaching/NumericalMethodsII2016/notes/lecture3.pdf
      * The rung partition and fixed-position split are local derivations.
-     * Symbol directory: Δτ -> timestep; Fᵣ -> sphRun with the due-pair filter;
-     * Y₀ -> pairBaselines; Y* -> predictor particle state; w -> velocity;
+     * Symbol directory: Δτ -> timestep; Fᵣ -> SPH run with the due-pair filter;
+     * Y₀ -> pair baselines; Y* -> predictor particle state; w -> velocity;
      * A -> entropy. Positions and the cosmological scale stay at this event.
      */
     // clang-format on
-    double const timestep = params.hydroKickTimestep;
+    double const Δτ = params.hydroKickTimestep;
     params.accelerationGradientViscosity = params.gradientSwitch();
     if (params.accelerationGradientViscosity) {
         params.pairMinimumRung = params.minimumRung;
@@ -848,7 +848,7 @@ SphRunReturn sphMidpointForces(
         if (gravityStage && params.accelerationGradientViscosity) {
             gravityStage();
         }
-        params.hydroKickTimestep = 0.5 * timestep;
+        params.hydroKickTimestep = 0.5 * Δτ;
         auto result = sphRun(params, cuda);
         updateSensor();
         sphCommitPairUpdates(1);
@@ -863,7 +863,7 @@ SphRunReturn sphMidpointForces(
         if (gravityStage && params.accelerationGradientViscosity) {
             gravityStage();
         }
-        params.hydroKickTimestep = timestep;
+        params.hydroKickTimestep = Δτ;
         params.retainProposedRungs = true;
         result += sphRun(params, cuda);
         updateSensor();

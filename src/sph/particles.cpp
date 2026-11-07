@@ -430,10 +430,8 @@ void sphParticlesGlobalReadPositions(
                 for (ParticleInteger i = begin; i < end; i++) {
                     ParticleInteger const srcIndex = i - lineId.index;
                     x[destIndex] = ptr[srcIndex][kXi];
-                    y[destIndex] =
-                        kSpatialDimensions > 1 ? ptr[srcIndex][kYi] : Position(0.5);
-                    z[destIndex] =
-                        kSpatialDimensions > 2 ? ptr[srcIndex][kZi] : Position(0.5);
+                    y[destIndex] = kSpatialDimensions > 1 ? ptr[srcIndex][kYi] : Position(0.5);
+                    z[destIndex] = kSpatialDimensions > 2 ? ptr[srcIndex][kZi] : Position(0.5);
                     destIndex++;
                 }
             }

@@ -161,10 +161,10 @@ CUDA_EXPORT inline Output advance(Input const& input, Parameters const& paramete
     double const step = parameters.explicitTimestep >= 0.0 ?
         parameters.explicitTimestep :
         ::ldexp(parameters.baseTimestep, -input.rung);
-    double const interval = parameters.scaleFactor * step * parameters.timeSeconds;
+    double const Δt = parameters.scaleFactor * step * parameters.timeSeconds;
     auto& state = output.state;
-    if (state.id == 0 || !detail::finite(parameters.explicitTimestep) || !(interval > 0.0) ||
-        !detail::finite(interval) || !detail::finite(state.specificStarFormationRate) ||
+    if (state.id == 0 || !detail::finite(parameters.explicitTimestep) || !(Δt > 0.0) ||
+        !detail::finite(Δt) || !detail::finite(state.specificStarFormationRate) ||
         state.specificStarFormationRate < 0.0 || !detail::finite(state.elapsedPhysicalTime)) {
         output.status = 4;
         return output;
@@ -172,16 +172,16 @@ CUDA_EXPORT inline Output advance(Input const& input, Parameters const& paramete
     // Official run.cc calls sfr_create_star_particles BEFORE cooling_and_starformation.
     // Sample the saved previous SFR over this full selected SPH interval.
     double const probability =
-        springel_and_hernquist::starFormationProbability(state.specificStarFormationRate, interval);
+        springel_and_hernquist::starFormationProbability(state.specificStarFormationRate, Δt);
     output.convert =
         detail::uniform(state.id, state.eventCounter, 0, parameters.seed) < probability;
     ++state.eventCounter;
-    state.elapsedPhysicalTime += interval;
+    state.elapsedPhysicalTime += Δt;
     if (!detail::finite(state.elapsedPhysicalTime)) {
         output.status = 4;
         return output;
     }
-    output.physicalInterval = interval;
+    output.physicalInterval = Δt;
     if (output.convert) {
         output.energy = 0.0f;
         state.specificStarFormationRate = 0.0;
@@ -191,29 +191,28 @@ CUDA_EXPORT inline Output advance(Input const& input, Parameters const& paramete
         return output;
     }
     double const physicalDensity = detail::density(input, parameters);
-    double const oldEnergy = detail::energy(input.energy, parameters);
-    double newEnergy = oldEnergy;
+    double const u_0 = detail::energy(input.energy, parameters);
+    double u_Δt = u_0;
     double electrons = input.electronFraction;
     if (detail::eligible(input, parameters)) {
         springel_and_hernquist::Equilibrium phase;
         if (!springel_and_hernquist::evaluateEquilibrium(
                 parameters.model, parameters.cooling, physicalDensity, electrons, phase) ||
-            !springel_and_hernquist::clampSourceTime(
-                parameters.model.parameters, interval, phase)) {
+            !springel_and_hernquist::clampSourceTime(parameters.model.parameters, Δt, phase)) {
             output.status = 1;
             return output;
         }
         // The official dense branch persists Ne from the hot cooling-time
         // lookup. Its subsequent DoCooling uses a local Ne, not that field.
         double coolingElectrons = electrons;
-        if (oldEnergy > phase.effectiveEnergy) {
-            if (gadget4::doCooling(oldEnergy, physicalDensity, interval, parameters.cooling,
-                    coolingElectrons, newEnergy) != gadget4::Status::Success) {
+        if (u_0 > phase.effectiveEnergy) {
+            if (gadget4::doCooling(u_0, physicalDensity, Δt, parameters.cooling, coolingElectrons,
+                    u_Δt) != gadget4::Status::Success) {
                 output.status = 2;
                 return output;
             }
-            if (newEnergy < phase.effectiveEnergy) {
-                newEnergy = phase.effectiveEnergy;
+            if (u_Δt < phase.effectiveEnergy) {
+                u_Δt = phase.effectiveEnergy;
             }
         } else {
             // clang-format off
@@ -223,31 +222,32 @@ CUDA_EXPORT inline Output advance(Input const& input, Parameters const& paramete
              * Derived frozen-equilibrium relaxation used by the GADGET-4 source:
              *   u(Δt) = u_eff + [u(0) − u_eff] exp(−Δt/τ_h).
              * Symbol directory:
-             *   u(0) → oldEnergy; u_eff → phase.effectiveEnergy; Δt → interval
-             *   τ_h → phase.relaxationTime; u(Δt) → newEnergy.
+             *   u(0) → old energy; u_eff → effective energy; Δt → interval
+             *   τ_h → relaxation time; u(Δt) → new energy.
+             *   Code names: u_0 = u(0); u_Δt = u(Δt).
              */
             // clang-format on
-            newEnergy = phase.effectiveEnergy +
-                (oldEnergy - phase.effectiveEnergy) * ::exp(-interval / phase.relaxationTime);
+            u_Δt = phase.effectiveEnergy +
+                (u_0 - phase.effectiveEnergy) * ::exp(-Δt / phase.relaxationTime);
         }
-        if (newEnergy < parameters.cooling.minimumSpecificEnergy) {
-            newEnergy = parameters.cooling.minimumSpecificEnergy;
+        if (u_Δt < parameters.cooling.minimumSpecificEnergy) {
+            u_Δt = parameters.cooling.minimumSpecificEnergy;
         }
-        detail::recordPhase(output, phase, newEnergy);
+        detail::recordPhase(output, phase, u_Δt);
     } else {
-        double const initialEnergy = oldEnergy < parameters.cooling.minimumSpecificEnergy ?
+        double const initialEnergy = u_0 < parameters.cooling.minimumSpecificEnergy ?
             parameters.cooling.minimumSpecificEnergy :
-            oldEnergy;
-        if (gadget4::doCooling(initialEnergy, physicalDensity, interval, parameters.cooling,
-                electrons, newEnergy) != gadget4::Status::Success) {
+            u_0;
+        if (gadget4::doCooling(initialEnergy, physicalDensity, Δt, parameters.cooling, electrons,
+                u_Δt) != gadget4::Status::Success) {
             output.status = 2;
             return output;
         }
-        if (newEnergy < parameters.cooling.minimumSpecificEnergy) {
-            newEnergy = parameters.cooling.minimumSpecificEnergy;
+        if (u_Δt < parameters.cooling.minimumSpecificEnergy) {
+            u_Δt = parameters.cooling.minimumSpecificEnergy;
         }
     }
-    if (!detail::storedEnergy(newEnergy, parameters, output.energy) || !detail::finite(electrons) ||
+    if (!detail::storedEnergy(u_Δt, parameters, output.energy) || !detail::finite(electrons) ||
         electrons < 0.0 || electrons > FLT_MAX) {
         output.status = 2;
         return output;

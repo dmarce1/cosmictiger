@@ -83,7 +83,7 @@ PositionInteger meshDomainPosition(int identity, int dim, int fixture, int phase
         // cell in x, so the count-balanced plane differs from the midpoint and
         // from the plane nearest the continuous median.
         int const cell = dim == kXi ? (identity < 80 ? 3 : 4 + identity % 11) :
-                                              (identity * 5 + 2 * dim) % kMeshDomainMeshSize;
+                                      (identity * 5 + 2 * dim) % kMeshDomainMeshSize;
         raw = cellWidth * (2 * cell + 1) / 2 + identity % 3;
     }
     // Half a period is an exact multiple of every power-of-two cell width, so

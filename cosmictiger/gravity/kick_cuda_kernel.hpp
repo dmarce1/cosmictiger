@@ -259,7 +259,7 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                             ALWAYS_ASSERT(params.top);
                             // Derived full-force quantization:
                             // r = max(ceil(log₂(Δτ₀/Δτ_G)), r_old−1, r_min).
-                            // Δτ₀ -> params.t0; Δτ_G -> dt; r -> nextRung.
+                            // Δτ₀ -> base timestep; Δτ_G -> gravity timestep; r -> next rung.
                             nextRung = max(
                                 (int) ceilf(log2f(params.t0 / dt)), max(rung - 1, params.minRung));
                         }
@@ -663,8 +663,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                             other.pos[dim], dim, geometry, &geometryFlops);    // 3
                                     }
                                     float const r2 = fmaf(dx[kXi], dx[kXi],
-                                        fmaf(dx[kYi], dx[kYi],
-                                            dx[kZi] * dx[kZi]));
+                                        fmaf(dx[kYi], dx[kYi], dx[kZi] * dx[kZi]));
                                     float const pairSmoothingLength = fmmPairSmoothingLength(
                                         smoothingLength, self.maxGravitySmoothingLength,
                                         other.maxGravitySmoothingLength);

@@ -127,12 +127,12 @@ std::pair<Vector<double>, Array<Vector<double>, kDimensions>> gravityAnalyticCal
     CudaStream copies(cudaGetDevice());
     copies.copyAsync(
         rc.first.data(), devPhi, sizeof(double) * numberOfSinks, cudaMemcpyDeviceToHost);
-    copies.copyAsync(rc.second[kXi].data(), devGx, sizeof(double) * numberOfSinks,
-        cudaMemcpyDeviceToHost);
-    copies.copyAsync(rc.second[kYi].data(), devGy, sizeof(double) * numberOfSinks,
-        cudaMemcpyDeviceToHost);
-    copies.copyAsync(rc.second[kZi].data(), devGz, sizeof(double) * numberOfSinks,
-        cudaMemcpyDeviceToHost);
+    copies.copyAsync(
+        rc.second[kXi].data(), devGx, sizeof(double) * numberOfSinks, cudaMemcpyDeviceToHost);
+    copies.copyAsync(
+        rc.second[kYi].data(), devGy, sizeof(double) * numberOfSinks, cudaMemcpyDeviceToHost);
+    copies.copyAsync(
+        rc.second[kZi].data(), devGz, sizeof(double) * numberOfSinks, cudaMemcpyDeviceToHost);
     copies.wait();
     return rc;
 }

@@ -177,12 +177,9 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
                 }
             }
             for (ParticleInteger k = myRng.first; k < myRng.second; k++) {
-                SimdPosition sinkX =
-                    simdBroadcast<SimdPosition>(particlesPos(kXi, k).raw());
-                SimdPosition sinkY =
-                    simdBroadcast<SimdPosition>(particlesPos(kYi, k).raw());
-                SimdPosition sinkZ =
-                    simdBroadcast<SimdPosition>(particlesPos(kZi, k).raw());
+                SimdPosition sinkX = simdBroadcast<SimdPosition>(particlesPos(kXi, k).raw());
+                SimdPosition sinkY = simdBroadcast<SimdPosition>(particlesPos(kYi, k).raw());
+                SimdPosition sinkZ = simdBroadcast<SimdPosition>(particlesPos(kZi, k).raw());
                 for (int j = 0; j < totalSize; j += kSimdFloatSize) {
                     static SimdFloat const toFloatFactor =
                         simdBroadcast<SimdFloat>(kPositionToFloat);
@@ -225,12 +222,9 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
             do {
                 foundLink = false;
                 for (ParticleInteger j = myRng.first; j < myRng.second; j++) {
-                    SimdPosition sinkX =
-                        simdBroadcast<SimdPosition>(particlesPos(kXi, j).raw());
-                    SimdPosition sinkY =
-                        simdBroadcast<SimdPosition>(particlesPos(kYi, j).raw());
-                    SimdPosition sinkZ =
-                        simdBroadcast<SimdPosition>(particlesPos(kZi, j).raw());
+                    SimdPosition sinkX = simdBroadcast<SimdPosition>(particlesPos(kXi, j).raw());
+                    SimdPosition sinkY = simdBroadcast<SimdPosition>(particlesPos(kYi, j).raw());
+                    SimdPosition sinkZ = simdBroadcast<SimdPosition>(particlesPos(kZi, j).raw());
                     for (ParticleInteger k = j + 1; k < myRng.second; k += kSimdFloatSize) {
                         static SimdFloat const toFloatFactor =
                             simdBroadcast<SimdFloat>(kPositionToFloat);

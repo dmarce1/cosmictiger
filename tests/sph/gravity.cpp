@@ -244,16 +244,15 @@ void verifyKick(
         double const sourceMass = particlesMass(1 - i);
         double const acceleration =
             kGravityScale * (gas ? 1.0 : -1.0) * sourceMass * separation * inverseCube;
-        requireClose(
-            "kick acceleration", particlesGravityAcceleration(kXi, i), acceleration);
+        requireClose("kick acceleration", particlesGravityAcceleration(kXi, i), acceleration);
         requireClose("kick potential with self mass removed", particlesPot(i),
             -kGravityScale * sourceMass * inverseRadius, 2e-4);
         requireClose("transverse force", particlesGravityAcceleration(kYi, i), 0.0);
         if (gas && sphMidpointEnabled()) {
             requireClose("gas gravity retains the latest hydro rung bound", particlesRung(i), 4);
             double const halfStep = 0.5 * std::ldexp(double(parameters.t0), -particlesRung(i));
-            requireClose("midpoint gas receives its gravity opening kick",
-                particlesVel(kXi, i), 0.125 + halfStep * acceleration);
+            requireClose("midpoint gas receives its gravity opening kick", particlesVel(kXi, i),
+                0.125 + halfStep * acceleration);
             requireClose("midpoint gravity leaves transverse velocity unchanged",
                 particlesVel(kYi, i), 0.25);
             requireClose("midpoint gravity leaves the thermal seed unchanged",
@@ -346,8 +345,7 @@ void verifyBhPotentials(bool useCuda) {
     requireClose("halo point potential excludes coincident source", potential[0], expected);
     double expectedMidpoint = 0.0;
     for (int i = 0; i < 2; ++i) {
-        double const pointSeparation =
-            std::abs(double(points[1][kXi]) - sources[i][kXi]);
+        double const pointSeparation = std::abs(double(points[1][kXi]) - sources[i][kXi]);
         softenedPairReference(pointSeparation, inverseCube, inverseRadius);
         expectedMidpoint -= getOptions().gravity.gm * inverseRadius;
     }
@@ -369,8 +367,8 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
         built.maxGravitySmoothingLength, getOptions().gravity.smoothingLength);
     ParticleInteger const gas = sphParticlesParticleIndex(0);
     ParticleInteger const darkMatterIndex = 1 - gas;
-    double const separation = particlesPos(kXi, darkMatterIndex).toDouble() -
-        particlesPos(kXi, gas).toDouble();
+    double const separation =
+        particlesPos(kXi, darkMatterIndex).toDouble() - particlesPos(kXi, gas).toDouble();
     double inverseCube = 1.0 / (separation * separation * separation);
     double inverseRadius = 1.0 / separation;
     if (softened) {
@@ -446,9 +444,8 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
         item.pos = origin;
         item.self = built.id;
         item.dchecklist.push_back(built.id);
-        auto const cudaResult =
-            cudaExecuteKicks(params, particlesX[kXi], particlesX[kYi],
-                particlesX[kZi], treeData(), Vector<KickWorkitem>{item});
+        auto const cudaResult = cudaExecuteKicks(params, particlesX[kXi], particlesX[kYi],
+            particlesX[kZi], treeData(), Vector<KickWorkitem>{item});
         requireClose("CUDA kick total potential", cudaResult.pot, cpuResult.pot, 2e-4);
         verifyKick(inverseCube, inverseRadius, separation, params);
         requireClose("CUDA gravity rung uses the variance smoothing length",
@@ -469,9 +466,8 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
                 item.pos = origin;
                 item.self = built.id;
                 item.dchecklist.push_back(built.id);
-                return cudaExecuteKicks(parameters, particlesX[kXi],
-                    particlesX[kYi], particlesX[kZi], treeData(),
-                    Vector<KickWorkitem>{item});
+                return cudaExecuteKicks(parameters, particlesX[kXi], particlesX[kYi],
+                    particlesX[kZi], treeData(), Vector<KickWorkitem>{item});
             }
 #else
             ALWAYS_ASSERT(!gpu);
@@ -499,8 +495,7 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
             sphParticlesSetProposedRung(0, 4);
             verifyPairDivergence("neighbor closure preserves decoded divergence");
             result += gravityFinishBalancedGasKick(params.t0, params.sign);
-            requireClose("balanced opening uses the final gas rung",
-                particlesVel(kXi, gasIndex),
+            requireClose("balanced opening uses the final gas rung", particlesVel(kXi, gasIndex),
                 0.125 + 0.5 * rungDt[6] * params.t0 * gasAcceleration, 1e-6);
             requireClose("balanced opening publishes the final rung", result.maxRung, 6);
             for (int dimension = 0; dimension < kDimensions; ++dimension) {
@@ -539,10 +534,10 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
                     auto const beforeOpening = particlesVel(kXi, gasIndex);
                     auto const opened = gravityFinishDeferredGasOpening();
                     double const expectedOpening = 0.25 * params.t0 * gasAcceleration;
-                    requireClose("deferred gas opening follows hydro",
-                        particlesVel(kXi, gasIndex), beforeOpening + expectedOpening, 1e-6);
-                    double const kineticChange = 0.5 * gasMass *
-                        (sqr(particlesVel(kXi, gasIndex)) - sqr(beforeOpening));
+                    requireClose("deferred gas opening follows hydro", particlesVel(kXi, gasIndex),
+                        beforeOpening + expectedOpening, 1e-6);
+                    double const kineticChange =
+                        0.5 * gasMass * (sqr(particlesVel(kXi, gasIndex)) - sqr(beforeOpening));
                     requireClose("deferred opening kinetic ledger", opened.dkin, kineticChange);
                     requireClose("deferred opening synchronized correction",
                         opened.darkMatterKineticCorrection, -kineticChange);
@@ -561,8 +556,8 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
             requireClose("frozen gas leaves dark-matter selection unchanged",
                 particlesRung(darkMatterIndex), 2);
             requireClose("frozen traditional opening uses the existing interval",
-                particlesVel(kXi, gasIndex),
-                0.125 + 0.5 * rungDt[1] * params.t0 * gasAcceleration, 1e-6);
+                particlesVel(kXi, gasIndex), 0.125 + 0.5 * rungDt[1] * params.t0 * gasAcceleration,
+                1e-6);
             verifyPairDivergence("frozen traditional kick preserves decoded divergence");
 
             resetKickState();
@@ -640,8 +635,8 @@ void checkpointPair() {
     verifyMappings();
     requireClose("checkpoint particle count", particlesSize(), 2);
     requireClose("checkpoint gas count", sphParticlesSize(), 1);
-    requireClose("checkpoint position",
-        particlesPos(kXi, sphParticlesParticleIndex(0)).toDouble(), position.toDouble());
+    requireClose("checkpoint position", particlesPos(kXi, sphParticlesParticleIndex(0)).toDouble(),
+        position.toDouble());
     requireClose("checkpoint hydro length", sphParticlesSmoothingLength(0), 0.02);
     requireClose("checkpoint internal energy", sphParticlesEntropies[0], 4.0);
     requireClose("checkpoint persistent hydro rung", sphParticlesProposedRung(0), 4);
@@ -778,8 +773,7 @@ void validateSphDomainRegression() {
         requireClose("remote prior divergence sign cache", divergence[1], expectedSign);
     }
     float velocity[kDimensions][3]{};
-    sphParticlesGlobalReadVelocities(
-        remote, velocity[kXi], velocity[kYi], velocity[kZi], 1);
+    sphParticlesGlobalReadVelocities(remote, velocity[kXi], velocity[kYi], velocity[kZi], 1);
     for (int dimension = 0; dimension < kDimensions; ++dimension) {
         requireClose("remote velocity cache", velocity[dimension][1], 0.125 * (dimension + 1));
     }
@@ -1008,10 +1002,8 @@ void prepareSphGravitySensorRegression() {
         if (particlesType(particle) == kDarkMatterType) {
             // Break the alternating periodic lattice's exact zero-force
             // symmetry so an unfilled stage buffer cannot pass the comparison.
-            particlesPos(kXi, particle) =
-                particlesPos(kXi, particle).toDouble() + 0.03125;
-            particlesPos(kYi, particle) =
-                particlesPos(kYi, particle).toDouble() + 0.015625;
+            particlesPos(kXi, particle) = particlesPos(kXi, particle).toDouble() + 0.03125;
+            particlesPos(kYi, particle) = particlesPos(kYi, particle).toDouble() + 0.015625;
         }
     }
 }

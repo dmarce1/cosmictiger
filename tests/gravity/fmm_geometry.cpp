@@ -222,8 +222,7 @@ TEST(FmmGeometry, NearCellImageCanExceedHalfBox) {
         EXPECT_GT(fmmPositionDifference(sinks[0], sources[0], kXi, {}), 0.0f);
         geometry.sinkCell[kXi] = meshSize - 1;
         detail::checkDifferences({Position(0.99)}, {Position(0.41)}, geometry);
-        EXPECT_GT(
-            fmmPositionDifference(Position(0.99), Position(0.41), kXi, geometry), 0.5f);
+        EXPECT_GT(fmmPositionDifference(Position(0.99), Position(0.41), kXi, geometry), 0.5f);
     }
 }
 
@@ -273,8 +272,7 @@ TEST(FmmGeometry, LowBitsSurviveWithinCellsAndAcrossTheSeam) {
             sources[i] = detail::rawPosition(half);
         }
         detail::checkDifferences(sinks, sources, geometry);
-        EXPECT_EQ(
-            fmmPositionDifference(sinks[0], sources[0], kXi, geometry), kPositionToFloat);
+        EXPECT_EQ(fmmPositionDifference(sinks[0], sources[0], kXi, geometry), kPositionToFloat);
     }
 }
 
@@ -315,8 +313,7 @@ TEST(FmmGeometry, BoxEndpointsKeepSubDoubleSeamDistances) {
                 sinks[lane][dim] = sources[lane][dim] = 0.0;
             }
             boxes[lane].begin[kXi] = boxes[lane].end[kXi] = upper ? 1.0 : 0.0;
-            sinks[lane][kXi] =
-                detail::rawPosition(upper ? last - lane : PositionInteger(lane + 1));
+            sinks[lane][kXi] = detail::rawPosition(upper ? last - lane : PositionInteger(lane + 1));
             sources[lane][kXi] =
                 detail::rawPosition(upper ? PositionInteger(lane + 1) : last - lane);
         }

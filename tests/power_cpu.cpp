@@ -38,8 +38,7 @@ void testFoldedDensity() {
                 auto const actual = assignTiledDensity(
                     kGridSize, tileSize, [&](Range<int64_t> const& box, float* density) {
                         accumulateDensityCpuKernel(fixture.positions[kXi].data(),
-                            fixture.positions[kYi].data(),
-                            fixture.positions[kZi].data(),
+                            fixture.positions[kYi].data(), fixture.positions[kZi].data(),
                             weighted ? fixture.masses.data() : nullptr, fixture.masses.size(), fold,
                             kGridSize, box, density);
                     });
@@ -64,9 +63,9 @@ void testUniformLattice() {
     }
     auto const density =
         assignTiledDensity(kGridSize, 3, [&](Range<int64_t> const& box, float* output) {
-            accumulateDensityCpuKernel(fixture.positions[kXi].data(),
-                fixture.positions[kYi].data(), fixture.positions[kZi].data(),
-                nullptr, fixture.masses.size(), 1, kGridSize, box, output);
+            accumulateDensityCpuKernel(fixture.positions[kXi].data(), fixture.positions[kYi].data(),
+                fixture.positions[kZi].data(), nullptr, fixture.masses.size(), 1, kGridSize, box,
+                output);
         });
     for (double value : density) {
         requireClose(value, 1.0, 2.0e-5, "unit lattice produces uniform density");

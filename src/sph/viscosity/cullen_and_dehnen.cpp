@@ -18,20 +18,14 @@ namespace cullen_and_dehnen {
  *   α_iⁿ⁺¹ = α_loc,i                                      if α_iⁿ < α_loc,i,
  *   α_iⁿ⁺¹ = α_loc,i + (α_iⁿ − α_loc,i) exp(−Δt/τ_i)       otherwise.
  * Symbol directory:
- *   α_iⁿ → bulkViscosityCoefficient/currentBulkViscosityCoefficient
- *   α_loc,i → targetBulkViscosityCoefficient/localBulkViscosityTarget
- *   Δt → timeStep/elapsedTime; τ_i⁻¹ → inverseDecayTime; α_iⁿ⁺¹ → return value.
+ *   α_iⁿ → bulk viscosity coefficient
+ *   α_loc,i → target bulk viscosity coefficient
+ *   Δt → time step; τ_i⁻¹ → inverse decay time; α_iⁿ⁺¹ → return value.
+ *   Code names: α_loc_i = α_loc,i; τ_i_inv = τ_i⁻¹.
  */
 // clang-format on
-float evolvedBulkViscosityCoefficient(float bulkViscosityCoefficient,
-    float targetBulkViscosityCoefficient, float inverseDecayTime, float timeStep) {
-    float const currentBulkViscosityCoefficient = bulkViscosityCoefficient;
-    float const localBulkViscosityTarget = targetBulkViscosityCoefficient;
-    float const elapsedTime = timeStep;
-    return currentBulkViscosityCoefficient < localBulkViscosityTarget ? localBulkViscosityTarget :
-                                                                        localBulkViscosityTarget +
-            (currentBulkViscosityCoefficient - localBulkViscosityTarget) *
-                std::exp(-elapsedTime * inverseDecayTime);
+float evolvedBulkViscosityCoefficient(float α_iⁿ, float α_loc_i, float τ_i_inv, float Δt) {
+    return α_iⁿ < α_loc_i ? α_loc_i : α_loc_i + (α_iⁿ - α_loc_i) * std::exp(-Δt * τ_i_inv);
 }
 
 }    // namespace cullen_and_dehnen

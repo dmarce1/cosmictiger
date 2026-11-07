@@ -19,8 +19,8 @@
  * ρ density, P pressure, u specific internal energy, c sound speed, h smoothing
  * length, r_ab = r_a − r_b, v_ab = v_a − v_b, W_ab = W(r_ab, h) the kernel,
  * W̃_ab the symmetric kernel of p. 554, Π_ab the artificial viscosity and μ_ab its
- * velocity measure, with the constants α, β and η. All code identifiers use
- * descriptive names; each equation block maps symbols to those names. The stored smoothing length
+ * velocity measure, with the constants α, β and η. Equation code uses
+ * these symbols; each equation block describes them. The stored smoothing length
  * is the compact support radius H, which equals 2h for the paper's cubic spline of section 7.
  */
 #pragma once
@@ -45,29 +45,27 @@ constexpr double kPi = 3.141592653589793238462643383279502884;
 // clang-format off
 /*
  * Symbol directory for the Monaghan (1992), section 7, formula above:
- *   r/H → normalizedRadius; q = r/h = 2r/H → smoothingNormalizedRadius
- *   σ = 1/π → kKernelNormalization; H³/h³ → kSupportVolumeScale
- *   2 − q → distanceToSupportEdge; dq/d(r/H) = 2 → kNormalizedRadiusScale
+ *   r/H → normalized radius; q = r/h = 2r/H → smoothing normalized radius
+ *   σ = 1/π → kernel normalization; H³/h³ → support volume scale
+ *   2 − q → distance to support edge; dq/d(r/H) = 2 → normalized radius scale
+ *   Code names: r_over_H = r/H; H3_over_h3 = H³/h³; two_minus_q = 2 − q;
+ *     dq_d_r_over_H = dq/d(r/H) = 2.
  * (the last constant is used only in kernelDerivative).
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real kernelValue(Real normalizedRadius) {
-    constexpr Real kKernelNormalization = Real(1.0 / kPi);
-    constexpr Real kSupportVolumeScale = Real(8);    // (H/h)³ with H = 2h
-    Real const smoothingNormalizedRadius = Real(2) * normalizedRadius;
-    if (smoothingNormalizedRadius >= Real(2)) {
+CUDA_EXPORT inline Real kernelValue(Real r_over_H) {
+    constexpr Real σ = Real(1.0 / kPi);
+    constexpr Real H3_over_h3 = Real(8);    // (H/h)³ with H = 2h
+    Real const q = Real(2) * r_over_H;
+    if (q >= Real(2)) {
         return Real(0);
     }
-    if (smoothingNormalizedRadius <= Real(1)) {
-        return kKernelNormalization * kSupportVolumeScale *
-            (Real(1) - Real(1.5) * smoothingNormalizedRadius * smoothingNormalizedRadius +
-                Real(0.75) * smoothingNormalizedRadius * smoothingNormalizedRadius *
-                    smoothingNormalizedRadius);
+    if (q <= Real(1)) {
+        return σ * H3_over_h3 * (Real(1) - Real(1.5) * q * q + Real(0.75) * q * q * q);
     }
-    Real const distanceToSupportEdge = Real(2) - smoothingNormalizedRadius;
-    return kKernelNormalization * kSupportVolumeScale * Real(0.25) * distanceToSupportEdge *
-        distanceToSupportEdge * distanceToSupportEdge;
+    Real const two_minus_q = Real(2) - q;
+    return σ * H3_over_h3 * Real(0.25) * two_minus_q * two_minus_q * two_minus_q;
 }
 
 /*
@@ -82,28 +80,28 @@ CUDA_EXPORT inline Real kernelValue(Real normalizedRadius) {
 // clang-format off
 /*
  * Symbol directory for the Monaghan (1992), section 7, formula above:
- *   r/H → normalizedRadius; q = r/h = 2r/H → smoothingNormalizedRadius
- *   σ = 1/π → kKernelNormalization; H³/h³ → kSupportVolumeScale
- *   2 − q → distanceToSupportEdge; dq/d(r/H) = 2 → kNormalizedRadiusScale
+ *   r/H → normalized radius; q = r/h = 2r/H → smoothing normalized radius
+ *   σ = 1/π → kernel normalization; H³/h³ → support volume scale
+ *   2 − q → distance to support edge; dq/d(r/H) = 2 → normalized radius scale
+ *   Code names: r_over_H = r/H; H3_over_h3 = H³/h³; two_minus_q = 2 − q;
+ *     dq_d_r_over_H = dq/d(r/H) = 2.
  * (the last constant is used only in kernelDerivative).
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real kernelDerivative(Real normalizedRadius) {
-    constexpr Real kKernelNormalization = Real(1.0 / kPi);
-    constexpr Real kSupportVolumeScale = Real(8);
-    constexpr Real kNormalizedRadiusScale = Real(2);
-    Real const smoothingNormalizedRadius = Real(2) * normalizedRadius;
-    if (smoothingNormalizedRadius >= Real(2)) {
+CUDA_EXPORT inline Real kernelDerivative(Real r_over_H) {
+    constexpr Real σ = Real(1.0 / kPi);
+    constexpr Real H3_over_h3 = Real(8);
+    constexpr Real dq_d_r_over_H = Real(2);
+    Real const q = Real(2) * r_over_H;
+    if (q >= Real(2)) {
         return Real(0);
     }
-    if (smoothingNormalizedRadius <= Real(1)) {
-        return kNormalizedRadiusScale * kKernelNormalization * kSupportVolumeScale *
-            smoothingNormalizedRadius * (Real(2.25) * smoothingNormalizedRadius - Real(3));
+    if (q <= Real(1)) {
+        return dq_d_r_over_H * σ * H3_over_h3 * q * (Real(2.25) * q - Real(3));
     }
-    Real const distanceToSupportEdge = Real(2) - smoothingNormalizedRadius;
-    return -kNormalizedRadiusScale * kKernelNormalization * kSupportVolumeScale * Real(0.75) *
-        distanceToSupportEdge * distanceToSupportEdge;
+    Real const two_minus_q = Real(2) - q;
+    return -dq_d_r_over_H * σ * H3_over_h3 * Real(0.75) * two_minus_q * two_minus_q;
 }
 
 }    // namespace sph_kernels

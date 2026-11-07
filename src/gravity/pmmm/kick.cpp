@@ -51,8 +51,8 @@ KickReturn particleMeshPrepareKick(double scale, double baseTimestep, double max
                     for (size_t i = worker * count / workers; i < (worker + 1) * count / workers;
                         ++i) {
                         auto const& acceleration = pmmmAcceleration(i);
-                        particlesCaptureGravitySample(i, acceleration[kXi],
-                            acceleration[kYi], acceleration[kZi]);
+                        particlesCaptureGravitySample(
+                            i, acceleration[kXi], acceleration[kYi], acceleration[kZi]);
                         double accelerationSquared = 0.0;
                         for (int dim = 0; dim < kDimensions; ++dim) {
                             accelerationSquared += double(acceleration[dim]) * acceleration[dim];

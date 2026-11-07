@@ -25,11 +25,9 @@ __global__ void accumulateDensityKernel(Position const* xValue, Position const* 
         int const j = (x * ndim);
         if (j >= intbox.begin[kXi] - kCloudMin && j < intbox.end[kXi] - kCloudMax) {
             int const k = (y * ndim);
-            if (k >= intbox.begin[kYi] - kCloudMin &&
-                k < intbox.end[kYi] - kCloudMax) {
+            if (k >= intbox.begin[kYi] - kCloudMin && k < intbox.end[kYi] - kCloudMax) {
                 int const l = (z * ndim);
-                if (l >= intbox.begin[kZi] - kCloudMin &&
-                    l < intbox.end[kZi] - kCloudMax) {
+                if (l >= intbox.begin[kZi] - kCloudMin && l < intbox.end[kZi] - kCloudMax) {
                     float const x0 = x * ndim - j;
                     float const y0 = y * ndim - k;
                     float const z0 = z * ndim - l;

@@ -61,12 +61,13 @@ public:
     // https://doi.org/10.1145/363707.363723 (unnumbered algorithm).
     // Derived atomic application, with the opposite sign convention for c:
     //   y = x − c; t = s + y; c′ = (t − s) − y; s′ = t.
-    // Symbol directory: x -> increment, c -> oldCorrection, s -> oldSum,
-    // y -> adjusted, t -> nextSum, c′ -> nextCorrection.
+    // Symbol directory: x -> increment, c -> old correction, s -> old sum,
+    // y -> adjusted, t -> next sum, c′ -> next correction.
+    // Code names: cʹ = c′.
     // Explicit round-to-nearest CUDA operations and volatile CPU intermediates
     // preserve the four separate operations under the production fast-math flags.
     // Return actual FP32 work, including attempts retried after contention.
-    CUDA_EXPORT FlopCount add(float increment) {
+    CUDA_EXPORT FlopCount add(float x) {
 #ifdef __CUDA_ARCH__
         Bits expected = atomicCAS(&bits_, Bits(0), Bits(0));
 #else
@@ -75,19 +76,19 @@ public:
 #endif
         FlopCount operations = 0;
         for (;;) {
-            float const oldSum = fromBits(uint32_t(expected));
-            float const oldCorrection = fromBits(uint32_t(expected >> 32));
+            float const s = fromBits(uint32_t(expected));
+            float const c = fromBits(uint32_t(expected >> 32));
 #ifdef __CUDA_ARCH__
-            float const adjusted = __fsub_rn(increment, oldCorrection);
-            float const nextSum = __fadd_rn(oldSum, adjusted);
-            float const nextCorrection = __fsub_rn(__fsub_rn(nextSum, oldSum), adjusted);
+            float const y = __fsub_rn(x, c);
+            float const t = __fadd_rn(s, y);
+            float const cʹ = __fsub_rn(__fsub_rn(t, s), y);
 #else
-            float volatile const adjusted = increment - oldCorrection;
-            float const volatile nextSum = oldSum + adjusted;
-            float const volatile rounding = nextSum - oldSum;
-            float const nextCorrection = rounding - adjusted;
+            float volatile const y = x - c;
+            float const volatile t = s + y;
+            float const volatile rounding = t - s;
+            float const cʹ = rounding - y;
 #endif
-            Bits const desired = Bits(floatBits(nextSum)) | (Bits(floatBits(nextCorrection)) << 32);
+            Bits const desired = Bits(floatBits(t)) | (Bits(floatBits(cʹ)) << 32);
             operations += 4;
 #ifdef __CUDA_ARCH__
             Bits const observed = atomicCAS(&bits_, expected, desired);
@@ -151,21 +152,20 @@ CUDA_EXPORT inline bool sphOwnsPairKick(SphPairSourceId const& target,
  * can differ between endpoints. The scheduling and accumulation are local
  * derivations, not a time integrator prescribed by the cited paper.
  * Symbol directory:
- *   Δτ → timestep; a_ab → acceleration; Ȧ_ab/Ȧ_ba → target/neighborEntropyRate;
- *   Δv_a → increment; a/b → target/neighbor.
+ *   Δτ → timestep; a_ab → acceleration; Ȧ_ab/Ȧ_ba → target, neighbor entropy rates;
+ *   Δv_a → increment; a, b → target, neighbor.
  */
 // clang-format on
-CUDA_EXPORT inline FlopCount sphAccumulatePairKick(SphPairUpdate& target, SphPairUpdate& neighbor,
-    Vector3<float> const& acceleration, float targetEntropyRate, float neighborEntropyRate,
-    float timestep) {
+CUDA_EXPORT inline FlopCount sphAccumulatePairKick(SphPairUpdate& a, SphPairUpdate& b,
+    Vector3<float> const& a_ab, float Ȧ_ab, float Ȧ_ba, float Δτ) {
     FlopCount operations = kSpatialDimensions + 2;    // Impulse and entropy products.
     for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
-        float const increment = timestep * acceleration[dimension];
-        operations += target.velocity[dimension].add(increment);
-        operations += neighbor.velocity[dimension].add(-increment);
+        float const Δv_a = Δτ * a_ab[dimension];
+        operations += a.velocity[dimension].add(Δv_a);
+        operations += b.velocity[dimension].add(-Δv_a);
     }
-    operations += target.entropy.add(timestep * targetEntropyRate);
-    operations += neighbor.entropy.add(timestep * neighborEntropyRate);
+    operations += a.entropy.add(Δτ * Ȧ_ab);
+    operations += b.entropy.add(Δτ * Ȧ_ba);
     return operations;
 }
 

@@ -57,7 +57,7 @@ namespace detail {
     CUDA_EXPORT inline int inverseMoment(math::Matrix<Real, kSpatialDimensions> const& moment,
         math::SymmetricMatrix<Real, kSpatialDimensions>& inverse,
         Counter& floatingPointOperations) {
-        math::SymmetricMatrix<Real, kSpatialDimensions> momentMatrix;
+        math::SymmetricMatrix<Real, kSpatialDimensions> T_norm;
         inverse = math::SymmetricMatrix<Real, kSpatialDimensions>{};
         Real scale = Real(0);
         for (int i = 0; i < kSpatialDimensions; ++i) {
@@ -72,26 +72,26 @@ namespace detail {
         }
         for (int i = 0; i < kSpatialDimensions; ++i) {
             for (int j = 0; j <= i; ++j) {
-                momentMatrix(i, j) = (Real(0.5) * moment[i][j] + Real(0.5) * moment[j][i]) / scale;
+                T_norm(i, j) = (Real(0.5) * moment[i][j] + Real(0.5) * moment[j][i]) / scale;
             }
         }
         floatingPointOperations += 2 * kSpatialDimensions * (kSpatialDimensions + 1);
-        auto const momentAdjugate = math::adjugate(momentMatrix);
-        Real momentDeterminant = momentMatrix(0, 0) * momentAdjugate(0, 0);
+        auto const adj_T = math::adjugate(T_norm);
+        Real det_T = T_norm(0, 0) * adj_T(0, 0);
         for (int dim = 1; dim < kSpatialDimensions; ++dim) {
-            momentDeterminant += momentMatrix(0, dim) * momentAdjugate(0, dim);
+            det_T += T_norm(0, dim) * adj_T(0, dim);
         }
         constexpr Real kRoundoff = std::numeric_limits<Real>::epsilon();
         constexpr Real kDeterminantTolerance = Real(128) * kRoundoff;
         constexpr Real kOffDiagonalTolerance = Real(4) * kRoundoff;
         constexpr Real kEigenvalueTolerance = Real(64) * kRoundoff;
         floatingPointOperations += kSpatialDimensions == 3 ? 24 : 2 * kSpatialDimensions;
-        if (std::abs(momentDeterminant) > kDeterminantTolerance) {
+        if (std::abs(det_T) > kDeterminantTolerance) {
             if constexpr (math::DefaultMatrixPolicy::kSymmetricInverseThreshold >=
                 kSpatialDimensions) {
                 for (int i = 0; i < kSpatialDimensions; ++i) {
                     for (int j = 0; j <= i; ++j) {
-                        inverse(i, j) = (momentAdjugate(i, j) / momentDeterminant) / scale;
+                        inverse(i, j) = (adj_T(i, j) / det_T) / scale;
                     }
                 }
                 floatingPointOperations += kSpatialDimensions * (kSpatialDimensions + 1);
@@ -100,8 +100,8 @@ namespace detail {
                 // Keep the physical rank gate above while honoring the build's
                 // algorithm selection for full-rank neighborhoods.
                 size_t operations = 0;
-                auto const status = math::tryInversePivoted(momentMatrix, inverse,
-                    math::MatrixOptions<Real>{Real(0), Real(0)}, &operations);
+                auto const status = math::tryInversePivoted(
+                    T_norm, inverse, math::MatrixOptions<Real>{Real(0), Real(0)}, &operations);
                 floatingPointOperations += operations;
                 if (status == math::MatrixStatus::Success) {
                     inverse /= scale;
@@ -111,32 +111,30 @@ namespace detail {
             }
         }
 
-        math::Matrix<Real, kSpatialDimensions> eigenvectors;
+        math::Matrix<Real, kSpatialDimensions> q;
         math::SymmetricEigenOptions<Real> options;
         options.pivot = math::JacobiPivot::Cyclic;
         options.maxIterations = 8;
         options.absoluteOffDiagonalTolerance = kOffDiagonalTolerance;
         options.relativeOffDiagonalTolerance = Real(0);
         options.useHypot = false;
-        math::jacobiDiagonalize(momentMatrix, eigenvectors, options, floatingPointOperations);
-        Real maximumEigenvalueMagnitude = Real(0);
+        math::jacobiDiagonalize(T_norm, q, options, floatingPointOperations);
+        Real λ_max = Real(0);
         for (int k = 0; k < kSpatialDimensions; ++k) {
-            Real const magnitude = std::abs(momentMatrix(k, k));
-            maximumEigenvalueMagnitude =
-                magnitude > maximumEigenvalueMagnitude ? magnitude : maximumEigenvalueMagnitude;
+            Real const magnitude = std::abs(T_norm(k, k));
+            λ_max = magnitude > λ_max ? magnitude : λ_max;
         }
         floatingPointOperations += kSpatialDimensions;
         int rank = 0;
         for (int k = 0; k < kSpatialDimensions; ++k) {
-            Real const eigenvalue = momentMatrix(k, k);
+            Real const λ_k = T_norm(k, k);
             floatingPointOperations += 2;
-            if (std::abs(eigenvalue) > kEigenvalueTolerance * maximumEigenvalueMagnitude) {
+            if (std::abs(λ_k) > kEigenvalueTolerance * λ_max) {
                 ++rank;
-                Real const inverseEigenvalue = (Real(1) / eigenvalue) / scale;
+                Real const inverseEigenvalue = (Real(1) / λ_k) / scale;
                 for (int i = 0; i < kSpatialDimensions; ++i) {
                     for (int j = 0; j <= i; ++j) {
-                        inverse(i, j) +=
-                            eigenvectors(i, k) * eigenvectors(j, k) * inverseEigenvalue;
+                        inverse(i, j) += q(i, k) * q(j, k) * inverseEigenvalue;
                     }
                 }
                 floatingPointOperations +=
@@ -151,7 +149,7 @@ namespace detail {
 /*
  * Cullen & Dehnen (2010), Appendix B2, equations (B2), (B4), (B7):
  *   T = Σ_j r_ij ⊗ r_ij w̄_ij, D = Σ_j v_ij ⊗ r_ij w̄_ij, V = D T⁻¹.
- * T, D → sums.moment, sums.velocity; V → velocityGradient.
+ * T, D → moment, velocity sums; V → velocity gradient.
  * This velocity-only reconstruction also supplies the shear/vorticity limiters.
  */
 template <typename Real, typename Counter>
@@ -161,25 +159,24 @@ template <typename Real, typename Counter>
 // with floating-point traps enabled even though every matrix entry is finite.
 __attribute__((optimize("no-tree-loop-vectorize", "no-tree-slp-vectorize")))
 #endif
-CUDA_EXPORT inline int reconstructVelocityGradient(VelocityGradientSums<Real> const& sums,
-    Real (&velocityGradient)[3][3], Counter& floatingPointOperations) {
+CUDA_EXPORT inline int reconstructVelocityGradient(
+    VelocityGradientSums<Real> const& sums, Real (&V)[3][3], Counter& floatingPointOperations) {
     for (int row = 0; row < 3; ++row) {
         for (int column = 0; column < 3; ++column) {
-            velocityGradient[row][column] = Real(0);
+            V[row][column] = Real(0);
         }
     }
-    math::SymmetricMatrix<Real, kSpatialDimensions> inverseMomentMatrix;
-    int const rank =
-        detail::inverseMoment(sums.moment, inverseMomentMatrix, floatingPointOperations);
+    math::SymmetricMatrix<Real, kSpatialDimensions> T_inv;
+    int const rank = detail::inverseMoment(sums.moment, T_inv, floatingPointOperations);
     // Keep the product here: an inlined generic matrix operator can carry
     // vectorized instructions produced before this function's GCC safeguard.
     for (int row = 0; row < kSpatialDimensions; ++row) {
         for (int column = 0; column < kSpatialDimensions; ++column) {
-            Real component = sums.velocity[row][0] * inverseMomentMatrix(0, column);
+            Real component = sums.velocity[row][0] * T_inv(0, column);
             for (int inner = 1; inner < kSpatialDimensions; ++inner) {
-                component += sums.velocity[row][inner] * inverseMomentMatrix(inner, column);
+                component += sums.velocity[row][inner] * T_inv(inner, column);
             }
-            velocityGradient[row][column] = component;
+            V[row][column] = component;
         }
     }
     floatingPointOperations +=
@@ -196,8 +193,8 @@ CUDA_EXPORT inline int reconstructVelocityGradient(VelocityGradientSums<Real> co
  *   G_previous = q_previous/Δτ_previous,
  *   S = a⁻² DG/Dt ≈ (G_n − G_previous)/(a³ Δτ),
  *   a⁴ S ≈ a (G_n − G_previous)/Δτ.
- * G → sampleDivergence; Δτ → sampleInterval; a → scaleFactor;
- * q_previous → state; Δτ_previous → previousSampleTimestep.
+ * G → sample divergence; Δτ → sample interval; a → scale factor;
+ * q_previous → state; Δτ_previous → previous sample timestep.
  * All three cosmological sensors use the peculiar stored-velocity gradient.
  * Since G = a² θ_pec, this estimates Dθ_pec/Dt + 2Hθ_pec, not Dθ_pec/Dt alone.
  * Pure Hubble flow has G = 0 without subtracting a background after differencing.
@@ -207,19 +204,15 @@ CUDA_EXPORT inline int reconstructVelocityGradient(VelocityGradientSums<Real> co
  * following kick with first-order viscosity timing.
  */
 template <typename Real, typename Counter>
-CUDA_EXPORT inline Real divergenceTimeDerivative(Real sampleDivergence, Real scaleFactor,
-    Float16Storage const& state, double sampleInterval, double previousSampleTimestep,
-    Counter& floatingPointOperations) {
-    if (!sph_viscosity::detail::isFinite(sampleInterval) ||
-        !sph_viscosity::detail::isFinite(previousSampleTimestep) || !(sampleInterval > 0.0) ||
-        !(previousSampleTimestep > 0.0)) {
+CUDA_EXPORT inline Real divergenceTimeDerivative(Real G, Real a, Float16Storage const& q_previous,
+    double Δτ, double Δτ_previous, Counter& floatingPointOperations) {
+    if (!sph_viscosity::detail::isFinite(Δτ) || !sph_viscosity::detail::isFinite(Δτ_previous) ||
+        !(Δτ > 0.0) || !(Δτ_previous > 0.0)) {
         return Real(0);
     }
-    double const derivative =
-        (double(sampleDivergence) - sphDecodeDivergence(state, previousSampleTimestep)) /
-        sampleInterval;
+    double const derivative = (double(G) - sphDecodeDivergence(q_previous, Δτ_previous)) / Δτ;
     floatingPointOperations += 4;
-    return Real(double(scaleFactor) * derivative);
+    return Real(double(a) * derivative);
 }
 
 /*
@@ -234,13 +227,15 @@ CUDA_EXPORT inline Real divergenceTimeDerivative(Real sampleDivergence, Real sca
  *   D = Σ_j v_ij ⊗ r_ij w̄_ij,  T = Σ_j r_ij ⊗ r_ij w̄_ij,  V = D T⁻¹.
  * Derived acceleration analogue: C = Σ_j a_ij ⊗ r_ij w̄_ij, G = C T⁻¹.
  * Symbol directory:
- *   T, D, C → sums.moment, sums.velocity, sums.acceleration
- *   T⁻¹ → inverseMomentMatrix; D → velocityMoment; C → accelerationMoment
- *   V, G → velocityGradientMatrix, accelerationGradientMatrix
- *   V_ij, G_ij → velocityGradient[i][j], accelerationGradient[i][j].
+ *   T, D, C → moment, velocity, acceleration sums
+ *   T⁻¹ → inverse moment matrix; D → velocity moment; C → acceleration moment
+ *   V, G → velocity gradient matrix, acceleration gradient matrix
+ *   V_ij, G_ij → velocity gradient, acceleration gradient entries.
  * The inverseMoment helper uses T⁺ = Σ_k q_k q_kᵀ/λ_k on resolved eigenmodes:
- *   normalized T → momentMatrix; adj(T) → momentAdjugate; det(T) → momentDeterminant
- *   q_k → eigenvectors(:, k); λ_k → eigenvalue; λ_max → maximumEigenvalueMagnitude.
+ *   normalized T → moment matrix; adj(T) → moment adjugate; det(T) → moment determinant
+ *   q_k → eigenvector k; λ_k → eigenvalue; λ_max → maximum eigenvalue magnitude.
+ *   Code names: T_inv = T⁻¹; T_norm = normalized T; adj_T = adj(T); det_T = det(T);
+ *     q(:, k) = q_k.
  * This pseudoinverse extension is a code-derived treatment of deficient neighborhoods.
  */
 // clang-format on
@@ -249,33 +244,30 @@ template <typename Real, typename Counter>
 // As in reconstructVelocityGradient, avoid arithmetic on unused SIMD stack lanes.
 __attribute__((optimize("no-tree-loop-vectorize", "no-tree-slp-vectorize")))
 #endif
-CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
-    Real (&velocityGradient)[3][3], Real (&accelerationGradient)[3][3],
-    Counter& floatingPointOperations) {
+CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums, Real (&V)[3][3],
+    Real (&G)[3][3], Counter& floatingPointOperations) {
     for (int row = 0; row < 3; ++row) {
         for (int column = 0; column < 3; ++column) {
-            accelerationGradient[row][column] = Real(0);
+            G[row][column] = Real(0);
         }
     }
     for (int row = 0; row < 3; ++row) {
         for (int column = 0; column < 3; ++column) {
-            velocityGradient[row][column] = Real(0);
+            V[row][column] = Real(0);
         }
     }
-    math::SymmetricMatrix<Real, kSpatialDimensions> inverseMomentMatrix;
-    int const rank =
-        detail::inverseMoment(sums.moment, inverseMomentMatrix, floatingPointOperations);
+    math::SymmetricMatrix<Real, kSpatialDimensions> T_inv;
+    int const rank = detail::inverseMoment(sums.moment, T_inv, floatingPointOperations);
     for (int row = 0; row < kSpatialDimensions; ++row) {
         for (int column = 0; column < kSpatialDimensions; ++column) {
-            Real velocityComponent = sums.velocity[row][0] * inverseMomentMatrix(0, column);
-            Real accelerationComponent = sums.acceleration[row][0] * inverseMomentMatrix(0, column);
+            Real velocityComponent = sums.velocity[row][0] * T_inv(0, column);
+            Real accelerationComponent = sums.acceleration[row][0] * T_inv(0, column);
             for (int inner = 1; inner < kSpatialDimensions; ++inner) {
-                velocityComponent += sums.velocity[row][inner] * inverseMomentMatrix(inner, column);
-                accelerationComponent +=
-                    sums.acceleration[row][inner] * inverseMomentMatrix(inner, column);
+                velocityComponent += sums.velocity[row][inner] * T_inv(inner, column);
+                accelerationComponent += sums.acceleration[row][inner] * T_inv(inner, column);
             }
-            velocityGradient[row][column] = velocityComponent;
-            accelerationGradient[row][column] = accelerationComponent;
+            V[row][column] = velocityComponent;
+            G[row][column] = accelerationComponent;
         }
     }
     floatingPointOperations += 2 * kSpatialDimensions * kSpatialDimensions *
@@ -284,11 +276,10 @@ CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
 }
 
 template <typename Real>
-CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
-    Real (&velocityGradient)[3][3], Real (&accelerationGradient)[3][3]) {
+CUDA_EXPORT inline int reconstructGradients(
+    GradientSums<Real> const& sums, Real (&V)[3][3], Real (&G)[3][3]) {
     unsigned long long floatingPointOperations = 0;
-    return reconstructGradients(
-        sums, velocityGradient, accelerationGradient, floatingPointOperations);
+    return reconstructGradients(sums, V, G, floatingPointOperations);
 }
 
 // clang-format off
@@ -301,22 +292,23 @@ CUDA_EXPORT inline int reconstructGradients(GradientSums<Real> const& sums,
  * F includes the full hydrodynamic, gravitational and imposed acceleration at
  * the same stage as w. No homogeneous expansion term is added to either gradient.
  * Symbol directory:
- *   a → scaleFactor; V → velocityGradient; C → accelerationGradient;
+ *   a → scale factor; V → velocity gradient; C → acceleration gradient;
  *   a⁴ [Dθ_pec/Dt + 2Hθ_pec] → derivative (returned scaled shock sensor).
+ *   Code names: a4_Dθ_pec_Dt_plus_2Hθ_pec = a⁴ [Dθ_pec/Dt + 2Hθ_pec].
  */
 // clang-format on
 template <typename Real, typename Counter>
-CUDA_EXPORT inline Real peculiarDivergenceDerivative(Real const (&velocityGradient)[3][3],
-    Real const (&accelerationGradient)[3][3], Real scaleFactor, Counter& floatingPointOperations) {
-    Real derivative = Real(0);
+CUDA_EXPORT inline Real peculiarDivergenceDerivative(
+    Real const (&V)[3][3], Real const (&C)[3][3], Real a, Counter& floatingPointOperations) {
+    Real a4_Dθ_pec_Dt_plus_2Hθ_pec = Real(0);
     for (int row = 0; row < kSpatialDimensions; ++row) {
-        derivative += scaleFactor * accelerationGradient[row][row];
+        a4_Dθ_pec_Dt_plus_2Hθ_pec += a * C[row][row];
         for (int column = 0; column < kSpatialDimensions; ++column) {
-            derivative -= velocityGradient[row][column] * velocityGradient[column][row];
+            a4_Dθ_pec_Dt_plus_2Hθ_pec -= V[row][column] * V[column][row];
         }
     }
     floatingPointOperations += 24;
-    return derivative;
+    return a4_Dθ_pec_Dt_plus_2Hθ_pec;
 }
 
 /*
@@ -354,119 +346,106 @@ CUDA_EXPORT inline Real peculiarDivergenceDerivative(Real const (&velocityGradie
  * Production supplies V′ = a² ∇_r v_pec with the derived peculiar conversion above,
  * or legacy endpoint differences; the target and limiter keep the same scaled form.
  * Symbol directory:
- *   a → scaleFactor/localScaleFactor; h_i → smoothingLength/kernelSmoothingLength
- *   v_sig,i → signalSpeed/localSignalSpeed; ℓ → decayCoefficient
- *   α_max → maximumBulkViscosityCoefficient; α_loc,i → result.targetBulkViscosityCoefficient
- *   R_i → signAverage/divergenceSignAverage; ξ_i → shearLimiter
- *   V′, G → velocityGradientMatrix, accelerationGradientMatrix
- *   tr(V′) → velocityDivergence; tr(G) → accelerationDivergence
- *   tr(V′²) → gradientSquareTrace; S′_ij → shearComponent
- *   tr(S′ S′ᵀ) → shearMagnitudeSquared; a³ ä → expansionAcceleration
- *   a⁴ D(∇·v_phys)/Dt → divergenceDerivative; a⁴ A_i → shockIndicator
- *   h_i² a⁴ A_i → radiusSquaredShockIndicator; τ_conformal⁻¹ → result.inverseDecayTime.
+ *   a → scale factor; h_i → smoothing length
+ *   v_sig,i → signal speed; ℓ → decay coefficient
+ *   α_max → maximum bulk viscosity coefficient; α_loc,i → target bulk viscosity coefficient
+ *   R_i → sign average; ξ_i → shear limiter
+ *   V′, G → velocity gradient matrix, acceleration gradient matrix
+ *   tr(V′) → velocity divergence; tr(G) → acceleration divergence
+ *   tr(V′²) → gradient square trace; S′_ij → shear component
+ *   tr(S′ S′ᵀ) → shear magnitude squared; a³ ä → expansion acceleration
+ *   a⁴ D(∇·v_phys)/Dt → divergence derivative; a⁴ A_i → shock indicator
+ *   h_i² a⁴ A_i → radius squared shock indicator; τ_conformal⁻¹ → inverse decay time.
+ *   Code names: v_sig_i = v_sig,i; α_loc_i = α_loc,i; Vʹ = V′; tr_Vʹ = tr(V′); Sʹ_ij = S′_ij;
+ *     tr_SʹSʹᵀ = tr(S′ S′ᵀ); a3_ä = a³ ä; a4_D_div_v_phys_Dt = a⁴ D(∇·v_phys)/Dt; a4_A_i = a⁴ A_i;
+ *     h_i2_a4_A_i = h_i² a⁴ A_i.
  * The support and signal speed passed here are comoving; v_sig,stored = a v_sig,phys.
  * The common scaling cancels in ξ_i and the target ratio.
  */
 // clang-format on
 template <typename Real, typename Counter>
-CUDA_EXPORT inline Result<Real> diagnosticsFromGradient(Real const (&velocityGradientMatrix)[3][3],
-    Real scaleFactor, Real divergenceDerivative, Real signAverage, Real smoothingLength,
-    Real signalSpeed, Real maximumBulkViscosityCoefficient, Real decayCoefficient,
-    Counter& floatingPointOperations) {
-    Real const localScaleFactor = scaleFactor;
-    Real const kernelSmoothingLength = smoothingLength;
-    Real const localSignalSpeed = signalSpeed;
+CUDA_EXPORT inline Result<Real> diagnosticsFromGradient(Real const (&Vʹ)[3][3], Real scaleFactor,
+    Real a4_D_div_v_phys_Dt, Real signAverage, Real smoothingLength, Real signalSpeed, Real α_max,
+    Real ℓ, Counter& floatingPointOperations) {
+    Real const a = scaleFactor;
+    Real const h_i = smoothingLength;
+    Real const v_sig_i = signalSpeed;
     Result<Real> result{};
-    if (!(localScaleFactor > Real(0)) || !(kernelSmoothingLength > Real(0))) {
+    if (!(a > Real(0)) || !(h_i > Real(0))) {
         return result;
     }
-    result.inverseDecayTime =
-        Real(2) * decayCoefficient * localSignalSpeed / (localScaleFactor * kernelSmoothingLength);
+    result.inverseDecayTime = Real(2) * ℓ * v_sig_i / (a * h_i);
     floatingPointOperations += 4;
-    Real const velocityDivergence =
-        velocityGradientMatrix[0][0] + velocityGradientMatrix[1][1] + velocityGradientMatrix[2][2];
-    Real shearMagnitudeSquared = Real(0);
+    Real const tr_Vʹ = Vʹ[0][0] + Vʹ[1][1] + Vʹ[2][2];
+    Real tr_SʹSʹᵀ = Real(0);
     for (int i = 0; i < kSpatialDimensions; ++i) {
         for (int j = 0; j < kSpatialDimensions; ++j) {
-            Real const shearComponent =
-                Real(0.5) * (velocityGradientMatrix[i][j] + velocityGradientMatrix[j][i]) -
-                (i == j ? velocityDivergence / Real(kSpatialDimensions) : Real(0));
-            shearMagnitudeSquared += shearComponent * shearComponent;
+            Real const Sʹ_ij = Real(0.5) * (Vʹ[i][j] + Vʹ[j][i]) -
+                (i == j ? tr_Vʹ / Real(kSpatialDimensions) : Real(0));
+            tr_SʹSʹᵀ += Sʹ_ij * Sʹ_ij;
         }
     }
     floatingPointOperations += 48;    // Velocity trace, symmetric shear and its squared norm.
-    result.divergence = velocityDivergence / (localScaleFactor * localScaleFactor);
-    Real const divergenceSignAverage = signAverage;
-    Real const squaredSignComplement =
-        (Real(1) - divergenceSignAverage) * (Real(1) - divergenceSignAverage);
-    Real const limiterCompression =
-        Real(2) * squaredSignComplement * squaredSignComplement * velocityDivergence;
+    result.divergence = tr_Vʹ / (a * a);
+    Real const R_i = signAverage;
+    Real const squaredSignComplement = (Real(1) - R_i) * (Real(1) - R_i);
+    Real const limiterCompression = Real(2) * squaredSignComplement * squaredSignComplement * tr_Vʹ;
     Real const limiterCompressionSquared = limiterCompression * limiterCompression;
-    Real const limiterDenominator = limiterCompressionSquared + shearMagnitudeSquared;
-    Real const shearLimiter =
+    Real const limiterDenominator = limiterCompressionSquared + tr_SʹSʹᵀ;
+    Real const ξ_i =
         limiterDenominator > Real(0) ? limiterCompressionSquared / limiterDenominator : Real(0);
-    Real const shockIndicator =
-        shearLimiter * (divergenceDerivative < Real(0) ? -divergenceDerivative : Real(0));
-    Real const radiusSquaredShockIndicator =
-        kernelSmoothingLength * kernelSmoothingLength * shockIndicator;
-    Real const denominator = localSignalSpeed * localSignalSpeed + radiusSquaredShockIndicator;
-    result.targetBulkViscosityCoefficient = denominator > Real(0) ?
-        maximumBulkViscosityCoefficient * radiusSquaredShockIndicator / denominator :
-        Real(0);
+    Real const a4_A_i = ξ_i * (a4_D_div_v_phys_Dt < Real(0) ? -a4_D_div_v_phys_Dt : Real(0));
+    Real const h_i2_a4_A_i = h_i * h_i * a4_A_i;
+    Real const denominator = v_sig_i * v_sig_i + h_i2_a4_A_i;
+    result.targetBulkViscosityCoefficient =
+        denominator > Real(0) ? α_max * h_i2_a4_A_i / denominator : Real(0);
     floatingPointOperations +=
         19 + (limiterDenominator > Real(0) ? 1 : 0) + (denominator > Real(0) ? 2 : 0);
     return result;
 }
 
 template <typename Real, typename Counter>
-CUDA_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums, Real scaleFactor,
-    Real expansionAcceleration, Real signAverage, Real smoothingLength, Real signalSpeed,
-    Real maximumBulkViscosityCoefficient, Real decayCoefficient, Counter& floatingPointOperations) {
-    Real velocityGradient[3][3];
-    Real accelerationGradient[3][3];
-    reconstructGradients(sums, velocityGradient, accelerationGradient, floatingPointOperations);
-    Real derivative = Real(3) * expansionAcceleration;
+CUDA_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums, Real a, Real a3_ä,
+    Real R_i, Real h_i, Real v_sig_i, Real α_max, Real ℓ, Counter& floatingPointOperations) {
+    Real Vʹ[3][3];
+    Real G[3][3];
+    reconstructGradients(sums, Vʹ, G, floatingPointOperations);
+    Real a4_D_div_v_phys_Dt = Real(3) * a3_ä;
     for (int i = 0; i < kSpatialDimensions; ++i) {
-        derivative += scaleFactor * accelerationGradient[i][i];
+        a4_D_div_v_phys_Dt += a * G[i][i];
         for (int j = 0; j < kSpatialDimensions; ++j) {
-            derivative -= velocityGradient[i][j] * velocityGradient[j][i];
+            a4_D_div_v_phys_Dt -= Vʹ[i][j] * Vʹ[j][i];
         }
     }
     floatingPointOperations += 1 + 2 * kSpatialDimensions * (kSpatialDimensions + 1);
-    return diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, signAverage,
-        smoothingLength, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient,
-        floatingPointOperations);
+    return diagnosticsFromGradient(
+        Vʹ, a, a4_D_div_v_phys_Dt, R_i, h_i, v_sig_i, α_max, ℓ, floatingPointOperations);
 }
 
 // Production time differences of G = ∇_x·w; no acceleration samples are read.
 template <typename Real, typename Counter>
 CUDA_EXPORT inline Result<Real> diagnosticsFromHistory(VelocityGradientSums<Real> const& sums,
-    Real scaleFactor, Float16Storage const& state, double sampleInterval,
-    double previousSampleTimestep, Real signAverage, Real smoothingLength, Real signalSpeed,
-    Real maximumBulkViscosityCoefficient, Real decayCoefficient, Counter& floatingPointOperations) {
-    Real velocityGradient[3][3];
-    int const rank = reconstructVelocityGradient(sums, velocityGradient, floatingPointOperations);
-    Real const divergence =
-        velocityGradient[0][0] + velocityGradient[1][1] + velocityGradient[2][2];
+    Real a, Float16Storage const& state, double sampleInterval, double previousSampleTimestep,
+    Real R_i, Real h_i, Real v_sig_i, Real α_max, Real ℓ, Counter& floatingPointOperations) {
+    Real Vʹ[3][3];
+    int const rank = reconstructVelocityGradient(sums, Vʹ, floatingPointOperations);
+    Real const divergence = Vʹ[0][0] + Vʹ[1][1] + Vʹ[2][2];
     floatingPointOperations += 2;
-    Real const derivative = rank == 0 ?
+    Real const a4_D_div_v_phys_Dt = rank == 0 ?
         Real(0) :
-        divergenceTimeDerivative(divergence, scaleFactor, state, sampleInterval,
-            previousSampleTimestep, floatingPointOperations);
-    auto result = diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, signAverage,
-        smoothingLength, signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient,
-        floatingPointOperations);
+        divergenceTimeDerivative(
+            divergence, a, state, sampleInterval, previousSampleTimestep, floatingPointOperations);
+    auto result = diagnosticsFromGradient(
+        Vʹ, a, a4_D_div_v_phys_Dt, R_i, h_i, v_sig_i, α_max, ℓ, floatingPointOperations);
     result.divergence = divergence;
     return result;
 }
 
 template <typename Real>
-CUDA_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums, Real scaleFactor,
-    Real expansionAcceleration, Real signAverage, Real smoothingLength, Real signalSpeed,
-    Real maximumBulkViscosityCoefficient, Real decayCoefficient) {
+CUDA_EXPORT inline Result<Real> diagnostics(GradientSums<Real> const& sums, Real a, Real a3_ä,
+    Real R_i, Real h_i, Real v_sig_i, Real α_max, Real ℓ) {
     unsigned long long floatingPointOperations = 0;
-    return diagnostics(sums, scaleFactor, expansionAcceleration, signAverage, smoothingLength,
-        signalSpeed, maximumBulkViscosityCoefficient, decayCoefficient, floatingPointOperations);
+    return diagnostics(sums, a, a3_ä, R_i, h_i, v_sig_i, α_max, ℓ, floatingPointOperations);
 }
 
 }    // namespace cullen_and_dehnen

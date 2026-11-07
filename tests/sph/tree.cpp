@@ -865,7 +865,7 @@ void verifySphTemporalOrder() {
         neighbors.interactionDirection = SphInteractionDirection::EitherSupport;
         sphTreeNeighbor(neighbors, tree.id, Vector<TreeId>{tree.id}).get();
 
-        auto const run = [&](int steps, double duration) {
+        auto const run = [&](int steps, double T) {
             for (ParticleInteger gas = 0; gas < 2; ++gas) {
                 sphParticlesVelocity(0, gas) = float(initialState[gas]);
                 sphParticlesEntropy(gas) = float(initialState[gas + 2]);
@@ -875,10 +875,10 @@ void verifySphTemporalOrder() {
             parameters.minimumRung = damping ? 0 : 2;
             parameters.maximumRung = damping ? kMaxRung - 1 : 2;
             parameters.globalTimestep = damping;
-            parameters.baseTimestep = float(duration);
+            parameters.baseTimestep = float(T);
             parameters.scaleFactor = 1.0f;
             parameters.expansionRate = 0.0f;
-            parameters.hydroKickTimestep = duration / steps;
+            parameters.hydroKickTimestep = T / steps;
             double const initialMomentum =
                 double(float(initialState[0])) + double(float(initialState[1]));
             for (int step = 0; step < steps; ++step) {
@@ -900,25 +900,25 @@ void verifySphTemporalOrder() {
             return sphTemporalState();
         };
 
-        double duration = 1.0;
+        double T = 1.0;
         if (!damping) {
             // Derived conditioning: choose a fixed final time from the initial
             // complete production RHS, so the pair loses an appreciable fraction
             // of its approach speed before the viscosity's separating branch.
             // T = 0.35 (v₀-v₁)/|a₀-a₁|; a is estimated by one short RK2 probe δ.
-            // Symbol directory: T → duration; δ → kProbeDuration;
-            // v₀,v₁ → initialState[0,1]; a₀-a₁ → relativeAcceleration.
-            constexpr double kProbeDuration = 1.0e-4;
-            auto const probe = run(1, kProbeDuration);
+            // Symbol directory: T → duration; δ → probe duration;
+            // v₀,v₁ → initial velocities; a₀-a₁ → relative acceleration.
+            // Code names: a_0_minus_a_1 = a₀-a₁.
+            constexpr double δ = 1.0e-4;
+            auto const probe = run(1, δ);
             double const initialRelativeVelocity =
                 double(float(initialState[0])) - double(float(initialState[1]));
-            double const relativeAcceleration =
-                (probe[0] - probe[1] - initialRelativeVelocity) / kProbeDuration;
-            requireSphTree(relativeAcceleration < 0.0,
-                "temporal pair fixture does not oppose the approaching flow");
-            duration = 0.35 * initialRelativeVelocity / -relativeAcceleration;
+            double const a_0_minus_a_1 = (probe[0] - probe[1] - initialRelativeVelocity) / δ;
+            requireSphTree(
+                a_0_minus_a_1 < 0.0, "temporal pair fixture does not oppose the approaching flow");
+            T = 0.35 * initialRelativeVelocity / -a_0_minus_a_1;
         }
-        auto const reference = run(damping ? 1 : 256, duration);
+        auto const reference = run(damping ? 1 : 256, T);
         requireSphTree(damping ||
                 (reference[0] < initialState[0] && reference[1] > initialState[1] &&
                     reference[0] > reference[1]),
@@ -931,14 +931,14 @@ void verifySphTemporalOrder() {
             std::array<double, 3> velocityErrors{};
             std::array<double, 3> entropyErrors{};
             for (size_t refinement = 0; refinement < stepCounts.size(); ++refinement) {
-                auto const state = run(stepCounts[refinement], duration);
+                auto const state = run(stepCounts[refinement], T);
                 for (size_t gas = 0; gas < 2; ++gas) {
                     // Derived exact solution of dv/dt = -λv:
-                    // v(T) = v(0) exp(-λT). λ → options.hydro.damping;
-                    // T → duration; v(0) → float(initialState[gas]).
-                    double const expectedVelocity = damping ? double(float(initialState[gas])) *
-                            std::exp(-options.hydro.damping * duration) :
-                                                              reference[gas];
+                    // v(T) = v(0) exp(-λT). λ → damping rate;
+                    // T → duration; v(0) → initial state.
+                    double const expectedVelocity = damping ?
+                        double(float(initialState[gas])) * std::exp(-options.hydro.damping * T) :
+                        reference[gas];
                     velocityErrors[refinement] = std::max(
                         velocityErrors[refinement], std::abs(state[gas] - expectedVelocity));
                     entropyErrors[refinement] = std::max(
@@ -977,7 +977,7 @@ void verifySphTemporalOrder() {
         // The three-particle chain has one coarse/coarse pair and one coarse/fine
         // pair sharing the middle particle, so these velocity/entropy-dependent
         // operators do not commute. Production RK2 implements every K call.
-        // Symbol directory: H -> coarseTimestep; K -> advanceRung;
+        // Symbol directory: H -> coarse timestep; K -> advance rung;
         // F_c,F_f -> the production due-pair operators on rungs 0 and 1.
         constexpr ParticleInteger kParticleCount = 3;
         using SplitState = std::array<double, 2 * kParticleCount>;
@@ -1033,7 +1033,7 @@ void verifySphTemporalOrder() {
             }
             return state;
         };
-        auto const advanceRung = [&](int rung, double timestep) {
+        auto const K = [&](int rung, double timestep) {
             SphRunParameters parameters;
             parameters.minimumRung = parameters.maximumRung = rung;
             parameters.baseTimestep = std::ldexp(timestep, rung);
@@ -1046,14 +1046,14 @@ void verifySphTemporalOrder() {
         };
         constexpr double kProbeDuration = 1.0e-5;
         resetState();
-        advanceRung(0, kProbeDuration);
+        K(0, kProbeDuration);
         auto const coarseProbe = captureState();
         requireSphTree(coarseProbe[0] < float(initialSplitState[0]) &&
                 coarseProbe[1] > float(initialSplitState[1]) &&
                 coarseProbe[2] == float(initialSplitState[2]),
             "split refinement fixture did not isolate its coarse-owned pair");
         resetState();
-        advanceRung(1, kProbeDuration);
+        K(1, kProbeDuration);
         auto const fineProbe = captureState();
         requireSphTree(fineProbe[0] == float(initialSplitState[0]) &&
                 fineProbe[1] < float(initialSplitState[1]) &&
@@ -1062,15 +1062,15 @@ void verifySphTemporalOrder() {
 
         auto const runSplit = [&](int steps, double duration) {
             resetState();
-            double const coarseTimestep = duration / steps;
+            double const H = duration / steps;
             double initialMomentum = 0.0;
             for (ParticleInteger gas = 0; gas < kParticleCount; ++gas) {
                 initialMomentum += float(initialSplitState[gas]);
             }
             for (int step = 0; step < steps; ++step) {
-                advanceRung(1, 0.5 * coarseTimestep);
-                advanceRung(0, coarseTimestep);
-                advanceRung(1, 0.5 * coarseTimestep);
+                K(1, 0.5 * H);
+                K(0, H);
+                K(1, 0.5 * H);
                 double momentum = 0.0;
                 for (ParticleInteger gas = 0; gas < kParticleCount; ++gas) {
                     momentum += sphParticlesVelocity(0, gas);
@@ -1864,12 +1864,13 @@ void verifySphViscosityHistoryRegression(int stage) {
         //   α(Δτ) = α_tar + (α₀ − α_tar) exp(−Δτ/τ_decay).
         // Completed endpoint intervals are 1/8 on rung 3, 1/4 after the rung
         // change, and the supplied 0.137 for the global event.
-        // Symbol directory: Δτ → elapsed; α(Δτ) → expectedAlpha;
+        // Symbol directory: Δτ → elapsed; α(Δτ) → expected alpha;
         // α_tar = float(0.2); α₀ = half(0.7); τ_decay⁻¹ = float(0.4).
-        Float16Storage expectedAlpha(0.7f);
-        auto const decay = [&](double elapsed) {
-            expectedAlpha = float(double(0.2f) +
-                (double(float(expectedAlpha)) - double(0.2f)) * std::exp(-double(0.4f) * elapsed));
+        // Code names: α_Δτ = α(Δτ).
+        Float16Storage α_Δτ(0.7f);
+        auto const decay = [&](double Δτ) {
+            α_Δτ = float(
+                double(0.2f) + (double(float(α_Δτ)) - double(0.2f)) * std::exp(-double(0.4f) * Δτ));
         };
         if (gas == 1 && stage >= 1) {
             decay(0.125);
@@ -1880,7 +1881,7 @@ void verifySphViscosityHistoryRegression(int stage) {
         if (stage == 4) {
             decay(double(float(0.137)));
         }
-        requireSphTree(sphParticlesBulkViscosityCoefficients[gas].bits == expectedAlpha.bits,
+        requireSphTree(sphParticlesBulkViscosityCoefficients[gas].bits == α_Δτ.bits,
             "viscosity alpha used the wrong completed endpoint interval");
     }
 }

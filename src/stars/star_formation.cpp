@@ -174,8 +174,8 @@ StarFormationUpdate stage(std::vector<ParticleInteger> const& gasIndices,
         }
         // Derived source ledger in the existing a(K+W+U) normalization:
         // ΔQ = −m (E_after − E_before)/a, E = a²u.
-        // m -> gasMass; E_after -> output.energy; E_before -> input.energy;
-        // a -> scaleFactor. Use the actual representable committed entropy.
+        // m -> gas mass; E_after -> output energy; E_before -> input energy;
+        // a -> scale factor. Use the actual representable committed entropy.
         output.value = -getOptions().initial.gasMass *
             (double(output.energy) - double(input.energy)) / scaleFactor;
         result.heating += output.value;

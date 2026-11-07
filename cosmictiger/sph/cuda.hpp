@@ -124,23 +124,23 @@ __device__ inline void recordSphGpuFlops(sph_flops::Counter const& flops, SphRed
 // clang-format off
 /*
  * Section 6 of Monaghan (1992): the resolution length follows the local density,
- * smoothingLength ∝ ρ_a^(−1/ν) with ν = 3 (equations 6.1-6.2). Instead of integrating equation 6.2
- * or 6.7, the solve holds (4π/3) ρ_a H_a³/m = N_target, i.e. ΣW = Σ_b w(r_ab/H_a) = 3 N_target/(4π)
+ * H_a ∝ ρ_a^(−1/ν) with ν = 3 (equations 6.1-6.2). Instead of integrating equation 6.2
+ * or 6.7, the solve holds (4π/3) ρ_a H_a³/m = N_target, i.e. ΣW = Σ_b w(|r_ab|/H_a) = 3 N_target/(4π)
  * for the selected kernel W(r, H) = w(r/H)/H³, by a bounded Newton iteration on the support
- * radius H_a = smoothingLength with dΣW/dH_a = −Σ_b q_ab w'(q_ab)/H_a, q_ab = r_ab/H_a. The
+ * radius H_a with dΣW/dH_a = −Σ_b q_ab w'(q_ab)/H_a, q_ab = |r_ab|/H_a. The
  * bounds limit the support radius without modifying the density sum.
  *
  * Symbol directory (in the code below):
- *   q_ab → normalizedRadius
+ *   q_ab → normalized radius
  *   r_ab → separation
- *   H_a → smoothingLength
+ *   H_a → smoothing length
  *   ρ_a → density
- *   ΣW → kernelSum
+ *   ΣW → kernel sum
  */
 // clang-format on
 
 template <int blockSize, class Neighbors>
-inline __device__ bool solveSphSmoothingLength(float& smoothingLength, float minimumSmoothingLength,
+inline __device__ bool solveSphSmoothingLength(float& H_a, float minimumSmoothingLength,
     float maximumSmoothingLength, float targetNeighborCount, Neighbors const& neighbors,
     Vector3<Position> const& position, Fixed32Range const& neighborSearchBox,
     sph_flops::Counter& flops) {
@@ -149,8 +149,7 @@ inline __device__ bool solveSphSmoothingLength(float& smoothingLength, float min
     ALWAYS_ASSERT(minimumSmoothingLength > 0.0f &&
         maximumSmoothingLength >= minimumSmoothingLength && targetNeighborCount > 0.0f);
     if (threadIndex == 0) {
-        smoothingLength =
-            fminf(fmaxf(smoothingLength, minimumSmoothingLength), maximumSmoothingLength);
+        H_a = fminf(fmaxf(H_a, minimumSmoothingLength), maximumSmoothingLength);
     }
     __syncthreads();
     float lower = minimumSmoothingLength;
@@ -161,15 +160,15 @@ inline __device__ bool solveSphSmoothingLength(float& smoothingLength, float min
         int boxExceeded = false;
         for (int dim = 0; dim < kDimensions; dim++) {
             bool const upperExceeded = neighborSearchBox.end[dim] <
-                RangeFixed(position[dim]) + RangeFixed(smoothingLength) + RangeFixed::min();
+                RangeFixed(position[dim]) + RangeFixed(H_a) + RangeFixed::min();
             // Single-precision fixed-point scale, preserving short circuiting.
             flops.singlePrecision += 1;
             if (upperExceeded) {
                 boxExceeded = true;
             } else {
                 flops.singlePrecision += 1;
-                if (RangeFixed(position[dim]) < neighborSearchBox.begin[dim] +
-                        RangeFixed(smoothingLength) + RangeFixed::min()) {
+                if (RangeFixed(position[dim]) <
+                    neighborSearchBox.begin[dim] + RangeFixed(H_a) + RangeFixed::min()) {
                     boxExceeded = true;
                 }
             }
@@ -177,67 +176,62 @@ inline __device__ bool solveSphSmoothingLength(float& smoothingLength, float min
         if (boxExceeded) {
             return false;
         }
-        float const inverseSmoothingLength = 1.0f / smoothingLength;
+        float const inverseSmoothingLength = 1.0f / H_a;
         flops += 1;
-        float kernelSum = 0.0f;
+        float ΣW = 0.0f;
         float kernelSumSupportDerivative = 0.0f;
         for (int neighborIndex = threadIndex; neighborIndex < neighbors.size();
             neighborIndex += runtimeBlockSize) {
             auto const& neighbor = neighbors[neighborIndex];
-            Vector3<float> const separation(distance(position[kXi], neighbor.positionX),
+            Vector3<float> const r_ab(distance(position[kXi], neighbor.positionX),
                 distance(position[kYi], neighbor.positionY),
                 distance(position[kZi], neighbor.positionZ));
-            float const normalizedRadius =
-                sqrtf(sph_geometry::spatialDot(separation, separation)) * inverseSmoothingLength;
+            float const q_ab = sqrtf(sph_geometry::spatialDot(r_ab, r_ab)) * inverseSmoothingLength;
             flops += 10;    // Three fixed distances, dot, root, normalized radius.
-            if (normalizedRadius < 1.0f) {
-                kernelSum += kernelW(normalizedRadius);
-                kernelSumSupportDerivative -=
-                    normalizedRadius * dkernelWDq(normalizedRadius) * inverseSmoothingLength;
-                flops += 4 +
-                    sph_flops::densityKernelOperations(selectedHydroKernel(), normalizedRadius) +
-                    sph_flops::densityKernelOperations(
-                        selectedHydroKernel(), normalizedRadius, true);
+            if (q_ab < 1.0f) {
+                ΣW += kernelW(q_ab);
+                kernelSumSupportDerivative -= q_ab * dkernelWDq(q_ab) * inverseSmoothingLength;
+                flops += 4 + sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab) +
+                    sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
             }
         }
-        sharedReduceAdd<float, blockSize>(kernelSum);
+        sharedReduceAdd<float, blockSize>(ΣW);
         sharedReduceAdd<float, blockSize>(kernelSumSupportDerivative);
         flops += 2 * detail::sphReductionFlops<blockSize>();
-        float const residual = kernelSum - targetKernelSum;
+        float const residual = ΣW - targetKernelSum;
         flops += 2;    // Residual and relative tolerance product (absolute value is free).
         if (fabsf(residual) <= kSphSmoothingLengthTolerance * targetKernelSum ||
-            (smoothingLength <= minimumSmoothingLength && residual >= 0.0f) ||
-            (smoothingLength >= maximumSmoothingLength && residual <= 0.0f)) {
+            (H_a <= minimumSmoothingLength && residual >= 0.0f) ||
+            (H_a >= maximumSmoothingLength && residual <= 0.0f)) {
             return true;
         }
         if (residual > 0.0f) {
-            upper = smoothingLength;
+            upper = H_a;
         } else {
-            lower = smoothingLength;
+            lower = H_a;
         }
-        float change = kernelSumSupportDerivative > 0.0f ? -residual / kernelSumSupportDerivative :
-                                                           0.2f * smoothingLength;
-        change = fminf(fmaxf(change, -0.2f * smoothingLength), 0.2f * smoothingLength);
-        float next =
-            fminf(fmaxf(smoothingLength + change, minimumSmoothingLength), maximumSmoothingLength);
+        float change =
+            kernelSumSupportDerivative > 0.0f ? -residual / kernelSumSupportDerivative : 0.2f * H_a;
+        change = fminf(fmaxf(change, -0.2f * H_a), 0.2f * H_a);
+        float next = fminf(fmaxf(H_a + change, minimumSmoothingLength), maximumSmoothingLength);
         flops += 4;    // Newton/fallback change, two clamp products, radius update.
         if (next < lower || next > upper) {
             next = 0.5f * (lower + upper);
             flops += 2;
         }
-        if (next == smoothingLength) {
+        if (next == H_a) {
             return true;
         }
         __syncthreads();
         if (threadIndex == 0) {
-            smoothingLength = next;
+            H_a = next;
         }
         __syncthreads();
     }
     if (threadIndex == 0) {
         printf("SPH smoothing-length solve did not converge: smoothingLength=%e bounds=[%e,%e] "
                "target=%e\n",
-            smoothingLength, minimumSmoothingLength, maximumSmoothingLength, targetNeighborCount);
+            H_a, minimumSmoothingLength, maximumSmoothingLength, targetNeighborCount);
         __trap();
     }
     return false;

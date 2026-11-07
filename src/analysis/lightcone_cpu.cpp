@@ -10,12 +10,9 @@ namespace detail {
 
 bool lightconeParticlesLinked(LightconeParticles const& first, int firstIndex,
     LightconeParticles const& second, int secondIndex, float linkingLengthSquared) {
-    float const dx =
-        distance(first.pos[kXi][firstIndex], second.pos[kXi][secondIndex]);
-    float const dy =
-        distance(first.pos[kYi][firstIndex], second.pos[kYi][secondIndex]);
-    float const dz =
-        distance(first.pos[kZi][firstIndex], second.pos[kZi][secondIndex]);
+    float const dx = distance(first.pos[kXi][firstIndex], second.pos[kXi][secondIndex]);
+    float const dy = distance(first.pos[kYi][firstIndex], second.pos[kYi][secondIndex]);
+    float const dz = distance(first.pos[kZi][firstIndex], second.pos[kZi][secondIndex]);
     return sqr(dx, dy, dz) < linkingLengthSquared;
 }
 

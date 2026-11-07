@@ -53,8 +53,7 @@ void appendDriftLightconeEntries(Vector3<double> const& before, Vector3<double> 
                     (2.0 * quadratic);
                 Vector3<double> crossing = {x0 + vx * time, y0 + vy * time, z0 + vz * time};
                 double const radiusSquared = crossing[kXi] * crossing[kXi] +
-                    crossing[kYi] * crossing[kYi] +
-                    crossing[kZi] * crossing[kZi];
+                    crossing[kYi] * crossing[kYi] + crossing[kZi] * crossing[kZi];
                 if (radiusSquared <= 1.0) {
                     long pixel;
                     vec2pix_nest(parameters.mapSize, crossing.data(), &pixel);

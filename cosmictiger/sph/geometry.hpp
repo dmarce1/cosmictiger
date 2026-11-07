@@ -32,27 +32,28 @@ CUDA_EXPORT inline Real spatialDot(Vector3<Real> const& left, Vector3<Real> cons
 }
 
 // Derived from W_D = H⁻ᴰ w_D(r/H): density scales as H⁻ᴰ and its
-// gradient as H⁻⁽ᴰ⁺¹⁾. D → kSpatialDimensions; H⁻¹ → inverseSupport.
+// gradient as H⁻⁽ᴰ⁺¹⁾. D → spatial dimensions; H⁻¹ → inverse support.
+// Code names: H_inv = H⁻¹.
 // Hopkins (2013), https://arxiv.org/abs/1206.5006, equations (8)–(13),
 // generalized here from 3D. Retain the established 3D multiplication order.
 template <class Real>
-CUDA_EXPORT inline Real inverseVolume(Real inverseSupport) {
+CUDA_EXPORT inline Real inverseVolume(Real H_inv) {
     if constexpr (kSpatialDimensions == 1) {
-        return inverseSupport;
+        return H_inv;
     } else if constexpr (kSpatialDimensions == 2) {
-        return inverseSupport * inverseSupport;
+        return H_inv * H_inv;
     } else {
-        return inverseSupport * inverseSupport * inverseSupport;
+        return H_inv * H_inv * H_inv;
     }
 }
 
 template <class Real>
-CUDA_EXPORT inline Real inverseGradientScale(Real inverseSupport) {
+CUDA_EXPORT inline Real inverseGradientScale(Real H_inv) {
     if constexpr (kSpatialDimensions == 3) {
-        Real const squared = inverseSupport * inverseSupport;
+        Real const squared = H_inv * H_inv;
         return squared * squared;
     } else {
-        return inverseVolume(inverseSupport) * inverseSupport;
+        return inverseVolume(H_inv) * H_inv;
     }
 }
 

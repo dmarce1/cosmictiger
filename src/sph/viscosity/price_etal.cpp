@@ -18,18 +18,15 @@ namespace price_etal {
  *   α_aⁿ⁺¹ = (α_aⁿ + α_loc,a Δt/τ_a)/(1 + Δt/τ_a).
  * An increase to α_loc,a is immediate, as specified before equation (49).
  * Symbol directory:
- *   α_aⁿ → bulkViscosityCoefficient; α_loc,a → targetBulkViscosityCoefficient
- *   Δt → timeStep; τ_a⁻¹ → inverseDecayTime; Δt/τ_a → decayStep
- *   α_aⁿ⁺¹ → return value; localBulkViscosityTarget is the target alias.
+ *   α_aⁿ → bulk viscosity coefficient; α_loc,a → target bulk viscosity coefficient
+ *   Δt → time step; τ_a⁻¹ → inverse decay time; Δt/τ_a → decay step
+ *   α_aⁿ⁺¹ → return value.
+ *   Code names: α_loc_a = α_loc,a; τ_a_inv = τ_a⁻¹; Δt_over_τ_a = Δt/τ_a; α_aⁿ_plus_1 = α_aⁿ⁺¹.
  */
 // clang-format on
-float evolvedBulkViscosityCoefficient(float bulkViscosityCoefficient,
-    float targetBulkViscosityCoefficient, float inverseDecayTime, float timeStep) {
-    float const localBulkViscosityTarget = targetBulkViscosityCoefficient;
-    float const decayStep = timeStep * inverseDecayTime;
-    return localBulkViscosityTarget > bulkViscosityCoefficient ?
-        localBulkViscosityTarget :
-        (bulkViscosityCoefficient + localBulkViscosityTarget * decayStep) / (1.0f + decayStep);
+float evolvedBulkViscosityCoefficient(float α_aⁿ, float α_loc_a, float τ_a_inv, float Δt) {
+    float const Δt_over_τ_a = Δt * τ_a_inv;
+    return α_loc_a > α_aⁿ ? α_loc_a : (α_aⁿ + α_loc_a * Δt_over_τ_a) / (1.0f + Δt_over_τ_a);
 }
 
 }    // namespace price_etal

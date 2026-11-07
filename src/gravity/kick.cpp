@@ -292,8 +292,7 @@ void gravitySealDeferredGasOpening() {
         detail::gasOpeningImpulses.reserve(detail::gasOpeningCount);
         for (ParticleInteger gasIndex = 0; gasIndex < sphParticlesSize(); ++gasIndex) {
             auto const increment = detail::gasOpeningIncrements[gasIndex];
-            if (increment[kXi] != 0.0f || increment[kYi] != 0.0f ||
-                increment[kZi] != 0.0f) {
+            if (increment[kXi] != 0.0f || increment[kYi] != 0.0f || increment[kZi] != 0.0f) {
                 detail::gasOpeningImpulses.push_back(
                     {sphParticlesParticleIndex(gasIndex), increment});
             }
@@ -328,25 +327,26 @@ KickReturn gravityFinishDeferredGasOpening() {
     // The signed hierarchical ladder supplies s_l; traditional gravity has one
     // opening term. Accumulation changes no momentum until the hydro operator
     // has completed. Diagnostic corrections retain the pre-opening state.
-    // Δv_G -> impulse.velocityIncrement; v_after_H -> before; v_after -> after.
+    // Δv_G -> velocity increment; v_after_H -> velocity before the gravity increment; v_after ->
+    // velocity after the gravity increment.
     for (auto const& impulse : detail::gasOpeningImpulses) {
         ParticleInteger const index = impulse.particleIndex;
         ALWAYS_ASSERT(particlesType(index) == kSphType);
-        Vector3<float> before;
-        Vector3<float> after;
+        Vector3<float> v_after_H;
+        Vector3<float> v_after;
         for (int dimension = 0; dimension < kDimensions; ++dimension) {
-            before[dimension] = particlesVel(dimension, index);
-            after[dimension] = before[dimension] + impulse.velocityIncrement[dimension];
-            particlesVel(dimension, index) = after[dimension];
+            v_after_H[dimension] = particlesVel(dimension, index);
+            v_after[dimension] = v_after_H[dimension] + impulse.velocityIncrement[dimension];
+            particlesVel(dimension, index) = v_after[dimension];
         }
         double const mass = particlesMass(index);
-        double const kineticChange = 0.5 * mass * (after.dot(after) - before.dot(before));
+        double const kineticChange = 0.5 * mass * (v_after.dot(v_after) - v_after_H.dot(v_after_H));
         result.dkin += kineticChange;
         result.darkMatterKineticCorrection -= kineticChange;
-        result.darkMatterXMomentumCorrection += mass * (before[kXi] - after[kXi]);
-        result.darkMatterYMomentumCorrection += mass * (before[kYi] - after[kYi]);
-        result.darkMatterZMomentumCorrection += mass * (before[kZi] - after[kZi]);
-        result.darkMatterMomentumNormCorrection += mass * (before.norm() - after.norm());
+        result.darkMatterXMomentumCorrection += mass * (v_after_H[kXi] - v_after[kXi]);
+        result.darkMatterYMomentumCorrection += mass * (v_after_H[kYi] - v_after[kYi]);
+        result.darkMatterZMomentumCorrection += mass * (v_after_H[kZi] - v_after[kZi]);
+        result.darkMatterMomentumNormCorrection += mass * (v_after_H.norm() - v_after.norm());
         result.maxRung = std::max(result.maxRung, int(particlesRung(index)));
     }
     addCpuFlops(3 * detail::gasOpeningImpulses.size(), FlopPrecision::Single);
@@ -431,7 +431,7 @@ void gravityRefreshSphAcceleration(double theta) {
     // g_phys = −G m Δx/(a² |Δx|³), hence dw/dτ = −G m Δx/|Δx|³.
     // No additional 1/a belongs on this gm-scaled gravity force. The hydro
     // pressure force's m/a factor follows its separate E = a² u conversion.
-    // w -> stored particlesVel; Gm -> parameters.gm; dw/dτ -> sphStageAccelerations.
+    // w -> stored particle velocity; Gm -> G times mass; dw/dτ -> SPH stage acceleration.
     // The gas buffer belongs to the current hydro stage. A full-source force
     // tree temporarily permutes base particles while keeping gas records fixed;
     // restore that permutation before any retained SPH tree/stage resumes.

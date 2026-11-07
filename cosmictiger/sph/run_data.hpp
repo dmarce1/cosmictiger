@@ -113,8 +113,7 @@ CUDA_EXPORT inline Vector3<float> sphCompleteAcceleration(SphRunParameters const
     flops.doublePrecision += sph_flops::positionConstructionFlops();
     if (centralAcceleration != 0.0f) {
         Vector3<float> const separation(distance(position[kXi], Position(0.5)),
-            distance(position[kYi], Position(0.5)),
-            distance(position[kZi], Position(0.5)));
+            distance(position[kYi], Position(0.5)), distance(position[kZi], Position(0.5)));
         float const radius = separation.norm();
         float const inverseSmoothingLength = 1.0f / centralSmoothingLength;
         float const normalizedRadius = radius * inverseSmoothingLength;

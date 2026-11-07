@@ -665,8 +665,7 @@ void particlesGlobalReadPosAndGroup(ParticleGlobalRange range, Position* x, Posi
         if (range.proc == hpxRank()) {
             ParticleInteger const dif = offset - range.range.first;
             ParticleInteger const sz = range.range.second - range.range.first;
-            std::memcpy(
-                x + offset, &particlesPos(kXi, range.range.first), sizeof(Position) * sz);
+            std::memcpy(x + offset, &particlesPos(kXi, range.range.first), sizeof(Position) * sz);
             if constexpr (kSpatialDimensions > 1) {
                 std::memcpy(y + offset, particlesPositionData(kYi, range.range.first),
                     sizeof(Position) * sz);
@@ -696,10 +695,10 @@ void particlesGlobalReadPosAndGroup(ParticleGlobalRange range, Position* x, Posi
                 for (ParticleInteger i = begin; i < end; i++) {
                     ParticleInteger const srcIndex = i - lineId.index;
                     x[destIndex] = ptr[srcIndex].position[kXi];
-                    y[destIndex] = kSpatialDimensions > 1 ? ptr[srcIndex].position[kYi] :
-                                                            Position(0.5);
-                    z[destIndex] = kSpatialDimensions > 2 ? ptr[srcIndex].position[kZi] :
-                                                            Position(0.5);
+                    y[destIndex] =
+                        kSpatialDimensions > 1 ? ptr[srcIndex].position[kYi] : Position(0.5);
+                    z[destIndex] =
+                        kSpatialDimensions > 2 ? ptr[srcIndex].position[kZi] : Position(0.5);
                     groupNumbers[destIndex] = ptr[srcIndex].groupNumber;
                     destIndex++;
                 }
@@ -883,8 +882,7 @@ void particlesGlobalReadPos(ParticleGlobalRange range, Position* x, Position* y,
         if (range.proc == hpxRank()) {
             ParticleInteger const dif = offset - range.range.first;
             ParticleInteger const sz = range.range.second - range.range.first;
-            std::memcpy(
-                x + offset, &particlesPos(kXi, range.range.first), sizeof(Position) * sz);
+            std::memcpy(x + offset, &particlesPos(kXi, range.range.first), sizeof(Position) * sz);
             if constexpr (kSpatialDimensions > 1) {
                 std::memcpy(y + offset, particlesPositionData(kYi, range.range.first),
                     sizeof(Position) * sz);
@@ -923,10 +921,10 @@ void particlesGlobalReadPos(ParticleGlobalRange range, Position* x, Position* y,
                 for (ParticleInteger i = begin; i < end; i++) {
                     ParticleInteger const srcIndex = i - lineId.index;
                     x[destIndex] = ptr[srcIndex].position[kXi];
-                    y[destIndex] = kSpatialDimensions > 1 ? ptr[srcIndex].position[kYi] :
-                                                            Position(0.5);
-                    z[destIndex] = kSpatialDimensions > 2 ? ptr[srcIndex].position[kZi] :
-                                                            Position(0.5);
+                    y[destIndex] =
+                        kSpatialDimensions > 1 ? ptr[srcIndex].position[kYi] : Position(0.5);
+                    z[destIndex] =
+                        kSpatialDimensions > 2 ? ptr[srcIndex].position[kZi] : Position(0.5);
                     if (types) {
                         if (getOptions().hydro.enabled) {
                             types[destIndex] = ptr[srcIndex].type;

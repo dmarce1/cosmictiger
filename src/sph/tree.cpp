@@ -130,23 +130,23 @@ double sphTreeVolumeRatio(SphTreeNode const& node, sph_flops::Counter& flops) {
      * bounds include motion since the most recent rebuild, including conservative
      * expansion at periodic seams; kernel support is excluded. Use double spans
      * and products: fixed-point volume products can underflow in refined cells.
-     * Symbol directory: R -> returned ratio; b/e_swept -> node.driftBox.begin/end;
-     * b/e_partition -> node.box.begin/end; V_swept -> sweptVolume;
-     * V_partition -> partitionVolume.
+     * Symbol directory: R -> returned ratio; b/e_swept -> swept box begin, end;
+     * b/e_partition -> partition box begin, end; V_swept -> swept volume;
+     * V_partition -> partition volume.
      */
     // clang-format on
-    double partitionVolume = 1.0;
-    double sweptVolume = 1.0;
+    double V_partition = 1.0;
+    double V_swept = 1.0;
     for (int dim = 0; dim < kSpatialDimensions; ++dim) {
         double const partitionSpan = node.box.end[dim].toDouble() - node.box.begin[dim].toDouble();
         double const sweptSpan =
             node.driftBox.end[dim].toDouble() - node.driftBox.begin[dim].toDouble();
         ALWAYS_ASSERT(partitionSpan > 0.0 && sweptSpan >= 0.0);
-        partitionVolume *= partitionSpan;
-        sweptVolume *= sweptSpan;
+        V_partition *= partitionSpan;
+        V_swept *= sweptSpan;
     }
     flops.doublePrecision += 8 * kSpatialDimensions + 1;
-    return sweptVolume / partitionVolume;
+    return V_swept / V_partition;
 }
 
 void mergeSphBounds(Fixed32Range& target, Fixed32Range const& source) {
@@ -156,8 +156,8 @@ void mergeSphBounds(Fixed32Range& target, Fixed32Range const& source) {
     }
 }
 
-Fixed32Range sweptSphBounds(Fixed32Range const& positions, Vector3<double> const& minimumVelocity,
-    Vector3<double> const& maximumVelocity, double driftFactor) {
+Fixed32Range sweptSphBounds(Fixed32Range const& positions, Vector3<double> const& v_minus,
+    Vector3<double> const& v_plus, double D) {
     Fixed32Range result = positions;
     double const padding = 2.0 * RangeFixed::min().toDouble();
     // clang-format off
@@ -170,16 +170,17 @@ Fixed32Range sweptSphBounds(Fixed32Range const& positions, Vector3<double> const
      * Bounds include every intermediate position and permit negative D. A span
      * of at least one periodic box covers that entire axis; saturating before
      * fixed-point conversion avoids wrapping the signed bound representation.
-     * Symbol directory: b_d/e_d -> positions.begin/end[dim]; D -> driftFactor;
-     * v⁻_d/v⁺_d -> minimumVelocity/maximumVelocity[dim]; b'_d/e'_d -> result.
+     * Symbol directory: b_d/e_d -> position box begin, end; D -> drift factor;
+     * v⁻_d/v⁺_d -> minimum, maximum velocity; b'_d/e'_d -> result.
+     * Code names: v_minus = v⁻, v_plus = v⁺.
      */
     // clang-format on
     for (int dim = 0; dim < kDimensions; ++dim) {
         if (positions.begin[dim] > positions.end[dim]) {
             continue;
         }
-        double const firstDisplacement = driftFactor * minimumVelocity[dim];
-        double const secondDisplacement = driftFactor * maximumVelocity[dim];
+        double const firstDisplacement = D * v_minus[dim];
+        double const secondDisplacement = D * v_plus[dim];
         double const lower = positions.begin[dim].toDouble() +
             std::min({0.0, firstDisplacement, secondDisplacement}) - padding;
         double const upper = positions.end[dim].toDouble() +
@@ -566,18 +567,19 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
             // selected axes in z/y/x order so occupied slots have contiguous ranges.
             // Longest-axis selection limits cell aspect ratios after partial splits.
             // Derived geometric split: m_d = (b_d + e_d)/2.
-            // b_d -> box.begin[dim], e_d -> box.end[dim], m_d -> midpoint[dim].
+            // b_d -> box begin, e_d -> box end, m_d -> split midpoint.
+            // Code names: m = m_d, indexed by dim.
             std::array<Pair<ParticleInteger>, kSphChildCount> childParticleRanges;
             childParticleRanges[0] = particleRange;
-            Vector3<double> midpoint;
+            Vector3<double> m;
             int partitionedMask = 0;
             for (int dim = kDimensions - 1; dim >= 0; --dim) {
                 int const upperBit = 1 << dim;
                 if ((splitMask & upperBit) == 0) {
                     continue;
                 }
-                midpoint[dim] = 0.5 * (box.begin[dim] + box.end[dim]);
-                Position const splitPosition(midpoint[dim]);
+                m[dim] = 0.5 * (box.begin[dim] + box.end[dim]);
+                Position const splitPosition(m[dim]);
                 flops.doublePrecision += 2 + sph_flops::positionConstructionFlops();
                 for (int childIndex = 0; childIndex < kSphChildCount; ++childIndex) {
                     if ((childIndex & ~partitionedMask) != 0) {
@@ -605,9 +607,9 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
                         continue;
                     }
                     if ((childIndex & (1 << dim)) != 0) {
-                        childBox.begin[dim] = midpoint[dim];
+                        childBox.begin[dim] = m[dim];
                     } else {
-                        childBox.end[dim] = midpoint[dim];
+                        childBox.end[dim] = m[dim];
                     }
                 }
                 childFutures[childIndex] = sphTreeCreateFork(params, key, processRange, childRange,

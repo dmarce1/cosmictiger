@@ -189,8 +189,7 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
                             for (int dim = 0; dim < kDimensions; dim++) {
                                 dx[dim] = xValue[dim] - yValue[dim];    // 3
                             }
-                            SimdFloat const separationSquared =
-                                sqr(dx[kXi], dx[kYi], dx[kZi]);
+                            SimdFloat const separationSquared = sqr(dx[kXi], dx[kYi], dx[kZi]);
                             SimdFloat const r2 = simdMax(separationSquared, tiny);
                             auto const farFlag = separationSquared > h2;
                             SimdFloat rinv1{};

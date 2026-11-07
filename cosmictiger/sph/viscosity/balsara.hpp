@@ -20,30 +20,30 @@ namespace balsara {
  * Derived storage quantization of the bounded shear factor:
  *   q = ⌊255 clamp(f, 0, 1) + ½⌋,   f̂ = q/255,
  *   |f̂ − f| ≤ 1/510 for 0 ≤ f ≤ 1, before floating-point reconstruction.
- * Symbol directory: f → factor; q → storedFactor; f̂ → decodeFactor result.
+ * Symbol directory: f → factor; q → stored factor; f̂ → decoded factor.
  * Nonfinite factors become zero. Integer IEEE checks preserve this guard under
  * finite-math optimization. The double intermediate preserves which side of a
  * half-code threshold the input float occupies; ties round upward.
  */
-CUDA_EXPORT inline uint8_t encodeFactor(float factor) {
+CUDA_EXPORT inline uint8_t encodeFactor(float f) {
 #ifdef __CUDA_ARCH__
-    uint32_t const factorBits = __float_as_uint(factor);
+    uint32_t const factorBits = __float_as_uint(f);
 #else
-    uint32_t const factorBits = std::bit_cast<uint32_t>(factor);
+    uint32_t const factorBits = std::bit_cast<uint32_t>(f);
 #endif
-    if ((factorBits & 0x7f800000U) == 0x7f800000U || factor <= 0.0f) {
+    if ((factorBits & 0x7f800000U) == 0x7f800000U || f <= 0.0f) {
         return 0;
     }
-    if (factor >= 1.0f) {
+    if (f >= 1.0f) {
         return 255;
     }
-    return static_cast<uint8_t>(double(factor) * 255.0 + 0.5);
+    return static_cast<uint8_t>(double(f) * 255.0 + 0.5);
 }
 
-CUDA_EXPORT inline float decodeFactor(uint8_t storedFactor) {
+CUDA_EXPORT inline float decodeFactor(uint8_t q) {
     // A float reciprocal under fast-math can map 255 slightly above one.
     // Decode in double before rounding to float to preserve both endpoints.
-    return float(double(storedFactor) / 255.0);
+    return float(double(q) / 255.0);
 }
 
 /*
@@ -60,21 +60,23 @@ CUDA_EXPORT inline float decodeFactor(uint8_t storedFactor) {
 // clang-format off
 /*
  * Symbol directory for GADGET-4 equation (72) above:
- *   ∇·v_a → divergence; |∇×v_a| → curlMagnitude
- *   |∇·v_a| → absoluteDivergence; |∇×v_a| → absoluteCurl
- *   |∇·v_a| + |∇×v_a| → limiterDenominator; f_aᴬⱽ → shearLimiter.
+ *   ∇·v_a → divergence; |∇×v_a| → curl magnitude
+ *   |∇·v_a| → absolute divergence
+ *   |∇·v_a| + |∇×v_a| → limiter denominator; f_aᴬⱽ → shear limiter.
+ *   Code names: div_v_a = ∇·v_a; abs_curl_v_a = |∇×v_a|; abs_div_v_a = |∇·v_a|;
+ *     abs_div_v_a_plus_abs_curl_v_a = |∇·v_a| + |∇×v_a|.
  * Density-weighted inputs are also valid because their common factor cancels.
  */
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline Real balsaraFactor(Real divergence, Real curlMagnitude) {
-    Real const velocityDivergence = divergence;
-    Real const absoluteDivergence = simdMax(velocityDivergence, -velocityDivergence);
-    Real const absoluteCurl = curlMagnitude;
-    Real const limiterDenominator = absoluteDivergence + absoluteCurl;
-    Real const shearLimiter =
-        absoluteDivergence / simdSelect(limiterDenominator > Real(0), limiterDenominator, Real(1));
-    return shearLimiter;
+    Real const div_v_a = divergence;
+    Real const abs_div_v_a = simdMax(div_v_a, -div_v_a);
+    Real const abs_curl_v_a = curlMagnitude;
+    Real const abs_div_v_a_plus_abs_curl_v_a = abs_div_v_a + abs_curl_v_a;
+    Real const f_aᴬⱽ = abs_div_v_a /
+        simdSelect(abs_div_v_a_plus_abs_curl_v_a > Real(0), abs_div_v_a_plus_abs_curl_v_a, Real(1));
+    return f_aᴬⱽ;
 }
 
 /*
@@ -85,21 +87,20 @@ CUDA_EXPORT inline Real balsaraFactor(Real divergence, Real curlMagnitude) {
  *   ω = (V_zy − V_yz, V_xz − V_zx, V_yx − V_xy),
  *   f = |G| / (|G| + |ω|).
  * The common conversion from stored to physical peculiar gradients cancels.
- * V → velocityGradient; G → divergence; ω → curlX/curlY/curlZ.
+ * V → velocity gradient; G → divergence; ω → curl components.
  * Count scalar arithmetic only: trace (2), curl (3), norm (6), factor (2).
  * Comparisons, selection and unary signs do not count as floating operations.
  */
 template <typename Real, typename Counter>
 CUDA_EXPORT inline Real factorFromVelocityGradient(
-    Real const (&velocityGradient)[3][3], Counter& floatingPointOperations) {
-    Real const divergence =
-        velocityGradient[0][0] + velocityGradient[1][1] + velocityGradient[2][2];
-    Real const curlX = velocityGradient[2][1] - velocityGradient[1][2];
-    Real const curlY = velocityGradient[0][2] - velocityGradient[2][0];
-    Real const curlZ = velocityGradient[1][0] - velocityGradient[0][1];
-    Real const curlMagnitude = simdSqrt(curlX * curlX + curlY * curlY + curlZ * curlZ);
+    Real const (&V)[3][3], Counter& floatingPointOperations) {
+    Real const G = V[0][0] + V[1][1] + V[2][2];
+    Real const ω_x = V[2][1] - V[1][2];
+    Real const ω_y = V[0][2] - V[2][0];
+    Real const ω_z = V[1][0] - V[0][1];
+    Real const curlMagnitude = simdSqrt(ω_x * ω_x + ω_y * ω_y + ω_z * ω_z);
     floatingPointOperations += 13;
-    return balsaraFactor(divergence, curlMagnitude);
+    return balsaraFactor(G, curlMagnitude);
 }
 
 }    // namespace balsara

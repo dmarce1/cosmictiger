@@ -283,9 +283,9 @@ Vector<float> accumulateDensityCpu(int fold, int gridSize, Range<int64_t> box) {
             masses[index] = particlesMass(index);
         }
     }
-    accumulateDensityCpuKernel(&particlesPos(kXi, 0), &particlesPos(kYi, 0),
-        &particlesPos(kZi, 0), masses.empty() ? nullptr : masses.data(), particleCount,
-        fold, gridSize, box, density.data());
+    accumulateDensityCpuKernel(&particlesPos(kXi, 0), &particlesPos(kYi, 0), &particlesPos(kZi, 0),
+        masses.empty() ? nullptr : masses.data(), particleCount, fold, gridSize, box,
+        density.data());
     return density;
 }
 

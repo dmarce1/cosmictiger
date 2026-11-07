@@ -67,8 +67,7 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
         }
         flops += kDimensions;
     }
-    particlesCaptureGravitySample(
-        index, total[kXi], total[kYi], total[kZi]);
+    particlesCaptureGravitySample(index, total[kXi], total[kYi], total[kZi]);
     bool const saveAcceleration =
         parameters.saveForce || saveParticleAcceleration(options.analysis);
     bool const savePotential = parameters.saveForce || saveParticlePotential(options.analysis);

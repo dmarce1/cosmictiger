@@ -106,8 +106,7 @@ inline std::vector<double> referenceDensity(
             for (int y = 0; y < gridSize; y++) {
                 for (int z = 0; z < gridSize; z++) {
                     size_t const cell = (size_t(x) * gridSize + y) * gridSize + z;
-                    result[cell] += mass * weights[kXi][x] * weights[kYi][y] *
-                        weights[kZi][z];
+                    result[cell] += mass * weights[kXi][x] * weights[kYi][y] * weights[kZi][z];
                 }
             }
         }

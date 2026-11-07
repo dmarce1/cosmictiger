@@ -214,7 +214,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
 #endif
     KickReturn kr;
     float const smoothingLength = params.gravitySmoothingLength;
-    float const gm = params.gm;
+    float const Gm = params.gm;
     float const eta = params.eta;
     bool const saveAcceleration =
         params.saveForce || saveParticleAcceleration(getOptions().analysis);
@@ -317,8 +317,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     dx[dim] = fmmPositionDifference(
                         selfPos[dim], otherPos[dim], dim, params.geometry, &geometryFlops);
                 }
-                SimdFloat const r2 = simdFma(dx[kXi], dx[kXi],
-                    simdFma(dx[kYi], dx[kYi], dx[kZi] * dx[kZi]));
+                SimdFloat const r2 =
+                    simdFma(dx[kXi], dx[kXi], simdFma(dx[kYi], dx[kYi], dx[kZi] * dx[kZi]));
                 SimdFloat const pairSmoothingLength =
                     fmmPairSmoothingLength(simdBroadcast<SimdFloat>(smoothingLength),
                         simdBroadcast<SimdFloat>(selfPtr->maxGravitySmoothingLength),
@@ -473,15 +473,15 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                         11;
                     continue;
                 }
-                forces.gx[j] *= gm;
-                forces.gy[j] *= gm;
-                forces.gz[j] *= gm;
-                forces.phi[j] *= gm;
+                forces.gx[j] *= Gm;
+                forces.gy[j] *= Gm;
+                forces.gz[j] *= Gm;
+                forces.phi[j] *= Gm;
                 if constexpr (snapshotDiagnostics) {
                     // Derived solver decomposition: far = M2P + L2P (including periodic
                     // corrections); near = explicit softened P2P with self removed.
                     // g = g_far + g_near; phi = phi_far + phi_near.
-                    // g -> output.acceleration; phi -> output.potential; Gm -> gm.
+                    // g -> acceleration; phi -> potential; Gm -> G times mass.
                     auto& output = particlesGravityDiagnostics[i];
                     output.acceleration = Vector3<float>(forces.gx[j], forces.gy[j], forces.gz[j]);
                     output.potential = forces.phi[j];
@@ -489,12 +489,12 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     output.longAcceleration[kYi] += kScaleFactor2 * l2.accelerationY();
                     output.longAcceleration[kZi] += kScaleFactor2 * l2.accelerationZ();
                     for (int dim = 0; dim < kDimensions; ++dim) {
-                        output.longAcceleration[dim] *= gm;
+                        output.longAcceleration[dim] *= Gm;
                         output.nearAcceleration[dim] =
                             output.acceleration[dim] - output.longAcceleration[dim];
                     }
                     output.longPotential =
-                        gm * (output.longPotential + kScaleFactor1 * l2.potential());
+                        Gm * (output.longPotential + kScaleFactor1 * l2.potential());
                     output.nearPotential = output.potential - output.longPotential;
                     continue;
                 }
@@ -606,7 +606,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                                     ALWAYS_ASSERT(params.top);
                                     // Derived quantization of the full-force bound:
                                     // r = max(ceil(log₂(Δτ₀/Δτ_G)), r_old−1, r_min).
-                                    // Δτ₀ -> params.t0; Δτ_G -> dt; r -> nextRung.
+                                    // Δτ₀ -> base timestep; Δτ_G -> gravity timestep; r -> next
+                                    // rung.
                                     nextRung = std::max(int(ceilf(log2f(params.t0 / dt))),
                                         std::max(int(rung) - 1, params.minRung));
                                 }
@@ -716,12 +717,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                             gravityGlobalAcceleration(kZi)[i] = forces.gz[j];
                         } else if (gas && params.deferHydroOpening) {
                             auto& increment = deferredGasOpening[particlesCatIndex(i)];
-                            increment[kXi] =
-                                std::fma(forces.gx[j], dt, increment[kXi]);
-                            increment[kYi] =
-                                std::fma(forces.gy[j], dt, increment[kYi]);
-                            increment[kZi] =
-                                std::fma(forces.gz[j], dt, increment[kZi]);
+                            increment[kXi] = std::fma(forces.gx[j], dt, increment[kXi]);
+                            increment[kYi] = std::fma(forces.gy[j], dt, increment[kYi]);
+                            increment[kZi] = std::fma(forces.gz[j], dt, increment[kZi]);
                         } else {
                             vx = fmaf(forces.gx[j], dt, vx);
                             vy = fmaf(forces.gy[j], dt, vy);

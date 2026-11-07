@@ -231,9 +231,8 @@ Vector<LightconeParticle> analysisGatherLightcone() {
         auto local = hpx::async<AnalysisReadLightconeBufferAction>(locality).get();
         particles.insert(particles.end(), local.begin(), local.end());
     }
-    std::sort(particles.begin(), particles.end(), [](auto const& left, auto const& right) {
-        return left.vel[kXi] < right.vel[kXi];
-    });
+    std::sort(particles.begin(), particles.end(),
+        [](auto const& left, auto const& right) { return left.vel[kXi] < right.vel[kXi]; });
     return particles;
 }
 

@@ -32,11 +32,12 @@ struct RungMergeDecision {
  * equal-cost tie. An empty finer set never triggers promotion.
  *
  * Symbol directory:
- *   Nₙ -> activeCount; Nₙ₊₁ -> fineCount;
+ *   Nₙ -> active count; Nₙ₊₁ -> fine count;
  *   configurable threshold Nₙ₊₁/Nₙ -> fraction (default 1/3).
+ *   Code names: minimum_N_n_plus_1_over_N_n = threshold on Nₙ₊₁/Nₙ.
  */
 inline RungMergeDecision rungMergeDecision(
-    std::span<size_t const> rungCounts, int lowestRung, double fraction) {
+    std::span<size_t const> rungCounts, int lowestRung, double minimum_N_n_plus_1_over_N_n) {
     RungMergeDecision decision;
     for (size_t rung = static_cast<size_t>(lowestRung); rung < rungCounts.size(); ++rung) {
         decision.activeCount += rungCounts[rung];
@@ -44,18 +45,18 @@ inline RungMergeDecision rungMergeDecision(
             decision.fineCount += rungCounts[rung];
         }
     }
-    if (fraction == 1.0 / 3.0) {
+    if (minimum_N_n_plus_1_over_N_n == 1.0 / 3.0) {
         // fineCount ≥ ceil(activeCount / 3), without multiplying counts or
         // rounding a large population through double precision.
         size_t const minimumFineCount =
             decision.activeCount / 3 + size_t(decision.activeCount % 3 != 0);
         decision.merge = decision.fineCount > 0 && decision.fineCount >= minimumFineCount;
-    } else if (fraction == 1.0) {
+    } else if (minimum_N_n_plus_1_over_N_n == 1.0) {
         decision.merge = decision.fineCount > 0 && decision.fineCount == decision.activeCount;
     } else {
         decision.merge = decision.fineCount > 0 &&
             static_cast<double>(decision.fineCount) >=
-                fraction * static_cast<double>(decision.activeCount);
+                minimum_N_n_plus_1_over_N_n * static_cast<double>(decision.activeCount);
     }
     return decision;
 }

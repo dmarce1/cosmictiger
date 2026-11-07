@@ -25,8 +25,7 @@ SphRunReturn sphCpuRungs(SphRunParameters const&, SphRunData const& data, int ta
         for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
             auto const separation =
                 detail::sphCpuSeparations(data, particleIndex, neighbors, first);
-            auto const squaredSeparation =
-                sqr(separation[kXi], separation[kYi], separation[kZi]);
+            auto const squaredSeparation = sqr(separation[kXi], separation[kYi], separation[kZi]);
             auto const neighborSupport =
                 detail::sphCpuLoad(data.sourceSmoothingLength, neighbors, first, 0.0f);
             SimdFloat const neighborRungs([&](auto lane) {
@@ -42,8 +41,8 @@ SphRunReturn sphCpuRungs(SphRunParameters const&, SphRunData const& data, int ta
         int const maximumNeighborRung = int(simdMaximum(maximumNeighborRungs));
         // Locally derived monotone neighbor-graph closure, including inactive endpoints:
         //   rᵢ⁽ᵏ⁺¹⁾ = max(rᵢ⁽ᵏ⁾, max_{j: dᵢⱼ ≤ max(Hᵢ,Hⱼ)} rⱼ⁽ᵏ⁾ − 1).
-        // rᵢ -> sinkRung; max rⱼ -> maximumNeighborRung; H -> smoothingLength;
-        // dᵢⱼ² -> squaredSeparation. Each pass reads a frozen source snapshot.
+        // rᵢ -> sink rung; max rⱼ -> maximum neighbor rung; H -> smoothing length;
+        // dᵢⱼ² -> squared separation. Each pass reads a frozen source snapshot.
         // Candidate storage defers live-rung changes until the driver schedules them.
         if (sinkRung < maximumNeighborRung - kMaxNeighborRungDifference) {
             auto* const candidates =

@@ -171,8 +171,8 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
         double const transverseSeed =
             1.0 + 0.5 * std::cos(phase) + std::cos(4.0 * phase) + 0.5 * std::cos(7.0 * phase);
         double const expectedVelocity = 0.025 * transverseSeed * std::sin(2.0 * kPi * z);
-        requireClose("normal velocity perturbation", sphParticlesVelocity(kZi, i),
-            expectedVelocity, 2.0e-8);
+        requireClose(
+            "normal velocity perturbation", sphParticlesVelocity(kZi, i), expectedVelocity, 2.0e-8);
         require(sphParticlesRung(i) == 0, "initial rung");
     }
     require(heavyCount == 2 * lightCount, "heavy and light particle counts have density ratio 2:1");
@@ -180,12 +180,9 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
     requireClose("heavy layer mass", mass * heavyCount, 1.0);
     requireClose("total mass", mass * sphParticlesSize(), 1.5);
     for (ParticleInteger i = 0; i < sphParticlesSize(); i += 2) {
-        require(sphParticlesPosition(kZi, i) < Position(0.5),
-            "lower particle precedes its mirror");
-        require(sphParticlesPosition(kXi, i).raw() ==
-                    sphParticlesPosition(kXi, i + 1).raw() &&
-                sphParticlesPosition(kYi, i).raw() ==
-                    sphParticlesPosition(kYi, i + 1).raw(),
+        require(sphParticlesPosition(kZi, i) < Position(0.5), "lower particle precedes its mirror");
+        require(sphParticlesPosition(kXi, i).raw() == sphParticlesPosition(kXi, i + 1).raw() &&
+                sphParticlesPosition(kYi, i).raw() == sphParticlesPosition(kYi, i + 1).raw(),
             "mirrored pairs share transverse positions");
         require(PositionInteger(sphParticlesPosition(kZi, i).raw() +
                     sphParticlesPosition(kZi, i + 1).raw()) == 0U,

@@ -140,16 +140,19 @@ __global__ void sphCudaSmoothingLengths(
  * Direct acceleration reconstruction (Cullen & Dehnen, equation B12):
  *   C = Σ_b F_ab ⊗ r_ab w̄_ab, ∇_x F = C T⁻¹, F_ab = F_a − F_b.
  * Symbol directory (Pack denotes SIMD partial sums):
- *   H_a → sinkKernelSmoothingLength; q_ab → normalizedRadius; w(q_ab) → kernelWeight
- *   ρ_a → density; ρ_a ∇·v_a → densityWeightedDivergence
- *   ρ_a ∇×v_a → densityWeightedCurl; ρ_a R_a → densityWeightedSignAverage
- *   r_ab, v_ab → separation, velocityDifference (peculiar stored velocity)
- *   m_b ∇_a W_ab → massWeightedKernelGradient
- *   T, D, C → gradientSums.moment, gradientSums.velocity, gradientSums.acceleration
- *   F_ab → accelerationDifference; F → sourceAccelerationX/Y/Z (full canonical force)
- *   Σ_b w → kernelSum; Σ_b q_ab w′ → kernelDerivativeMoment
- *   v_sig,a → signalSpeed (CUDA), signalSpeedPack (CPU)
- *   w̄_ab = −m_b F_a → gradientWeight inside the corrected-gradient branch.
+ *   H_a → sink kernel smoothing length; q_ab → normalized radius; w(q_ab) → kernel weight
+ *   ρ_a → density; ρ_a ∇·v_a → density-weighted divergence
+ *   ρ_a ∇×v_a → density-weighted curl; ρ_a R_a → density-weighted sign average
+ *   r_ab, v_ab → separation, velocity difference (peculiar stored velocity)
+ *   m_b ∇_a W_ab → mass-weighted kernel gradient
+ *   T, D, C → moment, velocity, acceleration gradient sums
+ *   F_ab → acceleration difference; F → source acceleration (full canonical force)
+ *   Σ_b w → kernel sum; Σ_b q_ab w′ → kernel derivative moment
+ *   v_sig,a → signal speed
+ *   w̄_ab = −m_b F_a → gradient weight inside the corrected-gradient branch.
+ *   Code names: w_q_ab = w(q_ab); ρ_a_div_v_a = ρ_a ∇·v_a; ρ_a_curl_v_a = ρ_a ∇×v_a;
+ *     ρ_a_R_a = ρ_a R_a; m_b_grad_a_W_ab = m_b ∇_a W_ab; ΣW = Σ_b w; Σqwʹ = Σ_b q_ab w′;
+ *     v_sig_a = v_sig,a.
  * Peculiar velocities enter all switch gradients and densityDerivativeSum.
  * Physical pair velocities include Hubble flow only in the signal-speed estimate; division by a ρ_a Ω_a gives d ln ρ_a/dτ
  * (Price 2012, equation (27), https://arxiv.org/abs/1012.1885).
@@ -261,12 +264,9 @@ __global__ void sphCudaDensityAndGradients(
                     auto const& neighbor = workspace.positions[neighborIndex];
                     auto const& particle = workspace.particles[neighborIndex];
                     if (parameters.isActiveRung(particle.rung)) {
-                        float const separationX =
-                            distance(position[kXi], neighbor.positionX);
-                        float const separationY =
-                            distance(position[kYi], neighbor.positionY);
-                        float const separationZ =
-                            distance(position[kZi], neighbor.positionZ);
+                        float const separationX = distance(position[kXi], neighbor.positionX);
+                        float const separationY = distance(position[kYi], neighbor.positionY);
+                        float const separationZ = distance(position[kZi], neighbor.positionZ);
                         flops += 10;    // Three fixed distances, squared norm, two supports.
                         if (sqr(separationX, separationY, separationZ) <
                             fmaxf(sqr(smoothingLength), sqr(particle.smoothingLength))) {
@@ -310,36 +310,36 @@ __global__ void sphCudaDensityAndGradients(
              * sum includes b = a. Each thread accumulates part of the sum.
              *
              * Symbol directory (in the code below):
-             *   H_a → sinkKernelSmoothingLength
-             *   m_b → data.gasMass
+             *   H_a → sink kernel smoothing length
+             *   m_b → gas mass
              *   ρ_a → density
              */
             // clang-format on
 
-            float const sinkKernelSmoothingLength = smoothingLength;
-            float const inverseSmoothingLength = 1.0f / sinkKernelSmoothingLength;
+            float const H_a = smoothingLength;
+            float const inverseSmoothingLength = 1.0f / H_a;
             float const massOverSupportVolume =
                 data.gasMass * sph_geometry::inverseVolume(inverseSmoothingLength);
             flops += 4;    // Reciprocal support and the mass/support-cubed scale.
-            float density = 0.0f;
+            float ρ_a = 0.0f;
             float densityDerivativeSum = 0.0f;
-            float densityWeightedDivergence = 0.0f;
-            Vector3<float> densityWeightedCurl(0.0f);
+            float ρ_a_div_v_a = 0.0f;
+            Vector3<float> ρ_a_curl_v_a(0.0f);
             cullen_and_dehnen::GradientSums<float> gradientSums{};
-            float densityWeightedSignAverage = 0.0f;
-            float signalSpeed = 0.0f;
+            float ρ_a_R_a = 0.0f;
+            float v_sig_a = 0.0f;
             // clang-format off
             /*
              * Variational operator: ΣW = Σ_b w(q_ab) and Σ_b q_ab w'(q_ab) give Ω_a and ζ_a.
              *
              * Symbol directory (in the code below):
-             *   q_ab → normalizedRadius
-             *   ζ_a → gradH.correction.weightedSupportCorrection
-             *   ΣW → kernelSum
+             *   q_ab → normalized radius
+             *   ζ_a → weighted support correction
+             *   ΣW → kernel sum
              */
             // clang-format on
-            float kernelSum = 0.0f;
-            float kernelDerivativeMoment = 0.0f;
+            float ΣW = 0.0f;
+            float Σqwʹ = 0.0f;
             float soundSpeedForSwitch =
                 0.0f;    // Sound speed for the CD signal speed or Price target.
             if (computeGradientDiagnostics) {
@@ -349,21 +349,19 @@ __global__ void sphCudaDensityAndGradients(
             for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
                 neighborIndex += blockSize) {
                 auto const& neighbor = workspace.positions[neighborIndex];
-                Vector3<float> const separation(distance(position[kXi], neighbor.positionX),
+                Vector3<float> const r_ab(distance(position[kXi], neighbor.positionX),
                     distance(position[kYi], neighbor.positionY),
                     distance(position[kZi], neighbor.positionZ));
-                float const radius = sqrtf(sph_geometry::spatialDot(separation, separation));
-                float const normalizedRadius = radius * inverseSmoothingLength;    // r_ab/H_a
-                float const kernelWeight = kernelW(normalizedRadius);
-                density += massOverSupportVolume * kernelWeight;
-                flops += 12 +
-                    sph_flops::densityKernelOperations(selectedHydroKernel(), normalizedRadius);
-                if (normalizedRadius < 1.0f) {
-                    kernelSum += kernelWeight;
-                    kernelDerivativeMoment += normalizedRadius * dkernelWDq(normalizedRadius);
-                    flops += 3 +
-                        sph_flops::densityKernelOperations(
-                            selectedHydroKernel(), normalizedRadius, true);
+                float const radius = sqrtf(sph_geometry::spatialDot(r_ab, r_ab));
+                float const q_ab = radius * inverseSmoothingLength;    // |r_ab|/H_a
+                float const w_q_ab = kernelW(q_ab);
+                ρ_a += massOverSupportVolume * w_q_ab;
+                flops += 12 + sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab);
+                if (q_ab < 1.0f) {
+                    ΣW += w_q_ab;
+                    Σqwʹ += q_ab * dkernelWDq(q_ab);
+                    flops +=
+                        3 + sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
                 }
                 if (computeGradientDiagnostics && parameters.cullenDehnen) {
                     /*
@@ -374,13 +372,12 @@ __global__ void sphCudaDensityAndGradients(
                     float const neighborDivergenceSign = neighborVelocityDivergence > 0.0f ?
                         1.0f :
                         (neighborVelocityDivergence < 0.0f ? -1.0f : 0.0f);
-                    densityWeightedSignAverage +=
-                        massOverSupportVolume * kernelWeight * neighborDivergenceSign;
+                    ρ_a_R_a += massOverSupportVolume * w_q_ab * neighborDivergenceSign;
                     flops += 3;
                 }
                 if ((computeSphDivergence || computeGradientDiagnostics ||
                         data.sinkLogDensityRate) &&
-                    radius > 0.0f && normalizedRadius < 1.0f) {
+                    radius > 0.0f && q_ab < 1.0f) {
                     // clang-format off
                     /*
                      * For constant viscosity and Morris & Monaghan, GADGET-4 equation
@@ -389,42 +386,36 @@ __global__ void sphCudaDensityAndGradients(
                      * density derivative keeps its variational SPH sum.
                      *
                      * Symbol directory (in the code below):
-                     *   v_ab → velocityDifference; m_b → data.gasMass; ρ_a → density.
+                     *   v_ab → velocity difference; m_b → gas mass; ρ_a → density.
                      */
                     // clang-format on
-                    float const massWeightedGradientFactor = massOverSupportVolume *
-                        inverseSmoothingLength * dkernelWDq(normalizedRadius) / radius;
+                    float const massWeightedGradientFactor =
+                        massOverSupportVolume * inverseSmoothingLength * dkernelWDq(q_ab) / radius;
                     auto const& particle = workspace.particles[neighborIndex];
-                    Vector3<float> const velocityDifference =
-                        Vector3<float>(data.sourceVelocityX[particleIndex],
-                            data.sourceVelocityY[particleIndex],
-                            data.sourceVelocityZ[particleIndex]) -
+                    Vector3<float> const v_ab = Vector3<float>(data.sourceVelocityX[particleIndex],
+                                                    data.sourceVelocityY[particleIndex],
+                                                    data.sourceVelocityZ[particleIndex]) -
                         Vector3<float>(particle.velocityX, particle.velocityY, particle.velocityZ);
                     // Kernel-gradient coefficient (3) and relative velocity (3).
-                    flops += 6 +
-                        sph_flops::densityKernelOperations(
-                            selectedHydroKernel(), normalizedRadius, true);
+                    flops +=
+                        6 + sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
                     if (computeSphDivergence || data.sinkLogDensityRate) {
-                        Vector3<float> const massWeightedKernelGradient =
-                            massWeightedGradientFactor * separation;
+                        Vector3<float> const m_b_grad_a_W_ab = massWeightedGradientFactor * r_ab;
                         flops += 3;
                         if (data.sinkLogDensityRate) {
-                            densityDerivativeSum += sph_geometry::spatialDot(
-                                velocityDifference, massWeightedKernelGradient);
+                            densityDerivativeSum += sph_geometry::spatialDot(v_ab, m_b_grad_a_W_ab);
                             flops += 6;
                         }
                         if (computeSphDivergence) {
-                            densityWeightedDivergence -= sph_geometry::spatialDot(
-                                velocityDifference, massWeightedKernelGradient);
+                            ρ_a_div_v_a -= sph_geometry::spatialDot(v_ab, m_b_grad_a_W_ab);
                             flops += 6;
                         }
                         if (computeSphBalsara) {
                             for (int dim = 0; dim < kDimensions; ++dim) {
                                 int const next = (dim + 1) % kDimensions;
                                 int const last = (dim + 2) % kDimensions;
-                                densityWeightedCurl[dim] +=
-                                    velocityDifference[next] * massWeightedKernelGradient[last] -
-                                    velocityDifference[last] * massWeightedKernelGradient[next];
+                                ρ_a_curl_v_a[dim] += v_ab[next] * m_b_grad_a_W_ab[last] -
+                                    v_ab[last] * m_b_grad_a_W_ab[next];
                             }
                             flops += 12;
                         }
@@ -436,18 +427,16 @@ __global__ void sphCudaDensityAndGradients(
                          * Equation (B7) allows the common mass/kernel-gradient
                          * weights, independent of densities changing on other ranks.
                          */
-                        float const gradientWeight = -massWeightedGradientFactor;
+                        float const w̄_ab = -massWeightedGradientFactor;
                         for (int i = 0; i < kSpatialDimensions; ++i) {
                             for (int j = 0; j < kSpatialDimensions; ++j) {
-                                gradientSums.moment[i][j] +=
-                                    gradientWeight * separation[i] * separation[j];
-                                gradientSums.velocity[i][j] +=
-                                    gradientWeight * velocityDifference[i] * separation[j];
+                                gradientSums.moment[i][j] += w̄_ab * r_ab[i] * r_ab[j];
+                                gradientSums.velocity[i][j] += w̄_ab * v_ab[i] * r_ab[j];
                             }
                         }
                         flops += 6 * kSpatialDimensions * kSpatialDimensions;
                         if (computeAccelerationGradient) {
-                            Vector3<float> const accelerationDifference =
+                            Vector3<float> const F_ab =
                                 Vector3<float>(data.sourceAccelerationX[particleIndex],
                                     data.sourceAccelerationY[particleIndex],
                                     data.sourceAccelerationZ[particleIndex]) -
@@ -455,8 +444,8 @@ __global__ void sphCudaDensityAndGradients(
                                     particle.accelerationZ);
                             for (int row = 0; row < kSpatialDimensions; ++row) {
                                 for (int column = 0; column < kSpatialDimensions; ++column) {
-                                    gradientSums.acceleration[row][column] += gradientWeight *
-                                        accelerationDifference[row] * separation[column];
+                                    gradientSums.acceleration[row][column] +=
+                                        w̄_ab * F_ab[row] * r_ab[column];
                                 }
                             }
                             flops += 3 + 3 * kSpatialDimensions * kSpatialDimensions;
@@ -464,13 +453,12 @@ __global__ void sphCudaDensityAndGradients(
                         if (parameters.cullenDehnen || parameters.huEtAl) {
                             // Hubble flow enters the approaching-pair signal speed only.
                             Vector3<float> const physicalVelocityDifference =
-                                velocityDifference + parameters.expansionRate * separation;
+                                v_ab + parameters.expansionRate * r_ab;
                             float const radialVelocity =
-                                sph_geometry::spatialDot(physicalVelocityDifference, separation) /
-                                radius;
+                                sph_geometry::spatialDot(physicalVelocityDifference, r_ab) / radius;
                             float const neighborSoundSpeed = sqrtf(
                                 adiabaticIndex * pressureEnergyRatio * particle.internalEnergy);
-                            signalSpeed = fmaxf(signalSpeed,
+                            v_sig_a = fmaxf(v_sig_a,
                                 0.5f * (soundSpeedForSwitch + neighborSoundSpeed) -
                                     fminf(radialVelocity, 0.0f));
                             flops += 18;
@@ -478,31 +466,31 @@ __global__ void sphCudaDensityAndGradients(
                     }
                 }
             }
-            sharedReduceAdd<float, kDensityAndGradientsBlockSize>(density);
+            sharedReduceAdd<float, kDensityAndGradientsBlockSize>(ρ_a);
             flops += detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
-            sharedReduceAdd<float, kDensityAndGradientsBlockSize>(kernelSum);
-            sharedReduceAdd<float, kDensityAndGradientsBlockSize>(kernelDerivativeMoment);
+            sharedReduceAdd<float, kDensityAndGradientsBlockSize>(ΣW);
+            sharedReduceAdd<float, kDensityAndGradientsBlockSize>(Σqwʹ);
             flops += 2 * detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
             if (data.sinkLogDensityRate) {
                 sharedReduceAdd<float, kDensityAndGradientsBlockSize>(densityDerivativeSum);
                 flops += detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
             }
             if (computeSphDivergence) {
-                sharedReduceAdd<float, kDensityAndGradientsBlockSize>(densityWeightedDivergence);
+                sharedReduceAdd<float, kDensityAndGradientsBlockSize>(ρ_a_div_v_a);
                 flops += detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
             }
             if (computeSphBalsara) {
                 for (int dim = 0; dim < kDimensions; ++dim) {
-                    sharedReduceAdd<float, kDensityAndGradientsBlockSize>(densityWeightedCurl[dim]);
+                    sharedReduceAdd<float, kDensityAndGradientsBlockSize>(ρ_a_curl_v_a[dim]);
                 }
                 flops += 3 * detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
             }
             if (computeGradientDiagnostics && parameters.cullenDehnen) {
-                sharedReduceAdd<float, kDensityAndGradientsBlockSize>(densityWeightedSignAverage);
+                sharedReduceAdd<float, kDensityAndGradientsBlockSize>(ρ_a_R_a);
                 flops += detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
             }
             if (computeGradientDiagnostics && (parameters.cullenDehnen || parameters.huEtAl)) {
-                sharedReduceMax<kDensityAndGradientsBlockSize>(signalSpeed);
+                sharedReduceMax<kDensityAndGradientsBlockSize>(v_sig_a);
             }
             if (computeGradientDiagnostics) {
                 for (int i = 0; i < kSpatialDimensions; ++i) {
@@ -522,12 +510,12 @@ __global__ void sphCudaDensityAndGradients(
             }
 
             if (threadIndex == 0) {
-                ALWAYS_ASSERT(sinkKernelSmoothingLength > 0.0f && density > 0.0f);
-                data.sinkDensity[sinkIndex] = density;
+                ALWAYS_ASSERT(H_a > 0.0f && ρ_a > 0.0f);
+                data.sinkDensity[sinkIndex] = ρ_a;
 
-                auto const gradH = sphGradHEvaluation(sinkKernelSmoothingLength,
-                    parameters.minimumSmoothingLength, parameters.maximumSmoothingLength,
-                    data.targetNeighborCount, data.gasMass, kernelSum, kernelDerivativeMoment);
+                auto const gradH = sphGradHEvaluation(H_a, parameters.minimumSmoothingLength,
+                    parameters.maximumSmoothingLength, data.targetNeighborCount, data.gasMass, ΣW,
+                    Σqwʹ);
                 flops += 8;    // Residual (2), and Ω, ζ, the weighted sums (6).
                 if (gradH.constraint != sph_volume::SupportConstraint::Free) {
                     atomicAdd(&reduction->heldSupports, 1);
@@ -538,14 +526,13 @@ __global__ void sphCudaDensityAndGradients(
                      * run; a small positive Ω_a is counted.
                      *
                      * Symbol directory (in the code below):
-                     *   ζ_a → gradH.correction.weightedSupportCorrection
+                     *   ζ_a → weighted support correction
                      */
                     // clang-format on
                     if (!sph_volume::isUsable(gradH.correction)) {
                         printf("SPH grad-H correction is unusable: smoothingLength=%e "
                                "density=%e ΣW=%e Σq dw/dq=%e Ω=%e ζ=%e residual=%e\n",
-                            sinkKernelSmoothingLength, density, kernelSum, kernelDerivativeMoment,
-                            gradH.correction.supportJacobian,
+                            H_a, ρ_a, ΣW, Σqwʹ, gradH.correction.supportJacobian,
                             gradH.correction.weightedSupportCorrection, gradH.relativeResidual);
                         __trap();
                     }
@@ -563,18 +550,17 @@ __global__ void sphCudaDensityAndGradients(
                      * d log(rho_comoving)/d tau = sum m v_ab.grad W/(a rho Omega).
                      *
                      * Symbol directory (in the code below):
-                     *   v_ab → velocityDifference
+                     *   v_ab → velocity difference
                      */
                     // clang-format on
                     data.sinkLogDensityRate[sinkIndex] = densityDerivativeSum /
-                        (parameters.scaleFactor * density * gradH.correction.supportJacobian);
+                        (parameters.scaleFactor * ρ_a * gradH.correction.supportJacobian);
                     flops += 3;
                 }
 
                 if (computeSphBalsara && data.sinkBalsaraFactor) {
-                    data.sinkBalsaraFactor[sinkIndex] =
-                        balsara::encodeFactor(balsara::balsaraFactor(
-                            densityWeightedDivergence, densityWeightedCurl.norm()));
+                    data.sinkBalsaraFactor[sinkIndex] = balsara::encodeFactor(
+                        balsara::balsaraFactor(ρ_a_div_v_a, ρ_a_curl_v_a.norm()));
                     flops += 8;
                 } else if (!parameters.balsaraSwitch && data.sinkBalsaraFactor) {
                     data.sinkBalsaraFactor[sinkIndex] = 255;
@@ -584,11 +570,10 @@ __global__ void sphCudaDensityAndGradients(
                      * Morris & Monaghan (1997), equations (5), (6), (13), in conformal time.
                      */
 
-                    float const velocityDivergence =
-                        densityWeightedDivergence / (density * parameters.scaleFactor);
+                    float const velocityDivergence = ρ_a_div_v_a / (ρ_a * parameters.scaleFactor);
                     float const soundSpeed = sqrtf(adiabaticIndex * pressureEnergyRatio *
                         data.sourceInternalEnergy[particleIndex]);
-                    float const smoothingLength = sinkKernelSmoothingLength /
+                    float const smoothingLength = H_a /
                         selectedHydroKernel().smoothingLengthPerEffectiveRadius *
                         float(monaghan::kViscosityWidthScale);
                     float const inverseDecayTime = parameters.viscosityDecay * soundSpeed /
@@ -654,16 +639,15 @@ __global__ void sphCudaDensityAndGradients(
                     cullen_and_dehnen::Result<float> diagnostics;
                     if (parameters.cullenDehnen) {
                         diagnostics = cullen_and_dehnen::diagnosticsFromGradient(velocityGradient,
-                            parameters.scaleFactor, divergenceDerivative,
-                            densityWeightedSignAverage / density, sinkKernelSmoothingLength,
-                            fmaxf(soundSpeedForSwitch, signalSpeed),
+                            parameters.scaleFactor, divergenceDerivative, ρ_a_R_a / ρ_a, H_a,
+                            fmaxf(soundSpeedForSwitch, v_sig_a),
                             parameters.maximumBulkViscosityCoefficient, parameters.viscosityDecayCD,
                             flops);
                         flops += 1;
                     } else if (parameters.huEtAl) {
                         diagnostics = hu_etal::diagnosticsFromGradient(velocityGradient,
-                            parameters.scaleFactor, divergenceDerivative, sinkKernelSmoothingLength,
-                            soundSpeedForSwitch, fmaxf(soundSpeedForSwitch, signalSpeed),
+                            parameters.scaleFactor, divergenceDerivative, H_a, soundSpeedForSwitch,
+                            fmaxf(soundSpeedForSwitch, v_sig_a),
                             parameters.maximumBulkViscosityCoefficientHu,
                             parameters.viscosityDecayHu, flops);
                     } else {
@@ -671,7 +655,7 @@ __global__ void sphCudaDensityAndGradients(
                          * Price et al. (2018), equations (46)-(48): the paper's smoothing
                          * length is the same calibrated viscosity length as Morris & Monaghan's h.
                          */
-                        float const smoothingLength = sinkKernelSmoothingLength /
+                        float const smoothingLength = H_a /
                             selectedHydroKernel().smoothingLengthPerEffectiveRadius *
                             float(monaghan::kViscosityWidthScale);
                         diagnostics = price_etal::diagnosticsFromGradient(velocityGradient,

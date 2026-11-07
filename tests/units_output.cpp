@@ -308,8 +308,7 @@ void checkUnitsOutputGas(DBfile* file, std::string const& name, int count, doubl
                 name + " coordinate unit");
         }
         auto const* coordinates = static_cast<double const*>(mesh->coords[dim]);
-        double const expected =
-            (0.5 + (dim == kXi ? std::ldexp(1.0, -32) : 0.0)) * coordinateScale;
+        double const expected = (0.5 + (dim == kXi ? std::ldexp(1.0, -32) : 0.0)) * coordinateScale;
         for (int i = 0; i < count; i++) {
             requireUnitsOutputClose(coordinates[i], expected, name + " particle position");
         }
@@ -431,7 +430,7 @@ void unitsOutputParticleFixture(bool initialize) {
                     << (kPositionBits - 32));
                 particlesVel(dim, i) = i == 2 ? (dim == kXi        ? 0.125 :
                                                         dim == kYi ? 0.25 :
-                                                                             -0.5) :
+                                                                     -0.5) :
                                                 0.0;
             }
             particlesRung(i) = 1;
@@ -477,8 +476,8 @@ void unitsOutputParticleFixture(bool initialize) {
                 "representable canonical divergence fixture");
         }
     } else {
-        detail::requireUnitsOutput(particlesPos(kXi, 0).raw() ==
-                    (PositionInteger(0x80000000U) << (kPositionBits - 32)) &&
+        detail::requireUnitsOutput(
+            particlesPos(kXi, 0).raw() == (PositionInteger(0x80000000U) << (kPositionBits - 32)) &&
                 particlesPos(kXi, 1).raw() ==
                     (PositionInteger(0x80000001U) << (kPositionBits - 32)),
             "particle fixed-point storage unchanged on every locality");

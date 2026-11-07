@@ -45,38 +45,34 @@ namespace detail {
  * live rung's interval; changing the rung rescales q without changing G.
  * Global integration recovers the normalization from its shared previous step.
  * Symbol directory:
- *   q → scaledDivergence; G → divergence; Δτ_r → sampleTimestep.
+ *   q → scaled divergence; G → divergence; Δτ_r → sample timestep.
  */
-CUDA_EXPORT inline float sphDivergenceSign(Float16Storage const& scaledDivergence) {
-    float const scaled = scaledDivergence;
+CUDA_EXPORT inline float sphDivergenceSign(Float16Storage const& q) {
+    float const scaled = q;
     return scaled > 0.0f ? 1.0f : (scaled < 0.0f ? -1.0f : 0.0f);
 }
 
-CUDA_EXPORT inline double sphDecodeDivergence(
-    Float16Storage const& scaledDivergence, double sampleTimestep) {
-    return sph_viscosity::detail::isFinite(sampleTimestep) && sampleTimestep > 0.0 ?
-        double(float(scaledDivergence)) / sampleTimestep :
-        0.0;
+CUDA_EXPORT inline double sphDecodeDivergence(Float16Storage const& q, double Δτ_r) {
+    return sph_viscosity::detail::isFinite(Δτ_r) && Δτ_r > 0.0 ? double(float(q)) / Δτ_r : 0.0;
 }
 
 // Reject overflow rather than silently clamp a shock history. Startup uses the
 // shared base interval for global steps, whose first accepted duration is unknown.
-CUDA_EXPORT inline bool sphEncodeDivergence(
-    Float16Storage& scaledDivergence, float divergence, double sampleTimestep) {
-    if (!sph_viscosity::detail::isFinite(divergence) ||
-        !sph_viscosity::detail::isFinite(sampleTimestep) || !(sampleTimestep > 0.0)) {
+CUDA_EXPORT inline bool sphEncodeDivergence(Float16Storage& q, float G, double Δτ_r) {
+    if (!sph_viscosity::detail::isFinite(G) || !sph_viscosity::detail::isFinite(Δτ_r) ||
+        !(Δτ_r > 0.0)) {
         return false;
     }
     constexpr double kMaximumHalf = 65504.0;
-    double const absoluteDivergence = std::abs(double(divergence));
-    if (absoluteDivergence > 1.0 && sampleTimestep > kMaximumHalf / absoluteDivergence) {
+    double const absoluteDivergence = std::abs(double(G));
+    if (absoluteDivergence > 1.0 && Δτ_r > kMaximumHalf / absoluteDivergence) {
         return false;
     }
-    double const scaled = double(divergence) * sampleTimestep;
+    double const scaled = double(G) * Δτ_r;
     if (std::abs(scaled) > kMaximumHalf) {
         return false;
     }
-    scaledDivergence = static_cast<float>(scaled);
+    q = static_cast<float>(scaled);
     return true;
 }
 
@@ -84,15 +80,14 @@ CUDA_EXPORT inline bool sphEncodeDivergence(
  * Derived change of normalization when a closed interval receives a new rung:
  *   q_new = q_old 2^(r_old − r_new).
  * No new gradient evaluation or sampling time is implied by this operation.
- * Symbol directory: q_old/q_new → scaledDivergence; r_old/r_new → oldRung/newRung.
+ * Symbol directory: q_old/q_new → scaled divergence; r_old/r_new → old, new rung.
+ * Code names: q holds q_old on entry and q_new on return.
  */
-CUDA_EXPORT inline bool sphRescaleDivergence(
-    Float16Storage& scaledDivergence, int oldRung, int newRung) {
-    if (oldRung < 0 || oldRung >= kMaxRung || newRung < 0 || newRung >= kMaxRung) {
+CUDA_EXPORT inline bool sphRescaleDivergence(Float16Storage& q, int r_old, int r_new) {
+    if (r_old < 0 || r_old >= kMaxRung || r_new < 0 || r_new >= kMaxRung) {
         return false;
     }
-    return sphEncodeDivergence(
-        scaledDivergence, float(scaledDivergence), std::ldexp(1.0, oldRung - newRung));
+    return sphEncodeDivergence(q, float(q), std::ldexp(1.0, r_old - r_new));
 }
 
 CUDA_EXPORT inline double sphViscosityStoredSampleTimestep(
@@ -107,17 +102,17 @@ CUDA_EXPORT inline double sphViscosityStoredSampleTimestep(
  * The difference of two endpoint samples estimates the gradient derivative at
  * the completed interval's midpoint. Applying its viscosity to the following
  * kick is first order in time. Rung selection happens only after this sample.
- * Δτ → interval (global), or interval 2⁻ʳ (dyadic); r → liveRung.
+ * Δτ → interval (global), or interval 2⁻ʳ (dyadic); r → live rung.
  */
 CUDA_EXPORT inline double sphViscositySampleInterval(
-    int liveRung, double interval, bool globalTimestep, bool initialize = false) {
-    if (initialize || !sph_viscosity::detail::isFinite(interval) || !(interval > 0.0)) {
+    int r, double Δτ, bool globalTimestep, bool initialize = false) {
+    if (initialize || !sph_viscosity::detail::isFinite(Δτ) || !(Δτ > 0.0)) {
         return 0.0;
     }
     if (globalTimestep) {
-        return interval;
+        return Δτ;
     }
-    return liveRung >= 0 && liveRung < kMaxRung ? std::ldexp(interval, -liveRung) : 0.0;
+    return r >= 0 && r < kMaxRung ? std::ldexp(Δτ, -r) : 0.0;
 }
 
 // Density-pass results retained only until the event's alpha/history update.

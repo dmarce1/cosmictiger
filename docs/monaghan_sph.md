@@ -17,22 +17,24 @@ equation 3.19 is not enabled.
 
 ## Notation in the code
 
-Equation implementations use descriptive camelCase identifiers. Adjacent comment blocks
-retain Unicode source notation, equation numbers and citations, then give a directory
-mapping each symbol to the implementation. Derived formulas and comoving conversions
-are identified explicitly. The same convention applies to CPU, SIMD, and CUDA code.
+Equation implementations use the source's Unicode symbols as identifiers. Adjacent
+comment blocks retain the source notation, equation numbers and citations, then give a
+directory with a short description of each symbol. A `Code names:` line spells any
+symbol that is not a legal C++ identifier, such as `abs_r_ab` for |r_ab|. Derived
+formulas and comoving conversions are identified explicitly. The same convention
+applies to CPU, SIMD, and CUDA code.
 
 | Symbol | Code name in the pair loops | Meaning |
 | --- | --- | --- |
-| α_a, α_b, α_ab | `bulkViscosityCoefficient`, `neighborBulkViscosityCoefficient`, `pairBulkViscosityCoefficient` | Linear artificial viscosity coefficients |
-| β_ab | `pairVonNeumannRichtmyerCoefficient` | Quadratic artificial viscosity coefficient |
-| ρ_a, P_a, u_a | `density`, `pressure`, `internalEnergy` | Sink thermodynamic state |
-| H_a, H_b | `sinkKernelSmoothingLength`, `neighborSmoothingLength` | Compact support radii |
-| r_ab, v_ab | `separation`, `velocityDifference` | Sink minus neighbor vectors |
-| μ_ab, Π_ab | `viscosityVelocity`, `pairArtificialViscosity` | Monaghan velocity measure and pair viscosity |
-| F_a, F_b, F_ab | `sinkGradientFactor`, `neighborGradientFactor`, `symmetricGradientFactor` | Radial kernel-gradient factors |
-| ζ_a | `gradHCorrection` | Adaptive-support correction |
-| Σ_b w, Σ_b q w′ | `kernelSum`, `kernelDerivativeMoment` | Dimensionless neighbor sums |
+| α_a, α_b, α_ab | `α_a`, `α_b`, `α_ab` | Linear artificial viscosity coefficients |
+| β_ab | `β_ab` | Quadratic artificial viscosity coefficient |
+| ρ_a, P_a, u_a | `ρ_a`, `P_a`, `u_a` | Sink thermodynamic state |
+| H_a, H_b | `H_a`, `H_b` | Compact support radii |
+| r_ab, v_ab | `r_ab`, `v_ab` | Sink minus neighbor vectors |
+| μ_ab, Π_ab | `μ_ab`, `Π_ab` | Monaghan velocity measure and pair viscosity |
+| F_a, F_b, F_ab | `F_a`, `F_b`, `F_ab` | Radial kernel-gradient factors |
+| ζ_a | `ζ_a` | Adaptive-support correction |
+| Σ_b w, Σ_b q w′ | `ΣW`, `Σqwʹ` | Dimensionless neighbor sums |
 
 The `Pack` suffix denotes SIMD lane partial sums or values. Public INI/CLI keys
 such as `hydro.viscosityAlpha` and `hydro.viscosityBeta` remain unchanged.

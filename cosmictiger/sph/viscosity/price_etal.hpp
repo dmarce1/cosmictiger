@@ -29,12 +29,11 @@ namespace price_etal {
 /*
  * Equation (50) with the instantaneous increase that precedes equation (49).
  */
-float evolvedBulkViscosityCoefficient(float bulkViscosityCoefficient,
-    float targetBulkViscosityCoefficient, float inverseDecayTime, float timeStep);
+float evolvedBulkViscosityCoefficient(float α_aⁿ, float α_loc_a, float τ_a_inv, float Δt);
 
 /*
  * Price et al. (2018), equations (40)-(41): directed viscous pressure q^a_ab.
- * radialVelocity is v_ab . rhat_ab in the same velocity units as soundSpeed.
+ * v_ab_dot_r̂_ab is v_ab . rhat_ab in the same velocity units as c_s_a.
  * Each side uses its own alpha, sound speed and density; beta is independent of alpha.
  * Clamp before multiplication so separating and padded SIMD lanes give exactly zero.
  */
@@ -45,25 +44,25 @@ float evolvedBulkViscosityCoefficient(float bulkViscosityCoefficient,
  *   v_sig,a = α_aᴬⱽ c_s,a + βᴬⱽ |v_ab · r̂_ab|,  for v_ab · r̂_ab < 0;
  *   q_abᵃ = 0 otherwise.
  * Symbol directory:
- *   ρ_a → density; c_s,a → soundSpeed; v_ab · r̂_ab → radialVelocity
- *   min(v_ab · r̂_ab, 0) → approachingRadialVelocity (clipped radial velocity in this helper)
- *   α_aᴬⱽ → bulkViscosityCoefficient; βᴬⱽ → vonNeumannRichtmyerCoefficient
+ *   ρ_a → density; c_s,a → sound speed; v_ab · r̂_ab → radial velocity
+ *   min(v_ab · r̂_ab, 0) → approaching radial velocity (clipped radial velocity in this helper)
+ *   α_aᴬⱽ → bulk viscosity coefficient; βᴬⱽ → von Neumann–Richtmyer coefficient
  *   q_abᵃ → return value.
+ *   Code names: c_s_a = c_s,a; v_ab_dot_r̂_ab = v_ab · r̂_ab;
+ *     min_v_ab_dot_r̂_ab_0 = min(v_ab · r̂_ab, 0).
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real artificialPressure(Real density, Real soundSpeed, Real radialVelocity,
-    Real bulkViscosityCoefficient, Real vonNeumannRichtmyerCoefficient) {
-    Real const approachingRadialVelocity = simdMin(radialVelocity, Real(0));
-    return -simdBroadcast<Real>(0.5) * density *
-        (bulkViscosityCoefficient * soundSpeed -
-            vonNeumannRichtmyerCoefficient * approachingRadialVelocity) *
-        approachingRadialVelocity;
+CUDA_EXPORT inline Real artificialPressure(
+    Real ρ_a, Real c_s_a, Real v_ab_dot_r̂_ab, Real α_aᴬⱽ, Real βᴬⱽ) {
+    Real const min_v_ab_dot_r̂_ab_0 = simdMin(v_ab_dot_r̂_ab, Real(0));
+    return -simdBroadcast<Real>(0.5) * ρ_a * (α_aᴬⱽ * c_s_a - βᴬⱽ * min_v_ab_dot_r̂_ab_0) *
+        min_v_ab_dot_r̂_ab_0;
 }
 
 /*
  * Equation (39): m_b q^a_ab / (rho_a^2 Omega_a). Equal gas masses and the
- * number-density support constraint give m_b/Omega_a = gasMass - gradHCorrection.
+ * number-density support constraint give m_b/Omega_a = m_b - ζ_a.
  * The same directed coefficient supplies the local shock heating of equation (42).
  */
 // clang-format off
@@ -74,14 +73,13 @@ CUDA_EXPORT inline Real artificialPressure(Real density, Real soundSpeed, Real r
  *   (du_a/dt)_AV = Σ_b C_ab v_ab · ∇_a W_ab(h_a).
  * Derived equal-mass support relation: m_b/Ω_a = m_b − ζ_a.
  * Symbol directory:
- *   q_abᵃ → viscousPressure; ρ_a → density; m_b → gasMass
- *   ζ_a → gradHCorrection; C_ab → return value.
+ *   q_abᵃ → viscous pressure; ρ_a → density; m_b → gas mass
+ *   ζ_a → grad-H correction; C_ab → return value.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real directedViscosityCoefficient(
-    Real viscousPressure, Real density, Real gasMass, Real gradHCorrection) {
-    return viscousPressure * (gasMass - gradHCorrection) / (density * density);
+CUDA_EXPORT inline Real directedViscosityCoefficient(Real q_abᵃ, Real ρ_a, Real m_b, Real ζ_a) {
+    return q_abᵃ * (m_b - ζ_a) / (ρ_a * ρ_a);
 }
 
 /*
@@ -111,63 +109,61 @@ CUDA_EXPORT inline Real directedViscosityCoefficient(
  * Derived cosmological acceleration-gradient reference subtracts the background derivative:
  *   a⁴ [D(∇·v_phys)/Dt − 3Ḣ] = a tr(G) + 3(aȧ)² − tr(V′²).
  * Symbol directory:
- *   a → scaleFactor/localScaleFactor; aȧ → expansionRate; h_a → smoothingLength
- *   a c_s,a → soundSpeed; α_max → maximumBulkViscosityCoefficient
- *   V′ = a² ∇_r v_phys → velocityGradient; G = ∇_x F → accelerationGradient
- *   tr(V′) → velocityDivergence; tr(G) → accelerationDivergence
- *   tr(V′²) → gradientSquareTrace; |∇×v′|² → curlSquared
- *   a⁴ [D(∇·v_phys)/Dt − 3Ḣ] → divergenceDerivative; ξ_a → shearLimiter
- *   a⁴ A_a → shockIndicator; α_loc,a → result.targetBulkViscosityCoefficient
- *   σ_decay → decayCoefficient/localDecayCoefficient
- *   τ_conformal⁻¹ = σ_decay c_s,stored/(a h_a) → result.inverseDecayTime.
+ *   a → scale factor; aȧ → expansion rate; h_a → smoothing length
+ *   a c_s,a → sound speed; α_max → maximum bulk viscosity coefficient
+ *   V′ = a² ∇_r v_phys → velocity gradient; G = ∇_x F → acceleration gradient
+ *   tr(V′) → velocity divergence; tr(G) → acceleration divergence
+ *   tr(V′²) → gradient square trace; |∇×v′|² → curl squared
+ *   a⁴ [D(∇·v_phys)/Dt − 3Ḣ] → divergence derivative; ξ_a → shear limiter
+ *   a⁴ A_a → shock indicator; α_loc,a → target bulk viscosity coefficient
+ *   σ_decay → decay coefficient
+ *   τ_conformal⁻¹ = σ_decay c_s,stored/(a h_a) → inverse decay time.
+ *   Code names: a_c_s_a = a c_s,a; Vʹ = V′; tr_Vʹ = tr(V′); abs_curl_vʹ2 = |∇×v′|²;
+ *     a4_D_div_v_phys_Dt_minus_3Ḣ = a⁴ [D(∇·v_phys)/Dt − 3Ḣ]; a4_A_a = a⁴ A_a; α_loc_a = α_loc,a.
  * Production history uses peculiar gradients and their time differences instead,
  * without introducing a homogeneous-background term into the target or limiter.
  */
 // clang-format on
 template <typename Real, typename Counter>
-CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnosticsFromGradient(
-    Real const (&velocityGradient)[3][3], Real scaleFactor, Real divergenceDerivative,
-    Real smoothingLength, Real soundSpeed, Real maximumBulkViscosityCoefficient,
+CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnosticsFromGradient(Real const (&Vʹ)[3][3],
+    Real scaleFactor, Real a4_D_div_v_phys_Dt_minus_3Ḣ, Real h_a, Real a_c_s_a, Real α_max,
     Real decayCoefficient, Counter& floatingPointOperations) {
-    Real const localScaleFactor = scaleFactor;
-    Real const localDecayCoefficient = decayCoefficient;
+    Real const a = scaleFactor;
+    Real const σ_decay = decayCoefficient;
     cullen_and_dehnen::Result<Real> result{};
-    if (!(localScaleFactor > Real(0)) || !(smoothingLength > Real(0))) {
+    if (!(a > Real(0)) || !(h_a > Real(0))) {
         return result;
     }
-    result.inverseDecayTime =
-        localDecayCoefficient * soundSpeed / (localScaleFactor * smoothingLength);
-    Real const velocityDivergence =
-        velocityGradient[0][0] + velocityGradient[1][1] + velocityGradient[2][2];
-    Real const curlX = velocityGradient[2][1] - velocityGradient[1][2];
-    Real const curlY = velocityGradient[0][2] - velocityGradient[2][0];
-    Real const curlZ = velocityGradient[1][0] - velocityGradient[0][1];
-    Real const curlSquared = curlX * curlX + curlY * curlY + curlZ * curlZ;
+    result.inverseDecayTime = σ_decay * a_c_s_a / (a * h_a);
+    Real const tr_Vʹ = Vʹ[0][0] + Vʹ[1][1] + Vʹ[2][2];
+    Real const curlX = Vʹ[2][1] - Vʹ[1][2];
+    Real const curlY = Vʹ[0][2] - Vʹ[2][0];
+    Real const curlZ = Vʹ[1][0] - Vʹ[0][1];
+    Real const abs_curl_vʹ2 = curlX * curlX + curlY * curlY + curlZ * curlZ;
     floatingPointOperations += 10;    // Velocity trace and squared curl.
-    result.divergence = velocityDivergence / (localScaleFactor * localScaleFactor);
+    result.divergence = tr_Vʹ / (a * a);
     /*
      * Equation (53) in the stored variables, then equations (47), (46), and (48).
      */
-    Real const divergenceSquared = velocityDivergence * velocityDivergence;
-    Real const limiterDenominator = divergenceSquared + curlSquared;
-    Real const shearLimiter =
+    Real const divergenceSquared = tr_Vʹ * tr_Vʹ;
+    Real const limiterDenominator = divergenceSquared + abs_curl_vʹ2;
+    Real const ξ_a =
         limiterDenominator > Real(0) ? divergenceSquared / limiterDenominator : Real(0);
-    Real const shockIndicator =
-        shearLimiter * (divergenceDerivative < Real(0) ? -divergenceDerivative : Real(0));
+    Real const a4_A_a =
+        ξ_a * (a4_D_div_v_phys_Dt_minus_3Ḣ < Real(0) ? -a4_D_div_v_phys_Dt_minus_3Ḣ : Real(0));
     /*
      * Equation (48)'s dimensionless prefactor; the paper gives no further justification.
      */
     constexpr Real kShockPrefactor = Real(10);
-    Real const scaledSmoothingLengthSquaredShockIndicator =
-        kShockPrefactor * smoothingLength * smoothingLength * shockIndicator;
+    Real const scaledSmoothingLengthSquaredShockIndicator = kShockPrefactor * h_a * h_a * a4_A_a;
 
-    Real const soundSpeedSquared = soundSpeed * soundSpeed;
+    Real const soundSpeedSquared = a_c_s_a * a_c_s_a;
     Real localBulkViscosityTarget = Real(0);
     if (scaledSmoothingLengthSquaredShockIndicator > Real(0)) {
-        localBulkViscosityTarget = scaledSmoothingLengthSquaredShockIndicator <
-                maximumBulkViscosityCoefficient * soundSpeedSquared ?
+        localBulkViscosityTarget =
+            scaledSmoothingLengthSquaredShockIndicator < α_max * soundSpeedSquared ?
             scaledSmoothingLengthSquaredShockIndicator / soundSpeedSquared :
-            maximumBulkViscosityCoefficient;
+            α_max;
     }
     result.targetBulkViscosityCoefficient = localBulkViscosityTarget;
     floatingPointOperations += 14 + (limiterDenominator > Real(0) ? 1 : 0) +
@@ -177,23 +173,21 @@ CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnosticsFromGradient(
 
 template <typename Real, typename Counter>
 CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnostics(
-    cullen_and_dehnen::GradientSums<Real> const& sums, Real scaleFactor, Real expansionRate,
-    Real smoothingLength, Real soundSpeed, Real maximumBulkViscosityCoefficient,
-    Real decayCoefficient, Counter& floatingPointOperations) {
-    Real velocityGradient[3][3];
-    Real accelerationGradient[3][3];
-    cullen_and_dehnen::reconstructGradients(
-        sums, velocityGradient, accelerationGradient, floatingPointOperations);
-    Real derivative = Real(3) * expansionRate * expansionRate;
+    cullen_and_dehnen::GradientSums<Real> const& sums, Real a, Real aȧ, Real h_a, Real a_c_s_a,
+    Real α_max, Real σ_decay, Counter& floatingPointOperations) {
+    Real Vʹ[3][3];
+    Real G[3][3];
+    cullen_and_dehnen::reconstructGradients(sums, Vʹ, G, floatingPointOperations);
+    Real a4_D_div_v_phys_Dt_minus_3Ḣ = Real(3) * aȧ * aȧ;
     for (int i = 0; i < 3; ++i) {
-        derivative += scaleFactor * accelerationGradient[i][i];
+        a4_D_div_v_phys_Dt_minus_3Ḣ += a * G[i][i];
         for (int j = 0; j < 3; ++j) {
-            derivative -= velocityGradient[i][j] * velocityGradient[j][i];
+            a4_D_div_v_phys_Dt_minus_3Ḣ -= Vʹ[i][j] * Vʹ[j][i];
         }
     }
     floatingPointOperations += 26;
-    return diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, smoothingLength,
-        soundSpeed, maximumBulkViscosityCoefficient, decayCoefficient, floatingPointOperations);
+    return diagnosticsFromGradient(
+        Vʹ, a, a4_D_div_v_phys_Dt_minus_3Ḣ, h_a, a_c_s_a, α_max, σ_decay, floatingPointOperations);
 }
 
 // Production reconstructs peculiar gradients directly, so homogeneous expansion
@@ -202,35 +196,30 @@ CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnostics(
 // above remains a nonproduction reference.
 template <typename Real, typename Counter>
 CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnosticsFromHistory(
-    cullen_and_dehnen::VelocityGradientSums<Real> const& sums, Real scaleFactor,
-    Float16Storage const& state, double sampleInterval, double previousSampleTimestep,
-    Real smoothingLength, Real soundSpeed, Real maximumBulkViscosityCoefficient,
-    Real decayCoefficient, Counter& floatingPointOperations) {
-    Real velocityGradient[3][3];
-    int const rank = cullen_and_dehnen::reconstructVelocityGradient(
-        sums, velocityGradient, floatingPointOperations);
-    Real const divergence =
-        velocityGradient[0][0] + velocityGradient[1][1] + velocityGradient[2][2];
+    cullen_and_dehnen::VelocityGradientSums<Real> const& sums, Real a, Float16Storage const& state,
+    double sampleInterval, double previousSampleTimestep, Real h_a, Real a_c_s_a, Real α_max,
+    Real σ_decay, Counter& floatingPointOperations) {
+    Real Vʹ[3][3];
+    int const rank =
+        cullen_and_dehnen::reconstructVelocityGradient(sums, Vʹ, floatingPointOperations);
+    Real const divergence = Vʹ[0][0] + Vʹ[1][1] + Vʹ[2][2];
     floatingPointOperations += 2;
-    Real const derivative = rank == 0 ?
+    Real const a4_D_div_v_phys_Dt_minus_3Ḣ = rank == 0 ?
         Real(0) :
-        cullen_and_dehnen::divergenceTimeDerivative(divergence, scaleFactor, state, sampleInterval,
-            previousSampleTimestep, floatingPointOperations);
-    auto result =
-        diagnosticsFromGradient(velocityGradient, scaleFactor, derivative, smoothingLength,
-            soundSpeed, maximumBulkViscosityCoefficient, decayCoefficient, floatingPointOperations);
+        cullen_and_dehnen::divergenceTimeDerivative(
+            divergence, a, state, sampleInterval, previousSampleTimestep, floatingPointOperations);
+    auto result = diagnosticsFromGradient(
+        Vʹ, a, a4_D_div_v_phys_Dt_minus_3Ḣ, h_a, a_c_s_a, α_max, σ_decay, floatingPointOperations);
     result.divergence = divergence;
     return result;
 }
 
 template <typename Real>
 CUDA_EXPORT inline cullen_and_dehnen::Result<Real> diagnostics(
-    cullen_and_dehnen::GradientSums<Real> const& sums, Real scaleFactor, Real expansionRate,
-    Real smoothingLength, Real soundSpeed, Real maximumBulkViscosityCoefficient,
-    Real decayCoefficient) {
+    cullen_and_dehnen::GradientSums<Real> const& sums, Real a, Real aȧ, Real h_a, Real a_c_s_a,
+    Real α_max, Real σ_decay) {
     unsigned long long floatingPointOperations = 0;
-    return diagnostics(sums, scaleFactor, expansionRate, smoothingLength, soundSpeed,
-        maximumBulkViscosityCoefficient, decayCoefficient, floatingPointOperations);
+    return diagnostics(sums, a, aȧ, h_a, a_c_s_a, α_max, σ_decay, floatingPointOperations);
 }
 
 }    // namespace price_etal

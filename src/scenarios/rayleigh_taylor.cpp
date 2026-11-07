@@ -81,8 +81,7 @@ ScenarioPlan initializeRayleighTaylor() {
                     for (int side = 0; side < 2; side++) {
                         sphParticlesPosition(kXi, index) = x;
                         sphParticlesPosition(kYi, index) = y;
-                        sphParticlesPosition(kZi, index) =
-                            side == 0 ? z : Position(0.0) - z;
+                        sphParticlesPosition(kZi, index) = side == 0 ? z : Position(0.0) - z;
                         sphParticlesVelocity(kXi, index) = 0.0f;
                         sphParticlesVelocity(kYi, index) = 0.0f;
                         sphParticlesVelocity(kZi, index) = side == 0 ? velocity : -velocity;

@@ -60,15 +60,14 @@ inline constexpr float kMinimumWellConditionedOmega = 0.1f;
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   w → kernelValue; w′ → kernelDerivative; q → normalizedRadius; H⁻¹ → inverseSmoothingLength.
+ *   w → kernel value; w′ → kernel derivative; q → normalized radius; H⁻¹ → inverse smoothing length.
+ *   Code names: wʹ = w′; H_inv = H⁻¹.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real kernelSupportDerivative(
-    Real kernelValue, Real kernelDerivative, Real normalizedRadius, Real inverseSmoothingLength) {
-    return -(simdBroadcast<Real>(kSpatialDimensions) * kernelValue +
-               normalizedRadius * kernelDerivative) *
-        sph_geometry::inverseGradientScale(inverseSmoothingLength);
+CUDA_EXPORT inline Real kernelSupportDerivative(Real w, Real wʹ, Real q, Real H_inv) {
+    return -(simdBroadcast<Real>(kSpatialDimensions) * w + q * wʹ) *
+        sph_geometry::inverseGradientScale(H_inv);
 }
 
 // grad_i W(r_ij, H) = F r_ij with F = w'(q)/(H^(D+1) r); the caller supplies r > 0.
@@ -78,13 +77,13 @@ CUDA_EXPORT inline Real kernelSupportDerivative(
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   w′ → kernelDerivative; H⁻¹ → inverseSmoothingLength; r → radius; bracket → return value.
+ *   w′ → kernel derivative; H⁻¹ → inverse smoothing length; r → radius; bracket → return value.
+ *   Code names: wʹ = w′; H_inv = H⁻¹.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real kernelGradientFactor(
-    Real kernelDerivative, Real inverseSmoothingLength, Real radius) {
-    return kernelDerivative * sph_geometry::inverseGradientScale(inverseSmoothingLength) / radius;
+CUDA_EXPORT inline Real kernelGradientFactor(Real wʹ, Real H_inv, Real r) {
+    return wʹ * sph_geometry::inverseGradientScale(H_inv) / r;
 }
 
 // One sink's neighbor sums at fixed H, including the self term.
@@ -109,19 +108,20 @@ CUDA_EXPORT inline SupportSums<Real> emptySupportSums() {
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   x_j → weight; w → kernelValue; w′ → kernelDerivative; q → normalizedRadius
- *   Σw, Σqw′ → sums.numberSum, sums.numberMoment
- *   Σxw, Σxqw′ → sums.weightedSum, sums.weightedMoment.
+ *   x_j → weight; w → kernel value; w′ → kernel derivative; q → normalized radius
+ *   Σw, Σqw′ → number sum, number moment
+ *   Σxw, Σxqw′ → weighted sum, weighted moment.
+ *   Code names: wʹ = w′.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline void accumulateSupportSums(SupportSums<Real>& sums, Real weight,
-    Real kernelValue, Real kernelDerivative, Real normalizedRadius) {
-    Real const moment = normalizedRadius * kernelDerivative;
-    sums.numberSum += kernelValue;
+CUDA_EXPORT inline void accumulateSupportSums(
+    SupportSums<Real>& sums, Real x_j, Real w, Real wʹ, Real q) {
+    Real const moment = q * wʹ;
+    sums.numberSum += w;
     sums.numberMoment += moment;
-    sums.weightedSum += weight * kernelValue;
-    sums.weightedMoment += weight * moment;
+    sums.weightedSum += x_j * w;
+    sums.weightedMoment += x_j * moment;
 }
 
 // Production gas has one mass; its weighted sums are the number sums times x.
@@ -137,12 +137,13 @@ CUDA_EXPORT inline SupportSums<Real> equalWeightSupportSums(
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   Σw → sums.numberSum; H⁻¹ → inverseSmoothingLength; n_i → return value.
+ *   Σw → number sum; H⁻¹ → inverse smoothing length; n_i → return value.
+ *   Code names: H_inv = H⁻¹.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real numberDensity(SupportSums<Real> const& sums, Real inverseSmoothingLength) {
-    return sums.numberSum * sph_geometry::inverseVolume(inverseSmoothingLength);
+CUDA_EXPORT inline Real numberDensity(SupportSums<Real> const& sums, Real H_inv) {
+    return sums.numberSum * sph_geometry::inverseVolume(H_inv);
 }
 
 // clang-format off
@@ -151,14 +152,14 @@ CUDA_EXPORT inline Real numberDensity(SupportSums<Real> const& sums, Real invers
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   Σw → sums.numberSum; Σqw′ → sums.numberMoment; H⁻¹ → inverseSmoothingLength.
+ *   Σw → number sum; Σqw′ → number moment; H⁻¹ → inverse smoothing length.
+ *   Code names: H_inv = H⁻¹.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real numberDensityDerivative(
-    SupportSums<Real> const& sums, Real inverseSmoothingLength) {
+CUDA_EXPORT inline Real numberDensityDerivative(SupportSums<Real> const& sums, Real H_inv) {
     return -(simdBroadcast<Real>(kSpatialDimensions) * sums.numberSum + sums.numberMoment) *
-        sph_geometry::inverseGradientScale(inverseSmoothingLength);
+        sph_geometry::inverseGradientScale(H_inv);
 }
 
 // clang-format off
@@ -167,13 +168,13 @@ CUDA_EXPORT inline Real numberDensityDerivative(
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   Σxw → sums.weightedSum; H⁻¹ → inverseSmoothingLength; y_i → return value.
+ *   Σxw → weighted sum; H⁻¹ → inverse smoothing length; y_i → return value.
+ *   Code names: H_inv = H⁻¹.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real weightedDensity(
-    SupportSums<Real> const& sums, Real inverseSmoothingLength) {
-    return sums.weightedSum * sph_geometry::inverseVolume(inverseSmoothingLength);
+CUDA_EXPORT inline Real weightedDensity(SupportSums<Real> const& sums, Real H_inv) {
+    return sums.weightedSum * sph_geometry::inverseVolume(H_inv);
 }
 
 // clang-format off
@@ -182,14 +183,14 @@ CUDA_EXPORT inline Real weightedDensity(
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   Σxw → sums.weightedSum; Σxqw′ → sums.weightedMoment; H⁻¹ → inverseSmoothingLength.
+ *   Σxw → weighted sum; Σxqw′ → weighted moment; H⁻¹ → inverse smoothing length.
+ *   Code names: H_inv = H⁻¹.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real weightedDensityDerivative(
-    SupportSums<Real> const& sums, Real inverseSmoothingLength) {
+CUDA_EXPORT inline Real weightedDensityDerivative(SupportSums<Real> const& sums, Real H_inv) {
     return -(simdBroadcast<Real>(kSpatialDimensions) * sums.weightedSum + sums.weightedMoment) *
-        sph_geometry::inverseGradientScale(inverseSmoothingLength);
+        sph_geometry::inverseGradientScale(H_inv);
 }
 
 // V_i = x_i / y_i.
@@ -199,12 +200,12 @@ CUDA_EXPORT inline Real weightedDensityDerivative(
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   x_i → weight; y_i → weightedDensityValue; ΔV_i → return value.
+ *   x_i → weight; y_i → weighted density value; ΔV_i → return value.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real volume(Real weight, Real weightedDensityValue) {
-    return weight / weightedDensityValue;
+CUDA_EXPORT inline Real volume(Real x_i, Real y_i) {
+    return x_i / y_i;
 }
 
 // ρ*_i = m_i y_i / x_i, the density implied by the weighted volume.
@@ -214,12 +215,12 @@ CUDA_EXPORT inline Real volume(Real weight, Real weightedDensityValue) {
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   m_i → mass; x_i → weight; y_i → weightedDensityValue; ρ_i → return value.
+ *   m_i → mass; x_i → weight; y_i → weighted density value; ρ_i → return value.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real volumeDensity(Real mass, Real weight, Real weightedDensityValue) {
-    return mass * weightedDensityValue / weight;
+CUDA_EXPORT inline Real volumeDensity(Real m_i, Real x_i, Real y_i) {
+    return m_i * y_i / x_i;
 }
 
 // Ω_i = 1 + H/(Dn) dn/dH = -sum q w' / (D sum w), written without the
@@ -231,7 +232,7 @@ CUDA_EXPORT inline Real volumeDensity(Real mass, Real weight, Real weightedDensi
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   Σw → sums.numberSum; Σqw′ → sums.numberMoment; Ω_i → return value.
+ *   Σw → number sum; Σqw′ → number moment; Ω_i → return value.
  */
 // clang-format on
 template <typename Real>
@@ -248,8 +249,8 @@ CUDA_EXPORT inline Real supportJacobian(SupportSums<Real> const& sums) {
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   Σxw → sums.weightedSum; Σxqw′ → sums.weightedMoment
- *   Σqw′ → sums.numberMoment; ζ_i → return value.
+ *   Σxw → weighted sum; Σxqw′ → weighted moment
+ *   Σqw′ → number moment; ζ_i → return value.
  */
 // clang-format on
 template <typename Real>
@@ -265,12 +266,12 @@ CUDA_EXPORT inline Real weightedSupportCorrection(SupportSums<Real> const& sums)
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   ζ_i → sinkGradHCorrection; x_j → neighborVolumeWeight; f_ij → return value.
+ *   ζ_i → sink grad-H correction; x_j → neighbor volume weight; f_ij → return value.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real correctionFactor(Real sinkGradHCorrection, Real neighborVolumeWeight) {
-    return simdBroadcast<Real>(1) - sinkGradHCorrection / neighborVolumeWeight;
+CUDA_EXPORT inline Real correctionFactor(Real ζ_i, Real x_j) {
+    return simdBroadcast<Real>(1) - ζ_i / x_j;
 }
 
 // How the stored support depends on the particle positions.

@@ -619,8 +619,8 @@ static void fft3dPhase3() {
                                    return fftwf_plan_dft_c2r_1d(n, input, output, FFTW_ESTIMATE);
                                });
                                auto i = j;
-                               for (i[1] = cmplxMybox[kZi].begin[1];
-                                   i[1] != cmplxMybox[kZi].end[1]; i[1]++) {
+                               for (i[1] = cmplxMybox[kZi].begin[1]; i[1] != cmplxMybox[kZi].end[1];
+                                   i[1]++) {
                                    for (i[2] = 0; i[2] < n / 2 + 1; i[2]++) {
                                        int64_t const l = cmplxMybox[kZi].index(i);
                                        in[i[2]][0] = yValue[l].real();

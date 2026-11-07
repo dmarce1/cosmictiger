@@ -413,8 +413,7 @@ static void reportKickInteractions(double theta) {
             magnitudeSum += std::sqrt(squared);
         }
         double const residual =
-            std::sqrt(total[kXi] * total[kXi] +
-                total[kYi] * total[kYi] + total[kZi] * total[kZi]) /
+            std::sqrt(total[kXi] * total[kXi] + total[kYi] * total[kYi] + total[kZi] * total[kZi]) /
             std::max(1.0, magnitudeSum);
         std::cout
             << std::format(

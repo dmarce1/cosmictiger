@@ -59,12 +59,12 @@ __global__ void cudaLightconeKernel(LightconeParticleMapType* particleMapPtr,
                             for (int pj = self.particleRange.first + tid;
                                 pj < self.particleRange.second; pj += kLightconeBlockSize) {
                                 auto& a = selfParticles.group[pj];
-                                float const dx = distance(selfParticles.pos[kXi][pj],
-                                    otherParticles.pos[kXi][pi]);
-                                float const dy = distance(selfParticles.pos[kYi][pj],
-                                    otherParticles.pos[kYi][pi]);
-                                float const dz = distance(selfParticles.pos[kZi][pj],
-                                    otherParticles.pos[kZi][pi]);
+                                float const dx = distance(
+                                    selfParticles.pos[kXi][pj], otherParticles.pos[kXi][pi]);
+                                float const dy = distance(
+                                    selfParticles.pos[kYi][pj], otherParticles.pos[kYi][pi]);
+                                float const dz = distance(
+                                    selfParticles.pos[kZi][pj], otherParticles.pos[kZi][pi]);
                                 float const r2 = sqr(dx, dy, dz);
                                 if (r2 < linkingLengthSquared) {
                                     if (a == kLightconeNoGroup) {
@@ -104,12 +104,12 @@ __global__ void cudaLightconeKernel(LightconeParticleMapType* particleMapPtr,
                         LightconeGroup thisMinGroup = kLightconeNoGroup;
                         if (pi != pj && pi < self.particleRange.second) {
                             auto const bValue = selfParticles.group[pi];
-                            float const dx = distance(selfParticles.pos[kXi][pi],
-                                selfParticles.pos[kXi][pj]);
-                            float const dy = distance(selfParticles.pos[kYi][pi],
-                                selfParticles.pos[kYi][pj]);
-                            float const dz = distance(selfParticles.pos[kZi][pi],
-                                selfParticles.pos[kZi][pj]);
+                            float const dx =
+                                distance(selfParticles.pos[kXi][pi], selfParticles.pos[kXi][pj]);
+                            float const dy =
+                                distance(selfParticles.pos[kYi][pi], selfParticles.pos[kYi][pj]);
+                            float const dz =
+                                distance(selfParticles.pos[kZi][pi], selfParticles.pos[kZi][pj]);
                             float const r2 = sqr(dx, dy, dz);
                             if (r2 < linkingLengthSquared) {
                                 thisMinGroup = bValue;

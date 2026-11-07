@@ -373,8 +373,8 @@ static void lcSendParticles(Vector<LightconeParticle> parts) {
     Timer tm;
     auto& particleMap = *particleMapPtr;
     for (auto const& part : parts) {
-        int const pix = vec2pix(part.pos[kXi].toDouble(), part.pos[kYi].toDouble(),
-            part.pos[kZi].toDouble());
+        int const pix =
+            vec2pix(part.pos[kXi].toDouble(), part.pos[kYi].toDouble(), part.pos[kZi].toDouble());
         auto const mutex = mutexMap.find(pix);
         ALWAYS_ASSERT(mutex != mutexMap.end() && mutex->second);
         std::unique_lock<SpinlockType> lock(*mutex->second);
@@ -419,8 +419,8 @@ void lcBuffer2homes() {
                 std::unordered_map<int, Vector<LightconeParticle>> sends;
                 for (int i = begin; i < end; i++) {
                     auto const& part = particleBuffer[i];
-                    int const pix = vec2pix(part.pos[kXi].toDouble(),
-                        part.pos[kYi].toDouble(), part.pos[kZi].toDouble());
+                    int const pix = vec2pix(part.pos[kXi].toDouble(), part.pos[kYi].toDouble(),
+                        part.pos[kZi].toDouble());
                     int const rank = pix2rank(pix);
                     sends[rank].push_back(part);
                 }

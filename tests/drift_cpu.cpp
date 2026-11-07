@@ -82,9 +82,8 @@ struct Fixture {
 
     void run(size_t offset, size_t count, DriftParameters const& parameters,
         std::vector<LightconeEntry>* entries = nullptr, char const* types = nullptr) {
-        cpuDriftKernel(positions[kXi].data() + offset,
-            positions[kYi].data() + offset, positions[kZi].data() + offset,
-            velocities.data() + offset, rungs.data() + offset,
+        cpuDriftKernel(positions[kXi].data() + offset, positions[kYi].data() + offset,
+            positions[kZi].data() + offset, velocities.data() + offset, rungs.data() + offset,
             types != nullptr ? types + offset : nullptr, count, parameters, entries);
     }
 };
@@ -313,8 +312,8 @@ void testLightconeGates() {
     require(entries.empty(), "inactive rung does not emit lightcone crossings");
     parameters.rung = -1;
     fixture.run(0, 1, parameters);
-    require(fixture.positions[kXi][0].toDouble() == 0.5,
-        "lightcone supports an omitted output buffer");
+    require(
+        fixture.positions[kXi][0].toDouble() == 0.5, "lightcone supports an omitted output buffer");
 }
 
 // Each stationary central particle crosses its eight images in sequence, so

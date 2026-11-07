@@ -99,8 +99,7 @@ static void checkEvenSpacing(Array<Vector<float>, kDimensions> const& shell) {
         std::to_string(n) + "-point shell has crowded points: " + std::to_string(minNearest));
     require(maxNearest < 1.25 * spacing,
         std::to_string(n) + "-point shell has a gap: " + std::to_string(maxNearest));
-    double const offset = std::sqrt(centroid[kXi] * centroid[kXi] +
-        centroid[kYi] * centroid[kYi] +
+    double const offset = std::sqrt(centroid[kXi] * centroid[kXi] + centroid[kYi] * centroid[kYi] +
         centroid[kZi] * centroid[kZi]);
     require(
         offset < 1e-2, std::to_string(n) + "-point shell is lopsided: " + std::to_string(offset));

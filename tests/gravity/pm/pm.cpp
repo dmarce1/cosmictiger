@@ -80,9 +80,7 @@ void initializePmFixture(int fixture, int side) {
         for (int dim = 0; dim < kDimensions; ++dim) {
             double coordinate;
             if (fixture == 2) {
-                int const divisor = dim == kXi ? side * side :
-                    dim == kYi                 ? side :
-                                                         1;
+                int const divisor = dim == kXi ? side * side : dim == kYi ? side : 1;
                 coordinate = double((i / divisor) % side) / side;
             } else {
                 coordinate = points[i][dim];
@@ -96,8 +94,7 @@ void initializePmFixture(int fixture, int side) {
             particlesPos(dim, local) = coordinate;
             if (fixture == 4) {
                 unsigned __int128 const period = static_cast<unsigned __int128>(1) << kPositionBits;
-                if ((i == 0 && dim == kXi) || (i == 2 && dim == kYi) ||
-                    (i == 3 && dim == kZi)) {
+                if ((i == 0 && dim == kXi) || (i == 2 && dim == kYi) || (i == 3 && dim == kZi)) {
                     int const numerator = i == 2 ? 2 : 1;
                     auto const firstAtBoundary = (period * numerator + 2) / 3;
                     particlesPos(dim, local)

@@ -19,8 +19,8 @@
  * ρ density, P pressure, u specific internal energy, c sound speed, h smoothing
  * length, r_ab = r_a − r_b, v_ab = v_a − v_b, W_ab = W(r_ab, h) the kernel,
  * W̃_ab the symmetric kernel of p. 554, Π_ab the artificial viscosity and μ_ab its
- * velocity measure, with the constants α, β and η. All code identifiers use
- * descriptive names; each equation block maps symbols to those names. The stored smoothing length
+ * velocity measure, with the constants α, β and η. Equation code uses
+ * these symbols; each equation block describes them. The stored smoothing length
  * is the compact support radius H, which equals 2h for the paper's cubic spline of section 7.
  */
 #pragma once
@@ -43,8 +43,8 @@ inline constexpr double kViscosityWidthScale =
  *   μ_ab = h v_ab·r_ab / (r_ab² + η²),      η² = 0.01 h²,
  *
  * and μ_ab = 0 when v_ab·r_ab ≥ 0, the vanishing branch of Π_ab on p. 550. For
- * unequal resolution lengths the pair uses pairSmoothingLength = ½(smoothingLength +
- * neighborSmoothingLength), the arithmetic mean that p. 554 offers. viscosityEpsilon is η²/h². The
+ * unequal resolution lengths the pair uses h̄_ab = ½(h_a + h_b), the arithmetic mean that
+ * p. 554 offers. ε is η²/h². The
  * two scale factors convert the stored support radii to the paper's h:
  * smoothingLengthPerEffectiveRadius maps H to the common effective radius of docs/kernels.md, and
  * viscosityWidthScale maps that radius to h. Their defaults give h = H/2, the cubic-spline
@@ -57,29 +57,27 @@ inline constexpr double kViscosityWidthScale =
  *   h̄_ab = ½(h_a + h_b),  η² = ε h̄_ab²,
  *   μ_ab = h̄_ab (v_ab · r_ab)/(r_ab² + η²) for v_ab · r_ab < 0; otherwise 0.
  * Symbol directory:
- *   r_ab² → radiusSquared; v_ab · r_ab → velocityDotRadius
- *   H_a, H_b → smoothingLength, sourceSmoothingLength (stored compact supports)
- *   h̄_ab → pairSmoothingLength; ε → viscosityEpsilon
- *   η² → regularizationLengthSquared; μ_ab → viscosityVelocity (return value)
+ *   r_ab² → radius squared; v_ab · r_ab → velocity dot radius
+ *   H_a, H_b → smoothing length, source smoothing length (stored compact supports)
+ *   h̄_ab → pair smoothing length; ε → viscosity epsilon
+ *   η² → regularization length squared; μ_ab → viscosity velocity (return value)
  *   h_a = H_a / smoothingLengthPerEffectiveRadius × viscosityWidthScale.
+ *   Code names: r_ab2 = r_ab²; v_ab_dot_r_ab = v_ab · r_ab; η2 = η².
  */
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline Real viscosityMu(Real radiusSquared, Real velocityDotRadius,
-    Real smoothingLength, Real sourceSmoothingLength, Real viscosityEpsilon,
+    Real smoothingLength, Real sourceSmoothingLength, Real ε,
     Real smoothingLengthPerEffectiveRadius = Real(2), Real viscosityWidthScale = Real(1)) {
-    Real const separationSquared = radiusSquared;    // |r_ab|²
-    Real const velocityDotSeparation = velocityDotRadius;
-    Real const sinkKernelSmoothingLength = smoothingLength;
-    Real const neighborSmoothingLength = sourceSmoothingLength;
-    Real const pairSmoothingLength = simdBroadcast<Real>(0.5) *
-        (sinkKernelSmoothingLength + neighborSmoothingLength) / smoothingLengthPerEffectiveRadius *
+    Real const r_ab2 = radiusSquared;    // |r_ab|²
+    Real const v_ab_dot_r_ab = velocityDotRadius;
+    Real const H_a = smoothingLength;
+    Real const H_b = sourceSmoothingLength;
+    Real const h̄_ab = simdBroadcast<Real>(0.5) * (H_a + H_b) / smoothingLengthPerEffectiveRadius *
         viscosityWidthScale;
-    Real const regularizationLengthSquared =
-        viscosityEpsilon * pairSmoothingLength * pairSmoothingLength;    // η²
-    Real const viscosityVelocity = pairSmoothingLength * velocityDotSeparation /
-        (separationSquared + regularizationLengthSquared);
-    return simdSelect(velocityDotSeparation < Real(0), viscosityVelocity, Real(0));
+    Real const η2 = ε * h̄_ab * h̄_ab;    // η²
+    Real const μ_ab = h̄_ab * v_ab_dot_r_ab / (r_ab2 + η2);
+    return simdSelect(v_ab_dot_r_ab < Real(0), μ_ab, Real(0));
 }
 
 /*
@@ -97,26 +95,22 @@ CUDA_EXPORT inline Real viscosityMu(Real radiusSquared, Real velocityDotRadius,
  * Monaghan (1992), p. 550, unnumbered formula after equation (4.1):
  *   Π_ab = (−α c̄_ab μ_ab + β μ_ab²)/ρ̄_ab when μ_ab < 0; otherwise 0.
  * Symbol directory:
- *   α → bulkViscosityCoefficient; β → vonNeumannRichtmyerCoefficient
- *   ρ_a, ρ_b → sinkDensity, sourceDensity; ρ̄_ab → meanDensity
- *   c_a, c_b → soundSpeed, neighborSoundSpeed; c̄_ab → meanSoundSpeed
- *   μ_ab → compressionVelocity; Π_ab → pairArtificialViscosity (return value).
+ *   α → bulk viscosity coefficient; β → von Neumann–Richtmyer coefficient
+ *   ρ_a, ρ_b → sink density, source density; ρ̄_ab → mean density
+ *   c_a, c_b → sound speed, neighbor sound speed; c̄_ab → mean sound speed
+ *   μ_ab → compression velocity; Π_ab → pair artificial viscosity (return value).
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real artificialViscosity(Real sinkDensity, Real sourceDensity, Real soundSpeed,
-    Real neighborSoundSpeed, Real compressionVelocity, Real bulkViscosityCoefficient,
-    Real vonNeumannRichtmyerCoefficient) {
-    Real const density = sinkDensity;
-    Real const neighborDensity = sourceDensity;
-    Real const viscosityVelocity = compressionVelocity;
-    Real const meanSoundSpeed = simdBroadcast<Real>(0.5) * (soundSpeed + neighborSoundSpeed);
-    Real const meanDensity = simdBroadcast<Real>(0.5) * (density + neighborDensity);
-    Real const pairArtificialViscosity =
-        (-bulkViscosityCoefficient * meanSoundSpeed * viscosityVelocity +
-            vonNeumannRichtmyerCoefficient * viscosityVelocity * viscosityVelocity) /
-        meanDensity;
-    return simdSelect(viscosityVelocity < Real(0), pairArtificialViscosity, Real(0));
+CUDA_EXPORT inline Real artificialViscosity(Real sinkDensity, Real sourceDensity, Real c_a,
+    Real c_b, Real compressionVelocity, Real α, Real β) {
+    Real const ρ_a = sinkDensity;
+    Real const ρ_b = sourceDensity;
+    Real const μ_ab = compressionVelocity;
+    Real const c̄_ab = simdBroadcast<Real>(0.5) * (c_a + c_b);
+    Real const ρ̄_ab = simdBroadcast<Real>(0.5) * (ρ_a + ρ_b);
+    Real const Π_ab = (-α * c̄_ab * μ_ab + β * μ_ab * μ_ab) / ρ̄_ab;
+    return simdSelect(μ_ab < Real(0), Π_ab, Real(0));
 }
 
 }    // namespace monaghan

@@ -2082,22 +2082,21 @@ bool processOptions(int argc, char* argv[]) {
     // Derived mass conversion: N_ref = max(N_dm, N_gas),
     // mₛ = fₛ N_ref / Nₛ. Thus Σₛ Nₛ mₛ = N_ref even for unequal
     // species populations, preserving the historical cosmological code units.
-    // Symbol directory: N_ref → initial.numberOfParticles;
-    // N_dm, N_gas → run.darkMatterParticleCount, run.gasParticleCount;
-    // f_dm, f_gas → darkMatterFraction, gasFraction (unity for a sole species);
-    // m_dm, m_gas → initial.darkMatterMass, initial.gasMass in reference masses.
+    // Symbol directory: N_ref → number of particles;
+    // N_dm, N_gas → dark matter particle count, gas particle count;
+    // f_dm, f_gas → dark matter fraction, gas fraction (unity for a sole species);
+    // m_dm, m_gas → dark matter mass, gas mass in reference masses.
     bool const hasDarkMatter = opts.run.darkMatterParticleCount != 0;
     bool const hasGas = opts.run.gasParticleCount != 0;
-    double const darkMatterFraction =
+    double const f_dm =
         hasDarkMatter ? (hasGas ? opts.cosmology.omegaC / opts.cosmology.omegaM : 1.0) : 0.0;
-    double const gasFraction =
+    double const f_gas =
         hasGas ? (hasDarkMatter ? opts.cosmology.omegaB / opts.cosmology.omegaM : 1.0) : 0.0;
-    opts.initial.darkMatterMass = hasDarkMatter ? darkMatterFraction *
-            (double(opts.initial.numberOfParticles) / opts.run.darkMatterParticleCount) :
-                                                  0.0;
-    opts.initial.gasMass = hasGas ?
-        gasFraction * (double(opts.initial.numberOfParticles) / opts.run.gasParticleCount) :
+    opts.initial.darkMatterMass = hasDarkMatter ?
+        f_dm * (double(opts.initial.numberOfParticles) / opts.run.darkMatterParticleCount) :
         0.0;
+    opts.initial.gasMass =
+        hasGas ? f_gas * (double(opts.initial.numberOfParticles) / opts.run.gasParticleCount) : 0.0;
     if ((hasDarkMatter && !detail::isPositiveFloatOption(opts.initial.darkMatterMass)) ||
         (hasGas && !detail::isPositiveFloatOption(opts.initial.gasMass))) {
         detail::throwOptionError("Active particle species require finite positive class masses\n");

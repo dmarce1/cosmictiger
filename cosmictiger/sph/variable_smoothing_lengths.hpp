@@ -53,13 +53,12 @@ namespace variational {
  * https://arxiv.org/abs/1012.1885.
  *   P_i x_i/y_i² = −P_i ∂V_i/∂y_i.
  * Symbol directory:
- *   P_i → pressure; x_i → weight; y_i → weightedDensityValue; expression → return value.
+ *   P_i → pressure; x_i → weight; y_i → weighted density value; expression → return value.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real pressureVolumeFactor(
-    Real pressure, Real weight, Real weightedDensityValue) {
-    return pressure * weight / (weightedDensityValue * weightedDensityValue);
+CUDA_EXPORT inline Real pressureVolumeFactor(Real P_i, Real x_i, Real y_i) {
+    return P_i * x_i / (y_i * y_i);
 }
 
 // Hopkins (2013), equations 12-13: Q_ij = (P_i x_i/y_i^2)(x_j - ζ_i).
@@ -70,13 +69,13 @@ CUDA_EXPORT inline Real pressureVolumeFactor(
  * https://arxiv.org/abs/1012.1885.
  *   Q_ij = (P_i x_i/y_i²)(x_j − ζ_i).
  * Symbol directory:
- *   P_i x_i/y_i² → sinkPressureVolumeFactor; x_j → neighborVolumeWeight; ζ_i → sinkGradHCorrection; Q_ij → return value.
+ *   P_i x_i/y_i² → sink pressure volume factor; x_j → neighbor volume weight; ζ_i → sink grad-H correction; Q_ij → return value.
+ *   Code names: P_i_x_i_over_y_i2 = P_i x_i/y_i².
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real directedCoefficient(
-    Real sinkPressureVolumeFactor, Real neighborVolumeWeight, Real sinkGradHCorrection) {
-    return sinkPressureVolumeFactor * (neighborVolumeWeight - sinkGradHCorrection);
+CUDA_EXPORT inline Real directedCoefficient(Real P_i_x_i_over_y_i2, Real x_j, Real ζ_i) {
+    return P_i_x_i_over_y_i2 * (x_j - ζ_i);
 }
 
 // Hopkins (2013), equation 12, or Price (2012), equation 30 in the equal-mass limit.
@@ -88,14 +87,13 @@ CUDA_EXPORT inline Real directedCoefficient(
  * https://arxiv.org/abs/1012.1885.
  *   m_i dv_i/dt|_j = −(Q_ij F_i + Q_ji F_j) r_ij.
  * Symbol directory:
- *   Q_ij, Q_ji → coefficientIJ, coefficientJI; F_i, F_j → gradientFactorI, gradientFactorJ
+ *   Q_ij, Q_ji → ij coefficient, ji coefficient; F_i, F_j → i gradient factor, j gradient factor
  *   positive parenthesis → return value.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real pairForceFactor(
-    Real coefficientIJ, Real coefficientJI, Real gradientFactorI, Real gradientFactorJ) {
-    return coefficientIJ * gradientFactorI + coefficientJI * gradientFactorJ;
+CUDA_EXPORT inline Real pairForceFactor(Real Q_ij, Real Q_ji, Real F_i, Real F_j) {
+    return Q_ij * F_i + Q_ji * F_j;
 }
 
 // The adiabatic first law above; Price (2012), equation 35 in the equal-mass limit.
@@ -107,14 +105,14 @@ CUDA_EXPORT inline Real pairForceFactor(
  * https://arxiv.org/abs/1012.1885.
  *   m_i du_i/dt|_j = Q_ij F_i (v_ij · r_ij).
  * Symbol directory:
- *   Q_ij → coefficientIJ; F_i → gradientFactorI; v_ij · r_ij → velocityDotSeparation
+ *   Q_ij → ij coefficient; F_i → i gradient factor; v_ij · r_ij → velocity dot separation
  *   pair work → return value.
+ *   Code names: v_ij_dot_r_ij = v_ij · r_ij.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real pairWork(
-    Real coefficientIJ, Real gradientFactorI, Real velocityDotSeparation) {
-    return coefficientIJ * gradientFactorI * velocityDotSeparation;
+CUDA_EXPORT inline Real pairWork(Real Q_ij, Real F_i, Real v_ij_dot_r_ij) {
+    return Q_ij * F_i * v_ij_dot_r_ij;
 }
 
 }    // namespace variational

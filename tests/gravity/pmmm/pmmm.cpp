@@ -389,15 +389,12 @@ void initializePmmmFixture(int fixture, int ownership) {
             } else if (fixture == 6) {
                 int const cell = dim == kXi ? id % 8 :
                     dim == kYi              ? 4 * ((id / 8) % 2) :
-                                                      4 * (id / 16);
+                                              4 * (id / 16);
                 coordinate = (cell + 0.5) / 8.0;
             } else if (fixture == 5) {
                 int const side = getOptions().gravity.meshSize;
                 int const group = id / 64;
-                int const cell = dim == kXi ? (group == 1        ? side - 1 :
-                                                              group == 3 ? 1 :
-                                                                           0) :
-                                                      1;
+                int const cell = dim == kXi ? (group == 1 ? side - 1 : group == 3 ? 1 : 0) : 1;
                 std::array<Vector3<double>, 5> const centers{{{-0.22, -0.20, -0.18},
                     {0.14, 0.03, -0.06}, {0.22, 0.20, 0.18}, {0.32, 0.05, 0.09}, {0.0, 0.0, 0.0}}};
                 int const multiplier = dim == kXi ? 17 : dim == kYi ? 29 : 43;
@@ -409,7 +406,7 @@ void initializePmmmFixture(int fixture, int ownership) {
             if (fixture == 3 && id >= 2) {
                 coordinate = (dim == kXi        ? 0.58 :
                                      dim == kYi ? 0.57 :
-                                                          0.81) +
+                                                  0.81) +
                     (id == 2 ? 0.013 : -0.019);
             }
             particlesPos(dim, local) = coordinate;
@@ -421,7 +418,7 @@ void initializePmmmFixture(int fixture, int ownership) {
             }
             particlesVel(dim, local) = dim == kXi ? float(id + 1) :
                 dim == kYi                        ? 0.25f * float(id) :
-                                                            -0.5f * float(id);
+                                                    -0.5f * float(id);
             particlesGravityAcceleration(dim, local) = float(4 * (id + 1) + dim);
         }
         particlesPot(local) = -0.25f * float(id + 1);

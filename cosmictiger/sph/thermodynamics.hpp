@@ -20,10 +20,9 @@ namespace sph_entropy {
 // Cosmological scale-factor conversions below deliberately retain their 3D
 // convention. Lower-dimensional SPH is noncosmological (a = 1).
 
-// A = P_physical / rho_physical^adiabaticIndex, rho_c = a^3 rho_physical,
-// E = a^2 u_physical. Therefore E = A rho_c^(adiabaticIndex-1) a^(5-3
-// adiabaticIndex)/(adiabaticIndex-1). Treat the representable monatomic adiabaticIndex exactly,
-// including on the GPU.
+// A = P_physical / rho_physical^γ, rho_c = a^3 rho_physical,
+// E = a^2 u_physical. Therefore E = A rho_c^(γ-1) a^(5-3γ)/(γ-1).
+// Treat the representable monatomic γ exactly, including on the GPU.
 // clang-format off
 /*
  * Derived ideal-gas conversion from A = P_phys/ρ_phys^γ,
@@ -31,13 +30,13 @@ namespace sph_entropy {
  *   E/A = ρ_c^(γ−1) a^(5−3γ)/(γ−1).
  * This is a local derivation, not a numbered source equation.
  * Symbol directory:
- *   ρ_c → density; γ → adiabaticIndex; a → scaleFactor; 5−3γ → exponent; E/A → return value.
+ *   ρ_c → density; γ → adiabatic index; a → scale factor; 5−3γ → exponent; E/A → return value.
+ *   Code names: five_minus_3γ = 5−3γ.
  */
 // clang-format on
-CUDA_EXPORT inline float energyPerEntropy(float density, float adiabaticIndex, float scaleFactor) {
-    float const exponent = (adiabaticIndex == 5.0f / 3.0f) ? 0.0f : 5.0f - 3.0f * adiabaticIndex;
-    return std::pow(density, adiabaticIndex - 1.0f) * std::pow(scaleFactor, exponent) /
-        (adiabaticIndex - 1.0f);
+CUDA_EXPORT inline float energyPerEntropy(float ρ_c, float γ, float a) {
+    float const five_minus_3γ = (γ == 5.0f / 3.0f) ? 0.0f : 5.0f - 3.0f * γ;
+    return std::pow(ρ_c, γ - 1.0f) * std::pow(a, five_minus_3γ) / (γ - 1.0f);
 }
 
 // clang-format off
@@ -47,12 +46,11 @@ CUDA_EXPORT inline float energyPerEntropy(float density, float adiabaticIndex, f
  *   E = A ρ_c^(γ−1) a^(5−3γ)/(γ−1).
  * This is a local derivation, not a numbered source equation.
  * Symbol directory:
- *   A → entropy; ρ_c → density; γ → adiabaticIndex; a → scaleFactor; E → return value.
+ *   A → entropy; ρ_c → density; γ → adiabatic index; a → scale factor; E → return value.
  */
 // clang-format on
-CUDA_EXPORT inline float storedEnergy(
-    float entropy, float density, float adiabaticIndex, float scaleFactor) {
-    return entropy * energyPerEntropy(density, adiabaticIndex, scaleFactor);
+CUDA_EXPORT inline float storedEnergy(float A, float ρ_c, float γ, float a) {
+    return A * energyPerEntropy(ρ_c, γ, a);
 }
 
 // clang-format off
@@ -62,12 +60,11 @@ CUDA_EXPORT inline float storedEnergy(
  *   A = (γ−1) E ρ_c^(1−γ) a^(3γ−5).
  * This is a local derivation, not a numbered source equation.
  * Symbol directory:
- *   E → energy; ρ_c → density; γ → adiabaticIndex; a → scaleFactor; A → return value.
+ *   E → energy; ρ_c → density; γ → adiabatic index; a → scale factor; A → return value.
  */
 // clang-format on
-CUDA_EXPORT inline float fromStoredEnergy(
-    float energy, float density, float adiabaticIndex, float scaleFactor) {
-    return energy / energyPerEntropy(density, adiabaticIndex, scaleFactor);
+CUDA_EXPORT inline float fromStoredEnergy(float E, float ρ_c, float γ, float a) {
+    return E / energyPerEntropy(ρ_c, γ, a);
 }
 
 struct PreparedThermalState {

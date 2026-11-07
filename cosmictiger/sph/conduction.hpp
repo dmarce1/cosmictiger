@@ -26,34 +26,29 @@ namespace sph_conduction {
  * The return value below is C_ab/a. H is the stored compact support; h̄ uses
  * the same calibrated effective-radius conversion as Monaghan viscosity.
  * Symbol directory:
- *   g → conductionCoefficient; m_b/a → scaledGasMass; ρ_a,ρ_b → density,neighborDensity;
- *   c_E,a,c_E,b → soundSpeed,neighborSoundSpeed; H_a,H_b → smoothingLength,neighborSmoothingLength;
- *   r_ab² → separationSquared; (a v_phys,ab)·x_ab → physicalVelocityDotSeparation;
- *   ∇_a W̃_ab = F_ab x_ab → symmetricGradientFactor; ε → viscosityEpsilon;
- *   h̄_ab → pairSmoothingLength; η²+r_ab² → regularizedSeparationSquared;
- *   μ_E,ab → compressionVelocity; q_a+q_b → pairDiffusivity; C_ab/a → return value.
+ *   g → conduction coefficient; m_b/a → scaled gas mass; ρ_a,ρ_b → density, neighbor density;
+ *   c_E,a,c_E,b → sound speed, neighbor sound speed; H_a,H_b → smoothing length, neighbor smoothing length;
+ *   r_ab² → separation squared; (a v_phys,ab)·x_ab → physical velocity dot separation;
+ *   ∇_a W̃_ab = F_ab x_ab → symmetric gradient factor; ε → viscosity epsilon;
+ *   h̄_ab → pair smoothing length; η²+r_ab² → regularized separation squared;
+ *   μ_E,ab → compression velocity; q_a+q_b → pair diffusivity; C_ab/a → return value.
+ *   Code names: m_b_over_a = m_b/a; c_E_a = c_E,a; c_E_b = c_E,b; r_ab2 = r_ab²;
+ *     a_v_phys_ab_dot_x_ab = (a v_phys,ab)·x_ab; η2_plus_r_ab2 = η²+r_ab²; μ_E_ab = μ_E,ab;
+ *     q_a_plus_q_b = q_a+q_b.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real exchangeRate(Real density, Real neighborDensity, Real soundSpeed,
-    Real neighborSoundSpeed, Real smoothingLength, Real neighborSmoothingLength,
-    Real separationSquared, Real physicalVelocityDotSeparation, Real symmetricGradientFactor,
-    Real conductionCoefficient, Real viscosityEpsilon, Real smoothingLengthPerEffectiveRadius,
-    Real scaledGasMass) {
-    Real const pairSmoothingLength = simdBroadcast<Real>(0.5) *
-        (smoothingLength + neighborSmoothingLength) / smoothingLengthPerEffectiveRadius *
+CUDA_EXPORT inline Real exchangeRate(Real ρ_a, Real ρ_b, Real c_E_a, Real c_E_b, Real H_a, Real H_b,
+    Real r_ab2, Real a_v_phys_ab_dot_x_ab, Real F_ab, Real g, Real ε,
+    Real smoothingLengthPerEffectiveRadius, Real m_b_over_a) {
+    Real const h̄_ab = simdBroadcast<Real>(0.5) * (H_a + H_b) / smoothingLengthPerEffectiveRadius *
         simdBroadcast<Real>(monaghan::kViscosityWidthScale);
-    Real const regularizedSeparationSquared =
-        separationSquared + viscosityEpsilon * pairSmoothingLength * pairSmoothingLength;
-    Real const compressionVelocity =
-        simdMin(pairSmoothingLength * physicalVelocityDotSeparation / regularizedSeparationSquared,
-            Real(0));
-    Real const meanSoundSpeed = simdBroadcast<Real>(0.5) * (soundSpeed + neighborSoundSpeed);
-    Real const meanDensity = simdBroadcast<Real>(0.5) * (density + neighborDensity);
-    Real const pairDiffusivity = conductionCoefficient * pairSmoothingLength *
-        (meanSoundSpeed - Real(4) * compressionVelocity);
-    return -scaledGasMass * pairDiffusivity * separationSquared * symmetricGradientFactor /
-        (meanDensity * regularizedSeparationSquared);
+    Real const η2_plus_r_ab2 = r_ab2 + ε * h̄_ab * h̄_ab;
+    Real const μ_E_ab = simdMin(h̄_ab * a_v_phys_ab_dot_x_ab / η2_plus_r_ab2, Real(0));
+    Real const meanSoundSpeed = simdBroadcast<Real>(0.5) * (c_E_a + c_E_b);
+    Real const meanDensity = simdBroadcast<Real>(0.5) * (ρ_a + ρ_b);
+    Real const q_a_plus_q_b = g * h̄_ab * (meanSoundSpeed - Real(4) * μ_E_ab);
+    return -m_b_over_a * q_a_plus_q_b * r_ab2 * F_ab / (meanDensity * η2_plus_r_ab2);
 }
 
 }    // namespace sph_conduction

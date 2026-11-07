@@ -423,26 +423,26 @@ void writeParticleExpressions(
             number(converted ? conversion.mass(mass) : mass) + ")",
         converted ? (cosmological ? "Msun/h" : "g") : "code");
     if (gas) {
-        double const adiabaticIndex = options.hydro.gamma;
+        double const γ = options.hydro.gamma;
         // Derived from the stored-state definitions in docs/units.md:
         //   ρc = a³ ρphys, A = Pphys/ρphys^γ, Pstored = a⁵ Pphys.
         //   Pstored = A ρc^γ a^(5−3γ); Pphys = A ρview^γ a^(−3γ)
         // for a comoving density view, or A ρview^γ for a proper density view.
-        // A → entropyTracer; ρview → density; γ → adiabaticIndex; a → a.
+        // A → entropy tracer; ρview → density; γ → adiabatic index; a → scale factor.
         // Existing cosmological factors remain 3D; lower-dimensional SPH has a=1.
-        double const pressureFactor = converted ? (lab ? 1.0 : std::pow(a, -3.0 * adiabaticIndex)) :
-                                                  std::pow(a, 5.0 - 3.0 * adiabaticIndex);
+        double const pressureFactor =
+            converted ? (lab ? 1.0 : std::pow(a, -3.0 * γ)) : std::pow(a, 5.0 - 3.0 * γ);
         char const* pressureUnit = !converted ? "code" :
             cosmological                      ? "(km/s)^2*(Msun/h)/(Mpc/h)^3" :
             kSpatialDimensions == 1           ? "erg/cm" :
             kSpatialDimensions == 2           ? "erg/cm^2" :
                                                 "erg/cm^3";
         writeViewExpression(db, "pressure",
-            field("entropyTracer") + " * (" + field("density") + " ^ " + number(adiabaticIndex) +
-                ") * " + number(pressureFactor),
+            field("entropyTracer") + " * (" + field("density") + " ^ " + number(γ) + ") * " +
+                number(pressureFactor),
             pressureUnit);
-        writeViewExpression(db, "adiabaticIndex",
-            "nodal_constant(" + field("mesh") + ", " + number(adiabaticIndex) + ")", "1");
+        writeViewExpression(
+            db, "adiabaticIndex", "nodal_constant(" + field("mesh") + ", " + number(γ) + ")", "1");
         writeViewText(db, "pressure_convention",
             converted ? "Physical pressure in either frame, reconstructed from stored entropy and "
                         "density." :
@@ -451,20 +451,20 @@ void writeParticleExpressions(
             // Derived neutral H/He ideal gas law, using the same normalization as
             // src/cosmology/initialize.cpp: T = (γ−1)u/(kB NA (1−3Y/4)).
             // Equivalently T = Pphys/ρphys /(kB NA (1−3Y/4)).
-            // Y → heliumFraction; 1−3Y/4 → neutralParticleFraction;
+            // Y → helium fraction; 1−3Y/4 → neutral particle fraction;
             // Pphys/ρphys → pressure/density times the frame/unit conversion.
-            double const neutralParticleFraction = 1.0 - 0.75 * options.cosmology.heliumFraction;
+            // Code names: one_minus_3Y_over_4 = 1−3Y/4.
+            double const one_minus_3Y_over_4 = 1.0 - 0.75 * options.cosmology.heliumFraction;
             double const energyFactor = converted ?
                 (cosmological ? 1.0e10 : 1.0) * (lab ? 1.0 : a * a * a) :
                 std::pow(options.units.lengthCm / (options.units.timeSeconds * a), 2);
             double const temperatureFactor =
-                energyFactor / (constants::kB * constants::kAvo * neutralParticleFraction);
+                energyFactor / (constants::kB * constants::kAvo * one_minus_3Y_over_4);
             writeViewExpression(db, "temperature",
                 field("pressure") + " / " + field("density") + " * " + number(temperatureFactor),
                 "K");
             writeViewExpression(db, "meanMolecularWeight",
-                "nodal_constant(" + field("mesh") + ", " + number(1.0 / neutralParticleFraction) +
-                    ")",
+                "nodal_constant(" + field("mesh") + ", " + number(1.0 / one_minus_3Y_over_4) + ")",
                 "1");
         }
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_CHEMISTRY
@@ -473,17 +473,17 @@ void writeParticleExpressions(
             // cosmictiger/chemistry/gadget4_cooling_impl.hpp (up to float output rounding):
             //   nₑ/nH = nH⁺/nH + nHe⁺/nH + 2 nHe²⁺/nH,
             //   μ = (1 + 4y)/(1 + y + nₑ/nH), y = (1−X)/(4X), X = 0.76.
-            // nₑ/nH → electronAbundance; y → heliumNumberRatio;
-            // μ → meanMolecularWeight; ion counts → corresponding *Abundance fields.
+            // nₑ/nH → electron abundance; y → helium number ratio;
+            // μ → mean molecular weight; ion counts → corresponding abundance fields.
             // Retain individual species: subtraction can erase small trace abundances.
-            double const heliumNumberRatio = gadget4::kHeliumNumberRatio;
+            double const y = gadget4::kHeliumNumberRatio;
             writeViewExpression(db, "electronAbundance",
                 field("ionizedHydrogenAbundance") + " + " + field("singlyIonizedHeliumAbundance") +
                     " + 2 * " + field("doublyIonizedHeliumAbundance"),
                 "1");
             writeViewExpression(db, "meanMolecularWeight",
-                number(1.0 + 4.0 * heliumNumberRatio) + " / (" + number(1.0 + heliumNumberRatio) +
-                    " + " + field("electronAbundance") + ")",
+                number(1.0 + 4.0 * y) + " / (" + number(1.0 + y) + " + " +
+                    field("electronAbundance") + ")",
                 "1");
         }
 #endif
@@ -1621,14 +1621,10 @@ Vector<float> outputView(int number, double time) {
                             for (int zi = -1; zi <= 0; zi++) {
                                 Vector3<double> vec;
                                 long int ipix;
-                                vec[kXi] =
-                                    particlesPositionValue(kXi, i).toFloat() + xi;
-                                vec[kYi] =
-                                    particlesPositionValue(kYi, i).toFloat() + yi;
-                                vec[kZi] =
-                                    particlesPositionValue(kZi, i).toFloat() + zi;
-                                float const r2 =
-                                    sqr(vec[kXi], vec[kYi], vec[kZi]);
+                                vec[kXi] = particlesPositionValue(kXi, i).toFloat() + xi;
+                                vec[kYi] = particlesPositionValue(kYi, i).toFloat() + yi;
+                                vec[kZi] = particlesPositionValue(kZi, i).toFloat() + zi;
+                                float const r2 = sqr(vec[kXi], vec[kYi], vec[kZi]);
                                 if (r2 < 1.0 && r2 > 0.0) {
                                     vec2pix_ring(nside, vec.data(), &ipix);
                                     atomicAdd(values[ipix], particlesMass(i) / r2);

@@ -393,8 +393,7 @@ FmmInteraction fmmWalkSelectInteraction(TreeId sink, TreeId source, float suppor
         displacement[dim] = distance(sinkNode->pos[dim], sourceNode->pos[dim]);
     }
     float const distanceSquared = std::fma(displacement[kXi], displacement[kXi],
-        std::fma(
-            displacement[kYi], displacement[kYi], sqr(displacement[kZi])));
+        std::fma(displacement[kYi], displacement[kYi], sqr(displacement[kZi])));
     float const pairSupport = fmmPairSmoothingLength(
         support, sinkNode->maxGravitySmoothingLength, sourceNode->maxGravitySmoothingLength);
     auto const acceptance = computeFmmAcceptance(distanceSquared, sinkNode->radius,
@@ -1485,8 +1484,7 @@ void fmmWalkPeriodicBackground(bool useCuda) {
             }
             dipoleSquared += dipole * dipole;
         }
-        if (dipoleSquared < 1.0e-4 ||
-            (translated == 0 && built.pos[kYi].toDouble() <= 0.5)) {
+        if (dipoleSquared < 1.0e-4 || (translated == 0 && built.pos[kYi].toDouble() <= 0.5)) {
             throw std::runtime_error("Periodic background regression lost its off-center dipole");
         }
         Vector<FmmWalkPeriodicField> reference(particlesSize());
@@ -1629,9 +1627,8 @@ void fmmWalkOpenLargerCell(bool useCuda) {
             }
             magnitudeSum += std::sqrt(squared);
         }
-        return std::sqrt(total[kXi] * total[kXi] +
-                   total[kYi] * total[kYi] +
-                   total[kZi] * total[kZi]) /
+        return std::sqrt(
+                   total[kXi] * total[kXi] + total[kYi] * total[kYi] + total[kZi] * total[kZi]) /
             std::max(1.0, magnitudeSum);
     };
     // Rms difference over rms reference, and the largest per-particle

@@ -72,14 +72,14 @@ struct KelvinHelmholtzLayout {
 
 // Derived common-cell geometry, with n cells across each half-box:
 // N_low = s_low 2ᴰ⁻¹ nᴰ, N_high = 2 N_low, N = 3 s_low 2ᴰ⁻¹ nᴰ.
-// s_low -> lowSitesPerCell; n -> side. Round upward using whole shared cells;
+// s_low -> low sites per cell; n -> side. Round upward using whole shared cells;
 // neither fluid changes cell size to approximate the density ratio.
-inline KelvinHelmholtzLayout roundKelvinHelmholtz(size_t requested, size_t lowSitesPerCell) {
+inline KelvinHelmholtzLayout roundKelvinHelmholtz(size_t requested, size_t s_low) {
     constexpr size_t kHalfBoxFactor = size_t(1) << (kSpatialDimensions - 1);
-    if (lowSitesPerCell == 0 || lowSitesPerCell > (size_t(1) << kSpatialDimensions)) {
+    if (s_low == 0 || s_low > (size_t(1) << kSpatialDimensions)) {
         throw std::invalid_argument("Invalid Kelvin-Helmholtz cell population");
     }
-    auto const lattice = roundLattice(requested, 3 * lowSitesPerCell * kHalfBoxFactor);
+    auto const lattice = roundLattice(requested, 3 * s_low * kHalfBoxFactor);
     if (lattice.side > std::numeric_limits<int>::max() / 2) {
         throw std::overflow_error("Kelvin-Helmholtz cell count exceeds the supported range");
     }

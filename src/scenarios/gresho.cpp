@@ -41,12 +41,10 @@ ScenarioPlan initializeGresho() {
                     sphParticlesSmoothingLength(i) = smoothingLength;
                     sphParticlesPosition(kXi, i) = position[0];
                     if constexpr (kSpatialDimensions > 1) {
-                        sphParticlesPosition(kYi, i) =
-                            kSpatialDimensions >= 2 ? position[1] : 0.5;
+                        sphParticlesPosition(kYi, i) = kSpatialDimensions >= 2 ? position[1] : 0.5;
                     }
                     if constexpr (kSpatialDimensions > 2) {
-                        sphParticlesPosition(kZi, i) =
-                            kSpatialDimensions >= 3 ? position[2] : 0.5;
+                        sphParticlesPosition(kZi, i) = kSpatialDimensions >= 3 ? position[2] : 0.5;
                     }
                     sphParticlesVelocity(kXi, i) = -angularVelocity * offsetY;
                     if constexpr (kSpatialDimensions > 1) {

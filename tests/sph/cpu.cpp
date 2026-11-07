@@ -578,13 +578,12 @@ void testCullenDehnenDensity() {
                         double const steepening = flow == 0 ? 3.0 : (flow == 2 ? 1.0 : 0.0);
                         double const previousSampleTimestep =
                             globalTimestep ? 0.25 : std::ldexp(1.0, -completedRung);
-                        double const sampleInterval =
-                            globalTimestep ? 0.375 : previousSampleTimestep;
+                        double const Δτ = globalTimestep ? 0.375 : previousSampleTimestep;
                         // Flow 4 keeps physical θ constant while a_previous=a/2:
                         // G_previous=a_previous² θ. GADGET differences G before converting.
                         double const previousGradient = flow == 4 ?
                             0.25 * a2 * peculiarDivergence :
-                            a2 * (peculiarDivergence + steepening * scaleFactor * sampleInterval);
+                            a2 * (peculiarDivergence + steepening * scaleFactor * Δτ);
                         require(sphEncodeDivergence(
                                     state, float(previousGradient), previousSampleTimestep),
                             "fixture raw-gradient sample is representable");
@@ -638,18 +637,18 @@ void testCullenDehnenDensity() {
                     // https://wwwmpa.mpa-garching.mpg.de/gadget4/doxygen/artificial__viscosity_8cc_source.html
                     // Derived conformal-time conversion after differencing the raw gradient:
                     // A_scaled = max(a (G_previous − G_current)/Δτ, 0).
-                    // G_previous → sphDecodeDivergence(centerHistory, previousSampleTimestep);
-                    // G_current → a2 * divergence; a → scaleFactor; Δτ → sampleInterval;
-                    // A_scaled → detector. The represented previous half sample is used.
+                    // G_previous → decoded previous divergence sample;
+                    // G_current → current divergence sample; a → scale factor; Δτ → sample
+                    // interval; A_scaled → detector. The represented previous half sample is used.
                     auto const& centerHistory = data.sinkScaledDivergence[center];
                     // Dyadic center closes rung1; global normalization uses the prior duration.
                     double const previousSampleTimestep = globalTimestep ? 0.25 : 0.5;
-                    double const sampleInterval = globalTimestep ? 0.375 : previousSampleTimestep;
-                    double const detector = std::max(0.0,
+                    double const Δτ = globalTimestep ? 0.375 : previousSampleTimestep;
+                    double const A_scaled = std::max(0.0,
                         double(scaleFactor) *
                             (sphDecodeDivergence(centerHistory, previousSampleTimestep) -
                                 a2 * divergence) /
-                            sampleInterval);
+                            Δτ);
                     if (flow == 4) {
                         double const previousScaleSquared = 0.25 * a2;
                         double const oldPhysicalDifferenceShock = std::max(0.0,
@@ -657,8 +656,8 @@ void testCullenDehnenDensity() {
                                 (sphDecodeDivergence(centerHistory, previousSampleTimestep) /
                                         previousScaleSquared -
                                     divergence) /
-                                sampleInterval);
-                        require(detector > 0.1 && oldPhysicalDifferenceShock < 0.01 * detector,
+                                Δτ);
+                        require(A_scaled > 0.1 && oldPhysicalDifferenceShock < 0.01 * A_scaled,
                             "expanding constant-physical-divergence fixture distinguishes GADGET "
                             "ordering");
                     }
@@ -685,7 +684,7 @@ void testCullenDehnenDensity() {
                                         0.0));
                         }
                     }
-                    double const supportSquaredDetector = 0.25 * 0.25 * limiter * detector;
+                    double const supportSquaredDetector = 0.25 * 0.25 * limiter * A_scaled;
                     double const expectedTarget =
                         2.0 * supportSquaredDetector / (signal * signal + supportSquaredDetector);
                     requireClose("CD shock target including self history and pair signal",
@@ -784,12 +783,12 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
                     double const steepening = flow == 0 ? 3.0 : (flow == 2 ? 1.0 : 0.0);
                     double const previousSampleTimestep =
                         globalTimestep ? 0.25 : std::ldexp(1.0, -completedRung);
-                    double const sampleInterval = globalTimestep ? 0.375 : previousSampleTimestep;
+                    double const Δτ = globalTimestep ? 0.375 : previousSampleTimestep;
                     // Flow 4 keeps physical θ constant while a_previous=a/2:
                     // G_previous=a_previous² θ. GADGET differences G before converting.
                     double const previousGradient = flow == 4 ?
                         0.25 * a2 * peculiarDivergence :
-                        a2 * (peculiarDivergence + steepening * scaleFactor * sampleInterval);
+                        a2 * (peculiarDivergence + steepening * scaleFactor * Δτ);
                     require(
                         sphEncodeDivergence(state, float(previousGradient), previousSampleTimestep),
                         "fixture raw-gradient sample is representable");
@@ -812,11 +811,11 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
                     require(float(data.sinkBulkViscosityCoefficient[sink]) ==
                             float(Float16Storage(0.7f)),
                         "gradient-switch density does not apply the M&M update");
-                    double const expectedSample = a2 * expectedDivergence;
+                    double const G_current = a2 * expectedDivergence;
                     if ((flow == 1 || flow == 3) &&
                         sphDecodeDivergence(
                             state, globalTimestep ? 0.25 : std::ldexp(1.0, -(i == 13 ? 1 : 0))) <=
-                            expectedSample) {
+                            G_current) {
                         requireClose("nonsteepening represented history has no shock target",
                             diagnostics.targetBulkViscosityCoefficient, 0.0, 3.0e-5);
                     }
@@ -833,19 +832,18 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
                 // https://wwwmpa.mpa-garching.mpg.de/gadget4/doxygen/artificial__viscosity_8cc_source.html
                 // Derived conformal-time conversion after differencing the raw gradient:
                 // A_scaled = max(a (G_previous − G_current)/Δτ, 0).
-                // G_previous → sphDecodeDivergence(centerHistory, previousSampleTimestep);
-                // G_current → expectedSample; a → scaleFactor; Δτ → sampleInterval;
+                // G_previous → decoded previous divergence sample;
+                // G_current → current divergence sample; a → scale factor; Δτ → sample interval;
                 // A_scaled → detector. Include only prior-half quantization in the reference.
                 auto const& centerHistory = data.sinkScaledDivergence[center];
                 // Dyadic center closes rung1; global normalization uses the prior duration.
                 double const previousSampleTimestep = globalTimestep ? 0.25 : 0.5;
-                double const sampleInterval = globalTimestep ? 0.375 : previousSampleTimestep;
-                double const expectedSample = a2 * divergence;
-                double const detector = std::max(0.0,
+                double const Δτ = globalTimestep ? 0.375 : previousSampleTimestep;
+                double const G_current = a2 * divergence;
+                double const A_scaled = std::max(0.0,
                     double(scaleFactor) *
-                        (sphDecodeDivergence(centerHistory, previousSampleTimestep) -
-                            expectedSample) /
-                        sampleInterval);
+                        (sphDecodeDivergence(centerHistory, previousSampleTimestep) - G_current) /
+                        Δτ);
                 if (flow == 4) {
                     double const previousScaleSquared = 0.25 * a2;
                     double const oldPhysicalDifferenceShock = std::max(0.0,
@@ -853,8 +851,8 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
                             (sphDecodeDivergence(centerHistory, previousSampleTimestep) /
                                     previousScaleSquared -
                                 divergence) /
-                            sampleInterval);
-                    require(detector > 0.1 && oldPhysicalDifferenceShock < 0.01 * detector,
+                            Δτ);
+                    require(A_scaled > 0.1 && oldPhysicalDifferenceShock < 0.01 * A_scaled,
                         "expanding constant-physical-divergence fixture distinguishes GADGET "
                         "ordering");
                 }
@@ -863,11 +861,11 @@ void testVorticityLimitedDensity(bool huEtAl = false) {
                 double const smoothingLength = 0.25 /
                     selectedHydroKernel().smoothingLengthPerEffectiveRadius *
                     monaghan::kViscosityWidthScale;
-                double const radiusSquaredShock = 0.25 * 0.25 * detector;
+                double const radiusSquaredShock = 0.25 * 0.25 * A_scaled;
                 double const expectedTarget = huEtAl ?
                     radiusSquaredShock / (radiusSquaredShock + soundSpeed * soundSpeed) :
                     std::min(1.0,
-                        10.0 * smoothingLength * smoothingLength * limiter * detector /
+                        10.0 * smoothingLength * smoothingLength * limiter * A_scaled /
                             (soundSpeed * soundSpeed));
                 requireClose("gradient-switch shock target",
                     data.sinkViscosityDiagnostics[center].targetBulkViscosityCoefficient,
@@ -1173,8 +1171,7 @@ void testUnequalSupports() {
     data.sourceVelocityX[1] = -0.1f;
     fixture.hydro();
     fixture.checkConservation();
-    require(data.sinkAccelerations[0][kXi] < 0.0f &&
-            data.sinkAccelerations[1][kXi] > 0.0f,
+    require(data.sinkAccelerations[0][kXi] < 0.0f && data.sinkAccelerations[1][kXi] > 0.0f,
         "union support must include both directions of repulsive force");
     std::array<float, 2> const viscousEnergy = {
         data.sinkInternalEnergyRate[0], data.sinkInternalEnergyRate[1]};
@@ -1240,8 +1237,8 @@ void testSelectedKernel() {
             soundSpeed * selectedHydroKernel().smoothingLengthPerEffectiveRadius / support);
     }
     fixture.hydro(1);
-    requireClose("selected kernel scalar/SIMD pressure force",
-        data.sinkAccelerations[0][kXi], pressureForce, 8.0e-6);
+    requireClose("selected kernel scalar/SIMD pressure force", data.sinkAccelerations[0][kXi],
+        pressureForce, 8.0e-6);
     requireClose("selected kernel effective-width CFL", fixture.reduction_->inverseSoundTimestep,
         inverseCfl, 3.0e-6);
     fixture.checkConservation();
@@ -1330,8 +1327,7 @@ void testUnequalPairEos() {
             fixture.params_.scaleFactor * data.sourceInternalEnergy[i];
         requireClose(
             "unequal-pair cosmological work", data.sinkInternalEnergyRate[i], expected, 2.0e-6);
-        requireClose("unequal-pair cosmological pressure force",
-            data.sinkAccelerations[i][kXi],
+        requireClose("unequal-pair cosmological pressure force", data.sinkAccelerations[i][kXi],
             (i == 0 ? pressureForce : -pressureForce) / fixture.params_.scaleFactor, 8.0e-6);
     }
 }
@@ -1351,8 +1347,8 @@ void testSelectedCentralGravity() {
     double const expected = -data.centralAcceleration * radius /
         std::pow(double(data.centralSmoothingLength), 3) *
         radial_kernel::forceFactor(selectedGravityKernel(), radius / data.centralSmoothingLength);
-    requireClose("selected gravity kernel central force", data.sinkAccelerations[0][kXi],
-        expected, 5.0e-6);
+    requireClose(
+        "selected gravity kernel central force", data.sinkAccelerations[0][kXi], expected, 5.0e-6);
 }
 
 void testFixedGravityTimestep() {
@@ -1384,8 +1380,7 @@ void testFixedGravityTimestep() {
 #else
     require(fixture.reduction_->maximumGravityRung == 0,
         "SPH-only builds must not report a self-gravity timestep");
-    requireClose(
-        "SPH-only ignores stored self-gravity", data.sinkAccelerations[0][kXi], 0.0, 0.0);
+    requireClose("SPH-only ignores stored self-gravity", data.sinkAccelerations[0][kXi], 0.0, 0.0);
     int const hydroRung = fixture.reduction_->maximumHydroRung;
     data.sinkGravityAccelerationX[0] = 1.0e20f;
     data.gravityEffectiveRadius = 1.0e-20f;
@@ -1394,8 +1389,8 @@ void testFixedGravityTimestep() {
             fixture.reduction_->maximumHydroRung == hydroRung &&
             fixture.reduction_->maximumRung == hydroRung,
         "stored self-gravity must not constrain SPH-only timesteps");
-    requireClose("SPH-only ignores changed stored self-gravity",
-        data.sinkAccelerations[0][kXi], 0.0, 0.0);
+    requireClose(
+        "SPH-only ignores changed stored self-gravity", data.sinkAccelerations[0][kXi], 0.0, 0.0);
 #endif
 }
 
@@ -1450,8 +1445,8 @@ void testZPlaneAcceleration() {
     data.sourcePositionZ[source] = 0.75;
     fixture.params_.zPlaneAcceleration = 0.0f;
     fixture.hydro();
-    requireClose("zero magnitude disables midplane force",
-        data.sinkAccelerations[sink][kZi], 0.0, 1.0e-7);
+    requireClose(
+        "zero magnitude disables midplane force", data.sinkAccelerations[sink][kZi], 0.0, 1.0e-7);
 
     fixture.params_.zPlaneAcceleration = 0.5f;
     fixture.params_.uniformAccelerationY = 0.25f;
@@ -1463,10 +1458,10 @@ void testZPlaneAcceleration() {
         fixture.hydro();
         auto const& acceleration = data.sinkAccelerations[sink];
         bool const expectSelfGravity = COSMICTIGER_WITH_GRAVITY && selfGravity;
-        requireClose("midplane force preserves enabled self gravity in x",
-            acceleration[kXi], expectSelfGravity ? 0.125 : 0.0, 1.0e-7);
-        requireClose("uniform y force remains independent of midplane force",
-            acceleration[kYi], expectSelfGravity ? 0.1875 : 0.25, 1.0e-7);
+        requireClose("midplane force preserves enabled self gravity in x", acceleration[kXi],
+            expectSelfGravity ? 0.125 : 0.0, 1.0e-7);
+        requireClose("uniform y force remains independent of midplane force", acceleration[kYi],
+            expectSelfGravity ? 0.1875 : 0.25, 1.0e-7);
         requireClose("midplane force adds to enabled self gravity in z", acceleration[kZi],
             expectSelfGravity ? -0.25 : -0.5, 1.0e-7);
     }
@@ -1626,8 +1621,7 @@ void testPeriodicTailsAndOffsets() {
         for (int i = 0; i < fixture->sinkOffset_; i++) {
             requireClose("density guard before sinks", data.sinkDensity[i], -91.0, 0.0);
             requireClose("heating guard before sinks", data.sinkInternalEnergyRate[i], -92.0, 0.0);
-            requireClose(
-                "force guard before sinks", data.sinkAccelerations[i][kXi], -93.0, 0.0);
+            requireClose("force guard before sinks", data.sinkAccelerations[i][kXi], -93.0, 0.0);
         }
         requireClose(
             "density guard after sinks", data.sinkDensity[fixture->sinkIndex(count)], -91.0, 0.0);
