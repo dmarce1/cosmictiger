@@ -23,13 +23,13 @@ __global__ void accumulateDensityKernel(Position const* xValue, Position const* 
         float y = fmodf(mfold * yValue[i].toFloat(), 1.0f);
         float z = fmodf(mfold * zValue[i].toFloat(), 1.0f);
         int const j = (x * ndim);
-        if (j >= intbox.begin[kXDimension] - kCloudMin && j < intbox.end[kXDimension] - kCloudMax) {
+        if (j >= intbox.begin[kXi] - kCloudMin && j < intbox.end[kXi] - kCloudMax) {
             int const k = (y * ndim);
-            if (k >= intbox.begin[kYDimension] - kCloudMin &&
-                k < intbox.end[kYDimension] - kCloudMax) {
+            if (k >= intbox.begin[kYi] - kCloudMin &&
+                k < intbox.end[kYi] - kCloudMax) {
                 int const l = (z * ndim);
-                if (l >= intbox.begin[kZDimension] - kCloudMin &&
-                    l < intbox.end[kZDimension] - kCloudMax) {
+                if (l >= intbox.begin[kZi] - kCloudMin &&
+                    l < intbox.end[kZi] - kCloudMax) {
                     float const x0 = x * ndim - j;
                     float const y0 = y * ndim - k;
                     float const z0 = z * ndim - l;

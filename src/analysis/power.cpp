@@ -283,8 +283,8 @@ Vector<float> accumulateDensityCpu(int fold, int gridSize, Range<int64_t> box) {
             masses[index] = particlesMass(index);
         }
     }
-    accumulateDensityCpuKernel(&particlesPos(kXDimension, 0), &particlesPos(kYDimension, 0),
-        &particlesPos(kZDimension, 0), masses.empty() ? nullptr : masses.data(), particleCount,
+    accumulateDensityCpuKernel(&particlesPos(kXi, 0), &particlesPos(kYi, 0),
+        &particlesPos(kZi, 0), masses.empty() ? nullptr : masses.data(), particleCount,
         fold, gridSize, box, density.data());
     return density;
 }
@@ -305,12 +305,12 @@ static void computeDensityFolded(int m) {
         for (size_t k = 0; k < ndim; k += nper) {
             for (size_t l = 0; l < ndim; l += nper) {
                 Range<int64_t> intbox;
-                intbox.begin[kXDimension] = int64_t(j) + kCloudMin;
-                intbox.begin[kYDimension] = int64_t(k) + kCloudMin;
-                intbox.begin[kZDimension] = int64_t(l) + kCloudMin;
-                intbox.end[kXDimension] = std::min(j + nper, ndim) + kCloudMax;
-                intbox.end[kYDimension] = std::min(k + nper, ndim) + kCloudMax;
-                intbox.end[kZDimension] = std::min(l + nper, ndim) + kCloudMax;
+                intbox.begin[kXi] = int64_t(j) + kCloudMin;
+                intbox.begin[kYi] = int64_t(k) + kCloudMin;
+                intbox.begin[kZi] = int64_t(l) + kCloudMin;
+                intbox.end[kXi] = std::min(j + nper, ndim) + kCloudMax;
+                intbox.end[kYi] = std::min(k + nper, ndim) + kCloudMax;
+                intbox.end[kZi] = std::min(l + nper, ndim) + kCloudMax;
                 Vector<float> rho;
 #ifdef USE_CUDA
                 if (getOptions().analysis.powerCuda) {

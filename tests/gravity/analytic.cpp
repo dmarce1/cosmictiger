@@ -68,9 +68,9 @@ Pair<double> analyticCompare(int numberOfSamples) {
     Vector<Position> sinky(numberOfSamples);
     Vector<Position> sinkz(numberOfSamples);
     for (int i = 0; i < numberOfSamples; i++) {
-        sinkx[i] = samples[i].position[kXDimension];
-        sinky[i] = samples[i].position[kYDimension];
-        sinkz[i] = samples[i].position[kZDimension];
+        sinkx[i] = samples[i].position[kXi];
+        sinky[i] = samples[i].position[kYi];
+        sinkz[i] = samples[i].position[kZi];
     }
     double const gm = getOptions().gravity.gm;
     auto results = doAnalytic(sinkx, sinky, sinkz);

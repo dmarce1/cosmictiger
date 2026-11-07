@@ -26,7 +26,7 @@ SphRunReturn sphCpuRungs(SphRunParameters const&, SphRunData const& data, int ta
             auto const separation =
                 detail::sphCpuSeparations(data, particleIndex, neighbors, first);
             auto const squaredSeparation =
-                sqr(separation[kXDimension], separation[kYDimension], separation[kZDimension]);
+                sqr(separation[kXi], separation[kYi], separation[kZi]);
             auto const neighborSupport =
                 detail::sphCpuLoad(data.sourceSmoothingLength, neighbors, first, 0.0f);
             SimdFloat const neighborRungs([&](auto lane) {

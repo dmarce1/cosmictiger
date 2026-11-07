@@ -206,7 +206,7 @@ void initializeNewbornGravityFixture(bool convert) {
         }
         for (int dimension = 0; dimension < kDimensions; ++dimension) {
             particlesPos(dimension, particle) =
-                dimension == kXDimension ? 0.375 - 0.125 * particle : 0.375;
+                dimension == kXi ? 0.375 - 0.125 * particle : 0.375;
             particlesVel(dimension, particle) = particle == 1 ? 0.125f * (dimension + 1) : 0.0f;
         }
     }
@@ -293,7 +293,7 @@ void verifyNewbornGravity() {
             }
             auto const before = newbornGravitySnapshot();
             requireStarParticles(before.size() == 2 && before[1].type == kStarType &&
-                    before[1].rung == 2 && before[1].velocity[kXDimension] == 0.125f,
+                    before[1].rung == 2 && before[1].velocity[kXi] == 0.125f,
                 "conversion applied an extra kick or changed the old gravity rung");
             domainsRebound();
             EnergiesT energies{};
@@ -310,7 +310,7 @@ void verifyNewbornGravity() {
             }
             auto const after = newbornGravitySnapshot();
             requireStarParticles(after.size() == 2 &&
-                    std::abs(after[1].velocity[kXDimension] - before[1].velocity[kXDimension]) >
+                    std::abs(after[1].velocity[kXi] - before[1].velocity[kXi]) >
                         1.0e-6f,
                 "newborn gravity equivalence fixture did not exercise a nonzero kick");
             if (!convert) {

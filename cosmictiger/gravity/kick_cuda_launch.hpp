@@ -527,19 +527,19 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     data.catIndex = nullptr;
 #endif
     if (kparams.forceOnly) {
-        ALWAYS_ASSERT(output.potential != nullptr && output.acceleration[kXDimension] != nullptr);
-        data.gx = output.acceleration[kXDimension];
-        data.gy = output.acceleration[kYDimension];
-        data.gz = output.acceleration[kZDimension];
+        ALWAYS_ASSERT(output.potential != nullptr && output.acceleration[kXi] != nullptr);
+        data.gx = output.acceleration[kXi];
+        data.gy = output.acceleration[kYi];
+        data.gz = output.acceleration[kZi];
         data.pot = output.potential;
     } else {
         bool const saveAcceleration =
             kparams.saveForce || saveParticleAcceleration(getOptions().analysis);
         bool const savePotential =
             kparams.saveForce || saveParticlePotential(getOptions().analysis);
-        data.gx = saveAcceleration ? &particlesGravityAcceleration(kXDimension, 0) : nullptr;
-        data.gy = saveAcceleration ? &particlesGravityAcceleration(kYDimension, 0) : nullptr;
-        data.gz = saveAcceleration ? &particlesGravityAcceleration(kZDimension, 0) : nullptr;
+        data.gx = saveAcceleration ? &particlesGravityAcceleration(kXi, 0) : nullptr;
+        data.gy = saveAcceleration ? &particlesGravityAcceleration(kYi, 0) : nullptr;
+        data.gz = saveAcceleration ? &particlesGravityAcceleration(kZi, 0) : nullptr;
         data.pot = savePotential && kparams.doPhi ? &particlesPot(0) : nullptr;
     }
     if (kparams.snapshotDiagnostics) {

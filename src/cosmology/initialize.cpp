@@ -941,9 +941,9 @@ static float zeldovichEnd(
                 size_t const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
                 double dxmax = 0.0;
                 for (ParticleInteger i = b; i < e; i++) {
-                    double const x0 = x0Value[kXDimension][i].toDouble();
-                    double const y0 = x0Value[kYDimension][i].toDouble();
-                    double const z0 = x0Value[kZDimension][i].toDouble();
+                    double const x0 = x0Value[kXi][i].toDouble();
+                    double const y0 = x0Value[kYi][i].toDouble();
+                    double const z0 = x0Value[kZi][i].toDouble();
                     double dx = 0.0;
                     if (!glass) {
                         int const sublattices = getOptions().initial.closePack ? 2 : 1;

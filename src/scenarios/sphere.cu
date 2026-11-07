@@ -155,11 +155,11 @@ void solveSphereSurfaceProblemCuda(Vector<Array<Vector<float>, kDimensions>>& xV
     CUDA_CHECK(cudaMallocManaged(&devZ, sizeof(float*) * xValue.size()));
     CUDA_CHECK(cudaMallocManaged(&devN, sizeof(int) * xValue.size()));
     for (int i = 0; i < xValue.size(); i++) {
-        int const nValue = xValue[i][kXDimension].size();
+        int const nValue = xValue[i][kXi].size();
         CUDA_CHECK(cudaMallocManaged(&devX[i], sizeof(float) * nValue));
         CUDA_CHECK(cudaMallocManaged(&devY[i], sizeof(float) * nValue));
         CUDA_CHECK(cudaMallocManaged(&devZ[i], sizeof(float) * nValue));
-        devN[i] = xValue[i][kXDimension].size();
+        devN[i] = xValue[i][kXi].size();
     }
     auto const releaseBuffers = [&]() {
         for (int i = 0; i < xValue.size(); i++) {
@@ -183,9 +183,9 @@ void solveSphereSurfaceProblemCuda(Vector<Array<Vector<float>, kDimensions>>& xV
         throw;
     }
     for (int i = 0; i < xValue.size(); i++) {
-        memcpy(xValue[i][kXDimension].data(), devX[i], sizeof(float) * devN[i]);
-        memcpy(xValue[i][kYDimension].data(), devY[i], sizeof(float) * devN[i]);
-        memcpy(xValue[i][kZDimension].data(), devZ[i], sizeof(float) * devN[i]);
+        memcpy(xValue[i][kXi].data(), devX[i], sizeof(float) * devN[i]);
+        memcpy(xValue[i][kYi].data(), devY[i], sizeof(float) * devN[i]);
+        memcpy(xValue[i][kZi].data(), devZ[i], sizeof(float) * devN[i]);
     }
     releaseBuffers();
 }

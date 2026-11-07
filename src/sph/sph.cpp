@@ -302,13 +302,13 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
                 i < selfPtr->particleRange.second; i++) {
                 bool const active = sphParticlesRung(i) >= params.minimumRung;
                 float const h = params.smoothingLengthMultiplier * sphParticlesSmoothingLength(i);
-                auto const myx = sphParticlesPositionValue(kXDimension, i);
-                auto const myy = sphParticlesPositionValue(kYDimension, i);
-                auto const myz = sphParticlesPositionValue(kZDimension, i);
+                auto const myx = sphParticlesPositionValue(kXi, i);
+                auto const myy = sphParticlesPositionValue(kYi, i);
+                auto const myz = sphParticlesPositionValue(kZi, i);
                 Vector3<Position> xValue;
-                xValue[kXDimension] = myx;
-                xValue[kYDimension] = myy;
-                xValue[kZDimension] = myz;
+                xValue[kXi] = myx;
+                xValue[kYi] = myy;
+                xValue[kZi] = myz;
                 auto const tiny = 10.0 * RangeFixed::min().toDouble();
                 flops.singlePrecision += 1;    // Support multiplier.
                 flops.doublePrecision += 2;    // Tiny-offset construction.

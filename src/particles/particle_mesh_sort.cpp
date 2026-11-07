@@ -58,9 +58,9 @@ size_t particleMeshChunkBoundary(size_t count, size_t chunk, size_t chunks) {
 }
 
 uint64_t particleMeshKey(size_t index, uint32_t meshSize) {
-    uint64_t const x = particleMeshCoordinate(particlesX[kXDimension][index].raw(), meshSize);
-    uint64_t const y = particleMeshCoordinate(particlesX[kYDimension][index].raw(), meshSize);
-    uint64_t const z = particleMeshCoordinate(particlesX[kZDimension][index].raw(), meshSize);
+    uint64_t const x = particleMeshCoordinate(particlesX[kXi][index].raw(), meshSize);
+    uint64_t const y = particleMeshCoordinate(particlesX[kYi][index].raw(), meshSize);
+    uint64_t const z = particleMeshCoordinate(particlesX[kZi][index].raw(), meshSize);
     return (x * meshSize + y) * meshSize + z;
 }
 

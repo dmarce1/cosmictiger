@@ -8,7 +8,7 @@ double CompressedParticles::compressionRatio() {
     size_t numberOfParticles = 0;
     size_t numberOfBytes = 36;
     for (int i = 0; i < blocks.size(); i++) {
-        int const n = blocks[i].positions[kXDimension].size();
+        int const n = blocks[i].positions[kXi].size();
         numberOfBytes += 33 + 2 * kDimensions * n;
         numberOfParticles += n;
     }
@@ -18,13 +18,13 @@ double CompressedParticles::compressionRatio() {
 int CompressedParticles::size() {
     int count = 0;
     for (int i = 0; i < blocks.size(); i++) {
-        count += blocks[i].positions[kXDimension].size();
+        count += blocks[i].positions[kXi].size();
     }
     return count;
 }
 
 void CompressedBlock::write(FILE* fp) {
-    unsigned char size = positions[kXDimension].size();
+    unsigned char size = positions[kXi].size();
     fwrite(&size, sizeof(unsigned char), 1, fp);
     fwrite(&xc[0], kDimensions * sizeof(LightconeReal), 1, fp);
     fwrite(&vc[0], kDimensions * sizeof(float), 1, fp);
@@ -205,12 +205,12 @@ CompressedParticles compressParticles(
     }
     for (int i = 0; i < inputParticles.size(); i++) {
         Array<double, 2 * kDimensions> x;
-        x[kXDimension] = inputParticles[i].x.toDouble();
-        x[kYDimension] = inputParticles[i].y.toDouble();
-        x[kZDimension] = inputParticles[i].z.toDouble();
-        x[kDimensions + kXDimension] = inputParticles[i].vx;
-        x[kDimensions + kYDimension] = inputParticles[i].vy;
-        x[kDimensions + kZDimension] = inputParticles[i].vz;
+        x[kXi] = inputParticles[i].x.toDouble();
+        x[kYi] = inputParticles[i].y.toDouble();
+        x[kZi] = inputParticles[i].z.toDouble();
+        x[kDimensions + kXi] = inputParticles[i].vx;
+        x[kDimensions + kYi] = inputParticles[i].vy;
+        x[kDimensions + kZi] = inputParticles[i].vz;
         for (int dim = 0; dim < kDimensions; dim++) {
             xc[dim] += x[dim];
             vc[dim] += x[kDimensions + dim];

@@ -82,8 +82,8 @@ void testPeriodicBoxSphere() {
     Fixed32Range box;
     Range<SimdDouble8> simdBox;
     for (int dim = 0; dim < kDimensions; dim++) {
-        box.begin[dim] = dim == kXDimension ? 0.70 : 0.20;
-        box.end[dim] = dim == kXDimension ? 0.80 : 0.30;
+        box.begin[dim] = dim == kXi ? 0.70 : 0.20;
+        box.end[dim] = dim == kXi ? 0.80 : 0.30;
         simdBox.begin[dim] = box.begin[dim].toDouble();
         simdBox.end[dim] = box.end[dim].toDouble();
     }
@@ -116,13 +116,13 @@ void testPeriodicBoxSphere() {
         require(distances[lane] == boxDistanceSquared(box, point),
             "Scalar and SIMD point-box distances must agree exactly");
     }
-    box.begin[kXDimension] = 0.95;
-    box.end[kXDimension] = 0.99;
-    simdBox.begin[kXDimension] = box.begin[kXDimension].toDouble();
-    simdBox.end[kXDimension] = box.end[kXDimension].toDouble();
+    box.begin[kXi] = 0.95;
+    box.end[kXi] = 0.99;
+    simdBox.begin[kXi] = box.begin[kXi].toDouble();
+    simdBox.end[kXi] = box.end[kXi].toDouble();
     Vector3<Position> point;
     for (int dim = 0; dim < kDimensions; dim++) {
-        point[dim] = dim == kXDimension ? 0.01 : 0.25;
+        point[dim] = dim == kXi ? 0.01 : 0.25;
         simdPoints[dim] = simdBroadcast<SimdPosition>(point[dim].raw());
     }
     require(boxIntersectsSphere(box, point, 0.03f),
@@ -135,12 +135,12 @@ void testPeriodicBoxSphere() {
         box.end[dim] = 0.5;
         simdBox.begin[dim] = 0.25;
         simdBox.end[dim] = 0.5;
-        point[dim] = dim == kXDimension ? 0.5 : 0.375;
+        point[dim] = dim == kXi ? 0.5 : 0.375;
     }
     // Eight Q0.64 ticks remain far below double resolution at 0.5, while
     // their squared distance is normal even in production FTZ builds.
     constexpr PositionInteger kBoundaryTicks = kPositionBits == 64 ? 8 : 1;
-    point[kXDimension].raw() += kBoundaryTicks;
+    point[kXi].raw() += kBoundaryTicks;
     for (int dim = 0; dim < kDimensions; dim++) {
         simdPoints[dim] = simdBroadcast<SimdPosition>(point[dim].raw());
     }
@@ -151,12 +151,12 @@ void testPeriodicBoxSphere() {
     require(boxDistanceSquared(simdBox, simdPoints)[0] == boundaryDistanceSquared,
         "SIMD point-box containment must retain the selected position precision");
     if constexpr (kPositionBits == 64) {
-        box.begin[kXDimension] = 0.0;
-        box.end[kXDimension] = 0.125;
-        simdBox.begin[kXDimension] = 0.0;
-        simdBox.end[kXDimension] = 0.125;
-        point[kXDimension].setInteger(PositionInteger(0) - kBoundaryTicks);
-        simdPoints[kXDimension] = simdBroadcast<SimdPosition>(point[kXDimension].raw());
+        box.begin[kXi] = 0.0;
+        box.end[kXi] = 0.125;
+        simdBox.begin[kXi] = 0.0;
+        simdBox.end[kXi] = 0.125;
+        point[kXi].setInteger(PositionInteger(0) - kBoundaryTicks);
+        simdPoints[kXi] = simdBroadcast<SimdPosition>(point[kXi].raw());
         require(boxDistanceSquared(box, point) == boundaryDistanceSquared,
             "Q0.64 box distance retains low bits across the periodic boundary");
         require(boxDistanceSquared(simdBox, simdPoints)[0] == boundaryDistanceSquared,

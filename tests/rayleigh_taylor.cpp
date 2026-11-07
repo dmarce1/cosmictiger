@@ -129,8 +129,8 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
     std::set<std::array<PositionInteger, kDimensions>> occupied;
     std::map<double, double> pressureByHeight;
     for (ParticleInteger i = 0; i < sphParticlesSize(); i++) {
-        double const x = sphParticlesPosition(kXDimension, i).toDouble();
-        double const z = sphParticlesPosition(kZDimension, i).toDouble();
+        double const x = sphParticlesPosition(kXi, i).toDouble();
+        double const z = sphParticlesPosition(kZi, i).toDouble();
         require(z > 0.0 && z < 1.0 && z != 0.25 && z != 0.5 && z != 0.75,
             "particles lie inside material layers away from symmetry planes");
         bool const heavy = z < 0.25 || z > 0.75;
@@ -163,15 +163,15 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
             mass * configured.hydro.neighborNumber /
                 (4.0 * kPi / 3.0 * support * support * support),
             density);
-        requireClose("zero transverse x velocity", sphParticlesVelocity(kXDimension, i), 0.0);
-        requireClose("zero transverse y velocity", sphParticlesVelocity(kYDimension, i), 0.0);
+        requireClose("zero transverse x velocity", sphParticlesVelocity(kXi, i), 0.0);
+        requireClose("zero transverse y velocity", sphParticlesVelocity(kYi, i), 0.0);
         // Check the independent Fourier expansion of the documented legacy
         // seed, rather than repeating its nested cosine expression.
         double const phase = 2.0 * kPi * (x - 0.5);
         double const transverseSeed =
             1.0 + 0.5 * std::cos(phase) + std::cos(4.0 * phase) + 0.5 * std::cos(7.0 * phase);
         double const expectedVelocity = 0.025 * transverseSeed * std::sin(2.0 * kPi * z);
-        requireClose("normal velocity perturbation", sphParticlesVelocity(kZDimension, i),
+        requireClose("normal velocity perturbation", sphParticlesVelocity(kZi, i),
             expectedVelocity, 2.0e-8);
         require(sphParticlesRung(i) == 0, "initial rung");
     }
@@ -180,17 +180,17 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
     requireClose("heavy layer mass", mass * heavyCount, 1.0);
     requireClose("total mass", mass * sphParticlesSize(), 1.5);
     for (ParticleInteger i = 0; i < sphParticlesSize(); i += 2) {
-        require(sphParticlesPosition(kZDimension, i) < Position(0.5),
+        require(sphParticlesPosition(kZi, i) < Position(0.5),
             "lower particle precedes its mirror");
-        require(sphParticlesPosition(kXDimension, i).raw() ==
-                    sphParticlesPosition(kXDimension, i + 1).raw() &&
-                sphParticlesPosition(kYDimension, i).raw() ==
-                    sphParticlesPosition(kYDimension, i + 1).raw(),
+        require(sphParticlesPosition(kXi, i).raw() ==
+                    sphParticlesPosition(kXi, i + 1).raw() &&
+                sphParticlesPosition(kYi, i).raw() ==
+                    sphParticlesPosition(kYi, i + 1).raw(),
             "mirrored pairs share transverse positions");
-        require(PositionInteger(sphParticlesPosition(kZDimension, i).raw() +
-                    sphParticlesPosition(kZDimension, i + 1).raw()) == 0U,
+        require(PositionInteger(sphParticlesPosition(kZi, i).raw() +
+                    sphParticlesPosition(kZi, i + 1).raw()) == 0U,
             "mirrored z coordinates are exact in fixed point");
-        require(sphParticlesVelocity(kZDimension, i) == -sphParticlesVelocity(kZDimension, i + 1),
+        require(sphParticlesVelocity(kZi, i) == -sphParticlesVelocity(kZi, i + 1),
             "normal velocities are exactly odd about the midplane");
         require(sphParticlesInternalEnergy(i) == sphParticlesInternalEnergy(i + 1) &&
                 sphParticlesSmoothingLength(i) == sphParticlesSmoothingLength(i + 1),

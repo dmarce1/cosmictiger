@@ -76,9 +76,9 @@ void outputParticles(std::string const filename, Vector<OutputParticle> const& p
     Vector<double> y(parts.size());
     Vector<double> z(parts.size());
     for (int i = 0; i < parts.size(); i++) {
-        x[i] = parts[i].position[kXDimension].toDouble();
-        y[i] = kSpatialDimensions > 1 ? parts[i].position[kYDimension].toDouble() : 0.5;
-        z[i] = kSpatialDimensions > 2 ? parts[i].position[kZDimension].toDouble() : 0.5;
+        x[i] = parts[i].position[kXi].toDouble();
+        y[i] = kSpatialDimensions > 1 ? parts[i].position[kYi].toDouble() : 0.5;
+        z[i] = kSpatialDimensions > 2 ? parts[i].position[kZi].toDouble() : 0.5;
     }
     int const numberOfParticles = parts.size();
     double* coords[kDimensions] = {x.data(), y.data(), z.data()};
@@ -175,10 +175,10 @@ Vector<float> outputGetSlice() {
         futs.push_back(hpx::async<OutputGetSliceAction>(c));
     }
     for (int i = 0; i < particlesSize(); i++) {
-        double const z = particlesPositionValue(kZDimension, i).toDouble();
+        double const z = particlesPositionValue(kZi, i).toDouble();
         if (z < getOptions().analysis.sliceSize) {
-            double const x = particlesPositionValue(kXDimension, i).toDouble();
-            double const y = particlesPositionValue(kYDimension, i).toDouble();
+            double const x = particlesPositionValue(kXi, i).toDouble();
+            double const y = particlesPositionValue(kYi, i).toDouble();
             int const xi = x * res;
             int const yi = y * res;
             int const j = yi * res + xi;

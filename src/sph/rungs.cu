@@ -62,9 +62,9 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
                 int rung;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
                     rung = data.sourceRungs[sourceParticleIndex];
-                    position[kXDimension] = data.sourcePositionX[sourceParticleIndex];
-                    position[kYDimension] = data.sourcePositionY[sourceParticleIndex];
-                    position[kZDimension] = data.sourcePositionZ[sourceParticleIndex];
+                    position[kXi] = data.sourcePositionX[sourceParticleIndex];
+                    position[kYi] = data.sourcePositionY[sourceParticleIndex];
+                    position[kZi] = data.sourcePositionZ[sourceParticleIndex];
                     if (targetNode.outerBox.contains(position, &flops.doublePrecision)) {
                         contains = true;
                     } else {
@@ -85,9 +85,9 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
                 if (contains) {
                     ASSERT(neighborIndex < total);
                     int const k = offset + neighborIndex;
-                    workspace.positionX[k] = position[kXDimension];
-                    workspace.positionY[k] = position[kYDimension];
-                    workspace.positionZ[k] = position[kZDimension];
+                    workspace.positionX[k] = position[kXi];
+                    workspace.positionY[k] = position[kYi];
+                    workspace.positionZ[k] = position[kZi];
                     workspace.smoothingLength[k] = data.sourceSmoothingLength[sourceParticleIndex];
                     workspace.rungs[k] = rung;
                 }

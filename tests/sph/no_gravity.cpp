@@ -86,14 +86,14 @@ void sphOnlyDiagnosticsTest() {
     particlesSave(checkpoint.get());
     poisonDiagnostics();
     sphParticlesSetInternalEnergy(0, 99.0f);
-    particlesVel(kXDimension, 0) = 99.0f;
+    particlesVel(kXi, 0) = 99.0f;
     sphParticlesSetProposedRung(0, 9);
     std::rewind(checkpoint.get());
     // This deliberately retains the same particle count, bypassing allocation.
     particlesLoad(checkpoint.get());
     checkDiagnostics(0, kParticleCount, "same-size checkpoint load");
     if (particlesSize() != kParticleCount || sphParticlesSize() != kParticleCount ||
-        sphParticlesInternalEnergy(0) != 2.0f || particlesVel(kXDimension, 0) != 0.25f ||
+        sphParticlesInternalEnergy(0) != 2.0f || particlesVel(kXi, 0) != 0.25f ||
         sphParticlesProposedRung(0) != 3) {
         throw std::runtime_error("SPH-only checkpoint failed to preserve the gas payload");
     }

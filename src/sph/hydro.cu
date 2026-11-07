@@ -126,9 +126,9 @@ __device__ __forceinline__ void sphCudaHydroImpl(SphRunParameters parameters, Sp
                 bool contains = false;
                 Vector3<Position> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
-                    position[kXDimension] = data.sourcePositionX[sourceParticleIndex];
-                    position[kYDimension] = data.sourcePositionY[sourceParticleIndex];
-                    position[kZDimension] = data.sourcePositionZ[sourceParticleIndex];
+                    position[kXi] = data.sourcePositionX[sourceParticleIndex];
+                    position[kYi] = data.sourcePositionY[sourceParticleIndex];
+                    position[kZi] = data.sourcePositionZ[sourceParticleIndex];
                     contains = targetNode.outerBox.contains(position, &flops.doublePrecision);
                     if (!contains) {
                         contains = sphSupportIntersects(targetNode.innerBox, position,
@@ -142,8 +142,8 @@ __device__ __forceinline__ void sphCudaHydroImpl(SphRunParameters parameters, Sp
                 __syncthreads();
                 workspace.neighbors.resize(offset + total);
                 if (contains) {
-                    workspace.neighbors[offset + slot] = {position[kXDimension],
-                        position[kYDimension], position[kZDimension],
+                    workspace.neighbors[offset + slot] = {position[kXi],
+                        position[kYi], position[kZi],
                         data.sourceSmoothingLength[sourceParticleIndex],
                         data.sourceVelocityX[sourceParticleIndex],
                         data.sourceVelocityY[sourceParticleIndex],
@@ -442,7 +442,7 @@ __device__ __forceinline__ void sphCudaHydroImpl(SphRunParameters parameters, Sp
                     sphOwnsPairKick(data.sourceIds[particleIndex],
                         data.sourceIds[neighbor.sourceIndex], previousRung, neighbor.rung)) {
                     Vector3<float> const pairAcceleration(
-                        -pairForce[kXDimension], -pairForce[kYDimension], -pairForce[kZDimension]);
+                        -pairForce[kXi], -pairForce[kYi], -pairForce[kZi]);
                     float const targetEntropyRate =
                         sph_entropy::fromStoredEnergy(targetDissipativeEnergyRate, density,
                             adiabaticIndex, parameters.scaleFactor);
@@ -465,9 +465,9 @@ __device__ __forceinline__ void sphCudaHydroImpl(SphRunParameters parameters, Sp
                     sph_flops::densityKernelOperations(
                         selectedHydroKernel(), normalizedNeighborRadius, true);
             }
-            sharedReduceAdd<float, kHydroBlockSize>(acceleration[kXDimension]);
-            sharedReduceAdd<float, kHydroBlockSize>(acceleration[kYDimension]);
-            sharedReduceAdd<float, kHydroBlockSize>(acceleration[kZDimension]);
+            sharedReduceAdd<float, kHydroBlockSize>(acceleration[kXi]);
+            sharedReduceAdd<float, kHydroBlockSize>(acceleration[kYi]);
+            sharedReduceAdd<float, kHydroBlockSize>(acceleration[kZi]);
             sharedReduceAdd<float, kHydroBlockSize>(internalEnergyRate);
             sharedReduceAdd<float, kHydroBlockSize>(dissipativeEnergyRate);
             if constexpr (retainHydroDiagnostics) {

@@ -231,7 +231,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
                     dx[dim] = simdCast<SimdFloat>(simdPositionDifference(position, xc[dim])) *
                         toFloatFactor;
                 }
-                auto const r2 = sqr(dx[kXDimension], dx[kYDimension], dx[kZDimension]);
+                auto const r2 = sqr(dx[kXi], dx[kYi], dx[kZi]);
                 r2Max = simdMax(r2Max, r2);
             }
             float r2 = 0.0f;

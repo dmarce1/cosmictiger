@@ -106,8 +106,8 @@ inline std::vector<double> referenceDensity(
             for (int y = 0; y < gridSize; y++) {
                 for (int z = 0; z < gridSize; z++) {
                     size_t const cell = (size_t(x) * gridSize + y) * gridSize + z;
-                    result[cell] += mass * weights[kXDimension][x] * weights[kYDimension][y] *
-                        weights[kZDimension][z];
+                    result[cell] += mass * weights[kXi][x] * weights[kYi][y] *
+                        weights[kZi][z];
                 }
             }
         }
@@ -135,9 +135,9 @@ std::vector<double> assignTiledDensity(int gridSize, int tileSize, AssignDensity
                 require(density.front() == kGuard && density.back() == kGuard,
                     "density assignment preserves guards around the padded tile");
                 // Emulate the periodic folding performed by fft3dAccumulateReal.
-                for (int64_t i = box.begin[kXDimension]; i < box.end[kXDimension]; i++) {
-                    for (int64_t j = box.begin[kYDimension]; j < box.end[kYDimension]; j++) {
-                        for (int64_t k = box.begin[kZDimension]; k < box.end[kZDimension]; k++) {
+                for (int64_t i = box.begin[kXi]; i < box.end[kXi]; i++) {
+                    for (int64_t j = box.begin[kYi]; j < box.end[kYi]; j++) {
+                        for (int64_t k = box.begin[kZi]; k < box.end[kZi]; k++) {
                             int64_t const wrappedX = (i % gridSize + gridSize) % gridSize;
                             int64_t const wrappedY = (j % gridSize + gridSize) % gridSize;
                             int64_t const wrappedZ = (k % gridSize + gridSize) % gridSize;

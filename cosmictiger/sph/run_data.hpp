@@ -107,14 +107,14 @@ CUDA_EXPORT inline Vector3<float> sphCompleteAcceleration(SphRunParameters const
     acceleration += gravityAcceleration;
     flops += 3;
 #endif
-    acceleration[kYDimension] += parameters.uniformAccelerationY;
-    acceleration[kZDimension] += parameters.midplaneAccelerationZ(position[kZDimension]);
+    acceleration[kYi] += parameters.uniformAccelerationY;
+    acceleration[kZi] += parameters.midplaneAccelerationZ(position[kZi]);
     flops += 2;
     flops.doublePrecision += sph_flops::positionConstructionFlops();
     if (centralAcceleration != 0.0f) {
-        Vector3<float> const separation(distance(position[kXDimension], Position(0.5)),
-            distance(position[kYDimension], Position(0.5)),
-            distance(position[kZDimension], Position(0.5)));
+        Vector3<float> const separation(distance(position[kXi], Position(0.5)),
+            distance(position[kYi], Position(0.5)),
+            distance(position[kZi], Position(0.5)));
         float const radius = separation.norm();
         float const inverseSmoothingLength = 1.0f / centralSmoothingLength;
         float const normalizedRadius = radius * inverseSmoothingLength;

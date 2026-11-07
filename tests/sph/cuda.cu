@@ -407,9 +407,9 @@ public:
         for (int i = 0; i < count_; i++) {
             auto const& acceleration = data_.sinkAccelerations[i];
             double const kinetic = data_.gasMass *
-                (data_.sourceVelocityX[i] * acceleration[kXDimension] +
-                    data_.sourceVelocityY[i] * acceleration[kYDimension] +
-                    data_.sourceVelocityZ[i] * acceleration[kZDimension]);
+                (data_.sourceVelocityX[i] * acceleration[kXi] +
+                    data_.sourceVelocityY[i] * acceleration[kYi] +
+                    data_.sourceVelocityZ[i] * acceleration[kZi]);
             double const thermal = data_.gasMass * data_.sinkInternalEnergyRate[i];
             energy += kinetic + thermal;
             absoluteEnergy += std::abs(kinetic) + std::abs(thermal);
@@ -1421,14 +1421,14 @@ void testPeriodicSupport() {
         box.end[dim] = 0.51;
         source[dim] = 0.5;
     }
-    box.begin[kXDimension] = 0.90;
-    box.end[kXDimension] = 0.95;
-    source[kXDimension] = 0.40;
+    box.begin[kXi] = 0.90;
+    box.end[kXi] = 0.95;
+    source[kXi] = 0.40;
     require(sphSupportIntersects(box, source, 0.49f),
         "periodic support reaches the far end of a sink box");
     require(!sphSupportIntersects(box, source, 0.40f),
         "periodic support excludes a genuinely separated box");
-    source[kXDimension] = 0.02;
+    source[kXi] = 0.02;
     require(sphSupportIntersects(box, source, 0.10f), "periodic support crosses the box boundary");
 }
 
@@ -1482,7 +1482,7 @@ void testLattice() {
     fixture.checkConservation();
     double forceNorm = 0.0;
     for (int i = 0; i < fixture.count_; i++) {
-        forceNorm += std::abs(fixture.data_.sinkAccelerations[i][kXDimension]);
+        forceNorm += std::abs(fixture.data_.sinkAccelerations[i][kXi]);
     }
     require(forceNorm > 0.1, "perturbed gas must exercise nonzero acceleration");
 
@@ -1516,7 +1516,7 @@ void testUnequalSupports() {
         data.sourceSmoothingLength[i] = data.sinkSmoothingLength[i] = i == 0 ? 0.2f : 0.45f;
         auto& node = data.treeNodes[i];
         for (int dim = 0; dim < kDimensions; dim++) {
-            double const position = dim == kXDimension ? data.sourcePositionX[i].toDouble() : 0.5;
+            double const position = dim == kXi ? data.sourcePositionX[i].toDouble() : 0.5;
             node.innerBox.begin[dim] = node.innerBox.end[dim] = position;
             node.outerBox.begin[dim] = position - data.sourceSmoothingLength[i];
             node.outerBox.end[dim] = position + data.sourceSmoothingLength[i];
@@ -1529,8 +1529,8 @@ void testUnequalSupports() {
     data.sourceVelocityX[1] = -0.1f;
     fixture.hydro();
     fixture.checkConservation();
-    require(data.sinkAccelerations[0][kXDimension] < 0.0f &&
-            data.sinkAccelerations[1][kXDimension] > 0.0f,
+    require(data.sinkAccelerations[0][kXi] < 0.0f &&
+            data.sinkAccelerations[1][kXi] > 0.0f,
         "union support must include both directions of repulsive force");
     std::array<float, 2> const viscousEnergy = {
         data.sinkInternalEnergyRate[0], data.sinkInternalEnergyRate[1]};
@@ -1595,7 +1595,7 @@ void testSelectedKernel() {
             soundSpeed * selectedHydroKernel().smoothingLengthPerEffectiveRadius / support);
     }
     fixture.hydro(1);
-    requireClose("selected kernel CPU/CUDA pressure force", data.sinkAccelerations[0][kXDimension],
+    requireClose("selected kernel CPU/CUDA pressure force", data.sinkAccelerations[0][kXi],
         pressureForce, 8.0e-6);
     requireClose("selected kernel effective-width CFL", fixture.reduction_->inverseSoundTimestep,
         inverseCfl, 3.0e-6);
@@ -1655,7 +1655,7 @@ void testUnequalPairEos() {
     double const pressureForce = directedGradient[0] + directedGradient[1];
     fixture.hydro(1);
     for (int i = 0; i < 2; ++i) {
-        requireClose("unequal-pair pressure force", data.sinkAccelerations[i][kXDimension],
+        requireClose("unequal-pair pressure force", data.sinkAccelerations[i][kXi],
             i == 0 ? pressureForce : -pressureForce, 8.0e-6);
     }
     requireClose(
@@ -1684,7 +1684,7 @@ void testUnequalPairEos() {
         requireClose(
             "unequal-pair cosmological work", data.sinkInternalEnergyRate[i], expected, 2.0e-6);
         requireClose("unequal-pair cosmological pressure force",
-            data.sinkAccelerations[i][kXDimension],
+            data.sinkAccelerations[i][kXi],
             (i == 0 ? pressureForce : -pressureForce) / fixture.params_.scaleFactor, 8.0e-6);
     }
 }
@@ -1704,7 +1704,7 @@ void testSelectedCentralGravity() {
     double const expected = -data.centralAcceleration * radius /
         std::pow(double(data.centralSmoothingLength), 3) *
         radial_kernel::forceFactor(selectedGravityKernel(), radius / data.centralSmoothingLength);
-    requireClose("selected gravity kernel central force", data.sinkAccelerations[0][kXDimension],
+    requireClose("selected gravity kernel central force", data.sinkAccelerations[0][kXi],
         expected, 5.0e-6);
 }
 
@@ -1738,7 +1738,7 @@ void testFixedGravityTimestep() {
     require(fixture.reduction_->maximumGravityRung == 0,
         "SPH-only builds must not report a self-gravity timestep");
     requireClose(
-        "SPH-only ignores stored self-gravity", data.sinkAccelerations[0][kXDimension], 0.0, 0.0);
+        "SPH-only ignores stored self-gravity", data.sinkAccelerations[0][kXi], 0.0, 0.0);
     int const hydroRung = fixture.reduction_->maximumHydroRung;
     data.sinkGravityAccelerationX[0] = 1.0e20f;
     data.gravityEffectiveRadius = 1.0e-20f;
@@ -1748,7 +1748,7 @@ void testFixedGravityTimestep() {
             fixture.reduction_->maximumRung == hydroRung,
         "stored self-gravity must not constrain SPH-only timesteps");
     requireClose("SPH-only ignores changed stored self-gravity",
-        data.sinkAccelerations[0][kXDimension], 0.0, 0.0);
+        data.sinkAccelerations[0][kXi], 0.0, 0.0);
 #endif
 }
 
@@ -1784,10 +1784,10 @@ void testZPlaneAcceleration() {
         data.sourcePositionZ[source] = positions[i];
         fixture.hydro(1);
         auto const& acceleration = data.sinkAccelerations[sink];
-        requireClose("midplane force has no x component", acceleration[kXDimension], 0.0, 1.0e-7);
-        requireClose("midplane force has no y component", acceleration[kYDimension], 0.0, 1.0e-7);
+        requireClose("midplane force has no x component", acceleration[kXi], 0.0, 1.0e-7);
+        requireClose("midplane force has no y component", acceleration[kYi], 0.0, 1.0e-7);
         requireClose("midplane force points inward including adjacent fixed coordinates",
-            acceleration[kZDimension], expectedAccelerations[i], 1.0e-7);
+            acceleration[kZi], expectedAccelerations[i], 1.0e-7);
         if (expectedAccelerations[i] != 0.0) {
             requireClose("midplane force contributes to acceleration timestep",
                 fixture.reduction_->inverseAccelerationTimestep, referenceInverseTimestep, 2.0e-7);
@@ -1803,7 +1803,7 @@ void testZPlaneAcceleration() {
     fixture.params_.zPlaneAcceleration = 0.0f;
     fixture.hydro();
     requireClose("zero magnitude disables midplane force",
-        data.sinkAccelerations[sink][kZDimension], 0.0, 1.0e-7);
+        data.sinkAccelerations[sink][kZi], 0.0, 1.0e-7);
 
     fixture.params_.zPlaneAcceleration = 0.5f;
     fixture.params_.uniformAccelerationY = 0.25f;
@@ -1816,10 +1816,10 @@ void testZPlaneAcceleration() {
         auto const& acceleration = data.sinkAccelerations[sink];
         bool const expectSelfGravity = COSMICTIGER_WITH_GRAVITY && selfGravity;
         requireClose("midplane force preserves enabled self gravity in x",
-            acceleration[kXDimension], expectSelfGravity ? 0.125 : 0.0, 1.0e-7);
+            acceleration[kXi], expectSelfGravity ? 0.125 : 0.0, 1.0e-7);
         requireClose("uniform y force remains independent of midplane force",
-            acceleration[kYDimension], expectSelfGravity ? 0.1875 : 0.25, 1.0e-7);
-        requireClose("midplane force adds to enabled self gravity in z", acceleration[kZDimension],
+            acceleration[kYi], expectSelfGravity ? 0.1875 : 0.25, 1.0e-7);
+        requireClose("midplane force adds to enabled self gravity in z", acceleration[kZi],
             expectSelfGravity ? -0.25 : -0.5, 1.0e-7);
     }
 }
@@ -1879,7 +1879,7 @@ void testDefaultThermalTimestep() {
         double const oldWidth = 0.5 * data.sourceSmoothingLength[i];
         double const soundSpeed =
             std::sqrt(kAdiabaticIndex * (kAdiabaticIndex - 1.0f) * data.sourceInternalEnergy[i]);
-        double const acceleration = std::abs(data.sinkAccelerations[i][kXDimension]);
+        double const acceleration = std::abs(data.sinkAccelerations[i][kXi]);
         double const soundStep = 0.25 * oldWidth / soundSpeed;
         double const accelerationStep = oldEta * std::sqrt(oldWidth / acceleration);
         double const thermalStep =

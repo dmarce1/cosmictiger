@@ -169,9 +169,9 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::tracefree::Expansion<float, o
             for (int j = 0; j < numberOfSources; j += kSimdFloatSize) {
                 SimdFloat mass{};
                 for (int l = 0; l < kSimdFloatSize; l++) {
-                    simdSetLane(yValue[kXDimension], l, srcx[j + l].raw());
-                    simdSetLane(yValue[kYDimension], l, srcy[j + l].raw());
-                    simdSetLane(yValue[kZDimension], l, srcz[j + l].raw());
+                    simdSetLane(yValue[kXi], l, srcx[j + l].raw());
+                    simdSetLane(yValue[kYi], l, srcy[j + l].raw());
+                    simdSetLane(yValue[kZi], l, srcz[j + l].raw());
                     simdSetLane(mass, l, masses[j + l]);
                 }
                 Vector3<SimdFloat> dx{};

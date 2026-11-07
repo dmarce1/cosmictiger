@@ -78,9 +78,9 @@ void checkGhostMassPermutation() {
     std::array<char, 4> types{}, rungs{7, 1, 5, 3};
     std::array<float, 4> masses{0.875f, 0.125f, 0.625f, 0.375f};
     FmmSourceView view;
-    view.positions[kXDimension] = x.data();
-    view.positions[kYDimension] = y.data();
-    view.positions[kZDimension] = z.data();
+    view.positions[kXi] = x.data();
+    view.positions[kYi] = y.data();
+    view.positions[kZi] = z.data();
     view.types = types.data();
     view.rungs = rungs.data();
     view.masses = masses.data();
@@ -111,7 +111,7 @@ void resetPmmmSavedForces() {
     // Domain migration transfers physical particle state, not saved diagnostic
     // forces. Initialize these sentinels after migration, before testing solves.
     for (ParticleInteger i = 0; i < particlesSize(); ++i) {
-        int const id = int(particlesVel(kXDimension, i)) - 1;
+        int const id = int(particlesVel(kXi, i)) - 1;
         particlesPot(i) = -0.25f * float(id + 1);
         for (int dim = 0; dim < kDimensions; ++dim) {
             particlesGravityAcceleration(dim, i) = float(4 * (id + 1) + dim);
@@ -383,32 +383,32 @@ void initializePmmmFixture(int fixture, int ownership) {
                 // Every particle shares one mesh cell, which coarse-aligned
                 // domains must keep on a single rank. Distinct positions avoid
                 // softened pairs in the independent Ewald sum.
-                int const multiplier = dim == kXDimension ? 1 : dim == kYDimension ? 3 : 5;
+                int const multiplier = dim == kXi ? 1 : dim == kYi ? 3 : 5;
                 double const offset = 0.2 + 0.1 * ((id * multiplier) % 7);
                 coordinate = (1.0 + offset) / getOptions().gravity.meshSize;
             } else if (fixture == 6) {
-                int const cell = dim == kXDimension ? id % 8 :
-                    dim == kYDimension              ? 4 * ((id / 8) % 2) :
+                int const cell = dim == kXi ? id % 8 :
+                    dim == kYi              ? 4 * ((id / 8) % 2) :
                                                       4 * (id / 16);
                 coordinate = (cell + 0.5) / 8.0;
             } else if (fixture == 5) {
                 int const side = getOptions().gravity.meshSize;
                 int const group = id / 64;
-                int const cell = dim == kXDimension ? (group == 1        ? side - 1 :
+                int const cell = dim == kXi ? (group == 1        ? side - 1 :
                                                               group == 3 ? 1 :
                                                                            0) :
                                                       1;
                 std::array<Vector3<double>, 5> const centers{{{-0.22, -0.20, -0.18},
                     {0.14, 0.03, -0.06}, {0.22, 0.20, 0.18}, {0.32, 0.05, 0.09}, {0.0, 0.0, 0.0}}};
-                int const multiplier = dim == kXDimension ? 17 : dim == kYDimension ? 29 : 43;
+                int const multiplier = dim == kXi ? 17 : dim == kYi ? 29 : 43;
                 double const jitter = (double((id * multiplier) % 64) + 0.5) / 64.0 - 0.5;
                 coordinate = (cell + 0.5 + centers[group][dim] + 0.11 * jitter) / side;
             } else {
                 coordinate = fixture == 4 ? 0.0625 + 0.5 * ((id >> dim) & 1) : points[id][dim];
             }
             if (fixture == 3 && id >= 2) {
-                coordinate = (dim == kXDimension        ? 0.58 :
-                                     dim == kYDimension ? 0.57 :
+                coordinate = (dim == kXi        ? 0.58 :
+                                     dim == kYi ? 0.57 :
                                                           0.81) +
                     (id == 2 ? 0.013 : -0.019);
             }
@@ -419,8 +419,8 @@ void initializePmmmFixture(int fixture, int ownership) {
                 // subdivision and a center conversion that rounds up to 1.
                 particlesPos(dim, local).setInteger(std::numeric_limits<PositionInteger>::max());
             }
-            particlesVel(dim, local) = dim == kXDimension ? float(id + 1) :
-                dim == kYDimension                        ? 0.25f * float(id) :
+            particlesVel(dim, local) = dim == kXi ? float(id + 1) :
+                dim == kYi                        ? 0.25f * float(id) :
                                                             -0.5f * float(id);
             particlesGravityAcceleration(dim, local) = float(4 * (id + 1) + dim);
         }
@@ -443,10 +443,10 @@ Vector<PmmmSample> readPmmmFixture() {
         sample.acceleration = pmmmAcceleration(i);
         sample.potential = pmmmPotential(i);
         sample.mass = particlesMass(i);
-        sample.id = int(particlesVel(kXDimension, i)) - 1;
-        requirePmmm(particlesVel(kXDimension, i) == float(sample.id + 1) &&
-                particlesVel(kYDimension, i) == 0.25f * float(sample.id) &&
-                particlesVel(kZDimension, i) == -0.5f * float(sample.id) &&
+        sample.id = int(particlesVel(kXi, i)) - 1;
+        requirePmmm(particlesVel(kXi, i) == float(sample.id + 1) &&
+                particlesVel(kYi, i) == 0.25f * float(sample.id) &&
+                particlesVel(kZi, i) == -0.5f * float(sample.id) &&
                 particlesRung(i) == 1 + sample.id % 4,
             "force solve changed velocity or rung");
         if (saveParticlePotential(getOptions().analysis)) {

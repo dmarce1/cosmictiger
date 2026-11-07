@@ -42,9 +42,9 @@ inline std::vector<int> sphCpuNeighbors(SphRunData const& data, SphTreeNode cons
                 continue;
             }
             Vector3<Position> position;
-            position[kXDimension] = data.sourcePositionX[sourceIndex];
-            position[kYDimension] = data.sourcePositionY[sourceIndex];
-            position[kZDimension] = data.sourcePositionZ[sourceIndex];
+            position[kXi] = data.sourcePositionX[sourceIndex];
+            position[kYi] = data.sourcePositionY[sourceIndex];
+            position[kZi] = data.sourcePositionZ[sourceIndex];
             if (targetNode.outerBox.contains(position, &flops.doublePrecision) ||
                 (symmetric &&
                     sphSupportIntersects(targetNode.innerBox, position,

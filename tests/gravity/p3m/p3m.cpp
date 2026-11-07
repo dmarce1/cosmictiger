@@ -271,7 +271,7 @@ void initializeP3mFixture(int fixture) {
         }
         for (int dim = 0; dim < kDimensions; ++dim) {
             particlesPos(dim, local) = positions[i][dim];
-            particlesVel(dim, local) = dim == kXDimension ? float(i + 1) : 0.0f;
+            particlesVel(dim, local) = dim == kXi ? float(i + 1) : 0.0f;
         }
         particlesRung(local) = 0;
         ++local;
@@ -290,7 +290,7 @@ Vector<P3mSample> readP3mFixture() {
         sample.shortPotential = p3mPotential(i);
         sample.longPotential = pmPotential(i);
         sample.mass = particlesMass(i);
-        sample.id = int(particlesVel(kXDimension, i)) - 1;
+        sample.id = int(particlesVel(kXi, i)) - 1;
     }
     return samples;
 }

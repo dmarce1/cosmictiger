@@ -68,7 +68,7 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
         flops += kDimensions;
     }
     particlesCaptureGravitySample(
-        index, total[kXDimension], total[kYDimension], total[kZDimension]);
+        index, total[kXi], total[kYi], total[kZi]);
     bool const saveAcceleration =
         parameters.saveForce || saveParticleAcceleration(options.analysis);
     bool const savePotential = parameters.saveForce || saveParticlePotential(options.analysis);
@@ -80,12 +80,12 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
     if (savePotential && parameters.doPhi) {
         particlesPot(index) = potential;
     }
-    auto& vx = particlesVel(kXDimension, index);
-    auto& vy = particlesVel(kYDimension, index);
-    auto& vz = particlesVel(kZDimension, index);
-    float const gx = acceleration[kXDimension];
-    float const gy = acceleration[kYDimension];
-    float const gz = acceleration[kZDimension];
+    auto& vx = particlesVel(kXi, index);
+    auto& vy = particlesVel(kYi, index);
+    auto& vz = particlesVel(kZi, index);
+    float const gx = acceleration[kXi];
+    float const gy = acceleration[kYi];
+    float const gz = acceleration[kZi];
     float const effectiveRadius = parameters.gravitySmoothingLength /
         selectedGravityKernel().smoothingLengthPerEffectiveRadius;
     // A new outer interval closes the previous substep with the old base timestep.
@@ -114,9 +114,9 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
     };
     auto const applyLong = [&](float sign, float half) {
         if (longKick.active && half > 0.0f) {
-            vx = std::fma(sign * longKick.acceleration[kXDimension], half, vx);
-            vy = std::fma(sign * longKick.acceleration[kYDimension], half, vy);
-            vz = std::fma(sign * longKick.acceleration[kZDimension], half, vz);
+            vx = std::fma(sign * longKick.acceleration[kXi], half, vx);
+            vy = std::fma(sign * longKick.acceleration[kYi], half, vy);
+            vz = std::fma(sign * longKick.acceleration[kZi], half, vz);
             flops += 3 * kDimensions;
         }
     };

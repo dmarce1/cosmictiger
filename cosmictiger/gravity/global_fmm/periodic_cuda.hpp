@@ -86,7 +86,7 @@ __device__ __forceinline__ FlopCount cudaApplyPeriodicPolicy(CudaKickData const&
                     for (int dim = 0; dim < kDimensions; dim++) {
                         dx[dim] = distance(self.pos[dim], other.pos[dim]);    // 3
                     }
-                    float r2 = sqr(dx[kXDimension], dx[kYDimension], dx[kZDimension]);
+                    float r2 = sqr(dx[kXi], dx[kYi], dx[kZi]);
                     r2 = fmaxf(r2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
                     float const dcc = (self.radius + other.radius) * thetainv;
                     sw[kCc] = r2 > sqr(dcc);

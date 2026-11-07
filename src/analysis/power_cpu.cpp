@@ -43,11 +43,11 @@ void accumulateDensityCpuKernel(Position const* positionX, Position const* posit
         for (int x = kCloudMin; x <= kCloudMax; x++) {
             for (int y = kCloudMin; y <= kCloudMax; y++) {
                 for (int z = kCloudMin; z <= kCloudMax; z++) {
-                    float const weight = weights[kXDimension][x - kCloudMin] *
-                        weights[kYDimension][y - kCloudMin] * weights[kZDimension][z - kCloudMin] *
+                    float const weight = weights[kXi][x - kCloudMin] *
+                        weights[kYi][y - kCloudMin] * weights[kZi][z - kCloudMin] *
                         mass;
-                    density[box.index(cell[kXDimension] + x, cell[kYDimension] + y,
-                        cell[kZDimension] + z)] += weight;
+                    density[box.index(cell[kXi] + x, cell[kYi] + y,
+                        cell[kZi] + z)] += weight;
                 }
             }
         }

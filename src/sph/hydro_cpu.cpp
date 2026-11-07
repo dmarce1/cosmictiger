@@ -425,9 +425,9 @@ SphRunReturn sphCpuHydroImpl(
                             data.sourceRungs[neighborIndex])) {
                         continue;
                     }
-                    Vector3<float> const pairAcceleration(-float(pairForcePack[kXDimension][lane]),
-                        -float(pairForcePack[kYDimension][lane]),
-                        -float(pairForcePack[kZDimension][lane]));
+                    Vector3<float> const pairAcceleration(-float(pairForcePack[kXi][lane]),
+                        -float(pairForcePack[kYi][lane]),
+                        -float(pairForcePack[kZi][lane]));
                     float const targetEntropyRate =
                         sph_entropy::fromStoredEnergy(float(targetDissipativeEnergyRate[lane]),
                             density, gasAdiabaticIndex, parameters.scaleFactor);
@@ -447,8 +447,8 @@ SphRunReturn sphCpuHydroImpl(
             flops += 54 * SimdFloat::size();    // common geometry, pressure, and accumulation
             maximumCompressionSpeedPack = simdMax(maximumCompressionSpeedPack, -viscosityVelocity);
         }
-        Vector3<float> acceleration(simdSum(accelerationPack[kXDimension]),
-            simdSum(accelerationPack[kYDimension]), simdSum(accelerationPack[kZDimension]));
+        Vector3<float> acceleration(simdSum(accelerationPack[kXi]),
+            simdSum(accelerationPack[kYi]), simdSum(accelerationPack[kZi]));
         float internalEnergyRate = simdSum(internalEnergyRatePack);
         float const conductionExchangeRate =
             parameters.conductionCoefficient > 0.0f ? simdSum(conductionExchangeRatePack) : 0.0f;

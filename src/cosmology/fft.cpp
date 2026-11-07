@@ -96,7 +96,7 @@ void fft3d2silo(bool real) {
         Vector<float> x;
         Vector<float> y;
         Vector<float> z;
-        auto box = cmplxMybox[kZDimension];
+        auto box = cmplxMybox[kZi];
         for (int i = 0; i < n; i++) {
             x.push_back(i);
         }
@@ -158,13 +158,13 @@ void fft3dForceReal() {
     for (auto c : hpxChildren()) {
         futs.push_back(hpx::async<Fft3dForceRealAction>(c));
     }
-    auto const& box = cmplxMybox[kZDimension];
+    auto const& box = cmplxMybox[kZi];
     Array<int64_t, kDimensions> i;
     Range<int64_t> mirrorBox = box;
     Range<int64_t> slimBox = box;
-    slimBox.end[kZDimension] = 1;
+    slimBox.end[kZi] = 1;
     ym.resize(slimBox.volume());
-    mirrorBox.end[kZDimension] = 1;
+    mirrorBox.end[kZi] = 1;
     for (int dim = 0; dim < kDimensions - 1; dim++) {
         mirrorBox.begin[dim] = n - box.end[dim] + 1;
         mirrorBox.end[dim] = n - box.begin[dim] + 1;
@@ -192,7 +192,7 @@ void fft3dForceReal() {
 }
 
 Range<int64_t> fft3dComplexRange() {
-    return cmplxMybox[kZDimension];
+    return cmplxMybox[kZi];
 }
 
 Range<int64_t> fft3dRealRange() {
@@ -208,10 +208,10 @@ void finishForceReal() {
     for (auto c : hpxChildren()) {
         futs.push_back(hpx::async<FinishForceRealAction>(c));
     }
-    auto const& box = cmplxMybox[kZDimension];
+    auto const& box = cmplxMybox[kZi];
     Array<int64_t, kDimensions> i;
     Range<int64_t> slimBox = box;
-    slimBox.end[kZDimension] = 1;
+    slimBox.end[kZi] = 1;
     for (i[0] = slimBox.begin[0]; i[0] != slimBox.end[0]; i[0]++) {
         for (i[1] = slimBox.begin[1]; i[1] != slimBox.end[1]; i[1]++) {
             for (i[2] = slimBox.begin[2]; i[2] != slimBox.end[2]; i[2]++) {
@@ -285,7 +285,7 @@ Vector<float> fft3dReadReal(Range<int64_t> const& thisBox) {
 Vector<ComplexFloat> fft3dReadComplex(Range<int64_t> const& thisBox) {
     Vector<hpx::future<void>> futs;
     Vector<ComplexFloat> data(thisBox.volume());
-    auto const mybox = cmplxMybox[kZDimension];
+    auto const mybox = cmplxMybox[kZi];
     if (mybox.contains(thisBox)) {
         Array<int64_t, kDimensions> i;
         for (i[0] = thisBox.begin[0]; i[0] != thisBox.end[0]; i[0]++) {
@@ -302,7 +302,7 @@ Vector<ComplexFloat> fft3dReadComplex(Range<int64_t> const& thisBox) {
                 for (si[1] = -n; si[1] <= +n; si[1] += n) {
                     for (si[2] = -n; si[2] <= +n; si[2] += n) {
                         auto const shiftedBox = thisBox.shift(si);
-                        auto const inter = cmplxBoxes[kZDimension][ri].intersection(shiftedBox);
+                        auto const inter = cmplxBoxes[kZi][ri].intersection(shiftedBox);
                         if (inter.volume()) {
                             Vector<Range<int64_t>> inters;
                             splitBox(inter, inters);
@@ -405,7 +405,7 @@ void fft3dAccumulateReal(Range<int64_t> const& thisBox, Vector<float> const& dat
 
 void fft3dAccumulateComplex(Range<int64_t> const& thisBox, Vector<ComplexFloat> const& data) {
     Vector<hpx::future<void>> futs;
-    auto const& box = cmplxMybox[kZDimension];
+    auto const& box = cmplxMybox[kZi];
     if (box.contains(thisBox)) {
         Array<int64_t, kDimensions> i;
         for (i[0] = thisBox.begin[0]; i[0] != thisBox.end[0]; i[0]++) {
@@ -419,13 +419,13 @@ void fft3dAccumulateComplex(Range<int64_t> const& thisBox, Vector<ComplexFloat> 
             }
         }
     } else {
-        for (int64_t bi = 0; bi < cmplxBoxes[kZDimension].size(); bi++) {
+        for (int64_t bi = 0; bi < cmplxBoxes[kZi].size(); bi++) {
             Array<int64_t, kDimensions> si;
             for (si[0] = -n; si[0] <= +n; si[0] += n) {
                 for (si[1] = -n; si[1] <= +n; si[1] += n) {
                     for (si[2] = -n; si[2] <= +n; si[2] += n) {
                         auto const shiftedBox = thisBox.shift(si);
-                        auto const inter = cmplxBoxes[kZDimension][bi].intersection(shiftedBox);
+                        auto const inter = cmplxBoxes[kZi][bi].intersection(shiftedBox);
                         if (!inter.empty()) {
                             Vector<Range<int64_t>> inters;
                             splitBox(inter, inters);
@@ -486,7 +486,7 @@ void fft3dInit(int64_t gridSize, float initConst) {
         findBoxes(box, cmplxBoxes[dim], 0, hpxSize());
         cmplxMybox[dim] = cmplxBoxes[dim][hpxRank()];
     }
-    yValue.resize(cmplxMybox[kZDimension].volume(), ComplexFloat(0.0, 0.0));
+    yValue.resize(cmplxMybox[kZi].volume(), ComplexFloat(0.0, 0.0));
     mutexes.resize(n * n);
     for (int64_t i = 0; i < n * n; i++) {
         mutexes[i] = std::make_shared<SpinlockType>();
@@ -522,7 +522,7 @@ static void fft3dPhase1() {
         futs.push_back(hpx::async<Fft3dPhase1Action>(c));
     }
     Array<int64_t, kDimensions> i;
-    yValue.resize(cmplxMybox[kZDimension].volume());
+    yValue.resize(cmplxMybox[kZi].volume());
     for (i[0] = realMybox.begin[0]; i[0] != realMybox.end[0]; i[0]++) {
         futs.push_back(
             hpx::async(hpx::annotated_function(
@@ -540,7 +540,7 @@ static void fft3dPhase1() {
                                    }
                                    fftwf_execute(p);
                                    for (i[2] = 0; i[2] < n / 2 + 1; i[2]++) {
-                                       int64_t const l = cmplxMybox[kZDimension].index(i);
+                                       int64_t const l = cmplxMybox[kZi].index(i);
                                        yValue[l].real(out[i[2]][0]);
                                        yValue[l].imag(out[i[2]][1]);
                                    }
@@ -608,7 +608,7 @@ static void fft3dPhase3() {
     yValue = std::move(y1Value);
     rValue.resize(realMybox.volume());
     float const ninv = 1.0 / n;
-    for (i[0] = cmplxMybox[kZDimension].begin[0]; i[0] != cmplxMybox[kZDimension].end[0]; i[0]++) {
+    for (i[0] = cmplxMybox[kZi].begin[0]; i[0] != cmplxMybox[kZi].end[0]; i[0]++) {
         futs.push_back(
             hpx::async(hpx::annotated_function(
                            [ninv](Array<int64_t, kDimensions> j) {
@@ -619,10 +619,10 @@ static void fft3dPhase3() {
                                    return fftwf_plan_dft_c2r_1d(n, input, output, FFTW_ESTIMATE);
                                });
                                auto i = j;
-                               for (i[1] = cmplxMybox[kZDimension].begin[1];
-                                   i[1] != cmplxMybox[kZDimension].end[1]; i[1]++) {
+                               for (i[1] = cmplxMybox[kZi].begin[1];
+                                   i[1] != cmplxMybox[kZi].end[1]; i[1]++) {
                                    for (i[2] = 0; i[2] < n / 2 + 1; i[2]++) {
-                                       int64_t const l = cmplxMybox[kZDimension].index(i);
+                                       int64_t const l = cmplxMybox[kZi].index(i);
                                        in[i[2]][0] = yValue[l].real();
                                        in[i[2]][1] = yValue[l].imag();
                                        /*					if( i[2] == 0 || i[2] == N / 2) {
@@ -725,8 +725,8 @@ static void shift(bool inv) {
     for (auto c : hpxChildren()) {
         futs.push_back(hpx::async<ShiftAction>(c, inv));
     }
-    int const dim2 = inv ? kYDimension : kXDimension;
-    int const dim1 = inv ? kXDimension : kYDimension;
+    int const dim2 = inv ? kYi : kXi;
+    int const dim1 = inv ? kXi : kYi;
     Range<int64_t> tbox = inv ? cmplxMybox[dim2].shiftUp() : cmplxMybox[dim2].shiftDown();
     y1Value.resize(cmplxMybox[dim2].volume());
     for (int64_t bi = 0; bi < cmplxBoxes[dim1].size(); bi++) {
@@ -766,7 +766,7 @@ static Vector<ComplexFloat> shiftRead(Range<int64_t> const& thisBox, bool inv) {
     Vector<ComplexFloat> data(thisBox.volume());
     auto tbox = inv ? thisBox.shiftDown() : thisBox.shiftUp();
     Array<int64_t, kDimensions> i;
-    int const dim = inv ? kXDimension : kYDimension;
+    int const dim = inv ? kXi : kYi;
     for (i[0] = thisBox.begin[0]; i[0] != thisBox.end[0]; i[0]++) {
         for (i[1] = thisBox.begin[1]; i[1] != thisBox.end[1]; i[1]++) {
             for (i[2] = thisBox.begin[2]; i[2] != thisBox.end[2]; i[2]++) {

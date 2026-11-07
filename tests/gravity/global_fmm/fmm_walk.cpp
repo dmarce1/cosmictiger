@@ -59,9 +59,9 @@ void fmmWalkRequireClose(
 
 Vector3<Position> fmmWalkPosition(double x, double y, double z) {
     Vector3<Position> position;
-    position[kXDimension] = x;
-    position[kYDimension] = y;
-    position[kZDimension] = z;
+    position[kXi] = x;
+    position[kYi] = y;
+    position[kZi] = z;
     return position;
 }
 
@@ -392,9 +392,9 @@ FmmInteraction fmmWalkSelectInteraction(TreeId sink, TreeId source, float suppor
     for (int dim = 0; dim < kDimensions; dim++) {
         displacement[dim] = distance(sinkNode->pos[dim], sourceNode->pos[dim]);
     }
-    float const distanceSquared = std::fma(displacement[kXDimension], displacement[kXDimension],
+    float const distanceSquared = std::fma(displacement[kXi], displacement[kXi],
         std::fma(
-            displacement[kYDimension], displacement[kYDimension], sqr(displacement[kZDimension])));
+            displacement[kYi], displacement[kYi], sqr(displacement[kZi])));
     float const pairSupport = fmmPairSmoothingLength(
         support, sinkNode->maxGravitySmoothingLength, sourceNode->maxGravitySmoothingLength);
     auto const acceptance = computeFmmAcceptance(distanceSquared, sinkNode->radius,
@@ -497,9 +497,9 @@ ForceVectors fmmWalkApplyInteraction(TreeId sink, TreeId source, float support, 
     ForceVectors result(range.second - range.first);
     for (ParticleInteger i = range.first; i < range.second; i++) {
         auto const j = i - range.first;
-        result.gx[j] = particlesGravityAcceleration(kXDimension, i);
-        result.gy[j] = particlesGravityAcceleration(kYDimension, i);
-        result.gz[j] = particlesGravityAcceleration(kZDimension, i);
+        result.gx[j] = particlesGravityAcceleration(kXi, i);
+        result.gy[j] = particlesGravityAcceleration(kYi, i);
+        result.gz[j] = particlesGravityAcceleration(kZi, i);
         result.phi[j] = particlesPot(i);
     }
     return result;
@@ -1486,7 +1486,7 @@ void fmmWalkPeriodicBackground(bool useCuda) {
             dipoleSquared += dipole * dipole;
         }
         if (dipoleSquared < 1.0e-4 ||
-            (translated == 0 && built.pos[kYDimension].toDouble() <= 0.5)) {
+            (translated == 0 && built.pos[kYi].toDouble() <= 0.5)) {
             throw std::runtime_error("Periodic background regression lost its off-center dipole");
         }
         Vector<FmmWalkPeriodicField> reference(particlesSize());
@@ -1581,9 +1581,9 @@ void fmmWalkOpenLargerCell(bool useCuda) {
             double const cosine = 2.0 * uniform(generator) - 1.0;
             double const sine = std::sqrt(std::max(0.0, 1.0 - cosine * cosine));
             double const azimuth = 2.0 * kPi * uniform(generator);
-            coordinate = {clumpCenter[kXDimension] + radius * sine * std::cos(azimuth),
-                clumpCenter[kYDimension] + radius * sine * std::sin(azimuth),
-                clumpCenter[kZDimension] + radius * cosine};
+            coordinate = {clumpCenter[kXi] + radius * sine * std::cos(azimuth),
+                clumpCenter[kYi] + radius * sine * std::sin(azimuth),
+                clumpCenter[kZi] + radius * cosine};
         } else {
             coordinate = {uniform(generator), uniform(generator), uniform(generator)};
         }
@@ -1629,9 +1629,9 @@ void fmmWalkOpenLargerCell(bool useCuda) {
             }
             magnitudeSum += std::sqrt(squared);
         }
-        return std::sqrt(total[kXDimension] * total[kXDimension] +
-                   total[kYDimension] * total[kYDimension] +
-                   total[kZDimension] * total[kZDimension]) /
+        return std::sqrt(total[kXi] * total[kXi] +
+                   total[kYi] * total[kYi] +
+                   total[kZi] * total[kZi]) /
             std::max(1.0, magnitudeSum);
     };
     // Rms difference over rms reference, and the largest per-particle
@@ -1763,11 +1763,11 @@ double fmmWalkVerifyDistributedForces(TreeId root) {
     reference.gx[0] = reference.gy[0] = reference.gz[0] = reference.phi[0] = 0.0f;
     cpuGravityPp(reference, true, sink, sources, getOptions().gravity.smoothingLength);
     detail::fmmWalkRequireClose("distributed handoff x acceleration",
-        particlesGravityAcceleration(kXDimension, 0), reference.gx[0]);
+        particlesGravityAcceleration(kXi, 0), reference.gx[0]);
     detail::fmmWalkRequireClose("distributed handoff y acceleration",
-        particlesGravityAcceleration(kYDimension, 0), reference.gy[0]);
+        particlesGravityAcceleration(kYi, 0), reference.gy[0]);
     detail::fmmWalkRequireClose("distributed handoff z acceleration",
-        particlesGravityAcceleration(kZDimension, 0), reference.gz[0]);
+        particlesGravityAcceleration(kZi, 0), reference.gz[0]);
     detail::fmmWalkRequireClose("distributed handoff potential", particlesPot(0), reference.phi[0]);
     return reference.phi[0];
 }

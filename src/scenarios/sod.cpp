@@ -42,7 +42,7 @@ namespace detail {
             throw std::runtime_error("Unable to open sod.txt for writing");
         }
         for (auto const& sample : diagnosticSamples(kN)) {
-            float const position = sample.position[kXDimension];
+            float const position = sample.position[kXi];
             float const rho = sample.density;
             float const p = sample.pressure;
             SodStateT state;
@@ -128,21 +128,21 @@ ScenarioPlan initializeSod() {
                 double h = sph_geometry::supportRadius(m, rho1, getOptions().hydro.neighborNumber);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
-                sphParticlesPosition(kXDimension, i) = x + rand1() * dx * kEta;
+                sphParticlesPosition(kXi, i) = x + rand1() * dx * kEta;
                 if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesPosition(kYDimension, i) =
+                    sphParticlesPosition(kYi, i) =
                         kSpatialDimensions >= 2 ? y + rand1() * dx * kEta : 0.5;
                 }
                 if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesPosition(kZDimension, i) =
+                    sphParticlesPosition(kZi, i) =
                         kSpatialDimensions >= 3 ? z + rand1() * dx * kEta : 0.5;
                 }
-                sphParticlesVelocity(kXDimension, i) = vx0;
+                sphParticlesVelocity(kXi, i) = vx0;
                 if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesVelocity(kYDimension, i) = vy0;
+                    sphParticlesVelocity(kYi, i) = vy0;
                 }
                 if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesVelocity(kZDimension, i) = vz0;
+                    sphParticlesVelocity(kZi, i) = vz0;
                 }
                 sphParticlesRung(i) = 0;
                 sphParticlesSetInternalEnergy(i, p1 / (getOptions().hydro.gamma - 1.0) / rho1);
@@ -152,21 +152,21 @@ ScenarioPlan initializeSod() {
                 z = (iz + 0.5) * dx;
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
-                sphParticlesPosition(kXDimension, i) = x + rand1() * dx * kEta;
+                sphParticlesPosition(kXi, i) = x + rand1() * dx * kEta;
                 if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesPosition(kYDimension, i) =
+                    sphParticlesPosition(kYi, i) =
                         kSpatialDimensions >= 2 ? y + rand1() * dx * kEta : 0.5;
                 }
                 if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesPosition(kZDimension, i) =
+                    sphParticlesPosition(kZi, i) =
                         kSpatialDimensions >= 3 ? z + rand1() * dx * kEta : 0.5;
                 }
-                sphParticlesVelocity(kXDimension, i) = vx0;
+                sphParticlesVelocity(kXi, i) = vx0;
                 if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesVelocity(kYDimension, i) = vy0;
+                    sphParticlesVelocity(kYi, i) = vy0;
                 }
                 if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesVelocity(kZDimension, i) = vz0;
+                    sphParticlesVelocity(kZi, i) = vz0;
                 }
                 sphParticlesRung(i) = 0;
                 sphParticlesSetInternalEnergy(i, p1 / (getOptions().hydro.gamma - 1.0) / rho1);
@@ -187,21 +187,21 @@ ScenarioPlan initializeSod() {
                 double h = sph_geometry::supportRadius(m, rho0, getOptions().hydro.neighborNumber);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
-                sphParticlesPosition(kXDimension, i) = x + rand1() * dx * kEta;
+                sphParticlesPosition(kXi, i) = x + rand1() * dx * kEta;
                 if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesPosition(kYDimension, i) =
+                    sphParticlesPosition(kYi, i) =
                         kSpatialDimensions >= 2 ? y + rand1() * dx * kEta : 0.5;
                 }
                 if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesPosition(kZDimension, i) =
+                    sphParticlesPosition(kZi, i) =
                         kSpatialDimensions >= 3 ? z + rand1() * dx * kEta : 0.5;
                 }
-                sphParticlesVelocity(kXDimension, i) = 0;
+                sphParticlesVelocity(kXi, i) = 0;
                 if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesVelocity(kYDimension, i) = 0;
+                    sphParticlesVelocity(kYi, i) = 0;
                 }
                 if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesVelocity(kZDimension, i) = 0;
+                    sphParticlesVelocity(kZi, i) = 0;
                 }
 
                 sphParticlesRung(i) = 0;
@@ -213,21 +213,21 @@ ScenarioPlan initializeSod() {
                 z = (iz + 0.5) * dx;
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
-                sphParticlesPosition(kXDimension, i) = x + rand1() * dx * kEta;
+                sphParticlesPosition(kXi, i) = x + rand1() * dx * kEta;
                 if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesPosition(kYDimension, i) =
+                    sphParticlesPosition(kYi, i) =
                         kSpatialDimensions >= 2 ? y + rand1() * dx * kEta : 0.5;
                 }
                 if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesPosition(kZDimension, i) =
+                    sphParticlesPosition(kZi, i) =
                         kSpatialDimensions >= 3 ? z + rand1() * dx * kEta : 0.5;
                 }
-                sphParticlesVelocity(kXDimension, i) = 0;
+                sphParticlesVelocity(kXi, i) = 0;
                 if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesVelocity(kYDimension, i) = 0;
+                    sphParticlesVelocity(kYi, i) = 0;
                 }
                 if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesVelocity(kZDimension, i) = 0;
+                    sphParticlesVelocity(kZi, i) = 0;
                 }
 
                 sphParticlesRung(i) = 0;

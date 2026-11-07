@@ -52,7 +52,7 @@ void initializeMeshTimestepFixture() {
     particlesResize(hpxRank() == 0 ? 3 : 0);
     for (ParticleInteger local = 0; local < particlesSize(); ++local) {
         for (int dim = 0; dim < kDimensions; ++dim) {
-            particlesPos(dim, local) = dim == kXDimension ? kFixtureX[local] : 0.5;
+            particlesPos(dim, local) = dim == kXi ? kFixtureX[local] : 0.5;
             particlesVel(dim, local) = 0.0f;
         }
         particlesRung(local) = 1;
@@ -81,7 +81,7 @@ Vector<MeshTimestepSample> readMeshTimestepFixture() {
         for (int dim = 0; dim < kDimensions; ++dim) {
             sample.velocity[dim] = particlesVel(dim, i);
         }
-        sample.position = particlesPos(kXDimension, i).toDouble();
+        sample.position = particlesPos(kXi, i).toDouble();
         sample.mass = particlesMass(i);
         sample.rung = particlesRung(i);
         sample.rank = hpxRank();
@@ -205,9 +205,9 @@ void checkMeshApplyFieldFlops() {
         {true, true, true, false, 37},
     }};
     Vector3<float> acceleration;
-    acceleration[kXDimension] = 0.5f;
-    acceleration[kYDimension] = -0.75f;
-    acceleration[kZDimension] = 1.0f;
+    acceleration[kXi] = 0.5f;
+    acceleration[kYi] = -0.75f;
+    acceleration[kZi] = 1.0f;
     auto const originalRung = particlesRung(0);
     Vector3<float> originalVelocity;
     for (int dim = 0; dim < kDimensions; ++dim) {

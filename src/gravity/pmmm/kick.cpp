@@ -51,8 +51,8 @@ KickReturn particleMeshPrepareKick(double scale, double baseTimestep, double max
                     for (size_t i = worker * count / workers; i < (worker + 1) * count / workers;
                         ++i) {
                         auto const& acceleration = pmmmAcceleration(i);
-                        particlesCaptureGravitySample(i, acceleration[kXDimension],
-                            acceleration[kYDimension], acceleration[kZDimension]);
+                        particlesCaptureGravitySample(i, acceleration[kXi],
+                            acceleration[kYi], acceleration[kZi]);
                         double accelerationSquared = 0.0;
                         for (int dim = 0; dim < kDimensions; ++dim) {
                             accelerationSquared += double(acceleration[dim]) * acceleration[dim];
@@ -121,9 +121,9 @@ KickReturn particleMeshPrepareKick(double scale, double baseTimestep, double max
                         if (!gas) {
                             // Hydro sums the gas energies and momenta in its kick.
                             result.kin += 0.5 * mass * velocitySquared;
-                            result.xmom += mass * particlesVel(kXDimension, i);
-                            result.ymom += mass * particlesVel(kYDimension, i);
-                            result.zmom += mass * particlesVel(kZDimension, i);
+                            result.xmom += mass * particlesVel(kXi, i);
+                            result.ymom += mass * particlesVel(kYi, i);
+                            result.zmom += mass * particlesVel(kZi, i);
                             result.nmom += mass * std::sqrt(velocitySquared);
                         }
                     }

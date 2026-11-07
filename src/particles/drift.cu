@@ -70,16 +70,16 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                 vel = vels[i].data();
                 driftParticle = true;
 #if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
-                vx = double(vel[kXDimension]) * ainv;
-                vy = double(vel[kYDimension]) * ainv;
-                vz = double(vel[kZDimension]) * ainv;
+                vx = double(vel[kXi]) * ainv;
+                vy = double(vel[kYi]) * ainv;
+                vz = double(vel[kZi]) * ainv;
 #endif
                 x0 = x[i].toDouble();
                 y0 = kSpatialDimensions > 1 ? y[i].toDouble() : 0.5;
                 z0 = kSpatialDimensions > 2 ? z[i].toDouble() : 0.5;
-                displacementX = double(vel[kXDimension]) * c1;
-                displacementY = kSpatialDimensions > 1 ? double(vel[kYDimension]) * c1 : 0.0;
-                displacementZ = kSpatialDimensions > 2 ? double(vel[kZDimension]) * c1 : 0.0;
+                displacementX = double(vel[kXi]) * c1;
+                displacementY = kSpatialDimensions > 1 ? double(vel[kYi]) * c1 : 0.0;
+                displacementZ = kSpatialDimensions > 2 ? double(vel[kZi]) * c1 : 0.0;
                 x1 = x0 + displacementX;
                 y1 = y0 + displacementY;
                 z1 = z0 + displacementZ;
@@ -94,17 +94,17 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
 #if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
         if (doLc) {
             for (int xi = -1; xi <= 0; xi++) {
-                x0Value[kXDimension] = x0 + (double) xi;
-                x1Value[kXDimension] = x1 + (double) xi;
+                x0Value[kXi] = x0 + (double) xi;
+                x1Value[kXi] = x1 + (double) xi;
                 for (int yi = -1; yi <= 0; yi++) {
-                    x0Value[kYDimension] = y0 + (double) yi;
-                    x1Value[kYDimension] = y1 + (double) yi;
+                    x0Value[kYi] = y0 + (double) yi;
+                    x1Value[kYi] = y1 + (double) yi;
                     for (int zi = -1; zi <= 0; zi++) {
                         bool test = false;
                         LightconeEntry entry;
                         if (driftParticle) {
-                            x0Value[kZDimension] = z0 + (double) zi;
-                            x1Value[kZDimension] = z1 + (double) zi;
+                            x0Value[kZi] = z0 + (double) zi;
+                            x1Value[kZi] = z1 + (double) zi;
                             double const dist0 = sqrt(sqr(x0Value[0], x0Value[1], x0Value[2]));
                             double const dist1 = sqrt(sqr(x1Value[0], x1Value[1], x1Value[2]));
                             double const lightconeTau0 = double(tau0) + dist0;
@@ -112,9 +112,9 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                             int const i0 = (double) (lightconeTau0 * c0);
                             int const i1 = (double) (lightconeTau1 * c0);
                             if (i0 != i1 && ((dist1 <= 1.0 || dist0 <= 1.0))) {
-                                double const& x0 = x0Value[kXDimension];
-                                double const& y0 = x0Value[kYDimension];
-                                double const& z0 = x0Value[kZDimension];
+                                double const& x0 = x0Value[kXi];
+                                double const& y0 = x0Value[kYi];
+                                double const& z0 = x0Value[kZi];
                                 double const ti = double((double) (i0 + 1)) * double(tauMax);
                                 double const sqrtauimtau0 = sqr(ti - t0);
                                 double const tau0mtaui = t0 - ti;
@@ -136,9 +136,9 @@ __global__ void cudaDriftKernel(Position* __restrict__ const x, Position* __rest
                                     entry.x = x1;
                                     entry.y = y1;
                                     entry.z = z1;
-                                    entry.vx = vel[kXDimension];
-                                    entry.vy = vel[kYDimension];
-                                    entry.vz = vel[kZDimension];
+                                    entry.vx = vel[kXi];
+                                    entry.vy = vel[kYi];
+                                    entry.vz = vel[kZi];
                                     entry.type =
                                         types != nullptr ? types[i] : char(kDarkMatterType);
                                     test = true;
@@ -221,9 +221,9 @@ void cudaDrift(
         listPtr->resize(numberOfBlocks);
     }
 #endif
-    Position* x = particlesPositionData(kXDimension, rng.first);
-    Position* y = particlesPositionData(kYDimension, rng.first);
-    Position* z = particlesPositionData(kZDimension, rng.first);
+    Position* x = particlesPositionData(kXi, rng.first);
+    Position* y = particlesPositionData(kYi, rng.first);
+    Position* z = particlesPositionData(kZi, rng.first);
     auto* vels = particlesVelData() + rng.first;
     auto const* rungs = &particlesRung(rng.first);
     // particlesTy is managed memory; particlesType() returns a shared static when hydro is off.

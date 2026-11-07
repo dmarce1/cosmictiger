@@ -171,9 +171,9 @@ KickReturn gravityFinishBalancedGasKick(double baseTimestep, float sign) {
         double const kineticChange = 0.5 * mass * (after.dot(after) - before.dot(before));
         result.dkin += kineticChange;
         result.darkMatterKineticCorrection -= kineticChange;
-        result.darkMatterXMomentumCorrection += mass * (before[kXDimension] - after[kXDimension]);
-        result.darkMatterYMomentumCorrection += mass * (before[kYDimension] - after[kYDimension]);
-        result.darkMatterZMomentumCorrection += mass * (before[kZDimension] - after[kZDimension]);
+        result.darkMatterXMomentumCorrection += mass * (before[kXi] - after[kXi]);
+        result.darkMatterYMomentumCorrection += mass * (before[kYi] - after[kYi]);
+        result.darkMatterZMomentumCorrection += mass * (before[kZi] - after[kZi]);
         result.darkMatterMomentumNormCorrection += mass * (before.norm() - after.norm());
     }
     addCpuFlops(flops, FlopPrecision::Single);
@@ -292,8 +292,8 @@ void gravitySealDeferredGasOpening() {
         detail::gasOpeningImpulses.reserve(detail::gasOpeningCount);
         for (ParticleInteger gasIndex = 0; gasIndex < sphParticlesSize(); ++gasIndex) {
             auto const increment = detail::gasOpeningIncrements[gasIndex];
-            if (increment[kXDimension] != 0.0f || increment[kYDimension] != 0.0f ||
-                increment[kZDimension] != 0.0f) {
+            if (increment[kXi] != 0.0f || increment[kYi] != 0.0f ||
+                increment[kZi] != 0.0f) {
                 detail::gasOpeningImpulses.push_back(
                     {sphParticlesParticleIndex(gasIndex), increment});
             }
@@ -343,9 +343,9 @@ KickReturn gravityFinishDeferredGasOpening() {
         double const kineticChange = 0.5 * mass * (after.dot(after) - before.dot(before));
         result.dkin += kineticChange;
         result.darkMatterKineticCorrection -= kineticChange;
-        result.darkMatterXMomentumCorrection += mass * (before[kXDimension] - after[kXDimension]);
-        result.darkMatterYMomentumCorrection += mass * (before[kYDimension] - after[kYDimension]);
-        result.darkMatterZMomentumCorrection += mass * (before[kZDimension] - after[kZDimension]);
+        result.darkMatterXMomentumCorrection += mass * (before[kXi] - after[kXi]);
+        result.darkMatterYMomentumCorrection += mass * (before[kYi] - after[kYi]);
+        result.darkMatterZMomentumCorrection += mass * (before[kZi] - after[kZi]);
         result.darkMatterMomentumNormCorrection += mass * (before.norm() - after.norm());
         result.maxRung = std::max(result.maxRung, int(particlesRung(index)));
     }

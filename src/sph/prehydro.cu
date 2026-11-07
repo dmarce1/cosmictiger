@@ -72,9 +72,9 @@ __global__ void sphCudaSmoothingLengths(
                 bool contains = false;
                 Vector3<Position> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
-                    position[kXDimension] = data.sourcePositionX[sourceParticleIndex];
-                    position[kYDimension] = data.sourcePositionY[sourceParticleIndex];
-                    position[kZDimension] = data.sourcePositionZ[sourceParticleIndex];
+                    position[kXi] = data.sourcePositionX[sourceParticleIndex];
+                    position[kYi] = data.sourcePositionY[sourceParticleIndex];
+                    position[kZi] = data.sourcePositionZ[sourceParticleIndex];
                     contains = targetNode.outerBox.contains(position, &flops.doublePrecision);
                 }
                 int slot = contains;
@@ -85,7 +85,7 @@ __global__ void sphCudaSmoothingLengths(
                 workspace.positions.resize(offset + total);
                 if (contains) {
                     workspace.positions[offset + slot] = {
-                        position[kXDimension], position[kYDimension], position[kZDimension]};
+                        position[kXi], position[kYi], position[kZi]};
                 }
             }
         }
@@ -98,9 +98,9 @@ __global__ void sphCudaSmoothingLengths(
                 data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]]);
             if (active && !data.sinkFlags[sinkIndex].converged()) {
                 Vector3<Position> position;
-                position[kXDimension] = data.sourcePositionX[particleIndex];
-                position[kYDimension] = data.sourcePositionY[particleIndex];
-                position[kZDimension] = data.sourcePositionZ[particleIndex];
+                position[kXi] = data.sourcePositionX[particleIndex];
+                position[kYi] = data.sourcePositionY[particleIndex];
+                position[kZi] = data.sourcePositionZ[particleIndex];
                 float& smoothingLength = data.sinkSmoothingLength[sinkIndex];
                 bool const converged = solveSphSmoothingLength<kSmoothingLengthsBlockSize>(
                     smoothingLength, parameters.minimumSmoothingLength,
@@ -197,9 +197,9 @@ __global__ void sphCudaDensityAndGradients(
                 bool contains = false;
                 Vector3<Position> position;
                 if (sourceParticleIndex < neighborNode.particleRange.second) {
-                    position[kXDimension] = data.sourcePositionX[sourceParticleIndex];
-                    position[kYDimension] = data.sourcePositionY[sourceParticleIndex];
-                    position[kZDimension] = data.sourcePositionZ[sourceParticleIndex];
+                    position[kXi] = data.sourcePositionX[sourceParticleIndex];
+                    position[kYi] = data.sourcePositionY[sourceParticleIndex];
+                    position[kZi] = data.sourcePositionZ[sourceParticleIndex];
                     contains = targetNode.outerBox.contains(position, &flops.doublePrecision);
                     if (!contains) {
                         contains = sphSupportIntersects(targetNode.innerBox, position,
@@ -215,7 +215,7 @@ __global__ void sphCudaDensityAndGradients(
                 workspace.particles.resize(offset + total);
                 if (contains) {
                     workspace.positions[offset + slot] = {
-                        position[kXDimension], position[kYDimension], position[kZDimension]};
+                        position[kXi], position[kYi], position[kZi]};
                     workspace.particles[offset + slot] = {
                         data.sourceSmoothingLength[sourceParticleIndex],
                         data.sourceRungs[sourceParticleIndex],
@@ -250,9 +250,9 @@ __global__ void sphCudaDensityAndGradients(
             bool const active = parameters.isActiveRung(
                 data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]]);
             Vector3<Position> position;
-            position[kXDimension] = data.sourcePositionX[particleIndex];
-            position[kYDimension] = data.sourcePositionY[particleIndex];
-            position[kZDimension] = data.sourcePositionZ[particleIndex];
+            position[kXi] = data.sourcePositionX[particleIndex];
+            position[kYi] = data.sourcePositionY[particleIndex];
+            position[kZi] = data.sourcePositionZ[particleIndex];
             float& smoothingLength = data.sinkSmoothingLength[sinkIndex];
             int semiactive = active;
             if (!active) {
@@ -262,11 +262,11 @@ __global__ void sphCudaDensityAndGradients(
                     auto const& particle = workspace.particles[neighborIndex];
                     if (parameters.isActiveRung(particle.rung)) {
                         float const separationX =
-                            distance(position[kXDimension], neighbor.positionX);
+                            distance(position[kXi], neighbor.positionX);
                         float const separationY =
-                            distance(position[kYDimension], neighbor.positionY);
+                            distance(position[kYi], neighbor.positionY);
                         float const separationZ =
-                            distance(position[kZDimension], neighbor.positionZ);
+                            distance(position[kZi], neighbor.positionZ);
                         flops += 10;    // Three fixed distances, squared norm, two supports.
                         if (sqr(separationX, separationY, separationZ) <
                             fmaxf(sqr(smoothingLength), sqr(particle.smoothingLength))) {
@@ -349,9 +349,9 @@ __global__ void sphCudaDensityAndGradients(
             for (int neighborIndex = threadIndex; neighborIndex < workspace.positions.size();
                 neighborIndex += blockSize) {
                 auto const& neighbor = workspace.positions[neighborIndex];
-                Vector3<float> const separation(distance(position[kXDimension], neighbor.positionX),
-                    distance(position[kYDimension], neighbor.positionY),
-                    distance(position[kZDimension], neighbor.positionZ));
+                Vector3<float> const separation(distance(position[kXi], neighbor.positionX),
+                    distance(position[kYi], neighbor.positionY),
+                    distance(position[kZi], neighbor.positionZ));
                 float const radius = sqrtf(sph_geometry::spatialDot(separation, separation));
                 float const normalizedRadius = radius * inverseSmoothingLength;    // r_ab/H_a
                 float const kernelWeight = kernelW(normalizedRadius);

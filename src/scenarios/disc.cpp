@@ -73,16 +73,16 @@ ScenarioPlan initializeDisc() {
                 if (r > innerRadius && r < outerRadius) {
                     sphParticlesResize(sphParticlesSize() + 1);
                     sphParticlesSmoothingLength(i) = h;
-                    sphParticlesPosition(kXDimension, i) = x;
-                    sphParticlesPosition(kYDimension, i) = y;
-                    sphParticlesPosition(kZDimension, i) = z;
+                    sphParticlesPosition(kXi, i) = x;
+                    sphParticlesPosition(kYi, i) = y;
+                    sphParticlesPosition(kZi, i) = z;
                     double const velocity = sqrt(opts.hydro.centralAcceleration / r);
                     double const vx = -(y - 0.5) / r * velocity;
                     double const vy = (x - 0.5) / r * velocity;
                     double const vz = 0.0;
-                    sphParticlesVelocity(kXDimension, i) = vx;
-                    sphParticlesVelocity(kYDimension, i) = vy;
-                    sphParticlesVelocity(kZDimension, i) = vz;
+                    sphParticlesVelocity(kXi, i) = vx;
+                    sphParticlesVelocity(kYi, i) = vy;
+                    sphParticlesVelocity(kZi, i) = vz;
                     sphParticlesRung(i) = 0;
                     sphParticlesSetInternalEnergy(i, internalEnergy);
 

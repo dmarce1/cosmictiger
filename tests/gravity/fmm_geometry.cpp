@@ -19,8 +19,8 @@ TEST(FmmGeometryFlops, DisplacementPrecisionTracksPeriodicAndShiftedPaths) {
     auto check = [](Position sink, Position source, FmmGeometry const& geometry, FlopCount single,
                      FlopCount doublePrecision) {
         FlopCounts counts{};
-        float const counted = fmmPositionDifference(sink, source, kXDimension, geometry, &counts);
-        EXPECT_EQ(counted, fmmPositionDifference(sink, source, kXDimension, geometry));
+        float const counted = fmmPositionDifference(sink, source, kXi, geometry, &counts);
+        EXPECT_EQ(counted, fmmPositionDifference(sink, source, kXi, geometry));
         EXPECT_EQ(counts.singlePrecision, kCountFlops ? single : 0);
         EXPECT_EQ(counts.doublePrecision, kCountFlops ? doublePrecision : 0);
         EXPECT_EQ(counts.unclassified, 0);
@@ -28,9 +28,9 @@ TEST(FmmGeometryFlops, DisplacementPrecisionTracksPeriodicAndShiftedPaths) {
     check(Position(0.3), Position(0.2), {}, 1, 0);
     FmmGeometry geometry;
     geometry.meshSize = 4;
-    geometry.sinkCell[kXDimension] = 1;
+    geometry.sinkCell[kXi] = 1;
     check(Position(0.3), Position(0.2), geometry, 0, 3);
-    geometry.sinkCell[kXDimension] = 3;
+    geometry.sinkCell[kXi] = 3;
     check(Position(0.99), Position(0.01), geometry, 0, 2);
 }
 
@@ -133,7 +133,7 @@ float referenceBox(
 }
 
 void checkDifferences(std::vector<Position> const& sinks, std::vector<Position> const& sources,
-    FmmGeometry const& geometry, int dim = kXDimension) {
+    FmmGeometry const& geometry, int dim = kXi) {
     ASSERT_EQ(sinks.size(), sources.size());
     for (size_t begin = 0; begin < sinks.size(); begin += kSimdFloatSize) {
         SimdPosition sinkPack{}, sourcePack{};
@@ -218,12 +218,12 @@ TEST(FmmGeometry, NearCellImageCanExceedHalfBox) {
         std::vector<Position> const sinks{Position(0.01), Position(0.02), Position(0.04)};
         std::vector<Position> const sources{Position(0.59), Position(0.58), Position(0.57)};
         detail::checkDifferences(sinks, sources, geometry);
-        EXPECT_LT(fmmPositionDifference(sinks[0], sources[0], kXDimension, geometry), -0.5f);
-        EXPECT_GT(fmmPositionDifference(sinks[0], sources[0], kXDimension, {}), 0.0f);
-        geometry.sinkCell[kXDimension] = meshSize - 1;
+        EXPECT_LT(fmmPositionDifference(sinks[0], sources[0], kXi, geometry), -0.5f);
+        EXPECT_GT(fmmPositionDifference(sinks[0], sources[0], kXi, {}), 0.0f);
+        geometry.sinkCell[kXi] = meshSize - 1;
         detail::checkDifferences({Position(0.99)}, {Position(0.41)}, geometry);
         EXPECT_GT(
-            fmmPositionDifference(Position(0.99), Position(0.41), kXDimension, geometry), 0.5f);
+            fmmPositionDifference(Position(0.99), Position(0.41), kXi, geometry), 0.5f);
     }
 }
 
@@ -232,7 +232,7 @@ TEST(FmmGeometry, ExactCellBoundarySelectsOneImageForTheWholeCell) {
         for (int sinkCell = 0; sinkCell < meshSize; ++sinkCell) {
             FmmGeometry geometry;
             geometry.meshSize = meshSize;
-            geometry.sinkCell[kXDimension] = sinkCell;
+            geometry.sinkCell[kXi] = sinkCell;
             Position const sink((sinkCell + 0.5) / meshSize);
             std::vector<Position> sinks, sources;
             for (int cell = 1; cell < meshSize; ++cell) {
@@ -242,8 +242,8 @@ TEST(FmmGeometry, ExactCellBoundarySelectsOneImageForTheWholeCell) {
                     unsigned(meshSize));
                 for (int offset : {-1, 0, 1}) {
                     Position const source = detail::rawPosition(threshold + offset);
-                    EXPECT_EQ(detail::fmmSourceImage(source, kXDimension, geometry),
-                        detail::referenceImage(source, kXDimension, geometry));
+                    EXPECT_EQ(detail::fmmSourceImage(source, kXi, geometry),
+                        detail::referenceImage(source, kXi, geometry));
                     sinks.push_back(sink);
                     sources.push_back(source);
                 }
@@ -265,16 +265,16 @@ TEST(FmmGeometry, LowBitsSurviveWithinCellsAndAcrossTheSeam) {
             sources.push_back(detail::rawPosition(last - offset));
         }
         detail::checkDifferences(sinks, sources, geometry);
-        geometry.sinkCell[kXDimension] = meshSize - 1;
+        geometry.sinkCell[kXi] = meshSize - 1;
         detail::checkDifferences(sources, sinks, geometry);
-        geometry.sinkCell[kXDimension] = meshSize / 2;
+        geometry.sinkCell[kXi] = meshSize / 2;
         for (size_t i = 0; i < sinks.size(); ++i) {
             sinks[i] = detail::rawPosition(half + i + 1);
             sources[i] = detail::rawPosition(half);
         }
         detail::checkDifferences(sinks, sources, geometry);
         EXPECT_EQ(
-            fmmPositionDifference(sinks[0], sources[0], kXDimension, geometry), kPositionToFloat);
+            fmmPositionDifference(sinks[0], sources[0], kXi, geometry), kPositionToFloat);
     }
 }
 
@@ -282,9 +282,9 @@ TEST(FmmGeometry, BoxImagesAgreeWithExactIntegerReference) {
     for (int meshSize : {3, 5, 6, 7}) {
         FmmGeometry geometry;
         geometry.meshSize = meshSize;
-        geometry.sinkCell[kXDimension] = 0;
-        geometry.sinkCell[kYDimension] = meshSize / 2;
-        geometry.sinkCell[kZDimension] = meshSize - 1;
+        geometry.sinkCell[kXi] = 0;
+        geometry.sinkCell[kYi] = meshSize / 2;
+        geometry.sinkCell[kZi] = meshSize - 1;
         std::array<Fixed32Range, kSimdFloatSize> boxes;
         std::array<Vector3<Position>, kSimdFloatSize> sinks, sources;
         for (int lane = 0; lane < kSimdFloatSize; ++lane) {
@@ -306,7 +306,7 @@ TEST(FmmGeometry, BoxEndpointsKeepSubDoubleSeamDistances) {
     for (bool upper : {false, true}) {
         FmmGeometry geometry;
         geometry.meshSize = 3;
-        geometry.sinkCell[kXDimension] = upper ? 2 : 0;
+        geometry.sinkCell[kXi] = upper ? 2 : 0;
         std::array<Fixed32Range, kSimdFloatSize> boxes;
         std::array<Vector3<Position>, kSimdFloatSize> sinks, sources;
         for (int lane = 0; lane < kSimdFloatSize; ++lane) {
@@ -314,15 +314,15 @@ TEST(FmmGeometry, BoxEndpointsKeepSubDoubleSeamDistances) {
                 boxes[lane].begin[dim] = boxes[lane].end[dim] = 0.0;
                 sinks[lane][dim] = sources[lane][dim] = 0.0;
             }
-            boxes[lane].begin[kXDimension] = boxes[lane].end[kXDimension] = upper ? 1.0 : 0.0;
-            sinks[lane][kXDimension] =
+            boxes[lane].begin[kXi] = boxes[lane].end[kXi] = upper ? 1.0 : 0.0;
+            sinks[lane][kXi] =
                 detail::rawPosition(upper ? last - lane : PositionInteger(lane + 1));
-            sources[lane][kXDimension] =
+            sources[lane][kXi] =
                 detail::rawPosition(upper ? PositionInteger(lane + 1) : last - lane);
         }
         detail::checkBoxes(geometry, boxes, sinks, sources);
         for (int lane = 0; lane < kSimdFloatSize; ++lane) {
-            boxes[lane].begin[kXDimension] = boxes[lane].end[kXDimension] = upper ? 0.0 : 1.0;
+            boxes[lane].begin[kXi] = boxes[lane].end[kXi] = upper ? 0.0 : 1.0;
         }
         detail::checkBoxes(geometry, boxes, sinks, sources);
     }

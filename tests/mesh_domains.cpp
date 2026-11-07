@@ -75,14 +75,14 @@ PositionInteger meshDomainPosition(int identity, int dim, int fixture, int phase
         // Distinct coordinates inside one full-mesh cell, hence inside one cell
         // of every coarse mesh. Aligned cuts can never separate them.
         int const count = meshDomainFixtureCount(fixture);
-        int const multiplier = dim == kXDimension ? 1 : dim == kYDimension ? 13 : 23;
+        int const multiplier = dim == kXi ? 1 : dim == kYi ? 13 : 23;
         int const offset = 1 + identity * multiplier % count;
         raw = period / 2 + cellWidth * offset / (2 * (count + 1));
     } else {
         // Cell-centered particles. Most of the population crowds one full-mesh
         // cell in x, so the count-balanced plane differs from the midpoint and
         // from the plane nearest the continuous median.
-        int const cell = dim == kXDimension ? (identity < 80 ? 3 : 4 + identity % 11) :
+        int const cell = dim == kXi ? (identity < 80 ? 3 : 4 + identity % 11) :
                                               (identity * 5 + 2 * dim) % kMeshDomainMeshSize;
         raw = cellWidth * (2 * cell + 1) / 2 + identity % 3;
     }
@@ -136,7 +136,7 @@ void initializeMeshDomains(int fixture) {
 
 void moveMeshDomains(int fixture, int phase) {
     for (ParticleInteger index = 0; index < particlesSize(); ++index) {
-        int const identity = int(particlesVel(kXDimension, index)) - 1;
+        int const identity = int(particlesVel(kXi, index)) - 1;
         for (int dim = 0; dim < kDimensions; ++dim) {
             particlesPos(dim, index).setInteger(meshDomainPosition(identity, dim, fixture, phase));
         }
@@ -386,7 +386,7 @@ void verifyMeshDomains(int fixture, int phase, bool rebound, int coarseMeshSize)
         auto const snapshot = pending[rank].get();
         populatedRanks += snapshot.records.empty() ? 0 : 1;
         for (auto const& record : snapshot.records) {
-            int const identity = int(record.velocity[kXDimension]) - 1;
+            int const identity = int(record.velocity[kXi]) - 1;
             requireMeshDomain(identity >= 0 && identity < count && !seen[identity],
                 "migration lost or duplicated particle identities");
             seen[identity] = true;

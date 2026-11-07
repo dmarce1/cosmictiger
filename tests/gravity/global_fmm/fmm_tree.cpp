@@ -42,12 +42,12 @@ void requireFmmTree(bool condition, char const* message) {
 
 Vector3<Position> fmmTreePosition(int rank, int particle) {
     Vector3<Position> position;
-    position[kXDimension] = 0.25 + 0.125 * (rank + (particle & 1)) / hpxSize();
-    position[kYDimension] = 0.25 + 0.0625 * ((particle >> 1) & 1);
-    position[kZDimension] = 0.25 + 0.0625 * ((particle >> 2) & 1);
+    position[kXi] = 0.25 + 0.125 * (rank + (particle & 1)) / hpxSize();
+    position[kYi] = 0.25 + 0.0625 * ((particle >> 1) & 1);
+    position[kZi] = 0.25 + 0.0625 * ((particle >> 2) & 1);
     // X/Z extrema fall between stored box coordinates; Y remains exactly aligned.
-    position[kXDimension].raw() += 1;
-    position[kZDimension].raw() += 3;
+    position[kXi].raw() += 1;
+    position[kZi].raw() += 3;
     return position;
 }
 
@@ -323,9 +323,9 @@ void fmmTreeTest() {
     detail::requireFmmTree(built.radius > 0.0f, "clustered global node has zero radius");
     auto const* root = treeGetNode(built.id);
     for (int dim = 0; dim < kDimensions; dim++) {
-        double const offset = dim == kYDimension ? 0.0 : (dim + 1) * Position::kToFloatFactor_;
+        double const offset = dim == kYi ? 0.0 : (dim + 1) * Position::kToFloatFactor_;
         double const lower = 0.25 + offset;
-        double const upper = (dim == kXDimension ? 0.375 : 0.3125) + offset;
+        double const upper = (dim == kXi ? 0.375 : 0.3125) + offset;
         detail::requireFmmTree(built.box.begin[dim] == lower && built.box.end[dim] == upper,
             "clustered global bounds differ from the particle extrema");
         detail::requireFmmTree(

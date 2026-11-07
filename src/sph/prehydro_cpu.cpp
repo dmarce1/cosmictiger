@@ -56,9 +56,9 @@ bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData c
     sinkKernelSmoothingLength = std::min(
         std::max(sinkKernelSmoothingLength, minimumSmoothingLength), maximumSmoothingLength);
     Vector3<Position> position;
-    position[kXDimension] = data.sourcePositionX[particleIndex];
-    position[kYDimension] = data.sourcePositionY[particleIndex];
-    position[kZDimension] = data.sourcePositionZ[particleIndex];
+    position[kXi] = data.sourcePositionX[particleIndex];
+    position[kYi] = data.sourcePositionY[particleIndex];
+    position[kZi] = data.sourcePositionZ[particleIndex];
     // Distances do not change during the bounded support-radius solve.
     std::vector<SimdFloat> separationMagnitudePacks;    // |r_ab| for each pack of neighbors
     separationMagnitudePacks.reserve(
@@ -570,9 +570,9 @@ SphRunReturn sphCpuDensityAndGradientsImpl(
             }
         }
         if (computeSphBalsara && data.sinkBalsaraFactor) {
-            Vector3<float> const densityWeightedCurl(simdSum(densityWeightedCurlPack[kXDimension]),
-                simdSum(densityWeightedCurlPack[kYDimension]),
-                simdSum(densityWeightedCurlPack[kZDimension]));
+            Vector3<float> const densityWeightedCurl(simdSum(densityWeightedCurlPack[kXi]),
+                simdSum(densityWeightedCurlPack[kYi]),
+                simdSum(densityWeightedCurlPack[kZi]));
             data.sinkBalsaraFactor[sinkIndex] = balsara::encodeFactor(balsara::balsaraFactor(
                 simdSum(densityWeightedDivergencePack), densityWeightedCurl.norm()));
             flops += 4 * (SimdFloat::size() - 1) + 8;

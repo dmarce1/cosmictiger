@@ -151,17 +151,17 @@ size_t lcAddParticleEntries(EntryLists const& entries) {
                                     continue;
                                 }
                                 auto& pi = particleBuffer[i++];
-                                pi.pos[kXDimension] = pj.x;
-                                pi.pos[kYDimension] = pj.y;
-                                pi.pos[kZDimension] = pj.z;
+                                pi.pos[kXi] = pj.x;
+                                pi.pos[kYi] = pj.y;
+                                pi.pos[kZi] = pj.z;
                                 double const tau1 = std::sqrt(
                                     sqr(pj.x.toDouble(), pj.y.toDouble(), pj.z.toDouble()));
                                 auto const a = lightconeEmissionScale(
                                     *background, background->finalConformalTime(), tau1);
                                 ALWAYS_ASSERT(a > 0.0);
-                                pi.vel[kXDimension] = pj.vx / a;
-                                pi.vel[kYDimension] = pj.vy / a;
-                                pi.vel[kZDimension] = pj.vz / a;
+                                pi.vel[kXi] = pj.vx / a;
+                                pi.vel[kYi] = pj.vy / a;
+                                pi.vel[kZi] = pj.vz / a;
                             }
                             ALWAYS_ASSERT(i == start + counts[k + 1]);
                             k = index++;
@@ -278,12 +278,12 @@ void lcParts2groups(double a, double linkingLength, int ti) {
         if (grp != kLightconeEdgeGroup) {
             LightconeEntry entry;
             auto const& p = particleBuffer[i];
-            entry.x = p.pos[kXDimension];
-            entry.y = p.pos[kYDimension];
-            entry.z = p.pos[kZDimension];
-            entry.vx = p.vel[kXDimension];
-            entry.vy = p.vel[kYDimension];
-            entry.vz = p.vel[kZDimension];
+            entry.x = p.pos[kXi];
+            entry.y = p.pos[kYi];
+            entry.z = p.pos[kZi];
+            entry.vx = p.vel[kXi];
+            entry.vy = p.vel[kYi];
+            entry.vz = p.vel[kZi];
             groupsMap[grp].push_back(entry);
             particleBuffer[i] = particleBuffer.back();
             particleBuffer.pop_back();
@@ -373,8 +373,8 @@ static void lcSendParticles(Vector<LightconeParticle> parts) {
     Timer tm;
     auto& particleMap = *particleMapPtr;
     for (auto const& part : parts) {
-        int const pix = vec2pix(part.pos[kXDimension].toDouble(), part.pos[kYDimension].toDouble(),
-            part.pos[kZDimension].toDouble());
+        int const pix = vec2pix(part.pos[kXi].toDouble(), part.pos[kYi].toDouble(),
+            part.pos[kZi].toDouble());
         auto const mutex = mutexMap.find(pix);
         ALWAYS_ASSERT(mutex != mutexMap.end() && mutex->second);
         std::unique_lock<SpinlockType> lock(*mutex->second);
@@ -419,8 +419,8 @@ void lcBuffer2homes() {
                 std::unordered_map<int, Vector<LightconeParticle>> sends;
                 for (int i = begin; i < end; i++) {
                     auto const& part = particleBuffer[i];
-                    int const pix = vec2pix(part.pos[kXDimension].toDouble(),
-                        part.pos[kYDimension].toDouble(), part.pos[kZDimension].toDouble());
+                    int const pix = vec2pix(part.pos[kXi].toDouble(),
+                        part.pos[kYi].toDouble(), part.pos[kZi].toDouble());
                     int const rank = pix2rank(pix);
                     sends[rank].push_back(part);
                 }
@@ -836,9 +836,9 @@ void lcFormTrees(double tau, double linkingLength) {
                 }
                 lcTreeCreate(pix, box, particleRange);
                 for (int i = 0; i < parts.group.size(); i++) {
-                    double const x = parts.pos[kXDimension][i].toDouble();
-                    double const y = parts.pos[kYDimension][i].toDouble();
-                    double const z = parts.pos[kZDimension][i].toDouble();
+                    double const x = parts.pos[kXi][i].toDouble();
+                    double const y = parts.pos[kYi][i].toDouble();
+                    double const z = parts.pos[kZi][i].toDouble();
                     double const r2 = sqr(x, y, z);
                     double const rValue = sqrt(r2);
                     if (sqr((float) (rValue - (tauMax - tau))) < (float) sqr(linkingLength) &&

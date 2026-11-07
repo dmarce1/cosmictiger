@@ -317,8 +317,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     dx[dim] = fmmPositionDifference(
                         selfPos[dim], otherPos[dim], dim, params.geometry, &geometryFlops);
                 }
-                SimdFloat const r2 = simdFma(dx[kXDimension], dx[kXDimension],
-                    simdFma(dx[kYDimension], dx[kYDimension], dx[kZDimension] * dx[kZDimension]));
+                SimdFloat const r2 = simdFma(dx[kXi], dx[kXi],
+                    simdFma(dx[kYi], dx[kYi], dx[kZi] * dx[kZi]));
                 SimdFloat const pairSmoothingLength =
                     fmmPairSmoothingLength(simdBroadcast<SimdFloat>(smoothingLength),
                         simdBroadcast<SimdFloat>(selfPtr->maxGravitySmoothingLength),
@@ -465,9 +465,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     auto const output = cudaWorkspace->output();
                     ParticleInteger const outputIndex = i + params.outputOffset;
                     output.potential[outputIndex] = params.doPhi ? forces.phi[j] : 0.0f;
-                    output.acceleration[kXDimension][outputIndex] = forces.gx[j];
-                    output.acceleration[kYDimension][outputIndex] = forces.gy[j];
-                    output.acceleration[kZDimension][outputIndex] = forces.gz[j];
+                    output.acceleration[kXi][outputIndex] = forces.gx[j];
+                    output.acceleration[kYi][outputIndex] = forces.gy[j];
+                    output.acceleration[kZi][outputIndex] = forces.gz[j];
                     flops += cosmictiger::gravity::cartesian::tracefree::detail::L2P<kLocalDegree,
                                  true>::kFlops_ +
                         11;
@@ -485,9 +485,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     auto& output = particlesGravityDiagnostics[i];
                     output.acceleration = Vector3<float>(forces.gx[j], forces.gy[j], forces.gz[j]);
                     output.potential = forces.phi[j];
-                    output.longAcceleration[kXDimension] += kScaleFactor2 * l2.accelerationX();
-                    output.longAcceleration[kYDimension] += kScaleFactor2 * l2.accelerationY();
-                    output.longAcceleration[kZDimension] += kScaleFactor2 * l2.accelerationZ();
+                    output.longAcceleration[kXi] += kScaleFactor2 * l2.accelerationX();
+                    output.longAcceleration[kYi] += kScaleFactor2 * l2.accelerationY();
+                    output.longAcceleration[kZi] += kScaleFactor2 * l2.accelerationZ();
                     for (int dim = 0; dim < kDimensions; ++dim) {
                         output.longAcceleration[dim] *= gm;
                         output.nearAcceleration[dim] =
@@ -513,16 +513,16 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 }
                 particlesCaptureGravitySample(i, forces.gx[j], forces.gy[j], forces.gz[j]);
                 if (saveAcceleration) {
-                    particlesGravityAcceleration(kXDimension, i) = forces.gx[j];
-                    particlesGravityAcceleration(kYDimension, i) = forces.gy[j];
-                    particlesGravityAcceleration(kZDimension, i) = forces.gz[j];
+                    particlesGravityAcceleration(kXi, i) = forces.gx[j];
+                    particlesGravityAcceleration(kYi, i) = forces.gy[j];
+                    particlesGravityAcceleration(kZi, i) = forces.gz[j];
                 }
                 if (savePotential && params.doPhi) {
                     particlesPot(i) = forces.phi[j];
                 }
-                auto& vx = particlesVel(kXDimension, i);
-                auto& vy = particlesVel(kYDimension, i);
-                auto& vz = particlesVel(kZDimension, i);
+                auto& vx = particlesVel(kXi, i);
+                auto& vy = particlesVel(kYi, i);
+                auto& vz = particlesVel(kZi, i);
                 auto& rung = particlesRung(i);
                 if (params.globalTimestep) {
                     float const gx = forces.gx[j], gy = forces.gy[j], gz = forces.gz[j];
@@ -540,9 +540,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     bool const gas = false;
 #endif
                     if (!gas || midpointHydro) {
-                        gravityGlobalAcceleration(kXDimension)[i] = gx;
-                        gravityGlobalAcceleration(kYDimension)[i] = gy;
-                        gravityGlobalAcceleration(kZDimension)[i] = gz;
+                        gravityGlobalAcceleration(kXi)[i] = gx;
+                        gravityGlobalAcceleration(kYi)[i] = gy;
+                        gravityGlobalAcceleration(kZi)[i] = gz;
                         double const halfStep = params.sign * 0.5 * params.previousTimestep;
                         vx = std::fma(gx, halfStep, vx);
                         vy = std::fma(gy, halfStep, vy);
@@ -634,9 +634,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                             auto& increment = deferredGasOpening[particlesCatIndex(i)];
                             float const signedHalfStep = sgn * dt;
                             for (int dimension = 0; dimension < kDimensions; ++dimension) {
-                                float const acceleration = dimension == kXDimension ?
+                                float const acceleration = dimension == kXi ?
                                     forces.gx[j] :
-                                    (dimension == kYDimension ? forces.gy[j] : forces.gz[j]);
+                                    (dimension == kYi ? forces.gy[j] : forces.gz[j]);
                                 increment[dimension] =
                                     std::fma(acceleration, signedHalfStep, increment[dimension]);
                             }
@@ -711,17 +711,17 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
 #endif
                         dt = params.sign * 0.5f * rungDt[rung] * params.t0;
                         if (gas && params.deferGasOpening) {
-                            gravityGlobalAcceleration(kXDimension)[i] = forces.gx[j];
-                            gravityGlobalAcceleration(kYDimension)[i] = forces.gy[j];
-                            gravityGlobalAcceleration(kZDimension)[i] = forces.gz[j];
+                            gravityGlobalAcceleration(kXi)[i] = forces.gx[j];
+                            gravityGlobalAcceleration(kYi)[i] = forces.gy[j];
+                            gravityGlobalAcceleration(kZi)[i] = forces.gz[j];
                         } else if (gas && params.deferHydroOpening) {
                             auto& increment = deferredGasOpening[particlesCatIndex(i)];
-                            increment[kXDimension] =
-                                std::fma(forces.gx[j], dt, increment[kXDimension]);
-                            increment[kYDimension] =
-                                std::fma(forces.gy[j], dt, increment[kYDimension]);
-                            increment[kZDimension] =
-                                std::fma(forces.gz[j], dt, increment[kZDimension]);
+                            increment[kXi] =
+                                std::fma(forces.gx[j], dt, increment[kXi]);
+                            increment[kYi] =
+                                std::fma(forces.gy[j], dt, increment[kYi]);
+                            increment[kZi] =
+                                std::fma(forces.gz[j], dt, increment[kZi]);
                         } else {
                             vx = fmaf(forces.gx[j], dt, vx);
                             vy = fmaf(forces.gy[j], dt, vy);

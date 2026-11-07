@@ -30,9 +30,9 @@ CUDA_EXPORT int evaluateEwaldGreen(Green<Real, order>& local, Vector3<Real> cons
     Real radiusSquared = simdBroadcast<Real>(0);
     for (int dim = 0; dim < kDimensions; dim++) {
         radiusSquared = simdFma(unwrappedPosition[dim], unwrappedPosition[dim], radiusSquared);
-        int const nx = dim == kXDimension;
-        int const ny = dim == kYDimension;
-        int const nz = dim == kZDimension;
+        int const nx = dim == kXi;
+        int const ny = dim == kYi;
+        int const nz = dim == kZi;
         local(nx, ny, nz) +=
             coefficient * simdBroadcast<Real>(kScaleFactorInverse2) * unwrappedPosition[dim];
     }

@@ -40,9 +40,9 @@ namespace detail {
             throw std::runtime_error("Unable to open blast.txt for writing");
         }
         for (auto const& sample : diagnosticSamples(kN)) {
-            float const x = sample.position[kXDimension] - 0.5;
-            float const y = sample.position[kYDimension] - 0.5;
-            float const z = sample.position[kZDimension] - 0.5;
+            float const x = sample.position[kXi] - 0.5;
+            float const y = sample.position[kYi] - 0.5;
+            float const z = sample.position[kZi] - 0.5;
             float const rho = sample.density;
             double time = endTime;
             double r = sqrt(sqr(x, y, z));
@@ -98,19 +98,19 @@ ScenarioPlan initializeBlast() {
                 double h = sph_geometry::supportRadius(m, rho0, getOptions().hydro.neighborNumber);
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
-                sphParticlesPosition(kXDimension, i) = x;
+                sphParticlesPosition(kXi, i) = x;
                 if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                    sphParticlesPosition(kYi, i) = kSpatialDimensions >= 2 ? y : 0.5;
                 }
                 if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                    sphParticlesPosition(kZi, i) = kSpatialDimensions >= 3 ? z : 0.5;
                 }
-                sphParticlesVelocity(kXDimension, i) = vx;
+                sphParticlesVelocity(kXi, i) = vx;
                 if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesVelocity(kYDimension, i) = vy;
+                    sphParticlesVelocity(kYi, i) = vy;
                 }
                 if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesVelocity(kZDimension, i) = vz;
+                    sphParticlesVelocity(kZi, i) = vz;
                 }
                 sphParticlesRung(i) = 0;
                 sphParticlesSetInternalEnergy(i, eint);
@@ -130,19 +130,19 @@ ScenarioPlan initializeBlast() {
                 vz = 0.0;
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
-                sphParticlesPosition(kXDimension, i) = x;
+                sphParticlesPosition(kXi, i) = x;
                 if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                    sphParticlesPosition(kYi, i) = kSpatialDimensions >= 2 ? y : 0.5;
                 }
                 if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                    sphParticlesPosition(kZi, i) = kSpatialDimensions >= 3 ? z : 0.5;
                 }
-                sphParticlesVelocity(kXDimension, i) = vx;
+                sphParticlesVelocity(kXi, i) = vx;
                 if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesVelocity(kYDimension, i) = vy;
+                    sphParticlesVelocity(kYi, i) = vy;
                 }
                 if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesVelocity(kZDimension, i) = vz;
+                    sphParticlesVelocity(kZi, i) = vz;
                 }
                 sphParticlesRung(i) = 0;
                 sphParticlesSetInternalEnergy(i, eint);

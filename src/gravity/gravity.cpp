@@ -93,9 +93,9 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                 for (int j = 0; j < numberOfSources; j += kSimdFloatSize) {
                     SimdFloat sourceWeight{};
                     for (int l = 0; l < kSimdFloatSize; l++) {
-                        simdSetLane(yValue[kXDimension], l, srcx[j + l].raw());
-                        simdSetLane(yValue[kYDimension], l, srcy[j + l].raw());
-                        simdSetLane(yValue[kZDimension], l, srcz[j + l].raw());
+                        simdSetLane(yValue[kXi], l, srcx[j + l].raw());
+                        simdSetLane(yValue[kYi], l, srcy[j + l].raw());
+                        simdSetLane(yValue[kZi], l, srcz[j + l].raw());
                         simdSetLane(sourceWeight, l, sourceWeights[j + l]);
                     }
                     Vector3<SimdFloat> dx{};
@@ -103,7 +103,7 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                         dx[dim] = fmmPositionDifference(
                             position[dim], yValue[dim], dim, geometry, &geometryFlops);
                     }
-                    SimdFloat const r2 = sqr(dx[kXDimension], dx[kYDimension], dx[kZDimension]);
+                    SimdFloat const r2 = sqr(dx[kXi], dx[kYi], dx[kZi]);
                     SimdFloat const rinv1Far =
                         simdBroadcast<SimdFloat>(1) / simdSqrt(simdMax(r2, tiny));
                     SimdFloat const rinv3Far = rinv1Far * sqr(rinv1Far);
@@ -125,9 +125,9 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                     }
                     rinv3 *= sourceWeight;
                     rinv1 *= sourceWeight;
-                    gx = simdFma(rinv3, dx[kXDimension], gx);
-                    gy = simdFma(rinv3, dx[kYDimension], gy);
-                    gz = simdFma(rinv3, dx[kZDimension], gz);
+                    gx = simdFma(rinv3, dx[kXi], gx);
+                    gy = simdFma(rinv3, dx[kYi], gy);
+                    gz = simdFma(rinv3, dx[kZi], gz);
                     phi -= rinv1;
                 }
                 int const j = i - range.first;

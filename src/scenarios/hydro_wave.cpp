@@ -47,19 +47,19 @@ ScenarioPlan initializeHydroWave() {
                 }
                 sphParticlesResize(sphParticlesSize() + 1);
                 sphParticlesSmoothingLength(i) = h;
-                sphParticlesPosition(kXDimension, i) = x;
+                sphParticlesPosition(kXi, i) = x;
                 if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesPosition(kYDimension, i) = kSpatialDimensions >= 2 ? y : 0.5;
+                    sphParticlesPosition(kYi, i) = kSpatialDimensions >= 2 ? y : 0.5;
                 }
                 if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesPosition(kZDimension, i) = kSpatialDimensions >= 3 ? z : 0.5;
+                    sphParticlesPosition(kZi, i) = kSpatialDimensions >= 3 ? z : 0.5;
                 }
-                sphParticlesVelocity(kXDimension, i) = 0.f;
+                sphParticlesVelocity(kXi, i) = 0.f;
                 if constexpr (kSpatialDimensions > 1) {
-                    sphParticlesVelocity(kYDimension, i) = 0.f;
+                    sphParticlesVelocity(kYi, i) = 0.f;
                 }
                 if constexpr (kSpatialDimensions > 2) {
-                    sphParticlesVelocity(kZDimension, i) = 0.f;
+                    sphParticlesVelocity(kZi, i) = 0.f;
                 }
                 sphParticlesRung(i) = 0;
                 sphParticlesSetInternalEnergy(i, eint);

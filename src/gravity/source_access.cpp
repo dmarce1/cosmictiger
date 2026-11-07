@@ -22,9 +22,9 @@ void gravityReadSourcePositions(TreeNode const& source, Position* x, Position* y
     auto const range = source.particleRange;
     ALWAYS_ASSERT(range.first >= 0 && range.second <= view.count);
     ParticleInteger const count = range.second - range.first;
-    std::copy_n(view.positions[kXDimension] + range.first, count, x + offset);
-    std::copy_n(view.positions[kYDimension] + range.first, count, y + offset);
-    std::copy_n(view.positions[kZDimension] + range.first, count, z + offset);
+    std::copy_n(view.positions[kXi] + range.first, count, x + offset);
+    std::copy_n(view.positions[kYi] + range.first, count, y + offset);
+    std::copy_n(view.positions[kZi] + range.first, count, z + offset);
     if (masses != nullptr) {
         for (ParticleInteger i = 0; i < count; ++i) {
             masses[offset + i] = fmmSourceMass(view, range.first + i);

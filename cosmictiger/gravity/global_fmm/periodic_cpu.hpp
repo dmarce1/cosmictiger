@@ -175,7 +175,7 @@ FlopCounts globalFmmPeriodicImpl(KickParameters const& params, ExpansionBuffer& 
                         simdCast<SimdFloat>(simdPositionDifference(selfPos[dim], otherPos[dim])) *
                         kPositionToFloat;
                 }
-                SimdFloat r2 = sqr(dx[kXDimension], dx[kYDimension], dx[kZDimension]);
+                SimdFloat r2 = sqr(dx[kXi], dx[kYi], dx[kZi]);
                 r2 = simdMax(r2,
                     sqr(simdMax(simdBroadcast<SimdFloat>(0.5) - (selfRadius + otherRadius),
                         simdBroadcast<SimdFloat>(0))));

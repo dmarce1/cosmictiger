@@ -24,18 +24,18 @@ void appendDriftLightconeEntries(Vector3<double> const& before, Vector3<double> 
     double const inverseScale = 1.0 / parameters.scale;
     double const inverseTauMax = 1.0 / parameters.tauMax;
     // CUDA uses float physical velocities for the crossing interpolation.
-    float const vx = velocity[kXDimension] * inverseScale;
-    float const vy = velocity[kYDimension] * inverseScale;
-    float const vz = velocity[kZDimension] * inverseScale;
+    float const vx = velocity[kXi] * inverseScale;
+    float const vy = velocity[kYi] * inverseScale;
+    float const vz = velocity[kZi] * inverseScale;
     for (int imageX = -1; imageX <= 0; ++imageX) {
-        double const x0 = before[kXDimension] + imageX;
-        double const x1 = after[kXDimension] + imageX;
+        double const x0 = before[kXi] + imageX;
+        double const x1 = after[kXi] + imageX;
         for (int imageY = -1; imageY <= 0; ++imageY) {
-            double const y0 = before[kYDimension] + imageY;
-            double const y1 = after[kYDimension] + imageY;
+            double const y0 = before[kYi] + imageY;
+            double const y1 = after[kYi] + imageY;
             for (int imageZ = -1; imageZ <= 0; ++imageZ) {
-                double const z0 = before[kZDimension] + imageZ;
-                double const z1 = after[kZDimension] + imageZ;
+                double const z0 = before[kZi] + imageZ;
+                double const z1 = after[kZi] + imageZ;
                 double const radius0 = std::sqrt(x0 * x0 + y0 * y0 + z0 * z0);
                 double const radius1 = std::sqrt(x1 * x1 + y1 * y1 + z1 * z1);
                 int const shell0 = (parameters.tau0 + radius0) * inverseTauMax;
@@ -52,19 +52,19 @@ void appendDriftLightconeEntries(Vector3<double> const& before, Vector3<double> 
                     -(linear + std::sqrt(linear * linear - 4.0 * quadratic * constant)) /
                     (2.0 * quadratic);
                 Vector3<double> crossing = {x0 + vx * time, y0 + vy * time, z0 + vz * time};
-                double const radiusSquared = crossing[kXDimension] * crossing[kXDimension] +
-                    crossing[kYDimension] * crossing[kYDimension] +
-                    crossing[kZDimension] * crossing[kZDimension];
+                double const radiusSquared = crossing[kXi] * crossing[kXi] +
+                    crossing[kYi] * crossing[kYi] +
+                    crossing[kZi] * crossing[kZi];
                 if (radiusSquared <= 1.0) {
                     long pixel;
                     vec2pix_nest(parameters.mapSize, crossing.data(), &pixel);
                     LightconeEntry entry;
-                    entry.x = crossing[kXDimension];
-                    entry.y = crossing[kYDimension];
-                    entry.z = crossing[kZDimension];
-                    entry.vx = outputVelocity[kXDimension];
-                    entry.vy = outputVelocity[kYDimension];
-                    entry.vz = outputVelocity[kZDimension];
+                    entry.x = crossing[kXi];
+                    entry.y = crossing[kYi];
+                    entry.z = crossing[kZi];
+                    entry.vx = outputVelocity[kXi];
+                    entry.vy = outputVelocity[kYi];
+                    entry.vz = outputVelocity[kZi];
                     entry.pix = pixel;
                     entry.type = type;
                     entries.push_back(entry);

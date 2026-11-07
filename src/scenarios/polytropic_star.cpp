@@ -135,9 +135,9 @@ namespace detail {
         double norm = 0.0;
         for (auto const& sample : diagnosticSamples(nsample)) {
             float const d0 = sample.density;
-            float const x = sample.position[kXDimension];
-            float const y = sample.position[kYDimension];
-            float const z = sample.position[kZDimension];
+            float const x = sample.position[kXi];
+            float const y = sample.position[kYi];
+            float const z = sample.position[kZi];
             float const r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
             float d1 = 0.0;
             if (r < kMaximumRadius) {
@@ -225,20 +225,20 @@ ScenarioPlan initializePolytropicStar() {
         double const d = rho(radius[i] * r0);
         double h = pow(
             m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * d), 1.0 / 3.0);
-        int const nValue = xValue[i][kXDimension].size();
+        int const nValue = xValue[i][kXi].size();
         for (int l = 0; l < nValue; l++) {
             ParticleInteger const k = sphParticlesSize();
             sphParticlesResize(k + 1);
-            sphParticlesPosition(kXDimension, k) = xValue[i][kXDimension][l] * radius[i] + 0.5;
-            sphParticlesPosition(kYDimension, k) = xValue[i][kYDimension][l] * radius[i] + 0.5;
-            sphParticlesPosition(kZDimension, k) = xValue[i][kZDimension][l] * radius[i] + 0.5;
+            sphParticlesPosition(kXi, k) = xValue[i][kXi][l] * radius[i] + 0.5;
+            sphParticlesPosition(kYi, k) = xValue[i][kYi][l] * radius[i] + 0.5;
+            sphParticlesPosition(kZi, k) = xValue[i][kZi][l] * radius[i] + 0.5;
             sphParticlesSmoothingLength(k) = h;
             double const pValue = kValue * pow(d, 1.0 + 1.0 / npoly);
             double const eint = pValue / ((opts.hydro.gamma - 1.0) * d);
             sphParticlesSetInternalEnergy(k, eint);
-            sphParticlesVelocity(kXDimension, k) = 0;
-            sphParticlesVelocity(kYDimension, k) = 0;
-            sphParticlesVelocity(kZDimension, k) = 0;
+            sphParticlesVelocity(kXi, k) = 0;
+            sphParticlesVelocity(kYi, k) = 0;
+            sphParticlesVelocity(kZi, k) = 0;
             sphParticlesRung(k) = 0;
         }
     }

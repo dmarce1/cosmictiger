@@ -33,9 +33,9 @@ inline constexpr int kSphTreeNodeAllocationSize = 4;
 inline constexpr int kSpatialDimensions = COSMICTIGER_DIMENSION_COUNT;
 static_assert(kSpatialDimensions >= 1 && kSpatialDimensions <= 3);
 inline constexpr int kDimensions = 3;
-inline constexpr int kXDimension = 0;
-inline constexpr int kYDimension = 1;
-inline constexpr int kZDimension = 2;
+inline constexpr int kXi = 0;
+inline constexpr int kYi = 1;
+inline constexpr int kZi = 2;
 
 inline constexpr int kChildCount = 2;
 inline constexpr int kLeftChild = 0;

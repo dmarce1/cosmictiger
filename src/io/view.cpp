@@ -951,12 +951,12 @@ ViewSnapshot collectViewParticles(
 #endif
     for (ParticleInteger i = 0; i < particlesSize(); ++i) {
         DarkMatterParticleInfo info{};
-        info.x = particlesPositionValue(kXDimension, i);
-        info.y = particlesPositionValue(kYDimension, i);
-        info.z = particlesPositionValue(kZDimension, i);
-        info.vx = particlesVelocityValue(kXDimension, i);
-        info.vy = particlesVelocityValue(kYDimension, i);
-        info.vz = particlesVelocityValue(kZDimension, i);
+        info.x = particlesPositionValue(kXi, i);
+        info.y = particlesPositionValue(kYi, i);
+        info.z = particlesPositionValue(kZi, i);
+        info.vx = particlesVelocityValue(kXi, i);
+        info.vy = particlesVelocityValue(kYi, i);
+        info.vz = particlesVelocityValue(kZi, i);
         info.rung = particlesRung(i);
         if (getOptions().starFormation.enabled) {
             info.id = particlesStarFormationStates[i].id;
@@ -1575,12 +1575,12 @@ void viewConfigure() {
             directoryError.message().c_str());
     }
     Range<double> viewBox;
-    viewBox.begin[kXDimension] = opts.output.xMin;
-    viewBox.end[kXDimension] = opts.output.xMax;
-    viewBox.begin[kYDimension] = opts.output.yMin;
-    viewBox.end[kYDimension] = opts.output.yMax;
-    viewBox.begin[kZDimension] = opts.output.zMin;
-    viewBox.end[kZDimension] = opts.output.zMax;
+    viewBox.begin[kXi] = opts.output.xMin;
+    viewBox.end[kXi] = opts.output.xMax;
+    viewBox.begin[kYi] = opts.output.yMin;
+    viewBox.end[kYi] = opts.output.yMax;
+    viewBox.begin[kZi] = opts.output.zMin;
+    viewBox.end[kZi] = opts.output.zMax;
     viewBoxes.push_back(viewBox);
     if (terminal::verbose() || !opts.run.test.empty()) {
         std::cout << std::format("Silo particle output: x [{:g}, {:g}], y [{:g}, {:g}], z [{:g}, "
@@ -1621,14 +1621,14 @@ Vector<float> outputView(int number, double time) {
                             for (int zi = -1; zi <= 0; zi++) {
                                 Vector3<double> vec;
                                 long int ipix;
-                                vec[kXDimension] =
-                                    particlesPositionValue(kXDimension, i).toFloat() + xi;
-                                vec[kYDimension] =
-                                    particlesPositionValue(kYDimension, i).toFloat() + yi;
-                                vec[kZDimension] =
-                                    particlesPositionValue(kZDimension, i).toFloat() + zi;
+                                vec[kXi] =
+                                    particlesPositionValue(kXi, i).toFloat() + xi;
+                                vec[kYi] =
+                                    particlesPositionValue(kYi, i).toFloat() + yi;
+                                vec[kZi] =
+                                    particlesPositionValue(kZi, i).toFloat() + zi;
                                 float const r2 =
-                                    sqr(vec[kXDimension], vec[kYDimension], vec[kZDimension]);
+                                    sqr(vec[kXi], vec[kYi], vec[kZi]);
                                 if (r2 < 1.0 && r2 > 0.0) {
                                     vec2pix_ring(nside, vec.data(), &ipix);
                                     atomicAdd(values[ipix], particlesMass(i) / r2);

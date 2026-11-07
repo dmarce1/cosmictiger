@@ -79,13 +79,13 @@ ScenarioPlan initializeRayleighTaylor() {
                     // Mirror in fixed-point coordinates so paired positions sum to one
                     // exactly. Scalars are even and the normal velocity is odd.
                     for (int side = 0; side < 2; side++) {
-                        sphParticlesPosition(kXDimension, index) = x;
-                        sphParticlesPosition(kYDimension, index) = y;
-                        sphParticlesPosition(kZDimension, index) =
+                        sphParticlesPosition(kXi, index) = x;
+                        sphParticlesPosition(kYi, index) = y;
+                        sphParticlesPosition(kZi, index) =
                             side == 0 ? z : Position(0.0) - z;
-                        sphParticlesVelocity(kXDimension, index) = 0.0f;
-                        sphParticlesVelocity(kYDimension, index) = 0.0f;
-                        sphParticlesVelocity(kZDimension, index) = side == 0 ? velocity : -velocity;
+                        sphParticlesVelocity(kXi, index) = 0.0f;
+                        sphParticlesVelocity(kYi, index) = 0.0f;
+                        sphParticlesVelocity(kZi, index) = side == 0 ? velocity : -velocity;
                         sphParticlesSmoothingLength(index) = smoothingLength;
                         sphParticlesSetInternalEnergy(index, internalEnergy);
                         sphParticlesRung(index) = 0;

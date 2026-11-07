@@ -52,19 +52,19 @@ __global__ void cudaLightconeKernel(LightconeParticleMapType* particleMapPtr,
                         pi++) {
                         auto const bValue = otherParticles.group[pi];
                         Vector3<double> b;
-                        b[kXDimension] = otherParticles.pos[kXDimension][pi].toDouble();
-                        b[kYDimension] = otherParticles.pos[kYDimension][pi].toDouble();
-                        b[kZDimension] = otherParticles.pos[kZDimension][pi].toDouble();
+                        b[kXi] = otherParticles.pos[kXi][pi].toDouble();
+                        b[kYi] = otherParticles.pos[kYi][pi].toDouble();
+                        b[kZi] = otherParticles.pos[kZi][pi].toDouble();
                         if (mybox.contains(b)) {
                             for (int pj = self.particleRange.first + tid;
                                 pj < self.particleRange.second; pj += kLightconeBlockSize) {
                                 auto& a = selfParticles.group[pj];
-                                float const dx = distance(selfParticles.pos[kXDimension][pj],
-                                    otherParticles.pos[kXDimension][pi]);
-                                float const dy = distance(selfParticles.pos[kYDimension][pj],
-                                    otherParticles.pos[kYDimension][pi]);
-                                float const dz = distance(selfParticles.pos[kZDimension][pj],
-                                    otherParticles.pos[kZDimension][pi]);
+                                float const dx = distance(selfParticles.pos[kXi][pj],
+                                    otherParticles.pos[kXi][pi]);
+                                float const dy = distance(selfParticles.pos[kYi][pj],
+                                    otherParticles.pos[kYi][pi]);
+                                float const dz = distance(selfParticles.pos[kZi][pj],
+                                    otherParticles.pos[kZi][pi]);
                                 float const r2 = sqr(dx, dy, dz);
                                 if (r2 < linkingLengthSquared) {
                                     if (a == kLightconeNoGroup) {
@@ -104,12 +104,12 @@ __global__ void cudaLightconeKernel(LightconeParticleMapType* particleMapPtr,
                         LightconeGroup thisMinGroup = kLightconeNoGroup;
                         if (pi != pj && pi < self.particleRange.second) {
                             auto const bValue = selfParticles.group[pi];
-                            float const dx = distance(selfParticles.pos[kXDimension][pi],
-                                selfParticles.pos[kXDimension][pj]);
-                            float const dy = distance(selfParticles.pos[kYDimension][pi],
-                                selfParticles.pos[kYDimension][pj]);
-                            float const dz = distance(selfParticles.pos[kZDimension][pi],
-                                selfParticles.pos[kZDimension][pj]);
+                            float const dx = distance(selfParticles.pos[kXi][pi],
+                                selfParticles.pos[kXi][pj]);
+                            float const dy = distance(selfParticles.pos[kYi][pi],
+                                selfParticles.pos[kYi][pj]);
+                            float const dz = distance(selfParticles.pos[kZi][pi],
+                                selfParticles.pos[kZi][pj]);
                             float const r2 = sqr(dx, dy, dz);
                             if (r2 < linkingLengthSquared) {
                                 thisMinGroup = bValue;

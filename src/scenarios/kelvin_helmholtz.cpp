@@ -100,8 +100,8 @@ ScenarioPlan initializeKelvinHelmholtz() {
     // modes below both fluids' limits, excluding DC and the Nyquist endpoint.
     // n -> halfBoxCells; p -> planesPerCell; K -> maximumPerturbationMode.
     int const maximumPerturbationMode = halfBoxCells *
-            std::min(packing.low.planesPerCell(kSpatialDimensions, kYDimension),
-                packing.high.planesPerCell(kSpatialDimensions, kYDimension)) -
+            std::min(packing.low.planesPerCell(kSpatialDimensions, kYi),
+                packing.high.planesPerCell(kSpatialDimensions, kYi)) -
         1;
     struct ModeAmplitudes {
         double sine;
@@ -165,9 +165,9 @@ ScenarioPlan initializeKelvinHelmholtz() {
                     sphParticlesVelocity(axis, particle) = 0.0;
                 }
                 size_t const plane =
-                    size_t(std::llround(position[kYDimension] * transverseVelocities.size()));
-                sphParticlesVelocity(kXDimension, particle) = transverseVelocities.at(plane);
-                sphParticlesVelocity(kYDimension, particle) = streamwiseVelocity;
+                    size_t(std::llround(position[kYi] * transverseVelocities.size()));
+                sphParticlesVelocity(kXi, particle) = transverseVelocities.at(plane);
+                sphParticlesVelocity(kYi, particle) = streamwiseVelocity;
                 sphParticlesSmoothingLength(particle) = supportRadius;
                 sphParticlesRung(particle) = 0;
                 ++particle;

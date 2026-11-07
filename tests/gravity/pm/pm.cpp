@@ -80,8 +80,8 @@ void initializePmFixture(int fixture, int side) {
         for (int dim = 0; dim < kDimensions; ++dim) {
             double coordinate;
             if (fixture == 2) {
-                int const divisor = dim == kXDimension ? side * side :
-                    dim == kYDimension                 ? side :
+                int const divisor = dim == kXi ? side * side :
+                    dim == kYi                 ? side :
                                                          1;
                 coordinate = double((i / divisor) % side) / side;
             } else {
@@ -96,8 +96,8 @@ void initializePmFixture(int fixture, int side) {
             particlesPos(dim, local) = coordinate;
             if (fixture == 4) {
                 unsigned __int128 const period = static_cast<unsigned __int128>(1) << kPositionBits;
-                if ((i == 0 && dim == kXDimension) || (i == 2 && dim == kYDimension) ||
-                    (i == 3 && dim == kZDimension)) {
+                if ((i == 0 && dim == kXi) || (i == 2 && dim == kYi) ||
+                    (i == 3 && dim == kZi)) {
                     int const numerator = i == 2 ? 2 : 1;
                     auto const firstAtBoundary = (period * numerator + 2) / 3;
                     particlesPos(dim, local)
@@ -107,7 +107,7 @@ void initializePmFixture(int fixture, int side) {
                         .setInteger(std::numeric_limits<PositionInteger>::max() - (i == 4 ? 1 : 0));
                 }
             }
-            particlesVel(dim, local) = dim == kXDimension ? float(i + 1) : 0.0f;
+            particlesVel(dim, local) = dim == kXi ? float(i + 1) : 0.0f;
         }
         particlesRung(local) = 2;
 #if COSMICTIGER_WITH_SPH
@@ -136,7 +136,7 @@ Vector<PmSample> readPmFixture() {
         sample.acceleration = pmAcceleration(i);
         sample.potential = pmPotential(i);
         sample.mass = particlesMass(i);
-        sample.id = int(particlesVel(kXDimension, i)) - 1;
+        sample.id = int(particlesVel(kXi, i)) - 1;
     }
     return samples;
 }

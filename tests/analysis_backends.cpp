@@ -88,11 +88,11 @@ int analysisPixelOwner(int pixel, int pixels) {
 LightconeParticle analysisLightconeParticle(
     int identity, double radius, double angle, double height = 0.0) {
     LightconeParticle particle{};
-    particle.pos[kXDimension] = radius * std::cos(angle);
-    particle.pos[kYDimension] = radius * std::sin(angle);
-    particle.pos[kZDimension] = height;
+    particle.pos[kXi] = radius * std::cos(angle);
+    particle.pos[kYi] = radius * std::sin(angle);
+    particle.pos[kZi] = height;
     // Velocities carry exact identities through tree permutation and routing.
-    particle.vel[kXDimension] = identity;
+    particle.vel[kXi] = identity;
     particle.group = kLightconeNoGroup;
     return particle;
 }
@@ -159,10 +159,10 @@ void analysisPowerSetup(bool perturb) {
             int const local = species * (global - begin) + kind;
             double const offset = kind == 0 ? 0.0 : 0.5 / side;
             double const x = (global / (side * side) + 0.5) / side + offset;
-            particlesPos(kXDimension, local) =
+            particlesPos(kXi, local) =
                 x + (perturb ? 0.03 * std::sin(2.0 * std::numbers::pi * x) : 0.0);
-            particlesPos(kYDimension, local) = ((global / side) % side + 0.5) / side + offset;
-            particlesPos(kZDimension, local) = (global % side + 0.5) / side + offset;
+            particlesPos(kYi, local) = ((global / side) % side + 0.5) / side + offset;
+            particlesPos(kZi, local) = (global % side + 0.5) / side + offset;
             for (int dim = 0; dim < kDimensions; ++dim) {
                 particlesVel(dim, local) = 0.0f;
             }
@@ -232,7 +232,7 @@ Vector<LightconeParticle> analysisGatherLightcone() {
         particles.insert(particles.end(), local.begin(), local.end());
     }
     std::sort(particles.begin(), particles.end(), [](auto const& left, auto const& right) {
-        return left.vel[kXDimension] < right.vel[kXDimension];
+        return left.vel[kXi] < right.vel[kXi];
     });
     return particles;
 }
@@ -273,7 +273,7 @@ void analysisCheckComponent(Vector<LightconeParticle> const& particles, int begi
     requireAnalysis(group != kLightconeNoGroup && (group == kLightconeEdgeGroup) == edge,
         "Lightcone component has an incorrect group classification");
     for (int i = begin; i < end; ++i) {
-        requireAnalysis(particles[i].vel[kXDimension] == firstIdentity + i - begin,
+        requireAnalysis(particles[i].vel[kXi] == firstIdentity + i - begin,
             "Lightcone grouping lost, duplicated or reordered particle identities");
         requireAnalysis(particles[i].group == group,
             "Lightcone linked component did not converge to a common group");

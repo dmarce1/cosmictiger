@@ -367,8 +367,8 @@ KickReturn globalFmmStageGpu(KickParameters params, Vector<KickWorkitem> workite
         particlesMemadviseGpu();
         gpuPhase.stop();
         auto const kr =
-            cudaExecuteKicks(params, &particlesPos(kXDimension, 0), &particlesPos(kYDimension, 0),
-                &particlesPos(kZDimension, 0), treeNodes, std::move(workitems), {});
+            cudaExecuteKicks(params, &particlesPos(kXi, 0), &particlesPos(kYi, 0),
+                &particlesPos(kZi, 0), treeNodes, std::move(workitems), {});
         profile::ScopedWork cleanupPhase(profile::WorkPhase::KickGpuCleanup, profileEnabled);
         tree2Cpu();
         particlesResize(originalParticleCount);

@@ -435,12 +435,12 @@ inline void particlesCaptureGravitySample(ParticleInteger index, float gx, float
     if (particlesGravitySampleAccelerations != nullptr) {
         ParticleInteger const slot = particlesGravitySample(index);
         if (slot >= 0) {
-            particlesGravitySampleAccelerations[slot][kXDimension] = gx;
+            particlesGravitySampleAccelerations[slot][kXi] = gx;
             if constexpr (kSpatialDimensions > 1) {
-                particlesGravitySampleAccelerations[slot][kYDimension] = gy;
+                particlesGravitySampleAccelerations[slot][kYi] = gy;
             }
             if constexpr (kSpatialDimensions > 2) {
-                particlesGravitySampleAccelerations[slot][kZDimension] = gz;
+                particlesGravitySampleAccelerations[slot][kZi] = gz;
             }
         }
     }

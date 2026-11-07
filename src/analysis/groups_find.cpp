@@ -160,9 +160,9 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
                         yValue2.data(), zValue2.data(), groupNumbers.data(), totalSize);
                     for (int i = totalSize; i < totalSize + otherSize; i++) {
                         Vector3<double> position;
-                        position[kXDimension] = xValue2[i].toDouble();
-                        position[kYDimension] = yValue2[i].toDouble();
-                        position[kZDimension] = zValue2[i].toDouble();
+                        position[kXi] = xValue2[i].toDouble();
+                        position[kYi] = yValue2[i].toDouble();
+                        position[kZi] = zValue2[i].toDouble();
                         if (!selfBox.periodicContains(position)) {
                             int const j = totalSize + otherSize - 1;
                             xValue2[i] = xValue2[j];
@@ -178,11 +178,11 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
             }
             for (ParticleInteger k = myRng.first; k < myRng.second; k++) {
                 SimdPosition sinkX =
-                    simdBroadcast<SimdPosition>(particlesPos(kXDimension, k).raw());
+                    simdBroadcast<SimdPosition>(particlesPos(kXi, k).raw());
                 SimdPosition sinkY =
-                    simdBroadcast<SimdPosition>(particlesPos(kYDimension, k).raw());
+                    simdBroadcast<SimdPosition>(particlesPos(kYi, k).raw());
                 SimdPosition sinkZ =
-                    simdBroadcast<SimdPosition>(particlesPos(kZDimension, k).raw());
+                    simdBroadcast<SimdPosition>(particlesPos(kZi, k).raw());
                 for (int j = 0; j < totalSize; j += kSimdFloatSize) {
                     static SimdFloat const toFloatFactor =
                         simdBroadcast<SimdFloat>(kPositionToFloat);
@@ -226,11 +226,11 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
                 foundLink = false;
                 for (ParticleInteger j = myRng.first; j < myRng.second; j++) {
                     SimdPosition sinkX =
-                        simdBroadcast<SimdPosition>(particlesPos(kXDimension, j).raw());
+                        simdBroadcast<SimdPosition>(particlesPos(kXi, j).raw());
                     SimdPosition sinkY =
-                        simdBroadcast<SimdPosition>(particlesPos(kYDimension, j).raw());
+                        simdBroadcast<SimdPosition>(particlesPos(kYi, j).raw());
                     SimdPosition sinkZ =
-                        simdBroadcast<SimdPosition>(particlesPos(kZDimension, j).raw());
+                        simdBroadcast<SimdPosition>(particlesPos(kZi, j).raw());
                     for (ParticleInteger k = j + 1; k < myRng.second; k += kSimdFloatSize) {
                         static SimdFloat const toFloatFactor =
                             simdBroadcast<SimdFloat>(kPositionToFloat);
@@ -240,9 +240,9 @@ hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double lin
                         SimdPosition sourceZ = sinkZ;
                         for (int l = k; l < lmax; l++) {
                             int const l0 = l - k;
-                            simdSetLane(sourceX, l0, particlesPos(kXDimension, l).raw());
-                            simdSetLane(sourceY, l0, particlesPos(kYDimension, l).raw());
-                            simdSetLane(sourceZ, l0, particlesPos(kZDimension, l).raw());
+                            simdSetLane(sourceX, l0, particlesPos(kXi, l).raw());
+                            simdSetLane(sourceY, l0, particlesPos(kYi, l).raw());
+                            simdSetLane(sourceZ, l0, particlesPos(kZi, l).raw());
                         }
                         SimdFloat const x =
                             simdCast<SimdFloat>(simdPositionDifference(sourceX, sinkX)) *

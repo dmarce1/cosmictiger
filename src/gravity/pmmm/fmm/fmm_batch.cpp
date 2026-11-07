@@ -101,8 +101,8 @@ KickReturn localBatchGpu(KickParameters params, Vector<KickWorkitem> workitems,
         return treeGetNode(left.self)->particleRange.first <
             treeGetNode(right.self)->particleRange.first;
     });
-    return cudaExecuteKicks(params, &particlesPos(kXDimension, 0), &particlesPos(kYDimension, 0),
-        &particlesPos(kZDimension, 0), treeData(), std::move(workitems), output);
+    return cudaExecuteKicks(params, &particlesPos(kXi, 0), &particlesPos(kYi, 0),
+        &particlesPos(kZi, 0), treeData(), std::move(workitems), output);
 #else
     THROW_ERROR("GPU gravity requested in a build without CUDA\n");
     return {};

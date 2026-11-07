@@ -184,9 +184,9 @@ inline __device__ bool solveSphSmoothingLength(float& smoothingLength, float min
         for (int neighborIndex = threadIndex; neighborIndex < neighbors.size();
             neighborIndex += runtimeBlockSize) {
             auto const& neighbor = neighbors[neighborIndex];
-            Vector3<float> const separation(distance(position[kXDimension], neighbor.positionX),
-                distance(position[kYDimension], neighbor.positionY),
-                distance(position[kZDimension], neighbor.positionZ));
+            Vector3<float> const separation(distance(position[kXi], neighbor.positionX),
+                distance(position[kYi], neighbor.positionY),
+                distance(position[kZi], neighbor.positionZ));
             float const normalizedRadius =
                 sqrtf(sph_geometry::spatialDot(separation, separation)) * inverseSmoothingLength;
             flops += 10;    // Three fixed distances, dot, root, normalized radius.

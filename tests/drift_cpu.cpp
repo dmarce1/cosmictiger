@@ -70,9 +70,9 @@ struct Fixture {
                     raw |= uint32_t(i * 3266489917ULL + (dim + 1) * 668265263ULL);
                 }
                 if (i % 7 == 0) {
-                    raw = dim == kXDimension ?
+                    raw = dim == kXi ?
                         0 :
-                        (dim == kYDimension ? std::numeric_limits<PositionInteger>::max() : 1);
+                        (dim == kYi ? std::numeric_limits<PositionInteger>::max() : 1);
                 }
                 positions[dim][i].setInteger(raw);
                 velocities[i][dim] = float(int((i * 11 + dim * 19) % 97) - 48) * 0.375f;
@@ -82,8 +82,8 @@ struct Fixture {
 
     void run(size_t offset, size_t count, DriftParameters const& parameters,
         std::vector<LightconeEntry>* entries = nullptr, char const* types = nullptr) {
-        cpuDriftKernel(positions[kXDimension].data() + offset,
-            positions[kYDimension].data() + offset, positions[kZDimension].data() + offset,
+        cpuDriftKernel(positions[kXi].data() + offset,
+            positions[kYi].data() + offset, positions[kZi].data() + offset,
             velocities.data() + offset, rungs.data() + offset,
             types != nullptr ? types + offset : nullptr, count, parameters, entries);
     }
@@ -200,11 +200,11 @@ void testFixed64Ticks() {
         Fixture fixture(kCount);
         for (size_t i = 0; i < kCount; ++i) {
             fixture.rungs[i] = i % 2;
-            fixture.positions[kXDimension][i].setInteger(PositionInteger((uint64_t{1} << 63) | 13));
-            fixture.positions[kYDimension][i].setInteger(2);
-            fixture.positions[kZDimension][i].setInteger(PositionInteger(UINT64_MAX - 2));
+            fixture.positions[kXi][i].setInteger(PositionInteger((uint64_t{1} << 63) | 13));
+            fixture.positions[kYi][i].setInteger(2);
+            fixture.positions[kZi][i].setInteger(PositionInteger(UINT64_MAX - 2));
             for (int dim = 0; dim < kDimensions; ++dim) {
-                fixture.velocities[i][dim] = dim == kYDimension ? -0x1p-60f : 0x1p-60f;
+                fixture.velocities[i][dim] = dim == kYi ? -0x1p-60f : 0x1p-60f;
             }
         }
         Fixture const original = fixture;
@@ -221,7 +221,7 @@ void testFixed64Ticks() {
         for (size_t i = 0; i < kCount; ++i) {
             uint64_t const increment = fixture.rungs[i] == 0 ? 32 : 0;
             for (int dim = 0; dim < kDimensions; ++dim) {
-                uint64_t const expected = dim == kYDimension ?
+                uint64_t const expected = dim == kYi ?
                     original.positions[dim][i].raw() - increment :
                     original.positions[dim][i].raw() + increment;
                 require(fixture.positions[dim][i].raw() == expected,
@@ -313,7 +313,7 @@ void testLightconeGates() {
     require(entries.empty(), "inactive rung does not emit lightcone crossings");
     parameters.rung = -1;
     fixture.run(0, 1, parameters);
-    require(fixture.positions[kXDimension][0].toDouble() == 0.5,
+    require(fixture.positions[kXi][0].toDouble() == 0.5,
         "lightcone supports an omitted output buffer");
 }
 
@@ -388,7 +388,7 @@ void testMovingLightcone() {
                 "lightcone stores the post-drag physical velocity");
         }
         require(entry.pix == 0, "radial motion preserves HEALPix direction");
-        requireClose(fixture.positions[kXDimension][0].toDouble(),
+        requireClose(fixture.positions[kXi][0].toDouble(),
             0.25 + 0.125 * parameters.timestep / parameters.scale,
             std::max(double(2.0L / kPositionPeriod), std::numeric_limits<double>::epsilon()),
             "particle displacement uses the velocity before drag");

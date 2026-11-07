@@ -67,22 +67,22 @@ void initializePlummerParticles() {
         double vx = velocity * nx;
         double vy = velocity * ny;
         double vz = velocity * nz;
-        particlesPos(kXDimension, i) = x;
-        particlesPos(kYDimension, i) = y;
-        particlesPos(kZDimension, i) = z;
-        particlesVel(kXDimension, i) = vx;
-        particlesVel(kYDimension, i) = vy;
-        particlesVel(kZDimension, i) = vz;
+        particlesPos(kXi, i) = x;
+        particlesPos(kYi, i) = y;
+        particlesPos(kZi, i) = z;
+        particlesVel(kXi, i) = vx;
+        particlesVel(kYi, i) = vy;
+        particlesVel(kZi, i) = vz;
         particlesRung(i) = 0;
         if (i + 1 == numberOfParticles) {
             break;
         }
-        particlesPos(kXDimension, i + 1) = 2.0 * x0 - x;
-        particlesPos(kYDimension, i + 1) = 2.0 * y0 - y;
-        particlesPos(kZDimension, i + 1) = 2.0 * z0 - z;
-        particlesVel(kXDimension, i + 1) = -vx;
-        particlesVel(kYDimension, i + 1) = -vy;
-        particlesVel(kZDimension, i + 1) = -vz;
+        particlesPos(kXi, i + 1) = 2.0 * x0 - x;
+        particlesPos(kYi, i + 1) = 2.0 * y0 - y;
+        particlesPos(kZi, i + 1) = 2.0 * z0 - z;
+        particlesVel(kXi, i + 1) = -vx;
+        particlesVel(kYi, i + 1) = -vy;
+        particlesVel(kZi, i + 1) = -vz;
         particlesRung(i + 1) = 0;
         particlesRung(i) = 0;
     }

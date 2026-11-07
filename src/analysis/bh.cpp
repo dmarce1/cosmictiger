@@ -138,9 +138,9 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
                         nextlist.resize(0);
                         for (int ci = 0; ci < checklist.size(); ci++) {
                             auto const& node = nodes[checklist[ci]];
-                            float const dx = mypos[kXDimension] - node.pos[kXDimension];
-                            float const dy = mypos[kYDimension] - node.pos[kYDimension];
-                            float const dz = mypos[kZDimension] - node.pos[kZDimension];
+                            float const dx = mypos[kXi] - node.pos[kXi];
+                            float const dy = mypos[kYi] - node.pos[kYi];
+                            float const dz = mypos[kZi] - node.pos[kZi];
                             float const r2 = sqr(dx, dy, dz);
                             if (detail::bhAcceptMonopole(r2, node, myradius, h, relativeError)) {
                                 BhSource source;
@@ -190,7 +190,7 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
                                 dx[dim] = xValue[dim] - yValue[dim];    // 3
                             }
                             SimdFloat const separationSquared =
-                                sqr(dx[kXDimension], dx[kYDimension], dx[kZDimension]);
+                                sqr(dx[kXi], dx[kYi], dx[kZi]);
                             SimdFloat const r2 = simdMax(separationSquared, tiny);
                             auto const farFlag = separationSquared > h2;
                             SimdFloat rinv1{};
@@ -234,9 +234,9 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Vector3<float> p
         nextlist.resize(0);
         for (int ci = 0; ci < checklist.size(); ci++) {
             auto const& node = nodes[checklist[ci]];
-            float const dx = pt[kXDimension] - node.pos[kXDimension];
-            float const dy = pt[kYDimension] - node.pos[kYDimension];
-            float const dz = pt[kZDimension] - node.pos[kZDimension];
+            float const dx = pt[kXi] - node.pos[kXi];
+            float const dy = pt[kYi] - node.pos[kYi];
+            float const dz = pt[kZi] - node.pos[kZi];
             float const r2 = sqr(dx, dy, dz);
             if (detail::bhAcceptMonopole(r2, node, 0.0f, h, relativeError)) {
                 BhSource source;
@@ -284,7 +284,7 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Vector3<float> p
         for (int dim = 0; dim < kDimensions; dim++) {
             dx[dim] = xValue[dim] - yValue[dim];    // 3
         }
-        SimdFloat const separationSquared = sqr(dx[kXDimension], dx[kYDimension], dx[kZDimension]);
+        SimdFloat const separationSquared = sqr(dx[kXi], dx[kYi], dx[kZi]);
         SimdFloat const r2 = simdMax(separationSquared, tiny);
         auto const farFlag = separationSquared > h2;
         SimdFloat rinv1{};

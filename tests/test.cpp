@@ -141,7 +141,7 @@ static void fft2Test() {
     fft3dInit(n);
     fft3dAccumulateReal(box, aValue);
     fft3dExecute();
-    box.end[kZDimension] = n / 2 + 1;
+    box.end[kZi] = n / 2 + 1;
     auto b = fft3dReadComplex(box);
     fft3dDestroy();
     auto const checkSpectrum = [&](Vector<ComplexFloat> const& spectrum) {
@@ -180,10 +180,10 @@ static void fft2Test() {
     fft3dForceReal();
     auto const forced = fft3dReadComplex(box);
     fft3dInvExecute();
-    box.end[kZDimension] = n;
+    box.end[kZi] = n;
     auto const reconstructed = fft3dReadReal(box);
     fft3dDestroy();
-    box.end[kZDimension] = n / 2 + 1;
+    box.end[kZi] = n / 2 + 1;
     maxSpectrumError = std::max(maxSpectrumError, checkSpectrum(forced));
     double maxRoundTripError = 0.0;
     for (size_t index = 0; index < aValue.size(); ++index) {
@@ -413,8 +413,8 @@ static void reportKickInteractions(double theta) {
             magnitudeSum += std::sqrt(squared);
         }
         double const residual =
-            std::sqrt(total[kXDimension] * total[kXDimension] +
-                total[kYDimension] * total[kYDimension] + total[kZDimension] * total[kZDimension]) /
+            std::sqrt(total[kXi] * total[kXi] +
+                total[kYi] * total[kYi] + total[kZi] * total[kZi]) /
             std::max(1.0, magnitudeSum);
         std::cout
             << std::format(

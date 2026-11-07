@@ -62,9 +62,9 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
         float const myRadius = self.radius;
         int sinkSize = self.parts.second - self.parts.first;
         for (int i = tid; i < sinkSize; i += kWarpSize) {
-            sinkX[i] = parts[self.parts.first + i][kXDimension];
-            sinkY[i] = parts[self.parts.first + i][kYDimension];
-            sinkZ[i] = parts[self.parts.first + i][kZDimension];
+            sinkX[i] = parts[self.parts.first + i][kXi];
+            sinkY[i] = parts[self.parts.first + i][kYi];
+            sinkZ[i] = parts[self.parts.first + i][kZi];
         }
         while (checklist.size()) {
             int maxci = roundUp(checklist.size(), kWarpSize);
@@ -74,9 +74,9 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
                 bool next = false;
                 if (ci < checklist.size()) {
                     auto const& other = treeNodes[checklist[ci]];
-                    float const dx = self.pos[kXDimension] - other.pos[kXDimension];
-                    float const dy = self.pos[kYDimension] - other.pos[kYDimension];
-                    float const dz = self.pos[kZDimension] - other.pos[kZDimension];
+                    float const dx = self.pos[kXi] - other.pos[kXi];
+                    float const dy = self.pos[kYi] - other.pos[kYi];
+                    float const dz = self.pos[kZi] - other.pos[kZi];
                     float const r2 = sqr(dx, dy, dz);
                     if (detail::bhAcceptMonopole(r2, other, myRadius, hsoft, relativeError)) {
                         source = true;
@@ -101,9 +101,9 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
                 index += offset;
                 if (source) {
                     auto const& other = treeNodes[checklist[ci]];
-                    sourceX[index] = other.pos[kXDimension];
-                    sourceY[index] = other.pos[kYDimension];
-                    sourceZ[index] = other.pos[kZDimension];
+                    sourceX[index] = other.pos[kXi];
+                    sourceY[index] = other.pos[kYi];
+                    sourceZ[index] = other.pos[kZi];
                     srcM[index] = other.mass;
                 }
 
@@ -144,9 +144,9 @@ __global__ void bhTreeEvaluateKernel(BhTreeNode const* treeNodes, int const* sin
                 srcM.resize(newSize);
                 for (int j = tid + other.parts.first; j < other.parts.second; j += kWarpSize) {
                     int k = j + offset - other.parts.first;
-                    sourceX[k] = parts[j][kXDimension];
-                    sourceY[k] = parts[j][kYDimension];
-                    sourceZ[k] = parts[j][kZDimension];
+                    sourceX[k] = parts[j][kXi];
+                    sourceY[k] = parts[j][kYi];
+                    sourceZ[k] = parts[j][kZi];
                     srcM[k] = 1.0f;
                 }
                 __syncwarp();
@@ -223,9 +223,9 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
                 bool next = false;
                 if (ci < checklist.size()) {
                     auto const& other = treeNodes[checklist[ci]];
-                    float const dx = sink[kXDimension] - other.pos[kXDimension];
-                    float const dy = sink[kYDimension] - other.pos[kYDimension];
-                    float const dz = sink[kZDimension] - other.pos[kZDimension];
+                    float const dx = sink[kXi] - other.pos[kXi];
+                    float const dy = sink[kYi] - other.pos[kYi];
+                    float const dz = sink[kZi] - other.pos[kZi];
                     float const r2 = sqr(dx, dy, dz);
                     if (detail::bhAcceptMonopole(r2, other, 0.0f, hsoft, relativeError)) {
                         source = true;
@@ -250,9 +250,9 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
                 index += offset;
                 if (source) {
                     auto const& other = treeNodes[checklist[ci]];
-                    sourceX[index] = other.pos[kXDimension];
-                    sourceY[index] = other.pos[kYDimension];
-                    sourceZ[index] = other.pos[kZDimension];
+                    sourceX[index] = other.pos[kXi];
+                    sourceY[index] = other.pos[kYi];
+                    sourceZ[index] = other.pos[kZi];
                     srcM[index] = other.mass;
                 }
 
@@ -293,9 +293,9 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
                 srcM.resize(newSize);
                 for (int j = tid + other.parts.first; j < other.parts.second; j += kWarpSize) {
                     int k = j + offset - other.parts.first;
-                    sourceX[k] = parts[j][kXDimension];
-                    sourceY[k] = parts[j][kYDimension];
-                    sourceZ[k] = parts[j][kZDimension];
+                    sourceX[k] = parts[j][kXi];
+                    sourceY[k] = parts[j][kYi];
+                    sourceZ[k] = parts[j][kZi];
                     srcM[k] = 1.0f;
                 }
                 __syncwarp();
@@ -312,9 +312,9 @@ __global__ void bhTreeEvaluatePointsKernel(BhTreeNode const* treeNodes, float* p
         float thisPhi = 0.0f;
         for (int j = tid; j < sourceX.size(); j += kWarpSize) {
             float rinv1, m;
-            float const dx = sourceX[j] - sink[kXDimension];
-            float const dy = sourceY[j] - sink[kYDimension];
-            float const dz = sourceZ[j] - sink[kZDimension];
+            float const dx = sourceX[j] - sink[kXi];
+            float const dy = sourceY[j] - sink[kYi];
+            float const dz = sourceZ[j] - sink[kZi];
             m = srcM[j];
             float const r2 = sqr(dx, dy, dz);
             float const r = sqrt(r2);    // 4

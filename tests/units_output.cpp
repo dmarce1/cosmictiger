@@ -309,7 +309,7 @@ void checkUnitsOutputGas(DBfile* file, std::string const& name, int count, doubl
         }
         auto const* coordinates = static_cast<double const*>(mesh->coords[dim]);
         double const expected =
-            (0.5 + (dim == kXDimension ? std::ldexp(1.0, -32) : 0.0)) * coordinateScale;
+            (0.5 + (dim == kXi ? std::ldexp(1.0, -32) : 0.0)) * coordinateScale;
         for (int i = 0; i < count; i++) {
             requireUnitsOutputClose(coordinates[i], expected, name + " particle position");
         }
@@ -387,9 +387,9 @@ void checkConvertedUnitsOutput(DBfile* file, bool cosmological, bool lab) {
         double const hi = *bounds.second;
         requireUnitsOutputClose(lo, 0.5 * coordinateScale, "first fixed position");
         requireUnitsOutputClose(hi,
-            (0.5 + (dim == kXDimension ? std::ldexp(1.0, -32) : 0.0)) * coordinateScale,
+            (0.5 + (dim == kXi ? std::ldexp(1.0, -32) : 0.0)) * coordinateScale,
             "second fixed position");
-        if (dim == kXDimension) {
+        if (dim == kXi) {
             requireUnitsOutput(hi > lo, "adjacent fixed-point positions stay distinct");
         }
     }
@@ -427,10 +427,10 @@ void unitsOutputParticleFixture(bool initialize) {
         for (ParticleInteger i = 0; i < 3; i++) {
             for (int dim = 0; dim < kDimensions; dim++) {
                 particlesPos(dim, i).setInteger(
-                    (PositionInteger(0x80000000U) + (i != 0 && dim == kXDimension ? 1U : 0U))
+                    (PositionInteger(0x80000000U) + (i != 0 && dim == kXi ? 1U : 0U))
                     << (kPositionBits - 32));
-                particlesVel(dim, i) = i == 2 ? (dim == kXDimension        ? 0.125 :
-                                                        dim == kYDimension ? 0.25 :
+                particlesVel(dim, i) = i == 2 ? (dim == kXi        ? 0.125 :
+                                                        dim == kYi ? 0.25 :
                                                                              -0.5) :
                                                 0.0;
             }
@@ -477,9 +477,9 @@ void unitsOutputParticleFixture(bool initialize) {
                 "representable canonical divergence fixture");
         }
     } else {
-        detail::requireUnitsOutput(particlesPos(kXDimension, 0).raw() ==
+        detail::requireUnitsOutput(particlesPos(kXi, 0).raw() ==
                     (PositionInteger(0x80000000U) << (kPositionBits - 32)) &&
-                particlesPos(kXDimension, 1).raw() ==
+                particlesPos(kXi, 1).raw() ==
                     (PositionInteger(0x80000001U) << (kPositionBits - 32)),
             "particle fixed-point storage unchanged on every locality");
         if (getOptions().hydro.viscosityGradientSwitch()) {
@@ -569,7 +569,7 @@ void unitsOutputTest() {
         UnitsOutputMesh mesh(DBGetPointmesh(file.get(), "darkMatter/mesh"), DBFreePointmesh);
         requireUnitsOutput(bool(mesh) && mesh->datatype == DB_DOUBLE && mesh->nels == 2,
             "code-unit dark matter mesh schema");
-        auto const* positions = static_cast<double const*>(mesh->coords[kXDimension]);
+        auto const* positions = static_cast<double const*>(mesh->coords[kXi]);
         auto const bounds = std::minmax_element(positions, positions + mesh->nels);
         requireUnitsOutputClose(*bounds.first, 0.5, "first code-unit dark matter position");
         requireUnitsOutputClose(

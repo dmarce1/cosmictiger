@@ -412,9 +412,9 @@ void sphParticlesGlobalReadPositions(
             ParticleInteger const particleCount = range.range.second - range.range.first;
             for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
                 int const j = offset + i - range.range.first;
-                x[j] = sphParticlesPositionValue(kXDimension, i);
-                y[j] = sphParticlesPositionValue(kYDimension, i);
-                z[j] = sphParticlesPositionValue(kZDimension, i);
+                x[j] = sphParticlesPositionValue(kXi, i);
+                y[j] = sphParticlesPositionValue(kYi, i);
+                z[j] = sphParticlesPositionValue(kZi, i);
             }
         } else {
             detail::SphCacheLineId lineId;
@@ -429,11 +429,11 @@ void sphParticlesGlobalReadPositions(
                 auto const end = std::min(lineId.index + lineSize, range.range.second);
                 for (ParticleInteger i = begin; i < end; i++) {
                     ParticleInteger const srcIndex = i - lineId.index;
-                    x[destIndex] = ptr[srcIndex][kXDimension];
+                    x[destIndex] = ptr[srcIndex][kXi];
                     y[destIndex] =
-                        kSpatialDimensions > 1 ? ptr[srcIndex][kYDimension] : Position(0.5);
+                        kSpatialDimensions > 1 ? ptr[srcIndex][kYi] : Position(0.5);
                     z[destIndex] =
-                        kSpatialDimensions > 2 ? ptr[srcIndex][kZDimension] : Position(0.5);
+                        kSpatialDimensions > 2 ? ptr[srcIndex][kZi] : Position(0.5);
                     destIndex++;
                 }
             }
@@ -575,9 +575,9 @@ void sphParticlesGlobalReadVelocities(
             ParticleInteger const particleCount = range.range.second - range.range.first;
             for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
                 int const j = offset + i - range.range.first;
-                vx[j] = sphParticlesVelocityValue(kXDimension, i);
-                vy[j] = sphParticlesVelocityValue(kYDimension, i);
-                vz[j] = sphParticlesVelocityValue(kZDimension, i);
+                vx[j] = sphParticlesVelocityValue(kXi, i);
+                vy[j] = sphParticlesVelocityValue(kYi, i);
+                vz[j] = sphParticlesVelocityValue(kZi, i);
             }
         } else {
             detail::SphCacheLineId lineId;
@@ -592,9 +592,9 @@ void sphParticlesGlobalReadVelocities(
                 auto const end = std::min(lineId.index + lineSize, range.range.second);
                 for (ParticleInteger i = begin; i < end; i++) {
                     ParticleInteger const srcIndex = i - lineId.index;
-                    vx[destIndex] = ptr[srcIndex][kXDimension];
-                    vy[destIndex] = kSpatialDimensions > 1 ? ptr[srcIndex][kYDimension] : 0.0f;
-                    vz[destIndex] = kSpatialDimensions > 2 ? ptr[srcIndex][kZDimension] : 0.0f;
+                    vx[destIndex] = ptr[srcIndex][kXi];
+                    vy[destIndex] = kSpatialDimensions > 1 ? ptr[srcIndex][kYi] : 0.0f;
+                    vz[destIndex] = kSpatialDimensions > 2 ? ptr[srcIndex][kZi] : 0.0f;
                     destIndex++;
                 }
             }

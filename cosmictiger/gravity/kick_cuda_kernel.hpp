@@ -95,9 +95,9 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             continue;
         }
         ASSERT(sinkIndex >= 0);
-        dx[kXDimension] = unwrappedDistance(sinkX[i], self.pos[kXDimension]);
-        dx[kYDimension] = unwrappedDistance(sinkY[i], self.pos[kYDimension]);
-        dx[kZDimension] = unwrappedDistance(sinkZ[i], self.pos[kZDimension]);
+        dx[kXi] = unwrappedDistance(sinkX[i], self.pos[kXi]);
+        dx[kYi] = unwrappedDistance(sinkY[i], self.pos[kYi]);
+        dx[kZi] = unwrappedDistance(sinkZ[i], self.pos[kZi]);
         cosmictiger::gravity::cartesian::tracefree::L2P(
             l2, lValue2, fmmScaleDisplacement(dx), params.doPhi);
         float gx = force.gx[i];
@@ -128,9 +128,9 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             auto& output = data.snapshotDiagnostics[sinkIndex];
             output.acceleration = Vector3<float>(gx, gy, gz);
             output.potential = phi;
-            output.longAcceleration[kXDimension] += kScaleFactor2 * l2.accelerationX();
-            output.longAcceleration[kYDimension] += kScaleFactor2 * l2.accelerationY();
-            output.longAcceleration[kZDimension] += kScaleFactor2 * l2.accelerationZ();
+            output.longAcceleration[kXi] += kScaleFactor2 * l2.accelerationX();
+            output.longAcceleration[kYi] += kScaleFactor2 * l2.accelerationY();
+            output.longAcceleration[kZi] += kScaleFactor2 * l2.accelerationZ();
             for (int dim = 0; dim < kDimensions; ++dim) {
                 output.longAcceleration[dim] *= params.gm;
                 output.nearAcceleration[dim] =
@@ -156,14 +156,14 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
         if (data.gravitySampleAccelerations != nullptr) {
             ParticleInteger const slot = data.gravitySampleIndices[sinkIndex];
             if (slot >= 0) {
-                data.gravitySampleAccelerations[slot][kXDimension] = gx;
-                data.gravitySampleAccelerations[slot][kYDimension] = gy;
-                data.gravitySampleAccelerations[slot][kZDimension] = gz;
+                data.gravitySampleAccelerations[slot][kXi] = gx;
+                data.gravitySampleAccelerations[slot][kYi] = gy;
+                data.gravitySampleAccelerations[slot][kZi] = gz;
             }
         }
-        vx = vels[sinkIndex][kXDimension];
-        vy = vels[sinkIndex][kYDimension];
-        vz = vels[sinkIndex][kZDimension];
+        vx = vels[sinkIndex][kXi];
+        vy = vels[sinkIndex][kYi];
+        vz = vels[sinkIndex][kZi];
         float const mass = data.sourceMasses != nullptr ?
             data.sourceMasses[sinkIndex] :
             data.sph ?
@@ -183,9 +183,9 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             bool const gas = false;
 #endif
             if (!gas || data.midpointHydro) {
-                data.globalAcceleration[kXDimension][sinkIndex] = gx;
-                data.globalAcceleration[kYDimension][sinkIndex] = gy;
-                data.globalAcceleration[kZDimension][sinkIndex] = gz;
+                data.globalAcceleration[kXi][sinkIndex] = gx;
+                data.globalAcceleration[kYi][sinkIndex] = gy;
+                data.globalAcceleration[kZi][sinkIndex] = gz;
                 double const halfStep = params.sign * 0.5 * params.previousTimestep;
                 vx = fma(double(gx), halfStep, double(vx));
                 vy = fma(double(gy), halfStep, double(vy));
@@ -285,9 +285,9 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                     data.type[sinkIndex] == kSphType) {
                     auto& increment = data.deferredGasOpening[data.catIndex[sinkIndex]];
                     float const signedHalfStep = sgn * dt;
-                    increment[kXDimension] = fmaf(gx, signedHalfStep, increment[kXDimension]);
-                    increment[kYDimension] = fmaf(gy, signedHalfStep, increment[kYDimension]);
-                    increment[kZDimension] = fmaf(gz, signedHalfStep, increment[kZDimension]);
+                    increment[kXi] = fmaf(gx, signedHalfStep, increment[kXi]);
+                    increment[kYi] = fmaf(gy, signedHalfStep, increment[kYi]);
+                    increment[kZi] = fmaf(gz, signedHalfStep, increment[kZi]);
                     flops += 7;
                 } else
 #endif
@@ -357,14 +357,14 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                 rungs[sinkIndex] = rung;
                 dt = params.sign * 0.5f * rungDt[rung] * params.t0;
                 if (gas && params.deferGasOpening) {
-                    data.globalAcceleration[kXDimension][sinkIndex] = gx;
-                    data.globalAcceleration[kYDimension][sinkIndex] = gy;
-                    data.globalAcceleration[kZDimension][sinkIndex] = gz;
+                    data.globalAcceleration[kXi][sinkIndex] = gx;
+                    data.globalAcceleration[kYi][sinkIndex] = gy;
+                    data.globalAcceleration[kZi][sinkIndex] = gz;
                 } else if (gas && params.deferHydroOpening) {
                     auto& increment = data.deferredGasOpening[data.catIndex[sinkIndex]];
-                    increment[kXDimension] = fmaf(gx, dt, increment[kXDimension]);
-                    increment[kYDimension] = fmaf(gy, dt, increment[kYDimension]);
-                    increment[kZDimension] = fmaf(gz, dt, increment[kZDimension]);
+                    increment[kXi] = fmaf(gx, dt, increment[kXi]);
+                    increment[kYi] = fmaf(gy, dt, increment[kYi]);
+                    increment[kZi] = fmaf(gz, dt, increment[kZi]);
                 } else {
                     vx = fmaf(gx, dt, vx);
                     vy = fmaf(gy, dt, vy);
@@ -384,9 +384,9 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
         float kin1 = 0.5 * mass * sqr(vx, vy, vz);
         // Only legacy hydro retains ownership of the gas gravitational kick.
         if (params.htime || data.midpointHydro || !data.sph || data.type[sinkIndex] != kSphType) {
-            vels[sinkIndex][kXDimension] = vx;
-            vels[sinkIndex][kYDimension] = vy;
-            vels[sinkIndex][kZDimension] = vz;
+            vels[sinkIndex][kXi] = vx;
+            vels[sinkIndex][kYi] = vy;
+            vels[sinkIndex][kZi] = vz;
         }
         phiTot += 0.5f * mass * phi;
         dkinTot += kin1 - kin0;
@@ -662,9 +662,9 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                         dx[dim] = fmmPositionDifference(self.pos[dim],
                                             other.pos[dim], dim, geometry, &geometryFlops);    // 3
                                     }
-                                    float const r2 = fmaf(dx[kXDimension], dx[kXDimension],
-                                        fmaf(dx[kYDimension], dx[kYDimension],
-                                            dx[kZDimension] * dx[kZDimension]));
+                                    float const r2 = fmaf(dx[kXi], dx[kXi],
+                                        fmaf(dx[kYi], dx[kYi],
+                                            dx[kZi] * dx[kZi]));
                                     float const pairSmoothingLength = fmmPairSmoothingLength(
                                         smoothingLength, self.maxGravitySmoothingLength,
                                         other.maxGravitySmoothingLength);

@@ -40,7 +40,7 @@ static double dot(Array<Vector<float>, kDimensions> const& shell, int const i, i
 }
 
 static void checkUnitSphere(Array<Vector<float>, kDimensions> const& shell) {
-    int const n = shell[kXDimension].size();
+    int const n = shell[kXi].size();
     for (int i = 0; i < n; i++) {
         double const norm = std::sqrt(dot(shell, i, i));
         require(std::isfinite(norm) && std::abs(norm - 1.0) < 1e-5,
@@ -52,7 +52,7 @@ static void checkUnitSphere(Array<Vector<float>, kDimensions> const& shell) {
 // counted per point; this fixes the antipodal pair, tetrahedron and octahedron.
 static void checkPolyhedron(
     Array<Vector<float>, kDimensions> const& shell, std::vector<double> const& expected) {
-    int const n = shell[kXDimension].size();
+    int const n = shell[kXi].size();
     for (int i = 0; i < n; i++) {
         std::vector<double> dots;
         for (int j = 0; j < n; j++) {
@@ -72,7 +72,7 @@ static void checkPolyhedron(
 // Random points crowd to separations of order 1/n; the relaxed shell must keep
 // every nearest neighbor near the hexagonal spacing sqrt(8 pi / (sqrt(3) n)).
 static void checkEvenSpacing(Array<Vector<float>, kDimensions> const& shell) {
-    int const n = shell[kXDimension].size();
+    int const n = shell[kXi].size();
     double const spacing = std::sqrt(4.0 * std::numbers::pi / n);
     double minNearest = std::numeric_limits<double>::max();
     double maxNearest = 0.0;
@@ -99,9 +99,9 @@ static void checkEvenSpacing(Array<Vector<float>, kDimensions> const& shell) {
         std::to_string(n) + "-point shell has crowded points: " + std::to_string(minNearest));
     require(maxNearest < 1.25 * spacing,
         std::to_string(n) + "-point shell has a gap: " + std::to_string(maxNearest));
-    double const offset = std::sqrt(centroid[kXDimension] * centroid[kXDimension] +
-        centroid[kYDimension] * centroid[kYDimension] +
-        centroid[kZDimension] * centroid[kZDimension]);
+    double const offset = std::sqrt(centroid[kXi] * centroid[kXi] +
+        centroid[kYi] * centroid[kYi] +
+        centroid[kZi] * centroid[kZi]);
     require(
         offset < 1e-2, std::to_string(n) + "-point shell is lopsided: " + std::to_string(offset));
 }
