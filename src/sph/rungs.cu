@@ -19,7 +19,7 @@ struct RungsWorkspace {
     static constexpr int kSharedBytes = 20 * 1024;
     static constexpr int kSharedCapacity =
         kSharedBytes / (sizeof(SpatialVector<Position>) + sizeof(float) + sizeof(char));
-    SharedNeighborBuffer<SpatialVector<Position>, kSharedCapacity> x;
+    SharedNeighborBuffer<SpatialVector<Position>, kSharedCapacity> positions;
     SharedNeighborBuffer<float, kSharedCapacity> smoothingLength;
     SharedNeighborBuffer<char, kSharedCapacity> rungs;
 };
@@ -27,11 +27,11 @@ struct RungsWorkspace {
 }    // namespace detail
 
 // Locally derived monotone neighbor-graph closure of sphCpuRungs, including inactive endpoints:
-//   L_a⁽ᵏ⁺¹⁾ = max(L_a⁽ᵏ⁾, max_{b: |r_ab| ≤ max(H_a, H_b)} L_b⁽ᵏ⁾ − 1).
-// Symbol directory: L_a → sink rung; max L_b → maximum neighbor rung;
-// H_a, H_b → sink, neighbor kernel smoothing length; x_a, x_b → sink, neighbor position;
-// paddedX_b → neighbor position as the record of the box tests; r_ab → separation;
-// r_ab² → squared separation. Code names: r2_ab = r_ab²; H2_a = H_a².
+//   L𞁑⁽ᵏ⁺¹⁾ = max(L𞁑⁽ᵏ⁾, max_{b: |r𞁑𞁓| ≤ max(H𞁑, H𞁓)} L𞁓⁽ᵏ⁾ − 1).
+// Symbol directory: L𞁑 → sink rung; max L𞁓 → maximum neighbor rung;
+// H𞁑, H𞁓 → sink, neighbor kernel smoothing length; x𞁑, x𞁓 → sink, neighbor position;
+// paddedX_b → neighbor position as the record of the box tests; r𞁑𞁓 → separation;
+// r𞁑𞁓² → squared separation. Code names: r2𞁑𞁓 = r𞁑𞁓²; H2𞁑 = H𞁑².
 __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction* reduction) {
     int const threadIndex = threadIdx.x;
     int const blockSize = blockDim.x;
@@ -46,7 +46,7 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
     int changes = 0;
     while (targetNodeIndex < data.numberOfTargetNodes) {
         __syncthreads();
-        workspace.x.resize(0);
+        workspace.positions.resize(0);
         workspace.smoothingLength.resize(0);
         workspace.rungs.resize(0);
         SphTreeNode const& targetNode = data.treeNodes[data.targetNodeIndices[targetNodeIndex]];
@@ -77,16 +77,16 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
                 }
                 neighborIndex = contains;
                 computeIndices<kRungsBlockSize>(neighborIndex, total);
-                int const offset = workspace.x.size();
+                int const offset = workspace.positions.size();
                 __syncthreads();
                 int const nextSize = offset + total;
-                workspace.x.resize(nextSize);
+                workspace.positions.resize(nextSize);
                 workspace.smoothingLength.resize(nextSize);
                 workspace.rungs.resize(nextSize);
                 if (contains) {
                     ASSERT(neighborIndex < total);
                     int const k = offset + neighborIndex;
-                    workspace.x[k] = data.sourcePosition(sourceParticleIndex);
+                    workspace.positions[k] = data.sourcePosition(sourceParticleIndex);
                     workspace.smoothingLength[k] = data.sourceSmoothingLength[sourceParticleIndex];
                     workspace.rungs[k] = rung;
                 }
@@ -97,25 +97,25 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
             __syncthreads();
             int const sinkIndex =
                 targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
-            auto const x_a = data.sourcePosition(particleIndex);
-            auto const H_a = data.sinkSmoothingLength[sinkIndex];
+            auto const x𞁑 = data.sourcePosition(particleIndex);
+            auto const H𞁑 = data.sinkSmoothingLength[sinkIndex];
             int const sinkRung = data.sourceRungs[particleIndex];
-            auto const H2_a = sqr(H_a);
+            auto const H2𞁑 = sqr(H𞁑);
             flops += 1;
-            int const roundedNeighborEnd = roundUp(workspace.x.size(), blockSize);
+            int const roundedNeighborEnd = roundUp(workspace.positions.size(), blockSize);
             int maximumNeighborRung = 0;
             for (int neighborIndex = threadIndex; neighborIndex < roundedNeighborEnd;
                 neighborIndex += blockSize) {
-                if (neighborIndex < workspace.x.size()) {
-                    auto const x_b = workspace.x[neighborIndex];
+                if (neighborIndex < workspace.positions.size()) {
+                    auto const x𞁓 = workspace.positions[neighborIndex];
                     int const neighborRung = workspace.rungs[neighborIndex];
-                    auto const r_ab = distance(x_a, x_b);
-                    float const r2_ab = r_ab.dot(r_ab);
-                    float const H_b = workspace.smoothingLength[neighborIndex];
-                    if (r2_ab <= fmaxf(H2_a, sqr(H_b))) {
+                    auto const r𞁑𞁓 = distance(x𞁑, x𞁓);
+                    float const r2𞁑𞁓 = r𞁑𞁓.dot(r𞁑𞁓);
+                    float const H𞁓 = workspace.smoothingLength[neighborIndex];
+                    if (r2𞁑𞁓 <= fmaxf(H2𞁑, sqr(H𞁓))) {
                         maximumNeighborRung = max(maximumNeighborRung, neighborRung);
                     }
-                    // Fixed distances, dot, H_b².
+                    // Fixed distances, dot, H𞁓².
                     flops += sph_flops::kVectorOperation + sph_flops::kDotProduct + 1;
                 }
             }

@@ -14,14 +14,15 @@
  *   doi:10.1146/annurev.aa.30.090192.002551, ADS bibcode 1992ARA&A..30..543M,
  *   https://articles.adsabs.harvard.edu/pdf/1992ARA%26A..30..543M
  *
- * Equation numbers and pages below refer to that review. Comments retain its
+ * Equation numbers and pages below refer to Monaghan (1992). Comments retain its
  * symbols: particle a is the one being updated and particle b a neighbor; m mass,
  * ρ density, P pressure, u specific internal energy, c sound speed, h smoothing
- * length, r_ab = r_a − r_b, v_ab = v_a − v_b, W_ab = W(r_ab, h) the kernel,
- * W̃_ab the symmetric kernel of p. 554, Π_ab the artificial viscosity and μ_ab its
+ * length, r𞁑𞁓 = r𞁑 − r𞁓, v𞁑𞁓 = v𞁑 − v𞁓, W𞁑𞁓 = W(r𞁑𞁓, h) the kernel,
+ * W̃𞁑𞁓 the symmetric kernel of Monaghan (1992), p. 554, Π𞁑𞁓 the artificial viscosity and μ𞁑𞁓 its
  * velocity measure, with the constants α, β and η. Equation code uses
  * these symbols; each equation block describes them. The stored smoothing length
- * is the compact support radius H, which equals 2h for the paper's cubic spline of section 7.
+ * is the compact support radius H, which equals 2h for the cubic spline of
+ * Monaghan (1992), section 7.
  */
 #pragma once
 
@@ -38,14 +39,14 @@ inline constexpr double kViscosityWidthScale =
                                (kSpatialDimensions == 2 ? 0.8890008890013335 : 0.9128709291752769));
 
 /*
- * Equation 4.2, p. 550, with the regularization of p. 551:
+ * Equation 4.2 of Monaghan (1992), p. 550, with the regularization of p. 551:
  *
- *   μ_ab = h v_ab·r_ab / (r_ab² + η²),      η² = 0.01 h²,
+ *   μ𞁑𞁓 = h v𞁑𞁓·r𞁑𞁓 / (r𞁑𞁓² + η²),      η² = 0.01 h²,
  *
- * and μ_ab = 0 when v_ab·r_ab ≥ 0, the vanishing branch of Π_ab on p. 550. For
- * unequal resolution lengths the pair uses h̄_ab = ½(h_a + h_b), the arithmetic mean that
- * p. 554 offers. ε is η²/h². The
- * two scale factors convert the stored support radii to the paper's h:
+ * and μ𞁑𞁓 = 0 when v𞁑𞁓·r𞁑𞁓 ≥ 0, the vanishing branch of Π𞁑𞁓 on p. 550 of Monaghan (1992). For
+ * unequal resolution lengths the pair uses h̄𞁑𞁓 = ½(h𞁑 + h𞁓), the arithmetic mean that
+ * Monaghan (1992), p. 554, offers. ε is η²/h². The
+ * two scale factors convert the stored support radii to the h of Monaghan (1992):
  * smoothingLengthPerEffectiveRadius maps H to the common effective radius of docs/kernels.md, and
  * viscosityWidthScale maps that radius to h. Their defaults give h = H/2, the cubic-spline
  * convention, for the standalone references in tests/sph/monaghan/equations.cpp.
@@ -54,55 +55,55 @@ inline constexpr double kViscosityWidthScale =
 /*
  * Monaghan (1992), equation (4.2), and the unnumbered pair means on p. 554
  * (doi:10.1146/annurev.aa.30.090192.002551; full citation above):
- *   h̄_ab = ½(h_a + h_b),  η² = ε h̄_ab²,
- *   μ_ab = h̄_ab (v_ab · r_ab)/(r_ab² + η²) for v_ab · r_ab < 0; otherwise 0.
+ *   h̄𞁑𞁓 = ½(h𞁑 + h𞁓),  η² = ε h̄𞁑𞁓²,
+ *   μ𞁑𞁓 = h̄𞁑𞁓 (v𞁑𞁓 · r𞁑𞁓)/(r𞁑𞁓² + η²) for v𞁑𞁓 · r𞁑𞁓 < 0; otherwise 0.
  * Symbol directory:
- *   r_ab² → radius squared; v_ab · r_ab → velocity dot radius
- *   H_a, H_b → smoothing length, source smoothing length (stored compact supports)
- *   h̄_ab → pair smoothing length; ε → viscosity epsilon
- *   η² → regularization length squared; μ_ab → viscosity velocity (return value)
- *   h_a = H_a / smoothingLengthPerEffectiveRadius × viscosityWidthScale.
- *   Code names: r2_ab = r_ab²; v_ab_dot_r_ab = v_ab · r_ab; η2 = η².
+ *   r𞁑𞁓² → radius squared; v𞁑𞁓 · r𞁑𞁓 → velocity dot radius
+ *   H𞁑, H𞁓 → smoothing length, source smoothing length (stored compact supports)
+ *   h̄𞁑𞁓 → pair smoothing length; ε → viscosity epsilon
+ *   η² → regularization length squared; μ𞁑𞁓 → viscosity velocity (return value)
+ *   h𞁑 = H𞁑 / smoothingLengthPerEffectiveRadius × viscosityWidthScale.
+ *   Code names: r2𞁑𞁓 = r𞁑𞁓²; v𞁑𞁓_dot_r𞁑𞁓 = v𞁑𞁓 · r𞁑𞁓; η2 = η².
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real viscosityMu(Real r2_ab, Real v_ab_dot_r_ab, Real H_a, Real H_b, Real ε,
+CUDA_EXPORT inline Real viscosityMu(Real r2𞁑𞁓, Real v𞁑𞁓_dot_r𞁑𞁓, Real H𞁑, Real H𞁓, Real ε,
     Real smoothingLengthPerEffectiveRadius = Real(2), Real viscosityWidthScale = Real(1)) {
-    Real const h̄_ab = simdBroadcast<Real>(0.5) * (H_a + H_b) / smoothingLengthPerEffectiveRadius *
+    Real const h̄𞁑𞁓 = simdBroadcast<Real>(0.5) * (H𞁑 + H𞁓) / smoothingLengthPerEffectiveRadius *
         viscosityWidthScale;
-    Real const η2 = ε * h̄_ab * h̄_ab;    // η²
-    Real const μ_ab = h̄_ab * v_ab_dot_r_ab / (r2_ab + η2);
-    return simdSelect(v_ab_dot_r_ab < Real(0), μ_ab, Real(0));
+    Real const η2 = ε * h̄𞁑𞁓 * h̄𞁑𞁓;    // η²
+    Real const μ𞁑𞁓 = h̄𞁑𞁓 * v𞁑𞁓_dot_r𞁑𞁓 / (r2𞁑𞁓 + η2);
+    return simdSelect(v𞁑𞁓_dot_r𞁑𞁓 < Real(0), μ𞁑𞁓, Real(0));
 }
 
 /*
- * Artificial viscosity Π_ab, p. 550 (unnumbered, following equation 4.1):
+ * Artificial viscosity Π𞁑𞁓 of Monaghan (1992), p. 550 (unnumbered, following equation 4.1):
  *
- *   Π_ab = (−α c̄_ab μ_ab + β μ_ab²) / ρ̄_ab    for v_ab·r_ab < 0,
- *   Π_ab = 0                                    for v_ab·r_ab > 0,
+ *   Π𞁑𞁓 = (−α c̄𞁑𞁓 μ𞁑𞁓 + β μ𞁑𞁓²) / ρ̄𞁑𞁓    for v𞁑𞁓·r𞁑𞁓 < 0,
+ *   Π𞁑𞁓 = 0                                    for v𞁑𞁓·r𞁑𞁓 > 0,
  *
- * with c̄_ab = ½(c_a + c_b) and ρ̄_ab = ½(ρ_a + ρ_b). The paper
- * recommends α = 1 and β = 2 (p. 551). Since μ_ab already vanishes for separating pairs, the branch
- * is selected on μ_ab < 0.
+ * with c̄𞁑𞁓 = ½(c𞁑 + c𞁓) and ρ̄𞁑𞁓 = ½(ρ𞁑 + ρ𞁓). Monaghan (1992)
+ * recommends α = 1 and β = 2 (p. 551). Since μ𞁑𞁓 already vanishes for separating pairs, the branch
+ * is selected on μ𞁑𞁓 < 0.
  */
 // clang-format off
 /*
  * Monaghan (1992), p. 550, unnumbered formula after equation (4.1):
- *   Π_ab = (−α c̄_ab μ_ab + β μ_ab²)/ρ̄_ab when μ_ab < 0; otherwise 0.
+ *   Π𞁑𞁓 = (−α c̄𞁑𞁓 μ𞁑𞁓 + β μ𞁑𞁓²)/ρ̄𞁑𞁓 when μ𞁑𞁓 < 0; otherwise 0.
  * Symbol directory:
  *   α → bulk viscosity coefficient; β → von Neumann–Richtmyer coefficient
- *   ρ_a, ρ_b → sink density, source density; ρ̄_ab → mean density
- *   c_a, c_b → sound speed, neighbor sound speed; c̄_ab → mean sound speed
- *   μ_ab → compression velocity; Π_ab → pair artificial viscosity (return value).
+ *   ρ𞁑, ρ𞁓 → sink density, source density; ρ̄𞁑𞁓 → mean density
+ *   c𞁑, c𞁓 → sound speed, neighbor sound speed; c̄𞁑𞁓 → mean sound speed
+ *   μ𞁑𞁓 → compression velocity; Π𞁑𞁓 → pair artificial viscosity (return value).
  */
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline Real artificialViscosity(
-    Real ρ_a, Real ρ_b, Real c_a, Real c_b, Real μ_ab, Real α, Real β) {
-    Real const c̄_ab = simdBroadcast<Real>(0.5) * (c_a + c_b);
-    Real const ρ̄_ab = simdBroadcast<Real>(0.5) * (ρ_a + ρ_b);
-    Real const Π_ab = (-α * c̄_ab * μ_ab + β * μ_ab * μ_ab) / ρ̄_ab;
-    return simdSelect(μ_ab < Real(0), Π_ab, Real(0));
+    Real ρ𞁑, Real ρ𞁓, Real c𞁑, Real c𞁓, Real μ𞁑𞁓, Real α, Real β) {
+    Real const c̄𞁑𞁓 = simdBroadcast<Real>(0.5) * (c𞁑 + c𞁓);
+    Real const ρ̄𞁑𞁓 = simdBroadcast<Real>(0.5) * (ρ𞁑 + ρ𞁓);
+    Real const Π𞁑𞁓 = (-α * c̄𞁑𞁓 * μ𞁑𞁓 + β * μ𞁑𞁓 * μ𞁑𞁓) / ρ̄𞁑𞁓;
+    return simdSelect(μ𞁑𞁓 < Real(0), Π𞁑𞁓, Real(0));
 }
 
 }    // namespace monaghan

@@ -110,7 +110,7 @@ ScenarioPlan initializeKelvinHelmholtz() {
     std::mt19937 generator(kPerturbationSeed);
     std::uniform_real_distribution<double> amplitude(-η, η);
     std::vector<ModeAmplitudes> modeAmplitudes(K);
-    // Derived RMS² = (1/2) Σ_k (a_k²+b_k²) -> velocity variance; RMS2 = RMS².
+    // Derived RMS² = (1/2) Σₖ (aₖ²+bₖ²) -> velocity variance; RMS2 = RMS².
     double RMS2 = 0.0;
     for (auto& mode : modeAmplitudes) {
         mode.sine = amplitude(generator);
@@ -118,10 +118,10 @@ ScenarioPlan initializeKelvinHelmholtz() {
         RMS2 += 0.5 * (sqr(mode.sine) + sqr(mode.cosine));
     }
     // Prescribed random K-H spectrum (code units):
-    // δv_x(y) = Σ_{k=1}^{K} [a_k sin(2πky) + b_k cos(2πky)],
-    // a_k, b_k independently uniform on [−η,+η].
+    // δvₓ(y) = Σ_{k=1}^{K} [aₖ sin(2πky) + bₖ cos(2πky)],
+    // aₖ, bₖ independently uniform on [−η,+η].
     // K -> maximum perturbation mode; η -> perturbation amplitude;
-    // a_k, b_k -> sine, cosine mode amplitudes; y -> streamwise position.
+    // aₖ, bₖ -> sine, cosine mode amplitudes; y -> streamwise position.
     // Precompute all possible half-cell y planes once for both fluids.
     std::vector<double> transverseVelocities(size_t(4) * n, 0.0);
     for (size_t plane = 0; plane < transverseVelocities.size(); ++plane) {

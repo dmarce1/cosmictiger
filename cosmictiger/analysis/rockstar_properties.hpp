@@ -41,7 +41,7 @@ struct SphericalOverdensity {
     double radius = 0.0;
 };
 
-// ROCKSTAR Sec. III.5.2: spherical-overdensity masses.
+// Behroozi, Wechsler & Wu (2013), Sec. III.5.2: spherical-overdensity masses.
 // Use the outermost complete radial shell above the requested mean number density.
 // Between particles, M(<r) is constant, so this boundary gives both an integer
 // particle mass and exactly the requested mean density. The next shell, if any,
@@ -80,8 +80,8 @@ struct VirialOverdensity {
     double meanMatter;
 };
 
-// ROCKSTAR Secs. III.3 (Eq. (4)) and III.5.2 adopt Bryan & Norman's virial density.
-// Bryan & Norman's fits are calibrated for flat matter+Lambda cosmologies and,
+// Behroozi, Wechsler & Wu (2013), Secs. III.3 (Eq. (4)) and III.5.2 adopt Bryan & Norman's
+// virial density. Bryan & Norman's fits are calibrated for flat matter+Lambda cosmologies and,
 // with openMatterOnly=true, open matter-only cosmologies. Including radiation
 // in Omega_m(a) is an extrapolation, not a new spherical-collapse fit.
 inline VirialOverdensity virialOverdensityFromMatterFraction(
@@ -179,7 +179,8 @@ inline HaloDensityThresholds haloDensityThresholds(double scaleFactor, double om
 
 namespace detail {
 
-    // ROCKSTAR Sec. III.5.4, Eq. (8): dimensionless NFW enclosed-mass function.
+    // Behroozi, Wechsler & Wu (2013), Sec. III.5.4, Eq. (8): dimensionless NFW
+    // enclosed-mass function.
     inline double nfwMassIntegral(double radiusRatio) {
         if (radiusRatio < 1.e-3) {
             return radiusRatio * radiusRatio *
@@ -206,8 +207,8 @@ struct NfwFit {
     double density = 0.0;
 };
 
-// ROCKSTAR Sec. III.5.4: maximum-likelihood NFW fit with equal-mass radial bins.
-// The shell-integrated multinomial objective below is our numerical realization.
+// Behroozi, Wechsler & Wu (2013), Sec. III.5.4: maximum-likelihood NFW fit with equal-mass
+// radial bins. The shell-integrated multinomial objective below is our numerical realization.
 inline NfwFit nfwFit(std::vector<double> const& sortedRadii) {
     size_t const particleCount = sortedRadii.size();
     size_t const targetBins = std::min(size_t(50), particleCount / 15);
@@ -273,8 +274,8 @@ inline NfwFit nfwFit(std::vector<double> const& sortedRadii) {
     // edge, are this project's conventions. Toward c -> 0 every NFW profile
     // tends to M(<r) ~ r^2 (rho ~ 1/r) and the likelihood is asymptotically flat
     // in log c, which let shot noise place Rs arbitrarily far outside the halo.
-    // The Klypin limit c >= 2.1626 (Eqs. (5)-(6)) is not used as the edge: it
-    // expresses the degeneracy of the Vmax inversion, not of the density
+    // The Klypin limit c >= 2.1626 (Eqs. (5)-(6) of Behroozi, Wechsler & Wu (2013)) is not
+    // used as the edge: it expresses the degeneracy of the Vmax inversion, not of the density
     // profile, whose logarithmic slope still runs from -1 to -2 inside the
     // outer radius for 1 <= c < 2.1626. The finite upper edge also bounds
     // work on unresolved/non-NFW profiles.
@@ -333,7 +334,7 @@ inline NfwFit nfwFit(std::vector<double> const& sortedRadii) {
     return {scaleRadius, density};
 }
 
-// ROCKSTAR Sec. III.5.4, Eqs. (5)-(8): invert c/f(c) for Rs = Rvir/c.
+// Behroozi, Wechsler & Wu (2013), Sec. III.5.4, Eqs. (5)-(8): invert c/f(c) for Rs = Rvir/c.
 inline double klypinScaleRadius(
     double maximumCircularVelocity, double virialRadius, double gravitationalMass) {
     if (!(maximumCircularVelocity > 0.0) || !detail::isFinite(maximumCircularVelocity) ||
@@ -341,7 +342,7 @@ inline double klypinScaleRadius(
         !detail::isFinite(gravitationalMass)) {
         return 0.0;
     }
-    // Eq. (6), using the root of Eq. (5) at higher precision.
+    // Eq. (6) of Behroozi, Wechsler & Wu (2013), using the root of Eq. (5) at higher precision.
     constexpr double kMaximumRadiusRatio = 2.1625815870646098;
     double const velocityRatio =
         maximumCircularVelocity * maximumCircularVelocity * virialRadius / gravitationalMass;

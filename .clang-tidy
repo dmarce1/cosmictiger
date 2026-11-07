@@ -14,7 +14,11 @@ CheckOptions:
   readability-identifier-naming.TypeTemplateParameterCase: CamelCase
   readability-identifier-naming.ValueTemplateParameterCase: camelBack
   readability-identifier-naming.VariableCase: camelBack
+  # Equation symbols (AGENTS.md, Equations and symbol identifiers): any non-ASCII
+  # character, an underscore-spelled subscript, or a one- to three-letter symbol.
+  readability-identifier-naming.VariableIgnoredRegexp: '[^ -~]|^[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]*$|^[A-Z][A-Za-z0-9]{0,2}$'
   readability-identifier-naming.ParameterCase: camelBack
+  readability-identifier-naming.ParameterIgnoredRegexp: '[^ -~]|^[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]*$|^[A-Z][A-Za-z0-9]{0,2}$'
   readability-identifier-naming.FunctionCase: camelBack
   readability-identifier-naming.MethodCase: camelBack
   readability-identifier-naming.MemberCase: camelBack

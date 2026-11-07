@@ -65,7 +65,7 @@ void testKernel() {
             sph_kernels::kernelDerivative(join + joinStep), 80.0 * joinStep);
     }
 
-    // Compare against the paper's h-based polynomial, where support H is 2h.
+    // Compare against the Monaghan (1992) h-based polynomial, where support H is 2h.
     double const smoothingLength = 0.37;
     double const support = 2.0 * smoothingLength;
     for (double const qPaper : {0.0, 0.2, 0.75, 1.0, 1.25, 1.75, 2.0}) {
@@ -76,7 +76,7 @@ void testKernel() {
         double const expected = shape / (kPi * std::pow(smoothingLength, 3));
         double const actual =
             sph_kernels::kernelValue(Real(radius / support)) / std::pow(support, 3);
-        requireClose("support radius equals twice paper h", actual, expected, roundoff);
+        requireClose("support radius equals twice Monaghan (1992) h", actual, expected, roundoff);
     }
 }
 

@@ -79,9 +79,9 @@ struct System {
     std::vector<Vector> position;
     std::vector<double> mass;
     std::vector<double> weight;
-    std::vector<double> entropy;    // P_i = K_i rho*_i^gamma
+    std::vector<double> entropy;    // Pᵢ = Kᵢ rho*_i^gamma
     double gamma = 5.0 / 3.0;
-    double targetSum = 0.0;    // sum_j w(q_ij) of the constraint H^3 n = constant
+    double targetSum = 0.0;    // sum_j w(qᵢⱼ) of the constraint H^3 n = constant
     double minimumSupport = 1.0e-3;
     double maximumSupport = 1.0e3;
     std::vector<double> support;
@@ -100,7 +100,7 @@ struct System {
         return sum;
     }
 
-    // The support solving sum_j w(r_ij/H) = target, bracketed and bisected to roundoff;
+    // The support solving sum_j w(rᵢⱼ/H) = target, bracketed and bisected to roundoff;
     // the sum increases monotonically with H.
     double freeSupport(int i) const {
         double lower = 1.0e-3;
@@ -161,7 +161,7 @@ struct System {
         return entropy[i] * std::pow(volumeDensity(i), gamma);
     }
 
-    // m_i u_i at the fixed entropy K_i, so that d(m_i u_i) = -P_i dV_i.
+    // mᵢ uᵢ at the fixed entropy Kᵢ, so that d(mᵢ uᵢ) = -Pᵢ dVᵢ.
     double thermalEnergy(int i) const {
         return entropy[i] * mass[i] * std::pow(volumeDensity(i), gamma - 1.0) / (gamma - 1.0);
     }
@@ -182,11 +182,11 @@ struct System {
     }
 
     struct Rates {
-        std::vector<Vector> force;    // m_i dv_i/dt
-        std::vector<double> work;     // d(m_i u_i)/dt
+        std::vector<Vector> force;    // mᵢ dvᵢ/dt
+        std::vector<double> work;     // d(mᵢ uᵢ)/dt
     };
 
-    // Hopkins (2013) equation 12 and the compatible work with the directed Q_ij.
+    // Hopkins (2013) equation 12 and the compatible work with the directed Qᵢⱼ.
     Rates rates(std::vector<Vector> const& velocity) const {
         std::vector<double> factor(size());
         std::vector<double> weightedSupportCorrection(size());
@@ -327,7 +327,7 @@ TEST(SphVolume, KernelGradientFactorMatchesFiniteDifferences) {
     }
 }
 
-// n_i and y_i, their H derivatives, V_i, rho*_i, Omega_i and zeta_i with unequal weights
+// nᵢ and yᵢ, their H derivatives, Vᵢ, rho*_i, Omega_i and zeta_i with unequal weights
 // and masses, compared with direct sums and finite differences in H.
 TEST(SphVolume, WeightedVolumeAndConstraintDerivatives) {
     auto system =
@@ -369,7 +369,7 @@ TEST(SphVolume, WeightedVolumeAndConstraintDerivatives) {
     }
 }
 
-// x_i = m_i with equal masses: y = m n, zeta = m (1 - 1/Omega), f_ij = 1/Omega, and the
+// xᵢ = mᵢ with equal masses: y = m n, zeta = m (1 - 1/Omega), fᵢⱼ = 1/Omega, and the
 // directed coefficients give Price (2012) equation 30.
 TEST(SphVolume, EqualMassReducesToStandardGradH) {
     auto system =
@@ -420,8 +420,8 @@ TEST(SphVolume, EqualMassReducesToStandardGradH) {
     }
 }
 
-// dy_i/dr_k and dH_i/dr_k with the support re-solved after each perturbation:
-// dy_i = sum_j (x_j - zeta_i) grad_i W_ij . dr_ij and dH_i = -H_i/(3 n_i Omega_i) dn_i.
+// dyᵢ/drₖ and dHᵢ/drₖ with the support re-solved after each perturbation:
+// dyᵢ = sum_j (xⱼ - zeta_i) grad_i Wᵢⱼ . drᵢⱼ and dHᵢ = -Hᵢ/(3 nᵢ Omega_i) dnᵢ.
 TEST(SphVolume, ConstrainedDensityDerivatives) {
     auto system =
         makeSystem({radial_kernel::Family::Spline, 4}, WeightModel::UnequalWeight, 5.0 / 3.0, 23);
@@ -468,7 +468,7 @@ TEST(SphVolume, ConstrainedDensityDerivatives) {
     }
 }
 
-// The force is minus the gradient of sum_i m_i u_i(rho*_i) at fixed entropy, with every
+// The force is minus the gradient of sum_i mᵢ uᵢ(rho*_i) at fixed entropy, with every
 // support re-solved, for free supports, fixed supports and both active bounds.
 TEST(SphVolume, ForceIsTheGradientOfTheDiscreteThermalEnergy) {
     struct Case {
@@ -567,8 +567,8 @@ TEST(SphVolume, PairRatesConserveMomentumAngularMomentumAndEnergy) {
     }
 }
 
-// Each particle's work is its own adiabatic rate d(m_i u_i)/dt = P_i x_i/y_i^2 dy_i/dt
-// along r + v t with supports re-solved: the discrete entropy K_i does not change.
+// Each particle's work is its own adiabatic rate d(mᵢ uᵢ)/dt = Pᵢ xᵢ/yᵢ^2 dyᵢ/dt
+// along r + v t with supports re-solved: the discrete entropy Kᵢ does not change.
 TEST(SphVolume, WorkMatchesDensityContinuityAtFixedEntropy) {
     for (int supports = 0; supports < 2; ++supports) {
         auto system =
@@ -612,8 +612,8 @@ TEST(SphVolume, WorkMatchesDensityContinuityAtFixedEntropy) {
     }
 }
 
-// For a free support, sum_j (x_j - zeta_i) r_ij . grad_i W_ij = -3 y_i exactly, so the
-// Hubble flow's pair work is the analytic homogeneous term -3 (da/dt / a) P_i V_i.
+// For a free support, sum_j (xⱼ - zeta_i) rᵢⱼ . grad_i Wᵢⱼ = -3 yᵢ exactly, so the
+// Hubble flow's pair work is the analytic homogeneous term -3 (da/dt / a) Pᵢ Vᵢ.
 // A held support has dH/dr = 0 and no such identity; with comoving bounds its support
 // dilates with the box, which the analytic term supplies (docs/variational_sph.md).
 TEST(SphVolume, HubbleFlowWorkIsTheHomogeneousExpansionWork) {
@@ -640,7 +640,7 @@ TEST(SphVolume, HubbleFlowWorkIsTheHomogeneousExpansionWork) {
         }
     }
     EXPECT_GT(heldMismatch, 1.0e-3);
-    // A uniform dilation with dilating (comoving) bounds scales every y_i by (1 + e)^-3.
+    // A uniform dilation with dilating (comoving) bounds scales every yᵢ by (1 + e)^-3.
     double const dilation = 1.0e-6;
     auto scaled = [&](double factor) {
         auto moved = system;

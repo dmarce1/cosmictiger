@@ -11,6 +11,7 @@
 #include <cosmictiger/sph/run_data.hpp>
 #include <cosmictiger/sph/thermodynamics.hpp>
 #include <cosmictiger/sph/viscosity/monaghan.hpp>
+#include <tests/sph/pair_kick_cases.hpp>
 
 namespace detail {
 
@@ -148,7 +149,7 @@ void testMidpointHydroTargets(Fixture& fixture) {
     auto& data = fixture.data_;
     auto& parameters = fixture.params_;
     fixture.enableMidpointOutputs();
-    parameters.midpointHydro = true;
+    fixture.enableKickObservation();
     parameters.minimumRung = 0;
     parameters.minimumProposedRung = 0;
     parameters.baseTimestep = 1.0e-6f;
@@ -178,17 +179,20 @@ void testMidpointHydroTargets(Fixture& fixture) {
         data.sourceGradHCorrection[source] = data.sinkGradHCorrection[sink];
     }
     fixture.hydro(0);
-    std::array<Vector3<float>, 4> referenceAcceleration;
+    std::array<sph_geometry::SpatialVector<float>, 4> referenceAcceleration;
     std::array<float, 4> referenceEntropyRate;
     std::array<int, 4> const rungs{1, 2, 1, 2};
+    double impulseScale = 0.0;
     for (int index = 0; index < 4; ++index) {
         int const source = fixture.sourceIndex(index);
         int const sink = fixture.sinkIndex(index);
-        referenceAcceleration[index] = data.sinkAccelerations[sink];
+        referenceAcceleration[index] = fixture.kickAcceleration(index);
         referenceEntropyRate[index] = data.sinkEntropyRate[sink];
+        for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
+            impulseScale += std::abs(referenceAcceleration[index][dimension]);
+        }
         data.sourceRungs[source] = data.sinkParticleRungs[fixture.particleIndex(index)] =
             rungs[index];
-        data.sinkAccelerations[sink] = Vector3<float>(-123.0f);
         data.sinkEntropyRate[sink] = -123.0f;
     }
     parameters.minimumRung = parameters.maximumRung = 2;
@@ -197,18 +201,25 @@ void testMidpointHydroTargets(Fixture& fixture) {
         "midpoint hydro published a gravity timestep criterion");
     midpointRequire(referenceEntropyRate[1] > 0.0f && referenceEntropyRate[3] > 0.0f,
         "midpoint fixture did not exercise viscous entropy generation");
+    // Every pair of an active target is kicked once, by the finer endpoint or the lower
+    // identity, so active targets recover the complete force while inactive neighbors receive
+    // only their recoil. Compensated sums deposited in another order agree to float rounding.
     for (int index = 0; index < 4; ++index) {
         int const source = fixture.sourceIndex(index);
         int const sink = fixture.sinkIndex(index);
         bool const active = rungs[index] == 2;
-        for (int dimension = 0; dimension < kDimensions; ++dimension) {
-            midpointRequire(data.sinkAccelerations[sink][dimension] ==
-                    (active ? referenceAcceleration[index][dimension] : -123.0f),
-                "exact-rung midpoint force lost neighbors or updated an inactive target");
+        if (active) {
+            auto const acceleration = fixture.kickAcceleration(index);
+            for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
+                midpointRequire(
+                    std::abs(acceleration[dimension] - referenceAcceleration[index][dimension]) <=
+                        32.0 * std::numeric_limits<float>::epsilon() * impulseScale,
+                    "exact-rung midpoint force lost neighbors");
+            }
         }
         midpointRequire(
             data.sinkEntropyRate[sink] == (active ? referenceEntropyRate[index] : -123.0f),
-            "midpoint entropy rate ignored exact-rung selection");
+            "midpoint entropy rate ignored exact-rung selection or updated an inactive target");
         midpointRequire(data.sinkFlags[sink].proposedRung() == (active ? 1 : kMaxRung - 1),
             "midpoint selection prevented coarsening or proposed an inactive rung");
         midpointRequire(data.sinkFlags[sink].converged() && data.sinkFlags[sink].semiactive(),
@@ -218,6 +229,18 @@ void testMidpointHydroTargets(Fixture& fixture) {
         midpointRequire(data.sourceVelocityX[source] == velocities[index] &&
                 data.sourceInternalEnergy[source] == 0.8f + 0.1f * index,
             "midpoint force changed the frozen source state");
+    }
+    for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
+        double total = 0.0;
+        double absolute = 0.0;
+        for (int index = 0; index < 4; ++index) {
+            double const increment = compensatedKickSum(
+                data.sourcePairUpdates[fixture.sourceIndex(index)].velocity[dimension]);
+            total += increment;
+            absolute += std::abs(increment);
+        }
+        midpointRequire(std::abs(total) <= 4.0 * std::numeric_limits<float>::epsilon() * absolute,
+            "fine-owned pairs lost the inactive endpoints' recoil");
     }
     // A faster touching source constrains the proposal without becoming an H target.
     data.sourceRungs[fixture.sourceIndex(2)] = data.sinkParticleRungs[fixture.particleIndex(2)] = 5;
@@ -229,8 +252,7 @@ void testMidpointHydroTargets(Fixture& fixture) {
         midpointRequire(data.sinkParticleRungs[fixture.particleIndex(index)] == 2,
             "neighbor timestep bound committed before the gravity boundary");
     }
-    midpointRequire(data.sinkAccelerations[fixture.sinkIndex(2)][0] == -123.0f &&
-            data.sinkEntropyRate[fixture.sinkIndex(2)] == -123.0f &&
+    midpointRequire(data.sinkEntropyRate[fixture.sinkIndex(2)] == -123.0f &&
             data.sinkFlags[fixture.sinkIndex(2)].proposedRung() == kMaxRung - 1,
         "midpoint neighbor limiter updated a target above the selected rung");
     testFineNeighborsOfCoarseParticle<Fixture>();

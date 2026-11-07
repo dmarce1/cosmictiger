@@ -34,10 +34,11 @@ The historical validation records below concern the former energy integrator.
 ## Notation
 
 The stored length is the compact support radius \(H\) and the selected kernel is
-\(W(r,H)=H^{-3}w(q)\), \(q=r/H\). It is not the papers' smoothing length \(h\), whose
-normalization differs between kernels; only \(H\,\partial W/\partial H\) ratios enter,
-so the formulas below are unchanged. Particle \(i\) carries a mass \(m_i\) and a
-volume weight \(x_i\); \(r_{ij}=r_i-r_j\) and \(v_{ij}=v_i-v_j\).
+\(W(r,H)=H^{-3}w(q)\), \(q=r/H\). It is not the smoothing length \(h\) of Hopkins (2013)
+and Price (2012), whose normalization differs between kernels; only
+\(H\,\partial W/\partial H\) ratios enter, so the formulas below are unchanged.
+Particle \(i\) carries a mass \(m_i\) and a volume weight \(x_i\); \(r_{ij}=r_i-r_j\)
+and \(v_{ij}=v_i-v_j\).
 
 | Symbol | Meaning | Code |
 | --- | --- | --- |
@@ -46,10 +47,10 @@ volume weight \(x_i\); \(r_{ij}=r_i-r_j\) and \(v_{ij}=v_i-v_j\).
 | \(V_i=x_i/y_i\) | particle volume | `sph_volume::volume` |
 | \(\rho^*_i=m_iy_i/x_i\) | density implied by \(V_i\) | `sph_volume::volumeDensity` |
 | \(\Omega_i\) | grad-H factor of the constraint | `sph_volume::omega`, `Ω_a` |
-| \(\zeta_i\) | weighted grad-H correction, in units of \(x\) | `sph_volume::zeta`, `ζ_a` |
+| \(\zeta_i\) | weighted grad-H correction, in units of \(x\) | `sph_volume::zeta`, `ζ𞁑` |
 | \(P_i x_i/y_i^2\) | pressure-volume prefactor | `variational::pressureVolumeFactor` |
 | \(Q_{ij}\) | directed pressure coefficient | `variational::directedCoefficient` |
-| \(g_i=\nabla_iW_{ij}(H_i)\), \(g_j=\nabla_iW_{ij}(H_j)\) | separate kernel gradients | `F_a r_ab`, `F_b r_ab` |
+| \(g_i=\nabla_iW_{ij}(H_i)\), \(g_j=\nabla_iW_{ij}(H_j)\) | separate kernel gradients | `F𞁑 r𞁑𞁓`, `F𞁓 r𞁑𞁓` |
 
 \(\partial W/\partial H=H^{-4}[-3w(q)-qw'(q)]\) (`sph_volume::kernelSupportDerivative`).
 This stage uses \(x_i=m_i\), so \(y_i\) is the ordinary mass-summed density, and all
@@ -111,7 +112,7 @@ In code, with \(x=m\) for every gas particle,
 ## Equation of state
 
 The reversible work uses the first law at fixed composition,
-\(du=P\,d\rho/\rho^2\) (Price 2012, equations 24–25); it does not require a
+\(du=P\,d\rho/\rho^2\) as in Price (2012), equations 24–25; it does not require a
 constant \(\gamma\). Production uses the fixed volume weight \(x=m\), so chemistry
 does not enter the density sum or its grad-H correction. Every particle uses the
 single ideal-gas index `hydro.gamma`: \(P_i=(\gamma-1)\rho_i u_i\) and
@@ -177,8 +178,8 @@ double-precision tests in `tests/sph/volume.cpp` solve supports to roundoff.
 The artificial viscosity is the Monaghan \(\Pi_{ij}\) with the symmetric gradient
 \(\tfrac12(g_i+g_j)\), its pair-symmetric force and its heating
 \(\tfrac12\sum_j m_j\Pi_{ij}v^{\rm phys}_{ij}\cdot\tfrac12(g_i+g_j)\).
-`hydro.viscosityEvolution` and `hydro.balsaraSwitch` select its coefficient
-evolution and shear limiter independently of the reversible pressure terms.
+`hydro.viscosityEvolution` selects its coefficient evolution, and with it the
+shear limiter, independently of the reversible pressure terms.
 
 ## Cosmological variables
 
@@ -297,8 +298,8 @@ solved to roundoff in a 48-particle isolated cloud):
   selectable kernels (spline 2–9, Wendland C0/C2/C4, Ferrers F1–F4).
 - \(n\), \(y\), their \(H\) derivatives, \(V\), \(\rho^*\), \(\Omega\) and \(\zeta\) agree with
   direct sums and finite differences for unequal weights and masses; the equal-mass
-  reduction \(\zeta=m(1-1/\Omega)\), \(f_{ij}=1/\Omega\) and Price's equation 30 hold to
-  \(10^{-12}\).
+  reduction \(\zeta=m(1-1/\Omega)\), \(f_{ij}=1/\Omega\) and equation 30 of Price (2012)
+  hold to \(10^{-12}\).
 - \(dy_i/dr_k\) and \(dH_i/dr_k\) with the support re-solved match the constrained
   derivatives.
 - The force equals minus the finite-difference gradient of

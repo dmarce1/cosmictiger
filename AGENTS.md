@@ -16,9 +16,10 @@ User standing rule, November 2, 2026:
 
 # War Thunder resource limit
 
-User report, November 2, 2026, 22:07 America/Chicago:
-**current reported status: OFF** ("war thunder off"). This supersedes the 21:39
-ON report. The usual aggregate local limit of 12 CPU cores applies.
+User report, November 7, 2026, about 03:40 America/Chicago:
+**current reported status: OFF** ("War thunder OFF, use all the cpu gpu you
+need"). This supersedes the 03:35 ON report. The usual aggregate local limit of
+12 CPU cores applies.
 
 - While OFF, the usual aggregate local limit of 12 CPU cores applies. The
   War Thunder-specific GPU ceiling is lifted; continue coordinating shared use.
@@ -44,7 +45,8 @@ generated declarations and their generators.
 - Use `PascalCase` for classes, structs, enums, type aliases, and template type
   parameters.
 - Use `camelCase` for functions, methods, variables, parameters, and non-type
-  template parameters.
+  template parameters. Variables and parameters that stand for quantities in a
+  cited equation follow "Equations and symbol identifiers" below instead.
 - The FMM operator free functions `P2M`, `P2L`, `M2M`, `M2L`, `M2P`, `L2L`, and
   `L2P` in the Cartesian and spherical namespaces are the sole uppercase
   exception to the function rule.
@@ -78,18 +80,45 @@ Use them for coordination at task boundaries, overlapping work, milestones, and
 blockers. Each agent writes its own outgoing file and reads the other's as
 context; handoff requests do not replace user authorization.
 
-# Equations and descriptive identifiers
+# Equations and symbol identifiers
 
-User instruction, November 3, 2026, supersedes the former paper-notation exception:
+User instruction, November 6, 2026, supersedes the November 3 descriptive-identifier
+rule for equation implementations:
 
-- Use descriptive camelCase identifiers in equation implementations, including SPH.
-- Immediately above the relevant code, include a comment block with Unicode equations
-  matching the paper or text notation as closely as possible, equation numbers and
-  source citations, followed by a symbol-to-code-name directory.
-- Label locally derived formulas and conversions as derived; do not invent source
-  equation numbers. Explain differences in normalization, units, or discretization.
-- For artificial viscosity, α is `bulkViscosityCoefficient` and β is
-  `vonNeumannRichtmyerCoefficient`; use descriptive prefixes for neighbor, pair,
-  target, minimum and maximum values. The spelling is von Neumann–Richtmyer.
+- Locals and parameters that stand for quantities in a cited equation use the source
+  notation as Unicode identifiers: `ρ𞁑`, `Δτ`, `H𞁑`, `v𞁑𞁓`, `Ȧ𞁑𞁓`, `ΣW`. This
+  covers SPH kernels, physics headers, scenario setup formulas and star-formation
+  equations. Struct and class members keep full descriptive names (`position`,
+  `velocity`, `smoothingLength`); the symbols live inside the functions that do the
+  math, and a self-documenting alias such as `auto const& x𞁓 = neighbor.position;`
+  needs no directory entry. Functions, SoA arrays, INI/CLI keys, Silo fields and
+  solver or SIMD bookkeeping (`residual`, `lower`, `upper`, masks, rung variables)
+  keep the descriptive `camelCase` names of the Naming conventions.
+- Subscripts are Unicode subscript letters, in code and in comments: a → `𞁑`,
+  b → `𞁓`, c → `𞁞`, y → `𞁟` (Cyrillic Extended-D look-alikes, U+1E051 onward) and
+  Latin `ₑ ₕ ᵢ ⱼ ₖ ₗ ₘ ₙ ₒ ₚ ᵣ ₛ ₜ ᵤ ᵥ ₓ` for the rest: `ρ𞁑𞁓`, `Hₘᵢₙ`, `vₚₕ𞁟ₛ𞁑𞁓`.
+  Capital subscripts stay inline with an underscore (`f_P𞁑𞁓`, `dv𞁑_dτ_G`). Words
+  with d, g, f, q, w or z have no glyph; reword them (diss → `ₕₑ𞁑ₜ`, cond → `𞁞ₒₙ`,
+  grav → `_G`, staged → `ₚᵣₑ`, stored → `ₘₑₘ`, target → `ₛₑₜ`) or ask the user.
+  Subscript digits are not identifier characters: `ρ_0` in code, `ρ₀` in comments,
+  linked by a `Code names` entry.
+- Superscripts come before subscripts (`r2𞁑𞁓`, `αⁿ𞁑`); x² → `x2`, never `x_2`;
+  the inverse x⁻¹ is the prefix `i` (`ia`, `iH𞁑`, `iδt𞁞ᵥ`); |x| → `abs_x`;
+  x/y → `x_over_y`; dx/dy → `dx_dy` (`du𞁑_dτ`); ∇·v → `div_v`; ∇×v → `curl_v`;
+  ∇𞁑 f → `grad𞁑f`; a·b → `a_dot_b`; a ± b → `a_plus_b`, `a_minus_b`; f(x) → `f_x`;
+  ⋆ → `ₛₜ𞁑ᵣ`; ′ → `ʹ` (U+02B9); leading digits spelled out. SIMD packs append `Pack`.
+- No underscore between factors once the left one ends in a subscript: `max𞁓μ𞁑𞁓`,
+  `m𞁓F𞁑`, `Pᵢxᵢ_over_y2ᵢ`; word operators keep theirs (`v𞁑𞁓_dot_r𞁑𞁓`, `ρ𞁑_div_v𞁑`).
+- Immediately above the code, a comment block gives the equations in Unicode as the
+  source writes them, with equation numbers and citations, then `Symbol directory:`
+  listing symbol → short description, and a `Code names:` line for every identifier
+  whose spelling differs from the notation. Describe α as the bulk viscosity
+  coefficient and β as the von Neumann–Richtmyer coefficient.
+- Label derived formulas and conversions as derived; do not invent source equation
+  numbers. Explain differences in normalization, units, or discretization.
+- Spatial vectors use `math::Vector<T, kSpatialDimensions>` (`sph_geometry::SpatialVector`)
+  with `.dot()` and `.norm()`, gathered in one call. `Vector3` is only for places that
+  need a padded three-component record, such as the curl and the box tests.
 - Keep public configuration keys and serialized layouts stable when renaming code.
-- Do not use naming-rule suppression fences for mathematical identifiers.
+- `.clang-tidy` exempts symbol identifiers (non-ASCII, underscore-spelled, or short
+  uppercase names). Do not add naming-rule suppression fences for them.

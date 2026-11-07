@@ -82,7 +82,7 @@ __global__ void sphCudaRungs(
 #endif
 
 struct SphNeighborPosition {
-    sph_geometry::SpatialVector<Position> x;
+    sph_geometry::SpatialVector<Position> position;
 };
 
 #ifdef __CUDACC__
@@ -122,45 +122,45 @@ __device__ inline void recordSphGpuFlops(sph_flops::Counter const& flops, SphRed
 // clang-format off
 /*
  * Section 6 of Monaghan (1992): the resolution length follows the local density,
- * H_a ∝ ρ_a^(−1/ν) with ν = 3 (equations 6.1-6.2). Instead of integrating equation 6.2
- * or 6.7, the solve holds (4π/3) ρ_a H_a³/m = N_target, i.e. ΣW = Σ_b w(|r_ab|/H_a) = 3 N_target/(4π)
- * for the selected kernel W(r, H) = w(r/H)/H³, by a bounded Newton iteration on the support
- * radius H_a with dΣW/dH_a = −Σ_b q_ab w'(q_ab)/H_a, q_ab = |r_ab|/H_a. The
- * bounds limit the support radius without modifying the density sum.
+ * H𞁑 ∝ ρ𞁑^(−1/ν) with ν = 3 (equations 6.1-6.2). Instead of integrating equation 6.2
+ * or 6.7 of Monaghan (1992), the solve holds (4π/3) ρ𞁑 H𞁑³/m = Nₛₑₜ, i.e.
+ * ΣW = Σ𞁓 w(|r𞁑𞁓|/H𞁑) = 3 Nₛₑₜ/(4π) for the selected kernel W(r, H) = w(r/H)/H³, by a
+ * bounded Newton iteration on the support radius H𞁑 with dΣW/dH𞁑 = −Σ𞁓 q𞁑𞁓 w'(q𞁑𞁓)/H𞁑,
+ * q𞁑𞁓 = |r𞁑𞁓|/H𞁑. The bounds limit the support radius without modifying the density sum.
  *
  * Symbol directory (in the code below):
- *   q_ab → normalized radius
- *   x_a → sink position; r_ab → separation
- *   H_a, H_a⁻¹ → smoothing length, its inverse; H_min, H_max → smoothing length bounds
- *   ρ_a → density
- *   ΣW, dΣW/dH_a → kernel sum, its support derivative
- *   N_target, ΣW_target → target neighbor count, target kernel sum
- *   paddedX_a → x_a as the three-axis record that the search-box bounds compare.
- *   Code names: H_inv_a = H_a⁻¹; dΣW_dH_a = dΣW/dH_a.
+ *   q𞁑𞁓 → normalized radius
+ *   x𞁑 → sink position; r𞁑𞁓 → separation
+ *   H𞁑, H𞁑⁻¹ → smoothing length, its inverse; Hₘᵢₙ, Hₘ𞁑ₓ → smoothing length bounds
+ *   ρ𞁑 → density
+ *   ΣW, dΣW/dH𞁑 → kernel sum, its support derivative
+ *   Nₛₑₜ, ΣWₛₑₜ → target neighbor count, target kernel sum
+ *   paddedX_a → x𞁑 as the three-axis record that the search-box bounds compare.
+ *   Code names: iH𞁑 = H𞁑⁻¹; dΣW_dH𞁑 = dΣW/dH𞁑.
  */
 // clang-format on
 
 template <int blockSize, class Neighbors>
-inline __device__ bool solveSphSmoothingLength(float& H_a, float H_min, float H_max, float N_target,
-    Neighbors const& neighbors, sph_geometry::SpatialVector<Position> const& x_a,
+inline __device__ bool solveSphSmoothingLength(float& H𞁑, float Hₘᵢₙ, float Hₘ𞁑ₓ, float Nₛₑₜ,
+    Neighbors const& neighbors, sph_geometry::SpatialVector<Position> const& x𞁑,
     Vector3<Position> const& paddedX_a, Fixed32Range const& neighborSearchBox,
     sph_flops::Counter& flops) {
     int const threadIndex = threadIdx.x;
     int const runtimeBlockSize = blockDim.x;
-    ALWAYS_ASSERT(H_min > 0.0f && H_max >= H_min && N_target > 0.0f);
+    ALWAYS_ASSERT(Hₘᵢₙ > 0.0f && Hₘ𞁑ₓ >= Hₘᵢₙ && Nₛₑₜ > 0.0f);
     if (threadIndex == 0) {
-        H_a = fminf(fmaxf(H_a, H_min), H_max);
+        H𞁑 = fminf(fmaxf(H𞁑, Hₘᵢₙ), Hₘ𞁑ₓ);
     }
     __syncthreads();
-    float lower = H_min;
-    float upper = H_max;
-    float const ΣW_target = N_target * float(1.0 / sph_geometry::kUnitBallVolume);
+    float lower = Hₘᵢₙ;
+    float upper = Hₘ𞁑ₓ;
+    float const ΣWₛₑₜ = Nₛₑₜ * float(1.0 / sph_geometry::kUnitBallVolume);
     flops += 1;
     for (int iteration = 0; iteration < 128; iteration++) {
         int boxExceeded = false;
         for (int dim = 0; dim < kDimensions; dim++) {
             bool const upperExceeded = neighborSearchBox.end[dim] <
-                RangeFixed(paddedX_a[dim]) + RangeFixed(H_a) + RangeFixed::min();
+                RangeFixed(paddedX_a[dim]) + RangeFixed(H𞁑) + RangeFixed::min();
             // Single-precision fixed-point scale, preserving short circuiting.
             flops.singlePrecision += 1;
             if (upperExceeded) {
@@ -168,7 +168,7 @@ inline __device__ bool solveSphSmoothingLength(float& H_a, float H_min, float H_
             } else {
                 flops.singlePrecision += 1;
                 if (RangeFixed(paddedX_a[dim]) <
-                    neighborSearchBox.begin[dim] + RangeFixed(H_a) + RangeFixed::min()) {
+                    neighborSearchBox.begin[dim] + RangeFixed(H𞁑) + RangeFixed::min()) {
                     boxExceeded = true;
                 }
             }
@@ -176,59 +176,59 @@ inline __device__ bool solveSphSmoothingLength(float& H_a, float H_min, float H_
         if (boxExceeded) {
             return false;
         }
-        float const H_inv_a = 1.0f / H_a;
+        float const iH𞁑 = 1.0f / H𞁑;
         flops += 1;
         float ΣW = 0.0f;
-        float dΣW_dH_a = 0.0f;
+        float dΣW_dH𞁑 = 0.0f;
         for (int neighborIndex = threadIndex; neighborIndex < neighbors.size();
             neighborIndex += runtimeBlockSize) {
             auto const& neighbor = neighbors[neighborIndex];
-            auto const r_ab = distance(x_a, neighbor.x);
-            float const q_ab = r_ab.norm() * H_inv_a;
+            auto const r𞁑𞁓 = distance(x𞁑, neighbor.position);
+            float const q𞁑𞁓 = r𞁑𞁓.norm() * iH𞁑;
             // Fixed distances, dot, root, normalized radius.
             flops += sph_flops::kVectorOperation + sph_flops::kNorm + 1;
-            if (q_ab < 1.0f) {
-                ΣW += kernelW(q_ab);
-                dΣW_dH_a -= q_ab * dkernelWDq(q_ab) * H_inv_a;
-                flops += 4 + sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab) +
-                    sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
+            if (q𞁑𞁓 < 1.0f) {
+                ΣW += kernelW(q𞁑𞁓);
+                dΣW_dH𞁑 -= q𞁑𞁓 * dkernelWDq(q𞁑𞁓) * iH𞁑;
+                flops += 4 + sph_flops::densityKernelOperations(selectedHydroKernel(), q𞁑𞁓) +
+                    sph_flops::densityKernelOperations(selectedHydroKernel(), q𞁑𞁓, true);
             }
         }
         sharedReduceAdd<float, blockSize>(ΣW);
-        sharedReduceAdd<float, blockSize>(dΣW_dH_a);
+        sharedReduceAdd<float, blockSize>(dΣW_dH𞁑);
         flops += 2 * detail::sphReductionFlops<blockSize>();
-        float const residual = ΣW - ΣW_target;
+        float const residual = ΣW - ΣWₛₑₜ;
         flops += 2;    // Residual and relative tolerance product (absolute value is free).
-        if (fabsf(residual) <= kSphSmoothingLengthTolerance * ΣW_target ||
-            (H_a <= H_min && residual >= 0.0f) || (H_a >= H_max && residual <= 0.0f)) {
+        if (fabsf(residual) <= kSphSmoothingLengthTolerance * ΣWₛₑₜ ||
+            (H𞁑 <= Hₘᵢₙ && residual >= 0.0f) || (H𞁑 >= Hₘ𞁑ₓ && residual <= 0.0f)) {
             return true;
         }
         if (residual > 0.0f) {
-            upper = H_a;
+            upper = H𞁑;
         } else {
-            lower = H_a;
+            lower = H𞁑;
         }
-        float change = dΣW_dH_a > 0.0f ? -residual / dΣW_dH_a : 0.2f * H_a;
-        change = fminf(fmaxf(change, -0.2f * H_a), 0.2f * H_a);
-        float next = fminf(fmaxf(H_a + change, H_min), H_max);
+        float change = dΣW_dH𞁑 > 0.0f ? -residual / dΣW_dH𞁑 : 0.2f * H𞁑;
+        change = fminf(fmaxf(change, -0.2f * H𞁑), 0.2f * H𞁑);
+        float next = fminf(fmaxf(H𞁑 + change, Hₘᵢₙ), Hₘ𞁑ₓ);
         flops += 4;    // Newton/fallback change, two clamp products, radius update.
         if (next < lower || next > upper) {
             next = 0.5f * (lower + upper);
             flops += 2;
         }
-        if (next == H_a) {
+        if (next == H𞁑) {
             return true;
         }
         __syncthreads();
         if (threadIndex == 0) {
-            H_a = next;
+            H𞁑 = next;
         }
         __syncthreads();
     }
     if (threadIndex == 0) {
         printf("SPH smoothing-length solve did not converge: smoothingLength=%e bounds=[%e,%e] "
                "target=%e\n",
-            H_a, H_min, H_max, N_target);
+            H𞁑, Hₘᵢₙ, Hₘ𞁑ₓ, Nₛₑₜ);
         __trap();
     }
     return false;

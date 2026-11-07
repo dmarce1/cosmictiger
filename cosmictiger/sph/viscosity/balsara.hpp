@@ -51,30 +51,30 @@ CUDA_EXPORT inline float decodeFactor(uint8_t q) {
  * MNRAS 506, 2871-2949, doi:10.1093/mnras/stab1855, equation (72):
  * https://wwwmpa.mpa-garching.mpg.de/gadget4/gadget4-code-paper.pdf
  *
- *   f_a^AV = |div v_a| / (|div v_a| + |curl v_a|),
- *   Π_ab <- ½(f_a^AV + f_b^AV) Π_ab.
+ *   f𞁑^AV = |div v𞁑| / (|div v𞁑| + |curl v𞁑|),
+ *   Π𞁑𞁓 <- ½(f𞁑^AV + f𞁓^AV) Π𞁑𞁓.
  *
- * The common density normalization cancels from the derivative sums. Set f_a^AV
+ * The common density normalization cancels from the derivative sums. Set f𞁑^AV
  * to zero when both vanish; a safe denominator prevents SIMD lanes evaluating 0/0.
  */
 // clang-format off
 /*
- * Symbol directory for GADGET-4 equation (72) above:
- *   ∇·v_a → divergence; |∇×v_a| → curl magnitude
- *   |∇·v_a| → absolute divergence
- *   |∇·v_a| + |∇×v_a| → limiter denominator; f_aᴬⱽ → shear limiter.
- *   Code names: div_v_a = ∇·v_a; abs_curl_v_a = |∇×v_a|; abs_div_v_a = |∇·v_a|;
- *     abs_div_v_a_plus_abs_curl_v_a = |∇·v_a| + |∇×v_a|; fᴬⱽ_a = f_aᴬⱽ.
+ * Symbol directory for GADGET-4, Springel et al. (2021), equation (72) above:
+ *   ∇·v𞁑 → divergence; |∇×v𞁑| → curl magnitude
+ *   |∇·v𞁑| → absolute divergence
+ *   |∇·v𞁑| + |∇×v𞁑| → limiter denominator; f𞁑ᴬⱽ → shear limiter.
+ *   Code names: div_v_a = ∇·v𞁑; abs_curl_v𞁑 = |∇×v𞁑|; abs_div_v𞁑 = |∇·v𞁑|
+ *     abs_div_v𞁑_plus_abs_curl_v𞁑 = |∇·v𞁑| + |∇×v𞁑|; fᴬⱽ𞁑 = f𞁑ᴬⱽ.
  * Density-weighted inputs are also valid because their common factor cancels.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real balsaraFactor(Real div_v_a, Real abs_curl_v_a) {
-    Real const abs_div_v_a = simdMax(div_v_a, -div_v_a);
-    Real const abs_div_v_a_plus_abs_curl_v_a = abs_div_v_a + abs_curl_v_a;
-    Real const fᴬⱽ_a = abs_div_v_a /
-        simdSelect(abs_div_v_a_plus_abs_curl_v_a > Real(0), abs_div_v_a_plus_abs_curl_v_a, Real(1));
-    return fᴬⱽ_a;
+CUDA_EXPORT inline Real balsaraFactor(Real div_v_a, Real abs_curl_v𞁑) {
+    Real const abs_div_v𞁑 = simdMax(div_v_a, -div_v_a);
+    Real const abs_div_v𞁑_plus_abs_curl_v𞁑 = abs_div_v𞁑 + abs_curl_v𞁑;
+    Real const fᴬⱽ𞁑 = abs_div_v𞁑 /
+        simdSelect(abs_div_v𞁑_plus_abs_curl_v𞁑 > Real(0), abs_div_v𞁑_plus_abs_curl_v𞁑, Real(1));
+    return fᴬⱽ𞁑;
 }
 
 }    // namespace balsara

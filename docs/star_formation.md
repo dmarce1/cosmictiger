@@ -35,7 +35,7 @@ When deriving the physical threshold, the calibration hot energy is `u_SN/A_0`,
 as in GADGET-4's initialization routine.
 
 When current gas energy is below `u_eff`, it relaxes exponentially on
-`t_relax = t_star (1-x)/(beta x (1+A))`. When it is above `u_eff`, ordinary
+`t_relax = tₛₜ𞁑ᵣ (1-x)/(beta x (1+A))`. When it is above `u_eff`, ordinary
 implicit cooling applies with `u_eff` as a floor. Gas whose resulting energy
 exceeds `1.01 u_eff` has zero star-formation rate. The effective star-formation
 timescale is bounded below by the selected interval after calculating the

@@ -18,7 +18,7 @@ See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
 
 namespace detail {
 
-// MB (1995), synchronous gauge, x=ln(a). The photon/baryon velocities are
+// Ma & Bertschinger (1995), synchronous gauge, x=ln(a). The photon/baryon velocities are
 // represented by their combined momentum and slip, avoiding subtraction of
 // enormous Thomson drag coefficients in the tight-coupling limit.
 enum Field {
@@ -168,11 +168,12 @@ class BoltzmannIntegrator {
         matrix[ScaledCurvature][ScaledCurvature] = 2.0 * (1.0 - bg.metricFriction);
         matrix[ScaledCurvature][Velocity] = bg.eps * bg.eps * etaVelocity;
         matrix[ScaledCurvature][VelocityNeutrino] = bg.eps * bg.eps * etaNeutrino;
-        // Use the Hamiltonian constraint (MB 21a) for h' in the fluid
-        // equations. Evolving eta with (21b) then feeds the metric back
-        // into the fluid solution without subtracting an accumulated
+        // Use the Hamiltonian constraint (Ma & Bertschinger (1995), equation 21a) for h' in
+        // the fluid equations. Evolving eta with equation 21b of Ma & Bertschinger (1995)
+        // then feeds the metric back into the fluid solution without subtracting an accumulated
         // O(1) curvature error from a tiny late-time eta at large k.
-        // HPrime remains an independently evolved (21c+21a) trace check.
+        // HPrime remains an independently evolved (Ma & Bertschinger (1995), equations 21c+21a)
+        // trace check.
         for (int row = 1; row < CoreSize; ++row) {
             double const metric = matrix[row][HPrime];
             matrix[row][HPrime] = 0.0;
@@ -198,8 +199,8 @@ class BoltzmannIntegrator {
             matrix[row][row] += 1.0;
         }
         std::vector<double> recurrence(rhs.values.size(), 0.0);
-        // Eliminate each tridiagonal tail back to its quadrupole. MB (51),(65)
-        // give F_L'=eps F_(L-1)-(L+1)/(tau Hc)F_L, plus photon opacity.
+        // Eliminate each tridiagonal tail back to its quadrupole. Ma & Bertschinger (1995),
+        // equations 51 and 65 give F_L'=eps F_(L-1)-(L+1)/(tau Hc)F_L, plus photon opacity.
         for (int species = 0; species < species_; ++species) {
             double const opacity = species < 2 ? bg.opacity : 0.0;
             for (int ell = options_.maxMultipole; ell >= 3; --ell) {
@@ -326,7 +327,7 @@ public:
         }
         double const rnu = universe_.params.omegaNu / radiation;
         // Rescale by (k tau_initial)^2 to keep initial fluid amplitudes O(1).
-        // The returned transfers restore this factor and have MB C=1/2.
+        // The returned transfers restore this factor and have C=1/2 of Ma & Bertschinger (1995).
         double const normalization = kt * kt;
         if (!(normalization > std::numeric_limits<double>::min()) ||
             !std::isfinite(normalization)) {
@@ -346,10 +347,11 @@ public:
                 (23.0 + 4.0 * rnu) / (15.0 + 4.0 * rnu) * state.values[Velocity];
             state.values[NeutrinoQuadrupole] = 4.0 / (3.0 * (15.0 + 4.0 * rnu));
         }
-        // MB (96) is a radiation-era series. At a finite start there is a
-        // small matter fraction: enforce (21a) once, then normalize the
-        // initial curvature back to the series value. Eta is subsequently
-        // evolved independently using (21b), never projected onto (21a).
+        // Equation 96 of Ma & Bertschinger (1995) is a radiation-era series. At a finite start
+        // there is a small matter fraction: enforce equation 21a of Ma & Bertschinger (1995)
+        // once, then normalize the initial curvature back to the series value. Eta is
+        // subsequently evolved independently using equation 21b of Ma & Bertschinger (1995),
+        // never projected onto equation 21a.
         double const initialDensity = initialBg.cdm * state.values[DeltaCdm] +
             initialBg.baryon * state.values[DeltaBaryon] +
             initialBg.photon * state.values[DeltaPhoton] +

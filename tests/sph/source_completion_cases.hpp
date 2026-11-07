@@ -10,11 +10,17 @@
 
 namespace detail {
 
+// deferAccelerationSources keeps the gravity buffer unread while a pair pass is in flight.
+// The pair and external kicks are the force outputs production integrates; neither depends
+// on the deferral, and neither carries self-gravity, which the gravity kick integrates.
+// Only a closing (non-midpoint) pass reads the gravity buffer at all, so the deferral guard
+// is exercised by a closing pass over null buffers, observed through the viscous heating.
 template <typename Fixture>
 void testDeferredSourceCompletion() {
     Fixture fixture(2);
     auto& data = fixture.data_;
     auto& parameters = fixture.params_;
+    fixture.enableKickObservation();
     parameters.minimumSmoothingLength = parameters.maximumSmoothingLength = 0.35f;
     parameters.uniformAccelerationY = 0.375f;
     parameters.zPlaneAcceleration = 0.25f;
@@ -40,39 +46,39 @@ void testDeferredSourceCompletion() {
     }
     fixture.density();
     fixture.hydro(0);
-    std::array<Vector3<float>, 2> expectedAcceleration;
-    std::array<float, 2> expectedHeating;
+    std::array<sph_geometry::SpatialVector<float>, 2> expectedAcceleration;
+    std::array<double, 2> expectedHeating;
     for (int i = 0; i < 2; ++i) {
-        int const sink = fixture.sinkIndex(i);
-        expectedAcceleration[i] = data.sinkAccelerations[sink];
-        expectedHeating[i] = data.sinkInternalEnergyRate[sink];
+        expectedAcceleration[i] = fixture.kickAcceleration(i);
+        expectedHeating[i] = fixture.dissipativeHeating(i);
     }
-    // No gravity buffer is readable while the pair pass is in flight. A stale
-    // field read must fail, even if a later correction could hide its value.
+    // The kicks and the viscous heating never depend on the deferral.
     parameters.deferAccelerationSources = true;
     data.sinkGravityAccelerationX = nullptr;
     data.sinkGravityAccelerationY = nullptr;
     data.sinkGravityAccelerationZ = nullptr;
     fixture.hydro(0);
+    // The one pair and the external kicks deposit the same impulses in the same order.
     for (int i = 0; i < 2; ++i) {
-        int const source = fixture.sourceIndex(i);
-        int const sink = fixture.sinkIndex(i);
-        sph_flops::Counter flops;
-        auto const completed = sphCompleteAcceleration(parameters,
-            Vector3<Position>(data.sourcePositionX[source], data.sourcePositionY[source],
-                data.sourcePositionZ[source]),
-            Vector3<float>(data.sourceVelocityX[source], data.sourceVelocityY[source],
-                data.sourceVelocityZ[source]),
-            data.sinkAccelerations[sink], gravity[i], data.centralAcceleration,
-            data.centralSmoothingLength, flops);
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            if (std::abs(completed[dim] - expectedAcceleration[i][dim]) >
-                1.0e-6f * std::max(1.0f, std::abs(expectedAcceleration[i][dim]))) {
-                throw std::runtime_error("Deferred SPH source assembly differs from serial force");
+        auto const acceleration = fixture.kickAcceleration(i);
+        for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+            if (acceleration[dim] != expectedAcceleration[i][dim]) {
+                throw std::runtime_error("Deferred SPH sources changed the pair or external kicks");
             }
         }
-        if (data.sinkInternalEnergyRate[sink] != expectedHeating[i]) {
-            throw std::runtime_error("Deferred SPH sources changed pressure or viscous work");
+        if (fixture.dissipativeHeating(i) != expectedHeating[i]) {
+            throw std::runtime_error("Deferred SPH sources changed the viscous heating");
+        }
+    }
+    // A midpoint pass never reads the gravity buffer; only a closing pass does, and only
+    // when the sources are not deferred. No gravity buffer is readable while the pair pass
+    // is in flight: a stale field read must fail, even if a later correction could hide its
+    // value. The closing pass completes over the null buffers and sums the same heating.
+    fixture.disableKickObservation();
+    fixture.hydro(0);
+    for (int i = 0; i < 2; ++i) {
+        if (fixture.dissipativeHeating(i) != expectedHeating[i]) {
+            throw std::runtime_error("Deferred closing SPH pass changed the viscous heating");
         }
     }
 }

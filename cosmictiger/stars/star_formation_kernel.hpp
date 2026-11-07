@@ -218,12 +218,12 @@ CUDA_EXPORT inline Output advance(Input const& input, Parameters const& paramete
             // clang-format off
             /*
              * Springel & Hernquist (2003), MNRAS 339, 289, equation (12),
-             * https://arxiv.org/abs/astro-ph/0206393: τ_h = t⋆ ρ_h/[β(A+1)ρ_c].
+             * https://arxiv.org/abs/astro-ph/0206393: τₕ = t⋆ ρₕ/[β(A+1)ρ𞁞].
              * Derived frozen-equilibrium relaxation used by the GADGET-4 source:
-             *   u(Δt) = u_eff + [u(0) − u_eff] exp(−Δt/τ_h).
+             *   u(Δt) = u_eff + [u(0) − u_eff] exp(−Δt/τₕ).
              * Symbol directory:
              *   u(0) → old energy; u_eff → effective energy; Δt → interval
-             *   τ_h → relaxation time; u(Δt) → new energy.
+             *   τₕ → relaxation time; u(Δt) → new energy.
              *   Code names: u_0 = u(0); u_Δt = u(Δt).
              */
             // clang-format on

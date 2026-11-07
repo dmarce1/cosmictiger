@@ -213,7 +213,8 @@ int rockstarFormTree(DeviceVector<RockstarTree>& trees, DeviceVector<RockstarPar
     return rockstarFormTree(parts, trees, rng, 0, parts.size());
 }
 
-// ROCKSTAR Sec. III.2: nearest-neighbor quantile in the normalized Eq. (1) metric.
+// Behroozi, Wechsler & Wu (2013), Sec. III.2: nearest-neighbor quantile in the normalized
+// Eq. (1) metric.
 float rockstarFindLinkLen(DeviceVector<RockstarTree>& trees, DeviceVector<RockstarParticle>& parts,
     int treeRoot, float ff, bool gpu) {
     if (parts.size() < 2) {
@@ -541,7 +542,8 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
     }
     sigma2X /= parts.size();
     sigma2V /= parts.size();
-    // Sec. III.2, Eq. (1): renormalize position and velocity at every level.
+    // Behroozi, Wechsler & Wu (2013), Sec. III.2, Eq. (1): renormalize position and velocity
+    // at every level.
     float sigmaX = rockstar::detail::normalizationScale(sigma2X);
     float sigmaV = rockstar::detail::normalizationScale(sigma2V);
     float sigmainvX = 1.0 / sigmaX;
@@ -617,8 +619,8 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
                 return a.parts.size() < b.parts.size();
             });
             for (int l = k + 1; l < subgroups.size(); l++) {
-                // Sec. III.3, Eq. (2): smaller seed's Poisson uncertainties;
-                // the squared merge threshold is (10*sqrt(2))^2 = 200.
+                // Behroozi, Wechsler & Wu (2013), Sec. III.3, Eq. (2): smaller seed's Poisson
+                // uncertainties; the squared merge threshold is (10*sqrt(2))^2 = 200.
                 double const sigmaXInv =
                     sqrt(double(subgroups[k].parts.size()) / subgroups[k].sigma2X);
                 double const sigmaVInv =
@@ -655,8 +657,8 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
             int minIndex = 0;
             for (int i = 0; i < subgroups.size(); i++) {
                 assert(subgroups[i].parts.size());
-                // Sec. III.3, Eqs. (3)-(4): use double after rescaling tiny
-                // cold seeds, so a finite velocity cannot overflow the metric.
+                // Behroozi, Wechsler & Wu (2013), Sec. III.3, Eqs. (3)-(4): use double after
+                // rescaling tiny cold seeds, so a finite velocity cannot overflow the metric.
                 double const rdynInv = 1.0 / std::max(double(subgroups[i].rDyn), 1.e-30);
                 double const sigmaVInv =
                     1.0 / std::sqrt(std::max(double(subgroups[i].sigma2V), 1.e-30));
@@ -704,7 +706,8 @@ Vector<Subgroup> rockstarSeeds(DeviceVector<RockstarParticle> parts, int& nextId
         sg.rVir *= sigmaX;
         sg.sigma2V = std::max(double(sg.sigma2V) * sigmaV * sigmaV, 1.e-30);
         sg.sigma2X = std::max(double(sg.sigma2X) * sigmaX * sigmaX, 1.e-30);
-        // Sec. III.5.1: compare center errors in the same length units.
+        // Behroozi, Wechsler & Wu (2013), Sec. III.5.1: compare center errors in the same
+        // length units.
         sg.sigmaXMin *= sigmaX;
         sg.vcircMax *= sigmaV;
         for (int i = 0; i < parts.size(); i++) {

@@ -310,30 +310,30 @@ KickReturn gravityFinishDeferredGasOpening() {
     }
     KickReturn result;
     // Derived split ordering at a coincident hydro event:
-    // Δv_G = Σ_l s_l (Δτ_l/2) a_l;  v_after = v_after_H + Δv_G.
+    // Δv_G = Σ_l s_l (Δτ_l/2) a_l;  vₒᵤₜ = vᵢₙ + Δv_G.
     // The signed hierarchical ladder supplies s_l; traditional gravity has one
     // opening term. Accumulation changes no momentum until the hydro operator
     // has completed. Diagnostic corrections retain the pre-opening state.
-    // Δv_G -> velocity increment; v_after_H -> velocity before the gravity increment; v_after ->
+    // Δv_G -> velocity increment; vᵢₙ -> velocity before the gravity increment; vₒᵤₜ ->
     // velocity after the gravity increment.
     for (auto const& impulse : detail::gasOpeningImpulses) {
         ParticleInteger const index = impulse.particleIndex;
         ALWAYS_ASSERT(particlesType(index) == kSphType);
-        Vector3<float> v_after_H;
-        Vector3<float> v_after;
+        Vector3<float> vᵢₙ;
+        Vector3<float> vₒᵤₜ;
         for (int dimension = 0; dimension < kDimensions; ++dimension) {
-            v_after_H[dimension] = particlesVel(dimension, index);
-            v_after[dimension] = v_after_H[dimension] + impulse.velocityIncrement[dimension];
-            particlesVel(dimension, index) = v_after[dimension];
+            vᵢₙ[dimension] = particlesVel(dimension, index);
+            vₒᵤₜ[dimension] = vᵢₙ[dimension] + impulse.velocityIncrement[dimension];
+            particlesVel(dimension, index) = vₒᵤₜ[dimension];
         }
         double const mass = particlesMass(index);
-        double const kineticChange = 0.5 * mass * (v_after.dot(v_after) - v_after_H.dot(v_after_H));
+        double const kineticChange = 0.5 * mass * (vₒᵤₜ.dot(vₒᵤₜ) - vᵢₙ.dot(vᵢₙ));
         result.dkin += kineticChange;
         result.darkMatterKineticCorrection -= kineticChange;
-        result.darkMatterXMomentumCorrection += mass * (v_after_H[kXi] - v_after[kXi]);
-        result.darkMatterYMomentumCorrection += mass * (v_after_H[kYi] - v_after[kYi]);
-        result.darkMatterZMomentumCorrection += mass * (v_after_H[kZi] - v_after[kZi]);
-        result.darkMatterMomentumNormCorrection += mass * (v_after_H.norm() - v_after.norm());
+        result.darkMatterXMomentumCorrection += mass * (vᵢₙ[kXi] - vₒᵤₜ[kXi]);
+        result.darkMatterYMomentumCorrection += mass * (vᵢₙ[kYi] - vₒᵤₜ[kYi]);
+        result.darkMatterZMomentumCorrection += mass * (vᵢₙ[kZi] - vₒᵤₜ[kZi]);
+        result.darkMatterMomentumNormCorrection += mass * (vᵢₙ.norm() - vₒᵤₜ.norm());
         result.maxRung = std::max(result.maxRung, int(particlesRung(index)));
     }
     addCpuFlops(3 * detail::gasOpeningImpulses.size(), FlopPrecision::Single);

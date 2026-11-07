@@ -40,8 +40,6 @@
 #define CHECK_SPH_PART_BOUNDS(i)
 #endif
 
-using SphAcceleration = ParticleVector<float>;
-
 // Cooling stores an equilibrium electron-fraction guess; hydro owns entropy.
 SPH_PARTICLES_EXTERN float* sphParticlesElectronFractions;
 

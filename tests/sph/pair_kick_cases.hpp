@@ -22,6 +22,11 @@ inline void pairKickClose(double actual, double expected, char const* message) {
         std::abs(actual - expected) <= 2.0e-6 * std::max(std::abs(expected), 1.0e-20), message);
 }
 
+// A compensated pair sum represents s − c (cosmictiger/sph/pair_kick.hpp).
+inline double compensatedKickSum(SphCompensatedSum const& sum) {
+    return double(float(sum)) - double(sum.correction());
+}
+
 template <class Fixture>
 void testConservativePairKick(Fixture& fixture, bool morrisAndMonaghan) {
     auto& data = fixture.data_;
@@ -33,10 +38,14 @@ void testConservativePairKick(Fixture& fixture, bool morrisAndMonaghan) {
     parameters.baseTimestep = 1.0e-5f;
     parameters.scaleFactor = 0.7f;
     parameters.expansionRate = 0.03f;
+    parameters.hydroKickTimestep = 0.0005;
     data.selfGravityEnabled = false;
     if (morrisAndMonaghan) {
         fixture.enableVariableViscosity();
     }
+    auto* identities = fixture.enablePairKickOutputs();
+    identities[fixture.sourceIndex(0)] = {1, 37};
+    identities[fixture.sourceIndex(1)] = {0, 92};
     std::array<std::array<float, 3>, 2> const velocities{
         {{0.2f, 0.07f, 0.04f}, {-0.1f, -0.03f, -0.06f}}};
     for (int index = 0; index < 2; ++index) {
@@ -55,26 +64,23 @@ void testConservativePairKick(Fixture& fixture, bool morrisAndMonaghan) {
             data.sourceBulkViscosityCoefficient[source] = 0.4f + 0.5f * index;
         }
     }
-    // The ordinary complete-target RHS is an independent reference for both
-    // sides' force and heating, including unequal particle alphas.
+    // The complete equal-rung evaluation, in which the lower identity owns the one pair, is
+    // the reference for both sides' impulse and heating, including unequal particle alphas.
+    // The fixture clears the pair updates before every pass.
     fixture.hydro(0);
-    std::array<Vector3<float>, 2> acceleration;
+    std::array<std::array<double, kDimensions>, 2> impulse;
     std::array<float, 2> entropyRate;
     for (int index = 0; index < 2; ++index) {
-        acceleration[index] = data.sinkAccelerations[fixture.sinkIndex(index)];
+        auto const& update = data.sourcePairUpdates[fixture.sourceIndex(index)];
+        for (int dimension = 0; dimension < kDimensions; ++dimension) {
+            impulse[index][dimension] = compensatedKickSum(update.velocity[dimension]);
+        }
         entropyRate[index] = data.sinkEntropyRate[fixture.sinkIndex(index)];
         pairKickRequire(entropyRate[index] > 0.0f, "pair fixture missed viscous heating");
+        pairKickRequire(impulse[index][0] != 0.0, "pair fixture missed the pair force");
     }
-    auto* identities = fixture.enablePairKickOutputs();
-    identities[fixture.sourceIndex(0)] = {1, 37};
-    identities[fixture.sourceIndex(1)] = {0, 92};
     data.sourceRungs[fixture.sourceIndex(0)] = data.sinkParticleRungs[fixture.particleIndex(0)] = 3;
     data.sourceRungs[fixture.sourceIndex(1)] = data.sinkParticleRungs[fixture.particleIndex(1)] = 1;
-    auto clearUpdates = [&] {
-        for (int index = 0; index < 2; ++index) {
-            data.sourcePairUpdates[fixture.sourceIndex(index)] = {};
-        }
-    };
     auto requireZero = [&] {
         for (int index = 0; index < 2; ++index) {
             auto const& update = data.sourcePairUpdates[fixture.sourceIndex(index)];
@@ -85,7 +91,6 @@ void testConservativePairKick(Fixture& fixture, bool morrisAndMonaghan) {
             }
         }
     };
-    parameters.hydroKickTimestep = 0.0005;
     parameters.minimumRung = parameters.maximumRung = 1;
     fixture.hydro(1);
     requireZero();
@@ -96,8 +101,7 @@ void testConservativePairKick(Fixture& fixture, bool morrisAndMonaghan) {
         pairKickClose(update.entropy, parameters.hydroKickTimestep * entropyRate[index],
             "pair kick lost an endpoint's viscous heating");
         for (int dimension = 0; dimension < kDimensions; ++dimension) {
-            pairKickClose(update.velocity[dimension],
-                parameters.hydroKickTimestep * acceleration[index][dimension],
+            pairKickClose(compensatedKickSum(update.velocity[dimension]), impulse[index][dimension],
                 "fine-owned pair impulse differs from the complete pair force");
         }
     }
@@ -124,7 +128,6 @@ void testConservativePairKick(Fixture& fixture, bool morrisAndMonaghan) {
     // also use the local index to break ties within one rank.
     data.sourceRungs[fixture.sourceIndex(1)] = data.sinkParticleRungs[fixture.particleIndex(1)] = 3;
     for (int ownershipCase = 0; ownershipCase < 2; ++ownershipCase) {
-        clearUpdates();
         if (ownershipCase == 1) {
             identities[fixture.sourceIndex(0)] = {0, 37};
             identities[fixture.sourceIndex(1)] = {0, 92};
@@ -135,21 +138,16 @@ void testConservativePairKick(Fixture& fixture, bool morrisAndMonaghan) {
             pairKickClose(update.entropy, parameters.hydroKickTimestep * entropyRate[index],
                 "equal-rung pair heating was counted twice or lost");
             for (int dimension = 0; dimension < kDimensions; ++dimension) {
-                pairKickClose(update.velocity[dimension],
-                    parameters.hydroKickTimestep * acceleration[index][dimension],
-                    "equal-rung pair force was counted twice or lost");
+                pairKickClose(compensatedKickSum(update.velocity[dimension]),
+                    impulse[index][dimension], "equal-rung pair force was counted twice or lost");
             }
         }
     }
-    // Production does not need persistent acceleration or entropy-rate output.
-    data.sinkAccelerations = nullptr;
+    // Production does not need the persistent entropy-rate output.
     data.sinkEntropyRate = nullptr;
-    data.sinkInternalEnergyRate = nullptr;
-    clearUpdates();
     parameters.hydroKickTimestep = 0.0;
     fixture.hydro(1);
     requireZero();
-    clearUpdates();
     parameters.hydroKickTimestep = 0.0005;
     parameters.minimumRung = parameters.maximumRung = 1;
     data.sourceRungs[fixture.sourceIndex(1)] = data.sinkParticleRungs[fixture.particleIndex(1)] = 1;

@@ -59,7 +59,7 @@ void rockstarFindSubgroupsCuda(DeviceVector<RockstarTree>& nodes, DeviceVector<i
     if (leaves.size() == 0) {
         return;
     }
-    // CUDA connectivity for ROCKSTAR Sec. III.2's Eq. (1) neighbor graph.
+    // CUDA connectivity for Behroozi, Wechsler & Wu (2013), Sec. III.2's Eq. (1) neighbor graph.
     // Label propagation is our implementation of that FOF connectivity.
     // Unique initial labels also represent singletons; the common size filter
     // removes those after connectivity has converged.

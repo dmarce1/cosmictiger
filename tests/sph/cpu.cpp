@@ -65,6 +65,8 @@ namespace detail {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
 
+using sph_geometry::SpatialVector;
+
 void require(bool condition, char const* label) {
     if (!condition) {
         throw std::runtime_error(label);
@@ -110,6 +112,7 @@ public:
     SphRunParameters params_;
     SphRunData data_{};
     SphRunReturn* reduction_ = &reductionValue_;
+    SphPairSourceId* pairSourceIds_ = nullptr;
 
     explicit Fixture(int count, int treeCount = 1, int sourceOffset = 0, int sinkOffset = 0,
         int particleOffset = 0)
@@ -138,9 +141,7 @@ public:
         data_.sinkGravityAccelerationX = allocate<float>(sinkSize);
         data_.sinkGravityAccelerationY = allocate<float>(sinkSize);
         data_.sinkGravityAccelerationZ = allocate<float>(sinkSize);
-        data_.sinkInternalEnergyRate = allocate<float>(sinkSize);
         data_.sinkSmoothingLength = allocate<float>(sinkSize);
-        data_.sinkAccelerations = allocate<SphAcceleration>(sinkSize);
         data_.sinkParticleRungs = allocate<char>(particleSize);
         data_.sinkFlags = allocate<SphParticleFlags>(sinkSize);
         data_.sinkParticleIndices = allocate<ParticleInteger>(sinkSize);
@@ -242,8 +243,14 @@ public:
         run(kSphRunSmoothingLengths);
     }
 
+    void enableEntropyRateOutput() {
+        if (!data_.sinkEntropyRate) {
+            data_.sinkEntropyRate = allocate<float>(count_ + sinkOffset_ + 3);
+        }
+    }
+
     void enableMidpointOutputs() {
-        data_.sinkEntropyRate = allocate<float>(count_ + sinkOffset_ + 3);
+        enableEntropyRateOutput();
         data_.proposeRungs = true;
         for (int i = 0; i < count_ + sinkOffset_ + 3; i++) {
             data_.sinkFlags[i].setProposedRung(kMaxRung - 1);
@@ -251,10 +258,61 @@ public:
     }
 
     SphPairSourceId* enablePairKickOutputs() {
-        auto* identities = allocate<SphPairSourceId>(count_ + sourceOffset_ + 3);
-        data_.sourceIds = identities;
+        pairSourceIds_ = allocate<SphPairSourceId>(count_ + sourceOffset_ + 3);
+        data_.sourceIds = pairSourceIds_;
         data_.sourcePairUpdates = allocate<SphPairUpdate>(count_ + sourceOffset_ + 3);
-        return identities;
+        return pairSourceIds_;
+    }
+
+    // Pair kicks are the force output production integrates. With every sink active on one
+    // rung, each pair is kicked exactly once per pass, so Δv/Δτ recovers the hydro
+    // acceleration: pair forces plus the external kick, never self-gravity. The power-of-two
+    // Δτ keeps the float products Δτ a𞁑𞁓 exact; only the compensated sums round.
+    static constexpr double kKickTimestep = 0x1p-10;
+
+    SphPairSourceId* enableKickObservation() {
+        if (!data_.sourcePairUpdates) {
+            enablePairKickOutputs();
+            for (int i = 0; i < count_; ++i) {
+                pairSourceIds_[sourceIndex(i)] = SphPairSourceId{0, ParticleInteger(i)};
+            }
+        }
+        enableEntropyRateOutput();
+        params_.midpointHydro = true;
+        params_.hydroKickTimestep = kKickTimestep;
+        return pairSourceIds_;
+    }
+
+    // Closing passes that need the non-midpoint gravity bound leave the kick arrays idle.
+    void disableKickObservation() {
+        params_.midpointHydro = false;
+        params_.hydroKickTimestep = 0.0;
+    }
+
+    void clearPairUpdates() {
+        for (int i = 0; i < count_; ++i) {
+            data_.sourcePairUpdates[sourceIndex(i)] = {};
+        }
+    }
+
+    // Δv/Δτ of one sink from the compensated kicks of the last pass.
+    SpatialVector<float> kickAcceleration(int index) const {
+        require(data_.sourcePairUpdates && params_.hydroKickTimestep > 0.0,
+            "kick acceleration requires an enabled kick observation");
+        auto const& update = data_.sourcePairUpdates[sourceIndex(index)];
+        SpatialVector<float> acceleration;
+        for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+            acceleration[dim] =
+                float(compensatedKickSum(update.velocity[dim]) / params_.hydroKickTimestep);
+        }
+        return acceleration;
+    }
+
+    // (du𞁑/dτ)ₕₑ𞁑ₜ of one sink, inverting the kernel's Ȧ𞁑 = (du𞁑/dτ)ₕₑ𞁑ₜ / (E/A)(ρ𞁑, γ, a).
+    double dissipativeHeating(int index) const {
+        require(data_.sinkEntropyRate, "dissipative heating requires the entropy-rate output");
+        return sph_entropy::storedEnergy(data_.sinkEntropyRate[sinkIndex(index)],
+            data_.sourceDensity[sourceIndex(index)], data_.adiabaticIndex, params_.scaleFactor);
     }
 
     void enableRungCandidates() {
@@ -331,22 +389,27 @@ public:
 
     void hydro(int phase = 0) {
         params_.phase = phase;
+        if (data_.sourcePairUpdates) {
+            clearPairUpdates();    // Each call reports the kicks of one pass.
+        }
         run(kSphRunHydro);
         for (int i = 0; i < count_; i++) {
             int const sink = sinkIndex(i);
-            if (data_.sinkInternalEnergyRate) {
-                require(isFinite(data_.sinkInternalEnergyRate[sink]),
-                    "finite active-kernel thermal rate");
+            if (data_.sinkEntropyRate) {
+                require(isFinite(data_.sinkEntropyRate[sink]), "finite active-kernel entropy rate");
             }
-            if (data_.sinkAccelerations) {
-                for (int dim = 0; dim < kDimensions; dim++) {
-                    require(isFinite(data_.sinkAccelerations[sink][dim]),
-                        "finite active-kernel acceleration");
+            if (data_.sourcePairUpdates) {
+                auto const& update = data_.sourcePairUpdates[sourceIndex(i)];
+                require(isFinite(float(update.entropy)), "finite active-kernel entropy kick");
+                for (int dim = 0; dim < kSpatialDimensions; dim++) {
+                    require(
+                        isFinite(float(update.velocity[dim])), "finite active-kernel pair kick");
                 }
             }
             if (phase == 1) {
-                require(
-                    data_.sinkParticleRungs[particleIndex(i)] >= (params_.globalTimestep ? 0 : 1) &&
+                // A midpoint pass proposes from minimumProposedRung; a closing pass keeps rung 1.
+                int const lowestRung = params_.globalTimestep || params_.midpointHydro ? 0 : 1;
+                require(data_.sinkParticleRungs[particleIndex(i)] >= lowestRung &&
                         data_.sinkParticleRungs[particleIndex(i)] < kMaxRung,
                     "valid active-kernel timestep rung");
             }
@@ -354,33 +417,25 @@ public:
         publishRungs();
     }
 
+    // Every kicked pair deposits ±Δv once, so the pair kicks of one pass carry no net
+    // momentum. The reversible work has no production observable, so the former
+    // Σ m v·a + Σ m du/dτ budget is not checked.
     void checkConservation() const {
+        require(data_.sourcePairUpdates && params_.hydroKickTimestep > 0.0,
+            "momentum check requires an enabled kick observation");
         Vector3<double> momentum{};
-        double energy = 0.0;
-        double absoluteEnergy = 0.0;
         double absoluteForce = 0.0;
         for (int i = 0; i < count_; i++) {
-            int const source = sourceIndex(i);
-            int const sink = sinkIndex(i);
-            auto const& acceleration = data_.sinkAccelerations[sink];
-            double const kinetic = data_.gasMass *
-                (data_.sourceVelocityX[source] * acceleration[kXi] +
-                    data_.sourceVelocityY[source] * acceleration[kYi] +
-                    data_.sourceVelocityZ[source] * acceleration[kZi]);
-            double const thermal = data_.gasMass * data_.sinkInternalEnergyRate[sink];
-            energy += kinetic + thermal;
-            absoluteEnergy += std::abs(kinetic) + std::abs(thermal);
-            for (int dim = 0; dim < kDimensions; dim++) {
+            auto const acceleration = kickAcceleration(i);
+            for (int dim = 0; dim < kSpatialDimensions; dim++) {
                 momentum[dim] += data_.gasMass * acceleration[dim];
                 absoluteForce += std::abs(data_.gasMass * acceleration[dim]);
             }
         }
-        for (int dim = 0; dim < kDimensions; dim++) {
+        for (int dim = 0; dim < kSpatialDimensions; dim++) {
             requireClose("active-kernel total momentum rate", momentum[dim], 0.0,
                 3.0e-5 * std::max(1.0, absoluteForce));
         }
-        requireClose(
-            "active-kernel total energy rate", energy, 0.0, 3.0e-5 * std::max(1.0, absoluteEnergy));
     }
 };
 
@@ -488,6 +543,7 @@ void testMorrisMonaghanDensity() {
 void testVariableViscosityPairs() {
     Fixture fixture(2, 2);
     fixture.enableVariableViscosity();
+    fixture.enableKickObservation();
     auto& data = fixture.data_;
     for (int i = 0; i < 2; ++i) {
         int const source = fixture.sourceIndex(i);
@@ -507,11 +563,11 @@ void testVariableViscosityPairs() {
         fixture.params_.vonNeumannRichtmyerCoefficient = vonNeumannRichtmyerCoefficient;
         fixture.hydro();
         fixture.checkConservation();
-        std::array<float, 2> heating;
-        std::array<SphAcceleration, 2> force;
+        std::array<double, 2> heating;
+        std::array<SpatialVector<float>, 2> force;
         for (int i = 0; i < 2; ++i) {
-            heating[i] = data.sinkInternalEnergyRate[fixture.sinkIndex(i)];
-            force[i] = data.sinkAccelerations[fixture.sinkIndex(i)];
+            heating[i] = fixture.dissipativeHeating(i);
+            force[i] = fixture.kickAcceleration(i);
         }
         fixture.params_.variableViscosity = false;
         fixture.params_.bulkViscosityCoefficient = 0.8f;
@@ -523,12 +579,12 @@ void testVariableViscosityPairs() {
         fixture.hydro();
         fixture.checkConservation();
         for (int i = 0; i < 2; ++i) {
-            int const sink = fixture.sinkIndex(i);
             requireClose("variable pair alpha and beta heating", heating[i],
-                data.sinkInternalEnergyRate[sink], 1.0e-5);
-            for (int dim = 0; dim < kDimensions; ++dim) {
+                fixture.dissipativeHeating(i), 1.0e-5);
+            auto const acceleration = fixture.kickAcceleration(i);
+            for (int dim = 0; dim < kSpatialDimensions; ++dim) {
                 requireClose("symmetric variable pair alpha and beta force", force[i][dim],
-                    data.sinkAccelerations[sink][dim], 1.0e-5);
+                    acceleration[dim], 1.0e-5);
             }
         }
         data.sourceBulkViscosityCoefficient = sourceAlpha;
@@ -597,12 +653,14 @@ void testLattice() {
         requireClose(
             "uniform lattice continuum density", fixture.data_.sourceDensity[i], 1.0, 0.03);
     }
+    fixture.enableKickObservation();
     fixture.hydro(1);
     for (int i = 0; i < fixture.count_; i++) {
         requireClose(
-            "uniform gas thermal rate", fixture.data_.sinkInternalEnergyRate[i], 0.0, 2.0e-5);
-        for (int dim = 0; dim < kDimensions; dim++) {
-            requireClose("uniform gas force", fixture.data_.sinkAccelerations[i][dim], 0.0, 2.0e-4);
+            "uniform gas at rest generates no entropy", fixture.dissipativeHeating(i), 0.0, 2.0e-5);
+        auto const acceleration = fixture.kickAcceleration(i);
+        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+            requireClose("uniform gas force", acceleration[dim], 0.0, 2.0e-4);
         }
     }
     require(fixture.reduction_->inverseSoundTimestep > 0.0f &&
@@ -619,11 +677,11 @@ void testLattice() {
     fixture.checkConservation();
     double forceNorm = 0.0;
     for (int i = 0; i < fixture.count_; i++) {
-        forceNorm += std::abs(fixture.data_.sinkAccelerations[i][kXi]);
+        forceNorm += std::abs(fixture.kickAcceleration(i)[kXi]);
     }
     require(forceNorm > 0.1, "perturbed gas must exercise nonzero acceleration");
 
-    // The physical expansion term is tested at nonunit a and nonmonatomic gamma.
+    // Homogeneous expansion at nonunit a and nonmonatomic gamma changes E, never A.
     fixture.data_.adiabaticIndex = 1.4f;
     fixture.params_.scaleFactor = 0.6f;
     fixture.params_.expansionRate = 0.09f;
@@ -633,11 +691,9 @@ void testLattice() {
     }
     fixture.density();
     fixture.hydro();
-    double const background = (5.0f - 3.0f * fixture.data_.adiabaticIndex) *
-        fixture.params_.expansionRate / fixture.params_.scaleFactor * 2.0f;
     for (int i = 0; i < fixture.count_; i++) {
-        requireClose("homogeneous cosmological energy source",
-            fixture.data_.sinkInternalEnergyRate[i], background, 2.0e-6);
+        requireClose("homogeneous expansion generates no entropy", fixture.dissipativeHeating(i),
+            0.0, 2.0e-6);
     }
 }
 
@@ -662,33 +718,31 @@ void testUnequalSupports() {
     fixture.density();
     require(data.sourceDensity[0] != data.sourceDensity[1],
         "unequal supports must produce unequal densities");
+    fixture.enableKickObservation();
     data.sourceVelocityX[0] = 0.1f;
     data.sourceVelocityX[1] = -0.1f;
     fixture.hydro();
     fixture.checkConservation();
-    require(data.sinkAccelerations[0][kXi] < 0.0f && data.sinkAccelerations[1][kXi] > 0.0f,
+    require(fixture.kickAcceleration(0)[kXi] < 0.0f && fixture.kickAcceleration(1)[kXi] > 0.0f,
         "union support must include both directions of repulsive force");
-    std::array<float, 2> const viscousEnergy = {
-        data.sinkInternalEnergyRate[0], data.sinkInternalEnergyRate[1]};
+    for (int i = 0; i < 2; i++) {
+        require(fixture.dissipativeHeating(i) > 0.0, "approach must add viscosity heating");
+    }
     fixture.params_.bulkViscosityCoefficient = fixture.params_.vonNeumannRichtmyerCoefficient =
         0.0f;
     fixture.hydro();
     for (int i = 0; i < 2; i++) {
-        require(viscousEnergy[i] > data.sinkInternalEnergyRate[i],
-            "approach must add viscosity heating");
+        require(fixture.dissipativeHeating(i) == 0.0, "inviscid approach generates no entropy");
     }
     data.sourceVelocityX[0] = -0.1f;
     data.sourceVelocityX[1] = 0.1f;
-    fixture.hydro();
-    std::array<float, 2> const inviscidEnergy = {
-        data.sinkInternalEnergyRate[0], data.sinkInternalEnergyRate[1]};
     fixture.params_.bulkViscosityCoefficient = 1.0f;
     fixture.params_.vonNeumannRichtmyerCoefficient = 2.0f;
     fixture.hydro();
     fixture.checkConservation();
     for (int i = 0; i < 2; i++) {
-        requireClose("separating pair has no viscosity heating", data.sinkInternalEnergyRate[i],
-            inviscidEnergy[i], 2.0e-6);
+        requireClose(
+            "separating pair has no viscosity heating", fixture.dissipativeHeating(i), 0.0, 2.0e-6);
     }
 }
 
@@ -731,8 +785,9 @@ void testSelectedKernel() {
         inverseCfl = std::max(inverseCfl,
             soundSpeed * selectedHydroKernel().smoothingLengthPerEffectiveRadius / support);
     }
+    fixture.enableKickObservation();
     fixture.hydro(1);
-    requireClose("selected kernel scalar/SIMD pressure force", data.sinkAccelerations[0][kXi],
+    requireClose("selected kernel scalar/SIMD pressure force", fixture.kickAcceleration(0)[kXi],
         pressureForce, 8.0e-6);
     requireClose("selected kernel effective-width CFL", fixture.reduction_->inverseSoundTimestep,
         inverseCfl, 3.0e-6);
@@ -792,24 +847,20 @@ void testUnequalPairEos() {
             soundSpeed * selectedHydroKernel().smoothingLengthPerEffectiveRadius / support);
     }
     double const pressureForce = directedGradient[0] + directedGradient[1];
+    fixture.enableKickObservation();
     fixture.hydro(1);
     for (int i = 0; i < 2; ++i) {
-        requireClose("unequal-pair pressure force", data.sinkAccelerations[i][kXi],
+        requireClose("unequal-pair pressure force", fixture.kickAcceleration(i)[kXi],
             i == 0 ? pressureForce : -pressureForce, 8.0e-6);
     }
     requireClose(
         "unequal-pair sound speed", fixture.reduction_->inverseSoundTimestep, inverseCfl, 3.0e-6);
     fixture.checkConservation();
 
+    // The directed pair work of this approach has no production observable.
     data.sourceVelocityX[0] = 0.1f;
     data.sourceVelocityX[1] = -0.07f;
-    double const velocityDifference = double(data.sourceVelocityX[0]) - data.sourceVelocityX[1];
     fixture.hydro();
-    for (int i = 0; i < 2; ++i) {
-        double const expectedWork = -velocityDifference * directedGradient[i];
-        requireClose(
-            "unequal-pair pressure work", data.sinkInternalEnergyRate[i], expectedWork, 8.0e-6);
-    }
     fixture.checkConservation();
     for (int i = 0; i < 2; ++i) {
         data.sourceVelocityX[i] = 0.0f;
@@ -818,11 +869,7 @@ void testUnequalPairEos() {
     fixture.params_.expansionRate = 0.09f;
     fixture.hydro();
     for (int i = 0; i < 2; ++i) {
-        double const expected = (2.0 - 3.0 * pressureEnergyRatio) * fixture.params_.expansionRate /
-            fixture.params_.scaleFactor * data.sourceInternalEnergy[i];
-        requireClose(
-            "unequal-pair cosmological work", data.sinkInternalEnergyRate[i], expected, 2.0e-6);
-        requireClose("unequal-pair cosmological pressure force", data.sinkAccelerations[i][kXi],
+        requireClose("unequal-pair cosmological pressure force", fixture.kickAcceleration(i)[kXi],
             (i == 0 ? pressureForce : -pressureForce) / fixture.params_.scaleFactor, 8.0e-6);
     }
 }
@@ -837,13 +884,14 @@ void testSelectedCentralGravity() {
     data.centralAcceleration = 0.07f;
     data.centralSmoothingLength = 0.3f;
     fixture.density();
+    fixture.enableKickObservation();
     fixture.hydro();
     double const radius = distance(data.sourcePositionX[0], Position(0.5));
     double const expected = -data.centralAcceleration * radius /
         std::pow(double(data.centralSmoothingLength), 3) *
         radial_kernel::forceFactor(selectedGravityKernel(), radius / data.centralSmoothingLength);
-    requireClose(
-        "selected gravity kernel central force", data.sinkAccelerations[0][kXi], expected, 5.0e-6);
+    requireClose("selected gravity kernel central force", fixture.kickAcceleration(0)[kXi],
+        expected, 5.0e-6);
 }
 
 void testFixedGravityTimestep() {
@@ -875,7 +923,10 @@ void testFixedGravityTimestep() {
 #else
     require(fixture.reduction_->maximumGravityRung == 0,
         "SPH-only builds must not report a self-gravity timestep");
-    requireClose("SPH-only ignores stored self-gravity", data.sinkAccelerations[0][kXi], 0.0, 0.0);
+    // The isolated particle has no pair or external force, so the closing pass's acceleration
+    // bound is exactly zero only when the stored gravity stays out of the acceleration.
+    requireClose("SPH-only ignores stored self-gravity",
+        fixture.reduction_->inverseAccelerationTimestep, 0.0, 0.0);
     int const hydroRung = fixture.reduction_->maximumHydroRung;
     data.sinkGravityAccelerationX[0] = 1.0e20f;
     data.gravityEffectiveRadius = 1.0e-20f;
@@ -884,8 +935,8 @@ void testFixedGravityTimestep() {
             fixture.reduction_->maximumHydroRung == hydroRung &&
             fixture.reduction_->maximumRung == hydroRung,
         "stored self-gravity must not constrain SPH-only timesteps");
-    requireClose(
-        "SPH-only ignores changed stored self-gravity", data.sinkAccelerations[0][kXi], 0.0, 0.0);
+    requireClose("SPH-only ignores changed stored self-gravity",
+        fixture.reduction_->inverseAccelerationTimestep, 0.0, 0.0);
 #endif
 }
 
@@ -901,6 +952,7 @@ void testZPlaneAcceleration() {
     data.sourceInternalEnergy[source] = 1.0e-6f;
     data.sinkFlags[sink].setConverged(true);
     fixture.density();
+    fixture.enableKickObservation();
 
     // A force with the same magnitude must select the same acceleration timestep
     // regardless of direction. The cold isolated particle has no pressure force.
@@ -921,7 +973,7 @@ void testZPlaneAcceleration() {
     for (size_t i = 0; i < sizeof(positions) / sizeof(positions[0]); i++) {
         data.sourcePositionZ[source] = positions[i];
         fixture.hydro(1);
-        auto const& acceleration = data.sinkAccelerations[sink];
+        auto const acceleration = fixture.kickAcceleration(0);
         requireClose("midplane force has no x component", acceleration[kXi], 0.0, 1.0e-7);
         requireClose("midplane force has no y component", acceleration[kYi], 0.0, 1.0e-7);
         requireClose("midplane force points inward including adjacent fixed coordinates",
@@ -941,25 +993,37 @@ void testZPlaneAcceleration() {
     fixture.params_.zPlaneAcceleration = 0.0f;
     fixture.hydro();
     requireClose(
-        "zero magnitude disables midplane force", data.sinkAccelerations[sink][kZi], 0.0, 1.0e-7);
+        "zero magnitude disables midplane force", fixture.kickAcceleration(0)[kZi], 0.0, 1.0e-7);
 
     fixture.params_.zPlaneAcceleration = 0.5f;
     fixture.params_.uniformAccelerationY = 0.25f;
     data.sinkGravityAccelerationX[sink] = 0.125f;
     data.sinkGravityAccelerationY[sink] = -0.0625f;
     data.sinkGravityAccelerationZ[sink] = 0.25f;
+    // The external kick never carries self-gravity, which the gravity kick integrates.
     for (bool const selfGravity : {false, true}) {
         data.selfGravityEnabled = selfGravity;
         fixture.hydro();
-        auto const& acceleration = data.sinkAccelerations[sink];
-        bool const expectSelfGravity = COSMICTIGER_WITH_GRAVITY && selfGravity;
-        requireClose("midplane force preserves enabled self gravity in x", acceleration[kXi],
-            expectSelfGravity ? 0.125 : 0.0, 1.0e-7);
+        auto const acceleration = fixture.kickAcceleration(0);
+        requireClose("external kick excludes self gravity in x", acceleration[kXi], 0.0, 1.0e-7);
         requireClose("uniform y force remains independent of midplane force", acceleration[kYi],
-            expectSelfGravity ? 0.1875 : 0.25, 1.0e-7);
-        requireClose("midplane force adds to enabled self gravity in z", acceleration[kZi],
-            expectSelfGravity ? -0.25 : -0.5, 1.0e-7);
+            0.25, 1.0e-7);
+        requireClose(
+            "midplane force adds to the external kick in z", acceleration[kZi], -0.5, 1.0e-7);
     }
+    // Self-gravity enters the closing pass's acceleration bound δt_f⁻¹ ∝ √|f𞁑|, so the fourth
+    // power of the bound ratio with and without gravity is |f𞁑|² with gravity over |f𞁑|²
+    // without: (0.125² + 0.1875² + 0.25²)/(0.25² + 0.5²) = 0.3625.
+    fixture.disableKickObservation();
+    data.selfGravityEnabled = false;
+    fixture.hydro(1);
+    double const externalBound = fixture.reduction_->inverseAccelerationTimestep;
+    data.selfGravityEnabled = true;
+    fixture.hydro(1);
+    double const gravityBound = fixture.reduction_->inverseAccelerationTimestep;
+    bool const expectSelfGravity = COSMICTIGER_WITH_GRAVITY;
+    requireClose("midplane force preserves enabled self gravity",
+        std::pow(gravityBound / externalBound, 4), expectSelfGravity ? 0.3625 : 1.0, 4.0e-6);
 }
 
 void testDefaultTimestepCalibration() {
@@ -1012,20 +1076,32 @@ void testDefaultThermalTimestep() {
     data.accelerationTimestepFactor =
         oldEta * std::sqrt(selectedGravityKernel().smoothingLengthPerEffectiveRadius);
     fixture.density();
+    fixture.enableKickObservation();
     fixture.hydro(1);
+    // The reversible work has no output. The scalar pair work of the variational operator,
+    // du𞁑/dτ = (Q𞁑𞁓/m𞁑) F𞁑 (v𞁑𞁓 · r𞁑𞁓) with the production ζ𞁑 and ρ𞁑, is the reference
+    // for the fractional thermal bound that the closing pass must select.
+    double const radius = std::abs(distance(data.sourcePositionX[0], data.sourcePositionX[1]));
+    double const velocityDifference = double(data.sourceVelocityX[0]) - data.sourceVelocityX[1];
     for (int i = 0; i < 2; i++) {
-        double const oldWidth = 0.5 * data.sourceSmoothingLength[i];
+        double const support = data.sourceSmoothingLength[i];
+        double const oldWidth = 0.5 * support;
         double const soundSpeed =
             std::sqrt(kAdiabaticIndex * (kAdiabaticIndex - 1.0f) * data.sourceInternalEnergy[i]);
-        double const acceleration = std::abs(data.sinkAccelerations[i][kXi]);
+        double const acceleration = std::abs(fixture.kickAcceleration(i)[kXi]);
         double const soundStep = 0.25 * oldWidth / soundSpeed;
         double const accelerationStep = oldEta * std::sqrt(oldWidth / acceleration);
-        double const thermalStep =
-            0.25 * data.sourceInternalEnergy[i] / std::abs(data.sinkInternalEnergyRate[i]);
+        double const directedGradient = (kAdiabaticIndex - 1.0) * data.sourceInternalEnergy[i] /
+            data.sourceDensity[i] * (data.gasMass - data.sourceGradHCorrection[i]) *
+            dkernelWDq(radius / support) / std::pow(support, 4);
+        double const thermalRate = -velocityDifference * directedGradient;
+        double const thermalStep = 0.25 * data.sourceInternalEnergy[i] / std::abs(thermalRate);
         require(thermalStep < soundStep && thermalStep < accelerationStep,
             "compression fixture must activate the fractional thermal timestep restriction");
-        int const expectedRung =
-            int(std::ceil(std::log2(fixture.params_.baseTimestep / thermalStep)));
+        requireClose("fractional thermal bound selects the hydro timestep",
+            fixture.reduction_->minimumTimestep, thermalStep, 1.0e-5);
+        int const expectedRung = int(std::ceil(
+            std::log2(fixture.params_.baseTimestep / fixture.reduction_->minimumTimestep)));
         require(data.sourceRungs[i] == expectedRung,
             "default fractional thermal bound must preserve the historical timestep rung");
     }
@@ -1046,11 +1122,12 @@ void testColdShockTimestep() {
     fixture.params_.bulkViscosityCoefficient = 1.0f;
     fixture.params_.vonNeumannRichtmyerCoefficient = 2.0f;
     fixture.density();
+    fixture.enableEntropyRateOutput();
     fixture.hydro(1);
     require(fixture.reduction_->minimumTimestep > 1.0e-5,
         "cold viscous shock must remain on a finite CFL timestep");
     for (int i = 0; i < 2; ++i) {
-        require(data.sinkInternalEnergyRate[i] > 0.0f,
+        require(fixture.dissipativeHeating(i) > 0.0,
             "excluding viscous heating from timestep selection must retain actual heating");
     }
 }
@@ -1063,6 +1140,7 @@ void testPeriodicTailsAndOffsets() {
     Fixture compact(count, 3);
     for (Fixture* fixture : {&shifted, &compact}) {
         auto& data = fixture->data_;
+        fixture->enableKickObservation();
         for (int i = 0; i < count; i++) {
             int const source = fixture->sourceIndex(i);
             int const sink = fixture->sinkIndex(i);
@@ -1078,12 +1156,15 @@ void testPeriodicTailsAndOffsets() {
         }
         for (int i = 0; i < fixture->sinkOffset_; i++) {
             data.sinkDensity[i] = -91.0f;
-            data.sinkInternalEnergyRate[i] = -92.0f;
-            data.sinkAccelerations[i][kXi] = -93.0f;
+            data.sinkEntropyRate[i] = -92.0f;
         }
         data.sinkDensity[fixture->sinkIndex(count)] = -91.0f;
-        data.sinkInternalEnergyRate[fixture->sinkIndex(count)] = -92.0f;
-        data.sinkAccelerations[fixture->sinkIndex(count)][kXi] = -93.0f;
+        data.sinkEntropyRate[fixture->sinkIndex(count)] = -92.0f;
+        // Pair updates are indexed by the staged source; guard both ends of that range.
+        for (int i = 0; i < fixture->sourceOffset_; i++) {
+            data.sourcePairUpdates[i].velocity[kXi].add(-93.0f);
+        }
+        data.sourcePairUpdates[fixture->sourceIndex(count)].velocity[kXi].add(-93.0f);
         fixture->run(kSphRunDensityAndGradients);
         for (int i = 0; i < count; i++) {
             int const source = fixture->sourceIndex(i);
@@ -1115,25 +1196,30 @@ void testPeriodicTailsAndOffsets() {
         fixture->checkConservation();
         for (int i = 0; i < fixture->sinkOffset_; i++) {
             requireClose("density guard before sinks", data.sinkDensity[i], -91.0, 0.0);
-            requireClose("heating guard before sinks", data.sinkInternalEnergyRate[i], -92.0, 0.0);
-            requireClose("force guard before sinks", data.sinkAccelerations[i][kXi], -93.0, 0.0);
+            requireClose("entropy guard before sinks", data.sinkEntropyRate[i], -92.0, 0.0);
         }
         requireClose(
             "density guard after sinks", data.sinkDensity[fixture->sinkIndex(count)], -91.0, 0.0);
-        requireClose("heating guard after sinks",
-            data.sinkInternalEnergyRate[fixture->sinkIndex(count)], -92.0, 0.0);
-        requireClose("force guard after sinks",
-            data.sinkAccelerations[fixture->sinkIndex(count)][kXi], -93.0, 0.0);
+        requireClose("entropy guard after sinks", data.sinkEntropyRate[fixture->sinkIndex(count)],
+            -92.0, 0.0);
+        for (int i = 0; i < fixture->sourceOffset_; i++) {
+            requireClose("kick guard before sources",
+                float(data.sourcePairUpdates[i].velocity[kXi]), -93.0, 0.0);
+        }
+        requireClose("kick guard after sources",
+            float(data.sourcePairUpdates[fixture->sourceIndex(count)].velocity[kXi]), -93.0, 0.0);
     }
     for (int i = 0; i < count; i++) {
         int const sink = shifted.sinkIndex(i);
         requireClose("offset-invariant density", shifted.data_.sinkDensity[sink],
             compact.data_.sinkDensity[i], 1.0e-6);
-        requireClose("offset-invariant heating", shifted.data_.sinkInternalEnergyRate[sink],
-            compact.data_.sinkInternalEnergyRate[i], 1.0e-6);
-        for (int dim = 0; dim < kDimensions; dim++) {
-            requireClose("offset-invariant force", shifted.data_.sinkAccelerations[sink][dim],
-                compact.data_.sinkAccelerations[i][dim], 1.0e-6);
+        requireClose("offset-invariant heating", shifted.dissipativeHeating(i),
+            compact.dissipativeHeating(i), 1.0e-6);
+        auto const shiftedAcceleration = shifted.kickAcceleration(i);
+        auto const compactAcceleration = compact.kickAcceleration(i);
+        for (int dim = 0; dim < kSpatialDimensions; dim++) {
+            requireClose("offset-invariant force", shiftedAcceleration[dim],
+                compactAcceleration[dim], 1.0e-6);
         }
         require(shifted.data_.sinkParticleRungs[shifted.particleIndex(i)] ==
                 compact.data_.sinkParticleRungs[compact.particleIndex(i)],
@@ -1146,6 +1232,7 @@ void testActivity() {
     auto& data = fixture.data_;
     fixture.params_.minimumRung = 4;
     fixture.params_.minimumSmoothingLength = fixture.params_.maximumSmoothingLength = 0.25f;
+    fixture.enableKickObservation();
     for (int i = 0; i < 3; i++) {
         int const source = fixture.sourceIndex(i);
         int const sink = fixture.sinkIndex(i);
@@ -1154,10 +1241,11 @@ void testActivity() {
         data.sourceRungs[source] = data.sinkParticleRungs[fixture.particleIndex(i)] =
             i == 0 ? 4 : 1;
         data.sinkDensity[sink] = -11.0f;
-        data.sinkInternalEnergyRate[sink] = -12.0f;
-        for (int dim = 0; dim < kDimensions; dim++) {
-            data.sinkAccelerations[sink][dim] = -13.0f;
-        }
+        data.sinkEntropyRate[sink] = -12.0f;
+    }
+    // The out-of-range inactive source must receive no recoil either.
+    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        data.sourcePairUpdates[fixture.sourceIndex(2)].velocity[dim].add(-13.0f);
     }
     auto result = sphCpuSmoothingLengths(fixture.params_, data, 0);
     require(!result.needsAnotherPass, "active fixed support converges");
@@ -1187,22 +1275,26 @@ void testActivity() {
     data.sourceInternalEnergy[fixture.sourceIndex(2)] = 0.0f;
     fixture.params_.phase = 1;
     sphCpuHydro(fixture.params_, data, 0);
-    require(data.sinkAccelerations[fixture.sinkIndex(0)][kXi] < 0.0f,
-        "active particle feels its semiactive neighbor");
-    require(isFinite(data.sinkInternalEnergyRate[fixture.sinkIndex(0)]),
+    auto const activeAcceleration = fixture.kickAcceleration(0);
+    require(activeAcceleration[kXi] < 0.0f, "active particle feels its semiactive neighbor");
+    require(isFinite(data.sinkEntropyRate[fixture.sinkIndex(0)]),
         "excluded zero-density neighbor leaves finite heating");
-    for (int dim = 0; dim < kDimensions; dim++) {
-        require(isFinite(data.sinkAccelerations[fixture.sinkIndex(0)][dim]),
+    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        require(isFinite(activeAcceleration[dim]),
             "excluded zero-density neighbor leaves finite force");
+    }
+    // The active owner kicks its one pair: the semiactive endpoint receives the opposite
+    // impulse and the out-of-range source none.
+    for (int dim = 0; dim < kSpatialDimensions; dim++) {
+        require(compensatedKickSum(data.sourcePairUpdates[fixture.sourceIndex(1)].velocity[dim]) ==
+                -compensatedKickSum(data.sourcePairUpdates[fixture.sourceIndex(0)].velocity[dim]),
+            "semiactive neighbor misses the owner's recoil");
+        requireClose("unrelated inactive kick is preserved",
+            float(data.sourcePairUpdates[fixture.sourceIndex(2)].velocity[dim]), -13.0, 0.0);
     }
     for (int i = 1; i < 3; i++) {
         int const sink = fixture.sinkIndex(i);
-        requireClose(
-            "inactive heating is preserved", data.sinkInternalEnergyRate[sink], -12.0, 0.0);
-        for (int dim = 0; dim < kDimensions; dim++) {
-            requireClose(
-                "inactive force is preserved", data.sinkAccelerations[sink][dim], -13.0, 0.0);
-        }
+        requireClose("inactive entropy rate is preserved", data.sinkEntropyRate[sink], -12.0, 0.0);
         require(data.sinkParticleRungs[fixture.particleIndex(i)] == 1,
             "inactive timestep rung is preserved");
     }
@@ -1330,7 +1422,9 @@ struct VariationalReference {
     std::vector<double> weightedSupportCorrection;
     std::vector<double> residual;                 // (sum w - target)/target at the given support
     std::vector<Vector3<double>> acceleration;    // pressure part of dv/dtau
-    std::vector<double> energyRate;    // pressure work and homogeneous expansion of dE/dtau
+    // Pressure work and homogeneous expansion of dE/dtau. Production exposes no reversible
+    // rate, so only the reference integrator below consumes it.
+    std::vector<double> energyRate;
 };
 
 // A reproducible uniform deviate in [0, 1).
@@ -1436,10 +1530,12 @@ VariationalReference variationalReference(
         result.weightedSupportCorrection[i] = constraint == sph_volume::SupportConstraint::Free ?
             sph_volume::weightedSupportCorrection(sums) :
             0.0;
-        // (1/m_i) P_i x_i/y_i^2 with x = m.
+        // (1/mᵢ) Pᵢ xᵢ/yᵢ^2 with x = m.
         pressureFactor[i] =
             (gamma - 1.0) * data.sourceInternalEnergy[fixture.sourceIndex(i)] / result.density[i];
     }
+    // The kernels' single-precision expansion coefficient, exactly zero for gamma = 5/3.
+    float const expansionCoefficient = 5.0f - 3.0f * data.adiabaticIndex;
     for (int i = 0; i < count; i++) {
         int const sourceI = fixture.sourceIndex(i);
         for (int j = 0; j < count; j++) {
@@ -1467,35 +1563,27 @@ VariationalReference variationalReference(
             result.energyRate[i] +=
                 inverseScaleFactor * coefficientIJ * gradientI * velocityDotSeparation;
         }
-        result.energyRate[i] += (5.0 - 3.0 * gamma) * fixture.params_.expansionRate *
+        result.energyRate[i] += expansionCoefficient * fixture.params_.expansionRate *
             inverseScaleFactor * data.sourceInternalEnergy[sourceI];
     }
     return result;
 }
 
-struct RateDifference {
-    double acceleration;    // largest difference over the largest acceleration
-    double energyRate;      // largest difference over the largest rate
-};
-
-RateDifference compareRates(Fixture const& fixture, VariationalReference const& reference) {
+// Largest production/reference acceleration difference over the largest reference
+// acceleration, through the pair kicks of the last pass.
+double compareAccelerations(Fixture const& fixture, VariationalReference const& reference) {
     double accelerationScale = 0.0;
-    double rateScale = 0.0;
     double accelerationError = 0.0;
-    double rateError = 0.0;
     for (int i = 0; i < fixture.count_; i++) {
-        auto const& acceleration = fixture.data_.sinkAccelerations[fixture.sinkIndex(i)];
-        for (int dim = 0; dim < kDimensions; dim++) {
+        auto const acceleration = fixture.kickAcceleration(i);
+        for (int dim = 0; dim < kSpatialDimensions; dim++) {
             accelerationScale =
                 std::max(accelerationScale, std::abs(reference.acceleration[i][dim]));
             accelerationError = std::max(
                 accelerationError, std::abs(acceleration[dim] - reference.acceleration[i][dim]));
         }
-        double const rate = fixture.data_.sinkInternalEnergyRate[fixture.sinkIndex(i)];
-        rateScale = std::max(rateScale, std::abs(reference.energyRate[i]));
-        rateError = std::max(rateError, std::abs(rate - reference.energyRate[i]));
     }
-    return {accelerationError / accelerationScale, rateError / rateScale};
+    return accelerationError / accelerationScale;
 }
 
 void perturbLattice(Fixture& fixture, int side, uint64_t seed) {
@@ -1537,6 +1625,7 @@ void testVariationalAgainstReference() {
         "density pass reports the support-solve residual");
     require(densityPass.minimumGradHOmega > 0.5f && densityPass.illConditionedSupports == 0,
         "perturbed lattice corrections are well conditioned");
+    fixture.enableKickObservation();
     fixture.hydro();
     std::vector<double> production(fixture.count_);
     for (int i = 0; i < fixture.count_; i++) {
@@ -1549,23 +1638,21 @@ void testVariationalAgainstReference() {
         requireClose("variational density", fixture.data_.sinkDensity[fixture.sinkIndex(i)],
             reference.density[i], 2.0e-6);
     }
-    auto const roundoff = compareRates(fixture, reference);
-    std::printf("variational float/double rates at production supports: acceleration %.3e, "
-                "energy %.3e\n",
-        roundoff.acceleration, roundoff.energyRate);
-    require(roundoff.acceleration < 2.0e-5 && roundoff.energyRate < 2.0e-5,
-        "production variational rates match the double reference at the same supports");
-    auto const exact = compareRates(fixture, variationalReference(fixture, exactSupports(fixture)));
-    std::printf("variational float rates against exactly solved supports: acceleration %.3e, "
-                "energy %.3e (solve tolerance %.1e)\n",
-        exact.acceleration, exact.energyRate, double(kSphSmoothingLengthTolerance));
-    require(exact.acceleration < 2.0e-3 && exact.energyRate < 2.0e-3,
-        "support-solve tolerance bounds the variational rate error");
+    double const roundoff = compareAccelerations(fixture, reference);
+    std::printf("variational float/double acceleration at production supports: %.3e\n", roundoff);
+    require(roundoff < 2.0e-5,
+        "production variational acceleration matches the double reference at the same supports");
+    double const exact =
+        compareAccelerations(fixture, variationalReference(fixture, exactSupports(fixture)));
+    std::printf("variational float acceleration against exactly solved supports: %.3e (solve "
+                "tolerance %.1e)\n",
+        exact, double(kSphSmoothingLengthTolerance));
+    require(exact < 2.0e-3, "support-solve tolerance bounds the variational acceleration error");
 }
 
-// An isolated cluster in the periodic box: linear and angular momentum and kinetic plus
-// internal energy with viscosity, held supports at H_max, and the Hubble-flow identity
-// sum_b (m - zeta_a) F_a r_ab . r_ab = -3 rho_a for free supports.
+// An isolated cluster in the periodic box: linear and angular momentum of the pair kicks with
+// viscosity, and held supports at Hₘ𞁑ₓ. The Hubble-flow work identity of free supports has no
+// production observable since the reversible rate left the kernel outputs.
 void testVariationalIsolatedCluster() {
     constexpr int kSide = 4;
     Fixture fixture(kSide * kSide * kSide);
@@ -1609,38 +1696,7 @@ void testVariationalIsolatedCluster() {
     }
     require(referenceHeld == fixture.reduction_->heldSupports,
         "production and reference hold the same supports");
-    // Hubble flow v = h (r - centre), no viscosity: the pair work of a free support equals
-    // the homogeneous expansion work -3 h P/rho.
-    fixture.params_.bulkViscosityCoefficient = 0.0f;
-    fixture.params_.vonNeumannRichtmyerCoefficient = 0.0f;
-    double const hubble = 0.2;
-    for (int k = 0; k < fixture.count_; k++) {
-        int const source = fixture.sourceIndex(k);
-        fixture.data_.sourceVelocityX[source] =
-            hubble * (fixture.data_.sourcePositionX[source].toDouble() - 0.5);
-        fixture.data_.sourceVelocityY[source] =
-            hubble * (fixture.data_.sourcePositionY[source].toDouble() - 0.5);
-        fixture.data_.sourceVelocityZ[source] =
-            hubble * (fixture.data_.sourcePositionZ[source].toDouble() - 0.5);
-    }
-    fixture.hydro();
-    int free = 0;
-    double heldMismatch = 0.0;
-    for (int k = 0; k < fixture.count_; k++) {
-        int const source = fixture.sourceIndex(k);
-        double const expansionWork = -3.0 * hubble * (fixture.data_.adiabaticIndex - 1.0) *
-            fixture.data_.sourceInternalEnergy[source];
-        double const work = fixture.data_.sinkInternalEnergyRate[fixture.sinkIndex(k)];
-        if (fixture.data_.sinkGradHCorrection[fixture.sinkIndex(k)] != 0.0f) {
-            requireClose("free-support Hubble work", work, expansionWork, 2.0e-5);
-            free++;
-        } else {
-            heldMismatch = std::max(heldMismatch, std::abs(work / expansionWork - 1.0));
-        }
-    }
-    require(free > 0 && heldMismatch > 1.0e-3,
-        "the Hubble identity holds for free supports and not for held ones");
-    // Random velocities with viscosity: momentum, angular momentum and energy.
+    // Random velocities with viscosity: momentum and angular momentum of the pair kicks.
     fixture.params_.bulkViscosityCoefficient = 1.0f;
     fixture.params_.vonNeumannRichtmyerCoefficient = 2.0f;
     for (int k = 0; k < fixture.count_; k++) {
@@ -1649,13 +1705,14 @@ void testVariationalIsolatedCluster() {
         fixture.data_.sourceVelocityY[source] = 0.3 * (nextDeviate(state) - 0.5);
         fixture.data_.sourceVelocityZ[source] = 0.3 * (nextDeviate(state) - 0.5);
     }
+    fixture.enableKickObservation();
     fixture.hydro();
     fixture.checkConservation();
     Vector3<double> torque{};
     double torqueScale = 0.0;
     for (int k = 0; k < fixture.count_; k++) {
         int const source = fixture.sourceIndex(k);
-        auto const& a = fixture.data_.sinkAccelerations[fixture.sinkIndex(k)];
+        auto const a = fixture.kickAcceleration(k);
         Vector3<double> const pairDistance{fixture.data_.sourcePositionX[source].toDouble() - 0.5,
             fixture.data_.sourcePositionY[source].toDouble() - 0.5,
             fixture.data_.sourcePositionZ[source].toDouble() - 0.5};
@@ -1672,7 +1729,7 @@ void testVariationalIsolatedCluster() {
     }
 }
 
-// Held supports: every lattice support at H_min, at H_max, and fixed.
+// Held supports: every lattice support at Hₘᵢₙ, at Hₘ𞁑ₓ, and fixed.
 void testVariationalHeldSupports() {
     constexpr int kSide = 5;
     Fixture fixture(kSide * kSide * kSide);
@@ -1703,22 +1760,24 @@ void testVariationalHeldSupports() {
         fixture.data_.sourceInternalEnergy[source] = 1.0 + 0.5 * nextDeviate(state);
     }
     fixture.density();
+    fixture.enableKickObservation();
     fixture.hydro();
     fixture.checkConservation();
     std::vector<double> support(fixture.count_, fixture.params_.minimumSmoothingLength);
     fixture.params_.bulkViscosityCoefficient = fixture.params_.vonNeumannRichtmyerCoefficient =
         0.0f;
     fixture.hydro();
-    auto const difference = compareRates(fixture, variationalReference(fixture, support));
-    require(difference.acceleration < 2.0e-5 && difference.energyRate < 2.0e-5,
-        "fixed supports reproduce the variational pressure force and directed work");
+    double const difference = compareAccelerations(fixture, variationalReference(fixture, support));
+    require(difference < 2.0e-5, "fixed supports reproduce the variational pressure force");
 }
 
-// A uniform free lattice has no pressure force or work; only the homogeneous source remains.
+// A uniform free lattice has no pressure force, and the homogeneous expansion of E leaves A
+// unchanged.
 void testVariationalUniformLattice() {
     constexpr int kSide = 5;
     Fixture fixture(kSide * kSide * kSide);
     initializeLattice(fixture, kSide);
+    fixture.enableKickObservation();
     for (float const gamma : {5.0f / 3.0f, 1.4f}) {
         fixture.data_.adiabaticIndex = gamma;
         fixture.params_.scaleFactor = 0.6f;
@@ -1730,13 +1789,12 @@ void testVariationalUniformLattice() {
         fixture.density();
         require(fixture.reduction_->heldSupports == 0, "uniform lattice supports are free");
         fixture.hydro(1);
-        double const background = (5.0 - 3.0 * gamma) * 0.09 / 0.6 * 2.0;
         for (int i = 0; i < fixture.count_; i++) {
-            requireClose("variational homogeneous energy source",
-                fixture.data_.sinkInternalEnergyRate[fixture.sinkIndex(i)], background, 2.0e-5);
-            for (int dim = 0; dim < kDimensions; dim++) {
-                requireClose("uniform variational force",
-                    fixture.data_.sinkAccelerations[fixture.sinkIndex(i)][dim], 0.0, 2.0e-4);
+            requireClose("homogeneous expansion generates no entropy",
+                fixture.dissipativeHeating(i), 0.0, 2.0e-5);
+            auto const acceleration = fixture.kickAcceleration(i);
+            for (int dim = 0; dim < kSpatialDimensions; dim++) {
+                requireClose("uniform variational force", acceleration[dim], 0.0, 2.0e-4);
             }
         }
     }
@@ -1747,7 +1805,9 @@ void testVariationalUniformLattice() {
 // rebuilt before every force pass. The state is kept in double so that time-integration
 // error is not hidden by float accumulation; the kernels read float snapshots. Rates are
 // conformal-time rates of the stored w = a v_pec and E = a^2 u, and the comoving drift is
-// dx/dtau = w/a.
+// dx/dtau = w/a. The acceleration is the production pair kick Δv/Δτ; production integrates
+// entropy and publishes no reversible work rate, so dE/dtau comes from the double reference of
+// the same variational equations at the production supports.
 class GlobalStepper {
     Fixture& fixture_;
     std::vector<Vector3<double>> acceleration_;
@@ -1807,6 +1867,7 @@ public:
                 data.sourceVelocityZ[source]};
             energy_[i] = data.sourceInternalEnergy[source];
         }
+        fixture_.enableKickObservation();
         evaluate();
     }
 
@@ -1823,10 +1884,17 @@ public:
         fixture_.publishSupport();
         fixture_.density();
         fixture_.hydro();
+        // The energy budgets of the tests below therefore compare the production force with
+        // the reference work.
+        std::vector<double> supports(fixture_.count_);
         for (int i = 0; i < fixture_.count_; i++) {
-            auto const& a = data.sinkAccelerations[fixture_.sinkIndex(i)];
+            supports[i] = data.sourceSmoothingLength[fixture_.sourceIndex(i)];
+        }
+        auto const reference = variationalReference(fixture_, supports);
+        for (int i = 0; i < fixture_.count_; i++) {
+            auto const a = fixture_.kickAcceleration(i);
             acceleration_[i] = {a[kXi], a[kYi], a[kZi]};
-            energyRate_[i] = data.sinkInternalEnergyRate[fixture_.sinkIndex(i)];
+            energyRate_[i] = reference.energyRate[i];
         }
     }
 
@@ -1879,7 +1947,7 @@ public:
         expansionWork_ += 0.5 * interval * (powerBefore + expansionPower());
     }
 
-    // sum_i m_i (w_i^2/2 + E_i) of the stored variables.
+    // sum_i mᵢ (wᵢ^2/2 + Eᵢ) of the stored variables.
     double storedEnergy() const {
         double total = 0.0;
         for (int i = 0; i < fixture_.count_; i++) {
@@ -1902,7 +1970,7 @@ public:
         return total;
     }
 
-    // A_i = (gamma - 1) u_i / rho_i^(gamma - 1) from the last density pass.
+    // Aᵢ = (gamma - 1) uᵢ / rho_i^(gamma - 1) from the last density pass.
     double entropy(int i) const {
         double const gamma = fixture_.data_.adiabaticIndex;
         return (gamma - 1.0) * energy_[i] /
@@ -1931,8 +1999,8 @@ void initializeSoundWave(Fixture& fixture, int side, double amplitude, double ga
 
 struct WaveRun {
     double energyError;     // max |Delta sum m(v^2/2 + u)| over the wave's kinetic energy
-    double entropyError;    // max_i |Delta A_i| / A_i at the end
-    double profileError;    // L2 error of v_x after half a period, over the amplitude
+    double entropyError;    // max_i |Delta Aᵢ| / Aᵢ at the end
+    double profileError;    // L2 error of vₓ after half a period, over the amplitude
 };
 
 WaveRun runSoundWave(int steps) {
@@ -2235,29 +2303,32 @@ TEST_F(SphCpuTest, BalsaraSymmetricForceAndHeating) {
         data.sourceSmoothingLength[i] = i == 0 ? 0.2f : 0.45f;
         data.sourceBalsaraFactor[i] = i == 0 ? 0.2f : 0.8f;
     }
+    fixture.enableKickObservation();
     fixture.hydro();
-    std::array<float, 2> const fullHeating = {
-        data.sinkInternalEnergyRate[0], data.sinkInternalEnergyRate[1]};
-    std::array<SphAcceleration, 2> const fullForce = {
-        data.sinkAccelerations[0], data.sinkAccelerations[1]};
+    std::array<double, 2> const fullHeating = {
+        fixture.dissipativeHeating(0), fixture.dissipativeHeating(1)};
+    std::array<sph_geometry::SpatialVector<float>, 2> const fullForce = {
+        fixture.kickAcceleration(0), fixture.kickAcceleration(1)};
     fixture.params_.bulkViscosityCoefficient = fixture.params_.vonNeumannRichtmyerCoefficient =
         0.0f;
     fixture.hydro();
-    std::array<float, 2> const pressureHeating = {
-        data.sinkInternalEnergyRate[0], data.sinkInternalEnergyRate[1]};
-    std::array<SphAcceleration, 2> const pressureForce = {
-        data.sinkAccelerations[0], data.sinkAccelerations[1]};
+    std::array<sph_geometry::SpatialVector<float>, 2> const pressureForce = {
+        fixture.kickAcceleration(0), fixture.kickAcceleration(1)};
+    for (int i = 0; i < 2; ++i) {
+        EXPECT_EQ(fixture.dissipativeHeating(i), 0.0);    // the pressure force is reversible
+    }
     fixture.params_.bulkViscosityCoefficient = 1.0f;
     fixture.params_.vonNeumannRichtmyerCoefficient = 2.0f;
     fixture.params_.balsaraSwitch = true;
     fixture.hydro();
     fixture.checkConservation();
+    // The mean Balsara factor 0.5 halves the viscous force and the viscous heating.
     for (int i = 0; i < 2; ++i) {
-        EXPECT_GT(fullHeating[i], pressureHeating[i]);
-        EXPECT_NEAR(data.sinkInternalEnergyRate[i],
-            pressureHeating[i] + 0.5f * (fullHeating[i] - pressureHeating[i]), 2.0e-6f);
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            EXPECT_NEAR(data.sinkAccelerations[i][dim],
+        EXPECT_GT(fullHeating[i], 0.0);
+        EXPECT_NEAR(fixture.dissipativeHeating(i), 0.5 * fullHeating[i], 2.0e-6);
+        auto const acceleration = fixture.kickAcceleration(i);
+        for (int dim = 0; dim < kSpatialDimensions; ++dim) {
+            EXPECT_NEAR(acceleration[dim],
                 pressureForce[i][dim] + 0.5f * (fullForce[i][dim] - pressureForce[i][dim]),
                 2.0e-6f);
         }
@@ -2543,12 +2614,13 @@ TEST_F(SphCpuTest, ColdShockThermalTimestep) {
     fixture.params_.globalTimestep = true;
     fixture.params_.minimumRung = 0;
     fixture.density();
+    fixture.enableEntropyRateOutput();
     fixture.hydro(1);
     double const coldStep = fixture.reduction_->minimumTimestep;
     ASSERT_GT(coldStep, 1.0e-5);
     ASSERT_LE(coldStep, fixture.params_.maximumTimestep);
     for (int i = 0; i < 2; ++i) {
-        EXPECT_GT(data.sinkInternalEnergyRate[i], 0.0f);
+        EXPECT_GT(fixture.dissipativeHeating(i), 0.0);
         data.sourceInternalEnergy[i] = 1.0e-10f;
     }
     fixture.hydro(1);
@@ -2640,25 +2712,15 @@ TEST_F(SphCpuTest, EntropyProduction) {
         0.0f;
     fixture.density();
     fixture.hydro();
-    std::array<float, 2> reversible{};
     for (int i = 0; i < 2; ++i) {
         EXPECT_EQ(rates[i], 0.0f);    // compression and cosmological expansion conserve A
-        reversible[i] = data.sinkInternalEnergyRate[i];
-        EXPECT_NE(reversible[i], 0.0f);
     }
     fixture.params_.bulkViscosityCoefficient = 1.0f;
     fixture.params_.vonNeumannRichtmyerCoefficient = 2.0f;
     fixture.hydro();
     for (int i = 0; i < 2; ++i) {
-        EXPECT_GT(rates[i], 0.0f);
-        double const heating = sph_entropy::storedEnergy(
-            rates[i], data.sourceDensity[i], data.adiabaticIndex, fixture.params_.scaleFactor);
-        EXPECT_NEAR(heating, data.sinkInternalEnergyRate[i] - reversible[i], 1.e-5 * heating);
+        EXPECT_GT(rates[i], 0.0f);    // viscous heating of the approaching pair raises A
     }
-    // Production does not allocate the optional total-energy-rate diagnostic.
-    data.sinkInternalEnergyRate = nullptr;
-    sphCpuHydro(fixture.params_, data, 0);
-    EXPECT_GT(rates[0], 0.0f);
 }
 
 TEST_F(SphCpuTest, ArtificialConduction) {

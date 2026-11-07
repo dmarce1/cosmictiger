@@ -11,27 +11,27 @@
  *
  *   P. F. Hopkins, "A general class of Lagrangian smoothed particle hydrodynamics
  *   methods and implications for fluid mixing problems", MNRAS 428 (2013), 2840,
- *   arXiv:1206.5006, equations 8-11 (y_i and its derivatives) and equation 13
- *   (f_ij, with the constraint scalar x~ = 1), and
+ *   arXiv:1206.5006, equations 8-11 (yᵢ and its derivatives) and equation 13
+ *   (fᵢⱼ, with the constraint scalar x~ = 1), and
  *   D. J. Price, "Smoothed particle hydrodynamics and magnetohydrodynamics",
- *   J. Comput. Phys. 231 (2012), 759, arXiv:1012.1885, equation 27 (Ω_a).
+ *   J. Comput. Phys. 231 (2012), 759, arXiv:1012.1885, equation 27 (Ω𞁑).
  *
  * The length here is the stored compact support radius H, with the selected kernel
- * W(r, H) = H^-D w(q) and q = r/H. It is not the papers' smoothing length h, whose
- * normalization differs by kernel; only ratios H dW/dH enter, so the formulas are
- * unchanged. Particle i carries a volume weight x_i and a mass m_i. With
+ * W(r, H) = H^-D w(q) and q = r/H. It is not the smoothing length h of Hopkins (2013)
+ * and Price (2012), whose normalization differs by kernel; only ratios H dW/dH enter, so
+ * the formulas are unchanged. Particle i carries a volume weight xᵢ and a mass mᵢ. With
  *
- *   n_i = Σ_j W_ij(H_i),   y_i = Σ_j x_j W_ij(H_i),
- *   V_i = x_i / y_i,         ρ*_i = m_i y_i / x_i,
+ *   nᵢ = Σⱼ Wᵢⱼ(Hᵢ),   yᵢ = Σⱼ xⱼ Wᵢⱼ(Hᵢ),
+ *   Vᵢ = xᵢ / yᵢ,         ρ*ᵢ = mᵢ yᵢ / xᵢ,
  *
- * the resolution constraint H_i^D n_i = constant uses the unweighted count n_i. With
- * x_i = m_i, y_i is the ordinary mass-summed density. For free supports
+ * the resolution constraint Hᵢ^D nᵢ = constant uses the unweighted count nᵢ. With
+ * xᵢ = mᵢ, yᵢ is the ordinary mass-summed density. For free supports
  *
- *   Ω_i = 1 + H_i/(D n_i) dn_i/dH_i,
- *   ζ_i  = H_i/(D n_i Ω_i) dy_i/dH_i.
+ *   Ωᵢ = 1 + Hᵢ/(D nᵢ) dnᵢ/dHᵢ,
+ *   ζᵢ  = Hᵢ/(D nᵢ Ωᵢ) dyᵢ/dHᵢ.
  *
- * The Hopkins factor f_ij = 1 - ζ_i/x_j reduces to 1/Ω_i for equal-mass
- * density SPH. A support held at a constant bound has dH_i/dr = 0, so ζ_i = 0
+ * The Hopkins factor fᵢⱼ = 1 - ζᵢ/xⱼ reduces to 1/Ωᵢ for equal-mass
+ * density SPH. A support held at a constant bound has dHᵢ/dr = 0, so ζᵢ = 0
  * there. The pressure force and thermal work that use these corrections are in
  * cosmictiger/sph/variable_smoothing_lengths.hpp. docs/variational_sph.md derives the
  * equations and cosmological scale factors. Sums are taken in units of H, using
@@ -61,38 +61,38 @@ inline constexpr float kMinimumWellConditionedOmega = 0.1f;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
  *   w → kernel value; w′ → kernel derivative; q → normalized radius; H⁻¹ → inverse smoothing length.
- *   Code names: wʹ = w′; H_inv = H⁻¹.
+ *   Code names: wʹ = w′; iH = H⁻¹.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real kernelSupportDerivative(Real w, Real wʹ, Real q, Real H_inv) {
+CUDA_EXPORT inline Real kernelSupportDerivative(Real w, Real wʹ, Real q, Real iH) {
     return -(simdBroadcast<Real>(kSpatialDimensions) * w + q * wʹ) *
-        sph_geometry::inverseGradientScale(H_inv);
+        sph_geometry::inverseGradientScale(iH);
 }
 
-// grad_i W(r_ij, H) = F r_ij with F = w'(q)/(H^(D+1) r); the caller supplies r > 0.
+// grad_i W(rᵢⱼ, H) = F rᵢⱼ with F = w'(q)/(H^(D+1) r); the caller supplies r > 0.
 // clang-format off
 /*
- * Derived radial gradient: ∇_i W_ij = [w′(q)/(H⁽ᴰ⁺¹⁾ r)] r_ij.
+ * Derived radial gradient: ∇ᵢ Wᵢⱼ = [w′(q)/(H⁽ᴰ⁺¹⁾ r)] rᵢⱼ.
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
  *   w′ → kernel derivative; H⁻¹ → inverse smoothing length; r → radius; bracket → return value.
- *   Code names: wʹ = w′; H_inv = H⁻¹.
+ *   Code names: wʹ = w′; iH = H⁻¹.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real kernelGradientFactor(Real wʹ, Real H_inv, Real r) {
-    return wʹ * sph_geometry::inverseGradientScale(H_inv) / r;
+CUDA_EXPORT inline Real kernelGradientFactor(Real wʹ, Real iH, Real r) {
+    return wʹ * sph_geometry::inverseGradientScale(iH) / r;
 }
 
 // One sink's neighbor sums at fixed H, including the self term.
 template <typename Real>
 struct SupportSums {
-    Real numberSum;         // sum_j w(q_ij) = H^D n_i
-    Real numberMoment;      // sum_j q_ij w'(q_ij) = -H^(D+1) dn_i/dH - D H^D n_i
-    Real weightedSum;       // sum_j x_j w(q_ij) = H^D y_i
-    Real weightedMoment;    // sum_j x_j q_ij w'(q_ij) = -H^(D+1) dy_i/dH - D H^D y_i
+    Real numberSum;         // sum_j w(qᵢⱼ) = H^D nᵢ
+    Real numberMoment;      // sum_j qᵢⱼ w'(qᵢⱼ) = -H^(D+1) dnᵢ/dH - D H^D nᵢ
+    Real weightedSum;       // sum_j xⱼ w(qᵢⱼ) = H^D yᵢ
+    Real weightedMoment;    // sum_j xⱼ qᵢⱼ w'(qᵢⱼ) = -H^(D+1) dyᵢ/dH - D H^D yᵢ
 };
 
 template <typename Real>
@@ -103,12 +103,12 @@ CUDA_EXPORT inline SupportSums<Real> emptySupportSums() {
 
 // clang-format off
 /*
- * Hopkins (2013), equations (8)–(11): Hᴰ n_i = Σ_j w, Hᴰ y_i = Σ_j x_j w.
- * H⁽ᴰ⁺¹⁾ ∂n_i/∂H = −DΣ_j w − Σ_j qw′; H⁽ᴰ⁺¹⁾ ∂y_i/∂H = −DΣ_j x_j w − Σ_j x_j qw′.
+ * Hopkins (2013), equations (8)–(11): Hᴰ nᵢ = Σⱼ w, Hᴰ yᵢ = Σⱼ xⱼ w.
+ * H⁽ᴰ⁺¹⁾ ∂nᵢ/∂H = −DΣ_j w − Σⱼ qw′; H⁽ᴰ⁺¹⁾ ∂yᵢ/∂H = −DΣ_j xⱼ w − Σⱼ xⱼ qw′.
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   x_j → weight; w → kernel value; w′ → kernel derivative; q → normalized radius
+ *   xⱼ → weight; w → kernel value; w′ → kernel derivative; q → normalized radius
  *   Σw, Σqw′ → number sum, number moment
  *   Σxw, Σxqw′ → weighted sum, weighted moment; qw′ → one neighbor's number moment.
  *   Code names: wʹ = w′; qwʹ = qw′.
@@ -116,12 +116,12 @@ CUDA_EXPORT inline SupportSums<Real> emptySupportSums() {
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline void accumulateSupportSums(
-    SupportSums<Real>& sums, Real x_j, Real w, Real wʹ, Real q) {
+    SupportSums<Real>& sums, Real xⱼ, Real w, Real wʹ, Real q) {
     Real const qwʹ = q * wʹ;
     sums.numberSum += w;
     sums.numberMoment += qwʹ;
-    sums.weightedSum += x_j * w;
-    sums.weightedMoment += x_j * qwʹ;
+    sums.weightedSum += xⱼ * w;
+    sums.weightedMoment += xⱼ * qwʹ;
 }
 
 // Production gas has one mass; its weighted sums are the number sums times x.
@@ -133,106 +133,106 @@ CUDA_EXPORT inline SupportSums<Real> equalWeightSupportSums(Real Σw, Real Σqw�
 
 // clang-format off
 /*
- * n_i = H⁻ᴰ Σ_j w(q_ij).
+ * nᵢ = H⁻ᴰ Σⱼ w(qᵢⱼ).
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   Σw → number sum; H⁻¹ → inverse smoothing length; n_i → return value.
- *   Code names: H_inv = H⁻¹.
+ *   Σw → number sum; H⁻¹ → inverse smoothing length; nᵢ → return value.
+ *   Code names: iH = H⁻¹.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real numberDensity(SupportSums<Real> const& sums, Real H_inv) {
-    return sums.numberSum * sph_geometry::inverseVolume(H_inv);
+CUDA_EXPORT inline Real numberDensity(SupportSums<Real> const& sums, Real iH) {
+    return sums.numberSum * sph_geometry::inverseVolume(iH);
 }
 
 // clang-format off
 /*
- * ∂n_i/∂H = −H⁻⁽ᴰ⁺¹⁾(DΣw + Σqw′).
+ * ∂nᵢ/∂H = −H⁻⁽ᴰ⁺¹⁾(DΣw + Σqw′).
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
  *   Σw → number sum; Σqw′ → number moment; H⁻¹ → inverse smoothing length.
- *   Code names: H_inv = H⁻¹.
+ *   Code names: iH = H⁻¹.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real numberDensityDerivative(SupportSums<Real> const& sums, Real H_inv) {
+CUDA_EXPORT inline Real numberDensityDerivative(SupportSums<Real> const& sums, Real iH) {
     return -(simdBroadcast<Real>(kSpatialDimensions) * sums.numberSum + sums.numberMoment) *
-        sph_geometry::inverseGradientScale(H_inv);
+        sph_geometry::inverseGradientScale(iH);
 }
 
 // clang-format off
 /*
- * y_i = H⁻ᴰ Σ_j x_j w(q_ij).
+ * yᵢ = H⁻ᴰ Σⱼ xⱼ w(qᵢⱼ).
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   Σxw → weighted sum; H⁻¹ → inverse smoothing length; y_i → return value.
- *   Code names: H_inv = H⁻¹.
+ *   Σxw → weighted sum; H⁻¹ → inverse smoothing length; yᵢ → return value.
+ *   Code names: iH = H⁻¹.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real weightedDensity(SupportSums<Real> const& sums, Real H_inv) {
-    return sums.weightedSum * sph_geometry::inverseVolume(H_inv);
+CUDA_EXPORT inline Real weightedDensity(SupportSums<Real> const& sums, Real iH) {
+    return sums.weightedSum * sph_geometry::inverseVolume(iH);
 }
 
 // clang-format off
 /*
- * ∂y_i/∂H = −H⁻⁽ᴰ⁺¹⁾(DΣxw + Σxqw′).
+ * ∂yᵢ/∂H = −H⁻⁽ᴰ⁺¹⁾(DΣxw + Σxqw′).
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
  *   Σxw → weighted sum; Σxqw′ → weighted moment; H⁻¹ → inverse smoothing length.
- *   Code names: H_inv = H⁻¹.
+ *   Code names: iH = H⁻¹.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real weightedDensityDerivative(SupportSums<Real> const& sums, Real H_inv) {
+CUDA_EXPORT inline Real weightedDensityDerivative(SupportSums<Real> const& sums, Real iH) {
     return -(simdBroadcast<Real>(kSpatialDimensions) * sums.weightedSum + sums.weightedMoment) *
-        sph_geometry::inverseGradientScale(H_inv);
+        sph_geometry::inverseGradientScale(iH);
 }
 
-// V_i = x_i / y_i.
+// Vᵢ = xᵢ / yᵢ.
 // clang-format off
 /*
- * Hopkins (2013), equation (8): ΔV_i = x_i/y_i.
+ * Hopkins (2013), equation (8): ΔVᵢ = xᵢ/yᵢ.
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   x_i → weight; y_i → weighted density value; ΔV_i → return value.
+ *   xᵢ → weight; yᵢ → weighted density value; ΔVᵢ → return value.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real volume(Real x_i, Real y_i) {
-    return x_i / y_i;
+CUDA_EXPORT inline Real volume(Real xᵢ, Real yᵢ) {
+    return xᵢ / yᵢ;
 }
 
-// ρ*_i = m_i y_i / x_i, the density implied by the weighted volume.
+// ρ*ᵢ = mᵢ yᵢ / xᵢ, the density implied by the weighted volume.
 // clang-format off
 /*
- * Derived mass density: ρ_i = m_i/ΔV_i = m_i y_i/x_i.
+ * Derived mass density: ρᵢ = mᵢ/ΔVᵢ = mᵢ yᵢ/xᵢ.
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   m_i → mass; x_i → weight; y_i → weighted density value; ρ_i → return value.
+ *   mᵢ → mass; xᵢ → weight; yᵢ → weighted density value; ρᵢ → return value.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real volumeDensity(Real m_i, Real x_i, Real y_i) {
-    return m_i * y_i / x_i;
+CUDA_EXPORT inline Real volumeDensity(Real mᵢ, Real xᵢ, Real yᵢ) {
+    return mᵢ * yᵢ / xᵢ;
 }
 
-// Ω_i = 1 + H/(Dn) dn/dH = -sum q w' / (D sum w), written without the
+// Ωᵢ = 1 + H/(Dn) dn/dH = -sum q w' / (D sum w), written without the
 // cancellation of the defining form. Nonnegative for nonincreasing kernels.
 // clang-format off
 /*
  * Price (2012), equation (27); derived equal-weight form:
- * Ω_i = 1 + H_i (∂n_i/∂H_i)/(Dn_i) = −Σ_j q_ij w′/(DΣ_j w).
+ * Ωᵢ = 1 + Hᵢ (∂nᵢ/∂Hᵢ)/(Dnᵢ) = −Σⱼ qᵢⱼ w′/(DΣ_j w).
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   Σw → number sum; Σqw′ → number moment; Ω_i → return value.
+ *   Σw → number sum; Σqw′ → number moment; Ωᵢ → return value.
  */
 // clang-format on
 template <typename Real>
@@ -240,17 +240,17 @@ CUDA_EXPORT inline Real supportJacobian(SupportSums<Real> const& sums) {
     return -sums.numberMoment / (simdBroadcast<Real>(kSpatialDimensions) * sums.numberSum);
 }
 
-// ζ_i = H/(D n Ω) dy/dH = (D sum x w + sum x q w') / sum q w', in units of x.
-// For equal weights this is x (1 - 1/Ω_i).
+// ζᵢ = H/(D n Ω) dy/dH = (D sum x w + sum x q w') / sum q w', in units of x.
+// For equal weights this is x (1 - 1/Ωᵢ).
 // clang-format off
 /*
- * Hopkins (2013), equation (13), with x̃_j = 1, derived notation:
- * ζ_i = H_i (∂y_i/∂H_i)/(Dn_i Ω_i) = (DΣxw + Σxqw′)/Σqw′.
+ * Hopkins (2013), equation (13), with x̃ⱼ = 1, derived notation:
+ * ζᵢ = Hᵢ (∂yᵢ/∂Hᵢ)/(Dnᵢ Ωᵢ) = (DΣxw + Σxqw′)/Σqw′.
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
  *   Σxw → weighted sum; Σxqw′ → weighted moment
- *   Σqw′ → number moment; ζ_i → return value.
+ *   Σqw′ → number moment; ζᵢ → return value.
  */
 // clang-format on
 template <typename Real>
@@ -259,41 +259,41 @@ CUDA_EXPORT inline Real weightedSupportCorrection(SupportSums<Real> const& sums)
         sums.numberMoment;
 }
 
-// Hopkins (2013) equation 13 with x~_j = 1: f_ij = 1 - ζ_i/x_j. Forces use x_j - ζ_i.
+// Hopkins (2013) equation 13 with x~ⱼ = 1: fᵢⱼ = 1 - ζᵢ/xⱼ. Forces use xⱼ - ζᵢ.
 // clang-format off
 /*
- * Hopkins (2013), equation (13), with x̃_j = 1: f_ij = 1 − ζ_i/x_j.
+ * Hopkins (2013), equation (13), with x̃ⱼ = 1: fᵢⱼ = 1 − ζᵢ/xⱼ.
  * References: Hopkins (2013), https://arxiv.org/abs/1206.5006;
  * Price (2012), https://arxiv.org/abs/1012.1885; full citations above.
  * Symbol directory:
- *   ζ_i → sink grad-H correction; x_j → neighbor volume weight; f_ij → return value.
+ *   ζᵢ → sink grad-H correction; xⱼ → neighbor volume weight; fᵢⱼ → return value.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real correctionFactor(Real ζ_i, Real x_j) {
-    return simdBroadcast<Real>(1) - ζ_i / x_j;
+CUDA_EXPORT inline Real correctionFactor(Real ζᵢ, Real xⱼ) {
+    return simdBroadcast<Real>(1) - ζᵢ / xⱼ;
 }
 
 // How the stored support depends on the particle positions.
 enum class SupportConstraint : int {
     Free,          // H follows H^D n = constant
-    LowerBound,    // held at H_min with more than the target neighbor sum
-    UpperBound,    // held at H_max (or the periodic cap) with fewer
-    Fixed          // H_min = H_max
+    LowerBound,    // held at Hₘᵢₙ with more than the target neighbor sum
+    UpperBound,    // held at Hₘ𞁑ₓ (or the periodic cap) with fewer
+    Fixed          // Hₘᵢₙ = Hₘ𞁑ₓ
 };
 
 // relativeResidual is (sum_j w - target)/target at the stored H. A residual within
 // the solve tolerance satisfies the constraint and is free even at a bound.
-// H → stored support radius; H_min, H_max → its bounds.
+// H → stored support radius; Hₘᵢₙ, Hₘ𞁑ₓ → its bounds.
 CUDA_EXPORT inline SupportConstraint classifySupport(
-    float H, float H_min, float H_max, float relativeResidual, float tolerance) {
-    if (H_min == H_max) {
+    float H, float Hₘᵢₙ, float Hₘ𞁑ₓ, float relativeResidual, float tolerance) {
+    if (Hₘᵢₙ == Hₘ𞁑ₓ) {
         return SupportConstraint::Fixed;
     }
-    if (H <= H_min && relativeResidual > tolerance) {
+    if (H <= Hₘᵢₙ && relativeResidual > tolerance) {
         return SupportConstraint::LowerBound;
     }
-    if (H >= H_max && relativeResidual < -tolerance) {
+    if (H >= Hₘ𞁑ₓ && relativeResidual < -tolerance) {
         return SupportConstraint::UpperBound;
     }
     return SupportConstraint::Free;
@@ -301,8 +301,8 @@ CUDA_EXPORT inline SupportConstraint classifySupport(
 
 template <typename Real>
 struct GradHCorrection {
-    Real supportJacobian;              // Ω_i of a free support; one when the support is held
-    Real weightedSupportCorrection;    // ζ_i in units of x; zero when the support is held
+    Real supportJacobian;              // Ωᵢ of a free support; one when the support is held
+    Real weightedSupportCorrection;    // ζᵢ in units of x; zero when the support is held
 };
 
 template <typename Real>

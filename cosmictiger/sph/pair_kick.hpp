@@ -145,31 +145,31 @@ CUDA_EXPORT inline bool sphOwnsPairKick(SphPairSourceId const& target,
 /*
  * Derived discrete kick for the antisymmetric SPH pair force of Hopkins (2013),
  * equation (12), https://arxiv.org/abs/1206.5006:
- *   Δv_a = Δτ a_ab, Δv_b = −Δv_a, ΔA_a = Δτ Ȧ_ab, ΔA_b = Δτ Ȧ_ba.
+ *   Δv𞁑 = Δτ a𞁑𞁓, Δv𞁓 = −Δv𞁑, ΔA𞁑 = Δτ Ȧ𞁑𞁓, ΔA𞁓 = Δτ Ȧ𞁓𞁑.
  * All production gas masses are equal. Evaluate a pair once at the midpoint of
  * its finer endpoint's interval and reuse the identical impulse with opposite
  * signs. Only nonadiabatic energy exchange contributes to Ȧ; directed viscous heating
  * can differ between endpoints. The scheduling and accumulation are local
- * derivations, not a time integrator prescribed by the cited paper.
+ * derivations, not a time integrator prescribed by Hopkins (2013).
  * Symbol directory:
- *   Δτ → timestep; a_ab → acceleration; Ȧ_ab/Ȧ_ba → target, neighbor entropy rates;
- *   Δv_a → increment; a, b → target, neighbor.
+ *   Δτ → timestep; a𞁑𞁓 → acceleration; Ȧ𞁑𞁓/Ȧ𞁓𞁑 → target, neighbor entropy rates;
+ *   Δv𞁑 → increment; a, b → target, neighbor.
  */
 // clang-format on
 CUDA_EXPORT inline FlopCount sphAccumulatePairKick(SphPairUpdate& a, SphPairUpdate& b,
-    sph_geometry::SpatialVector<float> const& a_ab, float Ȧ_ab, float Ȧ_ba, float Δτ) {
+    sph_geometry::SpatialVector<float> const& a𞁑𞁓, float Ȧ𞁑𞁓, float Ȧ𞁓𞁑, float Δτ) {
     FlopCount operations = kSpatialDimensions + 2;    // Impulse and entropy products.
     for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
-        float const Δv_a = Δτ * a_ab[dimension];
-        operations += a.velocity[dimension].add(Δv_a);
-        operations += b.velocity[dimension].add(-Δv_a);
+        float const Δv𞁑 = Δτ * a𞁑𞁓[dimension];
+        operations += a.velocity[dimension].add(Δv𞁑);
+        operations += b.velocity[dimension].add(-Δv𞁑);
     }
-    operations += a.entropy.add(Δτ * Ȧ_ab);
-    operations += b.entropy.add(Δτ * Ȧ_ba);
+    operations += a.entropy.add(Δτ * Ȧ𞁑𞁓);
+    operations += b.entropy.add(Δτ * Ȧ𞁓𞁑);
     return operations;
 }
 
-// Derived one-sided form of the kick above, Δv_a = Δτ dv/dτ, for forces without a gas partner.
+// Derived one-sided form of the kick above, Δv𞁑 = Δτ dv/dτ, for forces without a gas partner.
 // Δτ → timestep; dv/dτ → external acceleration. Code names: dv_dτ = dv/dτ.
 CUDA_EXPORT inline FlopCount sphAccumulateExternalKick(
     SphPairUpdate& target, sph_geometry::SpatialVector<float> const& dv_dτ, float Δτ) {

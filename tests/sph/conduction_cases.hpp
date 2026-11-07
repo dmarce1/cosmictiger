@@ -18,7 +18,7 @@ void testConductionPair(Fixture& fixture) {
     auto& data = fixture.data_;
     auto& parameters = fixture.params_;
     fixture.enableMidpointOutputs();
-    parameters.midpointHydro = true;
+    auto* identities = fixture.enableKickObservation();
     parameters.minimumRung = 0;
     parameters.minimumProposedRung = 0;
     parameters.maximumRung = kMaxRung - 1;
@@ -48,9 +48,9 @@ void testConductionPair(Fixture& fixture) {
             data.sourceVelocityX[cold] = -approach;
             parameters.conductionCoefficient = 0.0f;
             fixture.hydro();
-            std::array<Vector3<float>, 2> pressureAccelerations;
+            std::array<sph_geometry::SpatialVector<float>, 2> pressureAccelerations;
             for (int index = 0; index < 2; ++index) {
-                pressureAccelerations[index] = data.sinkAccelerations[fixture.sinkIndex(index)];
+                pressureAccelerations[index] = fixture.kickAcceleration(index);
                 pairKickRequire(data.sinkEntropyRate[fixture.sinkIndex(index)] == 0.0f,
                     "disabled conduction changed entropy without viscosity");
             }
@@ -92,11 +92,13 @@ void testConductionPair(Fixture& fixture) {
                 double const energyRate = sph_entropy::storedEnergy(data.sinkEntropyRate[sink],
                     data.sourceDensity[source], data.adiabaticIndex, scaleFactor);
                 pairKickClose(energyRate, index == 0 ? expectedHotRate : -expectedHotRate,
-                    "conductive rate differs from the paper's exchange");
+                    "conductive rate differs from the Monaghan (1992) exchange");
                 totalEnergyRate += energyRate;
-                for (int dimension = 0; dimension < kDimensions; ++dimension) {
-                    pairKickRequire(data.sinkAccelerations[sink][dimension] ==
-                            pressureAccelerations[index][dimension],
+                // The one pair deposits the same impulse in the same order either way.
+                auto const acceleration = fixture.kickAcceleration(index);
+                for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
+                    pairKickRequire(
+                        acceleration[dimension] == pressureAccelerations[index][dimension],
                         "conduction directly changed the pressure force");
                 }
             }
@@ -130,10 +132,8 @@ void testConductionPair(Fixture& fixture) {
     parameters.globalTimestep = false;
     parameters.conductionCoefficient = 0.3f;
     parameters.hydroKickTimestep = conductionTimestep;
-    auto* identities = fixture.enablePairKickOutputs();
     identities[hot] = {0, 11};
     identities[cold] = {1, 37};
-    data.sinkInternalEnergyRate = nullptr;
     data.sinkEntropyRate = nullptr;
     for (int owner = 0; owner < 3; ++owner) {
         int const hotRung = owner == 1 ? 1 : 3;
@@ -173,10 +173,9 @@ void testDissipativeRateSuperposition(Fixture& fixture, bool morrisAndMonaghan =
     auto& data = fixture.data_;
     auto& parameters = fixture.params_;
     fixture.enableMidpointOutputs();
-    parameters.midpointHydro = true;
+    fixture.enableKickObservation();
     parameters.scaleFactor = 0.7f;
     parameters.expansionRate = 0.0f;
-    parameters.hydroKickTimestep = 0.0;
     data.selfGravityEnabled = false;
     for (int index = 0; index < 2; ++index) {
         int const source = fixture.sourceIndex(index);
@@ -192,7 +191,7 @@ void testDissipativeRateSuperposition(Fixture& fixture, bool morrisAndMonaghan =
     if (morrisAndMonaghan) {
         fixture.enableVariableViscosity();
     }
-    std::array<SphAcceleration, 2> pressureAccelerations;
+    std::array<sph_geometry::SpatialVector<float>, 2> pressureAccelerations;
     std::array<float, 2> viscosityRates{}, conductionRates{};
     for (int mode = 0; mode < 4; ++mode) {
         parameters.bulkViscosityCoefficient = (mode & 1) ? 0.7f : 0.0f;
@@ -207,12 +206,11 @@ void testDissipativeRateSuperposition(Fixture& fixture, bool morrisAndMonaghan =
         parameters.uniformAccelerationY = 0.0f;
         parameters.velocityDampingRate = 0.0f;
         fixture.hydro();
-        std::array<SphAcceleration, 2> hydroAccelerations;
+        std::array<sph_geometry::SpatialVector<float>, 2> hydroAccelerations;
         std::array<float, 2> entropyRates;
         for (int index = 0; index < 2; ++index) {
-            int const sink = fixture.sinkIndex(index);
-            hydroAccelerations[index] = data.sinkAccelerations[sink];
-            entropyRates[index] = data.sinkEntropyRate[sink];
+            hydroAccelerations[index] = fixture.kickAcceleration(index);
+            entropyRates[index] = data.sinkEntropyRate[fixture.sinkIndex(index)];
         }
         // These forces must affect integration but never the entropy rate.
         parameters.uniformAccelerationY = 0.25f;
@@ -222,7 +220,7 @@ void testDissipativeRateSuperposition(Fixture& fixture, bool morrisAndMonaghan =
             int const sink = fixture.sinkIndex(index);
             pairKickClose(data.sinkEntropyRate[sink], entropyRates[index],
                 "external sources changed the entropy rate");
-            pairKickClose(data.sinkAccelerations[sink][1], hydroAccelerations[index][1] + 0.25f,
+            pairKickClose(fixture.kickAcceleration(index)[1], hydroAccelerations[index][1] + 0.25f,
                 "external acceleration was not applied to the integrator");
             for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
                 if (mode == 0) {

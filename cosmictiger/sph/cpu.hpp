@@ -80,26 +80,26 @@ inline sph_geometry::SpatialVector<SimdFloat> sphCpuLoad3(float const* x, float 
     return result;
 }
 
-// Separations r_ab = x_a - x_b for one pack of neighbors, over the active axes.
-// x_a, x_b → sink, neighbor coordinate along one axis; r_ab → separation (return value).
+// Separations r𞁑𞁓 = x𞁑 - x𞁓 for one pack of neighbors, over the active axes.
+// x𞁑, x𞁓 → sink, neighbor coordinate along one axis; r𞁑𞁓 → separation (return value).
 inline sph_geometry::SpatialVector<SimdFloat> sphCpuSeparations(
     SphRunData const& data, int particleIndex, std::vector<int> const& neighbors, size_t first) {
     Position const* positions[kDimensions] = {
         data.sourcePositionX, data.sourcePositionY, data.sourcePositionZ};
-    sph_geometry::SpatialVector<SimdFloat> r_ab;
+    sph_geometry::SpatialVector<SimdFloat> r𞁑𞁓;
     for (int dim = 0; dim < kSpatialDimensions; dim++) {
-        SignedPositionInteger const x_a =
+        SignedPositionInteger const x𞁑 =
             static_cast<SignedPositionInteger>(positions[dim][particleIndex].raw());
-        SimdPosition const x_b([&](auto lane) {
+        SimdPosition const x𞁓([&](auto lane) {
             size_t const index = first + size_t(lane);
             return index < neighbors.size() ?
                 static_cast<SignedPositionInteger>(positions[dim][neighbors[index]].raw()) :
-                x_a;
+                x𞁑;
         });
-        r_ab[dim] = simdCast<SimdFloat>(simdPositionDifference(SimdPosition(x_a), x_b)) *
+        r𞁑𞁓[dim] = simdCast<SimdFloat>(simdPositionDifference(SimdPosition(x𞁑), x𞁓)) *
             SimdFloat(kPositionToFloat);
     }
-    return r_ab;
+    return r𞁑𞁓;
 }
 
 // The component-wise additive reduction of a vector of SIMD partial sums.

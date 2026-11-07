@@ -17,11 +17,12 @@
  * Equation numbers and pages below refer to that review. Comments retain its
  * symbols: particle a is the one being updated and particle b a neighbor; m mass,
  * ρ density, P pressure, u specific internal energy, c sound speed, h smoothing
- * length, r_ab = r_a − r_b, v_ab = v_a − v_b, W_ab = W(r_ab, h) the kernel,
- * W̃_ab the symmetric kernel of p. 554, Π_ab the artificial viscosity and μ_ab its
+ * length, r𞁑𞁓 = r𞁑 − r𞁓, v𞁑𞁓 = v𞁑 − v𞁓, W𞁑𞁓 = W(r𞁑𞁓, h) the kernel,
+ * W̃𞁑𞁓 the symmetric kernel of Monaghan (1992), p. 554, Π𞁑𞁓 the artificial viscosity and μ𞁑𞁓 its
  * velocity measure, with the constants α, β and η. Equation code uses
  * these symbols; each equation block describes them. The stored smoothing length
- * is the compact support radius H, which equals 2h for the paper's cubic spline of section 7.
+ * is the compact support radius H, which equals 2h for the cubic spline of
+ * Monaghan (1992), section 7.
  */
 #pragma once
 
@@ -33,14 +34,14 @@ namespace sph_kernels {
 constexpr double kPi = 3.141592653589793238462643383279502884;
 
 /*
- * Section 7, pp. 554-555 (unnumbered): the cubic spline kernel
+ * Monaghan (1992), section 7, pp. 554-555 (unnumbered): the cubic spline kernel
  *
  *   W(r, h) = (σ/h³) · { 1 − (3/2) q² + (3/4) q³   for 0 ≤ q ≤ 1,
  *                         (1/4) (2 − q)³            for 1 ≤ q ≤ 2,
  *                         0                         otherwise },      q = r/h,
  *
  * with σ = 1/π in three dimensions. This returns H³ W as a function of r/H for the
- * stored support radius H = 2h, so the paper's q is twice the argument.
+ * stored support radius H = 2h, so the Monaghan (1992) q is twice the argument.
  */
 // clang-format off
 /*
@@ -48,7 +49,7 @@ constexpr double kPi = 3.141592653589793238462643383279502884;
  *   r/H → normalized radius; q = r/h = 2r/H → smoothing normalized radius
  *   σ = 1/π → kernel normalization; H³/h³ → support volume scale
  *   2 − q → distance to support edge; dq/d(r/H) = 2 → normalized radius scale
- *   Code names: r_over_H = r/H; H3_over_h3 = H³/h³; two_minus_q = 2 − q;
+ *   Code names: r_over_H = r/H; H3_over_h3 = H³/h³; two_minus_q = 2 − q
  *     dq_d_r_over_H = dq/d(r/H) = 2.
  * (the last constant is used only in kernelDerivative).
  */
@@ -83,7 +84,7 @@ CUDA_EXPORT inline Real kernelValue(Real r_over_H) {
  *   r/H → normalized radius; q = r/h = 2r/H → smoothing normalized radius
  *   σ = 1/π → kernel normalization; H³/h³ → support volume scale
  *   2 − q → distance to support edge; dq/d(r/H) = 2 → normalized radius scale
- *   Code names: r_over_H = r/H; H3_over_h3 = H³/h³; two_minus_q = 2 − q;
+ *   Code names: r_over_H = r/H; H3_over_h3 = H³/h³; two_minus_q = 2 − q
  *     dq_d_r_over_H = dq/d(r/H) = 2.
  * (the last constant is used only in kernelDerivative).
  */

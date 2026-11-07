@@ -17,28 +17,28 @@ namespace morris_and_monaghan {
 /*
  * Morris & Monaghan (1997), JCP 136, 41–50, doi:10.1006/jcph.1997.5690,
  * equations (5), (6), (13):
- *   dα_a/dt = −(α_a − α*)/τ_a + S_a,
- *   τ_a = h_a/(C₁ c_a),  S_a = max(−∇·v_a, 0).
- * Derived backward-Euler update with frozen S_a and τ_a:
- *   α_aⁿ⁺¹ = α* + (α_aⁿ − α* + Δt S_a)/(1 + Δt/τ_a).
+ *   dα_a/dt = −(α𞁑 − α*)/τ𞁑 + S𞁑,
+ *   τ𞁑 = h𞁑/(C₁ c𞁑),  S𞁑 = max(−∇·v𞁑, 0).
+ * Derived backward-Euler update with frozen S𞁑 and τ𞁑:
+ *   α𞁑ⁿ⁺¹ = α* + (α𞁑ⁿ − α* + Δt S𞁑)/(1 + Δt/τ𞁑).
  * Symbol directory:
- *   α_aⁿ → bulk viscosity coefficient; α* → minimum bulk viscosity coefficient
- *   τ_a⁻¹ → inverse decay time; ∇·v_a → divergence; Δt → time step
- *   S_a → source; Δt/τ_a → decay step; α_aⁿ⁺¹ → updated (return value).
- *   Code names: αⁿ_a = α_aⁿ; α_star = α*; τ_inv_a = τ_a⁻¹; div_v_a = ∇·v_a;
- *     Δt_over_τ_a = Δt/τ_a; αⁿ_plus_1_a = α_aⁿ⁺¹.
- * All rates use the integration time unit. The paper uses α* = 0.1 and C₁ = 0.2.
+ *   α𞁑ⁿ → bulk viscosity coefficient; α* → minimum bulk viscosity coefficient
+ *   τ𞁑⁻¹ → inverse decay time; ∇·v𞁑 → divergence; Δt → time step
+ *   S𞁑 → source; Δt/τ𞁑 → decay step; α𞁑ⁿ⁺¹ → updated (return value).
+ *   Code names: αⁿ𞁑 = α𞁑ⁿ; αₛₜ𞁑ᵣ = α*; iτ𞁑 = τ𞁑⁻¹; div_v_a = ∇·v𞁑
+ *     Δt_over_τ𞁑 = Δt/τ𞁑; αⁿ_plus_1𞁑 = α𞁑ⁿ⁺¹.
+ * All rates use the integration time unit. Morris & Monaghan (1997) use α* = 0.1 and C₁ = 0.2.
  * The shifted form preserves the floor; a zero interval returns the input exactly.
  */
 // clang-format on
 template <typename Real>
 CUDA_EXPORT inline Real evolvedBulkViscosityCoefficient(
-    Real αⁿ_a, Real α_star, Real τ_inv_a, Real div_v_a, Real Δt) {
-    Real const S_a = simdMax(-div_v_a, Real(0));
-    Real const Δt_over_τ_a = Δt * τ_inv_a;
+    Real αⁿ𞁑, Real αₛₜ𞁑ᵣ, Real iτ𞁑, Real div_v_a, Real Δt) {
+    Real const S𞁑 = simdMax(-div_v_a, Real(0));
+    Real const Δt_over_τ𞁑 = Δt * iτ𞁑;
     // Shift by the floor so its preservation does not depend on cancellation.
-    Real const αⁿ_plus_1_a = α_star + (αⁿ_a - α_star + Δt * S_a) / (Real(1) + Δt_over_τ_a);
-    return simdSelect(Δt == Real(0), αⁿ_a, αⁿ_plus_1_a);
+    Real const αⁿ_plus_1𞁑 = αₛₜ𞁑ᵣ + (αⁿ𞁑 - αₛₜ𞁑ᵣ + Δt * S𞁑) / (Real(1) + Δt_over_τ𞁑);
+    return simdSelect(Δt == Real(0), αⁿ𞁑, αⁿ_plus_1𞁑);
 }
 
 }    // namespace morris_and_monaghan

@@ -13,28 +13,28 @@ The active fluid model uses density and entropy (with derived internal energy) w
 [variational pressure operator](variational_sph.md), including grad-H corrections.
 It supports an ideal gas, primordial chemistry, and the SH03 star-formation
 closure. Ordinary particle advection is used; the optional XSPH variant in
-equation 3.19 is not enabled.
+equation 3.19 of Monaghan (1992) is not enabled.
 
 ## Notation in the code
 
 Equation implementations use the source's Unicode symbols as identifiers. Adjacent
 comment blocks retain the source notation, equation numbers and citations, then give a
 directory with a short description of each symbol. A `Code names:` line spells any
-symbol that is not a legal C++ identifier, such as `abs_r_ab` for |r_ab|. Derived
+symbol that is not a legal C++ identifier, such as `abs_r𞁑𞁓` for |r_ab|. Derived
 formulas and comoving conversions are identified explicitly. The same convention
 applies to CPU, SIMD, and CUDA code.
 
 | Symbol | Code name in the pair loops | Meaning |
 | --- | --- | --- |
-| α_a, α_b, α_ab | `α_a`, `α_b`, `α_ab` | Linear artificial viscosity coefficients |
-| β_ab | `β_ab` | Quadratic artificial viscosity coefficient |
-| ρ_a, P_a, u_a | `ρ_a`, `P_a`, `u_a` | Sink thermodynamic state |
-| H_a, H_b | `H_a`, `H_b` | Compact support radii |
-| r_ab, v_ab | `r_ab`, `v_ab` | Sink minus neighbor vectors |
-| μ_ab, Π_ab | `μ_ab`, `Π_ab` | Monaghan velocity measure and pair viscosity |
-| F_a, F_b, F_ab | `F_a`, `F_b`, `F_ab` | Radial kernel-gradient factors |
-| ζ_a | `ζ_a` | Adaptive-support correction |
-| Σ_b w, Σ_b q w′ | `ΣW`, `Σqwʹ` | Dimensionless neighbor sums |
+| α_a, α_b, α_ab | `α𞁑`, `α𞁓`, `α𞁑𞁓` | Linear artificial viscosity coefficients |
+| β_ab | `β𞁑𞁓` | Quadratic artificial viscosity coefficient |
+| ρ_a, P_a, u_a | `ρ𞁑`, `P𞁑`, `u𞁑` | Sink thermodynamic state |
+| H_a, H_b | `H𞁑`, `H𞁓` | Compact support radii |
+| r_ab, v_ab | `r𞁑𞁓`, `v𞁑𞁓` | Sink minus neighbor vectors |
+| μ_ab, Π_ab | `μ𞁑𞁓`, `Π𞁑𞁓` | Monaghan velocity measure and pair viscosity |
+| F_a, F_b, F_ab | `F𞁑`, `F𞁓`, `F𞁑𞁓` | Radial kernel-gradient factors |
+| ζ_a | `ζ𞁑` | Adaptive-support correction |
+| Σ𞁓 w, Σ𞁓 q w′ | `ΣW`, `Σqwʹ` | Dimensionless neighbor sums |
 
 The `Pack` suffix denotes SIMD lane partial sums or values. Public INI/CLI keys
 such as `hydro.viscosityAlpha` and `hydro.viscosityBeta` remain unchanged.
@@ -46,8 +46,8 @@ The names do not change the stored values or the kernel and viscosity length con
 
 ## Kernel and density
 
-The default spline in section 7, pp.554–555, is written here with the paper's
-length denoted by \(h_M\):
+The default spline in section 7, pp.554–555, of Monaghan (1992) is written here
+with that paper's length denoted by \(h_M\):
 
 \[
  W(r,h_M)=\frac{1}{\pi h_M^3}
@@ -65,7 +65,7 @@ at \(r/H=1/2\), and vanishes at \(r/H=1\). The common effective radius is
 \(h=2\sigma\), where \(\sigma\) is the one-coordinate standard deviation of
 the normalized kernel. It retains the existing `2 sigma` value without a
 factor-of-two conversion. For the cubic, \(H=\sqrt{10/3}\,h\); thus the common
-\(h\) and the paper's \(h_M\) are distinct.
+\(h\) and the \(h_M\) of Monaghan (1992) are distinct.
 
 The default `hydro.neighborNumber` is 42. The name cubic B-spline refers to this
 radial M4 kernel; it is not a tensor-product bicubic interpolation.
@@ -114,10 +114,11 @@ the self contribution and uses the gather sum
  \rho_i=\sum_j m_j W_{H_i}(r_{ij}).
 \]
 
-This gather choice is a deliberate practical variation: equation 6.3 on p.553
-writes the adaptive density interpolant with the **source** length \(h_j\).
-Section 6 permits summation instead of integrating the continuity equation, but
-does not prescribe this gather solve or its numerical parameters.
+This gather choice is a deliberate practical variation: equation 6.3 on p.553 of
+Monaghan (1992) writes the adaptive density interpolant with the **source**
+length \(h_j\). Section 6 of Monaghan (1992) permits summation instead of
+integrating the continuity equation, but does not prescribe this gather solve or
+its numerical parameters.
 
 Gas particles share one constant class mass. Other particle classes may have
 different constant masses; there is no per-particle SPH mass field. The gas
@@ -127,8 +128,9 @@ smoothing solve holds
  \frac{4\pi}{3}\frac{\rho_i H_i^3}{m}=N_{\rm target},
 \]
 
-so \(H_i\propto\rho_i^{-1/3}\), consistent with equation 6.2. The target is a
-kernel-weighted count, including self, rather than an integer number of neighbors.
+so \(H_i\propto\rho_i^{-1/3}\), consistent with equation 6.2 of Monaghan (1992).
+The target is a kernel-weighted count, including self, rather than an integer
+number of neighbors.
 The self contribution imposes \(N_{\rm target}>(4\pi/3)w(0)\), which is
 \(32/3\) for the default cubic. Startup checks use the selected kernel's floor,
 including its single-precision representation. The solve respects the configured
@@ -142,7 +144,7 @@ The periodic search uses one nearest image per pair, so the effective maximum
 support is also capped at half the box width; a requested minimum above that limit
 is rejected. The effective limits are printed at startup in initial interparticle
 spacings. These numerical choices are implementation details, not prescriptions
-in the paper.
+in Monaghan (1992).
 
 ## Pair force, viscosity, and thermal work
 
@@ -154,8 +156,9 @@ Let \(\mathbf r_{ij}=\mathbf r_i-\mathbf r_j\),
  =\tfrac12[\nabla_i W_{H_i}(r_{ij})+\nabla_i W_{H_j}(r_{ij})].
 \]
 
-This is one of the two choices explicitly offered on p.554. A pair participates
-when it lies inside either support radius. The zero-separation gradient is zero.
+This is one of the two choices explicitly offered on p.554 of Monaghan (1992). A
+pair participates when it lies inside either support radius. The zero-separation
+gradient is zero.
 
 The artificial-viscosity contributions to the physical-coordinate pair rates are
 
@@ -169,7 +172,7 @@ The artificial-viscosity contributions to the physical-coordinate pair rates are
 The [variational operator](variational_sph.md#constraint-and-equations) supplies
 the pressure force and reversible thermal work separately.
 
-These terms follow equation 4.1, the unnumbered definition of
+These terms follow equation 4.1 of Monaghan (1992), the unnumbered definition of
 \(\Pi_{ij}\) that follows it, and equation 4.2, pp.550–551:
 
 \[
@@ -187,19 +190,17 @@ speed. The viscosity length scale is
 interpretation of the viscosity parameters. The same factor applies to every
 selected family. The regularization remains \(\epsilon=0.01\). With variable
 viscosity disabled the default \(\alpha=1\) and \(\beta=2\) recover the constant
-coefficients of the paper. The default evolving coefficients are described below.
+coefficients of Monaghan (1992). The default evolving coefficients are described
+below.
 
-The Balsara (1995) shear limiter is always on with Morris–Monaghan;
-`hydro.balsaraSwitch` selects it only for constant α (`none`), where it defaults
-on. It uses equation (72) of
+The Balsara (1995) shear limiter is on with Morris–Monaghan and off with
+constant α (`none`); no separate option exists. It uses equation (72) of
 Springel, Pakmor, Zier & Reinecke (2021), *Simulating cosmic structure formation
 with the GADGET-4 code*, MNRAS 506, 2871–2949,
 [doi:10.1093/mnras/stab1855](https://doi.org/10.1093/mnras/stab1855)
 ([author PDF, section 5.3](https://wwwmpa.mpa-garching.mpg.de/gadget4/gadget4-code-paper.pdf)).
-Equation (72) belongs to GADGET-4, not to the original Balsara paper.
-Option processing normalizes `hydro.balsaraSwitch` to true for Morris–Monaghan,
-after CLI/INI precedence and for every programmatic option update, so a false
-value has no effect with that model.
+Equation (72) belongs to GADGET-4, Springel et al. (2021), not to the original
+Balsara (1995) paper.
 
 Balsara makes the density pass accumulate the separate SPH gather estimates
 \(\rho_i\,\nabla\!\cdot\mathbf v_i=-\sum_j m_j\mathbf v_{ij}\cdot\nabla_i W_{ij}(H_i)\)
@@ -226,7 +227,6 @@ from the baseline and predictor velocity states. The second
 hydro evaluation uses the predictor's limiter. Factors are transient and are
 recomputed after restart or migration. Checkpoint metadata records whether the
 limiter is enabled and rejects a restart with a different setting.
-Use `--hydro.balsaraSwitch=false` to disable this shear correction for constant α.
 
 The variational pressure terms and symmetric artificial viscosity conserve linear
 and angular momentum and balance kinetic with internal energy. This algebraic
@@ -247,12 +247,13 @@ Morris & Monaghan (1997), *A Switch to Reduce SPH Viscosity*, JCP 136, 41–50,
 
 The defaults are \(\alpha^\ast=0.1\) and \(\mathcal C_1=0.2\), as used in their
 calculations. There is no hard upper cap or \((\alpha_{\max}-\alpha)\) source
-multiplier. The source uses equation (13) directly, without an additional
-adiabatic-index scaling. The decay length is the same calibrated viscosity length
-\(h_{M,i}=\sqrt{5/6}\,H_i/\texttt{smoothingLengthPerEffectiveRadius}\), equal to
-\(H_i/2\) for the cubic spline. New particles start at \(\alpha^\ast\); this
-smooth-flow initialization is an implementation choice, since the paper uses
-problem-dependent initial values, including elevated α near the initial Sod interface.
+multiplier. Morris & Monaghan (1997) use equation (13) directly, without an
+additional adiabatic-index scaling. The decay length is the same calibrated
+viscosity length \(h_{M,i}=\sqrt{5/6}\,H_i/\texttt{smoothingLengthPerEffectiveRadius}\),
+equal to \(H_i/2\) for the cubic spline. New particles start at \(\alpha^\ast\);
+this smooth-flow initialization is an implementation choice, since
+Morris & Monaghan (1997) use problem-dependent initial values, including elevated
+α near the initial Sod interface.
 
 Morris–Monaghan pair forces and heating use
 \(\bar\alpha_{ij}=(\alpha_i+\alpha_j)/2\), preserving pair symmetry.
@@ -260,8 +261,8 @@ The single quadratic coefficient `hydro.viscosityBeta` (default 2)
 has a model-dependent meaning:
 
 - With `morrisAndMonaghan`, \(\beta_{ij}=\texttt{viscosityBeta}\,
-  \bar\alpha_{ij}\), the convention of Morris & Monaghan's equation (3), so β decays
-  with α.
+  \bar\alpha_{ij}\), the convention of equation (3) of Morris & Monaghan (1997), so
+  β decays with α.
 - With `none`, \(\beta_{ij}=\texttt{viscosityBeta}\) is constant: the fixed
   Monaghan coefficients.
 
@@ -280,8 +281,9 @@ Euler step over that completed interval:
 The source and decay time are frozen during this update. Divergence and curl are then discarded; neither their
 history nor \(\nabla\cdot(\rho\mathbf v)\) is needed. Momentum divergence contains
 an advected-density term and is not a Galilean-invariant compression indicator.
-The derivative-of-divergence indicator described after equation (72) in GADGET-4
-belongs to a later switch, not to Morris–Monaghan equation (13).
+The derivative-of-divergence indicator described after equation (72) of GADGET-4,
+Springel et al. (2021), belongs to a later switch, not to equation (13) of
+Morris & Monaghan (1997).
 
 Only the scalar `bulkViscosityCoefficient` (α) survives sorting, domain migration,
 and checkpoints; no rate or predictor is stored. It occupies two bytes in IEEE
@@ -315,10 +317,11 @@ viscous pair force still uses physical relative velocity including Hubble flow.
 
 `hydro.conductionCoefficient` is the dimensionless coefficient \(g\) in
 Monaghan (1992), equation (4.8). It defaults to **0**, which disables conduction.
-A finite positive value enables equations (4.5)/(4.8) independently of the
-viscosity model, variable alpha, and Balsara limiter. For example,
-`--hydro.conductionCoefficient=0.5` uses the approximate value discussed on p.552.
-This models artificial thermal diffusion, rather than a physical conductivity.
+A finite positive value enables equations (4.5)/(4.8) of Monaghan (1992)
+independently of the viscosity model, variable alpha, and Balsara limiter. For
+example, `--hydro.conductionCoefficient=0.5` uses the approximate value discussed
+on p.552 of Monaghan (1992). This models artificial thermal diffusion, rather
+than a physical conductivity.
 
 Using the symmetric kernel gradient and the same calibrated pair length
 \(\bar h\) and regularization \(\eta^2=\epsilon\bar h^2\) as Monaghan viscosity,
@@ -335,8 +338,9 @@ for separating pairs. The sound-speed
 part remains active for stationary and separating pairs; constant positive
 \(g\) therefore also diffuses smooth thermal gradients. No additional switch
 restricts this option to shocks. The sign above follows the diffusion equation
-(4.4) and its Gaussian example (4.6): with our gradient convention, the printed
-leading minus in (4.5) multiplying \(u_i-u_j\) would instead cause antidiffusion.
+(4.4) of Monaghan (1992) and its Gaussian example (4.6): with our gradient
+convention, the printed leading minus in (4.5) multiplying \(u_i-u_j\) would
+instead cause antidiffusion.
 
 Derived conversion to stored variables \(E=a^2u\), \(\rho_c=a^3\rho\), and
 conformal time \(dt=a\,d\tau\): evaluate \(C_{ij}\) using comoving lengths,
@@ -453,14 +457,15 @@ The Courant-viscous limit uses
  \frac{h_i}{c_i+0.6[\alpha c_i+\beta\max_j(-\mu_{ij},0)]}.
 \]
 
-The code interprets two apparent issues in the printed p.563 formulas:
+The code interprets two apparent issues in the printed formulas of Monaghan (1992),
+section 10.3, p. 563:
 
 - The printed force limit \(h/|\mathbf f|\) lacks a square root and has dimensions
   of time squared. The implemented acceleration limit scales as
   \(\sqrt{h/|\mathbf a|}\).
-- The printed viscous limit uses \(\max\mu\), although equation 4.2 makes \(\mu\)
-  negative for approaching particles. The implementation uses the nonnegative
-  compression magnitude \(\max(-\mu,0)\).
+- The printed viscous limit uses \(\max\mu\), although equation 4.2 of
+  Monaghan (1992) makes \(\mu\) negative for approaching particles. The
+  implementation uses the nonnegative compression magnitude \(\max(-\mu,0)\).
 
 The numerator uses the effective radius \(h_i=2\sigma_i\). The Courant coefficient
 defaults to `0.22821773229381923`, converted from `0.25` by \(\sqrt{5/6}\)
@@ -481,7 +486,7 @@ timestep accuracy for every kernel shape.
 The `star` test's constant-α schedule (zero during relaxation, 0.05 afterward)
 sets `hydro.viscosityEvolution=none` and `viscosityBeta=2*viscosityAlpha`
 for each stage, so the relaxation stage is inviscid. It relaxes its initial polytrope with a velocity damping term outside
-the paper, \(d\mathbf w/d\tau \mathrel{-}= \lambda_{\rm d}\mathbf w\), where
+Monaghan (1992), \(d\mathbf w/d\tau \mathrel{-}= \lambda_{\rm d}\mathbf w\), where
 \(\lambda_{\rm d}\) is the internal `hydro.damping` rate per code time unit. The
 timestep criteria above do not include it, so the explicit kick is stable only while
 \(\lambda_{\rm d}\Delta t\) stays below order one. The test therefore sets
@@ -513,7 +518,8 @@ cause artificial viscosity. The diagnostic homogeneous energy rate is
 which vanishes for \(\gamma=5/3\). This term is not integrated into entropy;
 the energy conversion already includes homogeneous adiabatic expansion. The pair-force and thermal-work prefactors contain
 \(m/a\) after converting to these stored variables. These transformations are
-repository requirements; the cited equations in the review are noncosmological.
+repository requirements; the equations cited from Monaghan (1992) are
+noncosmological.
 
 ## Cosmological viscosity conventions
 
@@ -559,7 +565,6 @@ hydrodynamic controls are:
 | `hydro.viscosityDecay` | `0.2` | Morris–Monaghan decay coefficient \(\mathcal C_1\) |
 | `hydro.conductionCoefficient` | `0` | Artificial thermal diffusion coefficient g; zero disables it |
 | `hydro.viscosityEpsilon` | `0.01` | Denominator coefficient multiplying \(\bar\ell^2\) |
-| `hydro.balsaraSwitch` | `true` | Balsara limiter for `none`; `morrisAndMonaghan` always applies it |
 | `hydro.neighborNumber` | `42` | Kernel-weighted support-sphere count |
 | `compute.sphBucketSize` | `0` (automatic) | SPH tree leaf limit; automatic sizing uses `floor(8/pi * hydro.neighborNumber)`, giving `106` at the default neighbor target |
 | `hydro.minEffectiveRadius` | unset | Alternative minimum effective radius \(h=2\sigma\), in initial interparticle spacings |
@@ -658,11 +663,11 @@ repository suite or performance-scaling study was run for this revision.
 Artificial-conduction addition (November 4, 2026): the Release CPU application
 build/link, 46 CPU SPH tests, and all 31 enabled CUDA SPH regressions passed
 (one pre-existing CUDA test disabled). The new shared fixture checks the scalar
-paper formula, hot-to-cold transfer, unequal densities/supports, cosmological
-scaling, unchanged pressure acceleration, uniform-temperature cancellation,
-conductive timestep scaling, mixed-rung pair ownership, energy conservation,
-positive thermal state, and increasing total thermodynamic entropy. A separate
-CPU/CUDA parity case includes variable viscosity and SIMD tails. Focused CLI
+formula of Monaghan (1992), hot-to-cold transfer, unequal densities/supports,
+cosmological scaling, unchanged pressure acceleration, uniform-temperature
+cancellation, conductive timestep scaling, mixed-rung pair ownership, energy
+conservation, positive thermal state, and increasing total thermodynamic entropy.
+A separate CPU/CUDA parity case includes variable viscosity and SIMD tails. Focused CLI
 checks cover the zero default, positive values, INI/CLI precedence and invalid
 inputs. The existing restart fixture passes with g=0.3, rejects changed/disabled
 conduction, and retains its other viscosity/pressure restart checks. Three-step
@@ -684,10 +689,10 @@ labeled by representation: signed-significand/base-90000 checks belong to commit
 
 The independent `sph_kernels` and `monaghan_sph` CTest targets retain the reference cubic checks:
 float and double kernel normalization, spline joins, analytic versus
-finite-difference derivatives, the paper's \(H=2h_M\) convention, viscosity signs
-and coefficients, regularization, and invariance under length-unit changes and
-velocity boosts. Pair tests combine variational pressure with Monaghan viscosity
-and use unequal pressures,
+finite-difference derivatives, the \(H=2h_M\) convention of Monaghan (1992),
+viscosity signs and coefficients, regularization, and invariance under length-unit
+changes and velocity boosts. Pair tests combine variational pressure with Monaghan
+viscosity and use unequal pressures,
 densities, masses, and supports to check net force, torque, and total energy rate,
 including a pair inside only one support. They also check separation, uniform
 translation, and the distinction between peculiar and physical thermal work.

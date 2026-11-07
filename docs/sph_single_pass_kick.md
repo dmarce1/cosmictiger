@@ -52,9 +52,11 @@ that opened at \(t_n\) and opening the next one at \(t_{n+1}\):
 | 9 | Rung limiter loop | `kSphRunRungs` | |
 | 10 | Opening half-kick with the new rung's \(\Delta t'\) | `sphParticlesApplyUpdates(…, 2, …)` | \(a_{n+1}\) |
 
-Both passes are full pair-force evaluations. Each writes `sinkAccelerations` and
-`sinkInternalEnergyRate` (`sph_hydro_cpu.cpp:238`, `:252`). Only pass 2 computes
-timesteps (`if (parameters.phase == 1)`, `sph_hydro_cpu.cpp:253`). The hierarchical
+Both passes are full pair-force evaluations. Each wrote the optional per-sink acceleration
+and total energy-rate diagnostic arrays of that time (`sph_hydro_cpu.cpp:238`, `:252`);
+those arrays were removed later, and the only force output is now the pair-kick
+accumulation in `SphRunData::sourcePairUpdates`. Only pass 2 computes timesteps
+(`if (parameters.phase == 1)`, `sph_hydro_cpu.cpp:253`). The hierarchical
 path does the same: `kSphRunHydro` runs at `hierarchical.cpp` lines ~914 (phase 0)
 and ~953 (phase 1), with the source commit between them.
 
@@ -176,7 +178,7 @@ rebuilt every step.
   that is unchanged. Cullen–Dehnen reads accelerations in its density-time
   exchange (`cullen_and_dehnen/particle_exchange.cpp`). After this change those
   are pass 1's completed accelerations instead of pass 2's. Check the A15
-  indicator.
+  indicator of Cullen & Dehnen (2010).
 - **Global-timestep and PM outer-interval modes.** `selectedTimestep` currently
   takes `result.minimumTimestep` from pass 2. It must come from the new loop, and
   `closingScale` versus `t0` (driver.cpp:284) must stay as it is.

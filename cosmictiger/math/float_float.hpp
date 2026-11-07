@@ -222,7 +222,7 @@ class FloatFloat {
     }
 
     // Fast2Sum requires |left| >= |right|; used only at the normalization
-    // steps justified by the cited double-word algorithms.
+    // steps justified by the double-word algorithms of Joldes et al. (2017).
     CUDA_EXPORT static FloatFloat fastTwoSum(float left, float right) {
         if ((detail::floatFloatBits(right) & 0x7fffffffU) == 0) {
             return FloatFloat(left);
@@ -237,7 +237,7 @@ class FloatFloat {
     }
 
     // TwoProdFMA: the residual is exact if it is representable and the
-    // rounded product is finite (Joldes et al., Algorithm 3).
+    // rounded product is finite (Joldes et al. (2017), Algorithm 3).
     CUDA_EXPORT static FloatFloat twoProduct(float left, float right) {
         FloatFloat result;
         result.high_ = detail::floatFloatMultiply(left, right);
@@ -248,7 +248,7 @@ class FloatFloat {
         return result;
     }
 
-    // DWTimesFP1 (Algorithm 7), used by DWDivDW2 below.
+    // DWTimesFP1 (Joldes et al. (2017), Algorithm 7), used by DWDivDW2 below.
     CUDA_EXPORT FloatFloat multiplyFloat(float right) const {
         FloatFloat const product = twoProduct(high_, right);
         float const cross = detail::floatFloatMultiply(low_, right);
@@ -336,8 +336,8 @@ public:
         return result;
     }
 
-    // Accurate DWPlusDW (Algorithm 6); unlike "sloppy" addition this retains
-    // the low-word sum's error when the high words cancel.
+    // Accurate DWPlusDW (Joldes et al. (2017), Algorithm 6); unlike "sloppy" addition this
+    // retains the low-word sum's error when the high words cancel.
     CUDA_EXPORT friend FloatFloat operator+(FloatFloat left, FloatFloat right) {
         FloatFloat const highSum = twoSum(left.high_, right.high_);
         if (!highSum.isFinite()) {
@@ -354,7 +354,7 @@ public:
         return left + (-right);
     }
 
-    // DWTimesDW3 (Algorithm 12), including the low * low contribution.
+    // DWTimesDW3 (Joldes et al. (2017), Algorithm 12), including the low * low contribution.
     CUDA_EXPORT friend FloatFloat operator*(FloatFloat left, FloatFloat right) {
         FloatFloat const product = twoProduct(left.high_, right.high_);
         if (!product.isFinite()) {
@@ -373,7 +373,7 @@ public:
         return left * right + addend;
     }
 
-    // DWDivDW2 (Algorithm 17), with the Algorithm 7 product above.
+    // DWDivDW2 (Joldes et al. (2017), Algorithm 17), with the Algorithm 7 product above.
     CUDA_EXPORT friend FloatFloat operator/(FloatFloat left, FloatFloat right) {
         float const quotient = detail::floatFloatDivide(left.high_, right.high_);
         if (!detail::floatFloatFinite(quotient) ||
@@ -414,7 +414,7 @@ public:
     // base value f(high) must also be computed to FloatFloat accuracy; calling
     // a float function there and merely adding low*f'(high) loses that accuracy.
     // Check convergence, truncation error and range separately for each function.
-    // See also Hida, Li and Bailey, cited above, Sec. 5 (Taylor series and
+    // See also Hida, Li and Bailey, Sec. 5 (Taylor series and
     // argument reduction for transcendental functions).
 
     CUDA_EXPORT FloatFloat& operator+=(FloatFloat right) {

@@ -25,46 +25,46 @@ namespace sph_entropy {
 // Treat the representable monatomic γ exactly, including on the GPU.
 // clang-format off
 /*
- * Derived ideal-gas conversion from A = P_phys/ρ_phys^γ,
- * ρ_c = a³ ρ_phys, E = a² u_phys and P_phys = (γ−1)ρ_phys u_phys.
- *   E/A = ρ_c^(γ−1) a^(5−3γ)/(γ−1).
+ * Derived ideal-gas conversion from A = Pₚₕ𞁟ₛ/ρₚₕ𞁟ₛ^γ,
+ * ρ𞁞 = a³ ρₚₕ𞁟ₛ, E = a² uₚₕ𞁟ₛ and Pₚₕ𞁟ₛ = (γ−1)ρₚₕ𞁟ₛ uₚₕ𞁟ₛ.
+ *   E/A = ρ𞁞^(γ−1) a^(5−3γ)/(γ−1).
  * This is a local derivation, not a numbered source equation.
  * Symbol directory:
- *   ρ_c → density; γ → adiabatic index; a → scale factor; 5−3γ → exponent; E/A → return value.
+ *   ρ𞁞 → density; γ → adiabatic index; a → scale factor; 5−3γ → exponent; E/A → return value.
  *   Code names: five_minus_3γ = 5−3γ.
  */
 // clang-format on
-CUDA_EXPORT inline float energyPerEntropy(float ρ_c, float γ, float a) {
+CUDA_EXPORT inline float energyPerEntropy(float ρ𞁞, float γ, float a) {
     float const five_minus_3γ = (γ == 5.0f / 3.0f) ? 0.0f : 5.0f - 3.0f * γ;
-    return std::pow(ρ_c, γ - 1.0f) * std::pow(a, five_minus_3γ) / (γ - 1.0f);
+    return std::pow(ρ𞁞, γ - 1.0f) * std::pow(a, five_minus_3γ) / (γ - 1.0f);
 }
 
 // clang-format off
 /*
- * Derived ideal-gas conversion from A = P_phys/ρ_phys^γ,
- * ρ_c = a³ ρ_phys, E = a² u_phys and P_phys = (γ−1)ρ_phys u_phys.
- *   E = A ρ_c^(γ−1) a^(5−3γ)/(γ−1).
+ * Derived ideal-gas conversion from A = Pₚₕ𞁟ₛ/ρₚₕ𞁟ₛ^γ,
+ * ρ𞁞 = a³ ρₚₕ𞁟ₛ, E = a² uₚₕ𞁟ₛ and Pₚₕ𞁟ₛ = (γ−1)ρₚₕ𞁟ₛ uₚₕ𞁟ₛ.
+ *   E = A ρ𞁞^(γ−1) a^(5−3γ)/(γ−1).
  * This is a local derivation, not a numbered source equation.
  * Symbol directory:
- *   A → entropy; ρ_c → density; γ → adiabatic index; a → scale factor; E → return value.
+ *   A → entropy; ρ𞁞 → density; γ → adiabatic index; a → scale factor; E → return value.
  */
 // clang-format on
-CUDA_EXPORT inline float storedEnergy(float A, float ρ_c, float γ, float a) {
-    return A * energyPerEntropy(ρ_c, γ, a);
+CUDA_EXPORT inline float storedEnergy(float A, float ρ𞁞, float γ, float a) {
+    return A * energyPerEntropy(ρ𞁞, γ, a);
 }
 
 // clang-format off
 /*
- * Derived ideal-gas conversion from A = P_phys/ρ_phys^γ,
- * ρ_c = a³ ρ_phys, E = a² u_phys and P_phys = (γ−1)ρ_phys u_phys.
- *   A = (γ−1) E ρ_c^(1−γ) a^(3γ−5).
+ * Derived ideal-gas conversion from A = Pₚₕ𞁟ₛ/ρₚₕ𞁟ₛ^γ,
+ * ρ𞁞 = a³ ρₚₕ𞁟ₛ, E = a² uₚₕ𞁟ₛ and Pₚₕ𞁟ₛ = (γ−1)ρₚₕ𞁟ₛ uₚₕ𞁟ₛ.
+ *   A = (γ−1) E ρ𞁞^(1−γ) a^(3γ−5).
  * This is a local derivation, not a numbered source equation.
  * Symbol directory:
- *   E → energy; ρ_c → density; γ → adiabatic index; a → scale factor; A → return value.
+ *   E → energy; ρ𞁞 → density; γ → adiabatic index; a → scale factor; A → return value.
  */
 // clang-format on
-CUDA_EXPORT inline float fromStoredEnergy(float E, float ρ_c, float γ, float a) {
-    return E / energyPerEntropy(ρ_c, γ, a);
+CUDA_EXPORT inline float fromStoredEnergy(float E, float ρ𞁞, float γ, float a) {
+    return E / energyPerEntropy(ρ𞁞, γ, a);
 }
 
 struct PreparedThermalState {
@@ -90,16 +90,16 @@ namespace detail {
 
 // Stage the canonical float A before changing any particle. Reconstruct E from
 // that exact representation so the source ledger matches the committed state.
-// Symbol directory: E → energy; ρ_c → density; γ → adiabatic index; a → scale factor;
+// Symbol directory: E → energy; ρ𞁞 → density; γ → adiabatic index; a → scale factor;
 // E/A → conversion factor. Code names: E_over_A = E/A.
-inline PreparedThermalState prepareStoredEnergy(float E, float ρ_c, float γ, float a) {
-    if (!detail::finiteThermalValue(E) || !(E > 0.0f) || !detail::finiteThermalValue(ρ_c) ||
-        !(ρ_c > 0.0f) || !detail::finiteThermalValue(γ) || !(γ > 1.0f) ||
+inline PreparedThermalState prepareStoredEnergy(float E, float ρ𞁞, float γ, float a) {
+    if (!detail::finiteThermalValue(E) || !(E > 0.0f) || !detail::finiteThermalValue(ρ𞁞) ||
+        !(ρ𞁞 > 0.0f) || !detail::finiteThermalValue(γ) || !(γ > 1.0f) ||
         !detail::finiteThermalValue(a) || !(a > 0.0f)) {
         throw std::invalid_argument(
             "SPH source requires finite positive energy, density and scale");
     }
-    float const E_over_A = energyPerEntropy(ρ_c, γ, a);
+    float const E_over_A = energyPerEntropy(ρ𞁞, γ, a);
     if (!detail::finiteThermalValue(E_over_A) || !(E_over_A > 0.0f)) {
         throw std::range_error("SPH source has an invalid entropy conversion factor");
     }

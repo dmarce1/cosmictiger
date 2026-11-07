@@ -20,7 +20,7 @@ struct RungMergeDecision {
 };
 
 /*
- * GADGET-4 (Springel et al. 2021, §4.2, equation 52):
+ * GADGET-4, Springel et al. (2021), section 4.2, equation 52:
  *   K_hierarchical = N₀ + 3 ∑_{k≥1} 2ᵏ⁻¹ Nₖ.
  * https://wwwmpa.mpa-garching.mpg.de/gadget4/gadget4-code-paper.pdf
  * Nₖ counts the particles on rung n+k or finer, not only that rung.
@@ -28,7 +28,7 @@ struct RungMergeDecision {
  * Derived comparison after cancelling the unchanged deeper solves:
  *   C_hierarchy = Nₙ + 3 Nₙ₊₁, C_merged = 2 Nₙ.
  *   C_merged ≤ C_hierarchy ⇔ Nₙ ≤ 3 Nₙ₊₁.
- * The paper uses strict cost saving. The selected policy also promotes on an
+ * Springel et al. (2021) use strict cost saving. The selected policy also promotes on an
  * equal-cost tie. An empty finer set never triggers promotion.
  *
  * Symbol directory:

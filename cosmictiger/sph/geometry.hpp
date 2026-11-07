@@ -42,27 +42,27 @@ CUDA_EXPORT inline Vector3<Real> paddedVector(SpatialVector<Real> const& spatial
 
 // Derived from W_D = H⁻ᴰ w_D(r/H): density scales as H⁻ᴰ and its
 // gradient as H⁻⁽ᴰ⁺¹⁾. D → spatial dimensions; H⁻¹, H⁻² → inverse support and its square.
-// Code names: H_inv = H⁻¹; H_inv2 = H⁻².
+// Code names: iH = H⁻¹; iH2 = H⁻².
 // Hopkins (2013), https://arxiv.org/abs/1206.5006, equations (8)–(13),
 // generalized here from 3D. Retain the established 3D multiplication order.
 template <class Real>
-CUDA_EXPORT inline Real inverseVolume(Real H_inv) {
+CUDA_EXPORT inline Real inverseVolume(Real iH) {
     if constexpr (kSpatialDimensions == 1) {
-        return H_inv;
+        return iH;
     } else if constexpr (kSpatialDimensions == 2) {
-        return H_inv * H_inv;
+        return iH * iH;
     } else {
-        return H_inv * H_inv * H_inv;
+        return iH * iH * iH;
     }
 }
 
 template <class Real>
-CUDA_EXPORT inline Real inverseGradientScale(Real H_inv) {
+CUDA_EXPORT inline Real inverseGradientScale(Real iH) {
     if constexpr (kSpatialDimensions == 3) {
-        Real const H_inv2 = H_inv * H_inv;
-        return H_inv2 * H_inv2;
+        Real const iH2 = iH * iH;
+        return iH2 * iH2;
     } else {
-        return inverseVolume(H_inv) * H_inv;
+        return inverseVolume(iH) * iH;
     }
 }
 
@@ -76,16 +76,16 @@ inline double supportRadius(double m, double ρ, double N) {
 
 }    // namespace sph_geometry
 
-// Component separations r_ab = x_a − x_b of two position vectors over the active axes, using
-// the scalar distance() of the coordinate type. x_a, x_b → sink, neighbor position;
-// r_ab → separation (return value). Global so that distance(x_a, x_b) resolves in kernels.
+// Component separations r𞁑𞁓 = x𞁑 − x𞁓 of two position vectors over the active axes, using
+// the scalar distance() of the coordinate type. x𞁑, x𞁓 → sink, neighbor position;
+// r𞁑𞁓 → separation (return value). Global so that distance(x𞁑, x𞁓) resolves in kernels.
 template <class Coordinate>
 CUDA_EXPORT inline sph_geometry::SpatialVector<float> distance(
-    sph_geometry::SpatialVector<Coordinate> const& x_a,
-    sph_geometry::SpatialVector<Coordinate> const& x_b) {
-    sph_geometry::SpatialVector<float> r_ab;
+    sph_geometry::SpatialVector<Coordinate> const& x𞁑,
+    sph_geometry::SpatialVector<Coordinate> const& x𞁓) {
+    sph_geometry::SpatialVector<float> r𞁑𞁓;
     for (int dim = 0; dim < kSpatialDimensions; ++dim) {
-        r_ab[dim] = distance(x_a[dim], x_b[dim]);
+        r𞁑𞁓[dim] = distance(x𞁑[dim], x𞁓[dim]);
     }
-    return r_ab;
+    return r𞁑𞁓;
 }
