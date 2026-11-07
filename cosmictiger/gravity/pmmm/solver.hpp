@@ -5,6 +5,7 @@
 #include <functional>
 
 #include <cosmictiger/gravity/kick.hpp>
+#include <cosmictiger/gravity/pm/outer_interval.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 
@@ -36,6 +37,9 @@ struct PmmmDiagnostics {
     uint64_t planBuilds = 0;
     uint64_t greenBuilds = 0;
     uint64_t solveCount = 0;
+    // Mesh transforms (deposit, forward FFT, contraction, inverse FFT) executed
+    // on this locality; frozen-membership near passes never add to it.
+    uint64_t transformCount = 0;
 
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
@@ -44,7 +48,7 @@ struct PmmmDiagnostics {
             ghostCells & ghostBytes & nearRemoteTreeFetches & nearRemoteParticleFetches &
             nearBatches & peakBatchParticles & completedWhileGhostsPending &
             storedAccelerationParticles & storedPotentialParticles & planBuilds & greenBuilds &
-            solveCount;
+            solveCount & transformCount;
     }
 };
 
@@ -54,7 +58,19 @@ void pmmmSolve(bool doPotential);
 // for sources and sinks. Traditional steps retain every owned source and the
 // full mesh, evaluating only sinks at or above parameters.minRung. Fields are
 // consumed by the kick without full-particle result buffers.
+// With parameters.frozenNear (PMMM outer interval, docs/pmmm.md) the pass is a
+// near-only evaluation on the stored frozen cell membership: no deposit, FFT
+// or far expansion; parameters.refreshMembership first re-sorts every owned
+// particle by position and stores the new membership for the coming interval.
 KickReturn pmmmKick(KickParameters const& parameters);
+// PMMM outer interval boundary: with every owned particle migrated to its
+// domain and at the synchronized position, sort by position, solve the far
+// field for every particle into particlesLongAcceleration (gm-scaled), and
+// choose the next interval from the far acceleration at the near-width scale,
+// the expansion bound, the coarse output clock and the end time. No velocity,
+// rung or membership changes; the following refreshMembership pass stores them.
+PmBoundaryResult pmmmOuterBoundary(
+    double scale, double scaleDerivative, double time, double coarseInterval, double endTime);
 void pmmmDestroy();
 PmmmDiagnostics pmmmDiagnostics();
 

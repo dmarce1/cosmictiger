@@ -121,15 +121,24 @@ snapshot. This can be different from npart if one is dealing with a multi-file s
 };
 /*****************************/
 
-// The mesh solvers (pm, p3m) store their gm-scaled long acceleration per particle.
+// The outer-interval solvers (pm, p3m and the PMMM outer interval) store their
+// gm-scaled long acceleration per particle between the boundary far solve and
+// the boundary kick that consumes it.
 inline bool particlesHasLongAcceleration(Options const& options) {
-    return options.gravity.enabled && usesParticleMesh(options.gravity);
+    return options.gravity.enabled && usesOuterInterval(options.gravity);
+}
+
+// The PMMM outer interval freezes each particle's near-field mesh cell key for
+// the whole interval; the key is assigned at the boundary that opens the interval.
+inline bool particlesHasFrozenCell(Options const& options) {
+    return options.gravity.enabled && usesMeshGravityInterval(options.gravity);
 }
 
 struct Particle {
     ParticleVector<Position> position;
     ParticleVector<float> velocity;
     ParticleVector<float> longAcceleration;
+    uint64_t frozenCell;
     GroupInteger groupNumber;
     ParticleInteger catalogIndex;
     char rung;
@@ -167,6 +176,9 @@ struct Particle {
             for (int dim = 0; dim < kSpatialDimensions; dim++) {
                 a& longAcceleration[dim];
             }
+        }
+        if (particlesHasFrozenCell(options)) {
+            a & frozenCell;
         }
     }
 };
@@ -213,6 +225,10 @@ PARTICLES_EXTERN Array<float*, kSpatialDimensions> particlesGravityAccelerations
 // is produced at an outer PM boundary and consumed by the next kick, so it
 // follows particle permutations and migration but is never checkpointed.
 PARTICLES_EXTERN Array<float*, kSpatialDimensions> particlesLongAccelerations;
+// PMMM outer interval: the mesh cell key each particle belonged to when the
+// current interval opened. It follows permutations, migration and checkpoints
+// and defines the frozen near-field membership until the next boundary.
+PARTICLES_EXTERN uint64_t* particlesFrozenCells;
 PARTICLES_EXTERN float* particlesP;
 PARTICLES_EXTERN std::atomic<GroupInteger>* particlesGrp
 #ifdef PARTICLES_CPP
@@ -385,6 +401,11 @@ inline float& particlesGravityAcceleration(int dim, ParticleInteger index) {
     return particlesGravityAccelerations[dim][index];
 }
 
+inline uint64_t& particlesFrozenCell(ParticleInteger index) {
+    CHECK_PART_BOUNDS(index);
+    return particlesFrozenCells[index];
+}
+
 inline GroupInteger particlesGroupInit(ParticleInteger index) {
     CHECK_PART_BOUNDS(index);
     return particlesGlobalOffset + index;
@@ -463,6 +484,9 @@ inline Particle particlesGetParticle(ParticleInteger index) {
             p.longAcceleration[dim] = particlesLongAcceleration(dim, index);
         }
     }
+    if (particlesHasFrozenCell(getOptions())) {
+        p.frozenCell = particlesFrozenCell(index);
+    }
     return p;
 }
 
@@ -495,6 +519,9 @@ inline void particlesSetParticle(Particle p, ParticleInteger index) {
         for (int dim = 0; dim < kSpatialDimensions; dim++) {
             particlesLongAcceleration(dim, index) = p.longAcceleration[dim];
         }
+    }
+    if (particlesHasFrozenCell(getOptions())) {
+        particlesFrozenCell(index) = p.frozenCell;
     }
 }
 

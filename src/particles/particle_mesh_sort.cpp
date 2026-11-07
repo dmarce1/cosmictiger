@@ -64,6 +64,21 @@ uint64_t particleMeshKey(size_t index, uint32_t meshSize) {
     return (x * meshSize + y) * meshSize + z;
 }
 
+// Key sources for the shared sort: the current position's cell, or the frozen
+// cell stored per particle by the PMMM outer interval.
+struct PositionMeshKey {
+    uint32_t meshSize;
+    uint64_t operator()(size_t index) const {
+        return particleMeshKey(index, meshSize);
+    }
+};
+
+struct FrozenMeshKey {
+    uint64_t operator()(size_t index) const {
+        return particlesFrozenCells[index];
+    }
+};
+
 struct ParticleMeshPartition {
     size_t begin;
     size_t middle;
@@ -74,8 +89,9 @@ struct ParticleMeshPartition {
     uint64_t upperMaximum = 0;
 };
 
+template <class KeyOf>
 ParticleMeshPartition partitionParticleMeshRange(
-    size_t begin, size_t end, uint64_t split, uint32_t meshSize) {
+    size_t begin, size_t end, uint64_t split, KeyOf const& keyOf) {
     ParticleMeshPartition result{begin, begin, end};
     auto const record = [&](uint64_t key) {
         auto& minimum = key < split ? result.lowerMinimum : result.upperMinimum;
@@ -86,7 +102,7 @@ ParticleMeshPartition partitionParticleMeshRange(
     size_t lower = begin;
     size_t upper = end;
     while (lower < upper) {
-        uint64_t const key = particleMeshKey(lower, meshSize);
+        uint64_t const key = keyOf(lower);
         record(key);
         if (key < split) {
             ++lower;
@@ -96,7 +112,7 @@ ParticleMeshPartition partitionParticleMeshRange(
                 if (upper == lower) {
                     break;
                 }
-                uint64_t const otherKey = particleMeshKey(upper, meshSize);
+                uint64_t const otherKey = keyOf(upper);
                 record(otherKey);
                 if (otherKey < split) {
                     particlesSwap(
@@ -111,8 +127,9 @@ ParticleMeshPartition partitionParticleMeshRange(
     return result;
 }
 
+template <class KeyOf>
 void sortParticleMeshRange(size_t begin, size_t end, uint64_t minimum, uint64_t maximum,
-    size_t workers, uint32_t meshSize) {
+    size_t workers, KeyOf const& keyOf) {
     size_t const count = end - begin;
     if (count < 2 || minimum >= maximum) {
         return;
@@ -121,11 +138,11 @@ void sortParticleMeshRange(size_t begin, size_t end, uint64_t minimum, uint64_t 
     workers = std::min(workers, std::max(size_t(1), count / kMinimumChunkSize));
     uint64_t const split = minimum + (maximum - minimum) / 2 + 1;
     if (workers == 1) {
-        auto const partition = partitionParticleMeshRange(begin, end, split, meshSize);
+        auto const partition = partitionParticleMeshRange(begin, end, split, keyOf);
         sortParticleMeshRange(
-            begin, partition.middle, partition.lowerMinimum, partition.lowerMaximum, 1, meshSize);
+            begin, partition.middle, partition.lowerMinimum, partition.lowerMaximum, 1, keyOf);
         sortParticleMeshRange(
-            partition.middle, end, partition.upperMinimum, partition.upperMaximum, 1, meshSize);
+            partition.middle, end, partition.upperMinimum, partition.upperMaximum, 1, keyOf);
         return;
     }
 
@@ -135,7 +152,7 @@ void sortParticleMeshRange(size_t begin, size_t end, uint64_t minimum, uint64_t 
     particleMeshParallelFor(workers, workers, "particles.meshPartition", [&](size_t chunk) {
         size_t const chunkBegin = begin + particleMeshChunkBoundary(count, chunk, workers);
         size_t const chunkEnd = begin + particleMeshChunkBoundary(count, chunk + 1, workers);
-        partitions[chunk] = partitionParticleMeshRange(chunkBegin, chunkEnd, split, meshSize);
+        partitions[chunk] = partitionParticleMeshRange(chunkBegin, chunkEnd, split, keyOf);
     });
     size_t middle = begin;
     uint64_t lowerMinimum = std::numeric_limits<uint64_t>::max();
@@ -192,19 +209,19 @@ void sortParticleMeshRange(size_t begin, size_t end, uint64_t minimum, uint64_t 
         }
     });
     if (middle == begin) {
-        sortParticleMeshRange(begin, end, upperMinimum, upperMaximum, workers, meshSize);
+        sortParticleMeshRange(begin, end, upperMinimum, upperMaximum, workers, keyOf);
     } else if (middle == end) {
-        sortParticleMeshRange(begin, end, lowerMinimum, lowerMaximum, workers, meshSize);
+        sortParticleMeshRange(begin, end, lowerMinimum, lowerMaximum, workers, keyOf);
     } else {
         size_t const lowerWorkers =
             std::clamp((middle - begin) / (count / workers + 1), size_t(1), workers - 1);
         particleMeshParallelFor(2, 2, "particles.meshSortRanges", [&](size_t side) {
             if (side == 0) {
                 sortParticleMeshRange(
-                    begin, middle, lowerMinimum, lowerMaximum, lowerWorkers, meshSize);
+                    begin, middle, lowerMinimum, lowerMaximum, lowerWorkers, keyOf);
             } else {
                 sortParticleMeshRange(
-                    middle, end, upperMinimum, upperMaximum, workers - lowerWorkers, meshSize);
+                    middle, end, upperMinimum, upperMaximum, workers - lowerWorkers, keyOf);
             }
         });
     }
@@ -216,8 +233,11 @@ Vector<ParticleMeshCell> particleMeshSort(int meshSize) {
     return particleMeshSort(meshSize, {0, particlesSize()});
 }
 
-Vector<ParticleMeshCell> particleMeshSort(int meshSize, Pair<ParticleInteger> range) {
-    uint64_t const cellCount = detail::particleMeshCellCount(meshSize);
+namespace detail {
+
+template <class KeyOf>
+Vector<ParticleMeshCell> particleMeshSortImpl(
+    uint64_t cellCount, Pair<ParticleInteger> range, KeyOf const& keyOf) {
     if (range.first < 0 || range.second < range.first || range.second > particlesSize()) {
         throw std::invalid_argument("Particle mesh sort range is outside owned particles");
     }
@@ -226,16 +246,14 @@ Vector<ParticleMeshCell> particleMeshSort(int meshSize, Pair<ParticleInteger> ra
     size_t const count = last - first;
     size_t const workers = static_cast<size_t>(std::max(1, hpxHardwareConcurrency()));
     std::unique_lock<SharedMutexType> lock(particlesSharedMutex());
-    detail::sortParticleMeshRange(first, last, 0, cellCount - 1, workers, meshSize);
+    sortParticleMeshRange(first, last, 0, cellCount - 1, workers, keyOf);
 #if COSMICTIGER_WITH_SPH
     if (getOptions().hydro.enabled) {
         // Gas arrays remain in their own ordering; rebuild their reverse map.
-        detail::particleMeshParallelFor(
+        particleMeshParallelFor(
             workers, workers, "particles.meshRebuildSphIndices", [&](size_t worker) {
-                size_t const begin =
-                    first + detail::particleMeshChunkBoundary(count, worker, workers);
-                size_t const end =
-                    first + detail::particleMeshChunkBoundary(count, worker + 1, workers);
+                size_t const begin = first + particleMeshChunkBoundary(count, worker, workers);
+                size_t const end = first + particleMeshChunkBoundary(count, worker + 1, workers);
                 for (size_t i = begin; i < end; ++i) {
                     if (particlesType(i) == kSphType) {
                         ParticleInteger const gasIndex = particlesCatIndex(i);
@@ -253,43 +271,60 @@ Vector<ParticleMeshCell> particleMeshSort(int meshSize, Pair<ParticleInteger> ra
     // Two parallel scans construct only the occupied-cell directory. There is
     // no particle-sized key array, permutation, or second particle allocation.
     std::vector<size_t> offsets(workers + 1, 0);
-    detail::particleMeshParallelFor(
-        workers, workers, "particles.meshCountCells", [&](size_t worker) {
-            size_t const begin = first + detail::particleMeshChunkBoundary(count, worker, workers);
-            size_t const end =
-                first + detail::particleMeshChunkBoundary(count, worker + 1, workers);
-            uint64_t previous = begin == first ? std::numeric_limits<uint64_t>::max() :
-                                                 detail::particleMeshKey(begin - 1, meshSize);
-            for (size_t i = begin; i < end; ++i) {
-                uint64_t const key = detail::particleMeshKey(i, meshSize);
-                offsets[worker + 1] += key != previous;
-                previous = key;
-            }
-        });
+    particleMeshParallelFor(workers, workers, "particles.meshCountCells", [&](size_t worker) {
+        size_t const begin = first + particleMeshChunkBoundary(count, worker, workers);
+        size_t const end = first + particleMeshChunkBoundary(count, worker + 1, workers);
+        uint64_t previous =
+            begin == first ? std::numeric_limits<uint64_t>::max() : keyOf(begin - 1);
+        for (size_t i = begin; i < end; ++i) {
+            uint64_t const key = keyOf(i);
+            offsets[worker + 1] += key != previous;
+            previous = key;
+        }
+    });
     for (size_t worker = 0; worker < workers; ++worker) {
         offsets[worker + 1] += offsets[worker];
     }
     Vector<ParticleMeshCell> cells(offsets.back());
-    detail::particleMeshParallelFor(
-        workers, workers, "particles.meshInitializeCells", [&](size_t worker) {
-            size_t const begin = first + detail::particleMeshChunkBoundary(count, worker, workers);
-            size_t const end =
-                first + detail::particleMeshChunkBoundary(count, worker + 1, workers);
-            uint64_t previous = begin == first ? std::numeric_limits<uint64_t>::max() :
-                                                 detail::particleMeshKey(begin - 1, meshSize);
-            size_t entry = offsets[worker];
-            for (size_t i = begin; i < end; ++i) {
-                uint64_t const key = detail::particleMeshKey(i, meshSize);
-                if (key != previous) {
-                    cells[entry++] = {key, static_cast<ParticleInteger>(i), 0, false};
-                }
-                previous = key;
+    particleMeshParallelFor(workers, workers, "particles.meshInitializeCells", [&](size_t worker) {
+        size_t const begin = first + particleMeshChunkBoundary(count, worker, workers);
+        size_t const end = first + particleMeshChunkBoundary(count, worker + 1, workers);
+        uint64_t previous =
+            begin == first ? std::numeric_limits<uint64_t>::max() : keyOf(begin - 1);
+        size_t entry = offsets[worker];
+        for (size_t i = begin; i < end; ++i) {
+            uint64_t const key = keyOf(i);
+            if (key != previous) {
+                cells[entry++] = {key, static_cast<ParticleInteger>(i), 0, false};
             }
-        });
-    detail::particleMeshParallelFor(
+            previous = key;
+        }
+    });
+    particleMeshParallelFor(
         cells.size(), workers, "particles.meshFinalizeCells", [&](size_t entry) {
             cells[entry].end = entry + 1 < cells.size() ? cells[entry + 1].begin :
                                                           static_cast<ParticleInteger>(last);
         });
     return cells;
+}
+
+}    // namespace detail
+
+Vector<ParticleMeshCell> particleMeshSort(int meshSize, Pair<ParticleInteger> range) {
+    uint64_t const cellCount = detail::particleMeshCellCount(meshSize);
+    return detail::particleMeshSortImpl(
+        cellCount, range, detail::PositionMeshKey{static_cast<uint32_t>(meshSize)});
+}
+
+Vector<ParticleMeshCell> particleMeshSortByKey(Pair<ParticleInteger> range) {
+    if (!particlesHasFrozenCell(getOptions()) || particlesFrozenCells == nullptr) {
+        throw std::logic_error("Frozen mesh keys are not allocated for this run");
+    }
+    uint64_t const cellCount = detail::particleMeshCellCount(getOptions().gravity.meshSize);
+    for (ParticleInteger i = range.first; i < range.second; ++i) {
+        if (particlesFrozenCells[i] >= cellCount) {
+            throw std::runtime_error("A particle carries an invalid frozen mesh cell key");
+        }
+    }
+    return detail::particleMeshSortImpl(cellCount, range, detail::FrozenMeshKey{});
 }

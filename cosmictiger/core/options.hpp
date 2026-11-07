@@ -190,6 +190,10 @@ struct Gravity {
                                                // near fields.
     std::string pmmmNearMethod{gravity::kBuildPmmmNearMethod};
     int pmmmBatchParticles{4096};    // Target owned sink count per ready near-field batch.
+    // PMMM outer interval: the FFT far field is solved only at synchronized
+    // outer boundaries, each particle's near-cube membership is frozen for the
+    // interval, and the near field advances on the inner rungs (see docs/pmmm.md).
+    bool pmmmOuterInterval{};
     // Particle-mesh (pm, p3m) assignment cloud: ngp, cic, tsc, or pcs.
     std::string cloud{"pcs"};
     // Gaussian split scale r_s in PM mesh cells and the short-range cutoff in
@@ -229,6 +233,17 @@ inline bool usesParticleMesh(Gravity const& gravityOptions) {
 
 inline bool usesSplitParticleMesh(Gravity const& gravityOptions) {
     return gravityOptions.method == "p3m";
+}
+
+// PMMM with its FFT far field on an outer interval and frozen near membership inside.
+inline bool usesMeshGravityInterval(Gravity const& gravityOptions) {
+    return usesMeshGravity(gravityOptions) && gravityOptions.pmmmOuterInterval;
+}
+
+// Every solver that integrates a long force on a mandatory outer interval with
+// the inner rung clock subdividing that interval.
+inline bool usesOuterInterval(Gravity const& gravityOptions) {
+    return usesParticleMesh(gravityOptions) || usesMeshGravityInterval(gravityOptions);
 }
 
 // Solvers whose short-range pair traversal requires every search-mesh cell to be
@@ -488,6 +503,7 @@ struct Options {
         arc & gravity.pmmmOrder;
         arc & gravity.openingSchedule;
         arc & gravity.pmmmCoarseMeshSize;
+        arc & gravity.pmmmOuterInterval;
         arc & gravity.errorInterval;
         arc & gravity.errorSampleSize;
         arc & starFormation.enabled;

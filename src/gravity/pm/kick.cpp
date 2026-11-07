@@ -215,8 +215,31 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
         }
     } else {
         float const sign = parameters.sign;
+        if (parameters.frozenNearClose) {
+            // PMMM outer interval, old membership at a new boundary (docs/pmmm.md):
+            // Δv = g_old (δ_old/2 - H_old/2), the last inner closing half-kick on
+            // the old near field minus the near part of the old long closing
+            // half-kick, (H_old/2)(T_new - S_old). The new-membership pass adds
+            // (H_old/2) S_new + (H_old/2) L_new to finish the closing. A rung-zero
+            // particle has δ_old = H_old and receives nothing here.
+            // Symbol directory: g_old → near acceleration on the old membership
+            // (gx, gy, gz); δ_old → rungDt[rung]*closingBase; H_old → closingBase.
+            float const step = 0.5f * closingBase * (rungDt[rung] - 1.0f);
+            vx = std::fma(sign * gx, step, vx);
+            vy = std::fma(sign * gy, step, vy);
+            vz = std::fma(sign * gz, step, vz);
+            flops += 3 + 3 * kDimensions;
+            result.maxRung = rung;
+            result.dkin = 0.5f * mass * sqr(vx, vy, vz) - oldKinetic;
+            submitFlops();
+            return result;
+        }
         if (!parameters.firstCall) {
-            float const halfStep = 0.5f * rungDt[rung] * closingBase;
+            // The frozen-membership boundary pass closes the short force over the
+            // whole old interval; its old-membership pass already applied the
+            // rung-dependent remainder.
+            float const closingFraction = parameters.closeShortOverInterval ? 1.0f : rungDt[rung];
+            float const halfStep = 0.5f * closingFraction * closingBase;
             vx = std::fma(sign * gx, halfStep, vx);
             vy = std::fma(sign * gy, halfStep, vy);
             vz = std::fma(sign * gz, halfStep, vz);

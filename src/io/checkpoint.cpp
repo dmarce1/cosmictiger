@@ -168,6 +168,9 @@ constexpr uint32_t kStarFormation = 1U << 20;
 constexpr uint32_t kWideParticleIndices = 1U << 21;
 // Scalar particle-mesh solvers (pm, p3m) with the mandatory outer PM interval.
 constexpr uint32_t kParticleMeshInterval = 1U << 22;
+// PMMM outer interval: frozen near-membership keys per particle and the
+// outer-interval extension of the driver state.
+constexpr uint32_t kMeshGravityInterval = 1U << 23;
 constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
 constexpr uint64_t kFnvPrime = 1099511628211ULL;
 
@@ -479,6 +482,8 @@ uint32_t checkpointFlags(Options const& opts) {
         (opts.compute.positionType == "fixed64" ? kFixed64Positions : 0U) |
         (opts.gravity.enabled && opts.gravity.method == "pmmm" ? kParticleMultipoleMesh : 0U) |
         (opts.gravity.enabled && usesParticleMesh(opts.gravity) ? kParticleMeshInterval : 0U) |
+        (opts.gravity.enabled && usesMeshGravityInterval(opts.gravity) ? kMeshGravityInterval :
+                                                                         0U) |
         (opts.starFormation.enabled ? kStarFormation : 0U);
 }
 
@@ -792,7 +797,7 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
             THROW_ERROR("Unable to write global timestep checkpoint extension\n");
         }
     }
-    if ((header.flags & kParticleMeshInterval) != 0U) {
+    if ((header.flags & (kParticleMeshInterval | kMeshGravityInterval)) != 0U) {
         // The outer interval whose opening long half-kick is applied, its start
         // time and index; itime above is the interval-local phase.
         uint64_t const version = 1;
@@ -982,7 +987,7 @@ DriverParameters readDriverState(FILE* fp) {
             }
 #endif
         }
-        if ((header.flags & kParticleMeshInterval) != 0U) {
+        if ((header.flags & (kParticleMeshInterval | kMeshGravityInterval)) != 0U) {
             uint64_t version;
             FREAD(&version, sizeof(version), 1, fp);
             FREAD(&params.outerInterval, sizeof(params.outerInterval), 1, fp);
@@ -1131,7 +1136,7 @@ void checkpointStateTest() {
     input.globalTimestep = usesGlobalIntegration(getOptions().run) ? 0.03125 : 0.0;
     input.globalHydroTimestep = usesGlobalIntegration(getOptions().run) ? 0.0625 : 0.0;
     bool const particleMesh =
-        getOptions().gravity.enabled && usesParticleMesh(getOptions().gravity);
+        getOptions().gravity.enabled && usesOuterInterval(getOptions().gravity);
     if (particleMesh) {
         input.outerInterval = 0.0078125;
         input.outerStart = 0.1171875;

@@ -62,17 +62,29 @@ struct SolveRequest {
     uint64_t totalParticles = 0;
     bool doPotential = false;
     bool applyKick = false;
+    // Outer-interval boundary far solve: deposit, transform and evaluate the far
+    // field of every owned particle into particlesLongAcceleration, with the
+    // far potential energy and the acceleration timestep bound reduced through
+    // the kick result; no near field, velocity or rung changes.
+    bool farOnly = false;
+    double scale = 1.0;
+    double eta = 0.0;
     KickParameters parameters;
 
     template <class Archive>
     void serialize(Archive& archive, unsigned) {
         archive & generation & meshSize & activeParticles & totalParticles & doPotential &
-            applyKick;
+            applyKick & farOnly & scale & eta;
         if (applyKick) {
             archive & parameters;
         }
     }
 };
+
+// A near-only pass on the frozen cell membership of the PMMM outer interval.
+inline bool frozenNearRequest(SolveRequest const& request) {
+    return request.applyKick && request.parameters.frozenNear;
+}
 
 // Moment packet from a cell's particle owner to its FFT slab owner.
 struct CellData {
@@ -220,6 +232,10 @@ void failSource(size_t index, std::exception_ptr failure);
 void clearGhosts();
 void deposit();
 void transform();
+// Frozen near passes skip the transform; release waiters on the far field.
+void skipTransform();
+// Boundary far solve: local expansions evaluated on every owned particle.
+void evaluateFar();
 void consumeField(ParticleInteger index, std::array<double, 4> const& field, KickReturn& result,
     FlopCount& doubleFlops, FlopCounts& kickFlops);
 std::vector<double> localExpansion(uint64_t key);

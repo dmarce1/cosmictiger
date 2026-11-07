@@ -38,6 +38,9 @@ void evaluateParticles(bool doPotential) {
     int const width = cache.nearWidth;
     double const h = 1.0 / n;
     double const localTrace = (4 * std::numbers::pi / 3) * h * h * state.background[0];
+    // A frozen-membership pass of the outer interval has no far expansion; the
+    // stored long acceleration is applied by the kick at the boundary instead.
+    bool const frozen = frozenNearRequest(state.request);
     addCpuFlops(4, FlopPrecision::Double);
     // Bundle whole cells by sink count. Tiny cells share one backend submission;
     // each sink still traverses only its own cell's shifted neighbor sources.
@@ -85,8 +88,10 @@ void evaluateParticles(bool doPotential) {
                     cellIndex + 1 < cells.size() ? cells[cellIndex + 1].sinkBegin : sinks.size();
                 for (size_t sink = cell.sinkBegin; sink < end; ++sink) {
                     std::array<double, 4> field{};
-                    flops += evaluate(cache.order, field, cell.coefficients.data(), localTrace,
-                        sinks[sink].offset, h);
+                    if (!frozen) {
+                        flops += evaluate(cache.order, field, cell.coefficients.data(), localTrace,
+                            sinks[sink].offset, h);
+                    }
                     auto const index = ParticleInteger(sinks[sink].index);
                     for (int component = 0; component < 4; ++component) {
                         field[component] += nearFields[sink][component];
@@ -129,7 +134,10 @@ void evaluateParticles(bool doPotential) {
             auto const center = coordinates(cell.key);
             // The slab owner serves the sink cell's local expansion; each
             // neighbor cell's owner serves that cell's particles directly.
-            auto coefficients = localExpansion(cell.key);
+            std::vector<double> coefficients;
+            if (!frozen) {
+                coefficients = localExpansion(cell.key);
+            }
             struct Request {
                 std::vector<uint64_t> keys;
                 hpx::future<std::vector<CellParticles>> future;
@@ -182,7 +190,7 @@ void evaluateParticles(bool doPotential) {
                     }
                 }
             }
-            if (coefficients.size() != size_t(cache.localCount)) {
+            if (!frozen && coefficients.size() != size_t(cache.localCount)) {
                 throw std::runtime_error("PMMM local expansion is missing");
             }
             if (!cells.empty() &&
@@ -208,8 +216,73 @@ void evaluateParticles(bool doPotential) {
 
 #endif
 
+// Boundary far solve of the PMMM outer interval (docs/pmmm.md).
+//
+//   L_new,i = gm ∇ evaluated from the local expansion of particle i's cell,
+//   H_acc   = min_i η sqrt(a r_eff / |L_new,i|),   r_eff = w h,
+//   W_far   = Σ_i ½ m_i gm φ_far,i.
+//
+// Symbol directory: L_new → far acceleration stored in particlesLongAcceleration;
+// η → gravity.timestepEta; a → the scale factor; r_eff → the near-width distance,
+// the smallest separation a far source can have; w → pmmmNearWidth; h → cell width.
+// Code names: L_new → acceleration, H_acc → result.minimumTimestep,
+// W_far → result.pot, r_eff → effectiveRadius.
+void evaluateFar() {
+    int const n = cache.meshSize;
+    double const h = 1.0 / n;
+    double const localTrace = (4 * std::numbers::pi / 3) * h * h * state.background[0];
+    double const gm = getOptions().gravity.gm;
+    double const effectiveRadius = cache.nearWidth * h;
+    double const scale = state.request.scale;
+    double const eta = state.request.eta;
+    if (!particlesHasLongAcceleration(getOptions())) {
+        throw std::runtime_error("The PMMM boundary far solve needs the long-acceleration field");
+    }
+    addCpuFlops(6, FlopPrecision::Double);
+    parallelFor(state.cells.size(), "gravity.pmmm.evaluateFar", [&](size_t cellIndex) {
+        auto const& cell = state.cells[cellIndex];
+        auto const center = coordinates(cell.key);
+        auto const coefficients = localExpansion(cell.key);
+        KickReturn result;
+        FlopCount flops = 0;
+        for (ParticleInteger i = cell.begin; i < cell.end; ++i) {
+            auto const value = particle(i, center, flops);
+            std::array<double, 4> field{};
+            flops += evaluate(cache.order, field, coefficients.data(), localTrace, value.offset, h);
+            double accelerationSquared = 0.0;
+            for (int component = 0; component < 4; ++component) {
+                if (!std::isfinite(field[component]) ||
+                    std::abs(gm * field[component]) > std::numeric_limits<float>::max()) {
+                    throw std::runtime_error("PMMM far particle field is not representable");
+                }
+            }
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                double const acceleration = gm * field[dim + 1];
+                particlesLongAcceleration(dim, i) = float(acceleration);
+                accelerationSquared += acceleration * acceleration;
+            }
+            double const timestep = eta *
+                std::sqrt(
+                    scale * effectiveRadius / std::max(std::sqrt(accelerationSquared), 1.0e-30));
+            if (!(timestep > 0.0) || !std::isfinite(timestep)) {
+                throw std::runtime_error("PMMM outer interval bound is not finite and positive");
+            }
+            result.minimumTimestep = std::min(result.minimumTimestep, timestep);
+            result.pot += 0.5 * value.mass * gm * field[0];
+            // Scaling, norm, square root, timestep and potential energy per particle.
+            flops += 3 * kDimensions + 8;
+        }
+        addCpuFlops(flops, FlopPrecision::Double);
+        std::lock_guard<MutexType> lock(state.queueMutex);
+        state.kickResult += result;
+        state.diagnostics.evaluatedParticles += cell.end - cell.begin;
+    });
+    ++state.diagnostics.solveCount;
+}
+
 }    // namespace pmmm::detail
 
 #if COSMICTIGER_ENABLE_PMMM_PP
 HPX_REGISTER_ACTION(PmmmEvaluateAction, PmmmEvaluateAction);
 #endif
+HPX_REGISTER_ACTION(PmmmEvaluateFarAction, PmmmEvaluateFarAction);

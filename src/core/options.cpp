@@ -554,6 +554,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"gravity.pmmmNearWidth", options.gravity.pmmmNearWidth},
         {"gravity.method.near", options.gravity.pmmmNearMethod},
         {"gravity.pmmmBatchParticles", options.gravity.pmmmBatchParticles},
+        {"gravity.pmmmOuterInterval", options.gravity.pmmmOuterInterval},
         {"gravity.cloud", options.gravity.cloud},
         {"gravity.p3mSplitCells", options.gravity.p3mSplitCells},
         {"gravity.p3mCutoff", options.gravity.p3mCutoff},
@@ -939,8 +940,12 @@ bool processOptions(int argc, char* argv[]) {
         po::value<int>(&opts.gravity.pmmmBatchParticles)->default_value(4096),
         "target sink particles per ready PMMM batch; oversized cells run alone")(
         "gravity.pmmmNearWidth", po::value<int>(&opts.gravity.pmmmNearWidth)->default_value(2),
-        "PMMM/P3M neighbor cube radius in search-mesh cells: 1 through 4")("gravity.openingAngle",
-        po::value<double>(&opts.gravity.openingAngle)->default_value(0.8),
+        "PMMM/P3M neighbor cube radius in search-mesh cells: 1 through 4")(
+        "gravity.pmmmOuterInterval",
+        po::value<bool>(&opts.gravity.pmmmOuterInterval)->default_value(false),
+        "PMMM: solve the FFT far field only at outer interval boundaries and keep the near-cube "
+        "membership frozen inside; the near field advances on the inner rungs")(
+        "gravity.openingAngle", po::value<double>(&opts.gravity.openingAngle)->default_value(0.8),
         "global FMM and FMM-PM opening angle; PMMM derives sqrt(3)/(pmmmNearWidth+1)")(
         "gravity.openingSchedule",
         po::value<std::string>(&opts.gravity.openingSchedule)->default_value(""),
@@ -1933,6 +1938,22 @@ bool processOptions(int argc, char* argv[]) {
         detail::throwOptionError(
             "gravity.method.far=pm/p3m currently supports run.timeIntegrator=traditional "
             "or hierarchical inside the outer PM interval\n");
+    }
+    if (opts.gravity.pmmmOuterInterval) {
+        if (!usesMeshGravity(opts.gravity)) {
+            detail::throwOptionError(
+                "gravity.pmmmOuterInterval requires gravity.method.far=pmmm\n");
+        }
+        if (opts.gravity.enabled && opts.gravity.pmmmNearMethod != "pp") {
+            detail::throwOptionError(
+                "gravity.pmmmOuterInterval currently supports gravity.method.near=pp; the "
+                "frozen-membership near FMM geometry is not implemented\n");
+        }
+        if (opts.gravity.enabled && opts.run.timeIntegrator == "global") {
+            detail::throwOptionError(
+                "gravity.pmmmOuterInterval supports run.timeIntegrator=traditional or "
+                "hierarchical inside the outer interval\n");
+        }
     }
     detail::validateCudaBackends(opts);
     detail::validateHydroMethod(opts);

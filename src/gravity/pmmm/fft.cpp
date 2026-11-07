@@ -461,6 +461,14 @@ void transform() {
                               "gravity.pmmm.transformLocalExpansions"))
         .get();
     addCpuFlops(cache.inverseFlops, FlopPrecision::Single);
+    ++state.diagnostics.transformCount;
+    state.farPromise->set_value();
+}
+
+void skipTransform() {
+    // A frozen-membership near pass: nothing is deposited or transformed, so the
+    // far field never becomes available; near work waits on nothing.
+    state.background = {};
     state.farPromise->set_value();
 }
 
@@ -493,4 +501,5 @@ void destroy() {
 }    // namespace pmmm::detail
 
 HPX_REGISTER_ACTION(PmmmTransformAction, PmmmTransformAction);
+HPX_REGISTER_ACTION(PmmmSkipTransformAction, PmmmSkipTransformAction);
 HPX_REGISTER_ACTION(PmmmDestroyAction, PmmmDestroyAction);

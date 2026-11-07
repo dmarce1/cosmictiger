@@ -101,12 +101,27 @@ struct DriverParameters {
 // endTime is the run's end time for the hierarchical drift (zero: the
 // substep base timestep times run.numberOfSteps, which a non-dyadic outer PM
 // interval does not reproduce).
+// PMMM outer interval (docs/pmmm.md): a force pass at a synchronized boundary
+// closes the old frozen membership, migrates, runs the far solve that selects
+// the next interval and opens the new membership. The force step reports the
+// selected interval and the far potential energy back through this record.
+struct PmmmBoundaryRequest {
+    double time = 0.0;
+    double coarseInterval = 0.0;
+    double endTime = 0.0;
+    // Outputs of the force step.
+    double nextInterval = 0.0;
+    double potentialEnergy = 0.0;
+};
+
 struct MeshKickSchedule {
     double closingBaseTimestep = 0.0;
     double longCloseTimestep = 0.0;
     double longOpenTimestep = 0.0;
     double longPotentialEnergy = 0.0;
     double endTime = 0.0;
+    // Set only for a PMMM outer-interval boundary pass.
+    PmmmBoundaryRequest* pmmmBoundary = nullptr;
 };
 
 #if COSMICTIGER_WITH_SPH

@@ -27,6 +27,10 @@ struct ParticleMeshCell {
 // then synchronize localities before remote reads. No actions are broadcast.
 Vector<ParticleMeshCell> particleMeshSort(int meshSize);
 Vector<ParticleMeshCell> particleMeshSort(int meshSize, Pair<ParticleInteger> range);
+// PMMM outer interval: the same in-place sort and occupied-cell directory, keyed
+// by each particle's stored frozen cell (particlesFrozenCell) on the full mesh
+// gravity.meshSize instead of its current position.
+Vector<ParticleMeshCell> particleMeshSortByKey(Pair<ParticleInteger> range);
 
 namespace detail {
 

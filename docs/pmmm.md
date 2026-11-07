@@ -521,7 +521,121 @@ Reported TFLOP/s divides these source-operation counts by the force-advancement
 wall time, including communication, staging, and scheduling overhead. See
 `flop_accounting.md` for the counting convention.
 
+## Outer interval with frozen near membership
+
+`gravity.pmmmOuterInterval = true` (PMMM with `gravity.method.near = pp`,
+`run.timeIntegrator = traditional` or `hierarchical`) integrates the far field
+on a mandatory outer interval, as pm and p3m do, and the near field on the
+inner rung clock. One mesh transform runs per outer boundary; no inner pass
+deposits, transforms or evaluates a far expansion.
+
+### The split
+
+PMMM's far/near split is geometric: a pair interacts directly when the two
+particles' cells lie within the `(2w+1)^3` neighbor cube, and through the mesh
+otherwise. The outer interval freezes that assignment. When an interval opens,
+every owned particle is sorted by position and its cell key is stored
+(`particlesFrozenCell`); inside the interval the near passes group particles by
+the stored key, wherever they have drifted, so
+
+```text
+H = T + V_far^P + V_near^P
+```
+
+is one fixed Hamiltonian split for the whole interval, with P the frozen
+assignment. The pieces are smooth in the positions because membership does not
+follow the particles, and the symmetric composition
+
+```text
+K_far(H/2) [ K_near(δ/2) D(δ) K_near(δ/2) ... ]  K_far(H/2)
+```
+
+keeps its second-order local error (Duncan, Levison & Lee 1998; Springel 2005,
+eq. 33). Nothing limits how far a particle may move from its frozen cell; a
+particle that left its cell keeps interacting directly with its frozen
+neighbors and through the mesh with everything else. Near offsets are taken
+from the image nearest the frozen cell center, which is exact as long as no
+particle travels half a box inside one interval.
+
+### Boundary equations
+
+At a boundary with every particle at the synchronized position, with `S` the
+near force and `L` the far force, `old` the frozen assignment being closed and
+`new` the fresh assignment, `H` the outer durations and `δ` a particle's inner
+durations:
+
+```text
+T_new   = L_new + S_new                      (one fresh far solve plus one near pass)
+L_close = T_new - S_old                      (exact long complement of the old split)
+Δp      = (δ_old/2) S_old + (H_old/2) L_close           closing
+        + (H_new/2) L_new + (δ_new/2) S_new             opening
+```
+
+No far expansion is ever evaluated on the old assignment: the old long force
+is the fresh total minus the old near force. A rung-zero particle (`δ_old =
+H_old`) closes with `(H_old/2) T_new` exactly, independent of the assignment
+change.
+
+The traditional step performs this as three solver calls:
+
+1. `frozenNearClose`: the old-membership pass, `Δp = (δ_old/2 - H_old/2) S_old`
+   for every particle (skipped at `tau = 0`);
+2. migration (with a rebound when the load imbalance exceeds its threshold),
+   then `pmmmOuterBoundary`: sort by position, deposit, transform and evaluate
+   the far field of every particle into `particlesLongAcceleration`, select the
+   next interval;
+3. `refreshMembership`: re-sort, store the new keys, near pass with the short
+   closing half-kick spanning `H_old/2` for every rung
+   (`closeShortOverInterval`), the long half-kicks `H_old/2` and `H_new/2` from
+   the stored far acceleration, rung selection from `S_new` at the softening
+   scale, and the `δ_new/2` opening.
+
+The hierarchical ladder needs no correction pass: its ascending levels close
+the fast subsets on the old membership, the top level migrates, runs the far
+solve, refreshes the membership and kicks every particle with `(H_old/2)(S_new +
+L_new)` and `(H_new/2)(S_new + L_new)`, and the descending levels open the fast
+subsets on the new membership. Only the boundary top level migrates; inside an
+interval every particle stays with its owner, so each frozen cell keeps one
+owner and `cellOwner` resolves from the frozen cell center.
+
+### Interval selection
+
+```text
+H_new = min( η sqrt(a w h / |L_new|) over particles, expansion bound,
+             time to the next coarse output boundary, time to the end )
+```
+
+with `w h` the near width in box units, the smallest separation a far source
+can have, `η = gravity.timestepEta` and the same caps as `pmSelectOuterInterval`.
+Inner rungs come from the near force at the softening scale, as in p3m. The
+potential energy at a boundary is the near potential of the boundary pass plus
+the far potential of the far solve, counted once.
+
+### State, restart and limits
+
+Each particle carries a `uint64_t` frozen cell key (allocated only for this
+mode) and, between the far solve and the boundary kick, the far acceleration in
+`particlesLongAcceleration`. Checkpoints set header flag bit 23, write the keys
+after the particle payload and the outer-interval extension (interval, start,
+index) after the driver state; a restart inside an interval resumes the frozen
+membership and a boundary checkpoint still holds the membership awaiting its
+closing pass. `PmmmDiagnostics::transformCount` counts mesh transforms; the run
+summary prints intervals, transforms and force passes.
+
+Not implemented: `gravity.method.near = fmm` with the outer interval (the
+near-FMM cell trees assume particles inside their cells and infer periodic
+images from current positions) and the `global` integrator; both are rejected
+at startup. SPH with PMMM remains rejected.
+
 ## Restart and regression checks
+
+`tests/gravity/pmmm/run_pmmm_interval.py` (`ctest -R pmmm_interval_cpu`) runs
+the outer interval on the 512-particle Plummer fixture: one transform per
+boundary plus the terminal pass and none inside, non-dyadic intervals selected
+by the far acceleration bound, the interval clock, inner rungs from the near
+force, frozen keys in every checkpoint, restart from inside an interval and
+from a boundary, rejection of a restart with the mode switched off, and energy
+and momentum against the per-substep PMMM run over the same time.
 
 Checkpoints identify PMMM separately from FMM and record its requested mesh size,
 coarse mesh size, expansion degree (in the historical internal order

@@ -811,7 +811,9 @@ void domainsBegin(int rung) {
                     for (ParticleInteger i = begin; i < end; i++) {
                         // Ordinary timesteps drift every rung together. Rebalance
                         // all particles before building their common gravity tree.
-                        if (!getOptions().run.hierarchicalGravity ||
+                        // A negative rung (PMMM outer-interval boundary) migrates
+                        // every particle of the current range whatever its rung.
+                        if (rung < 0 || !getOptions().run.hierarchicalGravity ||
                             !getOptions().gravity.enabled || particlesRung(i) == rung) {
                             Vector3<double> position;
                             for (ParticleInteger dim = 0; dim < kDimensions; dim++) {

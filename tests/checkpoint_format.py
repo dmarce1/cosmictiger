@@ -78,7 +78,7 @@ def read_header(data):
     header = Reader(data).native(Header)
     require(header.magic == 0x4354535048303031 and header.version == 3,
             "unsupported checkpoint header")
-    supported = sum(1 << bit for bit in (0, 6, 7, 8, 9, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 25, 26))
+    supported = sum(1 << bit for bit in (0, 6, 7, 8, 9, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 23, 25, 26))
     require(not header.flags & (1 << 16), "retired particle-mesh checkpoint")
     require(not header.flags & ~supported, "unsupported checkpoint feature flags")
     return header
@@ -162,7 +162,8 @@ def read_prefix(data):
     result.driver.outer_interval = 0.0
     result.driver.outer_start = 0.0
     result.driver.outer_index = 0
-    if flags & (1 << 22):
+    # Bit 22: pm/p3m outer PM interval; bit 23: PMMM outer interval (frozen membership).
+    if flags & ((1 << 22) | (1 << 23)):
         result.driver.interval_extension_offset = reader.offset
         version = reader.take("Q")[0]
         result.driver.outer_interval, result.driver.outer_start = reader.take("d", 2)
@@ -269,6 +270,9 @@ def decode_checkpoint(data, ranks=1):
                     and rate >= 0 and elapsed >= 0 and (kind == 1 or rate == 0)
                     and ((formation >= 0) == (kind == 2)),
                     "invalid checkpoint star-particle state")
+    # PMMM outer interval: each particle's frozen near-field mesh cell key.
+    result.frozen_cells = (reader.take("Q", count)
+                           if result.header.flags & (1 << 23) else ())
     result.particle_end = reader.offset
     rung_count = reader.take("i")[0]
     rung_begin = reader.take(integer_code)[0]

@@ -2131,6 +2131,16 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             --position-type ${COSMICTIGER_POSITION_TYPE} ${pmmm_sph_args})
         set_tests_properties(pmmm_evolution_cpu PROPERTIES TIMEOUT 600 PROCESSORS 2
             RUN_SERIAL TRUE LABELS "pmmm;cpu")
+        if(COSMICTIGER_ENABLE_PMMM_PP)
+            # Outer interval with frozen near membership (docs/pmmm.md).
+            add_test(NAME pmmm_interval_cpu COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/gravity/pmmm/run_pmmm_interval.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_BINARY_DIR}/tests/pmmm_interval_cpu
+                --order ${cosmictiger_default_fmm_order} --time-integrator ${cosmictiger_default_integrator}
+                --position-type ${COSMICTIGER_POSITION_TYPE})
+            set_tests_properties(pmmm_interval_cpu PROPERTIES TIMEOUT 900 PROCESSORS 2
+                RUN_SERIAL TRUE LABELS "pmmm;particle_mesh;cpu")
+        endif()
         if(COSMICTIGER_WITH_CUDA)
             add_test(NAME pmmm_evolution_cuda COMMAND ${Python3_EXECUTABLE}
                 ${PROJECT_SOURCE_DIR}/tests/gravity/pmmm/run_pmmm_evolution.py $<TARGET_FILE:cosmictiger>

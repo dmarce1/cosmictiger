@@ -45,6 +45,9 @@ void particlesSwap(ParticleInteger first, ParticleInteger second) {
                 particlesLongAccelerations[dim][first], particlesLongAccelerations[dim][second]);
         }
     }
+    if (particlesHasFrozenCell(options)) {
+        detail::swapParticleBytes(particlesFrozenCells[first], particlesFrozenCells[second]);
+    }
     if (saveParticlePotential(options.analysis)) {
         detail::swapParticleBytes(particlesP[first], particlesP[second]);
     }

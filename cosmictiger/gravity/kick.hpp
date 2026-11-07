@@ -145,6 +145,18 @@ struct KickParameters {
     float closingBaseTimestep = 0.0f;
     float longCloseTimestep = 0.0f;
     float longOpenTimestep = 0.0f;
+    // PMMM outer interval with frozen near membership (docs/pmmm.md):
+    // frozenNear evaluates the near field on the stored cell membership without
+    // a mesh solve; refreshMembership re-sorts by position and stores the new
+    // keys first (boundary pass); frozenNearClose applies only the old-membership
+    // closing correction -g_near (closingBase/2 - dt_rung/2) at a new boundary;
+    // closeShortOverInterval makes the traditional short closing half-kick span
+    // closingBase/2 for every rung, the remainder having been applied by the
+    // old-membership pass.
+    bool frozenNear = false;
+    bool refreshMembership = false;
+    bool frozenNearClose = false;
+    bool closeShortOverInterval = false;
     KickParameters() {
         htime = true;
         openLargerCell = false;
@@ -190,6 +202,10 @@ struct KickParameters {
         arc & closingBaseTimestep;
         arc & longCloseTimestep;
         arc & longOpenTimestep;
+        arc & frozenNear;
+        arc & refreshMembership;
+        arc & frozenNearClose;
+        arc & closeShortOverInterval;
     }
 };
 

@@ -53,6 +53,17 @@ PmmmNearParticle particle(ParticleInteger index, std::array<int, 3> const& cell,
             }
         }
     }
+    if (frozenNearRequest(state.request)) {
+        // Frozen membership: the particle may have drifted out of its cell or
+        // across the periodic seam. Its offset is taken from the image nearest
+        // the frozen cell center, which is exact while no particle travels half
+        // a box within one outer interval (docs/pmmm.md).
+        double const n = cache.meshSize;
+        for (int axis = 0; axis < kDimensions; ++axis) {
+            result.offset[axis] -= n * std::nearbyint(result.offset[axis] / n);
+        }
+        flops += 3 * kDimensions;
+    }
     result.mass = particlesMass(index);
     ++flops;    // Promote the stored float particle mass to double.
     result.rank = hpxRank();

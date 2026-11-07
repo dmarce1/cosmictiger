@@ -97,6 +97,7 @@ function(cosmictiger_feature_sources output)
         list(APPEND cosmictiger_source_files
             src/gravity/pm/collective_dispatch.cpp
             src/gravity/pm/kick.cpp
+            src/gravity/pm/outer_interval.cpp
             src/particles/particle_mesh_sort.cpp
         )
     endif()
@@ -126,6 +127,7 @@ function(cosmictiger_feature_sources output)
     if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
         list(APPEND cosmictiger_source_files
             src/gravity/pmmm/kick.cpp
+            src/gravity/pmmm/interval.cpp
             src/gravity/pmmm/solver.cpp
             src/gravity/pmmm/kernels.cpp
             src/gravity/pmmm/evaluation.cpp

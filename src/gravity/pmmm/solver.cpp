@@ -40,10 +40,37 @@ void prepare(SolveRequest const& request) {
     initializeGreen();
     prepareCollectively([&]() {
         state.request = request;
+        bool const frozen = frozenNearRequest(request);
         state.activeRange = selectedRange(request.applyKick && request.parameters.htime);
-        state.cells = particleMeshSort(cache.meshSize, state.activeRange);
+        if (frozen && !request.parameters.refreshMembership) {
+            // Inner pass of the outer interval: group the selected range by the
+            // membership stored when the interval opened, whatever the current
+            // positions are.
+            state.cells = particleMeshSortByKey(state.activeRange);
+        } else {
+            state.cells = particleMeshSort(cache.meshSize, state.activeRange);
+            if (frozen) {
+                // Boundary pass: this fresh position sort of every owned particle
+                // is the membership frozen for the coming interval.
+                if (state.activeRange.first != 0 ||
+                    state.activeRange.second != particlesOwnedSize()) {
+                    throw std::runtime_error(
+                        "The PMMM membership refresh requires every owned particle");
+                }
+                for (auto const& cell : state.cells) {
+                    for (ParticleInteger i = cell.begin; i < cell.end; ++i) {
+                        particlesFrozenCell(i) = cell.key;
+                    }
+                }
+            }
+        }
         state.stageRungs.resize(state.activeRange.second - state.activeRange.first);
-        state.moments.assign(cache.cellCount() * cache.sourceCount, 0.0);
+        if (frozen) {
+            // No deposit or transform: the far field is not evaluated.
+            std::vector<double>().swap(state.moments);
+        } else {
+            state.moments.assign(cache.cellCount() * cache.sourceCount, 0.0);
+        }
         state.ownedCells.clear();
         for (size_t index = 0; index < state.cells.size(); ++index) {
             state.ownedCells.emplace(state.cells[index].key, index);
@@ -63,7 +90,7 @@ void prepare(SolveRequest const& request) {
 #if COSMICTIGER_ENABLE_PMMM_FMM
         // Only the FMM pipeline fulfills these per-cell promises. Creating them
         // for PP would report a broken promise for every cell on the next solve.
-        if (getOptions().gravity.pmmmNearMethod == "fmm") {
+        if (getOptions().gravity.pmmmNearMethod == "fmm" && !request.farOnly) {
             for (size_t index = 0; index < state.cells.size(); ++index) {
                 auto source = std::make_shared<SourceCell>();
                 source->range = state.cells[index];
@@ -79,10 +106,11 @@ void prepare(SolveRequest const& request) {
         state.diagnostics.planBuilds = previous.planBuilds;
         state.diagnostics.greenBuilds = previous.greenBuilds;
         state.diagnostics.solveCount = previous.solveCount;
+        state.diagnostics.transformCount = previous.transformCount;
         state.diagnostics.meshSize = request.meshSize;
         state.diagnostics.activeParticles = request.activeParticles;
         state.diagnostics.totalParticles = request.totalParticles;
-        if (request.applyKick) {
+        if (request.applyKick || request.farOnly) {
             Vector<Vector3<float>>().swap(state.acceleration);
             Vector<float>().swap(state.potential);
         } else {
@@ -170,12 +198,21 @@ void solve(SolveRequest request) {
         }
     }
     auto const& options = getOptions().gravity;
-    request.meshSize = request.applyKick && request.parameters.htime ?
+    bool const frozen = frozenNearRequest(request);
+    // The outer interval keeps the full mesh: frozen keys and the boundary far
+    // solve both refer to it, whatever fraction of the particles is active.
+    request.meshSize = request.applyKick && request.parameters.htime && !frozen ?
         hierarchicalMeshSize(options.meshSize,
             resolvedCoarseMeshSize(
                 options.meshSize, options.pmmmCoarseMeshSize, options.pmmmNearWidth),
             request.activeParticles, request.totalParticles) :
         options.meshSize;
+    if (frozen && options.pmmmNearMethod != "pp") {
+        throw std::runtime_error(
+            "The PMMM outer interval supports only the pp near field on frozen membership");
+    }
+    bool const farField = !frozen;
+    bool const nearField = !request.farOnly;
     {
         profile::ScopedPhase phase(
             request.applyKick ? "pmmmKick.prepare" : "pmmmSolve.prepare", coordinator);
@@ -191,13 +228,13 @@ void solve(SolveRequest request) {
     bool started = false;
 #endif
     try {
-        {
+        if (farField) {
             profile::ScopedPhase phase(
                 request.applyKick ? "pmmmKick.deposit" : "pmmmSolve.deposit", coordinator);
             allLocalities<PmmmDepositAction>();
         }
 #if COSMICTIGER_ENABLE_PMMM_FMM
-        if (options.pmmmNearMethod == "fmm") {
+        if (options.pmmmNearMethod == "fmm" && nearField) {
             {
                 profile::ScopedPhase phase(
                     request.applyKick ? "pmmmKick.planGhosts" : "pmmmSolve.planGhosts",
@@ -211,15 +248,17 @@ void solve(SolveRequest request) {
             allLocalities<PmmmStartPipelineAction>();
         }
 #endif
-        {
+        if (farField) {
             // The FMM near-field pipeline overlaps the transform. These phases measure
             // coordinator wall intervals; finishNearPipeline is only the remaining wait.
             profile::ScopedPhase phase(
                 request.applyKick ? "pmmmKick.transform" : "pmmmSolve.transform", coordinator);
             allLocalities<PmmmTransformAction>();
+        } else {
+            allLocalities<PmmmSkipTransformAction>();
         }
 #if COSMICTIGER_ENABLE_PMMM_FMM
-        if (options.pmmmNearMethod == "fmm") {
+        if (options.pmmmNearMethod == "fmm" && nearField) {
             profile::ScopedPhase phase(
                 request.applyKick ? "pmmmKick.finishNearPipeline" : "pmmmSolve.finishNearPipeline",
                 coordinator);
@@ -227,12 +266,16 @@ void solve(SolveRequest request) {
         }
 #endif
 #if COSMICTIGER_ENABLE_PMMM_PP
-        if (options.pmmmNearMethod == "pp") {
+        if (options.pmmmNearMethod == "pp" && nearField) {
             profile::ScopedPhase phase(
                 request.applyKick ? "pmmmKick.evaluate" : "pmmmSolve.evaluate", coordinator);
             allLocalities<PmmmEvaluateAction>(request.doPotential);
         }
 #endif
+        if (request.farOnly) {
+            profile::ScopedPhase phase("pmmmBoundary.evaluateFar", coordinator);
+            allLocalities<PmmmEvaluateFarAction>();
+        }
     } catch (...) {
         failure = std::current_exception();
     }
@@ -252,7 +295,7 @@ void solve(SolveRequest request) {
         cleanup([]() { allLocalities<PmmmAbortPipelineAction>(); });
         cleanup([]() { allLocalities<PmmmFinishPipelineAction>(); });
     }
-    if (options.pmmmNearMethod == "fmm") {
+    if (options.pmmmNearMethod == "fmm" && nearField) {
         profile::ScopedPhase phase(
             request.applyKick ? "pmmmKick.cleanup" : "pmmmSolve.cleanup", coordinator);
         cleanup([]() { treeDestroy(); });
@@ -299,6 +342,8 @@ void solve(SolveRequest request) {
         globalDiagnostics.planBuilds = std::max(globalDiagnostics.planBuilds, value.planBuilds);
         globalDiagnostics.greenBuilds = std::max(globalDiagnostics.greenBuilds, value.greenBuilds);
         globalDiagnostics.solveCount = std::max(globalDiagnostics.solveCount, value.solveCount);
+        globalDiagnostics.transformCount =
+            std::max(globalDiagnostics.transformCount, value.transformCount);
     }
     for (auto& future : kickFutures) {
         globalKickResult += future.get();
