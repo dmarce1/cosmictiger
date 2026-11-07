@@ -36,7 +36,6 @@
 #endif
 #include <cosmictiger/core/timer.hpp>
 #include <cosmictiger/sph/particles.hpp>
-#include <cosmictiger/sph/viscosity/cullen_and_dehnen_particle_exchange.hpp>
 #if COSMICTIGER_ENABLE_STAR_FORMATION
 #include <cosmictiger/stars/star_formation.hpp>
 #endif
@@ -67,10 +66,6 @@ struct SphRunWorkspace {
     Vector<float, PinnedAllocator<float>> hostGradHCorrection;
     Vector<float, PinnedAllocator<float>> hostBalsaraFactor;
     Vector<float, PinnedAllocator<float>> hostViscosityAlpha;
-    Vector<float, PinnedAllocator<float>> hostAccelerationX;
-    Vector<float, PinnedAllocator<float>> hostAccelerationY;
-    Vector<float, PinnedAllocator<float>> hostAccelerationZ;
-    Vector<float, PinnedAllocator<float>> hostVelocityDivergence;
     Vector<float, PinnedAllocator<float>> hostSmoothingLength;
     Vector<char, PinnedAllocator<char>> hostRungs;
     Vector<SphTreeNode, PinnedAllocator<SphTreeNode>> hostTrees;
@@ -96,10 +91,6 @@ struct SphRunWorkspace {
         copy(runData.sourceGradHCorrection, hostGradHCorrection);
         copy(runData.sourceBalsaraFactor, hostBalsaraFactor);
         copy(runData.sourceBulkViscosityCoefficient, hostViscosityAlpha);
-        copy(runData.sourceAccelerationX, hostAccelerationX);
-        copy(runData.sourceAccelerationY, hostAccelerationY);
-        copy(runData.sourceAccelerationZ, hostAccelerationZ);
-        copy(runData.sourceVelocityDivergence, hostVelocityDivergence);
         copy(runData.sourceVelocityX, hostVelocityX);
         copy(runData.sourceVelocityY, hostVelocityY);
         copy(runData.sourceVelocityZ, hostVelocityZ);
@@ -493,49 +484,28 @@ struct SphPairBaseline {
     char proposedRung;
 };
 static Vector<SphPairBaseline> pairBaselines;
-static ParticleVector<float>* stageAccelerations = nullptr;
 static float* stageEntropyRates = nullptr;
-struct SphAlphaBaseline {
-    ParticleInteger index;
-    Float16Storage coefficient;
-};
-static Vector<SphAlphaBaseline> alphaBaselines;
 }    // namespace detail
 
-ParticleVector<float>* sphStageAccelerations() {
-    return detail::stageAccelerations;
-}
 float* sphStageEntropyRates() {
     return detail::stageEntropyRates;
 }
 
-void sphPrepareStageRates(SphRunParameters parameters, bool initialize);
+void sphPrepareStageRates(bool initialize);
 HPX_PLAIN_ACTION(sphPrepareStageRates, SphPrepareStageRatesAction);
-void sphPrepareStageRates(SphRunParameters parameters, bool initialize) {
+void sphPrepareStageRates(bool initialize) {
     Vector<hpx::future<void>> children;
     for (auto const& child : hpxChildren()) {
-        children.push_back(hpx::async<SphPrepareStageRatesAction>(child, parameters, initialize));
+        children.push_back(hpx::async<SphPrepareStageRatesAction>(child, initialize));
     }
     if (initialize) {
-        ALWAYS_ASSERT(
-            detail::stageAccelerations == nullptr && detail::stageEntropyRates == nullptr);
+        ALWAYS_ASSERT(detail::stageEntropyRates == nullptr);
         if (sphParticlesSize() != 0) {
-            detail::stageAccelerations = static_cast<ParticleVector<float>*>(
-                allocateManagedMemory(sphParticlesSize() * sizeof(ParticleVector<float>)));
             detail::stageEntropyRates =
                 static_cast<float*>(allocateManagedMemory(sphParticlesSize() * sizeof(float)));
         }
-        if (parameters.accelerationGradientViscosity) {
-            for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
-                if (parameters.isPairRungDue(sphParticlesRung(gas))) {
-                    detail::alphaBaselines.push_back(
-                        {gas, sphParticlesBulkViscosityCoefficients[gas]});
-                }
-            }
-        }
     }
     for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
-        detail::stageAccelerations[gas] = ParticleVector<float>(0.0f);
         detail::stageEntropyRates[gas] = 0.0f;
     }
     for (auto& child : children) {
@@ -543,28 +513,6 @@ void sphPrepareStageRates(SphRunParameters parameters, bool initialize) {
     }
 }
 
-Vector<ParticleVector<float>> sphFetchStageAccelerations(Pair<ParticleInteger> range);
-HPX_PLAIN_ACTION(sphFetchStageAccelerations, SphFetchStageAccelerationsAction);
-Vector<ParticleVector<float>> sphFetchStageAccelerations(Pair<ParticleInteger> range) {
-    ALWAYS_ASSERT(range.first >= 0 && range.second <= sphParticlesSize());
-    return Vector<ParticleVector<float>>(
-        detail::stageAccelerations + range.first, detail::stageAccelerations + range.second);
-}
-
-void sphRestoreStageAlpha();
-HPX_PLAIN_ACTION(sphRestoreStageAlpha, SphRestoreStageAlphaAction);
-void sphRestoreStageAlpha() {
-    Vector<hpx::future<void>> children;
-    for (auto const& child : hpxChildren()) {
-        children.push_back(hpx::async<SphRestoreStageAlphaAction>(child));
-    }
-    for (auto const& baseline : detail::alphaBaselines) {
-        sphParticlesBulkViscosityCoefficients[baseline.index] = baseline.coefficient;
-    }
-    for (auto& child : children) {
-        child.get();
-    }
-}
 void sphReceivePairUpdates(Vector<SphOwnedPairUpdate> updates) {
     std::lock_guard<MutexType> lock(detail::pairUpdateMutex);
     detail::pendingPairUpdates.insert(
@@ -588,16 +536,10 @@ void sphFinishPairStages(bool restore) {
             }
             sphParticlesEntropy(baseline.index) = baseline.entropy;
         }
-        for (auto const& baseline : detail::alphaBaselines) {
-            sphParticlesBulkViscosityCoefficients[baseline.index] = baseline.coefficient;
-        }
     }
     detail::pairBaselines.clear();
     detail::pendingPairUpdates.clear();
-    detail::alphaBaselines.clear();
-    freeManagedMemory(detail::stageAccelerations);
     freeManagedMemory(detail::stageEntropyRates);
-    detail::stageAccelerations = nullptr;
     detail::stageEntropyRates = nullptr;
     detail::stagedSphRun.reset();
     for (auto& child : children) {
@@ -775,8 +717,7 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     return rc;
 }
 
-SphRunReturn sphMidpointForces(
-    SphRunParameters params, bool cuda, SphGravityStage const& gravityStage) {
+SphRunReturn sphMidpointForces(SphRunParameters params, bool cuda) {
     params.runType = kSphRunHydro;
     params.phase = 1;
     params.midpointHydro = true;
@@ -800,89 +741,34 @@ SphRunReturn sphMidpointForces(
      */
     // clang-format on
     double const Δτ = params.hydroKickTimestep;
-    params.accelerationGradientViscosity = params.gradientSwitch();
-    if (params.accelerationGradientViscosity) {
-        params.pairMinimumRung = params.minimumRung;
-        params.pairMaximumRung = params.maximumRung;
-        params.minimumRung = 0;
-        params.maximumRung = kMaxRung - 1;
-    }
     params.deferPairCommit = true;
-    bool const ownDiagnostics =
-        params.accelerationGradientViscosity && !sphParticlesViscosityDiagnosticsActive();
     auto const refreshBalsara = [&]() {
         auto gradients = params;
         gradients.runType = kSphRunDensityAndGradients;
         gradients.phase = 0;
         gradients.viscosityTimestep = 0.0;
         gradients.refreshConvergedDensity = true;
-        // Only B(V) is consumed; the next complete force/sensor stage replaces
-        // any direct diagnostic computed with a temporary acceleration field.
-        gradients.currentGradientDivergence = false;
         sphRun(gradients, cuda);
-    };
-    auto const updateSensor = [&]() {
-        if (!params.accelerationGradientViscosity) {
-            return;
-        }
-        auto gradients = params;
-        gradients.runType = kSphRunDensityAndGradients;
-        gradients.phase = 0;
-        gradients.viscosityTimestep = 0.0;
-        gradients.refreshConvergedDensity = true;
-        gradients.currentGradientDivergence = false;
-        sphRun(gradients, cuda);
-        if (params.cullenDehnen) {
-            gradients.currentGradientDivergence = true;
-            sphRun(gradients, cuda);
-        }
     };
     try {
-        sphPrepareStageRates(params, true);
-        if (ownDiagnostics) {
-            sphParticlesBeginViscosityDiagnostics();
-            if (params.balsaraSwitch) {
-                refreshBalsara();
-            }
-        }
-        if (gravityStage && params.accelerationGradientViscosity) {
-            gravityStage();
-        }
+        sphPrepareStageRates(true);
         params.hydroKickTimestep = 0.5 * Δτ;
         auto result = sphRun(params, cuda);
-        updateSensor();
         sphCommitPairUpdates(1);
-        if (params.accelerationGradientViscosity) {
-            sphParticlesUpdateTargetAlpha(params);
-        }
         if (params.balsaraSwitch) {
             // B(Y*) must use the predictor velocities before the second force.
             refreshBalsara();
         }
-        sphPrepareStageRates(params, false);
-        if (gravityStage && params.accelerationGradientViscosity) {
-            gravityStage();
-        }
+        sphPrepareStageRates(false);
         params.hydroKickTimestep = Δτ;
         params.retainProposedRungs = true;
         result += sphRun(params, cuda);
-        updateSensor();
         sphCommitPairUpdates(2);
-        if (params.accelerationGradientViscosity) {
-            sphRestoreStageAlpha();
-            sphParticlesUpdateTargetAlpha(params);
-        }
         sphFinishPairStages(false);
-        if (ownDiagnostics) {
-            sphParticlesEndViscosityDiagnostics();
-        }
         return result;
     } catch (...) {
         auto const failure = std::current_exception();
         sphFinishPairStages(true);
-        if (ownDiagnostics) {
-            sphParticlesEndViscosityDiagnostics();
-        }
         std::rethrow_exception(failure);
     }
 }
@@ -945,19 +831,6 @@ void SphRunWorkspace::stage() {
     }
     if (params.runType == kSphRunHydro && params.balsaraSwitch) {
         hostBalsaraFactor.resize(particleStorageSize);
-    }
-    if (params.runType == kSphRunDensityAndGradients && params.gradientSwitch() &&
-        sphParticlesViscosityDiagnostics != nullptr) {
-        if (params.cullenDehnen &&
-            (!params.accelerationGradientViscosity || params.currentGradientDivergence)) {
-            // Only Cullen-Dehnen equation (17) reads the neighbors' previous divergences.
-            hostVelocityDivergence.resize(particleStorageSize);
-        }
-    }
-    if (params.runType == kSphRunDensityAndGradients && params.accelerationGradientViscosity) {
-        hostAccelerationX.resize(particleStorageSize);
-        hostAccelerationY.resize(particleStorageSize);
-        hostAccelerationZ.resize(particleStorageSize);
     }
     if (params.runType == kSphRunHydro && params.variableViscosity) {
         hostViscosityAlpha.resize(particleStorageSize);
@@ -1034,29 +907,6 @@ void SphRunWorkspace::stage() {
                                 node.globalParticleRange(), hostRungs.data(), offset);
                         }
                     }
-                    if (params.runType == kSphRunDensityAndGradients && params.gradientSwitch() &&
-                        sphParticlesViscosityDiagnostics != nullptr) {
-                        if (!hostVelocityDivergence.empty()) {
-                            sphParticlesGlobalReadViscosityDiagnostics(node.globalParticleRange(),
-                                hostVelocityDivergence.data(), offset,
-                                params.currentGradientDivergence);
-                        }
-                    }
-                    if (!hostAccelerationX.empty()) {
-                        auto const range = node.globalParticleRange();
-                        auto const accelerations = range.proc == hpxRank() ?
-                            sphFetchStageAccelerations(range.range) :
-                            hpx::async<SphFetchStageAccelerationsAction>(
-                                hpxLocalities()[range.proc], range.range)
-                                .get();
-                        for (ParticleInteger gas = 0; gas < size; ++gas) {
-                            hostAccelerationX[offset + gas] = accelerations[gas][0];
-                            hostAccelerationY[offset + gas] =
-                                kSpatialDimensions > 1 ? accelerations[gas][1] : 0.0f;
-                            hostAccelerationZ[offset + gas] =
-                                kSpatialDimensions > 2 ? accelerations[gas][2] : 0.0f;
-                        }
-                    }
                     if (!hostVelocityX.empty()) {
                         sphParticlesGlobalReadVelocities(node.globalParticleRange(),
                             hostVelocityX.data(), hostVelocityY.data(), hostVelocityZ.data(),
@@ -1095,8 +945,6 @@ SphRunData SphRunWorkspace::data() {
     runData.sinkGradHCorrection = sphParticlesGradHCorrections;
     runData.sinkBalsaraFactor = sphParticlesBalsaraFactors;
     runData.sinkBulkViscosityCoefficient = sphParticlesBulkViscosityCoefficients;
-    runData.sinkScaledDivergence = sphScaledDivergence;
-    runData.sinkViscosityDiagnostics = sphParticlesViscosityDiagnostics;
     runData.sinkSmoothingLength = sphParticlesSmoothingLengths;
     runData.sinkEntropyRate = params.runType == kSphRunHydro ? detail::stageEntropyRates : nullptr;
 #if COSMICTIGER_WITH_GRAVITY
@@ -1115,8 +963,6 @@ SphRunData SphRunWorkspace::data() {
 #endif
     runData.adiabaticIndex = getOptions().hydro.gamma;
     runData.numberOfTargetNodes = hostTargetNodeIndices.size();
-    runData.sinkAccelerations =
-        params.runType == kSphRunHydro ? detail::stageAccelerations : nullptr;
     runData.centralAcceleration = getOptions().hydro.centralAcceleration;
     runData.centralSmoothingLength = getOptions().hydro.centralSmoothingLength;
     runData.targetNeighborCount = getOptions().hydro.neighborNumber;

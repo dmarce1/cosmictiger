@@ -30,7 +30,6 @@
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
 #include <cosmictiger/sph/particle_flags.hpp>
-#include <cosmictiger/sph/viscosity/scaled_divergence.hpp>
 #endif
 
 namespace detail {
@@ -139,18 +138,6 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             output.longPotential =
                 params.gm * (output.longPotential + kScaleFactor1 * l2.potential());
             output.nearPotential = output.potential - output.longPotential;
-            continue;
-        }
-        if (params.sphAccelerationOnly) {
-#if COSMICTIGER_WITH_SPH
-            if (data.type[sinkIndex] == kSphType) {
-                ParticleInteger const gasIndex = data.catIndex[sinkIndex];
-                data.sphStageAccelerations[gasIndex] = Vector3<float>(gx, gy, gz);
-            }
-#endif
-            flops += cosmictiger::gravity::cartesian::tracefree::detail::L2P<fmmLocalDegree(order),
-                         true>::kFlops_ +
-                18;
             continue;
         }
         if (data.gravitySampleAccelerations != nullptr) {
@@ -271,13 +258,6 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                 maxRung = max(nextRung, maxRung);
                 ALWAYS_ASSERT(nextRung >= 0 && nextRung < kMaxRung);
                 flops += 13;
-#if COSMICTIGER_WITH_SPH
-                if (data.sphScaledDivergence != nullptr && rung != nextRung &&
-                    data.type[sinkIndex] == kSphType) {
-                    ALWAYS_ASSERT(sphRescaleDivergence(
-                        data.sphScaledDivergence[data.catIndex[sinkIndex]], rung, nextRung));
-                }
-#endif
                 rungs[sinkIndex] = nextRung;
                 dt = 0.5f * rungDt[params.minRung] * params.t0;
 #if COSMICTIGER_WITH_SPH
@@ -348,12 +328,6 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                     rung = params.fixedRung;
                 }
                 ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
-#if COSMICTIGER_WITH_SPH
-                if (data.sphScaledDivergence != nullptr && previousRung != rung && gas) {
-                    ALWAYS_ASSERT(sphRescaleDivergence(
-                        data.sphScaledDivergence[data.catIndex[sinkIndex]], previousRung, rung));
-                }
-#endif
                 rungs[sinkIndex] = rung;
                 dt = params.sign * 0.5f * rungDt[rung] * params.t0;
                 if (gas && params.deferGasOpening) {

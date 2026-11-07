@@ -12,7 +12,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <exception>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -25,18 +24,11 @@
 #include <hpx/threading_base/annotated_function.hpp>
 
 #define SPH_PARTICLES_CPP
-#include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/math/vector3.hpp>
-#include <cosmictiger/sph/flops.hpp>
-#include <cosmictiger/sph/run_data.hpp>
 #include <cosmictiger/sph/sph.hpp>
-#include <cosmictiger/sph/time_integration.hpp>
+#include <cosmictiger/sph/tree.hpp>
 #include <cosmictiger/sph/viscosity/balsara.hpp>
-#include <cosmictiger/sph/viscosity/cullen_and_dehnen.hpp>
-#include <cosmictiger/sph/viscosity/cullen_and_dehnen_particle_exchange.hpp>
-#include <cosmictiger/sph/viscosity/hu_etal.hpp>
-#include <cosmictiger/sph/viscosity/price_etal.hpp>
 #if COSMICTIGER_ENABLE_CHEMISTRY
 #include <cosmictiger/chemistry/sph.hpp>
 #endif
@@ -144,7 +136,7 @@ template <typename Visitor>
 void visitSphCheckpointArrays(
     Visitor&& visit, bool includeChemistry = true, bool includeViscosity = true) {
     size_t const count = sphParticlesSize();
-    // Persistent physical state and timestep/viscosity history only; force rates are event-local.
+    // Persistent physical state and timestep/viscosity state only; force rates are event-local.
     visit(sphParticlesEntropies, count);
     visit(sphParticlesSmoothingLengths, count);
     visit(sphParticlesParticleIndices, count);
@@ -152,13 +144,6 @@ void visitSphCheckpointArrays(
     visit(sphParticlesFlags, count);
     if (includeViscosity && sphParticlesBulkViscosityCoefficients != nullptr) {
         visit(sphParticlesBulkViscosityCoefficients, count);
-    }
-    if (includeViscosity && sphScaledDivergence != nullptr) {
-        visit(sphScaledDivergence, count);
-    }
-    if (includeViscosity && getOptions().hydro.viscosityGradientSwitch() &&
-        sphParticlesBalsaraFactors != nullptr) {
-        visit(sphParticlesBalsaraFactors, count);
     }
     if (includeChemistry && sphParticlesElectronFractions != nullptr) {
         visit(sphParticlesElectronFractions, count);
@@ -171,7 +156,7 @@ void sphParticlesSwap(ParticleInteger i, ParticleInteger j) {
     if (i != j) {
         sphTreeInvalidate();
     }
-    if (sphParticlesBalsaraFactors != nullptr && !getOptions().hydro.viscosityGradientSwitch()) {
+    if (sphParticlesBalsaraFactors != nullptr) {
         std::swap(sphParticlesBalsaraFactors[i], sphParticlesBalsaraFactors[j]);
     }
     std::swap(sphParticlesGradHCorrections[i], sphParticlesGradHCorrections[j]);
@@ -237,8 +222,6 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
     }
     bool const initializeBalsara =
         getOptions().hydro.balsaraSwitch && sphParticlesBalsaraFactors == nullptr;
-    bool const gradientSwitch = getOptions().hydro.viscosityGradientSwitch();
-    bool const initializeScaledDivergence = gradientSwitch && sphScaledDivergence == nullptr;
     bool const initializeViscosity = getOptions().hydro.viscosityEvolution != "none" &&
         sphParticlesBulkViscosityCoefficients == nullptr;
     // Stale until a density pass rebuilds it; NaN makes any earlier force use visible.
@@ -259,9 +242,6 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         sphParticlesArrayResize(sphParticlesFlags, newCapacity);
         if (getOptions().hydro.viscosityEvolution != "none") {
             sphParticlesArrayResize(sphParticlesBulkViscosityCoefficients, newCapacity);
-        }
-        if (gradientSwitch) {
-            sphParticlesArrayResize(sphScaledDivergence, newCapacity);
         }
         sphParticlesArrayResize(sphParticlesEntropies, newCapacity);
         sphParticlesArrayResize(sphParticlesSmoothingLengths, newCapacity);
@@ -291,20 +271,8 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         sphParticlesBulkViscosityCoefficients == nullptr && capacity > 0) {
         sphParticlesArrayResize(sphParticlesBulkViscosityCoefficients, capacity);
     }
-    if (!gradientSwitch && sphScaledDivergence != nullptr) {
-        freeManagedMemory(sphScaledDivergence);
-        sphScaledDivergence = nullptr;
-    } else if (gradientSwitch && sphScaledDivergence == nullptr && capacity > 0) {
-        sphParticlesArrayResize(sphScaledDivergence, capacity);
-    }
-    if (initializeScaledDivergence) {
-        for (ParticleInteger index = 0; index < size; ++index) {
-            sphScaledDivergence[index] = {};
-        }
-    }
     if (initializeViscosity) {
-        float const bulkViscosityCoefficient =
-            gradientSwitch ? 0.0f : getOptions().hydro.minimumBulkViscosityCoefficient;
+        float const bulkViscosityCoefficient = getOptions().hydro.minimumBulkViscosityCoefficient;
         for (ParticleInteger index = 0; index < size; ++index) {
             sphParticlesBulkViscosityCoefficients[index] = bulkViscosityCoefficient;
         }
@@ -335,12 +303,8 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         sphParticlesFlags[slot] = {};
         sphParticlesSetProposedRung(slot, 0);
         if (getOptions().hydro.viscosityEvolution != "none") {
-            float const bulkViscosityCoefficient =
-                gradientSwitch ? 0.0f : getOptions().hydro.minimumBulkViscosityCoefficient;
-            sphParticlesBulkViscosityCoefficients[slot] = bulkViscosityCoefficient;
-        }
-        if (gradientSwitch) {
-            sphScaledDivergence[slot] = {};
+            sphParticlesBulkViscosityCoefficients[slot] =
+                getOptions().hydro.minimumBulkViscosityCoefficient;
         }
         if (resizeGravityParticles) {
             particlesCatIndex(offset + i) = previousSize + i;
@@ -364,8 +328,6 @@ void sphParticlesFree() {
     sphTreeInvalidate();
     freeManagedMemory(sphParticlesHydroDiagnostics);
     sphParticlesHydroDiagnostics = nullptr;
-    freeManagedMemory(sphParticlesViscosityDiagnostics);
-    sphParticlesViscosityDiagnostics = nullptr;
     sphParticlesEntropyInitialized = false;
     sphParticlesThermalScaleFactor = 1.0;
     if (sphParticlesBalsaraFactors != nullptr) {
@@ -706,7 +668,6 @@ void sphParticlesClearHydroCaches() {
     thermodynamicParticleCache = decltype(thermodynamicParticleCache)();
     particleVelocityCache = decltype(particleVelocityCache)();
     densityParticleCache = decltype(densityParticleCache)();
-    cullen_and_dehnen::clearDiagnosticCache();
     hpx::wait_all(futures.begin(), futures.end());
 }
 
@@ -720,11 +681,13 @@ void sphParticlesClearCaches() {
     rungParticleCache = decltype(rungParticleCache)();
     particleVelocityCache = decltype(particleVelocityCache)();
     densityParticleCache = decltype(densityParticleCache)();
-    cullen_and_dehnen::clearDiagnosticCache();
     hpx::wait_all(futures.begin(), futures.end());
 }
 
 namespace detail {
+
+// Gas payloads below this version carried retired viscosity-model state.
+constexpr uint32_t kSphCheckpointBaseVersion = 140000U;
 
 uint32_t sphCheckpointVersion() {
     // Identify the scalar-viscosity payload and its optional model state.
@@ -738,23 +701,12 @@ uint32_t sphCheckpointVersion() {
     // From 50000 the transient gravity handoff is no longer checkpointed.
     // From 60000 the hydro rung bound is persistent and the hierarchical
     // predictor/position-clock structure is removed for chronological drifts.
-    // From 70000 no force rates persist; gradient switches checkpoint sample time/divergence.
-    // From 80000 own-midpoint viscosity history stores the previous sample rung.
-    // From 90000 divergences use signed integer significands instead of scaled binary16.
-    // From 100000 one half stores Δτ ∇_x·(a v_pec), the scaled stored-velocity gradient.
-    // From 110000 endpoint samples need only q; live rung changes rescale it.
-    // From 120000 gradient models retain their optional endpoint Balsara byte.
+    // From 70000 no force rates persist; retired viscosity models checkpoint their history.
     // From 130000 two working flags and the proposed rung share one byte.
-    return 130000U +
+    // From 140000 Morris-Monaghan alpha is the only viscosity state.
+    return kSphCheckpointBaseVersion +
         (options.starFormation.enabled ? 110U : (options.chemistry.enabled ? 100U : 2U)) +
-        (options.hydro.viscosityGradientSwitch() && options.hydro.balsaraSwitch ? 1U : 0U) +
-        (options.hydro.viscosityEvolution == "huEtal" ?
-                8U :
-                (options.hydro.viscosityEvolution == "cullenAndDehnen" ?
-                        4U :
-                        (options.hydro.viscosityEvolution == "priceEtAl" ?
-                                6U :
-                                (options.hydro.viscosityEvolution != "none" ? 2U : 0U))));
+        (options.hydro.viscosityEvolution != "none" ? 2U : 0U);
 }
 
 }    // namespace detail
@@ -765,6 +717,11 @@ void sphParticlesLoad(FILE* fp) {
     ParticleInteger savedCount;
     FREAD(header, sizeof(uint32_t), 7, fp);
     FREAD(&savedCount, sizeof(ParticleInteger), 1, fp);
+    if (header[0] == 0x43545350U && header[1] < detail::kSphCheckpointBaseVersion) {
+        THROW_ERROR("SPH checkpoint payload version %u predates the removal of the gradient "
+                    "viscosity models and cannot be restarted\n",
+            header[1]);
+    }
     if (header[0] != 0x43545350U || header[1] != detail::sphCheckpointVersion() ||
         header[2] != sizeof(ParticleInteger) || header[3] != sizeof(float) || header[4] != 0U ||
         header[5] != kSpatialDimensions || header[6] != sizeof(float) ||
@@ -800,19 +757,6 @@ void sphParticlesLoad(FILE* fp) {
                 ((coefficientBits & 0x8000U) != 0U && (coefficientBits & 0x7fffU) != 0U)) {
                 THROW_ERROR("Invalid SPH viscosity coefficient in checkpoint\n");
             }
-            if (getOptions().hydro.viscosityGradientSwitch()) {
-                auto& state = sphScaledDivergence[index];
-                state = {};
-                FREAD(&state.bits, sizeof(uint16_t), 1, fp);
-                // Validate IEEE bits before decode: finite-math compiler options
-                // must not erase rejection of infinities or NaNs.
-                if ((state.bits & 0x7c00U) == 0x7c00U) {
-                    THROW_ERROR("Invalid SPH divergence history in checkpoint\n");
-                }
-                if (getOptions().hydro.balsaraSwitch) {
-                    FREAD(&sphParticlesBalsaraFactors[index], sizeof(uint8_t), 1, fp);
-                }
-            }
         }
     }
     if (getOptions().chemistry.enabled) {
@@ -846,13 +790,6 @@ void sphParticlesSave(FILE* fp) {
     if (getOptions().hydro.viscosityEvolution != "none") {
         for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
             FWRITE(&sphParticlesBulkViscosityCoefficients[index].bits, sizeof(uint16_t), 1, fp);
-            if (getOptions().hydro.viscosityGradientSwitch()) {
-                auto const& state = sphScaledDivergence[index];
-                FWRITE(&state.bits, sizeof(uint16_t), 1, fp);
-                if (getOptions().hydro.balsaraSwitch) {
-                    FWRITE(&sphParticlesBalsaraFactors[index], sizeof(uint8_t), 1, fp);
-                }
-            }
         }
     }
     if (getOptions().chemistry.enabled) {
@@ -893,7 +830,6 @@ void sphCheckpointTest() {
             sphParticlesSetProposedRung(index, int(index % kMaxRung));
         }
     }
-    // Compact history is a scalar; its two bytes are both serialized state.
     auto const visitFields = [](auto&& visit) {
         detail::visitSphCheckpointArrays([&visit](auto* values, size_t count) {
             for (size_t index = 0; index < count; ++index) {
@@ -904,28 +840,6 @@ void sphCheckpointTest() {
     ALWAYS_ASSERT(sphParticlesSize() == 0 ||
         (sphParticlesBulkViscosityCoefficients != nullptr) ==
             (getOptions().hydro.viscosityEvolution != "none"));
-    ALWAYS_ASSERT(sphParticlesSize() == 0 ||
-        (sphScaledDivergence != nullptr) == getOptions().hydro.viscosityGradientSwitch());
-    Vector<Float16Storage> originalScaledDivergences;
-    if (getOptions().hydro.viscosityGradientSwitch() && sphParticlesSize() != 0) {
-        originalScaledDivergences.assign(
-            sphScaledDivergence, sphScaledDivergence + sphParticlesSize());
-        for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
-            auto& history = sphScaledDivergence[index];
-            history = {};
-            float const divergence = -0.5f + 0.025f * index;
-            ALWAYS_ASSERT(sphEncodeDivergence(history, divergence, 1.0));
-        }
-    }
-    ALWAYS_ASSERT(
-        cullen_and_dehnen::evolvedBulkViscosityCoefficient(0.0f, 1.5f, 2.0f, 0.0f) == 1.5f);
-    ALWAYS_ASSERT(
-        std::fabs(cullen_and_dehnen::evolvedBulkViscosityCoefficient(1.5f, 0.5f, 2.0f, 0.25f) -
-            (0.5f + std::exp(-0.5f))) < 1.0e-6f);
-    // Price et al. (2018), equation (50): (1.5 + 0.5 * 0.5) / 1.5 after one backward Euler step.
-    ALWAYS_ASSERT(price_etal::evolvedBulkViscosityCoefficient(0.0f, 1.5f, 2.0f, 0.0f) == 1.5f);
-    ALWAYS_ASSERT(std::fabs(price_etal::evolvedBulkViscosityCoefficient(1.5f, 0.5f, 2.0f, 0.25f) -
-                      1.75f / 1.5f) < 1.0e-6f);
     Vector<float> originalViscosity;
     if (getOptions().hydro.viscosityEvolution != "none" && sphParticlesSize() != 0) {
         originalViscosity.assign(sphParticlesBulkViscosityCoefficients,
@@ -1019,35 +933,6 @@ void sphCheckpointTest() {
             sphParticlesFlags[0] = validFlags;
         }
     }
-    if (getOptions().hydro.viscosityGradientSwitch() && sphParticlesSize() != 0) {
-        auto const validHistory = sphScaledDivergence[0];
-        uint16_t const invalidSamples[] = {0x7c00, 0xfc00, 0x7e00, 0xfe00};
-        for (auto const invalid : invalidSamples) {
-            auto& history = sphScaledDivergence[0];
-            history = validHistory;
-            history.bits = invalid;
-            FILE* corruptFile = std::tmpfile();
-            if (corruptFile == nullptr) {
-                THROW_ERROR("Unable to create corrupt SPH checkpoint test file\n");
-            }
-            sphParticlesSave(corruptFile);
-            std::rewind(corruptFile);
-            bool rejected = false;
-            try {
-                sphParticlesLoad(corruptFile);
-            } catch (std::runtime_error const& error) {
-                rejected = std::string(error.what()).find("Invalid SPH divergence history") !=
-                    std::string::npos;
-            }
-            std::fclose(corruptFile);
-            if (!rejected) {
-                THROW_ERROR("SPH checkpoint accepted invalid compact viscosity history\n");
-            }
-        }
-        std::rewind(file);
-        sphParticlesLoad(file);
-        std::cout << "SPH checkpoint rejected invalid compact viscosity histories\n" << std::flush;
-    }
     ParticleInteger const savedSize = size;
     size = 0;
     std::rewind(file);
@@ -1061,9 +946,6 @@ void sphCheckpointTest() {
     }
     for (size_t index = 0; index < originalViscosity.size(); ++index) {
         sphParticlesBulkViscosityCoefficients[index] = originalViscosity[index];
-    }
-    for (size_t index = 0; index < originalScaledDivergences.size(); ++index) {
-        sphScaledDivergence[index] = originalScaledDivergences[index];
     }
     for (size_t index = 0; index < originalFlags.size(); ++index) {
         sphParticlesFlags[index] = originalFlags[index];
@@ -1121,128 +1003,4 @@ void sphParticlesResetSemiactive() {
             "sph.particles.resetSemiactive")));
     }
     hpx::wait_all(futures.begin(), futures.end());
-}
-
-HPX_PLAIN_ACTION(
-    sphParticlesBeginViscosityDiagnostics, SphParticlesBeginViscosityDiagnosticsAction);
-HPX_PLAIN_ACTION(sphParticlesEndViscosityDiagnostics, SphParticlesEndViscosityDiagnosticsAction);
-
-namespace detail {
-static bool viscosityDiagnosticsActive = false;
-}
-
-bool sphParticlesViscosityDiagnosticsActive() {
-    return detail::viscosityDiagnosticsActive;
-}
-
-void sphParticlesEndViscosityDiagnostics() {
-    Vector<hpx::future<void>> pending;
-    for (auto const& child : hpxChildren()) {
-        pending.push_back(hpx::async<SphParticlesEndViscosityDiagnosticsAction>(child));
-    }
-    freeManagedMemory(sphParticlesViscosityDiagnostics);
-    sphParticlesViscosityDiagnostics = nullptr;
-    detail::viscosityDiagnosticsActive = false;
-    hpx::wait_all(pending.begin(), pending.end());
-    for (auto& future : pending) {
-        future.get();
-    }
-}
-
-void sphParticlesBeginViscosityDiagnostics() {
-    Vector<hpx::future<void>> pending;
-    for (auto const& child : hpxChildren()) {
-        pending.push_back(hpx::async<SphParticlesBeginViscosityDiagnosticsAction>(child));
-    }
-    std::exception_ptr failure;
-    try {
-        ALWAYS_ASSERT(
-            !detail::viscosityDiagnosticsActive && sphParticlesViscosityDiagnostics == nullptr);
-        detail::viscosityDiagnosticsActive = true;
-        if (getOptions().hydro.viscosityGradientSwitch() && sphParticlesSize() != 0) {
-            sphParticlesViscosityDiagnostics = static_cast<SphViscosityDiagnostics*>(
-                allocateManagedMemory(sizeof(SphViscosityDiagnostics) * sphParticlesSize()));
-            std::fill_n(
-                sphParticlesViscosityDiagnostics, sphParticlesSize(), SphViscosityDiagnostics{});
-        }
-    } catch (...) {
-        failure = std::current_exception();
-    }
-    for (auto& future : pending) {
-        try {
-            future.get();
-        } catch (...) {
-            if (!failure) {
-                failure = std::current_exception();
-            }
-        }
-    }
-    if (failure) {
-        sphParticlesEndViscosityDiagnostics();
-        std::rethrow_exception(failure);
-    }
-}
-
-HPX_PLAIN_ACTION(sphParticlesUpdateTargetAlpha, SphParticlesUpdateTargetAlphaAction);
-void sphParticlesUpdateTargetAlpha(SphRunParameters const& parameters) {
-    if (!getOptions().hydro.viscosityGradientSwitch()) {
-        return;
-    }
-    bool const cullenDehnen = getOptions().hydro.viscosityEvolution == "cullenAndDehnen";
-    bool const huEtAl = getOptions().hydro.viscosityEvolution == "huEtal";
-    Vector<hpx::future<void>> pending;
-    for (auto const& child : hpxChildren()) {
-        pending.push_back(hpx::async<SphParticlesUpdateTargetAlphaAction>(child, parameters));
-    }
-    sph_flops::Counter flops;
-    for (ParticleInteger index = 0; index < sphParticlesSize(); ++index) {
-        int const rung = sphParticlesRung(index);
-        bool const measured = parameters.accelerationGradientViscosity ?
-            parameters.isPairRungDue(rung) :
-            parameters.isActiveRung(rung);
-        bool const initializing = parameters.viscosityInitializeHistory;
-        auto& history = sphScaledDivergence[index];
-        if (measured && sphParticlesConverged(index)) {
-            ALWAYS_ASSERT(sphParticlesViscosityDiagnostics != nullptr);
-            auto const& diagnostic = sphParticlesViscosityDiagnostics[index];
-            double const elapsed = parameters.accelerationGradientViscosity ?
-                parameters.hydroKickTimestep :
-                sphViscositySampleInterval(rung, parameters.viscositySampleInterval,
-                    parameters.globalTimestep, initializing);
-            float const timeStep = static_cast<float>(elapsed);
-            double const sampleTimestep = initializing ?
-                sphViscosityStoredSampleTimestep(
-                    rung, parameters.viscosityBaseTimestep, 0.0, parameters.globalTimestep) :
-                elapsed;
-            if (!parameters.accelerationGradientViscosity &&
-                !sphEncodeDivergence(history, diagnostic.pendingDivergence, sampleTimestep)) {
-                THROW_ERROR("SPH timestep-scaled divergence exceeds finite float16 storage\n");
-            }
-            if (elapsed == 0.0) {
-                continue;
-            }
-            auto& bulkViscosityCoefficient = sphParticlesBulkViscosityCoefficients[index];
-            float const previousCoefficient = bulkViscosityCoefficient;
-            bool const increasing = previousCoefficient < diagnostic.targetBulkViscosityCoefficient;
-            // CD (2010), equation (A15); Hu (2014), equation (17); Price (2018), equation (50).
-            bulkViscosityCoefficient = huEtAl ?
-                hu_etal::evolvedBulkViscosityCoefficient(previousCoefficient,
-                    diagnostic.targetBulkViscosityCoefficient, diagnostic.inverseDecayTime,
-                    diagnostic.limiter, timeStep) :
-                cullenDehnen ? cullen_and_dehnen::evolvedBulkViscosityCoefficient(
-                                   previousCoefficient, diagnostic.targetBulkViscosityCoefficient,
-                                   diagnostic.inverseDecayTime, timeStep) :
-                               price_etal::evolvedBulkViscosityCoefficient(previousCoefficient,
-                                   diagnostic.targetBulkViscosityCoefficient,
-                                   diagnostic.inverseDecayTime, timeStep);
-            flops += (increasing ? (cullenDehnen || huEtAl ? 0 : 1) : 5) + (huEtAl ? 1 : 0);
-        }
-    }
-    addCpuFlops(flops.counts());
-    // Every locality must finish consuming the temporary diagnostics before
-    // an exception can unwind the driver's collective scratch-buffer scope.
-    hpx::wait_all(pending.begin(), pending.end());
-    for (auto& future : pending) {
-        future.get();
-    }
 }

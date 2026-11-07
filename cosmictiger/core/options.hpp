@@ -283,26 +283,19 @@ struct Hydro {
     double vonNeumannRichtmyerCoefficient{};
     double viscosityEpsilon{};
     double conductionCoefficient{0.0};
-    bool balsaraSwitch{false};
-    std::string viscosityEvolution{"huEtal"};
+    bool balsaraSwitch{true};
+    std::string viscosityEvolution{"morrisAndMonaghan"};
     double minimumBulkViscosityCoefficient{0.1};
     double viscosityDecay{0.2};
-    double maximumBulkViscosityCoefficient{2.0};
-    double viscosityDecayCD{0.05};
-    double maximumBulkViscosityCoefficientPrice{1.0};
-    double viscosityDecayPrice{0.1};
-    double maximumBulkViscosityCoefficientHu{1.0};
-    double viscosityDecayHu{0.05};
-    // Cullen-Dehnen, Hu, and Price et al. share gradient reconstruction and its state.
-    bool viscosityGradientSwitch() const {
-        return viscosityEvolution == "cullenAndDehnen" || viscosityEvolution == "priceEtAl" ||
-            viscosityEvolution == "huEtal";
-    }
-    // Morris-Monaghan, Cullen-Dehnen, and Hu et al. use beta_ij = viscosityBeta alpha_ij; the fixed
-    // Monaghan coefficients and Price et al. use beta_ij = viscosityBeta.
+    // Morris-Monaghan uses beta_ij = viscosityBeta alpha_ij; the fixed Monaghan coefficients
+    // use beta_ij = viscosityBeta.
     bool viscosityBetaFollowsAlpha() const {
-        return viscosityEvolution == "morrisAndMonaghan" ||
-            viscosityEvolution == "cullenAndDehnen" || viscosityEvolution == "huEtal";
+        return viscosityEvolution == "morrisAndMonaghan";
+    }
+    // Morris-Monaghan always applies the Balsara limiter, so the option only selects it
+    // for constant coefficients. Every path that installs options normalizes through here.
+    void normalizeBalsaraSwitch() {
+        balsaraSwitch = balsaraSwitch || viscosityEvolution == "morrisAndMonaghan";
     }
     double gamma{};
     double cfl{};
@@ -381,12 +374,6 @@ struct Options {
         arc & hydro.viscosityEvolution;
         arc & hydro.minimumBulkViscosityCoefficient;
         arc & hydro.viscosityDecay;
-        arc & hydro.maximumBulkViscosityCoefficient;
-        arc & hydro.viscosityDecayCD;
-        arc & hydro.maximumBulkViscosityCoefficientPrice;
-        arc & hydro.viscosityDecayPrice;
-        arc & hydro.maximumBulkViscosityCoefficientHu;
-        arc & hydro.viscosityDecayHu;
         arc & hydro.neighborNumber;
         arc & hydro.minSmoothingLength;
         arc & hydro.maxSmoothingLength;

@@ -29,7 +29,6 @@ static_assert(
     kMaxBucketSize >= 32 && kMaxBucketSize <= 1024 && (kMaxBucketSize & (kMaxBucketSize - 1)) == 0,
     "MAX_BUCKET_SIZE must be a power of two from 32 to 1024");
 
-struct Float16Storage;
 struct SphParticleFlags;
 
 struct CudaKickData {
@@ -41,7 +40,6 @@ struct CudaKickData {
     Vector3<float>* vel;
     bool midpointHydro = false;
     SphParticleFlags const* sphHydroFlags = nullptr;
-    Float16Storage* sphScaledDivergence = nullptr;
     ParticleInteger* catIndex;
     char* type;
     bool sph;
@@ -55,12 +53,7 @@ struct CudaKickData {
     float* pot;
     Array<float*, kDimensions> globalAcceleration{};
     Vector3<float>* deferredGasOpening = nullptr;
-    // These evaluation modes are mutually exclusive. Sharing their pointer
-    // keeps the ordinary CUDA launch data and per-thread stack unchanged.
-    union {
-        Vector3<float>* sphStageAccelerations = nullptr;
-        GravityDiagnostics* snapshotDiagnostics;
-    };
+    GravityDiagnostics* snapshotDiagnostics = nullptr;
     ParticleInteger const* gravitySampleIndices;
     Vector3<float>* gravitySampleAccelerations;
 };
@@ -108,8 +101,6 @@ struct KickParameters {
     FmmGeometry geometry{};
     ParticleInteger outputOffset = 0;
     bool forceOnly = false;
-    // Full-tree current gravity for an SPH acceleration-gradient sensor.
-    bool sphAccelerationOnly = false;
     bool snapshotDiagnostics = false;
     bool profileCoordinator = true;
     bool globalTimestep = false;
@@ -190,7 +181,6 @@ struct KickParameters {
         arc & openLargerCell;
         arc & geometry;
         arc & forceOnly;
-        arc & sphAccelerationOnly;
         arc & snapshotDiagnostics;
         arc & profileCoordinator;
         arc & globalTimestep;
@@ -224,11 +214,6 @@ void gravityDiscardDeferredGasOpening();
 bool gravityGasOpeningDeferred();
 Vector3<float>* gravityDeferredGasOpeningData();
 
-// Collective FMM-only force evaluation into sphStageAccelerations(). The caller
-// allocates that gas-indexed stage buffer first. No kicks, rung changes, domain
-// migration, or gas sorting occur; a temporary base-particle permutation is
-// restored exactly before returning, preserving hierarchical rung partitions.
-void gravityRefreshSphAcceleration(double theta);
 // Fresh all-particle fields; preserves velocities, rungs, ownership and ordering.
 // Caller owns snapshot storage on every locality.
 void gravityRefreshSnapshotDiagnostics(double theta);

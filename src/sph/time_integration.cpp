@@ -60,10 +60,6 @@ int sphCommitBalancedRungs() {
     for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
         auto const candidate = sphParticlesProposedRung(gas);
         ALWAYS_ASSERT(candidate >= 0 && candidate < kMaxRung);
-        if (sphScaledDivergence != nullptr && sphParticlesRung(gas) != candidate &&
-            !sphRescaleDivergence(sphScaledDivergence[gas], sphParticlesRung(gas), candidate)) {
-            throw std::runtime_error("SPH rung balance overflows timestep-scaled divergence");
-        }
         sphParticlesRung(gas) = candidate;
         maximumRung = std::max(maximumRung, int(candidate));
     }
@@ -266,10 +262,6 @@ int sphParticlesSelectMidpointRungs(int minimumRung) {
             int const nextRung = std::max(
                 {minimumRung, int(rung) - 1, sphParticlesHydroRung(gas), getOptions().run.minRung});
             ALWAYS_ASSERT(nextRung >= 0 && nextRung < kMaxRung);
-            if (sphScaledDivergence != nullptr && rung != nextRung &&
-                !sphRescaleDivergence(sphScaledDivergence[gas], rung, nextRung)) {
-                throw std::runtime_error("SPH rung selection overflows timestep-scaled divergence");
-            }
             rung = nextRung;
         }
         maximumRung = std::max(maximumRung, int(rung));

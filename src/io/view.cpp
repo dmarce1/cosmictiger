@@ -93,7 +93,6 @@ struct SphParticleInfo : public DarkMatterParticleInfo {
     float rho;
     float smoothingLength;
     float alpha;
-    double divergence;
 #if COSMICTIGER_ENABLE_CHEMISTRY
     std::array<float, 9> chemistryFields{};
 #endif
@@ -911,16 +910,6 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
 #endif
         writeViscosityField(db, metadata, gas);
         writeHydroDiagnostics(db, metadata, particles, &conversion, densityUnit, entropyUnit);
-        if (getOptions().hydro.viscosityGradientSwitch()) {
-            writeViewField(db, metadata, "velocityDivergence", "mesh", gas,
-                cosmological ? "(km/s)/(Mpc/h)" : "1/s",
-                [&conversion](SphParticleInfo const& particle) {
-                    return conversion.frequency(particle.divergence);
-                });
-            writeViewText(db, "divv_convention",
-                "Stored peculiar velocity gradient G = div_x(a v_pec) = a_sample^2 div_r(v_pec); "
-                "current output-coordinate sample, excluding Hubble flow.");
-        }
         writeViewField(db, metadata, "density", "mesh", gas, densityUnit,
             [&conversion](
                 SphParticleInfo const& particle) { return conversion.density(particle.rho); });
@@ -940,8 +929,7 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
 
 std::mutex siloViewMutex;
 
-ViewSnapshot collectViewParticles(
-    double a, double viscosityBaseTimestep, double viscosityGlobalTimestep) {
+ViewSnapshot collectViewParticles(double a) {
     ViewSnapshot snapshot;
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION
     std::optional<star_formation_backend::Parameters> parameters;
@@ -992,16 +980,6 @@ ViewSnapshot collectViewParticles(
             gas.smoothingLength = sphParticlesSmoothingLength(index);
             if (getOptions().hydro.viscosityEvolution != "none") {
                 gas.alpha = sphParticlesBulkViscosityCoefficients[index];
-            }
-            if (getOptions().hydro.viscosityGradientSwitch()) {
-                auto const& history = sphScaledDivergence[index];
-                double const sampleTimestep =
-                    sphViscosityStoredSampleTimestep(sphParticlesRung(index), viscosityBaseTimestep,
-                        viscosityGlobalTimestep, getOptions().run.timeIntegrator == "global");
-                if (!(sampleTimestep > 0.0)) {
-                    THROW_ERROR("SPH divergence output requires its sample timestep\n");
-                }
-                gas.divergence = sphDecodeDivergence(history, sampleTimestep);
             }
 #if COSMICTIGER_ENABLE_CHEMISTRY
             if (getOptions().chemistry.enabled) {
@@ -1272,13 +1250,6 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
 #endif
         writeViscosityField(db, metadata, gas);
         writeHydroDiagnostics(db, metadata, particles);
-        if (getOptions().hydro.viscosityGradientSwitch()) {
-            writeViewField(db, metadata, "velocityDivergence", "mesh", gas, "1/code_time",
-                [](SphParticleInfo const& particle) { return double(particle.divergence); });
-            writeViewText(db, "divv_convention",
-                "Stored peculiar velocity gradient G = div_x(a v_pec) = a_sample^2 div_r(v_pec); "
-                "current output-coordinate sample, excluding Hubble flow.");
-        }
         checkViewWrite(DBSetDir(db, ".."), "..");
     }
 #endif
@@ -1288,9 +1259,8 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
 }
 
 ViewLeafMetadata writeParticleLeaf(Vector<Range<double>> const& boxes, int cycle, double a,
-    double time, std::string const& generation, double viscosityBaseTimestep,
-    double viscosityGlobalTimestep) {
-    auto const snapshot = collectViewParticles(a, viscosityBaseTimestep, viscosityGlobalTimestep);
+    double time, std::string const& generation) {
+    auto const snapshot = collectViewParticles(a);
     ViewLeafMetadata metadata;
     metadata.boxes.resize(boxes.size());
     auto const frames = particleViewFrames();
@@ -1475,8 +1445,7 @@ void writeParticleMaster(size_t box, int cycle, double a, double time,
     std::filesystem::rename(temporary, filename);
 }
 
-void writeDistributedParticleViews(int cycle, double a, double time, double viscosityBaseTimestep,
-    double viscosityGlobalTimestep) {
+void writeDistributedParticleViews(int cycle, double a, double time) {
     static std::atomic<uint64_t> sequence{0};
     auto const ticks = std::chrono::system_clock::now().time_since_epoch().count();
     std::string const generation =
@@ -1492,7 +1461,7 @@ void writeDistributedParticleViews(int cycle, double a, double time, double visc
     auto const leaves = [&]() {
         profile::ScopedPhase profilePhase("output.particles.leaves");
         return onViewLocalities<WriteParticleLeafAction, ViewLeafMetadata>(
-            viewBoxes, cycle, a, time, generation, viscosityBaseTimestep, viscosityGlobalTimestep);
+            viewBoxes, cycle, a, time, generation);
     }();
     profile::ScopedPhase profilePhase("output.particles.master");
     for (size_t box = 0; box < viewBoxes.size(); ++box) {
@@ -1502,9 +1471,8 @@ void writeDistributedParticleViews(int cycle, double a, double time, double visc
 
 }    // namespace detail
 
-void viewOutputViews(int cycle, double a, bool force, double physicalYears,
-    double viscosityBaseTimestep, double viscosityGlobalTimestep, double conformalTime,
-    double scaleDerivative) {
+void viewOutputViews(int cycle, double a, bool force, double physicalYears, double baseTimestep,
+    double conformalTime, double scaleDerivative) {
     if (!getOptions().output.silo || viewBoxes.empty() ||
         (!force && cycle % getOptions().output.siloInterval != 0)) {
         return;
@@ -1522,8 +1490,7 @@ void viewOutputViews(int cycle, double a, bool force, double physicalYears,
             0.0;
     }
     if (!getOptions().output.siloTimeDerivatives) {
-        detail::writeDistributedParticleViews(
-            cycle, a, time, viscosityBaseTimestep, viscosityGlobalTimestep);
+        detail::writeDistributedParticleViews(cycle, a, time);
         return;
     }
     auto const release = []() {
@@ -1535,9 +1502,8 @@ void viewOutputViews(int cycle, double a, bool force, double physicalYears,
         if (getOptions().hydro.enabled) {
             EnergiesT unusedEnergies;
             bool const global = usesGlobalIntegration(getOptions().run);
-            sphMidpointStep(-1, conformalTime, -1.0, viscosityBaseTimestep, a, scaleDerivative,
-                unusedEnergies, global, global ? viscosityBaseTimestep : 0.0,
-                viscosityGlobalTimestep);
+            sphMidpointStep(-1, conformalTime, -1.0, baseTimestep, a, scaleDerivative,
+                unusedEnergies, global, global ? baseTimestep : 0.0);
         }
 #endif
 #if COSMICTIGER_WITH_GRAVITY
@@ -1545,8 +1511,7 @@ void viewOutputViews(int cycle, double a, bool force, double physicalYears,
             gravityRefreshSnapshotDiagnostics(getOptions().gravity.openingAngle);
         }
 #endif
-        detail::writeDistributedParticleViews(
-            cycle, a, time, viscosityBaseTimestep, viscosityGlobalTimestep);
+        detail::writeDistributedParticleViews(cycle, a, time);
     } catch (...) {
         auto const failure = std::current_exception();
         release();

@@ -23,24 +23,6 @@ TEST(Balsara, BalsaraFactor) {
     EXPECT_NEAR(balsara::balsaraFactor(3.0f, 2.0f), 0.6f, 1.0e-7f);
 }
 
-TEST(Balsara, ReconstructedGradientUsesTraceAndThreeComponentCurl) {
-    // Diagonal trace = -3. The antisymmetric components give curl = (2,-3,6),
-    // whose norm is 7. Symmetric shear must not affect either quantity.
-    for (double const scale : {0.25, 1.0, 4.0}) {
-        for (double const shear : {0.0, 5.0}) {
-            double const gradient[3][3] = {{-scale, scale * (-3.0 + shear), scale * (-1.5 + shear)},
-                {scale * (3.0 + shear), -scale, scale * (-1.0 + shear)},
-                {scale * (1.5 + shear), scale * (1.0 + shear), -scale}};
-            unsigned long long operations = 0;
-            EXPECT_NEAR(balsara::factorFromVelocityGradient(gradient, operations), 0.3, 1.0e-15);
-            EXPECT_GT(operations, 0U);
-        }
-    }
-    double const zero[3][3]{};
-    unsigned long long operations = 0;
-    EXPECT_EQ(balsara::factorFromVelocityGradient(zero, operations), 0.0);
-}
-
 TEST(Balsara, ByteStoragePreservesEveryCodeAndEndpoints) {
     for (unsigned code = 0; code <= 255; ++code) {
         auto const storedFactor = static_cast<uint8_t>(code);

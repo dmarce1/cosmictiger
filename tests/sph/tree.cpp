@@ -1466,10 +1466,6 @@ void verifyDistributedSphHierarchyMigration(bool afterMigration) {
             if (sphParticlesBulkViscosityCoefficients) {
                 sphParticlesBulkViscosityCoefficients[gas] = identity / 256.0f;
             }
-            if (sphScaledDivergence) {
-                auto& state = sphScaledDivergence[gas];
-                ALWAYS_ASSERT(sphEncodeDivergence(state, identity / 64.0f, 1.0));
-            }
             // The last midpoint's hydro timestep bound must survive migration
             // until the next gravity boundary consumes it.
             sphParticlesSetProposedRung(gas, particlesRung(particle) + 1);
@@ -1485,11 +1481,6 @@ void verifyDistributedSphHierarchyMigration(bool afterMigration) {
                     sphParticlesBulkViscosityCoefficients[gas] == identity / 256.0f) &&
                 sphParticlesProposedRung(gas) == particlesRung(particle) + 1,
             "migration changed midpoint gas scalars or the hydro rung bound");
-        if (sphScaledDivergence) {
-            auto const& state = sphScaledDivergence[gas];
-            detail::requireSphTree(sphDecodeDivergence(state, 1.0) == identity / 64.0f,
-                "migration changed committed viscosity samples");
-        }
         if (particle < range.first) {
             detail::requireSphTree(
                 identity == 100 * hpxRank() + particle + 1 && particlesRung(particle) == 0,
@@ -1545,9 +1536,6 @@ void initializeSphRungChain(bool emptyRemoteRank) {
         sphParticlesPosition(1, gas) = sphParticlesPosition(2, gas) = 0.5;
         sphParticlesSmoothingLength(gas) = identity % 2 == 0 ? 0.04f : 0.09f;
         sphParticlesRung(gas) = identity == 0 ? 7 : 0;
-        detail::requireSphTree(sphEncodeDivergence(sphScaledDivergence[gas], -3.0f,
-                                   std::ldexp(1.0, -sphParticlesRung(gas))),
-            "rung fixture history is not representable");
         sphParticlesSetProposedRung(gas, sphParticlesRung(gas));
         sphParticlesDensities[gas] = 1.0f;
         sphParticlesEntropies[gas] = 1.0f;
@@ -1574,23 +1562,21 @@ void verifySphRungChain(bool coarsened) {
 }
 HPX_PLAIN_ACTION(verifySphRungChain, VerifySphRungChainAction);
 
-void verifySphRungHistory(int expectedRung) {
+void verifySphLiveRung(int expectedRung) {
     for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
-        detail::requireSphTree(sphParticlesRung(gas) == expectedRung &&
-                sphDecodeDivergence(sphScaledDivergence[gas], std::ldexp(1.0, -expectedRung)) ==
-                    -3.0,
-            "live rung mutation changed the stored canonical gradient");
+        detail::requireSphTree(
+            sphParticlesRung(gas) == expectedRung, "live rung mutation missed a gas particle");
     }
 }
-HPX_PLAIN_ACTION(verifySphRungHistory, VerifySphRungHistoryAction);
+HPX_PLAIN_ACTION(verifySphLiveRung, VerifySphLiveRungAction);
 
 void sphRungChainTest() {
     auto const savedOptions = getOptions();
     auto options = savedOptions;
     options.compute.sphBucketSize = 1;
     options.hydro.enabled = true;
-    options.hydro.viscosityEvolution = "cullenAndDehnen";
-    // Exercise dyadic history rescaling when that integrator is available, even
+    options.hydro.viscosityEvolution = "morrisAndMonaghan";
+    // Exercise dyadic live-rung commits when that integrator is available, even
     // when the enclosing application selected global stepping. A global-only
     // build still checks the neighbor closure, which does not change live rungs.
     if (options.run.timeIntegrator == "global") {
@@ -1634,10 +1620,10 @@ void sphRungChainTest() {
                 future.get();
             }
         }
-        auto const verifyHistory = [&](int rung) {
+        auto const verifyLiveRung = [&](int rung) {
             futures.clear();
             for (auto const& locality : hpxLocalities()) {
-                futures.push_back(hpx::async<VerifySphRungHistoryAction>(locality, rung));
+                futures.push_back(hpx::async<VerifySphLiveRungAction>(locality, rung));
             }
             for (auto& future : futures) {
                 future.get();
@@ -1645,11 +1631,11 @@ void sphRungChainTest() {
         };
         if (options.run.timeIntegrator != "global") {
             sphCommitBalancedRungs();
-            verifyHistory(0);
+            verifyLiveRung(0);
             particlesSetMinrung(2);
-            verifyHistory(2);
+            verifyLiveRung(2);
             sphParticlesSelectMidpointRungs(0);
-            verifyHistory(1);
+            verifyLiveRung(1);
         }
     }
     sphTreeDestroy(true);
@@ -1663,7 +1649,7 @@ void distributedSphOctreeTest() {
     detail::requireSphTree(hpxSize() == 2, "distributed retained-tree fixture needs two ranks");
     auto options = getOptions();
     options.hydro.enabled = true;
-    options.hydro.viscosityEvolution = "cullenAndDehnen";
+    options.hydro.viscosityEvolution = "morrisAndMonaghan";
     options.chemistry.enabled = false;
     options.starFormation.enabled = false;
     options.analysis.groups = false;
@@ -1815,140 +1801,7 @@ void distributedSphOctreeTest() {
     sphRungChainTest();
 }
 
-namespace detail {
-
-void initializeSphViscosityHistoryRegression() {
-    sphParticlesFree();
-    particlesResize(0);
-    sphParticlesResize(hpxRank() == 0 ? 2 : 0);
-    for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
-        sphParticlesRung(gas) = gas == 0 ? 1 : 3;
-        sphParticlesSetSemiactive(gas, true);
-        sphParticlesSetConverged(gas, true);
-        sphParticlesBulkViscosityCoefficients[gas] = 0.7f;
-        sphScaledDivergence[gas] = {};
-    }
-}
-
-void stageSphViscosityHistoryRegression(int stage) {
-    requireSphTree((sphParticlesViscosityDiagnostics != nullptr) == (sphParticlesSize() != 0),
-        "diagnostic allocation did not match this locality's gas count");
-    for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
-        if (stage == 3 && gas == 1) {
-            requireSphTree(sphRescaleDivergence(sphScaledDivergence[gas], 3, 2),
-                "rung transition cannot encode history");
-            sphParticlesRung(gas) = 2;
-        }
-        auto& diagnostics = sphParticlesViscosityDiagnostics[gas];
-        diagnostics.pendingDivergence = -float(10 * stage + gas + 1);
-        diagnostics.targetBulkViscosityCoefficient = 0.2f;
-        diagnostics.inverseDecayTime = 0.4f;
-        diagnostics.limiter = 1.0f;
-    }
-}
-
-void verifySphViscosityHistoryRegression(int stage) {
-    requireSphTree(sphParticlesViscosityDiagnostics == nullptr,
-        "temporary viscosity diagnostics survived the completed event");
-    for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
-        auto const& history = sphScaledDivergence[gas];
-        int const committedStage = stage == 4 ? 4 : gas == 0 ? 0 : stage == 2 ? 1 : stage;
-        float const divergence = -float(10 * committedStage + gas + 1);
-        double const sampleTimestep = stage == 4 ? 0.137 : std::ldexp(1.0, -sphParticlesRung(gas));
-        Float16Storage expectedHistory{};
-        requireSphTree(sphEncodeDivergence(expectedHistory, divergence, sampleTimestep),
-            "expected endpoint sample cannot be represented");
-        requireSphTree(history.bits == expectedHistory.bits,
-            "viscosity history committed an inactive or diagnostic-only sample");
-        // CD (2010), equation (A15):
-        //   α(Δτ) = α_tar + (α₀ − α_tar) exp(−Δτ/τ_decay).
-        // Completed endpoint intervals are 1/8 on rung 3, 1/4 after the rung
-        // change, and the supplied 0.137 for the global event.
-        // Symbol directory: Δτ → elapsed; α(Δτ) → expected alpha;
-        // α_tar = float(0.2); α₀ = half(0.7); τ_decay⁻¹ = float(0.4).
-        // Code names: α_Δτ = α(Δτ).
-        Float16Storage α_Δτ(0.7f);
-        auto const decay = [&](double Δτ) {
-            α_Δτ = float(
-                double(0.2f) + (double(float(α_Δτ)) - double(0.2f)) * std::exp(-double(0.4f) * Δτ));
-        };
-        if (gas == 1 && stage >= 1) {
-            decay(0.125);
-        }
-        if (gas == 1 && stage >= 3) {
-            decay(0.25);
-        }
-        if (stage == 4) {
-            decay(double(float(0.137)));
-        }
-        requireSphTree(sphParticlesBulkViscosityCoefficients[gas].bits == α_Δτ.bits,
-            "viscosity alpha used the wrong completed endpoint interval");
-    }
-}
-
-}    // namespace detail
-
-HPX_PLAIN_ACTION(
-    detail::initializeSphViscosityHistoryRegression, InitializeSphViscosityHistoryRegressionAction);
-HPX_PLAIN_ACTION(
-    detail::stageSphViscosityHistoryRegression, StageSphViscosityHistoryRegressionAction);
-HPX_PLAIN_ACTION(
-    detail::verifySphViscosityHistoryRegression, VerifySphViscosityHistoryRegressionAction);
-
-void sphViscosityHistoryTest() {
-    auto const savedOptions = getOptions();
-    auto options = savedOptions;
-    options.hydro.enabled = true;
-    options.hydro.viscosityEvolution = "cullenAndDehnen";
-    options.chemistry.enabled = false;
-    options.starFormation.enabled = false;
-    setOptions(options);
-    std::vector<hpx::future<void>> pending;
-    for (auto const& locality : hpxLocalities()) {
-        pending.push_back(hpx::async<InitializeSphViscosityHistoryRegressionAction>(locality));
-    }
-    for (auto& future : pending) {
-        future.get();
-    }
-    for (int stage = 0; stage < 5; ++stage) {
-        sphParticlesBeginViscosityDiagnostics();
-        pending.clear();
-        for (auto const& locality : hpxLocalities()) {
-            pending.push_back(
-                hpx::async<StageSphViscosityHistoryRegressionAction>(locality, stage));
-        }
-        for (auto& future : pending) {
-            future.get();
-        }
-        SphRunParameters parameters{};
-        parameters.minimumRung = stage == 1 ? 3 : stage == 3 ? 2 : 0;
-        parameters.maximumRung = stage == 1 ? 3 : stage == 3 ? 2 : kMaxRung - 1;
-        parameters.hydroKickTimestep = stage == 0 || stage == 2 ? 0.0 : 0.125;
-        parameters.viscositySampleInterval = stage == 4 ? 0.137 : 1.0;
-        parameters.viscosityBaseTimestep = 1.0;
-        parameters.globalTimestep = stage == 4;
-        parameters.viscosityInitializeHistory = stage == 0;
-        if (stage != 2) {
-            sphParticlesUpdateTargetAlpha(parameters);
-        }
-        sphParticlesEndViscosityDiagnostics();
-        pending.clear();
-        for (auto const& locality : hpxLocalities()) {
-            pending.push_back(
-                hpx::async<VerifySphViscosityHistoryRegressionAction>(locality, stage));
-        }
-        for (auto& future : pending) {
-            future.get();
-        }
-    }
-    std::cout << "SPH viscosity endpoint history, rung rescaling, and temporary scratch regression "
-                 "passed\n"
-              << std::flush;
-    setOptions(savedOptions);
-}
-
 void sphTreeTest() {
-    sphViscosityHistoryTest();
     if (hpxSize() > 1) {
         distributedSphOctreeTest();
         return;

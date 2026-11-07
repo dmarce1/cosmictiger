@@ -2,12 +2,12 @@
 
 **Status: implemented and focused validation passed, November 4, 2026.**
 The default and only positive-duration SPH update is the chronological midpoint
-construction below. It uses two hydro evaluations, one reusable acceleration
-vector and one entropy-rate scalar per gas particle, plus temporary affected-particle
-baseline and exchange records. No event scratch enters migration or checkpoints.
+construction below. It uses two hydro evaluations and one entropy-rate scalar per
+gas particle, plus temporary affected-particle baseline and exchange records. No
+event scratch enters migration or checkpoints.
 SPH hydro is orchestrated by the driver, never called from a gravity kick.
-The published artificial-viscosity switch projections are retained; their
-accuracy limitation is explicit in section 7. Section 9 explains the alternative
+The published Morris–Monaghan endpoint update is retained; its accuracy
+limitation is explicit in section 7. Section 9 explains the alternative
 nested endpoint construction and its additional state requirements.
 
 The essential rule is that an interacting pair shares one integration clock:
@@ -105,10 +105,6 @@ coefficient, and \(\beta\) is the von Neumann–Richtmyer coefficient. The optio
 pair-symmetric Balsara factor multiplies both viscous force and heating.
 These are the comoving conversions of [Monaghan (1992), section 4](https://articles.adsabs.harvard.edu/pdf/1992ARA%26A..30..543M),
 implemented in [`monaghan.hpp`](../cosmictiger/sph/viscosity/monaghan.hpp).
-The Price/Phantom branch replaces (D3) by its two directed viscous pressures;
-their heating contributions can differ at the two endpoints. Its complete
-force must still be evaluated once and reversed for the other endpoint, as in
-[`price_etal.hpp`](../cosmictiger/sph/viscosity/price_etal.hpp).
 
 For artificial conduction, the current equal-mass exchange has the form
 
@@ -221,8 +217,7 @@ h_i^{\rm lim}=\min(h^{\rm cap},h_i^{\rm CFL},h_i^{\rm acc},
 
 A vanishing denominator supplies no restriction. \(c_{\rm width}\) is the
 kernel viscosity-width conversion, and the two viscosity bounds use the
-maximum coefficients encountered for that target. The Phantom branch uses
-its unregularized radial compression speed in place of \(-\mu\). Gravity
+maximum coefficients encountered for that target. Gravity
 has its separate timestep criterion; a hydro event does not fold a scheduled
 gravity kick into the hydro acceleration limit. The dyadic proposal is
 
@@ -448,14 +443,12 @@ boundaries. They must not persist or expose the provisional predictor. A failed
 event must restore its baseline before further work or terminate without
 publishing a checkpoint as though the event completed.
 
-### Storage: one acceleration and one entropy rate, plus event scratch
+### Storage: one entropy rate, plus event scratch
 
-The added reusable rate storage is one three-component acceleration
-field and one entropy-rate field per gas particle: four scalar values, or
-16 scalar-data bytes if each is a `float`, before alignment/container overhead.
-Their numerical meaning and lifetime must be explicit. A complete diagnostic
-acceleration, a selected-rung hydro rate, and an applied impulse have different
-meanings even when they have the same vector shape.
+The added reusable rate storage is one entropy-rate field per gas particle: four
+scalar-data bytes as a `float`, before alignment/container overhead. Its numerical
+meaning and lifetime must be explicit. A selected-rung hydro rate and an applied
+impulse have different meanings even when they have the same shape.
 
 One algebraic possibility stores stage-one rates
 \(k_1=(\mathbf a^{(1)},\dot A^{(1)})\), forms a provisional state, and uses
@@ -479,19 +472,13 @@ The implementation saves the original velocity and entropy, plus the
 first-stage proposed rung, in temporary records for affected particles. It
 restores velocity and entropy exactly before the corrector, retains the tighter
 rung proposal from both stages, then adds the stage-two increment. This avoids subtracting
-a rounded predictor. Temporary alpha baselines preserve the original switch
-coefficient for the final switch update. Source snapshots and reciprocal-exchange
-buffers also occupy temporary memory; the four scalar rate components are not
-a bound on total event memory.
+a rounded predictor. Source snapshots and reciprocal-exchange buffers also occupy
+temporary memory; the scalar rate field is not a bound on total event memory.
 
-For each stage the reusable acceleration field is cleared, filled by the
-force-only gravity diagnostic when required, and augmented by the complete hydro
-and external acceleration. The direct shock sensor consumes that field before
-it is reused for stage two. The selected-rung impulses are kept in reciprocal
-update records, so the acceleration field need not retain \(k_1\) for the
-corrector. The scalar field holds the stage entropy rate. Both arrays are
-event-local allocations, released after completion; no persistent particle,
-migration or checkpoint fields are added.
+The selected-rung impulses are kept in reciprocal update records, so no rate
+field need retain \(k_1\) for the corrector. The scalar field holds the stage
+entropy rate. It is an event-local allocation, released after completion; no
+persistent particle, migration or checkpoint fields are added.
 
 ## 5. What is conserved, and what second order means
 
@@ -574,151 +561,30 @@ ordering, discontinuous rung reassignment, unresolved shocks, or finite
 precision below the refinement-error floor. Such cases need their own
 analysis and measurements.
 
-## 6. Direct shock sensing from total canonical acceleration
+## 6. Balsara limiter as stage data
 
-The direct sensor uses the same stored peculiar-velocity convention
-as the former history-based implementation. Define
+The velocity-dependent Balsara limiter is stage data: its baseline value needs
+the baseline velocity gradient, and its midpoint value needs the predictor
+velocity gradient. Holding the baseline limiter fixed in the second force call
+omits its velocity derivative from the RK2 expansion. Refreshing this limiter
+does not itself advance the Morris–Monaghan coefficient.
 
-\[
-V=\nabla_{\mathbf x}\mathbf w,\qquad
-\mathbf F=\frac{D\mathbf w}{D\tau},\qquad
-\frac{D}{D\tau}=\partial_\tau+\frac{\mathbf w}{a}\cdot\nabla_{\mathbf x}.
-\]
+## 7. Retained Morris–Monaghan update and its limitation
 
-Differentiating a material derivative gives the locally derived identity
+The selected policy is to preserve the published Morris–Monaghan relaxation
+rather than replace it with an invented stage-consistent ODE. Its helper uses
+backward Euler for the source/decay equation, once at each particle's completed
+own interval endpoint, so both hydro stages read the coefficient from the last
+endpoint.
 
-\[
-\frac{DV}{D\tau}=\nabla_{\mathbf x}\mathbf F-\frac1aV^2,
-\qquad
-\boxed{\mathcal Q=a\,\mathrm{tr}(\nabla_{\mathbf x}\mathbf F)
-                       -\mathrm{tr}(V^2)
-       =a\frac{D\,\mathrm{tr}(V)}{D\tau}}.
-\tag{D17}
-\]
-
-The contraction is \(\mathrm{tr}(V^2)=\sum_{p,q}V_{pq}V_{qp}\), not the
-sum of squared matrix entries. The shock magnitude is based on
-\(\max(0,-\mathcal Q)\), with the chosen published limiter and target rule.
-The corrected moment-matrix reconstruction follows the construction in
-[Cullen & Dehnen (2010), Appendix B](https://arxiv.org/pdf/1006.1524): reconstruct
-velocity and acceleration gradients from neighbor differences using the same
-geometry and resolved moment subspace.
-
-This \(\mathcal Q\) follows the stored peculiar-gradient convention. It
-does not silently substitute the physical total-velocity divergence:
-
-\[
-\nabla_{\mathbf r}\cdot\mathbf v_{\rm pec}=\frac{\mathrm{tr}(V)}{a^2},
-\qquad
-a^4\frac{D}{Dt}(\nabla_{\mathbf r}\cdot\mathbf v_{\rm pec})
- =\mathcal Q-2a\dot a\,\mathrm{tr}(V).
-\tag{D18}
-\]
-
-Adding the Hubble velocity to \(V\) requires its corresponding homogeneous
-terms as well. The implementation must choose one convention consistently;
-this contract chooses (D17).
-
-The \(\mathbf F_i\) used by the sensor is the **instantaneous total canonical
-acceleration**, including gravity, every hydrodynamic neighbor, and applicable
-external acceleration at the diagnostic state. It is not
-\(\delta\mathbf w_i/h_r\) from the current selected-rung kick: that quantity
-omits operators assigned to other rungs. To reconstruct \(\nabla\mathbf F_i\),
-the sensor needs similarly complete \(\mathbf F_j\) for its source neighbors.
-
-Diagnostic evaluation and scheduled impulse application are separate:
-
-- Evaluating a force for the sensor does not authorize applying that force's
-  impulse at the current event.
-- Every diagnostic target and source must use one coherent position,
-  velocity, thermodynamic and coefficient state, with completed remote reads.
-- Gravity diagnostics must refer to that state's instantaneous acceleration;
-  signed closing/opening gravity kick weights are not force samples.
-- A direct force-dependent sensor has a data dependency: evaluate total
-  \(\mathbf F\), exchange the source values, reconstruct gradients, then
-  compute the target/limiter. If a new projected \(\alpha\) is subsequently
-  used by the hydro force, evaluate that force with the newly defined
-  coefficient. Do not describe two hydro evolution stages as a promise that
-  no additional diagnostic force or gradient work is required.
-- The velocity-dependent Balsara limiter is also stage data: its baseline
-  value needs the baseline velocity gradient, and its midpoint value needs
-  the predictor velocity gradient. Holding the baseline limiter fixed in the
-  second force call omits its velocity derivative from the RK2 expansion.
-  Refreshing this limiter does not itself advance the published alpha switch.
-
-The fixed-coefficient proof in section 5 avoids this coefficient dependency.
-For evolving coefficients, their sampling and projection order must be
-explicit; a new direct sensor by itself does not supply a second-order
-integrator for \(\alpha\).
-
-## 7. Retained published viscosity rules and their limitation
-
-The selected policy is to preserve the published shock-triggered increases,
-decays and limiter placement, rather than replace them with an invented
-smooth ODE. For example, [Cullen & Dehnen (2010), equation (A15)](https://arxiv.org/pdf/1006.1524)
-uses an immediate increase to the target and otherwise exponential decay
-toward that target. [Hu et al. (2014), equation (17)](https://arxiv.org/pdf/1402.1788)
-multiplies the entire selected increase/decay result by its limiter. The
-Price/Phantom mode retains its published backward-Euler target relaxation,
-implemented in [`price_etal.cpp`](../src/sph/viscosity/price_etal.cpp).
-The current Morris–Monaghan helper also uses backward Euler for its
-source/decay equation.
-
-Symbolically, the Cullen–Dehnen and Hu rules are
-
-\[
-\widetilde\alpha=
-\begin{cases}
-\alpha_{\rm tar},&\alpha\leq\alpha_{\rm tar},\\
-\alpha_{\rm tar}+(\alpha-\alpha_{\rm tar})e^{-\delta/\tau_d},
- &\alpha>\alpha_{\rm tar},
-\end{cases}
-\qquad
-\alpha_{\rm CD}^{+}=\widetilde\alpha,\qquad
-\alpha_{\rm Hu}^{+}=\xi\widetilde\alpha.
-\tag{D19}
-\]
-
-The irreversible projection and branch crossings are not an ordinary smooth
-RK right-hand side. In particular, applying the Hu multiplier twice while
-constructing one event's two stages would generally introduce an unintended
-\(\xi^2\) factor. A provisional stage must never consume a second physical
-coefficient-evolution interval or permanently advance switch history.
-
-Retaining these rules means the unqualified claim “the full adaptive-viscosity
-system is second order for every smooth flow and shock” is unavailable. A
-constant target's exponential decay is exact, but that does not make a
-time-varying target sampled at one endpoint second order. Backward-Euler
-relaxation is first order even on a smooth decay branch. Direct sensing removes
-the old endpoint-difference lag; it does not remove these other sources of
-order reduction. The rigorous RK2 claim is for the smooth hydro evolution
-with fixed or suitably stage-consistent coefficients, and the retained switch
-policy remains a documented limitation of the coupled calculation.
-
-The implemented stage timing is explicit. Let \(\mathcal D^0\) and
-\(\mathcal D^*\) denote the complete-force gradient diagnostics evaluated
-from the baseline and predictor states, and let \(\mathcal P_\delta\) be the
-selected published coefficient update over conformal interval \(\delta\).
-For particles whose own rung is due, the stages use
-
-\[
-k_1=F_r(Y^0,\alpha^0),\qquad
-\alpha^*=\mathcal P_{h_r/2}(\alpha^0;\mathcal D^0),
-\]
-\[
-k_2=F_r(Y^*,\alpha^*),\qquad
-\alpha^+=\mathcal P_{h_r}(\alpha^0;\mathcal D^*).
-\tag{D19a}
-\]
-
-The final switch update restores \(\alpha^0\) before applying the full
-interval rule; it does not evolve again from \(\alpha^*\). Thus the provisional
-Hu multiplication is not compounded into a permanent \(\xi^2\) update.
-Inactive coarse recoil recipients participate in both hydro stages but retain
-their coefficient until their own rung event. Morris–Monaghan retains its
-separate completed-interval endpoint update. These choices preserve the
-published switch forms and particle clocks; they do not extend the smooth,
-fixed-coefficient order proof to the projected adaptive system.
+Retaining this rule means the unqualified claim “the full adaptive-viscosity
+system is second order for every smooth flow and shock” is unavailable.
+Backward-Euler relaxation is first order even on a smooth decay branch. The
+rigorous RK2 claim is for the smooth hydro evolution with fixed or suitably
+stage-consistent coefficients, and the retained endpoint update remains a
+documented limitation of the coupled calculation. It preserves the published
+switch form and particle clocks; it does not extend the smooth, fixed-coefficient
+order proof to the adaptive system.
 
 ## 8. Implementation and validation
 
@@ -730,21 +596,14 @@ The implementation is organized as follows:
   only estimate rates and timestep bounds. Both stage timestep proposals are retained.
 - [`pair_kick.hpp`](../cosmictiger/sph/pair_kick.hpp) owns each unordered pair
   on its finer rung, with a rank/index tie break. CPU and CUDA kernels apply
-  the same due-pair filter while complete-force diagnostics can visit all gas.
+  the same due-pair filter.
 - [`driver.cpp`](../src/core/driver.cpp) and
   [`scenario_driver.cpp`](../src/core/scenario_driver.cpp) place coincident
   hydro between the gravity closing and opening actions. Deferred openings
   are sealed to base-particle identities before gas sorting.
-- [`kick.cpp`](../src/gravity/kick.cpp) supplies a force-only complete FMM
-  acceleration for the direct shock sensor. Its temporary base-particle sort
-  is reversed before the retained SPH tree resumes. It applies no kick or rung
-  change. With the single reusable acceleration buffer, this gravity diagnostic
-  is recomputed for each hydro stage.
-- CPU/CUDA prehydro kernels reconstruct the stage velocity and acceleration
-  gradients. Balsara is refreshed before both hydro evaluations. Cullen-Dehnen
-  first publishes current divergence signs, then consumes that same-stage
-  neighbor snapshot. The stored divergence scalar remains diagnostic/restart
-  data and is not the positive-duration shock sensor.
+- CPU/CUDA prehydro kernels rebuild the Balsara factor from the stage velocities
+  before both hydro evaluations, and advance Morris–Monaghan alpha only at
+  completed particle endpoints.
 
 The persistent particle layout is unchanged. Completed-event checkpoints need
 no RK stage data; a restarted run uses the new two-call method. There is no
@@ -756,13 +615,11 @@ analytic damping, a viscous mixed-rung pair, the pair with conduction, and a
 three-particle chain with noncommuting coarse/coarse and coarse/fine operators.
 The chain executes fine/coarse/fine composition at fixed geometry and compares
 refined solutions. These cases isolate temporal integration with fixed viscosity
-coefficients; they do not establish accuracy of instantaneous switch projections.
+coefficients; they do not establish accuracy of the Morris–Monaghan endpoint update.
 
-Kernel tests cover immutable shared-coarse reads under all 24 traversal orders
-and manufactured affine acceleration/velocity gradients, including cosmological
-scaling. Application gravity tests cover deferred signed openings, complete-force
-sensor evaluation with restricted rung ranges, exact state/order restoration,
-remote reciprocal updates, current Cullen-Dehnen signs, and an empty root locality.
+Kernel tests cover immutable shared-coarse reads under all 24 traversal orders.
+Application gravity tests cover deferred signed openings, remote reciprocal
+updates, and an empty root locality.
 Existing application tests additionally exercise moving self-gravitating gas,
 drift/kick refinement, retained trees, migration and completed-event restart.
 

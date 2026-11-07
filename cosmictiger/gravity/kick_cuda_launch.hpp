@@ -494,8 +494,7 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     eindices[workitems.size()] = ecount;
     CudaKickData data;
 #if COSMICTIGER_WITH_SPH
-    data.midpointHydro = !kparams.forceOnly && !kparams.sphAccelerationOnly && sphMidpointEnabled();
-    data.sphStageAccelerations = kparams.sphAccelerationOnly ? sphStageAccelerations() : nullptr;
+    data.midpointHydro = !kparams.forceOnly && sphMidpointEnabled();
 #endif
     for (int dim = 0; dim < kDimensions; ++dim) {
         data.globalAcceleration[dim] = (kparams.globalTimestep || kparams.deferGasOpening) ?
@@ -522,7 +521,6 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     bool const gasKick = data.sph && !kparams.forceOnly;
     data.catIndex = gasKick ? &particlesCatIndex(0) : nullptr;
     data.sphHydroFlags = gasKick && data.midpointHydro ? sphParticlesFlags : nullptr;
-    data.sphScaledDivergence = gasKick && data.midpointHydro ? sphScaledDivergence : nullptr;
 #else
     data.catIndex = nullptr;
 #endif
@@ -543,7 +541,6 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
         data.pot = savePotential && kparams.doPhi ? &particlesPot(0) : nullptr;
     }
     if (kparams.snapshotDiagnostics) {
-        ALWAYS_ASSERT(!kparams.sphAccelerationOnly);
         data.snapshotDiagnostics = particlesGravityDiagnostics;
     }
     ALWAYS_ASSERT(layout.massPlane == data.sph);

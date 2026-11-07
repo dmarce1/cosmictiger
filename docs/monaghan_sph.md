@@ -157,8 +157,7 @@ Let \(\mathbf r_{ij}=\mathbf r_i-\mathbf r_j\),
 This is one of the two choices explicitly offered on p.554. A pair participates
 when it lies inside either support radius. The zero-separation gradient is zero.
 
-For `none`, `morrisAndMonaghan`, and `cullenAndDehnen`, the artificial-viscosity
-contributions to the physical-coordinate pair rates are
+The artificial-viscosity contributions to the physical-coordinate pair rates are
 
 \[
  \frac{d\mathbf v_i}{dt}
@@ -170,7 +169,7 @@ contributions to the physical-coordinate pair rates are
 The [variational operator](variational_sph.md#constraint-and-equations) supplies
 the pressure force and reversible thermal work separately.
 
-These modes follow equation 4.1, the unnumbered definition of
+These terms follow equation 4.1, the unnumbered definition of
 \(\Pi_{ij}\) that follows it, and equation 4.2, pp.550–551:
 
 \[
@@ -190,33 +189,19 @@ selected family. The regularization remains \(\epsilon=0.01\). With variable
 viscosity disabled the default \(\alpha=1\) and \(\beta=2\) recover the constant
 coefficients of the paper. The default evolving coefficients are described below.
 
-The optional Balsara (1995) shear limiter defaults on for constant α (`none`)
-and Morris–Monaghan. Cullen–Dehnen, Hu and Price require it off. It uses equation (72) of
+The Balsara (1995) shear limiter is always on with Morris–Monaghan;
+`hydro.balsaraSwitch` selects it only for constant α (`none`), where it defaults
+on. It uses equation (72) of
 Springel, Pakmor, Zier & Reinecke (2021), *Simulating cosmic structure formation
 with the GADGET-4 code*, MNRAS 506, 2871–2949,
 [doi:10.1093/mnras/stab1855](https://doi.org/10.1093/mnras/stab1855)
 ([author PDF, section 5.3](https://wwwmpa.mpa-garching.mpg.de/gadget4/gadget4-code-paper.pdf)).
 Equation (72) belongs to GADGET-4, not to the original Balsara paper.
-An explicit `hydro.balsaraSwitch=true` with any other model is an error.
-CD, Hu and Price already supply their own shear suppression.
-The default and validation are resolved after CLI/INI precedence.
+Option processing normalizes `hydro.balsaraSwitch` to true for Morris–Monaghan,
+after CLI/INI precedence and for every programmatic option update, so a false
+value has no effect with that model.
 
-The overlap concerns purpose, not algebraic identity.
-[Cullen–Dehnen equations (13), (18)](https://arxiv.org/html/1006.1524#S3.SS3)
-limit the shock indicator using the shear tensor and neighbor compression signs.
-[Hu equations (17), (19)](https://arxiv.org/html/1402.1788#S2.SS3)
-multiply the complete alpha update by a quadratic divergence/curl limiter;
-[GADGET-4's force code](https://wwwmpa.mpa-garching.mpg.de/gadget4/doxygen/hydra_8cc_source.html#l00908)
-therefore uses unit pair factors with `TIMEDEP_ART_VISC`.
-[Price equations (46), (47)](https://arxiv.org/html/1702.03930#S2.SS2.SSS9)
-already include a modified Balsara limiter in the shock indicator. An extra pair
-factor further suppresses decaying alpha and, for Price, the independent quadratic
-beta term retained by equations (40)–(41). It changes the published schemes'
-forces; removing it is not a numerically neutral optimization. Constant α and
-MM have no corresponding built-in shear limiter.
-
-For constant α and Morris–Monaghan, enabling Balsara makes the density pass
-accumulate the separate SPH gather estimates
+Balsara makes the density pass accumulate the separate SPH gather estimates
 \(\rho_i\,\nabla\!\cdot\mathbf v_i=-\sum_j m_j\mathbf v_{ij}\cdot\nabla_i W_{ij}(H_i)\)
 and
 \(\rho_i\,\nabla\!\times\mathbf v_i=\sum_j m_j\mathbf v_{ij}\times\nabla_i W_{ij}(H_i)\).
@@ -224,8 +209,7 @@ It computes \(f_i=|\nabla\!\cdot\mathbf v_i|/(|\nabla\!\cdot\mathbf v_i|+
 |\nabla\!\times\mathbf v_i|)\), with \(f_i=0\) when both derivatives vanish,
 and multiplies \(\Pi_{ij}\) by \((f_i+f_j)/2\) in both force and heating.
 The density normalization cancels in the ratio. These direct divergence/curl
-sums are omitted when Balsara is disabled, apart from the divergence required
-for Morris–Monaghan's endpoint compression source.
+sums are omitted when constant viscosity disables Balsara.
 
 All derivatives use peculiar velocity differences, with homogeneous Hubble
 expansion excluded from the sensor.
@@ -237,12 +221,12 @@ passes, encoded as one `uint8_t` per gas particle:
 \]
 
 The endpoints zero and one are exact; the maximum absolute rounding error is
-\(1/510\). Evaluation and force/source staging use float. Constant α and Morris–Monaghan
-recompute Balsara from the baseline and predictor velocity states. The second
+\(1/510\). Evaluation and force/source staging use float. Balsara is recomputed
+from the baseline and predictor velocity states. The second
 hydro evaluation uses the predictor's limiter. Factors are transient and are
 recomputed after restart or migration. Checkpoint metadata records whether the
 limiter is enabled and rejects a restart with a different setting.
-Use `--hydro.balsaraSwitch=false` to disable this shear correction for constant α or Morris–Monaghan.
+Use `--hydro.balsaraSwitch=false` to disable this shear correction for constant α.
 
 The variational pressure terms and symmetric artificial viscosity conserve linear
 and angular momentum and balance kinetic with internal energy. This algebraic
@@ -270,18 +254,16 @@ adiabatic-index scaling. The decay length is the same calibrated viscosity lengt
 smooth-flow initialization is an implementation choice, since the paper uses
 problem-dependent initial values, including elevated α near the initial Sod interface.
 
-Morris–Monaghan and Cullen–Dehnen pair forces and heating use
+Morris–Monaghan pair forces and heating use
 \(\bar\alpha_{ij}=(\alpha_i+\alpha_j)/2\), preserving pair symmetry.
-Price mode uses the separate directed coefficients below.
 The single quadratic coefficient `hydro.viscosityBeta` (default 2)
 has a model-dependent meaning:
 
-- With `morrisAndMonaghan`, `cullenAndDehnen`, and `huEtal`, \(\beta_{ij}=\texttt{viscosityBeta}\,
+- With `morrisAndMonaghan`, \(\beta_{ij}=\texttt{viscosityBeta}\,
   \bar\alpha_{ij}\), the convention of Morris & Monaghan's equation (3), so β decays
   with α.
-- With `none` and `priceEtAl`, \(\beta_{ij}=\texttt{viscosityBeta}\) is constant: the
-  fixed Monaghan coefficients, and Phantom's equation (41), in which β does not
-  multiply α.
+- With `none`, \(\beta_{ij}=\texttt{viscosityBeta}\) is constant: the fixed
+  Monaghan coefficients.
 
 With `--hydro.viscosityEvolution=none` every pair uses the constant
 `hydro.viscosityAlpha` and `hydro.viscosityBeta`; the disabled mode allocates no
@@ -303,8 +285,8 @@ belongs to a later switch, not to Morris–Monaghan equation (13).
 
 Only the scalar `bulkViscosityCoefficient` (α) survives sorting, domain migration,
 and checkpoints; no rate or predictor is stored. It occupies two bytes in IEEE
-binary16, while the update arithmetic uses float. The configured MM minimum, or
-the selected gradient model's maximum, must lie in `[2^-24, 65504]`. Constant-alpha
+binary16, while the update arithmetic uses float. The configured minimum must lie
+in `[2^-24, 65504]`. Constant-alpha
 viscosity has no per-particle alpha array and keeps its float range. The density
 convergence flag ensures retries do not advance α twice. Morris–Monaghan updates occur only at
 each particle's completed own interval endpoint, before gas rung changes and
@@ -312,11 +294,9 @@ source conversion. Subsequent midpoint force evaluations use the last endpoint's
 α. Startup, semiactive measurements, output preparation and post-source bound
 estimates do not advance α. This retained backward-Euler endpoint update is first
 order; it limits the accuracy of the coupled variable-coefficient calculation
-even though the velocity/entropy hydro operator uses RK2. CD, Hu and Price instead
-evaluate their switches at the RK stages, as described below. Silo writes a
+even though the velocity/entropy hydro operator uses RK2. Silo writes a
 dimensionless `bulkViscosityCoefficient` gas field when viscosity evolution is enabled.
-Morris–Monaghan retains and writes no divergence field; Cullen–Dehnen has
-additional state described below.
+Morris–Monaghan retains and writes no divergence field.
 
 In the cosmological variables below, the normalized density derivative sum is
 \(D_i=\nabla_{\mathbf x}\cdot\mathbf w_i=a^2\theta_{{\rm pec},i}\), where
@@ -330,238 +310,6 @@ In the cosmological variables below, the normalized density derivative sum is
 
 This excludes homogeneous expansion from the compression sensor. The actual
 viscous pair force still uses physical relative velocity including Hubble flow.
-
-## Cullen–Dehnen variable viscosity
-
-`--hydro.viscosityEvolution=cullenAndDehnen` selects Cullen & Dehnen (2010),
-*Inviscid smoothed particle hydrodynamics*, MNRAS 408, 669–683,
-[doi:10.1111/j.1365-2966.2010.17158.x](https://doi.org/10.1111/j.1365-2966.2010.17158.x)
-([author paper](https://arxiv.org/pdf/1006.1524)). Their equations (13)–(16) define
-
-\[
- A_i=\xi_i\max\!\left[-\frac{D(\nabla\cdot\mathbf v)_i}{Dt},0\right],\qquad
- \alpha_{{\rm loc},i}=\alpha_{\max}
- \frac{H_i^2 A_i}{(v_i^{\rm sig})^2+H_i^2 A_i},
-\]
-\[
- v_i^{\rm sig}=\max_{j:r_{ij}\le H_i}
- \left[\frac{c_i+c_j}{2}-\min(0,\mathbf v_{ij}\cdot\widehat{\mathbf r}_{ij})\right],
- \qquad \tau_i=\frac{H_i}{2\ell v_i^{\rm sig}}.
-\]
-
-Here the paper's smoothing length is the **full support radius** \(H_i\), unlike
-the Morris–Monaghan cubic length \(H_i/2\). The CD floor and initial α are zero;
-\(\ell=0.05\) follows the paper. `hydro.viscosityAlphaMax=2` is an implementation
-choice. Equation (A15) raises α immediately to the target when needed and otherwise
-decays it exponentially toward that target.
-
-The limiter is equation (18), with the neighbor compression-sign measure from
-(17):
-\[
- R_i=\frac{\sum_jm_j\operatorname{sign}[(\nabla\cdot\mathbf v)_j]W_{ij}}{\rho_i},
- \qquad
- \xi_i=\frac{|2(1-R_i)^4\nabla\cdot\mathbf v_i|^2}
- {|2(1-R_i)^4\nabla\cdot\mathbf v_i|^2+\operatorname{tr}(\mathbf S_i\mathbf S_i^T)},
-\]
-where \(\mathbf S_i=\tfrac12(\mathbf V_i+\mathbf V_i^T)
--\tfrac13\operatorname{tr}(\mathbf V_i)\mathbf I\) and
-\(\mathbf V_i=\nabla\mathbf v_i\). The matrix-corrected gradient estimates follow
-(B2), (B4), and (B7), using mass/kernel-gradient weights so they do not read
-densities being updated concurrently on other ranks. A symmetric pseudoinverse
-handles planar or collinear neighborhoods on their resolved subspace.
-Positive-duration RK2 events use the direct acceleration-gradient alternative
-in Appendix B3. Define the canonical velocity gradient \(\mathbf V\), total
-instantaneous canonical acceleration \(\mathbf F=D\mathbf w/D\tau\), and
-\(G=\operatorname{tr}\mathbf V=a^2\theta_{\rm pec}\). The local conversion to
-the stored switch slope is
-
-\[
- Q=a\frac{DG}{D\tau}
-   =a\operatorname{tr}(\nabla_{\mathbf x}\mathbf F)
-      -\operatorname{tr}(\mathbf V^2).
-\]
-
-Here \(\operatorname{tr}(\mathbf V^2)=\sum_{p,q}V_{pq}V_{qp}\), not the sum
-of squared matrix entries. The force diagnostic includes every hydrodynamic
-neighbor, instantaneous gravity and external acceleration, even when a pair's
-impulse is not due at this rung event. The driver supplies gravity diagnostics;
-gravity kicks do not call SPH. Force values are exchanged before reconstructing
-their gradients. CD additionally obtains a current immutable neighbor-sign
-snapshot for equation (17). This requires diagnostic gradient passes beyond
-the two hydro evolution evaluations.
-
-The direct slope replaces differencing stored endpoint samples. It retains the
-canonical cosmological convention, including the \(2H\theta_{\rm pec}\) term
-derived below. CD, Hu and Price update alpha at the RK stages using their
-published projection and decay rules. The predictor uses the half interval;
-the accepted coefficient is recomputed from its saved incoming value over the
-full interval, so the predictor does not cause a second independent decay or
-Hu limiter application. There is no additional completed-endpoint alpha update
-for these three models. Startup and zero-duration estimates do not advance
-alpha through a finite interval. Morris–Monaghan retains its endpoint update.
-
-The retained compact divergence scalar supports `velocityDivergence` output and checkpoint
-compatibility; it is not the derivative source for the direct RK-stage sensor.
-All three gradient models share this scalar, with no wrapper, second divergence
-or previous sampled rung. The `velocityDivergence` output key reports decoded canonical
-\(G\) at the current output coordinates, with inverse-code-time units
-and explicit convention metadata. A density-only output refresh publishes that
-diagnostic without evolving alpha. Output remains canonical \(G\), rather than
-the physical peculiar divergence \(G/a^2\). The locally derived
-dimensionless storage normalization is
-
-\[
- q_n=\delta\tau_n G_n,\qquad
- \widehat G_n=\operatorname{float}(q_n)/\delta\tau_n.
-\]
-
-Here \(\delta\tau_n\) is the particle's own conformal hydro interval. The
-`Float16Storage* sphScaledDivergence` array stores one two-byte value per gas
-particle. The live dyadic rung recovers the normalization. Every dyadic rung
-mutation rescales the value according to
-
-\[
- q_{\rm new}=q_{\rm old}\,2^{r_{\rm old}-r_{\rm new}},
-\]
-
-preserving the decoded canonical gradient to storage accuracy. Global stepping
-instead uses the previous completed global duration from shared driver state;
-before the first completion it falls back to the base duration. Startup dyadic
-samples use the current live rung. No previous-rung byte, per-particle timestamp,
-or exponent is needed, and the derivative itself is transient.
-The magnitude of \(q_n\) is not assumed bounded by one and is not clamped to it.
-Values outside finite binary16 range are rejected rather than saturated. In
-particular, the global startup base duration can exceed the subsequently accepted CFL
-step, so startup normalization need not produce an order-one value.
-
-The history occupies exactly two bytes per gas particle in memory, checkpoints
-and migration, down from eight, in addition to the unchanged two-byte binary16 α.
-Half precision limits the stored diagnostic accuracy; the direct stage slope
-does not subtract those quantized samples. Target α, decay
-rate, limiter and pending divergence are four float scratch fields (sixteen bytes),
-allocated for gradient-switch diagnostics and released after the event.
-The retained instantaneous target increases and finite-step decay/projection
-rules are not a general second-order integrator for alpha. Every evolution
-scheme writes dimensionless `bulkViscosityCoefficient`; selecting `none`
-allocates neither α evolution state nor divergence state. Under CD, β follows α
-as described above.
-
-## Hu et al. variable viscosity
-
-`--hydro.viscosityEvolution=huEtal` (the default) selects Hu et al. (2014), *SPHGal*,
-[equations (16)–(19)](https://arxiv.org/html/1402.1788#S2.SS3), implemented in
-`viscosity/hu_etal.hpp`. The matrix-corrected peculiar gradients and GADGET-4
-cosmological shock-slope conversion are shared with Cullen–Dehnen, but the target
-is unlimited:
-
-\[
- Q_i=\max\!\left(0,-\frac{D(\nabla\cdot\mathbf v)_i}{Dt}\right),\qquad
- \alpha_{{\rm tar},i}=\alpha_{\max}
- \frac{H_i^2Q_i}{H_i^2Q_i+c_i^2},\qquad
- \xi_i=\frac{(\nabla\cdot\mathbf v_i)^2}
- {(\nabla\cdot\mathbf v_i)^2+|\nabla\times\mathbf v_i|^2+10^{-4}(c_i/H_i)^2}.
-\]
-
-The entire update is multiplied by the current limiter, including decaying old
-viscosity:
-
-\[
- \alpha_i^{n+1}=\xi_i
- \begin{cases}
- \alpha_{{\rm tar},i},&\alpha_i^n\le\alpha_{{\rm tar},i},\\
- \alpha_{{\rm tar},i}+(\alpha_i^n-\alpha_{{\rm tar},i})e^{-\Delta t/\tau_i},
- &\alpha_i^n>\alpha_{{\rm tar},i}.
- \end{cases}
-\]
-
-`hydro.viscosityAlphaMaxHu=1` sets the unlimited maximum;
-`hydro.viscosityDecayHu=0.05` gives \(\tau_i=H_i/(2\ell V_i)=10H_i/V_i\),
-with the same maximum approaching-pair speed \(V_i\) as CD. Here \(H_i\) is the
-full support radius. The switch starts at zero and imposes no extra alpha floor,
-as in the equations above; Hu's separate 0.1 floor used in their test suite is
-not imposed. `hydro.balsaraSwitch` must be false for Hu; enabling it is an error.
-Pair beta follows alpha as for CD; the existing Monaghan pair operator is retained.
-Hu shares the gradient-state lifecycle, including `velocityDivergence` output and migration,
-but does not require a neighbor divergence-sign snapshot. Its strong limiter is
-transient and reconstructed with the current RK-stage velocity gradient. Optional
-Checkpoints identify Hu separately and
-reject a change of viscosity model, maximum, or decay setting on restart.
-
-## Price et al. (Phantom) variable viscosity
-
-`--hydro.viscosityEvolution=priceEtAl` selects the switch of Price et al. (2018),
-*Phantom: A smoothed particle hydrodynamics and magnetohydrodynamics code for
-astrophysics*, PASA 35, e031,
-[doi:10.1017/pasa.2018.25](https://doi.org/10.1017/pasa.2018.25)
-([arXiv:1702.03930](https://arxiv.org/abs/1702.03930)), section 2.2.9. It is their
-variation on Cullen & Dehnen, implemented in `cosmictiger/sph/viscosity/price_etal.hpp`:
-
-\[
- A_i=\xi_i\max\!\left[-\frac{d}{dt}(\nabla\cdot\mathbf v_i),0\right]\ \text{(46)},\qquad
- \xi_i=\frac{|\nabla\cdot\mathbf v_i|^2}{|\nabla\cdot\mathbf v_i|^2+|\nabla\times\mathbf v_i|^2}
- \ \text{(47)},
-\]
-\[
- \alpha_{{\rm loc},i}=\min\!\left(\frac{10\,h_i^2A_i}{c_{s,i}^2},\alpha_{\max}\right)
- \ \text{(48)},\qquad
- \tau_i=\frac{h_i}{\sigma_{\rm decay}c_{s,i}}.
-\]
-
-The differences from CD are: ξ is the Balsara-type ratio of equation (47) rather than
-the sign-weighted \(\operatorname{tr}(\mathbf S\mathbf S^T)\) limiter, so no neighbor
-divergence snapshot is gathered; the target uses the sound speed and the fixed factor
-10, capped at `hydro.viscosityAlphaMaxPrice` (default 1, the paper's \(\alpha_{\max}\));
-the decay time uses the sound speed with `hydro.viscosityDecayPrice`
-(\(\sigma_{\rm decay}=0.1\)); and when \(\alpha_{{\rm loc}}\le\alpha\) the decay of
-equation (49) is integrated with the backward Euler step of equation (50),
-\(\alpha^{n+1}=(\alpha^n+\alpha_{\rm loc}\Delta t/\tau)/(1+\Delta t/\tau)\), otherwise α
-is set to \(\alpha_{\rm loc}\) immediately. The paper's \(h_i\) is the smoothing length
-with support \(2h_i\) for the cubic spline, so the code uses the same calibrated
-viscosity length \(h_{M,i}\) as Morris–Monaghan. The velocity gradient and curl retain the CD appendix-B matrix reconstruction.
-The shock slope uses the same direct canonical acceleration-gradient expression
-and cosmological conversion as CD and Hu. All three models use
-\(G=a^2(\nabla\cdot\mathbf v_{\rm physical}-3H)\) and use peculiar gradients
-in their limiters. Price therefore no longer needs a separate background-subtracted
-sample alongside a total-divergence sample. The direct identity follows the
-acceleration-gradient construction in equations (53)–(54), expressed in the
-stored canonical variables, without changing the target, limiter or directed pair forces.
-The initial α is zero, and the paper's quadratic coefficient is the constant
-`hydro.viscosityBeta` of equation (41). Its scalar history shares CD's migration
-and checkpoint lifecycle.
-
-The pair force uses Phantom's equations (39)–(41). Write
-\(w_{ab}=\mathbf v_{ab}\cdot\widehat{\mathbf r}_{ab}\); then
-
-\[
- q^a_{ab}=-\tfrac12\rho_a(\alpha_a c_{s,a}+\beta|w_{ab}|)w_{ab}
- \quad(w_{ab}<0),\qquad q^a_{ab}=0\quad(w_{ab}\ge0),
-\]
-\[
- C_{ab}=\frac{m_bq^a_{ab}}{\rho_a^2\Omega_a},\qquad
- \left.\frac{d\mathbf v_a}{dt}\right|_{\rm AV}
- =-\sum_b(C_{ab}\nabla_aW_{ab}(h_a)+C_{ba}\nabla_aW_{ab}(h_b)),
-\]
-\[
- \left.\frac{du_a}{dt}\right|_{\rm AV}
- =\sum_b C_{ab}\mathbf v_{ab}\cdot\nabla_aW_{ab}(h_a).
-\]
-The last expression is the viscous heating in equation (42). Each side uses its
-own density, sound speed, alpha, gradient and grad-H factor; there is no pair-averaged
-alpha or symmetric-gradient approximation. With equal gas masses the existing
-number-density constraint gives \(m_b/\Omega_a=m_b-\zeta_a\). The same directed
-coefficients in force and heating preserve pair momentum and total energy, with
-nonnegative shock heating when the grad-H factors are positive.
-
-Stored variables use the physical relative velocity, represented as
-\(\mathbf w_a-\mathbf w_b+(a\dot a)\mathbf x_{ab}\), for both dissipation and heating;
-the conformal-time rates have the same extra \(1/a\) as the pressure terms.
-`hydro.balsaraSwitch` must be false for Price/Phantom; its internal switch
-limiter supplies the shear suppression.
-`hydro.viscosityEpsilon` has no effect on this force. The existing Courant formula
-uses the maximum radial approach speed in place of regularized \(-\mu_{ab}\), and
-the maximum individual alpha instead of its pair average. This retains CosmicTiger's
-timestep calibration rather than replacing its integrator with Phantom's.
-No artificial thermal conductivity is added by this viscosity option.
 
 ## Optional artificial thermal conduction
 
@@ -582,8 +330,8 @@ Using the symmetric kernel gradient and the same calibrated pair length
  \left(\frac{du_i}{dt}\right)_{\rm cond}=\sum_j C_{ij}(u_j-u_i).
 \]
 
-Here \(\mu_{ij}\) is the regularized Monaghan velocity measure even when
-Phantom viscosity is selected. It vanishes for separating pairs. The sound-speed
+Here \(\mu_{ij}\) is the regularized Monaghan velocity measure. It vanishes
+for separating pairs. The sound-speed
 part remains active for stationary and separating pairs; constant positive
 \(g\) therefore also diffuses smooth thermal gradients. No additional switch
 restricts this option to shocks. The sign above follows the diffusion equation
@@ -680,7 +428,7 @@ They update canonical entropy using the endpoint density. Star conversion
 preserves mass, position, velocity and old rung; ordinary gravity handles the
 new collisionless particle. Sources use first-order splitting, and an all-gas
 zero-kick estimate refreshes timestep bounds afterward without another viscosity
-history update. See [star formation](star_formation.md) and
+update. See [star formation](star_formation.md) and
 [equilibrium cooling](primordial_chemistry.md) for the source state contract.
 
 Gas rungs change only at common all-particle synchronization boundaries. One
@@ -695,8 +443,8 @@ active particles and selected inactive neighbors solve the neighbor constraint
 before hydro. There is no separate radius predictor or divergence timestep bound.
 The one-byte hydro rung proposal retains the latest force-based timestep bound
 until that synchronization point. It is distinct from the live rung that defines
-the already-open interval. Viscosity uses that live rung and rescales its scalar
-history whenever the rung changes; it stores no additional rung byte.
+the already-open interval. Viscosity uses that live rung; it stores no additional
+rung byte.
 
 The Courant-viscous limit uses
 
@@ -770,8 +518,7 @@ repository requirements; the cited equations in the review are noncosmological.
 ## Cosmological viscosity conventions
 
 Every viscosity sensor uses peculiar gradients: the Morris–Monaghan compression
-source, Balsara factor, CD neighbor signs and shear limiter, and the Price/Hu
-limiters and divergence histories. With physical Hubble rate \(H=\dot a/a\),
+source and the Balsara factor. With physical Hubble rate \(H=\dot a/a\),
 
 \[
  G=\nabla_{\mathbf x}\cdot\mathbf w,
@@ -791,25 +538,7 @@ Its [density gradient](https://wwwmpa.mpa-garching.mpg.de/gadget4/doxygen/densit
 uses peculiar velocity differences. Its
 [Balsara and pair-force code](https://wwwmpa.mpa-garching.mpg.de/gadget4/doxygen/hydra_8cc_source.html#l00859)
 likewise excludes Hubble expansion from the limiter but includes it in the pair
-approach test. GADGET-4 disables the extra Balsara multiplier when its Hu-style
-time-dependent viscosity is enabled; CosmicTiger likewise rejects extra Balsara
-for Hu, Cullen–Dehnen and Price, and permits it for constant α and Morris–Monaghan.
-
-The canonical continuum convention matches GADGET-4's
-[time-dependent viscosity update, lines 139–140](https://wwwmpa.mpa-garching.mpg.de/gadget4/doxygen/artificial__viscosity_8cc_source.html#l00139)
-which differences \(G\) in physical time before multiplying by current
-\(a^{-2}\). CosmicTiger's RK-stage sensor obtains the same continuum quantity
-directly from velocity and acceleration gradients, without that endpoint
-difference. The comparison below is locally derived:
-
-\[
- \frac{1}{a^2}\frac{DG}{Dt}
- =\frac{D\theta_{\rm pec}}{Dt}+2H\theta_{\rm pec}.
-\]
-
-Thus the switch contains an additional \(2H\theta_{\rm pec}\) term relative to
-the material derivative of physical peculiar divergence. All three gradient models use this
-same convention. The cited pages are the official published source documentation;
+approach test. The cited pages are the official published source documentation;
 they are not a verification of the latest GitLab commit.
 
 ## Parameters and compatibility
@@ -824,19 +553,13 @@ hydrodynamic controls are:
 | `hydro.kernelDegree` | `3` | Density polynomial degree; valid values depend on family |
 | `hydro.gamma` | `5/3` | Ideal-gas adiabatic index |
 | `hydro.viscosityAlpha` | `1` | Constant linear coefficient when variable viscosity is disabled |
-| `hydro.viscosityBeta` | `2` | Quadratic coefficient: multiplies \(\bar\alpha_{ij}\) for `morrisAndMonaghan`, `cullenAndDehnen`, and `huEtal`, constant for `none` and `priceEtAl` |
-| `hydro.viscosityEvolution` | `huEtal` | α evolution: `none`, `morrisAndMonaghan`, `cullenAndDehnen`, `priceEtAl`, or `huEtal` |
-| `hydro.viscosityAlphaMaxHu` | `1` | Hu maximum before the strong limiter |
-| `hydro.viscosityDecayHu` | `0.05` | Hu decay coefficient in τ = H/(2 ell V) |
+| `hydro.viscosityBeta` | `2` | Quadratic coefficient: multiplies \(\bar\alpha_{ij}\) for `morrisAndMonaghan`, constant for `none` |
+| `hydro.viscosityEvolution` | `morrisAndMonaghan` | α evolution: `none` or `morrisAndMonaghan` |
 | `hydro.viscosityAlphaMin` | `0.1` | Morris–Monaghan positive α floor and initial value |
 | `hydro.viscosityDecay` | `0.2` | Morris–Monaghan decay coefficient \(\mathcal C_1\) |
-| `hydro.viscosityAlphaMax` | `2` | Cullen–Dehnen maximum α; the MM scheme has no upper cap |
-| `hydro.viscosityDecayCD` | `0.05` | Cullen–Dehnen decay coefficient \(\ell\) |
-| `hydro.viscosityAlphaMaxPrice` | `1` | Price et al. maximum α in equation (48) |
-| `hydro.viscosityDecayPrice` | `0.1` | Price et al. decay coefficient \(\sigma_{\rm decay}\) |
 | `hydro.conductionCoefficient` | `0` | Artificial thermal diffusion coefficient g; zero disables it |
 | `hydro.viscosityEpsilon` | `0.01` | Denominator coefficient multiplying \(\bar\ell^2\) |
-| `hydro.balsaraSwitch` | model-dependent | `true` by default for `none`/`morrisAndMonaghan`, which permit either value; CD/Hu/Price require `false` |
+| `hydro.balsaraSwitch` | `true` | Balsara limiter for `none`; `morrisAndMonaghan` always applies it |
 | `hydro.neighborNumber` | `42` | Kernel-weighted support-sphere count |
 | `compute.sphBucketSize` | `0` (automatic) | SPH tree leaf limit; automatic sizing uses `floor(8/pi * hydro.neighborNumber)`, giving `106` at the default neighbor target |
 | `hydro.minEffectiveRadius` | unset | Alternative minimum effective radius \(h=2\sigma\), in initial interparticle spacings |
@@ -873,14 +596,13 @@ Checkpoints use version 3, and the low byte of `reserved` is 2 for the
 are rejected. The next two bytes encode independent gravity and hydro kernel
 selections. Bit 24 identifies the compact gas layout after removal of stellar,
 chemistry, and obsolete solver fields. Older SPH checkpoints lack this bit and
-are rejected before particle data are loaded. The gas payload has a separate
-version: base 130000 omits serialized force-rate arrays and stores
-binary16 alpha plus, for gradient viscosity, one dimensionless binary16
-canonical-divergence scalar. The diagnostic sample is serialized as `H` in two bytes,
-matching memory and migration. Its normalization is recovered from the live rung
-or shared completed global duration, with a global startup base fallback.
-There is no previous-rung byte, sample timestamp, exponent or pending
-diagnostic payload. The three former byte arrays for convergence, semiactivity
+are rejected before particle data are loaded. Bit 25 identifies gas state without
+the retired viscosity models. Older SPH checkpoints lack it and are rejected
+before their longer viscosity parameter block is read. The gas payload has a
+separate version: base 140000 omits serialized force-rate arrays and stores
+binary16 alpha for Morris–Monaghan, serialized as `H` in two bytes, matching
+memory and migration. There is no previous-rung byte, sample timestamp, exponent
+or pending diagnostic payload. The three former byte arrays for convergence, semiactivity
 and proposed rung are replaced by one `SphParticleFlags` byte per gas particle:
 bit 0 is convergence, bit 1 semiactivity, and bits 2–7 encode the proposed rung.
 Codes 0–15 are current valid rungs. There is no unset sentinel; all other
@@ -893,14 +615,8 @@ Enabled conduction adds feature flag bit 25 and one double coefficient after the
 base SPH parameter block. Restarts require the same coefficient and enabled state.
 With conduction disabled, the existing checkpoint layout is unchanged.
 
-Balsara is allowed only for constant α and Morris–Monaghan; their factors
-remain transient. Gradient-model Balsara payloads are retained in the format
-definition for compatibility, but configurations enabling them are rejected. The existing physics and
-viscosity suffixes remain; earlier
-gas payloads, including base 90000's signed-significand histories and the
-intermediate base-100000 sampled-rung, base-110000 endpoint and base-120000
-unpacked-flag representations,
-are rejected.
+Balsara factors remain transient. The existing physics and viscosity suffixes
+remain; earlier gas payloads, including every base below 140000, are rejected.
 See the
 [pair-midpoint design](sph_pair_midpoint_plan.md) and
 [SPH octree design](sph_octree_plan.md) for the retained tree. The
@@ -917,6 +633,9 @@ checks still apply when migrating an old configuration to the new length and
 timestep conventions; old SPH checkpoints are not automatically converted.
 Remove `hydro.chemistry`, `hydro.conduction`, `hydro.diffusion`, `hydro.yReflect`,
 and `gravity.sphSmoothing` from older INI files, including entries set to false.
+The retired `hydro.viscosityAlphaMax`, `hydro.viscosityDecayCD`,
+`hydro.viscosityAlphaMaxPrice`, `hydro.viscosityDecayPrice`,
+`hydro.viscosityAlphaMaxHu` and `hydro.viscosityDecayHu` keys are also rejected.
 The `run.scenario=polytropicStar` scenario is a self-gravitating gas sphere; it does
 not use stellar particles or star formation.
 
@@ -1014,26 +733,16 @@ Artificial-viscosity policies live in `cosmictiger/sph/viscosity/`:
 
 - `monaghan.hpp`: the baseline artificial-viscosity formula.
 - `morris_and_monaghan.hpp`: compression/decay equation with a backward Euler alpha update.
-- `hu_etal.hpp`: Hu strong-limiter diagnostics and alpha update.
-- `cullen_and_dehnen.hpp`: gradient reconstruction, shock detection, alpha updates, and model diagnostics.
-- `price_etal.hpp`: the Phantom shock detector and backward Euler alpha update, reusing the CD gradient reconstruction and state.
-- `balsara.hpp`: the optional shear limiter for constant α and Morris–Monaghan.
+- `balsara.hpp`: the shear limiter, always on for Morris–Monaghan and optional for constant α.
 
-A two-byte bulk viscosity coefficient array stores alpha for all evolution
-models. Cullen–Dehnen, Hu and Price share the two-byte scalar `sphScaledDivergence`
-output/checkpoint array, with no wrapper or previous-rung byte, and a
-separate sixteen-byte temporary switch diagnostic entry. Optional Balsara storage is
-one byte per gas particle for constant α and Morris–Monaghan; evaluation and
-staged sources use float. CD, Hu and Price use four bytes for history plus alpha;
-Morris–Monaghan uses two bytes for alpha plus one when Balsara is enabled.
-Constant viscosity allocates neither history nor evolving alpha. The temporary diagnostic array is allocated
-after tree sorting for stage or output-gradient work, retained through density
-retries, and freed before source conversion. RK2 also uses one event-local
-acceleration vector and entropy-rate scalar, plus sparse baseline records;
-these are not part of the persistent coefficient/diagnostic storage above.
-Alpha and committed history participate in reordering, migration and checkpoints.
-Constant-α and Morris–Monaghan Balsara factors remain transient and are recomputed
-after restart or migration.
+A two-byte bulk viscosity coefficient array stores Morris–Monaghan alpha.
+Balsara storage is one byte per gas particle; evaluation and staged sources use
+float. Morris–Monaghan therefore uses three bytes per gas particle.
+Constant viscosity allocates no evolving alpha. RK2 also uses one event-local
+entropy-rate scalar, plus sparse baseline records; these are not part of the
+persistent coefficient storage above.
+Alpha participates in reordering, migration and checkpoints.
+Balsara factors remain transient and are recomputed after restart or migration.
 Their lifecycle remains in common particle code.
 The shared density and hydro passes call these policies without duplicating
 neighbor walks. Standalone policy tests use the same author-directory organization.

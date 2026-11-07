@@ -372,13 +372,8 @@ set(cosmictiger_header_files
     cosmictiger/gravity/sources.hpp
     cosmictiger/gravity/tree_build.hpp
     cosmictiger/sph/viscosity/balsara.hpp
-    cosmictiger/sph/viscosity/cullen_and_dehnen_particle_exchange.hpp
-    cosmictiger/sph/viscosity/scaled_divergence.hpp
-    cosmictiger/sph/viscosity/cullen_and_dehnen.hpp
     cosmictiger/sph/viscosity/monaghan.hpp
     cosmictiger/sph/viscosity/morris_and_monaghan.hpp
-    cosmictiger/sph/viscosity/price_etal.hpp
-    cosmictiger/sph/viscosity/hu_etal.hpp
     cosmictiger/sph/flops.hpp
     cosmictiger/sph/variable_smoothing_lengths.hpp
     cosmictiger/sph/volume.hpp
@@ -1751,29 +1746,17 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
         set_tests_properties(units_output PROPERTIES
             WORKING_DIRECTORY "${units_output_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
-        # Keep the existing cases on the default model and cover the other state layouts.
-        foreach(units_viscosity IN ITEMS none cullen_and_dehnen price_etal hu_etal)
-            if(units_viscosity STREQUAL "none")
-                set(units_viscosity_option none)
-            elseif(units_viscosity STREQUAL "hu_etal")
-                set(units_viscosity_option huEtal)
-            elseif(units_viscosity STREQUAL "price_etal")
-                set(units_viscosity_option priceEtAl)
-            else()
-                set(units_viscosity_option cullenAndDehnen)
-            endif()
-            set(units_test "units_output_${units_viscosity}")
-            set(units_workdir "${PROJECT_BINARY_DIR}/tests/${units_test}")
-            file(MAKE_DIRECTORY "${units_workdir}")
-            add_test(NAME ${units_test} COMMAND cosmictiger --run.test=unitsOutput
-                --compute.positionType=${COSMICTIGER_POSITION_TYPE}
-                --hydro.viscosityEvolution=${units_viscosity_option}
-                --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
-                --hpx:threads=2 --hpx:bind=none
-                ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
-            set_tests_properties(${units_test} PROPERTIES
-                WORKING_DIRECTORY "${units_workdir}" RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 2)
-        endforeach()
+        # Keep the existing cases on the default model and cover the constant-viscosity layout.
+        set(units_workdir "${PROJECT_BINARY_DIR}/tests/units_output_none")
+        file(MAKE_DIRECTORY "${units_workdir}")
+        add_test(NAME units_output_none COMMAND cosmictiger --run.test=unitsOutput
+            --compute.positionType=${COSMICTIGER_POSITION_TYPE}
+            --hydro.viscosityEvolution=none
+            --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
+            --hpx:threads=2 --hpx:bind=none
+            ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
+        set_tests_properties(units_output_none PROPERTIES
+            WORKING_DIRECTORY "${units_workdir}" RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 2)
 
         set(distributed_output_workdir "${PROJECT_BINARY_DIR}/tests/distributed_output")
         file(MAKE_DIRECTORY "${distributed_output_workdir}")
@@ -2287,21 +2270,6 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         add_executable(morris_and_monaghan_test tests/sph/morris_and_monaghan/viscosity.cpp)
         target_include_directories(morris_and_monaghan_test PRIVATE ${PROJECT_SOURCE_DIR})
         cosmictiger_add_gtest(NAME morris_and_monaghan TARGET morris_and_monaghan_test
-            PROPERTIES TIMEOUT 30 LABELS "sph;cpu")
-
-        add_executable(cullen_and_dehnen_test tests/sph/cullen_and_dehnen/viscosity.cpp)
-        target_include_directories(cullen_and_dehnen_test PRIVATE ${PROJECT_SOURCE_DIR})
-        cosmictiger_add_gtest(NAME cullen_and_dehnen TARGET cullen_and_dehnen_test
-            PROPERTIES TIMEOUT 30 LABELS "sph;cpu")
-
-        add_executable(price_etal_test tests/sph/price_etal/viscosity.cpp src/sph/viscosity/price_etal.cpp)
-        target_include_directories(price_etal_test PRIVATE ${PROJECT_SOURCE_DIR})
-        cosmictiger_add_gtest(NAME price_etal TARGET price_etal_test
-            PROPERTIES TIMEOUT 30 LABELS "sph;cpu")
-
-        add_executable(hu_etal_test tests/sph/hu_etal/viscosity.cpp)
-        target_include_directories(hu_etal_test PRIVATE ${PROJECT_SOURCE_DIR})
-        cosmictiger_add_gtest(NAME hu_etal TARGET hu_etal_test
             PROPERTIES TIMEOUT 30 LABELS "sph;cpu")
 
         add_executable(balsara_test tests/sph/balsara/shear_limiter.cpp)

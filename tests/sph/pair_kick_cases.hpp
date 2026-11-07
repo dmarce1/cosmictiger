@@ -23,7 +23,7 @@ inline void pairKickClose(double actual, double expected, char const* message) {
 }
 
 template <class Fixture>
-void testConservativePairKick(Fixture& fixture, bool directedViscosity) {
+void testConservativePairKick(Fixture& fixture, bool morrisAndMonaghan) {
     auto& data = fixture.data_;
     auto& parameters = fixture.params_;
     fixture.enableMidpointOutputs();
@@ -34,8 +34,8 @@ void testConservativePairKick(Fixture& fixture, bool directedViscosity) {
     parameters.scaleFactor = 0.7f;
     parameters.expansionRate = 0.03f;
     data.selfGravityEnabled = false;
-    if (directedViscosity) {
-        fixture.enableVariableViscosity(false, true);
+    if (morrisAndMonaghan) {
+        fixture.enableVariableViscosity();
     }
     std::array<std::array<float, 3>, 2> const velocities{
         {{0.2f, 0.07f, 0.04f}, {-0.1f, -0.03f, -0.06f}}};
@@ -51,12 +51,12 @@ void testConservativePairKick(Fixture& fixture, bool directedViscosity) {
         data.sourceInternalEnergy[source] = 0.8f + 0.6f * index;
         data.sourceSmoothingLength[source] = 0.2f + 0.05f * index;
         data.sourceGradHCorrection[source] = 0.0f;    // Fixed-support pair.
-        if (directedViscosity) {
+        if (morrisAndMonaghan) {
             data.sourceBulkViscosityCoefficient[source] = 0.4f + 0.5f * index;
         }
     }
     // The ordinary complete-target RHS is an independent reference for both
-    // sides' force and heating, including unequal directed Price q terms.
+    // sides' force and heating, including unequal particle alphas.
     fixture.hydro(0);
     std::array<Vector3<float>, 2> acceleration;
     std::array<float, 2> entropyRate;
@@ -64,16 +64,6 @@ void testConservativePairKick(Fixture& fixture, bool directedViscosity) {
         acceleration[index] = data.sinkAccelerations[fixture.sinkIndex(index)];
         entropyRate[index] = data.sinkEntropyRate[fixture.sinkIndex(index)];
         pairKickRequire(entropyRate[index] > 0.0f, "pair fixture missed viscous heating");
-    }
-    if (directedViscosity) {
-        double const firstHeating =
-            sph_entropy::storedEnergy(entropyRate[0], data.sourceDensity[fixture.sourceIndex(0)],
-                data.adiabaticIndex, parameters.scaleFactor);
-        double const secondHeating =
-            sph_entropy::storedEnergy(entropyRate[1], data.sourceDensity[fixture.sourceIndex(1)],
-                data.adiabaticIndex, parameters.scaleFactor);
-        pairKickRequire(std::abs(firstHeating / secondHeating - 1.0) > 0.05,
-            "Price fixture did not exercise different endpoint heating");
     }
     auto* identities = fixture.enablePairKickOutputs();
     identities[fixture.sourceIndex(0)] = {1, 37};

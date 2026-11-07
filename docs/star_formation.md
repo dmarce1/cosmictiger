@@ -194,40 +194,22 @@ gas population. Source payloads already carry particle ID, event counter, birth
 time, saved specific formation rate and elapsed physical time; this integration
 adds no persistent per-particle fields or force-rate arrays.
 
-The SPH payload uses base version 130000 for compact viscosity storage and packed
+The SPH payload uses base version 140000 for compact viscosity storage and packed
 gas flags. One `SphParticleFlags` byte follows density: convergence is bit 0,
 semiactivity bit 1, and proposed rung bits 2–7. Rung codes 0–15 are valid; 63
 decodes to `-1`, and the remaining codes are rejected. This replaces three byte
 arrays in memory, checkpoints and migration, saving two bytes per gas particle.
 Callers use explicit setters rather than mutable references to individual bits.
-Evolving
-alpha remains two-byte binary16. CD, Price and Hu share one two-byte
-`Float16Storage* sphScaledDivergence` array, storing the dimensionless sample
-\(q_n=\delta\tau_n G_n\), where
-\(G_n=\nabla_{\mathbf x}\cdot\mathbf w_n=a_n^2\theta_{{\rm pec},n}\).
-The normalization is the particle's own conformal interval; its actual duration
-is recovered from the live rung or shared previous completed global step. Global
-startup uses the shared base duration until a step has completed; dyadic startup
-uses the live rung. Startup seeds history without advancing alpha. There is no
-wrapper or retained sampled-rung byte. Checkpoint and migration both store `H`
-(two bytes). As in GADGET-4, the sensor differences decoded canonical
-gradients before converting with the current scale factor; the derivative is
-not retained. The `velocityDivergence` output reports the last endpoint's canonical \(G\), explicitly identified
-by its metadata. Four float pending diagnostics occupy sixteen
-temporary bytes only during density events.
+Evolving alpha remains two-byte binary16.
 
 The Balsara factor is one byte, rounded to the nearest multiple of \(1/255\);
-force/source staging uses float. With CD, Hu and Price, its retained byte is
-checkpointed and migrated when enabled. With constant α and Morris–Monaghan,
-it remains transient and is recomputed after restart or migration.
-Balsara defaults off for CD/Hu/Price and on for constant α/MM; explicit extra
-suppression for a gradient model is accepted with a warning.
-History, alpha and Balsara together use five bytes per gas particle when all
-are enabled, down from fourteen. Constant viscosity has no history or evolving
-alpha array. Source counters and elapsed source time retain their existing
-meanings; no viscosity timestamp is added. Older SPH payload versions, including
-base 90000's signed-significand histories and the intermediate bases 100000,
-110000 and 120000, are rejected.
+force/source staging uses float. It remains transient and is recomputed after
+restart or migration. Balsara is always on for Morris–Monaghan and defaults on
+for constant α.
+Alpha and Balsara together use three bytes per gas particle. Constant viscosity
+has no evolving alpha array. Source counters and elapsed source time retain their
+existing meanings; no viscosity timestamp is added. Older SPH payload versions,
+including every base below 140000, are rejected.
 
 The source-history lifecycle fixtures passed on CPU, CUDA and two MPI ranks for
 commit `1bc12b5f6`, the signed-significand/base-90000 representation, as recorded

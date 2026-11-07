@@ -46,11 +46,6 @@ void requireFixtureChemistry(ParticleInteger gasIndex, int rank, int originalGas
             sphParticlesBulkViscosityCoefficients[gasIndex] == 0.25f + 0.125f * originalGasIndex,
             "compaction, checkpoint or migration changed viscosity coefficient");
     }
-    if (sphScaledDivergence != nullptr) {
-        auto const& history = sphScaledDivergence[gasIndex];
-        requireStarParticles(sphDecodeDivergence(history, 1.0) == float(-4 - originalGasIndex),
-            "compaction, checkpoint or migration changed committed viscosity history");
-    }
 }
 
 void initializeStarParticleFixture() {
@@ -77,11 +72,6 @@ void initializeStarParticleFixture() {
             sphParticlesSetProposedRung(gasIndex, char(3 + gasIndex));
             if (sphParticlesBulkViscosityCoefficients != nullptr) {
                 sphParticlesBulkViscosityCoefficients[gasIndex] = 0.25f + 0.125f * gasIndex;
-            }
-            if (sphScaledDivergence != nullptr) {
-                auto& history = sphScaledDivergence[gasIndex];
-                history = {};
-                ALWAYS_ASSERT(sphEncodeDivergence(history, float(-4 - gasIndex), 1.0));
             }
             sphParticlesElectronFractions[gasIndex] = fixtureElectronFraction(hpxRank(), gasIndex);
         }

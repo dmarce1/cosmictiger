@@ -82,8 +82,6 @@ void initializeChemistryFixture(bool invalid) {
     }
 }
 ChemistryLocalSnapshot chemistryFixtureSnapshot() {
-    requireChemistry(sphParticlesViscosityDiagnostics == nullptr,
-        "temporary viscosity diagnostics survived the cooling source");
     ChemistryLocalSnapshot records;
     for (ParticleInteger i = 0; i < 3; ++i) {
         records.push_back({std::bit_cast<uint32_t>(sphParticlesElectronFractions[i]),

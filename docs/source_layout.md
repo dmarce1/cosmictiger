@@ -138,11 +138,7 @@ sph/                                      # Under both cosmictiger/ and src/
 ├── rungs_cpu.cpp, rungs.cu
 ├── run_data.hpp, flops.hpp, volume.hpp, variable_smoothing_lengths.hpp
 └── viscosity/
-    ├── monaghan.hpp, morris_and_monaghan.hpp, balsara.hpp, hu_etal.hpp
-    ├── cullen_and_dehnen.hpp, cullen_and_dehnen.cpp
-    ├── scaled_divergence.hpp
-    ├── cullen_and_dehnen_particle_exchange.hpp, cullen_and_dehnen_particle_exchange.cpp
-    └── price_etal.hpp, price_etal.cpp
+    └── monaghan.hpp, morris_and_monaghan.hpp, balsara.hpp
 
 chemistry/sph.*                            # Particle cooling integration
 stars/
@@ -154,10 +150,8 @@ stars/
 
 The `sph/` directory owns particle storage, neighbor traversal, smoothing and
 density loops, execution, and timesteps. `sph/viscosity/` owns the viscosity
-models and their diagnostic state/cache. The Monaghan module supplies pair
-viscosity; Morris–Monaghan, Cullen–Dehnen, Hu, and Price et al. supply
-coefficient-evolution laws. The Balsara module supplies the optional shear
-limiter. `volume.hpp` holds the weighted-volume sums, support derivatives,
+models. The Monaghan module supplies pair viscosity; Morris–Monaghan supplies the
+coefficient-evolution law. The Balsara module supplies the shear limiter. `volume.hpp` holds the weighted-volume sums, support derivatives,
 constraint, and grad-H factors. `variable_smoothing_lengths.hpp` holds the
 compatible pressure force and thermal work used for every SPH run
 ([variational SPH](variational_sph.md)). The common CPU and CUDA loops call
@@ -182,41 +176,25 @@ Cooling stores a plain `float electronFraction` in batch and migration records,
 with the particle array named `sphParticlesElectronFractions`. The default guess
 remains `1.0f`, and checkpoints retain one float per gas particle.
 
-The runtime selector remains
-`hydro.viscosityEvolution=none|morrisAndMonaghan|cullenAndDehnen|priceEtAl|huEtal`. Model-specific
-state allocation, migration, checkpoint identity, and output are handled at the
-existing storage and integration boundaries. Cullen–Dehnen's additional
-particle exchange is owned by its module.
-`scaled_divergence.hpp` supplies scalar encode/decode and rung-rescaling helpers;
-it does not define a per-particle wrapper. The persistent
-`Float16Storage* sphScaledDivergence` array uses two bytes per gas particle, with
-the same two-byte checkpoint and migration payload. Completed-interval endpoint
-sampling and rescaling on live-rung changes remove the former sampled-rung byte.
-The separate `SphViscosityDiagnostics` object is sixteen-byte event scratch.
-All evolving alpha, including Morris–Monaghan, updates only at completed own
-interval endpoints; startup does not advance it. Midpoint forces use the last
-endpoint's alpha. Constant-α and Morris–Monaghan runs compute enabled Balsara
-with separate SPH divergence/curl sums during the current density pass.
-CD, Hu and Price instead derive it from their shared reconstructed velocity
-gradient at startup and endpoints, retaining the factor until the next gradient
-reconstruction; their midpoint passes need neither the separate sums nor a
-new reconstruction. The corrected matrix estimator replaces the former
-uncorrected kernel-weighted divergence/curl estimate for those three models.
-Morris–Monaghan retains no divergence history.
-Alpha is two-byte binary16 and optional Balsara storage is one `uint8_t`, for
-five bytes per gas particle when all three retained arrays are enabled.
-Enabled Balsara is checkpointed and migrated only for CD, Hu and Price;
-constant-α and Morris–Monaghan factors remain transient. It defaults off for
-CD/Hu/Price and on for constant α/MM; explicit enabling for a gradient model
-is honored with a warning about duplicate shear suppression.
+The runtime selector is `hydro.viscosityEvolution=none|morrisAndMonaghan`.
+Model-specific state allocation, migration, checkpoint identity, and output are
+handled at the existing storage and integration boundaries.
+Morris–Monaghan alpha updates only at completed own interval endpoints; startup
+does not advance it. Midpoint forces use the last endpoint's alpha. Balsara is
+computed with separate SPH divergence/curl sums during the current density pass,
+is always on for Morris–Monaghan, and is optional for constant α. Morris–Monaghan
+retains no divergence history.
+Alpha is two-byte binary16 and Balsara storage is one `uint8_t`, for three bytes
+per gas particle. Balsara factors remain transient, are never checkpointed or
+migrated, and default on for constant α.
 `SphParticleFlags` replaces separate convergence, semiactivity and proposed-rung
 arrays with one byte: bits 0/1 are the flags and bits 2–7 are the proposed rung,
 with no unset sentinel. Current rungs are 0–15. Explicit setters are
 required because packed bits cannot expose mutable references. Memory,
 checkpoint and migration storage each shrink by two bytes per gas particle.
-SPH checkpoint base 130000 identifies this packed layout and retains the optional
-Balsara byte introduced by the intermediate base 120000 layout. See
-[viscosity timing and storage](monaghan_sph.md#cullendehnen-variable-viscosity).
+SPH checkpoint base 130000 introduced this packed layout; base 140000 removes the
+gradient-model state. See
+[viscosity timing and storage](monaghan_sph.md#morrismonaghan-variable-viscosity).
 
 Exact Sod, Sedov, and hydrostatic sphere reference/initial-condition helpers live
 in `scenarios/`, alongside the scenarios that use them.

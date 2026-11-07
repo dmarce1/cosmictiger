@@ -136,10 +136,6 @@ void initializeMeshSortFixture(ParticleInteger count, int pattern) {
                 sphParticlesBalsaraFactors[gasIndex] = uint8_t(i % 256);
                 sphParticlesSetProposedRung(gasIndex, i % 11);
                 sphParticlesBulkViscosityCoefficients[gasIndex] = float(i) + 1.5f;
-                auto& history = sphScaledDivergence[gasIndex];
-                requireParticleMeshSort(sphEncodeDivergence(history, float(i) + 2.5f, 1.0),
-                    "Particle mesh fixture history is not representable");
-
                 sphParticlesSetConverged(gasIndex, i % 7 != 0);
                 sphParticlesSetSemiactive(gasIndex, i % 5 != 0);
             }
@@ -218,9 +214,6 @@ void checkMeshSortFixture(int meshSize, int pattern) {
                         sphParticlesConverged(gasIndex) == (identity % 7 != 0) &&
                         sphParticlesSemiactive(gasIndex) == (identity % 5 != 0),
                     "Particle mesh sort changed gas state or broke its reverse map");
-                auto const& history = sphScaledDivergence[gasIndex];
-                requireParticleMeshSort(history.bits == Float16Storage(float(identity) + 2.5f).bits,
-                    "Particle mesh sort changed committed viscosity history");
             } else {
                 requireParticleMeshSort(particlesCatIndex(i) == ParticleInteger(kNoParticleIndex),
                     "Particle mesh sort changed a dark matter category index");
@@ -275,7 +268,7 @@ void particleMeshSortTest() {
         options.run.hierarchicalGravity = false;
     }
     options.hydro.enabled = COSMICTIGER_WITH_SPH && !usesHierarchicalIntegration(options.run);
-    options.hydro.viscosityEvolution = "cullenAndDehnen";
+    options.hydro.viscosityEvolution = "morrisAndMonaghan";
     options.analysis.saveForce = true;
     options.analysis.tracers = true;
     options.analysis.groups = COSMICTIGER_ENABLE_ROCKSTAR != 0;

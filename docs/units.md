@@ -108,8 +108,7 @@ Gas state also includes `density`, `entropyTracer`, `kernelSupportRadius`,
 `pressure`, `temperature`, `meanMolecularWeight`, and `adiabaticIndex`.
 The entropy tracer is A = P_phys/rho_phys^gamma, with the existing CGS conversion
 `(lengthCm/timeSeconds)^2 * (massG/lengthCm^D)^(1-gamma)` and no extra frame factor.
-The evolving viscosity coefficient is `bulkViscosityCoefficient`, and the
-stored velocity-divergence diagnostic is `velocityDivergence` when selected.
+The evolving viscosity coefficient is `bulkViscosityCoefficient`.
 Density remains stored: support-radius bounds can break the unconstrained
 neighbor-number relation, so reconstructing density from radius would be incorrect.
 

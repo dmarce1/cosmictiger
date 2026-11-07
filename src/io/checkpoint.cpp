@@ -147,6 +147,9 @@ constexpr uint32_t kRetiredMonaghanSph = 1;
 constexpr uint32_t kVariationalSph = 2;
 constexpr uint32_t kSphFormationMask = 0xffU;
 constexpr uint32_t kCompactSphLayout = 1U << 24;
+// Bit 25 of the physics code marks gas state without the retired viscosity models. Earlier
+// files carry a longer viscosity block, so they are rejected before it is read.
+constexpr uint32_t kScalarViscosityLayout = 1U << 25;
 constexpr uint32_t kArtificialConduction = 1U << 25;
 constexpr uint32_t kIndependentParticleCounts = 1U << 26;
 constexpr uint32_t kChemistry = 1U << 11;
@@ -522,8 +525,9 @@ uint32_t checkpointPhysicsCode(Options const& opts) {
         checkpointKernelCode(opts.hydro.kernelFamily, opts.hydro.kernelDegree) ^
         checkpointKernelCode("spline", 3);
     // Bit 24 identifies compact gas storage.
-    return (opts.hydro.enabled ? kVariationalSph | kCompactSphLayout : 0U) | (gravityCode << 8) |
-        (hydroCode << 16) | (uint32_t(3 - kSpatialDimensions) << 28) |
+    return (opts.hydro.enabled ? kVariationalSph | kCompactSphLayout | kScalarViscosityLayout :
+                                 0U) |
+        (gravityCode << 8) | (hydroCode << 16) | (uint32_t(3 - kSpatialDimensions) << 28) |
         (kSpatialDimensions < 3 ? (1U << 30) : 0U);
 }
 
@@ -575,18 +579,8 @@ std::array<double, 13> sphCheckpointParameters(Options const& opts) {
         opts.hydro.damping, opts.gravity.enabled ? 1.0 : 0.0};
 }
 
-std::array<double, 7> viscosityCheckpointParameters(Options const& opts) {
-    double const model = opts.hydro.viscosityEvolution == "cullenAndDehnen" ?
-        1.0 :
-        (opts.hydro.viscosityEvolution == "priceEtAl" ?
-                2.0 :
-                (opts.hydro.viscosityEvolution == "huEtal" ? 3.0 : 0.0));
-    return {opts.hydro.minimumBulkViscosityCoefficient, opts.hydro.viscosityDecay, model,
-        opts.hydro.viscosityEvolution == "huEtal" ? opts.hydro.maximumBulkViscosityCoefficientHu :
-                                                    opts.hydro.maximumBulkViscosityCoefficient,
-        opts.hydro.viscosityEvolution == "huEtal" ? opts.hydro.viscosityDecayHu :
-                                                    opts.hydro.viscosityDecayCD,
-        opts.hydro.maximumBulkViscosityCoefficientPrice, opts.hydro.viscosityDecayPrice};
+std::array<double, 2> viscosityCheckpointParameters(Options const& opts) {
+    return {opts.hydro.minimumBulkViscosityCoefficient, opts.hydro.viscosityDecay};
 }
 
 bool zPlaneCheckpointCompatible(double acceleration, Options const& opts) {
@@ -840,6 +834,11 @@ DriverParameters readDriverState(FILE* fp) {
                         "COSMICTIGER_ENABLE_CHEMISTRY=ON\n");
         }
 #endif
+        if ((header.reserved & kCompactSphLayout) != 0U &&
+            (header.reserved & kScalarViscosityLayout) == 0U) {
+            THROW_ERROR("Checkpoint uses the retired SPH viscosity layout and cannot be "
+                        "restarted; only none and morrisAndMonaghan viscosity remain\n");
+        }
         if (getOptions().hydro.enabled && (header.reserved & kCompactSphLayout) != 0U &&
             (header.reserved & kSphFormationMask) !=
                 (checkpointPhysicsCode(getOptions()) & kSphFormationMask)) {
@@ -1452,16 +1451,22 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(detail::checkpointCompatible(unlimitedHeader, balsaraOptions));
     balsaraOptions.hydro.balsaraSwitch = true;
     ALWAYS_ASSERT(!detail::checkpointCompatible(unlimitedHeader, balsaraOptions));
-    // Programmatic updates must enforce the same combinations as CLI/INI parsing.
-    for (char const* model : {"cullenAndDehnen", "huEtal", "priceEtAl"}) {
-        auto invalidOptions = getOptions();
-        invalidOptions.hydro.viscosityEvolution = model;
-        invalidOptions.hydro.balsaraSwitch = true;
+    // Programmatic updates normalize and validate exactly as CLI/INI parsing does.
+    {
+        auto const previousOptions = getOptions();
+        auto normalizedOptions = previousOptions;
+        normalizedOptions.hydro.viscosityEvolution = "morrisAndMonaghan";
+        normalizedOptions.hydro.balsaraSwitch = false;
+        setOptions(normalizedOptions);
+        ALWAYS_ASSERT(getOptions().hydro.balsaraSwitch);
+        setOptions(previousOptions);
+        auto invalidOptions = previousOptions;
+        invalidOptions.hydro.viscosityEvolution = "huEtal";
         bool rejected = false;
         try {
             setOptions(invalidOptions);
         } catch (std::invalid_argument const& error) {
-            rejected = std::string(error.what()).find("hydro.balsaraSwitch=true requires") !=
+            rejected = std::string(error.what()).find("hydro.viscosityEvolution must be") !=
                 std::string::npos;
         }
         ALWAYS_ASSERT(rejected);
@@ -1477,6 +1482,11 @@ void checkpointStateTest() {
     retiredHeader.reserved =
         (retiredHeader.reserved & ~detail::kSphFormationMask) | detail::kRetiredMonaghanSph;
     ALWAYS_ASSERT(!detail::checkpointCompatible(retiredHeader, operatorOptions));
+    // Older SPH files carry retired viscosity state and must never reach the payload.
+    ALWAYS_ASSERT((variationalHeader.reserved & detail::kScalarViscosityLayout) != 0U);
+    auto retiredViscosityHeader = variationalHeader;
+    retiredViscosityHeader.reserved &= ~detail::kScalarViscosityLayout;
+    ALWAYS_ASSERT(!detail::checkpointCompatible(retiredViscosityHeader, operatorOptions));
     auto viscosityOptions = getOptions();
     viscosityOptions.hydro.enabled = true;
     viscosityOptions.hydro.viscosityEvolution = "morrisAndMonaghan";
@@ -1494,34 +1504,14 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(fixedViscosityParameters != detail::sphCheckpointParameters(betaOptions));
     viscosityOptions.hydro.viscosityEvolution = "morrisAndMonaghan";
     ALWAYS_ASSERT(!detail::checkpointCompatible(fixedViscosityHeader, viscosityOptions));
-    for (int parameter = 0; parameter < 7; ++parameter) {
+    {
         auto altered = viscosityOptions;
-        if (parameter == 0) {
-            altered.hydro.minimumBulkViscosityCoefficient += 0.125;
-        } else if (parameter == 1) {
-            altered.hydro.viscosityDecay += 0.125;
-        } else if (parameter == 2) {
-            altered.hydro.viscosityEvolution = "cullenAndDehnen";
-        } else if (parameter == 3) {
-            altered.hydro.viscosityEvolution = "priceEtAl";
-        } else if (parameter == 4) {
-            altered.hydro.maximumBulkViscosityCoefficient += 0.125;
-        } else if (parameter == 5) {
-            altered.hydro.viscosityDecayCD += 0.125;
-        } else {
-            altered.hydro.maximumBulkViscosityCoefficientPrice += 0.125;
-        }
+        altered.hydro.minimumBulkViscosityCoefficient += 0.125;
+        ALWAYS_ASSERT(viscosityParameters != detail::viscosityCheckpointParameters(altered));
+        altered = viscosityOptions;
+        altered.hydro.viscosityDecay += 0.125;
         ALWAYS_ASSERT(viscosityParameters != detail::viscosityCheckpointParameters(altered));
     }
-    auto huOptions = viscosityOptions;
-    huOptions.hydro.viscosityEvolution = "huEtal";
-    auto const huParameters = detail::viscosityCheckpointParameters(huOptions);
-    ALWAYS_ASSERT(huParameters[2] == 3.0 && huParameters != viscosityParameters);
-    huOptions.hydro.maximumBulkViscosityCoefficientHu += 0.125;
-    ALWAYS_ASSERT(huParameters != detail::viscosityCheckpointParameters(huOptions));
-    huOptions.hydro.maximumBulkViscosityCoefficientHu -= 0.125;
-    huOptions.hydro.viscosityDecayHu += 0.125;
-    ALWAYS_ASSERT(huParameters != detail::viscosityCheckpointParameters(huOptions));
     auto planeOptions = getOptions();
     planeOptions.hydro.enabled = true;
     planeOptions.hydro.zPlaneAcceleration = 0.0;

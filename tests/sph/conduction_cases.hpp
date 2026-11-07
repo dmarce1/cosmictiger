@@ -177,7 +177,7 @@ void testConductionPair(Fixture& fixture) {
 // Independent on/off evaluations check the decomposition without duplicating
 // the pair equations; the conduction case above checks their scalar reference.
 template <class Fixture>
-void testHydroDiagnostics(Fixture& fixture, bool directedViscosity = false) {
+void testHydroDiagnostics(Fixture& fixture, bool morrisAndMonaghan = false) {
     auto& data = fixture.data_;
     auto& parameters = fixture.params_;
     fixture.enableMidpointOutputs();
@@ -197,8 +197,8 @@ void testHydroDiagnostics(Fixture& fixture, bool directedViscosity = false) {
         data.sourceSmoothingLength[source] = 0.22f + 0.07f * index;
         data.sourceGradHCorrection[source] = 0.0f;
     }
-    if (directedViscosity) {
-        fixture.enableVariableViscosity(false, true);
+    if (morrisAndMonaghan) {
+        fixture.enableVariableViscosity();
     }
     std::array<SphAcceleration, 2> pressureAccelerations;
     std::array<float, 2> viscosityRates{}, conductionRates{};
@@ -206,7 +206,7 @@ void testHydroDiagnostics(Fixture& fixture, bool directedViscosity = false) {
         parameters.bulkViscosityCoefficient = (mode & 1) ? 0.7f : 0.0f;
         parameters.vonNeumannRichtmyerCoefficient = (mode & 1) ? 2.0f : 0.0f;
         parameters.conductionCoefficient = (mode & 2) ? 0.3f : 0.0f;
-        if (directedViscosity) {
+        if (morrisAndMonaghan) {
             for (int index = 0; index < 2; ++index) {
                 data.sourceBulkViscosityCoefficient[fixture.sourceIndex(index)] =
                     (mode & 1) ? 0.4f + 0.2f * index : 0.0f;

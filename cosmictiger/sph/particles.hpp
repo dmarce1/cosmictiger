@@ -21,7 +21,6 @@
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/sph/particle_flags.hpp>
 #include <cosmictiger/sph/thermodynamics.hpp>
-#include <cosmictiger/sph/viscosity/scaled_divergence.hpp>
 
 #ifdef SPH_PARTICLES_CPP
 #define SPH_PARTICLES_EXTERN
@@ -79,16 +78,13 @@ SPH_PARTICLES_EXTERN float* sphParticlesEntropies;
 SPH_PARTICLES_EXTERN float* sphParticlesSmoothingLengths;
 SPH_PARTICLES_EXTERN ParticleInteger* sphParticlesParticleIndices;
 SPH_PARTICLES_EXTERN float* sphParticlesDensities;
-// Gradient models retain their endpoint factor; fixed-alpha and M&M density passes
-// rebuild it directly from weighted divergence and curl.
+// Every density pass rebuilds this factor from weighted divergence and curl, so it is
+// neither migrated nor checkpointed.
 SPH_PARTICLES_EXTERN uint8_t* sphParticlesBalsaraFactors;
 // Variational operator only: zeta_i of cosmictiger/sph/volume.hpp, written by the density
 // pass for every semiactive particle before each force pass. Never migrated or checkpointed.
 SPH_PARTICLES_EXTERN float* sphParticlesGradHCorrections;
 SPH_PARTICLES_EXTERN Float16Storage* sphParticlesBulkViscosityCoefficients;
-SPH_PARTICLES_EXTERN Float16Storage* sphScaledDivergence;
-// Event-local density/viscosity diagnostics, allocated only for one evaluation.
-SPH_PARTICLES_EXTERN SphViscosityDiagnostics* sphParticlesViscosityDiagnostics;
 
 // Convergence and semiactive working flags share one byte with the latest hydro
 // timestep requirement. The proposed rung is separate from the live particle rung,
@@ -133,13 +129,6 @@ void sphParticlesResetSemiactive();
 void sphParticlesLoad(FILE* fp);
 void sphParticlesSave(FILE* fp);
 void sphCheckpointTest();
-struct SphRunParameters;
-void sphParticlesBeginViscosityDiagnostics();
-void sphParticlesEndViscosityDiagnostics();
-// Scope ownership remains active on a locality with no gas and no allocation.
-bool sphParticlesViscosityDiagnosticsActive();
-// Commit history and viscosity only at the particle's completed endpoint.
-void sphParticlesUpdateTargetAlpha(SphRunParameters const& parameters);
 
 inline float sphParticlesMass(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);

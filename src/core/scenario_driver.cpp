@@ -110,11 +110,6 @@ void runFixedScenario() {
         [](auto const& stage) { return stage.bulkViscosityCoefficient >= 0.0; });
     bool const inheritedViscosityStage = std::any_of(plan.stages.begin(), plan.stages.end(),
         [](auto const& stage) { return stage.bulkViscosityCoefficient < 0.0; });
-    if (baseOptions.hydro.enabled && baseOptions.hydro.viscosityGradientSwitch() &&
-        fixedViscosityStage && inheritedViscosityStage) {
-        THROW_ERROR("Staged scenarios mixing fixed-viscosity overrides with gradient viscosity "
-                    "are not supported; use Morris-Monaghan or fixed viscosity throughout\n");
-    }
     if (baseOptions.hydro.enabled && fixedViscosityStage && !inheritedViscosityStage &&
         baseOptions.hydro.viscosityEvolution != "none") {
         // Every stage replaces the requested viscosity evolution with fixed
@@ -263,7 +258,7 @@ void runFixedScenario() {
                     // Refresh snapshot density and optional hydro rates without
                     // a viscosity update or entropy/velocity kick.
                     sphMidpointStep(-1, state.tau, -1.0, baseTimestep, 1.0, 0.0, state.energies,
-                        global, global ? baseTimestep : 0.0, state.globalTimestep);
+                        global, global ? baseTimestep : 0.0);
                 }
             }
 #endif
@@ -272,7 +267,7 @@ void runFixedScenario() {
                 profile::profileBegin("output");
                 viewOutputViews(outputStep, 1.0, false,
                     state.tau * getOptions().units.timeSeconds * constants::kSecondsToYears,
-                    duration / baseOptions.run.numberOfSteps, state.globalTimestep, state.tau);
+                    duration / baseOptions.run.numberOfSteps, state.tau);
                 profile::profileEnd();
             }
             resetFlops();
@@ -353,7 +348,7 @@ void runFixedScenario() {
                 }
                 auto const hydro = sphMidpointStep(global ? -1 : state.maxRung, midpointTime,
                     timestep, baseTimestep, 1.0, 0.0, state.energies, global,
-                    global ? baseTimestep : 0.0, state.globalTimestep);
+                    global ? baseTimestep : 0.0);
                 if (global) {
                     state.globalHydroTimestep = hydro.minimumTimestep;
                 }
@@ -364,10 +359,9 @@ void runFixedScenario() {
                 if (getOptions().chemistry.enabled || getOptions().starFormation.enabled ||
                     getOptions().hydro.viscosityEvolution != "none") {
                     int const closingRung = global ? 0 : minRung(inc(state.itime, state.maxRung));
-                    auto const sourceEstimate =
-                        sphCompleteSources(closingRung, state.tau + timestep, baseTimestep, 1.0,
-                            0.0, state.energies, global ? timestep : -1.0,
-                            global ? baseTimestep : 0.0, state.globalTimestep);
+                    auto const sourceEstimate = sphCompleteSources(closingRung,
+                        state.tau + timestep, baseTimestep, 1.0, 0.0, state.energies,
+                        global ? timestep : -1.0, global ? baseTimestep : 0.0);
                     if (global) {
                         state.globalHydroTimestep = sourceEstimate.minimumTimestep;
                     }
@@ -480,14 +474,14 @@ void runFixedScenario() {
 #if COSMICTIGER_WITH_SPH
     if (sphMidpointEnabled()) {
         sphMidpointStep(-1, state.tau, -1.0, coarseInterval, 1.0, 0.0, state.energies, global,
-            global ? coarseInterval : 0.0, state.globalTimestep);
+            global ? coarseInterval : 0.0);
     }
 #endif
     // Use the next cycle for a final partial coarse step, preserving earlier snapshots.
     profile::profileBegin("output");
     viewOutputViews(driverFinalOutputStep(state.tau, coarseInterval), 1.0, true,
         state.tau * getOptions().units.timeSeconds * constants::kSecondsToYears,
-        duration / baseOptions.run.numberOfSteps, state.globalTimestep, state.tau);
+        duration / baseOptions.run.numberOfSteps, state.tau);
     profile::profileEnd();
     if (completed && !interrupted && iterations > 0) {
         // Only terminal diagnostics consume the outstanding gravity closing

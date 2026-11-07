@@ -307,9 +307,10 @@ build flags, equations, and supported scenarios.
 
 The gas solver reconstructs density and evolves canonical entropy, using the
 [variational pressure operator](docs/variational_sph.md) with grad-H corrections
-for all SPH runs. It uses Monaghan artificial viscosity, or Phantom's directed
-viscous-pressure force with `hydro.viscosityEvolution=priceEtAl`, alongside FMM or
-PMMM gravity and shared particle storage. See
+for all SPH runs. It uses Monaghan artificial viscosity with the Morris & Monaghan
+coefficient switch and the Balsara shear limiter, or constant coefficients with
+`hydro.viscosityEvolution=none`, alongside FMM or PMMM gravity and shared particle
+storage. See
 [the kernel, viscosity, and paper references](docs/monaghan_sph.md) for the equations,
 cosmological conversions, and deliberate implementation choices. SPH support is
 built by default; `-DCOSMICTIGER_ENABLE_SPH=OFF` excludes it. Enable gas
@@ -328,8 +329,8 @@ coarse neighbors. Gravity and hydro remain separate driver-scheduled operators.
 See the [cross-rung equations and integration contract](docs/sph_rk2_time_integration.md)
 for the chronological schedule, shared stage snapshots, conservation properties,
 and accuracy conditions. The smooth fixed-coefficient hydro update is second
-order; retained viscosity-switch projections and split cooling/source updates
-have separate accuracy limitations. Focused CPU, CUDA and two-rank MPI checks,
+order; the retained Morris & Monaghan endpoint update and split cooling/source
+updates have separate accuracy limitations. Focused CPU, CUDA and two-rank MPI checks,
 including temporal refinement and restart, passed; the linked contract records
 their scope and numerical limits.
 Particle drift selects its backend with `drift.cuda`: the CPU path uses SIMD position updates
@@ -499,7 +500,7 @@ coordinator scopes exclude individual kernels, per-particle loops, and work
 on concurrent HPX tasks: the single phase stack belongs to the coordinator.
 
 The report uses dotted names for finer stages. SPH separates tree creation,
-neighbor boxes/lists, density/support solves, viscosity targets, closing/opening
+neighbor boxes/lists, density/support solves, closing/opening
 forces, predictor/corrector updates, rung limiting, sources, and cleanup.
 Gravity separates tree allocation
 and construction, the FMM root walk/background/result wait, PMMM
@@ -687,7 +688,7 @@ The same subsystem organization is used beneath `cosmictiger/` for headers and `
 implementations. Gravity solver code is in `gravity/global_fmm/` for global adaptive
 FMM and `gravity/pmmm/` for PMMM. SPH numerical modules are in
 `hydro/sph/variational/`, `hydro/sph/monaghan/`, `hydro/sph/morris_and_monaghan/`,
-`hydro/sph/cullen_and_dehnen/`, `hydro/sph/price_etal/`, and `hydro/sph/balsara/`.
+and `hydro/sph/balsara/`.
 Owned particle storage stays in `particles/`; PMMM owns its
 separate ghost arena in `gravity/pmmm/`.
 

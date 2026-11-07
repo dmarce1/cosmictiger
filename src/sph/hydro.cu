@@ -11,7 +11,6 @@
 #include <cosmictiger/sph/cuda.hpp>
 #include <cosmictiger/sph/variable_smoothing_lengths.hpp>
 #include <cosmictiger/sph/viscosity/monaghan.hpp>
-#include <cosmictiger/sph/viscosity/price_etal.hpp>
 #include <cosmictiger/sph/volume.hpp>
 
 namespace detail {
@@ -44,8 +43,7 @@ struct HydroWorkspace {
  * cosmictiger/sph/variable_smoothing_lengths.hpp. Artificial viscosity uses Monaghan (1992),
  * equations 4.1-4.2 and the symmetric kernel of p. 554; its heating follows equation
  * 6.5 and its time step section 10.3, p. 563. The viscosity header gives the full
- * citation. Price mode instead uses Phantom (2018), equations (39)-(42), below.
- * Particle a is the sink and particle b a staged neighbor; the computation
+ * citation. Particle a is the sink and particle b a staged neighbor; the computation
  * uses the papers' symbols, described below. Positions and density are comoving,
  * and stored velocities and internal energies carry the factors a and a² of
  * docs/variational_sph.md.
@@ -60,7 +58,7 @@ struct HydroWorkspace {
  *   dv_a/dτ = −a⁻¹ Σ_b [(Q_ab/m_a)F_a + (Q_ba/m_a)F_b] r_ab,
  *   du_a/dτ = a⁻¹ Σ_b (Q_ab/m_a)F_a (v_ab · r_ab),
  *   ∇_a W_ab(H_a) = F_a r_ab, F_a = w′(r_ab/H_a)/(H_a⁴ |r_ab|).
- * These are derived comoving forms; viscosity is added in the model branches below.
+ * These are derived comoving forms; the pair viscosity below adds to the same pair force.
  * Symbol directory:
  *   a → scale factor; m_b → gas mass; γ → gas adiabatic index
  *   ρ_a, P_a, u_a → density, pressure, internal energy
@@ -71,9 +69,7 @@ struct HydroWorkspace {
  *   dv_a/dτ, du_a/dτ → acceleration, internal energy rate
  *   α_a, α_b, α_ab → bulk viscosity coefficient, neighbor bulk viscosity coefficient, pair bulk viscosity coefficient
  *   β_ab → pair von Neumann–Richtmyer coefficient; Π_ab → pair artificial viscosity
- *   μ_ab → viscosity velocity (Phantom instead stores min(v_ab · r̂_ab, 0) here)
- *   q_abᵃ, q_abᵇ → sink viscous pressure, neighbor viscous pressure
- *   C_ab, C_ba → sink viscosity coefficient, neighbor viscosity coefficient
+ *   μ_ab → viscosity velocity
  *   Code names: abs_r_ab = |r_ab|; Q_ab_over_m_a = Q_ab/m_a; Q_ba_over_m_a = Q_ba/m_a;
  *     dv_a_dτ = dv_a/dτ; du_a_dτ = du_a/dτ.
  *   SIMD partial sums append Pack; CUDA partial sums are reduced in place.
@@ -288,19 +284,16 @@ __device__ __forceinline__ void sphCudaHydroImpl(SphRunParameters parameters, Sp
                 float const velocityDotSeparation = sph_geometry::spatialDot(v_ab, r_ab);
                 float const physicalVelocityDotSeparation =
                     velocityDotSeparation + expansionRate * separationSquared;
-                // Phantom uses radial approach speed, without Monaghan's h/eta regularization.
-                float const μ_ab = parameters.priceEtAl ?
-                    fminf(physicalVelocityDotSeparation / abs_r_ab, 0.0f) :
-                    monaghan::viscosityMu(separationSquared, physicalVelocityDotSeparation, H_a,
-                        H_b, viscosityRegularization, smoothingLengthPerEffectiveRadius,
-                        float(monaghan::kViscosityWidthScale));
+                float const μ_ab = monaghan::viscosityMu(separationSquared,
+                    physicalVelocityDotSeparation, H_a, H_b, viscosityRegularization,
+                    smoothingLengthPerEffectiveRadius, float(monaghan::kViscosityWidthScale));
                 float const α_b =
                     parameters.variableViscosity ? neighbor.bulkViscosityCoefficient : α_a;
                 float const α_ab = parameters.variableViscosity ? 0.5f * α_a + 0.5f * α_b : α_a;
                 float const β_ab = parameters.vonNeumannRichtmyerCoefficientFollowsBulk() ?
                     parameters.vonNeumannRichtmyerCoefficient * α_ab :
                     parameters.vonNeumannRichtmyerCoefficient;
-                α = fmaxf(α, parameters.priceEtAl ? fmaxf(α_a, α_b) : α_ab);
+                α = fmaxf(α, α_ab);
                 flops += 3 * int(parameters.variableViscosity) +
                     int(parameters.vonNeumannRichtmyerCoefficientFollowsBulk());
                 float shearFactor = 1.0f;
@@ -330,56 +323,22 @@ __device__ __forceinline__ void sphCudaHydroImpl(SphRunParameters parameters, Sp
                     neighbor.gradHCorrection);
                 float const pressureForce = inverseScaleFactor *
                     variational::pairForceFactor(Q_ab_over_m_a, Q_ba_over_m_a, F_a, F_b);
-                float viscousForce;
-                float viscousHeating;
-                float neighborViscousHeating = 0.0f;
-                if (parameters.priceEtAl) {
-                    /*
-                     * Phantom (2018), equations (39)-(42), including each side's grad-H factor.
-                     */
-                    float const q_abᵃ =
-                        price_etal::artificialPressure(ρ_a, soundSpeed, μ_ab, α_a, β_ab);
-                    float const q_abᵇ = price_etal::artificialPressure(
-                        neighborDensity, neighborSoundSpeed, μ_ab, α_b, β_ab);
-                    float C_ab = price_etal::directedViscosityCoefficient(q_abᵃ, ρ_a, m_b, ζ_a);
-                    float C_ba = price_etal::directedViscosityCoefficient(
-                        q_abᵇ, neighborDensity, m_b, neighbor.gradHCorrection);
-                    if (parameters.balsaraSwitch) {
-                        C_ab *= shearFactor;
-                        C_ba *= shearFactor;
-                        flops += 2;
-                    }
-                    viscousForce =
-                        inverseScaleFactor * variational::pairForceFactor(C_ab, C_ba, F_a, F_b);
-                    viscousHeating = inverseScaleFactor *
-                        variational::pairWork(C_ab, F_a, physicalVelocityDotSeparation);
-                    if (applyPairKicks) {
-                        // Negating both separation and relative velocity leaves
-                        // their dot product unchanged in the reverse pair.
-                        neighborViscousHeating = inverseScaleFactor *
-                            variational::pairWork(C_ba, F_b, physicalVelocityDotSeparation);
-                        flops += 3;
-                    }
-                    flops += 28;    // radial division, two q/C terms, force/work
-                } else {
-                    float Π_ab = monaghan::artificialViscosity(
-                        ρ_a, neighborDensity, soundSpeed, neighborSoundSpeed, μ_ab, α_ab, β_ab);
-                    if (parameters.balsaraSwitch) {
-                        Π_ab *= shearFactor;
-                        flops += 1;
-                    }
-                    viscousForce = scaledGasMass * Π_ab * F_ab;
-                    viscousHeating =
-                        scaledGasMass * 0.5f * Π_ab * F_ab * physicalVelocityDotSeparation;
-                    neighborViscousHeating = viscousHeating;
-                    flops += sph_flops::kViscosityMu + sph_flops::kArtificialViscosity + 6;
+                float Π_ab = monaghan::artificialViscosity(
+                    ρ_a, neighborDensity, soundSpeed, neighborSoundSpeed, μ_ab, α_ab, β_ab);
+                if (parameters.balsaraSwitch) {
+                    Π_ab *= shearFactor;
+                    flops += 1;
                 }
+                float const viscousForce = scaledGasMass * Π_ab * F_ab;
+                float const viscousHeating =
+                    scaledGasMass * 0.5f * Π_ab * F_ab * physicalVelocityDotSeparation;
+                flops += sph_flops::kViscosityMu + sph_flops::kArtificialViscosity + 6;
                 if constexpr (retainHydroDiagnostics) {
                     viscosityEnergyRate += viscousHeating;
                     flops += 1;
                 }
                 float targetDissipativeEnergyRate = viscousHeating;
-                float neighborDissipativeEnergyRate = neighborViscousHeating;
+                float neighborDissipativeEnergyRate = viscousHeating;
                 if (parameters.conductionCoefficient > 0.0f) {
                     float const exchangeRate = sph_conduction::exchangeRate(ρ_a, neighborDensity,
                         soundSpeed, neighborSoundSpeed, H_a, H_b, separationSquared,
@@ -409,7 +368,7 @@ __device__ __forceinline__ void sphCudaHydroImpl(SphRunParameters parameters, Sp
                     flops += 4 * kSpatialDimensions;
                 }
                 if (applyPairKicks &&
-                    parameters.isPairRungDue(max(previousRung, int(neighbor.rung))) &&
+                    parameters.isActiveRung(max(previousRung, int(neighbor.rung))) &&
                     sphOwnsPairKick(data.sourceIds[particleIndex],
                         data.sourceIds[neighbor.sourceIndex], previousRung, neighbor.rung)) {
                     Vector3<float> const pairAcceleration(
@@ -508,7 +467,7 @@ __device__ __forceinline__ void sphCudaHydroImpl(SphRunParameters parameters, Sp
                 } else {
                     ALWAYS_ASSERT(parameters.phase == 0);
                 }
-                if (applyPairKicks && parameters.isPairRungDue(previousRung)) {
+                if (applyPairKicks) {
                     Vector3<float> const externalAcceleration = sphCompleteAcceleration(parameters,
                         Vector3<Position>(positionX, positionY, positionZ), velocity,
                         Vector3<float>(0.0f), Vector3<float>(0.0f), data.centralAcceleration,
@@ -518,11 +477,7 @@ __device__ __forceinline__ void sphCudaHydroImpl(SphRunParameters parameters, Sp
                 }
                 if (data.sinkAccelerations) {
                     for (int dim = 0; dim < kSpatialDimensions; dim++) {
-                        if (parameters.accelerationGradientViscosity) {
-                            data.sinkAccelerations[sinkIndex][dim] += dv_a_dτ[dim];
-                        } else {
-                            data.sinkAccelerations[sinkIndex][dim] = dv_a_dτ[dim];
-                        }
+                        data.sinkAccelerations[sinkIndex][dim] = dv_a_dτ[dim];
                     }
                 }
                 // E=a^2 u and homogeneous work du/dt=-3 H P/rho give
@@ -549,9 +504,9 @@ __device__ __forceinline__ void sphCudaHydroImpl(SphRunParameters parameters, Sp
                      *   μ_ab)), δt = 0.25 min(δt_f, δt_cv).
                      * smoothingLength is the common effective radius 2σ (docs/monaghan_sph.md). The
                      * printed δt_f lacks a square root and is used as sqrt(smoothingLength/|f_a|);
-                     * max_b μ_ab is read as max_b(−μ_ab), or radial approach speed for Phantom; the
-                     * Courant factor and the calibrated acceleration coefficient replace
-                     * the fixed 0.25. The reciprocals are kept apart for the diagnostics.
+                     * max_b μ_ab is read as max_b(−μ_ab); the Courant factor and the calibrated
+                     * acceleration coefficient replace the fixed 0.25. The reciprocals are kept
+                     * apart for the diagnostics.
                      *
                      * Symbol directory (in the code below):
                      *   μ_ab → viscosity velocity

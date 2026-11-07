@@ -10,7 +10,6 @@
 #include <cosmictiger/particles/particle_types.hpp>
 #include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/variable_smoothing_lengths.hpp>
-#include <cosmictiger/sph/viscosity/cullen_and_dehnen.hpp>
 #include <cosmictiger/sph/viscosity/monaghan.hpp>
 #include <cosmictiger/sph/volume.hpp>
 
@@ -164,37 +163,11 @@ void variationalForce() {
     }
 }
 
-void gradients() {
-    cullen_and_dehnen::GradientSums<double> sums;
-    for (int row = 0; row < kSpatialDimensions; ++row) {
-        for (int column = 0; column < kSpatialDimensions; ++column) {
-            sums.moment[row][column] = row == column ? row + 1.0 : 0.0;
-            sums.velocity[row][column] = (column + 1.0) * (2 * row - column + 0.25);
-            sums.acceleration[row][column] = 0.0;
-        }
-    }
-    double velocity[3][3];
-    double acceleration[3][3];
-    size_t operations = 0;
-    int const rank =
-        cullen_and_dehnen::reconstructGradients(sums, velocity, acceleration, operations);
-    near(rank, kSpatialDimensions, 0, "gradient rank");
-    for (int row = 0; row < 3; ++row) {
-        for (int column = 0; column < 3; ++column) {
-            near(velocity[row][column],
-                row < kSpatialDimensions && column < kSpatialDimensions ? 2 * row - column + 0.25 :
-                                                                          0.0,
-                1e-12, "affine gradient");
-        }
-    }
-}
-
 }    // namespace detail
 
 int main() {
     detail::kernels();
     detail::variationalForce();
-    detail::gradients();
     std::cout << "D=" << kSpatialDimensions
-              << " kernel, grad-H, variational force and matrix checks passed\n";
+              << " kernel, grad-H and variational force checks passed\n";
 }

@@ -133,8 +133,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
     std::shared_ptr<KickWorkspace> cudaWorkspace, KickContext const& context) {
     using Expansion = cosmictiger::gravity::cartesian::tracefree::Expansion<float, order>;
     ALWAYS_ASSERT(!params.deferHydroOpening ||
-        (!params.forceOnly && !params.sphAccelerationOnly && !params.globalTimestep &&
-            !params.deferGasOpening && gravityGasOpeningDeferred()));
+        (!params.forceOnly && !params.globalTimestep && !params.deferGasOpening &&
+            gravityGasOpeningDeferred()));
     auto* deferredGasOpening = params.deferHydroOpening ? gravityDeferredGasOpeningData() : nullptr;
     constexpr int kLocalCoefficients = FmmOrder<order>::kLocalCoefficients_;
     constexpr int kLocalDegree = FmmOrder<order>::kLocalDegree_;
@@ -176,7 +176,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 params, selfPtr->numberOfParticles(), context.gpuExecutor);
         }
         size_t maximumGpuParticles = kCudaKickPartsMax;
-        auto const rng = (params.forceOnly || params.sphAccelerationOnly || snapshotDiagnostics) ?
+        auto const rng = (params.forceOnly || snapshotDiagnostics) ?
             Pair<ParticleInteger>(0, particlesOwnedSize()) :
             particlesCurrentRange();
         ParticleInteger const rangeParticles = rng.second - rng.first;
@@ -498,19 +498,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                     output.nearPotential = output.potential - output.longPotential;
                     continue;
                 }
-                if (params.sphAccelerationOnly) {
-#if COSMICTIGER_WITH_SPH
-                    if (particlesType(i) == kSphType) {
-                        ParticleInteger const gasIndex = particlesCatIndex(i);
-                        sphStageAccelerations()[gasIndex] =
-                            Vector3<float>(forces.gx[j], forces.gy[j], forces.gz[j]);
-                    }
-#endif
-                    flops += cosmictiger::gravity::cartesian::tracefree::detail::L2P<kLocalDegree,
-                                 true>::kFlops_ +
-                        15;
-                    continue;
-                }
                 particlesCaptureGravitySample(i, forces.gx[j], forces.gy[j], forces.gz[j]);
                 if (saveAcceleration) {
                     particlesGravityAcceleration(kXi, i) = forces.gx[j];
@@ -619,14 +606,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                         kr.maxRung = std::max(nextRung, kr.maxRung);
                         ALWAYS_ASSERT(nextRung >= 0 && nextRung < kMaxRung);
                         flops += 15;
-#if COSMICTIGER_WITH_SPH
-                        if (sphScaledDivergence != nullptr && rung != nextRung &&
-                            particlesType(i) == kSphType &&
-                            !sphRescaleDivergence(
-                                sphScaledDivergence[particlesCatIndex(i)], rung, nextRung)) {
-                            THROW_ERROR("SPH rung change overflows timestep-scaled divergence\n");
-                        }
-#endif
                         rung = nextRung;
                         dt = 0.5f * rungDt[params.minRung] * params.t0;
 #if COSMICTIGER_WITH_SPH
@@ -703,13 +682,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                             rung = params.fixedRung;
                         }
                         ALWAYS_ASSERT(rung >= 0 && rung < kMaxRung);
-#if COSMICTIGER_WITH_SPH
-                        if (sphScaledDivergence != nullptr && previousRung != rung && gas &&
-                            !sphRescaleDivergence(
-                                sphScaledDivergence[particlesCatIndex(i)], previousRung, rung)) {
-                            THROW_ERROR("SPH rung change overflows timestep-scaled divergence\n");
-                        }
-#endif
                         dt = params.sign * 0.5f * rungDt[rung] * params.t0;
                         if (gas && params.deferGasOpening) {
                             gravityGlobalAcceleration(kXi)[i] = forces.gx[j];

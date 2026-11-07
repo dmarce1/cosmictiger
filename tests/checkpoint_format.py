@@ -92,6 +92,7 @@ def read_prefix(data):
     dimension_count = 3 - ((header.reserved >> 28) & 3)
     require(dimension_count in (1, 2, 3), "invalid checkpoint dimension count")
     hydro, cooling, stars = (bool(flags & (1 << bit)) for bit in (0, 11, 20))
+    require(not hydro or header.reserved & (1 << 25), "retired SPH viscosity checkpoint layout")
     require(not cooling or hydro, "cooling checkpoint requires SPH")
     require(not stars or cooling, "star formation checkpoint requires cooling")
     require(hydro or not flags & ((1 << 12) | (1 << 13) | (1 << 14) | (1 << 25)),
@@ -123,7 +124,6 @@ def read_prefix(data):
         require(result.particle_mesh[0] == 1 and result.particle_mesh[11] == 1,
                 "unsupported particle-mesh checkpoint version or force convention")
     result.initial_counts = reader.take("Q", 2) if flags & (1 << 26) else ()
-    viscosity_offset = 0
     if hydro:
         result.sph_parameters = reader.take("d", 13)
         result.conduction_coefficient = reader.take("d")[0] if flags & (1 << 25) else 0.0
@@ -132,11 +132,9 @@ def read_prefix(data):
         if flags & (1 << 12):
             result.z_plane_acceleration = reader.take("d")[0]
         if flags & (1 << 14):
-            result.viscosity = reader.take("d", 7)
-            require(all(math.isfinite(value) for value in result.viscosity) and
-                    result.viscosity[2] in (0.0, 1.0, 2.0, 3.0),
+            result.viscosity = reader.take("d", 2)
+            require(all(math.isfinite(value) for value in result.viscosity),
                     "invalid checkpoint viscosity parameters")
-            viscosity_offset = 2 + 2 * int(result.viscosity[2])
     if cooling:
         result.cooling_offset = reader.offset
         result.cooling_parameters = reader.take("d", 6)
@@ -174,11 +172,9 @@ def read_prefix(data):
                 "invalid checkpoint particle-mesh interval extension")
     result.particle_start = reader.offset
     # Version 130000 packs convergence, semiactivity and the proposed rung into
-    # one byte, while retaining enabled gradient-model Balsara bytes.
-    # Normalization follows the live rung or shared previous global interval.
-    result.retained_balsara = viscosity_offset >= 4 and bool(flags & (1 << 13))
-    result.gas_version = (130000 + (110 if stars else 100 if cooling else 2) + viscosity_offset +
-                          int(result.retained_balsara))
+    # one byte. From 140000 Morris-Monaghan alpha is the only viscosity state.
+    result.gas_version = (140000 + (110 if stars else 100 if cooling else 2) +
+                          (2 if flags & (1 << 14) else 0))
     result.reader = reader
     return result
 
@@ -230,13 +226,11 @@ def decode_checkpoint(data, ranks=1):
                 "invalid checkpoint hydro rung bound")
         result.proposed_rungs = encoded_rungs
         flags = (result.converged, result.semiactive)
-        delta = (result.gas_version - 130000 - int(result.retained_balsara) -
+        delta = (result.gas_version - 140000 -
                  (110 if result.has_stars else 100 if result.has_cooling else 2))
-        require(delta in (0, 2, 4, 6, 8), "unsupported checkpoint viscosity payload")
+        require(delta in (0, 2), "unsupported checkpoint viscosity payload")
         viscosity = []
         result.bulk_viscosity_coefficients = []
-        result.divergence_histories = []
-        result.balsara_factors = []
         for _ in range(gas_count):
             values = ()
             if delta:
@@ -245,18 +239,6 @@ def decode_checkpoint(data, ranks=1):
                         "invalid checkpoint viscosity coefficient")
                 result.bulk_viscosity_coefficients.append(alpha)
                 values = (alpha,)
-            if delta >= 4:
-                scaled_divergence = reader.take("e")[0]
-                require(math.isfinite(scaled_divergence),
-                        "invalid checkpoint divergence history")
-                # Preserve the stored sample exactly for restart comparisons.
-                # Decoding requires the integrator's base/global timestep.
-                result.divergence_histories.append(scaled_divergence)
-                values += (scaled_divergence,)
-                if result.retained_balsara:
-                    factor = reader.take("B")[0]
-                    result.balsara_factors.append(factor)
-                    values += (factor,)
             viscosity.append(values)
         if result.has_cooling:
             result.cooling = tuple(reader.take("f", 1) for _ in range(gas_count))

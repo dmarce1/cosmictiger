@@ -421,67 +421,6 @@ void endGravityDiagnosticSort() {
 }    // namespace detail
 #endif
 
-void gravityRefreshSphAcceleration(double theta) {
-#if COSMICTIGER_ENABLE_FMM && COSMICTIGER_WITH_SPH
-    auto const& options = getOptions();
-    ALWAYS_ASSERT(hpxRank() == 0 && options.hydro.enabled && options.gravity.enabled &&
-        options.gravity.method == "fmm" && !gravityGasOpeningDeferred());
-    // Derived canonical-force conversion (docs/monaghan_sph.md, cosmological
-    // conventions): w = a v_pec, dt = a dτ, dw/dτ = a² g_phys;
-    // g_phys = −G m Δx/(a² |Δx|³), hence dw/dτ = −G m Δx/|Δx|³.
-    // No additional 1/a belongs on this gm-scaled gravity force. The hydro
-    // pressure force's m/a factor follows its separate E = a² u conversion.
-    // w -> stored particle velocity; Gm -> G times mass; dw/dτ -> SPH stage acceleration.
-    // The gas buffer belongs to the current hydro stage. A full-source force
-    // tree temporarily permutes base particles while keeping gas records fixed;
-    // restore that permutation before any retained SPH tree/stage resumes.
-    // The hierarchy's rungBegin/rungBegins are never modified.
-    try {
-        detail::beginGravityDiagnosticSort();
-        particlesCacheFree();
-        TreeCreateParameters treeParameters(0, theta, 0.0);
-        treeParameters.allParticles = true;
-        treeCreate(treeParameters);
-        KickParameters parameters;
-        parameters.sphAccelerationOnly = true;
-        parameters.htime = false;
-        parameters.ascending = parameters.descending = parameters.top = false;
-        parameters.doPhi = false;
-        parameters.gpu = options.gravity.cuda;
-        parameters.minLevel = treeParameters.minLevel;
-        parameters.minRung = 0;
-        parameters.gm = options.gravity.gm;
-        parameters.gravitySmoothingLength = options.gravity.smoothingLength;
-        parameters.theta = theta;
-        parameters.nodeLoad = 0.0f;
-        parameters.firstCall = true;
-        ExpansionBuffer expansion;
-        expansion.zero();
-        Vector3<Position> center;
-        for (int dimension = 0; dimension < kDimensions; ++dimension) {
-            center[dimension] = 0.0;
-        }
-        TreeId root;
-        root.proc = 0;
-        root.index = 0;
-        Vector<TreeId> checks;
-        checks.push_back(root);
-        kick(parameters, expansion, center, root, checks, checks, nullptr);
-        treeDestroy();
-        particlesCacheFree();
-        detail::endGravityDiagnosticSort();
-    } catch (...) {
-        auto const failure = std::current_exception();
-        treeDestroy();
-        particlesCacheFree();
-        detail::endGravityDiagnosticSort();
-        std::rethrow_exception(failure);
-    }
-#else
-    THROW_ERROR("SPH gravity sensor requires FMM and SPH support\n");
-#endif
-}
-
 void gravityRefreshSnapshotDiagnostics(double theta) {
     auto const& options = getOptions();
     ALWAYS_ASSERT(hpxRank() == 0 && options.gravity.enabled &&

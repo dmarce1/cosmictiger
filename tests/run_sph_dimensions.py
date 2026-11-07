@@ -59,7 +59,7 @@ def state(directory):
         assert abs(sum(result.velocities[dim::args.dimension])) / result.count < 2e-5
     return result
 
-for viscosity in ("none", "morrisAndMonaghan", "cullenAndDehnen", "huEtal", "priceEtAl"):
+for viscosity in ("none", "morrisAndMonaghan"):
     result = state(run("wave_" + viscosity, options=(f"--hydro.viscosityEvolution={viscosity}",)))
     assert min(result.densities) > 0.5 and max(result.densities) < 2
 for scenario in ("sod", "blast") + (("kelvinHelmholtz", "gresho") if args.dimension == 2 else ()):

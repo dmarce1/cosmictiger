@@ -169,7 +169,7 @@ def check_velocity_roundoff_restart(reference, resumed):
                 f"restart changed driver {field}")
     # Physical payload begins with two particle counts, then three position
     # arrays and the interleaved float velocities. Keep every other byte exact,
-    # including particle ordering, flags, viscosity history and entropy context.
+    # including particle ordering, flags, viscosity state and entropy context.
     begin = 2 * first.integer_bytes + 3 * first.count * first.position_bytes
     end = begin + 3 * first.count * 4
     require(first.physical[:begin] == second.physical[:begin] and
@@ -188,7 +188,7 @@ def check_velocity_roundoff_restart(reference, resumed):
 
 
 def checkViscosityRestarts(executable, baseWorkdir):
-    """Check every viscosity switch and both permitted constant/MM shear settings."""
+    """Check both viscosity models; only constant viscosity can disable the shear limiter."""
     configuration = Path(__file__).resolve().parents[1] / "configurations/hydro_wave.ini"
     common = [str(executable), f"--configuration={configuration}", "--hpx:threads=2",
               "--hpx:bind=none", "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512",
@@ -196,8 +196,8 @@ def checkViscosityRestarts(executable, baseWorkdir):
               "--run.endTime=0.00001", "--run.verbose=true", "--checkpoint.intervalSeconds=0",
               "--output.directory=.", "--output.silo=false", "--analysis.views=false",
               "--analysis.power=false", "--analysis.groups=false", "--lightcone.enabled=false"]
-    for model in ("none", "morrisAndMonaghan", "cullenAndDehnen", "priceEtAl", "huEtal"):
-        for limiter in ((False, True) if model in ("none", "morrisAndMonaghan") else (False,)):
+    for model in ("none", "morrisAndMonaghan"):
+        for limiter in ((False, True) if model == "none" else (True,)):
             name = f"viscosity_{model}_{int(limiter)}"
             options = common + [f"--hydro.viscosityEvolution={model}",
                                 f"--hydro.balsaraSwitch={str(limiter).lower()}"]
@@ -208,38 +208,24 @@ def checkViscosityRestarts(executable, baseWorkdir):
             checkpoint = reference / "checkpoint.1"
             if not checkpoint.is_dir():
                 raise RuntimeError(f"{name} did not save a completed first step")
-            first_state = decode_checkpoint((checkpoint / "checkpoint.0.dat").read_bytes())
-            final_state = decode_checkpoint(
-                (reference / "checkpoint.2" / "checkpoint.0.dat").read_bytes())
-            if model in ("cullenAndDehnen", "priceEtAl", "huEtal"):
-                # Each scalar stores the last committed endpoint gradient,
-                # normalized by its live rung or shared actual global duration.
-                for state in (first_state, final_state):
-                    if len(state.divergence_histories) != state.gas_count:
-                        raise RuntimeError(f"{name} has missing endpoint history")
-                    if len(state.balsara_factors) != (state.gas_count if limiter else 0):
-                        raise RuntimeError(f"{name} has an incorrect retained Balsara payload")
-                events = re.findall(r"SPH midpoint: time=(\S+) rung=(-?\d+) dt=(\S+)",
-                                    (reference / "run.log").read_text())
-                if len(events) < 2 or not final_state.driver.tau > first_state.driver.tau:
-                    raise RuntimeError(f"{name} did not complete successive hydro steps")
-            elif first_state.divergence_histories or final_state.divergence_histories:
-                raise RuntimeError(f"{name} unexpectedly checkpointed divergence history")
-            elif first_state.balsara_factors or final_state.balsara_factors:
-                raise RuntimeError(f"{name} unexpectedly checkpointed transient Balsara factors")
+            for path in (checkpoint, reference / "checkpoint.2"):
+                state = decode_checkpoint((path / "checkpoint.0.dat").read_bytes())
+                expected_coefficients = state.gas_count if model != "none" else 0
+                if len(state.bulk_viscosity_coefficients) != expected_coefficients:
+                    raise RuntimeError(f"{name} has an incorrect viscosity payload")
             resumed = prepareCase(baseWorkdir, name + "_restart", checkpoint)
             output = runSimulation(options + ["--run.maxIterations=1", "--checkpoint.readIndex=1"],
                                    resumed, "restart.log")
             if "Done reading checkpoint" not in output:
                 raise RuntimeError(f"{name} did not load the checkpoint")
             # Pair reduction order can leave tiny transverse velocity residuals.
-            # Keep all nonvelocity bytes (including viscosity history) and clocks
+            # Keep all nonvelocity bytes (including viscosity state) and clocks
             # exact, and bound only velocity accumulation at float precision.
             restart_errors = check_velocity_roundoff_restart(
                 reference / "checkpoint.2", resumed / "checkpoint.2")
             checkManifest(resumed / "checkpoint.2", 2, scenario="hydroWave", endTime=1.e-5,
                           gravity=False)
-            if not limiter:
+            if model != "none" or not limiter:
                 mutations = {"model": "--hydro.viscosityEvolution=" + (
                     "morrisAndMonaghan" if model == "none" else "none"),
                              "beta": "--hydro.viscosityBeta=3"}
@@ -249,15 +235,6 @@ def checkViscosityRestarts(executable, baseWorkdir):
                 if model == "morrisAndMonaghan":
                     mutations.update({"floor": "--hydro.viscosityAlphaMin=0.2",
                                       "decay": "--hydro.viscosityDecay=0.3"})
-                if model == "cullenAndDehnen":
-                    mutations.update({"maximum": "--hydro.viscosityAlphaMax=3",
-                                      "decay": "--hydro.viscosityDecayCD=0.1"})
-                if model == "huEtal":
-                    mutations.update({"maximum": "--hydro.viscosityAlphaMaxHu=0.5",
-                                      "decay": "--hydro.viscosityDecayHu=0.1"})
-                if model == "priceEtAl":
-                    mutations.update({"maximum": "--hydro.viscosityAlphaMaxPrice=0.5",
-                                      "decay": "--hydro.viscosityDecayPrice=0.2"})
                 for label, changed in mutations.items():
                     directory = prepareCase(baseWorkdir, name + "_reject_" + label, checkpoint)
                     changed_key = changed.split("=", 1)[0] + "="
@@ -274,12 +251,12 @@ def checkViscosityRestarts(executable, baseWorkdir):
                     )
                     if not any(diagnostic in output for diagnostic in diagnostics):
                         raise RuntimeError(f"{name}/{label} lacked a viscosity compatibility diagnostic")
-            print(f"{name}: velocity-roundoff restart, exact committed history, and "
+            print(f"{name}: velocity-roundoff restart, exact committed state, and "
                   f"viscosity compatibility passed; maximum errors={restart_errors}")
 
 
 def checkVariationalPressureRestart(executable, baseWorkdir):
-    """Restart variational SPH and reject the retired pressure formulation.
+    """Restart variational SPH and reject retired pressure and viscosity layouts.
 
     Rebuilt grad-H corrections must preserve every nonvelocity payload byte.
     Tiny velocity residuals may reflect conservative pair reduction ordering.
@@ -305,27 +282,37 @@ def checkVariationalPressureRestart(executable, baseWorkdir):
     restart_errors = check_velocity_roundoff_restart(
         reference / "checkpoint.2", resumed / "checkpoint.2")
 
-    directory = prepareCase(baseWorkdir, name + "_reject_retired", checkpoint)
-    checkpoint_dir = directory / checkpoint.name
-    rank_file = checkpoint_dir / "checkpoint.0.dat"
-    payload = bytearray(rank_file.read_bytes())
-    checkpoint_position_bytes(payload)  # Validate the current native header before changing it.
-    physics_offset = Header.reserved.offset
-    physics_code = struct.unpack_from("@I", payload, physics_offset)[0]
-    if physics_code & 0xff != 2:
-        raise RuntimeError("SPH checkpoint did not record the variational formulation")
-    struct.pack_into("@I", payload, physics_offset, (physics_code & ~0xff) | 1)
-    rank_file.write_bytes(payload)
-    # Keep integrity valid so rejection specifically tests the retired formulation.
-    manifest = checkpoint_dir / "checkpoint.meta"
-    lines = manifest.read_text().splitlines()
-    lines[1] = f"0 {len(payload)} {fnv1a64(payload):016x}"
-    manifest.write_text("\n".join(lines) + "\n")
-    output = runSimulation(options + ["--run.maxIterations=0", "--checkpoint.readIndex=1"],
-                           directory, "restart.log", expectSuccess=False)
-    if "Checkpoint SPH pressure operator (monaghan) is no longer supported" not in output:
-        raise RuntimeError("retired Monaghan checkpoint lacked the operator diagnostic")
-    print(f"{name}: velocity-roundoff restart and retired-operator rejection passed; "
+    def rejectRetired(label, alter, diagnostic):
+        directory = prepareCase(baseWorkdir, f"{name}_reject_{label}", checkpoint)
+        checkpoint_dir = directory / checkpoint.name
+        rank_file = checkpoint_dir / "checkpoint.0.dat"
+        payload = bytearray(rank_file.read_bytes())
+        # Validate the current native header before changing it.
+        checkpoint_position_bytes(payload)
+        physics_offset = Header.reserved.offset
+        physics_code = struct.unpack_from("@I", payload, physics_offset)[0]
+        struct.pack_into("@I", payload, physics_offset, alter(physics_code))
+        rank_file.write_bytes(payload)
+        # Keep integrity valid so rejection specifically tests the retired layout.
+        manifest = checkpoint_dir / "checkpoint.meta"
+        lines = manifest.read_text().splitlines()
+        lines[1] = f"0 {len(payload)} {fnv1a64(payload):016x}"
+        manifest.write_text("\n".join(lines) + "\n")
+        output = runSimulation(options + ["--run.maxIterations=0", "--checkpoint.readIndex=1"],
+                               directory, "restart.log", expectSuccess=False)
+        if diagnostic not in output:
+            raise RuntimeError(f"retired {label} checkpoint lacked its diagnostic")
+
+    def retirePressure(physics_code):
+        if physics_code & 0xff != 2:
+            raise RuntimeError("SPH checkpoint did not record the variational formulation")
+        return (physics_code & ~0xff) | 1
+
+    rejectRetired("pressure", retirePressure,
+                  "Checkpoint SPH pressure operator (monaghan) is no longer supported")
+    rejectRetired("viscosity", lambda physics_code: physics_code & ~(1 << 25),
+                  "Checkpoint uses the retired SPH viscosity layout")
+    print(f"{name}: velocity-roundoff restart and retired-layout rejection passed; "
           f"maximum errors={restart_errors}")
 
 

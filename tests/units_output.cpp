@@ -39,9 +39,7 @@
 namespace detail {
 
 constexpr float kUnitsOutputViscosityAlpha = 0.375f;
-constexpr float kUnitsOutputStoredDivergence = -1.25f;
 constexpr double kUnitsOutputBaseTimestep = 2.0;
-constexpr double kUnitsOutputGlobalTimestep = 0.375;
 constexpr double kUnitsOutputPhysicalYears = 4.2e9;
 
 void requireUnitsOutput(bool condition, std::string const& message) {
@@ -275,20 +273,6 @@ void checkUnitsOutputViscosity(DBfile* file, std::string const& path) {
     } else {
         checkUnitsOutputField(file, name, 1, double(kUnitsOutputViscosityAlpha), "1");
     }
-    if (getOptions().hydro.viscosityGradientSwitch()) {
-        // The sampled quantity is G = ∇_x·w. Its normalization is removed using
-        // the sample's duration; output must not divide by the current a².
-        double expected = kUnitsOutputStoredDivergence;
-        char const* unit = "1/code_time";
-        if (path.starts_with("cgs/")) {
-            expected /= 5.0e15;
-            unit = "1/s";
-        } else if (path.starts_with("cosmological/")) {
-            expected *= constants::kMpcToCm / (5.0e15 * 0.7 * 1.0e5);
-            unit = "(km/s)/(Mpc/h)";
-        }
-        checkUnitsOutputField(file, path + "gas/velocityDivergence", 1, expected, unit);
-    }
 }
 
 void checkUnitsOutputGas(DBfile* file, std::string const& name, int count, double coordinateScale,
@@ -464,32 +448,12 @@ void unitsOutputParticleFixture(bool initialize) {
             // Distinct from the scalar CLI alpha; unchanged by unit/frame conversion.
             sphParticlesBulkViscosityCoefficients[0] = detail::kUnitsOutputViscosityAlpha;
         }
-        if (getOptions().hydro.viscosityGradientSwitch()) {
-            auto& history = sphScaledDivergence[0];
-            // History normalization follows the live rung.
-
-            double const sampleTimestep = usesGlobalIntegration(getOptions().run) ?
-                detail::kUnitsOutputGlobalTimestep :
-                std::ldexp(detail::kUnitsOutputBaseTimestep, -sphParticlesRung(0));
-            detail::requireUnitsOutput(
-                sphEncodeDivergence(history, detail::kUnitsOutputStoredDivergence, sampleTimestep),
-                "representable canonical divergence fixture");
-        }
     } else {
         detail::requireUnitsOutput(
             particlesPos(kXi, 0).raw() == (PositionInteger(0x80000000U) << (kPositionBits - 32)) &&
                 particlesPos(kXi, 1).raw() ==
                     (PositionInteger(0x80000001U) << (kPositionBits - 32)),
             "particle fixed-point storage unchanged on every locality");
-        if (getOptions().hydro.viscosityGradientSwitch()) {
-            auto const& history = sphScaledDivergence[0];
-            double const sampleTimestep = usesGlobalIntegration(getOptions().run) ?
-                detail::kUnitsOutputGlobalTimestep :
-                std::ldexp(detail::kUnitsOutputBaseTimestep, -sphParticlesRung(0));
-            detail::requireUnitsOutput(sphDecodeDivergence(history, sampleTimestep) ==
-                    detail::kUnitsOutputStoredDivergence,
-                "output leaves the endpoint divergence unchanged");
-        }
     }
     for (auto& future : pending) {
         future.get();
@@ -558,8 +522,7 @@ void unitsOutputTest() {
     setOptions(options);
     unitsOutputParticleFixture(true);
     viewConfigure();
-    viewOutputViews(0, 0.25, true, kUnitsOutputPhysicalYears, kUnitsOutputBaseTimestep,
-        kUnitsOutputGlobalTimestep);
+    viewOutputViews(0, 0.25, true, kUnitsOutputPhysicalYears, kUnitsOutputBaseTimestep);
     for (int rank = 0; rank < hpxSize(); rank++) {
         auto file = openUnitsOutput(0, rank);
         checkUnitsOutputCommandLine(file.get());
@@ -593,8 +556,7 @@ void unitsOutputTest() {
     options.output.units = "both";
     options.output.frame = "both";
     setOptions(options);
-    viewOutputViews(1, 0.25, true, kUnitsOutputPhysicalYears, kUnitsOutputBaseTimestep,
-        kUnitsOutputGlobalTimestep);
+    viewOutputViews(1, 0.25, true, kUnitsOutputPhysicalYears, kUnitsOutputBaseTimestep);
     for (int rank = 0; rank < hpxSize(); rank++) {
         auto file = openUnitsOutput(1, rank);
         checkUnitsOutputCommandLine(file.get());
@@ -612,8 +574,7 @@ void unitsOutputTest() {
     options.output.units = "cgs";
     options.output.frame = "lab";
     setOptions(options);
-    viewOutputViews(2, 0.25, true, kUnitsOutputPhysicalYears, kUnitsOutputBaseTimestep,
-        kUnitsOutputGlobalTimestep);
+    viewOutputViews(2, 0.25, true, kUnitsOutputPhysicalYears, kUnitsOutputBaseTimestep);
     for (int rank = 0; rank < hpxSize(); rank++) {
         auto file = openUnitsOutput(2, rank);
         checkUnitsOutputCommandLine(file.get());
@@ -625,8 +586,7 @@ void unitsOutputTest() {
     options.output.units = "cosmological";
     options.output.frame = "comoving";
     setOptions(options);
-    viewOutputViews(3, 0.25, true, kUnitsOutputPhysicalYears, kUnitsOutputBaseTimestep,
-        kUnitsOutputGlobalTimestep);
+    viewOutputViews(3, 0.25, true, kUnitsOutputPhysicalYears, kUnitsOutputBaseTimestep);
     for (int rank = 0; rank < hpxSize(); rank++) {
         auto file = openUnitsOutput(3, rank);
         checkUnitsOutputCommandLine(file.get());
@@ -642,8 +602,8 @@ void unitsOutputTest() {
     setOptions(options);
     for (int snapshot = 0; snapshot < 2; ++snapshot) {
         unitsOutputSourceFixture(snapshot);
-        viewOutputViews(4 + snapshot, 0.25, true, kUnitsOutputPhysicalYears,
-            kUnitsOutputBaseTimestep, kUnitsOutputGlobalTimestep);
+        viewOutputViews(
+            4 + snapshot, 0.25, true, kUnitsOutputPhysicalYears, kUnitsOutputBaseTimestep);
         for (int rank = 0; rank < hpxSize(); ++rank) {
             auto file = openUnitsOutput(4 + snapshot, rank);
             for (auto const* path :
@@ -661,8 +621,7 @@ void unitsOutputTest() {
     double const elapsedCodeTime = 0.123456789;
     double const elapsedYears =
         elapsedCodeTime * options.units.timeSeconds * constants::kSecondsToYears;
-    viewOutputViews(
-        6, 1.0, true, elapsedYears, kUnitsOutputBaseTimestep, kUnitsOutputGlobalTimestep);
+    viewOutputViews(6, 1.0, true, elapsedYears, kUnitsOutputBaseTimestep);
     for (int rank = 0; rank < hpxSize(); ++rank) {
         auto file = openUnitsOutput(6, rank);
         requireUnitsOutputClose(readUnitsOutputClock(file.get(), ""), elapsedCodeTime,
@@ -692,8 +651,8 @@ void unitsOutputTest() {
         options.output.units = converted ? "both" : "code";
         options.output.frame = converted ? "both" : "comoving";
         setOptions(options);
-        viewOutputViews(7 + converted, 0.25, true, kUnitsOutputPhysicalYears,
-            kUnitsOutputBaseTimestep, kUnitsOutputGlobalTimestep);
+        viewOutputViews(
+            7 + converted, 0.25, true, kUnitsOutputPhysicalYears, kUnitsOutputBaseTimestep);
         for (int rank = 0; rank < hpxSize(); ++rank) {
             auto file = openUnitsOutput(7 + converted, rank);
             for (auto const* path :

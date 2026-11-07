@@ -79,28 +79,4 @@ CUDA_EXPORT inline Real balsaraFactor(Real divergence, Real curlMagnitude) {
     return f_aᴬⱽ;
 }
 
-/*
- * Derived evaluation of GADGET-4 equation (72) from the reconstructed peculiar
- * velocity gradient used by Cullen & Dehnen (2010), equations (B2), (B4), (B7):
- * https://arxiv.org/abs/1006.1524
- *   V_ij = ∂w_i/∂x_j,  G = tr(V),
- *   ω = (V_zy − V_yz, V_xz − V_zx, V_yx − V_xy),
- *   f = |G| / (|G| + |ω|).
- * The common conversion from stored to physical peculiar gradients cancels.
- * V → velocity gradient; G → divergence; ω → curl components.
- * Count scalar arithmetic only: trace (2), curl (3), norm (6), factor (2).
- * Comparisons, selection and unary signs do not count as floating operations.
- */
-template <typename Real, typename Counter>
-CUDA_EXPORT inline Real factorFromVelocityGradient(
-    Real const (&V)[3][3], Counter& floatingPointOperations) {
-    Real const G = V[0][0] + V[1][1] + V[2][2];
-    Real const ω_x = V[2][1] - V[1][2];
-    Real const ω_y = V[0][2] - V[2][0];
-    Real const ω_z = V[1][0] - V[0][1];
-    Real const curlMagnitude = simdSqrt(ω_x * ω_x + ω_y * ω_y + ω_z * ω_z);
-    floatingPointOperations += 13;
-    return balsaraFactor(G, curlMagnitude);
-}
-
 }    // namespace balsara

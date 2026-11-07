@@ -137,39 +137,25 @@ void validateConduction(Options const& opts) {
     }
 }
 
-void validateBalsaraSwitch(Options const& opts) {
-    if (opts.hydro.balsaraSwitch && opts.hydro.viscosityGradientSwitch()) {
-        throwOptionError(
-            "hydro.balsaraSwitch=true requires hydro.viscosityEvolution=none or morrisAndMonaghan; "
-            "disable Balsara for hydro.viscosityEvolution=%s\n",
-            opts.hydro.viscosityEvolution.c_str());
+void validateViscosityEvolution(Options const& opts) {
+    if (opts.hydro.viscosityEvolution != "none" &&
+        opts.hydro.viscosityEvolution != "morrisAndMonaghan") {
+        throwOptionError("hydro.viscosityEvolution must be none or morrisAndMonaghan\n");
     }
 }
 
 void validateViscosityStorage(Options const& opts) {
-    double coefficient;
-    char const* option;
-    if (opts.hydro.viscosityEvolution == "morrisAndMonaghan") {
-        coefficient = opts.hydro.minimumBulkViscosityCoefficient;
-        option = "hydro.viscosityAlphaMin";
-    } else if (opts.hydro.viscosityEvolution == "cullenAndDehnen") {
-        coefficient = opts.hydro.maximumBulkViscosityCoefficient;
-        option = "hydro.viscosityAlphaMax";
-    } else if (opts.hydro.viscosityEvolution == "priceEtAl") {
-        coefficient = opts.hydro.maximumBulkViscosityCoefficientPrice;
-        option = "hydro.viscosityAlphaMaxPrice";
-    } else if (opts.hydro.viscosityEvolution == "huEtal") {
-        coefficient = opts.hydro.maximumBulkViscosityCoefficientHu;
-        option = "hydro.viscosityAlphaMaxHu";
-    } else {
+    if (opts.hydro.viscosityEvolution != "morrisAndMonaghan") {
         // Constant-alpha viscosity has no per-particle binary16 storage.
         return;
     }
+    double const coefficient = opts.hydro.minimumBulkViscosityCoefficient;
     constexpr double kMinimumHalfCoefficient = 0x1p-24;
     constexpr double kMaximumHalfCoefficient = 65504.0;
     if (!isFiniteOption(coefficient) || coefficient < kMinimumHalfCoefficient ||
         coefficient > kMaximumHalfCoefficient) {
-        throwOptionError("%s must lie in [2^-24, 65504] for binary16 viscosity storage\n", option);
+        throwOptionError(
+            "hydro.viscosityAlphaMin must lie in [2^-24, 65504] for binary16 viscosity storage\n");
     }
 }
 
@@ -341,12 +327,14 @@ Options const& getOptions() {
     return globalOpts;
 }
 
-void setOptions(Options const& opts) {
+void setOptions(Options const& requested) {
+    Options opts = requested;
+    opts.hydro.normalizeBalsaraSwitch();
     scenarios::parseKelvinHelmholtzPacking(opts.initial.kelvinHelmholz.packing, kSpatialDimensions);
     detail::validateRockstar(opts);
     detail::validateCudaBackends(opts);
     detail::validateHydroMethod(opts);
-    detail::validateBalsaraSwitch(opts);
+    detail::validateViscosityEvolution(opts);
     detail::validateViscosityStorage(opts);
     detail::validateConduction(opts);
     detail::validateFlatCosmology(opts);
@@ -627,12 +615,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"hydro.viscosityEvolution", options.hydro.viscosityEvolution},
         {"hydro.viscosityAlphaMin", options.hydro.minimumBulkViscosityCoefficient},
         {"hydro.viscosityDecay", options.hydro.viscosityDecay},
-        {"hydro.viscosityAlphaMax", options.hydro.maximumBulkViscosityCoefficient},
-        {"hydro.viscosityDecayCD", options.hydro.viscosityDecayCD},
-        {"hydro.viscosityAlphaMaxPrice", options.hydro.maximumBulkViscosityCoefficientPrice},
-        {"hydro.viscosityDecayPrice", options.hydro.viscosityDecayPrice},
-        {"hydro.viscosityAlphaMaxHu", options.hydro.maximumBulkViscosityCoefficientHu},
-        {"hydro.viscosityDecayHu", options.hydro.viscosityDecayHu},
         {"hydro.gamma", options.hydro.gamma},
         {"hydro.centralAcceleration", options.hydro.centralAcceleration},
         {"hydro.centralSoftening",
@@ -1036,36 +1018,22 @@ bool processOptions(int argc, char* argv[]) {
         po::value<double>(&opts.hydro.bulkViscosityCoefficient)->default_value(1.0),
         "linear coefficient alpha when viscosityEvolution=none")("hydro.viscosityBeta",
         po::value<double>(&opts.hydro.vonNeumannRichtmyerCoefficient)->default_value(2.0),
-        "quadratic coefficient beta: multiplies the pair alpha for morrisAndMonaghan and "
-        "cullenAndDehnen and huEtal, constant for none and priceEtAl")("hydro.viscosityEpsilon",
+        "quadratic coefficient beta: multiplies the pair alpha for morrisAndMonaghan, "
+        "constant for none")("hydro.viscosityEpsilon",
         po::value<double>(&opts.hydro.viscosityEpsilon)->default_value(0.01),
         "viscosity regularization relative to the calibrated radius sqrt(5/6) effectiveRadius")(
         "hydro.conductionCoefficient",
         po::value<double>(&opts.hydro.conductionCoefficient)->default_value(0.0),
         "Monaghan artificial thermal conduction coefficient g; zero disables conduction")(
-        "hydro.balsaraSwitch", po::value<bool>(&opts.hydro.balsaraSwitch),
-        "Balsara shear suppression: defaults to true for none/morrisAndMonaghan; "
-        "cullenAndDehnen/huEtal/priceEtAl require false")("hydro.viscosityEvolution",
-        po::value<std::string>(&opts.hydro.viscosityEvolution)->default_value("huEtal"),
-        "viscosity evolution: none, morrisAndMonaghan, cullenAndDehnen, priceEtAl, or huEtal")(
-        "hydro.viscosityAlphaMin",
+        "hydro.balsaraSwitch", po::value<bool>(&opts.hydro.balsaraSwitch)->default_value(true),
+        "Balsara shear suppression for viscosityEvolution=none; morrisAndMonaghan always "
+        "applies it")("hydro.viscosityEvolution",
+        po::value<std::string>(&opts.hydro.viscosityEvolution)->default_value("morrisAndMonaghan"),
+        "viscosity evolution: none or morrisAndMonaghan")("hydro.viscosityAlphaMin",
         po::value<double>(&opts.hydro.minimumBulkViscosityCoefficient)->default_value(0.1),
         "Morris-Monaghan alpha floor and smooth-flow initial value")("hydro.viscosityDecay",
         po::value<double>(&opts.hydro.viscosityDecay)->default_value(0.2),
-        "Morris-Monaghan C1 in tau=h/(C1 c)")("hydro.viscosityAlphaMax",
-        po::value<double>(&opts.hydro.maximumBulkViscosityCoefficient)->default_value(2.0),
-        "maximum alpha for Cullen-Dehnen viscosity evolution")("hydro.viscosityDecayCD",
-        po::value<double>(&opts.hydro.viscosityDecayCD)->default_value(0.05),
-        "Cullen-Dehnen decay coefficient ell in tau=H/(2 ell vSignal)")(
-        "hydro.viscosityAlphaMaxPrice",
-        po::value<double>(&opts.hydro.maximumBulkViscosityCoefficientPrice)->default_value(1.0),
-        "maximum alpha for Price et al. (Phantom) viscosity evolution")("hydro.viscosityDecayPrice",
-        po::value<double>(&opts.hydro.viscosityDecayPrice)->default_value(0.1),
-        "Price et al. decay coefficient sigma in tau=h/(sigma c)")("hydro.viscosityAlphaMaxHu",
-        po::value<double>(&opts.hydro.maximumBulkViscosityCoefficientHu)->default_value(1.0),
-        "maximum alpha before the Hu et al. strong limiter")("hydro.viscosityDecayHu",
-        po::value<double>(&opts.hydro.viscosityDecayHu)->default_value(0.05),
-        "Hu et al. decay coefficient ell in tau=H/(2 ell vDecay)")("hydro.gamma",
+        "Morris-Monaghan C1 in tau=h/(C1 c)")("hydro.gamma",
         po::value<double>(&opts.hydro.gamma)->default_value(5.0 / 3.0),
         "ideal-gas adiabatic index; must be 5/3 when chemistry or star formation is enabled")(
         "hydro.centralAcceleration",
@@ -1804,51 +1772,18 @@ bool processOptions(int argc, char* argv[]) {
             "hydro.viscosityEpsilon must be finite and positive\n");
     }
     detail::validateConduction(opts);
-    if (opts.hydro.viscosityEvolution != "none" &&
-        opts.hydro.viscosityEvolution != "morrisAndMonaghan" &&
-        opts.hydro.viscosityEvolution != "cullenAndDehnen" &&
-        opts.hydro.viscosityEvolution != "priceEtAl" && opts.hydro.viscosityEvolution != "huEtal") {
-        detail::throwOptionError(
-            "hydro.viscosityEvolution must be none, morrisAndMonaghan, cullenAndDehnen, "
-            "priceEtAl, or huEtal\n");
-    }
-    // Resolve the default after CLI/INI precedence, then validate the final model below.
-    if (!isExplicit("hydro.balsaraSwitch")) {
-        opts.hydro.balsaraSwitch = !opts.hydro.viscosityGradientSwitch();
-    }
+    detail::validateViscosityEvolution(opts);
+    opts.hydro.normalizeBalsaraSwitch();
     if (!detail::isPositiveFloatOption(opts.hydro.minimumBulkViscosityCoefficient) ||
         !detail::isPositiveFloatOption(opts.hydro.viscosityDecay)) {
         detail::throwOptionError(
             "hydro.viscosityAlphaMin and hydro.viscosityDecay must be finite and positive "
             "in single precision\n");
     }
-    if (!detail::isPositiveFloatOption(opts.hydro.maximumBulkViscosityCoefficient) ||
-        !detail::isPositiveFloatOption(opts.hydro.viscosityDecayCD)) {
-        detail::throwOptionError(
-            "hydro.viscosityAlphaMax and hydro.viscosityDecayCD must be finite and positive "
-            "in single precision\n");
-    }
-    if (!detail::isPositiveFloatOption(opts.hydro.maximumBulkViscosityCoefficientPrice) ||
-        !detail::isPositiveFloatOption(opts.hydro.viscosityDecayPrice)) {
-        detail::throwOptionError(
-            "hydro.viscosityAlphaMaxPrice and hydro.viscosityDecayPrice must be finite "
-            "and positive in single precision\n");
-    }
-    if (!detail::isPositiveFloatOption(opts.hydro.maximumBulkViscosityCoefficientHu) ||
-        !detail::isPositiveFloatOption(opts.hydro.viscosityDecayHu)) {
-        detail::throwOptionError(
-            "hydro.viscosityAlphaMaxHu and hydro.viscosityDecayHu must be finite "
-            "and positive in single precision\n");
-    }
-    detail::validateBalsaraSwitch(opts);
     detail::validateViscosityStorage(opts);
     if (opts.hydro.viscosityBetaFollowsAlpha() &&
         !detail::isFiniteFloatOption(opts.hydro.vonNeumannRichtmyerCoefficient *
-            (opts.hydro.viscosityEvolution == "morrisAndMonaghan" ?
-                    opts.hydro.minimumBulkViscosityCoefficient :
-                    (opts.hydro.viscosityEvolution == "huEtal" ?
-                            opts.hydro.maximumBulkViscosityCoefficientHu :
-                            opts.hydro.maximumBulkViscosityCoefficient)))) {
+            opts.hydro.minimumBulkViscosityCoefficient)) {
         detail::throwOptionError(
             "the initial quadratic viscosity coefficient must be finite in single "
             "precision\n");

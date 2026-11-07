@@ -24,7 +24,6 @@ constexpr double kSfScale = 0.25;
 struct SfRecord {
     uint64_t id{}, eventCounter{}, formationTime{}, specificRate{}, elapsedTime{};
     uint32_t energy{}, entropy{}, electrons{}, mass{}, bulkViscosity{};
-    uint16_t viscosityHistory{};
     int proposedRung{};
     std::array<uint64_t, kDimensions> position{};
     std::array<uint32_t, kDimensions> velocity{};
@@ -34,8 +33,8 @@ struct SfRecord {
     template <typename Archive>
     void serialize(Archive& archive, unsigned) {
         archive & id & eventCounter & formationTime & specificRate & elapsedTime & energy &
-            entropy & electrons & mass & bulkViscosity & viscosityHistory & proposedRung &
-            position & velocity & rung & type & density;
+            entropy & electrons & mass & bulkViscosity & proposedRung & position & velocity & rung &
+            type & density;
     }
 };
 using SfSnapshot = std::vector<std::vector<SfRecord>>;
@@ -90,11 +89,6 @@ void initializeSfFixture() {
         if (sphParticlesBulkViscosityCoefficients != nullptr) {
             sphParticlesBulkViscosityCoefficients[index] = 0.25f + 0.125f * index;
         }
-        if (sphScaledDivergence != nullptr) {
-            auto& history = sphScaledDivergence[index];
-            history = {};
-            ALWAYS_ASSERT(sphEncodeDivergence(history, float(-4 - index), 1.0));
-        }
         for (int dim = 0; dim < kDimensions; ++dim) {
             particlesPos(dim, index) = 0.25 + index * 0.125;
             particlesVel(dim, index) = float(dim - 1) / 4.0f;
@@ -102,8 +96,6 @@ void initializeSfFixture() {
     }
 }
 std::vector<SfRecord> sfSnapshot() {
-    requireSf(sphParticlesViscosityDiagnostics == nullptr,
-        "temporary viscosity diagnostics survived star formation");
     std::vector<SfRecord> result;
     for (ParticleInteger index = 0; index < particlesSize(); ++index) {
         auto const& state = particlesStarFormationStates[index];
@@ -123,10 +115,6 @@ std::vector<SfRecord> sfSnapshot() {
             if (sphParticlesBulkViscosityCoefficients != nullptr) {
                 record.bulkViscosity =
                     uint32_t(sphParticlesBulkViscosityCoefficients[gasIndex].bits);
-            }
-            if (sphScaledDivergence != nullptr) {
-                auto const& history = sphScaledDivergence[gasIndex];
-                record.viscosityHistory = history.bits;
             }
         }
         record.electrons =
@@ -272,9 +260,8 @@ void starFormationTest() {
             auto const& ref = reference[rank][gas - 1];
             auto const& actual = after[rank][gas];
             detail::requireSf(actual.proposedRung == initial[rank][gas].proposedRung &&
-                    actual.bulkViscosity == initial[rank][gas].bulkViscosity &&
-                    actual.viscosityHistory == initial[rank][gas].viscosityHistory,
-                "source replayed a viscosity sample or changed a hydro proposal");
+                    actual.bulkViscosity == initial[rank][gas].bulkViscosity,
+                "source changed a viscosity coefficient or a hydro proposal");
             detail::requireSf(actual.entropy == ref.entropy,
                 "survivor did not commit the prepared canonical entropy");
             detail::requireSfClose(std::bit_cast<float>(actual.energy),

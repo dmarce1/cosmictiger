@@ -173,9 +173,7 @@ def main():
                 "starFormation.evaporationFactor", "starFormation.starFormationTimeGyr"}
     required.update({"run.timeIntegrator", "gravity.method.far", "gravity.method.near",
                      "gravity.expansionDegree", "hydro.viscosityEvolution", "hydro.viscosityAlphaMin",
-                     "hydro.viscosityDecay", "hydro.viscosityAlphaMax",
-                     "hydro.viscosityDecayCD", "hydro.viscosityAlphaMaxPrice",
-                     "hydro.viscosityDecayPrice", "hydro.viscosityAlphaMaxHu", "hydro.viscosityDecayHu"})
+                     "hydro.viscosityDecay"})
     required.update({"initial.cosmology.gadget4Restart", "initial.cosmology.useGlass",
                      "initial.cosmology.twoLpt", "initial.plummer.radius",
                      "initial.kelvinHelmholz.packing"})
@@ -282,12 +280,6 @@ balsaraSwitch = false
 viscosityEvolution = none
 viscosityAlphaMin = 0.15
 viscosityDecay = 0.3
-viscosityAlphaMax = 1.5
-viscosityDecayCD = 0.1
-viscosityAlphaMaxPrice = 0.8
-viscosityDecayPrice = 0.15
-viscosityAlphaMaxHu = 0.9
-viscosityDecayHu = 0.07
 zPlaneAcceleration = 0.25
 gamma = 1.4
 neighborNumber = 48
@@ -303,9 +295,6 @@ mapSize = 8
                 "hydro.viscosityBeta": 1.5, "hydro.viscosityEpsilon": 0.02,
                 "hydro.conductionCoefficient": 0.3,
                 "hydro.viscosityAlphaMin": 0.15, "hydro.viscosityDecay": 0.3,
-                "hydro.viscosityAlphaMax": 1.5, "hydro.viscosityDecayCD": 0.1,
-                "hydro.viscosityAlphaMaxPrice": 0.8, "hydro.viscosityDecayPrice": 0.15,
-                "hydro.viscosityAlphaMaxHu": 0.9, "hydro.viscosityDecayHu": 0.07,
                 "hydro.gamma": 1.4, "hydro.neighborNumber": 48.0,
                 "hydro.cfl": 0.3, "hydro.zPlaneAcceleration": 0.25, "lightcone.mapSize": 8.0,
                 "hydro.minSmoothingLength": 1.0e-6, "hydro.maxSmoothingLength": 4.0,
@@ -323,63 +312,52 @@ mapSize = 8
                         "--hydro.enabled=false", "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512"]
 
     def checkBalsaraOptions():
-        models = ("none", "morrisAndMonaghan", "cullenAndDehnen", "huEtal", "priceEtAl")
+        models = ("none", "morrisAndMonaghan")
         cases = []
         expected = []
 
-        def addCase(name, options, enabled, success=True):
-            cases.append((name, metadata_options + options, success))
-            expected.append((name, enabled, success))
+        def addCase(name, options, enabled):
+            cases.append((name, metadata_options + options, True))
+            expected.append((name, enabled))
 
         automaticConfigs = {}
-        enabledConfigs = {}
+        disabledConfigs = {}
         for model in models:
-            allowed = model in ("none", "morrisAndMonaghan")
-            addCase("balsara_default_" + model, [f"--hydro.viscosityEvolution={model}"], allowed)
+            addCase("balsara_default_" + model, [f"--hydro.viscosityEvolution={model}"], True)
             automatic = args.workdir / f"balsara_automatic_{model}.ini"
             automatic.write_text(f"[hydro]\nviscosityEvolution = {model}\n")
             automaticConfigs[model] = automatic
             addCase("balsara_automatic_ini_" + model,
-                    [f"--configuration={automatic.resolve()}"], allowed)
+                    [f"--configuration={automatic.resolve()}"], True)
             for enabled in (False, True):
+                # Morris & Monaghan always applies the limiter, whatever was requested.
+                resolved = enabled or model == "morrisAndMonaghan"
                 addCase(f"balsara_cli_{model}_{enabled}",
                         [f"--hydro.viscosityEvolution={model}",
-                         f"--hydro.balsaraSwitch={str(enabled).lower()}"],
-                        enabled, allowed or not enabled)
+                         f"--hydro.balsaraSwitch={str(enabled).lower()}"], resolved)
                 config = args.workdir / f"balsara_{model}_{enabled}.ini"
                 config.write_text(f"[hydro]\nviscosityEvolution = {model}\n"
                                   f"balsaraSwitch = {str(enabled).lower()}\n")
                 addCase(f"balsara_ini_{model}_{enabled}",
-                        [f"--configuration={config.resolve()}"], enabled, allowed or not enabled)
-                if enabled:
-                    enabledConfigs[model] = config
+                        [f"--configuration={config.resolve()}"], resolved)
+                if not enabled:
+                    disabledConfigs[model] = config
 
-        # Validate only after CLI/INI precedence: a CLI false or constant/MM selection
-        # can repair an otherwise invalid INI; enabling a forbidden pair fails.
-        addCase("balsara_enabled_cli_override", [
-            f"--configuration={automaticConfigs['priceEtAl'].resolve()}",
-            "--hydro.balsaraSwitch=1"], True, False)
+        # Normalize only after CLI/INI precedence: the final model decides the switch.
         addCase("balsara_disabled_cli_override", [
-            f"--configuration={enabledConfigs['priceEtAl'].resolve()}",
+            f"--configuration={automaticConfigs['none'].resolve()}",
             "--hydro.balsaraSwitch=0"], False)
-        addCase("balsara_automatic_model_override", [
-            f"--configuration={automaticConfigs['huEtal'].resolve()}",
+        addCase("balsara_enabled_cli_override", [
+            f"--configuration={disabledConfigs['none'].resolve()}",
+            "--hydro.balsaraSwitch=1"], True)
+        addCase("balsara_model_override_normalized", [
+            f"--configuration={disabledConfigs['none'].resolve()}",
             "--hydro.viscosityEvolution=morrisAndMonaghan"], True)
-        addCase("balsara_automatic_model_override_off", [
-            f"--configuration={automaticConfigs['morrisAndMonaghan'].resolve()}",
-            "--hydro.viscosityEvolution=huEtal"], False)
-        addCase("balsara_explicit_model_override", [
-            f"--configuration={enabledConfigs['morrisAndMonaghan'].resolve()}",
-            "--hydro.viscosityEvolution=huEtal"], True, False)
-        addCase("balsara_explicit_model_override_repaired", [
-            f"--configuration={enabledConfigs['cullenAndDehnen'].resolve()}",
-            "--hydro.viscosityEvolution=morrisAndMonaghan"], True)
+        addCase("balsara_model_override_disabled", [
+            f"--configuration={disabledConfigs['morrisAndMonaghan'].resolve()}",
+            "--hydro.viscosityEvolution=none"], False)
 
-        for (name, enabled, success), output in zip(expected, runAll(cases)):
-            if not success:
-                if "hydro.balsaraSwitch=true requires hydro.viscosityEvolution=none or morrisAndMonaghan" not in output:
-                    raise RuntimeError(f"{name}: missing Balsara model rejection")
-                continue
+        for (name, enabled), output in zip(expected, runAll(cases)):
             resolved = "T" if enabled else "F"
             if not re.search(r"^hydro\.balsaraSwitch\s*:\s*" + resolved + r"\s*$",
                              output, re.MULTILINE):
@@ -388,12 +366,13 @@ mapSize = 8
                 raise RuntimeError(f"{name}: metadata validation did not finish")
 
     if args.balsara_options_only:
-        rejected = run("obsolete_hu_selector", metadata_options + [
-            "--hydro.viscosityEvolution=hu_etal"], success=False)
-        if "hydro.viscosityEvolution must be" not in rejected:
-            raise RuntimeError("obsolete Hu selector was not rejected with valid choices")
+        for selector in ("hu_etal", "huEtal", "priceEtAl", "cullenAndDehnen"):
+            rejected = run("retired_viscosity_selector_" + selector, metadata_options + [
+                "--hydro.viscosityEvolution=" + selector], success=False)
+            if "hydro.viscosityEvolution must be" not in rejected:
+                raise RuntimeError(f"retired {selector} was not rejected with valid choices")
         checkBalsaraOptions()
-        print("Balsara model defaults, explicit overrides, and invalid combinations passed")
+        print("Balsara model defaults, explicit overrides, and normalization passed")
         return
 
     for key in cuda_keys:
@@ -929,15 +908,16 @@ mapSize = 8
             if expected not in output:
                 raise RuntimeError("midpoint deferred source rejection lacked guidance")
     if sph_controls_available:
-        if not re.search(r"^hydro\.balsaraSwitch\s*:\s*F\s*$", balsara_default, re.MULTILINE):
-            raise RuntimeError("Balsara switch must default to disabled for Hu et al.")
+        if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_default, re.MULTILINE):
+            raise RuntimeError("Balsara switch must default to enabled for Morris & Monaghan")
         balsara_override = run("balsara_cli_override", [f"--configuration={config.resolve()}",
                                                      "--hydro.viscosityEvolution=morrisAndMonaghan",
                                                      "--hydro.balsaraSwitch=true"] + sph_control_options)
         if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_override, re.MULTILINE):
             raise RuntimeError("CLI hydro.balsaraSwitch did not override INI")
 
-        for output, expected_value in ((configured, "none"), (balsara_default, "huEtal")):
+        for output, expected_value in ((configured, "none"),
+                                       (balsara_default, "morrisAndMonaghan")):
             if not re.search(r"^hydro\.viscosityEvolution\s*:\s*" + expected_value + r"\s*$",
                              output, re.MULTILINE):
                 raise RuntimeError("unexpected hydro.viscosityEvolution setting")
@@ -954,47 +934,38 @@ mapSize = 8
                        [f"--configuration={removed_config.resolve()}"], success=False)
         if "pressureOperator" not in rejected:
             raise RuntimeError("removed pressure selector lacked an INI diagnostic")
+    for key in ("hydro.viscosityAlphaMax", "hydro.viscosityDecayCD",
+                "hydro.viscosityAlphaMaxPrice", "hydro.viscosityDecayPrice",
+                "hydro.viscosityAlphaMaxHu", "hydro.viscosityDecayHu"):
+        retired_config = args.workdir / f"retired_{key}.ini"
+        retired_config.write_text(f"[hydro]\n{key.split('.')[1]} = 1\n")
+        rejected = run("retired_ini_" + key, [f"--configuration={retired_config.resolve()}"],
+                       success=False)
+        if key.split(".")[1] not in rejected:
+            raise RuntimeError(f"retired {key} lacked an INI diagnostic")
     for key in ("hydro.viscosityBetaMode", "hydro.viscosityBetaOverAlpha",
+                "hydro.viscosityAlphaMax", "hydro.viscosityDecayCD",
+                "hydro.viscosityAlphaMaxPrice", "hydro.viscosityDecayPrice",
+                "hydro.viscosityAlphaMaxHu", "hydro.viscosityDecayHu",
                 "initial.createGlass", "initial.plummer", "hydro.pressureOperator"):
         if re.search(r"^" + re.escape(key) + r"\s*:", balsara_default, re.MULTILINE):
             raise RuntimeError(f"removed option {key} is still reported")
     if sph_controls_available:
         viscosity_override = run("variable_viscosity_cli_override", [
-            f"--configuration={config.resolve()}", "--hydro.viscosityEvolution=priceEtAl",
-            "--hydro.viscosityAlphaMaxPrice=3"] + sph_control_options)
-        for key, expected_value in (("hydro.viscosityEvolution", "priceEtAl"),
-                                    ("hydro.viscosityAlphaMaxPrice", "3")):
+            f"--configuration={config.resolve()}",
+            "--hydro.viscosityEvolution=morrisAndMonaghan",
+            "--hydro.viscosityAlphaMin=0.4"] + sph_control_options)
+        for key, expected_value in (("hydro.viscosityEvolution", "morrisAndMonaghan"),
+                                    ("hydro.viscosityAlphaMin", "0.4")):
             match = re.search(r"^" + re.escape(key) + r"\s*:\s*(\S+)",
                               viscosity_override, re.MULTILINE)
-            if match is None or (float(match.group(1)) != 3 if expected_value == "3"
+            if match is None or (float(match.group(1)) != 0.4 if expected_value == "0.4"
                                  else match.group(1) != expected_value):
                 raise RuntimeError(f"CLI {key} did not override INI")
 
-    if sph_controls_available:
-        hu_override = run("hu_viscosity_cli_override", [
-            f"--configuration={config.resolve()}", "--hydro.viscosityEvolution=huEtal",
-            "--hydro.viscosityAlphaMaxHu=1.2", "--hydro.viscosityDecayHu=0.08"] + sph_control_options)
-        for key, value in (("hydro.viscosityEvolution", "huEtal"),
-                           ("hydro.viscosityAlphaMaxHu", "1.2"), ("hydro.viscosityDecayHu", "0.08")):
-            match = re.search(r"^" + re.escape(key) + r"\s*:\s*(\S+)", hu_override, re.MULTILINE)
-            if match is None or (match[1] != value if key == "hydro.viscosityEvolution"
-                                 else float(match[1]) != float(value)):
-                raise RuntimeError(f"Hu CLI {key} did not override INI")
-        hu_config = args.workdir / "hu_viscosity.ini"
-        hu_config.write_text("[hydro]\nviscosityEvolution = huEtal\n")
-        hu_ini = run("hu_viscosity_ini", sph_options +
-                     [f"--configuration={hu_config.resolve()}"] + sph_control_options)
-        if not re.search(r"^hydro\.viscosityEvolution\s*:\s*huEtal\s*$", hu_ini, re.MULTILINE):
-            raise RuntimeError("Hu viscosity INI selector was not applied")
-
     # Metadata-only cases exercise the storage range without integrating a flow
-    # with extreme viscosity. Each model limits only its stored floor or maximum.
-    viscosityStorageModels = (
-        ("morrisAndMonaghan", "hydro.viscosityAlphaMin"),
-        ("cullenAndDehnen", "hydro.viscosityAlphaMax"),
-        ("priceEtAl", "hydro.viscosityAlphaMaxPrice"),
-        ("huEtal", "hydro.viscosityAlphaMaxHu"),
-    )
+    # with extreme viscosity. Morris & Monaghan limits only its stored floor.
+    viscosityStorageModels = (("morrisAndMonaghan", "hydro.viscosityAlphaMin"),)
     halfMinimum = 2.0 ** -24
     halfMaximum = 65504.0
     halfOutsideValues = (2.0 ** -25, 65505.0)
@@ -1317,9 +1288,6 @@ mapSize = 8
                        ("hydro.neighborNumber", 42), ("hydro.kernelDegree", 3),
                        ("hydro.conductionCoefficient", 0),
                        ("hydro.viscosityAlphaMin", 0.1), ("hydro.viscosityDecay", 0.2),
-                       ("hydro.viscosityAlphaMax", 2), ("hydro.viscosityDecayCD", 0.05),
-                       ("hydro.viscosityAlphaMaxPrice", 1), ("hydro.viscosityDecayPrice", 0.1),
-                       ("hydro.viscosityAlphaMaxHu", 1), ("hydro.viscosityDecayHu", 0.05),
                        ("compute.bucketSize", 128), ("compute.sphBucketSize", 106)):
         assertNumericSetting(defaults, key, value)
 
@@ -1660,14 +1628,16 @@ mapSize = 8
         ("neighbors_rounding", "--hydro.neighborNumber=10.66666667", "single precision"),
         ("cfl_underflow", "--hydro.cfl=1e-100", "single precision"),
         ("support_underflow", "--hydro.minSmoothingLength=1e-100", "single precision"),
-        ("viscosity_alpha_max_hu", "--hydro.viscosityAlphaMaxHu=0", "hydro.viscosityAlphaMaxHu"),
-        ("viscosity_decay_hu", "--hydro.viscosityDecayHu=0", "hydro.viscosityDecayHu"),
+        ("viscosity_alpha_max_hu_removed", "--hydro.viscosityAlphaMaxHu=1",
+         "hydro.viscosityAlphaMaxHu"),
+        ("viscosity_decay_hu_removed", "--hydro.viscosityDecayHu=1", "hydro.viscosityDecayHu"),
         ("viscosity_evolution", "--hydro.viscosityEvolution=unknown", "hydro.viscosityEvolution"),
-        ("viscosity_alpha_max", "--hydro.viscosityAlphaMax=0", "hydro.viscosityAlphaMax"),
-        ("viscosity_decay_cd", "--hydro.viscosityDecayCD=0", "hydro.viscosityDecayCD"),
-        ("viscosity_alpha_max_price", "--hydro.viscosityAlphaMaxPrice=0",
+        ("viscosity_alpha_max_removed", "--hydro.viscosityAlphaMax=1", "hydro.viscosityAlphaMax"),
+        ("viscosity_decay_cd_removed", "--hydro.viscosityDecayCD=1", "hydro.viscosityDecayCD"),
+        ("viscosity_alpha_max_price_removed", "--hydro.viscosityAlphaMaxPrice=1",
          "hydro.viscosityAlphaMaxPrice"),
-        ("viscosity_decay_price", "--hydro.viscosityDecayPrice=0", "hydro.viscosityDecayPrice"),
+        ("viscosity_decay_price_removed", "--hydro.viscosityDecayPrice=1",
+         "hydro.viscosityDecayPrice"),
         ("beta_mode_removed", "--hydro.viscosityBetaMode=ratio", "hydro.viscosityBetaMode"),
         ("alpha_floor_zero", "--hydro.viscosityAlphaMin=0", "hydro.viscosityAlphaMin"),
         ("alpha_floor_underflow", "--hydro.viscosityAlphaMin=1e-100", "single precision"),

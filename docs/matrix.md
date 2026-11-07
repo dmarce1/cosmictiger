@@ -94,10 +94,6 @@ packed symmetric matrix and leaves the eigenvalues unsorted.
 
 ## Call sites
 
-- Cullen-Dehnen viscosity and Price conductivity: shared 3x3 gradient
-  reconstruction. The existing normalized determinant cutoff `128 epsilon`,
-  eight cyclic Jacobi sweeps and pseudoinverse eigenvalue cutoff `64 epsilon`
-  remain unchanged. Missing spatial directions are not regularized into existence.
 - ROCKSTAR: halo shape eigensystems. Its adapter retains row-oriented eigenvectors,
   largest-first order, and 64 largest-pivot rotations.
 - Recombination: 3x3 Newton solve, retaining the absolute pivot floor `1e-200`
