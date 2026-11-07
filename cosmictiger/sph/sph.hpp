@@ -163,8 +163,8 @@ struct SphRunParameters {
     double hydroKickTimestep = 0.0;
     bool deferPairCommit = false;
     bool retainProposedRungs = false;
-    // Phase zero may publish pair rates before the fresh gravity field arrives.
-    // Source acceleration is then assembled before the closing corrector.
+    // Phase zero may publish pair rates before the fresh gravity field arrives;
+    // the gravity and external kicks are then applied by the closing corrector.
     bool deferAccelerationSources = false;
     bool refreshConvergedDensity =
         false;    // Recompute diagnostics with fixed, converged supports.
@@ -196,7 +196,7 @@ struct SphRunParameters {
         vonNeumannRichtmyerCoefficient = opts.hydro.vonNeumannRichtmyerCoefficient;
         viscosityEpsilon = opts.hydro.viscosityEpsilon;
         conductionCoefficient = opts.hydro.conductionCoefficient;
-        balsaraSwitch = opts.hydro.balsaraSwitch;
+        balsaraSwitch = opts.hydro.usesBalsaraSwitch();
         variableViscosity = opts.hydro.viscosityEvolution != "none";
         minimumBulkViscosityCoefficient = opts.hydro.minimumBulkViscosityCoefficient;
         viscosityDecay = opts.hydro.viscosityDecay;

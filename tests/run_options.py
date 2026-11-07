@@ -40,8 +40,8 @@ def main():
                         help="Check hydrodynamics method selection without the full option suite")
     parser.add_argument("--startup-options-only", action="store_true",
                         help="Check the complete option dump during normal nonverbose startup")
-    parser.add_argument("--balsara-options-only", action="store_true",
-                        help="Check model-dependent Balsara defaults and explicit CLI/INI overrides")
+    parser.add_argument("--retired-viscosity-only", action="store_true",
+                        help="Check that retired viscosity selectors are rejected")
     args = parser.parse_args()
     if args.gravity_method == "none":
         if not args.startup_options_only or args.order != 0 or args.without_sph:
@@ -150,7 +150,7 @@ def main():
                 "run.darkMatterParticleCount", "run.gasParticleCount", "compute.bucketSize",
                 "compute.sphBucketSize", "compute.sphTreeRebuildFraction", "compute.positionType",
                 "hydro.enabled", "hydro.method", "hydro.viscosityAlpha", "hydro.viscosityBeta",
-                "hydro.viscosityEpsilon", "hydro.balsaraSwitch", "hydro.conductionCoefficient",
+                "hydro.viscosityEpsilon", "hydro.conductionCoefficient",
                 "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
                 "gravity.meshSize", "gravity.pmmmNearWidth", "gravity.pmmmCoarseMeshSize",
@@ -237,7 +237,7 @@ def main():
                        "initial.darkMatterParticleCount", "initial.gasParticleCount", "gravity.method",
                        "gravity.pmmmNearMethod", "gravity.pmmmOrder", "gravity.fmmOrder",
                        "run.hierarchicalGravity", "initial.createGlass", "initial.plummer",
-                       "hydro.pressureOperator", "chemistry.network", "chemistry.initialization",
+                       "hydro.pressureOperator", "hydro.balsaraSwitch", "chemistry.network", "chemistry.initialization",
                        "chemistry.initialTemperature", "chemistry.radiationFile", "chemistry.radiationTable",
                        "chemistry.hydrogenIonFraction", "chemistry.heliumIonFraction",
                        "chemistry.heliumDoubleIonFraction", "chemistry.hydrogenMinusFraction",
@@ -276,7 +276,6 @@ viscosityAlpha = 0.75
 viscosityBeta = 1.5
 viscosityEpsilon = 0.02
 conductionCoefficient = 0.3
-balsaraSwitch = false
 viscosityEvolution = none
 viscosityAlphaMin = 0.15
 viscosityDecay = 0.3
@@ -311,68 +310,13 @@ mapSize = 8
     metadata_options = ["--run.test=checkpointState",
                         "--hydro.enabled=false", "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512"]
 
-    def checkBalsaraOptions():
-        models = ("none", "morrisAndMonaghan")
-        cases = []
-        expected = []
-
-        def addCase(name, options, enabled):
-            cases.append((name, metadata_options + options, True))
-            expected.append((name, enabled))
-
-        automaticConfigs = {}
-        disabledConfigs = {}
-        for model in models:
-            addCase("balsara_default_" + model, [f"--hydro.viscosityEvolution={model}"], True)
-            automatic = args.workdir / f"balsara_automatic_{model}.ini"
-            automatic.write_text(f"[hydro]\nviscosityEvolution = {model}\n")
-            automaticConfigs[model] = automatic
-            addCase("balsara_automatic_ini_" + model,
-                    [f"--configuration={automatic.resolve()}"], True)
-            for enabled in (False, True):
-                # Morris & Monaghan always applies the limiter, whatever was requested.
-                resolved = enabled or model == "morrisAndMonaghan"
-                addCase(f"balsara_cli_{model}_{enabled}",
-                        [f"--hydro.viscosityEvolution={model}",
-                         f"--hydro.balsaraSwitch={str(enabled).lower()}"], resolved)
-                config = args.workdir / f"balsara_{model}_{enabled}.ini"
-                config.write_text(f"[hydro]\nviscosityEvolution = {model}\n"
-                                  f"balsaraSwitch = {str(enabled).lower()}\n")
-                addCase(f"balsara_ini_{model}_{enabled}",
-                        [f"--configuration={config.resolve()}"], resolved)
-                if not enabled:
-                    disabledConfigs[model] = config
-
-        # Normalize only after CLI/INI precedence: the final model decides the switch.
-        addCase("balsara_disabled_cli_override", [
-            f"--configuration={automaticConfigs['none'].resolve()}",
-            "--hydro.balsaraSwitch=0"], False)
-        addCase("balsara_enabled_cli_override", [
-            f"--configuration={disabledConfigs['none'].resolve()}",
-            "--hydro.balsaraSwitch=1"], True)
-        addCase("balsara_model_override_normalized", [
-            f"--configuration={disabledConfigs['none'].resolve()}",
-            "--hydro.viscosityEvolution=morrisAndMonaghan"], True)
-        addCase("balsara_model_override_disabled", [
-            f"--configuration={disabledConfigs['morrisAndMonaghan'].resolve()}",
-            "--hydro.viscosityEvolution=none"], False)
-
-        for (name, enabled), output in zip(expected, runAll(cases)):
-            resolved = "T" if enabled else "F"
-            if not re.search(r"^hydro\.balsaraSwitch\s*:\s*" + resolved + r"\s*$",
-                             output, re.MULTILINE):
-                raise RuntimeError(f"{name}: incorrect resolved Balsara switch")
-            if "Checkpoint state and mode validation passed" not in output:
-                raise RuntimeError(f"{name}: metadata validation did not finish")
-
-    if args.balsara_options_only:
+    if args.retired_viscosity_only:
         for selector in ("hu_etal", "huEtal", "priceEtAl", "cullenAndDehnen"):
             rejected = run("retired_viscosity_selector_" + selector, metadata_options + [
                 "--hydro.viscosityEvolution=" + selector], success=False)
             if "hydro.viscosityEvolution must be" not in rejected:
                 raise RuntimeError(f"retired {selector} was not rejected with valid choices")
-        checkBalsaraOptions()
-        print("Balsara model defaults, explicit overrides, and normalization passed")
+        print("Retired viscosity selectors rejected")
         return
 
     for key in cuda_keys:
@@ -615,8 +559,6 @@ mapSize = 8
         "--gravity.errorInterval=0", "--gravity.errorSampleSize=0"])
     assertNumericSetting(error_disabled, "gravity.errorInterval", 0)
 
-    if sph_controls_available and not re.search(r"^hydro\.balsaraSwitch\s*:\s*F\s*$", configured, re.MULTILINE):
-        raise RuntimeError("INI hydro.balsaraSwitch=false was not applied")
     balsara_options = ([option for option in metadata_options if not option.startswith("--hydro.enabled=")]
                        + sph_control_options if sph_controls_available else metadata_options)
     balsara_default = run("balsara_default", balsara_options)
@@ -904,20 +846,11 @@ mapSize = 8
             if expected not in output:
                 raise RuntimeError("midpoint deferred source rejection lacked guidance")
     if sph_controls_available:
-        if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_default, re.MULTILINE):
-            raise RuntimeError("Balsara switch must default to enabled for Morris & Monaghan")
-        balsara_override = run("balsara_cli_override", [f"--configuration={config.resolve()}",
-                                                     "--hydro.viscosityEvolution=morrisAndMonaghan",
-                                                     "--hydro.balsaraSwitch=true"] + sph_control_options)
-        if not re.search(r"^hydro\.balsaraSwitch\s*:\s*T\s*$", balsara_override, re.MULTILINE):
-            raise RuntimeError("CLI hydro.balsaraSwitch did not override INI")
-
         for output, expected_value in ((configured, "none"),
                                        (balsara_default, "morrisAndMonaghan")):
             if not re.search(r"^hydro\.viscosityEvolution\s*:\s*" + expected_value + r"\s*$",
                              output, re.MULTILINE):
                 raise RuntimeError("unexpected hydro.viscosityEvolution setting")
-    checkBalsaraOptions()
     # Pressure is always variational; neither old selector value is accepted.
     for operator in ("monaghan", "variational"):
         rejected = run("pressure_operator_removed_cli_" + operator,
@@ -932,7 +865,7 @@ mapSize = 8
             raise RuntimeError("removed pressure selector lacked an INI diagnostic")
     for key in ("hydro.viscosityAlphaMax", "hydro.viscosityDecayCD",
                 "hydro.viscosityAlphaMaxPrice", "hydro.viscosityDecayPrice",
-                "hydro.viscosityAlphaMaxHu", "hydro.viscosityDecayHu"):
+                "hydro.viscosityAlphaMaxHu", "hydro.viscosityDecayHu", "hydro.balsaraSwitch"):
         retired_config = args.workdir / f"retired_{key}.ini"
         retired_config.write_text(f"[hydro]\n{key.split('.')[1]} = 1\n")
         rejected = run("retired_ini_" + key, [f"--configuration={retired_config.resolve()}"],
@@ -1475,7 +1408,7 @@ mapSize = 8
                      "gravity.effectiveRadius", "gravity.smoothingLength",
                      "gravity.method.near", "gravity.expansionDegree",
                      "units.boxLength",
-                     "hydro.balsaraSwitch", "hydro.centralEffectiveRadius", "hydro.centralSmoothingLength",
+                     "hydro.centralEffectiveRadius", "hydro.centralSmoothingLength",
                      "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius"}
     public_keys = set(option_names) - {"help", "configuration"}
     preset_curvatures = {"critical.ini": 0.0}

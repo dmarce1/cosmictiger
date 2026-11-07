@@ -329,7 +329,6 @@ Options const& getOptions() {
 
 void setOptions(Options const& requested) {
     Options opts = requested;
-    opts.hydro.normalizeBalsaraSwitch();
     scenarios::parseKelvinHelmholtzPacking(opts.initial.kelvinHelmholz.packing, kSpatialDimensions);
     detail::validateRockstar(opts);
     detail::validateCudaBackends(opts);
@@ -610,7 +609,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"hydro.viscosityBeta", options.hydro.vonNeumannRichtmyerCoefficient},
         {"hydro.viscosityEpsilon", options.hydro.viscosityEpsilon},
         {"hydro.conductionCoefficient", options.hydro.conductionCoefficient},
-        {"hydro.balsaraSwitch", options.hydro.balsaraSwitch},
         {"hydro.viscosityEvolution", options.hydro.viscosityEvolution},
         {"hydro.viscosityAlphaMin", options.hydro.minimumBulkViscosityCoefficient},
         {"hydro.viscosityDecay", options.hydro.viscosityDecay},
@@ -1021,9 +1019,7 @@ bool processOptions(int argc, char* argv[]) {
         "hydro.conductionCoefficient",
         po::value<double>(&opts.hydro.conductionCoefficient)->default_value(0.0),
         "Monaghan artificial thermal conduction coefficient g; zero disables conduction")(
-        "hydro.balsaraSwitch", po::value<bool>(&opts.hydro.balsaraSwitch)->default_value(true),
-        "Balsara shear suppression for viscosityEvolution=none; morrisAndMonaghan always "
-        "applies it")("hydro.viscosityEvolution",
+        "hydro.viscosityEvolution",
         po::value<std::string>(&opts.hydro.viscosityEvolution)->default_value("morrisAndMonaghan"),
         "viscosity evolution: none or morrisAndMonaghan")("hydro.viscosityAlphaMin",
         po::value<double>(&opts.hydro.minimumBulkViscosityCoefficient)->default_value(0.1),
@@ -1769,7 +1765,6 @@ bool processOptions(int argc, char* argv[]) {
     }
     detail::validateConduction(opts);
     detail::validateViscosityEvolution(opts);
-    opts.hydro.normalizeBalsaraSwitch();
     if (!detail::isPositiveFloatOption(opts.hydro.minimumBulkViscosityCoefficient) ||
         !detail::isPositiveFloatOption(opts.hydro.viscosityDecay)) {
         detail::throwOptionError(
@@ -2095,7 +2090,7 @@ bool processOptions(int argc, char* argv[]) {
     }
     terminal::detailPrint("lc map size = %e\n", nside1);
 
-    // The photon density depends only on T_CMB and H_0. Adding massless species
+    // The photon density depends only on T_CMB and H₀. Adding massless species
     // changes the neutrino density without changing the photons.
     opts.cosmology.omegaGamma = 32.0 * std::numbers::pi / 3.0 * constants::kG * constants::kSigma *
         std::pow(constants::kH0, -2) * std::pow(constants::kC, -3) *
@@ -2120,8 +2115,8 @@ bool processOptions(int argc, char* argv[]) {
         }
     }
     detail::validateFlatCosmology(opts);
-    // ROCKSTAR Sec. III.1 and Table 2: outer FOF linking length b=0.28.
-    // Behroozi, Wechsler & Wu (2013), https://arxiv.org/html/1110.4372v3
+    // ROCKSTAR, Behroozi, Wechsler & Wu (2013), section III.1 and Table 2: outer FOF
+    // linking length b=0.28. https://arxiv.org/html/1110.4372v3
     opts.analysis.linkingLength =
         pow(std::max(size_t(1), opts.run.darkMatterParticleCount), -1.0 / kDimensions) * 0.28;
     opts.analysis.minGroupSize = 20;

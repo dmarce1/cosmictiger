@@ -671,7 +671,6 @@ void verifySphMidpointUpdates() {
     options.hydro.enabled = true;
     options.hydro.method = "sph";
     options.hydro.viscosityEvolution = "morrisAndMonaghan";
-    options.hydro.balsaraSwitch = false;
     options.hydro.damping = 0.0;
     options.hydro.yAcceleration = 0.0;
     options.hydro.zPlaneAcceleration = 0.0;
@@ -810,7 +809,6 @@ void verifySphTemporalOrder() {
     options.hydro.enabled = true;
     options.hydro.method = "sph";
     options.hydro.viscosityEvolution = "none";
-    options.hydro.balsaraSwitch = false;
     options.hydro.gamma = 5.0 / 3.0;
     options.hydro.bulkViscosityCoefficient = 0.7;
     options.hydro.vonNeumannRichtmyerCoefficient = 1.0;
@@ -973,12 +971,12 @@ void verifySphTemporalOrder() {
     }
     {
         // Derived Strang composition at fixed positions: over a coarse interval H,
-        // K_f(H/2) K_c(H) K_f(H/2) approximates F_f + F_c through second order.
+        // K_f(H/2) K𞁞(H) K_f(H/2) approximates F_f + F𞁞 through second order.
         // The three-particle chain has one coarse/coarse pair and one coarse/fine
         // pair sharing the middle particle, so these velocity/entropy-dependent
         // operators do not commute. Production RK2 implements every K call.
         // Symbol directory: H -> coarse timestep; K -> advance rung;
-        // F_c,F_f -> the production due-pair operators on rungs 0 and 1.
+        // F𞁞,F_f -> the production due-pair operators on rungs 0 and 1.
         constexpr ParticleInteger kParticleCount = 3;
         using SplitState = std::array<double, 2 * kParticleCount>;
         SplitState const initialSplitState{0.6, 0.1, -0.35, 0.08, 0.1, 0.12};

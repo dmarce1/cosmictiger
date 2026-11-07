@@ -778,7 +778,6 @@ void runSphMidpointPairRegression(bool useCuda) {
     options.hydro.viscosityEvolution = "none";
     options.hydro.bulkViscosityCoefficient = 1.0;
     options.hydro.vonNeumannRichtmyerCoefficient = 2.0;
-    options.hydro.balsaraSwitch = false;
     options.hydro.minSmoothingLength = options.hydro.maxSmoothingLength = 0.25;
     options.hydro.damping = options.hydro.centralAcceleration = 0.0;
     options.hydro.yAcceleration = options.hydro.zPlaneAcceleration = 0.0;

@@ -205,7 +205,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         sphTreeInvalidate();
     }
     bool const initializeBalsara =
-        getOptions().hydro.balsaraSwitch && sphParticlesBalsaraFactors == nullptr;
+        getOptions().hydro.usesBalsaraSwitch() && sphParticlesBalsaraFactors == nullptr;
     bool const initializeViscosity = getOptions().hydro.viscosityEvolution != "none" &&
         sphParticlesBulkViscosityCoefficients == nullptr;
     // Stale until a density pass rebuilds it; NaN makes any earlier force use visible.
@@ -216,7 +216,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
             newCapacity = size_t(101) * newCapacity / size_t(100);
         }
         sphParticlesArrayResize(sphParticlesDensities, newCapacity);
-        if (getOptions().hydro.balsaraSwitch) {
+        if (getOptions().hydro.usesBalsaraSwitch()) {
             sphParticlesArrayResize(sphParticlesBalsaraFactors, newCapacity);
         }
         sphParticlesArrayResize(sphParticlesGradHCorrections, newCapacity);
@@ -232,10 +232,10 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         }
         capacity = newCapacity;
     }
-    if (!getOptions().hydro.balsaraSwitch && sphParticlesBalsaraFactors != nullptr) {
+    if (!getOptions().hydro.usesBalsaraSwitch() && sphParticlesBalsaraFactors != nullptr) {
         freeManagedMemory(sphParticlesBalsaraFactors);
         sphParticlesBalsaraFactors = nullptr;
-    } else if (getOptions().hydro.balsaraSwitch && sphParticlesBalsaraFactors == nullptr &&
+    } else if (getOptions().hydro.usesBalsaraSwitch() && sphParticlesBalsaraFactors == nullptr &&
         capacity > 0) {
         sphParticlesArrayResize(sphParticlesBalsaraFactors, capacity);
     }
@@ -274,7 +274,7 @@ void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticl
         }
         sphParticlesParticleIndices[slot] = kNoParticleIndex;
         sphParticlesDensities[slot] = 0.0f;
-        if (getOptions().hydro.balsaraSwitch) {
+        if (getOptions().hydro.usesBalsaraSwitch()) {
             sphParticlesBalsaraFactors[slot] = 0;
         }
         sphParticlesGradHCorrections[slot] = unbuiltGradHCorrection;

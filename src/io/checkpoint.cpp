@@ -472,7 +472,7 @@ uint32_t checkpointFlags(Options const& opts) {
         (opts.lightcone.enabled ? kLightcone : 0U) | (opts.analysis.groups ? kGroups : 0U) |
         (opts.analysis.tracers ? kTracers : 0U) | (opts.chemistry.enabled ? kChemistry : 0U) |
         (opts.hydro.enabled && opts.hydro.zPlaneAcceleration != 0.0 ? kZPlaneAcceleration : 0U) |
-        (opts.hydro.enabled && opts.hydro.balsaraSwitch ? kBalsaraSwitch : 0U) |
+        (opts.hydro.enabled && opts.hydro.usesBalsaraSwitch() ? kBalsaraSwitch : 0U) |
         (opts.hydro.enabled && opts.hydro.conductionCoefficient > 0.0 ? kArtificialConduction :
                                                                         0U) |
         (opts.hydro.enabled && opts.hydro.viscosityEvolution != "none" ? kVariableViscosity : 0U) |
@@ -1439,26 +1439,27 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(detail::checkpointCompatible(conductionHeader, conductionOptions));
     conductionOptions.hydro.conductionCoefficient = 0.0;
     ALWAYS_ASSERT(!detail::checkpointCompatible(conductionHeader, conductionOptions));
+    // The Balsara limiter follows the viscosity model, so the models are not interchangeable.
     auto balsaraOptions = getOptions();
     balsaraOptions.hydro.enabled = true;
-    balsaraOptions.hydro.viscosityEvolution = "none";
-    balsaraOptions.hydro.balsaraSwitch = true;
+    balsaraOptions.hydro.viscosityEvolution = "morrisAndMonaghan";
+    ALWAYS_ASSERT(balsaraOptions.hydro.usesBalsaraSwitch());
     auto const balsaraHeader = detail::checkpointHeader(balsaraOptions);
     ALWAYS_ASSERT(detail::checkpointCompatible(balsaraHeader, balsaraOptions));
-    balsaraOptions.hydro.balsaraSwitch = false;
+    balsaraOptions.hydro.viscosityEvolution = "none";
+    ALWAYS_ASSERT(!balsaraOptions.hydro.usesBalsaraSwitch());
     ALWAYS_ASSERT(!detail::checkpointCompatible(balsaraHeader, balsaraOptions));
     auto const unlimitedHeader = detail::checkpointHeader(balsaraOptions);
     ALWAYS_ASSERT(detail::checkpointCompatible(unlimitedHeader, balsaraOptions));
-    balsaraOptions.hydro.balsaraSwitch = true;
+    balsaraOptions.hydro.viscosityEvolution = "morrisAndMonaghan";
     ALWAYS_ASSERT(!detail::checkpointCompatible(unlimitedHeader, balsaraOptions));
-    // Programmatic updates normalize and validate exactly as CLI/INI parsing does.
+    // Programmatic updates validate exactly as CLI/INI parsing does.
     {
         auto const previousOptions = getOptions();
-        auto normalizedOptions = previousOptions;
-        normalizedOptions.hydro.viscosityEvolution = "morrisAndMonaghan";
-        normalizedOptions.hydro.balsaraSwitch = false;
-        setOptions(normalizedOptions);
-        ALWAYS_ASSERT(getOptions().hydro.balsaraSwitch);
+        auto evolvingOptions = previousOptions;
+        evolvingOptions.hydro.viscosityEvolution = "morrisAndMonaghan";
+        setOptions(evolvingOptions);
+        ALWAYS_ASSERT(getOptions().hydro.usesBalsaraSwitch());
         setOptions(previousOptions);
         auto invalidOptions = previousOptions;
         invalidOptions.hydro.viscosityEvolution = "huEtal";

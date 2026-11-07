@@ -282,7 +282,6 @@ struct Hydro {
     double vonNeumannRichtmyerCoefficient{};
     double viscosityEpsilon{};
     double conductionCoefficient{0.0};
-    bool balsaraSwitch{true};
     std::string viscosityEvolution{"morrisAndMonaghan"};
     double minimumBulkViscosityCoefficient{0.1};
     double viscosityDecay{0.2};
@@ -291,10 +290,9 @@ struct Hydro {
     bool viscosityBetaFollowsAlpha() const {
         return viscosityEvolution == "morrisAndMonaghan";
     }
-    // Morris-Monaghan always applies the Balsara limiter, so the option only selects it
-    // for constant coefficients. Every path that installs options normalizes through here.
-    void normalizeBalsaraSwitch() {
-        balsaraSwitch = balsaraSwitch || viscosityEvolution == "morrisAndMonaghan";
+    // The Balsara limiter accompanies Morris-Monaghan viscosity and nothing else.
+    bool usesBalsaraSwitch() const {
+        return viscosityEvolution == "morrisAndMonaghan";
     }
     double gamma{};
     double cfl{};
@@ -369,7 +367,6 @@ struct Options {
         arc & hydro.bulkViscosityCoefficient;
         arc & hydro.vonNeumannRichtmyerCoefficient;
         arc & hydro.viscosityEpsilon;
-        arc & hydro.balsaraSwitch;
         arc & hydro.viscosityEvolution;
         arc & hydro.minimumBulkViscosityCoefficient;
         arc & hydro.viscosityDecay;

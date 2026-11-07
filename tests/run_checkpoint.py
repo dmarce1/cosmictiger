@@ -188,7 +188,7 @@ def check_velocity_roundoff_restart(reference, resumed):
 
 
 def checkViscosityRestarts(executable, baseWorkdir):
-    """Check both viscosity models; only constant viscosity can disable the shear limiter."""
+    """Check both viscosity models; the shear limiter follows the model."""
     configuration = Path(__file__).resolve().parents[1] / "configurations/hydro_wave.ini"
     common = [str(executable), f"--configuration={configuration}", "--hpx:threads=2",
               "--hpx:bind=none", "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512",
@@ -197,62 +197,60 @@ def checkViscosityRestarts(executable, baseWorkdir):
               "--output.directory=.", "--output.silo=false", "--analysis.views=false",
               "--analysis.power=false", "--analysis.groups=false", "--lightcone.enabled=false"]
     for model in ("none", "morrisAndMonaghan"):
-        for limiter in ((False, True) if model == "none" else (True,)):
-            name = f"viscosity_{model}_{int(limiter)}"
-            options = common + [f"--hydro.viscosityEvolution={model}",
-                                f"--hydro.balsaraSwitch={str(limiter).lower()}"]
-            if model == "none" and not limiter:
-                options += ["--hydro.conductionCoefficient=0.3"]
-            reference = prepareCase(baseWorkdir, name)
-            runSimulation(options + ["--run.maxIterations=2"], reference, "run.log")
-            checkpoint = reference / "checkpoint.1"
-            if not checkpoint.is_dir():
-                raise RuntimeError(f"{name} did not save a completed first step")
-            for path in (checkpoint, reference / "checkpoint.2"):
-                state = decode_checkpoint((path / "checkpoint.0.dat").read_bytes())
-                expected_coefficients = state.gas_count if model != "none" else 0
-                if len(state.bulk_viscosity_coefficients) != expected_coefficients:
-                    raise RuntimeError(f"{name} has an incorrect viscosity payload")
-            resumed = prepareCase(baseWorkdir, name + "_restart", checkpoint)
-            output = runSimulation(options + ["--run.maxIterations=1", "--checkpoint.readIndex=1"],
-                                   resumed, "restart.log")
-            if "Done reading checkpoint" not in output:
-                raise RuntimeError(f"{name} did not load the checkpoint")
-            # Pair reduction order can leave tiny transverse velocity residuals.
-            # Keep all nonvelocity bytes (including viscosity state) and clocks
-            # exact, and bound only velocity accumulation at float precision.
-            restart_errors = check_velocity_roundoff_restart(
-                reference / "checkpoint.2", resumed / "checkpoint.2")
-            checkManifest(resumed / "checkpoint.2", 2, scenario="hydroWave", endTime=1.e-5,
-                          gravity=False)
-            if model != "none" or not limiter:
-                mutations = {"model": "--hydro.viscosityEvolution=" + (
-                    "morrisAndMonaghan" if model == "none" else "none"),
-                             "beta": "--hydro.viscosityBeta=3"}
-                if model == "none":
-                    mutations.update({"conduction_off": "--hydro.conductionCoefficient=0",
-                                      "conduction_changed": "--hydro.conductionCoefficient=0.6"})
-                if model == "morrisAndMonaghan":
-                    mutations.update({"floor": "--hydro.viscosityAlphaMin=0.2",
-                                      "decay": "--hydro.viscosityDecay=0.3"})
-                for label, changed in mutations.items():
-                    directory = prepareCase(baseWorkdir, name + "_reject_" + label, checkpoint)
-                    changed_key = changed.split("=", 1)[0] + "="
-                    changed_options = [option for option in options
-                                       if not option.startswith(changed_key)]
-                    output = runSimulation(changed_options + ["--run.maxIterations=0",
-                                           "--checkpoint.readIndex=1", changed],
-                                           directory, "restart.log", expectSuccess=False)
-                    diagnostics = (
-                        "Checkpoint physics, particle layout or integrator differs",
-                        "SPH checkpoint parameters differ",
-                        "SPH checkpoint variable-viscosity parameters differ",
-                        "SPH checkpoint hydro.conductionCoefficient differs",
-                    )
-                    if not any(diagnostic in output for diagnostic in diagnostics):
-                        raise RuntimeError(f"{name}/{label} lacked a viscosity compatibility diagnostic")
-            print(f"{name}: velocity-roundoff restart, exact committed state, and "
-                  f"viscosity compatibility passed; maximum errors={restart_errors}")
+        limiter = model == "morrisAndMonaghan"    # the shear limiter follows the model
+        name = f"viscosity_{model}_{int(limiter)}"
+        options = common + [f"--hydro.viscosityEvolution={model}"]
+        if model == "none":
+            options += ["--hydro.conductionCoefficient=0.3"]
+        reference = prepareCase(baseWorkdir, name)
+        runSimulation(options + ["--run.maxIterations=2"], reference, "run.log")
+        checkpoint = reference / "checkpoint.1"
+        if not checkpoint.is_dir():
+            raise RuntimeError(f"{name} did not save a completed first step")
+        for path in (checkpoint, reference / "checkpoint.2"):
+            state = decode_checkpoint((path / "checkpoint.0.dat").read_bytes())
+            expected_coefficients = state.gas_count if model != "none" else 0
+            if len(state.bulk_viscosity_coefficients) != expected_coefficients:
+                raise RuntimeError(f"{name} has an incorrect viscosity payload")
+        resumed = prepareCase(baseWorkdir, name + "_restart", checkpoint)
+        output = runSimulation(options + ["--run.maxIterations=1", "--checkpoint.readIndex=1"],
+                               resumed, "restart.log")
+        if "Done reading checkpoint" not in output:
+            raise RuntimeError(f"{name} did not load the checkpoint")
+        # Pair reduction order can leave tiny transverse velocity residuals.
+        # Keep all nonvelocity bytes (including viscosity state) and clocks
+        # exact, and bound only velocity accumulation at float precision.
+        restart_errors = check_velocity_roundoff_restart(
+            reference / "checkpoint.2", resumed / "checkpoint.2")
+        checkManifest(resumed / "checkpoint.2", 2, scenario="hydroWave", endTime=1.e-5,
+                      gravity=False)
+        mutations = {"model": "--hydro.viscosityEvolution=" + (
+            "morrisAndMonaghan" if model == "none" else "none"),
+                     "beta": "--hydro.viscosityBeta=3"}
+        if model == "none":
+            mutations.update({"conduction_off": "--hydro.conductionCoefficient=0",
+                              "conduction_changed": "--hydro.conductionCoefficient=0.6"})
+        if model == "morrisAndMonaghan":
+            mutations.update({"floor": "--hydro.viscosityAlphaMin=0.2",
+                              "decay": "--hydro.viscosityDecay=0.3"})
+        for label, changed in mutations.items():
+            directory = prepareCase(baseWorkdir, name + "_reject_" + label, checkpoint)
+            changed_key = changed.split("=", 1)[0] + "="
+            changed_options = [option for option in options
+                               if not option.startswith(changed_key)]
+            output = runSimulation(changed_options + ["--run.maxIterations=0",
+                                   "--checkpoint.readIndex=1", changed],
+                                   directory, "restart.log", expectSuccess=False)
+            diagnostics = (
+                "Checkpoint physics, particle layout or integrator differs",
+                "SPH checkpoint parameters differ",
+                "SPH checkpoint variable-viscosity parameters differ",
+                "SPH checkpoint hydro.conductionCoefficient differs",
+            )
+            if not any(diagnostic in output for diagnostic in diagnostics):
+                raise RuntimeError(f"{name}/{label} lacked a viscosity compatibility diagnostic")
+        print(f"{name}: velocity-roundoff restart, exact committed state, and "
+              f"viscosity compatibility passed; maximum errors={restart_errors}")
 
 
 def checkVariationalPressureRestart(executable, baseWorkdir):
