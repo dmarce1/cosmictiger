@@ -19,8 +19,10 @@ struct Operations {
 };
 
 CUDA_EXPORT inline Operations operator+(Operations left, Operations right) {
-    return {
-        left.singlePrecision + right.singlePrecision, left.doublePrecision + right.doublePrecision};
+    Operations sum;
+    sum.singlePrecision = left.singlePrecision + right.singlePrecision;
+    sum.doublePrecision = left.doublePrecision + right.doublePrecision;
+    return sum;
 }
 CUDA_EXPORT inline Operations operator+(FlopCount left, Operations right) {
     return Operations{left, 0} + right;

@@ -164,19 +164,22 @@ __global__ void sphCudaHydro(
                 __syncthreads();
                 workspace.neighbors.resize(offset + total);
                 if (contains) {
-                    workspace.neighbors[offset + slot] = {data.sourcePosition(sourceParticleIndex),
-                        data.sourceSmoothingLength[sourceParticleIndex],
-                        data.sourceVelocity(sourceParticleIndex),
-                        data.sourceInternalEnergy[sourceParticleIndex],
-                        data.sourceDensity[sourceParticleIndex],
-                        parameters.balsaraSwitch ? data.sourceBalsaraFactor[sourceParticleIndex] :
-                                                   1.0f,
-                        parameters.variableViscosity ?
-                            data.sourceBulkViscosityCoefficient[sourceParticleIndex] :
-                            parameters.bulkViscosityCoefficient,
-                        data.sourceGradHCorrection[sourceParticleIndex],
-                        parameters.midpointHydro ? int(data.sourceRungs[sourceParticleIndex]) : 0,
-                        sourceParticleIndex};
+                    auto& neighbor = workspace.neighbors[offset + slot];
+                    neighbor.position = data.sourcePosition(sourceParticleIndex);
+                    neighbor.smoothingLength = data.sourceSmoothingLength[sourceParticleIndex];
+                    neighbor.velocity = data.sourceVelocity(sourceParticleIndex);
+                    neighbor.internalEnergy = data.sourceInternalEnergy[sourceParticleIndex];
+                    neighbor.density = data.sourceDensity[sourceParticleIndex];
+                    neighbor.balsaraFactor = parameters.balsaraSwitch ?
+                        data.sourceBalsaraFactor[sourceParticleIndex] :
+                        1.0f;
+                    neighbor.bulkViscosityCoefficient = parameters.variableViscosity ?
+                        data.sourceBulkViscosityCoefficient[sourceParticleIndex] :
+                        parameters.bulkViscosityCoefficient;
+                    neighbor.gradHCorrection = data.sourceGradHCorrection[sourceParticleIndex];
+                    neighbor.rung =
+                        parameters.midpointHydro ? int(data.sourceRungs[sourceParticleIndex]) : 0;
+                    neighbor.sourceIndex = sourceParticleIndex;
                 }
             }
         }

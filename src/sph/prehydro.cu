@@ -190,11 +190,11 @@ __global__ void sphCudaDensityAndGradients(
                 workspace.particles.resize(offset + total);
                 if (contains) {
                     workspace.positions[offset + slot] = {data.sourcePosition(sourceParticleIndex)};
-                    workspace.particles[offset + slot] = {
-                        data.sourceSmoothingLength[sourceParticleIndex],
-                        data.sourceRungs[sourceParticleIndex],
-                        loadVelocity ? data.sourceVelocity(sourceParticleIndex) :
-                                       SpatialVector<float>(0.0f)};
+                    auto& particle = workspace.particles[offset + slot];
+                    particle.smoothingLength = data.sourceSmoothingLength[sourceParticleIndex];
+                    particle.rung = data.sourceRungs[sourceParticleIndex];
+                    particle.velocity = loadVelocity ? data.sourceVelocity(sourceParticleIndex) :
+                                                       SpatialVector<float>(0.0f);
                 }
             }
         }

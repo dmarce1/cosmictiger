@@ -625,13 +625,15 @@ static Vector<SphDensityCacheEntry> sphParticlesFetchDensityCacheLine(ParticleIn
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
     for (ParticleInteger i = begin; i < end; i++) {
-        line[i - begin] = {sphParticlesDensity(i),
-            sphParticlesBalsaraFactors ? balsara::decodeFactor(sphParticlesBalsaraFactors[i]) :
-                                         1.0f,
-            getOptions().hydro.viscosityEvolution != "none" ?
-                float(sphParticlesBulkViscosityCoefficients[i]) :
-                0.0f,
-            sphParticlesGradHCorrections[i]};
+        auto& entry = line[i - begin];
+        entry.density = sphParticlesDensity(i);
+        entry.balsaraFactor = sphParticlesBalsaraFactors ?
+            balsara::decodeFactor(sphParticlesBalsaraFactors[i]) :
+            1.0f;
+        entry.bulkViscosityCoefficient = getOptions().hydro.viscosityEvolution != "none" ?
+            float(sphParticlesBulkViscosityCoefficients[i]) :
+            0.0f;
+        entry.gradHCorrection = sphParticlesGradHCorrections[i];
     }
     return line;
 }
