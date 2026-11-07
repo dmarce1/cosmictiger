@@ -21,6 +21,9 @@
 #include <cosmictiger/analysis/lightcone_entry.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/drift.hpp>
+#if COSMICTIGER_WITH_SPH
+#include <cosmictiger/sph/tree.hpp>
+#endif
 
 Array<Position*, kDimensions> particlesX;
 Vector3<float>* particlesV = nullptr;
@@ -37,6 +40,9 @@ size_t capturedWorkers = 0;
 size_t lightconeCalls = 0;
 double capturedScale = 0.0;
 double capturedTau = 0.0;
+size_t sphBoundsCalls = 0;
+double capturedDriftFactor = 0.0;
+int capturedDriftRung = 0;
 
 void require(bool condition, char const* message) {
     if (!condition) {
@@ -48,6 +54,7 @@ void resetCapture() {
     capturedEntries.clear();
     capturedWorkers = 0;
     lightconeCalls = 0;
+    sphBoundsCalls = 0;
 }
 
 struct Fixture {
@@ -132,6 +139,7 @@ void checkDispatch(size_t count, int rung, bool glass) {
         }
     }
     require(lightconeCalls == 0, "disabled lightcone unexpectedly received particles");
+    require(sphBoundsCalls == 0, "disabled hydro moved the SPH tree bounds");
 }
 
 void checkEmptyRanges() {
@@ -184,6 +192,21 @@ void checkLightcone() {
 }
 #endif
 
+#if COSMICTIGER_WITH_SPH
+void checkSphBounds() {
+    Fixture fixture(37);
+    options.hydro.enabled = true;
+    // The tree hook receives the drift displacement factor dt/a and the exact rung.
+    drift(0.5, 0.125, 0.0, 0.125, 0.0, 1);
+    require(sphBoundsCalls == 1, "hydro drift did not move the SPH tree bounds once");
+    require(capturedDriftFactor == 0.25 && capturedDriftRung == 1,
+        "SPH tree bounds received the wrong displacement factor or rung");
+    drift(0.5, 0.125, 0.0, 0.125, 0.0, -1);
+    require(sphBoundsCalls == 2 && capturedDriftRung == -1,
+        "full drift did not pass the all-rung request to the SPH tree");
+}
+#endif
+
 }    // namespace detail
 
 Options const& getOptions() {
@@ -233,6 +256,14 @@ void particlesMemadviseCpu() {
     throw std::runtime_error("CPU dispatch requested CUDA managed-memory advice");
 }
 
+#if COSMICTIGER_WITH_SPH
+void sphTreeDriftBounds(double driftFactor, int rung) {
+    ++detail::sphBoundsCalls;
+    detail::capturedDriftFactor = driftFactor;
+    detail::capturedDriftRung = rung;
+}
+#endif
+
 TEST(DriftDispatch, SmallRange) {
     detail::checkDispatch(37, -1, false);
 }
@@ -250,6 +281,12 @@ TEST(DriftDispatch, Drag) {
 TEST(DriftDispatch, EmptyRanges) {
     detail::checkEmptyRanges();
 }
+
+#if COSMICTIGER_WITH_SPH
+TEST(DriftDispatch, SphBounds) {
+    detail::checkSphBounds();
+}
+#endif
 
 #if !defined(COSMICTIGER_ENABLE_ROCKSTAR) || COSMICTIGER_ENABLE_ROCKSTAR
 TEST(DriftDispatch, Lightcone) {
