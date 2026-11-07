@@ -68,9 +68,9 @@ code.
 
 # Agent handoffs
 
-At the start of future CosmicTiger work, read `handoff/claude2openai.md` if it
-exists for Claude's latest handoff to OpenAI. OpenAI's notes to Claude belong in
-`handoff/openai2claude.md`. Each handoff should state the period it covers and
+At the start of future CosmicTiger work, read `handoff/claude2codex.md` if it
+exists for Claude's latest handoff to Codex. Codex's notes to Claude belong in
+`handoff/codex2claude.md`. Each handoff should state the period it covers and
 distinguish completed work, validation limits, and remaining work. Check current
 repository state before relying on an older handoff.
 Keep both handoff files untracked and unstaged; never include them in commits.
