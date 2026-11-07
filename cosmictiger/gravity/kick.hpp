@@ -53,7 +53,6 @@ struct CudaKickData {
     float* pot;
     Array<float*, kDimensions> globalAcceleration{};
     Vector3<float>* deferredGasOpening = nullptr;
-    GravityDiagnostics* snapshotDiagnostics = nullptr;
     ParticleInteger const* gravitySampleIndices;
     Vector3<float>* gravitySampleAccelerations;
 };
@@ -101,7 +100,6 @@ struct KickParameters {
     FmmGeometry geometry{};
     ParticleInteger outputOffset = 0;
     bool forceOnly = false;
-    bool snapshotDiagnostics = false;
     bool profileCoordinator = true;
     bool globalTimestep = false;
     // Traditional SPH common boundaries select and balance gas rungs before
@@ -181,7 +179,6 @@ struct KickParameters {
         arc & openLargerCell;
         arc & geometry;
         arc & forceOnly;
-        arc & snapshotDiagnostics;
         arc & profileCoordinator;
         arc & globalTimestep;
         arc & deferGasOpening;
@@ -213,10 +210,6 @@ KickReturn gravityFinishDeferredGasOpening();
 void gravityDiscardDeferredGasOpening();
 bool gravityGasOpeningDeferred();
 Vector3<float>* gravityDeferredGasOpeningData();
-
-// Fresh all-particle fields; preserves velocities, rungs, ownership and ordering.
-// Caller owns snapshot storage on every locality.
-void gravityRefreshSnapshotDiagnostics(double theta);
 
 struct KickWorkitem {
     FmmGeometry geometry{};

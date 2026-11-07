@@ -18,7 +18,6 @@ void testConductionPair(Fixture& fixture) {
     auto& data = fixture.data_;
     auto& parameters = fixture.params_;
     fixture.enableMidpointOutputs();
-    fixture.enableHydroDiagnostics();
     parameters.midpointHydro = true;
     parameters.minimumRung = 0;
     parameters.minimumProposedRung = 0;
@@ -95,13 +94,6 @@ void testConductionPair(Fixture& fixture) {
                 pairKickClose(energyRate, index == 0 ? expectedHotRate : -expectedHotRate,
                     "conductive rate differs from the paper's exchange");
                 totalEnergyRate += energyRate;
-                auto const& diagnostic = data.sinkHydroDiagnostics[sink];
-                pairKickClose(diagnostic.entropyRate, data.sinkEntropyRate[sink],
-                    "retained entropy rate differs from the integrator");
-                pairKickRequire(diagnostic.viscosityEntropyRate == 0.0f,
-                    "conduction leaked into the viscosity diagnostic");
-                pairKickClose(diagnostic.conductionEntropyRate, data.sinkEntropyRate[sink],
-                    "retained conduction rate differs from the paper's exchange");
                 for (int dimension = 0; dimension < kDimensions; ++dimension) {
                     pairKickRequire(data.sinkAccelerations[sink][dimension] ==
                             pressureAccelerations[index][dimension],
@@ -174,10 +166,10 @@ void testConductionPair(Fixture& fixture) {
     }
 }
 
-// Independent on/off evaluations check the decomposition without duplicating
-// the pair equations; the conduction case above checks their scalar reference.
+// Independent on/off evaluations check that the total rates superpose without
+// duplicating the pair equations; the conduction case above checks their scalar reference.
 template <class Fixture>
-void testHydroDiagnostics(Fixture& fixture, bool morrisAndMonaghan = false) {
+void testDissipativeRateSuperposition(Fixture& fixture, bool morrisAndMonaghan = false) {
     auto& data = fixture.data_;
     auto& parameters = fixture.params_;
     fixture.enableMidpointOutputs();
@@ -214,88 +206,59 @@ void testHydroDiagnostics(Fixture& fixture, bool morrisAndMonaghan = false) {
         }
         parameters.uniformAccelerationY = 0.0f;
         parameters.velocityDampingRate = 0.0f;
-        auto* diagnostics = data.sinkHydroDiagnostics;
-        data.sinkHydroDiagnostics = nullptr;
         fixture.hydro();
-        std::array<SphAcceleration, 2> referenceAcceleration;
-        std::array<float, 2> referenceEntropy;
+        std::array<SphAcceleration, 2> hydroAccelerations;
+        std::array<float, 2> entropyRates;
         for (int index = 0; index < 2; ++index) {
             int const sink = fixture.sinkIndex(index);
-            referenceAcceleration[index] = data.sinkAccelerations[sink];
-            referenceEntropy[index] = data.sinkEntropyRate[sink];
+            hydroAccelerations[index] = data.sinkAccelerations[sink];
+            entropyRates[index] = data.sinkEntropyRate[sink];
         }
-        if (diagnostics) {
-            data.sinkHydroDiagnostics = diagnostics;
-        } else {
-            fixture.enableHydroDiagnostics();
-        }
-        // These forces must affect integration but never the hydro diagnostic.
+        // These forces must affect integration but never the entropy rate.
         parameters.uniformAccelerationY = 0.25f;
         parameters.velocityDampingRate = 0.1f;
         fixture.hydro();
         for (int index = 0; index < 2; ++index) {
             int const sink = fixture.sinkIndex(index);
-            auto const& diagnostic = data.sinkHydroDiagnostics[sink];
-            pairKickClose(diagnostic.entropyRate, referenceEntropy[index],
-                "diagnostic collection changed entropy evolution");
-            pairKickClose(diagnostic.entropyRate,
-                diagnostic.viscosityEntropyRate + diagnostic.conductionEntropyRate,
-                "entropy source decomposition does not sum to the total");
+            pairKickClose(data.sinkEntropyRate[sink], entropyRates[index],
+                "external sources changed the entropy rate");
+            pairKickClose(data.sinkAccelerations[sink][1], hydroAccelerations[index][1] + 0.25f,
+                "external acceleration was not applied to the integrator");
             for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
-                pairKickClose(diagnostic.acceleration[dimension],
-                    referenceAcceleration[index][dimension],
-                    "hydro acceleration includes an external force or damping");
                 if (mode == 0) {
-                    pressureAccelerations[index][dimension] =
-                        referenceAcceleration[index][dimension];
+                    pressureAccelerations[index][dimension] = hydroAccelerations[index][dimension];
                 }
-                pairKickClose(diagnostic.pressureAcceleration[dimension],
-                    pressureAccelerations[index][dimension],
-                    "viscosity or external sources contaminated the pressure force");
-                pairKickClose(diagnostic.acceleration[dimension],
-                    diagnostic.pressureAcceleration[dimension] +
-                        diagnostic.viscosityAcceleration[dimension],
-                    "pressure and viscous forces do not sum to the hydro force");
                 if ((mode & 1) == 0) {
-                    pairKickRequire(diagnostic.viscosityAcceleration[dimension] == 0.0f,
-                        "disabled viscosity retained a nonzero force");
+                    pairKickClose(hydroAccelerations[index][dimension],
+                        pressureAccelerations[index][dimension],
+                        "conduction changed the pressure force");
                 }
             }
-            pairKickClose(data.sinkAccelerations[sink][1], diagnostic.acceleration[1] + 0.25f,
-                "external acceleration was not applied to the integrator");
             if (mode & 1) {
-                pairKickRequire(std::abs(diagnostic.viscosityAcceleration[0]) > 0.0f,
-                    "approaching viscous pair has no retained viscosity force");
+                pairKickRequire(hydroAccelerations[index][0] != pressureAccelerations[index][0],
+                    "approaching viscous pair has no viscous force");
             }
             if (mode == 0) {
-                pairKickRequire(diagnostic.entropyRate == 0.0f &&
-                        diagnostic.viscosityEntropyRate == 0.0f &&
-                        diagnostic.conductionEntropyRate == 0.0f,
-                    "disabled dissipation generated entropy");
-            } else if (mode == 1) {
-                viscosityRates[index] = diagnostic.viscosityEntropyRate;
                 pairKickRequire(
-                    viscosityRates[index] > 0.0f && diagnostic.conductionEntropyRate == 0.0f,
-                    "viscosity-only rate was not isolated");
+                    entropyRates[index] == 0.0f, "disabled dissipation generated entropy");
+            } else if (mode == 1) {
+                viscosityRates[index] = entropyRates[index];
+                pairKickRequire(viscosityRates[index] > 0.0f, "viscous pair generated no entropy");
             } else if (mode == 2) {
-                conductionRates[index] = diagnostic.conductionEntropyRate;
-                pairKickRequire(diagnostic.viscosityEntropyRate == 0.0f,
-                    "conduction-only rate contains viscosity");
+                conductionRates[index] = entropyRates[index];
             } else {
-                pairKickClose(diagnostic.viscosityEntropyRate, viscosityRates[index],
-                    "conduction changed the viscosity rate");
-                pairKickClose(diagnostic.conductionEntropyRate, conductionRates[index],
-                    "viscosity changed the conduction rate");
+                pairKickClose(entropyRates[index], viscosityRates[index] + conductionRates[index],
+                    "viscosity and conduction entropy rates do not superpose");
             }
         }
     }
 }
 
 template <class Fixture>
-void testHydroDensityDiagnostics(Fixture& fixture) {
+void testContinuityDensityRate(Fixture& fixture) {
     auto& data = fixture.data_;
     auto& parameters = fixture.params_;
-    fixture.enableHydroDiagnostics();
+    fixture.enableLogDensityRates();
     parameters.minimumSmoothingLength = parameters.maximumSmoothingLength = 0.2f;
     parameters.scaleFactor = 0.7f;
     parameters.expansionRate = 0.3f;
@@ -316,8 +279,9 @@ void testHydroDensityDiagnostics(Fixture& fixture) {
         double const expectedRate = data.gasMass * (-2.0 * approach) *
             dkernelWDq(radius / support) / (parameters.scaleFactor * std::pow(support, 4));
         for (int index = 0; index < 2; ++index) {
-            pairKickClose(data.sinkHydroDiagnostics[fixture.sinkIndex(index)].densityRate,
-                expectedRate, "retained density rate differs from the continuity equation");
+            int const sink = fixture.sinkIndex(index);
+            pairKickClose(double(data.sinkLogDensityRate[sink]) * data.sinkDensity[sink],
+                expectedRate, "density rate differs from the continuity equation");
         }
     }
 }

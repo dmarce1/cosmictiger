@@ -41,10 +41,6 @@ template KickReturn kickWalk<COSMICTIGER_FMM_INSTANCE_ORDER>(KickParameters, Exp
     Vector3<Position>, TreeId, Vector<TreeId>, Vector<TreeId>, std::shared_ptr<KickWorkspace>,
     KickContext const&);
 
-template KickReturn kickWalk<COSMICTIGER_FMM_INSTANCE_ORDER, true>(KickParameters, ExpansionBuffer,
-    Vector3<Position>, TreeId, Vector<TreeId>, Vector<TreeId>, std::shared_ptr<KickWorkspace>,
-    KickContext const&);
-
 // Tree multipole construction (tree_multipole.hpp).
 template FlopCounts treeComputeMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(MultipoleBuffer&,
     MultipoleBuffer const&, MultipoleBuffer const&, Vector3<double> const&, Vector3<double> const&,

@@ -263,22 +263,12 @@ point mesh named `mesh`. State fields have descriptive names: `xVelocity`,
 `yVelocity`, `zVelocity` (active axes only), `timestepRung`, `density`,
 `entropyTracer`, `kernelSupportRadius`, `pressure`, and `temperature`.
 Temperature is in kelvin, including without chemistry; that case uses the existing
-neutral H/He ideal-gas convention. Pressure, neutral temperature, constant mass,
-and algebraic diagnostic combinations are Silo expressions evaluated by VisIt.
+neutral H/He ideal-gas convention. Pressure, neutral temperature, and constant mass
+are Silo expressions evaluated by VisIt.
 
-Set `output.siloTimeDerivatives=true` to add each species' `timeDerivatives/`
-subdirectory (default: false). For gas, `timeDerivatives/xVelocity` sums the
-enabled hydro and gravity forces per mass; `hydro/`, `pressure/`, `viscosity/`,
-and `gravity/` underneath it expose the contributions. Density and entropy
-rates are `timeDerivatives/density` and `timeDerivatives/entropyTracer`;
-viscosity and conduction entropy rates are in their respective subdirectories.
-Gravity fields also provide `longField/` and `nearField/` splits. Species-level
-`potentialEnergy` is gravitational potential per unit mass, with long/near splits.
-Diagnostic storage exists only during snapshot evaluation and writing. With the
-switch off, no extra diagnostic buffers or force evaluations are produced.
-The initial snapshot includes these diagnostics. See [units and field paths](docs/units.md)
-for the complete directory layout and conventions. Saved VisIt sessions using
-abbreviated names or `dark_matter/` need their variable paths updated.
+See [units and field paths](docs/units.md) for the complete directory layout and
+conventions. Saved VisIt sessions using abbreviated names or `dark_matter/` need
+their variable paths updated.
 
 Particle positions retain the fixed-point representation used by the solver and
 checkpoints. Set `output.units=cgs` for CGS quantities or

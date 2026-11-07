@@ -132,14 +132,6 @@ void computeReadyCells() {
                     auto const value = particle(index, center, flops);
                     flops += evaluate(
                         cache.order, field, coefficients.data(), localTrace, value.offset, h);
-                    if (particlesGravityDiagnostics != nullptr) {
-                        auto& output = particlesGravityDiagnostics[index];
-                        double const gm = getOptions().gravity.gm;
-                        output.longPotential = gm * field[0];
-                        for (int dim = 0; dim < kDimensions; ++dim) {
-                            output.longAcceleration[dim] = gm * field[dim + 1];
-                        }
-                    }
                     field[0] += fields.potential[compact];
                     for (int dim = 0; dim < kDimensions; ++dim) {
                         field[dim + 1] += fields.acceleration[dim][compact];

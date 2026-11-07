@@ -519,15 +519,7 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
         sphParticlesResetSemiactive();
     };
     if (hydroTimestep < 0.0) {
-        if (sphParticlesHydroDiagnostics != nullptr) {
-            // A full, zero-kick pressure/viscosity evaluation at output coordinates.
-            // Phase zero neither proposes rungs nor advances viscosity or entropy.
-            auto diagnostics = runParameters;
-            diagnostics.runType = kSphRunHydro;
-            diagnostics.phase = 0;
-            diagnostics.viscosityTimestep = 0.0;
-            sphRun(diagnostics, true);
-        }
+        // Output density refresh: no force evaluation, viscosity update or entropy kick.
         clearMidpointSources();
         return result;
     }
@@ -1974,7 +1966,7 @@ void driver() {
                     outputSlice(number, years);
                 }
                 if (fullEval) {
-                    viewOutputViews(outputStep, a, false, years, t0, tau, a * adot);
+                    viewOutputViews(outputStep, a, false, years);
                 }
                 if (getOptions().analysis.views) {
                     Timer tm;
@@ -2419,8 +2411,7 @@ void driver() {
     }
 #endif
     profile::profileBegin("output");
-    viewOutputViews(
-        driverFinalOutputStep(tau, coarseInterval), a, true, years, coarseInterval, tau, a * adot);
+    viewOutputViews(driverFinalOutputStep(tau, coarseInterval), a, true, years);
     profile::profileEnd();
     if (!interrupted && thisIter > 0 && itime == 0 && cosmology::endTimeReached(tau, tauMax)) {
         // Finish the energy measurement only after all restart state and

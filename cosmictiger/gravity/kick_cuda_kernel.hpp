@@ -43,7 +43,7 @@ __device__ inline void cudaCopyExpansion(float* destination, float const* source
 
 }    // namespace detail
 
-template <int order, bool snapshotDiagnostics>
+template <int order>
 __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKickData const& data,
     cosmictiger::gravity::cartesian::tracefree::Expansion<float, order> const& lValue2,
     TreeNode const& self, CudaKickForceTile const& force, int sinkBegin, int sinkCount,
@@ -122,24 +122,6 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
         gy *= params.gm;
         gx *= params.gm;
         phi *= params.gm;
-        if constexpr (snapshotDiagnostics) {
-            // Same solver decomposition as kickWalk's snapshot specialization.
-            auto& output = data.snapshotDiagnostics[sinkIndex];
-            output.acceleration = Vector3<float>(gx, gy, gz);
-            output.potential = phi;
-            output.longAcceleration[kXi] += kScaleFactor2 * l2.accelerationX();
-            output.longAcceleration[kYi] += kScaleFactor2 * l2.accelerationY();
-            output.longAcceleration[kZi] += kScaleFactor2 * l2.accelerationZ();
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                output.longAcceleration[dim] *= params.gm;
-                output.nearAcceleration[dim] =
-                    output.acceleration[dim] - output.longAcceleration[dim];
-            }
-            output.longPotential =
-                params.gm * (output.longPotential + kScaleFactor1 * l2.potential());
-            output.nearPotential = output.potential - output.longPotential;
-            continue;
-        }
         if (data.gravitySampleAccelerations != nullptr) {
             ParticleInteger const slot = data.gravitySampleIndices[sinkIndex];
             if (slot >= 0) {
@@ -432,7 +414,7 @@ __device__ __forceinline__ FlopCount cudaApplyPeriodicPolicy(CudaKickData const&
 
 // One 32-thread warp per block. The dynamic shared memory follows the host
 // computed CudaKickArenaLayout; see kick.hpp for the region lifetimes.
-template <int order, bool snapshotDiagnostics>
+template <int order>
 __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, CudaKickData data,
     CudaKickParameters<order>* params, int itemCount, int* nextItem, CudaKickArenaLayout layout,
     char* listSlab
@@ -759,23 +741,6 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                             work.next(profile::DevicePhase::KickM2P);
                             interactionFlops += cudaGravityPcDirect<order>(data, control, self,
                                 sinkBegin, sinkCount, pclist, globalParams.doPhi, geometry);
-                            if constexpr (snapshotDiagnostics) {
-                                for (int local = tid; local < sinkCount; local += kWarpSize) {
-                                    auto const index = self.particleRange.first + sinkBegin + local;
-                                    auto& output = data.snapshotDiagnostics[index];
-                                    output.longAcceleration = Vector3<float>(
-                                        force.gx[local], force.gy[local], force.gz[local]);
-                                    float const mass = data.sourceMasses != nullptr ?
-                                        data.sourceMasses[index] :
-                                        data.sph ?
-                                        (data.type[index] == kDarkMatterType ? data.darkMatterMass :
-                                                                               data.sphMass) :
-                                        1.0f;
-                                    output.longPotential = force.phi[local] -
-                                        mass * selfPhi() * inverseSmoothingLength;
-                                }
-                                __syncwarp();
-                            }
                             work.next(profile::DevicePhase::KickP2P);
                             if (equalMass) {
                                 interactionFlops += cudaGravityPpDirect<order, true>(data, control,
@@ -788,9 +753,8 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                             }
                             __syncwarp();
                             work.next(profile::DevicePhase::KickLeafKick);
-                            interactionFlops += doKick<order, snapshotDiagnostics>(kr, globalParams,
-                                data, expansion, self, force, sinkBegin, sinkCount,
-                                params[index].outputOffset);
+                            interactionFlops += doKick<order>(kr, globalParams, data, expansion,
+                                self, force, sinkBegin, sinkCount, params[index].outputOffset);
                             // The next tile reinitializes the force planes.
                             __syncwarp();
                         }

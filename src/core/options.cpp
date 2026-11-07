@@ -541,7 +541,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"analysis.sliceResolution", options.analysis.sliceResolution},
         {"analysis.saveForce", options.analysis.saveForce},
         {"analysis.saveAcceleration", options.analysis.saveAcceleration},
-        {"output.siloTimeDerivatives", options.output.siloTimeDerivatives},
         {"analysis.savePotential", options.analysis.savePotential},
         {"lightcone.enabled", options.lightcone.enabled},
         {"lightcone.directory", options.lightcone.directory},
@@ -859,9 +858,6 @@ bool processOptions(int argc, char* argv[]) {
         "retain per-particle acceleration diagnostics")("analysis.savePotential",
         po::value<bool>(&opts.analysis.savePotential)->default_value(false),
         "retain per-particle potential diagnostics");
-    outputOpts.add_options()("output.siloTimeDerivatives",
-        po::value<bool>(&opts.output.siloTimeDerivatives)->default_value(false),
-        "evaluate hydro rates and split gravity fields at Silo snapshot positions");
 
     po::options_description lightconeOpts("Lightcone analysis");
     lightconeOpts.add_options()("lightcone.cuda",

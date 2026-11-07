@@ -255,8 +255,8 @@ void runFixedScenario() {
                         global ? baseTimestep : std::ldexp(baseTimestep, -baseOptions.run.minRung));
                     state.globalHydroTimestep = estimate.minimumTimestep;
                 } else if (outputDue) {
-                    // Refresh snapshot density and optional hydro rates without
-                    // a viscosity update or entropy/velocity kick.
+                    // Refresh density at the output coordinates without a force
+                    // evaluation, viscosity update, or entropy kick.
                     sphMidpointStep(-1, state.tau, -1.0, baseTimestep, 1.0, 0.0, state.energies,
                         global, global ? baseTimestep : 0.0);
                 }
@@ -266,8 +266,7 @@ void runFixedScenario() {
                 lastOutputStep = outputStep;
                 profile::profileBegin("output");
                 viewOutputViews(outputStep, 1.0, false,
-                    state.tau * getOptions().units.timeSeconds * constants::kSecondsToYears,
-                    duration / baseOptions.run.numberOfSteps, state.tau);
+                    state.tau * getOptions().units.timeSeconds * constants::kSecondsToYears);
                 profile::profileEnd();
             }
             resetFlops();
@@ -480,8 +479,7 @@ void runFixedScenario() {
     // Use the next cycle for a final partial coarse step, preserving earlier snapshots.
     profile::profileBegin("output");
     viewOutputViews(driverFinalOutputStep(state.tau, coarseInterval), 1.0, true,
-        state.tau * getOptions().units.timeSeconds * constants::kSecondsToYears,
-        duration / baseOptions.run.numberOfSteps, state.tau);
+        state.tau * getOptions().units.timeSeconds * constants::kSecondsToYears);
     profile::profileEnd();
     if (completed && !interrupted && iterations > 0) {
         // Only terminal diagnostics consume the outstanding gravity closing

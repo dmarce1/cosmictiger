@@ -267,10 +267,7 @@ SphRunReturn sphCpuSmoothingLengths(
  * (Price 2012, equation (27), https://arxiv.org/abs/1012.1885).
  */
 // clang-format on
-namespace detail {
-
-template <bool retainHydroDiagnostics>
-SphRunReturn sphCpuDensityAndGradientsImpl(
+SphRunReturn sphCpuDensityAndGradients(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
     bool const evolveMorrisMonaghan =
@@ -354,7 +351,7 @@ SphRunReturn sphCpuDensityAndGradientsImpl(
             ΣqwʹPack += simdSelect(inside, q_ab * dkernelWDq(q_ab), SimdFloat(0.0f));
             flops += 3 * SimdFloat::size() +
                 sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
-            if (computeSphDivergence || data.sinkLogDensityRate || retainHydroDiagnostics) {
+            if (computeSphDivergence || data.sinkLogDensityRate) {
                 // clang-format off
                 /*
                  * GADGET-4 equation (72) uses −Σ_b m_b v_ab·gradW_ab and Σ_b m_b v_ab×gradW_ab.
@@ -384,7 +381,7 @@ SphRunReturn sphCpuDensityAndGradientsImpl(
                     sph_flops::densityKernelOperations(selectedHydroKernel(), q_ab, true);
                 Vector3<SimdFloat> const m_b_grad_a_W_ab = massWeightedGradientFactor * r_ab;
                 flops += 3 * SimdFloat::size();
-                if (data.sinkLogDensityRate || retainHydroDiagnostics) {
+                if (data.sinkLogDensityRate) {
                     // Grad-H and conformal-time factors are applied below.
                     densityDerivativeSumPack += sph_geometry::spatialDot(v_ab, m_b_grad_a_W_ab);
                     flops += 6 * SimdFloat::size();
@@ -418,37 +415,24 @@ SphRunReturn sphCpuDensityAndGradientsImpl(
         flops += 2 * (SimdFloat::size() - 1) + 8;
         detail::recordSphCpuGradH(gradH, H_a, ρ_a, ΣW, Σqwʹ, result);
         data.sinkGradHCorrection[sinkIndex] = gradH.correction.weightedSupportCorrection;
-        if (data.sinkLogDensityRate || retainHydroDiagnostics) {
+        if (data.sinkLogDensityRate) {
             // clang-format off
             /*
              * Price (2012), equation (27), in the stored comoving variables:
-             *   dρ_c/dτ = Σ_b m_b (w_a−w_b)·∇_aW_ab / (a Ω_a).
+             *   d ln ρ_c/dτ = Σ_b m_b (w_a−w_b)·∇_aW_ab / (a ρ_c Ω_a).
              * Held supports use Ω_a=1. This is peculiar compression, excluding
              * homogeneous Hubble dilution; w=a v_pec and dt=a dτ.
              *
              * Symbol directory:
-             *   ρ_c → density; dρ_c/dτ → density rate;
-             *   w_a−w_b → velocity difference; a → scale factor;
-             *   Ω_a → support Jacobian;
-             *   Σ_b m_b (w_a−w_b)·∇_aW_ab → density derivative sum.
-             *   Code names: dρ_c_dτ = dρ_c/dτ.
+             *   ρ_c → density; d ln ρ_c/dτ → log density rate
+             *   w_a−w_b → velocity difference; a → scale factor
+             *   Ω_a → support Jacobian
+             *   Σ_b m_b (w_a−w_b)·∇_aW_ab → density derivative sum
              */
             // clang-format on
-            if constexpr (retainHydroDiagnostics) {
-                float const dρ_c_dτ = simdSum(densityDerivativeSumPack) /
-                    (parameters.scaleFactor * gradH.correction.supportJacobian);
-                data.sinkHydroDiagnostics[sinkIndex].densityRate = dρ_c_dτ;
-                if (data.sinkLogDensityRate) {
-                    data.sinkLogDensityRate[sinkIndex] = dρ_c_dτ / ρ_a;
-                    flops += 1;
-                }
-                flops += SimdFloat::size() - 1 + 2;
-            } else {
-                // Preserve the original single-division predictor path when diagnostics are off.
-                data.sinkLogDensityRate[sinkIndex] = simdSum(densityDerivativeSumPack) /
-                    (parameters.scaleFactor * ρ_a * gradH.correction.supportJacobian);
-                flops += SimdFloat::size() - 1 + 3;
-            }
+            data.sinkLogDensityRate[sinkIndex] = simdSum(densityDerivativeSumPack) /
+                (parameters.scaleFactor * ρ_a * gradH.correction.supportJacobian);
+            flops += SimdFloat::size() - 1 + 3;
         }
         if (parameters.balsaraSwitch && data.sinkBalsaraFactor) {
             Vector3<float> const ρ_a_curl_v_a(simdSum(ρ_a_curl_v_aPack[kXi]),
@@ -491,14 +475,4 @@ SphRunReturn sphCpuDensityAndGradientsImpl(
     result.floatingPointOperations = FlopCount(flops);
     addCpuFlops(flops.counts());
     return result;
-}
-
-}    // namespace detail
-
-SphRunReturn sphCpuDensityAndGradients(
-    SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
-    // One dispatch per target node; the disabled specialization contains no diagnostic work.
-    return data.sinkHydroDiagnostics ?
-        detail::sphCpuDensityAndGradientsImpl<true>(parameters, data, targetNodeIndex) :
-        detail::sphCpuDensityAndGradientsImpl<false>(parameters, data, targetNodeIndex);
 }

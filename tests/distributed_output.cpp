@@ -473,9 +473,9 @@ void distributedOutputTest() {
     setOptions(options);
     distributedOutputParticleFixture(hpxSize(), false, false);
     viewConfigure();
-    viewOutputViews(0, 0.25, false, -1.0, 1.0);
+    viewOutputViews(0, 0.25, false, -1.0);
     auto const initialGeneration = detail::checkDistributedOutput(0, "", hpxSize(), false);
-    viewOutputViews(0, 0.25, false, -1.0, 1.0);
+    viewOutputViews(0, 0.25, false, -1.0);
     auto const replacementGeneration = detail::checkDistributedOutput(0, "", hpxSize(), false);
     detail::requireDistributedOutput(initialGeneration != replacementGeneration,
         "republishing a cycle uses a new immutable generation");
@@ -491,7 +491,7 @@ void distributedOutputTest() {
     options.output.xMax = 0.45;
     setOptions(options);
     viewConfigure();
-    viewOutputViews(1, 0.25, false, -1.0, 1.0);
+    viewOutputViews(1, 0.25, false, -1.0);
     detail::checkDistributedOutput(1, "", hpxSize(), true);
 
     options.output.xMin = 0.0;
@@ -500,7 +500,7 @@ void distributedOutputTest() {
     options.output.frame = "both";
     setOptions(options);
     viewConfigure();
-    viewOutputViews(2, 0.25, false, -1.0, 1.0);
+    viewOutputViews(2, 0.25, false, -1.0);
     for (bool const cosmological : {false, true}) {
         for (bool const lab : {false, true}) {
             std::string const prefix =
@@ -519,12 +519,12 @@ void distributedOutputTest() {
     auto const skipped = detail::distributedMasterPath(4);
     detail::requireDistributedOutput(
         !std::filesystem::exists(skipped), "cadence probe starts unpublished");
-    viewOutputViews(4, 0.25, false, -1.0, 1.0);
+    viewOutputViews(4, 0.25, false, -1.0);
     detail::requireDistributedOutput(
         !std::filesystem::exists(skipped), "cadence skips nonoutput cycle");
     // The same scale can occur on either side of a cosmological turnaround.
     // Preserve the caller's actual age through both master and remote leaves.
-    viewOutputViews(4, 0.25, true, 4.2e9, 1.0);
+    viewOutputViews(4, 0.25, true, 4.2e9);
     detail::checkDistributedOutput(4, "", hpxSize(), false);
     {
         auto const masterPath = detail::distributedMasterPath(4);
@@ -538,14 +538,14 @@ void distributedOutputTest() {
 
     int const activeRanks = std::max(1, hpxSize() - 1);
     distributedOutputParticleFixture(activeRanks, false, false);
-    viewOutputViews(6, 0.25, false, -1.0, 1.0);
+    viewOutputViews(6, 0.25, false, -1.0);
     detail::checkDistributedOutput(6, "", activeRanks, false);
     distributedOutputParticleFixture(activeRanks, true, false);
     options.output.xMin = 0.2;
     options.output.xMax = 0.3;
     setOptions(options);
     viewConfigure();
-    viewOutputViews(9, 0.25, false, -1.0, 1.0);
+    viewOutputViews(9, 0.25, false, -1.0);
     {
         auto const masterPath = detail::distributedMasterPath(9);
         detail::DistributedOutputFile master(
@@ -560,7 +560,7 @@ void distributedOutputTest() {
         setOptions(options);
         viewConfigure();
         distributedOutputParticleFixture(1, false, true);
-        viewOutputViews(12, 0.25, false, -1.0, 1.0);
+        viewOutputViews(12, 0.25, false, -1.0);
         detail::checkDistributedOutput(12, "", 1, false, {}, true);
         distributedOutputParticleFixture(1, true, true);
     }

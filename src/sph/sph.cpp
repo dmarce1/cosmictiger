@@ -837,8 +837,7 @@ void SphRunWorkspace::stage() {
     }
     if (params.runType == kSphRunHydro ||
         (params.runType == kSphRunDensityAndGradients &&
-            (params.balsaraSwitch || params.variableViscosity ||
-                sphParticlesHydroDiagnostics != nullptr))) {
+            (params.balsaraSwitch || params.variableViscosity))) {
         hostVelocityX.resize(particleStorageSize);
         hostVelocityY.resize(particleStorageSize);
         hostVelocityZ.resize(particleStorageSize);
@@ -941,7 +940,6 @@ SphRunData SphRunWorkspace::data() {
         runData.proposeRungs = true;
     }
     runData.sinkDensity = &sphParticlesDensity(0);
-    runData.sinkHydroDiagnostics = sphParticlesHydroDiagnostics;
     runData.sinkGradHCorrection = sphParticlesGradHCorrections;
     runData.sinkBalsaraFactor = sphParticlesBalsaraFactors;
     runData.sinkBulkViscosityCoefficient = sphParticlesBulkViscosityCoefficients;
@@ -1028,9 +1026,7 @@ SphRunReturn SphRunWorkspace::compute(bool useCuda) {
 #ifdef USE_CUDA
     std::vector<std::unique_ptr<void, decltype(&cudaFree)>> sourceBuffers;
     sourceBuffers.reserve(15);
-    std::unique_ptr<float, decltype(&freeManagedMemory)> diagnosticLogDensityRates(
-        nullptr, freeManagedMemory);
-    // Declared after all buffer owners so failure drains submitted copies or
+    // Declared after the source owners so failure drains submitted copies or
     // kernels before their device allocations are released.
     CudaStream stream(cudaGetDevice());
     copySources(runData, [&](auto*& device, auto const& host) {
@@ -1044,36 +1040,12 @@ SphRunReturn SphRunWorkspace::compute(bool useCuda) {
             stream.copyAsync(allocation, host.data(), bytes, cudaMemcpyHostToDevice);
         }
     });
-    // Use the existing optional predictor output without changing the GPU density
-    // kernel or its disabled-path register/shared-memory occupancy.
-    if (params.runType == kSphRunDensityAndGradients && runData.sinkHydroDiagnostics) {
-        diagnosticLogDensityRates.reset(
-            static_cast<float*>(allocateManagedMemory(sizeof(float) * sphParticlesSize())));
-        runData.sinkLogDensityRate = diagnosticLogDensityRates.get();
-    }
     auto rc = sphRunCuda(params, runData, stream);
     if (!hostPairUpdates.empty()) {
         stream.copyAsync(hostPairUpdates.data(), runData.sourcePairUpdates,
             hostPairUpdates.size() * sizeof(SphPairUpdate), cudaMemcpyDeviceToHost);
     }
     stream.wait();
-    if (diagnosticLogDensityRates) {
-        size_t count = 0;
-        for (int const target : hostTargetNodeIndices) {
-            auto const& node = hostTrees[target];
-            for (auto sink = node.sinkParticleRange.first; sink < node.sinkParticleRange.second;
-                ++sink) {
-                if (runData.sinkFlags[sink].semiactive() && runData.sinkFlags[sink].converged()) {
-                    // Derived: dρ/dτ = ρ d(ln ρ)/dτ. The kernel already includes Ω and a.
-                    runData.sinkHydroDiagnostics[sink].densityRate =
-                        runData.sinkLogDensityRate[sink] * runData.sinkDensity[sink];
-                    ++count;
-                }
-            }
-        }
-        addCpuFlops(count, FlopPrecision::Single);
-        rc.floatingPointOperations += count;
-    }
 
     return rc;
 #else

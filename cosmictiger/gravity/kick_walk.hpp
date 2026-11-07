@@ -48,7 +48,7 @@ bool kickSourcesAreSingleRank(Vector<TreeId> const& checklist);
 
 }    // namespace detail
 
-template <int order, bool snapshotDiagnostics = false>
+template <int order>
 KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> pos, TreeId self,
     Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
     std::shared_ptr<KickWorkspace> cudaWorkspace, KickContext const& context);
@@ -127,7 +127,7 @@ inline void kickOpenOrDefer(bool openLargerCell, TreeNode const* sink, TreeNode 
 
 }    // namespace detail
 
-template <int order, bool snapshotDiagnostics>
+template <int order>
 KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> pos, TreeId self,
     Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
     std::shared_ptr<KickWorkspace> cudaWorkspace, KickContext const& context) {
@@ -176,9 +176,8 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 params, selfPtr->numberOfParticles(), context.gpuExecutor);
         }
         size_t maximumGpuParticles = kCudaKickPartsMax;
-        auto const rng = (params.forceOnly || snapshotDiagnostics) ?
-            Pair<ParticleInteger>(0, particlesOwnedSize()) :
-            particlesCurrentRange();
+        auto const rng = params.forceOnly ? Pair<ParticleInteger>(0, particlesOwnedSize()) :
+                                            particlesCurrentRange();
         ParticleInteger const rangeParticles = rng.second - rng.first;
         // A node that still carries Ewald checks goes over at the coarse
         // threshold, so that the kernel rather than this walk evaluates them.
@@ -410,16 +409,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
             if (selfPtr->numberOfParticles() > 0) {
                 work.next(profile::WorkPhase::KickCpuM2P);
                 cpuGravityPc<order>(forces, params.doPhi, self, pclist, params.geometry);
-                if constexpr (snapshotDiagnostics) {
-                    for (ParticleInteger local = 0; local < numberOfSelfParticles; ++local) {
-                        auto const index = selfPtr->particleRange.first + local;
-                        auto& output = particlesGravityDiagnostics[index];
-                        output.longAcceleration =
-                            Vector3<float>(forces.gx[local], forces.gy[local], forces.gz[local]);
-                        output.longPotential = forces.phi[local] -
-                            particlesMass(index) * selfPhi() * inverseSmoothingLength;
-                    }
-                }
                 work.next(profile::WorkPhase::KickCpuP2P);
                 cpuGravityPp(forces, params.doPhi, self, leaflist, params.gravitySmoothingLength,
                     params.geometry);
@@ -477,27 +466,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                 forces.gy[j] *= Gm;
                 forces.gz[j] *= Gm;
                 forces.phi[j] *= Gm;
-                if constexpr (snapshotDiagnostics) {
-                    // Derived solver decomposition: far = M2P + L2P (including periodic
-                    // corrections); near = explicit softened P2P with self removed.
-                    // g = g_far + g_near; phi = phi_far + phi_near.
-                    // g -> acceleration; phi -> potential; Gm -> G times mass.
-                    auto& output = particlesGravityDiagnostics[i];
-                    output.acceleration = Vector3<float>(forces.gx[j], forces.gy[j], forces.gz[j]);
-                    output.potential = forces.phi[j];
-                    output.longAcceleration[kXi] += kScaleFactor2 * l2.accelerationX();
-                    output.longAcceleration[kYi] += kScaleFactor2 * l2.accelerationY();
-                    output.longAcceleration[kZi] += kScaleFactor2 * l2.accelerationZ();
-                    for (int dim = 0; dim < kDimensions; ++dim) {
-                        output.longAcceleration[dim] *= Gm;
-                        output.nearAcceleration[dim] =
-                            output.acceleration[dim] - output.longAcceleration[dim];
-                    }
-                    output.longPotential =
-                        Gm * (output.longPotential + kScaleFactor1 * l2.potential());
-                    output.nearPotential = output.potential - output.longPotential;
-                    continue;
-                }
                 particlesCaptureGravitySample(i, forces.gx[j], forces.gy[j], forces.gz[j]);
                 if (saveAcceleration) {
                     particlesGravityAcceleration(kXi, i) = forces.gx[j];

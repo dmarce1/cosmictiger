@@ -17,9 +17,7 @@ Vector<float> outputView(int number, double time);
 // when gravity is compiled, or writes zero when cosmology is unavailable.
 // Native noncosmological snapshots store elapsed code time; cosmological and
 // converted snapshots store age/elapsed physical time in Gyr.
-// baseTimestep is the interval of the density pass that refreshes time-derivative output.
-void viewOutputViews(int cycle, double a, bool force = false, double physicalYears = -1.0,
-    double baseTimestep = 0.0, double conformalTime = 0.0, double scaleDerivative = 0.0);
+void viewOutputViews(int cycle, double a, bool force = false, double physicalYears = -1.0);
 
 void viewConfigure();
 

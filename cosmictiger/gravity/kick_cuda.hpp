@@ -184,7 +184,7 @@ struct CudaKickParameters {
 
 // listSlab: the per-launch list slab (layout.listSlabBytes per block), or null
 // when the lists grow from the pool.
-template <int order, bool snapshotDiagnostics = false>
+template <int order>
 __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, CudaKickData data,
     CudaKickParameters<order>* params, int itemCount, int* nextItem, CudaKickArenaLayout layout,
     char* listSlab

@@ -205,20 +205,6 @@ struct ParticleSample {
 #define CHECK_PART_BOUNDS(i)
 #endif
 
-// Derived snapshot fields, gm-scaled like the canonical gravity RHS.
-// Allocated only while output.siloTimeDerivatives output is being evaluated/written.
-struct GravityDiagnostics {
-    ParticleVector<float> acceleration{};
-    ParticleVector<float> longAcceleration{};
-    ParticleVector<float> nearAcceleration{};
-    float potential{};
-    float longPotential{};
-    float nearPotential{};
-};
-PARTICLES_EXTERN GravityDiagnostics* particlesGravityDiagnostics;
-void particlesAllocateGravityDiagnostics();
-void particlesFreeGravityDiagnostics();
-
 PARTICLES_EXTERN Array<Position*, kSpatialDimensions> particlesX;
 PARTICLES_EXTERN ParticleVector<float>* particlesV;
 PARTICLES_EXTERN char* particlesR;
@@ -287,11 +273,6 @@ void particlesGlobalReadPosAndGroup(ParticleGlobalRange range, Position* x, Posi
 ParticleInteger particlesSort(Pair<ParticleInteger> rng, double xm, int xdim);
 // Swap all attached fields without reading uninitialized saved-force values.
 void particlesSwap(ParticleInteger first, ParticleInteger second);
-// Local-only temporary geometric sorting. No migration, owned-population change,
-// or gas sorting may intervene. Ending restores every base-particle field and gas inverse
-// index to its original order, leaving persisted hierarchical rung ranges valid.
-void particlesBeginTemporarySort();
-void particlesEndTemporarySort();
 GadgetIoHeader particlesReadGadget4Header(std::string const&);
 GadgetIoHeader particlesReadGadget4(std::string);
 #ifndef __CUDACC__

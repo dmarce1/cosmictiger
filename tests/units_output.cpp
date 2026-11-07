@@ -39,7 +39,6 @@
 namespace detail {
 
 constexpr float kUnitsOutputViscosityAlpha = 0.375f;
-constexpr double kUnitsOutputBaseTimestep = 2.0;
 constexpr double kUnitsOutputPhysicalYears = 4.2e9;
 
 void requireUnitsOutput(bool condition, std::string const& message) {
@@ -522,7 +521,7 @@ void unitsOutputTest() {
     setOptions(options);
     unitsOutputParticleFixture(true);
     viewConfigure();
-    viewOutputViews(0, 0.25, true, kUnitsOutputPhysicalYears, kUnitsOutputBaseTimestep);
+    viewOutputViews(0, 0.25, true, kUnitsOutputPhysicalYears);
     for (int rank = 0; rank < hpxSize(); rank++) {
         auto file = openUnitsOutput(0, rank);
         checkUnitsOutputCommandLine(file.get());
@@ -556,7 +555,7 @@ void unitsOutputTest() {
     options.output.units = "both";
     options.output.frame = "both";
     setOptions(options);
-    viewOutputViews(1, 0.25, true, kUnitsOutputPhysicalYears, kUnitsOutputBaseTimestep);
+    viewOutputViews(1, 0.25, true, kUnitsOutputPhysicalYears);
     for (int rank = 0; rank < hpxSize(); rank++) {
         auto file = openUnitsOutput(1, rank);
         checkUnitsOutputCommandLine(file.get());
@@ -574,7 +573,7 @@ void unitsOutputTest() {
     options.output.units = "cgs";
     options.output.frame = "lab";
     setOptions(options);
-    viewOutputViews(2, 0.25, true, kUnitsOutputPhysicalYears, kUnitsOutputBaseTimestep);
+    viewOutputViews(2, 0.25, true, kUnitsOutputPhysicalYears);
     for (int rank = 0; rank < hpxSize(); rank++) {
         auto file = openUnitsOutput(2, rank);
         checkUnitsOutputCommandLine(file.get());
@@ -586,7 +585,7 @@ void unitsOutputTest() {
     options.output.units = "cosmological";
     options.output.frame = "comoving";
     setOptions(options);
-    viewOutputViews(3, 0.25, true, kUnitsOutputPhysicalYears, kUnitsOutputBaseTimestep);
+    viewOutputViews(3, 0.25, true, kUnitsOutputPhysicalYears);
     for (int rank = 0; rank < hpxSize(); rank++) {
         auto file = openUnitsOutput(3, rank);
         checkUnitsOutputCommandLine(file.get());
@@ -602,8 +601,7 @@ void unitsOutputTest() {
     setOptions(options);
     for (int snapshot = 0; snapshot < 2; ++snapshot) {
         unitsOutputSourceFixture(snapshot);
-        viewOutputViews(
-            4 + snapshot, 0.25, true, kUnitsOutputPhysicalYears, kUnitsOutputBaseTimestep);
+        viewOutputViews(4 + snapshot, 0.25, true, kUnitsOutputPhysicalYears);
         for (int rank = 0; rank < hpxSize(); ++rank) {
             auto file = openUnitsOutput(4 + snapshot, rank);
             for (auto const* path :
@@ -621,7 +619,7 @@ void unitsOutputTest() {
     double const elapsedCodeTime = 0.123456789;
     double const elapsedYears =
         elapsedCodeTime * options.units.timeSeconds * constants::kSecondsToYears;
-    viewOutputViews(6, 1.0, true, elapsedYears, kUnitsOutputBaseTimestep);
+    viewOutputViews(6, 1.0, true, elapsedYears);
     for (int rank = 0; rank < hpxSize(); ++rank) {
         auto file = openUnitsOutput(6, rank);
         requireUnitsOutputClose(readUnitsOutputClock(file.get(), ""), elapsedCodeTime,
@@ -651,8 +649,7 @@ void unitsOutputTest() {
         options.output.units = converted ? "both" : "code";
         options.output.frame = converted ? "both" : "comoving";
         setOptions(options);
-        viewOutputViews(
-            7 + converted, 0.25, true, kUnitsOutputPhysicalYears, kUnitsOutputBaseTimestep);
+        viewOutputViews(7 + converted, 0.25, true, kUnitsOutputPhysicalYears);
         for (int rank = 0; rank < hpxSize(); ++rank) {
             auto file = openUnitsOutput(7 + converted, rank);
             for (auto const* path :

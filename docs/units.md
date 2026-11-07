@@ -137,6 +137,7 @@ Pressure and neutral temperature are derived expressions:
   `a^(-3*gamma)` in a comoving-density view.
 - CGS pressure units are `erg/cm^D`; cosmological pressure units are
   `(km/s)^2*(Msun/h)/(Mpc/h)^3`.
+- Existing cosmological factors retain their 3D convention; D1/D2 SPH uses a=1.
 - Temperature is always in kelvin. With chemistry enabled, the existing
   equilibrium temperature remains a stored field. Without chemistry,
   `T = (gamma-1)*u_phys / (k_B*N_A*(1-3*Y/4))`, where Y is
@@ -145,8 +146,7 @@ Pressure and neutral temperature are derived expressions:
   infer ionization from temperature.
 
 Mass and constant thermodynamic parameters are `nodal_constant` expressions.
-Pressure, neutral temperature, chemistry electron abundance and molecular weight,
-hydro/entropy totals, and near-field gravity
+Pressure, neutral temperature, and chemistry electron abundance and molecular weight
 are also [Silo derived-variable definitions](https://silo.readthedocs.io/latest/objects.html#dbputdefvars).
 They contain fully qualified field paths in both master and locality files;
 VisIt evaluates them pointwise on the corresponding particle mesh. Expression
@@ -154,12 +154,11 @@ names occupy the same logical subdirectories as stored fields. Each expression's
 `<name>_unit` metadata records its units; it has no redundant particle array.
 The mass expression remains in `mass_expression`. Other definitions use
 `<name>_expression`. These are storage objects, not additional plot variables.
-Expression sums and differences can differ from former directly accumulated
-float fields by rounding. Standard VisIt `time`, `dtime`, and `cycle` names remain.
+Standard VisIt `time`, `dtime`, and `cycle` names remain.
 
-This replaces abbreviated field names (`vx`, `rho`, `A`, `r`, `alpha`, `divv`),
-flat diagnostic names, and the former `dark_matter/` directory. Existing saved
-VisIt sessions and scripts need their paths updated.
+This replaces abbreviated field names (`vx`, `rho`, `A`, `r`, `alpha`, `divv`)
+and the former `dark_matter/` directory. Existing saved VisIt sessions and scripts
+need their paths updated.
 
 The output cadence selects coarse output epochs; it does not synchronize the
 individual-rung particle fields. Converted views record
@@ -179,43 +178,6 @@ The `output.xMin` through `output.zMax` bounds always use the normalized comovin
 box `[0, 1]`, regardless of output selection. For example, `xMin=0.25` selects
 the same particles in all four views. The scale factor stretches the output
 coordinates without changing this selection.
-
-## Optional time derivatives
-
-`output.siloTimeDerivatives=true` evaluates hydro and gravity diagnostics at
-written snapshot positions (default: false). Paths below are relative to `gas/`:
-
-| Path | Meaning |
-| --- | --- |
-| `timeDerivatives/xVelocity` | Enabled hydro plus gravity acceleration; y/z likewise in active dimensions |
-| `timeDerivatives/hydro/xVelocity` | Pressure plus artificial viscosity |
-| `timeDerivatives/pressure/xVelocity` | Pressure contribution |
-| `timeDerivatives/viscosity/xVelocity` | Artificial-viscosity contribution |
-| `timeDerivatives/gravity/xVelocity` | Gravity contribution, when enabled |
-| `timeDerivatives/density` | Adaptive-support material density rate from peculiar motion |
-| `timeDerivatives/entropyTracer` | Viscosity plus conduction entropy rate |
-| `timeDerivatives/viscosity/entropyTracer` | Artificial-viscosity entropy rate |
-| `timeDerivatives/conduction/entropyTracer` | Artificial-conduction entropy rate |
-
-The velocity derivatives are force per unit mass, excluding imposed forces,
-damping, and Hubble drag. Reversible pressure work leaves the entropy tracer
-unchanged. Cooling is excluded from the entropy rates; conduction may be negative.
-Native derivatives use conformal code time. Converted entropy/density rates use
-physical seconds and their respective field units/frame. Converted velocity
-rates are **always cm/s²**, including views whose velocity itself is in km/s.
-Lab density rates do not add homogeneous Hubble dilution.
-
-Output evaluations do not kick particles or advance viscosity. They use the
-stored velocity and entropy stages and do not synchronize them in time.
-Managed diagnostics and immutable output side arrays exist only during snapshot
-evaluation/writing and are freed on failure as well. When disabled or no snapshot
-is due, no extra diagnostic storage or force pass is used. CPU/CUDA kernel
-specializations keep diagnostic accumulation out of ordinary force loops.
-The temporary hydro storage remains `(3*D + 4) * sizeof(float)` per gas particle,
-with an equivalent immutable output side array. These arrays are neither migrated
-nor checkpointed. CUDA density keeps its existing kernel and optional log-density
-rate output; conversion scratch is allocated only when diagnostics are selected.
-Existing cosmological factors retain their 3D convention; D1/D2 SPH uses a=1.
 
 ## Native state and CGS conversions
 
@@ -334,35 +296,3 @@ and `cycle` (integer), which VisIt reads for its database time slider. Frame
 directories carry the same clock pair. Native noncosmological output uses elapsed code time; cosmological and converted
 output uses physical age or elapsed physical time in Gyr. The root `time_unit`
 and `time_convention` metadata identify the stored clock.
-
-## Gravity fields and splits
-
-When gravity and `output.siloTimeDerivatives` are enabled, every species has:
-
-| Path relative to species | Meaning |
-| --- | --- |
-| `potentialEnergy` | Total gravitational potential **per unit mass**, not particle mass times potential |
-| `longField/potentialEnergy` | Long-field potential per unit mass |
-| `nearField/potentialEnergy` | Total minus long-field potential |
-
-For dark matter and stars, acceleration is `timeDerivatives/xVelocity`, with
-`timeDerivatives/longField/xVelocity` and `timeDerivatives/nearField/xVelocity`.
-For gas, the gravity-only values are under `timeDerivatives/gravity/`, including
-its `longField/` and `nearField/` subdirectories. All active axes follow this layout.
-
-FMM's long field contains M2P and local expansions including periodic corrections;
-near is softened explicit P2P with self potential removed. PMMM separates its mesh
-local expansion from neighboring-cell forces. P3M separates mesh force from the
-short-range correction. Pure PM has zero near field. These are solver partitions,
-not a universal radial cutoff. Total equals long plus near up to roundoff.
-
-Converted acceleration is cm/s² and potential is cm²/s² in either frame. Native
-force and potential follow the existing canonical convention, with conversions
-`L0/(a^2*T0^2)` and `L0^2/(a*T0^2)`. Potential zero points follow the solver.
-Fresh evaluations preserve particle order, ownership, integration state, and
-retained PM/P3M integrator fields. Legacy `analysis.saveForce`,
-`analysis.saveAcceleration`, and `analysis.savePotential` remain independent.
-
-Temporary gravity storage remains `12 * sizeof(float)` per particle in 3D, plus
-an output side array. The expression changes remove redundant Silo arrays; they
-do not alter force-kernel arithmetic or diagnostic allocation lifetimes.

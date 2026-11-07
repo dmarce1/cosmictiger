@@ -42,28 +42,6 @@
 
 using SphAcceleration = ParticleVector<float>;
 
-// Last evaluated hydrodynamic rates in native conformal time tau. Output refreshes
-// all gas at snapshot coordinates; migration invalidates them. These derived
-// fields are neither checkpoint state nor migration payload.
-struct SphHydroDiagnostics {
-    SphAcceleration acceleration{};
-    SphAcceleration pressureAcceleration{};
-    SphAcceleration viscosityAcceleration{};
-    float entropyRate{};
-    float viscosityEntropyRate{};
-    float conductionEntropyRate{};
-    float densityRate{};
-    template <class Archive>
-    void serialize(Archive& archive, unsigned) {
-        archive & acceleration & pressureAcceleration & viscosityAcceleration & entropyRate &
-            viscosityEntropyRate & conductionEntropyRate & densityRate;
-    }
-};
-SPH_PARTICLES_EXTERN SphHydroDiagnostics* sphParticlesHydroDiagnostics;
-// Snapshot-scoped derived storage; never allocated by the integrator.
-void sphParticlesAllocateHydroDiagnostics();
-void sphParticlesFreeHydroDiagnostics();
-
 // Cooling stores an equilibrium electron-fraction guess; hydro owns entropy.
 SPH_PARTICLES_EXTERN float* sphParticlesElectronFractions;
 

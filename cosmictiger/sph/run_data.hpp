@@ -52,7 +52,6 @@ struct SphRunData {
     // Optional d(log rho_comoving)/d(tau), including the adaptive-support
     // correction. Requires the source velocity arrays even with viscosity off.
     float* sinkLogDensityRate = nullptr;
-    SphHydroDiagnostics* sinkHydroDiagnostics = nullptr;
     float* sinkGradHCorrection;    // Rebuilt with the density on every preparation pass.
     uint8_t* sinkBalsaraFactor;
     Float16Storage* sinkBulkViscosityCoefficient;

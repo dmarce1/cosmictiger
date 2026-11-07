@@ -540,9 +540,6 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
         data.gz = saveAcceleration ? &particlesGravityAcceleration(kZi, 0) : nullptr;
         data.pot = savePotential && kparams.doPhi ? &particlesPot(0) : nullptr;
     }
-    if (kparams.snapshotDiagnostics) {
-        data.snapshotDiagnostics = particlesGravityDiagnostics;
-    }
     ALWAYS_ASSERT(layout.massPlane == data.sph);
 
     for (int i = 0; i < workitems.size(); i++) {
@@ -574,31 +571,14 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
 #if COSMICTIGER_PROFILE
     deviceEvents.record(1, streamHandle);
 #endif
-    if (kparams.snapshotDiagnostics) {
-        if (layout.totalBytes > 48 * 1024) {
-            CUDA_CHECK(cudaFuncSetAttribute((void const*) cudaKickKernel<order, true>,
-                cudaFuncAttributeMaxDynamicSharedMemorySize, layout.totalBytes));
-        }
-        cudaKickKernel<order, true>
-            <<<numberOfBlocks, kWarpSize, layout.totalBytes, stream.nativeHandle()>>>(
-                devReturnArg, kparams, data, devIkickParams, workitems.size(), devCurrentIndex,
-                layout, devListSlab
+    cudaKickKernel<order><<<numberOfBlocks, kWarpSize, layout.totalBytes, stream.nativeHandle()>>>(
+        devReturnArg, kparams, data, devIkickParams, workitems.size(), devCurrentIndex, layout,
+        devListSlab
 #if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
-                ,
-                devProfileRecords
+        ,
+        devProfileRecords
 #endif
-            );
-    } else {
-        cudaKickKernel<order>
-            <<<numberOfBlocks, kWarpSize, layout.totalBytes, stream.nativeHandle()>>>(
-                devReturnArg, kparams, data, devIkickParams, workitems.size(), devCurrentIndex,
-                layout, devListSlab
-#if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
-                ,
-                devProfileRecords
-#endif
-            );
-    }
+    );
     stream.checkLaunch();
 #if COSMICTIGER_PROFILE
     deviceEvents.record(2, streamHandle);

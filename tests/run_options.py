@@ -802,10 +802,6 @@ mapSize = 8
                                              ["--gravity.meshSize=16", "--gravity.p3mCutoff=4.5"],
                                              ["--gravity.meshSize=32", "--gravity.smoothingLength=8"])):
                 run(f"p3m_invalid_{index}", metadata_options + invalid, success=False, pmmm_mesh=None)
-    snapshot_output = run("snapshot_time_derivatives", metadata_options + [
-        "--output.siloTimeDerivatives=true"])
-    if not re.search(r"^output\.siloTimeDerivatives\s*:\s*T\s*$", snapshot_output, re.MULTILINE):
-        raise RuntimeError("unified snapshot time derivative switch was not enabled")
     for selected_field in ("saveAcceleration", "savePotential"):
         output = run(f"diagnostic_{selected_field}", metadata_options + [
             f"--analysis.{selected_field}=true"])

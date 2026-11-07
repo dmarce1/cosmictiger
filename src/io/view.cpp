@@ -38,7 +38,6 @@
 #include <hpx/threading_base/annotated_function.hpp>
 #include <silo.h>
 
-#include <cosmictiger/core/driver.hpp>
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/options_metadata.hpp>
@@ -47,7 +46,6 @@
 #include <cosmictiger/math/vector3.hpp>
 #if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/cosmology/cosmology.hpp>
-#include <cosmictiger/gravity/kick.hpp>
 #endif
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/io/view.hpp>
@@ -105,15 +103,9 @@ struct SphParticleInfo : public DarkMatterParticleInfo {
 struct ViewSnapshot {
 #if COSMICTIGER_WITH_SPH
     Vector<SphParticleInfo> gas;
-    Vector<SphHydroDiagnostics> hydroDiagnostics;
     Vector<StarParticleInfo> stars;
 #endif
     Vector<DarkMatterParticleInfo> darkMatter;
-    Vector<GravityDiagnostics> darkMatterGravity;
-#if COSMICTIGER_WITH_SPH
-    Vector<GravityDiagnostics> gasGravity;
-    Vector<GravityDiagnostics> starGravity;
-#endif
 };
 
 // A box selects immutable snapshot records by address. Frames share those same
@@ -160,18 +152,9 @@ public:
 struct ViewParticles {
 #if COSMICTIGER_WITH_SPH
     ParticleSelection<SphParticleInfo> gas;
-    SphParticleInfo const* gasBegin = nullptr;
-    SphHydroDiagnostics const* hydroDiagnostics = nullptr;
     ParticleSelection<StarParticleInfo> stars;
 #endif
     ParticleSelection<DarkMatterParticleInfo> darkMatter;
-    DarkMatterParticleInfo const* darkMatterBegin = nullptr;
-    GravityDiagnostics const* darkMatterGravity = nullptr;
-#if COSMICTIGER_WITH_SPH
-    StarParticleInfo const* starsBegin = nullptr;
-    GravityDiagnostics const* gasGravity = nullptr;
-    GravityDiagnostics const* starGravity = nullptr;
-#endif
 };
 
 namespace detail {
@@ -326,23 +309,6 @@ public:
         return cosmological_ ? units::toCosmologicalValue(frequency, context_) : frequency.value();
     }
 
-    // Derived from w=a v_pec and dt=a dτ: the force part of dw/dτ is
-    // a² dv_pec/dt. value is dw/dτ in code units; scale is a.
-    double hydroAcceleration(double value) const {
-        double const scale = context_.scaleFactor();
-        return value * scales_.accelerationScale().value() / (scale * scale);
-    }
-
-    // Derived physical peculiar potential: phi_phys = (L0/T0)^2 phi_code/a.
-    double gravityPotential(double value) const {
-        return value * scales_.specificEnergyScale().value() / context_.scaleFactor();
-    }
-
-    // Derived time conversion: dt_phys = a T0 dτ_code.
-    double hydroRateTimeScale() const {
-        return context_.scaleFactor() * scales_.timeScale().value();
-    }
-
     double mass(double value) const {
         auto const mass = units::toMass(units::StoredMass(value), scales_);
         return cosmological_ ? units::toCosmologicalValue(mass, context_) : mass.value();
@@ -492,49 +458,6 @@ void writeParticleExpressions(
                 "Neutral H/He ideal-gas temperature in kelvin; composition uses "
                 "cosmology.heliumFraction.");
     }
-    if (!options.output.siloTimeDerivatives) {
-        return;
-    }
-    char const* accelerationUnit = converted ? "cm/s^2" : "code";
-    if (options.gravity.enabled) {
-        writeViewExpression(db, "nearField/potentialEnergy",
-            field("potentialEnergy") + " - " + field("longField/potentialEnergy"),
-            converted ? "cm^2/s^2" : "code");
-        std::string const gravityPath = gas ? "timeDerivatives/gravity/" : "timeDerivatives/";
-        for (int dim = 0; dim < kSpatialDimensions; ++dim) {
-            std::string const velocity = std::string(1, char('x' + dim)) + "Velocity";
-            writeViewExpression(db, gravityPath + "nearField/" + velocity,
-                field(gravityPath + velocity) + " - " +
-                    field(gravityPath + "longField/" + velocity),
-                accelerationUnit);
-        }
-    }
-    if (gas) {
-        for (int dim = 0; dim < kSpatialDimensions; ++dim) {
-            std::string const velocity = std::string(1, char('x' + dim)) + "Velocity";
-            writeViewExpression(db, "timeDerivatives/hydro/" + velocity,
-                field("timeDerivatives/pressure/" + velocity) + " + " +
-                    field("timeDerivatives/viscosity/" + velocity),
-                accelerationUnit);
-            std::string total = field("timeDerivatives/hydro/" + velocity);
-            if (options.gravity.enabled) {
-                total += " + " + field("timeDerivatives/gravity/" + velocity);
-            }
-            writeViewExpression(db, "timeDerivatives/" + velocity, total, accelerationUnit);
-        }
-        char const* entropyUnit = !converted ? "code" :
-            cosmological                     ? "(km/s)^2/((Msun/h)/(Mpc/h)^3)^(gamma-1)/s" :
-            kSpatialDimensions == 1          ? "(erg/g)/(g/cm)^(gamma-1)/s" :
-            kSpatialDimensions == 2          ? "(erg/g)/(g/cm^2)^(gamma-1)/s" :
-                                               "(erg/g)/(g/cm^3)^(gamma-1)/s";
-        writeViewExpression(db, "timeDerivatives/entropyTracer",
-            field("timeDerivatives/viscosity/entropyTracer") + " + " +
-                field("timeDerivatives/conduction/entropyTracer"),
-            entropyUnit);
-        writeViewText(db, "velocity_derivative_convention",
-            "Sum of enabled hydro and gravity forces per mass; excludes imposed forces, damping "
-            "and Hubble drag.");
-    }
 }
 
 void writeParticleExpressions(DBfile* db, ViewParticles const& particles, double a,
@@ -625,65 +548,6 @@ void writeViewField(DBfile* db, ViewDirectoryMetadata& metadata, char const* nam
     DBFreeOptlist(options);
 }
 
-void writeGravityDiagnostics(DBfile* db, ViewDirectoryMetadata& metadata,
-    ViewParticles const& particles, ViewUnitConversion const* conversion = nullptr) {
-    if (!getOptions().output.siloTimeDerivatives || !getOptions().gravity.enabled) {
-        return;
-    }
-    auto const writeSpecies = [&]<typename Particle>(char const* species,
-                                  ParticleSelection<Particle> const& selection,
-                                  Particle const* begin, GravityDiagnostics const* fields) {
-        if (selection.empty()) {
-            return;
-        }
-        ALWAYS_ASSERT(fields != nullptr);
-        checkViewWrite(DBSetDir(db, species), species);
-        char const* prefixes[] = {"", "longField/"};
-        ParticleVector<float> GravityDiagnostics::* accelerations[] = {
-            &GravityDiagnostics::acceleration, &GravityDiagnostics::longAcceleration,
-            &GravityDiagnostics::nearAcceleration};
-        for (int source = 0; source < 2; ++source) {
-            auto const member = accelerations[source];
-            for (int dim = 0; dim < kSpatialDimensions; ++dim) {
-                std::string const name = std::string("timeDerivatives/") +
-                    (std::string(species) == "gas" ? "gravity/" : "") + prefixes[source] +
-                    char('x' + dim) + "Velocity";
-                writeViewField(db, metadata, name.c_str(), "mesh", selection,
-                    conversion ? "cm/s^2" : "code", [&](Particle const& particle) {
-                        double const value = (fields[&particle - begin].*member)[dim];
-                        return conversion ? conversion->hydroAcceleration(value) : value;
-                    });
-            }
-        }
-        char const* names[] = {"potentialEnergy", "longField/potentialEnergy"};
-        float GravityDiagnostics::* potentials[] = {&GravityDiagnostics::potential,
-            &GravityDiagnostics::longPotential, &GravityDiagnostics::nearPotential};
-        for (int source = 0; source < 2; ++source) {
-            auto const member = potentials[source];
-            writeViewField(db, metadata, names[source], "mesh", selection,
-                conversion ? "cm^2/s^2" : "code", [&](Particle const& particle) {
-                    double const value = fields[&particle - begin].*member;
-                    return conversion ? conversion->gravityPotential(value) : value;
-                });
-        }
-        writeViewText(db, "gravity_fields_convention",
-            "Fresh zero-kick gravity at snapshot positions; acceleration is force per unit mass. "
-            "potentialEnergy is potential per unit mass, not mass times potential. "
-            "Native acceleration is d(a*v_pec)/d(conformal code time); converted acceleration "
-            "and potential are physical peculiar quantities in CGS. Total = long + near. "
-            "FMM: long is M2P plus local expansion (including periodic corrections), near is "
-            "explicit softened P2P with self potential removed. PMMM: mesh expansion plus "
-            "neighboring cells. P3M: mesh plus short-range correction. PM: all long, zero near.");
-        checkViewWrite(DBSetDir(db, ".."), "..");
-    };
-    writeSpecies(
-        "darkMatter", particles.darkMatter, particles.darkMatterBegin, particles.darkMatterGravity);
-#if COSMICTIGER_WITH_SPH
-    writeSpecies("gas", particles.gas, particles.gasBegin, particles.gasGravity);
-    writeSpecies("stars", particles.stars, particles.starsBegin, particles.starGravity);
-#endif
-}
-
 template <typename Particle>
 void writeStarFormationFields(DBfile* db, ViewDirectoryMetadata& metadata, char const* mesh,
     char const* prefix, ParticleSelection<Particle> const& particles) {
@@ -736,66 +600,6 @@ void writeViewSpecies(DBfile* db, ViewDirectoryMetadata& metadata, char const* s
 }
 
 #if COSMICTIGER_WITH_SPH
-void writeHydroDiagnostics(DBfile* db, ViewDirectoryMetadata& metadata,
-    ViewParticles const& particles, ViewUnitConversion const* conversion = nullptr,
-    char const* densityUnit = "code", char const* entropyUnit = "code") {
-    if (!getOptions().output.siloTimeDerivatives) {
-        return;
-    }
-    auto const& gas = particles.gas;
-    // Optional side storage preserves the ordinary per-particle snapshot footprint.
-    auto const diagnosticsFor = [&particles](
-                                    SphParticleInfo const& particle) -> SphHydroDiagnostics const& {
-        return particles.hydroDiagnostics[&particle - particles.gasBegin];
-    };
-    char const* accelerationPrefixes[] = {"hydro", "pressure", "viscosity"};
-    SphAcceleration SphHydroDiagnostics::* accelerations[] = {&SphHydroDiagnostics::acceleration,
-        &SphHydroDiagnostics::pressureAcceleration, &SphHydroDiagnostics::viscosityAcceleration};
-    for (int source = 1; source < 3; ++source) {
-        auto const acceleration = accelerations[source];
-        for (int dim = 0; dim < kSpatialDimensions; ++dim) {
-            std::string const name = std::string("timeDerivatives/") +
-                accelerationPrefixes[source] + "/" + char('x' + dim) + "Velocity";
-            writeViewField(db, metadata, name.c_str(), "mesh", gas, conversion ? "cm/s^2" : "code",
-                [dim, conversion, acceleration, diagnosticsFor](SphParticleInfo const& particle) {
-                    double const value = (diagnosticsFor(particle).*acceleration)[dim];
-                    return conversion ? conversion->hydroAcceleration(value) : value;
-                });
-        }
-    }
-    std::string const densityRateUnit = conversion ? std::string(densityUnit) + "/s" : "code";
-    std::string const entropyRateUnit = conversion ? std::string(entropyUnit) + "/s" : "code";
-    writeViewField(db, metadata, "timeDerivatives/density", "mesh", gas, densityRateUnit.c_str(),
-        [conversion, diagnosticsFor](SphParticleInfo const& particle) {
-            double const value = diagnosticsFor(particle).densityRate;
-            return conversion ? conversion->density(value) / conversion->hydroRateTimeScale() :
-                                value;
-        });
-    char const* names[] = {"timeDerivatives/entropyTracer",
-        "timeDerivatives/viscosity/entropyTracer", "timeDerivatives/conduction/entropyTracer"};
-    float SphHydroDiagnostics::* rates[] = {&SphHydroDiagnostics::entropyRate,
-        &SphHydroDiagnostics::viscosityEntropyRate, &SphHydroDiagnostics::conductionEntropyRate};
-    for (int source = 1; source < 3; ++source) {
-        auto const rate = rates[source];
-        writeViewField(db, metadata, names[source], "mesh", gas, entropyRateUnit.c_str(),
-            [conversion, rate, diagnosticsFor](SphParticleInfo const& particle) {
-                double const value = diagnosticsFor(particle).*rate;
-                return conversion ? conversion->entropy(value) / conversion->hydroRateTimeScale() :
-                                    value;
-            });
-    }
-    writeViewText(db, "hydro_rates_convention",
-        "Current snapshot hydro pair acceleration (pressure plus viscosity), excluding gravity, "
-        "imposed forces and damping; timeDerivatives/pressure and timeDerivatives/viscosity give "
-        "its separate components. timeDerivatives/entropyTracer "
-        "is viscosity plus conduction only; reversible work "
-        "is zero. timeDerivatives/density is the adaptive-support material density rate from "
-        "peculiar motion, "
-        "excluding homogeneous Hubble dilution. Native fields use conformal time tau and "
-        "stored velocity a*v_pec; converted rates use physical seconds and the selected density "
-        "frame, and acceleration is the physical hydro force per mass in cm/s^2.");
-}
-
 void writeViscosityField(
     DBfile* db, ViewDirectoryMetadata& metadata, ParticleSelection<SphParticleInfo> const& gas) {
     if (getOptions().hydro.viscosityEvolution != "none") {
@@ -909,7 +713,6 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
         writeStarFormationGasFields(db, metadata, gas);
 #endif
         writeViscosityField(db, metadata, gas);
-        writeHydroDiagnostics(db, metadata, particles, &conversion, densityUnit, entropyUnit);
         writeViewField(db, metadata, "density", "mesh", gas, densityUnit,
             [&conversion](
                 SphParticleInfo const& particle) { return conversion.density(particle.rho); });
@@ -923,7 +726,6 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
         checkViewWrite(DBSetDir(db, ".."), "..");
     }
 #endif
-    writeGravityDiagnostics(db, metadata, particles, &conversion);
     writeParticleExpressions(db, particles, a, true, cosmological, lab);
 }
 
@@ -952,18 +754,12 @@ ViewSnapshot collectViewParticles(double a) {
         }
         if (particlesType(i) == kDarkMatterType) {
             snapshot.darkMatter.push_back(info);
-            if (particlesGravityDiagnostics != nullptr) {
-                snapshot.darkMatterGravity.push_back(particlesGravityDiagnostics[i]);
-            }
         }
 #if COSMICTIGER_WITH_SPH
         else if (particlesType(i) == kStarType) {
             StarParticleInfo star{};
             static_cast<DarkMatterParticleInfo&>(star) = info;
             snapshot.stars.push_back(star);
-            if (particlesGravityDiagnostics != nullptr) {
-                snapshot.starGravity.push_back(particlesGravityDiagnostics[i]);
-            }
         } else if (particlesType(i) == kSphType) {
             SphParticleInfo gas{};
             static_cast<DarkMatterParticleInfo&>(gas) = info;
@@ -973,10 +769,6 @@ ViewSnapshot collectViewParticles(double a) {
                 sph_entropy::fromStoredEnergy(sphParticlesInternalEnergy(index),
                     sphParticlesDensity(index), getOptions().hydro.gamma, a);
             gas.rho = sphParticlesDensity(index);
-            if (getOptions().output.siloTimeDerivatives) {
-                ALWAYS_ASSERT(sphParticlesHydroDiagnostics != nullptr);
-                snapshot.hydroDiagnostics.push_back(sphParticlesHydroDiagnostics[index]);
-            }
             gas.smoothingLength = sphParticlesSmoothingLength(index);
             if (getOptions().hydro.viscosityEvolution != "none") {
                 gas.alpha = sphParticlesBulkViscosityCoefficients[index];
@@ -1013,9 +805,6 @@ ViewSnapshot collectViewParticles(double a) {
             }
 #endif
             snapshot.gas.push_back(gas);
-            if (particlesGravityDiagnostics != nullptr) {
-                snapshot.gasGravity.push_back(particlesGravityDiagnostics[i]);
-            }
         }
 #endif
     }
@@ -1249,12 +1038,10 @@ void writeCodeParticleView(DBfile* db, ViewDirectoryMetadata& metadata,
         writeStarFormationGasFields(db, metadata, gas);
 #endif
         writeViscosityField(db, metadata, gas);
-        writeHydroDiagnostics(db, metadata, particles);
         checkViewWrite(DBSetDir(db, ".."), "..");
     }
 #endif
     DBFreeOptlist(options);
-    writeGravityDiagnostics(db, metadata, particles);
     writeParticleExpressions(db, particles, a);
 }
 
@@ -1286,16 +1073,9 @@ ViewLeafMetadata writeParticleLeaf(Vector<Range<double>> const& boxes, int cycle
             }
         };
 #if COSMICTIGER_WITH_SPH
-        particles.gasBegin = snapshot.gas.data();
-        particles.starsBegin = snapshot.stars.data();
-        particles.gasGravity = snapshot.gasGravity.data();
-        particles.starGravity = snapshot.starGravity.data();
-        particles.hydroDiagnostics = snapshot.hydroDiagnostics.data();
         selectParticles(snapshot.gas, particles.gas);
         selectParticles(snapshot.stars, particles.stars);
 #endif
-        particles.darkMatterBegin = snapshot.darkMatter.data();
-        particles.darkMatterGravity = snapshot.darkMatterGravity.data();
         selectParticles(snapshot.darkMatter, particles.darkMatter);
         for (auto const& frame : frames) {
             ViewDirectoryMetadata directoryMetadata;
@@ -1318,30 +1098,6 @@ ViewLeafMetadata writeParticleLeaf(Vector<Range<double>> const& boxes, int cycle
 }    // namespace detail
 
 HPX_PLAIN_ACTION(detail::writeParticleLeaf, WriteParticleLeafAction);
-
-namespace detail {
-int setSnapshotDiagnosticStorage(bool allocate) {
-    if (!allocate) {
-        particlesFreeGravityDiagnostics();
-#if COSMICTIGER_WITH_SPH
-        sphParticlesFreeHydroDiagnostics();
-#endif
-        return 0;
-    }
-#if COSMICTIGER_WITH_GRAVITY
-    if (getOptions().gravity.enabled) {
-        particlesAllocateGravityDiagnostics();
-    }
-#endif
-#if COSMICTIGER_WITH_SPH
-    if (getOptions().hydro.enabled) {
-        sphParticlesAllocateHydroDiagnostics();
-    }
-#endif
-    return 0;
-}
-}    // namespace detail
-HPX_PLAIN_ACTION(detail::setSnapshotDiagnosticStorage, SetSnapshotDiagnosticStorageAction);
 
 namespace detail {
 
@@ -1471,8 +1227,7 @@ void writeDistributedParticleViews(int cycle, double a, double time) {
 
 }    // namespace detail
 
-void viewOutputViews(int cycle, double a, bool force, double physicalYears, double baseTimestep,
-    double conformalTime, double scaleDerivative) {
+void viewOutputViews(int cycle, double a, bool force, double physicalYears) {
     if (!getOptions().output.silo || viewBoxes.empty() ||
         (!force && cycle % getOptions().output.siloInterval != 0)) {
         return;
@@ -1489,35 +1244,7 @@ void viewOutputViews(int cycle, double a, bool force, double physicalYears, doub
             physicalYears / (getOptions().units.timeSeconds * constants::kSecondsToYears) :
             0.0;
     }
-    if (!getOptions().output.siloTimeDerivatives) {
-        detail::writeDistributedParticleViews(cycle, a, time);
-        return;
-    }
-    auto const release = []() {
-        detail::onViewLocalities<SetSnapshotDiagnosticStorageAction, int>(false);
-    };
-    try {
-        detail::onViewLocalities<SetSnapshotDiagnosticStorageAction, int>(true);
-#if COSMICTIGER_WITH_SPH
-        if (getOptions().hydro.enabled) {
-            EnergiesT unusedEnergies;
-            bool const global = usesGlobalIntegration(getOptions().run);
-            sphMidpointStep(-1, conformalTime, -1.0, baseTimestep, a, scaleDerivative,
-                unusedEnergies, global, global ? baseTimestep : 0.0);
-        }
-#endif
-#if COSMICTIGER_WITH_GRAVITY
-        if (getOptions().gravity.enabled) {
-            gravityRefreshSnapshotDiagnostics(getOptions().gravity.openingAngle);
-        }
-#endif
-        detail::writeDistributedParticleViews(cycle, a, time);
-    } catch (...) {
-        auto const failure = std::current_exception();
-        release();
-        std::rethrow_exception(failure);
-    }
-    release();
+    detail::writeDistributedParticleViews(cycle, a, time);
 }
 
 void viewConfigure() {

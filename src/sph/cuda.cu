@@ -45,7 +45,7 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
     reduction->illConditionedSupports = 0;
     static int smoothingBlockCount;
     static int densityBlockCount;
-    static int hydroBlockCount[2];
+    static int hydroBlockCount;
     static int rungBlockCount;
     static bool first = true;
     Timer timer;
@@ -56,18 +56,13 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
         CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&densityBlockCount,
             (void const*) sphCudaDensityAndGradients, kDensityAndGradientsBlockSize, 0));
         CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-            &hydroBlockCount[0], (void const*) sphCudaHydro<false>, kHydroBlockSize, 0));
+            &hydroBlockCount, (void const*) sphCudaHydro, kHydroBlockSize, 0));
         CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
             &rungBlockCount, (void const*) sphCudaRungs, kRungsBlockSize, 0));
         smoothingBlockCount *= cudaSmpCount();
         densityBlockCount *= cudaSmpCount();
-        hydroBlockCount[0] *= cudaSmpCount();
+        hydroBlockCount *= cudaSmpCount();
         rungBlockCount *= cudaSmpCount();
-    }
-    if (data.sinkHydroDiagnostics && hydroBlockCount[1] == 0) {
-        CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-            &hydroBlockCount[1], (void const*) sphCudaHydro<true>, kHydroBlockSize, 0));
-        hydroBlockCount[1] *= cudaSmpCount();
     }
     timer.start();
     switch (parameters.runType) {
@@ -105,13 +100,8 @@ SphRunReturn sphRunCuda(SphRunParameters parameters, SphRunCudaData data, CudaSt
         result.needsAnotherPass = reduction->pendingChanges;
     } break;
     case kSphRunHydro: {
-        if (data.sinkHydroDiagnostics) {
-            sphCudaHydro<true><<<hydroBlockCount[1], kHydroBlockSize, 0, stream.nativeHandle()>>>(
-                parameters, data, reduction);
-        } else {
-            sphCudaHydro<false><<<hydroBlockCount[0], kHydroBlockSize, 0, stream.nativeHandle()>>>(
-                parameters, data, reduction);
-        }
+        sphCudaHydro<<<hydroBlockCount, kHydroBlockSize, 0, stream.nativeHandle()>>>(
+            parameters, data, reduction);
         stream.checkLaunch();
         stream.wait();
         reduction->timestepError.throwIfFailed([](SphTimestepFailure const& error) {
