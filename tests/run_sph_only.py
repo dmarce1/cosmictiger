@@ -155,9 +155,9 @@ def main():
     for scenario in ("sod", "blast", "rayleighTaylor", "disc"):
         extra = ["--run.darkMatterParticleCount=4096", "--run.gasParticleCount=4096"] if scenario == "disc" else []
         if scenario == "rayleighTaylor":
-            extra.append("--hydro.zPlaneAcceleration=0.5")
+            extra.append("--scenario.rayleighTaylor.zPlaneAcceleration=0.5")
         if scenario == "disc":
-            extra.append("--hydro.centralAcceleration=1")
+            extra.append("--scenario.disc.centralAcceleration=1")
         evolve(scenario, scenario, 1, extra)
     first, options = evolve("wave_first", "hydroWave", 1)
     if chemistryDisabled:

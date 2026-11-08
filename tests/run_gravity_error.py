@@ -122,7 +122,7 @@ def main():
               "compute.positionType": args.position_type,
               "hydro.enabled": "false", "chemistry.enabled": "false", "gravity.enabled": "true",
               "run.darkMatterParticleCount": 64, "run.gasParticleCount": 64, "initial.closePack": "false",
-              "initial.cosmology.useGlass": "false", "run.endTime": duration, "run.numberOfSteps": 5,
+              "scenario.cosmology.useGlass": "false", "run.endTime": duration, "run.numberOfSteps": 5,
               "run.minRung": 1, "run.maxIterations": 100, "analysis.groups": "false",
               "analysis.tracers": "false", "analysis.views": "false", "analysis.power": "false",
               "lightcone.enabled": "false", "output.silo": "false", "output.directory": ".",

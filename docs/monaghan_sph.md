@@ -37,7 +37,7 @@ applies to CPU, SIMD, and CUDA code.
 | Σ𞁓 w, Σ𞁓 q w′ | `ΣW`, `Σqwʹ` | Dimensionless neighbor sums |
 
 The `Pack` suffix denotes SIMD lane partial sums or values. Public INI/CLI keys
-such as `hydro.viscosityAlphaMin` and `hydro.viscosityBeta` remain unchanged.
+such as `hydro.viscosityCoefficientMin` and `hydro.vonNeumannRichtmyerCoefficient` keep descriptive names.
 
 Particle storage `sphParticlesSmoothingLengths`, the `sphParticlesSmoothingLength()`
 accessor, and the `sourceSmoothingLength`/`sinkSmoothingLength` working buffers
@@ -255,14 +255,14 @@ scaling. The decay length is the calibrated viscosity length
 smooth-flow initialization is an implementation choice, since Morris & Monaghan
 (1997) use problem-dependent initial values.
 
-There is no viscosity selector. Setting `hydro.viscosityAlphaMin` equal to
-`hydro.viscosityAlphaMax` holds every particle's α at that value, the constant
+There is no viscosity selector. Setting `hydro.viscosityCoefficientMin` equal to
+`hydro.viscosityCoefficientMax` holds every particle's α at that value, the constant
 Monaghan (1992) coefficients; equal zero bounds give inviscid gas.
 
 Pair forces and heating use \(\bar\alpha_{ij}=(\alpha_i+\alpha_j)/2\), preserving
-pair symmetry, and \(\beta_{ij}=\texttt{viscosityBeta}\,\bar\alpha_{ij}\), the
+pair symmetry, and \(\beta_{ij}=\texttt{vonNeumannRichtmyerCoefficient}\,\bar\alpha_{ij}\), the
 convention of equation (3) of Morris & Monaghan (1997), so β decays with α
-(`hydro.viscosityBeta` defaults to 2). The pair viscosity is the original
+(`hydro.vonNeumannRichtmyerCoefficient` defaults to 2). The pair viscosity is the original
 Monaghan (1992) form, not the signal-velocity form.
 
 The Balsara (1995) factor always multiplies \(\Pi_{ij}\) by
@@ -495,7 +495,7 @@ the selected hydro family. These reference conversions do not establish equal
 timestep accuracy for every kernel shape.
 
 The `star` test's constant-α schedule (zero during relaxation, 0.05 afterward)
-sets equal α bounds and `viscosityBeta=2` for each stage and resets every stored α
+sets equal α bounds and `vonNeumannRichtmyerCoefficient=2` for each stage and resets every stored α
 when a stage starts, so the relaxation stage is inviscid. It relaxes its initial polytrope with a velocity damping term outside
 Monaghan (1992), \(d\mathbf w/d\tau \mathrel{-}= \lambda_{\rm d}\mathbf w\), where
 \(\lambda_{\rm d}\) is the internal `hydro.damping` rate per code time unit. The
@@ -568,10 +568,10 @@ hydrodynamic controls are:
 | `hydro.enabled` | `false` | Enable the SPH gas solver |
 | `hydro.kernelFamily` | `spline` | Density family: `spline`, `wendland`, or `ferrers` |
 | `hydro.kernelDegree` | `3` | Density polynomial degree; valid values depend on family |
-| `hydro.gamma` | `5/3` | Ideal-gas adiabatic index |
-| `hydro.viscosityBeta` | `2` | Quadratic coefficient, multiplying \(\bar\alpha_{ij}\) |
-| `hydro.viscosityAlphaMin` | `0.1` | Morris–Monaghan α floor and initial value |
-| `hydro.viscosityAlphaMax` | `1.5` | Rosswog α ceiling; equal to the floor for constant α |
+| `hydro.heatCapacityRatio` | `5/3` | Ideal-gas adiabatic index |
+| `hydro.vonNeumannRichtmyerCoefficient` | `2` | Quadratic coefficient, multiplying \(\bar\alpha_{ij}\) |
+| `hydro.viscosityCoefficientMin` | `0.1` | Morris–Monaghan α floor and initial value |
+| `hydro.viscosityCoefficientMax` | `1.5` | Rosswog α ceiling; equal to the floor for constant α |
 | `hydro.viscosityDecay` | `0.2` | Morris–Monaghan decay coefficient \(\mathcal C\) |
 | `hydro.balsaraSoundSpeedCoefficient` | `1e-4` | Coefficient of \(c/H\) in the Balsara denominator |
 | `hydro.conductionCoefficient` | `0` | Artificial thermal diffusion coefficient g; zero disables it |
@@ -580,15 +580,14 @@ hydrodynamic controls are:
 | `compute.sphBucketSize` | `0` (automatic) | SPH tree leaf limit; automatic sizing uses `floor(8/pi * hydro.neighborNumber)`, giving `106` at the default neighbor target |
 | `hydro.minSmoothingLength` | `1e-6` | Minimum \(H\), in initial interparticle spacings |
 | `hydro.maxSmoothingLength` | `1000` | Requested maximum \(H\), in initial interparticle spacings; capped at half the box |
-| `hydro.centralEffectiveRadius` | `0.0054772255750516604` | Imposed central-force effective radius in box units; uses the gravity kernel |
-| `hydro.centralSmoothingLength` | derived | Alternative central-force support radius in box units; uses the gravity kernel |
-| `hydro.centralSoftening` | deprecated | Deprecated alias for `hydro.centralEffectiveRadius` with the same value and units; warns when set and is omitted from help and output metadata |
+| `scenario.disc.centralEffectiveRadius` | `0.0054772255750516604` | Imposed central-force effective radius in box units; uses the gravity kernel |
+| `scenario.disc.centralSmoothingLength` | derived | Alternative central-force support radius in box units; uses the gravity kernel |
 | `hydro.cfl` | `0.22821773229381923` | Courant-viscous coefficient using the effective radius \(h=2\sigma\); also controls the calibrated fractional-energy bound |
 
 For the central-force radius pair, an explicit effective-radius key wins over the
 support-radius key, including across CLI and INI inputs, with a warning naming
-the ignored key. For the central force, precedence is `centralEffectiveRadius`,
-then the deprecated `centralSoftening` alias, then `centralSmoothingLength`. The command line
+the ignored key. For the central force, `centralEffectiveRadius` takes precedence
+over `centralSmoothingLength`. The command line
 still overrides INI values for the same key. See [kernel radii](kernels.md) for
 the equivalent gravity options and conversion factors.
 
@@ -647,7 +646,11 @@ checks still apply when migrating an old configuration to the new length and
 timestep conventions; old SPH checkpoints are not automatically converted.
 Remove `hydro.chemistry`, `hydro.conduction`, `hydro.diffusion`, `hydro.yReflect`,
 and `gravity.sphSmoothing` from older INI files, including entries set to false.
-The retired `hydro.viscosityAlphaMax`, `hydro.viscosityDecayCD`,
+Rename `hydro.viscosityAlphaMin`, `hydro.viscosityAlphaMax`, `hydro.viscosityBeta` and
+`hydro.gamma` to `hydro.viscosityCoefficientMin`, `hydro.viscosityCoefficientMax`,
+`hydro.vonNeumannRichtmyerCoefficient` and `hydro.heatCapacityRatio`; the old spellings
+are rejected.
+The retired `hydro.viscosityDecayCD`,
 `hydro.viscosityAlphaMaxPrice`, `hydro.viscosityDecayPrice`,
 `hydro.viscosityAlphaMaxHu` and `hydro.viscosityDecayHu` keys are also rejected.
 The `run.scenario=polytropicStar` scenario is a self-gravitating gas sphere; it does

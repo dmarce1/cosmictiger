@@ -40,7 +40,7 @@ namespace detail {
                     value.position[dim] = sphParticlesPositionValue(dim, particle).toDouble();
                 }
                 value.density = sphParticlesDensity(particle);
-                value.pressure = (getOptions().hydro.gamma - 1.0) * value.density *
+                value.pressure = (getOptions().hydro.heatCapacityRatio - 1.0) * value.density *
                     sphParticlesInternalEnergy(particle);
                 value.weight = double(count) / samples;
                 result.push_back(value);

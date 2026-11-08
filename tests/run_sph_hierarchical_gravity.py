@@ -71,7 +71,7 @@ def main():
     require("fmm" in available["far"] and "hierarchical" in available["integrator"],
             "self-gravitating SPH regression requires FMM and hierarchical integration")
     common = {"hpx:threads": args.threads, "hpx:bind": "none", **cpu_backend_options(),
-              "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.cosmology.useGlass": "false",
+              "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "scenario.cosmology.useGlass": "false",
               "hydro.enabled": "true", "gravity.enabled": "true",
               "chemistry.enabled": "false", "starFormation.enabled": "false",
               "analysis.groups": "false", "analysis.tracers": "false", "analysis.views": "false",
@@ -79,8 +79,8 @@ def main():
               "output.silo": "false", "output.directory": ".", "checkpoint.intervalSeconds": 1000000,
               "run.verbose": "true", "compute.sphBucketSize": 16,
               "run.scenario": "polytropicStar",
-              "hydro.viscosityAlphaMin": 0, "hydro.viscosityAlphaMax": 0,
-              "hydro.viscosityBeta": 0,
+              "hydro.viscosityCoefficientMin": 0, "hydro.viscosityCoefficientMax": 0,
+              "hydro.vonNeumannRichtmyerCoefficient": 0,
               "run.numberOfSteps": 2}
 
     def run(label, options, integrator="hierarchical", *, completed=False, source_checkpoint=None):
@@ -258,7 +258,7 @@ def main():
     for integrator in (name for name in ("hierarchical", "traditional")
                        if name in available["integrator"]):
         label = "thermal_scale_" + integrator
-        thermal_options = dict(mixed_options, **{"hydro.gamma": 4 / 3, "hydro.cfl": 0.1,
+        thermal_options = dict(mixed_options, **{"hydro.heatCapacityRatio": 4 / 3, "hydro.cfl": 0.1,
                                                 "run.maxIterations": 2})
         current = run(label, thermal_options, integrator)
         previous = decode_checkpoint((root / label / "checkpoint.1" /

@@ -38,7 +38,7 @@ metal-line, shielding, or general high-density chemistry.
 ```ini
 [hydro]
 enabled = true
-gamma = 1.6666666666666667
+heatCapacityRatio = 1.6666666666666667
 
 [chemistry]
 enabled = true

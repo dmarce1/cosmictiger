@@ -141,7 +141,7 @@ disabled gravity. Mesh gravity with SPH remains deferred. A starting configurati
 ```ini
 [hydro]
 enabled = true
-gamma = 1.6666666666666667
+heatCapacityRatio = 1.6666666666666667
 
 [chemistry]
 enabled = true

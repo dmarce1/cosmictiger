@@ -51,7 +51,7 @@ INI. If neither is supplied, the default reference mass of
 `3.58e9` solar masses is used.
 
 `boxLength` is rejected for glass generation, which uses a fixed synthetic
-length and Hubble parameter, and for `initial.cosmology.gadget4Restart` input, whose
+length and Hubble parameter, and for `scenario.cosmology.gadget4Restart` input, whose
 header supplies the physical units.
 
 When restarting an existing checkpoint, retain the same units selector and
@@ -234,8 +234,8 @@ reinterpret initial-condition or checkpoint parameters.
 
 Every particle Silo file, including native code-unit output, records the public
 application settings under `/cli`. Dots in CLI names become directories: for
-example, `hydro.viscosityAlphaMax` is the single double-precision value
-`/cli/hydro/viscosityAlphaMax`. Integer and boolean settings use single integer
+example, `hydro.viscosityCoefficientMax` is the single double-precision value
+`/cli/hydro/viscosityCoefficientMax`. Integer and boolean settings use single integer
 values (booleans are 0 or 1); strings use null-terminated character arrays.
 Every gas particle also writes its evolved `bulkViscosityCoefficient` field.
 
@@ -244,7 +244,7 @@ configuration-file values, and runtime overrides or caps, expressed in the CLI's
 units. Thus support radii and the gravity effective radius
 (`/cli/gravity/effectiveRadius`) are recorded in interparticle spacings, and
 `units.massSolar` is in solar masses. Deprecated aliases such as
-`gravity.softening` and `hydro.centralSoftening` are not written. The removed keys
+`gravity.softening` are not written. The removed keys
 `hydro.minEffectiveRadius` and `hydro.maxEffectiveRadius` are no longer written either;
 `/cli/hydro/minSmoothingLength` and `/cli/hydro/maxSmoothingLength` record the bounds. The scalar settings are shared
 by all unit/frame views within the file.

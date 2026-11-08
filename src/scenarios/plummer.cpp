@@ -34,7 +34,7 @@ void initializePlummerParticles() {
     for (ParticleInteger i = 0; i < numberOfParticles; i += 2) {
         // Invert M(<r)=r^3/(1+r^2)^(3/2), conditioned on staying inside
         // the periodic box. This avoids a numerical integral's finite plateau.
-        double const scale = getOptions().initial.plummer.radius;
+        double const scale = getOptions().scenario.plummer.radius;
         double const maximumMass = std::pow(1.0 + 4.0 * scale * scale, -1.5);
         double const massFraction = sampleUniform() * maximumMass;
         double const r = scale / std::sqrt(std::expm1(-2.0 / 3.0 * std::log(massFraction)));
@@ -53,7 +53,7 @@ void initializePlummerParticles() {
         double y = y0 + r * ny;
         double z = z0 + r * nz;
         double velocity = sqrt(getOptions().gravity.gm * numberOfParticles /
-            sqrt(sqr(getOptions().initial.plummer.radius) + sqr(r)) / 2);
+            sqrt(sqr(getOptions().scenario.plummer.radius) + sqr(r)) / 2);
         do {
             nx = 2.0 * sampleUniform() - 1.0;
             ny = 2.0 * sampleUniform() - 1.0;

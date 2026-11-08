@@ -164,11 +164,11 @@ StarFormationUpdate stage(std::vector<ParticleInteger> const& gasIndices,
         }
         // Validate even a converting particle before any rank may commit.
         auto const original = sph_entropy::prepareStoredEnergy(
-            input.energy, input.density, getOptions().hydro.gamma, scaleFactor);
+            input.energy, input.density, getOptions().hydro.heatCapacityRatio, scaleFactor);
         (void) original;
         if (!output.convert) {
             auto const prepared = sph_entropy::prepareStoredEnergy(
-                output.energy, input.density, getOptions().hydro.gamma, scaleFactor);
+                output.energy, input.density, getOptions().hydro.heatCapacityRatio, scaleFactor);
             entropy = prepared.entropy;
             output.energy = prepared.storedEnergy;
         }

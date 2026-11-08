@@ -121,7 +121,7 @@ int readUnitsOutputInteger(DBfile* file, std::string const& name) {
 }
 
 void checkUnitsOutputCommandLine(DBfile* file) {
-    requireUnitsOutputClose(readUnitsOutputScalar(file, "/cli/hydro/viscosityAlphaMax"), 1.75,
+    requireUnitsOutputClose(readUnitsOutputScalar(file, "/cli/hydro/viscosityCoefficientMax"), 1.75,
         "scalar viscosity maximumBulkViscosityCoefficient");
     requireUnitsOutputClose(readUnitsOutputScalar(file, "/cli/gravity/effectiveRadius"), 0.125,
         "CLI effective radius units");
@@ -150,8 +150,8 @@ void checkUnitsOutputCommandLine(DBfile* file) {
         readUnitsOutputText(file, "/cli/output/units") == getOptions().output.units &&
             readUnitsOutputText(file, "/cli/output/frame") == getOptions().output.frame,
         "effective current output options");
-    requireUnitsOutput(
-        readUnitsOutputText(file, "/cli/initial/cosmology/gadget4Restart").empty(), "empty string option");
+    requireUnitsOutput(readUnitsOutputText(file, "/cli/scenario/cosmology/gadget4Restart").empty(),
+        "empty string option");
     int const argc = readUnitsOutputInteger(file, "/cli/argc");
     requireUnitsOutput(argc > 1, "original process argument count");
     bool foundHpxThreads = false;
@@ -350,7 +350,8 @@ void checkConvertedUnitsOutput(DBfile* file, bool cosmological, bool lab) {
     double const epoch = readUnitsOutputClock(file, path);
     requireUnitsOutput(epoch > 0.0, "positive cosmological age");
     double const entropyScale = energyScale * a * a *
-        std::pow(densityScale * (lab ? a * a * a : 1.0), 1.0 - getOptions().hydro.gamma);
+        std::pow(
+            densityScale * (lab ? a * a * a : 1.0), 1.0 - getOptions().hydro.heatCapacityRatio);
     UnitsOutputMesh mesh(DBGetPointmesh(file, (path + "darkMatter/mesh").c_str()), DBFreePointmesh);
     requireUnitsOutput(bool(mesh) && mesh->datatype == DB_DOUBLE && mesh->nels == 2,
         "dark matter mesh shape and datatype");

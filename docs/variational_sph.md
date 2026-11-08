@@ -115,8 +115,8 @@ The reversible work uses the first law at fixed composition,
 \(du=P\,d\rho/\rho^2\) as in Price (2012), equations 24–25; it does not require a
 constant \(\gamma\). Production uses the fixed volume weight \(x=m\), so chemistry
 does not enter the density sum or its grad-H correction. Every particle uses the
-single ideal-gas index `hydro.gamma`: \(P_i=(\gamma-1)\rho_i u_i\) and
-\(c_i^2=\gamma(\gamma-1)u_i\). Options require `hydro.gamma=5/3` whenever
+single ideal-gas index `hydro.heatCapacityRatio`: \(P_i=(\gamma-1)\rho_i u_i\) and
+\(c_i^2=\gamma(\gamma-1)u_i\). Options require `hydro.heatCapacityRatio=5/3` whenever
 chemistry or star formation is enabled, so no per-particle EOS is stored, staged,
 checkpointed or migrated. The per-particle composition EOS described in the
 October 30 record below has been removed.

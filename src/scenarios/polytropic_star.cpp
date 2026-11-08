@@ -234,7 +234,7 @@ ScenarioPlan initializePolytropicStar() {
             sphParticlesPosition(kZi, k) = xValue[i][kZi][l] * radius[i] + 0.5;
             sphParticlesSmoothingLength(k) = h;
             double const pValue = kValue * pow(d, 1.0 + 1.0 / npoly);
-            double const eint = pValue / ((opts.hydro.gamma - 1.0) * d);
+            double const eint = pValue / ((opts.hydro.heatCapacityRatio - 1.0) * d);
             sphParticlesSetInternalEnergy(k, eint);
             sphParticlesVelocity(kXi, k) = 0;
             sphParticlesVelocity(kYi, k) = 0;

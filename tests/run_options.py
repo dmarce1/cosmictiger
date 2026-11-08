@@ -149,7 +149,7 @@ def main():
     required = {"help", "configuration", "run.scenario", "run.endTime", "run.verbose",
                 "run.darkMatterParticleCount", "run.gasParticleCount", "compute.bucketSize",
                 "compute.sphBucketSize", "compute.sphTreeRebuildFraction", "compute.positionType",
-                "hydro.enabled", "hydro.method", "hydro.viscosityAlphaMax", "hydro.viscosityBeta",
+                "hydro.enabled", "hydro.method", "hydro.viscosityCoefficientMax", "hydro.vonNeumannRichtmyerCoefficient",
                 "hydro.viscosityEpsilon", "hydro.conductionCoefficient",
                 "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
@@ -160,8 +160,8 @@ def main():
                 "hydro.kernelFamily", "hydro.kernelDegree",
                 "gravity.effectiveRadius", "gravity.smoothingLength",
                 "hydro.minSmoothingLength", "hydro.maxSmoothingLength",
-                "hydro.centralEffectiveRadius", "hydro.centralSmoothingLength",
-                "hydro.zPlaneAcceleration",
+                "scenario.disc.centralEffectiveRadius", "scenario.disc.centralSmoothingLength",
+                "scenario.rayleighTaylor.zPlaneAcceleration",
                 "output.silo", "output.siloInterval", "output.directory",
                 "output.units", "output.frame",
                 "units.massSolar", "units.boxLength",
@@ -171,11 +171,11 @@ def main():
                 "starFormation.criticalOverDensity",
                 "starFormation.evaporationFactor", "starFormation.starFormationTimeGyr"}
     required.update({"run.timeIntegrator", "gravity.method.far", "gravity.method.near",
-                     "gravity.expansionDegree", "hydro.viscosityAlphaMin",
+                     "gravity.expansionDegree", "hydro.viscosityCoefficientMin",
                      "hydro.viscosityDecay", "hydro.balsaraSoundSpeedCoefficient"})
-    required.update({"initial.cosmology.gadget4Restart", "initial.cosmology.useGlass",
-                     "initial.cosmology.twoLpt", "initial.plummer.radius",
-                     "initial.kelvinHelmholz.packing"})
+    required.update({"scenario.cosmology.gadget4Restart", "scenario.cosmology.useGlass",
+                     "scenario.cosmology.twoLpt", "scenario.plummer.radius",
+                     "scenario.kelvinHelmholz.packing"})
     required.update(cuda_keys)
     required.update({"cosmology.omegaLambda", "cosmology.startRedshift", "lightcone.enabled"})
     required.update("gravity.cuda." + key for key in cuda_tunings)
@@ -183,8 +183,7 @@ def main():
         raise RuntimeError(f"grouped help is missing {sorted(required - option_names)}")
     # Deprecated aliases remain parseable but are not public keys: help, the
     # resolved listing and complete presets omit them.
-    deprecated_aliases = {"gravity.softening": "gravity.effectiveRadius",
-                          "hydro.centralSoftening": "hydro.centralEffectiveRadius"}
+    deprecated_aliases = {"gravity.softening": "gravity.effectiveRadius"}
     if set(deprecated_aliases) & option_names:
         raise RuntimeError(f"deprecated aliases remain in help: {sorted(set(deprecated_aliases) & option_names)}")
 
@@ -212,7 +211,7 @@ def main():
             "--analysis.power=false", "--analysis.groups=false", "--analysis.tracers=false",
             "--lightcone.enabled=false", f"--output.directory={startupDirectory.resolve()}",
             "--units.boxLength=20", "--compute.sphBucketSize=0", "--cosmology.omegaLambda=auto",
-            "--hydro.centralSmoothingLength=0.02", "--hydro.minSmoothingLength=0.001",
+            "--scenario.disc.centralSmoothingLength=0.02", "--hydro.minSmoothingLength=0.001",
             "--hydro.maxSmoothingLength=1000", "--starFormation.seed=18446744073709551615",
             "--analysis.saveForce=true"])
         assertStartupOptions(output, hydroMethod)
@@ -222,7 +221,7 @@ def main():
         # The half-box support cap is reported in reference particle spacings.
         assertNumericSetting(output, "hydro.maxSmoothingLength", 0.5 * population**(1 / dimension))
         assertNumericSetting(output, "units.boxLength", 20)
-        assertNumericSetting(output, "hydro.centralSmoothingLength", 0.02)
+        assertNumericSetting(output, "scenario.disc.centralSmoothingLength", 0.02)
         assertNumericSetting(output, "hydro.minSmoothingLength", 0.001)
         for key, expected in (("starFormation.seed", "18446744073709551615"),
                               ("analysis.saveForce", "T"), ("analysis.saveAcceleration", "F"),
@@ -279,29 +278,29 @@ sphBucketSize = 73
 sphTreeRebuildFraction = 0.5
 [hydro]
 enabled = false
-viscosityAlphaMax = 0.75
-viscosityBeta = 1.5
+viscosityCoefficientMax = 0.75
+vonNeumannRichtmyerCoefficient = 1.5
 viscosityEpsilon = 0.02
 conductionCoefficient = 0.3
-viscosityAlphaMin = 0.15
+viscosityCoefficientMin = 0.15
 viscosityDecay = 0.3
 zPlaneAcceleration = 0.25
-gamma = 1.4
+heatCapacityRatio = 1.4
 neighborNumber = 48
 cfl = 0.3
 [lightcone]
 mapSize = 8
 """)
     configured = run("config", [f"--configuration={config.resolve()}",
-                                "--run.maxIterations=3", "--hydro.viscosityAlphaMax=1.25"] + sph_control_options)
+                                "--run.maxIterations=3", "--hydro.viscosityCoefficientMax=1.25"] + sph_control_options)
     expected = {"run.maxIterations": 3.0, "run.darkMatterParticleCount": 512,
                 "run.gasParticleCount": 512 if sph_controls_available else 0,
-                "analysis.tracerCount": 41.0, "hydro.viscosityAlphaMax": 1.25,
-                "hydro.viscosityBeta": 1.5, "hydro.viscosityEpsilon": 0.02,
+                "analysis.tracerCount": 41.0, "hydro.viscosityCoefficientMax": 1.25,
+                "hydro.vonNeumannRichtmyerCoefficient": 1.5, "hydro.viscosityEpsilon": 0.02,
                 "hydro.conductionCoefficient": 0.3,
-                "hydro.viscosityAlphaMin": 0.15, "hydro.viscosityDecay": 0.3,
-                "hydro.gamma": 1.4, "hydro.neighborNumber": 48.0,
-                "hydro.cfl": 0.3, "hydro.zPlaneAcceleration": 0.25, "lightcone.mapSize": 8.0,
+                "hydro.viscosityCoefficientMin": 0.15, "hydro.viscosityDecay": 0.3,
+                "hydro.heatCapacityRatio": 1.4, "hydro.neighborNumber": 48.0,
+                "hydro.cfl": 0.3, "scenario.rayleighTaylor.zPlaneAcceleration": 0.25, "lightcone.mapSize": 8.0,
                 "hydro.minSmoothingLength": 1.0e-6, "hydro.maxSmoothingLength": 4.0,
                 "gravity.kernelDegree": 4.0,
                 "compute.bucketSize": 64.0, "compute.sphBucketSize": 73.0,
@@ -510,8 +509,8 @@ mapSize = 8
             ("glass", "--run.scenario=glass",
              "units.boxLength cannot be used with glass generation or Gadget4 input, "
              "which supply their own length scale"),
-            ("gadget", "--initial.cosmology.gadget4Restart=missing.gadget",
-             "initial.cosmology.gadget4Restart supplies its own units; do not set units.boxLength")):
+            ("gadget", "--scenario.cosmology.gadget4Restart=missing.gadget",
+             "scenario.cosmology.gadget4Restart supplies its own units; do not set units.boxLength")):
         rejected = run(f"units_box_unsupported_{name}", normalizationOptions + [
             option, f"--units.boxLength={boxLength}"], success=False)
         # Gadget input rejects the unit conflict before attempting to read its header.
@@ -866,7 +865,9 @@ mapSize = 8
             raise RuntimeError("removed pressure selector lacked an INI diagnostic")
     for key in ("hydro.viscosityAlpha", "hydro.viscosityEvolution", "hydro.viscosityDecayCD",
                 "hydro.viscosityAlphaMaxPrice", "hydro.viscosityDecayPrice",
-                "hydro.viscosityAlphaMaxHu", "hydro.viscosityDecayHu", "hydro.balsaraSwitch"):
+                "hydro.viscosityAlphaMaxHu", "hydro.viscosityDecayHu", "hydro.balsaraSwitch",
+                "hydro.viscosityAlphaMin", "hydro.viscosityAlphaMax", "hydro.viscosityBeta",
+                "hydro.gamma"):
         retired_config = args.workdir / f"retired_{key}.ini"
         retired_config.write_text(f"[hydro]\n{key.split('.')[1]} = 1\n")
         rejected = run("retired_ini_" + key, [f"--configuration={retired_config.resolve()}"],
@@ -877,21 +878,23 @@ mapSize = 8
                 "hydro.viscosityAlpha", "hydro.viscosityEvolution", "hydro.viscosityDecayCD",
                 "hydro.viscosityAlphaMaxPrice", "hydro.viscosityDecayPrice",
                 "hydro.viscosityAlphaMaxHu", "hydro.viscosityDecayHu",
-                "initial.createGlass", "initial.plummer", "hydro.pressureOperator"):
+                "initial.createGlass", "initial.plummer", "hydro.pressureOperator",
+                "hydro.viscosityAlphaMin", "hydro.viscosityAlphaMax", "hydro.viscosityBeta",
+                "hydro.gamma"):
         if re.search(r"^" + re.escape(key) + r"\s*:", balsara_default, re.MULTILINE):
             raise RuntimeError(f"removed option {key} is still reported")
     if sph_controls_available:
         viscosity_override = run("variable_viscosity_cli_override", [
             f"--configuration={config.resolve()}",
-            "--hydro.viscosityAlphaMin=0.4"] + sph_control_options)
-        match = re.search(r"^hydro\.viscosityAlphaMin\s*:\s*(\S+)", viscosity_override,
+            "--hydro.viscosityCoefficientMin=0.4"] + sph_control_options)
+        match = re.search(r"^hydro\.viscosityCoefficientMin\s*:\s*(\S+)", viscosity_override,
                           re.MULTILINE)
         if match is None or float(match.group(1)) != 0.4:
-            raise RuntimeError("CLI hydro.viscosityAlphaMin did not override INI")
+            raise RuntimeError("CLI hydro.viscosityCoefficientMin did not override INI")
 
     # Metadata-only cases exercise the storage range without integrating a flow
     # with extreme viscosity. Both alpha bounds are stored as binary16 particle values.
-    viscosityStorageKeys = ("hydro.viscosityAlphaMin", "hydro.viscosityAlphaMax")
+    viscosityStorageKeys = ("hydro.viscosityCoefficientMin", "hydro.viscosityCoefficientMax")
     halfMinimum = 2.0 ** -24
     halfMaximum = 65504.0
     halfOutsideValues = (2.0 ** -25, 65505.0)
@@ -906,8 +909,8 @@ mapSize = 8
         if key not in output or "binary16 viscosity storage" not in output:
             raise RuntimeError(f"invalid binary16 {key} lacked its storage diagnostic")
     reversed_bounds = run("viscosity_alpha_bounds_reversed", metadata_options + [
-        "--hydro.viscosityAlphaMin=0.5", "--hydro.viscosityAlphaMax=0.25"], success=False)
-    if "hydro.viscosityAlphaMax must not be below hydro.viscosityAlphaMin" not in reversed_bounds:
+        "--hydro.viscosityCoefficientMin=0.5", "--hydro.viscosityCoefficientMax=0.25"], success=False)
+    if "hydro.viscosityCoefficientMax must not be below hydro.viscosityCoefficientMin" not in reversed_bounds:
         raise RuntimeError("reversed alpha bounds lacked their diagnostic")
 
     # Equal bounds at either end of the binary16 range give a valid constant alpha.
@@ -1014,7 +1017,7 @@ mapSize = 8
                 ("no_chemistry", [option for option in star_options
                                   if not option.startswith("--chemistry.enabled=")] +
                  ["--chemistry.enabled=false"], "chemistry.enabled=true"),
-                ("wrong_gamma", star_options + ["--hydro.gamma=1.4"], "hydro.gamma")):
+                ("wrong_gamma", star_options + ["--hydro.heatCapacityRatio=1.4"], "hydro.heatCapacityRatio")):
             rejected = run("star_formation_" + label, options, success=False)
             if diagnostic not in rejected:
                 raise RuntimeError("incompatible star formation selection lacked a diagnostic")
@@ -1051,8 +1054,8 @@ mapSize = 8
         for acceleration in (0.0, 0.5):
             output = run(f"z_plane_checkpoint_{acceleration}", hydro_metadata_options + [
                 f"--configuration={config.resolve()}",
-                f"--hydro.zPlaneAcceleration={acceleration}"])
-            assertNumericSetting(output, "hydro.zPlaneAcceleration", acceleration)
+                f"--scenario.rayleighTaylor.zPlaneAcceleration={acceleration}"])
+            assertNumericSetting(output, "scenario.rayleighTaylor.zPlaneAcceleration", acceleration)
             if "Checkpoint state and mode validation passed" not in output:
                 raise RuntimeError("z-plane acceleration checkpoint state did not round-trip")
 
@@ -1081,7 +1084,7 @@ mapSize = 8
                                        "--chemistry.initializationTemperature=nan",
                                        "--chemistry.minimumSpecificEnergy=-1",
                                        "--chemistry.minimumSpecificEnergy=inf",
-                                       "--hydro.gamma=1.4")):
+                                       "--hydro.heatCapacityRatio=1.4")):
             run(f"gadget4_cooling_invalid_{index}", cooling_options + [extra], success=False)
         for index, removed in enumerate(("--chemistry.network=atomic6",
                                          "--chemistry.initialization=manual",
@@ -1214,7 +1217,8 @@ mapSize = 8
     for key, value in (("gravity.kernelDegree", 4),
                        ("hydro.neighborNumber", 42), ("hydro.kernelDegree", 3),
                        ("hydro.conductionCoefficient", 0),
-                       ("hydro.viscosityAlphaMin", 0.1), ("hydro.viscosityDecay", 0.2),
+                       ("hydro.viscosityCoefficientMin", 0.1), ("hydro.viscosityCoefficientMax", 1.5),
+                       ("hydro.viscosityDecay", 0.2),
                        ("compute.bucketSize", 128), ("compute.sphBucketSize", 106)):
         assertNumericSetting(defaults, key, value)
 
@@ -1251,7 +1255,7 @@ mapSize = 8
     gravityRatio = 1.5
     radiusPairs = (
         ("gravity.effectiveRadius", "gravity.smoothingLength", 0.02, gravityRatio),
-        ("hydro.centralEffectiveRadius", "hydro.centralSmoothingLength", 0.02, gravityRatio),
+        ("scenario.disc.centralEffectiveRadius", "scenario.disc.centralSmoothingLength", 0.02, gravityRatio),
     )
     radiusConfig = args.workdir / "radius.ini"
     for effectiveKey, supportKey, effectiveRadius, ratio in radiusPairs:
@@ -1297,8 +1301,7 @@ mapSize = 8
             assertNoRadiusWarning(output)
 
     for effectiveKey, supportKey, aliasKey in (
-            ("gravity.effectiveRadius", "gravity.smoothingLength", "gravity.softening"),
-            ("hydro.centralEffectiveRadius", "hydro.centralSmoothingLength", "hydro.centralSoftening")):
+            ("gravity.effectiveRadius", "gravity.smoothingLength", "gravity.softening"),):
         # Deprecated effective-radius aliases retain their meaning with one
         # deprecation warning, and explicitly supplied aliases also take
         # precedence over support-radius inputs.
@@ -1412,7 +1415,7 @@ mapSize = 8
                      "gravity.smoothingLength",
                      "gravity.method.near", "gravity.expansionDegree",
                      "units.boxLength",
-                     "hydro.centralSmoothingLength"}
+                     "scenario.disc.centralSmoothingLength"}
     public_keys = set(option_names) - {"help", "configuration"}
     preset_curvatures = {"critical.ini": 0.0}
     checked_presets = set()
@@ -1473,11 +1476,11 @@ mapSize = 8
             # physical scenario is unavailable in the compiled executable.
             preset_options.append("--run.scenario=cosmology")
         if (ini["run"]["scenario"] == "kelvinHelmholtz" and build_dimension != 2 and
-                ini.has_option("initial.kelvinHelmholz", "packing")):
+                ini.has_option("scenario.kelvinHelmholz", "packing")):
             # The Kelvin-Helmholtz preset targets the 2D build (make.sh); its CEV/E
             # packing has nonuniform site neighborhoods in 3D. Other builds check the
             # preset's option coverage with the default uniform CV/C packing.
-            preset_options.append("--initial.kelvinHelmholz.packing=CV/C")
+            preset_options.append("--scenario.kelvinHelmholz.packing=CV/C")
         output = run(f"complete_{case_name}", metadata_options + preset_options)
         if "Checkpoint state and mode validation passed" not in output:
             raise RuntimeError(f"{relative_path} did not finish metadata validation")
@@ -1523,14 +1526,14 @@ mapSize = 8
         ("silo_outside", "--output.xMax=1.1", "output.xMin"),
         ("silo_empty", "--output.yMin=1", "output.yMin"),
         ("silo_reversed", "--output.zMax=-0.1", "output.zMin"),
-        ("gamma_nan", "--hydro.gamma=nan", "hydro.gamma"),
-        ("gamma_inf", "--hydro.gamma=inf", "hydro.gamma"),
+        ("gamma_nan", "--hydro.heatCapacityRatio=nan", "hydro.heatCapacityRatio"),
+        ("gamma_inf", "--hydro.heatCapacityRatio=inf", "hydro.heatCapacityRatio"),
         ("conduction_negative", "--hydro.conductionCoefficient=-0.1", "hydro.conductionCoefficient"),
         ("conduction_nan", "--hydro.conductionCoefficient=nan", "hydro.conductionCoefficient"),
         ("conduction_inf", "--hydro.conductionCoefficient=inf", "hydro.conductionCoefficient"),
         ("conduction_overflow", "--hydro.conductionCoefficient=1e100", "single precision"),
         ("conduction_underflow", "--hydro.conductionCoefficient=1e-100", "single precision"),
-        ("alpha_max_nan", "--hydro.viscosityAlphaMax=nan", "hydro.viscosityAlphaMax"),
+        ("alpha_max_nan", "--hydro.viscosityCoefficientMax=nan", "hydro.viscosityCoefficientMax"),
         ("balsara_negative", "--hydro.balsaraSoundSpeedCoefficient=-1",
          "hydro.balsaraSoundSpeedCoefficient"),
         ("balsara_nan", "--hydro.balsaraSoundSpeedCoefficient=nan",
@@ -1540,11 +1543,11 @@ mapSize = 8
         ("epsilon_inf", "--hydro.viscosityEpsilon=inf", "hydro.viscosityEpsilon"),
         ("cfl_nan", "--hydro.cfl=nan", "hydro.cfl"),
         ("neighbors_inf", "--hydro.neighborNumber=inf", "hydro.neighborNumber"),
-        ("z_plane_negative", "--hydro.zPlaneAcceleration=-0.5", "hydro.zPlaneAcceleration"),
-        ("z_plane_nan", "--hydro.zPlaneAcceleration=nan", "hydro.zPlaneAcceleration"),
-        ("z_plane_inf", "--hydro.zPlaneAcceleration=inf", "hydro.zPlaneAcceleration"),
-        ("z_plane_overflow", "--hydro.zPlaneAcceleration=1e100", "single precision"),
-        ("z_plane_underflow", "--hydro.zPlaneAcceleration=1e-100", "single precision"),
+        ("z_plane_negative", "--scenario.rayleighTaylor.zPlaneAcceleration=-0.5", "scenario.rayleighTaylor.zPlaneAcceleration"),
+        ("z_plane_nan", "--scenario.rayleighTaylor.zPlaneAcceleration=nan", "scenario.rayleighTaylor.zPlaneAcceleration"),
+        ("z_plane_inf", "--scenario.rayleighTaylor.zPlaneAcceleration=inf", "scenario.rayleighTaylor.zPlaneAcceleration"),
+        ("z_plane_overflow", "--scenario.rayleighTaylor.zPlaneAcceleration=1e100", "single precision"),
+        ("z_plane_underflow", "--scenario.rayleighTaylor.zPlaneAcceleration=1e-100", "single precision"),
         ("steps_zero", "--run.numberOfSteps=0", "run.numberOfSteps"),
         ("end_time_negative", "--run.endTime=-1", "run.endTime"),
         ("end_time_nan", "--run.endTime=nan", "run.endTime"),
@@ -1567,9 +1570,9 @@ mapSize = 8
         ("softening_deprecated_zero", "--gravity.softening=0", "gravity.softening"),
         ("smoothing_obsolete", "--gravity.sphSmoothing=true", "gravity.sphSmoothing"),
         ("adaptive_option_removed", "--gravity.softeningMode=adaptive", "gravity.softeningMode"),
-        ("alpha_max_overflow", "--hydro.viscosityAlphaMax=1e100", "binary16 viscosity storage"),
+        ("alpha_max_overflow", "--hydro.viscosityCoefficientMax=1e100", "binary16 viscosity storage"),
         ("epsilon_underflow", "--hydro.viscosityEpsilon=1e-100", "single precision"),
-        ("gamma_rounding", "--hydro.gamma=1.00000001", "single precision"),
+        ("gamma_rounding", "--hydro.heatCapacityRatio=1.00000001", "single precision"),
         # The float cubic table gives a self-neighbor floor of 10.666666236 (float
         # 10.666666031): this value passes the double check and rounds onto the floor.
         ("neighbors_rounding", "--hydro.neighborNumber=10.6666664", "single precision"),
@@ -1587,19 +1590,28 @@ mapSize = 8
         ("viscosity_decay_price_removed", "--hydro.viscosityDecayPrice=1",
          "hydro.viscosityDecayPrice"),
         ("beta_mode_removed", "--hydro.viscosityBetaMode=ratio", "hydro.viscosityBetaMode"),
-        ("alpha_floor_negative", "--hydro.viscosityAlphaMin=-0.1", "hydro.viscosityAlphaMin"),
-        ("alpha_floor_underflow", "--hydro.viscosityAlphaMin=1e-100", "single precision"),
+        ("viscosity_alpha_min_renamed", "--hydro.viscosityAlphaMin=0.1", "hydro.viscosityAlphaMin"),
+        ("viscosity_alpha_max_renamed", "--hydro.viscosityAlphaMax=1", "hydro.viscosityAlphaMax"),
+        ("viscosity_beta_renamed", "--hydro.viscosityBeta=2", "hydro.viscosityBeta"),
+        ("gamma_renamed", "--hydro.gamma=1.4", "hydro.gamma"),
+        ("z_plane_moved", "--hydro.zPlaneAcceleration=0.5", "hydro.zPlaneAcceleration"),
+        ("central_acceleration_moved", "--hydro.centralAcceleration=1",
+         "hydro.centralAcceleration"),
+        ("plummer_radius_moved", "--initial.plummer.radius=0.02", "initial.plummer.radius"),
+        ("two_lpt_moved", "--initial.cosmology.twoLpt=true", "initial.cosmology.twoLpt"),
+        ("alpha_floor_negative", "--hydro.viscosityCoefficientMin=-0.1", "hydro.viscosityCoefficientMin"),
+        ("alpha_floor_underflow", "--hydro.viscosityCoefficientMin=1e-100", "single precision"),
         ("viscosity_decay_zero", "--hydro.viscosityDecay=0", "hydro.viscosityDecay"),
         ("viscosity_decay_overflow", "--hydro.viscosityDecay=1e100", "single precision"),
-        ("beta_overflow", "--hydro.viscosityBeta=1e100", "single precision"),
-        ("beta_nan", "--hydro.viscosityBeta=nan", "hydro.viscosityBeta"),
-        ("alpha_max", "--hydro.viscosityAlphaMax=-1", "hydro.viscosityAlphaMax"),
-        ("beta", "--hydro.viscosityBeta=-1", "hydro.viscosityBeta"),
+        ("beta_overflow", "--hydro.vonNeumannRichtmyerCoefficient=1e100", "single precision"),
+        ("beta_nan", "--hydro.vonNeumannRichtmyerCoefficient=nan", "hydro.vonNeumannRichtmyerCoefficient"),
+        ("alpha_max", "--hydro.viscosityCoefficientMax=-1", "hydro.viscosityCoefficientMax"),
+        ("beta", "--hydro.vonNeumannRichtmyerCoefficient=-1", "hydro.vonNeumannRichtmyerCoefficient"),
         ("epsilon", "--hydro.viscosityEpsilon=0", "hydro.viscosityEpsilon"),
-        ("gamma", "--hydro.gamma=1", "hydro.gamma"),
-        ("central_effective_radius", "--hydro.centralEffectiveRadius=0",
-         "hydro.centralEffectiveRadius"),
-        ("central_softening_deprecated", "--hydro.centralSoftening=0", "hydro.centralSoftening"),
+        ("gamma", "--hydro.heatCapacityRatio=1", "hydro.heatCapacityRatio"),
+        ("central_effective_radius", "--scenario.disc.centralEffectiveRadius=0",
+         "scenario.disc.centralEffectiveRadius"),
+        ("central_softening_removed", "--hydro.centralSoftening=0", "hydro.centralSoftening"),
         ("reflection", "--hydro.yReflect=true", "hydro.yReflect"),
         ("cfl_zero", "--hydro.cfl=0", "hydro.cfl"),
         ("cfl_large", "--hydro.cfl=1.1", "hydro.cfl"),

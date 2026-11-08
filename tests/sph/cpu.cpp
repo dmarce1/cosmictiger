@@ -557,7 +557,8 @@ void testVariableViscosityPairs() {
         data.sourceBulkViscosityCoefficient[source] = i == 0 ? 0.2f : 1.4f;
         data.sinkBulkViscosityCoefficient[sink] = data.sourceBulkViscosityCoefficient[source];
     }
-    // Pairs use beta_ab = viscosityBeta alpha_ab with the mean alpha_ab of the endpoints.
+    // Pairs use beta_ab = vonNeumannRichtmyerCoefficient alpha_ab with the mean alpha_ab of the
+    // endpoints.
     for (float const vonNeumannRichtmyerCoefficient : {0.0f, 2.0f, 3.5f}) {
         for (int i = 0; i < 2; ++i) {
             data.sourceBulkViscosityCoefficient[fixture.sourceIndex(i)] = i == 0 ? 0.2f : 1.4f;

@@ -148,7 +148,7 @@ def main():
               "chemistry.cuda": device, "starFormation.cuda": device, "hydro.enabled": "true",
               "starFormation.enabled": "true", "chemistry.enabled": "true",
               "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.closePack": "false",
-              "initial.cosmology.useGlass": "false", "analysis.groups": "false",
+              "scenario.cosmology.useGlass": "false", "analysis.groups": "false",
               "analysis.views": "false", "analysis.tracers": "false",
               "analysis.power": "false", "lightcone.enabled": "false",
               "output.directory": ".", "output.silo": "false",

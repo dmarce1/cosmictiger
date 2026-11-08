@@ -71,11 +71,11 @@ gasParticleCount = 4096
 cuda = true
 [hydro]
 enabled = true
-viscosityAlphaMin = 0.1
-viscosityAlphaMax = 1.5
-viscosityBeta = 2.0
+viscosityCoefficientMin = 0.1
+viscosityCoefficientMax = 1.5
+vonNeumannRichtmyerCoefficient = 2.0
 viscosityEpsilon = 0.01
-gamma = 1.666666666666667
+heatCapacityRatio = 1.666666666666667
 neighborNumber = 60
 cfl = 0.22821773229381923
 [run]
@@ -197,10 +197,10 @@ neighborNumber = 120
 The supported density polynomial degrees are spline 2–9, Wendland 2/5/8,
 and Ferrers 2/4/6/8. Specify `gravity.effectiveRadius` or `gravity.smoothingLength`,
 in mean particle spacings. The imposed central force similarly accepts
-`hydro.centralEffectiveRadius` or `hydro.centralSmoothingLength`, in box units,
-using the gravity kernel. `gravity.softening` and `hydro.centralSoftening` are
-deprecated aliases for `gravity.effectiveRadius` and `hydro.centralEffectiveRadius`:
-they keep their meaning but print a deprecation warning naming the replacement key.
+`scenario.disc.centralEffectiveRadius` or `scenario.disc.centralSmoothingLength`, in box units,
+using the gravity kernel. `gravity.softening` is a deprecated alias for
+`gravity.effectiveRadius`: it keeps its meaning but prints a deprecation warning naming
+the replacement key.
 
 SPH adapts each particle's support radius to its density, bounded by
 `hydro.minSmoothingLength` and `hydro.maxSmoothingLength`, in initial interparticle
@@ -299,9 +299,9 @@ build flags, equations, and supported scenarios.
 The gas solver reconstructs density and evolves canonical entropy, using the
 [variational pressure operator](docs/variational_sph.md) with grad-H corrections
 for all SPH runs. It uses Monaghan artificial viscosity with the Morris & Monaghan
-coefficient switch, limited by Rosswog et al. (2000) to `hydro.viscosityAlphaMax`,
-and the Balsara shear limiter; equal `hydro.viscosityAlphaMin` and
-`hydro.viscosityAlphaMax` give constant coefficients. This runs alongside FMM or PMMM
+coefficient switch, limited by Rosswog et al. (2000) to `hydro.viscosityCoefficientMax`,
+and the Balsara shear limiter; equal `hydro.viscosityCoefficientMin` and
+`hydro.viscosityCoefficientMax` give constant coefficients. This runs alongside FMM or PMMM
 gravity and shared particle
 storage. See
 [the kernel, viscosity, and paper references](docs/monaghan_sph.md) for the equations,

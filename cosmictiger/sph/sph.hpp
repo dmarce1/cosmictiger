@@ -204,7 +204,7 @@ struct SphRunParameters {
         maximumSmoothingLength = opts.hydro.maxSmoothingLength;
         velocityDampingRate = opts.hydro.damping;
         uniformAccelerationY = opts.hydro.yAcceleration;
-        zPlaneAcceleration = opts.hydro.zPlaneAcceleration;
+        zPlaneAcceleration = opts.scenario.rayleighTaylor.zPlaneAcceleration;
         vonNeumannRichtmyerCoefficient = opts.hydro.vonNeumannRichtmyerCoefficient;
         viscosityEpsilon = opts.hydro.viscosityEpsilon;
         conductionCoefficient = opts.hydro.conductionCoefficient;

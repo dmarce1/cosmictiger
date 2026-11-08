@@ -117,7 +117,7 @@ void sphParticlesPrepareThermodynamics(double scaleFactor, bool initializeEntrop
         for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
             ALWAYS_ASSERT(sphParticlesDensity(gas) > 0.0f && sphParticlesEntropies[gas] > 0.0f);
             sphParticlesEntropies[gas] = sph_entropy::fromStoredEnergy(sphParticlesEntropies[gas],
-                sphParticlesDensity(gas), getOptions().hydro.gamma, scaleFactor);
+                sphParticlesDensity(gas), getOptions().hydro.heatCapacityRatio, scaleFactor);
         }
         sphParticlesEntropyInitialized = true;
     }

@@ -189,7 +189,7 @@ std::vector<SfRecord> sfSourceReference() {
         requireSf(output.status == 0, "scalar source reference failed");
         SfRecord record;
         auto const prepared = sph_entropy::prepareStoredEnergy(
-            output.energy, input.density, getOptions().hydro.gamma, kSfScale);
+            output.energy, input.density, getOptions().hydro.heatCapacityRatio, kSfScale);
         record.energy = std::bit_cast<uint32_t>(prepared.storedEnergy);
         record.entropy = std::bit_cast<uint32_t>(prepared.entropy);
         record.electrons = std::bit_cast<uint32_t>(output.electronFraction);

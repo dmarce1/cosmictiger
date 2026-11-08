@@ -151,7 +151,7 @@ def main():
               "gravity.cuda": "false", "drift.cuda": "false", "hydro.cuda": "false",
               "compute.positionType": args.position_type,
               "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.closePack": "false",
-              "initial.cosmology.useGlass": "false", "chemistry.enabled": "false",
+              "scenario.cosmology.useGlass": "false", "chemistry.enabled": "false",
               # A small eta makes the PM acceleration bound select the interval of
               # the Plummer case; the split long force is smoother, so p3m keeps
               # a longer coarse interval instead of a smaller inner prefactor.

@@ -291,7 +291,7 @@ def main():
         "run.maxIterations": "10000",
         "run.darkMatterParticleCount": "512", "run.gasParticleCount": "512",
         "initial.closePack": "false",
-        "initial.cosmology.twoLpt": "false",
+        "scenario.cosmology.twoLpt": "false",
         "gravity.cuda": "true" if args.cuda else "false", "hydro.cuda": "true" if args.cuda and not args.collisionless_only else "false", "drift.cuda": "true" if args.cuda else "false",
         "compute.positionType": args.position_type,
         "gravity.enabled": "true",

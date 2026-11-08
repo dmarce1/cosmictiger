@@ -45,24 +45,24 @@ inline KelvinHelmholtzPacking parseKelvinHelmholtzPacking(std::string_view input
         ++lowEnd;
     }
     if (highEnd == 0 || lowBegin == highEnd || lowBegin == lowEnd || lowEnd != input.size()) {
-        throw std::invalid_argument("initial.kelvinHelmholz.packing requires two site strings, "
+        throw std::invalid_argument("scenario.kelvinHelmholz.packing requires two site strings, "
                                     "high/low (for example CV/C)");
     }
     KelvinHelmholtzPacking result{cell_lattice::CellLattice(input.substr(0, highEnd)),
         cell_lattice::CellLattice(input.substr(lowBegin))};
     for (auto const* lattice : {&result.high, &result.low}) {
         if (!lattice->appliesToDimension(dimension)) {
-            throw std::invalid_argument("initial.kelvinHelmholz.packing: " + lattice->sites() +
+            throw std::invalid_argument("scenario.kelvinHelmholz.packing: " + lattice->sites() +
                 " is not applicable in " + std::to_string(dimension) + "D");
         }
         if (!lattice->isUniform(dimension)) {
-            throw std::invalid_argument("initial.kelvinHelmholz.packing: " + lattice->sites() +
+            throw std::invalid_argument("scenario.kelvinHelmholz.packing: " + lattice->sites() +
                 " has nonuniform site neighborhoods in " + std::to_string(dimension) + "D");
         }
     }
     if (result.high.sitesPerCell(dimension) != 2 * result.low.sitesPerCell(dimension)) {
         throw std::invalid_argument(
-            "initial.kelvinHelmholz.packing must have a 2:1 high/low site count");
+            "scenario.kelvinHelmholz.packing must have a 2:1 high/low site count");
     }
     return result;
 }

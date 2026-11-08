@@ -54,7 +54,8 @@ ScenarioPlan initializeGresho() {
                         sphParticlesVelocity(kZi, i) = 0.0;
                     }
                     sphParticlesRung(i) = 0;
-                    sphParticlesSetInternalEnergy(i, state.pressure / (opts.hydro.gamma - 1.0));
+                    sphParticlesSetInternalEnergy(
+                        i, state.pressure / (opts.hydro.heatCapacityRatio - 1.0));
                     i++;
                 }
             }

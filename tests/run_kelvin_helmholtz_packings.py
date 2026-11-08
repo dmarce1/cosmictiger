@@ -30,7 +30,7 @@ def main():
               '--hydro.enabled=true', '--hydro.cuda=false', '--drift.cuda=false',
               '--chemistry.enabled=false', '--starFormation.enabled=false',
               '--hydro.kernelFamily=wendland', '--hydro.kernelDegree=5', '--hydro.neighborNumber=32',
-              '--hydro.viscosityAlphaMin=0', '--hydro.viscosityAlphaMax=0', '--hydro.viscosityBeta=0',
+              '--hydro.viscosityCoefficientMin=0', '--hydro.viscosityCoefficientMax=0', '--hydro.vonNeumannRichtmyerCoefficient=0',
               '--hydro.conductionCoefficient=0',
               '--run.endTime=1e-7', '--run.numberOfSteps=2', '--run.maxIterations=1',
               '--checkpoint.intervalSeconds=0', '--output.silo=false', '--output.directory=.',
@@ -51,7 +51,7 @@ def main():
             shutil.rmtree(directory)
         directory.mkdir()
         result = subprocess.run(common + [f'--run.gasParticleCount={count}',
-            f'--initial.kelvinHelmholz.packing={packing}', *extra], cwd=directory,
+            f'--scenario.kelvinHelmholz.packing={packing}', *extra], cwd=directory,
             env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=120)
         (directory / 'run.log').write_text(result.stdout)
         if error is not None:
@@ -71,9 +71,9 @@ def main():
         count = 3 * low_count
         # CLI overrides a deliberately invalid INI value, and punctuation/case normalize.
         config = root / f'packing_{index}.ini'
-        config.write_text('[initial.kelvinHelmholz]\npacking = X/X\n'
-                          '[initial.cosmology]\ntwoLpt = false\nuseGlass = false\ngadget4Restart =\n'
-                          '[initial.plummer]\nradius = 0.02\n')
+        config.write_text('[scenario.kelvinHelmholz]\npacking = X/X\n'
+                          '[scenario.cosmology]\ntwoLpt = false\nuseGlass = false\ngadget4Restart =\n'
+                          '[scenario.plummer]\nradius = 0.02\n')
         entered = high.lower() + ('-' if index % 2 else ' : ') + low
         state, directory = run(f'valid_{index}', entered, count - 1,
             (f'--configuration={config}', f'--initial.closePack={str(index % 2 == 0).lower()}'))
@@ -122,7 +122,7 @@ def main():
             assert re.search(r'^initial\.plummer\.radius\s*:\s*2\.0+e-02', log, re.M)
             # Re-read the selected layout and the extended Options serialization on restart.
             restarted = subprocess.run(common + [f'--run.gasParticleCount={count}',
-                f'--initial.kelvinHelmholz.packing={pair}', '--checkpoint.readIndex=1'],
+                f'--scenario.kelvinHelmholz.packing={pair}', '--checkpoint.readIndex=1'],
                 cwd=directory, env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, timeout=120)
             (directory / 'restart.log').write_text(restarted.stdout)

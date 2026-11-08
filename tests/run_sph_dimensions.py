@@ -60,7 +60,7 @@ def state(directory):
     return result
 
 # Equal alpha bounds hold alpha fixed; the default bounds evolve it.
-constant = ("--hydro.viscosityAlphaMin=1", "--hydro.viscosityAlphaMax=1")
+constant = ("--hydro.viscosityCoefficientMin=1", "--hydro.viscosityCoefficientMax=1")
 for viscosity, options in (("none", constant), ("evolving", ())):
     result = state(run("wave_" + viscosity, options=options))
     assert min(result.densities) > 0.5 and max(result.densities) < 2
@@ -128,7 +128,7 @@ run("padded_layout", options=(*constant,
 assert "Checkpoint particle storage differs" in (mismatched / "padded_layout.log").read_text()
 
 # Runtime capability rejection complements the configure-time gravity checks.
-run("central_gravity_rejected", options=("--hydro.centralAcceleration=1",), succeeds=False)
+run("central_gravity_rejected", options=("--scenario.disc.centralAcceleration=1",), succeeds=False)
 if args.dimension == 1:
     run("gresho_rejected", "gresho", succeeds=False)
 print(f"D={args.dimension} SPH scenarios, viscosity modes, compact storage, and restart within float accumulation roundoff passed")

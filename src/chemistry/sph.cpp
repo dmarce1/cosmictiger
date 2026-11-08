@@ -280,7 +280,7 @@ double sphCoolingPrepareLocal(std::vector<ParticleInteger> const& indices,
     double heating = 0.0;
     for (size_t selectedIndex = 0; selectedIndex < inputs.size(); ++selectedIndex) {
         auto const thermal = sph_entropy::prepareStoredEnergy(results[selectedIndex].storedEnergy,
-            inputs[selectedIndex].storedDensity, options.hydro.gamma, scaleFactor);
+            inputs[selectedIndex].storedDensity, options.hydro.heatCapacityRatio, scaleFactor);
         prepared.push_back(
             {indices[selectedIndex], thermal.entropy, results[selectedIndex].electronFraction});
         heating -= options.initial.gasMass *

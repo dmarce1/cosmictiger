@@ -478,7 +478,9 @@ uint32_t checkpointFlags(Options const& opts) {
         (opts.hydro.enabled ? kSph : 0U) | (opts.run.hierarchicalGravity ? kHierarchical : 0U) |
         (opts.lightcone.enabled ? kLightcone : 0U) | (opts.analysis.groups ? kGroups : 0U) |
         (opts.analysis.tracers ? kTracers : 0U) | (opts.chemistry.enabled ? kChemistry : 0U) |
-        (opts.hydro.enabled && opts.hydro.zPlaneAcceleration != 0.0 ? kZPlaneAcceleration : 0U) |
+        (opts.hydro.enabled && opts.scenario.rayleighTaylor.zPlaneAcceleration != 0.0 ?
+                kZPlaneAcceleration :
+                0U) |
         (opts.hydro.enabled ? kBalsaraSwitch : 0U) |
         (opts.hydro.enabled && opts.hydro.conductionCoefficient > 0.0 ? kArtificialConduction :
                                                                         0U) |
@@ -554,7 +556,7 @@ CheckpointHeader checkpointHeader(Options const& opts) {
     header.flags = checkpointFlags(opts);
     header.darkMatterMass = opts.initial.darkMatterMass;
     header.gasMass = opts.initial.gasMass;
-    header.gamma = opts.hydro.gamma;
+    header.gamma = opts.hydro.heatCapacityRatio;
     header.gravitySmoothingLength = opts.gravity.smoothingLength;
     header.gravitationalMass = opts.gravity.gm;
     header.omegaMatter = opts.cosmology.omegaM;
@@ -582,7 +584,7 @@ bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
         (header.flags & ~ignoredFlags) == (checkpointFlags(opts) & ~ignoredFlags) &&
         header.reserved == checkpointPhysicsCode(opts) &&
         header.darkMatterMass == opts.initial.darkMatterMass &&
-        header.gasMass == opts.initial.gasMass && header.gamma == opts.hydro.gamma &&
+        header.gasMass == opts.initial.gasMass && header.gamma == opts.hydro.heatCapacityRatio &&
         header.gravitySmoothingLength == opts.gravity.smoothingLength &&
         header.gravitationalMass == opts.gravity.gm &&
         header.omegaMatter == opts.cosmology.omegaM &&
@@ -599,8 +601,8 @@ std::array<double, 12> sphCheckpointParameters(Options const& opts) {
     return {opts.hydro.vonNeumannRichtmyerCoefficient, opts.hydro.viscosityEpsilon,
         opts.hydro.neighborNumber, opts.hydro.minSmoothingLength, opts.hydro.maxSmoothingLength,
         opts.hydro.cfl, opts.gravity.timestepEta, opts.hydro.yAcceleration,
-        opts.hydro.centralAcceleration, opts.hydro.centralSmoothingLength, opts.hydro.damping,
-        opts.gravity.enabled ? 1.0 : 0.0};
+        opts.scenario.disc.centralAcceleration, opts.scenario.disc.centralSmoothingLength,
+        opts.hydro.damping, opts.gravity.enabled ? 1.0 : 0.0};
 }
 
 std::array<double, 4> viscosityCheckpointParameters(Options const& opts) {
@@ -613,7 +615,7 @@ bool zPlaneCheckpointCompatible(double acceleration, Options const& opts) {
     uint64_t bits;
     std::memcpy(&bits, &acceleration, sizeof(bits));
     return (bits & 0x7ff0000000000000ULL) != 0x7ff0000000000000ULL &&
-        acceleration == opts.hydro.zPlaneAcceleration;
+        acceleration == opts.scenario.rayleighTaylor.zPlaneAcceleration;
 }
 
 std::array<uint64_t, 11> pmmmCheckpointParameters(Options const& opts) {
@@ -779,7 +781,8 @@ void writeDriverState(FILE* fp, DriverParameters const& params) {
         }
         // Optional extension: preserve the historical block and zero-force layout.
         if ((header.flags & kZPlaneAcceleration) != 0U &&
-            fwrite(&getOptions().hydro.zPlaneAcceleration, sizeof(double), 1, fp) != 1) {
+            fwrite(&getOptions().scenario.rayleighTaylor.zPlaneAcceleration, sizeof(double), 1,
+                fp) != 1) {
             THROW_ERROR("Unable to write SPH z-plane acceleration\n");
         }
         if ((header.flags & kVariableViscosity) != 0U) {
@@ -935,7 +938,8 @@ DriverParameters readDriverState(FILE* fp) {
                 double acceleration;
                 FREAD(&acceleration, sizeof(acceleration), 1, fp);
                 if (!zPlaneCheckpointCompatible(acceleration, getOptions())) {
-                    THROW_ERROR("SPH checkpoint hydro.zPlaneAcceleration differs from the "
+                    THROW_ERROR("SPH checkpoint scenario.rayleighTaylor.zPlaneAcceleration differs "
+                                "from the "
                                 "requested run\n");
                 }
             }
@@ -1488,7 +1492,8 @@ void checkpointStateTest() {
         try {
             setOptions(invalidOptions);
         } catch (std::invalid_argument const& error) {
-            rejected = std::string(error.what()).find("hydro.viscosityAlphaMax must not be") !=
+            rejected =
+                std::string(error.what()).find("hydro.viscosityCoefficientMax must not be") !=
                 std::string::npos;
         }
         ALWAYS_ASSERT(rejected);
@@ -1539,11 +1544,11 @@ void checkpointStateTest() {
     }
     auto planeOptions = getOptions();
     planeOptions.hydro.enabled = true;
-    planeOptions.hydro.zPlaneAcceleration = 0.0;
+    planeOptions.scenario.rayleighTaylor.zPlaneAcceleration = 0.0;
     auto const noPlaneHeader = detail::checkpointHeader(planeOptions);
     ALWAYS_ASSERT((noPlaneHeader.flags & detail::kZPlaneAcceleration) == 0U);
     auto const noPlaneParameters = detail::sphCheckpointParameters(planeOptions);
-    planeOptions.hydro.zPlaneAcceleration = 0.5;
+    planeOptions.scenario.rayleighTaylor.zPlaneAcceleration = 0.5;
     auto const planeHeader = detail::checkpointHeader(planeOptions);
     ALWAYS_ASSERT((planeHeader.flags & detail::kZPlaneAcceleration) != 0U);
     ALWAYS_ASSERT(!detail::checkpointCompatible(noPlaneHeader, planeOptions));
@@ -1551,7 +1556,7 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(noPlaneParameters == detail::sphCheckpointParameters(planeOptions));
     ALWAYS_ASSERT(detail::zPlaneCheckpointCompatible(0.5, planeOptions));
     ALWAYS_ASSERT(!detail::zPlaneCheckpointCompatible(0.25, planeOptions));
-    planeOptions.hydro.zPlaneAcceleration = 0.0;
+    planeOptions.scenario.rayleighTaylor.zPlaneAcceleration = 0.0;
     ALWAYS_ASSERT(!detail::checkpointCompatible(planeHeader, planeOptions));
     ALWAYS_ASSERT(!detail::zPlaneCheckpointCompatible(0.5, planeOptions));
     changed = getOptions();

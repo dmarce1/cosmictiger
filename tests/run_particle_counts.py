@@ -33,7 +33,7 @@ def main():
             "run.darkMatterParticleCount": dark_matter,
             "run.gasParticleCount": gas, "initial.closePack": str(close_pack).lower(),
             "hydro.enabled": str(gas != 0).lower(), "hydro.neighborNumber": 42,
-            "hydro.centralAcceleration": 1 if scenario == "disc" else 0,
+            "scenario.disc.centralAcceleration": 1 if scenario == "disc" else 0,
             "cosmology.sigma8": 0, "analysis.groups": "false", "analysis.views": "false",
             "analysis.power": "false", "analysis.tracers": "false", "lightcone.enabled": "false",
             "output.silo": "false", "output.directory": ".", "checkpoint.intervalSeconds": 0,

@@ -35,8 +35,8 @@ void requireFixtureChemistry(ParticleInteger gasIndex, int rank, int originalGas
     auto const expected = fixtureElectronFraction(rank, originalGasIndex);
     requireStarParticles(sphParticlesElectronFractions[gasIndex] == expected,
         "combined persistence changed the GADGET-4 electron guess");
-    auto const thermal = sph_entropy::prepareStoredEnergy(
-        float(2 + originalGasIndex), float(3 + originalGasIndex), getOptions().hydro.gamma, 1.0);
+    auto const thermal = sph_entropy::prepareStoredEnergy(float(2 + originalGasIndex),
+        float(3 + originalGasIndex), getOptions().hydro.heatCapacityRatio, 1.0);
     requireStarParticles(sphParticlesEntropyInitialized &&
             sphParticlesEntropies[gasIndex] == thermal.entropy &&
             sphParticlesProposedRung(gasIndex) == 3 + originalGasIndex,

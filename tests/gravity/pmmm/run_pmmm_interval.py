@@ -175,7 +175,7 @@ def main():
               "hydro.enabled": "false", "run.scenario": "plummer",
               "compute.positionType": args.position_type,
               "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512,
-              "initial.closePack": "false", "initial.cosmology.useGlass": "false",
+              "initial.closePack": "false", "scenario.cosmology.useGlass": "false",
               "chemistry.enabled": "false",
               # One coarse step of 0.005: with eta 0.04 the Plummer far acceleration
               # bound (about 4.1e-3) selects a non-dyadic first interval and the

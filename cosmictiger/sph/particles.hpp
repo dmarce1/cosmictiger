@@ -165,7 +165,7 @@ inline float sphParticlesInternalEnergy(ParticleInteger index) {
         return sphParticlesEntropies[index];
     }
     return sph_entropy::storedEnergy(sphParticlesEntropies[index], sphParticlesDensities[index],
-        getOptions().hydro.gamma, sphParticlesThermalScaleFactor);
+        getOptions().hydro.heatCapacityRatio, sphParticlesThermalScaleFactor);
 }
 
 // Initial conditions supply E before density exists. Later energy writes must convert to A.
@@ -173,7 +173,7 @@ inline void sphParticlesSetInternalEnergy(ParticleInteger index, float energy) {
     CHECK_SPH_PART_BOUNDS(index);
     sphParticlesEntropies[index] = sphParticlesEntropyInitialized ?
         sph_entropy::fromStoredEnergy(energy, sphParticlesDensities[index],
-            getOptions().hydro.gamma, sphParticlesThermalScaleFactor) :
+            getOptions().hydro.heatCapacityRatio, sphParticlesThermalScaleFactor) :
         energy;
 }
 
@@ -187,7 +187,7 @@ inline float& sphParticlesDensity(ParticleInteger index) {
 }
 
 inline float sphParticlesPressure(ParticleInteger index) {
-    // Options require hydro.gamma=5/3 whenever chemistry or star formation is enabled.
-    float const ratio = getOptions().hydro.gamma - 1.0f;
+    // Options require hydro.heatCapacityRatio=5/3 whenever chemistry or star formation is enabled.
+    float const ratio = getOptions().hydro.heatCapacityRatio - 1.0f;
     return ratio * sphParticlesDensity(index) * sphParticlesInternalEnergy(index);
 }

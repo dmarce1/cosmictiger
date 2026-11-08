@@ -296,7 +296,8 @@ void initialize(double z0) {
     terminal::detailPrint("D2 = %e\n", d2Value);
     terminal::detailPrint("Linear velocity factor = %e\n", linearVelocityFactor / a0);
     terminal::detailPrint("prefac2 = %e\n", prefac2 / a0);
-    int const latticePhases = interpolatedInitialConditions(getOptions().initial) ?
+    int const latticePhases = interpolatedInitialConditions(
+                                  getOptions().initial, getOptions().scenario.cosmology.useGlass) ?
         1 :
         (getOptions().initial.closePack ? 2 : 1) * (getOptions().hydro.enabled ? 2 : 1);
     for (int dim = 0; dim < kDimensions; dim++) {
@@ -323,7 +324,7 @@ void initialize(double z0) {
             }
         }
     }
-    if (getOptions().initial.cosmology.twoLpt) {
+    if (getOptions().scenario.cosmology.twoLpt) {
         profile::ScopedPhase profilePhase("initialize.twoLpt");
         twolptInit();
 
@@ -506,7 +507,8 @@ void twolptCorrection2(int dim, int latticePhase) {
                                 Vector3<float> const kValue = {kx, ky, kz};
                                 yValue[index] =
                                     -ComplexFloat(0, 1) * kValue[dim] * yValue[index] / k2;
-                                if (interpolatedInitialConditions(getOptions().initial)) {
+                                if (interpolatedInitialConditions(getOptions().initial,
+                                        getOptions().scenario.cosmology.useGlass)) {
                                     yValue[index] *= cloudFilter(kx * boxSize / n);
                                     yValue[index] *= cloudFilter(ky * boxSize / n);
                                     yValue[index] *= cloudFilter(kz * boxSize / n);
@@ -571,7 +573,8 @@ void twolptGenerate(int dim1, int dim2, bool velocity = false, int latticePhase 
                             factor * derivative[dim1] * derivative[dim2] / k2;
                         yValue[index] = lpt::interpolationCorrectedDerivative(
                             yValue[index], dim1, dim2, [=](ComplexFloat value) {
-                                if (interpolatedInitialConditions(getOptions().initial)) {
+                                if (interpolatedInitialConditions(getOptions().initial,
+                                        getOptions().scenario.cosmology.useGlass)) {
                                     value *= cloudFilter(kx * boxSize / n);
                                     value *= cloudFilter(ky * boxSize / n);
                                     value *= cloudFilter(kz * boxSize / n);
@@ -710,7 +713,8 @@ static void initX0() {
     }
     auto const& options = getOptions();
     auto const integerBox = findMyBox();
-    bool const interpolate = interpolatedInitialConditions(options.initial);
+    bool const interpolate =
+        interpolatedInitialConditions(options.initial, options.scenario.cosmology.useGlass);
     bool const identify = options.starFormation.enabled;
     size_t const largestCount =
         std::max(options.run.darkMatterParticleCount, options.run.gasParticleCount);
@@ -723,7 +727,7 @@ static void initX0() {
     int glassSide = 0;
     size_t glassCount = 0;
     std::array<std::vector<Fixed32>, kDimensions> glassPositions;
-    if (options.initial.cosmology.useGlass) {
+    if (options.scenario.cosmology.useGlass) {
         std::ifstream glassFile("glass.bin", std::ios::binary);
         glassFile.read(reinterpret_cast<char*>(&glassSide), sizeof(glassSide));
         if (!glassFile || glassSide <= 0) {
@@ -763,7 +767,7 @@ static void initX0() {
                 sourceIds.push_back(2 * sourceId + (gas ? 2 : 1));
             }
         };
-        if (options.initial.cosmology.useGlass) {
+        if (options.scenario.cosmology.useGlass) {
             if (side % glassSide != 0) {
                 THROW_ERROR("Resolved particle lattice is not a whole number of glass tiles\n");
             }
@@ -919,7 +923,8 @@ static float zeldovichEnd(
     double const boxSize =
         (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     auto box = findMyBox();
-    bool const glass = interpolatedInitialConditions(getOptions().initial);
+    bool const glass = interpolatedInitialConditions(
+        getOptions().initial, getOptions().scenario.cosmology.useGlass);
     if (glass) {
         for (int dim = 0; dim < kDimensions; dim++) {
             box.end[dim] += kCloudMax;

@@ -113,7 +113,7 @@ ScenarioPlan initializeSod() {
     sod.rhor = rho0;
     sod.pl = p1;
     sod.pr = p0;
-    sod.gamma = getOptions().hydro.gamma;
+    sod.gamma = getOptions().hydro.heatCapacityRatio;
     constexpr float kEta = 0.0;
     double const ne = getOptions().hydro.neighborNumber;
     terminal::detailPrint(
@@ -145,7 +145,8 @@ ScenarioPlan initializeSod() {
                     sphParticlesVelocity(kZi, i) = vz0;
                 }
                 sphParticlesRung(i) = 0;
-                sphParticlesSetInternalEnergy(i, p1 / (getOptions().hydro.gamma - 1.0) / rho1);
+                sphParticlesSetInternalEnergy(
+                    i, p1 / (getOptions().hydro.heatCapacityRatio - 1.0) / rho1);
                 i++;
                 x = (ix + 0.5) * dx;
                 y = (iy + 0.5) * dy;
@@ -169,7 +170,8 @@ ScenarioPlan initializeSod() {
                     sphParticlesVelocity(kZi, i) = vz0;
                 }
                 sphParticlesRung(i) = 0;
-                sphParticlesSetInternalEnergy(i, p1 / (getOptions().hydro.gamma - 1.0) / rho1);
+                sphParticlesSetInternalEnergy(
+                    i, p1 / (getOptions().hydro.heatCapacityRatio - 1.0) / rho1);
                 i++;
             }
         }
@@ -205,7 +207,8 @@ ScenarioPlan initializeSod() {
                 }
 
                 sphParticlesRung(i) = 0;
-                sphParticlesSetInternalEnergy(i, p0 / (getOptions().hydro.gamma - 1.0) / rho0);
+                sphParticlesSetInternalEnergy(
+                    i, p0 / (getOptions().hydro.heatCapacityRatio - 1.0) / rho0);
 
                 i++;
                 x = (ix + 0.5) * dx;
@@ -231,7 +234,8 @@ ScenarioPlan initializeSod() {
                 }
 
                 sphParticlesRung(i) = 0;
-                sphParticlesSetInternalEnergy(i, p0 / (getOptions().hydro.gamma - 1.0) / rho0);
+                sphParticlesSetInternalEnergy(
+                    i, p0 / (getOptions().hydro.heatCapacityRatio - 1.0) / rho0);
 
                 i++;
             }

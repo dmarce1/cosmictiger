@@ -65,26 +65,9 @@ struct Checkpoint {
     int intervalSeconds{};
 };
 
-struct CosmologyInitial {
-    std::string gadget4Restart{};
-    bool useGlass{};
-    bool twoLpt{};
-};
-
-struct PlummerInitial {
-    double radius{};
-};
-
-struct KelvinHelmholtzInitial {
-    std::string packing{"CV/C"};
-};
-
 struct Initial {
     bool cuda{};
     bool closePack{};
-    CosmologyInitial cosmology{};
-    PlummerInitial plummer{};
-    KelvinHelmholtzInitial kelvinHelmholz{};
     // Derived geometry and mass-normalization population, never public options.
     int latticeSide{};
     int darkMatterLatticeSide{};
@@ -99,8 +82,8 @@ struct Initial {
 
 // Equal even lattices retain exact spectral phase sampling. Other resolutions
 // use the existing interpolation-corrected LPT sampling on a common even FFT.
-inline bool interpolatedInitialConditions(Initial const& initial) {
-    return initial.cosmology.useGlass ||
+inline bool interpolatedInitialConditions(Initial const& initial, bool useGlass) {
+    return useGlass ||
         (initial.darkMatterLatticeSide != 0 &&
             initial.darkMatterLatticeSide != initial.fourierSize) ||
         (initial.gasLatticeSide != 0 && initial.gasLatticeSide != initial.fourierSize);
@@ -293,7 +276,7 @@ struct Hydro {
     std::string method{"sph"};
     std::string kernelFamily{"spline"};
     int kernelDegree{3};
-    // Pairs use beta_ij = viscosityBeta alpha_ij with Rosswog-limited Morris-Monaghan alpha.
+    // Pairs use beta_ij = vonNeumannRichtmyerCoefficient alpha_ij with Rosswog-limited alpha.
     double vonNeumannRichtmyerCoefficient{};
     double viscosityEpsilon{};
     double conductionCoefficient{0.0};
@@ -301,7 +284,7 @@ struct Hydro {
     double maximumBulkViscosityCoefficient{1.5};
     double viscosityDecay{0.2};
     double balsaraSoundSpeedCoefficient{1.0e-4};
-    double gamma{};
+    double heatCapacityRatio{};
     double cfl{};
     double neighborNumber{42.0};
     // Canonical support bounds in box units, normalized from input particle spacings.
@@ -309,11 +292,6 @@ struct Hydro {
     double maxSmoothingLength{};
     // Optional uniform external acceleration in the y direction.
     double yAcceleration{};
-    // Magnitude of the external acceleration toward the plane z = 0.5.
-    double zPlaneAcceleration{};
-    // Fixed central potential for the orbiting-disc gas test.
-    double centralAcceleration{};
-    double centralSmoothingLength{};
     // Velocity damping during the self-gravitating gas relaxation test.
     double damping{};
 };
@@ -342,6 +320,40 @@ struct StarFormation {
     std::uint64_t seed{42};
 };
 
+struct CosmologyScenario {
+    std::string gadget4Restart{};
+    bool useGlass{};
+    bool twoLpt{};
+};
+
+struct PlummerScenario {
+    double radius{};
+};
+
+struct KelvinHelmholtzScenario {
+    std::string packing{"CV/C"};
+};
+
+// Fixed central potential for the orbiting gas disc.
+struct DiscScenario {
+    double centralAcceleration{};
+    double centralSmoothingLength{};
+};
+
+struct RayleighTaylorScenario {
+    // Magnitude of the external acceleration toward the plane z = 0.5.
+    double zPlaneAcceleration{};
+};
+
+// Options read only by the run.scenario problem of the same name.
+struct Scenario {
+    CosmologyScenario cosmology{};
+    PlummerScenario plummer{};
+    KelvinHelmholtzScenario kelvinHelmholz{};
+    DiscScenario disc{};
+    RayleighTaylorScenario rayleighTaylor{};
+};
+
 struct Options {
     std::string configuration;
     Run run;
@@ -350,6 +362,7 @@ struct Options {
     Sort sort;
     Checkpoint checkpoint;
     Initial initial;
+    Scenario scenario;
     Output output;
     Analysis analysis;
     Lightcone lightcone;
@@ -384,19 +397,19 @@ struct Options {
         arc & initial.darkMatterMass;
         arc & initial.gasMass;
         arc & hydro.cfl;
-        arc & hydro.gamma;
+        arc & hydro.heatCapacityRatio;
         arc & hydro.yAcceleration;
-        arc & hydro.centralAcceleration;
-        arc & hydro.centralSmoothingLength;
+        arc & scenario.disc.centralAcceleration;
+        arc & scenario.disc.centralSmoothingLength;
         arc & initial.closePack;
         arc & initial.numberOfParticles;
-        arc & initial.cosmology.useGlass;
+        arc & scenario.cosmology.useGlass;
         arc & retiredGlassSelector;
-        arc & initial.cosmology.gadget4Restart;
+        arc & scenario.cosmology.gadget4Restart;
         arc & run.minRung;
         arc & run.treeOpeningAngle;
         arc & retiredPlummerSelector;
-        arc & initial.plummer.radius;
+        arc & scenario.plummer.radius;
         arc & cosmology.omegaK;
         arc & cosmology.omegaLambda;
         arc & compute.bucketSize;
@@ -422,7 +435,7 @@ struct Options {
         arc & output.yMax;
         arc & output.zMin;
         arc & output.zMax;
-        arc & initial.cosmology.twoLpt;
+        arc & scenario.cosmology.twoLpt;
         arc & lightcone.directory;
         arc & analysis.tracerCount;
         arc & initial.latticeSide;
@@ -483,7 +496,7 @@ struct Options {
         arc & chemistry.initializationTemperature;
         arc & chemistry.minimumSpecificEnergy;
         arc & run.verbose;
-        arc & hydro.zPlaneAcceleration;
+        arc & scenario.rayleighTaylor.zPlaneAcceleration;
         arc & hydro.method;
         arc & gravity.method;
         arc & gravity.meshSize;
@@ -533,7 +546,7 @@ struct Options {
         arc & run.gasParticleCount;
         arc & initial.darkMatterLatticeSide;
         arc & initial.gasLatticeSide;
-        arc & initial.kelvinHelmholz.packing;
+        arc & scenario.kelvinHelmholz.packing;
     }
 };
 

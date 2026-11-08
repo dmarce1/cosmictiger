@@ -233,16 +233,17 @@ void sphSourceTimingTest() {
     options.hydro.minSmoothingLength = options.hydro.maxSmoothingLength = 0.45f;
     options.hydro.damping = 0.0;
     options.hydro.yAcceleration = 0.0;
-    options.hydro.zPlaneAcceleration = 0.0;
-    options.hydro.centralAcceleration = 0.0;
+    options.scenario.rayleighTaylor.zPlaneAcceleration = 0.0;
+    options.scenario.disc.centralAcceleration = 0.0;
     double const baseTimestep = 1.0e8 / (detail::kSourceScale * options.units.timeSeconds);
     sphTreeDestroy(true);
     setOptions(options);
     // Give the fine interval one decay time, so an endpoint update is
     // visible in half storage even with cosmological code units.
     auto const sourceParameters = starFormationParameters(detail::kSourceScale);
-    double const soundSpeed = std::sqrt(options.hydro.gamma * (options.hydro.gamma - 1.0) * 1.0e12 *
-        detail::kSourceScale * detail::kSourceScale / sourceParameters.energyScale);
+    double const soundSpeed =
+        std::sqrt(options.hydro.heatCapacityRatio * (options.hydro.heatCapacityRatio - 1.0) *
+            1.0e12 * detail::kSourceScale * detail::kSourceScale / sourceParameters.energyScale);
     double const smoothingLength = options.hydro.minSmoothingLength /
         selectedHydroKernel().smoothingLengthPerEffectiveRadius * monaghan::kViscosityWidthScale;
     options.hydro.viscosityDecay =

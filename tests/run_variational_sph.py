@@ -503,7 +503,7 @@ def main():
                ("cosmology", gamma), integrator=integrators[0],
                resolution=8, kind="cosmology", timeout=kCosmologyTimeout,
                overrides={"chemistry.enabled": "false", "starFormation.enabled": "false",
-                          "hydro.gamma": gammas[gamma], "run.numberOfSteps": "2048",
+                          "hydro.heatCapacityRatio": gammas[gamma], "run.numberOfSteps": "2048",
                           "run.maxIterations": "5"})
 
     mpiSpecs = []

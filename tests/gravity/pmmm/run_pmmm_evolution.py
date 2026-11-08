@@ -119,7 +119,7 @@ def main():
               "drift.cuda": str(args.cuda).lower(),
               "compute.positionType": args.position_type,
               "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.closePack": "false",
-              "initial.cosmology.useGlass": "false", "chemistry.enabled": "false",
+              "scenario.cosmology.useGlass": "false", "chemistry.enabled": "false",
               "run.endTime": 0.005, "run.numberOfSteps": 4,
               "analysis.groups": "false", "analysis.tracers": "false",
               "analysis.views": "false", "analysis.power": "false", "lightcone.enabled": "false",

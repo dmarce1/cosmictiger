@@ -123,7 +123,7 @@ void rejectDuplicateCoolingTargets() {
     requireChemistry(before == chemistryFixtureSnapshot(), "duplicate source changed gas state");
 }
 void checkThermalProjection() {
-    double const gamma = getOptions().hydro.gamma;
+    double const gamma = getOptions().hydro.heatCapacityRatio;
     auto const prepared = sph_entropy::prepareStoredEnergy(3.0f, 7.0f, gamma, kChemistryTestScale);
     double const expectedEntropy = (gamma - 1.0) * 3.0 * std::pow(7.0, 1.0 - gamma);
     requireChemistry(std::abs(double(prepared.entropy) - expectedEntropy) <
@@ -194,7 +194,7 @@ void requireCompletedSource(ChemistrySnapshot const& before, ChemistrySnapshot c
             float const newEnergy = std::bit_cast<float>(newRecord.energyBits);
             double const density = std::bit_cast<float>(newRecord.densityBits);
             double const entropy = std::bit_cast<float>(newRecord.entropyBits);
-            double const gamma = getOptions().hydro.gamma;
+            double const gamma = getOptions().hydro.heatCapacityRatio;
             double const expectedEntropy =
                 (gamma - 1.0) * double(newEnergy) * std::pow(density, 1.0 - gamma);
             requireChemistry(std::abs(entropy - expectedEntropy) <=

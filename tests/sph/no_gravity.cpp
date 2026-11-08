@@ -30,9 +30,9 @@ void sphOnlyDiagnosticsTest() {
     options.hydro.minSmoothingLength = 0.25;
     options.hydro.maxSmoothingLength = 0.25;
     options.hydro.damping = 0.0;
-    options.hydro.centralAcceleration = 0.0;
+    options.scenario.disc.centralAcceleration = 0.0;
     options.hydro.yAcceleration = 0.0;
-    options.hydro.zPlaneAcceleration = 0.0;
+    options.scenario.rayleighTaylor.zPlaneAcceleration = 0.0;
     options.initial.gasMass = 0.125;
     options.run.minRung = 0;
     setOptions(options);
@@ -104,7 +104,7 @@ void sphOnlyDiagnosticsTest() {
     sphParticlesDensity(0) *= 8.0f;
     if (sphParticlesEntropy(0) != initialEntropy ||
         std::abs(sphParticlesInternalEnergy(0) / initialEnergy -
-            std::pow(8.0, options.hydro.gamma - 1.0)) > 1.e-5) {
+            std::pow(8.0, options.hydro.heatCapacityRatio - 1.0)) > 1.e-5) {
         throw std::runtime_error("Adiabatic compression did not preserve entropy");
     }
     float predictedEnergy, support;
@@ -113,8 +113,8 @@ void sphOnlyDiagnosticsTest() {
     range.range.first = 0;
     range.range.second = 1;
     sphParticlesGlobalReadInternalEnergyAndSmoothingLength(range, &predictedEnergy, &support, 0);
-    double const expectedEnergy =
-        sph_entropy::storedEnergy(initialEntropy, sphParticlesDensity(0), options.hydro.gamma, 0.5);
+    double const expectedEnergy = sph_entropy::storedEnergy(
+        initialEntropy, sphParticlesDensity(0), options.hydro.heatCapacityRatio, 0.5);
     if (std::abs(predictedEnergy - expectedEnergy) > 1.e-5 * expectedEnergy) {
         throw std::runtime_error("Staging did not derive energy from live canonical entropy");
     }

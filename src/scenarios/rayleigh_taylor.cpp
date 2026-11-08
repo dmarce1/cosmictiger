@@ -33,10 +33,10 @@ ScenarioPlan initializeRayleighTaylor() {
     constexpr double kHeavyDensity = 2.0;
     constexpr double kBoundaryPressure = 1.5;
     constexpr double kVelocityAmplitude = 0.1;
-    double const acceleration = opts.hydro.zPlaneAcceleration;
+    double const acceleration = opts.scenario.rayleighTaylor.zPlaneAcceleration;
     if (!(acceleration > 0.0)) {
         throw std::invalid_argument(
-            "The Rayleigh-Taylor scenario requires hydro.zPlaneAcceleration > 0");
+            "The Rayleigh-Taylor scenario requires scenario.rayleighTaylor.zPlaneAcceleration > 0");
     }
     opts.run.gasParticleCount = particleCount;
     opts.initial.gasMass = 0.5 * kLightDensity / lightCount;
@@ -66,7 +66,8 @@ ScenarioPlan initializeRayleighTaylor() {
                         acceleration *
                             (kHeavyDensity * (0.5 - std::fmax(distanceFromMiddle, 0.25)) +
                                 kLightDensity * std::fmax(0.25 - distanceFromMiddle, 0.0));
-                    double const internalEnergy = pressure / ((opts.hydro.gamma - 1.0) * density);
+                    double const internalEnergy =
+                        pressure / ((opts.hydro.heatCapacityRatio - 1.0) * density);
                     double const transverse = x.toDouble() - 0.5;
                     // Retain the legacy multiharmonic seed (d8e95728), made
                     // antisymmetric in z by 5e926504. The transverse Fourier

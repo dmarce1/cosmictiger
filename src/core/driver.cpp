@@ -1861,10 +1861,10 @@ void driver() {
         } else
 #endif
         {
-            if (getOptions().initial.cosmology.gadget4Restart.empty()) {
+            if (getOptions().scenario.cosmology.gadget4Restart.empty()) {
                 scenarios::initializeCosmology(params);
             } else {
-                particlesReadGadget4(getOptions().initial.cosmology.gadget4Restart);
+                particlesReadGadget4(getOptions().scenario.cosmology.gadget4Restart);
                 params.a = a0;
                 params.adot = cosmosDadt(a0);
                 params.tauMax = cosmology::configuredDuration(a0);
@@ -2263,7 +2263,7 @@ void driver() {
                 }
 #endif
             }
-            if (getOptions().initial.cosmology.useGlass && minrung == minrung0) {
+            if (getOptions().scenario.cosmology.useGlass && minrung == minrung0) {
                 //			particles_displace(rand1(), rand1(), rand1());
             }
             resetFlops();
@@ -2397,7 +2397,8 @@ void driver() {
             double const driftThermal = energies.therm;
             double const workEndScale = midpointHydro ? midpointScale : a;
             energies.cosmic += cosmology::kineticExpansionWork(a0, workEndScale, energies.tckin) +
-                (workEndScale - a0) * (3.0 * getOptions().hydro.gamma - 4.0) * driftThermal;
+                (workEndScale - a0) * (3.0 * getOptions().hydro.heatCapacityRatio - 4.0) *
+                    driftThermal;
             double const dyears =
                 physicalInterval * getOptions().units.timeSeconds / constants::kSpyr;
             auto const z0 = 1.0 / a0 - 1.0;
@@ -2445,7 +2446,7 @@ void driver() {
                 energies.tckin = afterHydro.kin;
                 energies.cosmic +=
                     cosmology::kineticExpansionWork(midpointScale, a, afterHydro.kin) +
-                    (a - midpointScale) * (3.0 * getOptions().hydro.gamma - 4.0) *
+                    (a - midpointScale) * (3.0 * getOptions().hydro.heatCapacityRatio - 4.0) *
                         afterHydro.therm / sqr(midpointScale);
                 // Complete each old gas interval before the next gravity
                 // boundary changes its rung. Checkpoints therefore contain

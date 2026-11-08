@@ -114,9 +114,9 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
     Options configured{};
     configured.run.gasParticleCount = size_t(resolution) * resolution * resolution;
     configured.hydro.enabled = true;
-    configured.hydro.gamma = 5.0 / 3.0;
+    configured.hydro.heatCapacityRatio = 5.0 / 3.0;
     configured.hydro.neighborNumber = 42.0;
-    configured.hydro.zPlaneAcceleration = acceleration;
+    configured.scenario.rayleighTaylor.zPlaneAcceleration = acceleration;
     setOptions(configured);
     auto const plan = scenarios::initializeRayleighTaylor();
     require(plan.stages.size() == 1, "Rayleigh-Taylor has one evolution stage");
@@ -146,7 +146,7 @@ void testInitialization(int resolution, ParticleInteger expectedCount, double ac
         }
         require(occupied.insert(key).second, "particle positions must be unique");
         double const energy = sphParticlesInternalEnergy(i);
-        double const pressure = (configured.hydro.gamma - 1.0) * density * energy;
+        double const pressure = (configured.hydro.heatCapacityRatio - 1.0) * density * energy;
         double const distance = std::abs(z - 0.5);
         // Integrate the weight inward from P=1.5 at z=0 or z=1.
         double const expectedPressure = heavy ?
@@ -252,7 +252,7 @@ TEST(RayleighTaylor, RequiresDrivingAcceleration) {
         sphParticlesResize(0);
         Options configured{};
         configured.run.gasParticleCount = 512;
-        configured.hydro.zPlaneAcceleration = acceleration;
+        configured.scenario.rayleighTaylor.zPlaneAcceleration = acceleration;
         setOptions(configured);
         EXPECT_THROW(scenarios::initializeRayleighTaylor(), std::invalid_argument);
         EXPECT_EQ(sphParticlesSize(), 0);

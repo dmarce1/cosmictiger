@@ -767,8 +767,8 @@ void runSphMidpointPairRegression(bool useCuda) {
     options.hydro.maximumBulkViscosityCoefficient = 1.0;
     options.hydro.vonNeumannRichtmyerCoefficient = 2.0;
     options.hydro.minSmoothingLength = options.hydro.maxSmoothingLength = 0.25;
-    options.hydro.damping = options.hydro.centralAcceleration = 0.0;
-    options.hydro.yAcceleration = options.hydro.zPlaneAcceleration = 0.0;
+    options.hydro.damping = options.scenario.disc.centralAcceleration = 0.0;
+    options.hydro.yAcceleration = options.scenario.rayleighTaylor.zPlaneAcceleration = 0.0;
     options.initial.numberOfParticles = 2;
     auto const collect = [](bool emptyRoot) {
         Array<double, 14> total{};

@@ -93,7 +93,7 @@ The accepted radius options are:
 | Purpose | Effective-radius key | Support-radius key | Units and kernel |
 | --- | --- | --- | --- |
 | Fixed comoving gravity | `gravity.effectiveRadius` | `gravity.smoothingLength` | Initial reference spacings; gravity kernel |
-| Imposed central force | `hydro.centralEffectiveRadius` | `hydro.centralSmoothingLength` | Box units; gravity kernel |
+| Imposed central force | `scenario.disc.centralEffectiveRadius` | `scenario.disc.centralSmoothingLength` | Box units; gravity kernel |
 
 SPH support bounds take only support radii: `hydro.minSmoothingLength` and
 `hydro.maxSmoothingLength`, in initial interparticle spacings.
@@ -104,11 +104,11 @@ the existing radius-input convention. Cosmological SPH runs use
 spacing for one class, not the smaller mean spacing of the combined gas and
 dark-matter population.
 
-`gravity.softening` and `hydro.centralSoftening` are deprecated aliases for
-`gravity.effectiveRadius` and `hydro.centralEffectiveRadius`. They still parse with
-the same numeric values and units, but each explicit use prints a warning naming the
-replacement key, and neither appears in help, the resolved option listing, or
-output metadata. Changing a kernel at
+`gravity.softening` is a deprecated alias for `gravity.effectiveRadius`. It still
+parses with the same numeric value and units, but each explicit use prints a warning
+naming the replacement key, and it appears in neither help, the resolved option listing,
+nor output metadata. The former `hydro.centralSoftening` alias was removed when the
+central-force radius moved to `scenario.disc`. Changing a kernel at
 fixed effective radius changes its support radius using the factor above.
 
 Both representations may be specified. An explicit effective-radius key takes
@@ -116,7 +116,7 @@ precedence over its deprecated softening alias, and either takes precedence over
 support-radius key. Each ignored key produces a warning identifying that key.
 This precedence applies across command-line and INI inputs; the command line
 overrides an INI value for the same key. Because the shipped presets set
-`gravity.effectiveRadius` and `hydro.centralEffectiveRadius`, a deprecated alias given
+`gravity.effectiveRadius` and `scenario.disc.centralEffectiveRadius`, a deprecated alias given
 on the command line does not override a preset; pass the replacement key instead. Defaults do not count as explicit
 settings. To use support-radius input with a repository example INI, remove or
 comment out its active effective-radius setting.
@@ -267,7 +267,7 @@ unit conversion.
 
 Viscosity uses a fixed reference factor `sqrt(5/6)` times the mean SPH effective
 radius. This equals Monaghan's `smoothingLength/2` for the cubic and preserves the meaning of
-the existing cubic viscosity α bounds, `viscosityBeta`, and regularization settings.
+the existing cubic viscosity α bounds, `vonNeumannRichtmyerCoefficient`, and regularization settings.
 The hydro acceleration limit additionally retains a fixed reference calibration
 `0.7115965735877551` multiplying gravity eta, preserving the historical
 cubic/Ferrers F4 acceleration calibration through the radius-unit conversion.

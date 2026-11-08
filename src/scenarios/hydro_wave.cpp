@@ -37,7 +37,7 @@ ScenarioPlan initializeHydroWave() {
                 double x = (ix + 0.5) * dx;
                 double y = (iy + 0.5) * dx;
                 double z = (iz + 0.5) * dx;
-                double eint = p0 / rho / (getOptions().hydro.gamma - 1);
+                double eint = p0 / rho / (getOptions().hydro.heatCapacityRatio - 1);
                 double h = sph_geometry::supportRadius(m, rho, getOptions().hydro.neighborNumber);
 
                 if (ix == ndim / 2) {

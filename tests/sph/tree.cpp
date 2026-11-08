@@ -673,8 +673,8 @@ void verifySphMidpointUpdates() {
     options.hydro.method = "sph";
     options.hydro.damping = 0.0;
     options.hydro.yAcceleration = 0.0;
-    options.hydro.zPlaneAcceleration = 0.0;
-    options.hydro.centralAcceleration = 0.0;
+    options.scenario.rayleighTaylor.zPlaneAcceleration = 0.0;
+    options.scenario.disc.centralAcceleration = 0.0;
     options.chemistry.enabled = false;
     options.starFormation.enabled = false;
     options.gravity.enabled = false;
@@ -756,7 +756,7 @@ void verifySphMidpointUpdates() {
     // factor), so the expected energy uses the live density with the recorded entropy.
     for (int gas = 0; gas < 2; ++gas) {
         double const expectedEnergy = sph_entropy::storedEnergy(
-            entropies[gas], sphParticlesDensities[gas], options.hydro.gamma, 1.0);
+            entropies[gas], sphParticlesDensities[gas], options.hydro.heatCapacityRatio, 1.0);
         requireSphTree(velocityX[gas] == velocities[gas] &&
                 std::abs(internalEnergy[gas] - expectedEnergy) < 1.0e-6 * expectedEnergy,
             "source staging replayed a rate or used stale physical state");
@@ -810,14 +810,14 @@ void verifySphTemporalOrder() {
     auto options = savedOptions;
     options.hydro.enabled = true;
     options.hydro.method = "sph";
-    options.hydro.gamma = 5.0 / 3.0;
+    options.hydro.heatCapacityRatio = 5.0 / 3.0;
     options.hydro.minimumBulkViscosityCoefficient = 0.7;
     options.hydro.maximumBulkViscosityCoefficient = 0.7;
     options.hydro.vonNeumannRichtmyerCoefficient = 1.0;
     options.hydro.viscosityEpsilon = 0.01;
     options.hydro.yAcceleration = 0.0;
-    options.hydro.zPlaneAcceleration = 0.0;
-    options.hydro.centralAcceleration = 0.0;
+    options.scenario.rayleighTaylor.zPlaneAcceleration = 0.0;
+    options.scenario.disc.centralAcceleration = 0.0;
     options.chemistry.enabled = false;
     options.starFormation.enabled = false;
     options.gravity.enabled = false;

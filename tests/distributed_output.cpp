@@ -117,7 +117,8 @@ DistributedOutputScales distributedOutputScales(bool cosmological, bool lab) {
         (cosmological ? std::pow(constants::kMpcToCm, 3) / (constants::kM0 * hubble * hubble) :
                         1.0);
     scales.entropy = length * length / (time * time) * (cosmological ? 1e-10 : 1.0) *
-        std::pow(scales.density * (lab ? a * a * a : 1.0), 1.0 - getOptions().hydro.gamma);
+        std::pow(
+            scales.density * (lab ? a * a * a : 1.0), 1.0 - getOptions().hydro.heatCapacityRatio);
     return scales;
 }
 

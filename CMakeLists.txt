@@ -1406,7 +1406,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 add_test(NAME ${boltzmann_smoke} COMMAND ${Python3_EXECUTABLE}
                     ${PROJECT_SOURCE_DIR}/tests/run_smoke.py dm_cpu $<TARGET_FILE:cosmictiger>
                     ${PROJECT_BINARY_DIR}/tests/${boltzmann_smoke}
-                    --extra-option=--initial.cosmology.twoLpt=${boltzmann_two_lpt}
+                    --extra-option=--scenario.cosmology.twoLpt=${boltzmann_two_lpt}
                     --extra-option=--run.timeIntegrator=${cosmictiger_default_integrator}
                     --extra-option=--gravity.method.far=fmm)
                 set_tests_properties(${boltzmann_smoke}
@@ -1752,7 +1752,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         file(MAKE_DIRECTORY "${units_workdir}")
         add_test(NAME units_output_none COMMAND cosmictiger --run.test=unitsOutput
             --compute.positionType=${COSMICTIGER_POSITION_TYPE}
-            --hydro.viscosityAlphaMin=1 --hydro.viscosityAlphaMax=1
+            --hydro.viscosityCoefficientMin=1 --hydro.viscosityCoefficientMax=1
             --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
             --hpx:threads=2 --hpx:bind=none
             ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})

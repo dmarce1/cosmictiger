@@ -945,10 +945,10 @@ SphRunData SphRunWorkspace::data() {
     addCpuFlops(2, FlopPrecision::Double);
     runData.selfGravityEnabled = false;
 #endif
-    runData.adiabaticIndex = getOptions().hydro.gamma;
+    runData.adiabaticIndex = getOptions().hydro.heatCapacityRatio;
     runData.numberOfTargetNodes = hostTargetNodeIndices.size();
-    runData.centralAcceleration = getOptions().hydro.centralAcceleration;
-    runData.centralSmoothingLength = getOptions().hydro.centralSmoothingLength;
+    runData.centralAcceleration = getOptions().scenario.disc.centralAcceleration;
+    runData.centralSmoothingLength = getOptions().scenario.disc.centralSmoothingLength;
     runData.targetNeighborCount = getOptions().hydro.neighborNumber;
     runData.gasMass = getOptions().initial.gasMass;
     runData.accelerationTimestepFactor = getOptions().gravity.timestepEta;

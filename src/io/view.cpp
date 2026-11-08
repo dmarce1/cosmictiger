@@ -301,7 +301,8 @@ public:
                 (constants::kM0 * context_.hubbleParameter() * context_.hubbleParameter());
         }
         // A = P_physical / rho_physical^gamma: no scale-factor or frame conversion.
-        return value * energyScale * std::pow(densityScale, 1.0 - getOptions().hydro.gamma);
+        return value * energyScale *
+            std::pow(densityScale, 1.0 - getOptions().hydro.heatCapacityRatio);
     }
 
     double frequency(double value) const {
@@ -388,7 +389,7 @@ void writeParticleExpressions(
             number(converted ? conversion.mass(mass) : mass) + ")",
         converted ? (cosmological ? "Msun/h" : "g") : "code");
     if (gas) {
-        double const γ = options.hydro.gamma;
+        double const γ = options.hydro.heatCapacityRatio;
         // Derived from the stored-state definitions in docs/units.md:
         //   ρc = a³ ρphys, A = Pphys/ρphys^γ, Pstored = a⁵ Pphys.
         //   Pstored = A ρc^γ a^(5−3γ); Pphys = A ρview^γ a^(−3γ)
@@ -682,7 +683,7 @@ void writeConvertedView(DBfile* db, ViewDirectoryMetadata& metadata, ViewParticl
     writeViewText(db, "mass_unit", massUnit);
     writeViewText(db, "density_unit", densityUnit);
     writeViewText(db, "entropy_unit", entropyUnit);
-    writeViewScalar(db, "adiabatic_index", getOptions().hydro.gamma);
+    writeViewScalar(db, "adiabatic_index", getOptions().hydro.heatCapacityRatio);
     writeViewClock(db, time, cycle);
     writeViewScalar(db, "scale_factor", a);
     writeViewScalar(db, "hubble_parameter", getOptions().cosmology.hubble);
@@ -765,7 +766,7 @@ ViewSnapshot collectViewParticles(double a) {
             gas.entropy = sphParticlesEntropyInitialized ?
                 sphParticlesEntropy(index) :
                 sph_entropy::fromStoredEnergy(sphParticlesInternalEnergy(index),
-                    sphParticlesDensity(index), getOptions().hydro.gamma, a);
+                    sphParticlesDensity(index), getOptions().hydro.heatCapacityRatio, a);
             gas.rho = sphParticlesDensity(index);
             gas.smoothingLength = sphParticlesSmoothingLength(index);
             gas.alpha = sphParticlesBulkViscosityCoefficients[index];

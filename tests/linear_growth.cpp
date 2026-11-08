@@ -858,7 +858,7 @@ void evolveLinearModes(LinearExperiment const& experiment, std::string const& fi
 void linearGrowthTest() {
     auto options = getOptions();
     if (hpxSize() != 1 || options.initial.latticeSide < 4 || options.initial.latticeSide > 32 ||
-        options.initial.closePack || options.initial.cosmology.useGlass) {
+        options.initial.closePack || options.scenario.cosmology.useGlass) {
         throw std::runtime_error(
             "linearGrowth requires one locality, 4 <= N <= 32 and no standard glass/close-pack "
             "loader; "

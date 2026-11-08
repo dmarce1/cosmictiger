@@ -107,7 +107,7 @@ def main():
                                           if name in available["integrator"]]
     require(integrators, "global or traditional integration is required")
     common = {"hpx:threads": args.threads, "hpx:bind": "none", **cpu_backend_options(),
-              "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "initial.cosmology.useGlass": "false",
+              "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "scenario.cosmology.useGlass": "false",
               "initial.closePack": "false", "hydro.enabled": "true",
               "gravity.enabled": "true", "chemistry.enabled": "false",
               "starFormation.enabled": "false", "analysis.groups": "false",
@@ -116,7 +116,7 @@ def main():
               "lightcone.enabled": "false", "output.silo": "false",
               "output.directory": ".", "checkpoint.intervalSeconds": 0,
               "run.verbose": "true", "compute.sphBucketSize": 16,
-              "hydro.viscosityAlphaMin": 1, "hydro.viscosityAlphaMax": 1}
+              "hydro.viscosityCoefficientMin": 1, "hydro.viscosityCoefficientMax": 1}
     common["gravity.cuda"] = "true" if args.cuda or args.gravity_cuda else "false"
     common["hydro.cuda"] = "true" if args.cuda or args.hydro_cuda else "false"
 

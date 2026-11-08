@@ -64,7 +64,7 @@ namespace detail {
             neighbors.operation = SphNeighborOperation::RefreshBounds;
             sphTreeNeighbor(neighbors, root, Vector<TreeId>{}).get();
         }
-        float const γ_minus_1 = getOptions().hydro.gamma - 1.0f;
+        float const γ_minus_1 = getOptions().hydro.heatCapacityRatio - 1.0f;
         for (ParticleInteger particle = 0; particle < sphParticlesSize(); ++particle) {
             // Derived ideal-gas conversion, using the EOS in sphParticlesPressure:
             // P = (γ − 1) ρ u  =>  u = P / [(γ − 1) ρ].
@@ -84,7 +84,7 @@ namespace detail {
 ScenarioPlan initializeKelvinHelmholtz() {
     auto opts = getOptions();
     auto const packing =
-        parseKelvinHelmholtzPacking(opts.initial.kelvinHelmholz.packing, kSpatialDimensions);
+        parseKelvinHelmholtzPacking(opts.scenario.kelvinHelmholz.packing, kSpatialDimensions);
     auto const layout = particle_count::roundKelvinHelmholtz(
         opts.run.gasParticleCount, packing.low.sitesPerCell(kSpatialDimensions));
     int const n = layout.side;

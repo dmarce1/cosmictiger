@@ -199,7 +199,7 @@ def checkViscosityRestarts(executable, baseWorkdir):
     # Equal alpha bounds give constant viscosity; the default bounds evolve alpha.
     for model in ("constant", "evolving"):
         name = f"viscosity_{model}"
-        options = common + (["--hydro.viscosityAlphaMin=1", "--hydro.viscosityAlphaMax=1",
+        options = common + (["--hydro.viscosityCoefficientMin=1", "--hydro.viscosityCoefficientMax=1",
                              "--hydro.conductionCoefficient=0.3"] if model == "constant" else [])
         reference = prepareCase(baseWorkdir, name)
         runSimulation(options + ["--run.maxIterations=2"], reference, "run.log")
@@ -222,15 +222,15 @@ def checkViscosityRestarts(executable, baseWorkdir):
             reference / "checkpoint.2", resumed / "checkpoint.2")
         checkManifest(resumed / "checkpoint.2", 2, scenario="hydroWave", endTime=1.e-5,
                       gravity=False)
-        mutations = {"ceiling": "--hydro.viscosityAlphaMax=" + (
+        mutations = {"ceiling": "--hydro.viscosityCoefficientMax=" + (
             "1.5" if model == "constant" else "1"),
-                     "beta": "--hydro.viscosityBeta=3",
+                     "beta": "--hydro.vonNeumannRichtmyerCoefficient=3",
                      "balsara": "--hydro.balsaraSoundSpeedCoefficient=0.01"}
         if model == "constant":
             mutations.update({"conduction_off": "--hydro.conductionCoefficient=0",
                               "conduction_changed": "--hydro.conductionCoefficient=0.6"})
         if model == "evolving":
-            mutations.update({"floor": "--hydro.viscosityAlphaMin=0.2",
+            mutations.update({"floor": "--hydro.viscosityCoefficientMin=0.2",
                               "decay": "--hydro.viscosityDecay=0.3"})
         for label, changed in mutations.items():
             directory = prepareCase(baseWorkdir, name + "_reject_" + label, checkpoint)

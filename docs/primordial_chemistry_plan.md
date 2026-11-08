@@ -321,7 +321,7 @@ symmetric splitting does not make the backward-Euler source solver second order.
 | Checkpoint code and output writers | Save species convention, network/rate/EOS/radiation versions, tables, units, particle state and split/rung timing; expose species, temperature and chemistry diagnostics |
 | `CMakeLists.txt`, `tests/` | Add independent CPU tests, CUDA parity tests, integration/restart tests and controlled benchmarks |
 
-Current SPH uses one configured `hydro.gamma` for pressure, sound speed and the
+Current SPH uses one configured `hydro.heatCapacityRatio` for pressure, sound speed and the
 expansion term. Replacing that constant with a local value is insufficient by
 itself: derive the expansion and thermal conversion from the new EOS and verify
 the adiabatic limit. Chemistry-disabled runs must retain their present behavior.

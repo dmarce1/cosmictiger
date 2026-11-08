@@ -147,12 +147,14 @@ void validateViscosityStorage(Options const& opts) {
         if (!isFiniteOption(coefficient) ||
             (coefficient != 0.0 && coefficient < kMinimumHalfCoefficient) ||
             coefficient > kMaximumHalfCoefficient) {
-            throwOptionError("hydro.viscosityAlphaMin and hydro.viscosityAlphaMax must be zero "
-                             "or lie in [2^-24, 65504] for binary16 viscosity storage\n");
+            throwOptionError(
+                "hydro.viscosityCoefficientMin and hydro.viscosityCoefficientMax must be zero "
+                "or lie in [2^-24, 65504] for binary16 viscosity storage\n");
         }
     }
     if (opts.hydro.maximumBulkViscosityCoefficient < opts.hydro.minimumBulkViscosityCoefficient) {
-        throwOptionError("hydro.viscosityAlphaMax must not be below hydro.viscosityAlphaMin\n");
+        throwOptionError(
+            "hydro.viscosityCoefficientMax must not be below hydro.viscosityCoefficientMin\n");
     }
 }
 
@@ -229,8 +231,10 @@ void validateCooling(Options const& opts) {
     if (!opts.hydro.enabled) {
         throw std::invalid_argument("chemistry.enabled requires hydro.enabled=true");
     }
-    if (!isFiniteOption(opts.hydro.gamma) || std::abs(opts.hydro.gamma - 5.0 / 3.0) > 1.0e-12) {
-        throw std::invalid_argument("GADGET-4 equilibrium cooling requires hydro.gamma=5/3");
+    if (!isFiniteOption(opts.hydro.heatCapacityRatio) ||
+        std::abs(opts.hydro.heatCapacityRatio - 5.0 / 3.0) > 1.0e-12) {
+        throw std::invalid_argument(
+            "GADGET-4 equilibrium cooling requires hydro.heatCapacityRatio=5/3");
     }
     if (!isFiniteOption(opts.chemistry.initializationTemperature) ||
         opts.chemistry.initializationTemperature < 0.0 ||
@@ -326,7 +330,8 @@ Options const& getOptions() {
 
 void setOptions(Options const& requested) {
     Options opts = requested;
-    scenarios::parseKelvinHelmholtzPacking(opts.initial.kelvinHelmholz.packing, kSpatialDimensions);
+    scenarios::parseKelvinHelmholtzPacking(
+        opts.scenario.kelvinHelmholz.packing, kSpatialDimensions);
     detail::validateRockstar(opts);
     detail::validateCudaBackends(opts);
     detail::validateHydroMethod(opts);
@@ -504,12 +509,12 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"gravity.cuda.kickListReserve", options.gravity.cudaKickListReserve},
         {"checkpoint.readIndex", options.checkpoint.readIndex},
         {"checkpoint.intervalSeconds", options.checkpoint.intervalSeconds},
-        {"initial.cosmology.gadget4Restart", options.initial.cosmology.gadget4Restart},
-        {"initial.cosmology.useGlass", options.initial.cosmology.useGlass},
-        {"initial.plummer.radius", options.initial.plummer.radius},
+        {"scenario.cosmology.gadget4Restart", options.scenario.cosmology.gadget4Restart},
+        {"scenario.cosmology.useGlass", options.scenario.cosmology.useGlass},
+        {"scenario.plummer.radius", options.scenario.plummer.radius},
         {"initial.closePack", options.initial.closePack},
-        {"initial.cosmology.twoLpt", options.initial.cosmology.twoLpt},
-        {"initial.kelvinHelmholz.packing", options.initial.kelvinHelmholz.packing},
+        {"scenario.cosmology.twoLpt", options.scenario.cosmology.twoLpt},
+        {"scenario.kelvinHelmholz.packing", options.scenario.kelvinHelmholz.packing},
         {"run.darkMatterParticleCount", options.run.darkMatterParticleCount},
         {"run.gasParticleCount", options.run.gasParticleCount},
         {"output.silo", options.output.silo},
@@ -598,19 +603,21 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"hydro.kernelFamily", options.hydro.kernelFamily},
         {"hydro.kernelDegree", options.hydro.kernelDegree},
         {"hydro.yAcceleration", options.hydro.yAcceleration},
-        {"hydro.zPlaneAcceleration", options.hydro.zPlaneAcceleration},
-        {"hydro.viscosityBeta", options.hydro.vonNeumannRichtmyerCoefficient},
+        {"scenario.rayleighTaylor.zPlaneAcceleration",
+            options.scenario.rayleighTaylor.zPlaneAcceleration},
+        {"hydro.vonNeumannRichtmyerCoefficient", options.hydro.vonNeumannRichtmyerCoefficient},
         {"hydro.viscosityEpsilon", options.hydro.viscosityEpsilon},
         {"hydro.conductionCoefficient", options.hydro.conductionCoefficient},
-        {"hydro.viscosityAlphaMin", options.hydro.minimumBulkViscosityCoefficient},
-        {"hydro.viscosityAlphaMax", options.hydro.maximumBulkViscosityCoefficient},
+        {"hydro.viscosityCoefficientMin", options.hydro.minimumBulkViscosityCoefficient},
+        {"hydro.viscosityCoefficientMax", options.hydro.maximumBulkViscosityCoefficient},
         {"hydro.viscosityDecay", options.hydro.viscosityDecay},
         {"hydro.balsaraSoundSpeedCoefficient", options.hydro.balsaraSoundSpeedCoefficient},
-        {"hydro.gamma", options.hydro.gamma},
-        {"hydro.centralAcceleration", options.hydro.centralAcceleration},
-        {"hydro.centralEffectiveRadius",
-            options.hydro.centralSmoothingLength / gravityTable.smoothingLengthPerEffectiveRadius},
-        {"hydro.centralSmoothingLength", options.hydro.centralSmoothingLength},
+        {"hydro.heatCapacityRatio", options.hydro.heatCapacityRatio},
+        {"scenario.disc.centralAcceleration", options.scenario.disc.centralAcceleration},
+        {"scenario.disc.centralEffectiveRadius",
+            options.scenario.disc.centralSmoothingLength /
+                gravityTable.smoothingLengthPerEffectiveRadius},
+        {"scenario.disc.centralSmoothingLength", options.scenario.disc.centralSmoothingLength},
         {"hydro.minSmoothingLength", options.hydro.minSmoothingLength * gasResolution},
         {"hydro.maxSmoothingLength", options.hydro.maxSmoothingLength * gasResolution},
         {"hydro.neighborNumber", options.hydro.neighborNumber},
@@ -761,24 +768,38 @@ bool processOptions(int argc, char* argv[]) {
         po::value<bool>(&opts.initial.closePack)->default_value(false),
         "use a close-packed particle lattice where supported; K-H uses its packing selector");
 
-    po::options_description cosmologyInitialOpts("Cosmology initial conditions");
-    cosmologyInitialOpts.add_options()("initial.cosmology.gadget4Restart",
-        po::value<std::string>(&opts.initial.cosmology.gadget4Restart)->default_value(""),
-        "Gadget4 input file for power-spectrum analysis")("initial.cosmology.useGlass",
-        po::value<bool>(&opts.initial.cosmology.useGlass)->default_value(false),
-        "initialize from a glass file")("initial.cosmology.twoLpt",
-        po::value<bool>(&opts.initial.cosmology.twoLpt)->default_value(false),
+    po::options_description cosmologyScenarioOpts("Cosmology scenario");
+    cosmologyScenarioOpts.add_options()("scenario.cosmology.gadget4Restart",
+        po::value<std::string>(&opts.scenario.cosmology.gadget4Restart)->default_value(""),
+        "Gadget4 input file for power-spectrum analysis")("scenario.cosmology.useGlass",
+        po::value<bool>(&opts.scenario.cosmology.useGlass)->default_value(false),
+        "initialize from a glass file")("scenario.cosmology.twoLpt",
+        po::value<bool>(&opts.scenario.cosmology.twoLpt)->default_value(false),
         "use second-order Lagrangian initial conditions");
 
-    po::options_description plummerInitialOpts("Plummer initial conditions");
-    plummerInitialOpts.add_options()("initial.plummer.radius",
-        po::value<double>(&opts.initial.plummer.radius)->default_value(1.0e-2), "Plummer radius");
+    po::options_description plummerScenarioOpts("Plummer scenario");
+    plummerScenarioOpts.add_options()("scenario.plummer.radius",
+        po::value<double>(&opts.scenario.plummer.radius)->default_value(1.0e-2), "Plummer radius");
 
-    po::options_description kelvinHelmholtzInitialOpts("Kelvin-Helmholtz initial conditions");
-    kelvinHelmholtzInitialOpts.add_options()("initial.kelvinHelmholz.packing",
-        po::value<std::string>(&opts.initial.kelvinHelmholz.packing)->default_value("CV/C"),
+    po::options_description kelvinHelmholtzScenarioOpts("Kelvin-Helmholtz scenario");
+    kelvinHelmholtzScenarioOpts.add_options()("scenario.kelvinHelmholz.packing",
+        po::value<std::string>(&opts.scenario.kelvinHelmholz.packing)->default_value("CV/C"),
         "high/low cell sites (C,F,E,V), case insensitive with any punctuation/space separator; "
         "both lattices must be uniform and dimensionally valid, with a 2:1 site count");
+
+    po::options_description discScenarioOpts("Orbiting disc scenario");
+    discScenarioOpts.add_options()("scenario.disc.centralAcceleration",
+        po::value<double>(&opts.scenario.disc.centralAcceleration)->default_value(0.0),
+        "magnitude of the central force")("scenario.disc.centralEffectiveRadius",
+        po::value<double>(&centralEffectiveRadius)->default_value(centralEffectiveRadius),
+        "central-force effective radius (2 sigma) in box units; overrides centralSmoothingLength")(
+        "scenario.disc.centralSmoothingLength", po::value<double>(),
+        "central-force support radius in box units; uses the selected gravity kernel");
+
+    po::options_description rayleighTaylorScenarioOpts("Rayleigh-Taylor scenario");
+    rayleighTaylorScenarioOpts.add_options()("scenario.rayleighTaylor.zPlaneAcceleration",
+        po::value<double>(&opts.scenario.rayleighTaylor.zPlaneAcceleration)->default_value(0.0),
+        "nonnegative acceleration magnitude toward the plane z=0.5");
 
     po::options_description outputOpts("Particle output");
     outputOpts.add_options()("output.silo",
@@ -997,9 +1018,8 @@ bool processOptions(int argc, char* argv[]) {
         po::value<int>(&opts.hydro.kernelDegree)->default_value(3),
         "density degree: spline 2..9; wendland 2,5,8; ferrers 2,4,6,8")("hydro.yAcceleration",
         po::value<double>(&opts.hydro.yAcceleration)->default_value(0.0),
-        "uniform gravitational acceleration in the y direction")("hydro.zPlaneAcceleration",
-        po::value<double>(&opts.hydro.zPlaneAcceleration)->default_value(0.0),
-        "nonnegative acceleration magnitude toward the plane z=0.5")("hydro.viscosityBeta",
+        "uniform gravitational acceleration in the y direction")(
+        "hydro.vonNeumannRichtmyerCoefficient",
         po::value<double>(&opts.hydro.vonNeumannRichtmyerCoefficient)->default_value(2.0),
         "quadratic coefficient beta, multiplying the pair alpha")("hydro.viscosityEpsilon",
         po::value<double>(&opts.hydro.viscosityEpsilon)->default_value(0.01),
@@ -1007,25 +1027,18 @@ bool processOptions(int argc, char* argv[]) {
         "hydro.conductionCoefficient",
         po::value<double>(&opts.hydro.conductionCoefficient)->default_value(0.0),
         "Monaghan artificial thermal conduction coefficient g; zero disables conduction")(
-        "hydro.viscosityAlphaMin",
+        "hydro.viscosityCoefficientMin",
         po::value<double>(&opts.hydro.minimumBulkViscosityCoefficient)->default_value(0.1),
-        "Morris-Monaghan alpha floor and initial value")("hydro.viscosityAlphaMax",
+        "Morris-Monaghan alpha floor and initial value")("hydro.viscosityCoefficientMax",
         po::value<double>(&opts.hydro.maximumBulkViscosityCoefficient)->default_value(1.5),
-        "Rosswog alpha ceiling; equal to viscosityAlphaMin for constant alpha")(
+        "Rosswog alpha ceiling; equal to viscosityCoefficientMin for constant alpha")(
         "hydro.viscosityDecay", po::value<double>(&opts.hydro.viscosityDecay)->default_value(0.2),
         "Morris-Monaghan C in tau=h/(C c)")("hydro.balsaraSoundSpeedCoefficient",
         po::value<double>(&opts.hydro.balsaraSoundSpeedCoefficient)->default_value(1.0e-4),
         "coefficient of c/h in the Balsara denominator |div v| + |curl v| + coefficient c/h")(
-        "hydro.gamma", po::value<double>(&opts.hydro.gamma)->default_value(5.0 / 3.0),
+        "hydro.heatCapacityRatio",
+        po::value<double>(&opts.hydro.heatCapacityRatio)->default_value(5.0 / 3.0),
         "ideal-gas adiabatic index; must be 5/3 when chemistry or star formation is enabled")(
-        "hydro.centralAcceleration",
-        po::value<double>(&opts.hydro.centralAcceleration)->default_value(0.0),
-        "magnitude of the central force")("hydro.centralEffectiveRadius",
-        po::value<double>(&centralEffectiveRadius)->default_value(centralEffectiveRadius),
-        "central-force effective radius (2 sigma) in box units; overrides centralSmoothingLength "
-        "and replaces the deprecated hydro.centralSoftening")("hydro.centralSmoothingLength",
-        po::value<double>(),
-        "central-force support radius in box units; uses the selected gravity kernel")(
         "hydro.minSmoothingLength",
         po::value<double>(&opts.hydro.minSmoothingLength)->default_value(1.0e-6),
         "minimum support radius in interparticle spacings")("hydro.maxSmoothingLength",
@@ -1088,9 +1101,11 @@ bool processOptions(int argc, char* argv[]) {
         .add(sortOpts)
         .add(checkpointOpts)
         .add(initialOpts)
-        .add(cosmologyInitialOpts)
-        .add(plummerInitialOpts)
-        .add(kelvinHelmholtzInitialOpts)
+        .add(cosmologyScenarioOpts)
+        .add(plummerScenarioOpts)
+        .add(kelvinHelmholtzScenarioOpts)
+        .add(discScenarioOpts)
+        .add(rayleighTaylorScenarioOpts)
         .add(outputOpts)
         .add(analysisOpts)
         .add(lightconeOpts)
@@ -1103,9 +1118,8 @@ bool processOptions(int argc, char* argv[]) {
     // Deprecated aliases stay parseable but are hidden from help, the resolved
     // option listing and its metadata; resolveSmoothingLength warns when one is set.
     po::options_description deprecatedOpts("Deprecated aliases");
-    deprecatedOpts.add_options()("gravity.softening", po::value<double>(),
-        "deprecated alias for gravity.effectiveRadius")("hydro.centralSoftening",
-        po::value<double>(), "deprecated alias for hydro.centralEffectiveRadius");
+    deprecatedOpts.add_options()(
+        "gravity.softening", po::value<double>(), "deprecated alias for gravity.effectiveRadius");
     po::options_description parserOpts("CosmicTiger options");
     parserOpts.add(commandOpts).add(deprecatedOpts);
     terminal::detailPrint("Processing options\n");
@@ -1561,8 +1575,8 @@ bool processOptions(int argc, char* argv[]) {
         "gravity.smoothingLength", "gravity.softening",
         gravityEffectiveRadius * gravityTable.smoothingLengthPerEffectiveRadius,
         gravityTable.smoothingLengthPerEffectiveRadius);
-    opts.hydro.centralSmoothingLength = resolveSmoothingLength("hydro.centralEffectiveRadius",
-        "hydro.centralSmoothingLength", "hydro.centralSoftening",
+    opts.scenario.disc.centralSmoothingLength = resolveSmoothingLength(
+        "scenario.disc.centralEffectiveRadius", "scenario.disc.centralSmoothingLength", nullptr,
         centralEffectiveRadius * gravityTable.smoothingLengthPerEffectiveRadius,
         gravityTable.smoothingLengthPerEffectiveRadius);
     for (auto const& [supportKey, smoothingLength] :
@@ -1634,22 +1648,22 @@ bool processOptions(int argc, char* argv[]) {
         opts.run.gasParticleCount > size_t(std::numeric_limits<ptrdiff_t>::max())) {
         detail::throwOptionError("Initial particle counts exceed the supported range\n");
     }
-    if (opts.initial.cosmology.useGlass && opts.initial.closePack) {
+    if (opts.scenario.cosmology.useGlass && opts.initial.closePack) {
         detail::throwOptionError(
-            "initial.cosmology.useGlass cannot be combined with initial.closePack; "
+            "scenario.cosmology.useGlass cannot be combined with initial.closePack; "
             "glass files already define the particle lattice\n");
     }
     // Validate explicit selectors even for other scenarios, before allocating particles.
-    opts.initial.kelvinHelmholz.packing = scenarios::parseKelvinHelmholtzPacking(
-        opts.initial.kelvinHelmholz.packing, kSpatialDimensions)
-                                              .name();
+    opts.scenario.kelvinHelmholz.packing = scenarios::parseKelvinHelmholtzPacking(
+        opts.scenario.kelvinHelmholz.packing, kSpatialDimensions)
+                                               .name();
     int glassTileSide = 1;
-    if (opts.initial.cosmology.useGlass) {
+    if (opts.scenario.cosmology.useGlass) {
         std::ifstream glassFile("glass.bin", std::ios::binary);
         glassFile.read(reinterpret_cast<char*>(&glassTileSide), sizeof(glassTileSide));
         if (!glassFile || glassTileSide <= 0) {
             detail::throwOptionError(
-                "initial.cosmology.useGlass requires a valid glass.bin tile\n");
+                "scenario.cosmology.useGlass requires a valid glass.bin tile\n");
         }
     }
     try {
@@ -1671,7 +1685,7 @@ bool processOptions(int argc, char* argv[]) {
             particle_count::roundLattice(opts.run.gasParticleCount, gasMultiplicity, glassTileSide);
         if (opts.run.scenario == "kelvinHelmholtz") {
             auto const packing = scenarios::parseKelvinHelmholtzPacking(
-                opts.initial.kelvinHelmholz.packing, kSpatialDimensions);
+                opts.scenario.kelvinHelmholz.packing, kSpatialDimensions);
             auto const layout = particle_count::roundKelvinHelmholtz(
                 opts.run.gasParticleCount, packing.low.sitesPerCell(kSpatialDimensions));
             gasLayout = {2 * layout.side, layout.count};
@@ -1740,32 +1754,35 @@ bool processOptions(int argc, char* argv[]) {
             "(gravity.cuda.kickSinkTile may be -1 for global force storage)\n");
     }
     if (!detail::isFiniteOption(opts.hydro.yAcceleration) ||
-        !detail::isFiniteOption(opts.hydro.centralAcceleration) ||
-        !detail::isFiniteOption(opts.hydro.centralSmoothingLength) ||
-        opts.hydro.centralSmoothingLength <= 0.0) {
+        !detail::isFiniteOption(opts.scenario.disc.centralAcceleration) ||
+        !detail::isFiniteOption(opts.scenario.disc.centralSmoothingLength) ||
+        opts.scenario.disc.centralSmoothingLength <= 0.0) {
         detail::throwOptionError(
-            "hydro.yAcceleration and hydro.centralAcceleration must be finite; "
-            "hydro.centralEffectiveRadius / hydro.centralSmoothingLength must be finite and "
+            "hydro.yAcceleration and scenario.disc.centralAcceleration must be finite; "
+            "scenario.disc.centralEffectiveRadius / scenario.disc.centralSmoothingLength must be "
+            "finite and "
             "positive\n");
     }
-    if (!detail::isFiniteOption(opts.hydro.zPlaneAcceleration) ||
-        opts.hydro.zPlaneAcceleration < 0.0) {
-        detail::throwOptionError("hydro.zPlaneAcceleration must be finite and nonnegative\n");
+    if (!detail::isFiniteOption(opts.scenario.rayleighTaylor.zPlaneAcceleration) ||
+        opts.scenario.rayleighTaylor.zPlaneAcceleration < 0.0) {
+        detail::throwOptionError(
+            "scenario.rayleighTaylor.zPlaneAcceleration must be finite and nonnegative\n");
     }
     if (!detail::isFiniteOption(opts.hydro.vonNeumannRichtmyerCoefficient) ||
         opts.hydro.vonNeumannRichtmyerCoefficient < 0.0 ||
         !detail::isFiniteOption(opts.hydro.viscosityEpsilon) ||
         opts.hydro.viscosityEpsilon <= 0.0) {
-        detail::throwOptionError("hydro.viscosityBeta must be finite and nonnegative; "
-                                 "hydro.viscosityEpsilon must be finite and positive\n");
+        detail::throwOptionError(
+            "hydro.vonNeumannRichtmyerCoefficient must be finite and nonnegative; "
+            "hydro.viscosityEpsilon must be finite and positive\n");
     }
     detail::validateConduction(opts);
     if (!(opts.hydro.minimumBulkViscosityCoefficient == 0.0 ||
             detail::isPositiveFloatOption(opts.hydro.minimumBulkViscosityCoefficient)) ||
         !detail::isPositiveFloatOption(opts.hydro.viscosityDecay)) {
-        detail::throwOptionError(
-            "hydro.viscosityAlphaMin must be zero or positive and hydro.viscosityDecay positive, "
-            "both finite in single precision\n");
+        detail::throwOptionError("hydro.viscosityCoefficientMin must be zero or positive and "
+                                 "hydro.viscosityDecay positive, both finite in single "
+                                 "precision\n");
     }
     detail::validateViscosityStorage(opts);
     if (!detail::isFiniteFloatOption(opts.hydro.balsaraSoundSpeedCoefficient) ||
@@ -1783,11 +1800,12 @@ bool processOptions(int argc, char* argv[]) {
             detail::throwOptionError(
                 "Lower-dimensional SPH supports code or CGS output, not cosmological units\n");
         }
-        if (opts.initial.cosmology.useGlass) {
+        if (opts.scenario.cosmology.useGlass) {
             detail::throwOptionError("The glass input format is three-dimensional\n");
         }
-        if (opts.hydro.centralAcceleration != 0.0 || opts.hydro.zPlaneAcceleration != 0.0 ||
-            opts.gravity.enabled || opts.chemistry.enabled || opts.starFormation.enabled) {
+        if (opts.scenario.disc.centralAcceleration != 0.0 ||
+            opts.scenario.rayleighTaylor.zPlaneAcceleration != 0.0 || opts.gravity.enabled ||
+            opts.chemistry.enabled || opts.starFormation.enabled) {
             detail::throwOptionError("Lower-dimensional SPH requires gravity, central gravity, "
                                      "chemistry and stars disabled\n");
         }
@@ -1799,8 +1817,9 @@ bool processOptions(int argc, char* argv[]) {
             detail::throwOptionError("hydro.yAcceleration requires at least two dimensions\n");
         }
     }
-    if (!detail::isFiniteOption(opts.hydro.gamma) || opts.hydro.gamma <= 1.0) {
-        detail::throwOptionError("hydro.gamma must be finite and greater than one\n");
+    if (!detail::isFiniteOption(opts.hydro.heatCapacityRatio) ||
+        opts.hydro.heatCapacityRatio <= 1.0) {
+        detail::throwOptionError("hydro.heatCapacityRatio must be finite and greater than one\n");
     }
     if (!detail::isFiniteOption(opts.hydro.cfl) || opts.hydro.cfl <= 0.0 || opts.hydro.cfl > 1.0) {
         detail::throwOptionError("hydro.cfl must be finite and in (0, 1]\n");
@@ -1820,14 +1839,14 @@ bool processOptions(int argc, char* argv[]) {
     }
     if (!detail::isFiniteFloatOption(opts.hydro.vonNeumannRichtmyerCoefficient) ||
         !detail::isPositiveFloatOption(opts.hydro.viscosityEpsilon)) {
-        detail::throwOptionError(
-            "hydro.viscosityBeta and hydro.viscosityEpsilon must be representable in single "
-            "precision, with positive viscosityEpsilon\n");
+        detail::throwOptionError("hydro.vonNeumannRichtmyerCoefficient and hydro.viscosityEpsilon "
+                                 "must be representable in single precision, with positive "
+                                 "viscosityEpsilon\n");
     }
-    if (!detail::isFiniteFloatOption(opts.hydro.gamma) ||
-        static_cast<float>(opts.hydro.gamma) <= 1.0f) {
-        detail::throwOptionError(
-            "hydro.gamma must remain finite and greater than one in single precision\n");
+    if (!detail::isFiniteFloatOption(opts.hydro.heatCapacityRatio) ||
+        static_cast<float>(opts.hydro.heatCapacityRatio) <= 1.0f) {
+        detail::throwOptionError("hydro.heatCapacityRatio must remain finite and greater than one "
+                                 "in single precision\n");
     }
     if (!detail::isPositiveFloatOption(opts.hydro.cfl)) {
         detail::throwOptionError("hydro.cfl must remain finite and positive in single precision\n");
@@ -1839,16 +1858,17 @@ bool processOptions(int argc, char* argv[]) {
             "self-neighbor floor in single precision\n");
     }
     if (!detail::isFiniteFloatOption(opts.hydro.yAcceleration) ||
-        !detail::isFiniteFloatOption(opts.hydro.centralAcceleration) ||
-        !detail::isPositiveFloatOption(opts.hydro.centralSmoothingLength)) {
+        !detail::isFiniteFloatOption(opts.scenario.disc.centralAcceleration) ||
+        !detail::isPositiveFloatOption(opts.scenario.disc.centralSmoothingLength)) {
         detail::throwOptionError(
-            "hydro.yAcceleration, hydro.centralAcceleration and hydro.centralSmoothingLength "
+            "hydro.yAcceleration, scenario.disc.centralAcceleration and "
+            "scenario.disc.centralSmoothingLength "
             "must be representable in single precision, with positive centralSmoothingLength\n");
     }
-    if (opts.hydro.zPlaneAcceleration != 0.0 &&
-        !detail::isPositiveFloatOption(opts.hydro.zPlaneAcceleration)) {
+    if (opts.scenario.rayleighTaylor.zPlaneAcceleration != 0.0 &&
+        !detail::isPositiveFloatOption(opts.scenario.rayleighTaylor.zPlaneAcceleration)) {
         detail::throwOptionError(
-            "nonzero hydro.zPlaneAcceleration must remain finite and positive in "
+            "nonzero scenario.rayleighTaylor.zPlaneAcceleration must remain finite and positive in "
             "single precision\n");
     }
     if (!detail::isPositiveFloatOption(opts.hydro.minSmoothingLength / gasResolution) ||
@@ -1954,33 +1974,33 @@ bool processOptions(int argc, char* argv[]) {
     detail::validateStarFormation(opts);
     if (opts.hydro.enabled) {
         if (opts.run.scenario == "glass" || opts.run.scenario == "plummer" ||
-            !opts.initial.cosmology.gadget4Restart.empty()) {
+            !opts.scenario.cosmology.gadget4Restart.empty()) {
             detail::throwOptionError(
                 "SPH cannot use the dark-matter-only glass, Plummer or Gadget loaders\n");
         }
         // Halo and lightcone finders link the equal-mass dark matter only
         // (analysis.haloParticles metadata); maps and spectra weight all species.
     }
-    if (!detail::isPositiveFloatOption(opts.hydro.centralSmoothingLength)) {
-        detail::throwOptionError(
-            "hydro.centralSmoothingLength must remain finite and positive in single precision\n");
+    if (!detail::isPositiveFloatOption(opts.scenario.disc.centralSmoothingLength)) {
+        detail::throwOptionError("scenario.disc.centralSmoothingLength must remain finite and "
+                                 "positive in single precision\n");
     }
     if (!detail::isPositiveFloatOption(opts.gravity.timestepEta)) {
         detail::throwOptionError(
             "gravity.timestepEta must remain finite and positive in single precision "
             "after normalization\n");
     }
-    if (opts.initial.cosmology.useGlass && opts.initial.closePack) {
+    if (opts.scenario.cosmology.useGlass && opts.initial.closePack) {
         detail::throwOptionError(
-            "initial.cosmology.useGlass cannot be combined with initial.closePack; "
+            "scenario.cosmology.useGlass cannot be combined with initial.closePack; "
             "glass files already define the particle lattice\n");
     }
-    if (!opts.initial.cosmology.gadget4Restart.empty()) {
+    if (!opts.scenario.cosmology.gadget4Restart.empty()) {
         if (hasBoxLength) {
-            detail::throwOptionError("initial.cosmology.gadget4Restart supplies its own units; do "
+            detail::throwOptionError("scenario.cosmology.gadget4Restart supplies its own units; do "
                                      "not set units.boxLength\n");
         }
-        auto const header = particlesReadGadget4Header(opts.initial.cosmology.gadget4Restart);
+        auto const header = particlesReadGadget4Header(opts.scenario.cosmology.gadget4Restart);
         opts.initial.numberOfParticles = size_t(header.npartTotal[1]);
         opts.run.darkMatterParticleCount = opts.initial.numberOfParticles;
         opts.run.gasParticleCount = 0;
@@ -2043,7 +2063,7 @@ bool processOptions(int argc, char* argv[]) {
     }
 
     if (hasBoxLength) {
-        if (opts.run.scenario == "glass" || !opts.initial.cosmology.gadget4Restart.empty()) {
+        if (opts.run.scenario == "glass" || !opts.scenario.cosmology.gadget4Restart.empty()) {
             detail::throwOptionError(
                 "units.boxLength cannot be used with glass generation or Gadget4 input, "
                 "which supply their own length scale\n");
@@ -2147,7 +2167,7 @@ bool processOptions(int argc, char* argv[]) {
     if (opts.run.scenario == "plummer" && !explicitGravityRadius) {
         opts.gravity.smoothingLength = gravityTable.smoothingLengthPerEffectiveRadius *
             1.5015907655628273 *
-            pow((4.0 / 3.0 * std::numbers::pi * pow(opts.initial.plummer.radius, 3.0)) /
+            pow((4.0 / 3.0 * std::numbers::pi * pow(opts.scenario.plummer.radius, 3.0)) /
                     opts.initial.numberOfParticles,
                 1.0 / 3.0);
     }

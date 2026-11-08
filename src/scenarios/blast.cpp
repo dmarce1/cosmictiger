@@ -49,7 +49,8 @@ namespace detail {
             double rmax = sqrt(1.5);
             double d, velocity, p;
             int ndim = kSpatialDimensions;
-            sedov::solution(time, r, rmax, d, velocity, p, ndim, getOptions().hydro.gamma);
+            sedov::solution(
+                time, r, rmax, d, velocity, p, ndim, getOptions().hydro.heatCapacityRatio);
             double dif = fabs(rho - d);
             norm1 += sample.weight * d;
             norm2 += sample.weight * sqr(d);

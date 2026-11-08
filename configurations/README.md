@@ -175,9 +175,9 @@ The star uses a Lane–Emden polytrope of index 1.5: the first stage uses dampin
 and zero artificial-viscosity alpha, while the second uses no damping and alpha
 0.05. These stages select constant viscosity, with beta equal to twice alpha.
 The star requires self-gravity. Its pressure profile has polytropic index 1.5,
-while its internal energy uses the configured `hydro.gamma`. The blast deposits
+while its internal energy uses the configured `hydro.heatCapacityRatio`. The blast deposits
 unit total energy on the realized particle lattice and its reference solution
-uses the configured `hydro.gamma`.
+uses the configured `hydro.heatCapacityRatio`.
 
 The cosmological configuration sets `run.darkMatterParticleCount` and
 `run.gasParticleCount` independently. Each count rounds up to a complete
@@ -242,26 +242,32 @@ or `gravity.smoothingLength`; the deprecated `gravity.softening` alias still
 parses with a warning. Alternative
 radius representations remain commented to avoid conflicting inputs.
 
-## Scenario initial-condition groups
+## Scenario option groups
 
-Shared controls remain in `[initial]`: `cuda` and `closePack`. Scenario-specific
-controls now use nested categories:
+Shared controls remain in `[initial]`: `cuda` and `closePack`. Options read by a
+single `run.scenario` problem live in `[scenario.<problem>]`:
 
 | Previous key | Current key |
 | --- | --- |
-| `initial.gadget4Restart` | `initial.cosmology.gadget4Restart` |
-| `initial.useGlass` | `initial.cosmology.useGlass` |
-| `initial.twoLpt` | `initial.cosmology.twoLpt` |
-| `initial.plummerRadius` | `initial.plummer.radius` |
+| `initial.gadget4Restart`, `initial.cosmology.gadget4Restart` | `scenario.cosmology.gadget4Restart` |
+| `initial.useGlass`, `initial.cosmology.useGlass` | `scenario.cosmology.useGlass` |
+| `initial.twoLpt`, `initial.cosmology.twoLpt` | `scenario.cosmology.twoLpt` |
+| `initial.plummerRadius`, `initial.plummer.radius` | `scenario.plummer.radius` |
+| `initial.kelvinHelmholz.packing` | `scenario.kelvinHelmholz.packing` |
+| `hydro.centralAcceleration` | `scenario.disc.centralAcceleration` |
+| `hydro.centralEffectiveRadius` | `scenario.disc.centralEffectiveRadius` |
+| `hydro.centralSmoothingLength` | `scenario.disc.centralSmoothingLength` |
+| `hydro.zPlaneAcceleration` | `scenario.rayleighTaylor.zPlaneAcceleration` |
 
 Update older local INIs/CLI commands to the new keys; the previous keys are no
-longer registered. The same dot hierarchy appears in the Silo CLI metadata.
-Scenarios without dedicated controls continue to use their fixed initial profiles.
+longer registered, and the deprecated `hydro.centralSoftening` alias was removed.
+The same dot hierarchy appears in the Silo CLI metadata. Scenarios without
+dedicated controls continue to use their fixed initial profiles.
 
 ### Kelvin–Helmholtz packing
 
 ```ini
-[initial.kelvinHelmholz]
+[scenario.kelvinHelmholz]
 packing = CV/C
 ```
 
@@ -270,7 +276,7 @@ selector remains `run.scenario=kelvinHelmholtz`. The packing's first part is the
 high-density region and its second is the low-density region. C, F, E and V mean
 cell centers, face centers, edge centers and vertices. Letter order and case do
 not matter. Any punctuation or whitespace separator is accepted, for example
-`--initial.kelvinHelmholz.packing=CEV-cV` in 2D; quote whitespace or shell
+`--scenario.kelvinHelmholz.packing=CEV-cV` in 2D; quote whitespace or shell
 metacharacters. Startup prints the normalized spelling.
 
 The reusable `cell_lattice::CellLattice` class accepts every nonempty subset of
