@@ -47,33 +47,37 @@ CUDA_EXPORT inline float decodeFactor(uint8_t q) {
 }
 
 /*
- * Balsara (1995) shear correction in Springel et al., GADGET-4 (2021),
- * MNRAS 506, 2871-2949, doi:10.1093/mnras/stab1855, equation (72):
- * https://wwwmpa.mpa-garching.mpg.de/gadget4/gadget4-code-paper.pdf
+ * Balsara (1995) shear correction with the sound-speed term of Springel (2005), GADGET-2,
+ * MNRAS 364, 1105-1134, doi:10.1111/j.1365-2966.2005.09655.x, equation (14), and the
+ * divergence and curl estimates of Springel et al., GADGET-4 (2021), MNRAS 506, 2871-2949,
+ * doi:10.1093/mnras/stab1855, equation (72):
  *
- *   f𞁑^AV = |div v𞁑| / (|div v𞁑| + |curl v𞁑|),
+ *   f𞁑^AV = |div v𞁑| / (|div v𞁑| + |curl v𞁑| + ε_B c𞁑/h𞁑),
  *   Π𞁑𞁓 <- ½(f𞁑^AV + f𞁓^AV) Π𞁑𞁓.
  *
- * The common density normalization cancels from the derivative sums. Set f𞁑^AV
- * to zero when both vanish; a safe denominator prevents SIMD lanes evaluating 0/0.
+ * GADGET-2 fixes ε_B = 10⁻⁴; here it is hydro.balsaraSoundSpeedCoefficient. The sound-speed
+ * term keeps noisy, nearly static flow from receiving full viscosity; a larger ε_B lowers f𞁑^AV
+ * toward zero, removing viscosity, and never toward one.
+ * A common density normalization of all three inputs cancels. Set f𞁑^AV to zero when the
+ * denominator vanishes; a safe denominator prevents SIMD lanes evaluating 0/0.
  */
 // clang-format off
 /*
- * Symbol directory for GADGET-4, Springel et al. (2021), equation (72) above:
- *   ∇·v𞁑 → divergence; |∇×v𞁑| → curl magnitude
- *   |∇·v𞁑| → absolute divergence
- *   |∇·v𞁑| + |∇×v𞁑| → limiter denominator; f𞁑ᴬⱽ → shear limiter.
+ * Symbol directory for GADGET-2 equation (14) above:
+ *   ∇·v𞁑 → divergence; |∇×v𞁑| → curl magnitude; |∇·v𞁑| → absolute divergence
+ *   c𞁑 → sound speed; h𞁑 → GADGET-2 smoothing length, the kernel support radius
+ *   ε_B → Balsara sound-speed coefficient
+ *   |∇·v𞁑| + |∇×v𞁑| + ε_B c𞁑/h𞁑 → limiter denominator; f𞁑ᴬⱽ → shear limiter.
  *   Code names: div_v_a = ∇·v𞁑; abs_curl_v𞁑 = |∇×v𞁑|; abs_div_v𞁑 = |∇·v𞁑|
- *     abs_div_v𞁑_plus_abs_curl_v𞁑 = |∇·v𞁑| + |∇×v𞁑|; fᴬⱽ𞁑 = f𞁑ᴬⱽ.
- * Density-weighted inputs are also valid because their common factor cancels.
+ *     c𞁑_over_h𞁑 = c𞁑/h𞁑; denominator = |∇·v𞁑| + |∇×v𞁑| + ε_B c𞁑/h𞁑; fᴬⱽ𞁑 = f𞁑ᴬⱽ.
+ * Density-weighted inputs are also valid when all three carry the factor.
  */
 // clang-format on
 template <typename Real>
-CUDA_EXPORT inline Real balsaraFactor(Real div_v_a, Real abs_curl_v𞁑) {
+CUDA_EXPORT inline Real balsaraFactor(Real div_v_a, Real abs_curl_v𞁑, Real c𞁑_over_h𞁑, Real ε_B) {
     Real const abs_div_v𞁑 = simdMax(div_v_a, -div_v_a);
-    Real const abs_div_v𞁑_plus_abs_curl_v𞁑 = abs_div_v𞁑 + abs_curl_v𞁑;
-    Real const fᴬⱽ𞁑 = abs_div_v𞁑 /
-        simdSelect(abs_div_v𞁑_plus_abs_curl_v𞁑 > Real(0), abs_div_v𞁑_plus_abs_curl_v𞁑, Real(1));
+    Real const denominator = abs_div_v𞁑 + abs_curl_v𞁑 + ε_B * c𞁑_over_h𞁑;
+    Real const fᴬⱽ𞁑 = abs_div_v𞁑 / simdSelect(denominator > Real(0), denominator, Real(1));
     return fᴬⱽ𞁑;
 }
 

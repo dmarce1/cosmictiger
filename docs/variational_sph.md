@@ -178,8 +178,8 @@ double-precision tests in `tests/sph/volume.cpp` solve supports to roundoff.
 The artificial viscosity is the Monaghan \(\Pi_{ij}\) with the symmetric gradient
 \(\tfrac12(g_i+g_j)\), its pair-symmetric force and its heating
 \(\tfrac12\sum_j m_j\Pi_{ij}v^{\rm phys}_{ij}\cdot\tfrac12(g_i+g_j)\).
-`hydro.viscosityEvolution` selects its coefficient evolution, and with it the
-shear limiter, independently of the reversible pressure terms.
+Its coefficient always evolves by the Rosswog-limited Morris–Monaghan switch with
+the Balsara shear limiter, independently of the reversible pressure terms.
 
 ## Cosmological variables
 

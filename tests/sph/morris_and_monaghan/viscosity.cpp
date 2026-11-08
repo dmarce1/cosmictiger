@@ -20,59 +20,63 @@ namespace detail {
 template <typename Real>
 void testViscosityEvolution() {
     double const tolerance = 64.0 * std::numeric_limits<Real>::epsilon();
-    Real const minimumBulkViscosityCoefficient = Real(0.1);
-    Real const inverseDecayTime = Real(0.4);
-    Real const timeStep = Real(0.5);
-    for (Real const divergence : {Real(0), Real(3)}) {
-        require(morris_and_monaghan::evolvedBulkViscosityCoefficient(
-                    minimumBulkViscosityCoefficient, minimumBulkViscosityCoefficient,
-                    inverseDecayTime, divergence, timeStep) == minimumBulkViscosityCoefficient,
+    Real const αₘᵢₙ = Real(0.1);
+    Real const αₘₐₓ = Real(1.5);
+    Real const iτ = Real(0.4);
+    Real const Δt = Real(0.5);
+    auto const evolve = [αₘᵢₙ, αₘₐₓ](Real α, Real iτ, Real div_v, Real Δt) {
+        return morris_and_monaghan::evolvedBulkViscosityCoefficient(α, αₘᵢₙ, αₘₐₓ, iτ, div_v, Δt);
+    };
+    for (Real const div_v : {Real(0), Real(3)}) {
+        require(evolve(αₘᵢₙ, iτ, div_v, Δt) == αₘᵢₙ,
             "quiescent and expanding gas remain at the viscosity floor");
-        requireClose("backward Euler postshock decay",
-            morris_and_monaghan::evolvedBulkViscosityCoefficient(
-                Real(0.7), minimumBulkViscosityCoefficient, inverseDecayTime, divergence, timeStep),
-            0.6, tolerance);
+        requireClose(
+            "backward Euler postshock decay", evolve(Real(0.7), iτ, div_v, Δt), 0.6, tolerance);
     }
+    // α = αₘᵢₙ + (α⁰ − αₘᵢₙ + Δt S (αₘₐₓ − αₘᵢₙ))/(1 + Δt/τ + Δt S), S = 3.
     requireClose("compression increases viscosity even at the floor",
-        morris_and_monaghan::evolvedBulkViscosityCoefficient(minimumBulkViscosityCoefficient,
-            minimumBulkViscosityCoefficient, inverseDecayTime, Real(-3), timeStep),
-        1.35, tolerance);
-    requireClose("cold gas retains compression growth without decay",
-        morris_and_monaghan::evolvedBulkViscosityCoefficient(
-            Real(4), minimumBulkViscosityCoefficient, Real(0), Real(-3), timeStep),
-        5.5, tolerance);
-    require(morris_and_monaghan::evolvedBulkViscosityCoefficient(Real(0.7),
-                minimumBulkViscosityCoefficient, inverseDecayTime, Real(-3), Real(0)) == Real(0.7),
+        evolve(αₘᵢₙ, iτ, Real(-3), Δt), 0.1 + 2.1 / 2.7, tolerance);
+    requireClose("cold gas grows toward the ceiling without decay",
+        evolve(Real(0.9), Real(0), Real(-3), Δt), 1.26, tolerance);
+    require(evolve(Real(0.7), iτ, Real(-3), Real(0)) == Real(0.7),
         "zero interval preserves the coefficient");
-    Real const stiff = morris_and_monaghan::evolvedBulkViscosityCoefficient(
-        Real(0.7), minimumBulkViscosityCoefficient, inverseDecayTime, Real(0), Real(1e6));
-    require(stiff >= minimumBulkViscosityCoefficient && stiff < Real(0.101),
+    Real const stiff = evolve(Real(0.7), iτ, Real(0), Real(1e6));
+    require(stiff >= αₘᵢₙ && stiff < Real(0.101),
         "stiff decay approaches the floor without overshooting");
 
-    // Morris & Monaghan (1997), equations (24)-(25): constant homologous
-    // compression has a steady alpha above the floor, with no upper cap.
-    Real const equilibriumAlpha = Real(7.6);
-    requireClose("unbounded original M&M compression equilibrium",
-        morris_and_monaghan::evolvedBulkViscosityCoefficient(equilibriumAlpha,
-            minimumBulkViscosityCoefficient, inverseDecayTime, Real(-3), timeStep),
-        7.6, tolerance);
-    require(morris_and_monaghan::evolvedBulkViscosityCoefficient(equilibriumAlpha - Real(1),
-                minimumBulkViscosityCoefficient, inverseDecayTime, Real(-3),
-                timeStep) > equilibriumAlpha - Real(1),
-        "compression grows viscosity above later schemes' usual alpha caps");
-    require(morris_and_monaghan::evolvedBulkViscosityCoefficient(equilibriumAlpha + Real(1),
-                minimumBulkViscosityCoefficient, inverseDecayTime, Real(-3),
-                timeStep) < equilibriumAlpha + Real(1),
+    // Rosswog et al. (2000): constant compression has the steady state
+    // α_eq = (αₘᵢₙ/τ + αₘₐₓ S)/(1/τ + S) (derived), below the ceiling.
+    Real const α_eq = (αₘᵢₙ * iτ + αₘₐₓ * Real(3)) / (iτ + Real(3));
+    requireClose(
+        "limited compression equilibrium", evolve(α_eq, iτ, Real(-3), Δt), double(α_eq), tolerance);
+    require(evolve(α_eq - Real(0.5), iτ, Real(-3), Δt) > α_eq - Real(0.5),
+        "compression grows viscosity toward its equilibrium");
+    require(evolve(α_eq + Real(0.1), iτ, Real(-3), Δt) < α_eq + Real(0.1),
         "decay returns viscosity toward its compressive equilibrium");
-
-    auto decayError = [minimumBulkViscosityCoefficient](int steps) {
-        Real bulkViscosityCoefficient = Real(1.1);
-        for (int step = 0; step < steps; ++step) {
-            bulkViscosityCoefficient =
-                morris_and_monaghan::evolvedBulkViscosityCoefficient(bulkViscosityCoefficient,
-                    minimumBulkViscosityCoefficient, Real(1), Real(0), Real(1) / Real(steps));
+    Real const saturated = evolve(αₘᵢₙ, iτ, Real(-1e6), Real(1e3));
+    require(saturated <= αₘₐₓ && saturated > Real(1.49),
+        "strong compression saturates at the ceiling without overshooting");
+    for (Real const α : {αₘᵢₙ, Real(0.4), Real(1.1), αₘₐₓ}) {
+        for (Real const div_v : {Real(-50), Real(-0.5), Real(0), Real(2)}) {
+            for (Real const step : {Real(1e-3), Real(0.5), Real(1e4)}) {
+                Real const evolved = evolve(α, iτ, div_v, step);
+                require(evolved >= αₘᵢₙ && evolved <= αₘₐₓ, "[αₘᵢₙ, αₘₐₓ] is invariant");
+            }
         }
-        return std::fabs(double(bulkViscosityCoefficient) - (0.1 + std::exp(-1.0)));
+    }
+    for (Real const div_v : {Real(-50), Real(0), Real(2)}) {
+        require(morris_and_monaghan::evolvedBulkViscosityCoefficient(
+                    Real(1), Real(1), Real(1), iτ, div_v, Δt) == Real(1),
+            "equal bounds hold alpha fixed");
+    }
+
+    auto decayError = [αₘᵢₙ, αₘₐₓ](int steps) {
+        Real α = Real(1.1);
+        for (int step = 0; step < steps; ++step) {
+            α = morris_and_monaghan::evolvedBulkViscosityCoefficient(
+                α, αₘᵢₙ, αₘₐₓ, Real(1), Real(0), Real(1) / Real(steps));
+        }
+        return std::fabs(double(α) - (0.1 + std::exp(-1.0)));
     };
     double const ratio = decayError(32) / decayError(64);
     require(ratio > 1.8 && ratio < 2.2, "backward Euler decay converges at first order");

@@ -30,7 +30,7 @@ def main():
               '--hydro.enabled=true', '--hydro.cuda=false', '--drift.cuda=false',
               '--chemistry.enabled=false', '--starFormation.enabled=false',
               '--hydro.kernelFamily=wendland', '--hydro.kernelDegree=5', '--hydro.neighborNumber=32',
-              '--hydro.viscosityEvolution=none', '--hydro.viscosityAlpha=0', '--hydro.viscosityBeta=0',
+              '--hydro.viscosityAlphaMin=0', '--hydro.viscosityAlphaMax=0', '--hydro.viscosityBeta=0',
               '--hydro.conductionCoefficient=0',
               '--run.endTime=1e-7', '--run.numberOfSteps=2', '--run.maxIterations=1',
               '--checkpoint.intervalSeconds=0', '--output.silo=false', '--output.directory=.',

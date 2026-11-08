@@ -138,25 +138,21 @@ void validateConduction(Options const& opts) {
     }
 }
 
-void validateViscosityEvolution(Options const& opts) {
-    if (opts.hydro.viscosityEvolution != "none" &&
-        opts.hydro.viscosityEvolution != "morrisAndMonaghan") {
-        throwOptionError("hydro.viscosityEvolution must be none or morrisAndMonaghan\n");
-    }
-}
-
 void validateViscosityStorage(Options const& opts) {
-    if (opts.hydro.viscosityEvolution != "morrisAndMonaghan") {
-        // Constant-alpha viscosity has no per-particle binary16 storage.
-        return;
-    }
-    double const coefficient = opts.hydro.minimumBulkViscosityCoefficient;
     constexpr double kMinimumHalfCoefficient = 0x1p-24;
     constexpr double kMaximumHalfCoefficient = 65504.0;
-    if (!isFiniteOption(coefficient) || coefficient < kMinimumHalfCoefficient ||
-        coefficient > kMaximumHalfCoefficient) {
-        throwOptionError(
-            "hydro.viscosityAlphaMin must lie in [2^-24, 65504] for binary16 viscosity storage\n");
+    for (double const coefficient :
+        {opts.hydro.minimumBulkViscosityCoefficient, opts.hydro.maximumBulkViscosityCoefficient}) {
+        // Zero is exact in binary16 and, with equal bounds, gives inviscid gas.
+        if (!isFiniteOption(coefficient) ||
+            (coefficient != 0.0 && coefficient < kMinimumHalfCoefficient) ||
+            coefficient > kMaximumHalfCoefficient) {
+            throwOptionError("hydro.viscosityAlphaMin and hydro.viscosityAlphaMax must be zero "
+                             "or lie in [2^-24, 65504] for binary16 viscosity storage\n");
+        }
+    }
+    if (opts.hydro.maximumBulkViscosityCoefficient < opts.hydro.minimumBulkViscosityCoefficient) {
+        throwOptionError("hydro.viscosityAlphaMax must not be below hydro.viscosityAlphaMin\n");
     }
 }
 
@@ -334,7 +330,6 @@ void setOptions(Options const& requested) {
     detail::validateRockstar(opts);
     detail::validateCudaBackends(opts);
     detail::validateHydroMethod(opts);
-    detail::validateViscosityEvolution(opts);
     detail::validateViscosityStorage(opts);
     detail::validateConduction(opts);
     detail::validateFlatCosmology(opts);
@@ -604,13 +599,13 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"hydro.kernelDegree", options.hydro.kernelDegree},
         {"hydro.yAcceleration", options.hydro.yAcceleration},
         {"hydro.zPlaneAcceleration", options.hydro.zPlaneAcceleration},
-        {"hydro.viscosityAlpha", options.hydro.bulkViscosityCoefficient},
         {"hydro.viscosityBeta", options.hydro.vonNeumannRichtmyerCoefficient},
         {"hydro.viscosityEpsilon", options.hydro.viscosityEpsilon},
         {"hydro.conductionCoefficient", options.hydro.conductionCoefficient},
-        {"hydro.viscosityEvolution", options.hydro.viscosityEvolution},
         {"hydro.viscosityAlphaMin", options.hydro.minimumBulkViscosityCoefficient},
+        {"hydro.viscosityAlphaMax", options.hydro.maximumBulkViscosityCoefficient},
         {"hydro.viscosityDecay", options.hydro.viscosityDecay},
+        {"hydro.balsaraSoundSpeedCoefficient", options.hydro.balsaraSoundSpeedCoefficient},
         {"hydro.gamma", options.hydro.gamma},
         {"hydro.centralAcceleration", options.hydro.centralAcceleration},
         {"hydro.centralEffectiveRadius",
@@ -1004,25 +999,24 @@ bool processOptions(int argc, char* argv[]) {
         po::value<double>(&opts.hydro.yAcceleration)->default_value(0.0),
         "uniform gravitational acceleration in the y direction")("hydro.zPlaneAcceleration",
         po::value<double>(&opts.hydro.zPlaneAcceleration)->default_value(0.0),
-        "nonnegative acceleration magnitude toward the plane z=0.5")("hydro.viscosityAlpha",
-        po::value<double>(&opts.hydro.bulkViscosityCoefficient)->default_value(1.0),
-        "linear coefficient alpha when viscosityEvolution=none")("hydro.viscosityBeta",
+        "nonnegative acceleration magnitude toward the plane z=0.5")("hydro.viscosityBeta",
         po::value<double>(&opts.hydro.vonNeumannRichtmyerCoefficient)->default_value(2.0),
-        "quadratic coefficient beta: multiplies the pair alpha for morrisAndMonaghan, "
-        "constant for none")("hydro.viscosityEpsilon",
+        "quadratic coefficient beta, multiplying the pair alpha")("hydro.viscosityEpsilon",
         po::value<double>(&opts.hydro.viscosityEpsilon)->default_value(0.01),
         "viscosity regularization relative to the calibrated radius sqrt(5/6) effectiveRadius")(
         "hydro.conductionCoefficient",
         po::value<double>(&opts.hydro.conductionCoefficient)->default_value(0.0),
         "Monaghan artificial thermal conduction coefficient g; zero disables conduction")(
-        "hydro.viscosityEvolution",
-        po::value<std::string>(&opts.hydro.viscosityEvolution)->default_value("morrisAndMonaghan"),
-        "viscosity evolution: none or morrisAndMonaghan")("hydro.viscosityAlphaMin",
+        "hydro.viscosityAlphaMin",
         po::value<double>(&opts.hydro.minimumBulkViscosityCoefficient)->default_value(0.1),
-        "Morris-Monaghan alpha floor and smooth-flow initial value")("hydro.viscosityDecay",
-        po::value<double>(&opts.hydro.viscosityDecay)->default_value(0.2),
-        "Morris-Monaghan C1 in tau=h/(C1 c)")("hydro.gamma",
-        po::value<double>(&opts.hydro.gamma)->default_value(5.0 / 3.0),
+        "Morris-Monaghan alpha floor and initial value")("hydro.viscosityAlphaMax",
+        po::value<double>(&opts.hydro.maximumBulkViscosityCoefficient)->default_value(1.5),
+        "Rosswog alpha ceiling; equal to viscosityAlphaMin for constant alpha")(
+        "hydro.viscosityDecay", po::value<double>(&opts.hydro.viscosityDecay)->default_value(0.2),
+        "Morris-Monaghan C in tau=h/(C c)")("hydro.balsaraSoundSpeedCoefficient",
+        po::value<double>(&opts.hydro.balsaraSoundSpeedCoefficient)->default_value(1.0e-4),
+        "coefficient of c/h in the Balsara denominator |div v| + |curl v| + coefficient c/h")(
+        "hydro.gamma", po::value<double>(&opts.hydro.gamma)->default_value(5.0 / 3.0),
         "ideal-gas adiabatic index; must be 5/3 when chemistry or star formation is enabled")(
         "hydro.centralAcceleration",
         po::value<double>(&opts.hydro.centralAcceleration)->default_value(0.0),
@@ -1758,31 +1752,31 @@ bool processOptions(int argc, char* argv[]) {
         opts.hydro.zPlaneAcceleration < 0.0) {
         detail::throwOptionError("hydro.zPlaneAcceleration must be finite and nonnegative\n");
     }
-    if (!detail::isFiniteOption(opts.hydro.bulkViscosityCoefficient) ||
-        opts.hydro.bulkViscosityCoefficient < 0.0 ||
-        !detail::isFiniteOption(opts.hydro.vonNeumannRichtmyerCoefficient) ||
+    if (!detail::isFiniteOption(opts.hydro.vonNeumannRichtmyerCoefficient) ||
         opts.hydro.vonNeumannRichtmyerCoefficient < 0.0 ||
         !detail::isFiniteOption(opts.hydro.viscosityEpsilon) ||
         opts.hydro.viscosityEpsilon <= 0.0) {
-        detail::throwOptionError(
-            "hydro.viscosityAlpha and hydro.viscosityBeta must be finite and nonnegative; "
-            "hydro.viscosityEpsilon must be finite and positive\n");
+        detail::throwOptionError("hydro.viscosityBeta must be finite and nonnegative; "
+                                 "hydro.viscosityEpsilon must be finite and positive\n");
     }
     detail::validateConduction(opts);
-    detail::validateViscosityEvolution(opts);
-    if (!detail::isPositiveFloatOption(opts.hydro.minimumBulkViscosityCoefficient) ||
+    if (!(opts.hydro.minimumBulkViscosityCoefficient == 0.0 ||
+            detail::isPositiveFloatOption(opts.hydro.minimumBulkViscosityCoefficient)) ||
         !detail::isPositiveFloatOption(opts.hydro.viscosityDecay)) {
         detail::throwOptionError(
-            "hydro.viscosityAlphaMin and hydro.viscosityDecay must be finite and positive "
-            "in single precision\n");
+            "hydro.viscosityAlphaMin must be zero or positive and hydro.viscosityDecay positive, "
+            "both finite in single precision\n");
     }
     detail::validateViscosityStorage(opts);
-    if (opts.hydro.viscosityBetaFollowsAlpha() &&
-        !detail::isFiniteFloatOption(opts.hydro.vonNeumannRichtmyerCoefficient *
-            opts.hydro.minimumBulkViscosityCoefficient)) {
+    if (!detail::isFiniteFloatOption(opts.hydro.balsaraSoundSpeedCoefficient) ||
+        opts.hydro.balsaraSoundSpeedCoefficient < 0.0) {
+        detail::throwOptionError("hydro.balsaraSoundSpeedCoefficient must be finite and "
+                                 "nonnegative in single precision\n");
+    }
+    if (!detail::isFiniteFloatOption(opts.hydro.vonNeumannRichtmyerCoefficient *
+            opts.hydro.maximumBulkViscosityCoefficient)) {
         detail::throwOptionError(
-            "the initial quadratic viscosity coefficient must be finite in single "
-            "precision\n");
+            "the maximum quadratic viscosity coefficient must be finite in single precision\n");
     }
     if constexpr (kSpatialDimensions < 3) {
         if (opts.output.units == "cosmological" || opts.output.units == "both") {
@@ -1824,12 +1818,11 @@ bool processOptions(int argc, char* argv[]) {
         detail::throwOptionError("hydro support radii must be finite with 0 < minSmoothingLength "
                                  "<= maxSmoothingLength\n");
     }
-    if (!detail::isFiniteFloatOption(opts.hydro.bulkViscosityCoefficient) ||
-        !detail::isFiniteFloatOption(opts.hydro.vonNeumannRichtmyerCoefficient) ||
+    if (!detail::isFiniteFloatOption(opts.hydro.vonNeumannRichtmyerCoefficient) ||
         !detail::isPositiveFloatOption(opts.hydro.viscosityEpsilon)) {
         detail::throwOptionError(
-            "hydro.viscosityAlpha, hydro.viscosityBeta and hydro.viscosityEpsilon must "
-            "be representable in single precision, with positive viscosityEpsilon\n");
+            "hydro.viscosityBeta and hydro.viscosityEpsilon must be representable in single "
+            "precision, with positive viscosityEpsilon\n");
     }
     if (!detail::isFiniteFloatOption(opts.hydro.gamma) ||
         static_cast<float>(opts.hydro.gamma) <= 1.0f) {

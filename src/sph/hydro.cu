@@ -180,12 +180,9 @@ __global__ void sphCudaHydro(
                     neighbor.velocity = data.sourceVelocity(sourceParticleIndex);
                     neighbor.internalEnergy = data.sourceInternalEnergy[sourceParticleIndex];
                     neighbor.density = data.sourceDensity[sourceParticleIndex];
-                    neighbor.balsaraFactor = parameters.balsaraSwitch ?
-                        data.sourceBalsaraFactor[sourceParticleIndex] :
-                        1.0f;
-                    neighbor.bulkViscosityCoefficient = parameters.variableViscosity ?
-                        data.sourceBulkViscosityCoefficient[sourceParticleIndex] :
-                        parameters.bulkViscosityCoefficient;
+                    neighbor.balsaraFactor = data.sourceBalsaraFactor[sourceParticleIndex];
+                    neighbor.bulkViscosityCoefficient =
+                        data.sourceBulkViscosityCoefficient[sourceParticleIndex];
                     neighbor.gradHCorrection = data.sourceGradHCorrection[sourceParticleIndex];
                     neighbor.rung =
                         parameters.midpointHydro ? int(data.sourceRungs[sourceParticleIndex]) : 0;
@@ -251,9 +248,7 @@ __global__ void sphCudaHydro(
             float du𞁑_dτ = 0.0f;
             float du𞁑_dτₕₑₐₜ = 0.0f;    // this thread's viscous/conductive sum
             float ΣC𞁑𞁓_over_a = 0.0f;
-            float const α𞁑 = parameters.variableViscosity ?
-                data.sourceBulkViscosityCoefficient[particleIndex] :
-                parameters.bulkViscosityCoefficient;
+            float const α𞁑 = data.sourceBulkViscosityCoefficient[particleIndex];
             float α = α𞁑;
             float max𞁓μ𞁑𞁓 = 0.0f;    // max𞁓(−μ𞁑𞁓) for δt𞁞ᵥ
             int maximumNeighborRung = 0;
@@ -305,21 +300,14 @@ __global__ void sphCudaHydro(
                 float const a_vₚₕ𞁟ₛ𞁑𞁓_dot_r𞁑𞁓 = v𞁑𞁓_dot_r𞁑𞁓 + aȧ * r2𞁑𞁓;
                 float const h̄_M𞁑𞁓 = monaghan::pairLength(h𞁑, h𞁓, h_M_over_h);
                 float const μ𞁑𞁓 = monaghan::viscosityMu(r2𞁑𞁓, a_vₚₕ𞁟ₛ𞁑𞁓_dot_r𞁑𞁓, h̄_M𞁑𞁓, ε);
-                float const α𞁓 =
-                    parameters.variableViscosity ? neighbor.bulkViscosityCoefficient : α𞁑;
-                float const α𞁑𞁓 = parameters.variableViscosity ? 0.5f * α𞁑 + 0.5f * α𞁓 : α𞁑;
-                float const β𞁑𞁓 = parameters.vonNeumannRichtmyerCoefficientFollowsBulk() ?
-                    parameters.vonNeumannRichtmyerCoefficient * α𞁑𞁓 :
-                    parameters.vonNeumannRichtmyerCoefficient;
+                float const α𞁓 = neighbor.bulkViscosityCoefficient;
+                float const α𞁑𞁓 = 0.5f * α𞁑 + 0.5f * α𞁓;
+                float const β𞁑𞁓 = parameters.vonNeumannRichtmyerCoefficient * α𞁑𞁓;
                 α = fmaxf(α, α𞁑𞁓);
-                flops += 3 * int(parameters.variableViscosity) +
-                    int(parameters.vonNeumannRichtmyerCoefficientFollowsBulk());
-                float fᴬⱽ𞁑𞁓 = 1.0f;
-                if (parameters.balsaraSwitch) {
-                    fᴬⱽ𞁑𞁓 =
-                        0.5f * (data.sourceBalsaraFactor[particleIndex] + neighbor.balsaraFactor);
-                    flops += 2;
-                }
+                // Symmetric Balsara multiplier.
+                float const fᴬⱽ𞁑𞁓 =
+                    0.5f * (data.sourceBalsaraFactor[particleIndex] + neighbor.balsaraFactor);
+                flops += 6;
                 // clang-format off
                 /*
                  * Hopkins (2013) equation 12 with Price (2012) equation 35: separate
@@ -341,15 +329,12 @@ __global__ void sphCudaHydro(
                     variational::pressureVolumeFactor(P𞁓, 1.0f, ρ𞁓), m𞁓, ζ𞁓);
                 float const f_P𞁑𞁓 =
                     ia * variational::pairForceFactor(Q𞁑𞁓_over_m𞁑, Q𞁓𞁑_over_m𞁑, F𞁑, F𞁓);
-                float Π𞁑𞁓 = monaghan::artificialViscosity(ρ𞁑, ρ𞁓, c𞁑, c𞁓, μ𞁑𞁓, α𞁑𞁓, β𞁑𞁓);
-                if (parameters.balsaraSwitch) {
-                    Π𞁑𞁓 *= fᴬⱽ𞁑𞁓;
-                    flops += 1;
-                }
+                float const Π𞁑𞁓 =
+                    fᴬⱽ𞁑𞁓 * monaghan::artificialViscosity(ρ𞁑, ρ𞁓, c𞁑, c𞁓, μ𞁑𞁓, α𞁑𞁓, β𞁑𞁓);
                 float const f_Π𞁑𞁓 = m𞁓_over_a * Π𞁑𞁓 * F𞁑𞁓;
                 float const du_dτ_Π𞁑𞁓 = m𞁓_over_a * 0.5f * Π𞁑𞁓 * F𞁑𞁓 * a_vₚₕ𞁟ₛ𞁑𞁓_dot_r𞁑𞁓;
                 // Pair length (3), μ𞁑𞁓, Π𞁑𞁓 and the force and heating factors.
-                flops += 3 + sph_flops::kViscosityMu + sph_flops::kArtificialViscosity + 6;
+                flops += 3 + sph_flops::kViscosityMu + sph_flops::kArtificialViscosity + 7;
                 float du𞁑_dτₕₑₐₜ𞁑𞁓 = du_dτ_Π𞁑𞁓;
                 float du𞁓_dτₕₑₐₜ𞁑𞁓 = du_dτ_Π𞁑𞁓;
                 if (parameters.conductionCoefficient > 0.0f) {
@@ -476,9 +461,7 @@ __global__ void sphCudaHydro(
                     // clang-format on
                     float const h̃𞁑 = h𞁑 / smoothingLengthPerEffectiveRadius;
                     float const iδt𞁞 = c𞁑 / h̃𞁑;
-                    float const β = parameters.vonNeumannRichtmyerCoefficientFollowsBulk() ?
-                        parameters.vonNeumannRichtmyerCoefficient * α :
-                        parameters.vonNeumannRichtmyerCoefficient;
+                    float const β = parameters.vonNeumannRichtmyerCoefficient * α;
                     float const iδtᵥ = 0.6f * (α * c𞁑 + β * max𞁓μ𞁑𞁓) / h̃𞁑;
                     float const iδt𞁞ᵥ = iδt𞁞 + iδtᵥ;
                     float const abs_f𞁑 = dv𞁑_dτ.norm();

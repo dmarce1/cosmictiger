@@ -34,8 +34,6 @@ void testFineNeighborsOfCoarseParticle() {
     parameters.hydroKickTimestep = 1.0e-5;
     parameters.scaleFactor = 0.7f;
     parameters.expansionRate = 0.03f;
-    parameters.balsaraSwitch = false;
-    parameters.variableViscosity = false;
     parameters.uniformAccelerationY = 0.0f;
     parameters.zPlaneAcceleration = 0.0f;
     parameters.velocityDampingRate = 0.0f;

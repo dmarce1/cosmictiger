@@ -176,9 +176,8 @@ Cooling stores a plain `float electronFraction` in batch and migration records,
 with the particle array named `sphParticlesElectronFractions`. The default guess
 remains `1.0f`, and checkpoints retain one float per gas particle.
 
-The runtime selector is `hydro.viscosityEvolution=none|morrisAndMonaghan`.
-Model-specific state allocation, migration, checkpoint identity, and output are
-handled at the existing storage and integration boundaries.
+There is no viscosity selector: every SPH run stores, migrates, checkpoints and
+outputs the per-particle α and Balsara factor.
 Morris–Monaghan alpha updates only at completed own interval endpoints; startup
 does not advance it. Midpoint forces use the last endpoint's alpha. Balsara is
 computed with separate SPH divergence/curl sums during the current density pass,

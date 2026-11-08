@@ -162,8 +162,7 @@ def main():
               "analysis.groups": "false", "analysis.tracers": "false", "analysis.views": "false",
               "analysis.power": "false", "analysis.slice": "false", "lightcone.enabled": "false",
               "output.silo": "false", "output.directory": ".", "checkpoint.intervalSeconds": 0,
-              "run.verbose": "true", "compute.sphBucketSize": 16,
-              "hydro.viscosityEvolution": "morrisAndMonaghan"}
+              "run.verbose": "true", "compute.sphBucketSize": 16}
     common["gravity.cuda"] = "true" if args.cuda or args.gravity_cuda else "false"
     common["hydro.cuda"] = "true" if args.cuda or args.hydro_cuda else "false"
 

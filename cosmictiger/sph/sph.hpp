@@ -184,14 +184,14 @@ struct SphRunParameters {
     // Initialization only: publish the converged kernel-sum density alongside h.
     // This pass uses the CPU solver before any thermal state is initialized.
     bool initializeDensity = false;
-    float bulkViscosityCoefficient;
+    // Pairs use beta_ab = vonNeumannRichtmyerCoefficient alpha_ab.
     float vonNeumannRichtmyerCoefficient;
     float viscosityEpsilon;
     float conductionCoefficient = 0.0f;
-    bool balsaraSwitch;
-    bool variableViscosity;
     float minimumBulkViscosityCoefficient;
+    float maximumBulkViscosityCoefficient;
     float viscosityDecay;
+    float balsaraSoundSpeedCoefficient;
     // Completed interval for Morris-Monaghan: dyadic base duration (divided by
     // the live rung in the density pass), or the actual global duration. Zero
     // disables evolution at midpoints, initialization, and diagnostic refreshes.
@@ -205,32 +205,25 @@ struct SphRunParameters {
         velocityDampingRate = opts.hydro.damping;
         uniformAccelerationY = opts.hydro.yAcceleration;
         zPlaneAcceleration = opts.hydro.zPlaneAcceleration;
-        bulkViscosityCoefficient = opts.hydro.bulkViscosityCoefficient;
         vonNeumannRichtmyerCoefficient = opts.hydro.vonNeumannRichtmyerCoefficient;
         viscosityEpsilon = opts.hydro.viscosityEpsilon;
         conductionCoefficient = opts.hydro.conductionCoefficient;
-        balsaraSwitch = opts.hydro.usesBalsaraSwitch();
-        variableViscosity = opts.hydro.viscosityEvolution != "none";
         minimumBulkViscosityCoefficient = opts.hydro.minimumBulkViscosityCoefficient;
+        maximumBulkViscosityCoefficient = opts.hydro.maximumBulkViscosityCoefficient;
         viscosityDecay = opts.hydro.viscosityDecay;
+        balsaraSoundSpeedCoefficient = opts.hydro.balsaraSoundSpeedCoefficient;
     }
     CUDA_EXPORT bool isActiveRung(int rung) const {
         return rung >= minimumRung && rung <= maximumRung;
     }
-    // Morris-Monaghan pairs use beta_ab = vonNeumannRichtmyerCoefficient alpha_ab; fixed
-    // Monaghan coefficients use the constant beta.
-    CUDA_EXPORT bool vonNeumannRichtmyerCoefficientFollowsBulk() const {
-        return variableViscosity;
-    }
     template <typename Archive>
     void serialize(Archive&& arc, unsigned) {
-        arc & bulkViscosityCoefficient;
         arc & vonNeumannRichtmyerCoefficient;
         arc & viscosityEpsilon;
-        arc & balsaraSwitch;
-        arc & variableViscosity;
         arc & minimumBulkViscosityCoefficient;
+        arc & maximumBulkViscosityCoefficient;
         arc & viscosityDecay;
+        arc & balsaraSoundSpeedCoefficient;
         arc & viscosityTimestep;
         arc & velocityDampingRate;
         arc & minimumSmoothingLength;

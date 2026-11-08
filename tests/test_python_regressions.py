@@ -29,6 +29,9 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=Fals
                        position_bytes=4, integer_bytes=4, global_step=False, pmmm=0,
                        ranks=1, converged=False, semiactive=True, proposed_rung=3):
     """Small writer-order fixture, with magic-like data inside a position array."""
+    # Every SPH checkpoint stores alpha and the Balsara factor.
+    viscosity = viscosity or hydro
+    balsara = balsara or hydro
     flags = 1 << 18
     flags |= int(hydro) | (int(cooling) << 11) | (int(stars) << 20)
     flags |= (int(position_bytes == 8) << 15) | (int(integer_bytes == 8) << 21)
@@ -37,7 +40,7 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=Fals
     flags |= int(hydro and balsara) << 13
     header = checkpoint.Header()
     header.magic, header.version, header.flags = 0x4354535048303031, 3, flags
-    header.reserved = int(hydro) << 25
+    header.reserved = (int(hydro) << 25) | (int(hydro) << 26)
     header.particles_per_species = 2
     header.physics[2] = 5.0 / 3.0
     output = bytearray(bytes(header))
@@ -53,9 +56,9 @@ def checkpoint_fixture(*, hydro=True, cooling=False, stars=False, viscosity=Fals
         put(f'{ {1:7, 2:8, 3:10, 4:11, 5:11}[pmmm]}Q',
             *values[:{1:7, 2:8, 3:10, 4:11, 5:11}[pmmm]])
     if hydro:
-        put('13d', *([1.] * 13))
+        put('12d', *([1.] * 12))
         if viscosity:
-            put('2d', 0.1, 2.)
+            put('4d', 0.1, 1.5, 2., 1e-4)
     if cooling:
         offsets['cooling'] = len(output)
         put('6d', 6., .76, 5. / 3., 1e4, 0., 1.)
@@ -153,7 +156,7 @@ class CheckpointTests(unittest.TestCase):
                 self.assertEqual(result.semiactive, (True,))
                 self.assertEqual(result.proposed_rungs, (3,))
                 self.assertEqual(result.gas[0][3:6], (False, True, 3))
-                self.assertEqual(result.bulk_viscosity_coefficients, [.25] if viscosity else [])
+                self.assertEqual(result.bulk_viscosity_coefficients, [.25])
 
     def test_packed_gas_flags_preserve_all_valid_combinations(self):
         for converged, semiactive, proposed_rung in itertools.product(
@@ -240,6 +243,13 @@ class CheckpointTests(unittest.TestCase):
         altered = bytearray(data)
         struct.pack_into('=I', altered, checkpoint.Header.reserved.offset, 0)
         with self.assertRaisesRegex(RuntimeError, 'retired SPH viscosity'):
+            checkpoint.decode_checkpoint(altered)
+
+    def test_unlimited_viscosity_layout_is_rejected(self):
+        data, _ = checkpoint_fixture()
+        altered = bytearray(data)
+        struct.pack_into('=I', altered, checkpoint.Header.reserved.offset, 1 << 25)
+        with self.assertRaisesRegex(RuntimeError, 'Rosswog-limited viscosity layout'):
             checkpoint.decode_checkpoint(altered)
 
     def test_old_uv_checkpoint_inserts_checksum_and_is_rejected_early(self):

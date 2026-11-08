@@ -121,8 +121,8 @@ int readUnitsOutputInteger(DBfile* file, std::string const& name) {
 }
 
 void checkUnitsOutputCommandLine(DBfile* file) {
-    requireUnitsOutputClose(readUnitsOutputScalar(file, "/cli/hydro/viscosityAlpha"), 1.75,
-        "scalar viscosity bulkViscosityCoefficient");
+    requireUnitsOutputClose(readUnitsOutputScalar(file, "/cli/hydro/viscosityAlphaMax"), 1.75,
+        "scalar viscosity maximumBulkViscosityCoefficient");
     requireUnitsOutputClose(readUnitsOutputScalar(file, "/cli/gravity/effectiveRadius"), 0.125,
         "CLI effective radius units");
     requireUnitsOutputClose(
@@ -266,12 +266,7 @@ void checkUnitsOutputSourceFields(DBfile* file, std::string const& path, int ran
 
 void checkUnitsOutputViscosity(DBfile* file, std::string const& path) {
     std::string const name = path + "gas/bulkViscosityCoefficient";
-    if (getOptions().hydro.viscosityEvolution == "none") {
-        requireUnitsOutput(
-            !DBInqVarExists(file, name.c_str()), name + " is absent for constant viscosity");
-    } else {
-        checkUnitsOutputField(file, name, 1, double(kUnitsOutputViscosityAlpha), "1");
-    }
+    checkUnitsOutputField(file, name, 1, double(kUnitsOutputViscosityAlpha), "1");
 }
 
 void checkUnitsOutputGas(DBfile* file, std::string const& name, int count, double coordinateScale,
@@ -443,10 +438,8 @@ void unitsOutputParticleFixture(bool initialize) {
         sphParticlesEntropyInitialized = true;
         sphParticlesThermalScaleFactor = 0.25;
         sphParticlesEntropy(0) = 4.0;
-        if (getOptions().hydro.viscosityEvolution != "none") {
-            // Distinct from the scalar CLI alpha; unchanged by unit/frame conversion.
-            sphParticlesBulkViscosityCoefficients[0] = detail::kUnitsOutputViscosityAlpha;
-        }
+        // Distinct from the scalar CLI alpha; unchanged by unit/frame conversion.
+        sphParticlesBulkViscosityCoefficients[0] = detail::kUnitsOutputViscosityAlpha;
     } else {
         detail::requireUnitsOutput(
             particlesPos(kXi, 0).raw() == (PositionInteger(0x80000000U) << (kPositionBits - 32)) &&
@@ -510,7 +503,7 @@ void unitsOutputTest() {
     options.initial.gasMass = 0.25;
     options.output.units = "code";
     options.output.frame = "comoving";
-    options.hydro.bulkViscosityCoefficient = 1.75;
+    options.hydro.maximumBulkViscosityCoefficient = 1.75;
     options.gravity.smoothingLength = 0.125 *
         selectedGravityKernel().smoothingLengthPerEffectiveRadius /
         std::pow(double(options.initial.numberOfParticles), 1.0 / kDimensions);

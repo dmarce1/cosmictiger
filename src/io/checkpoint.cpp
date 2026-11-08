@@ -150,6 +150,10 @@ constexpr uint32_t kCompactSphLayout = 1U << 24;
 // Bit 25 of the physics code marks gas state without the retired viscosity models. Earlier
 // files carry a longer viscosity block, so they are rejected before it is read.
 constexpr uint32_t kScalarViscosityLayout = 1U << 25;
+// Bit 26 of the physics code marks the Rosswog-limited viscosity block: alpha min, alpha max,
+// decay and the Balsara sound-speed coefficient, with no fixed-alpha parameter. Earlier files are
+// rejected before that block is read.
+constexpr uint32_t kRosswogViscosityLayout = 1U << 26;
 constexpr uint32_t kArtificialConduction = 1U << 25;
 constexpr uint32_t kIndependentParticleCounts = 1U << 26;
 constexpr uint32_t kChemistry = 1U << 11;
@@ -475,10 +479,10 @@ uint32_t checkpointFlags(Options const& opts) {
         (opts.lightcone.enabled ? kLightcone : 0U) | (opts.analysis.groups ? kGroups : 0U) |
         (opts.analysis.tracers ? kTracers : 0U) | (opts.chemistry.enabled ? kChemistry : 0U) |
         (opts.hydro.enabled && opts.hydro.zPlaneAcceleration != 0.0 ? kZPlaneAcceleration : 0U) |
-        (opts.hydro.enabled && opts.hydro.usesBalsaraSwitch() ? kBalsaraSwitch : 0U) |
+        (opts.hydro.enabled ? kBalsaraSwitch : 0U) |
         (opts.hydro.enabled && opts.hydro.conductionCoefficient > 0.0 ? kArtificialConduction :
                                                                         0U) |
-        (opts.hydro.enabled && opts.hydro.viscosityEvolution != "none" ? kVariableViscosity : 0U) |
+        (opts.hydro.enabled ? kVariableViscosity : 0U) |
         (opts.compute.positionType == "fixed64" ? kFixed64Positions : 0U) |
         (opts.gravity.enabled && opts.gravity.method == "pmmm" ? kParticleMultipoleMesh : 0U) |
         (opts.gravity.enabled && usesParticleMesh(opts.gravity) ? kParticleMeshInterval : 0U) |
@@ -530,7 +534,8 @@ uint32_t checkpointPhysicsCode(Options const& opts) {
         checkpointKernelCode(opts.hydro.kernelFamily, opts.hydro.kernelDegree) ^
         checkpointKernelCode("spline", 3);
     // Bit 24 identifies compact gas storage.
-    return (opts.hydro.enabled ? kVariationalSph | kCompactSphLayout | kScalarViscosityLayout :
+    return (opts.hydro.enabled ? kVariationalSph | kCompactSphLayout | kScalarViscosityLayout |
+                       kRosswogViscosityLayout :
                                  0U) |
         (gravityCode << 8) | (hydroCode << 16) | (uint32_t(3 - kSpatialDimensions) << 28) |
         (kSpatialDimensions < 3 ? (1U << 30) : 0U);
@@ -590,16 +595,17 @@ bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
 }
 
 // Stored only for SPH checkpoints; the dark-matter layout is unchanged.
-std::array<double, 13> sphCheckpointParameters(Options const& opts) {
-    return {opts.hydro.bulkViscosityCoefficient, opts.hydro.vonNeumannRichtmyerCoefficient,
-        opts.hydro.viscosityEpsilon, opts.hydro.neighborNumber, opts.hydro.minSmoothingLength,
-        opts.hydro.maxSmoothingLength, opts.hydro.cfl, opts.gravity.timestepEta,
-        opts.hydro.yAcceleration, opts.hydro.centralAcceleration, opts.hydro.centralSmoothingLength,
-        opts.hydro.damping, opts.gravity.enabled ? 1.0 : 0.0};
+std::array<double, 12> sphCheckpointParameters(Options const& opts) {
+    return {opts.hydro.vonNeumannRichtmyerCoefficient, opts.hydro.viscosityEpsilon,
+        opts.hydro.neighborNumber, opts.hydro.minSmoothingLength, opts.hydro.maxSmoothingLength,
+        opts.hydro.cfl, opts.gravity.timestepEta, opts.hydro.yAcceleration,
+        opts.hydro.centralAcceleration, opts.hydro.centralSmoothingLength, opts.hydro.damping,
+        opts.gravity.enabled ? 1.0 : 0.0};
 }
 
-std::array<double, 2> viscosityCheckpointParameters(Options const& opts) {
-    return {opts.hydro.minimumBulkViscosityCoefficient, opts.hydro.viscosityDecay};
+std::array<double, 4> viscosityCheckpointParameters(Options const& opts) {
+    return {opts.hydro.minimumBulkViscosityCoefficient, opts.hydro.maximumBulkViscosityCoefficient,
+        opts.hydro.viscosityDecay, opts.hydro.balsaraSoundSpeedCoefficient};
 }
 
 bool zPlaneCheckpointCompatible(double acceleration, Options const& opts) {
@@ -1383,11 +1389,10 @@ void checkpointStateTest() {
     defaultKernelOptions.hydro.kernelFamily = "spline";
     defaultKernelOptions.hydro.kernelDegree = 3;
     defaultKernelOptions.hydro.method = "sph";
-    // checkpointPhysicsCode marks every SPH checkpoint with the scalar viscosity layout.
-    uint32_t const sphLayoutCode =
-        detail::kVariationalSph | detail::kCompactSphLayout | detail::kScalarViscosityLayout;
     ALWAYS_ASSERT(detail::checkpointHeader(defaultKernelOptions).reserved ==
-        (defaultKernelOptions.hydro.enabled ? sphLayoutCode : 0U));
+        (defaultKernelOptions.hydro.enabled ? detail::kVariationalSph | detail::kCompactSphLayout |
+                    detail::kScalarViscosityLayout | detail::kRosswogViscosityLayout :
+                                              0U));
     auto legacyKernelOptions = defaultKernelOptions;
     legacyKernelOptions.hydro.enabled = false;
     legacyKernelOptions.run.hierarchicalGravity = true;
@@ -1463,41 +1468,32 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(detail::checkpointCompatible(conductionHeader, conductionOptions));
     conductionOptions.hydro.conductionCoefficient = 0.0;
     ALWAYS_ASSERT(!detail::checkpointCompatible(conductionHeader, conductionOptions));
-    // The Balsara limiter follows the viscosity model, so the models are not interchangeable.
+    // Every SPH checkpoint carries the Balsara factor and evolved alpha.
     auto balsaraOptions = getOptions();
     balsaraOptions.hydro.enabled = true;
-    balsaraOptions.hydro.viscosityEvolution = "morrisAndMonaghan";
-    ALWAYS_ASSERT(balsaraOptions.hydro.usesBalsaraSwitch());
     auto const balsaraHeader = detail::checkpointHeader(balsaraOptions);
+    ALWAYS_ASSERT((balsaraHeader.flags & detail::kBalsaraSwitch) != 0U);
+    ALWAYS_ASSERT((balsaraHeader.flags & detail::kVariableViscosity) != 0U);
     ALWAYS_ASSERT(detail::checkpointCompatible(balsaraHeader, balsaraOptions));
-    balsaraOptions.hydro.viscosityEvolution = "none";
-    ALWAYS_ASSERT(!balsaraOptions.hydro.usesBalsaraSwitch());
-    ALWAYS_ASSERT(!detail::checkpointCompatible(balsaraHeader, balsaraOptions));
-    auto const unlimitedHeader = detail::checkpointHeader(balsaraOptions);
-    ALWAYS_ASSERT(detail::checkpointCompatible(unlimitedHeader, balsaraOptions));
-    balsaraOptions.hydro.viscosityEvolution = "morrisAndMonaghan";
+    auto unlimitedHeader = balsaraHeader;
+    unlimitedHeader.flags &= ~(detail::kBalsaraSwitch | detail::kVariableViscosity);
     ALWAYS_ASSERT(!detail::checkpointCompatible(unlimitedHeader, balsaraOptions));
     // Programmatic updates validate exactly as CLI/INI parsing does.
     {
         auto const previousOptions = getOptions();
-        auto evolvingOptions = previousOptions;
-        // Keep the binary16 alpha floor valid whatever constant-viscosity settings the
-        // caller passed; this probe tests the viscosity selector.
-        evolvingOptions.hydro.minimumBulkViscosityCoefficient = 0.1;
-        evolvingOptions.hydro.viscosityEvolution = "morrisAndMonaghan";
-        setOptions(evolvingOptions);
-        ALWAYS_ASSERT(getOptions().hydro.usesBalsaraSwitch());
-        setOptions(previousOptions);
-        auto invalidOptions = evolvingOptions;
-        invalidOptions.hydro.viscosityEvolution = "huEtal";
+        auto invalidOptions = previousOptions;
+        invalidOptions.hydro.minimumBulkViscosityCoefficient = 0.5;
+        invalidOptions.hydro.maximumBulkViscosityCoefficient = 0.25;
         bool rejected = false;
         try {
             setOptions(invalidOptions);
         } catch (std::invalid_argument const& error) {
-            rejected = std::string(error.what()).find("hydro.viscosityEvolution must be") !=
+            rejected = std::string(error.what()).find("hydro.viscosityAlphaMax must not be") !=
                 std::string::npos;
         }
         ALWAYS_ASSERT(rejected);
+        ALWAYS_ASSERT(getOptions().hydro.maximumBulkViscosityCoefficient ==
+            previousOptions.hydro.maximumBulkViscosityCoefficient);
     }
     // Variational checkpoints round-trip; retired Monaghan pressure is never reinterpreted.
     auto operatorOptions = getOptions();
@@ -1515,29 +1511,30 @@ void checkpointStateTest() {
     auto retiredViscosityHeader = variationalHeader;
     retiredViscosityHeader.reserved &= ~detail::kScalarViscosityLayout;
     ALWAYS_ASSERT(!detail::checkpointCompatible(retiredViscosityHeader, operatorOptions));
+    // Files from before the Rosswog limiter carry a fixed alpha and no alpha max.
+    ALWAYS_ASSERT((variationalHeader.reserved & detail::kRosswogViscosityLayout) != 0U);
+    auto unlimitedViscosityHeader = variationalHeader;
+    unlimitedViscosityHeader.reserved &= ~detail::kRosswogViscosityLayout;
+    ALWAYS_ASSERT(!detail::checkpointCompatible(unlimitedViscosityHeader, operatorOptions));
     auto viscosityOptions = getOptions();
     viscosityOptions.hydro.enabled = true;
-    viscosityOptions.hydro.viscosityEvolution = "morrisAndMonaghan";
-    auto const viscosityHeader = detail::checkpointHeader(viscosityOptions);
     auto const viscosityParameters = detail::viscosityCheckpointParameters(viscosityOptions);
-    ALWAYS_ASSERT(detail::checkpointCompatible(viscosityHeader, viscosityOptions));
-    viscosityOptions.hydro.viscosityEvolution = "none";
-    ALWAYS_ASSERT(!detail::checkpointCompatible(viscosityHeader, viscosityOptions));
-    auto const fixedViscosityHeader = detail::checkpointHeader(viscosityOptions);
-    ALWAYS_ASSERT((fixedViscosityHeader.flags & detail::kVariableViscosity) == 0U);
-    auto betaOptions = viscosityOptions;
-    betaOptions.hydro.bulkViscosityCoefficient = 1.0;
-    auto const fixedViscosityParameters = detail::sphCheckpointParameters(betaOptions);
-    betaOptions.hydro.vonNeumannRichtmyerCoefficient += 0.5;
-    ALWAYS_ASSERT(fixedViscosityParameters != detail::sphCheckpointParameters(betaOptions));
-    viscosityOptions.hydro.viscosityEvolution = "morrisAndMonaghan";
-    ALWAYS_ASSERT(!detail::checkpointCompatible(fixedViscosityHeader, viscosityOptions));
     {
         auto altered = viscosityOptions;
+        altered.hydro.vonNeumannRichtmyerCoefficient += 0.5;
+        ALWAYS_ASSERT(detail::sphCheckpointParameters(viscosityOptions) !=
+            detail::sphCheckpointParameters(altered));
+        altered = viscosityOptions;
         altered.hydro.minimumBulkViscosityCoefficient += 0.125;
         ALWAYS_ASSERT(viscosityParameters != detail::viscosityCheckpointParameters(altered));
         altered = viscosityOptions;
+        altered.hydro.maximumBulkViscosityCoefficient += 0.125;
+        ALWAYS_ASSERT(viscosityParameters != detail::viscosityCheckpointParameters(altered));
+        altered = viscosityOptions;
         altered.hydro.viscosityDecay += 0.125;
+        ALWAYS_ASSERT(viscosityParameters != detail::viscosityCheckpointParameters(altered));
+        altered = viscosityOptions;
+        altered.hydro.balsaraSoundSpeedCoefficient += 0.125;
         ALWAYS_ASSERT(viscosityParameters != detail::viscosityCheckpointParameters(altered));
     }
     auto planeOptions = getOptions();
@@ -1558,7 +1555,7 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(!detail::checkpointCompatible(planeHeader, planeOptions));
     ALWAYS_ASSERT(!detail::zPlaneCheckpointCompatible(0.5, planeOptions));
     changed = getOptions();
-    changed.hydro.bulkViscosityCoefficient += 0.25;
+    changed.hydro.vonNeumannRichtmyerCoefficient += 0.25;
     ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));
     changed = getOptions();
     changed.hydro.neighborNumber += 1.0;

@@ -671,7 +671,6 @@ void verifySphMidpointUpdates() {
     auto options = savedOptions;
     options.hydro.enabled = true;
     options.hydro.method = "sph";
-    options.hydro.viscosityEvolution = "morrisAndMonaghan";
     options.hydro.damping = 0.0;
     options.hydro.yAcceleration = 0.0;
     options.hydro.zPlaneAcceleration = 0.0;
@@ -811,9 +810,9 @@ void verifySphTemporalOrder() {
     auto options = savedOptions;
     options.hydro.enabled = true;
     options.hydro.method = "sph";
-    options.hydro.viscosityEvolution = "none";
     options.hydro.gamma = 5.0 / 3.0;
-    options.hydro.bulkViscosityCoefficient = 0.7;
+    options.hydro.minimumBulkViscosityCoefficient = 0.7;
+    options.hydro.maximumBulkViscosityCoefficient = 0.7;
     options.hydro.vonNeumannRichtmyerCoefficient = 1.0;
     options.hydro.viscosityEpsilon = 0.01;
     options.hydro.yAcceleration = 0.0;
@@ -844,6 +843,7 @@ void verifySphTemporalOrder() {
         for (ParticleInteger gas = 0; gas < 2; ++gas) {
             sphParticlesDensities[gas] = 1.3f + 0.8f * gas;
             sphParticlesGradHCorrections[gas] = 0.0f;
+            sphParticlesBalsaraFactors[gas] = 255;    // Unlimited until the first refresh.
             sphParticlesSmoothingLength(gas) = damping ? 0.1f : 0.2f + 0.05f * gas;
             sphParticlesRung(gas) = gas == 0 ? 0 : 2;
             sphParticlesSetProposedRung(gas, sphParticlesRung(gas));
@@ -1579,7 +1579,6 @@ void sphRungChainTest() {
     auto options = savedOptions;
     options.compute.sphBucketSize = 1;
     options.hydro.enabled = true;
-    options.hydro.viscosityEvolution = "morrisAndMonaghan";
     // Exercise dyadic live-rung commits when that integrator is available, even
     // when the enclosing application selected global stepping. A global-only
     // build still checks the neighbor closure, which does not change live rungs.
@@ -1653,7 +1652,6 @@ void distributedSphOctreeTest() {
     detail::requireSphTree(hpxSize() == 2, "distributed retained-tree fixture needs two ranks");
     auto options = getOptions();
     options.hydro.enabled = true;
-    options.hydro.viscosityEvolution = "morrisAndMonaghan";
     options.chemistry.enabled = false;
     options.starFormation.enabled = false;
     options.analysis.groups = false;

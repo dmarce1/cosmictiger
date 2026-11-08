@@ -157,6 +157,8 @@ public:
         data_.sinkDensity = separateSources ? allocate<float>(count) : data_.sourceDensity;
         data_.sourceBalsaraFactor = allocate<float>(count);
         data_.sinkBalsaraFactor = allocate<uint8_t>(count);
+        data_.sourceBulkViscosityCoefficient = allocate<float>(count);
+        data_.sinkBulkViscosityCoefficient = allocate<Float16Storage>(count);
         data_.sinkGravityAccelerationX = allocate<float>(count);
         data_.sinkGravityAccelerationY = allocate<float>(count);
         data_.sinkGravityAccelerationZ = allocate<float>(count);
@@ -182,11 +184,9 @@ public:
         params_.maximumTimestep = 1.0f;
         params_.phase = 0;
         params_.courantFactor = 0.25f;
-        params_.bulkViscosityCoefficient = 1.0f;
         params_.vonNeumannRichtmyerCoefficient = 2.0f;
         params_.viscosityEpsilon = 0.01f;
-        params_.balsaraSwitch = false;
-        params_.variableViscosity = false;
+        params_.viscosityDecay = 0.2f;
         params_.minimumSmoothingLength = 0.1f;
         // The initial isolated support is held at the upper bound.
         params_.maximumSmoothingLength = 0.2f;
@@ -200,6 +200,7 @@ public:
             data_.sinkGravityAccelerationX[i] = data_.sinkGravityAccelerationY[i] =
                 data_.sinkGravityAccelerationZ[i] = 0.0f;
         }
+        setBulkViscosityCoefficient(1.0f);
         for (int tree = 0; tree < treeCount; tree++) {
             data_.targetNodeIndices[tree] = data_.neighborNodeIndices[tree] = tree;
             auto& node = data_.treeNodes[tree];
@@ -247,16 +248,19 @@ public:
         }
     }
 
-    void enableVariableViscosity() {
-        params_.variableViscosity = true;
-        params_.minimumBulkViscosityCoefficient = 0.1f;
-        params_.viscosityDecay = 0.2f;
-        data_.sourceBulkViscosityCoefficient = allocate<float>(count_);
-        data_.sinkBulkViscosityCoefficient = allocate<Float16Storage>(count_);
+    // Equal bounds hold every particle's alpha fixed, the constant-coefficient limit.
+    void setBulkViscosityCoefficient(float α) {
+        params_.minimumBulkViscosityCoefficient = params_.maximumBulkViscosityCoefficient = α;
         for (int i = 0; i < count_; ++i) {
-            data_.sourceBulkViscosityCoefficient[sourceIndex(i)] = 0.7f;
-            data_.sinkBulkViscosityCoefficient[sinkIndex(i)] = 0.7f;
+            data_.sourceBulkViscosityCoefficient[sourceIndex(i)] = α;
+            data_.sinkBulkViscosityCoefficient[sinkIndex(i)] = α;
         }
+    }
+
+    void enableVariableViscosity() {
+        setBulkViscosityCoefficient(0.7f);
+        params_.minimumBulkViscosityCoefficient = 0.1f;
+        params_.maximumBulkViscosityCoefficient = 1.5f;
     }
 
     int sourceIndex(int index) const {
@@ -489,7 +493,7 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
     std::vector<char> const sourceRungs(data.sourceRungs, data.sourceRungs + fixture.count_);
     std::vector<Float16Storage> bulkViscosityCoefficients;
     std::vector<float> sourceAlpha;
-    if (fixture.params_.variableViscosity) {
+    {
         bulkViscosityCoefficients.assign(
             data.sinkBulkViscosityCoefficient, data.sinkBulkViscosityCoefficient + fixture.count_);
         cpuData.sinkBulkViscosityCoefficient = bulkViscosityCoefficients.data();
@@ -567,7 +571,7 @@ void compareCpuCudaPhase(Fixture& fixture, int runType, int phase = 0) {
         require(std::bit_cast<uint32_t>(data.sourceGradHCorrection[i]) ==
                 std::bit_cast<uint32_t>(sourceGradHCorrection[i]),
             "CPU/CUDA phases preserve grad-H source snapshots");
-        if (fixture.params_.variableViscosity) {
+        {
             auto const& cpu = bulkViscosityCoefficients[i];
             auto const& gpu = data.sinkBulkViscosityCoefficient[i];
             requireClose("CPU/CUDA bulk viscosity coefficient", cpu, gpu, 7.0e-5);
@@ -618,7 +622,6 @@ void testCpuCudaParity(bool morrisAndMonaghan = false, float conductionCoefficie
         fixture.params_.vonNeumannRichtmyerCoefficient = 3.5f;
     }
 
-    fixture.params_.balsaraSwitch = true;
     auto& data = fixture.data_;
     std::vector<int> sinkIndices(fixture.count_);
     int const sinkBegins[] = {7, 13, 0};
@@ -819,9 +822,10 @@ void testMorrisMonaghanDensity() {
                     double const timeStep = globalTimestep ? 0.08 : 0.04;
                     double const source =
                         std::max(-densityDivergence / (density * scaleFactor), 0.0);
-                    double const expected = (double(float(Float16Storage(0.7f))) +
-                                                timeStep * (source + 0.1 * inverseDecayTime)) /
-                        (1.0 + timeStep * inverseDecayTime);
+                    double const expected = 0.1 +
+                        (double(float(Float16Storage(0.7f))) - 0.1 +
+                            timeStep * source * (1.5 - 0.1)) /
+                            (1.0 + timeStep * inverseDecayTime + timeStep * source);
                     data.sinkBulkViscosityCoefficient[center] = 0.7f;
                     data.sinkFlags[center].setConverged(false);
                     fixture.densityPass();
@@ -854,10 +858,6 @@ void testMorrisMonaghanDensity() {
             }
         }
     }
-    fixture.params_.variableViscosity = false;
-    data.sourceBulkViscosityCoefficient = nullptr;
-    data.sinkBulkViscosityCoefficient = nullptr;
-    fixture.densityPass();
 }
 
 void testVariableViscosityPairs() {
@@ -876,10 +876,11 @@ void testVariableViscosityPairs() {
         data.sourceBulkViscosityCoefficient[source] = i == 0 ? 0.2f : 1.4f;
         data.sinkBulkViscosityCoefficient[sink] = data.sourceBulkViscosityCoefficient[source];
     }
-    // Morris-Monaghan uses beta_ab = viscosityBeta alpha_ab.
+    // Pairs use beta_ab = viscosityBeta alpha_ab with the mean alpha_ab of the endpoints.
     for (float const vonNeumannRichtmyerCoefficient : {0.0f, 2.0f, 3.5f}) {
-        fixture.params_.variableViscosity = true;
-        fixture.params_.bulkViscosityCoefficient = 8.0f;    // Must not replace particle alpha.
+        for (int i = 0; i < 2; ++i) {
+            data.sourceBulkViscosityCoefficient[fixture.sourceIndex(i)] = i == 0 ? 0.2f : 1.4f;
+        }
         fixture.params_.vonNeumannRichtmyerCoefficient = vonNeumannRichtmyerCoefficient;
         fixture.hydro();
         fixture.checkConservation();
@@ -889,13 +890,8 @@ void testVariableViscosityPairs() {
             heating[i] = fixture.dissipativeHeating(i);
             force[i] = fixture.kickAcceleration(i);
         }
-        fixture.params_.variableViscosity = false;
-        fixture.params_.bulkViscosityCoefficient = 0.8f;
-        fixture.params_.vonNeumannRichtmyerCoefficient = 0.8f * vonNeumannRichtmyerCoefficient;
-        auto* sourceAlpha = data.sourceBulkViscosityCoefficient;
-        auto* states = data.sinkBulkViscosityCoefficient;
-        data.sourceBulkViscosityCoefficient = nullptr;
-        data.sinkBulkViscosityCoefficient = nullptr;
+        // Both endpoints at the pair mean 0.8 reproduce the same pair coefficients.
+        fixture.setBulkViscosityCoefficient(0.8f);
         fixture.hydro();
         fixture.checkConservation();
         for (int i = 0; i < 2; ++i) {
@@ -907,8 +903,6 @@ void testVariableViscosityPairs() {
                     acceleration[dim], 1.0e-5);
             }
         }
-        data.sourceBulkViscosityCoefficient = sourceAlpha;
-        data.sinkBulkViscosityCoefficient = states;
     }
 }
 
@@ -1035,12 +1029,13 @@ void testUnequalSupports() {
             node.outerBox.end[dim] = position + data.sourceSmoothingLength[i];
         }
     }
+    // Approach before the density pass: its Balsara factor sees pure compression.
+    data.sourceVelocityX[0] = 0.1f;
+    data.sourceVelocityX[1] = -0.1f;
     fixture.density();
     require(data.sourceDensity[0] != data.sourceDensity[1],
         "unequal supports must produce unequal densities");
     fixture.enableKickObservation();
-    data.sourceVelocityX[0] = 0.1f;
-    data.sourceVelocityX[1] = -0.1f;
     fixture.hydro();
     fixture.checkConservation();
     require(fixture.kickAcceleration(0)[kXi] < 0.0f && fixture.kickAcceleration(1)[kXi] > 0.0f,
@@ -1048,15 +1043,15 @@ void testUnequalSupports() {
     for (int i = 0; i < 2; i++) {
         require(fixture.dissipativeHeating(i) > 0.0, "approach must add viscosity heating");
     }
-    fixture.params_.bulkViscosityCoefficient = fixture.params_.vonNeumannRichtmyerCoefficient =
-        0.0f;
+    fixture.setBulkViscosityCoefficient(0.0f);
+    fixture.params_.vonNeumannRichtmyerCoefficient = 0.0f;
     fixture.hydro();
     for (int i = 0; i < 2; i++) {
         require(fixture.dissipativeHeating(i) == 0.0, "inviscid approach generates no entropy");
     }
     data.sourceVelocityX[0] = -0.1f;
     data.sourceVelocityX[1] = 0.1f;
-    fixture.params_.bulkViscosityCoefficient = 1.0f;
+    fixture.setBulkViscosityCoefficient(1.0f);
     fixture.params_.vonNeumannRichtmyerCoefficient = 2.0f;
     fixture.hydro();
     fixture.checkConservation();
@@ -1080,8 +1075,8 @@ void testSelectedKernel() {
         data.sourceSmoothingLength[i] = data.sinkSmoothingLength[i] = i == 0 ? 0.35f : 0.42f;
         data.sourceInternalEnergy[i] = i == 0 ? 0.7f : 1.2f;
     }
-    fixture.params_.bulkViscosityCoefficient = fixture.params_.vonNeumannRichtmyerCoefficient =
-        0.0f;
+    fixture.setBulkViscosityCoefficient(0.0f);
+    fixture.params_.vonNeumannRichtmyerCoefficient = 0.0f;
     fixture.density();
     double const radius = std::abs(distance(data.sourcePositionX[0], data.sourcePositionX[1]));
     double pressureForce = 0.0;
@@ -1114,7 +1109,7 @@ void testSelectedKernel() {
 
     data.sourceVelocityX[0] = 0.1f;
     data.sourceVelocityX[1] = -0.1f;
-    fixture.params_.bulkViscosityCoefficient = 1.0f;
+    fixture.setBulkViscosityCoefficient(1.0f);
     fixture.params_.vonNeumannRichtmyerCoefficient = 2.0f;
     fixture.hydro();
     fixture.checkConservation();
@@ -1130,8 +1125,8 @@ void testUnequalPairEos() {
     double const pressureEnergyRatio = data.adiabaticIndex - 1.0;
     data.sourcePositionX[0] = 0.40;
     data.sourcePositionX[1] = 0.58;
-    fixture.params_.bulkViscosityCoefficient = fixture.params_.vonNeumannRichtmyerCoefficient =
-        0.0f;
+    fixture.setBulkViscosityCoefficient(0.0f);
+    fixture.params_.vonNeumannRichtmyerCoefficient = 0.0f;
     for (int i = 0; i < 2; ++i) {
         data.sourcePositionY[i] = data.sourcePositionZ[i] = 0.5;
         data.sinkFlags[i].setConverged(true);
@@ -1358,7 +1353,7 @@ void testDefaultTimestepCalibration() {
         data.adiabaticIndex * (data.adiabaticIndex - 1.0f) * data.sourceInternalEnergy[0]);
     double const oldSmoothingLength = 0.5 * data.sourceSmoothingLength[0];
     double const expectedSoundStep = 0.25 * oldSmoothingLength /
-        (soundSpeed * (1.0 + 0.6 * fixture.params_.bulkViscosityCoefficient));
+        (soundSpeed * (1.0 + 0.6 * fixture.params_.maximumBulkViscosityCoefficient));
     double const soundStep = fixture.params_.courantFactor /
         (fixture.reduction_->inverseSoundTimestep + fixture.reduction_->inverseViscosityTimestep);
     requireClose("default cubic sound and viscosity timestep calibration", soundStep,
@@ -1385,8 +1380,8 @@ void testDefaultThermalTimestep() {
         data.sourceInternalEnergy[i] = 1.0e-6f;
         data.sourceVelocityX[i] = i == 0 ? 1.0f : -1.0f;
     }
-    fixture.params_.bulkViscosityCoefficient = fixture.params_.vonNeumannRichtmyerCoefficient =
-        0.0f;
+    fixture.setBulkViscosityCoefficient(0.0f);
+    fixture.params_.vonNeumannRichtmyerCoefficient = 0.0f;
     fixture.params_.courantFactor = 0.25 * std::sqrt(5.0 / 6.0);
     double const oldEta = 0.25 / std::sqrt(693.0 / 256.0);
     data.accelerationTimestepFactor =
@@ -1460,7 +1455,6 @@ TEST_F(SphCudaTest, VariableViscosityPairs) {
 TEST_F(SphCudaTest, BalsaraVelocityGradients) {
     detail::Fixture fixture(27, 3);
     fixture.enableVariableViscosity();
-    fixture.params_.balsaraSwitch = true;
     auto& data = fixture.data_;
     struct Flow {
         float compression;
@@ -1471,8 +1465,8 @@ TEST_F(SphCudaTest, BalsaraVelocityGradients) {
     };
     Flow const flows[] = {{0, 0, 0, 0, 0}, {0, 0, 1, 0, 0}, {0, 1, 0, 0, 0}, {1, 0, 0, 0, 1},
         {1, 1, 0, 0, 0.6f}, {0, 0, 0, -1, 0}, {1, 1, 0, 0.5f, 0.6f}};
-    for (bool const morrisMonaghan : {false, true}) {
-        fixture.params_.variableViscosity = morrisMonaghan;
+    for (double const viscosityTimestep : {0.0, 0.08}) {
+        fixture.params_.viscosityTimestep = viscosityTimestep;
         for (auto const& flow : flows) {
             fixture.params_.expansionRate = flow.expansion;
             for (int i = 0; i < fixture.count_; ++i) {
@@ -1499,11 +1493,6 @@ TEST_F(SphCudaTest, BalsaraVelocityGradients) {
             }
         }
     }
-    fixture.params_.balsaraSwitch = false;
-    fixture.density();
-    for (int i = 0; i < fixture.count_; ++i) {
-        EXPECT_EQ(data.sourceBalsaraFactor[i], 1.0f);
-    }
 }
 
 TEST_F(SphCudaTest, BalsaraSymmetricForceAndHeating) {
@@ -1515,7 +1504,6 @@ TEST_F(SphCudaTest, BalsaraSymmetricForceAndHeating) {
         data.sourceVelocityX[i] = i == 0 ? 0.1f : -0.1f;
         data.sourceDensity[i] = 1.0f + i;
         data.sourceSmoothingLength[i] = i == 0 ? 0.2f : 0.45f;
-        data.sourceBalsaraFactor[i] = i == 0 ? 0.2f : 0.8f;
     }
     fixture.enableKickObservation();
     fixture.hydro();
@@ -1523,17 +1511,19 @@ TEST_F(SphCudaTest, BalsaraSymmetricForceAndHeating) {
         fixture.dissipativeHeating(0), fixture.dissipativeHeating(1)};
     std::array<sph_geometry::SpatialVector<float>, 2> const fullForce = {
         fixture.kickAcceleration(0), fixture.kickAcceleration(1)};
-    fixture.params_.bulkViscosityCoefficient = fixture.params_.vonNeumannRichtmyerCoefficient =
-        0.0f;
+    fixture.setBulkViscosityCoefficient(0.0f);
+    fixture.params_.vonNeumannRichtmyerCoefficient = 0.0f;
     fixture.hydro();
     std::array<sph_geometry::SpatialVector<float>, 2> const pressureForce = {
         fixture.kickAcceleration(0), fixture.kickAcceleration(1)};
     for (int i = 0; i < 2; ++i) {
         EXPECT_EQ(fixture.dissipativeHeating(i), 0.0);    // the pressure force is reversible
     }
-    fixture.params_.bulkViscosityCoefficient = 1.0f;
+    fixture.setBulkViscosityCoefficient(1.0f);
     fixture.params_.vonNeumannRichtmyerCoefficient = 2.0f;
-    fixture.params_.balsaraSwitch = true;
+    for (int i = 0; i < 2; ++i) {
+        data.sourceBalsaraFactor[i] = i == 0 ? 0.2f : 0.8f;
+    }
     fixture.hydro();
     fixture.checkConservation();
     // The mean Balsara factor 0.5 halves the viscous force and the viscous heating.

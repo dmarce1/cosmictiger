@@ -71,7 +71,8 @@ gasParticleCount = 4096
 cuda = true
 [hydro]
 enabled = true
-viscosityAlpha = 1.0
+viscosityAlphaMin = 0.1
+viscosityAlphaMax = 1.5
 viscosityBeta = 2.0
 viscosityEpsilon = 0.01
 gamma = 1.666666666666667
@@ -298,8 +299,10 @@ build flags, equations, and supported scenarios.
 The gas solver reconstructs density and evolves canonical entropy, using the
 [variational pressure operator](docs/variational_sph.md) with grad-H corrections
 for all SPH runs. It uses Monaghan artificial viscosity with the Morris & Monaghan
-coefficient switch and the Balsara shear limiter, or constant coefficients with
-`hydro.viscosityEvolution=none`, alongside FMM or PMMM gravity and shared particle
+coefficient switch, limited by Rosswog et al. (2000) to `hydro.viscosityAlphaMax`,
+and the Balsara shear limiter; equal `hydro.viscosityAlphaMin` and
+`hydro.viscosityAlphaMax` give constant coefficients. This runs alongside FMM or PMMM
+gravity and shared particle
 storage. See
 [the kernel, viscosity, and paper references](docs/monaghan_sph.md) for the equations,
 cosmological conversions, and deliberate implementation choices. SPH support is

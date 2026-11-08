@@ -106,20 +106,6 @@ void runFixedScenario() {
     baseOptions.run.gasParticleCount = 0;
 #endif
     setOptions(baseOptions);
-    bool const fixedViscosityStage = std::any_of(plan.stages.begin(), plan.stages.end(),
-        [](auto const& stage) { return stage.bulkViscosityCoefficient >= 0.0; });
-    bool const inheritedViscosityStage = std::any_of(plan.stages.begin(), plan.stages.end(),
-        [](auto const& stage) { return stage.bulkViscosityCoefficient < 0.0; });
-    if (baseOptions.hydro.enabled && fixedViscosityStage && !inheritedViscosityStage &&
-        baseOptions.hydro.viscosityEvolution != "none") {
-        // Every stage replaces the requested viscosity evolution with fixed
-        // coefficients. Use that effective model for allocation and checkpoint
-        // layout too; migration frees the unused variable-viscosity arrays.
-        baseOptions.hydro.viscosityEvolution = "none";
-        setOptions(baseOptions);
-        terminal::detailPrint("All scenario stages prescribe fixed viscosity; using "
-                              "hydro.viscosityEvolution=none for evolution and checkpoints\n");
-    }
     double const defaultDuration = std::accumulate(plan.stages.begin(), plan.stages.end(), 0.0,
         [](double sum, auto const& stage) { return sum + stage.duration; });
     int const defaultSteps = std::accumulate(plan.stages.begin(), plan.stages.end(), 0,
@@ -223,13 +209,17 @@ void runFixedScenario() {
         auto stageOptions = baseOptions;
         stageOptions.hydro.damping = stage.damping;
         if (stage.bulkViscosityCoefficient >= 0.0) {
-            stageOptions.hydro.bulkViscosityCoefficient = stage.bulkViscosityCoefficient;
-            stageOptions.hydro.vonNeumannRichtmyerCoefficient =
-                2.0 * stage.bulkViscosityCoefficient;
-            stageOptions.hydro.viscosityEvolution = "none";
+            // Equal bounds hold alpha constant; beta_ab = 2 alpha_ab as for fixed Monaghan
+            // coefficients. Checkpoints keep the configured bounds of baseOptions.
+            stageOptions.hydro.minimumBulkViscosityCoefficient = stage.bulkViscosityCoefficient;
+            stageOptions.hydro.maximumBulkViscosityCoefficient = stage.bulkViscosityCoefficient;
+            stageOptions.hydro.vonNeumannRichtmyerCoefficient = 2.0;
         }
         setOptions(stageOptions);
 #if COSMICTIGER_WITH_SPH
+        if (stageOptions.hydro.enabled && stage.bulkViscosityCoefficient >= 0.0) {
+            sphParticlesSetBulkViscosityCoefficients(float(stage.bulkViscosityCoefficient));
+        }
         bool const midpointHydro = sphMidpointEnabled();
 #else
         bool const midpointHydro = false;
@@ -355,15 +345,12 @@ void runFixedScenario() {
                     profile::ScopedPhase phase("drift");
                     drift(1.0, 0.5 * timestep, midpointTime, state.tau + timestep, duration);
                 }
-                if (getOptions().chemistry.enabled || getOptions().starFormation.enabled ||
-                    getOptions().hydro.viscosityEvolution != "none") {
-                    int const closingRung = global ? 0 : minRung(inc(state.itime, state.maxRung));
-                    auto const sourceEstimate = sphCompleteSources(closingRung,
-                        state.tau + timestep, baseTimestep, 1.0, 0.0, state.energies,
-                        global ? timestep : -1.0, global ? baseTimestep : 0.0);
-                    if (global) {
-                        state.globalHydroTimestep = sourceEstimate.minimumTimestep;
-                    }
+                int const closingRung = global ? 0 : minRung(inc(state.itime, state.maxRung));
+                auto const sourceEstimate =
+                    sphCompleteSources(closingRung, state.tau + timestep, baseTimestep, 1.0, 0.0,
+                        state.energies, global ? timestep : -1.0, global ? baseTimestep : 0.0);
+                if (global) {
+                    state.globalHydroTimestep = sourceEstimate.minimumTimestep;
                 }
                 state.energies.tckin = particlesSumEnergies().kin;
             }
@@ -462,11 +449,10 @@ void runFixedScenario() {
         finalOptions = baseOptions;
         finalOptions.hydro.damping = plan.stages.back().damping;
         if (plan.stages.back().bulkViscosityCoefficient >= 0.0) {
-            finalOptions.hydro.bulkViscosityCoefficient =
-                plan.stages.back().bulkViscosityCoefficient;
-            finalOptions.hydro.vonNeumannRichtmyerCoefficient =
-                2.0 * plan.stages.back().bulkViscosityCoefficient;
-            finalOptions.hydro.viscosityEvolution = "none";
+            double const α = plan.stages.back().bulkViscosityCoefficient;
+            finalOptions.hydro.minimumBulkViscosityCoefficient = α;
+            finalOptions.hydro.maximumBulkViscosityCoefficient = α;
+            finalOptions.hydro.vonNeumannRichtmyerCoefficient = 2.0;
         }
     }
     setOptions(finalOptions);

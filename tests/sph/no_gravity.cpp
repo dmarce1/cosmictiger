@@ -27,7 +27,6 @@ void sphOnlyDiagnosticsTest() {
     options.analysis.groups = false;
     options.analysis.tracers = false;
     options.hydro.cuda = false;
-    options.hydro.viscosityEvolution = "morrisAndMonaghan";
     options.hydro.minSmoothingLength = 0.25;
     options.hydro.maxSmoothingLength = 0.25;
     options.hydro.damping = 0.0;

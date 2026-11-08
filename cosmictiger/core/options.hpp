@@ -293,22 +293,14 @@ struct Hydro {
     std::string method{"sph"};
     std::string kernelFamily{"spline"};
     int kernelDegree{3};
-    double bulkViscosityCoefficient{};
+    // Pairs use beta_ij = viscosityBeta alpha_ij with Rosswog-limited Morris-Monaghan alpha.
     double vonNeumannRichtmyerCoefficient{};
     double viscosityEpsilon{};
     double conductionCoefficient{0.0};
-    std::string viscosityEvolution{"morrisAndMonaghan"};
     double minimumBulkViscosityCoefficient{0.1};
+    double maximumBulkViscosityCoefficient{1.5};
     double viscosityDecay{0.2};
-    // Morris-Monaghan uses beta_ij = viscosityBeta alpha_ij; the fixed Monaghan coefficients
-    // use beta_ij = viscosityBeta.
-    bool viscosityBetaFollowsAlpha() const {
-        return viscosityEvolution == "morrisAndMonaghan";
-    }
-    // The Balsara limiter accompanies Morris-Monaghan viscosity and nothing else.
-    bool usesBalsaraSwitch() const {
-        return viscosityEvolution == "morrisAndMonaghan";
-    }
+    double balsaraSoundSpeedCoefficient{1.0e-4};
     double gamma{};
     double cfl{};
     double neighborNumber{42.0};
@@ -379,11 +371,11 @@ struct Options {
         arc & hydro.enabled;
         arc & gravity.enabled;
         arc & compute.sphBucketSize;
-        arc & hydro.bulkViscosityCoefficient;
         arc & hydro.vonNeumannRichtmyerCoefficient;
         arc & hydro.viscosityEpsilon;
-        arc & hydro.viscosityEvolution;
         arc & hydro.minimumBulkViscosityCoefficient;
+        arc & hydro.maximumBulkViscosityCoefficient;
+        arc & hydro.balsaraSoundSpeedCoefficient;
         arc & hydro.viscosityDecay;
         arc & hydro.neighborNumber;
         arc & hydro.minSmoothingLength;

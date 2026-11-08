@@ -101,6 +101,8 @@ void sphParticlesGlobalReadDensity(ParticleGlobalRange range, float*, ParticleIn
     float* balsaraFactor = nullptr, float* bulkViscosityCoefficient = nullptr,
     float* gradHCorrection = nullptr);
 void sphParticlesResetConverged();
+// Sets every local and child gas particle's alpha, for scenario stages with constant alpha.
+void sphParticlesSetBulkViscosityCoefficients(float bulkViscosityCoefficient);
 void sphParticlesResetSemiactive();
 void sphParticlesLoad(FILE* fp);
 void sphParticlesSave(FILE* fp);

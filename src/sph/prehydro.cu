@@ -147,9 +147,7 @@ __global__ void sphCudaSmoothingLengths(
 // clang-format on
 __global__ void sphCudaDensityAndGradients(
     SphRunParameters parameters, SphRunCudaData data, SphReduction* reduction) {
-    bool const evolveMorrisMonaghan =
-        parameters.variableViscosity && parameters.viscosityTimestep > 0.0;
-    bool const loadVelocity = parameters.balsaraSwitch || evolveMorrisMonaghan;
+    bool const evolveMorrisMonaghan = parameters.viscosityTimestep > 0.0;
     sph_flops::Counter flops = 2;    // γ − 1 and h_M/h.
     float const γ = data.adiabaticIndex;
     float const γ_minus_1 = γ - 1.0f;    // P/(ρu) for every particle.
@@ -198,8 +196,7 @@ __global__ void sphCudaDensityAndGradients(
                     auto& particle = workspace.particles[offset + slot];
                     particle.smoothingLength = data.sourceSmoothingLength[sourceParticleIndex];
                     particle.rung = data.sourceRungs[sourceParticleIndex];
-                    particle.velocity = loadVelocity ? data.sourceVelocity(sourceParticleIndex) :
-                                                       SpatialVector<float>(0.0f);
+                    particle.velocity = data.sourceVelocity(sourceParticleIndex);
                 }
             }
         }
@@ -242,7 +239,6 @@ __global__ void sphCudaDensityAndGradients(
             }
             bool const updateMorrisMonaghan =
                 evolveMorrisMonaghan && active && !data.sinkFlags[sinkIndex].converged();
-            bool const computeSphDivergence = parameters.balsaraSwitch || updateMorrisMonaghan;
             bool converged = true;
             if (!active && !data.sinkFlags[sinkIndex].converged()) {
                 converged = solveSphSmoothingLength<kDensityAndGradientsBlockSize>(h𞁑ₘₑₘ,
@@ -309,7 +305,7 @@ __global__ void sphCudaDensityAndGradients(
                     flops +=
                         3 + sph_flops::densityKernelOperations(selectedHydroKernel(), q𞁑𞁓, true);
                 }
-                if (computeSphDivergence && abs_r𞁑𞁓 > 0.0f && q𞁑𞁓 < 1.0f) {
+                if (abs_r𞁑𞁓 > 0.0f && q𞁑𞁓 < 1.0f) {
                     // clang-format off
                     /*
                      * GADGET-4, Springel et al. (2021), equation (72) uses −Σ𞁓 m𞁓 v𞁑𞁓·gradW_ab
@@ -332,11 +328,9 @@ __global__ void sphCudaDensityAndGradients(
                     flops += sph_flops::kVectorOperation;
                     ρ𞁑_div_v𞁑 -= v𞁑𞁓.dot(m𞁓grad𞁑W𞁑𞁓);
                     flops += sph_flops::kDotProduct + 1;
-                    if (parameters.balsaraSwitch) {
-                        ρ𞁑_curl_v𞁑 += sph_geometry::paddedVector(v𞁑𞁓).cross(
-                            sph_geometry::paddedVector(m𞁓grad𞁑W𞁑𞁓));
-                        flops += 12;
-                    }
+                    ρ𞁑_curl_v𞁑 += sph_geometry::paddedVector(v𞁑𞁓).cross(
+                        sph_geometry::paddedVector(m𞁓grad𞁑W𞁑𞁓));
+                    flops += 12;
                 }
             }
             sharedReduceAdd<float, kDensityAndGradientsBlockSize>(ρ𞁑);
@@ -344,16 +338,12 @@ __global__ void sphCudaDensityAndGradients(
             sharedReduceAdd<float, kDensityAndGradientsBlockSize>(ΣW);
             sharedReduceAdd<float, kDensityAndGradientsBlockSize>(Σqwʹ);
             flops += 2 * detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
-            if (computeSphDivergence) {
-                sharedReduceAdd<float, kDensityAndGradientsBlockSize>(ρ𞁑_div_v𞁑);
-                flops += detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
+            sharedReduceAdd<float, kDensityAndGradientsBlockSize>(ρ𞁑_div_v𞁑);
+            flops += detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
+            for (int dim = 0; dim < kDimensions; ++dim) {
+                sharedReduceAdd<float, kDensityAndGradientsBlockSize>(ρ𞁑_curl_v𞁑[dim]);
             }
-            if (parameters.balsaraSwitch) {
-                for (int dim = 0; dim < kDimensions; ++dim) {
-                    sharedReduceAdd<float, kDensityAndGradientsBlockSize>(ρ𞁑_curl_v𞁑[dim]);
-                }
-                flops += 3 * detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
-            }
+            flops += 3 * detail::sphReductionFlops<kDensityAndGradientsBlockSize>();
 
             if (threadIndex == 0) {
                 ALWAYS_ASSERT(h𞁑 > 0.0f && ρ𞁑 > 0.0f);
@@ -390,27 +380,28 @@ __global__ void sphCudaDensityAndGradients(
                 }
                 data.sinkGradHCorrection[sinkIndex] = gradH.correction.weightedSupportCorrection;
 
-                if (parameters.balsaraSwitch && data.sinkBalsaraFactor) {
+                float const c𞁑 = sqrtf(γ * γ_minus_1 * data.sourceInternalEnergy[particleIndex]);
+                flops += 3;
+                if (data.sinkBalsaraFactor) {
+                    // The density-weighted sums take ρ𞁑 c𞁑/h𞁑 with h𞁑 the kernel support radius.
                     data.sinkBalsaraFactor[sinkIndex] =
-                        balsara::encodeFactor(balsara::balsaraFactor(ρ𞁑_div_v𞁑, ρ𞁑_curl_v𞁑.norm()));
-                    flops += 8;
-                } else if (!parameters.balsaraSwitch && data.sinkBalsaraFactor) {
-                    data.sinkBalsaraFactor[sinkIndex] = 255;
+                        balsara::encodeFactor(balsara::balsaraFactor(ρ𞁑_div_v𞁑, ρ𞁑_curl_v𞁑.norm(),
+                            ρ𞁑 * c𞁑 / h𞁑, parameters.balsaraSoundSpeedCoefficient));
+                    flops += 12;
                 }
                 if (updateMorrisMonaghan) {
                     /*
-                     * Morris & Monaghan (1997), equations (5), (6), (13), in conformal time; the
-                     * update is in cosmictiger/sph/viscosity/morris_and_monaghan.hpp. The sum/rho
-                     * is a² div_phys(v); conformal-time rates divide by a. τ𞁑⁻¹ = C₁ c𞁑/h_M𞁑,
+                     * Morris & Monaghan (1997), equations (5), (6), (13), with the Rosswog et al.
+                     * (2000) limiter, in conformal time; the update is in
+                     * cosmictiger/sph/viscosity/morris_and_monaghan.hpp. The sum/rho is
+                     * a² div_phys(v); conformal-time rates divide by a. τ𞁑⁻¹ = C c𞁑/h_M𞁑,
                      * ∇·v𞁑 = ρ𞁑 ∇·v𞁑/(a ρ𞁑). Symbol directory: ∇·v𞁑 → divergence; c𞁑 → sound
-                     * speed; h_M𞁑 → viscosity smoothing length; τ𞁑⁻¹ → inverse decay time; C₁ →
+                     * speed; h_M𞁑 → viscosity smoothing length; τ𞁑⁻¹ → inverse decay time; C →
                      * viscosity decay parameter; Δt → time step; α𞁑 → stored bulk viscosity
                      * coefficient; h_M/h → Monaghan smoothing length per support radius.
                      * Code names: div_v_a = ∇·v𞁑; iτ𞁑 = τ𞁑⁻¹; h_M_over_h = h_M/h.
                      */
                     float const div_v_a = ρ𞁑_div_v𞁑 / (ρ𞁑 * parameters.scaleFactor);
-                    float const c𞁑 =
-                        sqrtf(γ * γ_minus_1 * data.sourceInternalEnergy[particleIndex]);
                     float const h_M𞁑 = h𞁑 * h_M_over_h;
                     float const iτ𞁑 =
                         parameters.viscosityDecay * c𞁑 / (parameters.scaleFactor * h_M𞁑);
@@ -419,8 +410,9 @@ __global__ void sphCudaDensityAndGradients(
                     float const Δt = actualInterval ? parameters.viscosityTimestep :
                                                       parameters.viscosityTimestep / (1 << rung);
                     auto& α𞁑 = data.sinkBulkViscosityCoefficient[sinkIndex];
-                    α𞁑 = morris_and_monaghan::evolvedBulkViscosityCoefficient(
-                        float(α𞁑), parameters.minimumBulkViscosityCoefficient, iτ𞁑, div_v_a, Δt);
+                    α𞁑 = morris_and_monaghan::evolvedBulkViscosityCoefficient(float(α𞁑),
+                        parameters.minimumBulkViscosityCoefficient,
+                        parameters.maximumBulkViscosityCoefficient, iτ𞁑, div_v_a, Δt);
 
                     flops += 18;
                     flops.doublePrecision += actualInterval ? 1 : 2;

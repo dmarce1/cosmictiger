@@ -583,12 +583,8 @@ SphRunReturn sphCompleteSources(int minimumClosingRung, double time, double base
     double maximumGlobalTimestep) {
     auto const& options = getOptions();
     bool const sourcePhysics = options.starFormation.enabled || options.chemistry.enabled;
-    // Morris-Monaghan keeps its published endpoint relaxation prescription and
-    // its documented accuracy limit.
-    bool const evolvingViscosity = options.hydro.viscosityEvolution == "morrisAndMonaghan";
-    if (!sourcePhysics && !evolvingViscosity) {
-        return {};
-    }
+    // Morris-Monaghan viscosity always closes here with its published endpoint relaxation
+    // prescription and documented accuracy limit.
     ALWAYS_ASSERT(minimumClosingRung >= 0 && minimumClosingRung < kMaxRung);
     ALWAYS_ASSERT(explicitTimestep != 0.0);
     if (sphMidpointTargetCount(-1) == 0) {
@@ -605,9 +601,8 @@ SphRunReturn sphCompleteSources(int minimumClosingRung, double time, double base
         sphStep1(minimumClosingRung);
         // Live dyadic rungs recover each closing interval from the base duration;
         // global integration supplies its exact duration.
-        double const viscosityTimestep = !evolvingViscosity ?
-            0.0 :
-            (maximumGlobalTimestep > 0.0 ? explicitTimestep : baseTimestep);
+        double const viscosityTimestep =
+            maximumGlobalTimestep > 0.0 ? explicitTimestep : baseTimestep;
         auto const endpointEstimate = sphMidpointEvaluate(minimumClosingRung, kMaxRung - 1, scale,
             time, baseTimestep, scaleDerivative, sourcePhysics ? -1.0 : 0.0, maximumGlobalTimestep,
             viscosityTimestep);
@@ -2452,18 +2447,15 @@ void driver() {
                     cosmology::kineticExpansionWork(midpointScale, a, afterHydro.kin) +
                     (a - midpointScale) * (3.0 * getOptions().hydro.gamma - 4.0) *
                         afterHydro.therm / sqr(midpointScale);
-                if (getOptions().chemistry.enabled || getOptions().starFormation.enabled ||
-                    getOptions().hydro.viscosityEvolution != "none") {
-                    // Complete each old gas interval before the next gravity
-                    // boundary changes its rung. Checkpoints therefore contain
-                    // completed sources and restart never replays this event.
-                    // Source heat is separate from the adiabatic work above.
-                    int const minimumClosingRung = global ? 0 : int(minRung(nextIntegerTime));
-                    auto const source = sphCompleteSources(minimumClosingRung, nextTau, t0, a,
-                        a * adot, energies, global ? dt : -1.0, global ? t0 : 0.0);
-                    if (global) {
-                        params.globalHydroTimestep = source.minimumTimestep;
-                    }
+                // Complete each old gas interval before the next gravity
+                // boundary changes its rung. Checkpoints therefore contain
+                // completed sources and restart never replays this event.
+                // Source heat is separate from the adiabatic work above.
+                int const minimumClosingRung = global ? 0 : int(minRung(nextIntegerTime));
+                auto const source = sphCompleteSources(minimumClosingRung, nextTau, t0, a, a * adot,
+                    energies, global ? dt : -1.0, global ? t0 : 0.0);
+                if (global) {
+                    params.globalHydroTimestep = source.minimumTimestep;
                 }
             } else
 #endif

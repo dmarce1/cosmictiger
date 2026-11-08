@@ -196,12 +196,11 @@ def checkViscosityRestarts(executable, baseWorkdir):
               "--run.endTime=0.00001", "--run.verbose=true", "--checkpoint.intervalSeconds=0",
               "--output.directory=.", "--output.silo=false", "--analysis.views=false",
               "--analysis.power=false", "--analysis.groups=false", "--lightcone.enabled=false"]
-    for model in ("none", "morrisAndMonaghan"):
-        limiter = model == "morrisAndMonaghan"    # the shear limiter follows the model
-        name = f"viscosity_{model}_{int(limiter)}"
-        options = common + [f"--hydro.viscosityEvolution={model}"]
-        if model == "none":
-            options += ["--hydro.conductionCoefficient=0.3"]
+    # Equal alpha bounds give constant viscosity; the default bounds evolve alpha.
+    for model in ("constant", "evolving"):
+        name = f"viscosity_{model}"
+        options = common + (["--hydro.viscosityAlphaMin=1", "--hydro.viscosityAlphaMax=1",
+                             "--hydro.conductionCoefficient=0.3"] if model == "constant" else [])
         reference = prepareCase(baseWorkdir, name)
         runSimulation(options + ["--run.maxIterations=2"], reference, "run.log")
         checkpoint = reference / "checkpoint.1"
@@ -209,8 +208,7 @@ def checkViscosityRestarts(executable, baseWorkdir):
             raise RuntimeError(f"{name} did not save a completed first step")
         for path in (checkpoint, reference / "checkpoint.2"):
             state = decode_checkpoint((path / "checkpoint.0.dat").read_bytes())
-            expected_coefficients = state.gas_count if model != "none" else 0
-            if len(state.bulk_viscosity_coefficients) != expected_coefficients:
+            if len(state.bulk_viscosity_coefficients) != state.gas_count:
                 raise RuntimeError(f"{name} has an incorrect viscosity payload")
         resumed = prepareCase(baseWorkdir, name + "_restart", checkpoint)
         output = runSimulation(options + ["--run.maxIterations=1", "--checkpoint.readIndex=1"],
@@ -224,13 +222,14 @@ def checkViscosityRestarts(executable, baseWorkdir):
             reference / "checkpoint.2", resumed / "checkpoint.2")
         checkManifest(resumed / "checkpoint.2", 2, scenario="hydroWave", endTime=1.e-5,
                       gravity=False)
-        mutations = {"model": "--hydro.viscosityEvolution=" + (
-            "morrisAndMonaghan" if model == "none" else "none"),
-                     "beta": "--hydro.viscosityBeta=3"}
-        if model == "none":
+        mutations = {"ceiling": "--hydro.viscosityAlphaMax=" + (
+            "1.5" if model == "constant" else "1"),
+                     "beta": "--hydro.viscosityBeta=3",
+                     "balsara": "--hydro.balsaraSoundSpeedCoefficient=0.01"}
+        if model == "constant":
             mutations.update({"conduction_off": "--hydro.conductionCoefficient=0",
                               "conduction_changed": "--hydro.conductionCoefficient=0.6"})
-        if model == "morrisAndMonaghan":
+        if model == "evolving":
             mutations.update({"floor": "--hydro.viscosityAlphaMin=0.2",
                               "decay": "--hydro.viscosityDecay=0.3"})
         for label, changed in mutations.items():

@@ -78,8 +78,9 @@ def main():
               "analysis.power": "false", "analysis.slice": "false", "lightcone.enabled": "false",
               "output.silo": "false", "output.directory": ".", "checkpoint.intervalSeconds": 1000000,
               "run.verbose": "true", "compute.sphBucketSize": 16,
-              "hydro.viscosityEvolution": "none", "run.scenario": "polytropicStar",
-              "hydro.viscosityAlpha": 0, "hydro.viscosityBeta": 0,
+              "run.scenario": "polytropicStar",
+              "hydro.viscosityAlphaMin": 0, "hydro.viscosityAlphaMax": 0,
+              "hydro.viscosityBeta": 0,
               "run.numberOfSteps": 2}
 
     def run(label, options, integrator="hierarchical", *, completed=False, source_checkpoint=None):
@@ -144,25 +145,6 @@ def main():
                 "force_balance_displacement": maximum_displacement,
                 "natural_rungs": sorted(set(probe.rungs)), "convergence": {}}
 
-    # Polytropic-star stages prescribe fixed viscosity even when the user keeps
-    # the normal Morris-Monaghan default. Migration may release its unused alpha
-    # array, so the checkpoint layout must use the effective stage policy too.
-    default_viscosity = {"hydro.viscosityEvolution": "morrisAndMonaghan",
-                         "run.maxIterations": 2, "checkpoint.intervalSeconds": 0}
-    default_state = run("default_viscosity", default_viscosity)
-    require(not default_state.viscosity,
-            "fixed-viscosity star checkpoint retained the variable-viscosity layout")
-    override_message = "All scenario stages prescribe fixed viscosity"
-    require(override_message in (root / "default_viscosity" / "run.log").read_text(),
-            "star did not explain its effective fixed-viscosity policy")
-    restarted_default = run("default_viscosity_restart",
-        dict(default_viscosity, **{"run.maxIterations": 1, "checkpoint.readIndex": 1}),
-        source_checkpoint=root / "default_viscosity" / "checkpoint.1")
-    require(not restarted_default.viscosity,
-            "restarted star changed the effective viscosity checkpoint layout")
-    evidence["default_viscosity_restart"] = compare_restart(
-        checkpoint_state(root / "default_viscosity", 2, 1),
-        checkpoint_state(root / "default_viscosity_restart", 2, 1))
 
     # Hold the endpoint and gas realization fixed, forcing uniform positive steps
     # shorter than the natural timestep. Stop before a stage transition; the

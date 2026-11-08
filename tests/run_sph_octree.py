@@ -116,7 +116,7 @@ def main():
               "lightcone.enabled": "false", "output.silo": "false",
               "output.directory": ".", "checkpoint.intervalSeconds": 0,
               "run.verbose": "true", "compute.sphBucketSize": 16,
-              "hydro.viscosityEvolution": "none"}
+              "hydro.viscosityAlphaMin": 1, "hydro.viscosityAlphaMax": 1}
     common["gravity.cuda"] = "true" if args.cuda or args.gravity_cuda else "false"
     common["hydro.cuda"] = "true" if args.cuda or args.hydro_cuda else "false"
 

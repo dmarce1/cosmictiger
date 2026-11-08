@@ -59,8 +59,10 @@ def state(directory):
         assert abs(sum(result.velocities[dim::args.dimension])) / result.count < 2e-5
     return result
 
-for viscosity in ("none", "morrisAndMonaghan"):
-    result = state(run("wave_" + viscosity, options=(f"--hydro.viscosityEvolution={viscosity}",)))
+# Equal alpha bounds hold alpha fixed; the default bounds evolve it.
+constant = ("--hydro.viscosityAlphaMin=1", "--hydro.viscosityAlphaMax=1")
+for viscosity, options in (("none", constant), ("evolving", ())):
+    result = state(run("wave_" + viscosity, options=options))
     assert min(result.densities) > 0.5 and max(result.densities) < 2
 for scenario in ("sod", "blast") + (("kelvinHelmholtz", "gresho") if args.dimension == 2 else ()):
     directory = run(scenario, scenario)
@@ -78,8 +80,8 @@ for scenario in ("sod", "blast") + (("kelvinHelmholtz", "gresho") if args.dimens
 state(run("output", options=("--output.silo=true",)))
 
 continuous = state(root / "wave_none")
-stopped = run("restart", options=("--hydro.viscosityEvolution=none", "--run.maxIterations=1"))
-run("resumed", options=("--hydro.viscosityEvolution=none", "--checkpoint.readIndex=1"), directory=stopped)
+stopped = run("restart", options=(*constant, "--run.maxIterations=1"))
+run("resumed", options=(*constant, "--checkpoint.readIndex=1"), directory=stopped)
 resumed = state(stopped)
 assert continuous.positions == resumed.positions
 # Near-zero transverse velocities arise from cancellation of finite pair
@@ -109,7 +111,7 @@ manifest = checkpoint.parent / "checkpoint.meta"
 lines = manifest.read_text().splitlines()
 lines[1] = f"0 {len(data)} {fnv1a64(data):016x}"
 manifest.write_text("\n".join(lines) + "\n")
-run("wrong_dimension", options=("--hydro.viscosityEvolution=none",
+run("wrong_dimension", options=(*constant,
     f"--checkpoint.readIndex={checkpoint.parent.name.split('.')[1]}"),
     succeeds=False, directory=mismatched)
 assert "Checkpoint spatial dimension" in (mismatched / "wrong_dimension.log").read_text()
@@ -120,7 +122,7 @@ header.reserved = (header.reserved & ~(7 << 28)) | ((3 - args.dimension) << 28)
 checkpoint.write_bytes(data)
 lines[1] = f"0 {len(data)} {fnv1a64(data):016x}"
 manifest.write_text("\n".join(lines) + "\n")
-run("padded_layout", options=("--hydro.viscosityEvolution=none",
+run("padded_layout", options=(*constant,
     f"--checkpoint.readIndex={checkpoint.parent.name.split('.')[1]}"),
     succeeds=False, directory=mismatched)
 assert "Checkpoint particle storage differs" in (mismatched / "padded_layout.log").read_text()

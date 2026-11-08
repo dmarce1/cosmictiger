@@ -149,7 +149,7 @@ def main():
     required = {"help", "configuration", "run.scenario", "run.endTime", "run.verbose",
                 "run.darkMatterParticleCount", "run.gasParticleCount", "compute.bucketSize",
                 "compute.sphBucketSize", "compute.sphTreeRebuildFraction", "compute.positionType",
-                "hydro.enabled", "hydro.method", "hydro.viscosityAlpha", "hydro.viscosityBeta",
+                "hydro.enabled", "hydro.method", "hydro.viscosityAlphaMax", "hydro.viscosityBeta",
                 "hydro.viscosityEpsilon", "hydro.conductionCoefficient",
                 "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
@@ -171,8 +171,8 @@ def main():
                 "starFormation.criticalOverDensity",
                 "starFormation.evaporationFactor", "starFormation.starFormationTimeGyr"}
     required.update({"run.timeIntegrator", "gravity.method.far", "gravity.method.near",
-                     "gravity.expansionDegree", "hydro.viscosityEvolution", "hydro.viscosityAlphaMin",
-                     "hydro.viscosityDecay"})
+                     "gravity.expansionDegree", "hydro.viscosityAlphaMin",
+                     "hydro.viscosityDecay", "hydro.balsaraSoundSpeedCoefficient"})
     required.update({"initial.cosmology.gadget4Restart", "initial.cosmology.useGlass",
                      "initial.cosmology.twoLpt", "initial.plummer.radius",
                      "initial.kelvinHelmholz.packing"})
@@ -254,6 +254,7 @@ def main():
                        "starFormation.windDecouplingMyr", "starFormation.windRecoupleDensityFraction",
                        "starFormation.windDirection", "hydro.dualEnergyPressureSwitch",
                        "hydro.dualEnergyUpdateSwitch", "hydro.treeRebuildActiveFraction",
+                       "hydro.viscosityAlpha", "hydro.viscosityEvolution",
                        "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius"}
     removed_options.update({"initial.gadget4Restart", "initial.useGlass", "initial.twoLpt", "initial.plummerRadius"})
     removed_options.update("compute.cuda" + key[0].upper() + key[1:] for key in cuda_tunings)
@@ -278,11 +279,10 @@ sphBucketSize = 73
 sphTreeRebuildFraction = 0.5
 [hydro]
 enabled = false
-viscosityAlpha = 0.75
+viscosityAlphaMax = 0.75
 viscosityBeta = 1.5
 viscosityEpsilon = 0.02
 conductionCoefficient = 0.3
-viscosityEvolution = none
 viscosityAlphaMin = 0.15
 viscosityDecay = 0.3
 zPlaneAcceleration = 0.25
@@ -293,10 +293,10 @@ cfl = 0.3
 mapSize = 8
 """)
     configured = run("config", [f"--configuration={config.resolve()}",
-                                "--run.maxIterations=3", "--hydro.viscosityAlpha=1.25"] + sph_control_options)
+                                "--run.maxIterations=3", "--hydro.viscosityAlphaMax=1.25"] + sph_control_options)
     expected = {"run.maxIterations": 3.0, "run.darkMatterParticleCount": 512,
                 "run.gasParticleCount": 512 if sph_controls_available else 0,
-                "analysis.tracerCount": 41.0, "hydro.viscosityAlpha": 1.25,
+                "analysis.tracerCount": 41.0, "hydro.viscosityAlphaMax": 1.25,
                 "hydro.viscosityBeta": 1.5, "hydro.viscosityEpsilon": 0.02,
                 "hydro.conductionCoefficient": 0.3,
                 "hydro.viscosityAlphaMin": 0.15, "hydro.viscosityDecay": 0.3,
@@ -317,11 +317,12 @@ mapSize = 8
                         "--hydro.enabled=false", "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512"]
 
     if args.retired_viscosity_only:
-        for selector in ("hu_etal", "huEtal", "priceEtAl", "cullenAndDehnen"):
+        # The Rosswog-limited Morris-Monaghan model is the only viscosity; no selector remains.
+        for selector in ("none", "morrisAndMonaghan", "huEtal", "priceEtAl", "cullenAndDehnen"):
             rejected = run("retired_viscosity_selector_" + selector, metadata_options + [
                 "--hydro.viscosityEvolution=" + selector], success=False)
-            if "hydro.viscosityEvolution must be" not in rejected:
-                raise RuntimeError(f"retired {selector} was not rejected with valid choices")
+            if "hydro.viscosityEvolution" not in rejected:
+                raise RuntimeError(f"retired selector {selector} lacked a diagnostic")
         print("Retired viscosity selectors rejected")
         return
 
@@ -851,12 +852,6 @@ mapSize = 8
                 expected = "COSMICTIGER_ENABLE_CHEMISTRY=ON"
             if expected not in output:
                 raise RuntimeError("midpoint deferred source rejection lacked guidance")
-    if sph_controls_available:
-        for output, expected_value in ((configured, "none"),
-                                       (balsara_default, "morrisAndMonaghan")):
-            if not re.search(r"^hydro\.viscosityEvolution\s*:\s*" + expected_value + r"\s*$",
-                             output, re.MULTILINE):
-                raise RuntimeError("unexpected hydro.viscosityEvolution setting")
     # Pressure is always variational; neither old selector value is accepted.
     for operator in ("monaghan", "variational"):
         rejected = run("pressure_operator_removed_cli_" + operator,
@@ -869,7 +864,7 @@ mapSize = 8
                        [f"--configuration={removed_config.resolve()}"], success=False)
         if "pressureOperator" not in rejected:
             raise RuntimeError("removed pressure selector lacked an INI diagnostic")
-    for key in ("hydro.viscosityAlphaMax", "hydro.viscosityDecayCD",
+    for key in ("hydro.viscosityAlpha", "hydro.viscosityEvolution", "hydro.viscosityDecayCD",
                 "hydro.viscosityAlphaMaxPrice", "hydro.viscosityDecayPrice",
                 "hydro.viscosityAlphaMaxHu", "hydro.viscosityDecayHu", "hydro.balsaraSwitch"):
         retired_config = args.workdir / f"retired_{key}.ini"
@@ -879,7 +874,7 @@ mapSize = 8
         if key.split(".")[1] not in rejected:
             raise RuntimeError(f"retired {key} lacked an INI diagnostic")
     for key in ("hydro.viscosityBetaMode", "hydro.viscosityBetaOverAlpha",
-                "hydro.viscosityAlphaMax", "hydro.viscosityDecayCD",
+                "hydro.viscosityAlpha", "hydro.viscosityEvolution", "hydro.viscosityDecayCD",
                 "hydro.viscosityAlphaMaxPrice", "hydro.viscosityDecayPrice",
                 "hydro.viscosityAlphaMaxHu", "hydro.viscosityDecayHu",
                 "initial.createGlass", "initial.plummer", "hydro.pressureOperator"):
@@ -888,51 +883,39 @@ mapSize = 8
     if sph_controls_available:
         viscosity_override = run("variable_viscosity_cli_override", [
             f"--configuration={config.resolve()}",
-            "--hydro.viscosityEvolution=morrisAndMonaghan",
             "--hydro.viscosityAlphaMin=0.4"] + sph_control_options)
-        for key, expected_value in (("hydro.viscosityEvolution", "morrisAndMonaghan"),
-                                    ("hydro.viscosityAlphaMin", "0.4")):
-            match = re.search(r"^" + re.escape(key) + r"\s*:\s*(\S+)",
-                              viscosity_override, re.MULTILINE)
-            if match is None or (float(match.group(1)) != 0.4 if expected_value == "0.4"
-                                 else match.group(1) != expected_value):
-                raise RuntimeError(f"CLI {key} did not override INI")
+        match = re.search(r"^hydro\.viscosityAlphaMin\s*:\s*(\S+)", viscosity_override,
+                          re.MULTILINE)
+        if match is None or float(match.group(1)) != 0.4:
+            raise RuntimeError("CLI hydro.viscosityAlphaMin did not override INI")
 
     # Metadata-only cases exercise the storage range without integrating a flow
-    # with extreme viscosity. Morris & Monaghan limits only its stored floor.
-    viscosityStorageModels = (("morrisAndMonaghan", "hydro.viscosityAlphaMin"),)
+    # with extreme viscosity. Both alpha bounds are stored as binary16 particle values.
+    viscosityStorageKeys = ("hydro.viscosityAlphaMin", "hydro.viscosityAlphaMax")
     halfMinimum = 2.0 ** -24
     halfMaximum = 65504.0
     halfOutsideValues = (2.0 ** -25, 65505.0)
     invalidHalfCases = []
-    for model, key in viscosityStorageModels:
+    for key in viscosityStorageKeys:
         for bound, value in zip(("below", "above"), halfOutsideValues):
             invalidHalfCases.append((key, (
-                f"viscosity_half_{model}_{bound}", metadata_options + [
-                    f"--hydro.viscosityEvolution={model}", f"--{key}={value:.17g}"], False)))
+                f"viscosity_half_{key.split('.')[1]}_{bound}", metadata_options + [
+                    f"--{key}={value:.17g}"], False)))
     for (key, _), output in zip(invalidHalfCases,
                                runAll([case for _, case in invalidHalfCases])):
         if key not in output or "binary16 viscosity storage" not in output:
             raise RuntimeError(f"invalid binary16 {key} lacked its storage diagnostic")
+    reversed_bounds = run("viscosity_alpha_bounds_reversed", metadata_options + [
+        "--hydro.viscosityAlphaMin=0.5", "--hydro.viscosityAlphaMax=0.25"], success=False)
+    if "hydro.viscosityAlphaMax must not be below hydro.viscosityAlphaMin" not in reversed_bounds:
+        raise RuntimeError("reversed alpha bounds lacked their diagnostic")
 
+    # Equal bounds at either end of the binary16 range give a valid constant alpha.
     acceptedHalfCases = []
-    for model, selectedKey in viscosityStorageModels:
-        for bound, value, unusedValue in zip(
-                ("minimum", "maximum"), (halfMinimum, halfMaximum), halfOutsideValues):
-            settings = {key: unusedValue for _, key in viscosityStorageModels}
-            settings[selectedKey] = value
-            acceptedHalfCases.append((settings, (
-                f"viscosity_half_{model}_{bound}", metadata_options + [
-                    f"--hydro.viscosityEvolution={model}",
-                    *[f"--{key}={setting:.17g}" for key, setting in settings.items()]], True)))
-    # Fixed alpha has no per-particle binary16 array; neither its value nor any
-    # unused evolution coefficient acquires the narrower storage restriction.
-    for bound, value in zip(("below", "above"), halfOutsideValues):
-        settings = {key: value for _, key in viscosityStorageModels}
-        settings["hydro.viscosityAlpha"] = value
+    for bound, value in zip(("minimum", "maximum"), (halfMinimum, halfMaximum)):
+        settings = {key: value for key in viscosityStorageKeys}
         acceptedHalfCases.append((settings, (
-            f"viscosity_half_none_{bound}", metadata_options + [
-                "--hydro.viscosityEvolution=none",
+            f"viscosity_half_constant_{bound}", metadata_options + [
                 *[f"--{key}={setting:.17g}" for key, setting in settings.items()]], True)))
     for (settings, _), output in zip(acceptedHalfCases,
                                     runAll([case for _, case in acceptedHalfCases])):
@@ -1547,7 +1530,13 @@ mapSize = 8
         ("conduction_inf", "--hydro.conductionCoefficient=inf", "hydro.conductionCoefficient"),
         ("conduction_overflow", "--hydro.conductionCoefficient=1e100", "single precision"),
         ("conduction_underflow", "--hydro.conductionCoefficient=1e-100", "single precision"),
-        ("alpha_nan", "--hydro.viscosityAlpha=nan", "hydro.viscosityAlpha"),
+        ("alpha_max_nan", "--hydro.viscosityAlphaMax=nan", "hydro.viscosityAlphaMax"),
+        ("balsara_negative", "--hydro.balsaraSoundSpeedCoefficient=-1",
+         "hydro.balsaraSoundSpeedCoefficient"),
+        ("balsara_nan", "--hydro.balsaraSoundSpeedCoefficient=nan",
+         "hydro.balsaraSoundSpeedCoefficient"),
+        ("balsara_overflow", "--hydro.balsaraSoundSpeedCoefficient=1e100",
+         "hydro.balsaraSoundSpeedCoefficient"),
         ("epsilon_inf", "--hydro.viscosityEpsilon=inf", "hydro.viscosityEpsilon"),
         ("cfl_nan", "--hydro.cfl=nan", "hydro.cfl"),
         ("neighbors_inf", "--hydro.neighborNumber=inf", "hydro.neighborNumber"),
@@ -1578,7 +1567,7 @@ mapSize = 8
         ("softening_deprecated_zero", "--gravity.softening=0", "gravity.softening"),
         ("smoothing_obsolete", "--gravity.sphSmoothing=true", "gravity.sphSmoothing"),
         ("adaptive_option_removed", "--gravity.softeningMode=adaptive", "gravity.softeningMode"),
-        ("alpha_overflow", "--hydro.viscosityAlpha=1e100", "single precision"),
+        ("alpha_max_overflow", "--hydro.viscosityAlphaMax=1e100", "binary16 viscosity storage"),
         ("epsilon_underflow", "--hydro.viscosityEpsilon=1e-100", "single precision"),
         ("gamma_rounding", "--hydro.gamma=1.00000001", "single precision"),
         # The float cubic table gives a self-neighbor floor of 10.666666236 (float
@@ -1589,21 +1578,22 @@ mapSize = 8
         ("viscosity_alpha_max_hu_removed", "--hydro.viscosityAlphaMaxHu=1",
          "hydro.viscosityAlphaMaxHu"),
         ("viscosity_decay_hu_removed", "--hydro.viscosityDecayHu=1", "hydro.viscosityDecayHu"),
-        ("viscosity_evolution", "--hydro.viscosityEvolution=unknown", "hydro.viscosityEvolution"),
-        ("viscosity_alpha_max_removed", "--hydro.viscosityAlphaMax=1", "hydro.viscosityAlphaMax"),
+        ("viscosity_evolution_removed", "--hydro.viscosityEvolution=none",
+         "hydro.viscosityEvolution"),
+        ("viscosity_alpha_removed", "--hydro.viscosityAlpha=1", "hydro.viscosityAlpha"),
         ("viscosity_decay_cd_removed", "--hydro.viscosityDecayCD=1", "hydro.viscosityDecayCD"),
         ("viscosity_alpha_max_price_removed", "--hydro.viscosityAlphaMaxPrice=1",
          "hydro.viscosityAlphaMaxPrice"),
         ("viscosity_decay_price_removed", "--hydro.viscosityDecayPrice=1",
          "hydro.viscosityDecayPrice"),
         ("beta_mode_removed", "--hydro.viscosityBetaMode=ratio", "hydro.viscosityBetaMode"),
-        ("alpha_floor_zero", "--hydro.viscosityAlphaMin=0", "hydro.viscosityAlphaMin"),
+        ("alpha_floor_negative", "--hydro.viscosityAlphaMin=-0.1", "hydro.viscosityAlphaMin"),
         ("alpha_floor_underflow", "--hydro.viscosityAlphaMin=1e-100", "single precision"),
         ("viscosity_decay_zero", "--hydro.viscosityDecay=0", "hydro.viscosityDecay"),
         ("viscosity_decay_overflow", "--hydro.viscosityDecay=1e100", "single precision"),
         ("beta_overflow", "--hydro.viscosityBeta=1e100", "single precision"),
         ("beta_nan", "--hydro.viscosityBeta=nan", "hydro.viscosityBeta"),
-        ("alpha", "--hydro.viscosityAlpha=-1", "hydro.viscosityAlpha"),
+        ("alpha_max", "--hydro.viscosityAlphaMax=-1", "hydro.viscosityAlphaMax"),
         ("beta", "--hydro.viscosityBeta=-1", "hydro.viscosityBeta"),
         ("epsilon", "--hydro.viscosityEpsilon=0", "hydro.viscosityEpsilon"),
         ("gamma", "--hydro.gamma=1", "hydro.gamma"),

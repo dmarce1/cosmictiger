@@ -584,9 +584,7 @@ struct GasMigrationState {
         arc & entropy;
         arc & density;
         arc & flags.bits;
-        if (getOptions().hydro.viscosityEvolution != "none") {
-            arc & bulkViscosityCoefficient.bits;
-        }
+        arc & bulkViscosityCoefficient.bits;
         if (getOptions().chemistry.enabled) {
             arc & electronFraction;
         }
@@ -628,9 +626,7 @@ static SphMigrationParticle packSphParticle(ParticleInteger index) {
         gas.density = sphParticlesDensities[i];
         gas.flags = sphParticlesFlags[i];
         gas.entropy = sphParticlesEntropies[i];
-        if (getOptions().hydro.viscosityEvolution != "none") {
-            gas.bulkViscosityCoefficient = sphParticlesBulkViscosityCoefficients[i];
-        }
+        gas.bulkViscosityCoefficient = sphParticlesBulkViscosityCoefficients[i];
         if (getOptions().chemistry.enabled) {
             gas.electronFraction = sphParticlesElectronFractions[i];
         }
@@ -652,9 +648,7 @@ static void unpackSphParticle(
         ALWAYS_ASSERT(gas.flags.valid());
         sphParticlesFlags[i] = gas.flags;
         sphParticlesEntropies[i] = gas.entropy;
-        if (getOptions().hydro.viscosityEvolution != "none") {
-            sphParticlesBulkViscosityCoefficients[i] = gas.bulkViscosityCoefficient;
-        }
+        sphParticlesBulkViscosityCoefficients[i] = gas.bulkViscosityCoefficient;
         if (getOptions().chemistry.enabled) {
             sphParticlesElectronFractions[i] = gas.electronFraction;
         }

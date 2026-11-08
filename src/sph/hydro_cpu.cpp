@@ -156,9 +156,7 @@ SphRunReturn sphCpuHydro(
         float const c𞁑 = std::sqrt(γ * γ_minus_1 * u𞁑);
         SpatialVector<float> const v𞁑 = data.sourceVelocity(particleIndex);
         SpatialVector<SimdFloat> const v𞁑Pack(v𞁑);
-        float const α𞁑 = parameters.variableViscosity ?
-            data.sourceBulkViscosityCoefficient[particleIndex] :
-            parameters.bulkViscosityCoefficient;
+        float const α𞁑 = data.sourceBulkViscosityCoefficient[particleIndex];
         SimdFloat αPack(α𞁑);
         float const ih𞁑 = 1.0f / h𞁑;
         flops += 6 + sph_flops::kInverseGradientScale;
@@ -256,28 +254,17 @@ SphRunReturn sphCpuHydro(
             SimdFloat const h̄_M𞁑𞁓 = monaghan::pairLength(SimdFloat(h𞁑), h𞁓, h_M_over_h);
             SimdFloat const μ𞁑𞁓 =
                 monaghan::viscosityMu(r2𞁑𞁓, a_vₚₕ𞁟ₛ𞁑𞁓_dot_r𞁑𞁓, h̄_M𞁑𞁓, SimdFloat(ε));
-            SimdFloat const α𞁓 = parameters.variableViscosity ?
-                simdSelect(interacts,
-                    detail::sphCpuLoad(data.sourceBulkViscosityCoefficient, neighbors, first, α𞁑),
-                    SimdFloat(α𞁑)) :
-                SimdFloat(α𞁑);
-            SimdFloat const α𞁑𞁓 =
-                parameters.variableViscosity ? half * SimdFloat(α𞁑) + half * α𞁓 : SimdFloat(α𞁑);
-            SimdFloat const β𞁑𞁓 = parameters.vonNeumannRichtmyerCoefficientFollowsBulk() ?
-                SimdFloat(parameters.vonNeumannRichtmyerCoefficient) * α𞁑𞁓 :
-                SimdFloat(parameters.vonNeumannRichtmyerCoefficient);
+            SimdFloat const α𞁓 = simdSelect(interacts,
+                detail::sphCpuLoad(data.sourceBulkViscosityCoefficient, neighbors, first, α𞁑),
+                SimdFloat(α𞁑));
+            SimdFloat const α𞁑𞁓 = half * SimdFloat(α𞁑) + half * α𞁓;
+            SimdFloat const β𞁑𞁓 = SimdFloat(parameters.vonNeumannRichtmyerCoefficient) * α𞁑𞁓;
             αPack = simdMax(αPack, simdSelect(interacts, α𞁑𞁓, SimdFloat(α𞁑)));
-            flops += (3 * int(parameters.variableViscosity) +
-                         int(parameters.vonNeumannRichtmyerCoefficientFollowsBulk())) *
-                SimdFloat::size();
-            SimdFloat fᴬⱽ𞁑𞁓(one);
-            if (parameters.balsaraSwitch) {
-                // Preserve the optional symmetric Balsara multiplier.
-                fᴬⱽ𞁑𞁓 = half *
-                    (SimdFloat(data.sourceBalsaraFactor[particleIndex]) +
-                        detail::sphCpuLoad(data.sourceBalsaraFactor, neighbors, first, 0.0f));
-                flops += 2 * SimdFloat::size();
-            }
+            // Symmetric Balsara multiplier.
+            SimdFloat const fᴬⱽ𞁑𞁓 = half *
+                (SimdFloat(data.sourceBalsaraFactor[particleIndex]) +
+                    detail::sphCpuLoad(data.sourceBalsaraFactor, neighbors, first, 0.0f));
+            flops += 6 * SimdFloat::size();
             // clang-format off
             /*
              * Hopkins (2013) equation 12 with Price (2012) equation 35: separate gradients
@@ -304,16 +291,12 @@ SphRunReturn sphCpuHydro(
             SimdFloat const f_P𞁑𞁓 = SimdFloat(ia) *
                 variational::pairForceFactor(
                     SimdFloat(Q𞁑𞁓_over_m𞁑), Q𞁓𞁑_over_m𞁑, maskedF_a, maskedF_b);
-            SimdFloat Π𞁑𞁓 =
+            SimdFloat const Π𞁑𞁓 = fᴬⱽ𞁑𞁓 *
                 monaghan::artificialViscosity(SimdFloat(ρ𞁑), ρ𞁓, SimdFloat(c𞁑), c𞁓, μ𞁑𞁓, α𞁑𞁓, β𞁑𞁓);
-            if (parameters.balsaraSwitch) {
-                Π𞁑𞁓 *= fᴬⱽ𞁑𞁓;
-                flops += SimdFloat::size();
-            }
             SimdFloat const f_Π𞁑𞁓 = m𞁓_over_a * Π𞁑𞁓 * F𞁑𞁓;
             SimdFloat const du_dτ_Π𞁑𞁓 = m𞁓_over_a * half * Π𞁑𞁓 * F𞁑𞁓 * a_vₚₕ𞁟ₛ𞁑𞁓_dot_r𞁑𞁓;
             // Pair length (3), μ𞁑𞁓, Π𞁑𞁓 and the force and heating factors.
-            flops += (3 + sph_flops::kViscosityMu + sph_flops::kArtificialViscosity + 6) *
+            flops += (3 + sph_flops::kViscosityMu + sph_flops::kArtificialViscosity + 7) *
                 SimdFloat::size();
             SimdFloat du𞁑_dτₕₑₐₜ𞁑𞁓 = du_dτ_Π𞁑𞁓;
             SimdFloat du𞁓_dτₕₑₐₜ𞁑𞁓 = du_dτ_Π𞁑𞁓;
@@ -383,9 +366,7 @@ SphRunReturn sphCpuHydro(
             ALWAYS_ASSERT(false);
         }
         float const α = simdMaximum(αPack);
-        float const β = parameters.vonNeumannRichtmyerCoefficientFollowsBulk() ?
-            parameters.vonNeumannRichtmyerCoefficient * α :
-            parameters.vonNeumannRichtmyerCoefficient;
+        float const β = parameters.vonNeumannRichtmyerCoefficient * α;
         float const max𞁓μ𞁑𞁓 = simdMaximum(max𞁓μ𞁑𞁓Pack);    // max𞁓(−μ𞁑𞁓) over approaching pairs
         // The pair calculation can overlap gravity. Only source assembly and
         // the following corrector require the fresh endpoint acceleration.

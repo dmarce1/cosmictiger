@@ -268,7 +268,6 @@ void particleMeshSortTest() {
         options.run.hierarchicalGravity = false;
     }
     options.hydro.enabled = COSMICTIGER_WITH_SPH && !usesHierarchicalIntegration(options.run);
-    options.hydro.viscosityEvolution = "morrisAndMonaghan";
     options.analysis.saveForce = true;
     options.analysis.tracers = true;
     options.analysis.groups = COSMICTIGER_ENABLE_ROCKSTAR != 0;

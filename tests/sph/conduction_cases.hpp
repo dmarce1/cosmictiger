@@ -23,7 +23,7 @@ void testConductionPair(Fixture& fixture) {
     parameters.minimumProposedRung = 0;
     parameters.maximumRung = kMaxRung - 1;
     parameters.baseTimestep = 1.0e-5;
-    parameters.bulkViscosityCoefficient = 0.0f;
+    fixture.setBulkViscosityCoefficient(0.0f);
     parameters.vonNeumannRichtmyerCoefficient = 0.0f;
     data.selfGravityEnabled = false;
     int const hot = fixture.sourceIndex(0);
@@ -194,7 +194,7 @@ void testDissipativeRateSuperposition(Fixture& fixture, bool morrisAndMonaghan =
     std::array<sph_geometry::SpatialVector<float>, 2> pressureAccelerations;
     std::array<float, 2> viscosityRates{}, conductionRates{};
     for (int mode = 0; mode < 4; ++mode) {
-        parameters.bulkViscosityCoefficient = (mode & 1) ? 0.7f : 0.0f;
+        fixture.setBulkViscosityCoefficient((mode & 1) ? 0.7f : 0.0f);
         parameters.vonNeumannRichtmyerCoefficient = (mode & 1) ? 2.0f : 0.0f;
         parameters.conductionCoefficient = (mode & 2) ? 0.3f : 0.0f;
         if (morrisAndMonaghan) {

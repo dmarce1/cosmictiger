@@ -93,6 +93,9 @@ def read_prefix(data):
     require(dimension_count in (1, 2, 3), "invalid checkpoint dimension count")
     hydro, cooling, stars = (bool(flags & (1 << bit)) for bit in (0, 11, 20))
     require(not hydro or header.reserved & (1 << 25), "retired SPH viscosity checkpoint layout")
+    # Bit 26: Rosswog-limited viscosity with stored alpha and Balsara factor in every SPH file.
+    require(not hydro or (header.reserved & (1 << 26) and flags & (1 << 13) and flags & (1 << 14)),
+            "SPH checkpoint predates the Rosswog-limited viscosity layout")
     require(not cooling or hydro, "cooling checkpoint requires SPH")
     require(not stars or cooling, "star formation checkpoint requires cooling")
     require(hydro or not flags & ((1 << 12) | (1 << 13) | (1 << 14) | (1 << 25)),
@@ -125,14 +128,15 @@ def read_prefix(data):
                 "unsupported particle-mesh checkpoint version or force convention")
     result.initial_counts = reader.take("Q", 2) if flags & (1 << 26) else ()
     if hydro:
-        result.sph_parameters = reader.take("d", 13)
+        result.sph_parameters = reader.take("d", 12)
         result.conduction_coefficient = reader.take("d")[0] if flags & (1 << 25) else 0.0
         require(math.isfinite(result.conduction_coefficient) and
                 result.conduction_coefficient >= 0.0, "invalid checkpoint conduction coefficient")
         if flags & (1 << 12):
             result.z_plane_acceleration = reader.take("d")[0]
         if flags & (1 << 14):
-            result.viscosity = reader.take("d", 2)
+            # alpha min, alpha max, decay and the Balsara sound-speed coefficient.
+            result.viscosity = reader.take("d", 4)
             require(all(math.isfinite(value) for value in result.viscosity),
                     "invalid checkpoint viscosity parameters")
     if cooling:
@@ -173,9 +177,8 @@ def read_prefix(data):
                 "invalid checkpoint particle-mesh interval extension")
     result.particle_start = reader.offset
     # Version 130000 packs convergence, semiactivity and the proposed rung into
-    # one byte. From 140000 Morris-Monaghan alpha is the only viscosity state.
-    result.gas_version = (140000 + (110 if stars else 100 if cooling else 2) +
-                          (2 if flags & (1 << 14) else 0))
+    # one byte. From 140000 Morris-Monaghan alpha is the only viscosity state, always stored.
+    result.gas_version = 140000 + (110 if stars else 100 if cooling else 2) + 2
     result.reader = reader
     return result
 
@@ -229,7 +232,7 @@ def decode_checkpoint(data, ranks=1):
         flags = (result.converged, result.semiactive)
         delta = (result.gas_version - 140000 -
                  (110 if result.has_stars else 100 if result.has_cooling else 2))
-        require(delta in (0, 2), "unsupported checkpoint viscosity payload")
+        require(delta == 2, "unsupported checkpoint viscosity payload")
         viscosity = []
         result.bulk_viscosity_coefficients = []
         for _ in range(gas_count):

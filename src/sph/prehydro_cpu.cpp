@@ -278,8 +278,7 @@ SphRunReturn sphCpuSmoothingLengths(
 SphRunReturn sphCpuDensityAndGradients(
     SphRunParameters const& parameters, SphRunData const& data, int targetNodeIndex) {
     SphRunReturn result;
-    bool const evolveMorrisMonaghan =
-        parameters.variableViscosity && parameters.viscosityTimestep > 0.0;
+    bool const evolveMorrisMonaghan = parameters.viscosityTimestep > 0.0;
     sph_flops::Counter flops = 2;    // γ − 1 and h_M/h.
     float const γ = data.adiabaticIndex;
     float const γ_minus_1 = γ - 1.0f;    // P/(ρu) for every gas particle
@@ -303,7 +302,6 @@ SphRunReturn sphCpuDensityAndGradients(
         }
         bool const updateMorrisMonaghan =
             evolveMorrisMonaghan && active && !data.sinkFlags[sinkIndex].converged();
-        bool const computeSphDivergence = parameters.balsaraSwitch || updateMorrisMonaghan;
         if (!active && !data.sinkFlags[sinkIndex].converged() &&
             !detail::solveSphCpuSmoothingLength(
                 parameters, data, targetNode, neighbors, particleIndex, h𞁑ₘₑₘ, flops)) {
@@ -362,42 +360,38 @@ SphRunReturn sphCpuDensityAndGradients(
             ΣqwʹPack += simdSelect(inside, q𞁑𞁓 * dkernelWDq(q𞁑𞁓), SimdFloat(0.0f));
             flops += 3 * SimdFloat::size() +
                 sph_flops::densityKernelOperations(selectedHydroKernel(), q𞁑𞁓, true);
-            if (computeSphDivergence) {
-                // clang-format off
-                /*
-                 * GADGET-4, Springel et al. (2021), equation (72) uses −Σ𞁓 m𞁓 v𞁑𞁓·gradW_ab
-                 * and Σ𞁓 m𞁓 v𞁑𞁓×gradW_ab.
-                 *
-                 * Symbol directory (in the code below):
-                 *   v𞁑, v𞁓 → sink, neighbor stored velocity; v𞁑𞁓 → velocity difference
-                 *   m𞁓 → gas mass
-                 *   ρ𞁑 → density
-                 */
-                // clang-format on
-                auto const contributes = detail::sphCpuValidLanes(neighbors, first) &&
-                    abs_r𞁑𞁓 > SimdFloat(0.0f) && q𞁑𞁓 < SimdFloat(1.0f);
-                SimdFloat const m𞁓F𞁑 = simdSelect(contributes,
-                    m𞁓ih_D_plus_1𞁑 * dkernelWDq(q𞁑𞁓) /
-                        simdSelect(contributes, abs_r𞁑𞁓, SimdFloat(1.0f)),
-                    SimdFloat(0.0f));
-                SpatialVector<SimdFloat> const v𞁑(data.sourceVelocity(particleIndex));
-                SpatialVector<SimdFloat> const v𞁓 = detail::sphCpuLoad3(data.sourceVelocityX,
-                    data.sourceVelocityY, data.sourceVelocityZ, neighbors, first, 0.0f);
-                SpatialVector<SimdFloat> const v𞁑𞁓 =
-                    simdSelect(contributes, v𞁑 - v𞁓, SpatialVector<SimdFloat>(SimdFloat(0)));
-                // Kernel-gradient coefficient (2) and relative velocity.
-                flops += (2 + sph_flops::kVectorOperation) * SimdFloat::size() +
-                    sph_flops::densityKernelOperations(selectedHydroKernel(), q𞁑𞁓, true);
-                SpatialVector<SimdFloat> const m𞁓grad𞁑W𞁑𞁓 = m𞁓F𞁑 * r𞁑𞁓;
-                flops += sph_flops::kVectorOperation * SimdFloat::size();
-                ρ𞁑_div_v𞁑Pack -= v𞁑𞁓.dot(m𞁓grad𞁑W𞁑𞁓);
-                flops += (sph_flops::kDotProduct + 1) * SimdFloat::size();
-                if (parameters.balsaraSwitch) {
-                    ρ𞁑_curl_v𞁑Pack += sph_geometry::paddedVector(v𞁑𞁓).cross(
-                        sph_geometry::paddedVector(m𞁓grad𞁑W𞁑𞁓));
-                    flops += 12 * SimdFloat::size();
-                }
-            }
+            // clang-format off
+            /*
+             * GADGET-4, Springel et al. (2021), equation (72) uses −Σ𞁓 m𞁓 v𞁑𞁓·gradW_ab
+             * and Σ𞁓 m𞁓 v𞁑𞁓×gradW_ab.
+             *
+             * Symbol directory (in the code below):
+             *   v𞁑, v𞁓 → sink, neighbor stored velocity; v𞁑𞁓 → velocity difference
+             *   m𞁓 → gas mass
+             *   ρ𞁑 → density
+             */
+            // clang-format on
+            auto const contributes = detail::sphCpuValidLanes(neighbors, first) &&
+                abs_r𞁑𞁓 > SimdFloat(0.0f) && q𞁑𞁓 < SimdFloat(1.0f);
+            SimdFloat const m𞁓F𞁑 = simdSelect(contributes,
+                m𞁓ih_D_plus_1𞁑 * dkernelWDq(q𞁑𞁓) /
+                    simdSelect(contributes, abs_r𞁑𞁓, SimdFloat(1.0f)),
+                SimdFloat(0.0f));
+            SpatialVector<SimdFloat> const v𞁑(data.sourceVelocity(particleIndex));
+            SpatialVector<SimdFloat> const v𞁓 = detail::sphCpuLoad3(data.sourceVelocityX,
+                data.sourceVelocityY, data.sourceVelocityZ, neighbors, first, 0.0f);
+            SpatialVector<SimdFloat> const v𞁑𞁓 =
+                simdSelect(contributes, v𞁑 - v𞁓, SpatialVector<SimdFloat>(SimdFloat(0)));
+            // Kernel-gradient coefficient (2) and relative velocity.
+            flops += (2 + sph_flops::kVectorOperation) * SimdFloat::size() +
+                sph_flops::densityKernelOperations(selectedHydroKernel(), q𞁑𞁓, true);
+            SpatialVector<SimdFloat> const m𞁓grad𞁑W𞁑𞁓 = m𞁓F𞁑 * r𞁑𞁓;
+            flops += sph_flops::kVectorOperation * SimdFloat::size();
+            ρ𞁑_div_v𞁑Pack -= v𞁑𞁓.dot(m𞁓grad𞁑W𞁑𞁓);
+            flops += (sph_flops::kDotProduct + 1) * SimdFloat::size();
+            ρ𞁑_curl_v𞁑Pack +=
+                sph_geometry::paddedVector(v𞁑𞁓).cross(sph_geometry::paddedVector(m𞁓grad𞁑W𞁑𞁓));
+            flops += 12 * SimdFloat::size();
         }
         float const ρ𞁑 = simdSum(ρ𞁑Pack);
         flops += SimdFloat::size() - 1;
@@ -413,29 +407,31 @@ SphRunReturn sphCpuDensityAndGradients(
         flops += 2 * (SimdFloat::size() - 1) + 8;
         detail::recordSphCpuGradH(gradH, h𞁑, ρ𞁑, ΣW, Σqwʹ, result);
         data.sinkGradHCorrection[sinkIndex] = gradH.correction.weightedSupportCorrection;
-        if (parameters.balsaraSwitch && data.sinkBalsaraFactor) {
+        float const c𞁑 = std::sqrt(γ * γ_minus_1 * data.sourceInternalEnergy[particleIndex]);
+        flops += 3;
+        if (data.sinkBalsaraFactor) {
+            // The density-weighted sums take ρ𞁑 c𞁑/h𞁑 with h𞁑 the kernel support radius.
             Vector3<float> const ρ𞁑_curl_v𞁑(simdSum(ρ𞁑_curl_v𞁑Pack[kXi]),
                 simdSum(ρ𞁑_curl_v𞁑Pack[kYi]), simdSum(ρ𞁑_curl_v𞁑Pack[kZi]));
-            data.sinkBalsaraFactor[sinkIndex] = balsara::encodeFactor(
-                balsara::balsaraFactor(simdSum(ρ𞁑_div_v𞁑Pack), ρ𞁑_curl_v𞁑.norm()));
-            flops += 4 * (SimdFloat::size() - 1) + 8;
-        } else if (!parameters.balsaraSwitch && data.sinkBalsaraFactor) {
-            data.sinkBalsaraFactor[sinkIndex] = 255;
+            data.sinkBalsaraFactor[sinkIndex] =
+                balsara::encodeFactor(balsara::balsaraFactor(simdSum(ρ𞁑_div_v𞁑Pack),
+                    ρ𞁑_curl_v𞁑.norm(), ρ𞁑 * c𞁑 / h𞁑, parameters.balsaraSoundSpeedCoefficient));
+            flops += 4 * (SimdFloat::size() - 1) + 12;
         }
         if (updateMorrisMonaghan) {
             /*
-             * Morris & Monaghan (1997), equations (5), (6), (13), in conformal time; the update is
-             * in cosmictiger/sph/viscosity/morris_and_monaghan.hpp. The sum/rho is a² div_phys(v);
-             * conformal-time rates divide by a. τ𞁑⁻¹ = C₁ c𞁑/h_M𞁑, ∇·v𞁑 = ρ𞁑 ∇·v𞁑/(a ρ𞁑).
+             * Morris & Monaghan (1997), equations (5), (6), (13), with the Rosswog et al. (2000)
+             * limiter, in conformal time; the update is in
+             * cosmictiger/sph/viscosity/morris_and_monaghan.hpp. The sum/rho is a² div_phys(v);
+             * conformal-time rates divide by a. τ𞁑⁻¹ = C c𞁑/h_M𞁑, ∇·v𞁑 = ρ𞁑 ∇·v𞁑/(a ρ𞁑).
              * Symbol directory:
              *   ∇·v𞁑 → divergence; c𞁑 → sound speed; h_M𞁑 → viscosity smoothing length
-             *   τ𞁑⁻¹ → inverse decay time; C₁ → viscosity decay parameter; Δt → time step
+             *   τ𞁑⁻¹ → inverse decay time; C → viscosity decay parameter; Δt → time step
              *   α𞁑 → stored bulk viscosity coefficient
              *   h_M/h → Monaghan smoothing length per support radius (monaghan::lengthPerSupport).
              *   Code names: div_v_a = ∇·v𞁑; iτ𞁑 = τ𞁑⁻¹; h_M_over_h = h_M/h.
              */
             float const div_v_a = simdSum(ρ𞁑_div_v𞁑Pack) / (ρ𞁑 * parameters.scaleFactor);
-            float const c𞁑 = std::sqrt(γ * γ_minus_1 * data.sourceInternalEnergy[particleIndex]);
             float const h_M𞁑 = h𞁑 * h_M_over_h;
             float const iτ𞁑 = parameters.viscosityDecay * c𞁑 / (parameters.scaleFactor * h_M𞁑);
             int const rung = data.sinkParticleRungs[data.sinkParticleIndices[sinkIndex]];
@@ -443,8 +439,9 @@ SphRunReturn sphCpuDensityAndGradients(
             float const Δt = actualInterval ? parameters.viscosityTimestep :
                                               parameters.viscosityTimestep / (1 << rung);
             auto& α𞁑 = data.sinkBulkViscosityCoefficient[sinkIndex];
-            α𞁑 = morris_and_monaghan::evolvedBulkViscosityCoefficient(
-                float(α𞁑), parameters.minimumBulkViscosityCoefficient, iτ𞁑, div_v_a, Δt);
+            α𞁑 = morris_and_monaghan::evolvedBulkViscosityCoefficient(float(α𞁑),
+                parameters.minimumBulkViscosityCoefficient,
+                parameters.maximumBulkViscosityCoefficient, iτ𞁑, div_v_a, Δt);
             flops += SimdFloat::size() - 1 + 18;
             flops.doublePrecision += actualInterval ? 1 : 2;
         }

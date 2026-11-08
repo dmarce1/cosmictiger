@@ -602,10 +602,8 @@ void writeViewSpecies(DBfile* db, ViewDirectoryMetadata& metadata, char const* s
 #if COSMICTIGER_WITH_SPH
 void writeViscosityField(
     DBfile* db, ViewDirectoryMetadata& metadata, ParticleSelection<SphParticleInfo> const& gas) {
-    if (getOptions().hydro.viscosityEvolution != "none") {
-        writeViewField(db, metadata, "bulkViscosityCoefficient", "mesh", gas, "1",
-            [](SphParticleInfo const& particle) { return double(particle.alpha); });
-    }
+    writeViewField(db, metadata, "bulkViscosityCoefficient", "mesh", gas, "1",
+        [](SphParticleInfo const& particle) { return double(particle.alpha); });
 }
 
 #if COSMICTIGER_ENABLE_STAR_FORMATION
@@ -770,9 +768,7 @@ ViewSnapshot collectViewParticles(double a) {
                     sphParticlesDensity(index), getOptions().hydro.gamma, a);
             gas.rho = sphParticlesDensity(index);
             gas.smoothingLength = sphParticlesSmoothingLength(index);
-            if (getOptions().hydro.viscosityEvolution != "none") {
-                gas.alpha = sphParticlesBulkViscosityCoefficients[index];
-            }
+            gas.alpha = sphParticlesBulkViscosityCoefficients[index];
 #if COSMICTIGER_ENABLE_CHEMISTRY
             if (getOptions().chemistry.enabled) {
                 gas.chemistryFields = sphChemistryOutput(sphParticlesElectronFractions[index],

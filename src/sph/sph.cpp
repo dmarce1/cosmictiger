@@ -758,10 +758,8 @@ SphRunReturn sphMidpointForces(SphRunParameters params, bool cuda) {
         params.hydroKickTimestep = 0.5 * Δτ;
         auto result = sphRun(params, cuda);
         sphCommitPairUpdates(1);
-        if (params.balsaraSwitch) {
-            // B(Y*) must use the predictor velocities before the second force.
-            refreshBalsara();
-        }
+        // B(Y*) must use the predictor velocities before the second force.
+        refreshBalsara();
         sphPrepareStageRates(false);
         params.hydroKickTimestep = Δτ;
         params.retainProposedRungs = true;
@@ -832,25 +830,17 @@ void SphRunWorkspace::stage() {
         (params.runType == kSphRunHydro && params.midpointHydro)) {
         hostRungs.resize(particleStorageSize);
     }
-    if (params.runType == kSphRunHydro && params.balsaraSwitch) {
-        hostBalsaraFactor.resize(particleStorageSize);
-    }
-    if (params.runType == kSphRunHydro && params.variableViscosity) {
-        hostViscosityAlpha.resize(particleStorageSize);
-    }
-    if (params.runType == kSphRunHydro ||
-        (params.runType == kSphRunDensityAndGradients &&
-            (params.balsaraSwitch || params.variableViscosity))) {
-        hostVelocityX.resize(particleStorageSize);
-        hostVelocityY.resize(particleStorageSize);
-        hostVelocityZ.resize(particleStorageSize);
-    }
     if (params.runType == kSphRunHydro) {
+        hostBalsaraFactor.resize(particleStorageSize);
+        hostViscosityAlpha.resize(particleStorageSize);
         hostDensity.resize(particleStorageSize);
         hostGradHCorrection.resize(particleStorageSize);
     }
-    if (params.runType == kSphRunHydro ||
-        (params.runType == kSphRunDensityAndGradients && params.variableViscosity)) {
+    // The density pass forms the Balsara factor and evolves alpha from v and c.
+    if (params.runType == kSphRunHydro || params.runType == kSphRunDensityAndGradients) {
+        hostVelocityX.resize(particleStorageSize);
+        hostVelocityY.resize(particleStorageSize);
+        hostVelocityZ.resize(particleStorageSize);
         hostInternalEnergy.resize(particleStorageSize);
     }
     Vector<hpx::future<void>> futs;
@@ -900,10 +890,8 @@ void SphRunWorkspace::stage() {
                         // The correction shares the density's cache line, so a remote
                         // source's ζ is from the same density pass as its ρ.
                         sphParticlesGlobalReadDensity(node.globalParticleRange(),
-                            hostDensity.data(), offset,
-                            params.balsaraSwitch ? hostBalsaraFactor.data() : nullptr,
-                            params.variableViscosity ? hostViscosityAlpha.data() : nullptr,
-                            hostGradHCorrection.data());
+                            hostDensity.data(), offset, hostBalsaraFactor.data(),
+                            hostViscosityAlpha.data(), hostGradHCorrection.data());
                         if (params.midpointHydro) {
                             sphParticlesGlobalReadRungs(
                                 node.globalParticleRange(), hostRungs.data(), offset);

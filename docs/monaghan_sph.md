@@ -37,7 +37,7 @@ applies to CPU, SIMD, and CUDA code.
 | Σ𞁓 w, Σ𞁓 q w′ | `ΣW`, `Σqwʹ` | Dimensionless neighbor sums |
 
 The `Pack` suffix denotes SIMD lane partial sums or values. Public INI/CLI keys
-such as `hydro.viscosityAlpha` and `hydro.viscosityBeta` remain unchanged.
+such as `hydro.viscosityAlphaMin` and `hydro.viscosityBeta` remain unchanged.
 
 Particle storage `sphParticlesSmoothingLengths`, the `sphParticlesSmoothingLength()`
 accessor, and the `sourceSmoothingLength`/`sinkSmoothingLength` working buffers
@@ -230,53 +230,67 @@ The variational pressure terms and symmetric artificial viscosity conserve linea
 and angular momentum and balance kinetic with internal energy. This algebraic
 identity does not imply exact conservation by a finite-step asynchronous integrator.
 
-## Morris–Monaghan variable viscosity
+## Morris–Monaghan variable viscosity with the Rosswog limiter
 
-`hydro.viscosityEvolution=morrisAndMonaghan` enables the original additive switch of
-Morris & Monaghan (1997), *A Switch to Reduce SPH Viscosity*, JCP 136, 41–50,
-[doi:10.1006/jcph.1997.5690](https://doi.org/10.1006/jcph.1997.5690):
+Artificial viscosity always uses the additive switch of Morris & Monaghan (1997),
+*A Switch to Reduce SPH Viscosity*, JCP 136, 41–50,
+[doi:10.1006/jcph.1997.5690](https://doi.org/10.1006/jcph.1997.5690), with the
+source limiter of Rosswog, Davies, Thielemann & Piran (2000), A&A 360, 171:
 
 \[
- \frac{d\alpha_i}{dt}=-\frac{\alpha_i-\alpha^\ast}{\tau_i}+S_i
- \quad\text{(5)},\qquad
- \tau_i=\frac{h_{M,i}}{\mathcal C_1c_i}\quad\text{(6)},\qquad
- S_i=\max(-\nabla\!\cdot\mathbf v_i,0)\quad\text{(13)}.
+ \frac{d\alpha_i}{dt}=-\frac{\alpha_i-\alpha_{\min}}{\tau_i}
+   +(\alpha_{\max}-\alpha_i)\,S_i,\qquad
+ \tau_i=\frac{h_{M,i}}{\mathcal C\,c_i},\qquad
+ S_i=\max(-\nabla\!\cdot\mathbf v_i,0).
 \]
 
-The defaults are \(\alpha^\ast=0.1\) and \(\mathcal C_1=0.2\), as used in their
-calculations. There is no hard upper cap or \((\alpha_{\max}-\alpha)\) source
-multiplier. Morris & Monaghan (1997) use equation (13) directly, without an
-additional adiabatic-index scaling. The decay length is the same calibrated
-viscosity length \(h_{M,i}=\sqrt{5/6}\,H_i/\texttt{smoothingLengthPerEffectiveRadius}\),
-equal to \(H_i/2\) for the cubic spline. New particles start at \(\alpha^\ast\);
-this smooth-flow initialization is an implementation choice, since
-Morris & Monaghan (1997) use problem-dependent initial values, including elevated
-α near the initial Sod interface.
+The decay and source are equations (5), (6) and (13) of Morris & Monaghan (1997);
+the factor \((\alpha_{\max}-\alpha_i)\) is the Rosswog et al. (2000) limiter, which
+saturates α smoothly below \(\alpha_{\max}\) instead of letting a strong shock drive
+it without bound. The defaults are \(\alpha_{\min}=0.1\), \(\alpha_{\max}=1.5\) and
+\(\mathcal C=0.2\). Equation (13) is used directly, without an adiabatic-index
+scaling. The decay length is the calibrated viscosity length
+\(h_{M,i}=\sqrt{5/6}\,H_i/\texttt{smoothingLengthPerEffectiveRadius}\), equal to
+\(H_i/2\) for the cubic spline. New particles start at \(\alpha_{\min}\); this
+smooth-flow initialization is an implementation choice, since Morris & Monaghan
+(1997) use problem-dependent initial values.
 
-Morris–Monaghan pair forces and heating use
-\(\bar\alpha_{ij}=(\alpha_i+\alpha_j)/2\), preserving pair symmetry.
-The single quadratic coefficient `hydro.viscosityBeta` (default 2)
-has a model-dependent meaning:
+There is no viscosity selector. Setting `hydro.viscosityAlphaMin` equal to
+`hydro.viscosityAlphaMax` holds every particle's α at that value, the constant
+Monaghan (1992) coefficients; equal zero bounds give inviscid gas.
 
-- With `morrisAndMonaghan`, \(\beta_{ij}=\texttt{viscosityBeta}\,
-  \bar\alpha_{ij}\), the convention of equation (3) of Morris & Monaghan (1997), so
-  β decays with α.
-- With `none`, \(\beta_{ij}=\texttt{viscosityBeta}\) is constant: the fixed
-  Monaghan coefficients.
+Pair forces and heating use \(\bar\alpha_{ij}=(\alpha_i+\alpha_j)/2\), preserving
+pair symmetry, and \(\beta_{ij}=\texttt{viscosityBeta}\,\bar\alpha_{ij}\), the
+convention of equation (3) of Morris & Monaghan (1997), so β decays with α
+(`hydro.viscosityBeta` defaults to 2). The pair viscosity is the original
+Monaghan (1992) form, not the signal-velocity form.
 
-With `--hydro.viscosityEvolution=none` every pair uses the constant
-`hydro.viscosityAlpha` and `hydro.viscosityBeta`; the disabled mode allocates no
-per-particle variable-viscosity state.
+The Balsara (1995) factor always multiplies \(\Pi_{ij}\) by
+\(\tfrac12(f_i+f_j)\), with the sound-speed term of Springel (2005), GADGET-2,
+MNRAS 364, 1105, equation (14):
+
+\[
+ f_i=\frac{|\nabla\!\cdot\mathbf v_i|}
+   {|\nabla\!\cdot\mathbf v_i|+|\nabla\!\times\mathbf v_i|+\varepsilon_B\,c_i/H_i}.
+\]
+
+GADGET-2 fixes \(\varepsilon_B=10^{-4}\); here it is
+`hydro.balsaraSoundSpeedCoefficient`. The term keeps noisy, nearly static gas from
+receiving full viscosity. A larger coefficient lowers \(f_i\) toward zero and so
+removes viscosity; it never restores the unlimited factor \(f_i=1\).
 
 At each particle's completed interval endpoint, the density pass computes the
 instantaneous peculiar velocity divergence and advances α with a single backward
 Euler step over that completed interval:
 
 \[
- \alpha^{n+1}=\frac{\alpha^n+\Delta t(S+\alpha^\ast/\tau)}{1+\Delta t/\tau}.
+ \alpha^{n+1}=\alpha_{\min}+\frac{\alpha^n-\alpha_{\min}
+   +\Delta t\,S\,(\alpha_{\max}-\alpha_{\min})}{1+\Delta t/\tau+\Delta t\,S}.
 \]
 
-The source and decay time are frozen during this update. Divergence and curl are then discarded; neither their
+The source and decay time are frozen during this update (derived). The result is a
+positive weighting of \(\alpha^n\), \(\alpha_{\min}\) and \(\alpha_{\max}\), so
+\([\alpha_{\min},\alpha_{\max}]\) is invariant for every step. Divergence and curl are then discarded; neither their
 history nor \(\nabla\cdot(\rho\mathbf v)\) is needed. Momentum divergence contains
 an advected-density term and is not a Galilean-invariant compression indicator.
 The derivative-of-divergence indicator described after equation (72) of GADGET-4,
@@ -285,9 +299,8 @@ Morris & Monaghan (1997).
 
 Only the scalar `bulkViscosityCoefficient` (α) survives sorting, domain migration,
 and checkpoints; no rate or predictor is stored. It occupies two bytes in IEEE
-binary16, while the update arithmetic uses float. The configured minimum must lie
-in `[2^-24, 65504]`. Constant-alpha
-viscosity has no per-particle alpha array and keeps its float range. The density
+binary16, while the update arithmetic uses float. Both configured bounds must be
+zero or lie in `[2^-24, 65504]`, with the maximum not below the minimum. The density
 convergence flag ensures retries do not advance α twice. Morris–Monaghan updates occur only at
 each particle's completed own interval endpoint, before gas rung changes and
 source conversion. Subsequent midpoint force evaluations use the last endpoint's
@@ -295,7 +308,7 @@ source conversion. Subsequent midpoint force evaluations use the last endpoint's
 estimates do not advance α. This retained backward-Euler endpoint update is first
 order; it limits the accuracy of the coupled variable-coefficient calculation
 even though the velocity/entropy hydro operator uses RK2. Silo writes a
-dimensionless `bulkViscosityCoefficient` gas field when viscosity evolution is enabled.
+dimensionless `bulkViscosityCoefficient` gas field.
 Morris–Monaghan retains and writes no divergence field.
 
 In the cosmological variables below, the normalized density derivative sum is
@@ -482,8 +495,8 @@ the selected hydro family. These reference conversions do not establish equal
 timestep accuracy for every kernel shape.
 
 The `star` test's constant-α schedule (zero during relaxation, 0.05 afterward)
-sets `hydro.viscosityEvolution=none` and `viscosityBeta=2*viscosityAlpha`
-for each stage, so the relaxation stage is inviscid. It relaxes its initial polytrope with a velocity damping term outside
+sets equal α bounds and `viscosityBeta=2` for each stage and resets every stored α
+when a stage starts, so the relaxation stage is inviscid. It relaxes its initial polytrope with a velocity damping term outside
 Monaghan (1992), \(d\mathbf w/d\tau \mathrel{-}= \lambda_{\rm d}\mathbf w\), where
 \(\lambda_{\rm d}\) is the internal `hydro.damping` rate per code time unit. The
 timestep criteria above do not include it, so the explicit kick is stable only while
@@ -556,11 +569,11 @@ hydrodynamic controls are:
 | `hydro.kernelFamily` | `spline` | Density family: `spline`, `wendland`, or `ferrers` |
 | `hydro.kernelDegree` | `3` | Density polynomial degree; valid values depend on family |
 | `hydro.gamma` | `5/3` | Ideal-gas adiabatic index |
-| `hydro.viscosityAlpha` | `1` | Constant linear coefficient when variable viscosity is disabled |
-| `hydro.viscosityBeta` | `2` | Quadratic coefficient: multiplies \(\bar\alpha_{ij}\) for `morrisAndMonaghan`, constant for `none` |
-| `hydro.viscosityEvolution` | `morrisAndMonaghan` | α evolution: `none` or `morrisAndMonaghan` |
-| `hydro.viscosityAlphaMin` | `0.1` | Morris–Monaghan positive α floor and initial value |
-| `hydro.viscosityDecay` | `0.2` | Morris–Monaghan decay coefficient \(\mathcal C_1\) |
+| `hydro.viscosityBeta` | `2` | Quadratic coefficient, multiplying \(\bar\alpha_{ij}\) |
+| `hydro.viscosityAlphaMin` | `0.1` | Morris–Monaghan α floor and initial value |
+| `hydro.viscosityAlphaMax` | `1.5` | Rosswog α ceiling; equal to the floor for constant α |
+| `hydro.viscosityDecay` | `0.2` | Morris–Monaghan decay coefficient \(\mathcal C\) |
+| `hydro.balsaraSoundSpeedCoefficient` | `1e-4` | Coefficient of \(c/H\) in the Balsara denominator |
 | `hydro.conductionCoefficient` | `0` | Artificial thermal diffusion coefficient g; zero disables it |
 | `hydro.viscosityEpsilon` | `0.01` | Denominator coefficient multiplying \(\bar\ell^2\) |
 | `hydro.neighborNumber` | `42` | Kernel-weighted support-sphere count |

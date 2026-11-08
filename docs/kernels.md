@@ -267,7 +267,7 @@ unit conversion.
 
 Viscosity uses a fixed reference factor `sqrt(5/6)` times the mean SPH effective
 radius. This equals Monaghan's `smoothingLength/2` for the cubic and preserves the meaning of
-the existing cubic `viscosityAlpha`, `viscosityBeta`, and regularization settings.
+the existing cubic viscosity α bounds, `viscosityBeta`, and regularization settings.
 The hydro acceleration limit additionally retains a fixed reference calibration
 `0.7115965735877551` multiplying gravity eta, preserving the historical
 cubic/Ferrers F4 acceleration calibration through the radius-unit conversion.

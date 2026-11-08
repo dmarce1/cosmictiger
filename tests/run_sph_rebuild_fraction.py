@@ -61,7 +61,7 @@ def main():
               "lightcone.enabled": "false", "output.silo": "false",
               "output.directory": ".", "checkpoint.intervalSeconds": 0,
               "run.verbose": "true", "compute.sphBucketSize": 16,
-              "hydro.viscosityEvolution": "none"}
+              "hydro.viscosityAlphaMin": 1, "hydro.viscosityAlphaMax": 1}
 
     def run(name, options, integrator=None, *, success=True, extra=(), localities=ranks):
         directory = prepareCase(root, name)

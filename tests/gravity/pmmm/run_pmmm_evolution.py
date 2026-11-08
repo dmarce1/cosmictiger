@@ -97,9 +97,6 @@ def main():
     parser.add_argument("--near-method", choices=("pp", "fmm"), required=True)
     parser.add_argument("--order", type=int, choices=range(3, 10), required=True)
     parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"), required=True)
-    parser.add_argument("--viscosity-evolution",
-                        choices=("none", "morrisAndMonaghan"),
-                        default="morrisAndMonaghan")
     parser.add_argument("--with-sph", action="store_true",
                         help="exercise mixed gas/dark-matter evolution in an SPH-enabled build")
     parser.add_argument("--sph-only", action="store_true",
@@ -147,8 +144,6 @@ def main():
         options = dict(common, **{"hydro.enabled": str(hydro).lower(),
                                   "hydro.cuda": str(args.cuda and hydro and args.with_sph).lower(),
                                   "run.scenario": "cosmology" if hydro else "plummer"})
-        if hydro:
-            options["hydro.viscosityEvolution"] = args.viscosity_evolution
         if hydro:
             rejected = prepareCase(root, label + "_rejected")
             log = run(rejected, dict(options, **{"run.maxIterations": 0}), False)

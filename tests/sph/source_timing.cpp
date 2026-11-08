@@ -237,7 +237,6 @@ void sphSourceTimingTest() {
     options.hydro.centralAcceleration = 0.0;
     double const baseTimestep = 1.0e8 / (detail::kSourceScale * options.units.timeSeconds);
     sphTreeDestroy(true);
-    options.hydro.viscosityEvolution = "morrisAndMonaghan";
     setOptions(options);
     // Give the fine interval one decay time, so an endpoint update is
     // visible in half storage even with cosmological code units.

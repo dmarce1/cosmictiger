@@ -608,9 +608,7 @@ void initializeSphDomainRegression() {
     sphParticlesSetProposedRung(0, 5 + target % 4);
     sphParticlesSetConverged(0, target % 2 != 0);
     sphParticlesSetSemiactive(0, target % 3 != 0);
-    if (getOptions().hydro.viscosityEvolution != "none") {
-        sphParticlesBulkViscosityCoefficients[0] = 0.5f + target / 16.0f;
-    }
+    sphParticlesBulkViscosityCoefficients[0] = 0.5f + target / 16.0f;
     if (getOptions().chemistry.enabled) {
         sphParticlesElectronFractions[0] = migrationElectronFraction(target);
     }
@@ -661,10 +659,8 @@ void validateSphDomainRegression() {
     requireClose("migration convergence flag", sphParticlesConverged(0), target % 2 != 0, 0.0);
     requireClose("migration semiactive flag", sphParticlesSemiactive(0), target % 3 != 0, 0.0);
     requireClose("migration canonical thermal state", sphParticlesEntropies[0], 20.0 + target);
-    if (getOptions().hydro.viscosityEvolution != "none") {
-        requireClose("migration viscosity alpha", sphParticlesBulkViscosityCoefficients[0],
-            0.5 + target / 16.0);
-    }
+    requireClose(
+        "migration viscosity alpha", sphParticlesBulkViscosityCoefficients[0], 0.5 + target / 16.0);
     if (getOptions().chemistry.enabled) {
         auto const expected = migrationElectronFraction(target);
         auto const& actual = sphParticlesElectronFractions[0];
@@ -675,14 +671,11 @@ void validateSphDomainRegression() {
     ParticleGlobalRange remote;
     remote.proc = (hpxRank() + 1) % hpxSize();
     remote.range = {0, 1};
-    if (getOptions().hydro.viscosityEvolution != "none") {
-        float bulkViscosityCoefficient[3] = {-9.0f, -9.0f, -9.0f};
-        sphParticlesGlobalReadDensity(remote, nullptr, 1, nullptr, bulkViscosityCoefficient);
-        requireClose(
-            "remote viscosity cache", bulkViscosityCoefficient[1], 0.5 + remote.proc / 16.0);
-        requireClose("remote viscosity lower padding", bulkViscosityCoefficient[0], -9.0);
-        requireClose("remote viscosity upper padding", bulkViscosityCoefficient[2], -9.0);
-    }
+    float bulkViscosityCoefficient[3] = {-9.0f, -9.0f, -9.0f};
+    sphParticlesGlobalReadDensity(remote, nullptr, 1, nullptr, bulkViscosityCoefficient);
+    requireClose("remote viscosity cache", bulkViscosityCoefficient[1], 0.5 + remote.proc / 16.0);
+    requireClose("remote viscosity lower padding", bulkViscosityCoefficient[0], -9.0);
+    requireClose("remote viscosity upper padding", bulkViscosityCoefficient[2], -9.0);
     float velocity[kDimensions][3]{};
     sphParticlesGlobalReadVelocities(remote, velocity[kXi], velocity[kYi], velocity[kZi], 1);
     for (int dimension = 0; dimension < kDimensions; ++dimension) {
@@ -736,12 +729,10 @@ void initializeSphMidpointPairRegression(bool emptyRoot) {
         sphParticlesSetInternalEnergy(gas, 2.0f + endpoint);
         sphParticlesDensity(gas) = 1.0f;
         sphParticlesSmoothingLength(gas) = 0.25f;
-        if (getOptions().hydro.viscosityEvolution != "none") {
-            // Convergence need not trigger a positive shock target when pressure
-            // is already decelerating the pair. Supply retained viscosity so
-            // this fixture's strict dissipative-heating check is well posed.
-            sphParticlesBulkViscosityCoefficients[gas] = 1.0f;
-        }
+        // Convergence need not trigger a positive shock target when pressure
+        // is already decelerating the pair. Supply retained viscosity so
+        // this fixture's strict dissipative-heating check is well posed.
+        sphParticlesBulkViscosityCoefficients[gas] = 1.0f;
     }
 }
 HPX_PLAIN_ACTION(initializeSphMidpointPairRegression, InitializeSphMidpointPairRegressionAction);
@@ -772,8 +763,8 @@ void runSphMidpointPairRegression(bool useCuda) {
     options.starFormation.enabled = false;
     options.run.scenario = "soundWave";
     options.run.minRung = 0;
-    options.hydro.viscosityEvolution = "none";
-    options.hydro.bulkViscosityCoefficient = 1.0;
+    options.hydro.minimumBulkViscosityCoefficient = 1.0;
+    options.hydro.maximumBulkViscosityCoefficient = 1.0;
     options.hydro.vonNeumannRichtmyerCoefficient = 2.0;
     options.hydro.minSmoothingLength = options.hydro.maxSmoothingLength = 0.25;
     options.hydro.damping = options.hydro.centralAcceleration = 0.0;
@@ -809,7 +800,9 @@ void runSphMidpointPairRegression(bool useCuda) {
         // The second MPI fixture has no root gas allocation. Stage storage must
         // still be collective across the driver and RK stages.
         bool const emptyRoot = fixture == 1;
-        options.hydro.viscosityEvolution = emptyRoot ? "morrisAndMonaghan" : "none";
+        // Equal bounds hold alpha fixed; the empty-root fixture evolves it.
+        options.hydro.minimumBulkViscosityCoefficient = emptyRoot ? 0.1 : 1.0;
+        options.hydro.maximumBulkViscosityCoefficient = emptyRoot ? 1.5 : 1.0;
         for (int backend = 0; backend <= int(useCuda); ++backend) {
             options.hydro.cuda = backend != 0;
             sphTreeDestroy(true);
@@ -903,9 +896,11 @@ void sphGravityTest() {
             verifyBhPotentials(true);
         }
 #endif
-        for (char const* viscosity : {"none", "morrisAndMonaghan"}) {
+        // Fixed alpha (equal bounds), then evolving alpha.
+        for (double const minimumAlpha : {1.0, 0.1}) {
             auto selected = opts;
-            selected.hydro.viscosityEvolution = viscosity;
+            selected.hydro.minimumBulkViscosityCoefficient = minimumAlpha;
+            selected.hydro.maximumBulkViscosityCoefficient = minimumAlpha == 1.0 ? 1.0 : 1.5;
             setOptions(selected);
             runPairCase(useCuda, false);
             checkpointPair();

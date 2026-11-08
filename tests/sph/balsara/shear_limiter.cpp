@@ -16,11 +16,19 @@
 #include <cosmictiger/sph/viscosity/balsara.hpp>
 
 TEST(Balsara, BalsaraFactor) {
-    EXPECT_EQ(balsara::balsaraFactor(0.0, 0.0), 0.0);
-    EXPECT_EQ(balsara::balsaraFactor(0.0f, 2.0f), 0.0f);
-    EXPECT_EQ(balsara::balsaraFactor(-3.0, 0.0), 1.0);
-    EXPECT_NEAR(balsara::balsaraFactor(-3.0, 2.0), 0.6, 1.0e-15);
-    EXPECT_NEAR(balsara::balsaraFactor(3.0f, 2.0f), 0.6f, 1.0e-7f);
+    // Without the sound-speed term the factor is |div|/(|div| + |curl|).
+    EXPECT_EQ(balsara::balsaraFactor(0.0, 0.0, 0.0, 0.0), 0.0);
+    EXPECT_EQ(balsara::balsaraFactor(0.0f, 2.0f, 1.0f, 1.0e-4f), 0.0f);
+    EXPECT_EQ(balsara::balsaraFactor(-3.0, 0.0, 0.0, 1.0e-4), 1.0);
+    EXPECT_NEAR(balsara::balsaraFactor(-3.0, 2.0, 0.0, 1.0e-4), 0.6, 1.0e-15);
+    EXPECT_NEAR(balsara::balsaraFactor(3.0f, 2.0f, 0.0f, 1.0e-4f), 0.6f, 1.0e-7f);
+    // GADGET-2 equation (14): |div|/(|div| + |curl| + ε_B c/h).
+    EXPECT_NEAR(balsara::balsaraFactor(-3.0, 2.0, 1.0e4, 1.0e-4), 0.5, 1.0e-15);
+    EXPECT_NEAR(balsara::balsaraFactor(-3.0, 0.0, 30.0, 0.1), 0.5, 1.0e-15);
+    // Noise-level divergence in static gas receives almost no viscosity.
+    EXPECT_LT(balsara::balsaraFactor(1.0e-6, 0.0, 1.0, 1.0e-4), 0.01);
+    // A large coefficient removes viscosity; it never restores the unlimited factor.
+    EXPECT_LT(balsara::balsaraFactor(-3.0, 0.0, 1.0, 1.0e6), 1.0e-5);
 }
 
 TEST(Balsara, ByteStoragePreservesEveryCodeAndEndpoints) {

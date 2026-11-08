@@ -1747,12 +1747,12 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})
         set_tests_properties(units_output PROPERTIES
             WORKING_DIRECTORY "${units_output_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
-        # Keep the existing cases on the default model and cover the constant-viscosity layout.
+        # Keep the existing cases on the default bounds and cover constant alpha (equal bounds).
         set(units_workdir "${PROJECT_BINARY_DIR}/tests/units_output_none")
         file(MAKE_DIRECTORY "${units_workdir}")
         add_test(NAME units_output_none COMMAND cosmictiger --run.test=unitsOutput
             --compute.positionType=${COSMICTIGER_POSITION_TYPE}
-            --hydro.viscosityEvolution=none
+            --hydro.viscosityAlphaMin=1 --hydro.viscosityAlphaMax=1
             --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=true --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
             --hpx:threads=2 --hpx:bind=none
             ${cosmictiger_test_integrator_args} ${cosmictiger_test_selection_args})

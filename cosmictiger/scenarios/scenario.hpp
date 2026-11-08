@@ -9,6 +9,8 @@ struct EvolutionStage {
     double duration;
     int numberOfSteps;
     double damping{0.0};
+    // Nonnegative: constant alpha for the stage (equal alpha bounds, beta_ab = 2 alpha_ab);
+    // negative: the configured Rosswog-limited bounds.
     double bulkViscosityCoefficient{-1.0};
 };
 

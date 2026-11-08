@@ -234,10 +234,10 @@ reinterpret initial-condition or checkpoint parameters.
 
 Every particle Silo file, including native code-unit output, records the public
 application settings under `/cli`. Dots in CLI names become directories: for
-example, `hydro.viscosityAlpha` is the single double-precision value
-`/cli/hydro/viscosityAlpha`. Integer and boolean settings use single integer
+example, `hydro.viscosityAlphaMax` is the single double-precision value
+`/cli/hydro/viscosityAlphaMax`. Integer and boolean settings use single integer
 values (booleans are 0 or 1); strings use null-terminated character arrays.
-The constant viscosity coefficient is not repeated as a particle `bulkViscosityCoefficient` field.
+Every gas particle also writes its evolved `bulkViscosityCoefficient` field.
 
 These are the effective settings at the snapshot, including defaults,
 configuration-file values, and runtime overrides or caps, expressed in the CLI's
