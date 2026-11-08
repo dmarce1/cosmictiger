@@ -41,7 +41,7 @@ CUDA_EXPORT inline Vector3<Real> paddedVector(SpatialVector<Real> const& spatial
 }
 
 // Derived from W_D = h⁻ᴰ w_D(r/h): density scales as h⁻ᴰ and its
-// gradient as h⁻⁽ᴰ⁺¹⁾. D → spatial dimensions; h⁻¹, h⁻² → inverse support and its square.
+// gradient as h⁻⁽ᴰ⁺¹⁾. D → spatial dimensions; h⁻¹, h⁻² → inverse smoothing length and its square.
 // Code names: ih = h⁻¹; ih2 = h⁻².
 // Hopkins (2013), https://arxiv.org/abs/1206.5006, equations (8)–(13),
 // generalized here from 3D. Retain the established 3D multiplication order.
@@ -69,7 +69,7 @@ CUDA_EXPORT inline Real inverseGradientScale(Real ih) {
 // Derived from V_D hᴰ ρ/m = N, the neighbor count of a uniform density:
 //   h = [m N/(V_D ρ)]^(1/D).
 // m → particle mass; ρ → density; N → neighbor count; V_D → unit ball volume;
-// D → spatial dimensions; h → support radius (return value).
+// D → spatial dimensions; h → smoothing length (return value).
 inline double supportRadius(double m, double ρ, double N) {
     return std::pow(m * N / (kUnitBallVolume * ρ), 1.0 / kSpatialDimensions);
 }

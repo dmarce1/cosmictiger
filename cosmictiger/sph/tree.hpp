@@ -43,7 +43,7 @@ struct SphTreeNode {
      * sinkParticleRange      -  8 bytes - Corresponding sink/output particle indices [begin, end).
      * innerBox               - 24 bytes - Bounds enclosing all particle positions in this subtree.
      * outerBox               - 24 bytes - Bounds enclosing active particles' kernel supports,
-     *                                    expanded by the configured support-radius multiplier
+     *                                    expanded by the configured smoothing-length multiplier
      *                                    (kSphSupportSearchMultiplier while supports may change,
      *                                    kSphConvergedSearchMultiplier after convergence).
      * box                    - 24 bytes - Spatial partition assigned to this node.

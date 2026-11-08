@@ -794,7 +794,7 @@ bool processOptions(int argc, char* argv[]) {
         po::value<double>(&centralEffectiveRadius)->default_value(centralEffectiveRadius),
         "central-force effective radius (2 sigma) in box units; overrides centralSmoothingLength")(
         "scenario.disc.centralSmoothingLength", po::value<double>(),
-        "central-force support radius in box units; uses the selected gravity kernel");
+        "central-force smoothing length in box units; uses the selected gravity kernel");
 
     po::options_description rayleighTaylorScenarioOpts("Rayleigh-Taylor scenario");
     rayleighTaylorScenarioOpts.add_options()("scenario.rayleighTaylor.zPlaneAcceleration",
@@ -965,7 +965,7 @@ bool processOptions(int argc, char* argv[]) {
         "fixed comoving effective radius (2 sigma) in initial reference spacings; overrides "
         "smoothingLength and replaces the deprecated gravity.softening")("gravity.smoothingLength",
         po::value<double>(),
-        "compact support radius in initial reference spacings; ignored when effectiveRadius is "
+        "smoothing length in initial reference spacings; ignored when effectiveRadius is "
         "specified")("gravity.kernelFamily",
         po::value<std::string>(&opts.gravity.kernelFamily)->default_value("ferrers"),
         "density kernel family: spline, wendland, or ferrers")("gravity.kernelDegree",
@@ -1041,9 +1041,9 @@ bool processOptions(int argc, char* argv[]) {
         "ideal-gas adiabatic index; must be 5/3 when chemistry or star formation is enabled")(
         "hydro.minSmoothingLength",
         po::value<double>(&opts.hydro.minSmoothingLength)->default_value(1.0e-6),
-        "minimum support radius in interparticle spacings")("hydro.maxSmoothingLength",
+        "minimum smoothing length in interparticle spacings")("hydro.maxSmoothingLength",
         po::value<double>(&opts.hydro.maxSmoothingLength)->default_value(1000.0),
-        "maximum kernel support radius in interparticle spacings; capped at half the box")(
+        "maximum smoothing length in interparticle spacings; capped at half the box")(
         "hydro.neighborNumber", po::value<double>(&opts.hydro.neighborNumber)->default_value(42),
         "kernel-weighted neighbor target within the support sphere, including self")("hydro.cfl",
         po::value<double>(&opts.hydro.cfl)->default_value(0.22821773229381923),
@@ -1532,7 +1532,7 @@ bool processOptions(int argc, char* argv[]) {
     auto const hydroTable = makeHydroKernelTable(
         detail::kernelSpec(opts.hydro.kernelFamily, opts.hydro.kernelDegree, true));
     // Resolve representations after both CLI and INI parsing. Only explicit
-    // effective radii, or their deprecated aliases, override support radii;
+    // effective radii, or their deprecated aliases, override smoothing lengths;
     // defaulted effective radii do not.
     auto const resolveSmoothingLength = [&](char const* effectiveKey, char const* supportKey,
                                             char const* legacyKey, double defaultSmoothingLength,
@@ -1566,7 +1566,7 @@ bool processOptions(int argc, char* argv[]) {
             smoothingLength = vm[supportKey].as<double>();
         }
         if (!detail::isFiniteOption(smoothingLength) || smoothingLength <= 0.0) {
-            detail::throwOptionError("%s / %s%s%s must give a finite positive support radius\n",
+            detail::throwOptionError("%s / %s%s%s must give a finite positive smoothing length\n",
                 effectiveKey, supportKey, legacyKey ? " / " : "", legacyKey ? legacyKey : "");
         }
         return smoothingLength;
@@ -1583,7 +1583,8 @@ bool processOptions(int argc, char* argv[]) {
         {std::pair{"hydro.minSmoothingLength", opts.hydro.minSmoothingLength},
             std::pair{"hydro.maxSmoothingLength", opts.hydro.maxSmoothingLength}}) {
         if (!detail::isFiniteOption(smoothingLength) || smoothingLength <= 0.0) {
-            detail::throwOptionError("%s must give a finite positive support radius\n", supportKey);
+            detail::throwOptionError(
+                "%s must give a finite positive smoothing length\n", supportKey);
         }
     }
     double const selfNeighborFloor =
@@ -1834,8 +1835,9 @@ bool processOptions(int argc, char* argv[]) {
         !detail::isFiniteOption(opts.hydro.maxSmoothingLength) ||
         opts.hydro.minSmoothingLength <= 0.0 ||
         opts.hydro.maxSmoothingLength < opts.hydro.minSmoothingLength) {
-        detail::throwOptionError("hydro support radii must be finite with 0 < minSmoothingLength "
-                                 "<= maxSmoothingLength\n");
+        detail::throwOptionError(
+            "hydro smoothing lengths must be finite with 0 < minSmoothingLength "
+            "<= maxSmoothingLength\n");
     }
     if (!detail::isFiniteFloatOption(opts.hydro.vonNeumannRichtmyerCoefficient) ||
         !detail::isPositiveFloatOption(opts.hydro.viscosityEpsilon)) {
@@ -1875,7 +1877,7 @@ bool processOptions(int argc, char* argv[]) {
         !detail::isPositiveFloatOption(
             std::min(opts.hydro.maxSmoothingLength / gasResolution, 0.5))) {
         detail::throwOptionError(
-            "hydro support radii must remain finite and positive in single precision "
+            "hydro smoothing lengths must remain finite and positive in single precision "
             "after normalization by the mean gas-particle spacing\n");
     }
     opts.hydro.damping = 0.0;

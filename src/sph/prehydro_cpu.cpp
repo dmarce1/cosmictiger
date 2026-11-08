@@ -35,19 +35,18 @@ namespace detail {
  * or 6.7 of Monaghan (1992), the solve holds
  *   (4π/3) ρ𞁑 h𞁑³/m = Nₛₑₜ,   i.e.   ΣW = Σ𞁓 w(|r𞁑𞁓|/h𞁑) = 3 Nₛₑₜ/(4π)
  * for the selected kernel W(r, h) = w(r/h)/h³, by a bounded Newton iteration on the
- * support radius h𞁑 with dΣW/dh𞁑 = −Σ𞁓 q𞁑𞁓 w'(q𞁑𞁓)/h𞁑, q𞁑𞁓 = |r𞁑𞁓|/h𞁑. The bounds
- * limit the support radius without modifying the density sum.
+ * smoothing length h𞁑 with dΣW/dh𞁑 = −Σ𞁓 q𞁑𞁓 w'(q𞁑𞁓)/h𞁑, q𞁑𞁓 = |r𞁑𞁓|/h𞁑. The bounds
+ * limit the smoothing length without modifying the density sum.
  *
  * Symbol directory (in the code below):
  *   q𞁑𞁓 → normalized radius
- *   r𞁑𞁓 → separation pack; |r𞁑𞁓| → separation magnitude packs
+ *   r𞁑𞁓 → separation; |r𞁑𞁓| → separation magnitude
  *   h𞁑, h𞁑⁻¹ → sink kernel smoothing length, its inverse; hₘᵢₙ, hₘₐₓ → smoothing length bounds
  *   ρ𞁑 → density
- *   ΣW, dΣW/dh𞁑 → kernel sum, its support derivative
+ *   ΣW, dΣW/dh𞁑 → kernel sum, its smoothing-length derivative
  *   Nₛₑₜ, ΣWₛₑₜ → target neighbor count, target kernel sum
  *   paddedX_a → sink position as the three-axis record that the search-box bounds compare.
  *   Code names: abs_r𞁑𞁓 = |r𞁑𞁓|; ih𞁑 = h𞁑⁻¹; dΣW_dh𞁑 = dΣW/dh𞁑.
- *   SIMD values append Pack.
  */
 // clang-format on
 bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData const& data,
@@ -58,7 +57,7 @@ bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData c
     ALWAYS_ASSERT(hₘᵢₙ > 0.0f && hₘₐₓ >= hₘᵢₙ && data.targetNeighborCount > 0.0f);
     h𞁑 = std::min(std::max(h𞁑, hₘᵢₙ), hₘₐₓ);
     Vector3<Position> const paddedX_a = data.sourcePaddedPosition(particleIndex);
-    // Distances do not change during the bounded support-radius solve.
+    // Distances do not change during the bounded smoothing-length solve.
     std::vector<SimdFloat> abs_r𞁑𞁓;    // |r𞁑𞁓| for each pack of neighbors
     abs_r𞁑𞁓.reserve((neighbors.size() + SimdFloat::size() - 1) / SimdFloat::size());
     for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
@@ -187,7 +186,7 @@ void recordSphCpuGradH(SphGradHEvaluation const& gradH, float h𞁑, float ρ�
 }
 
 // Whether an active neighbor touches particle a: r𞁑𞁓² < max(h𞁑², h𞁓²).
-// Symbol directory: r𞁑𞁓 → separation pack; r𞁑𞁓² → squared separation;
+// Symbol directory: r𞁑𞁓 → separation; r𞁑𞁓² → squared separation;
 // h𞁑, h𞁓 → sink, neighbor kernel smoothing length. Code names: r2𞁑𞁓 = r𞁑𞁓²; h2𞁑 = h𞁑².
 bool sphCpuHasActiveNeighbor(SphRunParameters const& parameters, SphRunData const& data,
     std::vector<int> const& neighbors, int particleIndex, float h𞁑, sph_flops::Counter& flops) {
@@ -254,10 +253,10 @@ SphRunReturn sphCpuSmoothingLengths(
  *   ρ𞁑 = Σ𞁓 m𞁓 W𞁑𞁓(h𞁑), W𞁑𞁓 = h𞁑⁻³ w(q𞁑𞁓), q𞁑𞁓 = |r𞁑𞁓|/h𞁑,
  *   ρ𞁑 ∇·v𞁑 = −Σ𞁓 m𞁓 v𞁑𞁓 · ∇𞁑 W𞁑𞁓,
  *   ρ𞁑 ∇×v𞁑 = Σ𞁓 m𞁓 v𞁑𞁓 × ∇𞁑 W𞁑𞁓.
- * Symbol directory (Pack denotes SIMD partial sums):
+ * Symbol directory:
  *   h𞁑, h𞁑⁻¹ → sink kernel smoothing length, its inverse; q𞁑𞁓 → normalized radius
  *   h𞁑,stored → stored smoothing length, updated by the solver
- *   w(q𞁑𞁓) → kernel weight; m𞁓/h𞁑ᴰ → mass over support volume
+ *   w(q𞁑𞁓) → kernel weight; m𞁓/h𞁑ᴰ → mass over smoothing volume
  *   ρ𞁑 → density; ρ𞁑 ∇·v𞁑 → density-weighted divergence
  *   ρ𞁑 ∇×v𞁑 → density-weighted curl
  *   γ, γ − 1 → gas adiabatic index, P/(ρu) of all gas
@@ -265,7 +264,7 @@ SphRunReturn sphCpuSmoothingLengths(
  *   v𞁑𞁓 → velocity difference (peculiar stored velocity)
  *   m𞁓 h𞁑⁻⁽ᴰ⁺¹⁾ → mass times the sink inverse gradient scale, m𞁓 F𞁑 = m𞁓 h𞁑⁻⁽ᴰ⁺¹⁾ w′(q𞁑𞁓)/|r𞁑𞁓|
  *   m𞁓 F𞁑 → mass-weighted kernel gradient factor; m𞁓 ∇𞁑 W𞁑𞁓 → mass-weighted kernel gradient
- *   h_M/h → Monaghan smoothing length per support radius (monaghan::lengthPerSupport)
+ *   h_M/h → Monaghan to stored smoothing-length ratio (monaghan::lengthPerSupport)
  *   Σ𞁓 w → kernel sum; Σ𞁓 q𞁑𞁓 w′ → kernel derivative moment
  *   Code names: ih𞁑 = h𞁑⁻¹; h𞁑ₘₑₘ = h𞁑,stored; m𞁓_over_hᴰ𞁑 = m𞁓/h𞁑ᴰ
  *     γ_minus_1 = γ − 1; abs_r𞁑𞁓 = |r𞁑𞁓|; w_q𞁑𞁓 = w(q𞁑𞁓); ρ𞁑_div_v𞁑 = ρ𞁑 ∇·v𞁑; ρ𞁑_curl_v𞁑 = ρ𞁑 ∇×v𞁑
@@ -312,7 +311,7 @@ SphRunReturn sphCpuDensityAndGradients(
         // clang-format off
         /*
          * Equation 3.8 of Monaghan (1992) (the interpolant 2.7 at r𞁑): ρ𞁑 = Σ𞁓 m𞁓 W𞁑𞁓,
-         * with the sink's own support radius in W(r, h𞁑) = w(r/h𞁑)/h𞁑³, a gather form of
+         * with the sink's own smoothing length in W(r, h𞁑) = w(r/h𞁑)/h𞁑³, a gather form of
          * equation 6.3 (which uses h_M𞁓). Every gas particle has mass m𞁓 = gasMass, and the
          * sum includes b = a.
          *
@@ -334,7 +333,7 @@ SphRunReturn sphCpuDensityAndGradients(
         // clang-format off
         /*
          * Variational operator: the unweighted sums ΣW = Σ𞁓 w(q𞁑𞁓) and Σ𞁓 q𞁑𞁓 w'(q𞁑𞁓)
-         * of cosmictiger/sph/volume.hpp give Ω𞁑 and ζ𞁑 at this support radius.
+         * of cosmictiger/sph/volume.hpp give Ω𞁑 and ζ𞁑 at this smoothing length.
          *
          * Symbol directory (in the code below):
          *   q𞁑𞁓 → normalized radius
@@ -410,7 +409,7 @@ SphRunReturn sphCpuDensityAndGradients(
         float const c𞁑 = std::sqrt(γ * γ_minus_1 * data.sourceInternalEnergy[particleIndex]);
         flops += 3;
         if (data.sinkBalsaraFactor) {
-            // The density-weighted sums take ρ𞁑 c𞁑/h𞁑 with h𞁑 the kernel support radius.
+            // The density-weighted sums take ρ𞁑 c𞁑/h𞁑 with h𞁑 the smoothing length.
             Vector3<float> const ρ𞁑_curl_v𞁑(simdSum(ρ𞁑_curl_v𞁑Pack[kXi]),
                 simdSum(ρ𞁑_curl_v𞁑Pack[kYi]), simdSum(ρ𞁑_curl_v𞁑Pack[kZi]));
             data.sinkBalsaraFactor[sinkIndex] =
@@ -428,7 +427,7 @@ SphRunReturn sphCpuDensityAndGradients(
              *   ∇·v𞁑 → divergence; c𞁑 → sound speed; h_M𞁑 → viscosity smoothing length
              *   τ𞁑⁻¹ → inverse decay time; C → viscosity decay parameter; Δt → time step
              *   α𞁑 → stored bulk viscosity coefficient
-             *   h_M/h → Monaghan smoothing length per support radius (monaghan::lengthPerSupport).
+             *   h_M/h → Monaghan to stored smoothing-length ratio (monaghan::lengthPerSupport).
              *   Code names: div_v_a = ∇·v𞁑; iτ𞁑 = τ𞁑⁻¹; h_M_over_h = h_M/h.
              */
             float const div_v_a = simdSum(ρ𞁑_div_v𞁑Pack) / (ρ𞁑 * parameters.scaleFactor);

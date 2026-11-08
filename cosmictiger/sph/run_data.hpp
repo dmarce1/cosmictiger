@@ -68,7 +68,7 @@ struct SphRunData {
     SphTreeNode* treeNodes;
     int* targetNodeIndices;
     int* neighborNodeIndices;
-    float targetNeighborCount;    // Weighted neighbor target for the support-radius solve.
+    float targetNeighborCount;    // Weighted neighbor target for the smoothing-length solve.
     float gasMass;
     float adiabaticIndex;    // Ideal-gas index shared by all gas particles.
     bool selfGravityEnabled;
@@ -163,7 +163,7 @@ CUDA_EXPORT inline sph_geometry::SpatialVector<float> sphCompleteAcceleration(
 inline constexpr int kMaxNeighborRungDifference = 1;
 inline constexpr float kSphSmoothingLengthTolerance = float(1.0e-4);
 
-// Target of the support solves: ΣW = Σ𞁓 w(q𞁑𞁓) = 3 Nₛₑₜ/(4π).
+// Target of the smoothing-length solves: ΣW = Σ𞁓 w(q𞁑𞁓) = 3 Nₛₑₜ/(4π).
 // Nₛₑₜ → target neighbor count.
 CUDA_EXPORT inline float sphTargetKernelSum(float Nₛₑₜ) {
     return Nₛₑₜ * float(1.0 / sph_geometry::kUnitBallVolume);
@@ -172,13 +172,13 @@ CUDA_EXPORT inline float sphTargetKernelSum(float Nₛₑₜ) {
 struct SphGradHEvaluation {
     sph_volume::GradHCorrection<float> correction;
     sph_volume::SupportConstraint constraint;
-    float relativeResidual;    // (ΣW − target)/target at the stored support radius
+    float relativeResidual;    // (ΣW − target)/target at the stored smoothing length
 };
 
 // The variational density pass's correction for one sink, from its unweighted sums
-// ΣW = Σ𞁓 w(q𞁑𞁓) and Σ𞁓 q𞁑𞁓 w′(q𞁑𞁓) at the converged support.
+// ΣW = Σ𞁓 w(q𞁑𞁓) and Σ𞁓 q𞁑𞁓 w′(q𞁑𞁓) at the converged smoothing length.
 // Every gas particle has the mass m and the volume weight x = m.
-// Symbol directory: h𞁑, hₘᵢₙ, hₘₐₓ → support radius and its bounds; Nₛₑₜ → target neighbor
+// Symbol directory: h𞁑, hₘᵢₙ, hₘₐₓ → smoothing length and its bounds; Nₛₑₜ → target neighbor
 // count; ΣWₛₑₜ → target kernel sum; m → gas mass; Σ𞁓 q𞁑𞁓 w′ → kernel derivative moment.
 // Code names: Σqwʹ = Σ𞁓 q𞁑𞁓 w′.
 CUDA_EXPORT inline SphGradHEvaluation sphGradHEvaluation(
@@ -195,7 +195,7 @@ CUDA_EXPORT inline SphGradHEvaluation sphGradHEvaluation(
 
 // A source can reach any sink in this box through a periodic image. Expanding
 // the unwrapped interval before testing avoids inconsistent endpoint wrapping.
-// x𞁓 → padded source position; h𞁓 → source support radius.
+// x𞁓 → padded source position; h𞁓 → source smoothing length.
 CUDA_EXPORT inline bool sphSupportIntersects(Fixed32Range const& sinkBox,
     Vector3<Position> const& x𞁓, float h𞁓, sph_flops::Counter* flops = nullptr) {
     Fixed32Range expanded = sinkBox;

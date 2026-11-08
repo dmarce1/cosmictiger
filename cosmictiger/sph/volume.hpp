@@ -7,7 +7,7 @@
  */
 
 /*
- * Support-radius, weighted-volume and grad-H correction algebra for SPH, after
+ * Smoothing-length, weighted-volume and grad-H correction algebra for SPH, after
  *
  *   P. F. Hopkins, "A general class of Lagrangian smoothed particle hydrodynamics
  *   methods and implications for fluid mixing problems", MNRAS 428 (2013), 2840,
@@ -16,8 +16,8 @@
  *   D. J. Price, "Smoothed particle hydrodynamics and magnetohydrodynamics",
  *   J. Comput. Phys. 231 (2012), 759, arXiv:1012.1885, equation 27 (Ω𞁑).
  *
- * The length here is the stored compact support radius h, with the selected kernel
- * W(r, h) = h^-D w(q) and q = r/h. It is not the kernel-normalized smoothing length of Hopkins
+ * The length here is the stored smoothing length h, the full compact support of the kernel
+ * W(r, h) = h^-D w(q) and q = r/h. It is not the kernel-normalized length of Hopkins
  * (2013) and Price (2012), whose normalization differs by kernel; only ratios h dW/dh enter, so the
  * formulas are unchanged. Particle i carries a volume weight xᵢ and a mass mᵢ. With
  *
@@ -284,7 +284,7 @@ enum class SupportConstraint : int {
 
 // relativeResidual is (sum_j w - target)/target at the stored h. A residual within
 // the solve tolerance satisfies the constraint and is free even at a bound.
-// h → stored support radius; hₘᵢₙ, hₘₐₓ → its bounds.
+// h → stored smoothing length; hₘᵢₙ, hₘₐₓ → its bounds.
 CUDA_EXPORT inline SupportConstraint classifySupport(
     float h, float hₘᵢₙ, float hₘₐₓ, float relativeResidual, float tolerance) {
     if (hₘᵢₙ == hₘₐₓ) {

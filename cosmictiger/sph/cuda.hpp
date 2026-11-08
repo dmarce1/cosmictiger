@@ -125,15 +125,15 @@ __device__ inline void recordSphGpuFlops(sph_flops::Counter const& flops, SphRed
  * h𞁑 ∝ ρ𞁑^(−1/ν) with ν = 3 (equations 6.1-6.2). Instead of integrating equation 6.2
  * or 6.7 of Monaghan (1992), the solve holds (4π/3) ρ𞁑 h𞁑³/m = Nₛₑₜ, i.e.
  * ΣW = Σ𞁓 w(|r𞁑𞁓|/h𞁑) = 3 Nₛₑₜ/(4π) for the selected kernel W(r, h) = w(r/h)/h³, by a
- * bounded Newton iteration on the support radius h𞁑 with dΣW/dh𞁑 = −Σ𞁓 q𞁑𞁓 w'(q𞁑𞁓)/h𞁑,
- * q𞁑𞁓 = |r𞁑𞁓|/h𞁑. The bounds limit the support radius without modifying the density sum.
+ * bounded Newton iteration on the smoothing length h𞁑 with dΣW/dh𞁑 = −Σ𞁓 q𞁑𞁓 w'(q𞁑𞁓)/h𞁑,
+ * q𞁑𞁓 = |r𞁑𞁓|/h𞁑. The bounds limit the smoothing length without modifying the density sum.
  *
  * Symbol directory (in the code below):
  *   q𞁑𞁓 → normalized radius
  *   x𞁑 → sink position; r𞁑𞁓 → separation
  *   h𞁑, h𞁑⁻¹ → smoothing length, its inverse; hₘᵢₙ, hₘₐₓ → smoothing length bounds
  *   ρ𞁑 → density
- *   ΣW, dΣW/dh𞁑 → kernel sum, its support derivative
+ *   ΣW, dΣW/dh𞁑 → kernel sum, its smoothing-length derivative
  *   Nₛₑₜ, ΣWₛₑₜ → target neighbor count, target kernel sum
  *   paddedX_a → x𞁑 as the three-axis record that the search-box bounds compare.
  *   Code names: ih𞁑 = h𞁑⁻¹; dΣW_dh𞁑 = dΣW/dh𞁑.

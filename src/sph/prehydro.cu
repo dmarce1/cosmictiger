@@ -122,9 +122,9 @@ __global__ void sphCudaSmoothingLengths(
  *   ρ𞁑 = Σ𞁓 m𞁓 W𞁑𞁓(h𞁑), W𞁑𞁓 = h𞁑⁻³ w(q𞁑𞁓), q𞁑𞁓 = |r𞁑𞁓|/h𞁑,
  *   ρ𞁑 ∇·v𞁑 = −Σ𞁓 m𞁓 v𞁑𞁓 · ∇𞁑 W𞁑𞁓,
  *   ρ𞁑 ∇×v𞁑 = Σ𞁓 m𞁓 v𞁑𞁓 × ∇𞁑 W𞁑𞁓.
- * Symbol directory (Pack denotes SIMD partial sums):
+ * Symbol directory:
  *   h𞁑, h𞁑⁻¹ → sink kernel smoothing length, its inverse; q𞁑𞁓 → normalized radius
- *   w(q𞁑𞁓) → kernel weight; m𞁓/h𞁑ᴰ → mass over support volume
+ *   w(q𞁑𞁓) → kernel weight; m𞁓/h𞁑ᴰ → mass over smoothing volume
  *   ρ𞁑 → density; ρ𞁑 ∇·v𞁑 → density-weighted divergence
  *   ρ𞁑 ∇×v𞁑 → density-weighted curl
  *   γ, γ − 1 → gas adiabatic index, P/(ρu) of all gas
@@ -134,7 +134,7 @@ __global__ void sphCudaSmoothingLengths(
  *   v𞁑𞁓 → velocity difference (peculiar stored velocity)
  *   m𞁓 h𞁑⁻⁽ᴰ⁺¹⁾ → mass times the sink inverse gradient scale, m𞁓 F𞁑 = m𞁓 h𞁑⁻⁽ᴰ⁺¹⁾ w′(q𞁑𞁓)/|r𞁑𞁓|
  *   m𞁓 F𞁑 → mass-weighted kernel gradient factor; m𞁓 ∇𞁑 W𞁑𞁓 → mass-weighted kernel gradient
- *   h_M/h → Monaghan smoothing length per support radius (monaghan::lengthPerSupport)
+ *   h_M/h → Monaghan to stored smoothing-length ratio (monaghan::lengthPerSupport)
  *   Σ𞁓 w → kernel sum; Σ𞁓 q𞁑𞁓 w′ → kernel derivative moment
  *   h𞁑,stored → stored smoothing length, updated by the solver
  *   Code names: ih𞁑 = h𞁑⁻¹; h𞁑ₘₑₘ = h𞁑,stored; m𞁓_over_hᴰ𞁑 = m𞁓/h𞁑ᴰ
@@ -256,7 +256,7 @@ __global__ void sphCudaDensityAndGradients(
             // clang-format off
             /*
              * Equation 3.8 of Monaghan (1992) (the interpolant 2.7 at r𞁑): ρ𞁑 = Σ𞁓 m𞁓 W𞁑𞁓,
-             * with the sink's own support radius in W(r, h𞁑) = w(r/h𞁑)/h𞁑³, a gather form of
+             * with the sink's own smoothing length in W(r, h𞁑) = w(r/h𞁑)/h𞁑³, a gather form of
              * equation 6.3 (which uses h_M𞁓). Every gas particle has mass m𞁓 = gasMass, and the
              * sum includes b = a. Each thread accumulates part of the sum.
              *
@@ -383,7 +383,7 @@ __global__ void sphCudaDensityAndGradients(
                 float const c𞁑 = sqrtf(γ * γ_minus_1 * data.sourceInternalEnergy[particleIndex]);
                 flops += 3;
                 if (data.sinkBalsaraFactor) {
-                    // The density-weighted sums take ρ𞁑 c𞁑/h𞁑 with h𞁑 the kernel support radius.
+                    // The density-weighted sums take ρ𞁑 c𞁑/h𞁑 with h𞁑 the smoothing length.
                     data.sinkBalsaraFactor[sinkIndex] =
                         balsara::encodeFactor(balsara::balsaraFactor(ρ𞁑_div_v𞁑, ρ𞁑_curl_v𞁑.norm(),
                             ρ𞁑 * c𞁑 / h𞁑, parameters.balsaraSoundSpeedCoefficient));
@@ -398,7 +398,7 @@ __global__ void sphCudaDensityAndGradients(
                      * ∇·v𞁑 = ρ𞁑 ∇·v𞁑/(a ρ𞁑). Symbol directory: ∇·v𞁑 → divergence; c𞁑 → sound
                      * speed; h_M𞁑 → viscosity smoothing length; τ𞁑⁻¹ → inverse decay time; C →
                      * viscosity decay parameter; Δt → time step; α𞁑 → stored bulk viscosity
-                     * coefficient; h_M/h → Monaghan smoothing length per support radius.
+                     * coefficient; h_M/h → Monaghan to stored smoothing-length ratio.
                      * Code names: div_v_a = ∇·v𞁑; iτ𞁑 = τ𞁑⁻¹; h_M_over_h = h_M/h.
                      */
                     float const div_v_a = ρ𞁑_div_v𞁑 / (ρ𞁑 * parameters.scaleFactor);

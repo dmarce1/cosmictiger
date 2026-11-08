@@ -57,7 +57,7 @@ using sph_geometry::SpatialVector;
  *   v𞁑𞁓 → velocity difference; v𞁑𞁓 · r𞁑𞁓 → velocity dot separation
  *   (a vₚₕ𞁟ₛ𞁑𞁓) · r𞁑𞁓 → velocity dot separation including the Hubble flow a ȧ r𞁑𞁓
  *   r𞁑𞁓² staged, h𞁓 staged → r𞁑𞁓², h𞁓 before excluded lanes are replaced
- *   q𞁑, q𞁓 → radius normalized by the sink support, by the neighbor support
+ *   q𞁑, q𞁓 → radius normalized by the sink, by the neighbor smoothing length
  *   ζ𞁑, ζ𞁓 → sink grad-H correction, neighbor grad-H correction
  *   Q𞁑𞁓/m𞁑, Q𞁓𞁑/m𞁑 → sink pressure coefficient, neighbor pressure coefficient
  *   F𞁑, F𞁓, F𞁑𞁓 → sink gradient factor, neighbor gradient factor, symmetric gradient factor
@@ -65,7 +65,7 @@ using sph_geometry::SpatialVector;
  *   α𞁑, α𞁓, α𞁑𞁓 → bulk viscosity coefficient, neighbor bulk viscosity coefficient, pair bulk viscosity coefficient
  *   β𞁑𞁓 → pair von Neumann–Richtmyer coefficient; Π𞁑𞁓 → pair artificial viscosity
  *   μ𞁑𞁓 → viscosity velocity; ε → η²/h² of Monaghan (1992), p. 551
- *   h_M/h → Monaghan smoothing length per support radius (monaghan::lengthPerSupport)
+ *   h_M/h → Monaghan to stored smoothing-length ratio (monaghan::lengthPerSupport)
  *   h̄_M𞁑𞁓 → pair Monaghan smoothing length ½(h𞁑 + h𞁓) h_M/h, shared by viscosity and conduction
  *   fᴬⱽ𞁑𞁓 → pair shear factor, the mean of the two Balsara factors
  *   f_P𞁑𞁓, f_Π𞁑𞁓 → pressure force factor, viscous force factor of one pair
@@ -88,7 +88,6 @@ using sph_geometry::SpatialVector;
  *     du𞁑_dτₕₑₐₜ = (du𞁑/dτ)ₕₑₐₜ; dv𞁑_dτ_G = (dv𞁑/dτ)_G; h_M_over_h = h_M/h
  *     dv𞁑_dτₑₓₜ = (dv𞁑/dτ)ₑₓₜ; five_minus_3γ = 5 − 3γ; r2𞁑𞁓ₚᵣₑ = r𞁑𞁓² staged
  *     h𞁓ₚᵣₑ = h𞁓 staged.
- *   SIMD values append Pack; CUDA partial sums are reduced in place.
  */
 // clang-format on
 SphRunReturn sphCpuHydro(
@@ -140,7 +139,7 @@ SphRunReturn sphCpuHydro(
          * ideal gas gives P𞁑 = (γ − 1) ρ𞁑 u𞁑 and c𞁑² = γ P𞁑/ρ𞁑 with the single configured γ.
          *
          * Symbol directory (in the code below):
-         *   h𞁑 → support radius, 2h_M for the cubic spline
+         *   h𞁑 → smoothing length, 2h_M for the cubic spline
          *   P𞁑 → pressure
          *   u𞁑 → internal energy
          *   ρ𞁑 → density

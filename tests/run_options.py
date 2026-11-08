@@ -1617,7 +1617,7 @@ mapSize = 8
         ("cfl_large", "--hydro.cfl=1.1", "hydro.cfl"),
         ("neighbors", "--hydro.neighborNumber=10", "hydro.neighborNumber"),
         ("min_radius", "--hydro.minSmoothingLength=0", "hydro.minSmoothingLength"),
-        ("max_radius", "--hydro.maxSmoothingLength=1e-7", "support radii"),
+        ("max_radius", "--hydro.maxSmoothingLength=1e-7", "smoothing lengths"),
         ("chemistry", "--hydro.chemistry=true", "hydro.chemistry"),
         ("conduction", "--hydro.conduction=true", "hydro.conduction"),
         ("diffusion", "--hydro.diffusion=true", "hydro.diffusion"),
@@ -1662,7 +1662,7 @@ mapSize = 8
     output = run("support_half_box", metadata_options + [
                                       "--hydro.minSmoothingLength=5"], success=False)
     if "half the periodic box" not in output:
-        raise RuntimeError("oversized minimum support radius was not rejected explicitly")
+        raise RuntimeError("oversized minimum smoothing length was not rejected explicitly")
     print("Grouped CLI, complete INIs, Silo units/frames, and parameter bounds passed")
 
 

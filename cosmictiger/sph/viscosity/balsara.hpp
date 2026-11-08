@@ -65,7 +65,7 @@ CUDA_EXPORT inline float decodeFactor(uint8_t q) {
 /*
  * Symbol directory for GADGET-2 equation (14) above:
  *   ∇·v𞁑 → divergence; |∇×v𞁑| → curl magnitude; |∇·v𞁑| → absolute divergence
- *   c𞁑 → sound speed; h𞁑 → GADGET-2 smoothing length, the kernel support radius
+ *   c𞁑 → sound speed; h𞁑 → smoothing length (GADGET-2's h, the full kernel support)
  *   ε_B → Balsara sound-speed coefficient
  *   |∇·v𞁑| + |∇×v𞁑| + ε_B c𞁑/h𞁑 → limiter denominator; f𞁑ᴬⱽ → shear limiter.
  *   Code names: div_v_a = ∇·v𞁑; abs_curl_v𞁑 = |∇×v𞁑|; abs_div_v𞁑 = |∇·v𞁑|

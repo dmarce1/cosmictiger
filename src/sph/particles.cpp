@@ -628,7 +628,7 @@ uint32_t sphCheckpointVersion() {
     auto const& options = getOptions();
     // Chemistry payloads 80 and 90 carried a per-particle EOS; 100 and 110 store only the
     // electron fraction because chemistry fixes gamma at 5/3. Payloads below 10000 interleaved
-    // internal energy with support radius; later ones store the two arrays separately. From
+    // internal energy with smoothing length; later ones store the two arrays separately. From
     // 20000 the predicted rates are no longer stored. From 30000 the thermal array and
     // its rate store entropy, with an explicit initialization flag and scale factor.
     // From 40000 viscosity stores only the scalar bulk viscosity coefficient.

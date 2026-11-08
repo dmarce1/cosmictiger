@@ -21,7 +21,7 @@
  * W̃𞁑𞁓 the symmetric kernel of Monaghan (1992), p. 554, Π𞁑𞁓 the artificial viscosity and μ𞁑𞁓 its
  * velocity measure, with the constants α, β and η. Equation code uses
  * these symbols; each equation block describes them. The stored smoothing length
- * is the compact support radius h, which equals 2h_M for the cubic spline of
+ * h is the full compact support of the kernel and equals 2h_M for the cubic spline of
  * Monaghan (1992), section 7.
  */
 #pragma once
@@ -40,16 +40,16 @@ inline constexpr double kViscosityWidthScale =
 
 // clang-format off
 /*
- * Derived conversion from the stored compact support h to the Monaghan (1992) smoothing
+ * Derived conversion from the stored smoothing length h to the Monaghan (1992) smoothing
  * length h_M: h̃ = h/C_H is the common effective radius of docs/kernels.md and
  * h_M = k_M h̃ with the calibration k_M = kViscosityWidthScale, so
  *   h_M/h = k_M/C_H,
  * one factor per kernel launch (1/2 for the cubic spline of Monaghan (1992), section 7).
  * Symbol directory:
- *   h → stored compact support; h̃ → common effective radius
+ *   h → stored smoothing length; h̃ → common effective radius
  *   h_M → Monaghan (1992) smoothing length
  *   C_H → smoothing length per effective radius; k_M → viscosity width scale
- *   h_M/h → Monaghan smoothing length per support radius (return value).
+ *   h_M/h → Monaghan to stored smoothing-length ratio (return value).
  *   Code names: smoothingLengthPerEffectiveRadius = C_H; kViscosityWidthScale = k_M.
  */
 // clang-format on
@@ -65,8 +65,8 @@ CUDA_EXPORT constexpr Real lengthPerSupport(Real smoothingLengthPerEffectiveRadi
  *   h̄_M𞁑𞁓 = ½(h_M𞁑 + h_M𞁓) = ½(h𞁑 + h𞁓) h_M/h.
  * Each pair forms it once and passes it to viscosityMu and sph_conduction::exchangeRate.
  * Symbol directory:
- *   h𞁑, h𞁓 → smoothing length, neighbor smoothing length (stored compact supports)
- *   h_M/h → Monaghan smoothing length per support radius
+ *   h𞁑, h𞁓 → smoothing length, neighbor smoothing length
+ *   h_M/h → Monaghan to stored smoothing-length ratio
  *   h̄_M𞁑𞁓 → pair smoothing length (return value).
  *   Code names: h_M_over_h = h_M/h.
  */
