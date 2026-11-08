@@ -1217,7 +1217,7 @@ mapSize = 8
     for key, value in (("gravity.kernelDegree", 4),
                        ("hydro.neighborNumber", 42), ("hydro.kernelDegree", 3),
                        ("hydro.conductionCoefficient", 0),
-                       ("hydro.viscosityCoefficientMin", 0.1), ("hydro.viscosityCoefficientMax", 1.5),
+                       ("hydro.viscosityCoefficientMin", 0.01), ("hydro.viscosityCoefficientMax", 2.0),
                        ("hydro.viscosityDecay", 0.2),
                        ("compute.bucketSize", 128), ("compute.sphBucketSize", 106)):
         assertNumericSetting(defaults, key, value)

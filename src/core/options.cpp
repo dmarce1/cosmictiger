@@ -1028,9 +1028,9 @@ bool processOptions(int argc, char* argv[]) {
         po::value<double>(&opts.hydro.conductionCoefficient)->default_value(0.0),
         "Monaghan artificial thermal conduction coefficient g; zero disables conduction")(
         "hydro.viscosityCoefficientMin",
-        po::value<double>(&opts.hydro.minimumBulkViscosityCoefficient)->default_value(0.1),
+        po::value<double>(&opts.hydro.minimumBulkViscosityCoefficient)->default_value(0.01),
         "Morris-Monaghan alpha floor and initial value")("hydro.viscosityCoefficientMax",
-        po::value<double>(&opts.hydro.maximumBulkViscosityCoefficient)->default_value(1.5),
+        po::value<double>(&opts.hydro.maximumBulkViscosityCoefficient)->default_value(2.0),
         "Rosswog alpha ceiling; equal to viscosityCoefficientMin for constant alpha")(
         "hydro.viscosityDecay", po::value<double>(&opts.hydro.viscosityDecay)->default_value(0.2),
         "Morris-Monaghan C in tau=h/(C c)")("hydro.balsaraSoundSpeedCoefficient",

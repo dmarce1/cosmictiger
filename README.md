@@ -71,8 +71,8 @@ gasParticleCount = 4096
 cuda = true
 [hydro]
 enabled = true
-viscosityCoefficientMin = 0.1
-viscosityCoefficientMax = 1.5
+viscosityCoefficientMin = 0.01
+viscosityCoefficientMax = 2.0
 vonNeumannRichtmyerCoefficient = 2.0
 viscosityEpsilon = 0.01
 heatCapacityRatio = 1.666666666666667

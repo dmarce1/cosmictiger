@@ -280,8 +280,8 @@ struct Hydro {
     double vonNeumannRichtmyerCoefficient{};
     double viscosityEpsilon{};
     double conductionCoefficient{0.0};
-    double minimumBulkViscosityCoefficient{0.1};
-    double maximumBulkViscosityCoefficient{1.5};
+    double minimumBulkViscosityCoefficient{0.01};
+    double maximumBulkViscosityCoefficient{2.0};
     double viscosityDecay{0.2};
     double balsaraSoundSpeedCoefficient{1.0e-4};
     double heatCapacityRatio{};

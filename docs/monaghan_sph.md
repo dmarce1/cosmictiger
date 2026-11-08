@@ -247,7 +247,7 @@ source limiter of Rosswog, Davies, Thielemann & Piran (2000), A&A 360, 171:
 The decay and source are equations (5), (6) and (13) of Morris & Monaghan (1997);
 the factor \((\alpha_{\max}-\alpha_i)\) is the Rosswog et al. (2000) limiter, which
 saturates α smoothly below \(\alpha_{\max}\) instead of letting a strong shock drive
-it without bound. The defaults are \(\alpha_{\min}=0.1\), \(\alpha_{\max}=1.5\) and
+it without bound. The defaults are \(\alpha_{\min}=0.01\), \(\alpha_{\max}=2\) and
 \(\mathcal C=0.2\). Equation (13) is used directly, without an adiabatic-index
 scaling. The decay length is the calibrated viscosity length
 \(h_{M,i}=\sqrt{5/6}\,H_i/\texttt{smoothingLengthPerEffectiveRadius}\), equal to
@@ -570,8 +570,8 @@ hydrodynamic controls are:
 | `hydro.kernelDegree` | `3` | Density polynomial degree; valid values depend on family |
 | `hydro.heatCapacityRatio` | `5/3` | Ideal-gas adiabatic index |
 | `hydro.vonNeumannRichtmyerCoefficient` | `2` | Quadratic coefficient, multiplying \(\bar\alpha_{ij}\) |
-| `hydro.viscosityCoefficientMin` | `0.1` | Morris–Monaghan α floor and initial value |
-| `hydro.viscosityCoefficientMax` | `1.5` | Rosswog α ceiling; equal to the floor for constant α |
+| `hydro.viscosityCoefficientMin` | `0.01` | Morris–Monaghan α floor and initial value |
+| `hydro.viscosityCoefficientMax` | `2` | Rosswog α ceiling; equal to the floor for constant α |
 | `hydro.viscosityDecay` | `0.2` | Morris–Monaghan decay coefficient \(\mathcal C\) |
 | `hydro.balsaraSoundSpeedCoefficient` | `1e-4` | Coefficient of \(c/H\) in the Balsara denominator |
 | `hydro.conductionCoefficient` | `0` | Artificial thermal diffusion coefficient g; zero disables it |
