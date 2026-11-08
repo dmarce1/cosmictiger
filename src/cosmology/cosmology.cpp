@@ -24,9 +24,13 @@ namespace detail {
 
 cosmology::FriedmannCosmology backgroundCosmology() {
     auto const& opts = getOptions();
-    return cosmology::FriedmannCosmology(
-        {units::normalizedHubble100(opts) * opts.cosmology.hubble, opts.cosmology.omegaR,
-            opts.cosmology.omegaM, opts.cosmology.omegaLambda, opts.cosmology.omegaK});
+    cosmology::BackgroundCosmologyParameters parameters;
+    parameters.hubbleConstant = units::normalizedHubble100(opts) * opts.cosmology.hubble;
+    parameters.omegaRadiation = opts.cosmology.omegaR;
+    parameters.omegaMatter = opts.cosmology.omegaM;
+    parameters.omegaDarkEnergy = opts.cosmology.omegaLambda;
+    parameters.omegaCurvature = opts.cosmology.omegaK;
+    return cosmology::FriedmannCosmology(parameters);
 }
 
 }    // namespace detail

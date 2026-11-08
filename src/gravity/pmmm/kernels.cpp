@@ -43,8 +43,12 @@ namespace detail {
     HarmonicParts harmonicParts(int degree, int mode) {
         int const magnitude = std::abs(mode);
         int const parity = mode < 0 && magnitude % 2 != 0 ? -1 : 1;
-        return {index(degree, magnitude), index(degree, -magnitude), parity,
-            mode == 0 ? 0 : (mode < 0 ? -parity : parity)};
+        HarmonicParts parts;
+        parts.realSlot = index(degree, magnitude);
+        parts.imaginarySlot = index(degree, -magnitude);
+        parts.realSign = parity;
+        parts.imaginarySign = mode == 0 ? 0 : (mode < 0 ? -parity : parity);
+        return parts;
     }
 
 }    // namespace detail

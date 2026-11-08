@@ -678,8 +678,13 @@ FriedmannAdvance FriedmannCosmology::intervalsBetweenScales(
         }
     }
     double const factor = (finalScale > initialScale ? 1.0 : -1.0) / parameters_.hubbleConstant;
-    return {
-        finalState, factor * integral[0], factor * integral[1], factor * integral[2], flops + 4};
+    FriedmannAdvance advance;
+    advance.state = finalState;
+    advance.physicalTime = factor * integral[0];
+    advance.conformalTime = factor * integral[1];
+    advance.driftIntegral = factor * integral[2];
+    advance.flops = flops + 4;
+    return advance;
 }
 
 }    // namespace cosmology

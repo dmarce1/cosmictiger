@@ -94,9 +94,9 @@ event-timestep conversions retain their own precision classifications.
 | `solveSphSmoothingLength` (CUDA) | Each iteration counts support checks and reciprocal, 10 per visited neighbor, another 4 plus density/derivative costs inside support, both block sums, residual/tolerance and the selected update. |
 | `sphCpuHasActiveNeighbor` / CUDA semiactive scan | Distance, dot product and squared support tests for the packets/pairs actually visited. |
 | `sphCpuSmoothingLengths`, `sphCudaSmoothingLengths` | Neighbor construction and every support-radius solve, including unsuccessful solves requiring a larger neighbor box. |
-| `sphCpuDensityAndGradients`, `sphCudaDensityAndGradients` | One γ − 1 per CPU call or CUDA thread; activity scan, support solve, mass/support normalization, every density-kernel evaluation and density reduction; grad-H sums, derivative kernels, reductions and correction evaluation. |
-| `sphCpuHydro` | Scalar sink setup, including 5 for its directed pressure coefficient; `9W+1` per candidate packet; 79 per lane of interacting packets plus both derivative kernels and enabled viscosity switches; one γ − 1 per call; four numerical sums; external accelerations, damping and cosmological thermal work; timestep/rung selection. Padded lanes count when executed. |
-| `sphCudaHydro` | One γ − 1 per executing thread; sink setup per executing thread, including 5 for its directed pressure coefficient; 8 per candidate, another 2 for nonzero separation; 79 per accepted pair plus both derivative kernels and enabled viscosity switches; actual block sums; external accelerations, damping, thermal work and timestep/rung selection. |
+| `sphCpuDensityAndGradients`, `sphCudaDensityAndGradients` | One γ − 1 and one h_M/h per CPU call or CUDA thread; activity scan, support solve, mass/support normalization and the per-sink mass times inverse gradient scale (1 + `kInverseGradientScale`), every density-kernel evaluation and density reduction; grad-H sums, derivative kernels, reductions and correction evaluation. |
+| `sphCpuHydro` | Scalar sink setup, including 5 for its directed pressure coefficient; `9W+1` per candidate packet; 78 per lane of interacting packets (including 3 for the pair length h̄_M) plus both derivative kernels and enabled viscosity switches; one γ − 1 and one h_M/h per call; four numerical sums; external accelerations, damping and cosmological thermal work; timestep/rung selection. Padded lanes count when executed. |
+| `sphCudaHydro` | One γ − 1 and one h_M/h per executing thread; sink setup per executing thread, including 5 for its directed pressure coefficient; 8 per candidate, another 2 for nonzero separation; 78 per accepted pair plus both derivative kernels and enabled viscosity switches; actual block sums; external accelerations, damping, thermal work and timestep/rung selection. |
 | Hydro timestep selection | 25 per active phase-1 sink plus 13 when self-gravity constrains the rung; another 3 when the thermal limiter executes. Signal-speed reporting and gravity-only diagnostic calculations with self-gravity disabled are excluded. |
 | `sphCpuRungs`, `sphCudaRungs` | Support squares, actual distance/dot products and neighbor geometry; integer rung propagation costs zero. |
 | `sphAccumulatePairKick`, `sphAccumulateExternalKick` | FP32 products plus four operations per actual Kahan CAS attempt, including retries; 37 and 15 operations respectively without contention. |
@@ -105,8 +105,8 @@ event-timestep conversions retain their own precision classifications.
 | `sphTreeNeighbor` | Actual search intersections and refreshed support boxes. Self-box validation checks are excluded. |
 | `SphRunWorkspace::run` | Gravity effective-radius division and its narrowing store are FP64; staging/copies and dispatch have no arithmetic count. |
 
-The reusable Monaghan viscosity helper costs are 9 (`viscosityMu`) and 10
-(`artificialViscosity`). The variational pressure helpers cost 3
+The reusable Monaghan viscosity helper costs are 5 (`viscosityMu`, given the pair length) and 10
+(`artificialViscosity`); the pair length itself (3) is counted at the call site. The variational pressure helpers cost 3
 (`pressureVolumeFactor`), 2 (`directedCoefficient`), 3 (`pairForceFactor`) and 2
 (`pairWork`). The hydro loops submit `39 + 9 + 10 + 21 = 79` per interacting lane
 or pair before derivative kernels and viscosity switches. The 21-operation term

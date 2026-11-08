@@ -100,8 +100,11 @@ FlopRates flopRatesPerSecond() {
     if (elapsed <= 0.0) {
         return {};
     }
-    return {double(counts.singlePrecision) / elapsed, double(counts.doublePrecision) / elapsed,
-        double(counts.unclassified) / elapsed};
+    FlopRates rates;
+    rates.singlePrecision = double(counts.singlePrecision) / elapsed;
+    rates.doublePrecision = double(counts.doublePrecision) / elapsed;
+    rates.unclassified = double(counts.unclassified) / elapsed;
+    return rates;
 }
 
 double flopsPerSecond() {

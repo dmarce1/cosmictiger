@@ -330,13 +330,10 @@ void runPairCase(bool useCuda, bool softened, float hydroSupport = 0.02f) {
     initializePair(nominalSeparation);
     float const gasMass = particlesMass(sphParticlesParticleIndex(0));
     sphParticlesSmoothingLength(0) = hydroSupport;
-    auto const built =
-        treeCreate(TreeCreateParameters(0, 0.5, getOptions().gravity.smoothingLength));
+    auto const built = treeCreate(TreeCreateParameters(0, 0.5));
     verifyMappings();
     requireClose("root mixed mass", nodeMass(treeGetNode(built.id)),
         getOptions().initial.darkMatterMass + gasMass);
-    requireClose("gravity tree support is independent of hydro smoothing",
-        built.maxGravitySmoothingLength, getOptions().gravity.smoothingLength);
     ParticleInteger const gas = sphParticlesParticleIndex(0);
     ParticleInteger const darkMatterIndex = 1 - gas;
     double const separation =
@@ -958,7 +955,7 @@ void sphGravityTest() {
         future.get();
     }
     if (hpxSize() > 1) {
-        treeCreate(TreeCreateParameters(0, 0.5, getOptions().gravity.smoothingLength));
+        treeCreate(TreeCreateParameters(0, 0.5));
         pending.clear();
         for (auto const& locality : hpxLocalities()) {
             pending.push_back(hpx::async<ValidateSphRemoteTreeCacheAction>(locality));

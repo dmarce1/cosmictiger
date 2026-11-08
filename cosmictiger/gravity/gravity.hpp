@@ -113,8 +113,12 @@ CUDA_EXPORT inline FlopCounts gravitySofteningOperations(
                 FlopCount const forceDouble = piece == 0 ? kernel.degree + 6 : kernel.degree + 11;
                 FlopCount const potentialDouble =
                     piece == 0 ? kernel.degree + 9 : 2 * kernel.degree + 14;
-                return {arithmetic - 1 - int(doPhi),
-                    visited * (1 + int(doPhi)) + forceDouble + (doPhi ? potentialDouble : 0), 0};
+                FlopCounts counts;
+                counts.singlePrecision = arithmetic - 1 - int(doPhi);
+                counts.doublePrecision =
+                    visited * (1 + int(doPhi)) + forceDouble + (doPhi ? potentialDouble : 0);
+                counts.unclassified = 0;
+                return counts;
             }
         }
         return {arithmetic, visited * (1 + int(doPhi)), 0};

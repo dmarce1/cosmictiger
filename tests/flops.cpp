@@ -114,9 +114,12 @@ TEST(Flops, ConcurrentAndDistributedAggregation) {
         for (auto const& locality : localities) {
             hpx::async<ContributeFlopsAction>(locality).get();
         }
-        FlopCounts const expected{FlopCount(4) * 10000 * (1234567 + 2468) +
-                localities.size() * ((FlopCount(1) << 54) + (FlopCount(1) << 53) + 12),
-            FlopCount(4) * 10000 * 913 + localities.size() * ((FlopCount(1) << 55) + 11), 0};
+        FlopCounts expected;
+        expected.singlePrecision = FlopCount(4) * 10000 * (1234567 + 2468) +
+            localities.size() * ((FlopCount(1) << 54) + (FlopCount(1) << 53) + 12);
+        expected.doublePrecision =
+            FlopCount(4) * 10000 * 913 + localities.size() * ((FlopCount(1) << 55) + 11);
+        expected.unclassified = 0;
         auto const actual = readFlopCounts();
         EXPECT_EQ(actual.singlePrecision, expected.singlePrecision);
         EXPECT_EQ(actual.doublePrecision, expected.doublePrecision);

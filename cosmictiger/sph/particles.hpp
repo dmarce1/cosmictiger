@@ -49,8 +49,8 @@ extern bool sphParticlesEntropyInitialized;
 extern double sphParticlesThermalScaleFactor;
 void sphParticlesPrepareThermodynamics(double scaleFactor, bool initializeEntropy);
 SPH_PARTICLES_EXTERN float* sphParticlesEntropies;
-// Stored smoothing length is the full compact-support radius H of the SPH kernel.
-// For the cubic spline H = 2h; renaming this storage does not rescale its values.
+// Stored smoothing length is the full compact-support radius h of the SPH kernel.
+// For the cubic spline h = 2h_M; renaming this storage does not rescale its values.
 SPH_PARTICLES_EXTERN float* sphParticlesSmoothingLengths;
 SPH_PARTICLES_EXTERN ParticleInteger* sphParticlesParticleIndices;
 SPH_PARTICLES_EXTERN float* sphParticlesDensities;

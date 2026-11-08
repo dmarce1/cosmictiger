@@ -68,7 +68,7 @@ public:
     }
 };
 
-// W(r, H) = H^-3 w(r/H).
+// W(r, h) = h^-3 w(r/h).
 double kernel(radial_kernel::KernelTable<double> const& table, double radius, double support) {
     double const q = radius / support;
     return q < 1.0 ? radial_kernel::value(table, q) / (support * support * support) : 0.0;
@@ -81,7 +81,7 @@ struct System {
     std::vector<double> weight;
     std::vector<double> entropy;    // Pᵢ = Kᵢ rho*_i^gamma
     double gamma = 5.0 / 3.0;
-    double targetSum = 0.0;    // sum_j w(qᵢⱼ) of the constraint H^3 n = constant
+    double targetSum = 0.0;    // sum_j w(qᵢⱼ) of the constraint h^3 n = constant
     double minimumSupport = 1.0e-3;
     double maximumSupport = 1.0e3;
     std::vector<double> support;
@@ -100,8 +100,8 @@ struct System {
         return sum;
     }
 
-    // The support solving sum_j w(rᵢⱼ/H) = target, bracketed and bisected to roundoff;
-    // the sum increases monotonically with H.
+    // The support solving sum_j w(rᵢⱼ/h) = target, bracketed and bisected to roundoff;
+    // the sum increases monotonically with h.
     double freeSupport(int i) const {
         double lower = 1.0e-3;
         double upper = 0.05;
@@ -327,8 +327,8 @@ TEST(SphVolume, KernelGradientFactorMatchesFiniteDifferences) {
     }
 }
 
-// nᵢ and yᵢ, their H derivatives, Vᵢ, rho*_i, Omega_i and zeta_i with unequal weights
-// and masses, compared with direct sums and finite differences in H.
+// nᵢ and yᵢ, their h derivatives, Vᵢ, rho*_i, Omega_i and zeta_i with unequal weights
+// and masses, compared with direct sums and finite differences in h.
 TEST(SphVolume, WeightedVolumeAndConstraintDerivatives) {
     auto system =
         makeSystem({radial_kernel::Family::Wendland, 5}, WeightModel::UnequalWeight, 1.4, 17);
@@ -420,8 +420,8 @@ TEST(SphVolume, EqualMassReducesToStandardGradH) {
     }
 }
 
-// dyᵢ/drₖ and dHᵢ/drₖ with the support re-solved after each perturbation:
-// dyᵢ = sum_j (xⱼ - zeta_i) grad_i Wᵢⱼ . drᵢⱼ and dHᵢ = -Hᵢ/(3 nᵢ Omega_i) dnᵢ.
+// dyᵢ/drₖ and dhᵢ/drₖ with the support re-solved after each perturbation:
+// dyᵢ = sum_j (xⱼ - zeta_i) grad_i Wᵢⱼ . drᵢⱼ and dhᵢ = -hᵢ/(3 nᵢ Omega_i) dnᵢ.
 TEST(SphVolume, ConstrainedDensityDerivatives) {
     auto system =
         makeSystem({radial_kernel::Family::Spline, 4}, WeightModel::UnequalWeight, 5.0 / 3.0, 23);
@@ -614,7 +614,7 @@ TEST(SphVolume, WorkMatchesDensityContinuityAtFixedEntropy) {
 
 // For a free support, sum_j (xⱼ - zeta_i) rᵢⱼ . grad_i Wᵢⱼ = -3 yᵢ exactly, so the
 // Hubble flow's pair work is the analytic homogeneous term -3 (da/dt / a) Pᵢ Vᵢ.
-// A held support has dH/dr = 0 and no such identity; with comoving bounds its support
+// A held support has dh/dr = 0 and no such identity; with comoving bounds its support
 // dilates with the box, which the analytic term supplies (docs/variational_sph.md).
 TEST(SphVolume, HubbleFlowWorkIsTheHomogeneousExpansionWork) {
     auto system =

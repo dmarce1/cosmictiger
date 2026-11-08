@@ -20,13 +20,11 @@
 
 #include <cosmictiger/core/flops.hpp>
 #include <cosmictiger/core/safe_io.hpp>
-#include <cosmictiger/math/vector3.hpp>
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
-#include <cosmictiger/gravity/pmmm/solver.hpp>
-#endif
+#include <cosmictiger/gravity/softening.hpp>
 #include <cosmictiger/math/constants.hpp>
 #include <cosmictiger/math/kernel.hpp>
 #include <cosmictiger/math/math.hpp>
+#include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/sph/cpu.hpp>
 #include <cosmictiger/sph/flops.hpp>
 #include <cosmictiger/sph/sph.hpp>
@@ -300,25 +298,27 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
                 xValue[kXi] = myx;
                 xValue[kYi] = myy;
                 xValue[kZi] = myz;
-                auto const tiny = 10.0 * RangeFixed::min().toDouble();
                 flops.singlePrecision += 1;    // Support multiplier.
-                flops.doublePrecision += 2;    // Tiny-offset construction.
                 if (active) {
                     factive = true;
                 }
                 if (params.outerParticleSelection == SphParticleSelection::All || active) {
                     for (int dim = 0; dim < kDimensions; dim++) {
                         double const position = xValue[dim].toDouble();
-                        obox.begin[dim] = std::min(obox.begin[dim].toDouble(), position - h - tiny);
-                        obox.end[dim] = std::max(obox.end[dim].toDouble(), position + h + tiny);
+                        obox.begin[dim] =
+                            std::min(obox.begin[dim].toDouble(), position - h - kSphBoxPadding);
+                        obox.end[dim] =
+                            std::max(obox.end[dim].toDouble(), position + h + kSphBoxPadding);
                         flops.doublePrecision += 11;    // Includes both support promotions.
                     }
                 }
                 if (params.innerParticleSelection == SphParticleSelection::All || active) {
                     for (int dim = 0; dim < kDimensions; dim++) {
                         double const position = xValue[dim].toDouble();
-                        ibox.begin[dim] = std::min(ibox.begin[dim].toDouble(), position - tiny);
-                        ibox.end[dim] = std::max(ibox.end[dim].toDouble(), position + tiny);
+                        ibox.begin[dim] =
+                            std::min(ibox.begin[dim].toDouble(), position - kSphBoxPadding);
+                        ibox.end[dim] =
+                            std::max(ibox.end[dim].toDouble(), position + kSphBoxPadding);
                         flops.doublePrecision += 7;
                     }
                 }
@@ -584,9 +584,12 @@ void sphCommitPairUpdates(int stage) {
             ++next;
         } while (next < updates.size() && updates[next].index == gas);
         if (stage == 1) {
-            detail::pairBaselines.push_back(
-                {gas, particlesVelData()[sphParticlesParticleIndex(gas)], sphParticlesEntropy(gas),
-                    char(sphParticlesProposedRung(gas))});
+            detail::SphPairBaseline baseline;
+            baseline.index = gas;
+            baseline.velocity = particlesVelData()[sphParticlesParticleIndex(gas)];
+            baseline.entropy = sphParticlesEntropy(gas);
+            baseline.proposedRung = char(sphParticlesProposedRung(gas));
+            detail::pairBaselines.push_back(baseline);
         }
         for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
             sphParticlesVelocity(dimension, gas) += total.velocity[dimension];
@@ -949,13 +952,8 @@ SphRunData SphRunWorkspace::data() {
     runData.sinkGravityAccelerationX = nullptr;
     runData.sinkGravityAccelerationY = nullptr;
     runData.sinkGravityAccelerationZ = nullptr;
-    runData.gravityEffectiveRadius = getOptions().gravity.smoothingLength /
-        selectedGravityKernel().smoothingLengthPerEffectiveRadius;
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
-    if (usesMeshGravity(getOptions().gravity)) {
-        runData.gravityEffectiveRadius = pmmmEffectiveRadius();
-    }
-#endif
+    runData.gravityEffectiveRadius =
+        gravitySofteningEffectiveRadius(getOptions().gravity.smoothingLength);
     addCpuFlops(2, FlopPrecision::Double);
     runData.selfGravityEnabled = false;
 #endif

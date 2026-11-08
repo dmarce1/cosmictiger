@@ -50,6 +50,7 @@
 #if COSMICTIGER_ENABLE_CHEMISTRY
 #include <cosmictiger/chemistry/sph.hpp>
 #endif
+#include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/particles.hpp>
 #endif
 
@@ -886,8 +887,10 @@ static void initX0() {
             units::PhysicalSpecificEnergy(physicalEnergy), unitScales, context)
                                                .value();
         double const density = options.initial.gasMass * options.run.gasParticleCount;
-        float const smoothLength = std::cbrt(options.hydro.neighborNumber /
-            ((4.0 * std::numbers::pi / 3.0) * options.run.gasParticleCount));
+        // h = [m N/(V_D ρ)]^(1/D) with ρ = m N_gas in the unit box; m cancels, so pass unit
+        // mass and the particle number density N_gas.
+        float const smoothLength = sph_geometry::supportRadius(
+            1.0, double(options.run.gasParticleCount), options.hydro.neighborNumber);
         for (ParticleInteger i = 0; i < gasCount; ++i) {
             sphParticlesSetInternalEnergy(i, storedThermalEnergy);
             sphParticlesSmoothingLength(i) = smoothLength;

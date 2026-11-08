@@ -17,7 +17,7 @@
 #include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/gravity/pmmm/kick.hpp>
 #include <cosmictiger/gravity/pmmm/solver.hpp>
-#include <cosmictiger/math/kernel.hpp>
+#include <cosmictiger/gravity/softening.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -36,7 +36,7 @@ KickReturn particleMeshPrepareKick(double scale, double baseTimestep, double max
             child, scale, baseTimestep, maximumTimestep, firstCall, minimumRung, previousTimestep));
     }
     auto const& options = getOptions();
-    double const effectiveRadius = pmmmEffectiveRadius();
+    double const effectiveRadius = gravitySofteningEffectiveRadius(options.gravity.smoothingLength);
     addCpuFlops(1, FlopPrecision::Double);    // Support-radius conversion, once per locality.
     double const sign = options.run.scenario == "glass" ? -1.0 : 1.0;
     size_t const count = particlesSize();

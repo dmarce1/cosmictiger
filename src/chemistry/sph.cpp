@@ -116,18 +116,23 @@ std::vector<SphChemistryBatchResult> sphChemistryAdvanceBatch(
     std::vector<gadget4::Input> physicalInputs;
     physicalInputs.reserve(inputs.size());
     for (auto const& input : inputs) {
-        physicalInputs.push_back(
-            {input.electronFraction, detail::coolingPhysicalEnergy(input.storedEnergy, scaleFactor),
-                detail::coolingPhysicalDensity(input.storedDensity, scaleFactor),
-                input.physicalInterval});
+        gadget4::Input physicalInput;
+        physicalInput.electronFraction = input.electronFraction;
+        physicalInput.specificEnergy =
+            detail::coolingPhysicalEnergy(input.storedEnergy, scaleFactor);
+        physicalInput.density = detail::coolingPhysicalDensity(input.storedDensity, scaleFactor);
+        physicalInput.interval = input.physicalInterval;
+        physicalInputs.push_back(physicalInput);
     }
     auto const integrated =
         detail::integrateCoolingBatch(physicalInputs, sphCoolingParameters(scaleFactor), inputs);
     std::vector<SphChemistryBatchResult> results;
     results.reserve(inputs.size());
     for (auto const& result : integrated) {
-        results.push_back({result.electronFraction,
-            detail::coolingStoredEnergy(result.specificEnergy, scaleFactor)});
+        SphChemistryBatchResult stored;
+        stored.electronFraction = result.electronFraction;
+        stored.storedEnergy = detail::coolingStoredEnergy(result.specificEnergy, scaleFactor);
+        results.push_back(stored);
     }
     return results;
 }
@@ -261,8 +266,13 @@ double sphCoolingPrepareLocal(std::vector<ParticleInteger> const& indices,
             units::toPhysicalInterval(units::ConformalTime(interval * scales.timeScale()), context)
                 .quantity()
                 .value();
-        inputs.push_back({sphParticlesElectronFractions[index], sphParticlesInternalEnergy(index),
-            sphParticlesDensity(index), seconds, index});
+        SphChemistryBatchInput input;
+        input.electronFraction = sphParticlesElectronFractions[index];
+        input.storedEnergy = sphParticlesInternalEnergy(index);
+        input.storedDensity = sphParticlesDensity(index);
+        input.physicalInterval = seconds;
+        input.particleIndex = index;
+        inputs.push_back(input);
     }
     auto const results = sphChemistryAdvanceBatch(inputs, scaleFactor);
     std::vector<detail::PendingCoolingUpdate> prepared;

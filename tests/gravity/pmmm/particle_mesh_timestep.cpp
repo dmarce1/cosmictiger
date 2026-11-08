@@ -16,6 +16,7 @@
 #include <cosmictiger/core/time.hpp>
 #include <cosmictiger/gravity/pmmm/kick.hpp>
 #include <cosmictiger/gravity/pmmm/solver.hpp>
+#include <cosmictiger/gravity/softening.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -363,7 +364,10 @@ void particleMeshTimestepTest() {
         "remote locality must provide the finest timestep proposal");
     // A bound of 1/12 lies safely inside rung four, away from roundoff at a
     // dyadic boundary. Reducing gm by 256 then makes gravity permit rung one.
-    options.gravity.timestepEta = std::sqrt(maximumAcceleration / pmmmEffectiveRadius()) / 12.0;
+    options.gravity.timestepEta =
+        std::sqrt(maximumAcceleration /
+            gravitySofteningEffectiveRadius(getOptions().gravity.smoothingLength)) /
+        12.0;
     setOptions(options);
     detail::meshTimestepStep(0, 4, true);
     TimeType clock = inc(0, 4);

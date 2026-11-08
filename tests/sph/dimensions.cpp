@@ -73,7 +73,7 @@ void kernels() {
         near(radial_kernel::value(floatTable, float(radius)), radial_kernel::value(table, radius),
             2e-5, "float kernel");
     }
-    near(monaghan::kViscosityWidthScale / kernel.smoothingLengthPerEffectiveRadius, 0.5, 1e-14,
+    near(monaghan::lengthPerSupport(double(kernel.smoothingLengthPerEffectiveRadius)), 0.5, 1e-14,
         "cubic viscosity length");
 }
 

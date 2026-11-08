@@ -20,6 +20,7 @@
 #include <limits>
 #include <numbers>
 #include <stdexcept>
+#include <utility>
 #include <variant>
 
 #include <hpx/modules/program_options.hpp>
@@ -444,8 +445,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
     // Public effective radius is 2 sigma in mean box particle spacings.
     auto const gravityTable = radial_kernel::makeKernelTable(
         detail::kernelSpec(options.gravity.kernelFamily, options.gravity.kernelDegree));
-    auto const hydroTable = makeHydroKernelTable(
-        detail::kernelSpec(options.hydro.kernelFamily, options.hydro.kernelDegree, true));
     double const effectiveRadius = options.gravity.smoothingLength *
         std::pow(double(options.initial.numberOfParticles), 1.0 / kDimensions) /
         gravityTable.smoothingLengthPerEffectiveRadius;
@@ -568,7 +567,6 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"gravity.openingAngle", options.gravity.openingAngle},
         {"gravity.openingSchedule", options.gravity.openingSchedule},
         {"gravity.openLargerCell", options.gravity.openLargerCell},
-        {"gravity.softening", effectiveRadius},
         {"gravity.effectiveRadius", effectiveRadius},
         {"gravity.smoothingLength",
             options.gravity.smoothingLength *
@@ -615,17 +613,9 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"hydro.viscosityDecay", options.hydro.viscosityDecay},
         {"hydro.gamma", options.hydro.gamma},
         {"hydro.centralAcceleration", options.hydro.centralAcceleration},
-        {"hydro.centralSoftening",
-            options.hydro.centralSmoothingLength / gravityTable.smoothingLengthPerEffectiveRadius},
         {"hydro.centralEffectiveRadius",
             options.hydro.centralSmoothingLength / gravityTable.smoothingLengthPerEffectiveRadius},
         {"hydro.centralSmoothingLength", options.hydro.centralSmoothingLength},
-        {"hydro.minEffectiveRadius",
-            options.hydro.minSmoothingLength * gasResolution /
-                hydroTable.smoothingLengthPerEffectiveRadius},
-        {"hydro.maxEffectiveRadius",
-            options.hydro.maxSmoothingLength * gasResolution /
-                hydroTable.smoothingLengthPerEffectiveRadius},
         {"hydro.minSmoothingLength", options.hydro.minSmoothingLength * gasResolution},
         {"hydro.maxSmoothingLength", options.hydro.maxSmoothingLength * gasResolution},
         {"hydro.neighborNumber", options.hydro.neighborNumber},
@@ -637,8 +627,9 @@ namespace detail {
 
 void showResolvedOptions(
     Options const& opts, hpx::program_options::options_description const& commandOpts) {
-    // Reuse output metadata's resolved public values, including unit conversions,
-    // aliases and automatic defaults, instead of printing the parser's input map.
+    // Reuse output metadata's resolved public values, including unit conversions, both
+    // radius representations and automatic defaults (deprecated aliases are omitted),
+    // instead of printing the parser's input map.
     auto entries = getOptionsMetadata(opts);
     entries.insert(entries.end(),
         {
@@ -680,8 +671,8 @@ void showResolvedOptions(
 
 bool processOptions(int argc, char* argv[]) {
     Options opts{};
-    double gravityEffectiveRadius;
-    double centralEffectiveRadius;
+    double gravityEffectiveRadius = 0.01876988456953534;
+    double centralEffectiveRadius = 0.005477225575051661;
     double boxLength = 0.0;
     std::string omegaLambdaInput;
     std::string starFormationSeedInput;
@@ -953,11 +944,11 @@ bool processOptions(int argc, char* argv[]) {
         "gravity.openLargerCell",
         po::value<bool>(&opts.gravity.openLargerCell)->default_value(true),
         "tree walk opens only the larger of two rejected cells instead of both")(
-        "gravity.softening",
-        po::value<double>(&gravityEffectiveRadius)->default_value(0.01876988456953534),
-        "legacy alias for gravity.effectiveRadius")("gravity.effectiveRadius", po::value<double>(),
+        "gravity.effectiveRadius",
+        po::value<double>(&gravityEffectiveRadius)->default_value(gravityEffectiveRadius),
         "fixed comoving effective radius (2 sigma) in initial reference spacings; overrides "
-        "smoothingLength")("gravity.smoothingLength", po::value<double>(),
+        "smoothingLength and replaces the deprecated gravity.softening")("gravity.smoothingLength",
+        po::value<double>(),
         "compact support radius in initial reference spacings; ignored when effectiveRadius is "
         "specified")("gravity.kernelFamily",
         po::value<std::string>(&opts.gravity.kernelFamily)->default_value("ferrers"),
@@ -1035,25 +1026,18 @@ bool processOptions(int argc, char* argv[]) {
         "ideal-gas adiabatic index; must be 5/3 when chemistry or star formation is enabled")(
         "hydro.centralAcceleration",
         po::value<double>(&opts.hydro.centralAcceleration)->default_value(0.0),
-        "magnitude of the central force")("hydro.centralSoftening",
-        po::value<double>(&centralEffectiveRadius)->default_value(0.005477225575051661),
-        "legacy alias for hydro.centralEffectiveRadius")("hydro.centralEffectiveRadius",
+        "magnitude of the central force")("hydro.centralEffectiveRadius",
+        po::value<double>(&centralEffectiveRadius)->default_value(centralEffectiveRadius),
+        "central-force effective radius (2 sigma) in box units; overrides centralSmoothingLength "
+        "and replaces the deprecated hydro.centralSoftening")("hydro.centralSmoothingLength",
         po::value<double>(),
-        "central-force effective radius (2 sigma) in box units; overrides centralSmoothingLength")(
-        "hydro.centralSmoothingLength", po::value<double>(),
         "central-force support radius in box units; uses the selected gravity kernel")(
         "hydro.minSmoothingLength",
         po::value<double>(&opts.hydro.minSmoothingLength)->default_value(1.0e-6),
-        "minimum support radius in interparticle spacings")("hydro.minEffectiveRadius",
-        po::value<double>(),
-        "minimum effective radius (2 sigma) in interparticle spacings; overrides "
-        "minSmoothingLength")("hydro.maxSmoothingLength",
+        "minimum support radius in interparticle spacings")("hydro.maxSmoothingLength",
         po::value<double>(&opts.hydro.maxSmoothingLength)->default_value(1000.0),
         "maximum kernel support radius in interparticle spacings; capped at half the box")(
-        "hydro.maxEffectiveRadius", po::value<double>(),
-        "maximum effective radius (2 sigma) in interparticle spacings; overrides "
-        "maxSmoothingLength")("hydro.neighborNumber",
-        po::value<double>(&opts.hydro.neighborNumber)->default_value(42),
+        "hydro.neighborNumber", po::value<double>(&opts.hydro.neighborNumber)->default_value(42),
         "kernel-weighted neighbor target within the support sphere, including self")("hydro.cfl",
         po::value<double>(&opts.hydro.cfl)->default_value(0.22821773229381923),
         "Courant time-step factor using effective radius (2 sigma)");
@@ -1122,10 +1106,18 @@ bool processOptions(int argc, char* argv[]) {
         .add(hydroOpts)
         .add(chemistryOpts)
         .add(starFormationOpts);
+    // Deprecated aliases stay parseable but are hidden from help, the resolved
+    // option listing and its metadata; resolveSmoothingLength warns when one is set.
+    po::options_description deprecatedOpts("Deprecated aliases");
+    deprecatedOpts.add_options()("gravity.softening", po::value<double>(),
+        "deprecated alias for gravity.effectiveRadius")("hydro.centralSoftening",
+        po::value<double>(), "deprecated alias for hydro.centralEffectiveRadius");
+    po::options_description parserOpts("CosmicTiger options");
+    parserOpts.add(commandOpts).add(deprecatedOpts);
     terminal::detailPrint("Processing options\n");
     po::variables_map vm;
     // Require exact names; category prefixes and retired keys are not aliases.
-    po::store(po::parse_command_line(argc, argv, commandOpts,
+    po::store(po::parse_command_line(argc, argv, parserOpts,
                   po::command_line_style::default_style & ~po::command_line_style::allow_guessing),
         vm);
     po::notify(vm);
@@ -1172,7 +1164,7 @@ bool processOptions(int argc, char* argv[]) {
         if (!opts.configuration.empty()) {
             std::ifstream cfgFs{opts.configuration};
             if (cfgFs) {
-                po::store(po::parse_config_file(cfgFs, commandOpts), vm);
+                po::store(po::parse_config_file(cfgFs, parserOpts), vm);
                 rc = true;
             } else {
                 detail::throwOptionError(
@@ -1532,13 +1524,19 @@ bool processOptions(int argc, char* argv[]) {
     auto const hydroTable = makeHydroKernelTable(
         detail::kernelSpec(opts.hydro.kernelFamily, opts.hydro.kernelDegree, true));
     // Resolve representations after both CLI and INI parsing. Only explicit
-    // effective radii override support radii; defaulted legacy aliases do not.
+    // effective radii, or their deprecated aliases, override support radii;
+    // defaulted effective radii do not.
     auto const resolveSmoothingLength = [&](char const* effectiveKey, char const* supportKey,
                                             char const* legacyKey, double defaultSmoothingLength,
                                             double smoothingLengthPerEffectiveRadius) {
         auto const explicitOption = [&](char const* key) {
             return key != nullptr && vm.count(key) && !vm[key].defaulted();
         };
+        if (explicitOption(legacyKey)) {
+            std::cout << std::format("Warning: {:s} is deprecated; use {:s} instead.\n", legacyKey,
+                             effectiveKey)
+                      << std::flush;
+        }
         char const* selectedEffectiveKey = explicitOption(effectiveKey) ? effectiveKey :
             explicitOption(legacyKey)                                   ? legacyKey :
                                                                           nullptr;
@@ -1573,12 +1571,13 @@ bool processOptions(int argc, char* argv[]) {
         "hydro.centralSmoothingLength", "hydro.centralSoftening",
         centralEffectiveRadius * gravityTable.smoothingLengthPerEffectiveRadius,
         gravityTable.smoothingLengthPerEffectiveRadius);
-    opts.hydro.minSmoothingLength =
-        resolveSmoothingLength("hydro.minEffectiveRadius", "hydro.minSmoothingLength", nullptr,
-            opts.hydro.minSmoothingLength, hydroTable.smoothingLengthPerEffectiveRadius);
-    opts.hydro.maxSmoothingLength =
-        resolveSmoothingLength("hydro.maxEffectiveRadius", "hydro.maxSmoothingLength", nullptr,
-            opts.hydro.maxSmoothingLength, hydroTable.smoothingLengthPerEffectiveRadius);
+    for (auto const& [supportKey, smoothingLength] :
+        {std::pair{"hydro.minSmoothingLength", opts.hydro.minSmoothingLength},
+            std::pair{"hydro.maxSmoothingLength", opts.hydro.maxSmoothingLength}}) {
+        if (!detail::isFiniteOption(smoothingLength) || smoothingLength <= 0.0) {
+            detail::throwOptionError("%s must give a finite positive support radius\n", supportKey);
+        }
+    }
     double const selfNeighborFloor =
         sph_geometry::kUnitBallVolume * radial_kernel::value(hydroTable, 0.0);
     if (opts.output.siloInterval <= 0) {
@@ -1752,7 +1751,8 @@ bool processOptions(int argc, char* argv[]) {
         opts.hydro.centralSmoothingLength <= 0.0) {
         detail::throwOptionError(
             "hydro.yAcceleration and hydro.centralAcceleration must be finite; "
-            "hydro.centralSoftening must be finite and positive\n");
+            "hydro.centralEffectiveRadius / hydro.centralSmoothingLength must be finite and "
+            "positive\n");
     }
     if (!detail::isFiniteOption(opts.hydro.zPlaneAcceleration) ||
         opts.hydro.zPlaneAcceleration < 0.0) {
@@ -1849,8 +1849,8 @@ bool processOptions(int argc, char* argv[]) {
         !detail::isFiniteFloatOption(opts.hydro.centralAcceleration) ||
         !detail::isPositiveFloatOption(opts.hydro.centralSmoothingLength)) {
         detail::throwOptionError(
-            "hydro.yAcceleration, hydro.centralAcceleration and hydro.centralSoftening "
-            "must be representable in single precision, with positive centralSoftening\n");
+            "hydro.yAcceleration, hydro.centralAcceleration and hydro.centralSmoothingLength "
+            "must be representable in single precision, with positive centralSmoothingLength\n");
     }
     if (opts.hydro.zPlaneAcceleration != 0.0 &&
         !detail::isPositiveFloatOption(opts.hydro.zPlaneAcceleration)) {
@@ -1970,7 +1970,7 @@ bool processOptions(int argc, char* argv[]) {
     }
     if (!detail::isPositiveFloatOption(opts.hydro.centralSmoothingLength)) {
         detail::throwOptionError(
-            "hydro.centralSoftening support must remain finite and positive in single precision\n");
+            "hydro.centralSmoothingLength must remain finite and positive in single precision\n");
     }
     if (!detail::isPositiveFloatOption(opts.gravity.timestepEta)) {
         detail::throwOptionError(
@@ -2160,7 +2160,7 @@ bool processOptions(int argc, char* argv[]) {
     }
     if (opts.gravity.enabled && !detail::isPositiveFloatOption(opts.gravity.smoothingLength)) {
         detail::throwOptionError(
-            "gravity.effectiveRadius / gravity.smoothingLength (gravity.softening) must "
+            "gravity.effectiveRadius / gravity.smoothingLength (deprecated gravity.softening) must "
             "remain finite and positive in single precision "
             "after normalization when gravity.enabled is true\n");
     }

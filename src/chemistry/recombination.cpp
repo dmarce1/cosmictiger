@@ -524,8 +524,11 @@ std::array<double, 4> RecombinationHistory::sample(double scaleFactor) const {
     }
     scaleFactor = std::min(scaleFactor, options_.maxScaleFactor);
     double const radiationTemperature = parameters_.cmbTemperature / scaleFactor;
-    detail::RecombinationModel const model{
-        parameters_, heliumRatio_, hydrogenDensityToday_, hydrogenSahaEnd_};
+    detail::RecombinationModel model;
+    model.parameters = parameters_;
+    model.heliumRatio = heliumRatio_;
+    model.hydrogenDensityToday = hydrogenDensityToday_;
+    model.hydrogenSahaEnd = hydrogenSahaEnd_;
     if (scaleFactor < std::exp(samples_.front().logScaleFactor)) {
         double const redshift = 1.0 / scaleFactor - 1.0;
         if (redshift > 8000.0) {

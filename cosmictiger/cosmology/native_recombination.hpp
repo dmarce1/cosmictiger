@@ -8,9 +8,14 @@
 
 inline primordial::RecombinationParameters recombinationParameters(
     CosmicParameters const& parameters) {
-    return {parameters.hubble, parameters.omegaB, parameters.omegaC,
-        parameters.omegaGam + parameters.omegaNu, parameters.y,
-        parameters.theta * constants::kTcmb};
+    primordial::RecombinationParameters recombination;
+    recombination.hubble = parameters.hubble;
+    recombination.omegaB = parameters.omegaB;
+    recombination.omegaC = parameters.omegaC;
+    recombination.omegaRadiation = parameters.omegaGam + parameters.omegaNu;
+    recombination.heliumMassFraction = parameters.y;
+    recombination.cmbTemperature = parameters.theta * constants::kTcmb;
+    return recombination;
 }
 
 // This is the homogeneous background used by the linear perturbation solver.

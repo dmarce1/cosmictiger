@@ -53,6 +53,19 @@ struct SphTreeNeighborReturn {
 };
 #endif
 
+// Support multipliers for SphTreeCreateParameters and SphTreeNeighborParameters. While
+// supports may still change, tree builds and bounds refreshes expand node outer boxes by 21%
+// of each support h𞁑, so neighbor searches against those boxes leave room for h𞁑 to grow
+// during the smoothing-length iteration.
+// The bounds refresh after a converged density pass uses only a 1% margin.
+constexpr float kSphSupportSearchMultiplier = 1.21f;
+constexpr float kSphConvergedSearchMultiplier = 1.01f;
+
+// Padding added to every particle coordinate in SPH tree position, support and drift
+// boxes: ten units of the RangeFixed box resolution, so rounding in the fixed-point
+// conversion cannot exclude a particle or support from its own box.
+constexpr double kSphBoxPadding = 10.0 * RangeFixed::kToFloatFactor_;
+
 enum class SphNeighborOperation { RefreshBounds, FindNeighbors };
 
 // Which particle's kernel support can admit a pair to the neighbor list.
@@ -168,7 +181,7 @@ struct SphRunParameters {
     bool deferAccelerationSources = false;
     bool refreshConvergedDensity =
         false;    // Recompute diagnostics with fixed, converged supports.
-    // Initialization only: publish the converged kernel-sum density alongside H.
+    // Initialization only: publish the converged kernel-sum density alongside h.
     // This pass uses the CPU solver before any thermal state is initialized.
     bool initializeDensity = false;
     float bulkViscosityCoefficient;

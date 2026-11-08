@@ -121,7 +121,7 @@ void sphOnlyDiagnosticsTest() {
     }
     for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
         for (int dimension = 0; dimension < kDimensions; ++dimension) {
-            // The neighboring diagonal particles lie near the edge of H=0.25.
+            // The neighboring diagonal particles lie near the edge of h=0.25.
             // A weak compression heats by less than one float entropy unit at
             // dt=0.0005; use a resolved shock without changing that short step.
             sphParticlesVelocity(dimension, gas) =

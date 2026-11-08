@@ -6,7 +6,6 @@
  See LICENSE_1_0.txt or https://www.boost.org/LICENSE_1_0.txt.
  */
 
-#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -103,7 +102,6 @@ void verifyTreeReturnArchive() {
     expected.id.proc = 3;
     expected.id.index = 17;
     expected.radius = 0.125f;
-    expected.maxGravitySmoothingLength = 0.21875f;
     // The archive carries the runtime order's coefficients of the max-size buffer.
     int const coefficientCount = fmmMultipoleCoefficientCount(fmmOrder());
     expected.multi.zero();
@@ -122,7 +120,6 @@ void verifyTreeReturnArchive() {
     }
     TreeCreateReturn actual;
     actual.multi.zero();
-    actual.maxGravitySmoothingLength = -1.0f;
     for (int dim = 0; dim < kDimensions; dim++) {
         actual.box.begin[dim] = actual.box.end[dim] = -1.0;
     }
@@ -130,8 +127,7 @@ void verifyTreeReturnArchive() {
         hpx::serialization::input_archive archive(bytes);
         archive >> actual;
     }
-    requireFmmTree(actual.id == expected.id && actual.radius == expected.radius &&
-            actual.maxGravitySmoothingLength == expected.maxGravitySmoothingLength,
+    requireFmmTree(actual.id == expected.id && actual.radius == expected.radius,
         "tree-return metadata did not survive the HPX archive");
     for (int i = 0; i < coefficientCount; i++) {
         requireFmmTree(
@@ -148,21 +144,18 @@ void verifyTreeReturnArchive() {
 void verifyTreeNodeArchive(TreeId id) {
     // Node loading allocates a multipole in the live tree arena, so this check
     // runs after tree construction. Do not alter the production node itself.
-    TreeNode expected = *treeGetNode(id);
-    expected.maxGravitySmoothingLength = 0.34375f;
+    TreeNode const expected = *treeGetNode(id);
     std::vector<char> bytes;
     {
         hpx::serialization::output_archive archive(bytes);
         archive << expected;
     }
     TreeNode actual;
-    actual.maxGravitySmoothingLength = -1.0f;
     {
         hpx::serialization::input_archive archive(bytes);
         archive >> actual;
     }
     requireFmmTree(actual.radius == expected.radius &&
-            actual.maxGravitySmoothingLength == expected.maxGravitySmoothingLength &&
             actual.particleRange.first == expected.particleRange.first &&
             actual.particleRange.second == expected.particleRange.second &&
             actual.processRange.first == expected.processRange.first &&
@@ -220,8 +213,7 @@ void verifyRemoteMultipoleStorage() {
     }
 }
 
-float verifyTreeGeometry(TreeId id, bool empty, float smoothingLength, int distinctSupportRank = -1,
-    float distinctSmoothingLength = 0.0f) {
+void verifyTreeGeometry(TreeId id, bool empty) {
     TreeNode const* node = treeGetNode(id);
     requireFmmTree(
         std::isfinite(node->radius) && node->radius >= 0.0f, "node has an invalid bounding radius");
@@ -241,25 +233,12 @@ float verifyTreeGeometry(TreeId id, bool empty, float smoothingLength, int disti
     if (empty) {
         requireFmmTree(node->radius == 0.0f, "empty node has a nonzero radius");
     }
-    requireFmmTree(
-        std::isfinite(node->maxGravitySmoothingLength) && node->maxGravitySmoothingLength >= 0.0f,
-        "node has an invalid maximum gravity support");
-    float expectedSupport = 0.0f;
     if (!node->leaf) {
         auto const children = node->children;
         for (int child = 0; child < kChildCount; child++) {
-            float const childSupport = verifyTreeGeometry(children[child], empty, smoothingLength,
-                distinctSupportRank, distinctSmoothingLength);
-            expectedSupport = std::max(expectedSupport, childSupport);
+            verifyTreeGeometry(children[child], empty);
         }
-    } else if (node->numberOfParticles() > 0) {
-        expectedSupport = node->processRange.first == distinctSupportRank ?
-            distinctSmoothingLength :
-            smoothingLength;
     }
-    requireFmmTree(node->maxGravitySmoothingLength == expectedSupport,
-        "node maximum gravity support disagrees with its represented particles");
-    return expectedSupport;
 }
 }    // namespace detail
 
@@ -275,15 +254,6 @@ void initializeFmmTreeRegression(bool empty) {
     }
 }
 HPX_PLAIN_ACTION(initializeFmmTreeRegression, InitializeFmmTreeRegressionAction);
-
-ParticleInteger setFmmTreeRegressionSupport(float smoothingLength) {
-    detail::requireFmmTree(hpxChildren().empty(), "support fixture requires a terminal locality");
-    auto options = getOptions();
-    options.gravity.smoothingLength = smoothingLength;
-    setOptions(options);
-    return particlesSize();
-}
-HPX_PLAIN_ACTION(setFmmTreeRegressionSupport, SetFmmTreeRegressionSupportAction);
 
 void fmmTreeTest() {
     detail::verifyVectorArchives();
@@ -311,13 +281,10 @@ void fmmTreeTest() {
     domainsRebound();
     domainsBegin(0);
     domainsEnd();
-    auto const built = treeCreate(TreeCreateParameters(0, 0.5, options.gravity.smoothingLength));
-    detail::verifyTreeGeometry(built.id, false, float(options.gravity.smoothingLength));
+    auto const built = treeCreate(TreeCreateParameters(0, 0.5));
+    detail::verifyTreeGeometry(built.id, false);
     detail::verifyTreeNodeArchive(built.id);
     detail::verifyRemoteMultipoleStorage();
-    detail::requireFmmTree(
-        built.maxGravitySmoothingLength == float(options.gravity.smoothingLength),
-        "clustered tree return has the wrong fixed gravity support");
     detail::requireFmmTree(built.multi[0] == float(options.initial.numberOfParticles),
         "clustered tree lost particle mass");
     detail::requireFmmTree(built.radius > 0.0f, "clustered global node has zero radius");
@@ -354,32 +321,6 @@ void fmmTreeTest() {
     }
     treeDestroy(true);
 
-    if (hpxSize() > 1) {
-        // Exercise the real distributed max reduction with heterogeneous leaf
-        // metadata. Each locality still builds from a fixed support; this test
-        // performs no gravity kick and does not enable adaptive-softening physics.
-        int const distinctRank = hpxSize() - 1;
-        constexpr float kDistinctSmoothingLength = 0.00390625f;
-        try {
-            auto const count = hpx::async<SetFmmTreeRegressionSupportAction>(
-                hpxLocalities()[distinctRank], kDistinctSmoothingLength)
-                                   .get();
-            detail::requireFmmTree(count > 0, "distinct-support locality has no particles");
-            auto const heterogeneous =
-                treeCreate(TreeCreateParameters(0, 0.5, options.gravity.smoothingLength));
-            detail::verifyTreeGeometry(heterogeneous.id, false,
-                float(options.gravity.smoothingLength), distinctRank, kDistinctSmoothingLength);
-            detail::requireFmmTree(
-                heterogeneous.maxGravitySmoothingLength == kDistinctSmoothingLength,
-                "distributed parent did not receive the remote maximum gravity support");
-            treeDestroy(true);
-        } catch (...) {
-            setOptions(options);
-            throw;
-        }
-        setOptions(options);
-    }
-
     if (hpxSize() == 1) {
         // More coincident particles than the bucket must terminate while the
         // enclosing global cells still satisfy the ordinary Ewald criterion.
@@ -389,9 +330,8 @@ void fmmTreeTest() {
                 particlesPos(dim, particle) = 0.375;
             }
         }
-        auto const coincident =
-            treeCreate(TreeCreateParameters(0, 0.5, options.gravity.smoothingLength));
-        detail::verifyTreeGeometry(coincident.id, false, float(options.gravity.smoothingLength));
+        auto const coincident = treeCreate(TreeCreateParameters(0, 0.5));
+        detail::verifyTreeGeometry(coincident.id, false);
         detail::requireFmmTree(coincident.multi[0] == float(options.initial.numberOfParticles),
             "coincident tree lost particle mass");
         detail::requireFmmTree(coincident.radius == 0.0f, "coincident tree has a nonzero radius");
@@ -401,10 +341,8 @@ void fmmTreeTest() {
     // Preserve the distributed domain tree while removing every active particle.
     // With multiple localities this constructs an empty, multi-rank parent.
     initialize(true);
-    auto const empty = treeCreate(TreeCreateParameters(0, 0.5, options.gravity.smoothingLength));
-    detail::verifyTreeGeometry(empty.id, true, float(options.gravity.smoothingLength));
-    detail::requireFmmTree(empty.maxGravitySmoothingLength == 0.0f,
-        "empty tree return has a nonzero maximum gravity support");
+    auto const empty = treeCreate(TreeCreateParameters(0, 0.5));
+    detail::verifyTreeGeometry(empty.id, true);
     treeDestroy(true);
     std::cout << std::format("FMM tree regression passed ({:d} localities)\n", hpxSize())
               << std::flush;

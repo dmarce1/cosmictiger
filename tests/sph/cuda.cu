@@ -355,7 +355,7 @@ public:
         return acceleration;
     }
 
-    // (du𞁑/dτ)ₕₑ𞁑ₜ of one sink, inverting the kernel's Ȧ𞁑 = (du𞁑/dτ)ₕₑ𞁑ₜ / (E/A)(ρ𞁑, γ, a).
+    // (du𞁑/dτ)ₕₑₐₜ of one sink, inverting the kernel's Ȧ𞁑 = (du𞁑/dτ)ₕₑₐₜ / (E/A)(ρ𞁑, γ, a).
     double dissipativeHeating(int index) const {
         require(data_.sinkEntropyRate, "dissipative heating requires the entropy-rate output");
         return sph_entropy::storedEnergy(data_.sinkEntropyRate[sinkIndex(index)],

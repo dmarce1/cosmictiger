@@ -23,6 +23,7 @@
 #include <cosmictiger/scenarios/diagnostics.hpp>
 #include <cosmictiger/scenarios/polytropic_star.hpp>
 #include <cosmictiger/scenarios/sphere.hpp>
+#include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/particles.hpp>
 
 namespace scenarios {
@@ -223,8 +224,7 @@ ScenarioPlan initializePolytropicStar() {
     solveSphereSurfaceProblem(xValue);
     for (int i = 0; i < xValue.size(); i++) {
         double const d = rho(radius[i] * r0);
-        double h = pow(
-            m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * d), 1.0 / 3.0);
+        double h = sph_geometry::supportRadius(m, d, getOptions().hydro.neighborNumber);
         int const nValue = xValue[i][kXi].size();
         for (int l = 0; l < nValue; l++) {
             ParticleInteger const k = sphParticlesSize();

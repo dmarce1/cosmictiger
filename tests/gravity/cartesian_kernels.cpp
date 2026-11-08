@@ -459,8 +459,11 @@ struct AxialRemainder {
 
 AxialRemainder closedFormRemainder(int multipoleDegree, double q) {
     double const tail = std::pow(q, multipoleDegree + 1);
-    return {-tail / (2 * (1 - q)),
-        -tail * ((multipoleDegree + 2) - (multipoleDegree + 1) * q) / (4 * (1 - q) * (1 - q))};
+    AxialRemainder remainder;
+    remainder.potential = -tail / (2 * (1 - q));
+    remainder.acceleration =
+        -tail * ((multipoleDegree + 2) - (multipoleDegree + 1) * q) / (4 * (1 - q) * (1 - q));
+    return remainder;
 }
 
 AxialRemainder bruteForceRemainder(int multipoleDegree, double q) {

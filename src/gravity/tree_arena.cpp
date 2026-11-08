@@ -192,7 +192,7 @@ TreeAllocator::~TreeAllocator() {
     allocatorMtx--;
 }
 
-TreeCreateParameters::TreeCreateParameters(int minimumRung, double openingAngle, double hmaxArg) {
+TreeCreateParameters::TreeCreateParameters(int minimumRung, double openingAngle) {
     theta = openingAngle;
     minRung = minimumRung;
     minLevel = 9;

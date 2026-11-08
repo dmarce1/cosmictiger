@@ -45,7 +45,7 @@ definitions without linking unrelated physics libraries.
 gravity/
 ├── kernels/                               # Shared Cartesian, STF, spherical, screened kernels
 ├── fmm_types.hpp, fmm_order.*
-├── fmm_acceptance.hpp, fmm_geometry.hpp
+├── fmm_acceptance.hpp, fmm_geometry.hpp, softening.hpp
 ├── sources.*, source_access.*
 ├── tree*, gravity*, kick*                  # Shared local tree/walk/CPU/CUDA execution
 ├── global_fmm/                            # Distributed global FMM and periodic corrections

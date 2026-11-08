@@ -75,9 +75,10 @@ inline constexpr FlopCount kNorm = kDotProduct + 1;
 inline constexpr FlopCount kInverseVolume = kSpatialDimensions - 1;
 inline constexpr FlopCount kInverseGradientScale = kSpatialDimensions == 1 ? 1 : 2;
 
-// Costs of the expressions in monaghan/viscosity.hpp. Selection and unary signs
-// are free; both expressions passed to simdSelect are evaluated.
-constexpr FlopCount kViscosityMu = 9;
+// Costs of the expressions in sph/viscosity/monaghan.hpp. Selection and unary signs
+// are free; both expressions passed to simdSelect are evaluated. The pair length
+// h̄_M𞁑𞁓 (3 operations) is formed and counted once per pair by the caller.
+constexpr FlopCount kViscosityMu = 5;
 constexpr FlopCount kArtificialViscosity = 10;
 
 // Two gamma-1 subtractions, two powers, multiplication, and two divisions.

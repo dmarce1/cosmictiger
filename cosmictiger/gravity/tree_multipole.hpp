@@ -65,12 +65,14 @@ FlopCounts treeComputeMultipole(MultipoleBuffer& multi, MultipoleBuffer const& l
     }
     // M2M is double, including two input widenings and one output narrowing
     // per stored coefficient. Only the two populated SIMD lanes are counted.
-    return {0,
-        2 *
-                cosmictiger::gravity::cartesian::tracefree::detail::M2M<
-                    FmmOrder<order>::kMultipoleDegree_>::kFlops_ +
-            12 + 4 * kMultipoleCoefficients,
-        0};
+    FlopCounts counts;
+    counts.singlePrecision = 0;
+    counts.doublePrecision = 2 *
+            cosmictiger::gravity::cartesian::tracefree::detail::M2M<
+                FmmOrder<order>::kMultipoleDegree_>::kFlops_ +
+        12 + 4 * kMultipoleCoefficients;
+    counts.unclassified = 0;
+    return counts;
 }
 
 template <int order>
@@ -132,12 +134,15 @@ FlopCounts treeComputeMultipole(MultipoleBuffer& multi, Pair<ParticleInteger> pa
     FlopCount const packets = lanes / kSimdFloatSize;
     // P2M, lane mass weights, and SIMD reductions are float. Each reduced
     // coefficient widens and accumulates in double, then narrows into storage.
-    return {lanes *
-                (cosmictiger::gravity::cartesian::tracefree::detail::P2M<
-                     FmmOrder<order>::kMultipoleDegree_>::kFlops_ +
-                    6 + kMultipoleCoefficients) +
-            packets * (kSimdFloatSize - 1) * kMultipoleCoefficients,
-        centerConversions + (2 * packets + 1) * kMultipoleCoefficients, 0};
+    FlopCounts counts;
+    counts.singlePrecision = lanes *
+            (cosmictiger::gravity::cartesian::tracefree::detail::P2M<
+                 FmmOrder<order>::kMultipoleDegree_>::kFlops_ +
+                6 + kMultipoleCoefficients) +
+        packets * (kSimdFloatSize - 1) * kMultipoleCoefficients;
+    counts.doublePrecision = centerConversions + (2 * packets + 1) * kMultipoleCoefficients;
+    counts.unclassified = 0;
+    return counts;
 }
 
 #endif

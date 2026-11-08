@@ -19,8 +19,12 @@ FmmSourceView fmmSourceView(FmmParticleStore store) {
     if (store == FmmParticleStore::Ghost) {
         return detail::borrowedSources;
     }
-    return {particlesX, getOptions().hydro.enabled ? particlesTy : nullptr, particlesR,
-        particlesSize()};
+    FmmSourceView view;
+    view.positions = particlesX;
+    view.types = getOptions().hydro.enabled ? particlesTy : nullptr;
+    view.rungs = particlesR;
+    view.count = particlesSize();
+    return view;
 }
 
 void fmmRegisterSourceView(FmmParticleStore store, FmmSourceView view) {

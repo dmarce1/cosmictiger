@@ -257,7 +257,7 @@ static void treeTest() {
     tm.reset();
 
     tm.start();
-    TreeCreateParameters tparams(0, 0.7, getOptions().gravity.smoothingLength);
+    TreeCreateParameters tparams(0, 0.7);
     treeCreate(tparams);
     tm.stop();
     std::cout << std::format("tree_create: {:e} s\n", tm.read()) << std::flush;
@@ -312,8 +312,7 @@ static void kickTest() {
     tm.reset();
     tm.reset();
     tm.start();
-    TreeCreateParameters tparams(
-        0, getOptions().gravity.openingAngle, getOptions().gravity.smoothingLength);
+    TreeCreateParameters tparams(0, getOptions().gravity.openingAngle);
     auto sr = treeCreate(tparams);
     tm.stop();
     std::cout << std::format("tree_create: {:e} s\n", tm.read()) << std::flush;
@@ -464,11 +463,11 @@ static void forceTest() {
         domainsBegin(0);
         domainsEnd();
         particlesSortByRung(0);
-        TreeCreateParameters tparams(0, theta, getOptions().gravity.smoothingLength);
+        TreeCreateParameters tparams(0, theta);
         treeCreate(tparams);
         return tparams;
     };
-    TreeCreateParameters tparams(0, treeTheta, getOptions().gravity.smoothingLength);
+    TreeCreateParameters tparams(0, treeTheta);
     if (fixedTree) {
         tparams = buildTree(treeTheta);
         std::cout << std::format("tree built once at theta {:.3f}\n", treeTheta) << std::flush;
@@ -559,8 +558,7 @@ static void bucketTest() {
             domainsBegin(0);
             domainsEnd();
             particlesSortByRung(0);
-            TreeCreateParameters tparams(
-                0, getOptions().gravity.openingAngle, getOptions().gravity.smoothingLength);
+            TreeCreateParameters tparams(0, getOptions().gravity.openingAngle);
             treeCreate(tparams);
             std::cout << "Tree created\n" << std::flush;
             KickParameters kparams;
@@ -653,7 +651,7 @@ static void speedTest() {
             domainsBegin(0);
             domainsEnd();
             particlesSortByRung(0);
-            TreeCreateParameters tparams(0, thetas[ci], getOptions().gravity.smoothingLength);
+            TreeCreateParameters tparams(0, thetas[ci]);
             treeCreate(tparams);
             KickParameters kparams;
             kparams.nodeLoad = 10;

@@ -49,10 +49,10 @@ Model model() {
         3.0 * hubble * hubble / (8.0 * 3.14159265358979323846 * 6.6738e-8);
     Model result;
     if (settings.criticalPhysicalDensity > 0.0) {
-        result = {parameters,
-            settings.criticalPhysicalDensity * gadget4::kProtonMass /
-                gadget4::kHydrogenMassFraction,
-            0.0};
+        result.parameters = parameters;
+        result.thresholdDensity = settings.criticalPhysicalDensity * gadget4::kProtonMass /
+            gadget4::kHydrogenMassFraction;
+        result.overdensityThreshold = 0.0;
         if (!springel_and_hernquist::validParameters(parameters)) {
             throw std::runtime_error("Invalid GADGET-4 star-formation parameters");
         }

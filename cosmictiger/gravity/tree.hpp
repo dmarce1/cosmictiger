@@ -40,9 +40,6 @@ struct TreeNode {
     Vector3<Position> pos;
     MultipolePosition* mpos;
     float radius;
-    // Maximum actual compact gravity support among represented particles, not an
-    // effective smoothing length. Rebuild/refit after those supports change.
-    float maxGravitySmoothingLength = 0.0f;
     struct {
         unsigned short depth : 14;
         unsigned short localRoot : 1;
@@ -81,7 +78,6 @@ struct TreeNode {
         arc & particleRange;
         arc & sourceStore;
         arc & radius;
-        arc & maxGravitySmoothingLength;
         int localRoot0;
         int leaf0;
         int depth0;
@@ -105,7 +101,6 @@ struct TreeNode {
         arc & particleRange;
         arc & sourceStore;
         arc & radius;
-        arc & maxGravitySmoothingLength;
         int localRoot0;
         int leaf0;
         int depth0;
@@ -128,7 +123,6 @@ struct TreeCreateReturn {
     Vector3<Position> pos;
     TreeId id;
     float radius;
-    float maxGravitySmoothingLength = 0.0f;
     Range<double> box;
     template <class A>
     void serialize(A&& a, unsigned) {
@@ -136,7 +130,6 @@ struct TreeCreateReturn {
         a & id;
         a & pos;
         a & radius;
-        a & maxGravitySmoothingLength;
         a & box;
     }
 };
@@ -152,7 +145,7 @@ struct TreeCreateParameters {
         leafPushed = false;
         doLeafSizes = false;
     }
-    TreeCreateParameters(int minRung, double theta, double hmax);
+    TreeCreateParameters(int minRung, double theta);
     template <class A>
     void serialize(A&& arc, unsigned) {
         arc & parallelParticleThreshold;
@@ -166,7 +159,6 @@ struct TreeCreateParameters {
 
 void treeReset();
 void treeDestroy(bool freeTree = false);
-int treeMinLevel(double theta, double hsoft);
 TreeNode const* treeGetNode(TreeId);
 // Cumulative remote tree reads issued by this locality, never reset.
 uint64_t treeRemoteFetchCount();
@@ -178,7 +170,6 @@ void treeClearNeighborRanges();
 int treeAvgLeafSize();
 int treeAllocateNeighborList(Vector<TreeId> const& values);
 void treeSetNeighborRange(TreeId id, Pair<int, int> rng);
-void treeSetBoxes(TreeId id, Fixed32Range const& ibox, Fixed32Range const& obox, float hmax);
 TreeId const treeGetLeaf(int i);
 size_t treeAddRemote(TreeNode const& remote);
 TreeNode* treeData();

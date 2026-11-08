@@ -14,6 +14,7 @@
 #include <cosmictiger/core/particle_count.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/rayleigh_taylor.hpp>
+#include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/particles.hpp>
 
 namespace scenarios {
@@ -50,8 +51,8 @@ ScenarioPlan initializeRayleighTaylor() {
                 bool const heavy = iz < quarterDim;
                 double const density = heavy ? kHeavyDensity : kLightDensity;
                 int const samples = heavy ? 2 : 1;
-                double const smoothingLength = std::cbrt(
-                    mass * opts.hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * density));
+                double const smoothingLength =
+                    sph_geometry::supportRadius(mass, density, opts.hydro.neighborNumber);
                 for (int sample = 0; sample < samples; sample++) {
                     double const offset = heavy ? 0.25 + 0.5 * sample : 0.5;
                     Position const x((ix + offset) * dx);

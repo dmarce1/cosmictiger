@@ -413,7 +413,7 @@ struct CheckpointHeader {
     double darkMatterMass;
     double gasMass;
     double gamma;
-    double softening;
+    double gravitySmoothingLength;
     double gravitationalMass;
     double omegaMatter;
     double omegaRadiation;
@@ -543,11 +543,25 @@ bool legacyCheckpointCompatible(Options const& opts) {
 }
 
 CheckpointHeader checkpointHeader(Options const& opts) {
-    return {kCheckpointMagic, kCheckpointVersion, checkpointFlags(opts),
-        opts.initial.darkMatterMass, opts.initial.gasMass, opts.hydro.gamma,
-        opts.gravity.smoothingLength, opts.gravity.gm, opts.cosmology.omegaM, opts.cosmology.omegaR,
-        opts.cosmology.omegaLambda, opts.units.lengthCm, opts.units.timeSeconds, opts.units.massG,
-        opts.initial.numberOfParticles, opts.run.numberOfSteps, checkpointPhysicsCode(opts)};
+    CheckpointHeader header;
+    header.magic = kCheckpointMagic;
+    header.version = kCheckpointVersion;
+    header.flags = checkpointFlags(opts);
+    header.darkMatterMass = opts.initial.darkMatterMass;
+    header.gasMass = opts.initial.gasMass;
+    header.gamma = opts.hydro.gamma;
+    header.gravitySmoothingLength = opts.gravity.smoothingLength;
+    header.gravitationalMass = opts.gravity.gm;
+    header.omegaMatter = opts.cosmology.omegaM;
+    header.omegaRadiation = opts.cosmology.omegaR;
+    header.omegaLambda = opts.cosmology.omegaLambda;
+    header.unitLength = opts.units.lengthCm;
+    header.unitTime = opts.units.timeSeconds;
+    header.unitMass = opts.units.massG;
+    header.particlesPerSpecies = opts.initial.numberOfParticles;
+    header.nominalSteps = opts.run.numberOfSteps;
+    header.reserved = checkpointPhysicsCode(opts);
+    return header;
 }
 
 bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
@@ -564,7 +578,7 @@ bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
         header.reserved == checkpointPhysicsCode(opts) &&
         header.darkMatterMass == opts.initial.darkMatterMass &&
         header.gasMass == opts.initial.gasMass && header.gamma == opts.hydro.gamma &&
-        header.softening == opts.gravity.smoothingLength &&
+        header.gravitySmoothingLength == opts.gravity.smoothingLength &&
         header.gravitationalMass == opts.gravity.gm &&
         header.omegaMatter == opts.cosmology.omegaM &&
         header.omegaRadiation == opts.cosmology.omegaR &&
@@ -1091,14 +1105,17 @@ CheckpointSelection readCheckpointSelection(std::string const& outputDirectory, 
                 algorithms[1] = algorithms[2] = algorithms[3] = 0;
             }
         }
-        return {algorithms[1] == 4 ?
-                "p3m" :
-                (algorithms[1] == 3 ?
-                        "pm" :
-                        (algorithms[1] == 2 ? "pmmm" : (algorithms[1] == 1 ? "fmm" : "none"))),
-            algorithms[2] == 2 ? "fmm" : (algorithms[2] == 1 ? "pp" : "none"),
-            algorithms[4] == 2 ? "global" : (algorithms[4] == 1 ? "hierarchical" : "traditional"),
-            static_cast<int>(algorithms[3])};
+        CheckpointSelection selection;
+        selection.farMethod = algorithms[1] == 4 ?
+            "p3m" :
+            (algorithms[1] == 3 ?
+                    "pm" :
+                    (algorithms[1] == 2 ? "pmmm" : (algorithms[1] == 1 ? "fmm" : "none")));
+        selection.nearMethod = algorithms[2] == 2 ? "fmm" : (algorithms[2] == 1 ? "pp" : "none");
+        selection.timeIntegrator =
+            algorithms[4] == 2 ? "global" : (algorithms[4] == 1 ? "hierarchical" : "traditional");
+        selection.expansionOrder = static_cast<int>(algorithms[3]);
+        return selection;
     }
     CheckpointSelection result;
     result.farMethod = (header.flags & detail::kParticleMultipoleMesh) != 0U ?
@@ -1366,9 +1383,11 @@ void checkpointStateTest() {
     defaultKernelOptions.hydro.kernelFamily = "spline";
     defaultKernelOptions.hydro.kernelDegree = 3;
     defaultKernelOptions.hydro.method = "sph";
+    // checkpointPhysicsCode marks every SPH checkpoint with the scalar viscosity layout.
+    uint32_t const sphLayoutCode =
+        detail::kVariationalSph | detail::kCompactSphLayout | detail::kScalarViscosityLayout;
     ALWAYS_ASSERT(detail::checkpointHeader(defaultKernelOptions).reserved ==
-        (defaultKernelOptions.hydro.enabled ? detail::kVariationalSph | detail::kCompactSphLayout :
-                                              0U));
+        (defaultKernelOptions.hydro.enabled ? sphLayoutCode : 0U));
     auto legacyKernelOptions = defaultKernelOptions;
     legacyKernelOptions.hydro.enabled = false;
     legacyKernelOptions.run.hierarchicalGravity = true;
@@ -1462,11 +1481,14 @@ void checkpointStateTest() {
     {
         auto const previousOptions = getOptions();
         auto evolvingOptions = previousOptions;
+        // Keep the binary16 alpha floor valid whatever constant-viscosity settings the
+        // caller passed; this probe tests the viscosity selector.
+        evolvingOptions.hydro.minimumBulkViscosityCoefficient = 0.1;
         evolvingOptions.hydro.viscosityEvolution = "morrisAndMonaghan";
         setOptions(evolvingOptions);
         ALWAYS_ASSERT(getOptions().hydro.usesBalsaraSwitch());
         setOptions(previousOptions);
-        auto invalidOptions = previousOptions;
+        auto invalidOptions = evolvingOptions;
         invalidOptions.hydro.viscosityEvolution = "huEtal";
         bool rejected = false;
         try {

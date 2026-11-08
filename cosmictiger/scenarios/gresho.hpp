@@ -31,8 +31,11 @@ inline GreshoState greshoState(double radius) {
     if (radius < 0.2) {
         return {5.0 + 12.5 * radius * radius, 5.0 * radius};
     } else if (radius < 0.4) {
-        return {9.0 + 12.5 * radius * radius - 20.0 * radius + 4.0 * std::log(5.0 * radius),
-            2.0 - 5.0 * radius};
+        GreshoState state;
+        state.pressure =
+            9.0 + 12.5 * radius * radius - 20.0 * radius + 4.0 * std::log(5.0 * radius);
+        state.azimuthalVelocity = 2.0 - 5.0 * radius;
+        return state;
     }
     return {3.0 + 4.0 * std::log(2.0), 0.0};
 }

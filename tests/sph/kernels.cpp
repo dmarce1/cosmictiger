@@ -65,7 +65,7 @@ void testKernel() {
             sph_kernels::kernelDerivative(join + joinStep), 80.0 * joinStep);
     }
 
-    // Compare against the Monaghan (1992) h-based polynomial, where support H is 2h.
+    // Compare against the Monaghan (1992) h_M-based polynomial, where support h is 2h_M.
     double const smoothingLength = 0.37;
     double const support = 2.0 * smoothingLength;
     for (double const qPaper : {0.0, 0.2, 0.75, 1.0, 1.25, 1.75, 2.0}) {

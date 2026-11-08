@@ -19,9 +19,9 @@
  *
  * Particle i has mass mᵢ, fixed volume weight xᵢ, weighted density yᵢ and volume
  * Vᵢ = xᵢ/yᵢ. cosmictiger/sph/volume.hpp evaluates yᵢ and the grad-H correction
- * ζᵢ for the support constraint Hᵢ^D nᵢ = constant. Its spatial derivative is
+ * ζᵢ for the support constraint hᵢ^D nᵢ = constant. Its spatial derivative is
  *
- *   dyᵢ = Σⱼ (xⱼ - ζᵢ) gᵢ . drᵢⱼ,   gᵢ = grad_i Wᵢⱼ(Hᵢ).
+ *   dyᵢ = Σⱼ (xⱼ - ζᵢ) gᵢ . drᵢⱼ,   gᵢ = grad_i Wᵢⱼ(hᵢ).
  *
  * The adiabatic first law d(mᵢ uᵢ) = -Pᵢ dVᵢ = (Pᵢ xᵢ/yᵢ^2) dyᵢ and
  * L = Σᵢ mᵢ (vᵢ^2/2 - uᵢ) give the directed coefficient and inviscid rates
@@ -30,7 +30,7 @@
  *   mᵢ dvᵢ/dt = -Σⱼ [Qᵢⱼ gᵢ + Qⱼᵢ gⱼ],
  *   mᵢ duᵢ/dt =  Σⱼ Qᵢⱼ vᵢⱼ . gᵢ,
  *
- * where rᵢⱼ = rᵢ-rⱼ, vᵢⱼ = vᵢ-vⱼ and gⱼ = grad_i Wᵢⱼ(Hⱼ).
+ * where rᵢⱼ = rᵢ-rⱼ, vᵢⱼ = vᵢ-vⱼ and gⱼ = grad_i Wᵢⱼ(hⱼ).
  * Hopkins' fᵢⱼ = 1 - ζᵢ/xⱼ is absorbed into Qᵢⱼ. For equal masses with
  * xᵢ = mᵢ, yᵢ = ρᵢ and xⱼ-ζᵢ = mᵢ/Ωᵢ, these become Price (2012),
  * equations 30 and 35. A held support uses ζᵢ = 0.

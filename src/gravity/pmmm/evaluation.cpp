@@ -198,8 +198,9 @@ void evaluateParticles(bool doPotential) {
                     kMaximumBatchSources - std::min(kMaximumBatchSources, batchSources.size())) {
                 submit();
             }
-            PmmmNearSourceRange const sourceRange{
-                batchSources.size(), batchSources.size() + sources.size()};
+            PmmmNearSourceRange sourceRange;
+            sourceRange.begin = batchSources.size();
+            sourceRange.end = batchSources.size() + sources.size();
             batchSources.insert(batchSources.end(), sources.begin(), sources.end());
             cells.push_back({sinks.size(), std::move(coefficients)});
             for (ParticleInteger i = cell.begin; i < cell.end; ++i) {

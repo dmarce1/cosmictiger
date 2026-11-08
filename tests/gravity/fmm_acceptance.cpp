@@ -63,60 +63,226 @@ AcceptanceCase reciprocalCase(AcceptanceCase value) {
 
 std::vector<AcceptanceCase> acceptanceCases() {
     std::vector<AcceptanceCase> cases;
+    AcceptanceCase next;
     for (bool sinkLeaf : {false, true}) {
         for (bool sourceLeaf : {false, true}) {
-            cases.push_back({"CC takes precedence at every tree level", 16.0f, 1.0f, 1.0f, 9.0f,
-                9.0f, 0.5f, 1.5f, sinkLeaf, sourceLeaf, true, FmmInteraction::CellCell});
+            next.label = "CC takes precedence at every tree level";
+            next.centerDistanceSquared = 16.0f;
+            next.sinkRadius = 1.0f;
+            next.sourceRadius = 1.0f;
+            next.sinkBoxToSourceCenterSquared = 9.0f;
+            next.sourceBoxToSinkCenterSquared = 9.0f;
+            next.pairSmoothingLength = 0.5f;
+            next.inverseTheta = 1.5f;
+            next.sinkLeaf = sinkLeaf;
+            next.sourceLeaf = sourceLeaf;
+            next.supportSeparated = true;
+            next.expected = FmmInteraction::CellCell;
+            cases.push_back(next);
         }
     }
 
     // The source-center distance to the sink box resolves this anisotropic pair
     // even though the enclosing-sphere PC angular bound is exactly tangent.
-    cases.push_back({"PC between two leaves", 1.0f, 0.5f, 0.25f, 0.36f, 0.5625f, 0.1f, 2.0f, true,
-        true, true, FmmInteraction::ParticleCell});
-    cases.push_back({"PC from an internal source into a sink leaf", 1.0f, 0.5f, 0.25f, 0.36f,
-        0.5625f, 0.1f, 2.0f, true, false, true, FmmInteraction::ParticleCell});
-    cases.push_back({"PC cannot expose particles from an internal sink", 1.0f, 0.5f, 0.25f, 0.36f,
-        0.5625f, 0.1f, 2.0f, false, true, true, FmmInteraction::ParticleParticle});
-    cases.push_back({"internal pair must descend when CC fails", 1.0f, 0.5f, 0.25f, 0.36f, 0.5625f,
-        0.1f, 2.0f, false, false, true, FmmInteraction::ParticleParticle});
+    next.label = "PC between two leaves";
+    next.centerDistanceSquared = 1.0f;
+    next.sinkRadius = 0.5f;
+    next.sourceRadius = 0.25f;
+    next.sinkBoxToSourceCenterSquared = 0.36f;
+    next.sourceBoxToSinkCenterSquared = 0.5625f;
+    next.pairSmoothingLength = 0.1f;
+    next.inverseTheta = 2.0f;
+    next.sinkLeaf = true;
+    next.sourceLeaf = true;
+    next.supportSeparated = true;
+    next.expected = FmmInteraction::ParticleCell;
+    cases.push_back(next);
+    next.label = "PC from an internal source into a sink leaf";
+    next.centerDistanceSquared = 1.0f;
+    next.sinkRadius = 0.5f;
+    next.sourceRadius = 0.25f;
+    next.sinkBoxToSourceCenterSquared = 0.36f;
+    next.sourceBoxToSinkCenterSquared = 0.5625f;
+    next.pairSmoothingLength = 0.1f;
+    next.inverseTheta = 2.0f;
+    next.sinkLeaf = true;
+    next.sourceLeaf = false;
+    next.supportSeparated = true;
+    next.expected = FmmInteraction::ParticleCell;
+    cases.push_back(next);
+    next.label = "PC cannot expose particles from an internal sink";
+    next.centerDistanceSquared = 1.0f;
+    next.sinkRadius = 0.5f;
+    next.sourceRadius = 0.25f;
+    next.sinkBoxToSourceCenterSquared = 0.36f;
+    next.sourceBoxToSinkCenterSquared = 0.5625f;
+    next.pairSmoothingLength = 0.1f;
+    next.inverseTheta = 2.0f;
+    next.sinkLeaf = false;
+    next.sourceLeaf = true;
+    next.supportSeparated = true;
+    next.expected = FmmInteraction::ParticleParticle;
+    cases.push_back(next);
+    next.label = "internal pair must descend when CC fails";
+    next.centerDistanceSquared = 1.0f;
+    next.sinkRadius = 0.5f;
+    next.sourceRadius = 0.25f;
+    next.sinkBoxToSourceCenterSquared = 0.36f;
+    next.sourceBoxToSinkCenterSquared = 0.5625f;
+    next.pairSmoothingLength = 0.1f;
+    next.inverseTheta = 2.0f;
+    next.sinkLeaf = false;
+    next.sourceLeaf = false;
+    next.supportSeparated = true;
+    next.expected = FmmInteraction::ParticleParticle;
+    cases.push_back(next);
 
     // Both hybrid geometries pass while CC fails. A leaf can interact with an
     // internal cloud even when the reciprocal particle side is unavailable.
-    cases.push_back({"PC is the eligible hybrid for a sink leaf", 1.69f, 0.5f, 0.5f, 1.21f, 1.21f,
-        0.1f, 2.0f, true, false, true, FmmInteraction::ParticleCell});
-    cases.push_back({"CP is the eligible hybrid for a source leaf", 1.69f, 0.5f, 0.5f, 1.21f, 1.21f,
-        0.1f, 2.0f, false, true, true, FmmInteraction::CellParticle});
-    cases.push_back({"two internal clouds cannot use either hybrid", 1.69f, 0.5f, 0.5f, 1.21f,
-        1.21f, 0.1f, 2.0f, false, false, true, FmmInteraction::ParticleParticle});
-    cases.push_back({"two leaves prefer the smaller source cloud", 1.69f, 0.5f, 0.25f, 1.21f, 1.21f,
-        0.1f, 2.0f, true, true, true, FmmInteraction::ParticleCell});
+    next.label = "PC is the eligible hybrid for a sink leaf";
+    next.centerDistanceSquared = 1.69f;
+    next.sinkRadius = 0.5f;
+    next.sourceRadius = 0.5f;
+    next.sinkBoxToSourceCenterSquared = 1.21f;
+    next.sourceBoxToSinkCenterSquared = 1.21f;
+    next.pairSmoothingLength = 0.1f;
+    next.inverseTheta = 2.0f;
+    next.sinkLeaf = true;
+    next.sourceLeaf = false;
+    next.supportSeparated = true;
+    next.expected = FmmInteraction::ParticleCell;
+    cases.push_back(next);
+    next.label = "CP is the eligible hybrid for a source leaf";
+    next.centerDistanceSquared = 1.69f;
+    next.sinkRadius = 0.5f;
+    next.sourceRadius = 0.5f;
+    next.sinkBoxToSourceCenterSquared = 1.21f;
+    next.sourceBoxToSinkCenterSquared = 1.21f;
+    next.pairSmoothingLength = 0.1f;
+    next.inverseTheta = 2.0f;
+    next.sinkLeaf = false;
+    next.sourceLeaf = true;
+    next.supportSeparated = true;
+    next.expected = FmmInteraction::CellParticle;
+    cases.push_back(next);
+    next.label = "two internal clouds cannot use either hybrid";
+    next.centerDistanceSquared = 1.69f;
+    next.sinkRadius = 0.5f;
+    next.sourceRadius = 0.5f;
+    next.sinkBoxToSourceCenterSquared = 1.21f;
+    next.sourceBoxToSinkCenterSquared = 1.21f;
+    next.pairSmoothingLength = 0.1f;
+    next.inverseTheta = 2.0f;
+    next.sinkLeaf = false;
+    next.sourceLeaf = false;
+    next.supportSeparated = true;
+    next.expected = FmmInteraction::ParticleParticle;
+    cases.push_back(next);
+    next.label = "two leaves prefer the smaller source cloud";
+    next.centerDistanceSquared = 1.69f;
+    next.sinkRadius = 0.5f;
+    next.sourceRadius = 0.25f;
+    next.sinkBoxToSourceCenterSquared = 1.21f;
+    next.sourceBoxToSinkCenterSquared = 1.21f;
+    next.pairSmoothingLength = 0.1f;
+    next.inverseTheta = 2.0f;
+    next.sinkLeaf = true;
+    next.sourceLeaf = true;
+    next.supportSeparated = true;
+    next.expected = FmmInteraction::ParticleCell;
+    cases.push_back(next);
     auto reverseRadius = reciprocalCase(cases.back());
     reverseRadius.label = "two leaves prefer the smaller sink cloud";
     cases.push_back(reverseRadius);
-    cases.push_back({"leaf eligibility overrides the smaller cloud preference", 1.69f, 0.25f, 0.5f,
-        1.21f, 1.21f, 0.1f, 2.0f, true, false, true, FmmInteraction::ParticleCell});
+    next.label = "leaf eligibility overrides the smaller cloud preference";
+    next.centerDistanceSquared = 1.69f;
+    next.sinkRadius = 0.25f;
+    next.sourceRadius = 0.5f;
+    next.sinkBoxToSourceCenterSquared = 1.21f;
+    next.sourceBoxToSinkCenterSquared = 1.21f;
+    next.pairSmoothingLength = 0.1f;
+    next.inverseTheta = 2.0f;
+    next.sinkLeaf = true;
+    next.sourceLeaf = false;
+    next.supportSeparated = true;
+    next.expected = FmmInteraction::ParticleCell;
+    cases.push_back(next);
     float const lowerRadius = std::nextafter(0.5f, 0.0f);
     float const upperRadius = std::nextafter(0.5f, std::numeric_limits<float>::infinity());
-    cases.push_back({"adjacent smaller source radius selects PC", 1.69f, 0.5f, lowerRadius, 1.21f,
-        1.21f, 0.1f, 2.0f, true, true, true, FmmInteraction::ParticleCell});
-    cases.push_back({"equal radii retain reciprocal PP fallback", 1.69f, 0.5f, 0.5f, 1.21f, 1.21f,
-        0.1f, 2.0f, true, true, true, FmmInteraction::ParticleParticle});
-    cases.push_back({"adjacent larger source radius selects CP", 1.69f, 0.5f, upperRadius, 1.21f,
-        1.21f, 0.1f, 2.0f, true, true, true, FmmInteraction::CellParticle});
+    next.label = "adjacent smaller source radius selects PC";
+    next.centerDistanceSquared = 1.69f;
+    next.sinkRadius = 0.5f;
+    next.sourceRadius = lowerRadius;
+    next.sinkBoxToSourceCenterSquared = 1.21f;
+    next.sourceBoxToSinkCenterSquared = 1.21f;
+    next.pairSmoothingLength = 0.1f;
+    next.inverseTheta = 2.0f;
+    next.sinkLeaf = true;
+    next.sourceLeaf = true;
+    next.supportSeparated = true;
+    next.expected = FmmInteraction::ParticleCell;
+    cases.push_back(next);
+    next.label = "equal radii retain reciprocal PP fallback";
+    next.centerDistanceSquared = 1.69f;
+    next.sinkRadius = 0.5f;
+    next.sourceRadius = 0.5f;
+    next.sinkBoxToSourceCenterSquared = 1.21f;
+    next.sourceBoxToSinkCenterSquared = 1.21f;
+    next.pairSmoothingLength = 0.1f;
+    next.inverseTheta = 2.0f;
+    next.sinkLeaf = true;
+    next.sourceLeaf = true;
+    next.supportSeparated = true;
+    next.expected = FmmInteraction::ParticleParticle;
+    cases.push_back(next);
+    next.label = "adjacent larger source radius selects CP";
+    next.centerDistanceSquared = 1.69f;
+    next.sinkRadius = 0.5f;
+    next.sourceRadius = upperRadius;
+    next.sinkBoxToSourceCenterSquared = 1.21f;
+    next.sourceBoxToSinkCenterSquared = 1.21f;
+    next.pairSmoothingLength = 0.1f;
+    next.inverseTheta = 2.0f;
+    next.sinkLeaf = true;
+    next.sourceLeaf = true;
+    next.supportSeparated = true;
+    next.expected = FmmInteraction::CellParticle;
+    cases.push_back(next);
 
     // Internal-cloud eligibility must retain strict angular opening boundaries.
     for (float center : {std::nextafter(0.390625f, 0.0f), 0.390625f,
              std::nextafter(0.390625f, std::numeric_limits<float>::infinity())}) {
-        cases.push_back({"strict center opening for an internal source", center, 0.125f, 0.25f,
-            0.0f, 0.0f, 0.0625f, 2.0f, true, false, true,
-            center > 0.390625f ? FmmInteraction::ParticleCell : FmmInteraction::ParticleParticle});
+        next.label = "strict center opening for an internal source";
+        next.centerDistanceSquared = center;
+        next.sinkRadius = 0.125f;
+        next.sourceRadius = 0.25f;
+        next.sinkBoxToSourceCenterSquared = 0.0f;
+        next.sourceBoxToSinkCenterSquared = 0.0f;
+        next.pairSmoothingLength = 0.0625f;
+        next.inverseTheta = 2.0f;
+        next.sinkLeaf = true;
+        next.sourceLeaf = false;
+        next.supportSeparated = true;
+        next.expected =
+            center > 0.390625f ? FmmInteraction::ParticleCell : FmmInteraction::ParticleParticle;
+        cases.push_back(next);
     }
     for (float boxDistance : {std::nextafter(0.25f, 0.0f), 0.25f,
              std::nextafter(0.25f, std::numeric_limits<float>::infinity())}) {
-        cases.push_back({"strict box opening for an internal source", 0.49f, 0.5f, 0.25f,
-            boxDistance, 0.0f, 0.1f, 2.0f, true, false, true,
-            boxDistance > 0.25f ? FmmInteraction::ParticleCell : FmmInteraction::ParticleParticle});
+        next.label = "strict box opening for an internal source";
+        next.centerDistanceSquared = 0.49f;
+        next.sinkRadius = 0.5f;
+        next.sourceRadius = 0.25f;
+        next.sinkBoxToSourceCenterSquared = boxDistance;
+        next.sourceBoxToSinkCenterSquared = 0.0f;
+        next.pairSmoothingLength = 0.1f;
+        next.inverseTheta = 2.0f;
+        next.sinkLeaf = true;
+        next.sourceLeaf = false;
+        next.supportSeparated = true;
+        next.expected =
+            boxDistance > 0.25f ? FmmInteraction::ParticleCell : FmmInteraction::ParticleParticle;
+        cases.push_back(next);
     }
 
     // Every separation bound is exactly tangent to support. Angular acceptance
@@ -125,29 +291,81 @@ std::vector<AcceptanceCase> acceptanceCases() {
     float const upperCenter = std::nextafter(0.25f, std::numeric_limits<float>::infinity());
     for (float center : {lowerCenter, 0.25f, upperCenter}) {
         bool const separated = center > 0.25f;
-        cases.push_back({"strict center support boundary", center, 0.125f, 0.25f, 0.140625f,
-            0.0625f, 0.125f, 1.25f, true, false, separated,
-            separated ? FmmInteraction::CellCell : FmmInteraction::ParticleParticle});
+        next.label = "strict center support boundary";
+        next.centerDistanceSquared = center;
+        next.sinkRadius = 0.125f;
+        next.sourceRadius = 0.25f;
+        next.sinkBoxToSourceCenterSquared = 0.140625f;
+        next.sourceBoxToSinkCenterSquared = 0.0625f;
+        next.pairSmoothingLength = 0.125f;
+        next.inverseTheta = 1.25f;
+        next.sinkLeaf = true;
+        next.sourceLeaf = false;
+        next.supportSeparated = separated;
+        next.expected = separated ? FmmInteraction::CellCell : FmmInteraction::ParticleParticle;
+        cases.push_back(next);
     }
     float const lowerBox = std::nextafter(0.0625f, 0.0f);
     float const upperBox = std::nextafter(0.0625f, std::numeric_limits<float>::infinity());
     for (float boxDistance : {lowerBox, 0.0625f, upperBox}) {
         bool const separated = boxDistance > 0.0625f;
-        cases.push_back({"strict box support boundary", 0.49f, 0.5f, 0.125f, boxDistance, 0.330625f,
-            0.125f, 1.5f, true, false, separated,
-            separated ? FmmInteraction::ParticleCell : FmmInteraction::ParticleParticle});
+        next.label = "strict box support boundary";
+        next.centerDistanceSquared = 0.49f;
+        next.sinkRadius = 0.5f;
+        next.sourceRadius = 0.125f;
+        next.sinkBoxToSourceCenterSquared = boxDistance;
+        next.sourceBoxToSinkCenterSquared = 0.330625f;
+        next.pairSmoothingLength = 0.125f;
+        next.inverseTheta = 1.5f;
+        next.sinkLeaf = true;
+        next.sourceLeaf = false;
+        next.supportSeparated = separated;
+        next.expected = separated ? FmmInteraction::ParticleCell : FmmInteraction::ParticleParticle;
+        cases.push_back(next);
     }
 
     // Centers are 7/16 apart, both radii are 1/8, and the closest particle pair
     // can be 3/16 apart. The old CUDA max(R/theta,H) shortcut accepts H=1/4,
     // because each center is 5/16 from the other box. That pair is softened.
-    cases.push_back(
-        {"CUDA shortcut must include source extent", 0.19140625f, 0.125f, 0.125f, 0.09765625f,
-            0.09765625f, 0.25f, 2.0f, true, false, false, FmmInteraction::ParticleParticle});
-    cases.push_back({"same geometry with smaller pair support", 0.19140625f, 0.125f, 0.125f,
-        0.09765625f, 0.09765625f, 0.125f, 2.0f, true, false, true, FmmInteraction::ParticleCell});
-    cases.push_back({"coincident cells remain PP", 0.0f, 0.125f, 0.125f, 0.0f, 0.0f, 0.125f, 2.0f,
-        true, true, false, FmmInteraction::ParticleParticle});
+    next.label = "CUDA shortcut must include source extent";
+    next.centerDistanceSquared = 0.19140625f;
+    next.sinkRadius = 0.125f;
+    next.sourceRadius = 0.125f;
+    next.sinkBoxToSourceCenterSquared = 0.09765625f;
+    next.sourceBoxToSinkCenterSquared = 0.09765625f;
+    next.pairSmoothingLength = 0.25f;
+    next.inverseTheta = 2.0f;
+    next.sinkLeaf = true;
+    next.sourceLeaf = false;
+    next.supportSeparated = false;
+    next.expected = FmmInteraction::ParticleParticle;
+    cases.push_back(next);
+    next.label = "same geometry with smaller pair support";
+    next.centerDistanceSquared = 0.19140625f;
+    next.sinkRadius = 0.125f;
+    next.sourceRadius = 0.125f;
+    next.sinkBoxToSourceCenterSquared = 0.09765625f;
+    next.sourceBoxToSinkCenterSquared = 0.09765625f;
+    next.pairSmoothingLength = 0.125f;
+    next.inverseTheta = 2.0f;
+    next.sinkLeaf = true;
+    next.sourceLeaf = false;
+    next.supportSeparated = true;
+    next.expected = FmmInteraction::ParticleCell;
+    cases.push_back(next);
+    next.label = "coincident cells remain PP";
+    next.centerDistanceSquared = 0.0f;
+    next.sinkRadius = 0.125f;
+    next.sourceRadius = 0.125f;
+    next.sinkBoxToSourceCenterSquared = 0.0f;
+    next.sourceBoxToSinkCenterSquared = 0.0f;
+    next.pairSmoothingLength = 0.125f;
+    next.inverseTheta = 2.0f;
+    next.sinkLeaf = true;
+    next.sourceLeaf = true;
+    next.supportSeparated = false;
+    next.expected = FmmInteraction::ParticleParticle;
+    cases.push_back(next);
     // Include both orientations in the SIMD packs as well as in the scalar
     // reciprocity assertions, especially CP contributions to internal sinks.
     size_t const originalCaseCount = cases.size();

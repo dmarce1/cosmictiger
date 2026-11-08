@@ -123,8 +123,8 @@ int readUnitsOutputInteger(DBfile* file, std::string const& name) {
 void checkUnitsOutputCommandLine(DBfile* file) {
     requireUnitsOutputClose(readUnitsOutputScalar(file, "/cli/hydro/viscosityAlpha"), 1.75,
         "scalar viscosity bulkViscosityCoefficient");
-    requireUnitsOutputClose(
-        readUnitsOutputScalar(file, "/cli/gravity/softening"), 0.125, "CLI softening units");
+    requireUnitsOutputClose(readUnitsOutputScalar(file, "/cli/gravity/effectiveRadius"), 0.125,
+        "CLI effective radius units");
     requireUnitsOutputClose(
         readUnitsOutputScalar(file, "/cli/gravity/timestepEta"), 0.3, "CLI timestep eta");
     requireUnitsOutput(

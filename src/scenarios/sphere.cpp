@@ -180,8 +180,13 @@ void solveSphereSurfaceProblemCpu(Vector<Array<Vector<float>, kDimensions>>& pos
     std::vector<hpx::future<void>> futs;
     futs.reserve(positions.size());
     for (auto& shell : positions) {
-        detail::SphereSurfaceShell const points{shell[kXi].data(), shell[kYi].data(),
-            shell[kZi].data(), static_cast<int>(shell[kXi].size()), 0.f, 0.f};
+        detail::SphereSurfaceShell points;
+        points.x = shell[kXi].data();
+        points.y = shell[kYi].data();
+        points.z = shell[kZi].data();
+        points.count = static_cast<int>(shell[kXi].size());
+        points.h = 0.f;
+        points.mass = 0.f;
         futs.push_back(hpx::async(hpx::annotated_function(detail::relaxSphereSurfaceShell,
                                       "scenarios.relaxSphereSurfaceShell"),
             points));

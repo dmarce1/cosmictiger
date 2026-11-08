@@ -159,7 +159,6 @@ def main():
                 "gravity.errorInterval", "gravity.errorSampleSize",
                 "hydro.kernelFamily", "hydro.kernelDegree",
                 "gravity.effectiveRadius", "gravity.smoothingLength",
-                "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius",
                 "hydro.minSmoothingLength", "hydro.maxSmoothingLength",
                 "hydro.centralEffectiveRadius", "hydro.centralSmoothingLength",
                 "hydro.zPlaneAcceleration",
@@ -182,6 +181,12 @@ def main():
     required.update("gravity.cuda." + key for key in cuda_tunings)
     if not required <= option_names:
         raise RuntimeError(f"grouped help is missing {sorted(required - option_names)}")
+    # Deprecated aliases remain parseable but are not public keys: help, the
+    # resolved listing and complete presets omit them.
+    deprecated_aliases = {"gravity.softening": "gravity.effectiveRadius",
+                          "hydro.centralSoftening": "hydro.centralEffectiveRadius"}
+    if set(deprecated_aliases) & option_names:
+        raise RuntimeError(f"deprecated aliases remain in help: {sorted(set(deprecated_aliases) & option_names)}")
 
     sph_controls_available = not args.without_sph and not hydro_rejected
     sph_control_options = ["--hydro.enabled=true"] if sph_controls_available else []
@@ -207,7 +212,7 @@ def main():
             "--analysis.power=false", "--analysis.groups=false", "--analysis.tracers=false",
             "--lightcone.enabled=false", f"--output.directory={startupDirectory.resolve()}",
             "--units.boxLength=20", "--compute.sphBucketSize=0", "--cosmology.omegaLambda=auto",
-            "--hydro.centralSmoothingLength=0.02", "--hydro.minEffectiveRadius=0.001",
+            "--hydro.centralSmoothingLength=0.02", "--hydro.minSmoothingLength=0.001",
             "--hydro.maxSmoothingLength=1000", "--starFormation.seed=18446744073709551615",
             "--analysis.saveForce=true"])
         assertStartupOptions(output, hydroMethod)
@@ -218,7 +223,7 @@ def main():
         assertNumericSetting(output, "hydro.maxSmoothingLength", 0.5 * population**(1 / dimension))
         assertNumericSetting(output, "units.boxLength", 20)
         assertNumericSetting(output, "hydro.centralSmoothingLength", 0.02)
-        assertNumericSetting(output, "hydro.minEffectiveRadius", 0.001)
+        assertNumericSetting(output, "hydro.minSmoothingLength", 0.001)
         for key, expected in (("starFormation.seed", "18446744073709551615"),
                               ("analysis.saveForce", "T"), ("analysis.saveAcceleration", "F"),
                               ("analysis.savePotential", "F"), ("help", "F")):
@@ -248,7 +253,8 @@ def main():
                        "starFormation.windMassLoading", "starFormation.windEnergyFraction",
                        "starFormation.windDecouplingMyr", "starFormation.windRecoupleDensityFraction",
                        "starFormation.windDirection", "hydro.dualEnergyPressureSwitch",
-                       "hydro.dualEnergyUpdateSwitch", "hydro.treeRebuildActiveFraction"}
+                       "hydro.dualEnergyUpdateSwitch", "hydro.treeRebuildActiveFraction",
+                       "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius"}
     removed_options.update({"initial.gadget4Restart", "initial.useGlass", "initial.twoLpt", "initial.plummerRadius"})
     removed_options.update("compute.cuda" + key[0].upper() + key[1:] for key in cuda_tunings)
     if removed_options & option_names:
@@ -955,14 +961,14 @@ mapSize = 8
         output = run(name, metadata_options + [
             f"--gravity.kernelFamily={gravity_family}", f"--gravity.kernelDegree={gravity_degree}",
             f"--hydro.kernelFamily={hydro_family}", f"--hydro.kernelDegree={hydro_degree}",
-            "--hydro.neighborNumber=200", "--gravity.softening=0.02", "--gravity.timestepEta=0.15"])
+            "--hydro.neighborNumber=200", "--gravity.effectiveRadius=0.02", "--gravity.timestepEta=0.15"])
         for key, value in (("gravity.kernelFamily", gravity_family),
                            ("gravity.kernelDegree", str(gravity_degree)),
                            ("hydro.kernelFamily", hydro_family),
                            ("hydro.kernelDegree", str(hydro_degree))):
             if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + value + r"\s*$", output, re.MULTILINE):
                 raise RuntimeError(f"independent kernel setting {key} was not applied")
-        for key, value in (("gravity.softening", 0.02), ("gravity.timestepEta", 0.15)):
+        for key, value in (("gravity.effectiveRadius", 0.02), ("gravity.timestepEta", 0.15)):
             match = re.search(r"^" + re.escape(key) + r"\s*:\s*(\S+)", output, re.MULTILINE)
             if match is None or abs(float(match.group(1)) - value) > 1.e-8:
                 raise RuntimeError(f"kernel-independent setting {key} changed meaning")
@@ -1207,12 +1213,21 @@ mapSize = 8
 
     def assertNoRadiusWarning(output):
         radiusKeys = ("effectiveRadius", "EffectiveRadius", "smoothingLength", "SmoothingLength",
-                      "gravity.softening", "hydro.centralSoftening")
+                      *deprecated_aliases)
         if any("warning" in line.lower() and any(key in line for key in radiusKeys)
                for line in output.splitlines()):
             raise RuntimeError("a single radius representation produced a warning")
 
+    def assertDeprecatedOption(output, aliasKey):
+        warnings = [line for line in output.splitlines()
+                    if aliasKey in line and "deprecated" in line.lower()]
+        if len(warnings) != 1 or deprecated_aliases[aliasKey] not in warnings[0]:
+            raise RuntimeError(f"{aliasKey} did not print one deprecation warning naming "
+                               f"{deprecated_aliases[aliasKey]}")
+
     defaults = run("independent_defaults", balsara_options)
+    build_dimension = int(
+        re.search(r"^build\.dimensionCount\s*:\s*(\d+)", defaults, re.MULTILINE)[1])
     for key, value in (("gravity.kernelDegree", 4),
                        ("hydro.neighborNumber", 42), ("hydro.kernelDegree", 3),
                        ("hydro.conductionCoefficient", 0),
@@ -1251,12 +1266,9 @@ mapSize = 8
             assertNoRadiusWarning(output)
 
     gravityRatio = 1.5
-    hydroRatio = math.sqrt(10 / 3)
     radiusPairs = (
         ("gravity.effectiveRadius", "gravity.smoothingLength", 0.02, gravityRatio),
         ("hydro.centralEffectiveRadius", "hydro.centralSmoothingLength", 0.02, gravityRatio),
-        ("hydro.minEffectiveRadius", "hydro.minSmoothingLength", 0.01, hydroRatio),
-        ("hydro.maxEffectiveRadius", "hydro.maxSmoothingLength", 0.1, hydroRatio),
     )
     radiusConfig = args.workdir / "radius.ini"
     for effectiveKey, supportKey, effectiveRadius, ratio in radiusPairs:
@@ -1304,12 +1316,18 @@ mapSize = 8
     for effectiveKey, supportKey, aliasKey in (
             ("gravity.effectiveRadius", "gravity.smoothingLength", "gravity.softening"),
             ("hydro.centralEffectiveRadius", "hydro.centralSmoothingLength", "hydro.centralSoftening")):
-        # Legacy effective-radius aliases retain their meaning, and explicitly
-        # supplied aliases also take precedence over support-radius inputs.
+        # Deprecated effective-radius aliases retain their meaning with one
+        # deprecation warning, and explicitly supplied aliases also take
+        # precedence over support-radius inputs.
         output = run(f"radius_alias_{aliasKey}", metadata_options + [f"--{aliasKey}=0.02"])
         assertNumericSetting(output, effectiveKey, 0.02)
         assertNumericSetting(output, supportKey, 0.02 * gravityRatio)
-        assertNoRadiusWarning(output)
+        assertDeprecatedOption(output, aliasKey)
+        if any("warning" in line.lower() and "ignored" in line.lower()
+               for line in output.splitlines()):
+            raise RuntimeError(f"a lone {aliasKey} produced an ignored-option warning")
+        if re.search(r"^" + re.escape(aliasKey) + r"\s*:", output, re.MULTILINE):
+            raise RuntimeError(f"resolved options listed deprecated {aliasKey}")
         for winningKey, losingKey in ((effectiveKey, aliasKey), (aliasKey, supportKey)):
             for winningSource in ("cli", "ini", "both_cli"):
                 if winningSource == "cli":
@@ -1326,13 +1344,16 @@ mapSize = 8
                 assertNumericSetting(output, effectiveKey, 0.02)
                 assertNumericSetting(output, supportKey, 0.02 * gravityRatio)
                 assertIgnoredOption(output, losingKey)
+                assertDeprecatedOption(output, aliasKey)
 
-    # Defaulted legacy aliases and defaulted support bounds are fallbacks, not
+    # Defaulted effective radii and defaulted support bounds are fallbacks, not
     # explicitly selected representations that can conflict with one another.
     output = run("radius_defaults", metadata_options)
     assertNoRadiusWarning(output)
+    radiusKeys = [key for effectiveKey, supportKey, _, _ in radiusPairs
+                  for key in (effectiveKey, supportKey)]
     runAll([(f"invalid_{key}_{value}", metadata_options + [f"--{key}={value}"], False)
-            for effectiveKey, supportKey, _, _ in radiusPairs for key in (effectiveKey, supportKey)
+            for key in radiusKeys + ["hydro.minSmoothingLength", "hydro.maxSmoothingLength"]
             for value in ("0", "-1", "nan", "inf")])
 
     def assertOutputSettings(output, outputUnits, outputFrame):
@@ -1405,11 +1426,10 @@ mapSize = 8
     # and empty-string defaults without running its physical problem.
     root = Path(__file__).resolve().parents[1]
     optional_keys = {"compute.positionType", "compute.bucketSize",
-                     "gravity.effectiveRadius", "gravity.smoothingLength",
+                     "gravity.smoothingLength",
                      "gravity.method.near", "gravity.expansionDegree",
                      "units.boxLength",
-                     "hydro.centralEffectiveRadius", "hydro.centralSmoothingLength",
-                     "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius"}
+                     "hydro.centralSmoothingLength"}
     public_keys = set(option_names) - {"help", "configuration"}
     preset_curvatures = {"critical.ini": 0.0}
     checked_presets = set()
@@ -1469,6 +1489,12 @@ mapSize = 8
             # Keep validating every example's option coverage and syntax when its
             # physical scenario is unavailable in the compiled executable.
             preset_options.append("--run.scenario=cosmology")
+        if (ini["run"]["scenario"] == "kelvinHelmholtz" and build_dimension != 2 and
+                ini.has_option("initial.kelvinHelmholz", "packing")):
+            # The Kelvin-Helmholtz preset targets the 2D build (make.sh); its CEV/E
+            # packing has nonuniform site neighborhoods in 3D. Other builds check the
+            # preset's option coverage with the default uniform CV/C packing.
+            preset_options.append("--initial.kelvinHelmholz.packing=CV/C")
         output = run(f"complete_{case_name}", metadata_options + preset_options)
         if "Checkpoint state and mode validation passed" not in output:
             raise RuntimeError(f"{relative_path} did not finish metadata validation")
@@ -1544,17 +1570,20 @@ mapSize = 8
         ("eta_nan", "--gravity.timestepEta=nan", "gravity.timestepEta"),
         ("eta_inf", "--gravity.timestepEta=inf", "gravity.timestepEta"),
         ("eta_underflow", "--gravity.timestepEta=1e-100", "gravity.timestepEta"),
-        ("softening_zero", "--gravity.softening=0", "gravity.softening"),
-        ("softening_negative", "--gravity.softening=-0.1", "gravity.softening"),
-        ("softening_nan", "--gravity.softening=nan", "gravity.softening"),
-        ("softening_inf", "--gravity.softening=inf", "gravity.softening"),
-        ("softening_underflow", "--gravity.softening=1e-100", "gravity.softening"),
+        ("effective_radius_zero", "--gravity.effectiveRadius=0", "gravity.effectiveRadius"),
+        ("effective_radius_negative", "--gravity.effectiveRadius=-0.1", "gravity.effectiveRadius"),
+        ("effective_radius_nan", "--gravity.effectiveRadius=nan", "gravity.effectiveRadius"),
+        ("effective_radius_inf", "--gravity.effectiveRadius=inf", "gravity.effectiveRadius"),
+        ("effective_radius_underflow", "--gravity.effectiveRadius=1e-100", "gravity.effectiveRadius"),
+        ("softening_deprecated_zero", "--gravity.softening=0", "gravity.softening"),
         ("smoothing_obsolete", "--gravity.sphSmoothing=true", "gravity.sphSmoothing"),
         ("adaptive_option_removed", "--gravity.softeningMode=adaptive", "gravity.softeningMode"),
         ("alpha_overflow", "--hydro.viscosityAlpha=1e100", "single precision"),
         ("epsilon_underflow", "--hydro.viscosityEpsilon=1e-100", "single precision"),
         ("gamma_rounding", "--hydro.gamma=1.00000001", "single precision"),
-        ("neighbors_rounding", "--hydro.neighborNumber=10.66666667", "single precision"),
+        # The float cubic table gives a self-neighbor floor of 10.666666236 (float
+        # 10.666666031): this value passes the double check and rounds onto the floor.
+        ("neighbors_rounding", "--hydro.neighborNumber=10.6666664", "single precision"),
         ("cfl_underflow", "--hydro.cfl=1e-100", "single precision"),
         ("support_underflow", "--hydro.minSmoothingLength=1e-100", "single precision"),
         ("viscosity_alpha_max_hu_removed", "--hydro.viscosityAlphaMaxHu=1",
@@ -1578,7 +1607,9 @@ mapSize = 8
         ("beta", "--hydro.viscosityBeta=-1", "hydro.viscosityBeta"),
         ("epsilon", "--hydro.viscosityEpsilon=0", "hydro.viscosityEpsilon"),
         ("gamma", "--hydro.gamma=1", "hydro.gamma"),
-        ("central_softening", "--hydro.centralSoftening=0", "hydro.centralSoftening"),
+        ("central_effective_radius", "--hydro.centralEffectiveRadius=0",
+         "hydro.centralEffectiveRadius"),
+        ("central_softening_deprecated", "--hydro.centralSoftening=0", "hydro.centralSoftening"),
         ("reflection", "--hydro.yReflect=true", "hydro.yReflect"),
         ("cfl_zero", "--hydro.cfl=0", "hydro.cfl"),
         ("cfl_large", "--hydro.cfl=1.1", "hydro.cfl"),

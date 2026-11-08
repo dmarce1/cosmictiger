@@ -241,8 +241,12 @@ The constant viscosity coefficient is not repeated as a particle `bulkViscosityC
 
 These are the effective settings at the snapshot, including defaults,
 configuration-file values, and runtime overrides or caps, expressed in the CLI's
-units. Thus support radii and gravity softening are recorded in interparticle
-spacings, and `units.massSolar` is in solar masses. The scalar settings are shared
+units. Thus support radii and the gravity effective radius
+(`/cli/gravity/effectiveRadius`) are recorded in interparticle spacings, and
+`units.massSolar` is in solar masses. Deprecated aliases such as
+`gravity.softening` and `hydro.centralSoftening` are not written. The removed keys
+`hydro.minEffectiveRadius` and `hydro.maxEffectiveRadius` are no longer written either;
+`/cli/hydro/minSmoothingLength` and `/cli/hydro/maxSmoothingLength` record the bounds. The scalar settings are shared
 by all unit/frame views within the file.
 
 `/cli/argc` and `/cli/argv/arg_0`, `arg_1`, and so on preserve the original process

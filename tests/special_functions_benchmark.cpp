@@ -447,9 +447,11 @@ Measurement runPath(Path path, std::vector<float> const& inputs, std::vector<flo
         nanoseconds = run<operation, Path::LibraryDouble, packed>(inputs, first, second);
         break;
     }
-    return {nanoseconds,
-        outputChecksum(
-            first, second, operation == Operation::Sincos || operation == Operation::Erfcexp)};
+    Measurement measurement;
+    measurement.nanoseconds = nanoseconds;
+    measurement.checksum = outputChecksum(
+        first, second, operation == Operation::Sincos || operation == Operation::Erfcexp);
+    return measurement;
 }
 
 double median(std::vector<double> samples) {

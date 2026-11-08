@@ -271,9 +271,10 @@ SphTreeSummary verifySphTreeNode(TreeId id, int depth, std::set<int>& leaves) {
             }
         }
         if (node.numberOfParticles() != 0) {
-            requireSphTree(
-                std::abs(node.innerBox.begin[dim].toDouble() - (lower - 2 * quantum)) <= quantum &&
-                    std::abs(node.innerBox.end[dim].toDouble() - (upper + 2 * quantum)) <= quantum,
+            requireSphTree(std::abs(node.innerBox.begin[dim].toDouble() -
+                               (lower - kSphBoxPadding)) <= quantum &&
+                    std::abs(node.innerBox.end[dim].toDouble() - (upper + kSphBoxPadding)) <=
+                        quantum,
                 "inner bounds do not match the new particle extrema");
         } else {
             requireSphTree(node.innerBox.begin[dim] > node.innerBox.end[dim],
@@ -281,8 +282,8 @@ SphTreeSummary verifySphTreeNode(TreeId id, int depth, std::set<int>& leaves) {
         }
         if (activeParticles != 0) {
             requireSphTree(std::abs(node.outerBox.begin[dim].toDouble() -
-                               (supportLower - 2 * quantum)) <= quantum &&
-                    std::abs(node.outerBox.end[dim].toDouble() - (supportUpper + 2 * quantum)) <=
+                               (supportLower - kSphBoxPadding)) <= quantum &&
+                    std::abs(node.outerBox.end[dim].toDouble() - (supportUpper + kSphBoxPadding)) <=
                         quantum,
                 "outer bounds do not match the new active particles and support radii");
         } else {
@@ -752,11 +753,13 @@ void verifySphMidpointUpdates() {
     float velocityX[2], velocityY[2], velocityZ[2], internalEnergy[2];
     sphParticlesGlobalReadVelocities(range, velocityX, velocityY, velocityZ, 0);
     sphParticlesGlobalReadInternalEnergyAndSmoothingLength(range, internalEnergy, nullptr, 0);
+    // The midpoint predictor refreshes the active particle's density (for the Balsara
+    // factor), so the expected energy uses the live density with the recorded entropy.
     for (int gas = 0; gas < 2; ++gas) {
+        double const expectedEnergy = sph_entropy::storedEnergy(
+            entropies[gas], sphParticlesDensities[gas], options.hydro.gamma, 1.0);
         requireSphTree(velocityX[gas] == velocities[gas] &&
-                std::abs(internalEnergy[gas] -
-                    sph_entropy::storedEnergy(entropies[gas], 1.0, options.hydro.gamma, 1.0)) <
-                    1.0e-6,
+                std::abs(internalEnergy[gas] - expectedEnergy) < 1.0e-6 * expectedEnergy,
             "source staging replayed a rate or used stale physical state");
     }
     parameters.minimumRung = parameters.maximumRung = 0;
@@ -824,13 +827,16 @@ void verifySphTemporalOrder() {
     SphTemporalState const initialState{0.5, -0.3, 0.8, 1.2};
 
     // These are production fixed-position hydro events, including source staging,
-    // reciprocal updates and commits. Hold supports, densities and viscosity
-    // coefficients fixed to isolate the temporal order of the hydro operator;
-    // this does not test drift splitting or the endpoint viscosity switches.
+    // reciprocal updates and commits. Hold supports and viscosity coefficients fixed
+    // to isolate the temporal order of the hydro operator; this does not test drift
+    // splitting or the endpoint viscosity switches. The midpoint predictor always
+    // refreshes densities for the Balsara factor, so the isolated damping pair holds
+    // its supports at the upper bound instead of leaving them free and unsolved.
     for (int testCase = 0; testCase < 3; ++testCase) {
         bool const damping = testCase == 0;
         options.hydro.damping = damping ? 1.25 : 0.0;
         options.hydro.conductionCoefficient = testCase == 2 ? 0.3 : 0.0;
+        options.hydro.maxSmoothingLength = damping ? 0.1 : savedOptions.hydro.maxSmoothingLength;
         setOptions(options);
         sphTreeDestroy(true);
         sphParticlesEntropyInitialized = false;

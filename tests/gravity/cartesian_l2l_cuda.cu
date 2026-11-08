@@ -319,8 +319,15 @@ void close(
     }
     double const error = std::abs(actual - expected) / std::max(1., std::abs(expected));
     if (!std::isfinite(actual) || error > found->relativeError) {
-        *found = {
-            label, error, actual, expected, sample, lane, index, validationDoPhi, validationSteps};
+        found->label = label;
+        found->relativeError = error;
+        found->actual = actual;
+        found->expected = expected;
+        found->sample = sample;
+        found->lane = lane;
+        found->coefficient = index;
+        found->doPhi = validationDoPhi;
+        found->steps = validationSteps;
     }
 }
 

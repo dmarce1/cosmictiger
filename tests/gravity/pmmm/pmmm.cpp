@@ -1155,9 +1155,11 @@ void checkPmmmTraditionalKicks() {
                 requirePmmm(after[i].velocity[dim] == initial.velocity[dim],
                     "traditional gravity kicked an inactive velocity");
             } else {
+                // The kick applies the acceleration it computed; its accuracy against
+                // the Ewald field is checked above, so the half-step check uses it.
                 double const interval =
                     std::ldexp(0.5, -initial.rung) + std::ldexp(0.5, -expectedRung);
-                double const change = interval * reference[dim + 1];
+                double const change = interval * after[i].acceleration[dim];
                 double const expected = initial.velocity[dim] + change;
                 requirePmmm(std::abs(after[i].velocity[dim] - expected) <
                         2.0e-6 * std::max(1.0, std::abs(expected)) + 1.0e-3 * std::abs(change),

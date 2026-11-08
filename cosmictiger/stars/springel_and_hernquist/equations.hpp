@@ -147,7 +147,7 @@ CUDA_EXPORT inline double coldFraction(double y) {
  *   t𞁞ₒₒₗ → cooling time; u_eff → effective internal energy; P_eff → pressure; τₕ → relaxation time
  *   ṁ⋆/m → specific star formation rate; ρ → density; β → supernova mass fraction; γ → adiabatic index
  *   A₀,t⋆⁰,u𞁞,u_SN → base evaporation factor, base star formation time, cold energy, supernova energy.
- *   Code names: tₛₜ𞁑ᵣ = t⋆; one_minus_x = 1−x; ṁₛₜ𞁑ᵣ_over_m = ṁ⋆/m.
+ *   Code names: tₛₜₐᵣ = t⋆; one_minus_x = 1−x; ṁₛₜₐᵣ_over_m = ṁ⋆/m.
  */
 // clang-format on
 CUDA_EXPORT inline bool equilibrium(
@@ -158,7 +158,7 @@ CUDA_EXPORT inline bool equilibrium(
         ρ < model.thresholdDensity || !detail::finite(t𞁞ₒₒₗ) || t𞁞ₒₒₗ < 0.0) {
         return false;
     }
-    double const tₛₜ𞁑ᵣ = ::sqrt(model.thresholdDensity / ρ) * parameters.starFormationTime;
+    double const tₛₜₐᵣ = ::sqrt(model.thresholdDensity / ρ) * parameters.starFormationTime;
     double const A = ::pow(ρ / model.thresholdDensity, -0.8) * parameters.evaporationFactor;
     double const uₕ = parameters.supernovaEnergy / (1.0 + A) + parameters.coldEnergy;
     double const feedbackSpecificEnergy = feedbackEnergy(parameters);
@@ -166,17 +166,17 @@ CUDA_EXPORT inline bool equilibrium(
         return false;
     }
     // GADGET-4 returns tcool=0 for net heating. Its y->infinity limit is x=1.
-    double const x = t𞁞ₒₒₗ == 0.0 ? 1.0 : coldFraction(tₛₜ𞁑ᵣ / t𞁞ₒₒₗ * uₕ / feedbackSpecificEnergy);
+    double const x = t𞁞ₒₒₗ == 0.0 ? 1.0 : coldFraction(tₛₜₐᵣ / t𞁞ₒₒₗ * uₕ / feedbackSpecificEnergy);
     double const one_minus_x = 1.0 - x;
     double const u_eff = uₕ * one_minus_x + parameters.coldEnergy * x;
     double const P_eff = (parameters.adiabaticIndex - 1.0) * ρ * u_eff;
-    double const τₕ = tₛₜ𞁑ᵣ * one_minus_x / x / (parameters.supernovaMassFraction * (1.0 + A));
-    double const ṁₛₜ𞁑ᵣ_over_m = (1.0 - parameters.supernovaMassFraction) * x / tₛₜ𞁑ᵣ;
+    double const τₕ = tₛₜₐᵣ * one_minus_x / x / (parameters.supernovaMassFraction * (1.0 + A));
+    double const ṁₛₜₐᵣ_over_m = (1.0 - parameters.supernovaMassFraction) * x / tₛₜₐᵣ;
     if (!(x >= 0.0 && x <= 1.0) || !detail::finite(u_eff) || !detail::finite(P_eff) ||
-        !(τₕ >= 0.0) || !detail::finite(ṁₛₜ𞁑ᵣ_over_m)) {
+        !(τₕ >= 0.0) || !detail::finite(ṁₛₜₐᵣ_over_m)) {
         return false;
     }
-    result = {tₛₜ𞁑ᵣ, A, uₕ, x, one_minus_x, u_eff, P_eff, τₕ, ṁₛₜ𞁑ᵣ_over_m};
+    result = {tₛₜₐᵣ, A, uₕ, x, one_minus_x, u_eff, P_eff, τₕ, ṁₛₜₐᵣ_over_m};
     return true;
 }
 // clang-format off
@@ -214,13 +214,13 @@ CUDA_EXPORT inline bool clampSourceTime(
  * Derived Poisson conversion probability for conversion of the whole gas particle.
  * Symbol directory:
  *   ṁ⋆/m → specific rate; Δt → interval; p⋆ → return value.
- *   Code names: ṁₛₜ𞁑ᵣ_over_m = ṁ⋆/m.
+ *   Code names: ṁₛₜₐᵣ_over_m = ṁ⋆/m.
  */
 // clang-format on
-CUDA_EXPORT inline double starFormationProbability(double ṁₛₜ𞁑ᵣ_over_m, double Δt) {
-    if (!detail::finite(Δt) || Δt < 0.0 || !detail::finite(ṁₛₜ𞁑ᵣ_over_m) || ṁₛₜ𞁑ᵣ_over_m < 0.0) {
+CUDA_EXPORT inline double starFormationProbability(double ṁₛₜₐᵣ_over_m, double Δt) {
+    if (!detail::finite(Δt) || Δt < 0.0 || !detail::finite(ṁₛₜₐᵣ_over_m) || ṁₛₜₐᵣ_over_m < 0.0) {
         return detail::invalid();
     }
-    return 1.0 - ::exp(-ṁₛₜ𞁑ᵣ_over_m * Δt);
+    return 1.0 - ::exp(-ṁₛₜₐᵣ_over_m * Δt);
 }
 }    // namespace springel_and_hernquist

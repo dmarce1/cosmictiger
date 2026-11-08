@@ -187,10 +187,10 @@ public:
             data_.targetNodeIndices[tree] = treeCount - tree - 1;
             data_.neighborNodeIndices[tree] = tree;
             auto& node = data_.treeNodes[tree];
-            node.particleRange = {
-                sourceIndex(tree * count / treeCount), sourceIndex((tree + 1) * count / treeCount)};
-            node.sinkParticleRange = {
-                sinkIndex(tree * count / treeCount), sinkIndex((tree + 1) * count / treeCount)};
+            node.particleRange.first = sourceIndex(tree * count / treeCount);
+            node.particleRange.second = sourceIndex((tree + 1) * count / treeCount);
+            node.sinkParticleRange.first = sinkIndex(tree * count / treeCount);
+            node.sinkParticleRange.second = sinkIndex((tree + 1) * count / treeCount);
             node.neighborRange = {0, treeCount};
             for (int dim = 0; dim < kDimensions; dim++) {
                 node.innerBox.begin[dim] = 0.0;
@@ -308,7 +308,7 @@ public:
         return acceleration;
     }
 
-    // (du𞁑/dτ)ₕₑ𞁑ₜ of one sink, inverting the kernel's Ȧ𞁑 = (du𞁑/dτ)ₕₑ𞁑ₜ / (E/A)(ρ𞁑, γ, a).
+    // (du𞁑/dτ)ₕₑₐₜ of one sink, inverting the kernel's Ȧ𞁑 = (du𞁑/dτ)ₕₑₐₜ / (E/A)(ρ𞁑, γ, a).
     double dissipativeHeating(int index) const {
         require(data_.sinkEntropyRate, "dissipative heating requires the entropy-rate output");
         return sph_entropy::storedEnergy(data_.sinkEntropyRate[sinkIndex(index)],
@@ -1651,7 +1651,7 @@ void testVariationalAgainstReference() {
 }
 
 // An isolated cluster in the periodic box: linear and angular momentum of the pair kicks with
-// viscosity, and held supports at Hₘ𞁑ₓ. The Hubble-flow work identity of free supports has no
+// viscosity, and held supports at hₘₐₓ. The Hubble-flow work identity of free supports has no
 // production observable since the reversible rate left the kernel outputs.
 void testVariationalIsolatedCluster() {
     constexpr int kSide = 4;
@@ -1729,7 +1729,7 @@ void testVariationalIsolatedCluster() {
     }
 }
 
-// Held supports: every lattice support at Hₘᵢₙ, at Hₘ𞁑ₓ, and fixed.
+// Held supports: every lattice support at hₘᵢₙ, at hₘₐₓ, and fixed.
 void testVariationalHeldSupports() {
     constexpr int kSide = 5;
     Fixture fixture(kSide * kSide * kSide);
@@ -2179,6 +2179,7 @@ void testVariationalStaleCorrections() {
     fixture.density();
     float const notANumber = std::numeric_limits<float>::quiet_NaN();
     fixture.data_.sourceGradHCorrection[fixture.sourceIndex(2)] = notANumber;
+    fixture.enableKickObservation();
     fixture.hydro();
     fixture.checkConservation();
     fixture.data_.sourceGradHCorrection[fixture.sourceIndex(1)] = notANumber;
@@ -2381,15 +2382,18 @@ TEST_F(SphCpuTest, DensityAndRungsCountPaddedPackets) {
     // has six interpolation steps (18 operations), four weights, one scalar
     // width subtraction. Include distance/normalization, density accumulation,
     // four scalar setup operations and a width-1 additive reduction per sink.
-    // Grad-H adds both quadratic derivative spans, three sums per lane, two
+    // Grad-h adds both quadratic derivative spans, three sums per lane, two
     // reductions, and eight scalar operations for its residual and correction.
     // Float tables add four scalar FP32 width subtractions per packet;
     // there are no table precision conversions. Geometry still contributes FP64.
     // The single target node also computes gamma - 1 once.
+    // The sink setup also forms the mass times inverse gradient scale (1 +
+    // kInverseGradientScale = 3), and each call forms h_M/h once. The gradient
+    // coefficient it shortens runs only with velocity derivatives, which are off here.
     detail::submittedSphFlops = {};
     auto const density = fixture.run(kSphRunDensityAndGradients);
-    EXPECT_EQ(density.floatingPointOperations, double(fixture.count_) * (23 + 173 * width) + 1);
-    EXPECT_EQ(detail::submittedSphFlops.singlePrecision, fixture.count_ * (17 + 173 * width) + 1);
+    EXPECT_EQ(density.floatingPointOperations, double(fixture.count_) * (26 + 173 * width) + 2);
+    EXPECT_EQ(detail::submittedSphFlops.singlePrecision, fixture.count_ * (20 + 173 * width) + 2);
     EXPECT_EQ(detail::submittedSphFlops.doublePrecision, 6 * fixture.count_);
     EXPECT_EQ(detail::submittedSphFlops.unclassified, 0);
 }

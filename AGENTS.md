@@ -86,7 +86,7 @@ User instruction, November 6, 2026, supersedes the November 3 descriptive-identi
 rule for equation implementations:
 
 - Locals and parameters that stand for quantities in a cited equation use the source
-  notation as Unicode identifiers: `ρ𞁑`, `Δτ`, `H𞁑`, `v𞁑𞁓`, `Ȧ𞁑𞁓`, `ΣW`. This
+  notation as Unicode identifiers: `ρ𞁑`, `Δτ`, `h𞁑`, `v𞁑𞁓`, `Ȧ𞁑𞁓`, `ΣW`. This
   covers SPH kernels, physics headers, scenario setup formulas and star-formation
   equations. Struct and class members keep full descriptive names (`position`,
   `velocity`, `smoothingLength`); the symbols live inside the functions that do the
@@ -94,19 +94,22 @@ rule for equation implementations:
   needs no directory entry. Functions, SoA arrays, INI/CLI keys, Silo fields and
   solver or SIMD bookkeeping (`residual`, `lower`, `upper`, masks, rung variables)
   keep the descriptive `camelCase` names of the Naming conventions.
-- Subscripts are Unicode subscript letters, in code and in comments: a → `𞁑`,
-  b → `𞁓`, c → `𞁞`, y → `𞁟` (Cyrillic Extended-D look-alikes, U+1E051 onward) and
-  Latin `ₑ ₕ ᵢ ⱼ ₖ ₗ ₘ ₙ ₒ ₚ ᵣ ₛ ₜ ᵤ ᵥ ₓ` for the rest: `ρ𞁑𞁓`, `Hₘᵢₙ`, `vₚₕ𞁟ₛ𞁑𞁓`.
-  Capital subscripts stay inline with an underscore (`f_P𞁑𞁓`, `dv𞁑_dτ_G`). Words
-  with d, g, f, q, w or z have no glyph; reword them (diss → `ₕₑ𞁑ₜ`, cond → `𞁞ₒₙ`,
+- Subscripts are Unicode subscript letters, in code and in comments. The particle
+  labels a, b, c and the index y use the Cyrillic Extended-D look-alikes `𞁑`, `𞁓`,
+  `𞁞`, `𞁟` (U+1E051 onward); every other subscript letter, and every letter inside
+  a subscript word, uses Latin `ₐ ₑ ₕ ᵢ ⱼ ₖ ₗ ₘ ₙ ₒ ₚ ᵣ ₛ ₜ ᵤ ᵥ ₓ`: `ρ𞁑𞁓`, `hₘₐₓ`,
+  `ₕₑₐₜ𞁑𞁓`, `vₚₕ𞁟ₛ𞁑𞁓` (b, c and y inside a word keep the look-alikes, as in `𞁞ₒₙ`,
+  since Latin has no subscript for them; `ₕₑ𞁑ₜ` is wrong, `ₕₑₐₜ` is right). Capital
+  subscripts stay inline with an underscore (`f_P𞁑𞁓`, `dv𞁑_dτ_G`). Words with d, g,
+  f, q, w or z have no glyph; reword them (diss → `ₕₑₐₜ`, cond → `𞁞ₒₙ`,
   grav → `_G`, staged → `ₚᵣₑ`, stored → `ₘₑₘ`, target → `ₛₑₜ`) or ask the user.
   Subscript digits are not identifier characters: `ρ_0` in code, `ρ₀` in comments,
   linked by a `Code names` entry.
 - Superscripts come before subscripts (`r2𞁑𞁓`, `αⁿ𞁑`); x² → `x2`, never `x_2`;
-  the inverse x⁻¹ is the prefix `i` (`ia`, `iH𞁑`, `iδt𞁞ᵥ`); |x| → `abs_x`;
+  the inverse x⁻¹ is the prefix `i` (`ia`, `ih𞁑`, `iδt𞁞ᵥ`); |x| → `abs_x`;
   x/y → `x_over_y`; dx/dy → `dx_dy` (`du𞁑_dτ`); ∇·v → `div_v`; ∇×v → `curl_v`;
   ∇𞁑 f → `grad𞁑f`; a·b → `a_dot_b`; a ± b → `a_plus_b`, `a_minus_b`; f(x) → `f_x`;
-  ⋆ → `ₛₜ𞁑ᵣ`; ′ → `ʹ` (U+02B9); leading digits spelled out. SIMD packs append `Pack`.
+  ⋆ → `ₛₜₐᵣ`; ′ → `ʹ` (U+02B9); leading digits spelled out. SIMD packs append `Pack`.
 - No underscore between factors once the left one ends in a subscript: `max𞁓μ𞁑𞁓`,
   `m𞁓F𞁑`, `Pᵢxᵢ_over_y2ᵢ`; word operators keep theirs (`v𞁑𞁓_dot_r𞁑𞁓`, `ρ𞁑_div_v𞁑`).
 - Immediately above the code, a comment block gives the equations in Unicode as the

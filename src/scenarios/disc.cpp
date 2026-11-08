@@ -14,6 +14,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/scenarios/disc.hpp>
+#include <cosmictiger/sph/geometry.hpp>
 #include <cosmictiger/sph/particles.hpp>
 
 namespace scenarios {
@@ -33,8 +34,7 @@ ScenarioPlan initializeDisc() {
     opts.initial.gasMass = 1.0;
     setOptions(opts);
     double const m = opts.initial.gasMass;
-    double h = pow(
-        m * getOptions().hydro.neighborNumber / (4.0 * std::numbers::pi / 3.0 * rho), 1.0 / 3.0);
+    double h = sph_geometry::supportRadius(m, rho, getOptions().hydro.neighborNumber);
     int i = 0;
     int const nz = 3;
     // A complete six-plane annular lattice is the valid resolution unit.

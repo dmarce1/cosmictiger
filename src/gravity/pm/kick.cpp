@@ -11,7 +11,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/stack_trace.hpp>
 #include <cosmictiger/gravity/pm/kick.hpp>
-#include <cosmictiger/math/kernel.hpp>
+#include <cosmictiger/gravity/softening.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
@@ -85,8 +85,8 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
     float const gx = acceleration[kXi];
     float const gy = acceleration[kYi];
     float const gz = acceleration[kZi];
-    float const effectiveRadius = parameters.gravitySmoothingLength /
-        selectedGravityKernel().smoothingLengthPerEffectiveRadius;
+    float const effectiveRadius =
+        gravitySofteningEffectiveRadius(parameters.gravitySmoothingLength);
     // A new outer interval closes the previous substep with the old base timestep.
     float const closingBase =
         parameters.closingBaseTimestep > 0.0f ? parameters.closingBaseTimestep : parameters.t0;

@@ -268,12 +268,7 @@ struct LinearExperiment {
             }
         }
         particlesSortByRung(0);
-        auto const built = treeCreate(
-            TreeCreateParameters(0, options.gravity.openingAngle, options.gravity.smoothingLength));
-        if (built.maxGravitySmoothingLength != float(options.gravity.smoothingLength)) {
-            throw std::runtime_error(
-                "Linear-growth tree changed the configured fixed gravity support");
-        }
+        auto const built = treeCreate(TreeCreateParameters(0, options.gravity.openingAngle));
         KickParameters parameters;
         parameters.htime = false;
         parameters.sign = 1.0;
@@ -320,7 +315,7 @@ struct LinearExperiment {
                 throw std::runtime_error("Linear-growth particle labels are not unique");
             }
             seen[index] = true;
-            double const support = built.maxGravitySmoothingLength;
+            double const support = float(options.gravity.smoothingLength);
             result.meanSupport[kind] += support / perSpecies;
             result.minimumSupport = std::min(result.minimumSupport, support);
             result.maximumSupport = std::max(result.maximumSupport, support);
@@ -761,8 +756,10 @@ void evolveLinearModes(LinearExperiment const& experiment, std::string const& fi
                 }
             }
             states.push_back(std::move(negative));
-            states.push_back({LinearField(experiment.reference.size()),
-                LinearField(experiment.reference.size())});
+            LinearState zeroState;
+            zeroState.displacement = LinearField(experiment.reference.size());
+            zeroState.velocity = LinearField(experiment.reference.size());
+            states.push_back(zeroState);
         }
         double const stepSize = std::log(final / initial) / steps;
         std::cout << std::format("Linear growth evolution {:s} mode=({:d},{:d},{:d}), {:d} steps\n",

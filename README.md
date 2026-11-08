@@ -197,20 +197,20 @@ The supported density polynomial degrees are spline 2–9, Wendland 2/5/8,
 and Ferrers 2/4/6/8. Specify `gravity.effectiveRadius` or `gravity.smoothingLength`,
 in mean particle spacings. The imposed central force similarly accepts
 `hydro.centralEffectiveRadius` or `hydro.centralSmoothingLength`, in box units,
-using the gravity kernel. `gravity.softening` and `hydro.centralSoftening`
-remain aliases for their effective radii.
+using the gravity kernel. `gravity.softening` and `hydro.centralSoftening` are
+deprecated aliases for `gravity.effectiveRadius` and `hydro.centralEffectiveRadius`:
+they keep their meaning but print a deprecation warning naming the replacement key.
 
-SPH adapts each particle's support radius to its density. Its bounds accept
-`hydro.minEffectiveRadius` or `hydro.minSmoothingLength`, and
-`hydro.maxEffectiveRadius` or `hydro.maxSmoothingLength`, in initial interparticle
-spacings, using the hydro kernel. Neighbor and force evaluation use support
-radii; timestep limits use effective radii.
+SPH adapts each particle's support radius to its density, bounded by
+`hydro.minSmoothingLength` and `hydro.maxSmoothingLength`, in initial interparticle
+spacings. Neighbor and force evaluation use support radii; timestep limits use
+effective radii.
 
 Both representations may be supplied. An explicit effective-radius key wins
-over its legacy alias, and either wins over a support-radius key, including
+over its deprecated alias, and either wins over a support-radius key, including
 across command-line and INI inputs. A warning names each ignored key. To select
 a support radius in an example INI, remove or comment out its active effective
-radius or softening alias. See [kernel definitions and migration](docs/kernels.md)
+radius. See [kernel definitions and migration](docs/kernels.md)
 for conversions and timestep conventions.
 
 For the Kelvin–Helmholtz scenario, run from a build directory:

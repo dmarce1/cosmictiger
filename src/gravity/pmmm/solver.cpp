@@ -2,6 +2,7 @@
 
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/gravity/pmmm/mesh_size.hpp>
+#include <cosmictiger/gravity/softening.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include "actions.hpp"
 
@@ -388,11 +389,6 @@ Vector3<float> const& pmmmAcceleration(ParticleInteger index) {
 
 float pmmmPotential(ParticleInteger index) {
     return pmmm::detail::state.potential.empty() ? 0.0f : pmmm::detail::state.potential.at(index);
-}
-
-double pmmmEffectiveRadius() {
-    return getOptions().gravity.smoothingLength /
-        selectedGravityKernel().smoothingLengthPerEffectiveRadius;
 }
 
 void pmmmSetCellObserver(std::function<void(PmmmCellEvent, uint64_t)> observer) {

@@ -29,7 +29,7 @@ applies to CPU, SIMD, and CUDA code.
 | α_a, α_b, α_ab | `α𞁑`, `α𞁓`, `α𞁑𞁓` | Linear artificial viscosity coefficients |
 | β_ab | `β𞁑𞁓` | Quadratic artificial viscosity coefficient |
 | ρ_a, P_a, u_a | `ρ𞁑`, `P𞁑`, `u𞁑` | Sink thermodynamic state |
-| H_a, H_b | `H𞁑`, `H𞁓` | Compact support radii |
+| H_a, H_b | `h𞁑`, `h𞁓` | Compact support radii |
 | r_ab, v_ab | `r𞁑𞁓`, `v𞁑𞁓` | Sink minus neighbor vectors |
 | μ_ab, Π_ab | `μ𞁑𞁓`, `Π𞁑𞁓` | Monaghan velocity measure and pair viscosity |
 | F_a, F_b, F_ab | `F𞁑`, `F𞁓`, `F𞁑𞁓` | Radial kernel-gradient factors |
@@ -134,10 +134,8 @@ number of neighbors.
 The self contribution imposes \(N_{\rm target}>(4\pi/3)w(0)\), which is
 \(32/3\) for the default cubic. Startup checks use the selected kernel's floor,
 including its single-precision representation. The solve respects the configured
-radius bounds, supplied as `hydro.minEffectiveRadius`/`hydro.maxEffectiveRadius`
-or `hydro.minSmoothingLength`/`hydro.maxSmoothingLength` and converted with the selected
-hydro kernel. Explicit effective-radius settings take precedence with a warning
-naming each ignored support-radius setting. It refreshes neighbors if the search
+support-radius bounds `hydro.minSmoothingLength`/`hydro.maxSmoothingLength`.
+It refreshes neighbors if the search
 box is too small, and caps each local solve at 128 iterations. Its relative residual tolerance
 is \(10^{-4}\); a bound-limited solution need not attain the requested target.
 The periodic search uses one nearest image per pair, so the effective maximum
@@ -567,19 +565,17 @@ hydrodynamic controls are:
 | `hydro.viscosityEpsilon` | `0.01` | Denominator coefficient multiplying \(\bar\ell^2\) |
 | `hydro.neighborNumber` | `42` | Kernel-weighted support-sphere count |
 | `compute.sphBucketSize` | `0` (automatic) | SPH tree leaf limit; automatic sizing uses `floor(8/pi * hydro.neighborNumber)`, giving `106` at the default neighbor target |
-| `hydro.minEffectiveRadius` | unset | Alternative minimum effective radius \(h=2\sigma\), in initial interparticle spacings |
 | `hydro.minSmoothingLength` | `1e-6` | Minimum \(H\), in initial interparticle spacings |
-| `hydro.maxEffectiveRadius` | unset | Alternative maximum effective radius \(h=2\sigma\), in initial interparticle spacings |
 | `hydro.maxSmoothingLength` | `1000` | Requested maximum \(H\), in initial interparticle spacings; capped at half the box |
 | `hydro.centralEffectiveRadius` | `0.0054772255750516604` | Imposed central-force effective radius in box units; uses the gravity kernel |
 | `hydro.centralSmoothingLength` | derived | Alternative central-force support radius in box units; uses the gravity kernel |
-| `hydro.centralSoftening` | legacy alias | Alias for `hydro.centralEffectiveRadius` with the same value and units |
+| `hydro.centralSoftening` | deprecated | Deprecated alias for `hydro.centralEffectiveRadius` with the same value and units; warns when set and is omitted from help and output metadata |
 | `hydro.cfl` | `0.22821773229381923` | Courant-viscous coefficient using the effective radius \(h=2\sigma\); also controls the calibrated fractional-energy bound |
 
-For each radius pair, an explicit effective-radius key wins over the
+For the central-force radius pair, an explicit effective-radius key wins over the
 support-radius key, including across CLI and INI inputs, with a warning naming
 the ignored key. For the central force, precedence is `centralEffectiveRadius`,
-then the `centralSoftening` alias, then `centralSmoothingLength`. The command line
+then the deprecated `centralSoftening` alias, then `centralSmoothingLength`. The command line
 still overrides INI values for the same key. See [kernel radii](kernels.md) for
 the equivalent gravity options and conversion factors.
 

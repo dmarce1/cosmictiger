@@ -402,17 +402,24 @@ public:
                 state.values[ScaledCurvature] - 0.5 * state.values[HPrime] + 1.5 * density;
             double const denominator = std::abs(state.values[ScaledCurvature]) +
                 0.5 * std::abs(state.values[HPrime]) + 1.5 * std::abs(density);
-            transfers.push_back({scaleFactor, normalization * state.values[DeltaCdm],
-                normalization * state.values[DeltaBaryon],
-                normalization * state.values[DeltaNeutrino],
-                normalization * (state.values[Velocity] + bg.photonWeight * state.values[Slip]),
-                normalization * (2.0 * state.values[ScaledCurvature] + 3.0 * density),
-                normalization * state.values[ScaledCurvature] / (bg.eps * bg.eps),
-                normalization * etaPrime(state, bg),
-                0.5 * normalization * state.values[PhotonQuadrupole],
-                0.5 * normalization * state.values[NeutrinoQuadrupole], state.tau,
-                constraint / std::max(denominator, std::numeric_limits<double>::min()), accepted_,
-                rejected_});
+            BoltzmannTransfer transfer;
+            transfer.scaleFactor = scaleFactor;
+            transfer.deltaCdm = normalization * state.values[DeltaCdm];
+            transfer.deltaBaryon = normalization * state.values[DeltaBaryon];
+            transfer.deltaNeutrino = normalization * state.values[DeltaNeutrino];
+            transfer.thetaBaryonOverK =
+                normalization * (state.values[Velocity] + bg.photonWeight * state.values[Slip]);
+            transfer.hPrime = normalization * (2.0 * state.values[ScaledCurvature] + 3.0 * density);
+            transfer.eta = normalization * state.values[ScaledCurvature] / (bg.eps * bg.eps);
+            transfer.etaPrime = normalization * etaPrime(state, bg);
+            transfer.photonShear = 0.5 * normalization * state.values[PhotonQuadrupole];
+            transfer.neutrinoShear = 0.5 * normalization * state.values[NeutrinoQuadrupole];
+            transfer.conformalTime = state.tau;
+            transfer.constraintResidual =
+                constraint / std::max(denominator, std::numeric_limits<double>::min());
+            transfer.acceptedSteps = accepted_;
+            transfer.rejectedSteps = rejected_;
+            transfers.push_back(transfer);
         }
         return transfers;
     }

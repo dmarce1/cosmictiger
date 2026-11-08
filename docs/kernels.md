@@ -94,8 +94,9 @@ The accepted radius options are:
 | --- | --- | --- | --- |
 | Fixed comoving gravity | `gravity.effectiveRadius` | `gravity.smoothingLength` | Initial reference spacings; gravity kernel |
 | Imposed central force | `hydro.centralEffectiveRadius` | `hydro.centralSmoothingLength` | Box units; gravity kernel |
-| SPH minimum | `hydro.minEffectiveRadius` | `hydro.minSmoothingLength` | Initial interparticle spacings; hydro kernel |
-| SPH maximum | `hydro.maxEffectiveRadius` | `hydro.maxSmoothingLength` | Initial interparticle spacings; hydro kernel |
+
+SPH support bounds take only support radii: `hydro.minSmoothingLength` and
+`hydro.maxSmoothingLength`, in initial interparticle spacings.
 
 Gravity's reference spacing is `numberOfParticles^-1/3` in box units, preserving
 the existing radius-input convention. Cosmological SPH runs use
@@ -103,21 +104,26 @@ the existing radius-input convention. Cosmological SPH runs use
 spacing for one class, not the smaller mean spacing of the combined gas and
 dark-matter population.
 
-`gravity.softening` and `hydro.centralSoftening` remain aliases for the respective
-effective radii, preserving their numeric values and units. Changing a kernel at
+`gravity.softening` and `hydro.centralSoftening` are deprecated aliases for
+`gravity.effectiveRadius` and `hydro.centralEffectiveRadius`. They still parse with
+the same numeric values and units, but each explicit use prints a warning naming the
+replacement key, and neither appears in help, the resolved option listing, or
+output metadata. Changing a kernel at
 fixed effective radius changes its support radius using the factor above.
 
 Both representations may be specified. An explicit effective-radius key takes
-precedence over its legacy softening alias, and either takes precedence over a
+precedence over its deprecated softening alias, and either takes precedence over a
 support-radius key. Each ignored key produces a warning identifying that key.
 This precedence applies across command-line and INI inputs; the command line
-overrides an INI value for the same key. Defaults do not count as explicit
+overrides an INI value for the same key. Because the shipped presets set
+`gravity.effectiveRadius` and `hydro.centralEffectiveRadius`, a deprecated alias given
+on the command line does not override a preset; pass the replacement key instead. Defaults do not count as explicit
 settings. To use support-radius input with a repository example INI, remove or
-comment out its active softening alias or effective-radius setting.
+comment out its active effective-radius setting.
 
 SPH adapts and stores each particle's support radius because neighbor searches
-must reach the support boundary. Its minimum and maximum bounds can use either
-representation. The maximum support remains capped at half the box. Timesteps
+must reach the support boundary. Its minimum and maximum bounds are support
+radii. The maximum support remains capped at half the box. Timesteps
 use effective radius, computed as
 `smoothingLength / smoothingLengthPerEffectiveRadius`; force and neighbor evaluation
 use support radius. Checkpoint field order and stored radius units are unchanged.
@@ -204,7 +210,7 @@ equal large powers near the support boundary.
 
 Gas and dark matter use the same selected gravity kernel and one fixed
 comoving support radius. Set that radius with `gravity.effectiveRadius`,
-`gravity.smoothingLength`, or the legacy effective-radius alias `gravity.softening`.
+or `gravity.smoothingLength`; the deprecated alias `gravity.softening` still parses.
 The configured radius remains constant in comoving coordinates during evolution;
 its physical length scales with the cosmological scale factor. Gravity does not
 solve a neighbor constraint or use the gas smoothing radius.
@@ -242,7 +248,7 @@ acceleration limit, and the cubic Courant-viscous limit, using these values:
 
 | Setting | Previous default | Current default |
 | --- | ---: | ---: |
-| `gravity.softening` | `0.0125` in Plummer-equivalent epsilon | `0.01876988456953534` in `effectiveRadius = 2 sigma` |
+| `gravity.effectiveRadius` (formerly `gravity.softening`) | `0.0125` in Plummer-equivalent epsilon | `0.01876988456953534` in `effectiveRadius = 2 sigma` |
 | `gravity.timestepEta` | `0.25` | `0.20401599335954483` |
 | `hydro.cfl` | `0.25` | `0.22821773229381923` |
 
@@ -266,8 +272,9 @@ The hydro acceleration limit additionally retains a fixed reference calibration
 `0.7115965735877551` multiplying gravity eta, preserving the historical
 cubic/Ferrers F4 acceleration calibration through the radius-unit conversion.
 These factors are independent of the selected kernel family.
-The additional fractional thermal-energy timestep bound applies the same
-fixed reference conversion to preserve their old default physical limits.
+The additional fractional thermal-energy timestep bound uses its own calibration
+`kThermalTimestepScale`, equal to the cubic viscosity width scale `sqrt(5/6)` in 3D,
+to preserve the old default physical limit.
 
 Kernel selections are encoded in the checkpoint physics marker. Restarting with
 different selections is rejected. Checkpoints retain the version 3 format.

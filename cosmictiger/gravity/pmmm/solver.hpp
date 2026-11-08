@@ -77,7 +77,6 @@ PmmmDiagnostics pmmmDiagnostics();
 // Results remain valid until the next particle permutation or solve.
 Vector3<float> const& pmmmAcceleration(ParticleInteger index);
 float pmmmPotential(ParticleInteger index);
-double pmmmEffectiveRadius();
 
 // Local instrumentation hook. Set/clear only between solves; callbacks execute
 // on HPX tasks and may suspend for deterministic readiness tests.

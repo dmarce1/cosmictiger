@@ -129,12 +129,13 @@ void run() {
     for (int index = 0; index < kSampleCount; ++index) {
         int const exponent = index - 16;
         float const sign = (index & 1) ? -1.0f : 1.0f;
-        inputs[index] = {std::ldexp(sign * (1.0f + index * 0x1p-5f), exponent),
-            std::ldexp(sign * float(index + 1), exponent - 32),
-            std::ldexp(1.25f + index * 0x1p-6f, -exponent),
-            std::ldexp(-float(index + 3), -exponent - 32),
-            std::ldexp(-sign * (1.5f + index * 0x1p-5f), exponent),
-            std::ldexp(sign * float(index + 5), exponent - 32)};
+        auto& input = inputs[index];
+        input.leftHigh = std::ldexp(sign * (1.0f + index * 0x1p-5f), exponent);
+        input.leftLow = std::ldexp(sign * float(index + 1), exponent - 32);
+        input.rightHigh = std::ldexp(1.25f + index * 0x1p-6f, -exponent);
+        input.rightLow = std::ldexp(-float(index + 3), -exponent - 32);
+        input.addendHigh = std::ldexp(-sign * (1.5f + index * 0x1p-5f), exponent);
+        input.addendLow = std::ldexp(sign * float(index + 5), exponent - 32);
     }
     // Include cancellation and inputs differing only in their low components.
     inputs[0] = {1.0f, 0x1p-40f, -1.0f, 0x1p-40f, 1.0f, 0.0f};

@@ -42,8 +42,7 @@ struct AcceptanceInput {
     float sourceRadius;
     float sinkBoxDistanceSquared;
     float sourceBoxDistanceSquared;
-    float sinkSupport;
-    float sourceSupport;
+    float support;
     float theta;
     bool sinkLeaf;
     bool sourceLeaf;
@@ -91,7 +90,7 @@ CUDA_EXPORT AcceptanceResult evaluate(AcceptanceInput const& input) {
     float const inverseTheta = fmmInverseOpeningAngle(input.theta);
     auto const accepted = computeFmmAcceptance(input.centerDistanceSquared, input.sinkRadius,
         input.sourceRadius, input.sinkBoxDistanceSquared, input.sourceBoxDistanceSquared,
-        fmmPairSmoothingLength(0.0f, input.sinkSupport, input.sourceSupport), inverseTheta);
+        input.support, inverseTheta);
     auto const selected = selectFmmInteraction(accepted.cellCell != 0.0f,
         accepted.particleCell != 0.0f, accepted.cellParticle != 0.0f, input.sinkLeaf,
         input.sourceLeaf, input.sinkRadius, input.sourceRadius);
@@ -128,7 +127,6 @@ __global__ void evaluateSelections(
 AcceptanceInput reversed(AcceptanceInput input) {
     std::swap(input.sinkRadius, input.sourceRadius);
     std::swap(input.sinkBoxDistanceSquared, input.sourceBoxDistanceSquared);
-    std::swap(input.sinkSupport, input.sourceSupport);
     std::swap(input.sinkLeaf, input.sourceLeaf);
     return input;
 }
@@ -176,14 +174,14 @@ void runAcceptance() {
         inputs.push_back(reversed(input));
     };
     // Far cells, overlapping supports, and each one-sided geometric opening.
-    add({0.25f, .03125f, .0625f, 0.0f, 0.0f, .015625f, .03125f, .8f, true, true});
-    add({.000625f, .001f, .01f, .000576f, .000225f, .02f, .01f, .8f, true, true});
-    add({.015625f, .0625f, .015625f, .00390625f, 0.0f, .00390625f, .0078125f, .5f, true, true});
+    add({0.25f, .03125f, .0625f, 0.0f, 0.0f, .03125f, .8f, true, true});
+    add({.000625f, .001f, .01f, .000576f, .000225f, .02f, .8f, true, true});
+    add({.015625f, .0625f, .015625f, .00390625f, 0.0f, .0078125f, .5f, true, true});
     // Exactly representable support boundary, then its adjacent float values.
     float const boundary = .015625f;
     for (float distanceSquared : {std::nextafter(boundary, 0.0f), boundary,
              std::nextafter(boundary, std::numeric_limits<float>::infinity())}) {
-        add({distanceSquared, .03125f, .03125f, 0.0f, 0.0f, .0625f, .015625f, .8f, true, true});
+        add({distanceSquared, .03125f, .03125f, 0.0f, 0.0f, .0625f, .8f, true, true});
     }
     // Boundary probes isolate center and box alternatives, including reciprocal
     // inequalities whose fused multiply-add must agree under CUDA fast math.
@@ -201,8 +199,17 @@ void runAcceptance() {
                         for (float probe : {std::nextafter(distanceSquared, 0.0f), distanceSquared,
                                  std::nextafter(
                                      distanceSquared, std::numeric_limits<float>::infinity())}) {
-                            add({probe, sinkRadius, sourceRadius, 0.0f, 0.0f, support,
-                                .5f * support, theta, true, true});
+                            AcceptanceInput centerProbe;
+                            centerProbe.centerDistanceSquared = probe;
+                            centerProbe.sinkRadius = sinkRadius;
+                            centerProbe.sourceRadius = sourceRadius;
+                            centerProbe.sinkBoxDistanceSquared = 0.0f;
+                            centerProbe.sourceBoxDistanceSquared = 0.0f;
+                            centerProbe.support = support;
+                            centerProbe.theta = theta;
+                            centerProbe.sinkLeaf = true;
+                            centerProbe.sourceLeaf = true;
+                            add(centerProbe);
                         }
                     }
                     float const boxBoundary = sourceRadius + support;
@@ -211,8 +218,17 @@ void runAcceptance() {
                         {std::nextafter(boxBoundarySquared, 0.0f), boxBoundarySquared,
                             std::nextafter(
                                 boxBoundarySquared, std::numeric_limits<float>::infinity())}) {
-                        add({0.0f, sinkRadius, sourceRadius, probe, 0.0f, .5f * support, support,
-                            theta, true, true});
+                        AcceptanceInput boxProbe;
+                        boxProbe.centerDistanceSquared = 0.0f;
+                        boxProbe.sinkRadius = sinkRadius;
+                        boxProbe.sourceRadius = sourceRadius;
+                        boxProbe.sinkBoxDistanceSquared = probe;
+                        boxProbe.sourceBoxDistanceSquared = 0.0f;
+                        boxProbe.support = support;
+                        boxProbe.theta = theta;
+                        boxProbe.sinkLeaf = true;
+                        boxProbe.sourceLeaf = true;
+                        add(boxProbe);
                     }
                 }
             }
@@ -222,11 +238,20 @@ void runAcceptance() {
     // Reversing each input also exchanges the explicit leaf and internal cloud.
     for (bool sinkLeaf : {false, true}) {
         for (bool sourceLeaf : {false, true}) {
-            add({0.25f, .03125f, .0625f, 0.0f, 0.0f, .015625f, .03125f, .8f, sinkLeaf, sourceLeaf});
-            add({.015625f, .0625f, .015625f, .00390625f, 0.0f, .00390625f, .0078125f, .5f, sinkLeaf,
-                sourceLeaf});
-            add({1.69f, .5f, .5f, 1.21f, 1.21f, .1f, .1f, .5f, sinkLeaf, sourceLeaf});
-            add({.000625f, .001f, .01f, .000576f, .000225f, .02f, .01f, .8f, sinkLeaf, sourceLeaf});
+            add({0.25f, .03125f, .0625f, 0.0f, 0.0f, .03125f, .8f, sinkLeaf, sourceLeaf});
+            AcceptanceInput oriented;
+            oriented.centerDistanceSquared = .015625f;
+            oriented.sinkRadius = .0625f;
+            oriented.sourceRadius = .015625f;
+            oriented.sinkBoxDistanceSquared = .00390625f;
+            oriented.sourceBoxDistanceSquared = 0.0f;
+            oriented.support = .0078125f;
+            oriented.theta = .5f;
+            oriented.sinkLeaf = sinkLeaf;
+            oriented.sourceLeaf = sourceLeaf;
+            add(oriented);
+            add({1.69f, .5f, .5f, 1.21f, 1.21f, .1f, .5f, sinkLeaf, sourceLeaf});
+            add({.000625f, .001f, .01f, .000576f, .000225f, .02f, .8f, sinkLeaf, sourceLeaf});
         }
     }
     auto const results = runDevice<AcceptanceInput, AcceptanceResult>(inputs,
@@ -317,10 +342,20 @@ void runSelections() {
     std::vector<SelectionInput> inputs;
     auto const add = [&](SelectionInput const& input) {
         inputs.push_back(input);
-        inputs.push_back({input.cellCell, input.cellParticle, input.particleCell, input.sourceLeaf,
-            input.sinkLeaf, input.sourceRadius, input.sinkRadius, input.sourceCount,
-            input.sinkCount, input.hybridFlopsPerParticle, input.particlePairFlops,
-            input.cellCellFlops});
+        SelectionInput transposedInput;
+        transposedInput.cellCell = input.cellCell;
+        transposedInput.particleCell = input.cellParticle;
+        transposedInput.cellParticle = input.particleCell;
+        transposedInput.sinkLeaf = input.sourceLeaf;
+        transposedInput.sourceLeaf = input.sinkLeaf;
+        transposedInput.sinkRadius = input.sourceRadius;
+        transposedInput.sourceRadius = input.sinkRadius;
+        transposedInput.sinkCount = input.sourceCount;
+        transposedInput.sourceCount = input.sinkCount;
+        transposedInput.hybridFlopsPerParticle = input.hybridFlopsPerParticle;
+        transposedInput.particlePairFlops = input.particlePairFlops;
+        transposedInput.cellCellFlops = input.cellCellFlops;
+        inputs.push_back(transposedInput);
     };
     for (auto const& value : cases) {
         add(value.input);
@@ -330,8 +365,15 @@ void runSelections() {
     for (int masks = 0; masks < 32; ++masks) {
         for (float sinkRadius : radii) {
             for (float sourceRadius : radii) {
-                add({bool(masks & 1), bool(masks & 2), bool(masks & 4), bool(masks & 8),
-                    bool(masks & 16), sinkRadius, sourceRadius});
+                SelectionInput selection;
+                selection.cellCell = bool(masks & 1);
+                selection.particleCell = bool(masks & 2);
+                selection.cellParticle = bool(masks & 4);
+                selection.sinkLeaf = bool(masks & 8);
+                selection.sourceLeaf = bool(masks & 16);
+                selection.sinkRadius = sinkRadius;
+                selection.sourceRadius = sourceRadius;
+                add(selection);
             }
         }
     }

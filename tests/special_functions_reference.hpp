@@ -206,8 +206,10 @@ inline std::vector<PowInput> powerInputs() {
     std::uniform_real_distribution<double> logBase(-8.0, 8.0);
     std::uniform_real_distribution<double> exponent(-6.0, 6.0);
     for (size_t sample = 0; sample < kRandomSamples; ++sample) {
-        values.push_back({static_cast<float>(std::exp2(logBase(generator))),
-            static_cast<float>(exponent(generator))});
+        PowInput input;
+        input.base = static_cast<float>(std::exp2(logBase(generator)));
+        input.exponent = static_cast<float>(exponent(generator));
+        values.push_back(input);
     }
     return values;
 }

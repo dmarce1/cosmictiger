@@ -159,7 +159,6 @@ void mergeSphBounds(Fixed32Range& target, Fixed32Range const& source) {
 Fixed32Range sweptSphBounds(Fixed32Range const& positions, Vector3<double> const& v_minus,
     Vector3<double> const& v_plus, double D) {
     Fixed32Range result = positions;
-    double const padding = 2.0 * RangeFixed::min().toDouble();
     // clang-format off
     /*
      * Derived conservative bound for the implemented linear drift x' = x + v D:
@@ -182,15 +181,15 @@ Fixed32Range sweptSphBounds(Fixed32Range const& positions, Vector3<double> const
         double const firstDisplacement = D * v_minus[dim];
         double const secondDisplacement = D * v_plus[dim];
         double const lower = positions.begin[dim].toDouble() +
-            std::min({0.0, firstDisplacement, secondDisplacement}) - padding;
+            std::min({0.0, firstDisplacement, secondDisplacement}) - kSphBoxPadding;
         double const upper = positions.end[dim].toDouble() +
-            std::max({0.0, firstDisplacement, secondDisplacement}) + padding;
+            std::max({0.0, firstDisplacement, secondDisplacement}) + kSphBoxPadding;
         if (!std::isfinite(lower) || !std::isfinite(upper)) {
             throw std::runtime_error("Nonfinite SPH drift bound");
         }
         if (upper - lower >= 1.0) {
-            result.begin[dim] = -padding;
-            result.end[dim] = 1.0 + padding;
+            result.begin[dim] = -kSphBoxPadding;
+            result.end[dim] = 1.0 + kSphBoxPadding;
         } else {
             result.begin[dim] = lower;
             result.end[dim] = upper;
@@ -215,15 +214,15 @@ void updateLocalSphDriftBounds(TreeId id, double driftFactor, int rung) {
             minimumVelocity[dim] = 0.0;
             maximumVelocity[dim] = 0.0;
         }
-        double const padding = 2.0 * RangeFixed::min().toDouble();
         for (ParticleInteger particle = node.particleRange.first;
             particle < node.particleRange.second; ++particle) {
             bool const moving = rung < 0 || sphParticlesRung(particle) == rung;
             for (int dim = 0; dim < kDimensions; ++dim) {
                 double const position = sphParticlesPositionValue(dim, particle).toDouble();
                 positions.begin[dim] =
-                    std::min(positions.begin[dim].toDouble(), position - padding);
-                positions.end[dim] = std::max(positions.end[dim].toDouble(), position + padding);
+                    std::min(positions.begin[dim].toDouble(), position - kSphBoxPadding);
+                positions.end[dim] =
+                    std::max(positions.end[dim].toDouble(), position + kSphBoxPadding);
                 double const velocity = moving ? sphParticlesVelocityValue(dim, particle) : 0.0;
                 minimumVelocity[dim] = std::min(minimumVelocity[dim], velocity);
                 maximumVelocity[dim] = std::max(maximumVelocity[dim], velocity);
@@ -664,8 +663,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         numberOfActiveParticles = 0;
         innerBox = emptySphBounds();
         outerBox = emptySphBounds();
-        auto const tiny = 2.0 * RangeFixed::min().toDouble();
-        flops.doublePrecision += 4 * kDimensions + 2;
+        flops.doublePrecision += 4 * kDimensions;    // Empty-bound conversions.
         for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
             float const h = params.smoothingLengthMultiplier * sphParticlesSmoothingLength(i);
             flops.singlePrecision += 1;
@@ -675,14 +673,17 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
             }
             for (int dim = 0; dim < kDimensions; dim++) {
                 double const position = xValue[dim].toDouble();
-                innerBox.begin[dim] = std::min(innerBox.begin[dim].toDouble(), position - tiny);
-                innerBox.end[dim] = std::max(innerBox.end[dim].toDouble(), position + tiny);
+                innerBox.begin[dim] =
+                    std::min(innerBox.begin[dim].toDouble(), position - kSphBoxPadding);
+                innerBox.end[dim] =
+                    std::max(innerBox.end[dim].toDouble(), position + kSphBoxPadding);
                 // Position and old-bound conversions, two offsets and two new bounds.
                 flops.doublePrecision += 7;
                 if (sphParticlesRung(i) >= params.minimumRung) {
                     outerBox.begin[dim] =
-                        std::min(outerBox.begin[dim].toDouble(), position - h - tiny);
-                    outerBox.end[dim] = std::max(outerBox.end[dim].toDouble(), position + h + tiny);
+                        std::min(outerBox.begin[dim].toDouble(), position - h - kSphBoxPadding);
+                    outerBox.end[dim] =
+                        std::max(outerBox.end[dim].toDouble(), position + h + kSphBoxPadding);
                     flops.doublePrecision += 10;    // Includes both support promotions.
                 }
             }
@@ -811,7 +812,6 @@ static SphTreeCreateReturn sphTreeRefreshNode(
             minimumVelocity[dim] = 0.0;
             maximumVelocity[dim] = 0.0;
         }
-        double const padding = 2.0 * RangeFixed::min().toDouble();
         for (ParticleInteger particle = node.particleRange.first;
             particle < node.particleRange.second; ++particle) {
             bool const active = sphParticlesRung(particle) >= params.minimumRung;
@@ -825,15 +825,15 @@ static SphTreeCreateReturn sphTreeRefreshNode(
                 minimumVelocity[dim] = std::min(minimumVelocity[dim], velocity);
                 maximumVelocity[dim] = std::max(maximumVelocity[dim], velocity);
                 result.innerBox.begin[dim] =
-                    std::min(result.innerBox.begin[dim].toDouble(), position - padding);
+                    std::min(result.innerBox.begin[dim].toDouble(), position - kSphBoxPadding);
                 result.innerBox.end[dim] =
-                    std::max(result.innerBox.end[dim].toDouble(), position + padding);
+                    std::max(result.innerBox.end[dim].toDouble(), position + kSphBoxPadding);
                 flops.doublePrecision += 7;
                 if (active) {
                     result.outerBox.begin[dim] = std::min(
-                        result.outerBox.begin[dim].toDouble(), position - support - padding);
-                    result.outerBox.end[dim] =
-                        std::max(result.outerBox.end[dim].toDouble(), position + support + padding);
+                        result.outerBox.begin[dim].toDouble(), position - support - kSphBoxPadding);
+                    result.outerBox.end[dim] = std::max(
+                        result.outerBox.end[dim].toDouble(), position + support + kSphBoxPadding);
                     flops.doublePrecision += 10;
                 }
             }

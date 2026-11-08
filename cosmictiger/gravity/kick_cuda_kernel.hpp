@@ -26,6 +26,7 @@
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_cuda.hpp>
+#include <cosmictiger/gravity/softening.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #if COSMICTIGER_WITH_SPH
@@ -75,7 +76,7 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
     float darkMatterMomentumNormCorrection = 0.0f;
 
     float const gravityEffectiveRadius =
-        params.gravitySmoothingLength / selectedGravityKernel().smoothingLengthPerEffectiveRadius;
+        gravitySofteningEffectiveRadius(params.gravitySmoothingLength);
     FlopCounter<FlopCount> flops = 0;
     // Widen support radius, divide by the double kernel radius, then narrow.
     FlopCounter<FlopCount> doubleFlops = 3;
@@ -620,13 +621,10 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                     }
                                     float const r2 = fmaf(dx[kXi], dx[kXi],
                                         fmaf(dx[kYi], dx[kYi], dx[kZi] * dx[kZi]));
-                                    float const pairSmoothingLength = fmmPairSmoothingLength(
-                                        smoothingLength, self.maxGravitySmoothingLength,
-                                        other.maxGravitySmoothingLength);
                                     FlopCount acceptanceFlops;
                                     auto acceptance =
                                         computeFmmAcceptance(r2, self.radius, other.radius, 0.0f,
-                                            0.0f, pairSmoothingLength, thetainv, &acceptanceFlops);
+                                            0.0f, smoothingLength, thetainv, &acceptanceFlops);
                                     flops += 5 + acceptanceFlops;    // Float norm; geometry counted
                                                                      // separately.
                                     if (!acceptance.cellCell && (other.leaf || self.leaf)) {
@@ -636,7 +634,7 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                                                     self.box, other.pos, geometry, &geometryFlops),
                                                 fmmSourceBoxDistanceSquared(other.box, self.pos,
                                                     other.pos, geometry, &geometryFlops),
-                                                pairSmoothingLength, thetainv, &acceptanceFlops);
+                                                smoothingLength, thetainv, &acceptanceFlops);
                                         flops += acceptanceFlops;    // Box arithmetic is counted by
                                                                      // precision at its source.
                                     }

@@ -69,9 +69,12 @@ std::shared_ptr<SimulationBackgroundTable const> simulationBackground(double fin
     auto const& options = getOptions();
     bool const fixed = !options.run.scenario.empty() && options.run.scenario != "cosmology";
     double const initialScale = fixed ? 1.0 : 1.0 / (1.0 + options.cosmology.startRedshift);
-    BackgroundCosmologyParameters const parameters{
-        units::normalizedHubble100(options) * options.cosmology.hubble, options.cosmology.omegaR,
-        options.cosmology.omegaM, options.cosmology.omegaLambda, options.cosmology.omegaK};
+    BackgroundCosmologyParameters parameters;
+    parameters.hubbleConstant = units::normalizedHubble100(options) * options.cosmology.hubble;
+    parameters.omegaRadiation = options.cosmology.omegaR;
+    parameters.omegaMatter = options.cosmology.omegaM;
+    parameters.omegaDarkEnergy = options.cosmology.omegaLambda;
+    parameters.omegaCurvature = options.cosmology.omegaK;
     std::array<double, 8> const key{parameters.hubbleConstant, parameters.omegaRadiation,
         parameters.omegaMatter, parameters.omegaDarkEnergy, parameters.omegaCurvature, initialScale,
         finalConformalTime, fixed ? 1.0 : 0.0};

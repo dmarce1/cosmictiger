@@ -26,23 +26,6 @@ struct FmmAcceptance {
     Mask supportSeparated;
 };
 
-namespace detail {
-
-CUDA_EXPORT inline float fmmMaximum(float left, float right) {
-    return std::fmax(left, right);
-}
-
-CUDA_EXPORT inline double fmmMaximum(double left, double right) {
-    return std::fmax(left, right);
-}
-
-template <class T>
-CUDA_EXPORT inline T fmmMaximum(T const& left, T const& right) {
-    return simdMax(left, right);
-}
-
-}    // namespace detail
-
 CUDA_EXPORT inline float fmmInverseOpeningAngle(float theta) {
 #ifdef __CUDA_ARCH__
     return __fdiv_rn(1.0f, theta);
@@ -51,28 +34,20 @@ CUDA_EXPORT inline float fmmInverseOpeningAngle(float theta) {
 #endif
 }
 
-// Either cell can contain the larger compact support. Retain the kick's fixed
-// support as a floor for callers that override the value used to build the tree.
-template <class T>
-CUDA_EXPORT inline T fmmPairSmoothingLength(
-    T const& fixedSmoothingLength, T const& sinkSmoothingLength, T const& sourceSmoothingLength) {
-    return detail::fmmMaximum(
-        fixedSmoothingLength, detail::fmmMaximum(sinkSmoothingLength, sourceSmoothingLength));
-}
-
-// Inputs describe enclosing cells and periodic minimum distances. The support
-// bound must cover the actual pair-softening law for every represented pair.
+// Inputs describe enclosing cells and periodic minimum distances. Every particle
+// carries the same fixed comoving gravity support h_G (gravity.smoothingLength),
+// which bounds the pair-softening law for every represented pair.
 // Returned fields are booleans for scalars and native masks for SIMD packs.
 template <class T>
 CUDA_EXPORT inline FmmAcceptance<T> computeFmmAcceptance(T const& centerDistanceSquared,
     T const& sinkRadius, T const& sourceRadius, T const& sinkBoxToSourceCenterSquared,
-    T const& sourceBoxToSinkCenterSquared, T const& pairSmoothingLength, T const& inverseTheta,
+    T const& sourceBoxToSinkCenterSquared, T const& smoothingLength, T const& inverseTheta,
     FlopCount* operationCount = nullptr) {
     T const radiusSum = sinkRadius + sourceRadius;
-    T const supportDistance = radiusSum + pairSmoothingLength;
+    T const supportDistance = radiusSum + smoothingLength;
     auto const centerSupportSeparated = centerDistanceSquared > supportDistance * supportDistance;
-    T const sourceSupportDistance = sourceRadius + pairSmoothingLength;
-    T const sinkSupportDistance = sinkRadius + pairSmoothingLength;
+    T const sourceSupportDistance = sourceRadius + smoothingLength;
+    T const sinkSupportDistance = sinkRadius + smoothingLength;
     auto const sourceSupportSeparated =
         sinkBoxToSourceCenterSquared > sourceSupportDistance * sourceSupportDistance;
     auto const sinkSupportSeparated =
@@ -101,9 +76,13 @@ CUDA_EXPORT inline FmmAcceptance<T> computeFmmAcceptance(T const& centerDistance
         }
     }
 
-    return {(centerDistanceSquared > cellCellDistance * cellCellDistance) && centerSupportSeparated,
-        particleCellGeometry && supportSeparated, cellParticleGeometry && supportSeparated,
-        supportSeparated};
+    FmmAcceptance<T> acceptance;
+    acceptance.cellCell =
+        (centerDistanceSquared > cellCellDistance * cellCellDistance) && centerSupportSeparated;
+    acceptance.particleCell = particleCellGeometry && supportSeparated;
+    acceptance.cellParticle = cellParticleGeometry && supportSeparated;
+    acceptance.supportSeparated = supportSeparated;
+    return acceptance;
 }
 
 // Only the explicit-particle side must be a leaf. For a leaf pair, the walk

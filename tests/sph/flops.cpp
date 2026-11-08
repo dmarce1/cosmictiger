@@ -125,8 +125,7 @@ TEST(SphFlops, MonaghanExpressionsMatchExecutedArithmetic) {
     using Real = detail::CountingReal;
     for (double velocity : {-0.3, 0.0, 0.3}) {
         Real::reset();
-        auto const mu = monaghan::viscosityMu(
-            Real(0.1), Real(velocity), Real(0.4), Real(0.5), Real(0.01), Real(2), Real(1));
+        auto const mu = monaghan::viscosityMu(Real(0.1), Real(velocity), Real(0.225), Real(0.01));
         EXPECT_EQ(Real::count(), sph_flops::kViscosityMu);
         Real::reset();
         monaghan::artificialViscosity(Real(1), Real(2), Real(3), Real(4), mu, Real(1), Real(2));

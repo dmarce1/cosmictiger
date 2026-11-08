@@ -95,7 +95,6 @@
 #include <cosmictiger/sph/volume.hpp>
 #endif
 
-constexpr double kSmoothLengthBuffer = 0.21;
 constexpr double kScaleTimestep = 0.01;
 
 double domainTime = 0.0;
@@ -284,7 +283,7 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose) {
 
     Timer timer;
     treeParameters.minimumRung = minrung;
-    treeParameters.smoothingLengthMultiplier = (1.0 + kSmoothLengthBuffer);
+    treeParameters.smoothingLengthMultiplier = kSphSupportSearchMultiplier;
     SphTreeCreateReturn treeResult;
 
     timer.start();
@@ -376,7 +375,7 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
 
     runParameters.phase = 1;
     SphTreeNeighborParameters neighborParameters;
-    neighborParameters.smoothingLengthMultiplier = (1.0 + kSmoothLengthBuffer);
+    neighborParameters.smoothingLengthMultiplier = kSphSupportSearchMultiplier;
     neighborParameters.minimumRung = runParameters.minimumRung;
     TreeId rootId;
     rootId.proc = 0;
@@ -419,7 +418,7 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
             }
             timer.reset();
             needsNeighborRefresh = result.needsAnotherPass;
-            neighborParameters.smoothingLengthMultiplier = (1.0 + kSmoothLengthBuffer);
+            neighborParameters.smoothingLengthMultiplier = kSphSupportSearchMultiplier;
             neighborParameters.operation = SphNeighborOperation::RefreshBounds;
             neighborParameters.outerParticleSelection =
                 needsNeighborRefresh ? SphParticleSelection::Active : SphParticleSelection::All;
@@ -476,7 +475,7 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
             timer.reset();
             needsNeighborRefresh = result.needsAnotherPass;
             neighborParameters.smoothingLengthMultiplier =
-                needsNeighborRefresh ? (1.0 + kSmoothLengthBuffer) : 1.01;
+                needsNeighborRefresh ? kSphSupportSearchMultiplier : kSphConvergedSearchMultiplier;
             neighborParameters.operation = SphNeighborOperation::RefreshBounds;
             neighborParameters.outerParticleSelection = SphParticleSelection::All;
             neighborParameters.innerParticleSelection = SphParticleSelection::All;
@@ -679,7 +678,7 @@ KickParameters prepareFmmKick(int minrung, double scale, double dadt, double t0,
     tm.reset();
     tm.start();
     // ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
-    TreeCreateParameters tparams(minrung, theta, 0.f);
+    TreeCreateParameters tparams(minrung, theta);
     terminal::detailPrint("Create tree %i %e\n", minrung, theta);
     profile::profileBegin("treeCreate");
     treeCreate(tparams);
@@ -1381,7 +1380,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         tm.start();
 #if COSMICTIGER_ENABLE_FMM
         if (treeGravity) {
-            TreeCreateParameters tparams(levels[li], theta, 0.f);
+            TreeCreateParameters tparams(levels[li], theta);
             profile::profileBegin("treeCreate");
             treeCreate(tparams);
             profile::profileEnd();

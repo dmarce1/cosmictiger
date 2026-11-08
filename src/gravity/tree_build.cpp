@@ -45,7 +45,6 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     FlopCounter<FlopCount> flops = 0;    // Double box/center arithmetic.
     FlopCounter<FlopCount> singleFlops = 0;
     FlopCounter<FlopCounts> multipoleFlops;
-    double const h = getOptions().gravity.smoothingLength;
     int bucketSize = getOptions().compute.bucketSize;
     TreeCreateReturn rc;
     if (depth >= kMaxDepth) {
@@ -86,10 +85,22 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         bool leftLocalRoot = false;
         bool rightLocalRoot = false;
         if (processRange.second - processRange.first > 1) {
-            TreeBuildRequest left{
-                params, key << 1, leftRange, leftParticleRange, leftBox, depth + 1, false};
-            TreeBuildRequest right{
-                params, (key << 1) + 1, rightRange, rightParticleRange, rightBox, depth + 1, false};
+            TreeBuildRequest left;
+            left.params = params;
+            left.key = key << 1;
+            left.processRange = leftRange;
+            left.particleRange = leftParticleRange;
+            left.box = leftBox;
+            left.depth = depth + 1;
+            left.localRoot = false;
+            TreeBuildRequest right;
+            right.params = params;
+            right.key = (key << 1) + 1;
+            right.processRange = rightRange;
+            right.particleRange = rightParticleRange;
+            right.box = rightBox;
+            right.depth = depth + 1;
+            right.localRoot = false;
             policy.splitDomains(policy.context, left, right);
             leftBox = left.box;
             rightBox = right.box;
@@ -145,15 +156,26 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             leftParticleRange.second = rightParticleRange.first = mid;
             leftBox.end[xdim] = rightBox.begin[xdim] = xmid;
         }
-        auto futr = policy.fork(policy.context,
-            {params, (key << 1) + 1, rightRange, rightParticleRange, rightBox, depth + 1,
-                rightLocalRoot},
-            true, true);
+        TreeBuildRequest rightRequest;
+        rightRequest.params = params;
+        rightRequest.key = (key << 1) + 1;
+        rightRequest.processRange = rightRange;
+        rightRequest.particleRange = rightParticleRange;
+        rightRequest.box = rightBox;
+        rightRequest.depth = depth + 1;
+        rightRequest.localRoot = rightLocalRoot;
+        auto futr = policy.fork(policy.context, rightRequest, true, true);
         hpx::future<TreeCreateReturn> futl;
         try {
-            futl = policy.fork(policy.context,
-                {params, key << 1, leftRange, leftParticleRange, leftBox, depth + 1, leftLocalRoot},
-                false, false);
+            TreeBuildRequest leftRequest;
+            leftRequest.params = params;
+            leftRequest.key = key << 1;
+            leftRequest.processRange = leftRange;
+            leftRequest.particleRange = leftParticleRange;
+            leftRequest.box = leftBox;
+            leftRequest.depth = depth + 1;
+            leftRequest.localRoot = leftLocalRoot;
+            futl = policy.fork(policy.context, leftRequest, false, false);
         } catch (...) {
             futr.wait();
             throw;
@@ -164,8 +186,6 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         futr.wait();
         auto const rcl = futl.get();
         auto const rcr = futr.get();
-        rc.maxGravitySmoothingLength =
-            std::max(rcl.maxGravitySmoothingLength, rcr.maxGravitySmoothingLength);
         auto const& xl = rcl.pos;
         auto const& xr = rcr.pos;
         auto const& ml = rcl.multi;
@@ -354,10 +374,6 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
         children[kLeftChild] = rcl.id;
         children[kRightChild] = rcr.id;
     } else {
-        // All species use the same fixed comoving gravity support. Gas smoothing
-        // lengths belong only to the hydrodynamic tree and neighbor searches.
-        rc.maxGravitySmoothingLength = numberOfParticles > 0 ? float(h) : 0.0f;
-        flops += numberOfParticles > 0 ? 1 : 0;
         auto& xminValue = rbox.begin;
         auto& xmaxValue = rbox.end;
         for (int dim = 0; dim < kDimensions; dim++) {
@@ -431,7 +447,6 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
     }
     TreeNode node;
     node.radius = radius;
-    node.maxGravitySmoothingLength = rc.maxGravitySmoothingLength;
     node.children = children;
     node.localRoot = localRoot;
     node.particleRange = particleRange;

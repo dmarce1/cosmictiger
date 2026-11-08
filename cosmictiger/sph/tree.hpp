@@ -43,7 +43,9 @@ struct SphTreeNode {
      * sinkParticleRange      -  8 bytes - Corresponding sink/output particle indices [begin, end).
      * innerBox               - 24 bytes - Bounds enclosing all particle positions in this subtree.
      * outerBox               - 24 bytes - Bounds enclosing active particles' kernel supports,
-     *                                    expanded by the configured support-radius multiplier.
+     *                                    expanded by the configured support-radius multiplier
+     *                                    (kSphSupportSearchMultiplier while supports may change,
+     *                                    kSphConvergedSearchMultiplier after convergence).
      * box                    - 24 bytes - Spatial partition assigned to this node.
      * driftBox               - 24 bytes - Conservative swept bounds since the last rebuild.
      * numberOfActiveParticles-  8 bytes - Number of active particles in this subtree.
@@ -189,7 +191,7 @@ struct SphTreeCreateReturn {
 
 struct SphTreeCreateParameters {
     int minimumRung;
-    float smoothingLengthMultiplier;
+    float smoothingLengthMultiplier;    // Support multiplier, normally kSphSupportSearchMultiplier.
     SphTreeCreateParameters() = default;
     SphTreeCreateParameters(int minimumRung, float smoothingLengthMultiplier);
     template <typename A>

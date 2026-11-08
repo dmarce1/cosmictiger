@@ -159,7 +159,6 @@ std::array<TreeNode, 3> makeTree() {
         node.localRoot = i == 0;
         node.leaf = i != 0;
         node.radius = 0.5f;
-        node.maxGravitySmoothingLength = kSupport;
         // Deliberately conservative overlapping boxes/radii prevent acceptance
         // of any far-field or hybrid pair. Every source reaches the PP list.
         for (int dim = 0; dim < kDimensions; ++dim) {

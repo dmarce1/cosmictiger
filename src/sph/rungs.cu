@@ -27,11 +27,11 @@ struct RungsWorkspace {
 }    // namespace detail
 
 // Locally derived monotone neighbor-graph closure of sphCpuRungs, including inactive endpoints:
-//   L𞁑⁽ᵏ⁺¹⁾ = max(L𞁑⁽ᵏ⁾, max_{b: |r𞁑𞁓| ≤ max(H𞁑, H𞁓)} L𞁓⁽ᵏ⁾ − 1).
+//   L𞁑⁽ᵏ⁺¹⁾ = max(L𞁑⁽ᵏ⁾, max_{b: |r𞁑𞁓| ≤ max(h𞁑, h𞁓)} L𞁓⁽ᵏ⁾ − 1).
 // Symbol directory: L𞁑 → sink rung; max L𞁓 → maximum neighbor rung;
-// H𞁑, H𞁓 → sink, neighbor kernel smoothing length; x𞁑, x𞁓 → sink, neighbor position;
+// h𞁑, h𞁓 → sink, neighbor kernel smoothing length; x𞁑, x𞁓 → sink, neighbor position;
 // paddedX_b → neighbor position as the record of the box tests; r𞁑𞁓 → separation;
-// r𞁑𞁓² → squared separation. Code names: r2𞁑𞁓 = r𞁑𞁓²; H2𞁑 = H𞁑².
+// r𞁑𞁓² → squared separation. Code names: r2𞁑𞁓 = r𞁑𞁓²; h2𞁑 = h𞁑².
 __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction* reduction) {
     int const threadIndex = threadIdx.x;
     int const blockSize = blockDim.x;
@@ -98,9 +98,9 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
             int const sinkIndex =
                 targetNode.sinkParticleRange.first - targetNode.particleRange.first + particleIndex;
             auto const x𞁑 = data.sourcePosition(particleIndex);
-            auto const H𞁑 = data.sinkSmoothingLength[sinkIndex];
+            auto const h𞁑 = data.sinkSmoothingLength[sinkIndex];
             int const sinkRung = data.sourceRungs[particleIndex];
-            auto const H2𞁑 = sqr(H𞁑);
+            auto const h2𞁑 = sqr(h𞁑);
             flops += 1;
             int const roundedNeighborEnd = roundUp(workspace.positions.size(), blockSize);
             int maximumNeighborRung = 0;
@@ -111,11 +111,11 @@ __global__ void sphCudaRungs(SphRunParameters, SphRunCudaData data, SphReduction
                     int const neighborRung = workspace.rungs[neighborIndex];
                     auto const r𞁑𞁓 = distance(x𞁑, x𞁓);
                     float const r2𞁑𞁓 = r𞁑𞁓.dot(r𞁑𞁓);
-                    float const H𞁓 = workspace.smoothingLength[neighborIndex];
-                    if (r2𞁑𞁓 <= fmaxf(H2𞁑, sqr(H𞁓))) {
+                    float const h𞁓 = workspace.smoothingLength[neighborIndex];
+                    if (r2𞁑𞁓 <= fmaxf(h2𞁑, sqr(h𞁓))) {
                         maximumNeighborRung = max(maximumNeighborRung, neighborRung);
                     }
-                    // Fixed distances, dot, H𞁓².
+                    // Fixed distances, dot, h𞁓².
                     flops += sph_flops::kVectorOperation + sph_flops::kDotProduct + 1;
                 }
             }

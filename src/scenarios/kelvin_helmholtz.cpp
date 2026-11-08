@@ -29,12 +29,11 @@ namespace scenarios {
 namespace detail {
 
     void initializeKelvinHelmholtzThermodynamics(float P) {
-        constexpr float kSupportSearchMultiplier = 1.2f;
         // All scenario particles are still on rank zero. The tree may sort gas
         // records, but does not migrate them; assign energies only after this pass.
         SphTreeCreateParameters treeParameters;
         treeParameters.minimumRung = 0;
-        treeParameters.smoothingLengthMultiplier = kSupportSearchMultiplier;
+        treeParameters.smoothingLengthMultiplier = kSphSupportSearchMultiplier;
         sphTreeCreate(treeParameters);
         SphRunParameters parameters;
         parameters.runType = kSphRunSmoothingLengths;
@@ -46,7 +45,7 @@ namespace detail {
         parameters.initializeDensity = true;
         SphTreeNeighborParameters neighbors;
         neighbors.minimumRung = 0;
-        neighbors.smoothingLengthMultiplier = kSupportSearchMultiplier;
+        neighbors.smoothingLengthMultiplier = kSphSupportSearchMultiplier;
         neighbors.interactionDirection = SphInteractionDirection::TargetSupport;
         TreeId const root{0, 0};
         sphParticlesResetConverged();

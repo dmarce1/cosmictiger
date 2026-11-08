@@ -268,6 +268,7 @@ set(cosmictiger_header_files
     cosmictiger/gravity/kernels/cartesian_operators.hpp
     cosmictiger/gravity/kernels/cartesian_tracefree_types.hpp
     cosmictiger/gravity/fmm_acceptance.hpp
+    cosmictiger/gravity/softening.hpp
     cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp
     cosmictiger/gravity/kernels/cartesian_tracefree_ewald_operators.hpp
     cosmictiger/gravity/fmm_order.hpp

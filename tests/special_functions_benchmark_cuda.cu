@@ -404,9 +404,11 @@ Measurement run(float const* deviceInput, float* deviceFirst, float* deviceSecon
         cudaCheck(
             cudaMemcpy(second.data(), deviceSecond, count * sizeof(float), cudaMemcpyDeviceToHost));
     }
-    return {double(milliseconds) * 1.0e6 / (double(count) * double(launches)),
-        outputChecksum(
-            first, second, operation == Operation::Sincos || operation == Operation::Erfcexp)};
+    Measurement measurement;
+    measurement.nanoseconds = double(milliseconds) * 1.0e6 / (double(count) * double(launches));
+    measurement.checksum = outputChecksum(
+        first, second, operation == Operation::Sincos || operation == Operation::Erfcexp);
+    return measurement;
 }
 
 template <Operation operation>
@@ -529,9 +531,11 @@ RegisterMeasurement runRegister(float const* deviceSeeds, float* deviceFirst, fl
         }
         minimumWarpMaximum = std::min(minimumWarpMaximum, warpMaximum);
     }
-    return {double(minimumWarpMaximum) / double(iterations),
-        outputChecksum(
-            first, second, operation == Operation::Sincos || operation == Operation::Erfcexp)};
+    RegisterMeasurement measurement;
+    measurement.cyclesPerEvaluation = double(minimumWarpMaximum) / double(iterations);
+    measurement.checksum = outputChecksum(
+        first, second, operation == Operation::Sincos || operation == Operation::Erfcexp);
+    return measurement;
 }
 
 template <Operation operation>

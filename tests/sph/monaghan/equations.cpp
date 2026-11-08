@@ -35,32 +35,41 @@ void testViscosity() {
     Real const supportI = Real(0.6);
     Real const supportJ = Real(1.0);
     Real const epsilon = Real(0.01);
-    Real const mu =
-        monaghan::viscosityMu(radiusSquared, velocityDotRadius, supportI, supportJ, epsilon);
+    // The cubic spline of Monaghan (1992), section 7, has h_M = h/2.
+    Real const cubicLengthPerSupport = Real(0.5);
+    Real const pairLength = monaghan::pairLength(supportI, supportJ, cubicLengthPerSupport);
+    requireClose(
+        "Monaghan (1992) pair mean of the cubic smoothing lengths", pairLength, 0.4, tolerance);
+    Real const mu = monaghan::viscosityMu(radiusSquared, velocityDotRadius, pairLength, epsilon);
     double const expectedMu = -0.096 / 0.3616;
     requireClose("Monaghan (1992) smoothing scale in viscosity mu", mu, expectedMu, tolerance);
     Real const smoothingLengthPerEffectiveRadius = Real(1.8257418583505538);
     Real const meanEffectiveRadius =
         Real(0.5) * (supportI + supportJ) / smoothingLengthPerEffectiveRadius;
-    Real const effectiveMu = monaghan::viscosityMu(radiusSquared, velocityDotRadius, supportI,
-        supportJ, epsilon, smoothingLengthPerEffectiveRadius);
+    Real const effectiveMu = monaghan::viscosityMu(radiusSquared, velocityDotRadius,
+        monaghan::pairLength(supportI, supportJ, Real(1) / smoothingLengthPerEffectiveRadius),
+        epsilon);
     requireClose("effective smoothing width in viscosity mu", effectiveMu,
         meanEffectiveRadius * velocityDotRadius /
             (radiusSquared + epsilon * meanEffectiveRadius * meanEffectiveRadius),
         tolerance);
     requireClose("calibrated cubic viscosity preserves the Monaghan (1992) scale",
-        monaghan::viscosityMu(radiusSquared, velocityDotRadius, supportI, supportJ, epsilon,
-            smoothingLengthPerEffectiveRadius, Real(monaghan::kViscosityWidthScale)),
+        monaghan::viscosityMu(radiusSquared, velocityDotRadius,
+            monaghan::pairLength(
+                supportI, supportJ, monaghan::lengthPerSupport(smoothingLengthPerEffectiveRadius)),
+            epsilon),
         expectedMu, tolerance);
     requireClose("symmetric viscosity mu", mu,
-        monaghan::viscosityMu(radiusSquared, velocityDotRadius, supportJ, supportI, epsilon),
+        monaghan::viscosityMu(radiusSquared, velocityDotRadius,
+            monaghan::pairLength(supportJ, supportI, cubicLengthPerSupport), epsilon),
         tolerance);
     requireClose("viscosity independent of length unit", mu,
         monaghan::viscosityMu(Real(9) * radiusSquared, Real(3) * velocityDotRadius,
-            Real(3) * supportI, Real(3) * supportJ, epsilon),
+            monaghan::pairLength(Real(3) * supportI, Real(3) * supportJ, cubicLengthPerSupport),
+            epsilon),
         tolerance);
     for (Real const dot : {Real(0), Real(0.24)}) {
-        require(monaghan::viscosityMu(radiusSquared, dot, supportI, supportJ, epsilon) == Real(0),
+        require(monaghan::viscosityMu(radiusSquared, dot, pairLength, epsilon) == Real(0),
             "no viscosity for static or separating particles");
     }
     Real const rhoI = Real(2.0);
@@ -94,8 +103,7 @@ void testViscosity() {
                     inactiveMu, Real(1), Real(2)) == Real(0),
             "no artificial expansion heating");
     }
-    Real const closeMu =
-        monaghan::viscosityMu(Real(1.0e-12), Real(-1.0e-6), supportI, supportJ, epsilon);
+    Real const closeMu = monaghan::viscosityMu(Real(1.0e-12), Real(-1.0e-6), pairLength, epsilon);
     require(std::isfinite(closeMu), "regularized viscosity near coincidence");
     require(std::abs(closeMu) < Real(1.0e-3), "regularization limits close-pair viscosity");
 }
@@ -131,8 +139,9 @@ Rates pairRates(Particle const& sink, Particle const& source, double alpha, doub
         (sph_kernels::kernelDerivative(radius / sink.support) / std::pow(sink.support, 4) +
             sph_kernels::kernelDerivative(radius / source.support) / std::pow(source.support, 4));
     Vector const gradient = gradientScale * displacement;
-    double const mu = monaghan::viscosityMu(
-        radiusSquared, relativeVelocity.dot(displacement), sink.support, source.support, 0.01);
+    // Cubic-spline pair length: h_M = h/2 (Monaghan 1992, section 7).
+    double const mu = monaghan::viscosityMu(radiusSquared, relativeVelocity.dot(displacement),
+        monaghan::pairLength(sink.support, source.support, 0.5), 0.01);
     double const viscosity = monaghan::artificialViscosity(
         sink.rho, source.rho, sink.soundSpeed, source.soundSpeed, mu, alpha, beta);
     // Fixed supports use zeta = 0; each particle contributes its own pressure gradient.

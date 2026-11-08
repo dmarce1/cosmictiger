@@ -84,10 +84,13 @@ void initializeChemistryFixture(bool invalid) {
 ChemistryLocalSnapshot chemistryFixtureSnapshot() {
     ChemistryLocalSnapshot records;
     for (ParticleInteger i = 0; i < 3; ++i) {
-        records.push_back({std::bit_cast<uint32_t>(sphParticlesElectronFractions[i]),
-            std::bit_cast<uint32_t>(sphParticlesInternalEnergy(i)),
-            std::bit_cast<uint32_t>(sphParticlesEntropy(i)),
-            std::bit_cast<uint32_t>(sphParticlesDensity(i)), uint64_t(sphParticlesRung(i))});
+        ChemistryRecord record;
+        record.electronFractionBits = std::bit_cast<uint32_t>(sphParticlesElectronFractions[i]);
+        record.energyBits = std::bit_cast<uint32_t>(sphParticlesInternalEnergy(i));
+        record.entropyBits = std::bit_cast<uint32_t>(sphParticlesEntropy(i));
+        record.densityBits = std::bit_cast<uint32_t>(sphParticlesDensity(i));
+        record.rung = uint64_t(sphParticlesRung(i));
+        records.push_back(record);
     }
     return records;
 }
