@@ -8,13 +8,11 @@ instantiation units.
 ```sh
 cmake -S . -B build/release_cpu -DCMAKE_BUILD_TYPE=Release \
   -DCOSMICTIGER_WITH_CUDA=OFF -DBUILD_TESTING=OFF \
-  -DCOSMICTIGER_ENABLE_FMM=ON -DCOSMICTIGER_ENABLE_PMMM_PP=ON \
-  -DCOSMICTIGER_ENABLE_PMMM_FMM=ON \
+  -DCOSMICTIGER_ENABLE_GRAVITY=ON \
   -DCOSMICTIGER_ENABLE_INTEGRATOR_GLOBAL=ON \
   -DCOSMICTIGER_EXPANSION_DEGREE=4-6
 cmake --build build/release_cpu --target cosmictiger --parallel 3
-build/release_cpu/cosmictiger --gravity.method.far=pmmm \
-  --gravity.method.near=pp --gravity.meshSize=16 \
+build/release_cpu/cosmictiger --gravity.meshSize=16 \
   --gravity.expansionDegree=6 --run.timeIntegrator=global --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
 ```
 
@@ -31,13 +29,8 @@ direct formulas. See [matrix algorithms and measurements](docs/matrix.md).
 
 | Option | Fresh default | Purpose |
 | --- | --- | --- |
-| `COSMICTIGER_ENABLE_FMM` | `ON` | Compile global FMM gravity. |
-| `COSMICTIGER_ENABLE_PMMM_PP` | `OFF` | Compile PMMM gravity with direct particle-pair near interactions. |
-| `COSMICTIGER_ENABLE_PMMM_FMM` | `OFF` | Compile PMMM gravity with cell FMM near interactions. Includes shared FMM machinery without requiring global FMM. |
-| `COSMICTIGER_ENABLE_PM` | `OFF` | Compile pure particle-mesh gravity (`gravity.method.far=pm`) with the mandatory outer PM interval; see `docs/p3m.md`. |
-| `COSMICTIGER_ENABLE_P3M_PP` | `OFF` | Compile PP-PM gravity (`gravity.method.far=p3m`, `gravity.method.near=pp`): Gaussian-split mesh force plus direct screened short-range pairs. |
-| `COSMICTIGER_ENABLE_P3M_FMM` | `OFF` | Compile FMM-PM gravity (`gravity.method.far=p3m`, `gravity.method.near=fmm`): the same split with a screened full-Cartesian short-range FMM (CPU only). Includes the shared tree machinery. |
-| `COSMICTIGER_DIMENSION_COUNT` | `3` | Spatial dimensions: 1, 2, or 3. Below 3 requires SPH, all gravity solvers OFF, chemistry OFF, and stars OFF. See [dimensional SPH](docs/sph_dimensions.md). |
+| `COSMICTIGER_ENABLE_GRAVITY` | `ON` | Compile PMMM gravity: the periodic FFT far field with the FMM near field and its direct particle-pair fallback (`gravity.method.near=fmm|pp`). |
+| `COSMICTIGER_DIMENSION_COUNT` | `3` | Spatial dimensions: 1, 2, or 3. Below 3 requires SPH, gravity OFF, chemistry OFF, and stars OFF. See [dimensional SPH](docs/sph_dimensions.md). |
 | `COSMICTIGER_ENABLE_SPH` | `ON` | Compile SPH and hydro problems. |
 | `COSMICTIGER_ENABLE_CHEMISTRY` | `ON` | Compile equilibrium cooling when SPH is also enabled. Inactive with SPH disabled. |
 | `COSMICTIGER_ENABLE_STARS` | `OFF` | Compile GADGET-4 multiphase star formation. Requires equilibrium cooling; inactive with SPH disabled. |
@@ -54,12 +47,11 @@ direct formulas. See [matrix algorithms and measurements](docs/matrix.md).
 | `COSMICTIGER_REQUIRE_APEX` | Build-dependent | ON for Debug, RelWithDebInfo, Profile; otherwise OFF. Requires an APEX-enabled HPX installation. |
 | `BUILD_TESTING` | `ON` | Compile and register tests supported by the enabled capabilities. |
 
-At least one physics component and one integrator must be enabled. The two PMMM
-options are independent; either enables PMMM, and both may be enabled together.
+At least one physics component and one integrator must be enabled.
 SPH requires traditional or global integration; hierarchical integration is
-collisionless only.
-To build SPH only, disable `COSMICTIGER_ENABLE_FMM`,
-`COSMICTIGER_ENABLE_PMMM_PP`, and `COSMICTIGER_ENABLE_PMMM_FMM`.
+collisionless only, and SPH with self-gravity is not yet supported by the PMMM
+solver.
+To build SPH only, disable `COSMICTIGER_ENABLE_GRAVITY`.
 To build gravity only, disable `COSMICTIGER_ENABLE_SPH`.
 
 Equilibrium cooling requires both `COSMICTIGER_ENABLE_SPH=ON` and
@@ -84,17 +76,17 @@ synchronizes the legacy cache entry and compiler macro with it. Thus
 `-DCOSMICTIGER_ENABLE_STARS=OFF` disables stars even if the old cache entry
 was `ON`; after migration, change `STARS` to select either value.
 
-Runtime selection uses `gravity.method.far=fmm|pmmm`,
-`gravity.method.near=pp|fmm` (PMMM), and
-`run.timeIntegrator=traditional|hierarchical|global`. A sole eligible method is
-automatic; multiple eligible methods require an explicit CLI/INI choice. A saved
+Runtime selection uses `gravity.method.near=fmm|pp` (the FMM near field or its
+direct particle-pair fallback) and
+`run.timeIntegrator=traditional|hierarchical|global`. A sole eligible integrator is
+automatic; multiple eligible integrators require an explicit CLI/INI choice. A saved
 checkpoint selection also resolves these choices on restart. Help and startup
 metadata distinguish compiled capabilities from the selected run.
 
 `gravity.expansionDegree` defaults to the highest compiled degree. Potential
 degree d means source multipole degree d-1 and historical internal order d+1.
-The default degrees 4-6 therefore instantiate old orders 5-7. PMMM far and near
-FMM share the selected degree. Internal tensor and old checkpoint integers keep
+The default degrees 4-6 therefore instantiate old orders 5-7. The PMMM far and near
+fields share the selected degree. Internal tensor and old checkpoint integers keep
 their historical order convention. PMMM formerly defaulted to old order 8
 (potential degree 7); request a range including 7 to retain that accuracy setting.
 SPH-only builds instantiate no gravity expansions.
@@ -177,7 +169,7 @@ installation is not found or when selecting a particular installation.
 GSL and Threads are also required and discovered with CMake's standard finders;
 use `CMAKE_PREFIX_PATH` for a nonstandard GSL installation. FFTW's
 single-precision MPI API must pass a compile/link check during configuration.
-An FMM-only build still discovers the project's full required dependency set.
+A gravity-only build still discovers the project's full required dependency set.
 
 When tests are enabled and no installed GoogleTest is found, configuration
 fetches a pinned GoogleTest source archive unless its source directory is

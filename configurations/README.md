@@ -17,21 +17,21 @@ CLI groups, and explicit CLI values override values in the selected file.
 the cosmology scenario below enable GADGET-4 equilibrium cooling explicitly.
 The parser defaults leave hydro, cooling and star formation disabled.
 
-CMake `COSMICTIGER_ENABLE_*` options select which algorithms are compiled.
-`gravity.method.far=fmm|pmmm`, `gravity.method.near=pp|fmm` (PMMM only), and
-`run.timeIntegrator=traditional|hierarchical|global` select the run. A single
-eligible compiled algorithm is automatic; multiple choices require CLI/INI
+CMake `COSMICTIGER_ENABLE_*` options select which capabilities are compiled.
+The gravity solver is PMMM; `gravity.method.near=fmm|pp` selects its FMM near
+field (default) or the direct particle-pair fallback, and
+`run.timeIntegrator=traditional|hierarchical|global` selects the integrator. A
+single eligible compiled integrator is automatic; multiple choices require CLI/INI
 selection. Restart can recover omitted selections from the checkpoint.
-The supplied configurations choose traditional integration and FMM when gravity
-is enabled. Override those selections for a build containing different algorithms.
+The supplied configurations choose traditional integration.
 
 `COSMICTIGER_EXPANSION_DEGREE=4-6` compiles potential degrees 4, 5, and 6 by default.
 `gravity.expansionDegree` chooses a compiled degree and defaults to the largest.
 The implementation's historical order is one greater than potential degree.
-Global FMM retains `gravity.openingAngle` and `gravity.openingSchedule`.
+The near-field opening angle is derived as `sqrt(3)/(gravity.pmmmNearWidth+1)`.
 PMMM requires an explicit valid `gravity.meshSize`: a power of two at least
 `2*gravity.pmmmNearWidth+1`; override the supplied zero with, for example,
-`--gravity.meshSize=32 --gravity.method.far=pmmm --gravity.method.near=pp`.
+`--gravity.meshSize=32`.
 `gravity.pmmmCoarseMeshSize` (default `meshSize/8`) is the coarsest hierarchical
 stage mesh and the granularity of PMMM particle-domain cuts; PMMM runs need a
 power-of-two locality count.

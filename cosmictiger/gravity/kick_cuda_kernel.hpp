@@ -405,14 +405,6 @@ __device__ inline void cudaOpenOrDefer(bool openLargerCell, TreeNode const& sink
     }
 }
 
-// The per-order composition unit supplies this node policy before explicit
-// instantiation. It is an inline device call, with no function-pointer dispatch.
-template <int order>
-__device__ __forceinline__ FlopCount cudaApplyPeriodicPolicy(CudaKickData const&,
-    KickParameters const&, cosmictiger::gravity::cartesian::tracefree::Expansion<float, order>&,
-    TreeNode const&, StackVector<int>&, DeviceVector<int>&, DeviceVector<int>&, DeviceVector<int>&,
-    DeviceVector<int>&);
-
 // One 32-thread warp per block. The dynamic shared memory follows the host
 // computed CudaKickArenaLayout; see kick.hpp for the region lifetimes.
 template <int order>
@@ -484,7 +476,6 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
     auto& sparams = control.params;
     auto& ancestors = control.ancestors;
     auto& dchecks = control.dchecks;
-    auto& echecks = control.echecks;
     auto& nextlist = control.nextlist;
     auto& bothlist = control.bothlist;
     auto& cclist = control.cclist;
@@ -523,19 +514,14 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
         FmmGeometry const geometry = params[index].geometry;
         ancestors.resize(0);
         dchecks.resize(0);
-        echecks.resize(0);
         sparams.resize(0);
         detail::cudaCopyExpansion<order>(&expansion[0], &params[index].lValue[0]);
         if (tid < kDimensions) {
             expansionPos[tid] = params[index].lpos[tid];
         }
         dchecks.resize(params[index].dcount);
-        echecks.resize(params[index].ecount);
         for (int i = tid; i < params[index].dcount; i += kWarpSize) {
             dchecks[i] = params[index].dchecks[i];
-        }
-        for (int i = tid; i < params[index].ecount; i += kWarpSize) {
-            echecks[i] = params[index].echecks[i];
         }
         {
             SearchParameters sparam;
@@ -578,13 +564,6 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                 }
                 ParticleInteger const numberOfSinks =
                     self.particleRange.second - self.particleRange.first;
-#if COSMICTIGER_ENABLE_FMM
-                if (numberOfSinks && geometry.meshSize == 0) {
-                    work.next(profile::DevicePhase::KickPeriodic);
-                    flops += cudaApplyPeriodicPolicy<order>(data, globalParams, expansion, self,
-                        echecks, nextlist, cclist, leaflist, bothlist);
-                }
-#endif
                 if (numberOfSinks) {
                     work.next(profile::DevicePhase::KickTraversal);
                     nextlist.resize(0);
@@ -805,7 +784,6 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     }
                     __syncwarp();
                     dchecks.pushTop();
-                    echecks.pushTop();
                     if (tid == 0) {
                         sparams.back().phase += 1;
                     }
@@ -830,7 +808,6 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                 __syncwarp();
                 ancestors.popBack();
                 dchecks.popTop();
-                echecks.popTop();
                 if (tid == 0) {
                     sparams.back().phase += 1;
                 }

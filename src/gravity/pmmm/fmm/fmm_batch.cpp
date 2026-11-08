@@ -109,14 +109,14 @@ KickReturn localBatchGpu(KickParameters params, Vector<KickWorkitem> workitems,
 #endif
 }
 hpx::future<KickReturn> localBatchFork(KickParameters params, ExpansionBuffer const& l,
-    Vector3<Position> pos, TreeId self, Vector<TreeId> direct, Vector<TreeId> periodic,
+    Vector3<Position> pos, TreeId self, Vector<TreeId> direct,
     std::shared_ptr<KickWorkspace> workspace, bool threadme) {
-    ALWAYS_ASSERT(self.proc == hpxRank() && periodic.empty());
+    ALWAYS_ASSERT(self.proc == hpxRank());
     auto run = [params, l, pos, self, workspace](Vector<TreeId> direct) {
         KickContext context;
         context.fork = localBatchFork;
         context.gpuExecutor = localBatchGpu;
-        return kickWalkDispatch(params, l, pos, self, std::move(direct), {}, workspace, context);
+        return kickWalkDispatch(params, l, pos, self, std::move(direct), workspace, context);
     };
     static std::atomic<int> threads{1};
     bool const eligible = threadme && treeGetNode(self)->numberOfParticles() > kMinKickThreadParts;
@@ -164,7 +164,7 @@ FmmForceResult kickCellBatch(Vector<KickWorkitem> workitems, bool doPotential, i
         auto const range = node->particleRange;
         ALWAYS_ASSERT(range.first >= previousEnd && range.second <= ownedCount);
         ALWAYS_ASSERT(range.second >= range.first);
-        ALWAYS_ASSERT(item.echecklist.empty() && item.geometry.meshSize > 0);
+        ALWAYS_ASSERT(item.geometry.meshSize > 0);
         for (auto const source : item.dchecklist) {
             ALWAYS_ASSERT(source.proc == hpxRank() && treeGetNode(source)->isLocalHere());
         }
@@ -213,8 +213,8 @@ FmmForceResult kickCellBatch(Vector<KickWorkitem> workitems, bool doPotential, i
         for (auto& item : workitems) {
             params.geometry = item.geometry;
             params.outputOffset = item.outputOffset;
-            futures.push_back(detail::localBatchFork(params, item.l, item.pos, item.self,
-                std::move(item.dchecklist), std::move(item.echecklist), workspace, true));
+            futures.push_back(detail::localBatchFork(
+                params, item.l, item.pos, item.self, std::move(item.dchecklist), workspace, true));
         }
         hpx::wait_all(futures.begin(), futures.end());
         for (auto& future : futures) {

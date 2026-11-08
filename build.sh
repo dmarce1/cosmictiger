@@ -108,9 +108,7 @@ if (( maxTestJobs < 1 )); then
 fi
 
 buildMode=release
-enableFmm=ON
-enablePmmmPp=OFF
-enablePmmmFmm=OFF
+enableGravity=ON
 expansionDegree=4-6
 enableTraditional=ON
 enableHierarchical=OFF
@@ -201,31 +199,9 @@ chooseMode() {
 }
 
 chooseGravityFeatures() {
-    if [[ $useDialog == true ]]; then
-        local selectedFeatures feature
-        if selectedFeatures=$(dialogChoice --title 'Gravity capabilities' --notags \
-            --separate-output --checklist \
-            'Space toggles capabilities. Leave all gravity capabilities off for SPH only.' \
-            14 76 3 \
-            fmm 'Global FMM' "$enableFmm" \
-            pmmm_pp 'PMMM with direct particle-pair near field' "$enablePmmmPp" \
-            pmmm_fmm 'PMMM with FMM near field' "$enablePmmmFmm"); then
-            enableFmm=OFF
-            enablePmmmPp=OFF
-            enablePmmmFmm=OFF
-            while IFS= read -r feature; do
-                case "$feature" in
-                    fmm) enableFmm=ON ;;
-                    pmmm_pp) enablePmmmPp=ON ;;
-                    pmmm_fmm) enablePmmmFmm=ON ;;
-                esac
-            done <<< "$selectedFeatures"
-        fi
-        return
-    fi
-    chooseToggle 'Compile global FMM' "$enableFmm"; enableFmm=$promptValue
-    chooseToggle 'Compile PMMM with PP near field' "$enablePmmmPp"; enablePmmmPp=$promptValue
-    chooseToggle 'Compile PMMM with FMM near field' "$enablePmmmFmm"; enablePmmmFmm=$promptValue
+    # PMMM gravity: FFT far field, FMM near field, direct PP fallback. Off for SPH only.
+    chooseToggle 'Compile PMMM gravity (FMM near field with PP fallback)' "$enableGravity"
+    enableGravity=$promptValue
 }
 
 chooseExpansionDegree() {
@@ -376,7 +352,7 @@ showMainMenu() {
     printf '  6) HPX installation prefix: %s\n' "${hpxPrefix:-automatic by build mode}"
     printf '  7) CUDA architectures: %s\n' "${cudaArchitectures:-$defaultCudaArchitectures}"
     printf '  8) Additional dependency prefixes: %s\n' "${dependencyPrefixes:-system default}"
-    printf '  9) Gravity: FMM=%s PMMM PP=%s PMMM FMM=%s\n' "$enableFmm" "$enablePmmmPp" "$enablePmmmFmm"
+    printf '  9) Gravity (PMMM, FMM near field with PP fallback): %s\n' "$enableGravity"
     printf ' 10) Potential expansion degrees: %s\n' "$expansionDegree"
     printf ' 11) Integrators: traditional=%s hierarchical=%s global=%s\n' "$enableTraditional" "$enableHierarchical" "$enableGlobal"
     printf ' 12) Build SPH support: %s\n' "$enableSph"
@@ -402,7 +378,7 @@ chooseMainMenu() {
             6 "HPX installation prefix: ${hpxPrefix:-automatic by build mode}" \
             7 "CUDA architectures: ${cudaArchitectures:-$defaultCudaArchitectures}" \
             8 "Additional dependency prefixes: ${dependencyPrefixes:-system default}" \
-            9 "Gravity: FMM=$enableFmm PMMM PP=$enablePmmmPp PMMM FMM=$enablePmmmFmm" \
+            9 "Gravity (PMMM, FMM near field with PP fallback): $enableGravity" \
             10 "Potential expansion degrees: $expansionDegree" \
             11 "Integrators: traditional=$enableTraditional hierarchical=$enableHierarchical global=$enableGlobal" \
             12 "Build SPH support: $enableSph" \
@@ -420,7 +396,7 @@ chooseMainMenu() {
 }
 
 validateFeatures() {
-    if [[ $enableFmm != ON && $enablePmmmPp != ON && $enablePmmmFmm != ON && $enableSph != ON ]]; then
+    if [[ $enableGravity != ON && $enableSph != ON ]]; then
         showMessage 'Enable at least one physics component.'; return 1
     fi
     if [[ $enableTraditional != ON && $enableHierarchical != ON && $enableGlobal != ON ]]; then
@@ -511,7 +487,9 @@ configureCommand=(cmake -S "$rootDir" -B "$buildDir" -G 'Unix Makefiles'
     -UCOSMICTIGER_TIME_INTEGRATOR -UCOSMICTIGER_GRAVITY_METHOD
     -UCOSMICTIGER_PMMM_NEAR_METHOD -UCOSMICTIGER_WITH_ORDER
     -UCOSMICTIGER_ENABLE_PMMM -UCOSMICTIGER_ENABLE_PMMM_NEAR_PP
-    -UCOSMICTIGER_ENABLE_PMMM_NEAR_FMM
+    -UCOSMICTIGER_ENABLE_PMMM_NEAR_FMM -UCOSMICTIGER_ENABLE_FMM
+    -UCOSMICTIGER_ENABLE_PMMM_PP -UCOSMICTIGER_ENABLE_PMMM_FMM -UCOSMICTIGER_ENABLE_PM
+    -UCOSMICTIGER_ENABLE_P3M_PP -UCOSMICTIGER_ENABLE_P3M_FMM
     -UCOSMICTIGER_FMM_MIN_ORDER -UCOSMICTIGER_FMM_MAX_ORDER -UCOSMICTIGER_WITH_SPH
     '-U*GSL*' '-UCHEALPIX_*' '-UHEALPIX_CXX_*'
     "-DCMAKE_BUILD_TYPE=$buildType"
@@ -520,9 +498,7 @@ configureCommand=(cmake -S "$rootDir" -B "$buildDir" -G 'Unix Makefiles'
     "-DCOSMICTIGER_ENABLE_CHEMISTRY=$enableChemistry"
     "-DCOSMICTIGER_ENABLE_STARS=$enableStars"
     "-DCOSMICTIGER_ENABLE_ROCKSTAR=$enableRockstar"
-    "-DCOSMICTIGER_ENABLE_FMM=$enableFmm"
-    "-DCOSMICTIGER_ENABLE_PMMM_PP=$enablePmmmPp"
-    "-DCOSMICTIGER_ENABLE_PMMM_FMM=$enablePmmmFmm"
+    "-DCOSMICTIGER_ENABLE_GRAVITY=$enableGravity"
     "-DCOSMICTIGER_EXPANSION_DEGREE=$expansionDegree"
     "-DCOSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL=$enableTraditional"
     "-DCOSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL=$enableHierarchical"
@@ -577,7 +553,7 @@ runStage() {
     printf '%s succeeded.\n' "$stageName"
 }
 
-printf '\nGravity: FMM=%s PMMM PP=%s PMMM FMM=%s; potential degrees=%s\n' "$enableFmm" "$enablePmmmPp" "$enablePmmmFmm" "$expansionDegree"
+printf '\nGravity (PMMM, FMM near field with PP fallback): %s; potential degrees=%s\n' "$enableGravity" "$expansionDegree"
 printf 'Integrators: traditional=%s hierarchical=%s global=%s\n' "$enableTraditional" "$enableHierarchical" "$enableGlobal"
 printf 'SPH support: %s\n' "$enableSph"
 printf 'Equilibrium cooling: %s (requires SPH)\n' "$enableChemistry"

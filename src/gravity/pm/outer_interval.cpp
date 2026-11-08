@@ -1,4 +1,4 @@
-/* CosmicTiger - outer long-force interval shared by pm, p3m and the PMMM outer interval; BSL-1.0. */
+/* CosmicTiger - outer long-force interval of the PMMM outer interval; BSL-1.0. */
 
 #include <algorithm>
 #include <cmath>

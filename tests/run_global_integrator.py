@@ -92,12 +92,11 @@ def main():
     cases = []
     if not args.without_sph:
         cases.append(("hydro", False, True, None, None))
-    for far in (name for name in available["far"] if name != "none"):
-        for near in (available["near"] if far == "pmmm" else [None]):
-            cases.append((far + ("_" + near if near else ""), True, False, far, near))
-            if not args.without_sph:
-                cases.append((far + ("_" + near if near else "") + "_hydro",
-                              True, True, far, near))
+    # SPH has no self-gravity coupling in the PMMM solver: gravity cases are
+    # dark matter only, hydro runs are gravity free.
+    if "pmmm" in available["far"]:
+        for near in available["near"]:
+            cases.append(("pmmm_" + near, True, False, "pmmm", near))
 
     def run(directory, options, selections, restart=None, mpi=False, success=True):
         command = [str(executable), *args.hpx_argument] + selections
@@ -118,8 +117,7 @@ def main():
                       if path.is_dir() and re.fullmatch(r"checkpoint\.[0-9]+", path.name))
 
     for label, gravity, hydro, far, near in cases:
-        selections = application_arguments(executable, far=far, near=near,
-                                           integrator="global", hydro=hydro)
+        selections = application_arguments(executable, near=near, integrator="global", hydro=hydro)
         options = dict(common, **{"run.scenario": "hydroWave" if hydro else "plummer",
                                   "gravity.enabled": str(gravity).lower(),
                                   "hydro.enabled": str(hydro).lower(), "hydro.cfl": 0.123,

@@ -12,7 +12,7 @@
 // and rungs. Traditional sources must contain every owned particle even when
 // minRung selects only a subset of the sinks.
 //
-// Particle-mesh solvers add the per-particle long acceleration: the closing
+// The PMMM outer interval adds the per-particle long acceleration: the closing
 // half-kick uses parameters.closingBaseTimestep (the previous outer interval)
 // when it is positive, the long half-kicks use longCloseTimestep and
 // longOpenTimestep, and the saved/sampled acceleration is the long plus short
@@ -26,7 +26,3 @@
 KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& acceleration,
     float potential, KickParameters const& parameters, FlopCount* flopCount = nullptr,
     FlopCounts* precisionCounts = nullptr);
-
-// Pure PM inner kick: every selected sink receives a zero short field, so the
-// rung proposal comes from hydro alone and the long half-kicks are applied.
-KickReturn particleMeshZeroFieldKick(KickParameters const& parameters);

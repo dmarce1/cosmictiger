@@ -97,8 +97,8 @@ void initialize(int meshSize) {
     if (options.meshSize < 3 || !isPowerOfTwo(baseMeshSize) || options.pmmmNearWidth < 1 ||
         options.pmmmNearWidth > 4 || options.pmmmNearWidth > (options.meshSize - 1) / 2 ||
         coarseMeshSize < 2 * options.pmmmNearWidth + 1 || coarseMeshSize > baseMeshSize ||
-        !isPowerOfTwo(coarseMeshSize) || options.pmmmOrder < kFmmMinOrder ||
-        options.pmmmOrder > kFmmMaxOrder || !(options.smoothingLength > 0) ||
+        !isPowerOfTwo(coarseMeshSize) || options.fmmOrder < kFmmMinOrder ||
+        options.fmmOrder > kFmmMaxOrder || !(options.smoothingLength > 0) ||
         options.smoothingLength > double(options.pmmmNearWidth) / baseMeshSize ||
         meshSize < coarseMeshSize || meshSize > baseMeshSize || !isPowerOfTwo(meshSize)) {
         throw std::runtime_error("Invalid PMMM mesh, order, near width or softening support");
@@ -107,7 +107,7 @@ void initialize(int meshSize) {
         if (meshCachePool.requestedMeshSize != options.meshSize ||
             meshCachePool.baseMeshSize != baseMeshSize ||
             meshCachePool.coarseMeshSize != coarseMeshSize ||
-            meshCachePool.order != options.pmmmOrder ||
+            meshCachePool.order != options.fmmOrder ||
             meshCachePool.nearWidth != options.pmmmNearWidth) {
             throw std::runtime_error("PMMM configuration changed without destroying its plans");
         }
@@ -115,7 +115,7 @@ void initialize(int meshSize) {
         meshCachePool.requestedMeshSize = options.meshSize;
         meshCachePool.baseMeshSize = baseMeshSize;
         meshCachePool.coarseMeshSize = coarseMeshSize;
-        meshCachePool.order = options.pmmmOrder;
+        meshCachePool.order = options.fmmOrder;
         meshCachePool.nearWidth = options.pmmmNearWidth;
     }
     if (cache.communicator != MPI_COMM_NULL && !cache.initialized) {
@@ -147,7 +147,7 @@ void initialize(int meshSize) {
     }
     cache.meshSize = meshSize;
     cache.lastUsed = ++meshCachePool.nextUse;
-    cache.order = getOptions().gravity.pmmmOrder;
+    cache.order = getOptions().gravity.fmmOrder;
     cache.nearWidth = options.pmmmNearWidth;
     cache.sourceCount = fmmMultipoleCoefficientCount(cache.order);
     cache.localCount = fmmLocalHarmonicCoefficientCount(cache.order);
@@ -473,7 +473,7 @@ void skipTransform() {
 }
 
 void destroy() {
-#if defined(USE_CUDA) && COSMICTIGER_ENABLE_PMMM_PP
+#ifdef USE_CUDA
     // Every solve has drained its tasks before this quiescent teardown. Release
     // retained PP buffers even when only the standalone near-field API ran.
     clearPmmmNearCudaWorkspaces();

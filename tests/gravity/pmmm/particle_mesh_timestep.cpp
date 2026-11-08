@@ -320,7 +320,6 @@ void checkMeshGlobalTimestepFlops() {
 
 void particleMeshTimestepTest() {
     auto options = getOptions();
-    options.gravity.method = gravity::kBuildGravityMethod;
     options.gravity.meshSize = 8;
     options.gravity.pmmmNearWidth = 2;
     options.gravity.pmmmNearMethod = gravity::kBuildPmmmNearMethod;

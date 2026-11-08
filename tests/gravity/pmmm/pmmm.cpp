@@ -95,7 +95,6 @@ void checkGhostMassPermutation() {
     }
 }
 
-#if COSMICTIGER_ENABLE_PMMM_FMM
 void reservePmmmCudaFixture() {
     // Reserve the largest fixture on every rank before temporary CPU execution.
     // The application's retained particle/tree arenas assume a fixed backend.
@@ -105,7 +104,6 @@ void reservePmmmCudaFixture() {
     particlesResize(0);
 }
 
-#endif
 
 void resetPmmmSavedForces() {
     // Domain migration transfers physical particle state, not saved diagnostic
@@ -119,7 +117,6 @@ void resetPmmmSavedForces() {
     }
 }
 
-#if COSMICTIGER_ENABLE_PMMM_PP
 void checkedPmmmNearField(std::vector<PmmmNearParticle> const& sinks,
     std::vector<PmmmNearParticle> const& sources, double cellWidth, bool doPotential,
     std::vector<std::array<double, 4>>& fields) {
@@ -347,7 +344,6 @@ void checkPmmmNearEdges() {
     setOptions(options);
 }
 
-#endif
 
 void initializePmmmFixture(int fixture, int ownership) {
     // The first two and the next pair share cells on the n=8 mesh. Their
@@ -568,7 +564,6 @@ Vector<int> readPmmmOverlapGate() {
         int(gate->receivedHeld)};
 }
 
-#if COSMICTIGER_ENABLE_PMMM_FMM
 size_t verifyPmmmTreeCell(TreeId id, uint64_t key, int meshSize) {
     auto const* node = treeGetNode(id);
     uint64_t positionKey = 0;
@@ -631,7 +626,6 @@ Vector<TreeCellRoot> buildPmmmTestForest() {
     return roots;
 }
 
-#endif
 
 // Independent direct Ewald summation, with no generated kernels, mesh, FFT,
 // harmonic coefficients, or production image tables. The primary self term is
@@ -781,7 +775,7 @@ std::array<double, 4> directPmmmExpansionReference(size_t sink, Vector<PmmmSampl
 double verifyPmmmReference(Vector<PmmmSample> const& samples) {
     auto const& options = getOptions();
     std::string const context = " mesh=" + std::to_string(options.gravity.meshSize) +
-        " order=" + std::to_string(options.gravity.pmmmOrder) +
+        " order=" + std::to_string(options.gravity.fmmOrder) +
         " width=" + std::to_string(options.gravity.pmmmNearWidth);
     // Potential/force truncation budgets for these off-center fixtures, measured
     // against the independent Ewald sum with a direct double expansion for both
@@ -866,7 +860,7 @@ void comparePmmmSamples(
     std::string const context = " near=" + options.gravity.pmmmNearMethod +
         " mesh=" + std::to_string(options.gravity.meshSize) +
         " fmmOrder=" + std::to_string(options.gravity.fmmOrder) +
-        " pmmmOrder=" + std::to_string(options.gravity.pmmmOrder) +
+        " fmmOrder=" + std::to_string(options.gravity.fmmOrder) +
         " width=" + std::to_string(options.gravity.pmmmNearWidth) +
         " theta=" + std::to_string(options.gravity.openingAngle) +
         " cuda=" + std::to_string(options.gravity.cuda);
@@ -911,10 +905,8 @@ HPX_PLAIN_ACTION(detail::readPmmmFixture, ReadPmmmFixtureAction);
 HPX_PLAIN_ACTION(detail::readPmmmKickFixture, ReadPmmmKickFixtureAction);
 HPX_PLAIN_ACTION(detail::installPmmmOverlapGate, InstallPmmmOverlapGateAction);
 HPX_PLAIN_ACTION(detail::readPmmmOverlapGate, ReadPmmmOverlapGateAction);
-#if COSMICTIGER_ENABLE_PMMM_FMM
 HPX_PLAIN_ACTION(detail::buildPmmmTestForest, BuildPmmmTestForestAction);
 HPX_PLAIN_ACTION(detail::reservePmmmCudaFixture, ReservePmmmCudaFixtureAction);
-#endif
 HPX_PLAIN_ACTION(detail::resetPmmmSavedForces, ResetPmmmSavedForcesAction);
 
 namespace detail {
@@ -955,7 +947,6 @@ void distributePmmmFixture(int fixture) {
     }
 }
 
-#if COSMICTIGER_ENABLE_PMMM_FMM
 void checkPmmmForestGeometry() {
     treePrepareCellForest();
     std::vector<hpx::future<Vector<TreeCellRoot>>> futures;
@@ -985,7 +976,6 @@ void checkPmmmForestGeometry() {
     particlesCacheFree();
 }
 
-#endif
 
 Vector<PmmmSample> gatherPmmmSamples() {
     std::vector<hpx::future<Vector<PmmmSample>>> futures;
@@ -1265,7 +1255,6 @@ void checkPmmmStreamedStages() {
     options.gravity.pmmmCoarseMeshSize = 8;
     options.gravity.pmmmNearWidth = 2;
     options.gravity.fmmOrder = fmmOrder();
-    options.gravity.pmmmOrder = options.gravity.fmmOrder;
     options.gravity.openingAngle = 0.02;
     options.analysis.saveForce = false;
     options.analysis.saveAcceleration = false;
@@ -1425,7 +1414,6 @@ void checkPmmmStageMeshes() {
     options.gravity.pmmmCoarseMeshSize = 8;
     options.gravity.pmmmNearWidth = 2;
     options.gravity.fmmOrder = fmmOrder();
-    options.gravity.pmmmOrder = options.gravity.fmmOrder;
     options.gravity.openingAngle = 0.02;
     options.analysis.saveForce = false;
     options.analysis.saveAcceleration = false;
@@ -1580,7 +1568,6 @@ void checkPmmmCoarseMeshes() {
     options.gravity.pmmmCoarseMeshSize = 8;
     options.gravity.pmmmNearWidth = 2;
     options.gravity.fmmOrder = fmmOrder();
-    options.gravity.pmmmOrder = options.gravity.fmmOrder;
     options.gravity.openingAngle = 0.02;
     options.analysis.saveForce = false;
     options.analysis.saveAcceleration = false;
@@ -1704,7 +1691,6 @@ void checkPmmmCellOverlap() {
     options.gravity.meshSize = 8;
     options.gravity.pmmmNearWidth = 1;
     options.gravity.fmmOrder = fmmOrder();
-    options.gravity.pmmmOrder = options.gravity.fmmOrder;
     options.gravity.pmmmBatchParticles = 1;
     options.gravity.openingAngle = 0.02;
     pmmmDestroy();
@@ -1764,7 +1750,6 @@ void checkPmmmCellOverlap() {
               << std::flush;
 }
 
-#if COSMICTIGER_ENABLE_PMMM_FMM
 void checkPmmmFmmNear() {
     if (!(getOptions().gravity.pmmmNearMethod == "fmm")) {
         return;
@@ -1776,7 +1761,6 @@ void checkPmmmFmmNear() {
     options.hydro.enabled = false;
     options.compute.bucketSize = 8;
     options.gravity.fmmOrder = fmmOrder();
-    options.gravity.pmmmOrder = options.gravity.fmmOrder;
     options.gravity.pmmmNearWidth = 1;
     options.gravity.smoothingLength = 0.001;
     if (saved.gravity.cuda) {
@@ -1895,7 +1879,6 @@ void checkPmmmFmmNear() {
     setOptions(saved);
 }
 
-#endif
 
 }    // namespace detail
 
@@ -1910,7 +1893,6 @@ void pmmmTest() {
     options.gravity.gm = 0.125;
     options.gravity.smoothingLength = 0.001;
     options.gravity.fmmOrder = fmmOrder();
-    options.gravity.pmmmOrder = fmmOrder();
     options.gravity.openingAngle = 0.05;
     options.analysis.saveForce = true;
     options.analysis.tracers = false;
@@ -1921,12 +1903,10 @@ void pmmmTest() {
     options.run.hierarchicalGravity =
         usesHierarchicalIntegration(options.run) && options.gravity.enabled;
     setOptions(options);
-#if COSMICTIGER_ENABLE_PMMM_PP
     if (options.gravity.pmmmNearMethod == "pp") {
         detail::checkPmmmNearEdges();
         detail::checkPmmmNearBatches();
     }
-#endif
     // Each base side is at least the smallest side for its near width:
     // 4 for width 1, 8 for widths 2 and 3, 16 for width 4.
     std::array<std::array<int, 2>, 5> const configurations{
@@ -2022,9 +2002,7 @@ void pmmmTest() {
         }
     }
     pmmmDestroy();
-#if COSMICTIGER_ENABLE_PMMM_FMM
     detail::checkPmmmFmmNear();
-#endif
     detail::checkPmmmTraditionalKicks();
     detail::checkPmmmPpBatchTargets();
     detail::checkPmmmStreamedStages();

@@ -44,18 +44,12 @@
 #if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/cosmology/fftw_threads.hpp>
 #endif
-#if COSMICTIGER_ENABLE_FMM
-#include <cosmictiger/gravity/global_fmm/ewald_indices.hpp>
-#include <cosmictiger/gravity/kernels/cartesian_tracefree_ewald_operators.hpp>
-#endif
 #if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
 #include <cosmictiger/gravity/pmmm/solver.hpp>
-#endif
 #include <cosmictiger/gravity/tree.hpp>
 #endif
 #include <cosmictiger/io/checkpoint.hpp>
@@ -132,56 +126,6 @@ int hpx_main(int argc, char* argv[]) {
             }
 #endif
             profile::checkForInterrupt();
-#if COSMICTIGER_ENABLE_FMM
-            if (getOptions().gravity.enabled && !usesMeshGravity(getOptions().gravity) &&
-                !usesParticleMesh(getOptions().gravity)) {
-                EwaldConst::init();
-                // Debug dump of the Ewald Green's function along x for the runtime order.
-                fmmDispatch([](auto orderTag) {
-                    constexpr int kOrder = decltype(orderTag)::value;
-                    cosmictiger::gravity::cartesian::tracefree::Green<SimdFloat, kOrder> d;
-                    Vector3<SimdFloat> xValue;
-                    FILE* fp = fopen(outputPath("ewald.txt").c_str(), "wt");
-                    if (fp == nullptr) {
-                        THROW_ERROR("Unable to write ewald.txt\n");
-                    }
-                    xValue[0] = xValue[1] = xValue[2] = SimdFloat(0.0f);
-                    // D(nx,ny,nz) is the Green's function derivative of order nx, ny, nz
-                    // in x, y, z, sampled along the x axis.
-                    fprintf(fp, "# x");
-                    for (int n = 0; n < kOrder; n++) {
-                        for (int m = 0; m < kOrder - n; m++) {
-                            for (int l = 0; l < kOrder - n - m; l++) {
-                                if (l > 1 && !(l == 2 && n == 0 && m == 0)) {
-                                    continue;
-                                }
-                                fprintf(fp, " D(%i,%i,%i)", n, m, l);
-                            }
-                        }
-                    }
-                    fprintf(fp, "\n");
-                    for (double x = 0.00; x < 0.5; x += 0.001) {
-                        xValue[0] = simdBroadcast<SimdFloat>(x);
-                        d = SimdFloat(0.0f);
-                        cosmictiger::gravity::cartesian::tracefree::evaluateEwaldGreen(d, xValue);
-                        fprintf(fp, "%e ", x);
-                        for (int n = 0; n < kOrder; n++) {
-                            for (int m = 0; m < kOrder - n; m++) {
-                                for (int l = 0; l < kOrder - n - m; l++) {
-                                    if (l > 1 && !(l == 2 && n == 0 && m == 0)) {
-                                        continue;
-                                    }
-                                    // Const access reconstructs the unstored D(0,0,2).
-                                    fprintf(fp, "%e ", double(std::as_const(d)(n, m, l)[0]));
-                                }
-                            }
-                        }
-                        fprintf(fp, "\n");
-                    }
-                    fclose(fp);
-                });
-            }
-#endif
             profile::checkForInterrupt();
 #ifdef COSMICTIGER_BUILD_TESTING
             if (getOptions().run.test != "") {
@@ -194,7 +138,7 @@ int hpx_main(int argc, char* argv[]) {
             }
 #endif
         }
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
+#if COSMICTIGER_WITH_GRAVITY
         pmmmDestroy();
 #endif
         particlesDestroy();
@@ -203,7 +147,7 @@ int hpx_main(int argc, char* argv[]) {
                   << std::flush;
         detail::writeProfile();
         try {
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
+#if COSMICTIGER_WITH_GRAVITY
             pmmmDestroy();
 #endif
             particlesDestroy();
@@ -227,7 +171,7 @@ int hpx_main(int argc, char* argv[]) {
     } catch (std::exception const& error) {
         std::cout << std::format("CosmicTiger failed: {:s}\n", error.what()) << std::flush;
         try {
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
+#if COSMICTIGER_WITH_GRAVITY
             pmmmDestroy();
 #endif
         } catch (std::exception const& cleanupError) {
@@ -244,7 +188,7 @@ int hpx_main(int argc, char* argv[]) {
     } catch (...) {
         std::cout << "CosmicTiger failed with an unknown exception\n" << std::flush;
         try {
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
+#if COSMICTIGER_WITH_GRAVITY
             pmmmDestroy();
 #endif
         } catch (...) {

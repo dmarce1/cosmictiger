@@ -234,7 +234,6 @@ struct KickWorkitem {
     Vector3<Position> pos;
     TreeId self;
     Vector<TreeId> dchecklist;
-    Vector<TreeId> echecklist;
 };
 
 struct KickWorkspace;
@@ -278,7 +277,7 @@ constexpr int kKickHandoffBlocksPerMultiprocessor = 2;
 constexpr double kKickHandoffReferenceParticles = 32768.0;
 constexpr double kKickHandoffMaxScale = 3.0;
 int kickBlockCount(ParticleInteger particles);
-// Divisor for nodes that carry no Ewald checks (see kickFineBlockCount in
+// Optional finer divisor for the near-cell walks (see kickFineBlockCount in
 // kick.cu); never below kickBlockCount.
 int kickFineBlockCount(ParticleInteger particles);
 size_t kickEstimateCudaMemoryUsage(double theta, int numberOfParticles, int checkCount);

@@ -39,7 +39,6 @@ namespace profile {
 // lookup. These intervals are independent of the coordinator phase stack.
 enum class WorkPhase {
     KickCpuPrepare,
-    KickCpuPeriodic,
     KickCpuTraversal,
     KickCpuM2L,
     KickCpuP2L,

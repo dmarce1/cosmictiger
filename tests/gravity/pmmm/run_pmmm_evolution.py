@@ -94,7 +94,7 @@ def main():
     parser.add_argument("--ranks", type=int, default=2)
     parser.add_argument("--position-type", choices=("fixed32", "fixed64"), default="fixed32")
     parser.add_argument("--cuda", action="store_true")
-    parser.add_argument("--near-method", choices=("pp", "fmm"), required=True)
+    parser.add_argument("--near-method", choices=("pp", "fmm"), default="fmm")
     parser.add_argument("--order", type=int, choices=range(3, 10), required=True)
     parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"), required=True)
     parser.add_argument("--with-sph", action="store_true",
@@ -113,7 +113,7 @@ def main():
     mesh_size = 16
     common = {"hpx:threads": 2, "hpx:bind": "none",
               "gravity.meshSize": mesh_size, "gravity.pmmmNearWidth": 2,
-              "gravity.method.far": "pmmm", "gravity.method.near": args.near_method,
+              "gravity.method.near": args.near_method,
               "gravity.expansionDegree": args.order - 1, "run.timeIntegrator": args.time_integrator,
               "gravity.enabled": "true", "gravity.cuda": str(args.cuda).lower(),
               "drift.cuda": str(args.cuda).lower(),
@@ -147,9 +147,9 @@ def main():
         if hydro:
             rejected = prepareCase(root, label + "_rejected")
             log = run(rejected, dict(options, **{"run.maxIterations": 0}), False)
-            diagnostic = ("hierarchical SPH requires FMM gravity"
+            diagnostic = ("hierarchical requires gravity without SPH"
                           if args.with_sph and args.time_integrator == "hierarchical" else
-                          "Midpoint SPH currently requires FMM or disabled gravity"
+                          "SPH with self-gravity is not supported by the PMMM solver"
                           if args.with_sph else "COSMICTIGER_ENABLE_SPH=ON")
             require(diagnostic in log or "COSMICTIGER_ENABLE_SPH=ON" in log,
                     "unavailable SPH was not rejected with the expected diagnostic")
@@ -158,7 +158,6 @@ def main():
         baseline = prepareCase(root, label + "_baseline")
         log = run(baseline, dict(options, **{"run.maxIterations": 4}))
         for key, expected in (("run.timeIntegrator", args.time_integrator),
-                              ("gravity.method.far", "pmmm"),
                               ("gravity.method.near", args.near_method),
                               ("gravity.expansionDegree", str(args.order - 1))):
             require(re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected + r"\s*$",

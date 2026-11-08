@@ -166,7 +166,7 @@ def main():
     ranks = args.ranks if args.mpi_exec else 1
     mesh_size = 16
     common = {"hpx:threads": 2, "hpx:bind": "none",
-              "gravity.method.far": "pmmm", "gravity.method.near": "pp",
+              "gravity.method.near": "pp",
               "gravity.meshSize": mesh_size, "gravity.pmmmNearWidth": 2,
               "gravity.pmmmOuterInterval": "true",
               "gravity.expansionDegree": args.order - 1,
@@ -219,7 +219,7 @@ def main():
     baseline = prepareCase(root, label + "_baseline")
     log = run(baseline, dict(common, **{"run.maxIterations": iterations}))
     for key, expected in (("run.timeIntegrator", args.time_integrator),
-                          ("gravity.method.far", "pmmm"), ("gravity.method.near", "pp"),
+                          ("gravity.method.near", "pp"),
                           ("gravity.pmmmOuterInterval", "T")):
         require(re.search(r"^" + re.escape(key) + r"\s*:\s*" + expected + r"\s*$",
                           log, re.MULTILINE), f"{label}: resolved options lack {key}={expected}")

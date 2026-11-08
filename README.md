@@ -26,7 +26,7 @@ for all options and defaults. HPX's own options retain their `--hpx:*` syntax.
 | `output` | Particle Silo output, cadence, directory, unit system, frame, and selected box |
 | `analysis` | Power spectrum, halos, tracers, slices, and views |
 | `lightcone` | Lightcone output and group finding |
-| `gravity` | Mesh selection, softening, global FMM opening angle, and timestep |
+| `gravity` | PMMM mesh, near field, softening, and timestep |
 | `cosmology` | Redshifts, density parameters, and primordial spectrum |
 | `units` | Particle mass unit in solar masses |
 | `hydro` | SPH, equation of state, smoothing radii, and artificial viscosity |
@@ -112,42 +112,41 @@ physics and integrators:
 ```sh
 cmake -S . -B build/release_cpu -DCMAKE_BUILD_TYPE=Release \
   -DCOSMICTIGER_WITH_CUDA=OFF -DBUILD_TESTING=OFF \
-  -DCOSMICTIGER_ENABLE_FMM=ON -DCOSMICTIGER_ENABLE_PMMM_PP=ON \
+  -DCOSMICTIGER_ENABLE_GRAVITY=ON \
   -DCOSMICTIGER_ENABLE_INTEGRATOR_GLOBAL=ON \
   -DCOSMICTIGER_EXPANSION_DEGREE=4-6
 cmake --build build/release_cpu --target cosmictiger --parallel 3
-build/release_cpu/cosmictiger --gravity.method.far=pmmm \
-  --gravity.method.near=pp --gravity.meshSize=16 \
+build/release_cpu/cosmictiger --gravity.meshSize=16 \
   --run.timeIntegrator=global --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
 ```
 
-Fresh defaults enable FMM, SPH, equilibrium cooling, ROCKSTAR, traditional nested
-integration, and potential expansion degrees 4-6. PMMM with PP or FMM near fields, hierarchical
-integration, and global integration can be enabled independently. Both PMMM options default
-to `OFF` and may be enabled together. A single eligible algorithm is
-automatically selected; multiple eligible algorithms require a CLI/INI selection.
+Fresh defaults enable PMMM gravity, SPH, equilibrium cooling, ROCKSTAR, traditional nested
+integration, and potential expansion degrees 4-6. Hierarchical integration and global
+integration can be enabled independently. A single eligible integrator is
+automatically selected; multiple eligible integrators require a CLI/INI selection.
 
-Use `gravity.method.far=fmm|pmmm|pm|p3m`, `gravity.method.near=pp|fmm` for PMMM
-and P3M, `gravity.expansionDegree`, and
-`run.timeIntegrator=traditional|hierarchical|global`. `COSMICTIGER_ENABLE_PM`,
-`COSMICTIGER_ENABLE_P3M_PP` (PP-PM) and `COSMICTIGER_ENABLE_P3M_FMM` (FMM-PM)
-compile the scalar particle-mesh solvers with their mandatory outer PM
-interval; see [docs/p3m.md](docs/p3m.md).
+The gravity solver is PMMM: a periodic FFT far field with an FMM near field.
+`gravity.method.near=fmm|pp` selects the near field; `fmm` is the default and
+`pp`, the direct particle-pair evaluation, is its fallback (the outer-interval
+mode `gravity.pmmmOuterInterval` currently requires it). Select the degree with
+`gravity.expansionDegree` and the integrator with
+`run.timeIntegrator=traditional|hierarchical|global`.
 The highest compiled degree is the runtime default. Potential degree d is old
-internal order d+1, so degrees 4-6 correspond to orders 5-7. PMMM and its near FMM
-share the degree. Old checkpoint order integers retain their original meaning.
+internal order d+1, so degrees 4-6 correspond to orders 5-7. The far and near
+fields share the degree. Old checkpoint order integers retain their original meaning.
 
 Traditional integration uses individual nested block timesteps. Hierarchical
 integration uses a Hamiltonian split and currently supports collisionless runs.
 It merges its lowest rung into the next by the GADGET-4 rule `run.rungMergeFraction`
 ([hierarchical gravity](docs/hierarchical_gravity.md)).
 Global integration advances every particle with the minimum raw allowed timestep
-across all particles and ranks, without power-of-two rounding. It supports SPH,
-gravity, and combined runs, including explicit chemistry source intervals.
+across all particles and ranks, without power-of-two rounding. It supports SPH
+and gravity runs, including explicit chemistry source intervals. SPH with
+self-gravity is not yet supported by the PMMM solver: gas runs set
+`gravity.enabled=false`.
 
-Set `COSMICTIGER_ENABLE_SPH=OFF` for gravity-only builds, or disable
-`COSMICTIGER_ENABLE_FMM`, `COSMICTIGER_ENABLE_PMMM_PP`, and
-`COSMICTIGER_ENABLE_PMMM_FMM` for SPH-only builds.
+Set `COSMICTIGER_ENABLE_SPH=OFF` for gravity-only builds, or
+`COSMICTIGER_ENABLE_GRAVITY=OFF` for SPH-only builds.
 `COSMICTIGER_ENABLE_CHEMISTRY` defaults to `ON`; set it to `OFF` to retain SPH
 without equilibrium cooling. Equilibrium cooling is compiled only when SPH and
 chemistry are both enabled. The chemistry setting is inactive when SPH is off;
@@ -169,8 +168,7 @@ the configured capabilities. See [CMake options](CMAKE_OPTIONS.md) for the full
 reference, defaults, and migration from the retired named physics targets.
 
 PMMM needs `gravity.meshSize`; `gravity.pmmmNearWidth` accepts 1-4 and defaults
-to 2. It fixes near-FMM theta to `sqrt(3)/(pmmmNearWidth+1)`. Global FMM retains
-`gravity.openingAngle` and cosmological `gravity.openingSchedule` controls.
+to 2. The near-FMM opening angle is derived as `sqrt(3)/(pmmmNearWidth+1)`.
 See [PMMM](docs/pmmm.md) for particle/FFT ownership and solver details.
 
 Use `--gravity.errorInterval=10 --gravity.errorSampleSize=100` to compare the
@@ -301,18 +299,16 @@ The gas solver reconstructs density and evolves canonical entropy, using the
 for all SPH runs. It uses Monaghan artificial viscosity with the Morris & Monaghan
 coefficient switch, limited by Rosswog et al. (2000) to `hydro.viscosityCoefficientMax`,
 and the Balsara shear limiter; equal `hydro.viscosityCoefficientMin` and
-`hydro.viscosityCoefficientMax` give constant coefficients. This runs alongside FMM or PMMM
-gravity and shared particle
-storage. See
+`hydro.viscosityCoefficientMax` give constant coefficients. This shares the particle
+storage with PMMM gravity, which does not yet couple to gas. See
 [the kernel, viscosity, and paper references](docs/monaghan_sph.md) for the equations,
 cosmological conversions, and deliberate implementation choices. SPH support is
 built by default; `-DCOSMICTIGER_ENABLE_SPH=OFF` excludes it. Enable gas
-explicitly with `--hydro.enabled=true`. SPH supports traditional block timesteps
-and global adaptive timesteps with FMM, either PMMM near method, or gravity
-disabled. Hierarchical integration supports SPH with FMM gravity. Global,
-traditional, and hierarchical SPH share the adaptive octree and force formulation;
-hierarchical gravity retains its signed kick ladder. Chemistry and star formation
-are not yet supported with hierarchical SPH. See the
+explicitly with `--hydro.enabled=true` and `--gravity.enabled=false`. SPH supports
+traditional block timesteps and global adaptive timesteps; self-gravity for gas
+awaits PMMM/SPH coupling, and the gravity-only hierarchical integrator rejects
+SPH. Global and traditional SPH share the adaptive octree and force
+formulation. See the
 [SPH octree design](docs/sph_octree_plan.md).
 Select SIMD CPU SPH with `--hydro.cuda=false` or CUDA SPH with `--hydro.cuda=true`.
 Positive-duration hydro events use two-call explicit-midpoint RK2 by default,
@@ -372,7 +368,7 @@ Physical conduction and general diffusion remain unsupported. The former boolean
 `hydro.conduction`/`hydro.diffusion` options, the obsolete `hydro.chemistry` switch,
 `hydro.yReflect`, and `gravity.sphSmoothing` are no longer accepted, including
 false entries in older INI files. Gas smoothing lengths remain adaptive;
-FMM gravity uses one fixed comoving radius for gas and dark matter. With SPH on,
+PMMM gravity uses one fixed comoving radius for every particle. With SPH on,
 the FOF/ROCKSTAR halo finder and the lightcone halo catalogue link dark matter
 only, each particle counted at the total-matter mass of its lattice site (the
 ROCKSTAR `RESCALE_PARTICLE_MASSES` convention); gas and stars enter the power
@@ -495,9 +491,8 @@ on concurrent HPX tasks: the single phase stack belongs to the coordinator.
 The report uses dotted names for finer stages. SPH separates tree creation,
 neighbor boxes/lists, density/support solves, closing/opening
 forces, predictor/corrector updates, rung limiting, sources, and cleanup.
-Gravity separates tree allocation
-and construction, the FMM root walk/background/result wait, PMMM
-preparation/deposition/transforms/evaluation, and cleanup. Drift separates
+Gravity separates PMMM
+preparation/deposition/transforms/near-field evaluation, and cleanup. Drift separates
 CPU/CUDA execution, memory advice, and remaining remote waits.
 Domain migration, cosmological initialization, checkpoint I/O, particle output,
 group finding, lightcone processing, and power spectra have their own subphases.
@@ -530,8 +525,8 @@ Timers stop before recursive descent and GPU execution handoff. Concurrent
 tasks and nested waits can overlap; detail rows have no percentage share or
 grand total and must not be added to the coordinator total. The independent
 `profile::ScopedWork` counters do not use the coordinator's phase stack or a
-system-thread-local stack. They also cover force-only uses of the shared FMM
-walk, such as gravity error checks and PMMM near interactions when enabled.
+system-thread-local stack. They also cover force-only uses of the shared tree
+walk, such as the PMMM near-field FMM batches.
 
 For CUDA, a separate device table uses stream events to measure the explicit
 launch-packet host-to-device copy, fused gravity kernel, and result
@@ -678,8 +673,8 @@ emergency termination, and the completed APEX and `profile.txt` reports.
 
 Common gravity and SPH machinery lives directly in each subsystem directory.
 The same subsystem organization is used beneath `cosmictiger/` for headers and `src/` for
-implementations. Gravity solver code is in `gravity/global_fmm/` for global adaptive
-FMM and `gravity/pmmm/` for PMMM. SPH numerical modules are in
+implementations. The PMMM gravity solver is in `gravity/pmmm/`, with the shared
+tree walk directly under `gravity/`. SPH numerical modules are in
 `hydro/sph/variational/`, `hydro/sph/monaghan/`, `hydro/sph/morris_and_monaghan/`,
 and `hydro/sph/balsara/`.
 Owned particle storage stays in `particles/`; PMMM owns its
@@ -725,7 +720,7 @@ methods, potential expansion degrees
 (a scalar or inclusive range),
 enabled time integrators, and fixed32 or fixed64 position storage.
 Builds use `build/<mode>_<cuda|cpu>` (for example `build/release_cuda`), with live
-output and a `builder.*.log`. The default builds `cosmictiger` with FMM, SPH,
+output and a `builder.*.log`. The default builds `cosmictiger` with PMMM gravity, SPH,
 equilibrium cooling, ROCKSTAR, traditional integration, potential degrees 4–6,
 and fixed32 positions. Building and running the test suite is opt-in. Build concurrency
 defaults to the detected system thread count, with no upper cap. Use `./build.sh -j 4` to select a count,

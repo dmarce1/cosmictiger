@@ -27,7 +27,6 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/safe_io.hpp>
-#include <cosmictiger/gravity/pm/geometry.hpp>
 #include <cosmictiger/gravity/pmmm/mesh_size.hpp>
 #include <cosmictiger/math/math.hpp>
 #include <cosmictiger/math/vector3.hpp>
@@ -432,11 +431,14 @@ void domainsRebound() {
     domains[0].box = unitBox<double>();
     domains[0].processRange.first = 0;
     domains[0].processRange.second = hpxSize();
-    // Both gravity solvers balance the current particle population. Global FMM
-    // cuts anywhere; PMMM cuts on coarse-mesh planes so no mesh cell spans two
-    // localities, choosing the admissible plane with the best particle balance.
+    // The decomposition balances the current particle population. PMMM cuts on
+    // coarse-mesh planes so no mesh cell spans two localities, choosing the
+    // admissible plane with the best particle balance; gravity-free runs cut anywhere.
     auto const& gravityOptions = getOptions().gravity;
-    int const coarseMeshSize = pm::coarseMeshSize(gravityOptions);
+    int const coarseMeshSize = gravityOptions.enabled && gravityOptions.meshSize > 0 ?
+        pmmm::detail::resolvedCoarseMeshSize(gravityOptions.meshSize,
+            gravityOptions.pmmmCoarseMeshSize, gravityOptions.pmmmNearWidth) :
+        0;
     domains[0].totalCount = 0;
     auto const loads = []() {
         profile::ScopedPhase profilePhase("domains.rebound.loads");

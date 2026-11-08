@@ -1,14 +1,13 @@
 # Generated FMM representations
 
-`tools/generate_fmm.py` emits three representations together:
+`tools/generate_fmm.py` emits two representations together:
 
 | Representation | Storage through degree d | Use |
 | --- | --- | --- |
-| Cartesian | `(d + 1)(d + 2)(d + 3)/6` full symmetric coefficients, including every trace | General supplied Green tensors and Newtonian/Plummer helpers |
-| Cartesian tracefree | `(d + 1)^2` symmetric trace-free coefficients; a local Laplacian slot | Existing production Newtonian FMM |
-| Spherical | `(d + 1)^2` real slots for complex-conjugate harmonic coefficients | Newtonian free-space and periodic Ewald kernels |
+| Cartesian tracefree | `(d + 1)^2` symmetric trace-free coefficients; a local Laplacian slot | PMMM near-field FMM |
+| Spherical | `(d + 1)^2` real slots for complex-conjugate harmonic coefficients | PMMM far field: free-space and periodic Ewald kernels |
 
-The checked-in headers contain all three families for local degrees 2 through 8,
+The checked-in headers contain both families for local degrees 2 through 8,
 source degrees 1 through 7, corresponding to application FMM orders 3 through 9.
 M2L keeps terms of combined source and local degree at most the local-degree
 limit. `--min-order` and `--max-order` retain the
@@ -25,12 +24,10 @@ When reusing an older cache, remove the retired options with
 `-U COSMICTIGER_FMM_MIN_ORDER -U COSMICTIGER_FMM_MAX_ORDER`.
 
 The representations are generated and tested independently. The runtime walk,
-tree layout, checkpoint representation, and softening selection continue using
-Cartesian tracefree. General Cartesian operators are an additional mathematical
-API; this change does not select them for production gravity or add FMM-PM.
+tree layout, checkpoint representation, and softening selection use Cartesian
+tracefree; the far-field mesh uses the spherical kernels.
 
-The public C++ namespaces are `cosmictiger::gravity::cartesian`,
-`cosmictiger::gravity::cartesian::tracefree`, and
+The public C++ namespaces are `cosmictiger::gravity::cartesian::tracefree` and
 `cosmictiger::gravity::spherical`. Each provides distinct `Multipole`, `Expansion`,
 and `Green` types and destination-first additive operators `P2M`, `M2M`, `M2L`,
 `M2P`, `P2L`, `L2L`, and `L2P`. All share `gravity::Field`, with acceleration
@@ -40,10 +37,6 @@ and qualify `cartesian::tracefree` (or use ADL with its types).
 
 `Multipole<Real, order>` has source degree `order - 2`; `Expansion` and `Green`
 have degree `order - 1`. The generated implementation classes use degrees.
-General Cartesian moments retain every trace. Its supplied Green tensor contains
-ordinary derivatives of the negative unit-source potential, so the same tensor
-contraction can represent nonharmonic kernels. See [the full Cartesian API](generated_cartesian.md)
-for normalization, centered-source contracts, and numerical coverage.
 Types use PascalCase, functions and variables camelCase, and namespaces and
 filenames snake_case, with the standard FMM operator abbreviations retained.
 
@@ -58,15 +51,13 @@ python3 tests/gravity/check_generated_fmm_flops.py --generated-dir cosmictiger/g
 Generated headers and their operation report are checked in under
 `cosmictiger/gravity/kernels/`:
 
-- `cartesian_kernels.hpp` contains the full symmetric Cartesian operators.
 - `cartesian_tracefree_m2l.hpp`, `cartesian_tracefree_kernels.hpp`, and
   `cartesian_tracefree_config.hpp` contain the STF operators and degree configuration.
-- `cartesian_tracefree_ewald_kernels.hpp` contains the STF Ewald derivatives.
 - `spherical_kernels.hpp` and `spherical_ewald_kernels.hpp` contain the
   spherical kernels.
 - `operation_counts.json` records the generated arithmetic counts and selections.
 
-The generator defaults to this source directory and emits all three families for
+The generator defaults to this source directory and emits both families for
 FMM orders 3 through 9, formatting headers with the repository's clang-format
 configuration. Use `--output-dir` to write a separate copy. Never hand-edit
 generated headers; update their generators and regenerate them. `--check`
@@ -80,9 +71,9 @@ headers directly and do not regenerate or modify them. Regeneration requires
 Python 3 and clang-format.
 
 The numerical tests follow the selected build range: CMake creates
-`generated_spherical_degree_<degree>` for each selected degree when PMMM
-support is enabled, and
-`generated_spherical_ewald`, `cartesian_kernels`, and corresponding Ewald/CUDA
+`generated_spherical_degree_<degree>` for each selected degree when gravity
+is enabled, and
+`generated_spherical_ewald`, `cartesian_kernels`, and the corresponding CUDA
 tests exercise that range. `generated_fmm_current` checks reproducibility of
 the complete source output. CTest's `generated_fmm_flops` passes the configured
 range through `--min-fmm-order` and `--max-fmm-order`, compiling and executing

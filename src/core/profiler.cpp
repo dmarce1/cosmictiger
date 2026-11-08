@@ -43,14 +43,14 @@ namespace detail {
 
     constexpr size_t kWorkCount = static_cast<size_t>(WorkPhase::Count);
     constexpr size_t kDeviceWorkBegin = static_cast<size_t>(WorkPhase::KickGpuHostToDevice);
-    constexpr std::array<char const*, kWorkCount> kWorkNames{{"kick.cpu.prepare",
-        "kick.cpu.periodic", "kick.cpu.traversal", "kick.cpu.M2L", "kick.cpu.P2L", "kick.cpu.M2P",
-        "kick.cpu.P2P", "kick.cpu.leafKick", "kick.cpu.schedule", "kick.gpu.queueWork",
-        "kick.wait.children", "kick.wait.result", "kick.gpu.groupSources",
-        "kick.gpu.collectSources", "kick.gpu.remap", "kick.gpu.sortFetchWait",
-        "kick.gpu.memoryAdvice", "kick.gpu.cleanup", "kick.gpu.launchQueue",
-        "kick.gpu.prepareLaunch", "kick.gpu.submitWait", "gravity.concurrentForce",
-        "kick.gpu.hostToDevice", "kick.gpu.kernel", "kick.gpu.deviceToHost"}};
+    constexpr std::array<char const*, kWorkCount> kWorkNames{
+        {"kick.cpu.prepare", "kick.cpu.traversal", "kick.cpu.M2L", "kick.cpu.P2L", "kick.cpu.M2P",
+            "kick.cpu.P2P", "kick.cpu.leafKick", "kick.cpu.schedule", "kick.gpu.queueWork",
+            "kick.wait.children", "kick.wait.result", "kick.gpu.groupSources",
+            "kick.gpu.collectSources", "kick.gpu.remap", "kick.gpu.sortFetchWait",
+            "kick.gpu.memoryAdvice", "kick.gpu.cleanup", "kick.gpu.launchQueue",
+            "kick.gpu.prepareLaunch", "kick.gpu.submitWait", "gravity.concurrentForce",
+            "kick.gpu.hostToDevice", "kick.gpu.kernel", "kick.gpu.deviceToHost"}};
 
     // Keep unrelated phases on separate cache lines. Sampling touches only two
     // relaxed atomics; reporting does not block workers on the phase mutex.
@@ -134,9 +134,9 @@ namespace detail {
 
 #if COSMICTIGER_DEVICE_PROFILE
     constexpr std::array<char const*, kDevicePhaseCount> kDeviceNames{
-        {"kick.device.prepare", "kick.device.periodic", "kick.device.traversal", "kick.device.M2L",
-            "kick.device.P2L", "kick.device.M2P", "kick.device.P2P", "kick.device.leafKick",
-            "kick.device.copyWait", "kick.device.schedule", "kick.device.cleanup"}};
+        {"kick.device.prepare", "kick.device.traversal", "kick.device.M2L", "kick.device.P2L",
+            "kick.device.M2P", "kick.device.P2P", "kick.device.leafKick", "kick.device.copyWait",
+            "kick.device.schedule", "kick.device.cleanup"}};
 
     struct CycleDistribution {
         std::uint64_t samples = 0;

@@ -100,7 +100,7 @@ def main():
     base = args.workdir.resolve()
     base.mkdir(parents=True, exist_ok=True)
     command = [str(executable), "--hpx:threads=2", "--hpx:bind=none",
-               "--run.timeIntegrator=traditional", "--gravity.method.far=fmm"]
+               "--run.timeIntegrator=traditional", "--gravity.meshSize=8"]
     expected_files = {stem + ".ini" for stem, *_ in SCENARIOS}
     expected_files.update(stem + ".ini" for stem in COSMOLOGY_PRESETS)
     actual_files = {path.name for path in (root / "configurations").glob("*.ini")
@@ -182,8 +182,26 @@ def main():
         print(f"{name or scenario}: solver selection, finite diagnostics, and output containment passed")
         return directory, destination, options
 
-    results = {case[1]: exercise(*case, overrides={"initial.closePack": "true", "run.gasParticleCount": str(4 * 8**3)}
-                                if case[1] == "gresho" else None) for case in SCENARIOS}
+    def expect_coupled_rejection(stem, scenario):
+        # Self-gravitating gas scenarios cannot run until the PMMM solver couples
+        # to SPH; their presets must be rejected at startup, before initialization.
+        directory = prepare(scenario)
+        output = run_process(command + [f"--configuration={root / 'configurations' / (stem + '.ini')}",
+                                        "--run.maxIterations=0", *[f"--{key}={value}" for key, value in
+                                                                   cpu_backend_options().items()]],
+                             directory, success=False)
+        if "SPH with self-gravity is not supported by the PMMM solver" not in output:
+            raise RuntimeError(f"{scenario}: coupled SPH/gravity preset was not rejected at startup")
+        print(f"{scenario}: self-gravitating gas preset rejected at startup (PMMM/SPH coupling pending)")
+
+    results = {}
+    for case in SCENARIOS:
+        stem, scenario, gravity, hydro, chemistry = case
+        if gravity and hydro:
+            expect_coupled_rejection(stem, scenario)
+            continue
+        results[scenario] = exercise(*case, overrides={"initial.closePack": "true", "run.gasParticleCount": str(4 * 8**3)}
+                                     if scenario == "gresho" else None)
 
     gresho_log = (results["gresho"][0] / "run.log").read_text()
     if int(setting(gresho_log, "Initialized particles")) != 4 * 8**3:
@@ -195,6 +213,8 @@ def main():
 
     exercise("rayleigh_taylor", "rayleighTaylor", False, True, False,
              name="rayleighTaylor_no_gravity", overrides={"gravity.enabled": "false"})
+    exercise("cosmology", "cosmology", False, True, True,
+             name="cosmology_no_gravity", overrides={"gravity.enabled": "false"})
     # A CLI scenario override exercises dispatch independently of the INI name;
     # disabled Silo must not prevent text diagnostics or directory creation.
     exercise("sod", "hydroWave", False, True, False, name="scenario_cli_override",
@@ -242,53 +262,6 @@ def main():
             "Done reading checkpoint" in rejected_log):
         raise RuntimeError("cross-scenario restart was not rejected before loading particle state")
 
-    # Two coarse intervals put one interval on each side of the stellar
-    # relaxation boundary. The tiny duration keeps the N8 fixture inexpensive
-    # while exercising the damping/viscosity transition and its pending kicks.
-    star_duration = 1.e-5
-    _, star_reference, star_options = exercise(
-        "polytropic_star", "polytropicStar", True, True, False,
-        name="polytropicStar_stage_uninterrupted",
-        overrides={"run.numberOfSteps": "2", "run.maxIterations": "64"})
-    star_clock = [line.split() for line in
-                  (star_reference / "progress.txt").read_text().splitlines() if line.strip()]
-    if not math.isclose(float(star_clock[-1][1]), star_duration, rel_tol=1.e-9, abs_tol=1.e-14):
-        raise RuntimeError("polytropicStar did not complete both evolution stages")
-    boundaries = [index for index, row in enumerate(star_clock)
-                  if math.isclose(float(row[1]), 0.5 * star_duration,
-                                  rel_tol=1.e-9, abs_tol=1.e-14)]
-    if len(boundaries) != 1 or boundaries[0] == len(star_clock) - 1:
-        raise RuntimeError("polytropicStar did not cross its synchronized relaxation boundary")
-    boundary_index = boundaries[0]
-    boundary_iteration = int(star_clock[boundary_index][0])
-    final_iteration = int(star_clock[-1][0])
-    boundary_checkpoint = star_reference / f"checkpoint.{boundary_iteration}"
-    if not boundary_checkpoint.is_dir():
-        raise RuntimeError("polytropicStar did not checkpoint its relaxation boundary")
-    star_restart_directory = prepare("polytropicStar_stage_restart")
-    star_restart_output = star_restart_directory / "output/polytropicStar"
-    star_restart_output.mkdir(parents=True)
-    shutil.copytree(boundary_checkpoint,
-                    star_restart_output / f"checkpoint.{boundary_iteration}")
-    star_restart_options = dict(star_options,
-                                **{"checkpoint.readIndex": str(boundary_iteration)})
-    star_resumed_log = run_process(
-        command + [f"--{key}={value}" for key, value in star_restart_options.items()],
-        star_restart_directory)
-    if "Done reading checkpoint" not in star_resumed_log:
-        raise RuntimeError("polytropicStar did not resume its relaxation-boundary checkpoint")
-    star_final_checkpoint = star_restart_output / f"checkpoint.{final_iteration}"
-    checkManifest(star_final_checkpoint, final_iteration, scenario="polytropicStar",
-                  endTime=star_duration, gravity=True)
-    if (hydro_particle_payload(star_reference / f"checkpoint.{final_iteration}") !=
-            hydro_particle_payload(star_final_checkpoint)):
-        raise RuntimeError("polytropicStar stage-boundary restart changed physical or predictor state")
-    star_restarted_clock = [line.split() for line in
-                           (star_restart_output / "progress.txt").read_text().splitlines()
-                           if line.strip()]
-    if star_restarted_clock != star_clock[boundary_index + 1:]:
-        raise RuntimeError("polytropicStar stage-boundary restart changed its physical clock")
-    print("polytropicStar: stage-boundary restart matches uninterrupted state and clock")
 
     for name, option in (("unknown", "--run.scenario=unknown"),
                          ("abbreviated_rayleigh_taylor", "--run.scenario=rt"),

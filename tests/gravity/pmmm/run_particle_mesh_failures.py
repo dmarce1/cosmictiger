@@ -42,7 +42,7 @@ def run_case(args, name, marker, blocker):
                   "--gravity.cuda=false", "--hpx:threads=2", "--hpx:bind=none",
                   "--hpx:localities=2", "--hpx:ini=hpx.parcel.mpi.enable=1",
                   "--hpx:ini=hpx.threadpools.io_pool_size=1"])
-    command += application_arguments(args.executable.resolve(), far="pmmm")
+    command += application_arguments(args.executable.resolve())
     if args.disable_tcp:
         command.append("--hpx:ini=hpx.parcel.tcp.enable=0")
     log_path = workdir / "failure.log"

@@ -1,8 +1,8 @@
 /* CosmicTiger - bounded production CUDA kick profiling regression; BSL-1.0. */
 
 // Run the actual kick kernel without application initialization or an HPX runtime.
-// Its isolated four-particle tree uses only direct softened pairs. The periodic
-// policy below deliberately contributes zero; this is not an Ewald accuracy test.
+// Its isolated four-particle tree uses only direct softened pairs; this is not
+// a force accuracy test.
 // Every launch has at most two one-warp blocks, further bounded by SM_count / 6.
 // No initialization, memset, or reduction kernels are launched by this fixture.
 
@@ -34,19 +34,6 @@ void cosmictigerAssert(char const* condition, bool value, char const* file, int 
         throw std::runtime_error(std::string(file) + ":" + std::to_string(line) + ": " + condition);
     }
 }
-
-#if COSMICTIGER_ENABLE_FMM
-template <int order>
-__device__ __forceinline__ FlopCount cudaApplyPeriodicPolicy(CudaKickData const&,
-    KickParameters const&, cosmictiger::gravity::cartesian::tracefree::Expansion<float, order>&,
-    TreeNode const&, StackVector<int>& checks, DeviceVector<int>&, DeviceVector<int>&,
-    DeviceVector<int>&, DeviceVector<int>&) {
-    // All positions occupy one small interior region, and the fixture asks for
-    // isolated forces. Empty periodic checklists are an explicit precondition.
-    ALWAYS_ASSERT(checks.size() == 0);
-    return 0;
-}
-#endif
 
 namespace detail {
 
@@ -239,12 +226,6 @@ PhaseCalls checkRecords(std::vector<profile::DeviceBlockRecord> const& records) 
         }
     }
     for (size_t phase = 0; phase < profile::kDevicePhaseCount; ++phase) {
-#if !COSMICTIGER_ENABLE_FMM
-        if (phase == static_cast<size_t>(profile::DevicePhase::KickPeriodic)) {
-            require(calls[phase] == 0, "non-FMM build unexpectedly called the periodic phase");
-            continue;
-        }
-#endif
         require(calls[phase] > 0 && cycles[phase] > 0,
             "production kick omitted a required device phase");
     }
@@ -286,8 +267,6 @@ void run(int blocks) {
         items[item].lValue = 0.0f;
         items[item].dchecks = checks.data();
         items[item].dcount = 1;
-        items[item].echecks = nullptr;
-        items[item].ecount = 0;
     }
     parameters.upload(items.data());
     CudaKickData data{};
@@ -375,7 +354,7 @@ void run(int blocks) {
         blocks, kWarpSize, kOrder);
 #if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
     std::puts("Device phase coverage and per-launch record overwrite passed "
-              "(isolated periodic callback, empty M2L/P2L/M2P lists).");
+              "(empty M2L/P2L/M2P lists).");
 #else
     std::puts("Device profiling compiled out; output records remained untouched.");
 #endif

@@ -88,7 +88,6 @@ void prepare(SolveRequest const& request) {
         state.pendingGhosts = 0;
         state.farPromise = std::make_shared<hpx::promise<void>>();
         state.farReady = state.farPromise->get_future().share();
-#if COSMICTIGER_ENABLE_PMMM_FMM
         // Only the FMM pipeline fulfills these per-cell promises. Creating them
         // for PP would report a broken promise for every cell on the next solve.
         if (getOptions().gravity.pmmmNearMethod == "fmm" && !request.farOnly) {
@@ -100,7 +99,6 @@ void prepare(SolveRequest const& request) {
                 state.sourceCells.push_back(std::move(source));
             }
         }
-#endif
         state.radialTrace = 0;
         auto const previous = state.diagnostics;
         state.diagnostics = {};
@@ -225,16 +223,13 @@ void solve(SolveRequest request) {
         allLocalities<PmmmPrepareAction>(request);
     }
     std::exception_ptr failure;
-#if COSMICTIGER_ENABLE_PMMM_FMM
     bool started = false;
-#endif
     try {
         if (farField) {
             profile::ScopedPhase phase(
                 request.applyKick ? "pmmmKick.deposit" : "pmmmSolve.deposit", coordinator);
             allLocalities<PmmmDepositAction>();
         }
-#if COSMICTIGER_ENABLE_PMMM_FMM
         if (options.pmmmNearMethod == "fmm" && nearField) {
             {
                 profile::ScopedPhase phase(
@@ -248,7 +243,6 @@ void solve(SolveRequest request) {
                 coordinator);
             allLocalities<PmmmStartPipelineAction>();
         }
-#endif
         if (farField) {
             // The FMM near-field pipeline overlaps the transform. These phases measure
             // coordinator wall intervals; finishNearPipeline is only the remaining wait.
@@ -258,21 +252,18 @@ void solve(SolveRequest request) {
         } else {
             allLocalities<PmmmSkipTransformAction>();
         }
-#if COSMICTIGER_ENABLE_PMMM_FMM
         if (options.pmmmNearMethod == "fmm" && nearField) {
             profile::ScopedPhase phase(
                 request.applyKick ? "pmmmKick.finishNearPipeline" : "pmmmSolve.finishNearPipeline",
                 coordinator);
             allLocalities<PmmmFinishPipelineAction>();
         }
-#endif
-#if COSMICTIGER_ENABLE_PMMM_PP
+        // The direct particle-pair near field is the fallback of the FMM near field.
         if (options.pmmmNearMethod == "pp" && nearField) {
             profile::ScopedPhase phase(
                 request.applyKick ? "pmmmKick.evaluate" : "pmmmSolve.evaluate", coordinator);
             allLocalities<PmmmEvaluateAction>(request.doPotential);
         }
-#endif
         if (request.farOnly) {
             profile::ScopedPhase phase("pmmmBoundary.evaluateFar", coordinator);
             allLocalities<PmmmEvaluateFarAction>();
@@ -280,7 +271,6 @@ void solve(SolveRequest request) {
     } catch (...) {
         failure = std::current_exception();
     }
-#if COSMICTIGER_ENABLE_PMMM_FMM
     auto cleanup = [&](auto&& operation) {
         try {
             operation();
@@ -303,7 +293,6 @@ void solve(SolveRequest request) {
         cleanup([]() { particlesCacheFree(); });
         cleanup([]() { allLocalities<PmmmClearGhostsAction>(); });
     }
-#endif
     if (failure) {
         std::rethrow_exception(failure);
     }

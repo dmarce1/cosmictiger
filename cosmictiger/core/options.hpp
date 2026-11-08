@@ -153,8 +153,8 @@ struct Gravity {
     int cudaKickMultipoleTile{};        // staged positioned multipoles
     bool cudaKickSharedExpansion{};     // keep the active local expansion in shared memory
     int cudaKickHandoffBlocks{};        // pins the CPU/GPU handoff divisor; zero derives it
-    int cudaKickFineHandoffBlocks{};    // handoff divisor once a node carries no Ewald checks;
-                                        // zero (or below the divisor above) keeps that one
+    int cudaKickFineHandoffBlocks{};    // finer handoff divisor for the near-cell walks; zero
+                                        // (or below the divisor above) keeps that one
     int cudaKickListReserve{};    // pool entries reserved per kick list at block start; zero grows
                                   // on demand
     bool enabled{};
@@ -162,40 +162,27 @@ struct Gravity {
     int errorInterval{};
     // Evenly spaced global particle indices, capped at the particle count.
     int errorSampleSize{100};
-    // Selected algorithms retain their historical serialized field names.
-    std::string method{gravity::kBuildGravityMethod};
     int meshSize{};    // Full-particle PMMM side; a power of two, scaled by rung per stage.
     // Coarsest hierarchical stage mesh and the granularity of particle-domain
     // cuts; a power of two. Zero resolves to meshSize/8, at least the near minimum.
     int pmmmCoarseMeshSize{};
     int pmmmNearWidth{2};    // Direct neighbor cube radius for periodic PMMM, one to four cells.
-    int pmmmOrder{gravity::kBuildFmmOrder};    // Potential expansion degree + 1, shared by far and
-                                               // near fields.
+    // Near field of the PMMM solver: fmm, or its direct particle-pair fallback pp.
+    // The field keeps its historical serialized name.
     std::string pmmmNearMethod{gravity::kBuildPmmmNearMethod};
     int pmmmBatchParticles{4096};    // Target owned sink count per ready near-field batch.
     // PMMM outer interval: the FFT far field is solved only at synchronized
     // outer boundaries, each particle's near-cube membership is frozen for the
     // interval, and the near field advances on the inner rungs (see docs/pmmm.md).
     bool pmmmOuterInterval{};
-    // Particle-mesh (pm, p3m) assignment cloud: ngp, cic, tsc, or pcs.
-    std::string cloud{"pcs"};
-    // Gaussian split scale r_s in PM mesh cells and the short-range cutoff in
-    // units of r_s. Both apply only to gravity.method.far=p3m.
-    double p3mSplitCells{1.25};
-    double p3mCutoff{4.5};
-    // Derived P3M geometry in box units: the split radius, the short cutoff, and
-    // the power-of-two short-range search mesh whose pmmmNearWidth-cell cube
-    // covers the cutoff. These are resolved at startup, not configured.
-    double p3mSplitRadius{};
-    double p3mCutoffRadius{};
-    int p3mMeshSize{};
-    int fmmOrder{
-        gravity::kBuildFmmOrder};    // Potential expansion degree + 1; template/storage convention.
+    // Potential expansion degree + 1 of the far and near fields; template/storage
+    // convention.
+    int fmmOrder{gravity::kBuildFmmOrder};
     std::string kernelFamily{"ferrers"};
     int kernelDegree{4};
+    // Near-field FMM opening angle, derived from the neighbor cube geometry as
+    // sqrt(3)/(pmmmNearWidth+1); not a configured option.
     double openingAngle{};
-    // Global cosmological FMM redshift:theta pairs; empty retains the scalar angle.
-    std::string openingSchedule{};
     // Open only the larger of two rejected cells instead of both.
     bool openLargerCell{};
     // Fixed comoving compact support in box units; effectiveRadius is 2 sigma.
@@ -204,35 +191,10 @@ struct Gravity {
     double gm{};
 };
 
-inline bool usesMeshGravity(Gravity const& gravityOptions) {
-    return gravityOptions.method == "pmmm";
-}
-
-// Pure PM and both P3M variants: a scalar PM/FFT long force with the mandatory
-// outer PM interval; the short solver (none, pp, or fmm) runs inside it.
-inline bool usesParticleMesh(Gravity const& gravityOptions) {
-    return gravityOptions.method == "pm" || gravityOptions.method == "p3m";
-}
-
-inline bool usesSplitParticleMesh(Gravity const& gravityOptions) {
-    return gravityOptions.method == "p3m";
-}
-
-// PMMM with its FFT far field on an outer interval and frozen near membership inside.
-inline bool usesMeshGravityInterval(Gravity const& gravityOptions) {
-    return usesMeshGravity(gravityOptions) && gravityOptions.pmmmOuterInterval;
-}
-
-// Every solver that integrates a long force on a mandatory outer interval with
-// the inner rung clock subdividing that interval.
+// PMMM with its FFT far field on an outer interval and frozen near membership
+// inside; the inner rung clock subdivides that interval.
 inline bool usesOuterInterval(Gravity const& gravityOptions) {
-    return usesParticleMesh(gravityOptions) || usesMeshGravityInterval(gravityOptions);
-}
-
-// Solvers whose short-range pair traversal requires every search-mesh cell to be
-// owned, with all its particles, by one locality (coarse-mesh-aligned domain cuts).
-inline bool usesCellOwnedShortRange(Gravity const& gravityOptions) {
-    return usesMeshGravity(gravityOptions) || usesSplitParticleMesh(gravityOptions);
+    return gravityOptions.pmmmOuterInterval;
 }
 
 inline bool usesHierarchicalIntegration(Run const& run) {
@@ -498,15 +460,12 @@ struct Options {
         arc & run.verbose;
         arc & scenario.rayleighTaylor.zPlaneAcceleration;
         arc & hydro.method;
-        arc & gravity.method;
         arc & gravity.meshSize;
         arc & gravity.pmmmNearWidth;
         arc & gravity.pmmmNearMethod;
         arc & analysis.saveAcceleration;
         arc & analysis.savePotential;
         arc & gravity.pmmmBatchParticles;
-        arc & gravity.pmmmOrder;
-        arc & gravity.openingSchedule;
         arc & gravity.pmmmCoarseMeshSize;
         arc & gravity.pmmmOuterInterval;
         arc & gravity.errorInterval;
@@ -533,12 +492,6 @@ struct Options {
         arc & lightcone.cuda;
         arc & chemistry.cuda;
         arc & starFormation.cuda;
-        arc & gravity.cloud;
-        arc & gravity.p3mSplitCells;
-        arc & gravity.p3mCutoff;
-        arc & gravity.p3mSplitRadius;
-        arc & gravity.p3mCutoffRadius;
-        arc & gravity.p3mMeshSize;
         arc & compute.sphTreeRebuildFraction;
         arc & run.rungMergeFraction;
         arc & hydro.conductionCoefficient;

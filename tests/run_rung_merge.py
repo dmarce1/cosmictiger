@@ -42,6 +42,7 @@ def run_case(executable, base, name, fraction):
         "run.endTime": "0.0016",
         "run.maxIterations": "400",
         "run.rungMergeFraction": fraction,
+        "gravity.meshSize": "8",
         "run.darkMatterParticleCount": "1728", "run.gasParticleCount": "1728",
         "analysis.groups": "false",
         "analysis.power": "false",
@@ -53,7 +54,7 @@ def run_case(executable, base, name, fraction):
         "checkpoint.intervalSeconds": "0",
     })
     command = [str(executable), "--hpx:threads=2", "--hpx:bind=none"]
-    command += application_arguments(executable, far="fmm", integrator="hierarchical")
+    command += application_arguments(executable, integrator="hierarchical")
     command += [f"--{key}={value}" for key, value in options.items()]
     environment = dict(os.environ, CUDA_VISIBLE_DEVICES="", OMP_NUM_THREADS="1",
                        OPENBLAS_NUM_THREADS="1")

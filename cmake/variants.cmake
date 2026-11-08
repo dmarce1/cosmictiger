@@ -39,7 +39,7 @@ endif()
 
 # Capability definitions are shared by the executable and standalone tests.
 add_library(cosmictiger_default_config INTERFACE)
-foreach(feature IN ITEMS FMM PMMM_PP PMMM_FMM PM P3M_PP P3M_FMM SPH
+foreach(feature IN ITEMS GRAVITY SPH
         INTEGRATOR_TRADITIONAL INTEGRATOR_HIERARCHICAL INTEGRATOR_GLOBAL)
     target_compile_definitions(cosmictiger_default_config INTERFACE
         COSMICTIGER_ENABLE_${feature}=$<BOOL:${COSMICTIGER_ENABLE_${feature}}>)
@@ -108,8 +108,7 @@ if(COSMICTIGER_WITH_CUDA AND COSMICTIGER_WITH_STARS)
         cosmictiger_default_config cosmictiger_sph_chemistry CUDA::cudart Boost::boost)
     set_target_properties(cosmictiger_star_formation_cuda PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 endif()
-if(COSMICTIGER_ENABLE_FMM OR
-        COSMICTIGER_ENABLE_PMMM_FMM OR COSMICTIGER_ENABLE_P3M_FMM)
+if(COSMICTIGER_WITH_GRAVITY)
     foreach(order IN LISTS COSMICTIGER_FMM_ORDERS)
         set(FMM_INSTANCE_ORDER ${order})
         configure_file(src/gravity/fmm_instance_cpu.cpp.in

@@ -58,12 +58,8 @@ function(cosmictiger_feature_sources output)
         )
     endif()
 
-    # The tree walk is shared by global FMM and PMMM's optional near-cell FMM.
-    set(cosmictiger_uses_fmm OFF)
-    if(COSMICTIGER_ENABLE_FMM OR COSMICTIGER_ENABLE_PMMM_FMM OR COSMICTIGER_ENABLE_P3M_FMM)
-        set(cosmictiger_uses_fmm ON)
-    endif()
-    if(cosmictiger_uses_fmm)
+    if(COSMICTIGER_WITH_GRAVITY)
+        # The tree walk serves the PMMM near-cell FMM.
         list(APPEND cosmictiger_source_files
             src/gravity/gravity.cpp
             src/gravity/kick.cpp
@@ -78,54 +74,15 @@ function(cosmictiger_feature_sources output)
         )
     endif()
 
-    if(COSMICTIGER_ENABLE_FMM)
-        list(APPEND cosmictiger_source_files
-            src/gravity/global_fmm/ewald_indices.cpp
-            src/gravity/global_fmm/ewald_indices.cu
-            src/gravity/global_fmm/distributed_tree.cpp
-            src/gravity/global_fmm/execution.cpp
-            src/gravity/global_fmm/gpu_staging.cpp
-            src/gravity/global_fmm/particle_exchange.cpp
-            src/gravity/global_fmm/periodic.cpp
-            src/gravity/global_fmm/remote_cache.cpp
-        )
-    endif()
-
-    # Mesh solvers share collective dispatch, the owned-particle mesh sort and
-    # the streamed field consumer that applies rung kicks.
-    if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM OR COSMICTIGER_WITH_PARTICLE_MESH)
+    # PMMM: collective dispatch, the owned-particle mesh sort, the streamed
+    # field consumer that applies rung kicks, the FMM near field and its PP
+    # fallback.
+    if(COSMICTIGER_WITH_GRAVITY)
         list(APPEND cosmictiger_source_files
             src/gravity/pm/collective_dispatch.cpp
             src/gravity/pm/kick.cpp
             src/gravity/pm/outer_interval.cpp
             src/particles/particle_mesh_sort.cpp
-        )
-    endif()
-    if(COSMICTIGER_WITH_PARTICLE_MESH)
-        list(APPEND cosmictiger_source_files
-            src/gravity/pm/solver.cpp
-            src/gravity/pm/interval.cpp
-        )
-        if(COSMICTIGER_ENABLE_P3M_PP OR COSMICTIGER_ENABLE_P3M_FMM)
-            list(APPEND cosmictiger_source_files
-                src/gravity/p3m/solver.cpp
-            )
-        endif()
-        if(COSMICTIGER_ENABLE_P3M_PP)
-            list(APPEND cosmictiger_source_files
-                src/gravity/p3m/pp/short_pp.cpp
-                src/gravity/p3m/pp/short_pp.cu
-            )
-        endif()
-        if(COSMICTIGER_ENABLE_P3M_FMM)
-            list(APPEND cosmictiger_source_files
-                src/gravity/p3m/fmm_short_fmm.cpp
-            )
-        endif()
-    endif()
-
-    if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
-        list(APPEND cosmictiger_source_files
             src/gravity/pmmm/kick.cpp
             src/gravity/pmmm/interval.cpp
             src/gravity/pmmm/solver.cpp
@@ -133,22 +90,14 @@ function(cosmictiger_feature_sources output)
             src/gravity/pmmm/evaluation.cpp
             src/gravity/pmmm/fft.cpp
             src/gravity/pmmm/mesh_exchange.cpp
+            src/gravity/pmmm/fmm/cell_schedule.cpp
+            src/gravity/pmmm/fmm/cell_tree.cpp
+            src/gravity/pmmm/fmm/fmm_batch.cpp
+            src/gravity/pmmm/fmm/ghost_exchange.cpp
+            src/gravity/pmmm/fmm/ghost_storage.cpp
+            src/gravity/pmmm/pp/near_pp.cpp
+            src/gravity/pmmm/pp/near_pp.cu
         )
-        if(COSMICTIGER_ENABLE_PMMM_FMM)
-            list(APPEND cosmictiger_source_files
-                src/gravity/pmmm/fmm/cell_schedule.cpp
-                src/gravity/pmmm/fmm/cell_tree.cpp
-                src/gravity/pmmm/fmm/fmm_batch.cpp
-                src/gravity/pmmm/fmm/ghost_exchange.cpp
-                src/gravity/pmmm/fmm/ghost_storage.cpp
-            )
-        endif()
-        if(COSMICTIGER_ENABLE_PMMM_PP)
-            list(APPEND cosmictiger_source_files
-                src/gravity/pmmm/pp/near_pp.cpp
-                src/gravity/pmmm/pp/near_pp.cu
-            )
-        endif()
     endif()
 
     if(COSMICTIGER_WITH_SPH)
@@ -203,29 +152,14 @@ function(cosmictiger_feature_sources output)
             list(APPEND cosmictiger_source_files
                 tests/analysis_backends.cpp tests/bh.cpp tests/groups_catalogue.cpp tests/rockstar.cpp)
         endif()
-        if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
+        if(COSMICTIGER_WITH_GRAVITY)
             list(APPEND cosmictiger_source_files
                 tests/mesh_domains.cpp
                 tests/gravity/pmmm/particle_mesh_dispatch.cpp
                 tests/particle_mesh_sort.cpp
                 tests/gravity/pmmm/particle_mesh_timestep.cpp
                 tests/gravity/pmmm/pmmm.cpp)
-        endif()
-        if(COSMICTIGER_WITH_PARTICLE_MESH)
-            list(APPEND cosmictiger_source_files tests/gravity/pm/pm.cpp)
-            if(NOT (COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM))
-                list(APPEND cosmictiger_source_files tests/particle_mesh_sort.cpp)
-            endif()
-        endif()
-        if(COSMICTIGER_ENABLE_P3M_PP OR COSMICTIGER_ENABLE_P3M_FMM)
-            list(APPEND cosmictiger_source_files tests/gravity/p3m/p3m.cpp)
-        endif()
-        if(COSMICTIGER_ENABLE_FMM)
-            list(APPEND cosmictiger_source_files
-                tests/gravity/global_fmm/fmm_tree.cpp tests/gravity/global_fmm/fmm_walk.cpp
-                tests/gravity/analytic.cpp tests/gravity/analytic.cu tests/linear_growth.cpp)
-        endif()
-        if(NOT COSMICTIGER_WITH_GRAVITY)
+        else()
             list(APPEND cosmictiger_source_files tests/sph/no_gravity.cpp)
         endif()
         if(COSMICTIGER_WITH_SPH)
@@ -237,10 +171,6 @@ function(cosmictiger_feature_sources output)
             if(COSMICTIGER_ENABLE_STAR_FORMATION)
                 list(APPEND cosmictiger_source_files tests/sph/star_formation.cpp
                     tests/star_formation_particles.cpp tests/sph/source_timing.cpp)
-            endif()
-            if(COSMICTIGER_ENABLE_FMM)
-                list(APPEND cosmictiger_source_files tests/sph/gravity.cpp
-                    tests/kernel_selection_cuda.cu)
             endif()
         endif()
     endif()

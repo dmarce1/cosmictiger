@@ -102,14 +102,14 @@ def main():
     root = args.workdir.resolve()
     root.mkdir(parents=True, exist_ok=True)
     available = compiled_algorithms(str(executable))
-    require("fmm" in available["far"], "shared SPH octree regression requires FMM")
     integrators = args.time_integrator or [name for name in ("global", "traditional")
                                           if name in available["integrator"]]
     require(integrators, "global or traditional integration is required")
     common = {"hpx:threads": args.threads, "hpx:bind": "none", **cpu_backend_options(),
               "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "scenario.cosmology.useGlass": "false",
               "initial.closePack": "false", "hydro.enabled": "true",
-              "gravity.enabled": "true", "chemistry.enabled": "false",
+              # SPH has no self-gravity coupling in the PMMM solver.
+              "gravity.enabled": "false", "chemistry.enabled": "false",
               "starFormation.enabled": "false", "analysis.groups": "false",
               "analysis.tracers": "false", "analysis.views": "false",
               "analysis.power": "false", "analysis.slice": "false",
@@ -122,7 +122,7 @@ def main():
 
     def run(directory, options, integrator, *, ranks=1, restart=None):
         command = [str(executable), *args.hpx_argument,
-                   *application_arguments(executable, far="fmm", integrator=integrator, hydro=True)]
+                   *application_arguments(executable, integrator=integrator, hydro=True)]
         command += [f"--{key}={value}" for key, value in dict(common, **options).items()]
         if restart is not None:
             command.append(f"--checkpoint.readIndex={restart}")
@@ -148,10 +148,8 @@ def main():
     for integrator in integrators:
         cases = [("wave", {"run.scenario": "hydroWave", "run.endTime": 0.5,
                            "run.numberOfSteps": 1, "run.maxIterations": 8}, 1)]
-        cases += [("mixed", {"run.scenario": "cosmology", "cosmology.sigma8": 0,
-                             "run.darkMatterParticleCount": 64, "run.gasParticleCount": 64, "run.maxIterations": 2}, 1)]
         if args.mpi_exec:
-            cases.append(("mixed_mpi", dict(cases[-1][1]), 2))
+            cases.append(("wave_mpi", dict(cases[-1][1]), 2))
         for name, options, ranks in cases:
             label = f"{integrator}_{name}"
             reference = prepareCase(root, label)

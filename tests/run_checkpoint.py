@@ -334,7 +334,7 @@ def main():
         return 0
 
     options = [str(executable), "--hpx:threads=2", "--hpx:bind=none",
-               "--run.timeIntegrator=traditional", "--gravity.method.far=fmm",
+               "--run.timeIntegrator=traditional", "--gravity.meshSize=8",
                "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512", "--hydro.enabled=false",
                "--gravity.cuda=false", "--analysis.views=false",
                "--lightcone.enabled=false", "--analysis.power=false",
@@ -461,7 +461,7 @@ def main():
         manifest.write_text("\n".join(lines) + "\n")
 
     output = restart("retired_pm", retiredParticleMesh, expectSuccess=False)
-    if "Ordinary PM gravity checkpoints are no longer supported" not in output:
+    if "Scalar particle-mesh (pm, p3m) checkpoints are no longer supported" not in output:
         raise RuntimeError("retired PM checkpoint was not rejected before reading its payload")
 
     def downgradeToVersionOne(checkpointDir):

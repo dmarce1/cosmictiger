@@ -90,7 +90,7 @@ std::unordered_map<std::string, Row> workRows(std::string const& report) {
 struct WorkExpected {
     double prepare;
     double traversal;
-    double periodic;
+    double schedule;
     double parallel;
 };
 
@@ -116,12 +116,12 @@ WorkExpected exerciseWork() {
     }
     auto const start = Clock::now();
     try {
-        profile::ScopedWork work(profile::WorkPhase::KickCpuPeriodic);
+        profile::ScopedWork work(profile::WorkPhase::KickCpuSchedule);
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
         throw UnwindChild{};
     } catch (UnwindChild const&) {
     }
-    expected.periodic = std::chrono::duration<double>(Clock::now() - start).count();
+    expected.schedule = std::chrono::duration<double>(Clock::now() - start).count();
 
     constexpr size_t kWorkers = 4;
     std::barrier rendezvous(static_cast<std::ptrdiff_t>(kWorkers));
@@ -167,14 +167,14 @@ WorkExpected exerciseWork() {
 void checkWork(std::string const& report, WorkExpected const& expected) {
     auto const values = workRows(report);
     require(values.size() == 8, "Unexpected detail phase or disabled/stopped scope recorded");
-    for (auto const* name : {"kick.cpu.prepare", "kick.cpu.traversal", "kick.cpu.periodic"}) {
+    for (auto const* name : {"kick.cpu.prepare", "kick.cpu.traversal", "kick.cpu.schedule"}) {
         require(values.at(name).calls == 1, "Transition or scope unwind changed work calls");
     }
     require(std::abs(values.at("kick.cpu.prepare").total - expected.prepare) < 0.02,
         "Preparation work interval was lost or duplicated");
     require(std::abs(values.at("kick.cpu.traversal").total - expected.traversal) < 0.02,
         "Transition did not separate work intervals");
-    require(std::abs(values.at("kick.cpu.periodic").total - expected.periodic) < 0.02,
+    require(std::abs(values.at("kick.cpu.schedule").total - expected.schedule) < 0.02,
         "Exception unwind lost work interval");
     require(values.at("kick.cpu.P2P").calls == 4, "Parallel scopes lost calls");
     require(std::abs(values.at("kick.cpu.P2P").total - expected.parallel) < 0.02,
@@ -212,7 +212,7 @@ void exerciseDeviceWork() {
     profile::recordDeviceBlocks(blocks.data(), blocks.size());
     // Cycles without a recorded invocation are invalid and must not create a
     // row, block, or launch. A genuine zero-cycle invocation below is retained.
-    blocks[2].phases[static_cast<size_t>(profile::DevicePhase::KickPeriodic)].cycles = 999;
+    blocks[2].phases[static_cast<size_t>(profile::DevicePhase::KickCleanup)].cycles = 999;
     profile::recordDeviceBlocks(blocks.data(), blocks.size());
     require(profile::profileReport().empty(), "Empty/invalid device records created a report");
     blocks[0].phases[static_cast<size_t>(profile::DevicePhase::KickPrepare)] = {100, 2};

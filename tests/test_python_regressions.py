@@ -20,7 +20,6 @@ import check_build_features
 import checkpoint_format as checkpoint
 import compare_native_recombination
 import run_gadget4_cooling
-import run_linear_growth
 import run_star_formation_ids
 import run_variational_sph
 
@@ -123,7 +122,7 @@ class BuildCapabilityTests(unittest.TestCase):
             with self.subTest(gravity=gravity, rockstar=rockstar):
                 configuration = {feature: feature in ('SPH', 'INTEGRATOR_TRADITIONAL')
                                  for feature in check_build_features.FEATURES}
-                configuration.update(FMM=gravity, ROCKSTAR=rockstar)
+                configuration.update(GRAVITY=gravity, ROCKSTAR=rockstar)
                 definitions = check_build_features.configurationDefinitions(configuration, 32, (4, 6))
                 self.assertEqual(definitions['COSMICTIGER_ENABLE_ROCKSTAR'], str(int(gravity and rockstar)))
                 self.assertEqual(check_build_features.hasRockstar(configuration), gravity and rockstar)
@@ -378,16 +377,6 @@ class VariationalCudaTests(unittest.TestCase):
 
 
 class OptimizedRunnerTests(unittest.TestCase):
-    def test_application_runner_waits_and_reports_failure(self):
-        with tempfile.TemporaryDirectory() as directory:
-            with patch.object(run_linear_growth, 'application_arguments', return_value=[]), \
-                    patch.object(run_linear_growth.subprocess, 'Popen') as popen:
-                process = popen.return_value.__enter__.return_value
-                process.wait.return_value = 7
-                with self.assertRaisesRegex(RuntimeError, 'exited with 7'):
-                    run_linear_growth.runDiagnostic(Path('/fake/executable'), Path(directory))
-                process.wait.assert_called_once_with(timeout=180)
-
     def test_variational_mpi_launcher_argument_order(self):
         launcher = SimpleNamespace(mpi_exec='/mpi', mpi_numproc_flag='-np',
                                    mpi_preflag=['--before'], mpi_postflag=['--after'],
@@ -409,7 +398,7 @@ class OptimizedRunnerTests(unittest.TestCase):
         directory = Path(__file__).resolve().parent
         for name in ('run_checkpoint', 'run_gadget4_cooling', 'run_global_integrator',
                      'run_gravity_error', 'run_mpi_launcher', 'run_star_formation',
-                     'run_star_formation_ids', 'run_linear_growth',
+                     'run_star_formation_ids',
                      'camb_reference', 'compare_native_recombination'):
             with self.subTest(name=name):
                 module = importlib.import_module(name)
@@ -428,7 +417,7 @@ class OptimizedRunnerTests(unittest.TestCase):
     def test_regression_checks_are_not_python_assert_statements(self):
         directory = Path(__file__).resolve().parent
         for name in ('run_global_integrator.py', 'run_mpi_launcher.py', 'run_checkpoint.py',
-                     'run_star_formation.py', 'run_gadget4_cooling.py', 'run_linear_growth.py'):
+                     'run_star_formation.py', 'run_gadget4_cooling.py'):
             tree = ast.parse((directory / name).read_text())
             with self.subTest(name=name):
                 self.assertFalse(any(isinstance(node, ast.Assert) for node in ast.walk(tree)))

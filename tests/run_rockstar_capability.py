@@ -62,13 +62,11 @@ def main():
         return match[1].split()
 
     solvers = choices("Gravity solvers")
-    far = next((value for value in ("fmm", "pmmm", "pm", "p3m", "none")
-                if value in solvers), None)
+    far = next((value for value in ("pmmm", "none") if value in solvers), None)
     if far is None:
         raise RuntimeError("no compiled gravity solver supports the startup fixture")
     eligible = [value for value in choices("Time integrators")
-                if (value != "global" or far not in ("pm", "p3m"))
-                and (value != "hierarchical" or far != "none")]
+                if value != "hierarchical" or far != "none"]
     integrator = next((value for value in ("traditional", "global", "hierarchical")
                        if value in eligible), None)
     if integrator is None:
@@ -94,13 +92,10 @@ def main():
         "output.directory": ".",
         "checkpoint.intervalSeconds": "0",
     }
-    if far != "none":
-        options["gravity.method.far"] = far
-    if far in ("pmmm", "p3m"):
-        near = choices("PMMM near solvers" if far == "pmmm" else "P3M short solvers")
-        options["gravity.method.near"] = next(value for value in ("pp", "fmm") if value in near)
-    if far in ("pmmm", "pm", "p3m"):
-        options["gravity.meshSize"] = "32" if far == "p3m" else "8"
+    if far == "pmmm":
+        near = choices("PMMM near solvers")
+        options["gravity.method.near"] = next(value for value in ("fmm", "pp") if value in near)
+        options["gravity.meshSize"] = "8"
 
     startup = run("startup", options)
     if not re.search(r"^build\.rockstar\s*:\s*F\s*$", startup, re.MULTILINE):

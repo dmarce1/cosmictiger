@@ -14,8 +14,7 @@
 // report counts.
 struct KickInteractionCounts {
     long long acceptanceTests;                // acceptance evaluations, both passes
-    long long cellCellDirect;                 // M2L, direct pass
-    long long cellCellEwald;                  // M2L, Ewald pass
+    long long cellCellDirect;                 // M2L
     long long cellParticle;                   // P2L: source leaf particles into a sink expansion
     long long cellParticleAtLeafSinks;        // the subset whose sink is a leaf
     long long particleCell;                   // M2P: source multipole onto sink leaf particles

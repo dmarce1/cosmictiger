@@ -131,7 +131,7 @@ inline bool particlesHasLongAcceleration(Options const& options) {
 // The PMMM outer interval freezes each particle's near-field mesh cell key for
 // the whole interval; the key is assigned at the boundary that opens the interval.
 inline bool particlesHasFrozenCell(Options const& options) {
-    return options.gravity.enabled && usesMeshGravityInterval(options.gravity);
+    return options.gravity.enabled && usesOuterInterval(options.gravity);
 }
 
 struct Particle {

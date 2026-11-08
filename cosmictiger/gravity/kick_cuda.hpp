@@ -51,8 +51,6 @@ template <int order>
 struct CudaKickListStorage {
     int* dchecks;         // checklist stack entries
     int* dcheckBounds;    // stack level bounds, depth + 2 entries
-    int* echecks;
-    int* echeckBounds;
     int* leaflist;
     int* cplist;
     int* cclist;
@@ -104,8 +102,6 @@ CUDA_EXPORT inline int kickCarveListStorage(
     storage.currentEntries = layout.expansionOffset >= 0 ? 0 : 1;
     storage.dchecks = carver.take<int>(storage.listEntries);
     storage.dcheckBounds = carver.take<int>(storage.depth + 2);
-    storage.echecks = carver.take<int>(storage.listEntries);
-    storage.echeckBounds = carver.take<int>(storage.depth + 2);
     storage.leaflist = carver.take<int>(storage.listEntries);
     storage.cplist = carver.take<int>(storage.listEntries);
     storage.cclist = carver.take<int>(storage.listEntries);
@@ -125,7 +121,6 @@ CUDA_EXPORT inline int kickCarveListStorage(
 // (or, without a reservation, in the cudaAllocate pool).
 template <int order>
 struct CudaKickControl {
-    StackVector<int> echecks;
     StackVector<int> dchecks;
     DeviceVector<int> leaflist;
     DeviceVector<int> cplist;
@@ -155,8 +150,7 @@ struct CudaKickControl {
     CudaKickControl() = default;
     // Collective: lists on the block's slab regions (every lane constructs).
     __device__ inline CudaKickControl(CudaKickListStorage<order> const& storage)
-      : echecks(storage.echecks, storage.listEntries, storage.echeckBounds, storage.depth)
-      , dchecks(storage.dchecks, storage.listEntries, storage.dcheckBounds, storage.depth)
+      : dchecks(storage.dchecks, storage.listEntries, storage.dcheckBounds, storage.depth)
       , leaflist(storage.leaflist, storage.listEntries)
       , cplist(storage.cplist, storage.listEntries)
       , cclist(storage.cclist, storage.listEntries)
@@ -177,9 +171,7 @@ struct CudaKickParameters {
     cosmictiger::gravity::cartesian::tracefree::Expansion<float, order> lValue;
     int self;
     int* dchecks;
-    int* echecks;
     int dcount;
-    int ecount;
 };
 
 // listSlab: the per-launch list slab (layout.listSlabBytes per block), or null

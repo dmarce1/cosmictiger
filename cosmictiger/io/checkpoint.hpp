@@ -14,7 +14,7 @@
 #include <cosmictiger/core/driver.hpp>
 
 struct CheckpointSelection {
-    std::string farMethod;
+    // PMMM near field recorded by the checkpoint: fmm, pp, or none without gravity.
     std::string nearMethod;
     std::string timeIntegrator;
     int expansionOrder{};

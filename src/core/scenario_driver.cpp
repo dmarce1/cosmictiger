@@ -19,9 +19,6 @@
 #include <cosmictiger/core/terminal.hpp>
 #include <cosmictiger/core/timer.hpp>
 #if COSMICTIGER_WITH_GRAVITY
-#if COSMICTIGER_ENABLE_FMM
-#include <cosmictiger/gravity/global_fmm/execution.hpp>
-#endif
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
 #endif
@@ -496,9 +493,6 @@ void runFixedScenario() {
         profile::ScopedPhase phase("diagnostics.scenario");
         plan.finish(state.tau);
     }
-#if COSMICTIGER_ENABLE_FMM
-    kickClearBuffers();
-#endif
     runtime.stop();
     if (hpxRank() == 0) {
         std::cout << std::format("\n  {:s}: {:s} at t={:.6e} after {:d} steps.\n", definition.name,

@@ -100,7 +100,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
-    parser.add_argument("--gravity-method", choices=("fmm", "pmmm"), required=True)
     parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"))
     parser.add_argument("--position-type", choices=("fixed32", "fixed64"), default="fixed32")
     parser.add_argument("--cuda", action="store_true")
@@ -127,19 +126,15 @@ def main():
               "analysis.tracers": "false", "analysis.views": "false", "analysis.power": "false",
               "lightcone.enabled": "false", "output.silo": "false", "output.directory": ".",
               "checkpoint.intervalSeconds": 0}
-    common.update(application_options(executable, far=args.gravity_method,
-                                      integrator=args.time_integrator))
-    if args.gravity_method == "pmmm":
-        common["gravity.meshSize"] = 8
-        if args.cuda:
-            # The PP CUDA path requires enough candidate pairs to amortize a
-            # launch. The eight-cell power-of-two mesh with width two gives each
-            # cell a 5**3 neighbor cube; 512 particles and a 4096-particle batch
-            # keep the candidate pairs on the GPU rather than falling back to CPU.
-            common.update({"run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "gravity.meshSize": 8,
-                           "gravity.pmmmNearWidth": 2, "gravity.pmmmBatchParticles": 4096})
-    elif args.cuda:
-        common["run.verbose"] = "true"
+    common.update(application_options(executable, integrator=args.time_integrator))
+    common["gravity.meshSize"] = 8
+    if args.cuda:
+        # The near-field CUDA paths require enough candidate pairs to amortize a
+        # launch. The eight-cell power-of-two mesh with width two gives each
+        # cell a 5**3 neighbor cube; 512 particles and a 4096-particle batch
+        # keep the candidate pairs on the GPU rather than falling back to CPU.
+        common.update({"run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "gravity.meshSize": 8,
+                       "gravity.pmmmNearWidth": 2, "gravity.pmmmBatchParticles": 4096})
     if ranks > 1:
         common["hpx:localities"] = ranks
 
@@ -172,9 +167,6 @@ def main():
     referenceBackend = "CUDA" if args.cuda else "CPU"
     require(f"using {referenceBackend} Ewald table" in sampledLog,
             f"sampled evolution did not select the {referenceBackend} reference backend")
-    if args.cuda and args.gravity_method == "fmm":
-        require("CUDA kick arena (" in sampledLog,
-                "sampled FMM evolution did not execute the CUDA kick path")
     fields, rows = readErrors(sampled, [0, 2, 4], 7, duration)
     sampledCheckpoints = checkpoints(sampled)
     compareState(baselineState, readState(sampledCheckpoints[-1], ranks))
@@ -199,7 +191,7 @@ def main():
                  "run.darkMatterParticleCount": 64, "run.gasParticleCount": 64, "run.maxIterations": 1})
     readErrors(capped, [0], 64, duration)
     print(f"Gravity error sampling passed: cadence, 7/{particleCount} samples, restart, unchanged physics, "
-          f"and count cap ({args.gravity_method}, {'CUDA' if args.cuda else 'CPU'}, "
+          f"and count cap (pmmm, {'CUDA' if args.cuda else 'CPU'}, "
           f"{args.position_type}, {ranks} rank(s))")
     return 0
 

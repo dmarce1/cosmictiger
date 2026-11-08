@@ -24,9 +24,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
-    parser.add_argument("--gravity-method", choices=("fmm", "pmmm", "pm", "p3m", "none"), required=True)
-    parser.add_argument("--near-method", choices=("pp", "fmm", "none"), required=True)
-    parser.add_argument("--order", type=int, choices=(0, *range(3, 10)), required=True)
+    parser.add_argument("--near-method", choices=("pp", "fmm"), default="fmm",
+                        help="PMMM near field selected by the fixtures (fmm or its pp fallback)")
+    parser.add_argument("--order", type=int, choices=(0, *range(3, 10)), required=True,
+                        help="compiled expansion order; 0 for an SPH-only build without gravity")
     parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"), required=True)
     parser.add_argument("--without-sph", action="store_true")
     parser.add_argument("--without-chemistry", action="store_true")
@@ -43,11 +44,10 @@ def main():
     parser.add_argument("--retired-viscosity-only", action="store_true",
                         help="Check that retired viscosity selectors are rejected")
     args = parser.parse_args()
-    if args.gravity_method == "none":
-        if not args.startup_options_only or args.order != 0 or args.without_sph:
-            parser.error("gravity-method=none requires startup-options-only, order=0, and SPH")
-    elif args.order == 0:
-        parser.error("order=0 requires gravity-method=none")
+    # PMMM is the only gravity solver; order zero marks an SPH-only build.
+    gravity_compiled = args.order != 0
+    if not gravity_compiled and (not args.startup_options_only or args.without_sph):
+        parser.error("order=0 requires startup-options-only and SPH")
     chemistryAvailable = not args.without_sph and not args.without_chemistry
     starFormationAvailable = not args.without_sph and args.with_star_formation
     coupledSourcesAvailable = not args.without_entropy_sources
@@ -70,28 +70,25 @@ def main():
                     "kickSharedExpansion", "kickHandoffBlocks", "kickFineHandoffBlocks",
                     "kickListReserve")
 
-    # Hierarchical SPH shares the hydro path and currently supports FMM gravity.
-    hydro_rejected = args.time_integrator == "hierarchical" and args.gravity_method != "fmm"
-    hydro_error = "hierarchical SPH requires FMM gravity"
+    # Hierarchical integration steps gravity alone; SPH has no self-gravity coupling.
+    hydro_rejected = args.time_integrator == "hierarchical"
+    hydro_error = "hierarchical requires gravity without SPH"
 
     def run(name, options, success=True, pmmm_mesh=8, selectors=True):
         if selectors:
-            selected = {"gravity.method.far": args.gravity_method,
-                        "run.timeIntegrator": args.time_integrator}
-            if args.gravity_method == "none":
+            selected = {"run.timeIntegrator": args.time_integrator}
+            if not gravity_compiled:
                 selected["gravity.enabled"] = "false"
             else:
                 selected["gravity.expansionDegree"] = args.order - 1
-            if args.gravity_method in ("pmmm", "p3m"):
                 selected["gravity.method.near"] = args.near_method
             options = options + [f"--{key}={value}" for key, value in selected.items()
                                  if not any(option.startswith(f"--{key}=") for option in options)]
         # Most cases inspect unrelated options; supply the required mesh size.
         # Mesh/INI-specific cases can disable this fixture default explicitly.
-        if (args.gravity_method in ("pmmm", "pm", "p3m") and pmmm_mesh is not None and
+        if (gravity_compiled and pmmm_mesh is not None and
                 not any(option.startswith("--gravity.meshSize=") for option in options)):
-            # The P3M search mesh needs 32 PM cells at the default split and cutoff.
-            options = options + [f"--gravity.meshSize={32 if args.gravity_method == 'p3m' else pmmm_mesh}"]
+            options = options + [f"--gravity.meshSize={pmmm_mesh}"]
         result = subprocess.run(command + options, cwd=args.workdir, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30,
                                 env=environment)
@@ -154,8 +151,6 @@ def main():
                 "hydro.neighborNumber", "gravity.enabled",
                 "gravity.kernelFamily", "gravity.kernelDegree",
                 "gravity.meshSize", "gravity.pmmmNearWidth", "gravity.pmmmCoarseMeshSize",
-                "gravity.cloud", "gravity.p3mSplitCells", "gravity.p3mCutoff",
-                "gravity.openingAngle", "gravity.openingSchedule",
                 "gravity.errorInterval", "gravity.errorSampleSize",
                 "hydro.kernelFamily", "hydro.kernelDegree",
                 "gravity.effectiveRadius", "gravity.smoothingLength",
@@ -170,7 +165,7 @@ def main():
                 "starFormation.enabled", "starFormation.seed", "starFormation.criticalPhysicalDensity",
                 "starFormation.criticalOverDensity",
                 "starFormation.evaporationFactor", "starFormation.starFormationTimeGyr"}
-    required.update({"run.timeIntegrator", "gravity.method.far", "gravity.method.near",
+    required.update({"run.timeIntegrator", "gravity.method.near",
                      "gravity.expansionDegree", "hydro.viscosityCoefficientMin",
                      "hydro.viscosityDecay", "hydro.balsaraSoundSpeedCoefficient"})
     required.update({"scenario.cosmology.gadget4Restart", "scenario.cosmology.useGlass",
@@ -203,7 +198,7 @@ def main():
         startupDirectory = args.workdir / "units startup"
         hydroMethod = "sph"
         startupPhysics = (["--run.scenario=hydroWave", "--hydro.enabled=true"]
-                          if args.gravity_method == "none" else ["--hydro.enabled=false"])
+                          if not gravity_compiled else ["--hydro.enabled=false"])
         output = run("startup_options", [
             "--run.verbose=false", *startupPhysics,
             f"--hydro.method={hydroMethod}", "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512",
@@ -239,6 +234,8 @@ def main():
                        "hydro.yReflect", "gravity.sphSmoothing", "cosmology.omegaK",
                        "initial.usePowerFile", "initial.particlesPerDimension",
                        "initial.darkMatterParticleCount", "initial.gasParticleCount", "gravity.method",
+                       "gravity.method.far", "gravity.cloud", "gravity.p3mSplitCells",
+                       "gravity.p3mCutoff", "gravity.openingAngle", "gravity.openingSchedule",
                        "gravity.pmmmNearMethod", "gravity.pmmmOrder", "gravity.fmmOrder",
                        "run.hierarchicalGravity", "initial.createGlass", "initial.plummer",
                        "hydro.pressureOperator", "hydro.balsaraSwitch", "chemistry.network", "chemistry.initialization",
@@ -360,7 +357,7 @@ mapSize = 8
         print("Hydrodynamics method validation passed")
         return
 
-    for key, value in (("gravity.method.far", "unknown"),
+    for key, value in (("gravity.method.near", "unknown"),
                        ("run.timeIntegrator", "unknown"),
                        ("gravity.expansionDegree", "1"),
                        ("gravity.expansionDegree", "9")):
@@ -375,17 +372,13 @@ mapSize = 8
         output = run(f"selection_degree_{degree}",
                      metadata_options + [f"--gravity.expansionDegree={degree}"])
         assertNumericSetting(output, "gravity.expansionDegree", degree)
-    selected_options = [f"--gravity.method.far={args.gravity_method}",
-                        f"--gravity.expansionDegree={args.order - 1}",
-                        f"--run.timeIntegrator={args.time_integrator}"]
-    near_selected = args.gravity_method in ("pmmm", "p3m")
-    if near_selected:
-        selected_options.append(f"--gravity.method.near={args.near_method}")
+    selected_options = [f"--gravity.expansionDegree={args.order - 1}",
+                        f"--run.timeIntegrator={args.time_integrator}",
+                        f"--gravity.method.near={args.near_method}"]
     selection_config = args.workdir / "algorithm_selection.ini"
     selection_config.write_text(
         f"[run]\ntimeIntegrator = {args.time_integrator}\n[gravity]\n"
-        f"method.far = {args.gravity_method}\nexpansionDegree = {args.order - 1}\n" +
-        (f"method.near = {args.near_method}\n" if near_selected else ""))
+        f"expansionDegree = {args.order - 1}\nmethod.near = {args.near_method}\n")
     output = run("selection_ini", metadata_options + [
         f"--configuration={selection_config.resolve()}"], selectors=False)
     assertNumericSetting(output, "gravity.expansionDegree", args.order - 1)
@@ -395,15 +388,7 @@ mapSize = 8
                  selectors=False)
     assertNumericSetting(output, "gravity.expansionDegree", int(degree_range[2]))
     for key, label, choices in (
-            ("gravity.method.far", "Gravity solvers", ("fmm", "pmmm", "pm", "p3m")),
-            ("run.timeIntegrator", "Time integrators", ("traditional", "hierarchical", "global")),
-            ("gravity.method.near", "PMMM near solvers" if args.gravity_method == "pmmm"
-             else "P3M short solvers", ("pp", "fmm"))):
-        if key == "gravity.method.near" and not near_selected:
-            continue
-        if key == "run.timeIntegrator" and args.gravity_method in ("pm", "p3m"):
-            # The global integrator is compiled but not eligible for pm/p3m.
-            choices = ("traditional", "hierarchical")
+            ("run.timeIntegrator", "Time integrators", ("traditional", "hierarchical", "global")),):
         compiled = re.search(r"^\s*" + label + r":([^\n]*)", help_text, re.MULTILINE)
         count = sum(choice in compiled[1].split() for choice in choices) if compiled else 0
         arguments = [option for option in selected_options if not option.startswith(f"--{key}=")]
@@ -411,6 +396,16 @@ mapSize = 8
                      success=count == 1, selectors=False)
         if count > 1 and key not in output:
             raise RuntimeError(f"ambiguous {key} lacked an explicit-selection diagnostic")
+    # Both near fields are always compiled; the FMM near field is the default and
+    # pp is its fallback.
+    compiled_near = re.search(r"^\s*PMMM near solvers:([^\n]*)", help_text, re.MULTILINE)
+    if compiled_near is None or set(compiled_near[1].split()) != {"fmm", "pp"}:
+        raise RuntimeError("help did not list the fmm near field and its pp fallback")
+    output = run("selection_implicit_gravity.method.near", metadata_options + [
+        option for option in selected_options if not option.startswith("--gravity.method.near=")],
+        selectors=False)
+    if not re.search(r"^gravity\.method\.near\s*:\s*fmm\s*$", output, re.MULTILINE):
+        raise RuntimeError("the implicit PMMM near field is not the FMM")
 
     # A comoving Mpc/h box contains rho_m,0 * L^3. Resolution changes the mass
     # unit, and close packing doubles the reference count at fixed resolution.
@@ -569,8 +564,7 @@ mapSize = 8
                        + sph_control_options if sph_controls_available else metadata_options)
     balsara_default = run("balsara_default", balsara_options)
     def assertCompiledSettings(output):
-        for key, value in (("gravity.method.far", args.gravity_method),
-                           ("gravity.method.near", args.near_method if args.gravity_method in ("pmmm", "p3m") else "none"),
+        for key, value in (("gravity.method.near", args.near_method if gravity_compiled else "none"),
                            ("run.timeIntegrator", args.time_integrator)):
             if not re.search(r"^" + re.escape(key) + r"\s*:\s*" + value + r"\s*$",
                              output, re.MULTILINE):
@@ -592,47 +586,8 @@ mapSize = 8
     for scenario in ("plummer", "glass"):
         output = run(f"integrator_{scenario}", metadata_options + [f"--run.scenario={scenario}"])
         assertCompiledSettings(output)
-    if args.gravity_method == "fmm":
-        assertNumericSetting(balsara_default, "gravity.openingAngle", 0.8)
-        scalar_angle = run("fmm_scalar_angle", metadata_options + ["--gravity.openingAngle=0.73"])
-        assertNumericSetting(scalar_angle, "gravity.openingAngle", 0.73)
-        schedule_config = args.workdir / "opening_schedule.ini"
-        schedule_config.write_text("[gravity]\nopeningSchedule = 2:0.61,49:0.41,20:0.51\n"
-                                   "openingAngle = 0.73\n[cosmology]\nstartRedshift = 30\n")
-        schedule_output = run("opening_schedule_ini", metadata_options + [
-            f"--configuration={schedule_config.resolve()}"])
-        assertNumericSetting(schedule_output, "gravity.openingAngle", 0.51)
-        if not re.search(r"^gravity\.openingSchedule\s*:\s*2:0\.61,49:0\.41,20:0\.51\s*$",
-                         schedule_output, re.MULTILINE):
-            raise RuntimeError("INI opening schedule was not retained in option metadata")
-        schedule_output = run("opening_schedule_cli_override", metadata_options + [
-            f"--configuration={schedule_config.resolve()}", "--cosmology.startRedshift=46",
-            "--gravity.openingSchedule=20:0.55,49:0.44,2:0.66"])
-        assertNumericSetting(schedule_output, "gravity.openingAngle", 0.44)
-        schedule_output = run("opening_schedule_empty_override", metadata_options + [
-            f"--configuration={schedule_config.resolve()}", "--gravity.openingSchedule=none"])
-        assertNumericSetting(schedule_output, "gravity.openingAngle", 0.73)
-        schedule_output = run("opening_schedule_tie", metadata_options + [
-            "--cosmology.startRedshift=34.5", "--gravity.openingSchedule=20:0.51,49:0.41"])
-        assertNumericSetting(schedule_output, "gravity.openingAngle", 0.41)
-    for index, schedule in enumerate((
-            "49", "49:0.41,", "49:0.41:0.51", "49:0.41,49:0.51",
-            "nan:0.41", "49:nan", "inf:0.41", "49:inf", "-1:0.41",
-            "49:0", "49:-0.41")):
-        rejected = run(f"opening_schedule_invalid_{index}", metadata_options + [
-            f"--gravity.openingSchedule={schedule}"], success=False)
-        if "gravity.openingSchedule" not in rejected:
-            raise RuntimeError("invalid opening schedule lacked an option-specific diagnostic")
-    unsupported_schedules = [("plummer", ["--run.scenario=plummer"])]
-    if args.gravity_method in ("pmmm", "pm", "p3m"):
-        unsupported_schedules.append((args.gravity_method, []))
-    for name, options in unsupported_schedules:
-        rejected = run(f"opening_schedule_unsupported_{name}", metadata_options + options + [
-            "--gravity.openingSchedule=49:0.41,20:0.51"], success=False)
-        if "gravity.openingSchedule" not in rejected:
-            raise RuntimeError(f"opening schedule was not explicitly rejected for {name}")
     run("gravity_negative_mesh", metadata_options + ["--gravity.meshSize=-1"], success=False)
-    if args.gravity_method == "pmmm":
+    if gravity_compiled:
         # The smallest power-of-two mesh with distinct periodic near cells.
         minimum_mesh = {1: 4, 2: 8, 3: 8, 4: 16}
         for near_width, mesh_size in minimum_mesh.items():
@@ -681,7 +636,7 @@ mapSize = 8
             f"--configuration={coarse_config.resolve()}"], success=False, pmmm_mesh=None)
         if "gravity.pmmmCoarseMeshSize must be a power of two" not in rejected:
             raise RuntimeError("INI coarse mesh rejection lacked its option diagnostic")
-        power_of_two = "gravity.meshSize must be a power of two when gravity.method.far=pmmm"
+        power_of_two = "gravity.meshSize must be a power of two for PMMM"
         coarse_range = ("gravity.pmmmCoarseMeshSize must be a power of two between the smallest "
                         "power of two at least 2*gravity.pmmmNearWidth+1 and gravity.meshSize")
         for label, options, diagnostic in (
@@ -714,51 +669,12 @@ mapSize = 8
                 "gravity.pmmmNearWidth/gravity.meshSize") not in rejected:
             raise RuntimeError("PMMM support validation lacked its near-width diagnostic")
         for scenario in ("cosmology", "plummer"):
+            # The near-field angle is derived from the neighbor cube for every scenario.
             pmmm_output = run(f"pmmm_derived_angle_{scenario}", metadata_options + [
-                f"--run.scenario={scenario}", "--gravity.openingAngle=0.99"])
+                f"--run.scenario={scenario}"])
             assertCompiledSettings(pmmm_output)
             assertNumericSetting(pmmm_output, "gravity.openingAngle", math.sqrt(3) / 3)
-    if args.gravity_method in ("pm", "p3m"):
-        for cloud, points in (("ngp", 1), ("cic", 2), ("tsc", 3), ("pcs", 4)):
-            mesh_output = run(f"{args.gravity_method}_cloud_{cloud}", metadata_options + [
-                "--gravity.meshSize=32", f"--gravity.cloud={cloud}"])
-            assertCompiledSettings(mesh_output)
-            if not re.search(r"^gravity\.cloud\s*:\s*" + cloud + r"\s*$", mesh_output, re.MULTILINE):
-                raise RuntimeError(f"resolved options did not report gravity.cloud={cloud}")
-            assertNumericSetting(mesh_output, "gravity.meshSize", 32)
-            if args.gravity_method == "p3m":
-                # r_s = 1.25/32, cutoff 4.5 r_s = 0.1758; the search mesh with width
-                # two is 8 (2/8 >= 0.1758) and its coarse mesh resolves to the near minimum.
-                assertNumericSetting(mesh_output, "gravity.p3mSplitRadius", 1.25 / 32)
-                assertNumericSetting(mesh_output, "gravity.p3mCutoffRadius", 4.5 * 1.25 / 32)
-                assertNumericSetting(mesh_output, "gravity.p3mMeshSize", 8)
-                assertNumericSetting(mesh_output, "gravity.pmmmCoarseMeshSize", 8)
-            else:
-                assertNumericSetting(mesh_output, "gravity.p3mMeshSize", 0)
-        run(f"{args.gravity_method}_invalid_cloud", metadata_options + [
-            "--gravity.meshSize=32", "--gravity.cloud=sph"], success=False)
-        run(f"{args.gravity_method}_mesh_too_small", metadata_options + [
-            "--gravity.meshSize=3", "--gravity.cloud=pcs"], success=False, pmmm_mesh=None)
-        run(f"{args.gravity_method}_global_rejected", metadata_options + [
-            "--gravity.meshSize=32", "--run.timeIntegrator=global"], success=False)
-        # Non-power-of-two meshes are valid for the scalar PM solve.
-        odd_output = run(f"{args.gravity_method}_odd_mesh", metadata_options + ["--gravity.meshSize=36"])
-        assertNumericSetting(odd_output, "gravity.meshSize", 36)
-        if args.gravity_method == "p3m":
-            for index, invalid in enumerate((["--gravity.meshSize=32", "--gravity.p3mSplitCells=0"],
-                                             ["--gravity.meshSize=32", "--gravity.p3mCutoff=-1"],
-                                             ["--gravity.meshSize=16", "--gravity.p3mCutoff=4.5"],
-                                             ["--gravity.meshSize=32", "--gravity.smoothingLength=8"])):
-                run(f"p3m_invalid_{index}", metadata_options + invalid, success=False, pmmm_mesh=None)
-    for selected_field in ("saveAcceleration", "savePotential"):
-        output = run(f"diagnostic_{selected_field}", metadata_options + [
-            f"--analysis.{selected_field}=true"])
-        for field in ("saveForce", "saveAcceleration", "savePotential"):
-            expected = "T" if field == selected_field else "F"
-            if not re.search(r"^analysis\." + field + r"\s*:\s*" + expected + r"\s*$",
-                             output, re.MULTILINE):
-                raise RuntimeError("independent saved field option enabled the wrong diagnostic")
-    if args.gravity_method == "pmmm":
+    if gravity_compiled:
         for index, invalid in enumerate((
                 [], ["--gravity.meshSize=4"], ["--gravity.meshSize=12"],
                 ["--gravity.meshSize=8", "--gravity.pmmmNearWidth=0"],
@@ -775,10 +691,10 @@ mapSize = 8
             run(f"pmmm_invalid_{index}", metadata_options + invalid,
                 success=False, pmmm_mesh=None)
         pmmm_config = args.workdir / "pmmm.ini"
-        pmmm_config.write_text("[gravity]\nmeshSize = 16\npmmmNearWidth = 2\nopeningAngle = 0.1\n")
+        pmmm_config.write_text("[gravity]\nmeshSize = 16\npmmmNearWidth = 2\n")
         pmmm_output = run("pmmm_ini_cli", metadata_options + [
-            f"--configuration={pmmm_config.resolve()}", "--gravity.pmmmNearWidth=1",
-            "--gravity.openingAngle=0.9"], pmmm_mesh=None)
+            f"--configuration={pmmm_config.resolve()}", "--gravity.pmmmNearWidth=1"],
+            pmmm_mesh=None)
         assertCompiledSettings(pmmm_output)
         assertNumericSetting(pmmm_output, "gravity.meshSize", 16)
         # Width one lowers the minimum coarse mesh to four, above meshSize/8.
@@ -818,20 +734,23 @@ mapSize = 8
             raise RuntimeError("disabled SPH chemistry request lacked build guidance")
     else:
         for gravity_enabled in ("true", "false"):
-            rejected_here = hydro_rejected or (args.time_integrator == "hierarchical" and
-                                               gravity_enabled == "false")
+            # SPH has no self-gravity coupling in the PMMM solver.
+            coupled = gravity_enabled == "true" and gravity_compiled
+            rejected_here = hydro_rejected or coupled
             output = run(f"sph_cli_gravity_{gravity_enabled}", sph_options + [
                 "--hydro.enabled=true", f"--gravity.enabled={gravity_enabled}"],
                 success=not rejected_here)
             if rejected_here:
-                if hydro_error not in output:
+                if hydro_rejected and hydro_error not in output:
                     raise RuntimeError("hierarchical hydro rejection lacked guidance")
+                if not hydro_rejected and "SPH with self-gravity is not supported" not in output:
+                    raise RuntimeError("SPH with gravity lacked the PMMM coupling diagnostic")
                 continue
             assertCompiledSettings(output)
             if not re.search(r"^hydro\.enabled\s*:\s*T\s*$", output, re.MULTILINE):
                 raise RuntimeError("SPH CLI request was not enabled")
         sph_config = args.workdir / "sph_allowed.ini"
-        sph_config.write_text("[gravity]\nenabled = true\nmeshSize = 8\n"
+        sph_config.write_text("[gravity]\nenabled = false\nmeshSize = 8\n"
                               "[hydro]\nenabled = true\n")
         output = run("sph_ini_allowed", sph_options + [
             f"--configuration={sph_config.resolve()}"], success=not hydro_rejected)
@@ -1428,8 +1347,7 @@ mapSize = 8
         ini.optionxform = str
         with path.open() as stream:
             ini.read_file(stream)
-        preset_optional_keys = optional_keys | ({"gravity.method.far"}
-            if "method.far" not in ini["gravity"] else set())
+        preset_optional_keys = optional_keys
         actual_keys = {f"{section}.{key}" for section in ini.sections() for key in ini[section]}
         active_optional_keys = actual_keys & preset_optional_keys
         expected_keys = (public_keys - preset_optional_keys) | active_optional_keys
@@ -1460,10 +1378,6 @@ mapSize = 8
                              f"--lightcone.directory={metadata_directory / 'lightcone'}"]
         if args.without_rockstar:
             runtime_overrides.extend(["--analysis.groups=false", "--lightcone.enabled=false"])
-        if args.gravity_method in ("pmmm", "pm", "p3m"):
-            # The metadata fixture selects the compiled solver independently of
-            # a local preset's FMM-specific opening schedule.
-            runtime_overrides.append("--gravity.openingSchedule=none")
         preset_options = [f"--configuration={path}", "--chemistry.enabled=false",
                           "--starFormation.enabled=false"] + runtime_overrides
         if args.time_integrator == "hierarchical":
@@ -1629,8 +1543,11 @@ mapSize = 8
     removedCases = []
     for option in sorted(removed_options):
         value = {"cosmology.omegaK": "0.1", "gravity.cloud": "pcs",
-                 "gravity.method": args.gravity_method, "gravity.pmmmNearMethod": args.near_method,
+                 "gravity.method": "pmmm", "gravity.method.far": "pmmm",
+                 "gravity.pmmmNearMethod": args.near_method,
                  "gravity.fmmOrder": str(args.order), "gravity.pmmmOrder": str(args.order),
+                 "gravity.p3mSplitCells": "1.25", "gravity.p3mCutoff": "4.5",
+                 "gravity.openingAngle": "0.8", "gravity.openingSchedule": "none",
                  "run.timeIntegrator": args.time_integrator
                  }.get(option, "false")
         group, name = option.split(".")
@@ -1647,18 +1564,6 @@ mapSize = 8
     for (source, option, _), output in zip(removedCases, runAll([case for _, _, case in removedCases])):
         if option not in output or not re.search(r"unrecogni[sz]ed option|is ambiguous and matches", output):
             raise RuntimeError(f"removed {source} option {option} was not rejected explicitly")
-    if not args.without_sph and args.gravity_method == "fmm":
-        for parameter in ("omegaB", "omegaC"):
-            for value in ("0", "-0.1", "nan", "inf"):
-                output = run(f"invalid_class_mass_{parameter}_{value}", [
-                    "--run.test=sphGravity", "--hydro.enabled=true",
-                    "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512", f"--cosmology.{parameter}={value}"],
-                    success=False)
-                # Negative and nonfinite densities fail the common cosmology guard;
-                # zero is allowed there but cannot supply an SPH particle class.
-                diagnostic = "class masses" if value == "0" else "Invalid cosmology"
-                if diagnostic not in output:
-                    raise RuntimeError(f"invalid {parameter} did not produce {diagnostic!r}")
     output = run("support_half_box", metadata_options + [
                                       "--hydro.minSmoothingLength=5"], success=False)
     if "half the periodic box" not in output:

@@ -95,9 +95,6 @@ def selectReportOrders(report, minFmmOrder, maxFmmOrder):
     for key in ('kernels', 'operators'):
         selected[key] = [row for row in selected[key] if includes(cartesianFmmOrder(row))]
         cartesian[key] = [row for row in cartesian[key] if includes(cartesianFmmOrder(row))]
-    symmetric = selected['representations']['cartesian']
-    symmetric['kernels'] = [row for row in symmetric['kernels'] if includes(
-        row['degree'] + (2 if row['operator'] in ('P2M', 'M2M', 'M2P') else 1))]
     spherical = selected['representations']['spherical']
     spherical['kernels'] = [row for row in spherical['kernels'] if includes(sphericalFmmOrder(row))]
     spherical['selections'] = [row for row in spherical['selections'] if includes(row['fmm_order'])]
@@ -116,11 +113,6 @@ def appendAvailabilityChecks(lines, report, minFmmOrder, maxFmmOrder):
         sourceDegree = order - 2
         expected = str(minFmmOrder <= order <= maxFmmOrder).lower()
         kernels = (
-            f'cartesian::detail::M2L<{localDegree}, false>',
-            f'cartesian::detail::P2M<{sourceDegree}>',
-            f'cartesian::detail::L2L<{localDegree}>',
-            f'cartesian::detail::PlummerDerivatives<{localDegree}>',
-            f'cartesian::detail::RadialDerivatives<{localDegree}>',
             f'cartesian::tracefree::detail::M2L<{localDegree}, false>',
             f'cartesian::tracefree::detail::P2M<{sourceDegree}>',
             f'cartesian::tracefree::detail::L2L<{localDegree}, true>',
@@ -230,57 +222,9 @@ def appendCartesianChecks(lines, report, checks):
         checks.append(label)
 
 
-def appendSymmetricChecks(lines, report, checks):
-    for kernel in report['representations']['cartesian']['kernels']:
-        operation = kernel['operator']
-        parameters = str(kernel['degree'])
-        if operation in ('M2L', 'M2P'):
-            parameters += ', ' + str(kernel['centered']).lower()
-        geometry = 'Real(0.3), Real(-0.2), Real(0.4)'
-        arguments = {
-            'P2M': 'output, Real(0.7), ' + geometry,
-            'M2M': 'output, source, ' + geometry,
-            'M2L': 'output, source, derivatives',
-            'M2P': 'output, source, derivatives',
-            'P2L': 'output, Real(0.7), derivatives',
-            'L2L': 'output, source, ' + geometry,
-            'L2P': 'output, source, ' + geometry,
-            'PlummerDerivatives': 'output, ' + geometry + ', Real(0.09)',
-            'RadialDerivatives': 'output, ' + geometry + ', CountingRadial{}',
-        }[operation]
-        method = 'evaluate' if operation in ('PlummerDerivatives', 'RadialDerivatives') else 'add'
-        arithmetic = kernel['arithmetic']
-        fused = arithmetic.get('fma', 0)
-        roots = arithmetic.get('sqrt', 0)
-        weighted = sum(arithmetic.values()) + 6 * roots + kernel['accumulations']
-        conventional = weighted + fused - 6 * roots
-        if (kernel['weighted_flops'], kernel['conventional_flops']) != (weighted, conventional):
-            raise ValueError(f'Incorrect full Cartesian arithmetic report: {kernel}')
-        label = f'Cartesian symmetric {operation}<{parameters}>'
-        lines.extend([
-            '    {',
-            f'        using Kernel = cosmictiger::gravity::cartesian::detail::{operation}<{parameters}>;',
-            f'        static_assert(Kernel::kWeightedFlops_ == {weighted});',
-            f'        static_assert(Kernel::kFlops_ == {conventional});',
-            '        Real::operations = 0;',
-            '        Real::fusedOperations = 0;',
-            '        Real::squareRoots = 0;',
-            f'        Kernel::template {method}<Real>({arguments});',
-            f'        if (Real::operations != {weighted} || Real::fusedOperations != {fused} ||',
-            f'            Real::squareRoots != {roots}) {{',
-            f'            std::fprintf(stderr, "{label}: got %d ops/%d FMAs/%d roots, expected '
-            f'{weighted}/{fused}/{roots}\\n",',
-            '                Real::operations, Real::fusedOperations, Real::squareRoots);',
-            '            return 7;',
-            '        }',
-            '    }'])
-        checks.append(label)
-
-
 def buildChecks(report, minFmmOrder, maxFmmOrder):
     checks = []
     lines = ['#include <array>', '#include <cstdio>', '',
-             '#include <cosmictiger/gravity/kernels/cartesian_kernels.hpp>',
              '#include <cosmictiger/gravity/kernels/cartesian_tracefree_m2l.hpp>',
              '#include <cosmictiger/gravity/kernels/cartesian_tracefree_kernels.hpp>',
              '#include <cosmictiger/gravity/kernels/spherical_kernels.hpp>',
@@ -306,7 +250,6 @@ def buildChecks(report, minFmmOrder, maxFmmOrder):
              '        derivatives[i] = Real(0.5 / (i + 1));',
              '        output[i] = Real(0.125);', '    }'])
     appendCartesianChecks(lines, report, checks)
-    appendSymmetricChecks(lines, report, checks)
     representations = report['representations']
     namespace = 'spherical'
     spherical = representations['spherical']
@@ -423,7 +366,7 @@ def main():
         shim.write_text(COUNTING_HEADER)
         includeDir = root/'cosmictiger/gravity/kernels'
         includeDir.mkdir(parents=True)
-        for name in ('cartesian_kernels.hpp', 'cartesian_tracefree_m2l.hpp', 'cartesian_tracefree_kernels.hpp', 'spherical_kernels.hpp',
+        for name in ('cartesian_tracefree_m2l.hpp', 'cartesian_tracefree_kernels.hpp', 'spherical_kernels.hpp',
                      'spherical_ewald_kernels.hpp'):
             (includeDir/name).symlink_to(generated/name)
         source = root/'counts.cpp'

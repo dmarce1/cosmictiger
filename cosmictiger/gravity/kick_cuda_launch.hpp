@@ -394,13 +394,11 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     static char* devListSlab = nullptr;
     static size_t listSlabSize = 0;
     int dcount = 0;
-    int ecount = 0;
     for (int i = 0; i < workitems.size(); i++) {
         dcount += workitems[i].dchecklist.size();
-        ecount += workitems[i].echecklist.size();
     }
     size_t const packetSize = sizeof(int) + sizeof(Parameters) * workitems.size() +
-        sizeof(KickReturn) + sizeof(int) * dcount + sizeof(int) * ecount;
+        sizeof(KickReturn) + sizeof(int) * dcount;
     size_t allocSize = packetSize;
 #if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
     // Reuse the launch-owned packet storage. The launch ticket keeps it alive
@@ -448,8 +446,6 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     offset += sizeof(Parameters) * workitems.size();
     int* dchecks = (int*) (dataPtr + offset);
     offset += sizeof(int) * dcount;
-    int* echecks = (int*) (dataPtr + offset);
-    offset += sizeof(int) * ecount;
     int* currentIndex = (int*) (dataPtr + offset);
     offset += sizeof(int);
     offset = 0;
@@ -459,8 +455,6 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     offset += sizeof(Parameters) * workitems.size();
     int* devDchecks = (int*) (devDataPtr + offset);
     offset += sizeof(int) * dcount;
-    int* devEchecks = (int*) (devDataPtr + offset);
-    offset += sizeof(int) * ecount;
     int* devCurrentIndex = (int*) (devDataPtr + offset);
     offset += sizeof(int);
 #if COSMICTIGER_PROFILE && COSMICTIGER_DEVICE_PROFILE
@@ -474,24 +468,16 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
     *currentIndex = 0;
     *result = KickReturn();
     Vector<int> dindices(workitems.size() + 1);
-    Vector<int> eindices(workitems.size() + 1);
     dcount = 0;
-    ecount = 0;
     for (int i = 0; i < workitems.size(); i++) {
         dindices[i] = dcount;
-        eindices[i] = ecount;
         for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
             dchecks[dcount] = workitems[i].dchecklist[j].index;
             dcount++;
         }
-        for (int j = 0; j < workitems[i].echecklist.size(); j++) {
-            echecks[ecount] = workitems[i].echecklist[j].index;
-            ecount++;
-        }
     }
 
     dindices[workitems.size()] = dcount;
-    eindices[workitems.size()] = ecount;
     CudaKickData data;
 #if COSMICTIGER_WITH_SPH
     data.midpointHydro = !kparams.forceOnly && sphMidpointEnabled();
@@ -550,9 +536,7 @@ KickReturn cudaExecuteKicksImpl(KickParameters kparams, Position* devX, Position
         params.lValue = workitems[i].l.template expansion<order>();
         params.self = workitems[i].self.index;
         params.dchecks = devDchecks + dindices[i];
-        params.echecks = devEchecks + eindices[i];
         params.dcount = dindices[i + 1] - dindices[i];
-        params.ecount = eindices[i + 1] - eindices[i];
         ikickParams[i] = std::move(params);
     }
     cudaSetDevice();

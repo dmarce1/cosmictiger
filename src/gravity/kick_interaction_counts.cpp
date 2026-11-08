@@ -8,7 +8,6 @@ namespace {
 struct KickInteractionCounters {
     std::atomic<long long> acceptanceTests{0};
     std::atomic<long long> cellCellDirect{0};
-    std::atomic<long long> cellCellEwald{0};
     std::atomic<long long> cellParticle{0};
     std::atomic<long long> cellParticleAtLeafSinks{0};
     std::atomic<long long> particleCell{0};
@@ -26,7 +25,6 @@ KickInteractionCounters interactionCounters;
 void kickResetInteractionCounts() {
     interactionCounters.acceptanceTests = 0;
     interactionCounters.cellCellDirect = 0;
-    interactionCounters.cellCellEwald = 0;
     interactionCounters.cellParticle = 0;
     interactionCounters.cellParticleAtLeafSinks = 0;
     interactionCounters.particleCell = 0;
@@ -40,7 +38,6 @@ void kickResetInteractionCounts() {
 void kickAddInteractionCounts(KickInteractionCounts const& counts) {
     interactionCounters.acceptanceTests += counts.acceptanceTests;
     interactionCounters.cellCellDirect += counts.cellCellDirect;
-    interactionCounters.cellCellEwald += counts.cellCellEwald;
     interactionCounters.cellParticle += counts.cellParticle;
     interactionCounters.cellParticleAtLeafSinks += counts.cellParticleAtLeafSinks;
     interactionCounters.particleCell += counts.particleCell;
@@ -55,7 +52,6 @@ KickInteractionCounts kickInteractionCounts() {
     KickInteractionCounts counts;
     counts.acceptanceTests = interactionCounters.acceptanceTests;
     counts.cellCellDirect = interactionCounters.cellCellDirect;
-    counts.cellCellEwald = interactionCounters.cellCellEwald;
     counts.cellParticle = interactionCounters.cellParticle;
     counts.cellParticleAtLeafSinks = interactionCounters.cellParticleAtLeafSinks;
     counts.particleCell = interactionCounters.particleCell;

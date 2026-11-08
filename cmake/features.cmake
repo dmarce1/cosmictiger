@@ -5,7 +5,9 @@ foreach(legacy IN ITEMS COSMICTIGER_TIME_INTEGRATOR COSMICTIGER_GRAVITY_METHOD
         COSMICTIGER_PMMM_NEAR_METHOD COSMICTIGER_WITH_ORDER
         COSMICTIGER_FMM_MIN_ORDER COSMICTIGER_FMM_MAX_ORDER COSMICTIGER_WITH_SPH
         COSMICTIGER_ENABLE_PMMM COSMICTIGER_ENABLE_PMMM_NEAR_PP
-        COSMICTIGER_ENABLE_PMMM_NEAR_FMM)
+        COSMICTIGER_ENABLE_PMMM_NEAR_FMM COSMICTIGER_ENABLE_FMM
+        COSMICTIGER_ENABLE_PMMM_PP COSMICTIGER_ENABLE_PMMM_FMM COSMICTIGER_ENABLE_PM
+        COSMICTIGER_ENABLE_P3M_PP COSMICTIGER_ENABLE_P3M_FMM)
     if(DEFINED CACHE{${legacy}})
         list(APPEND cosmictiger_retired_cache_options ${legacy})
     endif()
@@ -19,16 +21,17 @@ if(cosmictiger_retired_cache_options)
         "-U COSMICTIGER_PMMM_NEAR_METHOD -U COSMICTIGER_WITH_ORDER "
         "-U COSMICTIGER_FMM_MIN_ORDER -U COSMICTIGER_FMM_MAX_ORDER "
         "-U COSMICTIGER_WITH_SPH -U COSMICTIGER_ENABLE_PMMM "
-        "-U COSMICTIGER_ENABLE_PMMM_NEAR_PP -U COSMICTIGER_ENABLE_PMMM_NEAR_FMM, "
-        "and supply the desired new feature options. PMMM variants are selected "
-        "directly with COSMICTIGER_ENABLE_PMMM_PP and COSMICTIGER_ENABLE_PMMM_FMM.")
+        "-U COSMICTIGER_ENABLE_PMMM_NEAR_PP -U COSMICTIGER_ENABLE_PMMM_NEAR_FMM "
+        "-U COSMICTIGER_ENABLE_FMM -U COSMICTIGER_ENABLE_PMMM_PP "
+        "-U COSMICTIGER_ENABLE_PMMM_FMM -U COSMICTIGER_ENABLE_PM "
+        "-U COSMICTIGER_ENABLE_P3M_PP -U COSMICTIGER_ENABLE_P3M_FMM, "
+        "and supply the desired new feature options. The only gravity solver is "
+        "PMMM with FMM near interactions, selected by COSMICTIGER_ENABLE_GRAVITY.")
 endif()
-option(COSMICTIGER_ENABLE_FMM "Compile the global FMM gravity solver" ON)
-option(COSMICTIGER_ENABLE_PMMM_PP "Compile PMMM gravity with direct PP near interactions" OFF)
-option(COSMICTIGER_ENABLE_PMMM_FMM "Compile PMMM gravity with FMM near interactions" OFF)
-option(COSMICTIGER_ENABLE_PM "Compile pure particle-mesh gravity with a mandatory outer PM interval" OFF)
-option(COSMICTIGER_ENABLE_P3M_PP "Compile PP-PM gravity: Gaussian-split PM plus direct short-range pairs" OFF)
-option(COSMICTIGER_ENABLE_P3M_FMM "Compile FMM-PM gravity: Gaussian-split PM plus a screened short-range FMM" OFF)
+# PMMM gravity: a periodic FFT far field with an FMM near field. The direct
+# particle-pair near field stays compiled as the fallback of the FMM near field
+# (gravity.method.near=pp), including the frozen-membership outer interval.
+option(COSMICTIGER_ENABLE_GRAVITY "Compile PMMM gravity with FMM near interactions and the PP fallback" ON)
 option(COSMICTIGER_ENABLE_SPH "Compile SPH hydrodynamics" ON)
 option(COSMICTIGER_ENABLE_ROCKSTAR "Compile ROCKSTAR halo finding and lightcone analysis when gravity is enabled" ON)
 option(COSMICTIGER_ENABLE_CHEMISTRY "Compile GADGET-4 equilibrium cooling when SPH is enabled" ON)
@@ -70,14 +73,10 @@ if(COSMICTIGER_WITH_SPH AND COSMICTIGER_ENABLE_CHEMISTRY)
         set(COSMICTIGER_WITH_STARS ON)
     endif()
 endif()
-set(COSMICTIGER_WITH_GRAVITY OFF)
-if(COSMICTIGER_ENABLE_FMM OR COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM OR
-        COSMICTIGER_ENABLE_PM OR COSMICTIGER_ENABLE_P3M_PP OR COSMICTIGER_ENABLE_P3M_FMM)
-    set(COSMICTIGER_WITH_GRAVITY ON)
-endif()
+set(COSMICTIGER_WITH_GRAVITY ${COSMICTIGER_ENABLE_GRAVITY})
 if(COSMICTIGER_DIMENSION_COUNT LESS 3)
     if(COSMICTIGER_WITH_GRAVITY OR NOT COSMICTIGER_WITH_SPH)
-        message(FATAL_ERROR "COSMICTIGER_DIMENSION_COUNT=1 or 2 requires SPH and all gravity algorithms OFF (FMM, PMMM_PP, PMMM_FMM, PM, P3M_PP, P3M_FMM)")
+        message(FATAL_ERROR "COSMICTIGER_DIMENSION_COUNT=1 or 2 requires SPH and COSMICTIGER_ENABLE_GRAVITY=OFF")
     endif()
     if(COSMICTIGER_WITH_CHEMISTRY OR COSMICTIGER_WITH_STARS)
         message(FATAL_ERROR "Lower-dimensional SPH requires COSMICTIGER_ENABLE_CHEMISTRY=OFF and COSMICTIGER_ENABLE_STARS=OFF; volumetric source physics is three-dimensional")
@@ -88,18 +87,12 @@ set(COSMICTIGER_WITH_ROCKSTAR OFF)
 if(COSMICTIGER_WITH_GRAVITY AND COSMICTIGER_ENABLE_ROCKSTAR)
     set(COSMICTIGER_WITH_ROCKSTAR ON)
 endif()
-# The scalar PM/FFT solve and the outer PM interval are shared by every PM variant.
-set(COSMICTIGER_WITH_PARTICLE_MESH OFF)
-if(COSMICTIGER_ENABLE_PM OR COSMICTIGER_ENABLE_P3M_PP OR COSMICTIGER_ENABLE_P3M_FMM)
-    set(COSMICTIGER_WITH_PARTICLE_MESH ON)
-endif()
 if(NOT COSMICTIGER_WITH_GRAVITY AND NOT COSMICTIGER_ENABLE_SPH)
-    message(FATAL_ERROR "Enable at least one of COSMICTIGER_ENABLE_FMM, COSMICTIGER_ENABLE_PMMM_PP, COSMICTIGER_ENABLE_PMMM_FMM, COSMICTIGER_ENABLE_PM, COSMICTIGER_ENABLE_P3M_PP, COSMICTIGER_ENABLE_P3M_FMM, or COSMICTIGER_ENABLE_SPH")
+    message(FATAL_ERROR "Enable at least one of COSMICTIGER_ENABLE_GRAVITY or COSMICTIGER_ENABLE_SPH")
 endif()
 if(COSMICTIGER_ENABLE_SPH AND NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL AND
-        NOT COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL AND
-        NOT (COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL AND COSMICTIGER_ENABLE_FMM))
-    message(FATAL_ERROR "SPH requires traditional or global integration, or hierarchical integration with FMM")
+        NOT COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL)
+    message(FATAL_ERROR "SPH requires traditional or global integration")
 endif()
 set(COSMICTIGER_EXPANSION_DEGREE "4-6" CACHE STRING
     "Compiled maximum potential degrees: one degree or inclusive range, from 2 through 8")
@@ -129,32 +122,6 @@ if(NOT COSMICTIGER_WITH_GRAVITY)
     set(COSMICTIGER_FMM_MIN_ORDER 0)
     set(COSMICTIGER_FMM_MAX_ORDER 0)
     set(COSMICTIGER_FMM_ORDERS)
-endif()
-set(cosmictiger_default_gravity_method none)
-if(COSMICTIGER_ENABLE_FMM)
-    set(cosmictiger_default_gravity_method fmm)
-elseif(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
-    set(cosmictiger_default_gravity_method pmmm)
-elseif(COSMICTIGER_ENABLE_P3M_PP OR COSMICTIGER_ENABLE_P3M_FMM)
-    set(cosmictiger_default_gravity_method p3m)
-elseif(COSMICTIGER_ENABLE_PM)
-    set(cosmictiger_default_gravity_method pm)
-endif()
-# PMMM tests use this near solver whenever PMMM is compiled, whatever the
-# default far solver; P3M-only builds fall back to their short solver.
-set(cosmictiger_default_near_method none)
-if(COSMICTIGER_ENABLE_PMMM_PP OR COSMICTIGER_ENABLE_PMMM_FMM)
-    if(COSMICTIGER_ENABLE_PMMM_PP)
-        set(cosmictiger_default_near_method pp)
-    else()
-        set(cosmictiger_default_near_method fmm)
-    endif()
-elseif(COSMICTIGER_ENABLE_P3M_PP OR COSMICTIGER_ENABLE_P3M_FMM)
-    if(COSMICTIGER_ENABLE_P3M_PP)
-        set(cosmictiger_default_near_method pp)
-    else()
-        set(cosmictiger_default_near_method fmm)
-    endif()
 endif()
 set(cosmictiger_default_integrator traditional)
 if(NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)

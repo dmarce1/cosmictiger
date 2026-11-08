@@ -1450,82 +1450,6 @@ void verifyDistributedSphOctree(Vector<TreeId> const& allLeaves) {
 }
 HPX_PLAIN_ACTION(verifyDistributedSphOctree, VerifyDistributedSphOctreeAction);
 
-#if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL && COSMICTIGER_ENABLE_FMM
-void verifyDistributedSphHierarchyMigration(bool afterMigration) {
-    static std::vector<Vector3<Position>> prefixPositions;
-    auto const range = particlesCurrentRange();
-    detail::requireSphTree(range.first == 7 && range.second == 8,
-        "hierarchical migration changed the inactive prefix or active suffix size");
-    if (!afterMigration) {
-        prefixPositions.resize(range.first);
-    }
-    for (ParticleInteger particle = 0; particle < particlesSize(); ++particle) {
-        ParticleInteger const gas = particlesCatIndex(particle);
-        if (!afterMigration) {
-            sphParticlesEntropies[gas] = 100 * hpxRank() + particle + 1;
-        }
-        float const identity = sphParticlesEntropies[gas];
-        if (!afterMigration) {
-            sphParticlesDensities[gas] = identity + 0.5f;
-            if (sphParticlesBulkViscosityCoefficients) {
-                sphParticlesBulkViscosityCoefficients[gas] = identity / 256.0f;
-            }
-            // The last midpoint's hydro timestep bound must survive migration
-            // until the next gravity boundary consumes it.
-            sphParticlesSetProposedRung(gas, particlesRung(particle) + 1);
-            if (particle < range.first) {
-                for (int dim = 0; dim < kDimensions; ++dim) {
-                    prefixPositions[particle][dim] = particlesPos(dim, particle);
-                }
-            }
-            continue;
-        }
-        detail::requireSphTree(sphParticlesDensities[gas] == identity + 0.5f &&
-                (!sphParticlesBulkViscosityCoefficients ||
-                    sphParticlesBulkViscosityCoefficients[gas] == identity / 256.0f) &&
-                sphParticlesProposedRung(gas) == particlesRung(particle) + 1,
-            "migration changed midpoint gas scalars or the hydro rung bound");
-        if (particle < range.first) {
-            detail::requireSphTree(
-                identity == 100 * hpxRank() + particle + 1 && particlesRung(particle) == 0,
-                "active migration moved or replaced an inactive prefix particle");
-            for (int dim = 0; dim < kDimensions; ++dim) {
-                detail::requireSphTree(
-                    particlesPos(dim, particle) == prefixPositions[particle][dim],
-                    "migration reordered positions in a saved rung prefix");
-            }
-        } else {
-            detail::requireSphTree(
-                int(identity) / 100 == 1 - hpxRank() && particlesRung(particle) == 2,
-                "crossed active particle did not arrive from the opposite rank");
-        }
-    }
-}
-HPX_PLAIN_ACTION(
-    verifyDistributedSphHierarchyMigration, VerifyDistributedSphHierarchyMigrationAction);
-
-size_t initializeOutsideDomainSphHierarchy() {
-    size_t outside = 0;
-    auto const domain = domainsFindMyBox();
-    for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
-        bool const active = gas >= 5;
-        sphParticlesRung(gas) = active ? 2 : 0;
-        sphParticlesPosition(0, gas) = active ? (hpxRank() == 0 ? 0.21 : 0.71) + 0.015 * (gas - 5) :
-                                                (hpxRank() == 0 ? 0.75 : 0.25) + 0.01 * gas;
-        Vector3<double> position;
-        for (int dim = 0; dim < kDimensions; ++dim) {
-            if (dim != 0) {
-                sphParticlesPosition(dim, gas) = 0.25;
-            }
-            sphParticlesVelocity(dim, gas) = 0.0f;
-            position[dim] = sphParticlesPosition(dim, gas).toDouble();
-        }
-        outside += !active && !domain.contains(position);
-    }
-    return outside;
-}
-HPX_PLAIN_ACTION(initializeOutsideDomainSphHierarchy, InitializeOutsideDomainSphHierarchyAction);
-#endif
 
 void initializeSphRungChain(bool emptyRemoteRank) {
     ParticleInteger const first = hpxSize() == 1 || hpxRank() == 0 ? 0 : 4;
@@ -1585,9 +1509,6 @@ void sphRungChainTest() {
     if (options.run.timeIntegrator == "global") {
         if (integration::kBuildHasTraditional) {
             options.run.timeIntegrator = "traditional";
-        } else if (integration::kBuildHasHierarchical && options.gravity.enabled &&
-            options.gravity.method == "fmm") {
-            options.run.timeIntegrator = "hierarchical";
         }
     }
     options.run.hierarchicalGravity = usesHierarchicalIntegration(options.run);
@@ -1721,83 +1642,6 @@ void distributedSphOctreeTest() {
         future.get();
     }
     sphTreeDestroy(true);
-#if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL && COSMICTIGER_ENABLE_FMM
-    if (options.run.hierarchicalGravity) {
-        particlesPushRungs();
-        particlesSortByRung(2);
-        for (bool afterMigration : {false, true}) {
-            if (afterMigration) {
-                domainsBegin(2);
-                domainsEnd();
-            }
-            std::vector<hpx::future<void>> stateChecks;
-            for (auto const& locality : hpxLocalities()) {
-                stateChecks.push_back(hpx::async<VerifyDistributedSphHierarchyMigrationAction>(
-                    locality, afterMigration));
-            }
-            for (auto& future : stateChecks) {
-                future.get();
-            }
-        }
-        particlesPopRungs();
-        detail::requireSphTree(particlesCurrentRange().first == 0,
-            "hierarchical migration corrupted the saved rung stack");
-        std::cout << "SPH hierarchical migration regression passed: crossed=2 prefix=7\n"
-                  << std::flush;
-
-        // A threshold rebuild can occur before slow particles reach their own
-        // migration event. More than one bucket of those particles now lies
-        // outside each rank's domain; a domain-limited local octree could never
-        // separate their x coordinates and would exceed its maximum depth.
-        std::vector<hpx::future<size_t>> outsideCounts;
-        for (auto const& locality : hpxLocalities()) {
-            outsideCounts.push_back(
-                hpx::async<InitializeOutsideDomainSphHierarchyAction>(locality));
-        }
-        size_t outside = 0;
-        for (auto& future : outsideCounts) {
-            outside += future.get();
-        }
-        detail::requireSphTree(outside == 10 && sphTreeShouldRebuild(6, 16),
-            "out-of-domain fixture did not reach its active rebuild threshold");
-        domainsBegin(2);
-        domainsEnd();
-        auto const rebuilt = sphTreeCreate(parameters);
-        detail::requireSphTree(sphTreeAllValid() && rebuilt.numberOfActiveParticles == 6,
-            "threshold rebuild failed with inactive gas outside its owner domain");
-        // The earlier brute-force check cached remote positions. Match the
-        // production SPH staging boundary after manual mutation and resorting.
-        sphParticlesClearCaches();
-        leaves.clear();
-        pending = {rebuilt.id};
-        while (!pending.empty()) {
-            auto const id = pending.back();
-            pending.pop_back();
-            auto const& node = *sphTreeGetNode(id);
-            if (node.leaf) {
-                leaves.push_back(id);
-            } else {
-                for (auto const child : node.children) {
-                    if (child.index >= 0) {
-                        pending.push_back(child);
-                    }
-                }
-            }
-        }
-        sphTreeNeighbor(neighbors, rebuilt.id, Vector<TreeId>{rebuilt.id}).get();
-        validation.clear();
-        for (auto const& locality : hpxLocalities()) {
-            validation.push_back(hpx::async<VerifyDistributedSphOctreeAction>(locality, leaves));
-        }
-        for (auto& future : validation) {
-            future.get();
-        }
-        sphTreeDestroy(true);
-        std::cout << "SPH hierarchical out-of-domain rebuild regression passed: "
-                     "active=6 total=16 inactive_outside=10\n"
-                  << std::flush;
-    }
-#endif
     std::cout << "SPH octree distributed retain regression passed: active=2 total=16 crossed=2\n"
               << std::flush;
     sphRungChainTest();

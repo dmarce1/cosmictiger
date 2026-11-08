@@ -9,7 +9,6 @@ namespace profile {
 
 enum class DevicePhase {
     KickPrepare,
-    KickPeriodic,
     KickTraversal,
     KickM2L,
     KickP2L,

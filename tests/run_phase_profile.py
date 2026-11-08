@@ -38,7 +38,7 @@ DEVICE_ROW = re.compile(r"(kick\.device\.\S+)\s+(\d+)\s+(\d+)\s+(\d+\.\d{3})\s+(
 DEVICE_STATS = re.compile(
     r"Recorded (blocks|launches): (\d+); cycles min/mean/max: (\d+) / (\d+\.\d{3}) / (\d+)")
 DEVICE_PHASES = tuple(f"kick.device.{name}" for name in (
-    "prepare", "periodic", "traversal", "M2L", "P2L", "M2P", "P2P", "leafKick",
+    "prepare", "traversal", "M2L", "P2L", "M2P", "P2P", "leafKick",
     "copyWait", "schedule", "cleanup"))
 
 
@@ -295,59 +295,36 @@ def main():
         require(not detail_rows, f"{label}: gravity-disabled run reported gravity work")
         print(f"{label}: child phases, call counts, totals and terminal/file equality passed")
         count += 1
-    if args.gravity:
-        for far in (name for name in compiled["far"] if name != "none"):
-            nears = (compiled["near"] if far == "pmmm" else
-                     compiled["short"] if far == "p3m" else [None])
-            for near in nears:
-                label = far + (f"_{near}" if near is not None else "")
-                selections = application_options(executable, far=far, near=near,
-                                                  integrator=integrators[0])
-                options = dict(common, **selections)
-                options.update({"run.scenario": "plummer", "gravity.enabled": "true",
-                                "hydro.enabled": "false", "run.darkMatterParticleCount": 64, "run.gasParticleCount": 64})
-                if far == "fmm":
-                    options.update({"run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "compute.bucketSize": 32})
-                if far == "p3m":
-                    # The P3M search mesh needs 32 PM cells at the default split and cutoff.
-                    options["gravity.meshSize"] = 32
-                rows, detail_rows = run_case(executable, base / label, options, deadline)
-                if far == "fmm":
-                    require_phases(rows, ("treeCreate.allocate", "treeCreate.build",
-                                          "kick.walk", "kick.background"), label)
-                    require_phases(detail_rows, (
-                        "kick.cpu.prepare", "kick.cpu.traversal", "kick.cpu.M2L", "kick.cpu.P2L",
-                        "kick.cpu.M2P", "kick.cpu.P2P", "kick.cpu.leafKick",
-                        "kick.wait.children"), label)
-                elif far in ("pm", "p3m"):
-                    # Particle-mesh solves happen only at outer PM boundaries.
-                    phases = ["pmBoundary.domains", "pmBoundary.solve"]
-                    if far == "p3m":
-                        phases += [f"p3mKick.{name}" for name in
-                                   ("prepare", "gather", "evaluate", "diagnostics")]
-                    require_phases(rows, phases, label)
-                else:
-                    prefix = "pmmmSolve" if integrators[0] == "global" else "pmmmKick"
-                    phases = ["particleCounts", "prepare", "deposit", "transform", "diagnostics"]
-                    phases += (["evaluate"] if near == "pp" else
-                               ["planGhosts", "startNearPipeline", "finishNearPipeline", "cleanup"])
-                    require_phases(rows, (f"{prefix}.{name}" for name in phases), label)
-                print(f"{label}: gravity child phases and report accounting passed")
-                count += 1
-    if args.cuda:
-        label = "fmm_cuda"
-        selections = application_options(executable, far="fmm", integrator=integrators[0])
+    if args.gravity and "pmmm" in compiled["far"]:
+        for near in compiled["near"]:
+            label = "pmmm_" + near
+            selections = application_options(executable, near=near, integrator=integrators[0])
+            options = dict(common, **selections)
+            options.update({"run.scenario": "plummer", "gravity.enabled": "true",
+                            "hydro.enabled": "false", "run.darkMatterParticleCount": 64, "run.gasParticleCount": 64})
+            rows, detail_rows = run_case(executable, base / label, options, deadline)
+            prefix = "pmmmSolve" if integrators[0] == "global" else "pmmmKick"
+            phases = ["particleCounts", "prepare", "deposit", "transform", "diagnostics"]
+            phases += (["evaluate"] if near == "pp" else
+                       ["planGhosts", "startNearPipeline", "finishNearPipeline", "cleanup"])
+            require_phases(rows, (f"{prefix}.{name}" for name in phases), label)
+            print(f"{label}: gravity child phases and report accounting passed")
+            count += 1
+    if args.cuda and "pmmm" in compiled["far"]:
+        # The near-field FMM batches run on the device; the far field stays on the host.
+        label = "pmmm_fmm_cuda"
+        selections = application_options(executable, near="fmm", integrator=integrators[0])
         options = dict(common, **selections)
         options.update({"run.scenario": "plummer", "gravity.enabled": "true",
                         "hydro.enabled": "false", "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512,
-                        "compute.bucketSize": 32, "gravity.cuda": "true"})
+                        "gravity.cuda": "true"})
         rows, detail_rows = run_case(executable, base / label, options, deadline)
-        require_phases(rows, ("treeCreate.allocate", "treeCreate.build", "kick.walk"), label)
+        prefix = "pmmmSolve" if integrators[0] == "global" else "pmmmKick"
+        require_phases(rows, (f"{prefix}.{name}" for name in
+                              ("particleCounts", "prepare", "deposit", "transform",
+                               "planGhosts", "startNearPipeline", "finishNearPipeline", "cleanup")), label)
         require_phases(detail_rows, (
-            "kick.gpu.hostToDevice", "kick.gpu.kernel", "kick.gpu.deviceToHost",
-            "kick.gpu.launchQueue", "kick.gpu.prepareLaunch", "kick.gpu.submitWait",
-            "kick.gpu.groupSources", "kick.gpu.collectSources", "kick.gpu.remap",
-            "kick.gpu.sortFetchWait", "kick.gpu.memoryAdvice", "kick.gpu.cleanup"), label)
+            "kick.gpu.hostToDevice", "kick.gpu.kernel", "kick.gpu.deviceToHost"), label)
         device_calls = [detail_rows[name]["calls"] for name in (
             "kick.gpu.hostToDevice", "kick.gpu.kernel", "kick.gpu.deviceToHost")]
         require(device_calls[0] > 0 and len(set(device_calls)) == 1,

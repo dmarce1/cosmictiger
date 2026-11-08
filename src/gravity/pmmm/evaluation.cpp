@@ -32,7 +32,7 @@ void consumeField(ParticleInteger index, std::array<double, 4> const& field, Kic
     }
 }
 
-#if COSMICTIGER_ENABLE_PMMM_PP
+// Direct particle-pair near field: the fallback of the FMM near field.
 void evaluateParticles(bool doPotential) {
     int const n = cache.meshSize;
     int const width = cache.nearWidth;
@@ -215,7 +215,6 @@ void evaluateParticles(bool doPotential) {
     ++state.diagnostics.solveCount;
 }
 
-#endif
 
 // Boundary far solve of the PMMM outer interval (docs/pmmm.md).
 //
@@ -283,7 +282,5 @@ void evaluateFar() {
 
 }    // namespace pmmm::detail
 
-#if COSMICTIGER_ENABLE_PMMM_PP
 HPX_REGISTER_ACTION(PmmmEvaluateAction, PmmmEvaluateAction);
-#endif
 HPX_REGISTER_ACTION(PmmmEvaluateFarAction, PmmmEvaluateFarAction);

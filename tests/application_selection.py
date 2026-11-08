@@ -19,16 +19,17 @@ def compiled_algorithms(executable):
         if match is None:
             raise RuntimeError(f"application help omitted compiled {label}")
         return match[1].split()
-    near = choices("PMMM near solvers")
-    try:
-        short = choices("P3M short solvers")
-    except RuntimeError:
-        short = []
-    return {"far": choices("Gravity solvers"), "near": near, "short": short,
+    # The gravity solver is PMMM (or none in SPH-only builds); its near field is
+    # the FMM or its direct particle-pair fallback.
+    return {"far": choices("Gravity solvers"), "near": choices("PMMM near solvers"),
             "integrator": choices("Time integrators")}
 
 
-def application_options(executable, *, far=None, near=None, integrator=None, hydro=False):
+def has_gravity(executable):
+    return "pmmm" in compiled_algorithms(str(executable))["far"]
+
+
+def application_options(executable, *, near=None, integrator=None, hydro=False):
     compiled = compiled_algorithms(str(executable))
     def select(requested, available, preference, label):
         if requested is not None:
@@ -39,21 +40,15 @@ def application_options(executable, *, far=None, near=None, integrator=None, hyd
             if choice in available:
                 return choice
         raise RuntimeError(f"no compiled {label} supports this regression")
-    far = select(far, compiled["far"], ("fmm", "pmmm", "p3m", "pm", "none"), "far solver")
-    # Hierarchical SPH shares the FMM leaf path; the particle-mesh solvers
-    # exclude global integration; hierarchical hydro currently requires FMM.
-    mesh = far in ("pm", "p3m")
+    gravity = "pmmm" in compiled["far"]
+    # Hierarchical integration steps gravity alone; SPH has no self-gravity
+    # coupling in the PMMM solver, so hydro runs keep traditional or global.
     eligible = [value for value in compiled["integrator"]
-                if (value != "hierarchical" or (far != "none" and (not hydro or far == "fmm")))
-                and (value != "global" or not mesh)]
+                if value != "hierarchical" or (gravity and not hydro)]
     integrator = select(integrator, eligible, ("traditional", "global", "hierarchical"), "integrator")
     result = {"run.timeIntegrator": integrator}
-    if far != "none":
-        result["gravity.method.far"] = far
-    if far == "pmmm":
-        result["gravity.method.near"] = select(near, compiled["near"], ("pp", "fmm"), "near solver")
-    if far == "p3m":
-        result["gravity.method.near"] = select(near, compiled["short"], ("pp", "fmm"), "short solver")
+    if gravity:
+        result["gravity.method.near"] = select(near, compiled["near"], ("fmm", "pp"), "near solver")
     return result
 
 

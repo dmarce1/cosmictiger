@@ -44,27 +44,12 @@
 #include <cosmictiger/cosmology/evolution.hpp>
 #include <cosmictiger/cosmology/fft.hpp>
 #include <cosmictiger/cosmology/initialize.hpp>
-#if COSMICTIGER_ENABLE_FMM
-#include <cosmictiger/gravity/global_fmm/distributed_tree.hpp>
-#include <cosmictiger/gravity/global_fmm/execution.hpp>
-#endif
 #include <cosmictiger/gravity/error.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
 #include <cosmictiger/gravity/pmmm/kick.hpp>
 #include <cosmictiger/gravity/pmmm/solver.hpp>
-#endif
-#if COSMICTIGER_WITH_PARTICLE_MESH
-#include <cosmictiger/gravity/pm/interval.hpp>
-#include <cosmictiger/gravity/pm/kick.hpp>
-#include <cosmictiger/gravity/pm/solver.hpp>
-#endif
-#if COSMICTIGER_WITH_P3M
-#include <cosmictiger/gravity/p3m/solver.hpp>
-#endif
-#include <cosmictiger/gravity/opening_schedule.hpp>
 #endif
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
@@ -643,166 +628,7 @@ SphRunReturn sphCompleteSources(int minimumClosingRung, double time, double base
 
 #endif
 
-#if COSMICTIGER_ENABLE_FMM
-namespace detail {
-
-KickParameters prepareFmmKick(int minrung, double scale, double dadt, double t0, double theta,
-    bool firstCall, bool fullEval, double previousTimestep, double maximumGlobalTimestep) {
-    Timer tm;
-    tm.start();
-    terminal::detailPrint("domains_begin\n");
-    profile::profileBegin("domains");
-    bool migrate = true;
-#if COSMICTIGER_WITH_SPH
-    if (getOptions().hydro.enabled) {
-        migrate = prepareSphDomainEvent(minrung);
-    }
-#endif
-    if (migrate) {
-        profile::ScopedPhase phase("domains.migrate");
-        domainsBegin(minrung);
-    }
-    terminal::detailPrint("domains_end \n");
-    if (migrate) {
-        profile::ScopedPhase phase("domains.install");
-        domainsEnd();
-    }
-    profile::profileEnd();
-    tm.stop();
-    domainTime += tm.read();
-    tm.reset();
-    tm.start();
-    // ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
-    TreeCreateParameters tparams(minrung, theta);
-    terminal::detailPrint("Create tree %i %e\n", minrung, theta);
-    profile::profileBegin("treeCreate");
-    treeCreate(tparams);
-    profile::profileEnd();
-    terminal::detailPrint("Done with tree\n");
-
-    tm.stop();
-    sortTime += tm.read();
-    tm.reset();
-    tm.start();
-
-    KickParameters kparams;
-    if (getOptions().run.scenario == "cosmology") {
-        kparams.maxDt =
-            cosmology::expansionTimestep(scale, dadt / scale, cosmosD2adt2(scale), kScaleTimestep);
-    }
-    // The ordinary path visits every starting particle, including rung zero,
-    // while the chosen step must still honor the configured starting-rung floor.
-    kparams.globalTimestep = maximumGlobalTimestep > 0.0;
-    kparams.previousTimestep = previousTimestep;
-    if (kparams.globalTimestep) {
-        profile::ScopedPhase phase("kick.prepareGlobal");
-        float kernelCap = static_cast<float>(maximumGlobalTimestep);
-        if (double(kernelCap) < maximumGlobalTimestep) {
-            kernelCap = std::nextafter(kernelCap, std::numeric_limits<float>::infinity());
-        }
-        kparams.maxDt = std::min(kparams.maxDt, kernelCap);
-        gravityBeginGlobalKick();
-    } else {
-        kparams.maxDt =
-            std::min(kparams.maxDt, std::ldexp(static_cast<float>(t0), -getOptions().run.minRung));
-    }
-    kparams.htime = false;
-    kparams.ascending = kparams.descending = kparams.top = true;
-    kparams.doPhi = fullEval;
-    kparams.sign = getOptions().run.scenario == "glass" ? -1.0 : 1.0;
-    kparams.nodeLoad = flopsPerNode / flopsPerParticle;
-    kparams.gpu = getOptions().gravity.cuda;
-    usedGpu = kparams.gpu;
-    kparams.minLevel = tparams.minLevel;
-    kparams.saveForce = getOptions().analysis.saveForce;
-    kparams.gm = getOptions().gravity.enabled ? getOptions().gravity.gm : 0.0;
-    kparams.eta = getOptions().gravity.timestepEta;
-    kparams.gravitySmoothingLength = getOptions().gravity.smoothingLength;
-    kparams.a = scale;
-    kparams.firstCall = firstCall;
-    kparams.minRung = minrung;
-    kparams.t0 = t0;
-    kparams.theta = theta;
-    return kparams;
-}
-
-ForceStepResult evaluateFmmKick(KickParameters parameters) {
-    Timer timer;
-    timer.start();
-    ExpansionBuffer l;
-    l.zero();
-    Vector3<Position> pos;
-    for (int dim = 0; dim < kDimensions; dim++) {
-        pos[dim] = 0.f;
-    }
-    TreeId rootId;
-    rootId.proc = 0;
-    rootId.index = 0;
-    Vector<TreeId> checklist;
-    checklist.push_back(rootId);
-    terminal::detailPrint("Do kick\n");
-    profile::ScopedPhase phase("kick", parameters.profileCoordinator);
-    KickReturn result = kick(parameters, l, pos, rootId, checklist, checklist, nullptr);
-    timer.stop();
-    kickTime += timer.read();
-    terminal::detailPrint("kick done\n");
-    return result;
-}
-
-void finishFmmKick() {
-    profile::ScopedPhase phase("kick.cleanup");
-    treeDestroy();
-    particlesCacheFree();
-}
-
-}    // namespace detail
-
-ForceStepResult kickStep(int minrung, double scale, double dadt, double t0, double theta,
-    bool firstCall, bool fullEval, double previousTimestep, double maximumGlobalTimestep,
-    bool deferHydroOpening) {
-    auto parameters = detail::prepareFmmKick(minrung, scale, dadt, t0, theta, firstCall, fullEval,
-        previousTimestep, maximumGlobalTimestep);
-#if COSMICTIGER_WITH_SPH
-    if (sphMidpointEnabled() && !parameters.globalTimestep) {
-        parameters.deferGasOpening = sphCommonBoundary(minrung);
-        parameters.freezeGasRungs = !parameters.deferGasOpening;
-        if (parameters.deferGasOpening) {
-            gravityBeginGlobalKick();
-        }
-    }
-    if (deferHydroOpening) {
-        ALWAYS_ASSERT(!parameters.deferGasOpening && !parameters.globalTimestep);
-        gravityBeginDeferredGasOpening();
-        parameters.deferHydroOpening = true;
-    }
-#endif
-    try {
-        auto result = detail::evaluateFmmKick(parameters);
-#if COSMICTIGER_WITH_SPH
-        if (parameters.deferGasOpening) {
-            result.maxRung = std::max(result.maxRung, sphBalanceBoundaryRungs(scale));
-            result += gravityFinishBalancedGasKick(t0, parameters.sign);
-        }
-        if (deferHydroOpening) {
-            gravitySealDeferredGasOpening();
-        }
-#endif
-        detail::finishFmmKick();
-        return result;
-    } catch (...) {
-#if COSMICTIGER_WITH_SPH
-        if (deferHydroOpening) {
-            gravityDiscardDeferredGasOpening();
-        }
-#endif
-        detail::finishFmmKick();
-        throw;
-    }
-}
-
-#endif
-
-#if COSMICTIGER_WITH_GRAVITY && (COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM)
+#if COSMICTIGER_WITH_GRAVITY
 namespace detail {
 
 // PMMM outer interval (docs/pmmm.md): migrate every owned particle to its
@@ -936,11 +762,9 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
     MeshKickSchedule const& schedule, bool deferHydroOpening) {
     ForceStepResult result{};
     bool const global = maximumGlobalTimestep > 0.0;
-    bool const meshGravity = getOptions().gravity.enabled && usesMeshGravity(getOptions().gravity);
+    bool const meshGravity = getOptions().gravity.enabled;
     [[maybe_unused]] bool const meshInterval =
-        getOptions().gravity.enabled && usesMeshGravityInterval(getOptions().gravity);
-    bool const particleMesh =
-        getOptions().gravity.enabled && usesParticleMesh(getOptions().gravity);
+        getOptions().gravity.enabled && usesOuterInterval(getOptions().gravity);
 #if COSMICTIGER_WITH_SPH
     bool const midpointHydro = sphMidpointEnabled();
 #endif
@@ -955,7 +779,6 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
         profile::profileEnd();
     }
     if (getOptions().gravity.enabled) {
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
         if (meshGravity && meshInterval) {
             // Outer interval with frozen near membership: migration happens only
             // inside the boundary pass, inner passes solve no mesh.
@@ -1022,80 +845,6 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
             timer.stop();
             kickTime += timer.read();
         }
-#endif
-#if COSMICTIGER_WITH_PARTICLE_MESH
-        if (particleMesh) {
-            // The mesh force was solved and stored at the outer boundary. This
-            // pass evaluates the short force (none for pure PM), closes the
-            // previous substep, applies the long half-kicks requested by the
-            // schedule and opens the next substep on the inner rung clock.
-            if (global) {
-                THROW_ERROR("The global inner integrator is not available for pm/p3m\n");
-            }
-            Timer timer;
-            timer.start();
-            profile::profileBegin("domains");
-            {
-                profile::ScopedPhase phase("domains.migrate");
-                domainsBegin(0);
-            }
-            {
-                profile::ScopedPhase phase("domains.install");
-                domainsEnd();
-            }
-            profile::profileEnd();
-            timer.stop();
-            domainTime += timer.read();
-            timer.reset();
-            timer.start();
-            double maximumTimestep = std::ldexp(baseTimestep, -getOptions().run.minRung);
-            if (getOptions().run.scenario == "cosmology") {
-                maximumTimestep = std::min(maximumTimestep,
-                    cosmology::expansionTimestep(
-                        scale, scaleDerivative / scale, cosmosD2adt2(scale), kScaleTimestep));
-            }
-            KickParameters parameters;
-            parameters.htime = false;
-            parameters.ascending = parameters.descending = parameters.top = true;
-            parameters.minRung = minRung;
-            parameters.t0 = baseTimestep;
-            parameters.a = scale;
-            parameters.eta = getOptions().gravity.timestepEta;
-            parameters.gravitySmoothingLength = getOptions().gravity.smoothingLength;
-            parameters.gm = getOptions().gravity.gm;
-            parameters.sign = getOptions().run.scenario == "glass" ? -1.0 : 1.0;
-            parameters.firstCall = firstCall;
-            parameters.saveForce = getOptions().analysis.saveForce;
-            parameters.gpu = getOptions().gravity.cuda;
-            parameters.doPhi = true;
-            parameters.maxDt = maximumTimestep;
-            parameters.closingBaseTimestep = schedule.closingBaseTimestep;
-            parameters.longCloseTimestep = schedule.longCloseTimestep;
-            parameters.longOpenTimestep = closingOnly ? 0.0 : schedule.longOpenTimestep;
-            if (usesSplitParticleMesh(getOptions().gravity)) {
-#if COSMICTIGER_WITH_P3M
-                profile::profileBegin("p3mKick");
-                result = p3mKick(parameters);
-                profile::profileEnd();
-#else
-                THROW_ERROR("P3M is not compiled into this executable\n");
-#endif
-            } else {
-                profile::profileBegin("pmKick");
-                result = particleMeshZeroFieldKick(parameters);
-                profile::profileEnd();
-            }
-            result.pot += schedule.longPotentialEnergy;
-            timer.stop();
-            kickTime += timer.read();
-        }
-#endif
-#if COSMICTIGER_ENABLE_FMM
-        if (!meshGravity && !particleMesh) {
-            result = kickStep(minRung, scale, scaleDerivative, baseTimestep, theta, firstCall,
-                fullEvaluation, previousTimestep, maximumGlobalTimestep, deferHydroOpening);
-        }
-#endif
     } else
 #endif
     {
@@ -1167,18 +916,10 @@ ForceStepResult advanceForces(int minRung, double scale, double scaleDerivative,
         }
     }
     if (global && !closingOnly && getOptions().gravity.enabled) {
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
-        if (meshGravity) {
+        {
             profile::ScopedPhase phase("pmmmKick.finishGlobal");
             particleMeshFinishGlobalKick(result.minimumTimestep);
         }
-#endif
-#if COSMICTIGER_ENABLE_FMM
-        if (!meshGravity && !particleMesh) {
-            profile::ScopedPhase phase("kick.finishGlobal");
-            gravityFinishGlobalKick(result.minimumTimestep);
-        }
-#endif
         {
             profile::ScopedPhase phase("diagnostics.energies");
             energies.tckin = particlesSumEnergies().kin;
@@ -1227,10 +968,8 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
     // ladder. The saved checkpoint retains the original staggered momenta.
     nocrop = nocrop || closingOnly;
     bool const selfGravity = getOptions().gravity.enabled;
-    bool const meshGravity = usesMeshGravity(getOptions().gravity);
-    bool const meshInterval = selfGravity && usesMeshGravityInterval(getOptions().gravity);
-    bool const particleMesh = selfGravity && usesParticleMesh(getOptions().gravity);
-    bool const treeGravity = selfGravity && !meshGravity && !particleMesh;
+    bool const meshGravity = selfGravity;
+    bool const meshInterval = selfGravity && usesOuterInterval(getOptions().gravity);
     // The PMMM outer interval completes its boundary schedule at the top level.
     MeshKickSchedule meshSchedule = schedule;
     bool const hierarchicalHydro = getOptions().hydro.enabled;
@@ -1344,13 +1083,11 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
          tm.stop();
          terminal::detailPrint("drift = %e\n", tm.read());
          }*/
-        int minimumTreeLevel = 0;
         if (selfGravity && top && gravityErrorStep >= 0) {
             profile::profileBegin("gravityError");
             gravityErrorBegin();
             profile::profileEnd();
         }
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
         if (meshBoundary) {
             // The far solve on the fresh assignment selects the next interval;
             // the top kick then closes the old interval and opens the new one on
@@ -1370,19 +1107,6 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             meshSchedule.longOpenTimestep = closingOnly ? 0.0 : far.nextInterval;
             meshSchedule.longPotentialEnergy = far.potentialEnergy;
         }
-#endif
-        tm.reset();
-        tm.start();
-#if COSMICTIGER_ENABLE_FMM
-        if (treeGravity) {
-            TreeCreateParameters tparams(levels[li], theta);
-            profile::profileBegin("treeCreate");
-            treeCreate(tparams);
-            profile::profileEnd();
-            minimumTreeLevel = tparams.minLevel;
-        }
-#endif
-        tm.stop();
 
         KickParameters kparams;
         if (clipTop && levels[li] == minrung0 + 1) {
@@ -1400,7 +1124,7 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         kparams.velInit = getOptions().run.scenario == "plummer";
         kparams.nodeLoad = flopsPerNode / flopsPerParticle;
         kparams.gpu = getOptions().gravity.cuda;
-        kparams.minLevel = minimumTreeLevel;
+        kparams.minLevel = 0;
         kparams.saveForce = getOptions().analysis.saveForce;
         kparams.gm = getOptions().gravity.gm;
         kparams.eta = getOptions().gravity.timestepEta;
@@ -1458,16 +1182,13 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
         tm.reset();
         tm.start();
         if (top) {
-#if COSMICTIGER_ENABLE_FMM || COSMICTIGER_ENABLE_PMMM_FMM
             resetGravityCounters();
             setGravityCounterUse(true);
-#endif
         }
         KickReturn thisKr;
         if (!selfGravity) {
             thisKr.maxRung = top ? 0 : maxRung;
         }
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
         if (selfGravity && meshGravity) {
             profile::profileBegin("pmmmKick");
             thisKr = pmmmKick(kparams);
@@ -1476,38 +1197,8 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
                 thisKr.pot += meshSchedule.longPotentialEnergy;
             }
         }
-#endif
-#if COSMICTIGER_WITH_PARTICLE_MESH
-        if (particleMesh) {
-            if (usesSplitParticleMesh(getOptions().gravity)) {
-#if COSMICTIGER_WITH_P3M
-                profile::profileBegin("p3mKick");
-                thisKr = p3mKick(kparams);
-                profile::profileEnd();
-#else
-                THROW_ERROR("P3M is not compiled into this executable\n");
-#endif
-            } else {
-                profile::profileBegin("pmKick");
-                thisKr = particleMeshZeroFieldKick(kparams);
-                profile::profileEnd();
-            }
-            if (top) {
-                thisKr.pot += schedule.longPotentialEnergy;
-            }
-        }
-#endif
-#if COSMICTIGER_ENABLE_FMM
-        if (treeGravity) {
-            profile::profileBegin("kick");
-            thisKr = kick(kparams, l, pos, rootId, checklist, checklist, nullptr);
-            profile::profileEnd();
-        }
-#endif
         if (top) {
-#if COSMICTIGER_ENABLE_FMM || COSMICTIGER_ENABLE_PMMM_FMM
             setGravityCounterUse(false);
-#endif
         }
         if (selfGravity && top && gravityErrorStep >= 0) {
             profile::profileBegin("gravityError");
@@ -1540,12 +1231,6 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             }
         }
         if (closingOnly && top) {
-#if COSMICTIGER_ENABLE_FMM
-            if (treeGravity) {
-                profile::ScopedPhase phase("kick.cleanup");
-                treeReset();
-            }
-#endif
             break;
         }
         if (clipTop && top) {
@@ -1579,13 +1264,6 @@ ForceStepResult kickStepHierarchical(int& minrung, int maxRung, double scale, do
             profile::profileEnd();
             tm.stop();
         }
-#if COSMICTIGER_ENABLE_FMM
-        if (treeGravity) {
-            profile::ScopedPhase phase("kick.cleanup");
-            treeReset();
-            particlesCacheFree();
-        }
-#endif
         if (ascending && !top) {
             particlesPopRungs();
         }
@@ -1749,14 +1427,11 @@ void driver() {
 #else
     bool const midpointHydro = false;
 #endif
-    // Particle-mesh solvers (pm, p3m): the integer rung clock subdivides the
-    // mandatory outer PM interval instead of the nominal coarse interval.
-    bool const particleMesh =
-        getOptions().gravity.enabled && usesParticleMesh(getOptions().gravity);
-    // PMMM outer interval: the same interval clock with frozen near membership.
+    // PMMM outer interval: the integer rung clock subdivides the outer interval
+    // instead of the nominal coarse interval, with frozen near membership inside.
     bool const meshInterval =
-        getOptions().gravity.enabled && usesMeshGravityInterval(getOptions().gravity);
-    bool const outerInterval = particleMesh || meshInterval;
+        getOptions().gravity.enabled && usesOuterInterval(getOptions().gravity);
+    bool const outerInterval = meshInterval;
     if (scenarios::definition(getOptions().run.scenario).fixedTime) {
         runFixedScenario();
         return;
@@ -1896,22 +1571,6 @@ void driver() {
         params.energies.tckin = tmp1.kin;
         //		write_checkpoint(params);
     }
-#if COSMICTIGER_WITH_GRAVITY
-    auto const openingSchedule =
-        gravity::parseOpeningSchedule(getOptions().gravity.openingSchedule);
-    bool const useOpeningSchedule = getOptions().run.scenario == "cosmology" &&
-        !usesMeshGravity(getOptions().gravity) && !openingSchedule.empty();
-    if (useOpeningSchedule) {
-        auto opts = getOptions();
-        // Use the same expansion intervals on either branch and after restart.
-        // Restarting requires the same requested opening schedule.
-        opts.gravity.openingAngle = gravity::openingScheduleTheta(openingSchedule,
-            opts.cosmology.startRedshift, 1.0 / params.a - 1.0, opts.gravity.openingAngle);
-        setOptions(opts);
-        terminal::detailPrint("FMM opening schedule: z=%.17g theta=%.17g\n", 1.0 / params.a - 1.0,
-            opts.gravity.openingAngle);
-    }
-#endif
     if (getOptions().checkpoint.readIndex == -1) {
 #if COSMICTIGER_WITH_SPH && COSMICTIGER_ENABLE_STAR_FORMATION
         if (getOptions().starFormation.enabled) {
@@ -2190,32 +1849,7 @@ void driver() {
             }
             MeshKickSchedule schedule;
             schedule.endTime = tauMax;
-#if COSMICTIGER_WITH_PARTICLE_MESH
-            if (particleMesh && itime == 0) {
-                // Outer PM boundary: every particle is at the synchronized
-                // position. Solve the mesh with all gravitating sources, close
-                // the finished interval's long half-kick and open the next one;
-                // inner rungs never trigger another FFT.
-                profile::profileBegin("pmBoundary");
-                auto const boundary =
-                    pmOuterBoundary(a, a * adot, tau, coarseInterval, tauMax, true);
-                profile::profileEnd();
-                schedule.closingBaseTimestep = params.outerInterval;
-                schedule.longCloseTimestep = params.outerInterval;
-                schedule.longOpenTimestep = boundary.nextInterval;
-                schedule.longPotentialEnergy = boundary.potentialEnergy;
-                if (!(boundary.nextInterval > 0.0)) {
-                    THROW_ERROR("The outer PM interval must be positive before the end time\n");
-                }
-                params.outerInterval = boundary.nextInterval;
-                params.outerStart = tau;
-            }
-            if (particleMesh) {
-                t0 = params.outerInterval;
-            }
-#endif
             PmmmBoundaryRequest pmmmBoundary;
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
             if (meshInterval && itime == 0) {
                 // PMMM outer boundary: the force step closes the frozen
                 // membership, migrates, solves the far field once and selects
@@ -2230,12 +1864,10 @@ void driver() {
             if (meshInterval) {
                 t0 = params.outerInterval;
             }
-#endif
             auto opts = getOptions();
             opts.gravity.smoothingLength =
                 hsoft0;    // Fixed comoving support for every particle type.
-            // Global FMM schedules advance after drift; PMMM retains its angle
-            // derived from the ghost width throughout evolution.
+            // PMMM retains its angle derived from the ghost width throughout evolution.
             double const theta = opts.gravity.openingAngle;
             bucketSize = opts.compute.bucketSize;
             ForceStepResult tmp;
@@ -2317,7 +1949,6 @@ void driver() {
                 }
             }
 #endif
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
             if (meshInterval && itime == 0) {
                 if (!(pmmmBoundary.nextInterval > 0.0)) {
                     THROW_ERROR("The PMMM outer interval must be positive before the end time\n");
@@ -2326,7 +1957,6 @@ void driver() {
                 params.outerStart = tau;
                 t0 = params.outerInterval;
             }
-#endif
             if (tau == 0.0) {
                 energies0 = energies;
             }
@@ -2403,19 +2033,6 @@ void driver() {
                 physicalInterval * getOptions().units.timeSeconds / constants::kSpyr;
             auto const z0 = 1.0 / a0 - 1.0;
             auto const z1 = 1.0 / a - 1.0;
-#if COSMICTIGER_WITH_GRAVITY
-            if (useOpeningSchedule) {
-                double const nextTheta = gravity::openingScheduleTheta(
-                    openingSchedule, getOptions().cosmology.startRedshift, z1, theta);
-                if (nextTheta != theta) {
-                    auto nextOptions = getOptions();
-                    nextOptions.gravity.openingAngle = nextTheta;
-                    setOptions(nextOptions);
-                    terminal::detailPrint(
-                        "FMM opening schedule: z=%.17g theta=%.17g\n", z1, nextTheta);
-                }
-            }
-#endif
             for (auto& z : checkpointlist) {
                 if ((z - z0) * (z - z1) < 0.0) {
                     doCheck = true;
@@ -2482,13 +2099,9 @@ void driver() {
 
             double const numberOfParticles = getOptions().initial.numberOfParticles;
             double close = 0.0, direct = 0.0;
-#if COSMICTIGER_ENABLE_FMM || COSMICTIGER_ENABLE_PMMM_FMM
-            if (!usesParticleMesh(getOptions().gravity) &&
-                (!usesMeshGravity(getOptions().gravity) ||
-                    getOptions().gravity.pmmmNearMethod == "fmm")) {
+            if (getOptions().gravity.pmmmNearMethod == "fmm") {
                 getGravityCounters(close, direct);
             }
-#endif
             direct += close;
             if (outputDue) {
                 fprintf(textfp,
@@ -2637,20 +2250,7 @@ void driver() {
         double const theta = getOptions().gravity.openingAngle;
         MeshKickSchedule schedule;
         schedule.endTime = tauMax;
-#if COSMICTIGER_WITH_PARTICLE_MESH
-        if (particleMesh) {
-            // The terminal boundary solves the mesh at the final positions and
-            // closes the last interval's long half-kick; nothing opens.
-            auto const boundary = pmOuterBoundary(a, a * adot, tau, coarseInterval, tauMax, true);
-            schedule.closingBaseTimestep = params.outerInterval;
-            schedule.longCloseTimestep = params.outerInterval;
-            schedule.longOpenTimestep = 0.0;
-            schedule.longPotentialEnergy = boundary.potentialEnergy;
-            t0 = params.outerInterval;
-        }
-#endif
         PmmmBoundaryRequest terminalBoundary;
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
         if (meshInterval) {
             // The terminal boundary closes the frozen membership and the last
             // interval's long half-kick on the fresh far solve; nothing opens.
@@ -2663,7 +2263,6 @@ void driver() {
             schedule.longOpenTimestep = 0.0;
             t0 = params.outerInterval;
         }
-#endif
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
         if (getOptions().run.hierarchicalGravity) {
             int minimumRung = minrung0;
@@ -2686,22 +2285,7 @@ void driver() {
     if (getOptions().lightcone.enabled) {
         particlesFree();
     }
-#if COSMICTIGER_ENABLE_FMM
-    kickClearBuffers();
-#endif
     evolutionTime.stop();
-#if COSMICTIGER_WITH_PARTICLE_MESH
-    if (particleMesh) {
-        // Mesh solves happen only at outer boundaries (plus the terminal energy
-        // pass); every other force pass is an inner rung step without an FFT.
-        std::cout << std::format("  Particle-mesh intervals completed: {:d}; mesh solves this run: "
-                                 "{:d}; force passes this run: {:d}\n",
-                         static_cast<unsigned long long>(params.outerIndex),
-                         static_cast<unsigned long long>(pmDiagnostics().solveCount), thisIter)
-                  << std::flush;
-    }
-#endif
-#if COSMICTIGER_ENABLE_PMMM_PP || COSMICTIGER_ENABLE_PMMM_FMM
     if (meshInterval) {
         // One mesh transform per outer boundary (plus the terminal energy pass);
         // inner passes evaluate the near field on the frozen membership only.
@@ -2712,7 +2296,6 @@ void driver() {
                          thisIter)
                   << std::flush;
     }
-#endif
     std::cout << std::format("  Total evolution time (this run, initialization excluded): {:s}\n",
                      terminal::formatDuration(thisIter > 0 ? evolutionTime.read() : 0.0).c_str())
               << std::flush;

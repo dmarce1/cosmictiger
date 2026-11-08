@@ -20,7 +20,7 @@
 #include <cosmictiger/math/position.hpp>
 
 // Shared order-templated traversal and direct interactions. KickContext supplies
-// solver-specific task scheduling, periodic node work, and completion handling.
+// solver-specific task scheduling and completion handling.
 // Per-order instance translation units compile the arithmetic once per order.
 
 struct KickWorkspace;
@@ -50,8 +50,8 @@ bool kickSourcesAreSingleRank(Vector<TreeId> const& checklist);
 
 template <int order>
 KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> pos, TreeId self,
-    Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
-    std::shared_ptr<KickWorkspace> cudaWorkspace, KickContext const& context);
+    Vector<TreeId> dchecklist, std::shared_ptr<KickWorkspace> cudaWorkspace,
+    KickContext const& context);
 
 #ifdef COSMICTIGER_FMM_INSTANCE_ORDER
 // The definition pulls in the generated kernels, so only the per-order instance
@@ -85,7 +85,7 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
 namespace detail {
 
 // Adds an opened child to a list unless it is known to hold no particles. The
-// Ewald leaf criterion splits sparse boxes down to single particles beside
+// leaf criterion can split sparse boxes down to single particles beside
 // empty siblings, and an empty cell contributes nothing: keeping it out of
 // every list spares its acceptance tests, its own opening and its zero-mass
 // M2L, as the CUDA walk does by skipping empty sources at the test. Only a
@@ -130,8 +130,8 @@ inline void kickOpenOrDefer(bool openLargerCell, TreeNode const* sink, TreeNode 
 
 template <int order>
 KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> pos, TreeId self,
-    Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
-    std::shared_ptr<KickWorkspace> cudaWorkspace, KickContext const& context) {
+    Vector<TreeId> dchecklist, std::shared_ptr<KickWorkspace> cudaWorkspace,
+    KickContext const& context) {
     using Expansion = cosmictiger::gravity::cartesian::tracefree::Expansion<float, order>;
     ALWAYS_ASSERT(!params.deferHydroOpening ||
         (!params.forceOnly && !params.globalTimestep && !params.deferGasOpening &&
@@ -166,9 +166,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
         }
         return KickReturn();
     }
-    if (context.background != nullptr) {
-        policyFlops += context.background(order, params, l, pos, self, echecklist);
-    }
     bool threadLeft = true;
 #ifdef USE_CUDA
     if (getOptions().gravity.cuda && params.gpu) {
@@ -180,23 +177,19 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
         auto const rng = params.forceOnly ? Pair<ParticleInteger>(0, particlesOwnedSize()) :
                                             particlesCurrentRange();
         ParticleInteger const rangeParticles = rng.second - rng.first;
-        // A node that still carries Ewald checks goes over at the coarse
-        // threshold, so that the kernel rather than this walk evaluates them.
-        int const blockCount = echecklist.empty() ? kickFineBlockCount(rangeParticles) :
-                                                    kickBlockCount(rangeParticles);
+        int const blockCount = kickFineBlockCount(rangeParticles);
         maximumGpuParticles = std::min((size_t) maximumGpuParticles,
             (size_t) std::max(
                 rangeParticles / blockCount, (ParticleInteger) getOptions().compute.bucketSize));
         if (params.gpu && selfPtr->numberOfParticles() <= maximumGpuParticles &&
-            selfPtr->isLocal() && detail::kickSourcesAreSingleRank(dchecklist) &&
-            detail::kickSourcesAreSingleRank(echecklist)) {
+            selfPtr->isLocal() && detail::kickSourcesAreSingleRank(dchecklist)) {
             work.stop();
             if (selfPtr->numberOfParticles()) {
                 if (!cudaWorkspace->isBatch()) {
                     context.coverParticles(selfPtr->numberOfParticles());
                 }
                 cudaWorkspace->addWork(cudaWorkspace, l, pos, self, std::move(dchecklist),
-                    std::move(echecklist), params.geometry, params.outputOffset);
+                    params.geometry, params.outputOffset);
             }
             addCpuFlops(flops, FlopPrecision::Single);
             addCpuFlops(doubleFlops, FlopPrecision::Double);
@@ -278,11 +271,6 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
             forces.phi[i] = particlesMass(particleIndex) * selfPhi() * inverseSmoothingLength;
         }
     }
-    if (context.periodic != nullptr) {
-        work.next(profile::WorkPhase::KickCpuPeriodic);
-        policyFlops += context.periodic(order, params, l, self, echecklist, counts);
-    }
-
     {
         work.next(profile::WorkPhase::KickCpuTraversal);
         nextlist.resize(0);
@@ -708,10 +696,10 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
         work.stop();
         std::array<hpx::future<KickReturn>, kChildCount> futs;
         futs[kRightChild] = context.fork(params, l, selfPtr->pos, selfPtr->children[kRightChild],
-            dchecklist, echecklist, cudaWorkspace, threadLeft);
+            dchecklist, cudaWorkspace, threadLeft);
         try {
             futs[kLeftChild] = context.fork(params, l, selfPtr->pos, selfPtr->children[kLeftChild],
-                std::move(dchecklist), std::move(echecklist), cudaWorkspace, false);
+                std::move(dchecklist), cudaWorkspace, false);
         } catch (...) {
             // Keep shared tree data alive until the asynchronous sibling exits.
             profile::ScopedWork wait(profile::WorkPhase::KickChildJoin, profileWork);

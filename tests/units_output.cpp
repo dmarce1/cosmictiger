@@ -127,10 +127,8 @@ void checkUnitsOutputCommandLine(DBfile* file) {
         "CLI effective radius units");
     requireUnitsOutputClose(
         readUnitsOutputScalar(file, "/cli/gravity/timestepEta"), 0.3, "CLI timestep eta");
-    requireUnitsOutput(
-        readUnitsOutputText(file, "/cli/gravity/method/far") == getOptions().gravity.method &&
-            readUnitsOutputText(file, "/cli/gravity/method/near") ==
-                getOptions().gravity.pmmmNearMethod,
+    requireUnitsOutput(readUnitsOutputText(file, "/cli/gravity/method/near") ==
+            getOptions().gravity.pmmmNearMethod,
         "nested gravity method options use directories");
     requireUnitsOutputClose(
         readUnitsOutputScalar(file, "/cli/hydro/minSmoothingLength"), 0.2, "CLI minimum support");

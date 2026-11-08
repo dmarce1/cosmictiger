@@ -142,9 +142,6 @@ SphTreeCreateReturn sphStep1(int minrung, bool verbose = true);
 
 #endif
 #if COSMICTIGER_WITH_GRAVITY
-ForceStepResult kickStep(int minrung, double scale, double, double t0, double theta, bool firstCall,
-    bool fullEval, double previousTimestep = 0.0, double maximumGlobalTimestep = 0.0,
-    bool deferHydroOpening = false);
 #if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
 ForceStepResult kickStepHierarchical(int& minimumRung, int maximumRung, double scale,
     double scaleDerivative, double time, double baseTimestep, double theta, EnergiesT* energies,

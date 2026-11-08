@@ -11,7 +11,7 @@
 // Explicit instantiations of the order-templated CPU code for the order named
 // by COSMICTIGER_FMM_INSTANCE_ORDER (one translation unit per order, generated
 // by CMake from src/gravity/fmm_instance_cpu.cpp.in). The dispatchers in gravity.cpp,
-// kick.cpp, tree.cpp and ewald_indices.cpp call these through fmmDispatch().
+// kick.cpp and tree.cpp call these through fmmDispatch().
 
 #ifndef COSMICTIGER_FMM_INSTANCE_ORDER
 #error "COSMICTIGER_FMM_INSTANCE_ORDER must name the instantiated FMM order"
@@ -38,8 +38,7 @@ template void cpuGravityPc<COSMICTIGER_FMM_INSTANCE_ORDER>(
 
 // CPU tree walk (kick_walk.hpp).
 template KickReturn kickWalk<COSMICTIGER_FMM_INSTANCE_ORDER>(KickParameters, ExpansionBuffer,
-    Vector3<Position>, TreeId, Vector<TreeId>, Vector<TreeId>, std::shared_ptr<KickWorkspace>,
-    KickContext const&);
+    Vector3<Position>, TreeId, Vector<TreeId>, std::shared_ptr<KickWorkspace>, KickContext const&);
 
 // Tree multipole construction (tree_multipole.hpp).
 template FlopCounts treeComputeMultipole<COSMICTIGER_FMM_INSTANCE_ORDER>(MultipoleBuffer&,

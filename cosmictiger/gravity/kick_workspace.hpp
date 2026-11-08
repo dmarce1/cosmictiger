@@ -58,7 +58,7 @@ public:
     void serialize(A&&, unsigned) {}
     void addWork(std::shared_ptr<KickWorkspace> ptr, ExpansionBuffer const& l,
         Vector3<Position> pos, TreeId self, Vector<TreeId>&& dchecklist,
-        Vector<TreeId>&& echecklist, FmmGeometry const& geometry, ParticleInteger outputOffset = 0);
+        FmmGeometry const& geometry, ParticleInteger outputOffset = 0);
     void recordProcessedParticles(std::shared_ptr<KickWorkspace> ptr, ParticleInteger n);
     KickReturn toGpu();
     bool isBatch() const {

@@ -18,8 +18,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
     parser.add_argument("workdir", type=Path)
-    parser.add_argument("--gravity-method", choices=("fmm", "pmmm"), required=True)
-    parser.add_argument("--near-method", choices=("pp", "fmm", "none"))
+    parser.add_argument("--near-method", choices=("pp", "fmm"), default="fmm")
     parser.add_argument("--order", type=int)
     parser.add_argument("--time-integrator", choices=("traditional", "hierarchical", "global"), required=True)
     parser.add_argument("--without-sph", action="store_true")
@@ -36,12 +35,10 @@ def main():
               "--run.darkMatterParticleCount=64", "--run.gasParticleCount=64", "--analysis.groups=false",
               "--analysis.tracers=false", "--analysis.views=false", "--analysis.power=false",
               "--lightcone.enabled=false", "--output.silo=false", "--output.directory=."]
-    common += [f"--gravity.method.far={args.gravity_method}",
-               f"--run.timeIntegrator={args.time_integrator}"]
+    common += [f"--run.timeIntegrator={args.time_integrator}", "--gravity.meshSize=8",
+               f"--gravity.method.near={args.near_method}"]
     if args.order is not None:
         common.append(f"--gravity.expansionDegree={args.order - 1}")
-    if args.gravity_method == "pmmm":
-        common += ["--gravity.meshSize=8", f"--gravity.method.near={args.near_method}"]
     metadata = ["--run.test=checkpointState"]
 
     def selection(name, options, program=executable):
@@ -51,9 +48,7 @@ def main():
                          output, re.MULTILINE):
             raise RuntimeError(f"{name}: incorrect selected position representation")
         buildSettings = {"run.timeIntegrator": args.time_integrator,
-                         "gravity.method.far": args.gravity_method}
-        if args.near_method is not None and args.gravity_method == "pmmm":
-            buildSettings["gravity.method.near"] = args.near_method
+                         "gravity.method.near": args.near_method}
         if args.order is not None:
             buildSettings["gravity.expansionDegree"] = str(args.order - 1)
         for setting, expectedValue in buildSettings.items():
@@ -162,9 +157,10 @@ def main():
     hydro_options = [option for option in common if not option.startswith(
         ("--hydro.enabled=", "--run.darkMatterParticleCount=", "--run.gasParticleCount="))]
     hierarchicalHydro = args.time_integrator == "hierarchical"
-    hydroSupported = not args.without_sph and (not hierarchicalHydro or args.gravity_method == "fmm")
-    if hierarchicalHydro:
-        hydro_options.append("--gravity.enabled=true")
+    # SPH has no self-gravity coupling in the PMMM solver: hydro runs are
+    # gravity free and cannot use the gravity-only hierarchical integrator.
+    hydroSupported = not args.without_sph and not hierarchicalHydro
+    hydro_options.append("--gravity.enabled=false")
     output = runSimulation([str(executable), *hydro_options, f"--compute.positionType={selected}",
                             "--hydro.enabled=true",
                             "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512", "--run.scenario=sod",

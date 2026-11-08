@@ -136,9 +136,10 @@ def main():
     base = args.workdir.resolve()
     base.mkdir(parents=True, exist_ok=True)
     available = compiled_algorithms(str(executable))
-    integrators = [value for value in ("traditional", "hierarchical", "global")
+    # SPH has no self-gravity coupling in the PMMM solver: gas runs are gravity
+    # free, so hierarchical (gravity-only) integration is excluded.
+    integrators = [value for value in ("traditional", "global")
                    if value in available["integrator"] and
-                   (value != "hierarchical" or "fmm" in available["far"]) and
                    (args.time_integrator is None or value == args.time_integrator)]
     if not integrators:
         raise RuntimeError("star formation requires a compiled SPH-compatible integrator")
@@ -152,7 +153,7 @@ def main():
               "analysis.views": "false", "analysis.tracers": "false",
               "analysis.power": "false", "lightcone.enabled": "false",
               "output.directory": ".", "output.silo": "false",
-              "hpx:bind": "none", "gravity.meshSize": 8}
+              "hpx:bind": "none", "gravity.meshSize": 8, "gravity.enabled": "false"}
     selection = application_options(executable, integrator=integrators[0], hydro=True)
     evidence = {"fixtures": [], "cosmology": []}
 
@@ -182,14 +183,10 @@ def main():
             evidence["fixtures"].append({"name": fixture, "workers": workers, "passed": True})
 
     if not args.fixtures_only:
-        solvers = [("fmm", None)] if "fmm" in available["far"] else []
-        if not solvers:
-            solvers = [("none", None)]
-        for far, near in solvers:
+        for far, near in (("none", None),):
             for integrator in integrators:
-                selections = application_options(executable, far=far, near=near,
-                                                 integrator=integrator, hydro=True)
-                gravity = far != "none"
+                selections = application_options(executable, integrator=integrator, hydro=True)
+                gravity = False
                 label = "_".join(value for value in (far, near, integrator) if value)
                 options = dict(common, **selections, **{"run.scenario": "cosmology",
                     "gravity.enabled": str(gravity).lower(), "run.maxIterations": 2,

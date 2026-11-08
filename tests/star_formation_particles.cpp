@@ -171,161 +171,14 @@ std::vector<Particle> starParticleMigrationSnapshot() {
     return result;
 }
 
-#if COSMICTIGER_ENABLE_FMM
-void initializeNewbornGravityFixture(bool convert) {
-    ParticleInteger const count = hpxRank() == 0 ? 2 : 0;
-    particlesResize(count);
-    sphParticlesResize(convert && count != 0 ? 1 : 0, false);
-    sphParticlesEntropyInitialized = true;
-    sphParticlesThermalScaleFactor = 1.0;
-    for (ParticleInteger particle = 0; particle < count; ++particle) {
-        particlesType(particle) =
-            particle == 0 ? kDarkMatterType : (convert ? kSphType : kStarType);
-        particlesCatIndex(particle) = convert && particle == 1 ? 0 : kNoParticleIndex;
-        particlesRung(particle) = 2;
-        auto& state = particlesStarFormationStates[particle];
-        state = {};
-        state.id = uint64_t(particle) + 1;
-        if (particle == 1) {
-            state.specificStarFormationRate = convert ? 1.0e100 : 0.0;
-            if (!convert) {
-                state.eventCounter = 1;
-                state.elapsedPhysicalTime = 0.00025 * getOptions().units.timeSeconds;
-                state.formationTime = 1.0;
-            }
-        }
-        for (int dimension = 0; dimension < kDimensions; ++dimension) {
-            particlesPos(dimension, particle) = dimension == kXi ? 0.375 - 0.125 * particle : 0.375;
-            particlesVel(dimension, particle) = particle == 1 ? 0.125f * (dimension + 1) : 0.0f;
-        }
-    }
-    if (convert && count != 0) {
-        sphParticlesParticleIndex(0) = 1;
-        sphParticlesDensity(0) = 1.0f;
-        sphParticlesSetInternalEnergy(0, 2.0f);
-        sphParticlesSmoothingLength(0) = 0.05f;
-        sphParticlesElectronFractions[0] = 1.0f;
-    }
-}
-#endif
 
 }    // namespace detail
 
-#if COSMICTIGER_ENABLE_FMM
-HPX_PLAIN_ACTION(detail::initializeNewbornGravityFixture, InitializeNewbornGravityFixtureAction);
-#endif
 HPX_PLAIN_ACTION(detail::initializeStarParticleFixture, InitializeStarParticleFixtureAction);
 HPX_PLAIN_ACTION(detail::exerciseStarParticleFixture, ExerciseStarParticleFixtureAction);
 HPX_PLAIN_ACTION(detail::starParticleMigrationSnapshot, StarParticleMigrationSnapshotAction);
 
 namespace detail {
-#if COSMICTIGER_ENABLE_FMM
-std::vector<Particle> newbornGravitySnapshot() {
-    std::vector<hpx::future<std::vector<Particle>>> pending;
-    for (auto const& locality : hpxLocalities()) {
-        pending.push_back(hpx::async<StarParticleMigrationSnapshotAction>(locality));
-    }
-    std::vector<Particle> particles;
-    for (auto& future : pending) {
-        auto local = future.get();
-        particles.insert(particles.end(), local.begin(), local.end());
-    }
-    std::sort(particles.begin(), particles.end(), [](auto const& first, auto const& second) {
-        return first.starFormation.id < second.starFormation.id;
-    });
-    return particles;
-}
-
-void verifyNewbornGravity() {
-    auto const originalOptions = getOptions();
-    auto options = originalOptions;
-    options.gravity.enabled = true;
-    options.gravity.method = "fmm";
-    options.gravity.cuda = false;
-    options.gravity.gm = 1.0;
-    options.gravity.smoothingLength = 0.05;
-    options.run.scenario = "cosmology";
-    options.run.minRung = 2;
-    options.initial.numberOfParticles = 2;
-    options.initial.darkMatterMass = 2.0;
-    options.initial.gasMass = 1.0;
-    std::vector<std::string> integrators;
-    if (integration::kBuildHasTraditional) {
-        integrators.push_back("traditional");
-    }
-    if (integration::kBuildHasGlobal) {
-        integrators.push_back("global");
-    }
-    if (integration::kBuildHasHierarchical) {
-        integrators.push_back("hierarchical");
-    }
-    for (auto const& integrator : integrators) {
-        options.run.timeIntegrator = integrator;
-        options.run.hierarchicalGravity = integrator == "hierarchical";
-        setOptions(options);
-        std::vector<Particle> reference;
-        for (bool const convert : {false, true}) {
-            sphTreeDestroy(false);
-            std::vector<hpx::future<void>> pending;
-            for (auto const& locality : hpxLocalities()) {
-                pending.push_back(
-                    hpx::async<InitializeNewbornGravityFixtureAction>(locality, convert));
-            }
-            for (auto& future : pending) {
-                future.get();
-            }
-            particlesSortByRung(0);
-            if (convert) {
-                auto const source = starFormationClose(2, 1.0, 0.0, 0.001, 0.00025);
-                requireStarParticles(source.converted == 1,
-                    "nonzero-gravity fixture failed to create its newborn star");
-            }
-            auto const before = newbornGravitySnapshot();
-            requireStarParticles(before.size() == 2 && before[1].type == kStarType &&
-                    before[1].rung == 2 && before[1].velocity[kXi] == 0.125f,
-                "conversion applied an extra kick or changed the old gravity rung");
-            domainsRebound();
-            EnergiesT energies{};
-            if (options.run.hierarchicalGravity) {
-#if COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
-                int minimumRung = 2;
-                kickStepHierarchical(minimumRung, 2, 1.0, 0.0, 0.00025, 0.001, 0.5, &energies, 2,
-                    true, nullptr, true, 0.0);
-#endif
-            } else {
-                bool const global = integrator == "global";
-                advanceForces(global ? 0 : 2, 1.0, 0.0, 0.00025, 0.001, 0.5, false, true, energies,
-                    -1, false, 0.00025, global ? 0.00025 : 0.0);
-            }
-            auto const after = newbornGravitySnapshot();
-            requireStarParticles(after.size() == 2 &&
-                    std::abs(after[1].velocity[kXi] - before[1].velocity[kXi]) > 1.0e-6f,
-                "newborn gravity equivalence fixture did not exercise a nonzero kick");
-            if (!convert) {
-                reference = after;
-            } else {
-                for (size_t index = 0; index < after.size(); ++index) {
-                    requireStarParticles(
-                        after[index].starFormation == reference[index].starFormation &&
-                            after[index].rung == reference[index].rung &&
-                            after[index].type == reference[index].type,
-                        "newborn gravity boundary changed source state or selected a different "
-                        "rung");
-                    for (int dimension = 0; dimension < kDimensions; ++dimension) {
-                        requireStarParticles(after[index].position[dimension] ==
-                                    reference[index].position[dimension] &&
-                                after[index].velocity[dimension] ==
-                                    reference[index].velocity[dimension],
-                            "newborn missed or repeated an ordinary gravity boundary kick");
-                    }
-                }
-            }
-        }
-        std::cout << "Newborn ordinary gravity equivalence passed: " << integrator << '\n';
-    }
-    setOptions(originalOptions);
-}
-#endif
 }    // namespace detail
 
 void starFormationParticlesTest() {
@@ -392,9 +245,6 @@ void starFormationParticlesTest() {
                 beforeMigration[index].starFormation == afterMigration[index].starFormation,
             "migration lost stellar identity or saved gas source state");
     }
-#if COSMICTIGER_ENABLE_FMM
-    detail::verifyNewbornGravity();
-#endif
     std::cout << "Star-formation particles passed: IDs, permutation, conversion, compaction, "
                  "momentum, checkpoint, combined chemistry/source metadata, empty gas, "
                  "HPX serialization and migration\n"

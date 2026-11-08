@@ -44,9 +44,9 @@ def main():
     root.mkdir(parents=True, exist_ok=True)
     ranks = 2 if args.mpi_exec else 1
     available = compiled_algorithms(str(executable))
-    require("fmm" in available["far"], "SPH rebuild fraction regression requires FMM")
-    integrators = args.time_integrator or [name for name in
-                                          ("hierarchical", "traditional", "global")
+    # SPH has no self-gravity coupling in the PMMM solver, so hierarchical
+    # integration (gravity only) is excluded.
+    integrators = args.time_integrator or [name for name in ("traditional", "global")
                                           if name in available["integrator"]]
     require(integrators, "no supported integrator was compiled")
     require(all(name in available["integrator"] for name in integrators),
@@ -54,7 +54,7 @@ def main():
     common = {"hpx:threads": args.threads, "hpx:bind": "none", **cpu_backend_options(),
               "run.darkMatterParticleCount": 512, "run.gasParticleCount": 512, "scenario.cosmology.useGlass": "false",
               "initial.closePack": "false", "hydro.enabled": "true",
-              "gravity.enabled": "true", "chemistry.enabled": "false",
+              "gravity.enabled": "false", "chemistry.enabled": "false",
               "starFormation.enabled": "false", "analysis.groups": "false",
               "analysis.tracers": "false", "analysis.views": "false",
               "analysis.power": "false", "analysis.slice": "false",
@@ -66,7 +66,7 @@ def main():
     def run(name, options, integrator=None, *, success=True, extra=(), localities=ranks):
         directory = prepareCase(root, name)
         command = [str(executable), *args.hpx_argument, *application_arguments(
-            executable, far="fmm", integrator=integrator or integrators[0], hydro=True)]
+            executable, integrator=integrator or integrators[0], hydro=True)]
         command += [f"--{key}={value}" for key, value in dict(common, **options).items()]
         command += extra
         if localities == 2:
@@ -143,23 +143,6 @@ def main():
             print(f"{label}: {counts['rebuild']} rebuilds, {counts['retain']} retained events",
                   flush=True)
 
-    # Cosmological initial conditions contain both gas and dark matter. Check
-    # the reported denominator against the actual checkpoint species counts,
-    # including across MPI ranks rather than using a per-rank or gas-only count.
-    mixed = {"run.scenario": "cosmology", "cosmology.sigma8": 0,
-             "run.darkMatterParticleCount": 64, "run.gasParticleCount": 64, "run.maxIterations": 2, OPTION: 1}
-    directory, output = run("mixed_total_particles", mixed)
-    counts = validate_events(output, "mixed_total_particles", integrators[0], 1)
-    _, _, _, species = checkpoint_state(directory, mixed["run.maxIterations"], ranks)
-    require(species == (64, 64), "mixed population did not include gas and dark matter")
-    events = EVENT.findall(output)
-    require(all(int(total) == sum(species) for _, _, total, _ in events),
-            "mixed lifecycle threshold used a gas-only or per-rank denominator")
-    require(int(events[0][1]) == sum(species),
-            "initial active count omitted part of the mixed particle population")
-    evidence["evolution"]["mixed_total_particles"] = {**counts, "fraction": 1,
-                                                       "particles": sum(species),
-                                                       "gas": species[1]}
     (root / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
     print("SPH rebuild fraction application regression passed", flush=True)
     return 0

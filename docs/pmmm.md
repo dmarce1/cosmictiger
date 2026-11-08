@@ -1,36 +1,31 @@
 # Periodic particle mesh multipoles
 
-Enable PMMM with either or both near-field algorithms in `./build.sh` or with
-CMake feature options. Every configuration builds one `cosmictiger` executable
-containing the selected capabilities. The default configuration enables FMM and
-SPH, particle chemistry, the traditional integrator, and potential expansion
-degrees four through six; PMMM is disabled. A gravity-only PMMM configuration
-with both near algorithms is:
+PMMM is CosmicTiger's gravity solver. `COSMICTIGER_ENABLE_GRAVITY` (default
+`ON`) compiles it in `./build.sh` or with CMake feature options; every
+configuration builds one `cosmictiger` executable containing the selected
+capabilities. The default configuration enables PMMM gravity and SPH, particle
+chemistry, the traditional integrator, and potential expansion degrees four
+through six. A gravity-only configuration is:
 
 ```sh
-cmake -S . -B build_pmmm -DCOSMICTIGER_ENABLE_FMM=OFF \
-  -DCOSMICTIGER_ENABLE_SPH=OFF \
-  -DCOSMICTIGER_ENABLE_PMMM_PP=ON \
-  -DCOSMICTIGER_ENABLE_PMMM_FMM=ON \
+cmake -S . -B build_pmmm -DCOSMICTIGER_ENABLE_SPH=OFF \
   -DCOSMICTIGER_EXPANSION_DEGREE=4-6
 cmake --build build_pmmm --parallel 12
 ```
 
-`COSMICTIGER_ENABLE_PMMM_PP` and `COSMICTIGER_ENABLE_PMMM_FMM` both default
-to `OFF`. Each enables PMMM with its corresponding near field; both may be
-enabled together. They are independent of
-`COSMICTIGER_ENABLE_FMM`, which enables the full-domain FMM solver. PMMM uses a
-periodic uniform mesh, spherical multipoles about cell centers and FFT
-convolution for distant interactions. Neighboring cells use the selected
-direct-pair or adaptive FMM near field.
+PMMM uses a periodic uniform mesh, spherical multipoles about cell centers and
+FFT convolution for distant interactions. Neighboring cells use the adaptive FMM
+near field (`gravity.method.near=fmm`, the default) or its fallback, the direct
+particle-pair near field (`gravity.method.near=pp`). Both near fields are always
+compiled.
 
-Use `gravity.method.far=fmm|pmmm`, `gravity.method.near=pp|fmm`, and
-`run.timeIntegrator=traditional|hierarchical|global` to select among enabled
-algorithms. A selector is required when more than one eligible algorithm is
-available; a sole eligible algorithm is selected automatically. The near
-selector applies only to PMMM. `gravity.expansionDegree` selects a compiled
-potential degree and defaults to the largest enabled degree, six in the default
-range. Algorithm and degree selections can differ between runs of one executable.
+Use `gravity.method.near=fmm|pp` and
+`run.timeIntegrator=traditional|hierarchical|global` to select the run. An
+integrator selector is required when more than one eligible integrator is
+compiled; a sole eligible integrator is selected automatically.
+`gravity.expansionDegree` selects a compiled potential degree and defaults to
+the largest enabled degree, six in the default range. Near-field, integrator and
+degree selections can differ between runs of one executable.
 
 PMMM's forward, inverse, and cached Green-function FFTs run their parallel jobs
 on the existing HPX worker pool through FFTW's threading callback. They share
@@ -44,7 +39,7 @@ parallelized by HPX. Their planning and destruction also run on native I/O
 threads so waiting for the shared planner lock cannot block HPX workers.
 
 ```sh
-./build_pmmm/cosmictiger --gravity.method.far=pmmm --gravity.method.near=pp \
+./build_pmmm/cosmictiger --gravity.method.near=pp \
   --gravity.expansionDegree=6 --run.timeIntegrator=traditional \
   --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
   --run.darkMatterParticleCount=32768 --run.gasParticleCount=32768 --hydro.enabled=false \
@@ -55,7 +50,6 @@ The runtime settings can also be supplied in an INI file:
 
 ```ini
 [gravity]
-method.far = pmmm
 method.near = pp
 expansionDegree = 6
 meshSize = 32
@@ -100,10 +94,10 @@ region contains `(2*w+1)^3` cells (27, 125, 343, or 729, respectively),
 including the sink cell. The mesh must satisfy `n >= 2*w+1`, so periodic near
 cells are distinct.
 
-`gravity.method.near=pp|fmm` selects how those near cells are evaluated from the
-compiled capabilities. The `pp` method sums all primary particle pairs. The `fmm` method uses the
-existing Cartesian FMM operators and adaptive tree acceptance within the same
-near-cell region. It first exchanges complete remote source-cell particle
+`gravity.method.near=fmm|pp` selects how those near cells are evaluated. The
+`fmm` method (the default) uses the Cartesian FMM operators and adaptive tree
+acceptance within the near-cell region. The `pp` method, its fallback, sums all
+primary particle pairs. It first exchanges complete remote source-cell particle
 records and builds local source trees as individual cells become ready.
 Owned sink cells run once every near-source cell they need is ready, allowing
 interior and ready boundary work to overlap outstanding cell fetches.
@@ -111,17 +105,16 @@ It adds no second periodic correction or distant-cell force:
 the spherical FFT result supplies those contributions in either mode.
 
 `gravity.expansionDegree` sets the shared PMMM and near FMM potential degree.
-PMMM fixes `gravity.openingAngle` to
-`sqrt(3)/(w+1)`, even when a scalar opening angle is supplied explicitly. At the
+PMMM derives the near-field opening angle `gravity.openingAngle` as
+`sqrt(3)/(w+1)`; it is not a configurable option. At the
 default ghost width of two, theta is approximately 0.577350269. This theta stays
-fixed during cosmological evolution; global FMM opening schedules are not
-accepted in PMMM mode. `compute.bucketSize` controls the near FMM tree bucket
+fixed during cosmological evolution. `compute.bucketSize` controls the near FMM tree bucket
 size. Near FMM can reduce pair work in dense cells, but its additional
 approximation and actual performance must be checked on the intended
 distribution. With the near FMM capability enabled:
 
 ```sh
-./build_pmmm/cosmictiger --gravity.method.far=pmmm --gravity.method.near=fmm \
+./build_pmmm/cosmictiger --gravity.method.near=fmm \
   --run.timeIntegrator=traditional --gravity.meshSize=32 --gravity.pmmmNearWidth=2 \
   --gravity.expansionDegree=6 --compute.bucketSize=32 \
   --hydro.enabled=false --gravity.cuda=false
@@ -138,38 +131,6 @@ PMMM accuracy is controlled by mesh size, expansion degree, and near width.
 The derived opening angle controls only the optional near FMM; the near width
 also changes which interactions are included in the far-field convolution.
 
-## Global FMM opening schedules
-
-For `gravity.method.far=fmm` with `run.scenario=cosmology`, an optional schedule replaces the
-previous hardcoded cosmology opening angles:
-
-```sh
-./cosmictiger --gravity.method.far=fmm --run.timeIntegrator=traditional \
-  --cosmology.startRedshift=49 \
-  --gravity.openingSchedule='49:0.41,20:0.51,2:0.61'
-```
-
-The corresponding INI entry is `openingSchedule = 49:0.41,20:0.51,2:0.61` in
-`[gravity]`. Pairs may appear in any order. The initial theta comes from the pair
-closest to the starting redshift; equal distances choose the higher redshift.
-During expansion, crossing a listed redshift selects its theta. During
-contraction, recrossing a boundary undoes that change and restores the theta
-used before expansion crossed it. In the example above, expansion selects
-0.41, then 0.51 at z=20, then 0.61 at z=2; contraction restores 0.51 just
-above z=2 and 0.41 just above z=20. At an exact boundary, both branches use
-that entry's theta. If a step crosses several entries, apply or undo each in
-crossing order.
-
-Redshifts must be distinct and finite with `z > -1`; theta values must be
-positive and within the normal `float` range. An empty schedule uses the scalar
-`gravity.openingAngle`, whose cosmology default is 0.8. CLI schedule input
-overrides an INI schedule, including `--gravity.openingSchedule=none` to clear
-the schedule and select the scalar angle. An empty INI entry also selects the
-scalar angle. Nonempty schedules are rejected for PMMM and noncosmology
-scenarios. Restart reconstructs theta from the original starting redshift and
-subsequent crossings, so use the same configured schedule and original
-`cosmology.startRedshift` when restarting.
-
 ## Source organization
 
 PMMM interfaces are in `cosmictiger/gravity/pmmm/` and implementations in
@@ -183,14 +144,13 @@ tree builder. `fmm_batch.cpp` adapts ready cells to the common traversal, and
 alternative direct near field, and `kernels.cpp` adapts the spherical operators.
 
 Common Cartesian operators, tree construction, source views, and CPU/CUDA walks
-remain directly in `gravity/`. PMMM near FMM uses this common code without a
-dependency on the global solver in `gravity/global_fmm/`. Owned particle arrays and
-sorting remain in `particles/`. See [source organization](source_layout.md) for
+remain directly in `gravity/`; the PMMM near FMM is their only user. Owned
+particle arrays and sorting remain in `particles/`. See [source organization](source_layout.md) for
 the complete ownership and generated-code layout.
 
 ## Expansion degrees and coefficient conventions
 
-PMMM and FMM share a potential-degree convention and total-degree truncation.
+The PMMM far field and near FMM share a potential-degree convention and total-degree truncation.
 `COSMICTIGER_EXPANSION_DEGREE=d` compiles one degree; an inclusive range such as
 `4-6` compiles every degree in that range. Supported degrees are two through
 eight. For potential degree `d`, source multipoles have degree `S=d-1`, local
@@ -280,7 +240,7 @@ parcel traffic, and require the application's existing `MPI_THREAD_MULTIPLE`
 startup guarantee. FFTW planner operations share the process-wide planner
 lock with other FFTW users.
 
-PMMM uses the recursive bisection of global FMM for its particle domains, but
+PMMM uses the common recursive bisection for its particle domains, but
 every cut lies on a coarse-mesh plane. The locality count is a power of two;
 depth `d` of the bisection halves the locality range and cuts axis `d mod 3`.
 Among the coarse planes that leave each child enough whole coarse cells for the
@@ -291,7 +251,7 @@ Because every stage mesh is a power of two at least as fine as the coarse mesh,
 no cell of any PMMM mesh ever has particles on two localities: each cell is
 owned, with all its particles, by exactly one locality. Balance is therefore
 only as fine as the coarse cells allow; a smaller coarse mesh (larger cells)
-trades balance for a coarser minimum stage mesh. Global FMM retains the
+trades balance for a coarser minimum stage mesh. Gravity-free runs retain the
 unrestricted continuous cuts. Particle migration and checkpoint reload preserve
 the domains independently of the FFT slabs. Each solve sorts local particle
 arrays in place into cell ranges, using parallel CPU partitioning and preserving
@@ -368,7 +328,7 @@ budget is 64 MiB per batch; a single oversized cell runs whole.
 
 The local FMM path also compares the generated M2L arithmetic estimate with
 direct PP work for geometrically accepted leaf pairs, choosing PP when its
-estimate is smaller. Non-leaf acceptance and global FMM behavior are unchanged.
+estimate is smaller. Non-leaf acceptance is unchanged.
 Batching follows the particle target without a separate 32-cell limit, so sparse
 mesh cells can fill a useful batch.
 
@@ -525,7 +485,7 @@ wall time, including communication, staging, and scheduling overhead. See
 
 `gravity.pmmmOuterInterval = true` (PMMM with `gravity.method.near = pp`,
 `run.timeIntegrator = traditional` or `hierarchical`) integrates the far field
-on a mandatory outer interval, as pm and p3m do, and the near field on the
+on a mandatory outer interval and the near field on the
 inner rung clock. One mesh transform runs per outer boundary; no inner pass
 deposits, transforms or evaluates a far expansion.
 
@@ -607,7 +567,7 @@ H_new = min( η sqrt(a w h / |L_new|) over particles, expansion bound,
 
 with `w h` the near width in box units, the smallest separation a far source
 can have, `η = gravity.timestepEta` and the same caps as `pmSelectOuterInterval`.
-Inner rungs come from the near force at the softening scale, as in p3m. The
+Inner rungs come from the near force at the softening scale. The
 potential energy at a boundary is the near potential of the boundary pass plus
 the far potential of the far solve, counted once.
 
@@ -695,7 +655,7 @@ A small CPU application
 regression can be selected explicitly:
 
 ```sh
-./build_pmmm/cosmictiger --run.test=pmmm --gravity.method.far=pmmm \
+./build_pmmm/cosmictiger --run.test=pmmm \
   --gravity.method.near=pp --run.timeIntegrator=traditional --gravity.meshSize=8 \
   --run.darkMatterParticleCount=512 --run.gasParticleCount=512 --hydro.enabled=false \
   --gravity.cuda=false --hpx:threads=2 --hpx:bind=none

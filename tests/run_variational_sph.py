@@ -132,8 +132,7 @@ def buildCommand(spec, launcher):
     else:
         command = [str(spec.executable), "--hpx:threads=2", "--hpx:bind=none",
                    f"--configuration={kConfigurations / (spec.stem + '.ini')}"]
-        command += application_arguments(spec.executable, far="fmm", integrator=spec.integrator,
-                                         hydro=True)
+        command += application_arguments(spec.executable, integrator=spec.integrator, hydro=True)
         options = dict(kCommonOptions)
         options.update({
             "gravity.cuda": "true" if spec.backend == "cuda" else "false", "hydro.cuda": "true" if spec.backend == "cuda" else "false", "drift.cuda": "true" if spec.backend == "cuda" else "false",
@@ -237,12 +236,6 @@ def analyzeRun(spec, directory, returnCode, timedOut, wall, output):
                       steps=lastStep(directory))
         return result
     try:
-        if spec.kind == "migration":
-            if "SPH gravity regression passed" not in output:
-                raise ValueError("success message missing")
-            result.update(status="ok", message=re.search(
-                r"SPH gravity regression passed[^\n]*", output)[0])
-            return result
         expected = {"run.timeIntegrator": spec.integrator,
                     "gravity.cuda": "T" if spec.backend == "cuda" else "F", "hydro.cuda": "T" if spec.backend == "cuda" else "F", "drift.cuda": "T" if spec.backend == "cuda" else "F"}
         for key, value in expected.items():
@@ -513,17 +506,6 @@ def main():
                                 executable, localities=2,
                                 integrator=waveIntegrator, resolution=8))
         keys[mpiSpecs[-1].name] = ("hydroWave", "mpi", 8, waveIntegrator)
-        # Mirrors the sph_migration_mpi CTest command.
-        migration = [str(executable), "--run.test=sphGravity",
-                     "--run.darkMatterParticleCount=512", "--run.gasParticleCount=512", "--hydro.enabled=true",
-                     "--gravity.cuda=false", "--hpx:threads=2", "--hpx:bind=none"]
-        migration += application_arguments(executable, far="fmm", hydro=True)
-        mpiSpecs.append(RunSpec("mpi_sph_migration", None, executable,
-                                localities=2,
-                                integrator=application_options(
-                                    executable, far="fmm", hydro=True)["run.timeIntegrator"],
-                                resolution=8, kind="migration", rawCommand=migration))
-        keys[mpiSpecs[-1].name] = ("migration",)
 
     cudaSpecs = []
     cudaSkip = None
@@ -649,9 +631,6 @@ def main():
                            f"all-row max |diff|/(K+U)={rowMaximum:.2e}; rows "
                            f"{single['energyRows']}/{double['energyRows']}; max|dE| 1loc="
                            f"{single['maxEnergyError']:.3e} 2loc={double['maxEnergyError']:.3e}")
-        migration = results.get(("migration",))
-        validation.add("mpi sph migration variational", "PASS" if ok(migration) else "FAIL",
-                       migration["message"] if ok(migration) else describe(migration))
     else:
         validation.add("mpi", "SKIP", "no --mpi-exec")
 

@@ -41,7 +41,6 @@ void KickWorkspace::addInteractionCounts(KickInteractionCounts const& counts) {
     std::lock_guard<MutexType> lock(mutex_);
     interactionCounts_.acceptanceTests += counts.acceptanceTests;
     interactionCounts_.cellCellDirect += counts.cellCellDirect;
-    interactionCounts_.cellCellEwald += counts.cellCellEwald;
     interactionCounts_.cellParticle += counts.cellParticle;
     interactionCounts_.cellParticleAtLeafSinks += counts.cellParticleAtLeafSinks;
     interactionCounts_.particleCell += counts.particleCell;
@@ -99,8 +98,8 @@ void KickWorkspace::recordProcessedParticles(
 }
 
 void KickWorkspace::addWork(std::shared_ptr<KickWorkspace> ptr, ExpansionBuffer const& l,
-    Vector3<Position> pos, TreeId self, Vector<TreeId>&& dchecks, Vector<TreeId>&& echecks,
-    FmmGeometry const& geometry, ParticleInteger outputOffset) {
+    Vector3<Position> pos, TreeId self, Vector<TreeId>&& dchecks, FmmGeometry const& geometry,
+    ParticleInteger outputOffset) {
     profile::ScopedWork work(profile::WorkPhase::KickGpuQueue,
 #if COSMICTIGER_PROFILE
         hpxRank() == 0
@@ -115,16 +114,11 @@ void KickWorkspace::addWork(std::shared_ptr<KickWorkspace> ptr, ExpansionBuffer 
     item.pos = pos;
     item.self = self;
     item.dchecklist = std::move(dchecks);
-    item.echecklist = std::move(echecks);
     bool doWork = false;
     {
         ParticleInteger const numberOfNodeParticles = treeGetNode(self)->numberOfParticles();
         std::lock_guard<MutexType> lock(mutex_);
         for (auto const& id : item.dchecklist) {
-            ALWAYS_ASSERT(treeGetNode(id)->isLocal());
-            treeIds_.insert(id);
-        }
-        for (auto const& id : item.echecklist) {
             ALWAYS_ASSERT(treeGetNode(id)->isLocal());
             treeIds_.insert(id);
         }

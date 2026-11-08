@@ -444,8 +444,6 @@ void meshDomainsTest() {
     detail::requireMeshDomain(
         (hpxSize() & (hpxSize() - 1)) == 0, "meshDomains needs a power-of-two locality count");
     auto options = getOptions();
-    detail::requireMeshDomain(
-        usesMeshGravity(options.gravity), "meshDomains needs --gravity.method.far=pmmm");
     options.hydro.enabled = false;
     options.gravity.enabled = true;
     // setOptions skips command-line validation, so every PMMM mesh parameter the
