@@ -70,8 +70,9 @@ Q_{ij}=\frac{\mathcal P_i}{\rho_i^2}(m-\zeta_i),\qquad
 
 Here \(\mathbf f_{ij}\) is the contribution to \(d\mathbf w_i/d\tau\), so it
 is acceleration in the stored variables, not momentum per unit time. The
-grad-support correction is \(m-\zeta_i=m/\Omega_i\) for free equal-mass
-supports and \(\zeta_i=0\) at a held support bound. This is the production
+grad-support correction is \(m-\zeta_i=m/\Omega_i\) for equal-mass supports, with
+\(\Omega_i\) blended toward one inside a bound layer, and \(\zeta_i=0\) for a fixed
+support. This is the production
 specialization of [Hopkins (2013), equations (12)–(13)](https://arxiv.org/abs/1206.5006)
 and [Price (2012), equations (27), (30), and (35)](https://arxiv.org/abs/1012.1885).
 The code's directed coefficients have already been divided by the recipient

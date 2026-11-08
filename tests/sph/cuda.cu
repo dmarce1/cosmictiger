@@ -940,18 +940,44 @@ void testPeriodicSupport() {
     require(sphSupportIntersects(box, source, 0.10f), "periodic support crosses the box boundary");
 }
 
+// The stiffness psi of a stored support in the fixture's bounds, mirroring
+// sphGradHEvaluation: zero for a support on or outside distinct bounds or when fixed.
+double referenceStiffness(Fixture const& fixture, double support) {
+    double const minimum = fixture.params_.minimumSmoothingLength;
+    double const maximum = fixture.params_.maximumSmoothingLength;
+    if (!(minimum < maximum && support > minimum && support < maximum)) {
+        return 0.0;
+    }
+    return sph_volume::boundedTarget<double>(
+        support, minimum, maximum, sph_volume::supportLayers(minimum, maximum))
+        .stiffness;
+}
+
+// Every solved support lies strictly inside the bounds and in the expected bound layer of
+// sph_volume::supportLayers; the CPU parity tests cover the residual itself.
+void requireLayerSupports(Fixture const& fixture, bool lowerLayer) {
+    auto const layers = sph_volume::supportLayers(
+        fixture.params_.minimumSmoothingLength, fixture.params_.maximumSmoothingLength);
+    for (int i = 0; i < fixture.count_; i++) {
+        float const support = fixture.data_.sourceSmoothingLength[i];
+        require(support > fixture.params_.minimumSmoothingLength &&
+                support < fixture.params_.maximumSmoothingLength,
+            "bounded support stays strictly inside the bounds");
+        require(lowerLayer ? support < layers.lowerJunction : support > layers.upperJunction,
+            "bounded support lies in the expected layer");
+    }
+}
+
+// A 6³ lattice: the free support of 32 neighbors, 0.33, lies below the upper layer of the
+// half-box bound 0.49 (which starts at 0.392) and above bounds of 0.24 and below.
 void testLattice() {
-    constexpr int kSide = 5;
+    constexpr int kSide = 6;
     Fixture fixture(kSide * kSide * kSide);
     initializeLattice(fixture, kSide);
     fixture.solveSmoothing(0.1f, 0.24f, 0.2f);
-    for (int i = 0; i < fixture.count_; i++) {
-        requireClose("upper support bound", fixture.data_.sourceSmoothingLength[i], 0.24f, 1.0e-7);
-    }
+    requireLayerSupports(fixture, false);
     fixture.solveSmoothing(0.43f, 0.49f, 0.48f);
-    for (int i = 0; i < fixture.count_; i++) {
-        requireClose("lower support bound", fixture.data_.sourceSmoothingLength[i], 0.43f, 1.0e-7);
-    }
+    requireLayerSupports(fixture, true);
     fixture.solveSmoothing(0.3f, 0.3f, 0.17f);
     for (int i = 0; i < fixture.count_; i++) {
         requireClose("fixed support bound", fixture.data_.sourceSmoothingLength[i], 0.3f, 1.0e-7);
@@ -1090,8 +1116,12 @@ void testSelectedKernel() {
             "selected kernel CPU/CUDA density", data.sourceDensity[i], expectedDensity, 3.0e-6);
         double const normalizedRadius = radius / support;
         double const derivative = dkernelWDq(normalizedRadius);
+        // The second support, 0.42, lies in the upper layer of the 0.49 bound: Omega blends
+        // the free value -q w'/(3 sum w) with one by the stiffness psi.
+        auto const sums = sph_volume::equalWeightSupportSums<double>(
+            kernelW(0.0) + kernelW(normalizedRadius), normalizedRadius * derivative, data.gasMass);
         double const omega =
-            -normalizedRadius * derivative / (3.0 * (kernelW(0.0) + kernelW(normalizedRadius)));
+            sph_volume::gradHCorrection(sums, referenceStiffness(fixture, support)).supportJacobian;
         double const pressureFactor =
             (data.adiabaticIndex - 1.0f) * data.sourceInternalEnergy[i] / data.sourceDensity[i];
         pressureForce += data.gasMass * pressureFactor / omega * derivative / std::pow(support, 4);
@@ -1145,11 +1175,13 @@ void testUnequalPairEos() {
         double const radialGradient = derivative / std::pow(support, 4);
         double const pressureFactor =
             pressureEnergyRatio * data.sourceInternalEnergy[i] / data.sourceDensity[i];
-        // Equal masses: Omega = -sum(q w') / (3 sum(w)), zeta = m (1 - 1/Omega).
+        // Equal masses: zeta = m (1 - 1/Omega), with Omega blended toward one by the
+        // stiffness of the 0.42 support inside the upper layer of the 0.49 bound.
         // These unequal supports give distinct, nonzero corrections and gradients.
-        double const omega =
-            -normalizedRadius * derivative / (3.0 * (kernelW(0.0) + kernelW(normalizedRadius)));
-        double const zeta = data.gasMass * (1.0 - 1.0 / omega);
+        auto const sums = sph_volume::equalWeightSupportSums<double>(
+            kernelW(0.0) + kernelW(normalizedRadius), normalizedRadius * derivative, data.gasMass);
+        double const zeta = sph_volume::gradHCorrection(sums, referenceStiffness(fixture, support))
+                                .weightedSupportCorrection;
         require(std::abs(zeta) > 0.1 * data.gasMass,
             "unequal pair exercises a nonzero grad-H correction");
         requireClose("unequal-pair grad-H correction", data.sourceGradHCorrection[i], zeta, 8.0e-6);

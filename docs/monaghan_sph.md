@@ -133,11 +133,14 @@ The target is a kernel-weighted count, including self, rather than an integer
 number of neighbors.
 The self contribution imposes \(N_{\rm target}>(4\pi/3)w(0)\), which is
 \(32/3\) for the default cubic. Startup checks use the selected kernel's floor,
-including its single-precision representation. The solve respects the configured
-support-radius bounds `hydro.minSmoothingLength`/`hydro.maxSmoothingLength`.
+including its single-precision representation. Near the configured support-radius
+bounds `hydro.minSmoothingLength`/`hydro.maxSmoothingLength` the target itself depends on
+\(H\): it equals \(N_{\rm target}\) between \(1.5H_{\min}\) and \(0.8H_{\max}\), rises to
+infinity at \(H_{\min}\) and falls to zero at \(H_{\max}\), so every solved support lies
+strictly inside the bounds ([supports near the bounds](variational_sph.md#supports-near-the-bounds)).
 It refreshes neighbors if the search
 box is too small, and caps each local solve at 128 iterations. Its relative residual tolerance
-is \(10^{-4}\); a bound-limited solution need not attain the requested target.
+is \(10^{-4}\).
 The periodic search uses one nearest image per pair, so the effective maximum
 support is also capped at half the box width; a requested minimum above that limit
 is rejected. The effective limits are printed at startup in initial interparticle
@@ -578,8 +581,8 @@ hydrodynamic controls are:
 | `hydro.viscosityEpsilon` | `0.01` | Denominator coefficient multiplying \(\bar\ell^2\) |
 | `hydro.neighborNumber` | `42` | Kernel-weighted support-sphere count |
 | `compute.sphBucketSize` | `0` (automatic) | SPH tree leaf limit; automatic sizing uses `floor(8/pi * hydro.neighborNumber)`, giving `106` at the default neighbor target |
-| `hydro.minSmoothingLength` | `1e-6` | Minimum \(H\), in initial interparticle spacings |
-| `hydro.maxSmoothingLength` | `1000` | Requested maximum \(H\), in initial interparticle spacings; capped at half the box |
+| `hydro.minSmoothingLength` | `1e-6` | Minimum \(H\), in initial interparticle spacings; the target rises to infinity there, so no support reaches it |
+| `hydro.maxSmoothingLength` | `1000` | Requested maximum \(H\), in initial interparticle spacings; capped at half the box; the target falls to zero there, so no support reaches it |
 | `scenario.disc.centralEffectiveRadius` | `0.0054772255750516604` | Imposed central-force effective radius in box units; uses the gravity kernel |
 | `scenario.disc.centralSmoothingLength` | derived | Alternative central-force support radius in box units; uses the gravity kernel |
 | `hydro.cfl` | `0.22821773229381923` | Courant-viscous coefficient using the effective radius \(h=2\sigma\); also controls the calibrated fractional-energy bound |

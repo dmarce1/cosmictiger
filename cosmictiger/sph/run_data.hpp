@@ -163,33 +163,44 @@ CUDA_EXPORT inline sph_geometry::SpatialVector<float> sphCompleteAcceleration(
 inline constexpr int kMaxNeighborRungDifference = 1;
 inline constexpr float kSphSmoothingLengthTolerance = float(1.0e-4);
 
-// Target of the smoothing-length solves: ΣW = Σ𞁓 w(q𞁑𞁓) = 3 Nₛₑₜ/(4π).
-// Nₛₑₜ → target neighbor count.
+// Interior target of the smoothing-length solves: ΣW = Σ𞁓 w(q𞁑𞁓) = 3 Nₛₑₜ/(4π); the
+// bounded target of sph_volume::boundedTarget multiplies it by f(h).
+// Nₛₑₜ → requested neighbor number N₀.
 CUDA_EXPORT inline float sphTargetKernelSum(float Nₛₑₜ) {
     return Nₛₑₜ * float(1.0 / sph_geometry::kUnitBallVolume);
 }
 
 struct SphGradHEvaluation {
     sph_volume::GradHCorrection<float> correction;
-    sph_volume::SupportConstraint constraint;
-    float relativeResidual;    // (ΣW − target)/target at the stored smoothing length
+    float stiffness;           // ψ: one for a free support, below one in a layer, zero if fixed
+    float relativeResidual;    // (ΣW − ΣWₛₑₜ(h))/ΣWₛₑₜ(h) at the stored smoothing length
 };
 
-// The variational density pass's correction for one sink, from its unweighted sums
-// ΣW = Σ𞁓 w(q𞁑𞁓) and Σ𞁓 q𞁑𞁓 w′(q𞁑𞁓) at the converged smoothing length.
-// Every gas particle has the mass m and the volume weight x = m.
-// Symbol directory: h𞁑, hₘᵢₙ, hₘₐₓ → smoothing length and its bounds; Nₛₑₜ → target neighbor
-// count; ΣWₛₑₜ → target kernel sum; m → gas mass; Σ𞁓 q𞁑𞁓 w′ → kernel derivative moment.
-// Code names: Σqwʹ = Σ𞁓 q𞁑𞁓 w′.
+// The density pass's correction for one sink, from its unweighted sums
+// ΣW = Σ𞁓 w(q𞁑𞁓) and Σ𞁓 q𞁑𞁓 w′(q𞁑𞁓) at the converged smoothing length, with the
+// bounded target of sph_volume::boundedTarget. Every gas particle has the mass m and the
+// volume weight x = m. A fixed support (hₘᵢₙ = hₘₐₓ), or one on or outside a bound, has
+// stiffness zero.
+// Symbol directory: h𞁑, hₘᵢₙ, hₘₐₓ → smoothing length and its bounds; Nₛₑₜ → requested
+// neighbor number N₀; ΣWₛₑₜ → target kernel sum at h𞁑; ψ → support stiffness; m → gas
+// mass; Σ𞁓 q𞁑𞁓 w′ → kernel derivative moment. Code names: Σqwʹ = Σ𞁓 q𞁑𞁓 w′.
 CUDA_EXPORT inline SphGradHEvaluation sphGradHEvaluation(
     float h𞁑, float hₘᵢₙ, float hₘₐₓ, float Nₛₑₜ, float m, float ΣW, float Σqwʹ) {
-    float const ΣWₛₑₜ = sphTargetKernelSum(Nₛₑₜ);
+    float ΣWₛₑₜ = sphTargetKernelSum(Nₛₑₜ);
+    float ψ = 0.0f;
+    // A fixed support, or one placed on or outside a bound, has no constraint to meet:
+    // its residual is measured against the interior target.
+    if (hₘᵢₙ < hₘₐₓ && h𞁑 > hₘᵢₙ && h𞁑 < hₘₐₓ) {
+        auto const layers = sph_volume::supportLayers(hₘᵢₙ, hₘₐₓ);
+        auto const target = sph_volume::boundedTarget(h𞁑, hₘᵢₙ, hₘₐₓ, layers);
+        ΣWₛₑₜ *= target.factor;
+        ψ = target.stiffness;
+    }
     SphGradHEvaluation result;
+    result.stiffness = ψ;
     result.relativeResidual = (ΣW - ΣWₛₑₜ) / ΣWₛₑₜ;
-    result.constraint = sph_volume::classifySupport(
-        h𞁑, hₘᵢₙ, hₘₐₓ, result.relativeResidual, kSphSmoothingLengthTolerance);
-    result.correction = sph_volume::gradHCorrection(
-        sph_volume::equalWeightSupportSums(ΣW, Σqwʹ, m), result.constraint);
+    result.correction =
+        sph_volume::gradHCorrection(sph_volume::equalWeightSupportSums(ΣW, Σqwʹ, m), ψ);
     return result;
 }
 

@@ -352,24 +352,27 @@ __global__ void sphCudaDensityAndGradients(
                 auto const gradH = sphGradHEvaluation(h𞁑, parameters.minimumSmoothingLength,
                     parameters.maximumSmoothingLength, data.targetNeighborCount, data.gasMass, ΣW,
                     Σqwʹ);
-                flops += 8;    // Residual (2), and Ω, ζ, the weighted sums (6).
-                if (gradH.constraint != sph_volume::SupportConstraint::Free) {
+                flops += 24;    // Layers, target (12), residual (2), Ω, ζ, weighted sums (8).
+                // clang-format off
+                /*
+                 * A support inside a bound layer, or a fixed one, counts as held; a fixed
+                 * support has Ω𞁑 = 1, ζ𞁑 = 0 and no constraint to meet. Any other unusable
+                 * correction stops the run; a small positive Ω𞁑 is counted.
+                 *
+                 * Symbol directory (in the code below):
+                 *   ζ𞁑 → weighted support correction; ψ → support stiffness
+                 */
+                // clang-format on
+                if (gradH.stiffness < 1.0f) {
                     atomicAdd(&reduction->heldSupports, 1);
-                } else {
-                    // clang-format off
-                    /*
-                     * A held support uses ζ𞁑 = 0. An unusable free correction stops the
-                     * run; a small positive Ω𞁑 is counted.
-                     *
-                     * Symbol directory (in the code below):
-                     *   ζ𞁑 → weighted support correction
-                     */
-                    // clang-format on
+                }
+                if (gradH.stiffness > 0.0f) {
                     if (!sph_volume::isUsable(gradH.correction)) {
                         printf("SPH grad-H correction is unusable: smoothingLength=%e "
-                               "density=%e ΣW=%e Σq dw/dq=%e Ω=%e ζ=%e residual=%e\n",
+                               "density=%e ΣW=%e Σq dw/dq=%e Ω=%e ζ=%e ψ=%e residual=%e\n",
                             h𞁑, ρ𞁑, ΣW, Σqwʹ, gradH.correction.supportJacobian,
-                            gradH.correction.weightedSupportCorrection, gradH.relativeResidual);
+                            gradH.correction.weightedSupportCorrection, gradH.stiffness,
+                            gradH.relativeResidual);
                         __trap();
                     }
                     atomicMin(&reduction->minimumGradHOmega, gradH.correction.supportJacobian);

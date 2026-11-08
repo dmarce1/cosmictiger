@@ -123,10 +123,15 @@ __device__ inline void recordSphGpuFlops(sph_flops::Counter const& flops, SphRed
 /*
  * Section 6 of Monaghan (1992): the resolution length follows the local density,
  * h𞁑 ∝ ρ𞁑^(−1/ν) with ν = 3 (equations 6.1-6.2). Instead of integrating equation 6.2
- * or 6.7 of Monaghan (1992), the solve holds (4π/3) ρ𞁑 h𞁑³/m = Nₛₑₜ, i.e.
- * ΣW = Σ𞁓 w(|r𞁑𞁓|/h𞁑) = 3 Nₛₑₜ/(4π) for the selected kernel W(r, h) = w(r/h)/h³, by a
- * bounded Newton iteration on the smoothing length h𞁑 with dΣW/dh𞁑 = −Σ𞁓 q𞁑𞁓 w'(q𞁑𞁓)/h𞁑,
- * q𞁑𞁓 = |r𞁑𞁓|/h𞁑. The bounds limit the smoothing length without modifying the density sum.
+ * or 6.7 of Monaghan (1992), the solve holds (4π/3) ρ𞁑 h𞁑³/m = N(h𞁑), i.e.
+ * ΣW = Σ𞁓 w(|r𞁑𞁓|/h𞁑) = ΣWₛₑₜ(h𞁑) = 3 N(h𞁑)/(4π) for the selected kernel
+ * W(r, h) = w(r/h)/h³, where N(h) = N₀ f(h) is the bounded target of
+ * sph_volume::boundedTarget: N₀ between the layer junctions, infinite at hₘᵢₙ and zero at
+ * hₘₐₓ, so the root always lies strictly inside the bounds. A bounded Newton iteration on
+ * h𞁑 uses dΣW/dh𞁑 = −Σ𞁓 q𞁑𞁓 w'(q𞁑𞁓)/h𞁑, q𞁑𞁓 = |r𞁑𞁓|/h𞁑, and the target slope
+ * dΣWₛₑₜ/dh𞁑 = 3 N₀ f′/(4π). Iterates stay a margin inside the bounds, where the target
+ * is singular; an iterate pinned at the margin with a residual of the bound's sign is
+ * accepted, as is a fixed support (hₘᵢₙ = hₘₐₓ).
  *
  * Symbol directory (in the code below):
  *   q𞁑𞁓 → normalized radius
@@ -134,9 +139,12 @@ __device__ inline void recordSphGpuFlops(sph_flops::Counter const& flops, SphRed
  *   h𞁑, h𞁑⁻¹ → smoothing length, its inverse; hₘᵢₙ, hₘₐₓ → smoothing length bounds
  *   ρ𞁑 → density
  *   ΣW, dΣW/dh𞁑 → kernel sum, its smoothing-length derivative
- *   Nₛₑₜ, ΣWₛₑₜ → target neighbor count, target kernel sum
+ *   N₀ → requested neighbor number; f, f′ → target factor and its slope
+ *   ΣWₛₑₜ, dΣWₛₑₜ/dh𞁑 → target kernel sum at h𞁑, its slope; ΣW_0 → interior target 3N₀/(4π)
+ *   dF/dh𞁑 → slope of the residual ΣW − ΣWₛₑₜ
  *   paddedX_a → x𞁑 as the three-axis record that the search-box bounds compare.
- *   Code names: ih𞁑 = h𞁑⁻¹; dΣW_dh𞁑 = dΣW/dh𞁑.
+ *   Code names: ih𞁑 = h𞁑⁻¹; dΣW_dh𞁑 = dΣW/dh𞁑; dΣWₛₑₜ_dh𞁑 = dΣWₛₑₜ/dh𞁑; dF_dh𞁑 = dF/dh𞁑;
+ *   Nₛₑₜ = N₀.
  */
 // clang-format on
 
@@ -148,14 +156,19 @@ inline __device__ bool solveSphSmoothingLength(float& h𞁑, float hₘᵢₙ, f
     int const threadIndex = threadIdx.x;
     int const runtimeBlockSize = blockDim.x;
     ALWAYS_ASSERT(hₘᵢₙ > 0.0f && hₘₐₓ >= hₘᵢₙ && Nₛₑₜ > 0.0f);
+    auto const layers = sph_volume::supportLayers(hₘᵢₙ, hₘₐₓ);
+    float const lowerLimit =
+        hₘᵢₙ + float(sph_volume::kSupportMargin) * (layers.lowerJunction - hₘᵢₙ);
+    float const upperLimit =
+        hₘₐₓ - float(sph_volume::kSupportMargin) * (hₘₐₓ - layers.upperJunction);
     if (threadIndex == 0) {
-        h𞁑 = fminf(fmaxf(h𞁑, hₘᵢₙ), hₘₐₓ);
+        h𞁑 = fminf(fmaxf(h𞁑, lowerLimit), upperLimit);
     }
     __syncthreads();
-    float lower = hₘᵢₙ;
-    float upper = hₘₐₓ;
-    float const ΣWₛₑₜ = sphTargetKernelSum(Nₛₑₜ);
-    flops += 1;
+    float lower = lowerLimit;
+    float upper = upperLimit;
+    float const ΣW_0 = sphTargetKernelSum(Nₛₑₜ);
+    flops += 7;    // Interior target, junctions and limits.
     for (int iteration = 0; iteration < 128; iteration++) {
         int boxExceeded = false;
         for (int dim = 0; dim < kDimensions; dim++) {
@@ -197,10 +210,13 @@ inline __device__ bool solveSphSmoothingLength(float& h𞁑, float hₘᵢₙ, f
         sharedReduceAdd<float, blockSize>(ΣW);
         sharedReduceAdd<float, blockSize>(dΣW_dh𞁑);
         flops += 2 * detail::sphReductionFlops<blockSize>();
+        auto const target = sph_volume::boundedTarget(h𞁑, hₘᵢₙ, hₘₐₓ, layers);
+        float const ΣWₛₑₜ = ΣW_0 * target.factor;
+        float const dΣWₛₑₜ_dh𞁑 = ΣW_0 * target.slope;
         float const residual = ΣW - ΣWₛₑₜ;
-        flops += 2;    // Residual and relative tolerance product (absolute value is free).
+        flops += 14;    // Target (12), residual and relative tolerance product.
         if (fabsf(residual) <= kSphSmoothingLengthTolerance * ΣWₛₑₜ ||
-            (h𞁑 <= hₘᵢₙ && residual >= 0.0f) || (h𞁑 >= hₘₐₓ && residual <= 0.0f)) {
+            (h𞁑 <= lowerLimit && residual >= 0.0f) || (h𞁑 >= upperLimit && residual <= 0.0f)) {
             return true;
         }
         if (residual > 0.0f) {
@@ -208,10 +224,11 @@ inline __device__ bool solveSphSmoothingLength(float& h𞁑, float hₘᵢₙ, f
         } else {
             lower = h𞁑;
         }
-        float change = dΣW_dh𞁑 > 0.0f ? -residual / dΣW_dh𞁑 : 0.2f * h𞁑;
+        float const dF_dh𞁑 = dΣW_dh𞁑 - dΣWₛₑₜ_dh𞁑;
+        float change = dF_dh𞁑 > 0.0f ? -residual / dF_dh𞁑 : 0.2f * h𞁑;
         change = fminf(fmaxf(change, -0.2f * h𞁑), 0.2f * h𞁑);
-        float next = fminf(fmaxf(h𞁑 + change, hₘᵢₙ), hₘₐₓ);
-        flops += 4;    // Newton/fallback change, two clamp products, radius update.
+        float next = fminf(fmaxf(h𞁑 + change, lowerLimit), upperLimit);
+        flops += 5;    // Residual slope, Newton/fallback change, two clamp products, update.
         if (next < lower || next > upper) {
             next = 0.5f * (lower + upper);
             flops += 2;

@@ -83,7 +83,9 @@ The dimensionless grad-H corrections are
 \zeta_i=\frac{D\sum_jm_jw_D+\sum_jm_jq_{ij}w_D'}{\sum_jq_{ij}w_D'}.
 \]
 
-Held supports retain zero zeta. With
+Fixed supports retain zero zeta; a support inside a bound layer blends \(\Omega_i\)
+and \(\zeta_i\) toward one and zero by its stiffness
+([variational_sph.md](variational_sph.md#supports-near-the-bounds)). With
 \(Q_{ij}=(P_i m_i/\rho_i^2)(m_j-\zeta_i)\), pressure forces remain
 \(m_i\dot v_i=-\sum_j[Q_{ij}\nabla_iW(H_i)+Q_{ji}\nabla_iW(H_j)]\).
 Entropy is unchanged by reversible pressure work; viscosity and conduction
