@@ -79,24 +79,24 @@ function(cosmictiger_feature_sources output)
     # fallback.
     if(COSMICTIGER_WITH_GRAVITY)
         list(APPEND cosmictiger_source_files
-            src/gravity/pm/collective_dispatch.cpp
-            src/gravity/pm/kick.cpp
-            src/gravity/pm/outer_interval.cpp
+            src/gravity/collective_dispatch.cpp
+            src/gravity/pm_kick.cpp
+            src/gravity/outer_interval.cpp
             src/particles/particle_mesh_sort.cpp
-            src/gravity/pmmm/kick.cpp
-            src/gravity/pmmm/interval.cpp
-            src/gravity/pmmm/solver.cpp
-            src/gravity/pmmm/kernels.cpp
-            src/gravity/pmmm/evaluation.cpp
-            src/gravity/pmmm/fft.cpp
-            src/gravity/pmmm/mesh_exchange.cpp
-            src/gravity/pmmm/fmm/cell_schedule.cpp
-            src/gravity/pmmm/fmm/cell_tree.cpp
-            src/gravity/pmmm/fmm/fmm_batch.cpp
-            src/gravity/pmmm/fmm/ghost_exchange.cpp
-            src/gravity/pmmm/fmm/ghost_storage.cpp
-            src/gravity/pmmm/pp/near_pp.cpp
-            src/gravity/pmmm/pp/near_pp.cu
+            src/gravity/pmmm_kick.cpp
+            src/gravity/interval.cpp
+            src/gravity/solver.cpp
+            src/gravity/pmmm_kernels.cpp
+            src/gravity/evaluation.cpp
+            src/gravity/fft.cpp
+            src/gravity/mesh_exchange.cpp
+            src/gravity/fmm/cell_schedule.cpp
+            src/gravity/fmm/cell_tree.cpp
+            src/gravity/fmm/fmm_batch.cpp
+            src/gravity/fmm/ghost_exchange.cpp
+            src/gravity/fmm/ghost_storage.cpp
+            src/gravity/pp/near_pp.cpp
+            src/gravity/pp/near_pp.cu
         )
     endif()
 
@@ -155,10 +155,10 @@ function(cosmictiger_feature_sources output)
         if(COSMICTIGER_WITH_GRAVITY)
             list(APPEND cosmictiger_source_files
                 tests/mesh_domains.cpp
-                tests/gravity/pmmm/particle_mesh_dispatch.cpp
+                tests/gravity/particle_mesh_dispatch.cpp
                 tests/particle_mesh_sort.cpp
-                tests/gravity/pmmm/particle_mesh_timestep.cpp
-                tests/gravity/pmmm/pmmm.cpp)
+                tests/gravity/particle_mesh_timestep.cpp
+                tests/gravity/pmmm.cpp)
         else()
             list(APPEND cosmictiger_source_files tests/sph/no_gravity.cpp)
         endif()

@@ -673,12 +673,12 @@ emergency termination, and the completed APEX and `profile.txt` reports.
 
 Common gravity and SPH machinery lives directly in each subsystem directory.
 The same subsystem organization is used beneath `cosmictiger/` for headers and `src/` for
-implementations. The PMMM gravity solver is in `gravity/pmmm/`, with the shared
-tree walk directly under `gravity/`. SPH numerical modules are in
+implementations. The PMMM gravity solver and the tree walk of its FMM near
+field are directly under `gravity/`. SPH numerical modules are in
 `hydro/sph/variational/`, `hydro/sph/monaghan/`, `hydro/sph/morris_and_monaghan/`,
 and `hydro/sph/balsara/`.
 Owned particle storage stays in `particles/`; PMMM owns its
-separate ghost arena in `gravity/pmmm/`.
+separate ghost arena in `gravity/fmm/`.
 
 See [the source organization guide](docs/source_layout.md) for file responsibilities,
 dependency boundaries, and generated-code placement.

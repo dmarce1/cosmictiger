@@ -112,7 +112,7 @@ The corresponding complete per-lane counts appear in each kernel's `kFlops_`.
 These are source-operation weights, not measured elapsed time or hardware
 instruction counts; float promotion does not alter the counted expression DAG.
 
-`tests/gravity/pmmm/generated_spherical_ewald.cpp` exercises every order in
+`tests/gravity/generated_spherical_ewald.cpp` exercises every order in
 the selected compiled range, float and double, origin and near-origin,
 Cartesian axes, general positions, and box corners. It compares all coefficients to an independent complex
 recurrence, Gaussian quadrature central term, explicit finite gamma sums, and

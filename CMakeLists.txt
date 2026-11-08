@@ -339,14 +339,14 @@ set(cosmictiger_header_files
     cosmictiger/core/tree_id.hpp
     cosmictiger/gravity/fmm_geometry.hpp
     cosmictiger/gravity/kick_context.hpp
-    cosmictiger/gravity/pmmm/fmm/cell_tree.hpp
-    cosmictiger/gravity/pm/collective_dispatch.hpp
-    cosmictiger/gravity/pmmm/fmm/fmm_batch.hpp
-    cosmictiger/gravity/pmmm/fmm/ghost_storage.hpp
-    cosmictiger/gravity/pmmm/kernels.hpp
-    cosmictiger/gravity/pmmm/kick.hpp
-    cosmictiger/gravity/pmmm/pp_near_pp.hpp
-    cosmictiger/gravity/pmmm/solver.hpp
+    cosmictiger/gravity/fmm/cell_tree.hpp
+    cosmictiger/gravity/collective_dispatch.hpp
+    cosmictiger/gravity/fmm/fmm_batch.hpp
+    cosmictiger/gravity/fmm/ghost_storage.hpp
+    cosmictiger/gravity/pmmm_kernels.hpp
+    cosmictiger/gravity/pmmm_kick.hpp
+    cosmictiger/gravity/pp_near_pp.hpp
+    cosmictiger/gravity/solver.hpp
     cosmictiger/gravity/source_access.hpp
     cosmictiger/gravity/sources.hpp
     cosmictiger/gravity/tree_build.hpp
@@ -439,20 +439,20 @@ set_source_files_properties(src/cosmology/boltzmann.cpp PROPERTIES
     COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 # Background and clock guards must remain effective in release builds.
 set_source_files_properties(src/core/driver.cpp src/gravity/error.cpp src/gravity/reference_table.cpp
-    src/gravity/pmmm/solver.cpp src/gravity/pmmm/kernels.cpp src/gravity/pmmm/pp/near_pp.cpp tests/gravity/pmmm/pmmm.cpp
-    src/gravity/pmmm/kick.cpp src/cosmology/friedmann.cpp src/cosmology/cosmology.cpp
+    src/gravity/solver.cpp src/gravity/pmmm_kernels.cpp src/gravity/pp/near_pp.cpp tests/gravity/pmmm.cpp
+    src/gravity/pmmm_kick.cpp src/cosmology/friedmann.cpp src/cosmology/cosmology.cpp
     src/cosmology/background.cpp src/cosmology/evolution.cpp PROPERTIES
     COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 # Keep the diagnostic's compensated double sums intact on both host and device.
 set_source_files_properties(src/gravity/error_cuda.cu PROPERTIES COMPILE_OPTIONS
     "--ftz=false;--prec-div=true;--prec-sqrt=true;--fmad=false;-Xcompiler=-fno-fast-math;-Xcompiler=-ffp-contract=off")
 set_source_files_properties(
-    src/gravity/pmmm/fft.cpp
-    src/gravity/pmmm/mesh_exchange.cpp
-    src/gravity/pmmm/fmm/ghost_exchange.cpp
-    src/gravity/pmmm/fmm/cell_schedule.cpp
-    src/gravity/pmmm/evaluation.cpp
-    src/gravity/pm/kick.cpp
+    src/gravity/fft.cpp
+    src/gravity/mesh_exchange.cpp
+    src/gravity/fmm/ghost_exchange.cpp
+    src/gravity/fmm/cell_schedule.cpp
+    src/gravity/evaluation.cpp
+    src/gravity/pm_kick.cpp
     PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=off")
 # Domain boundary coordinates must round identically when stored and reloaded.
 set_source_files_properties(src/particles/domain.cpp tests/mesh_domains.cpp PROPERTIES
@@ -1716,7 +1716,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
     if(COSMICTIGER_WITH_GRAVITY)
         foreach(representation IN ITEMS spherical_ewald)
             set(generated_kernel_target "generated_${representation}_test")
-            add_executable(${generated_kernel_target} "tests/gravity/pmmm/generated_${representation}.cpp")
+            add_executable(${generated_kernel_target} "tests/gravity/generated_${representation}.cpp")
             target_include_directories(${generated_kernel_target} PRIVATE ${PROJECT_SOURCE_DIR})
             cosmictiger_use_generated_kernels(${generated_kernel_target})
             target_compile_options(${generated_kernel_target} PRIVATE -fno-fast-math -ffp-contract=off)
@@ -1728,7 +1728,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         foreach(spherical_order IN LISTS COSMICTIGER_FMM_ORDERS)
             math(EXPR spherical_degree "${spherical_order} - 1")
             set(spherical_target "generated_spherical_degree_${spherical_degree}_test")
-            add_executable(${spherical_target} tests/gravity/pmmm/generated_spherical.cpp)
+            add_executable(${spherical_target} tests/gravity/generated_spherical.cpp)
             target_include_directories(${spherical_target} PRIVATE ${PROJECT_SOURCE_DIR})
             target_compile_definitions(${spherical_target} PRIVATE
                 GENERATED_SPHERICAL_TEST_DEGREE=${spherical_degree})
@@ -1797,21 +1797,21 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         cosmictiger_add_gtest(NAME mesh_domain TARGET mesh_domain_test
             PROPERTIES TIMEOUT 30 LABELS "particle_mesh;cpu")
 
-        add_executable(pmmm_kernels_test tests/gravity/pmmm/pmmm_kernels.cpp
-            tests/gravity/pmmm/pmmm_kernel_flops.cpp src/gravity/pmmm/kernels.cpp)
+        add_executable(pmmm_kernels_test tests/gravity/pmmm_kernels.cpp
+            tests/gravity/pmmm_kernel_flops.cpp src/gravity/pmmm_kernels.cpp)
         target_include_directories(pmmm_kernels_test PRIVATE ${PROJECT_SOURCE_DIR})
         cosmictiger_use_generated_kernels(pmmm_kernels_test)
         target_link_libraries(pmmm_kernels_test PRIVATE HPX::hpx Boost::boost)
         target_compile_options(pmmm_kernels_test PRIVATE -fno-fast-math -ffp-contract=off)
         cosmictiger_add_gtest(NAME pmmm_kernels TARGET pmmm_kernels_test
             PROPERTIES TIMEOUT 180 LABELS "pmmm;cpu")
-        add_executable(pmmm_near_flops_test tests/gravity/pmmm/pp/near_pp_flops.cpp)
+        add_executable(pmmm_near_flops_test tests/gravity/pp/near_pp_flops.cpp)
         target_include_directories(pmmm_near_flops_test PRIVATE ${PROJECT_SOURCE_DIR})
         target_link_libraries(pmmm_near_flops_test PRIVATE HPX::hpx Boost::boost)
         target_compile_options(pmmm_near_flops_test PRIVATE -fno-fast-math -ffp-contract=off)
         cosmictiger_add_gtest(NAME pmmm_near_flops TARGET pmmm_near_flops_test
             PROPERTIES TIMEOUT 60 LABELS "pmmm;cpu;flops")
-        add_executable(pmmm_fft_flops_test tests/gravity/pm/fft_flops.cpp)
+        add_executable(pmmm_fft_flops_test tests/gravity/fft_flops.cpp)
         target_include_directories(pmmm_fft_flops_test PRIVATE ${PROJECT_SOURCE_DIR} ${FFTW3F_INCLUDE_DIR})
         target_link_libraries(pmmm_fft_flops_test PRIVATE HPX::hpx Boost::boost ${FFTW3F_LIBRARY})
         target_compile_options(pmmm_fft_flops_test PRIVATE -fno-fast-math -ffp-contract=off)
@@ -1855,7 +1855,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             list(APPEND pmmm_sph_args --with-sph)
         endif()
         add_test(NAME pmmm_evolution_cpu COMMAND ${Python3_EXECUTABLE}
-            ${PROJECT_SOURCE_DIR}/tests/gravity/pmmm/run_pmmm_evolution.py $<TARGET_FILE:cosmictiger>
+            ${PROJECT_SOURCE_DIR}/tests/gravity/run_pmmm_evolution.py $<TARGET_FILE:cosmictiger>
             ${PROJECT_BINARY_DIR}/tests/pmmm_evolution_cpu
             --order ${cosmictiger_default_fmm_order}
             --time-integrator ${cosmictiger_default_integrator}
@@ -1865,7 +1865,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         # Outer interval with frozen near membership (docs/pmmm.md).
         if(COSMICTIGER_WITH_GRAVITY)
             add_test(NAME pmmm_interval_cpu COMMAND ${Python3_EXECUTABLE}
-                ${PROJECT_SOURCE_DIR}/tests/gravity/pmmm/run_pmmm_interval.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_SOURCE_DIR}/tests/gravity/run_pmmm_interval.py $<TARGET_FILE:cosmictiger>
                 ${PROJECT_BINARY_DIR}/tests/pmmm_interval_cpu
                 --order ${cosmictiger_default_fmm_order} --time-integrator ${cosmictiger_default_integrator}
                 --position-type ${COSMICTIGER_POSITION_TYPE})
@@ -1874,7 +1874,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
         endif()
         if(COSMICTIGER_WITH_CUDA)
             add_test(NAME pmmm_evolution_cuda COMMAND ${Python3_EXECUTABLE}
-                ${PROJECT_SOURCE_DIR}/tests/gravity/pmmm/run_pmmm_evolution.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_SOURCE_DIR}/tests/gravity/run_pmmm_evolution.py $<TARGET_FILE:cosmictiger>
                 ${PROJECT_BINARY_DIR}/tests/pmmm_evolution_cuda --cuda
                 --order ${cosmictiger_default_fmm_order}
                 --time-integrator ${cosmictiger_default_integrator}
@@ -1961,7 +1961,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                     LABELS "particle_mesh;mpi")
             endforeach()
             add_test(NAME pmmm_evolution_mpi COMMAND ${Python3_EXECUTABLE}
-                ${PROJECT_SOURCE_DIR}/tests/gravity/pmmm/run_pmmm_evolution.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_SOURCE_DIR}/tests/gravity/run_pmmm_evolution.py $<TARGET_FILE:cosmictiger>
                 ${PROJECT_BINARY_DIR}/tests/pmmm_evolution_mpi ${pm_launcher_args} --ranks 2
                 --order ${cosmictiger_default_fmm_order}
                 --time-integrator ${cosmictiger_default_integrator}
@@ -1969,7 +1969,7 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
             set_tests_properties(pmmm_evolution_mpi PROPERTIES TIMEOUT 600 PROCESSORS 4
                 RUN_SERIAL TRUE LABELS "pmmm;mpi")
             add_test(NAME particle_mesh_dispatch_failures_mpi COMMAND ${Python3_EXECUTABLE}
-                ${PROJECT_SOURCE_DIR}/tests/gravity/pmmm/run_particle_mesh_failures.py $<TARGET_FILE:cosmictiger>
+                ${PROJECT_SOURCE_DIR}/tests/gravity/run_particle_mesh_failures.py $<TARGET_FILE:cosmictiger>
                 ${PROJECT_BINARY_DIR}/tests/particle_mesh_dispatch_failures_mpi ${pm_launcher_args})
             set_tests_properties(particle_mesh_dispatch_failures_mpi PROPERTIES TIMEOUT 100 PROCESSORS 4
                 RUN_SERIAL TRUE LABELS "particle_mesh;mpi")

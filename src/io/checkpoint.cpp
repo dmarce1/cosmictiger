@@ -35,7 +35,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/core/profiler.hpp>
 #include <cosmictiger/core/terminal.hpp>
-#include <cosmictiger/gravity/pmmm/mesh_size.hpp>
+#include <cosmictiger/gravity/mesh_size.hpp>
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/kernel.hpp>

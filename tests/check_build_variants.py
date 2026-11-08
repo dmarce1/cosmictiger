@@ -235,22 +235,22 @@ class BuildFeaturesTest(unittest.TestCase):
 
     def testMissingEnabledSolver(self):
         self.configure()
-        self.commands = [entry for entry in self.commands if not entry["file"].endswith("pmmm/solver.cpp")]
-        with self.assertRaisesRegex(ValueError, "required source missing: src/gravity/pmmm/solver.cpp"):
+        self.commands = [entry for entry in self.commands if not entry["file"].endswith("src/gravity/solver.cpp")]
+        with self.assertRaisesRegex(ValueError, "required source missing: src/gravity/solver.cpp"):
             self.check()
 
     def testMissingEnabledNearSolver(self):
         for source in ("pp/near_pp.cpp", "fmm/fmm_batch.cpp"):
             with self.subTest(source=source):
                 self.configure()
-                self.commands = [entry for entry in self.commands if not entry["file"].endswith("pmmm/" + source)]
-                with self.assertRaisesRegex(ValueError, "required source missing: src/gravity/pmmm/" + source):
+                self.commands = [entry for entry in self.commands if not entry["file"].endswith("src/gravity/" + source)]
+                with self.assertRaisesRegex(ValueError, "required source missing: src/gravity/" + source):
                     self.check()
 
     def testPmmmSourceLeak(self):
         self.configure(GRAVITY=False)
-        self.addCompilation("cosmictiger_objects", "src/gravity/pmmm/solver.cpp", self.definitions)
-        with self.assertRaisesRegex(ValueError, "PMMM disabled but compiles solver source"):
+        self.addCompilation("cosmictiger_objects", "src/gravity/solver.cpp", self.definitions)
+        with self.assertRaisesRegex(ValueError, "gravity disabled but compiles gravity source: src/gravity/solver.cpp"):
             self.check()
 
     def testRetiredSolverSourceLeak(self):
@@ -405,7 +405,7 @@ class BuildFeaturesTest(unittest.TestCase):
                 self.assertIn("Build features passed", self.check())
 
     def testSphOnlyRejectsMeshSourcesAndTests(self):
-        for source in ("src/gravity/pm/collective_dispatch.cpp", "tests/gravity/pm/fft_flops.cpp",
+        for source in ("src/gravity/collective_dispatch.cpp", "tests/gravity/fft_flops.cpp",
                        "src/particles/particle_mesh_sort.cpp", "tests/particle_mesh_sort.cpp",
                        "tests/mesh_domain.cpp", "tests/mesh_domains.cpp"):
             with self.subTest(source=source):
@@ -796,8 +796,8 @@ class FeatureConfigurationTest(unittest.TestCase):
                 self.assertEqual("src/gravity/kick.cpp" in selected, hasGravity(configuration))
                 self.assertEqual("tests/analysis_backends.cpp" in selected, hasGravity(configuration) and testing)
                 self.assertEqual("src/particles/particle_mesh_sort.cpp" in selected, hasGravity(configuration))
-                self.assertEqual("src/gravity/pmmm/pp/near_pp.cpp" in selected, hasGravity(configuration))
-                self.assertEqual("src/gravity/pmmm/fmm/fmm_batch.cpp" in selected, hasGravity(configuration))
+                self.assertEqual("src/gravity/pp/near_pp.cpp" in selected, hasGravity(configuration))
+                self.assertEqual("src/gravity/fmm/fmm_batch.cpp" in selected, hasGravity(configuration))
 
     def testNoPhysics(self):
         result = self.configure({"COSMICTIGER_ENABLE_GRAVITY": "OFF", "COSMICTIGER_ENABLE_SPH": "OFF"})

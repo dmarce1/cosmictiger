@@ -49,7 +49,7 @@
 #include <cosmictiger/gravity/fmm_types.hpp>
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_operators.hpp>
-#include <cosmictiger/gravity/pmmm/solver.hpp>
+#include <cosmictiger/gravity/solver.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #endif
 #include <cosmictiger/io/checkpoint.hpp>

@@ -7,7 +7,7 @@ does. Do not create single-file directories: flatten the file into its parent wi
 a prefix naming the former directory. Within a subsystem directory, omit a
 redundant subsystem prefix (for example, `sph/cuda.hpp`, not `sph/sph_cuda.hpp`).
 This applies independently to the header and source trees; the single-file
-PMMM PP header is `gravity/pmmm/pp_near_pp.hpp`. Common machinery sits directly
+PMMM PP header is `gravity/pp_near_pp.hpp`. Common machinery sits directly
 in its subsystem directory; there is no `shared/` layer.
 
 ## Build libraries
@@ -47,28 +47,29 @@ gravity/
 ├── sources.*, source_access.*
 ├── tree*, gravity*, kick*                  # Local tree/walk/CPU/CUDA execution of the near field
 ├── error.*, direct_reference.hpp, reference_table.*   # Sampled direct-force diagnostics
-├── pm/                                    # Mesh infrastructure shared by the PMMM stages
-│   ├── collective_dispatch.*, fft_flops.hpp
-│   ├── kick.*                             # Streamed field consumer with long half-kicks
-│   └── outer_interval.*                   # Outer interval selection
-└── pmmm/
-    ├── solver.*, kernels.*, mesh_size.hpp, fft.cpp, mesh_exchange.cpp, interval.cpp
-    ├── evaluation.cpp, kick.*
-    ├── state.hpp, actions.hpp              # Private source implementation headers
-    ├── pp_near_pp.hpp, pp/near_pp.*        # Direct particle-pair near field (fallback)
-    └── fmm/{cell_tree.*,fmm_batch.*,cell_schedule.cpp,ghost_storage.*,ghost_exchange.cpp}
+├── solver.*, pmmm_kernels.*, mesh_size.hpp # PMMM solve, spherical contraction, mesh sides
+├── fft.cpp, mesh_exchange.cpp, evaluation.cpp, interval.cpp
+├── pmmm_kick.*                            # PMMM prepare/finish kick entry points
+├── pm_kick.*                              # Streamed field consumer with long half-kicks
+├── collective_dispatch.*, fft_flops.hpp   # Mesh collectives and FFT operation counts
+├── outer_interval.*                       # Outer interval selection
+├── state.hpp, actions.hpp                 # Private source implementation headers
+├── pp_near_pp.hpp, pp/near_pp.*           # Direct particle-pair near field (fallback)
+└── fmm/{cell_tree.*,fmm_batch.*,cell_schedule.cpp,ghost_storage.*,ghost_exchange.cpp}
 ```
 
 An asterisk denotes the applicable header, C++ implementation, and/or CUDA
 implementation, rather than a requirement that every file have all three.
-The `state.hpp` and `actions.hpp` headers belong only to `src/gravity/pmmm/`.
+The `state.hpp` and `actions.hpp` headers belong only to `src/gravity/`.
 
-Directories identify solver families, not paper authors. `pmmm/` owns the
-multipole mesh convolution and its FMM and PP near fields; the local tree and
-walk machinery of the FMM near field sits at the gravity root. Generic FFT
-accounting, collective dispatch, the per-particle long acceleration consumer and
-the outer interval selection live in `pm/`. PMMM's tensor convolution is not a
-scalar PM solve merely because it uses FFTs.
+PMMM is the only gravity solver, so its files sit directly in `gravity/`
+beside the local tree and walk machinery of its FMM near field. Two files that
+would otherwise collide with common names carry the prefix of their former
+directory: `pmmm_kick.*` (PMMM kick entry points, beside the common `kick.*`
+tree walk) and `pmmm_kernels.*` (beside the generated `kernels/` directory);
+`pm_kick.*` is the per-particle long acceleration consumer. The `fmm/` and
+`pp/` subdirectories hold the two PMMM near-field evaluations. PMMM's tensor
+convolution is not a scalar PM solve merely because it uses FFTs.
 
 `COSMICTIGER_ENABLE_GRAVITY=OFF` excludes the whole solver. Public runtime
 selectors and serialized layouts are preserved: `gravity.method.near` keeps its
@@ -204,9 +205,8 @@ a solver.
 
 A file move must update includes, CMake sources, generated output paths,
 per-source compiler options, and active test or benchmark inputs together.
-Tests mirror solver ownership under `tests/gravity/` and `tests/sph/`, with
-common numerical tests at the parent level and solver tests in author
-subdirectories. Gravity benchmarks use the same convention beneath
-`benchmarks/gravity/`. Historical benchmark manifests and patches retain the
+Tests mirror solver ownership under `tests/gravity/` and `tests/sph/`; PMMM
+tests sit directly in `tests/gravity/`, with near-field tests in the same
+`pp/` subdirectory as their sources. Historical benchmark manifests and patches retain the
 paths of the source versions they describe. Public option keys, serialized fields, and test names
 are independent of the source-directory names.

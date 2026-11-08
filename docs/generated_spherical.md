@@ -118,7 +118,7 @@ previous finite-order rotation pitfalls. Its C++ generator is not copied.
 
 ## Validation
 
-`tests/gravity/pmmm/generated_spherical.cpp` uses independently written loop-based complex
+`tests/gravity/generated_spherical.cpp` uses independently written loop-based complex
 harmonic recurrences and translation/contraction sums, rather than the Python
 DAG. It checks the selected operators, arbitrary Green contraction, additive
 outputs, P2M/P2L normalization, and a three-particle direct

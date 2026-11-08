@@ -48,8 +48,8 @@
 #include <cosmictiger/gravity/gravity.hpp>
 #include <cosmictiger/gravity/kick.hpp>
 #include <cosmictiger/gravity/kick_workspace.hpp>
-#include <cosmictiger/gravity/pmmm/kick.hpp>
-#include <cosmictiger/gravity/pmmm/solver.hpp>
+#include <cosmictiger/gravity/pmmm_kick.hpp>
+#include <cosmictiger/gravity/solver.hpp>
 #endif
 #include <cosmictiger/io/checkpoint.hpp>
 #include <cosmictiger/io/output.hpp>

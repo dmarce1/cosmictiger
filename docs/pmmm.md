@@ -133,15 +133,15 @@ also changes which interactions are included in the far-field convolution.
 
 ## Source organization
 
-PMMM interfaces are in `cosmictiger/gravity/pmmm/` and implementations in
-`src/gravity/pmmm/`. `solver.cpp` coordinates the solve; `fft.cpp` owns the
+PMMM interfaces are in `cosmictiger/gravity/` and implementations in
+`src/gravity/`. `solver.cpp` coordinates the solve; `fft.cpp` owns the
 persistent transform/cache lifecycle; `mesh_exchange.cpp` transfers moments and
 local expansions. `ghost_storage.cpp` owns the reusable source arena,
 `ghost_exchange.cpp` handles whole-cell requests, and `cell_schedule.cpp` launches
 ready cell work. `cell_tree.cpp` supplies exact mesh-cell geometry to the common
 tree builder. `fmm_batch.cpp` adapts ready cells to the common traversal, and
 `evaluation.cpp` combines and consumes the fields. `near_pp.cpp`/`.cu` provide the
-alternative direct near field, and `kernels.cpp` adapts the spherical operators.
+alternative direct near field, and `pmmm_kernels.cpp` adapts the spherical operators.
 
 Common Cartesian operators, tree construction, source views, and CPU/CUDA walks
 remain directly in `gravity/`; the PMMM near FMM is their only user. Owned
@@ -589,7 +589,7 @@ at startup. SPH with PMMM remains rejected.
 
 ## Restart and regression checks
 
-`tests/gravity/pmmm/run_pmmm_interval.py` (`ctest -R pmmm_interval_cpu`) runs
+`tests/gravity/run_pmmm_interval.py` (`ctest -R pmmm_interval_cpu`) runs
 the outer interval on the 512-particle Plummer fixture: one transform per
 boundary plus the terminal pass and none inside, non-dyadic intervals selected
 by the far acceleration bound, the interval clock, inner rungs from the near

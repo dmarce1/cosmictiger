@@ -154,13 +154,10 @@ def sourceSelectionErrors(sources, configuration):
                 errors.append(f"gravity disabled but compiles gravity source: {source}")
             if cosmologySource:
                 errors.append(f"gravity disabled but compiles cosmology source: {source}")
-        if not hasGravity(configuration) and source.startswith(
-                ("src/gravity/pmmm/", "tests/gravity/pmmm/")):
-            errors.append(f"PMMM disabled but compiles solver source: {source}")
         if not hasGravity(configuration) and source in {
-                "tests/gravity/pm/fft_flops.cpp", "tests/mesh_domain.cpp", "tests/mesh_domains.cpp",
-                "src/gravity/pm/collective_dispatch.cpp", "src/gravity/pm/kick.cpp",
-                "src/gravity/pm/outer_interval.cpp",
+                "tests/gravity/fft_flops.cpp", "tests/mesh_domain.cpp", "tests/mesh_domains.cpp",
+                "src/gravity/collective_dispatch.cpp", "src/gravity/pm_kick.cpp",
+                "src/gravity/outer_interval.cpp",
                 "src/particles/particle_mesh_sort.cpp", "tests/particle_mesh_sort.cpp"}:
             errors.append(f"mesh solvers disabled but compiles mesh source: {source}")
         if source.startswith(("src/gravity/global_fmm/", "src/gravity/p3m/", "tests/gravity/p3m/",
@@ -211,9 +208,9 @@ def requiredSources(configuration, cuda):
             required.update({"src/analysis/bh.cu", "src/analysis/healpix.cu", "src/analysis/lightcone.cu",
                              "src/analysis/rockstar.cu"})
     if hasGravity(configuration):
-        required.update({"src/gravity/pmmm/solver.cpp", "src/gravity/pmmm/fft.cpp",
-                         "src/gravity/pmmm/pp/near_pp.cpp", "src/gravity/pmmm/fmm/fmm_batch.cpp",
-                         "src/gravity/pm/kick.cpp", "src/gravity/kick.cpp"})
+        required.update({"src/gravity/solver.cpp", "src/gravity/fft.cpp",
+                         "src/gravity/pp/near_pp.cpp", "src/gravity/fmm/fmm_batch.cpp",
+                         "src/gravity/pm_kick.cpp", "src/gravity/kick.cpp"})
     if configuration["SPH"]:
         required.update({"src/sph/sph.cpp", "src/sph/hydro_cpu.cpp", "src/sph/prehydro_cpu.cpp",
                          "src/sph/rungs_cpu.cpp", "src/sph/particles.cpp", "src/sph/tree.cpp",

@@ -36,7 +36,7 @@
 #include <cosmictiger/core/terminal.hpp>
 #if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/gravity/fmm_order.hpp>
-#include <cosmictiger/gravity/pmmm/mesh_size.hpp>
+#include <cosmictiger/gravity/mesh_size.hpp>
 #include <cosmictiger/gravity/tree.hpp>
 #endif
 #include <cosmictiger/io/checkpoint.hpp>
