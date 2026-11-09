@@ -240,18 +240,14 @@ bool sphTreeAllValid();
 // Called on each locality before its particle drift. Rung < 0 includes every
 // particle; otherwise only that exact rung moves. Refresh before global queries.
 void sphTreeDriftBounds(double driftFactor, int rung = -1);
-void sphTreeCacheClear();
-// This locality's local root, {-1, -1} when no tree is built here.
+// This locality's local root, {-1, -1} when no tree is built here. Each locality builds and
+// refreshes its own octree; there are no rank-routing nodes above the local roots, and no
+// locality reads another's tree except its exported leaves, held as ghosts.
 TreeId sphTreeLocalRoot();
-// Every locality's local root after the last build, in rank order. Each locality builds and
-// refreshes its own octree; there are no rank-routing nodes above the local roots.
-Vector<TreeId> const& sphTreeLocalRoots();
-// Remote nodes read through the tree-node cache on this locality since the last reset.
-std::int64_t sphTreeRemoteNodeReads();
-void sphTreeResetRemoteNodeReads();
-// Call after all tree consumers finish. Normal teardown invalidates caches but
-// retains the constructed arena for rebuilding; true explicitly releases it.
+// Call after all tree consumers finish. Normal teardown retains the constructed arena for
+// rebuilding; true explicitly releases it.
 void sphTreeDestroy(bool freeSphTree = false);
+// A local node, or a remote leaf held as a ghost here; any other remote id throws.
 SphTreeNode const* sphTreeGetNode(TreeId);
 void sphTreeSortSphParticlesByParticles();
 void sphTreeSetConverged(TreeId id, bool = true);

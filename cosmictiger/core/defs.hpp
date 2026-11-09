@@ -73,7 +73,6 @@ inline constexpr int kMinSphTrees = (2 * 1024 * 1024);
 inline constexpr int kParticleCacheSize = 1024;
 inline constexpr int kSortOversubscription = 2;
 inline constexpr int kTreeCacheSize = 1024;
-inline constexpr int kSphTreeCacheSize = 1024;
 inline constexpr int kTreeNodeAllocationSize = 8;
 
 // Compile-time cap on compute.bucketSize (COSMICTIGER_WITH_MAX_BUCKET); see kick.hpp.

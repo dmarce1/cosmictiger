@@ -25,28 +25,26 @@
  * and the reverse pair updates are unchanged. The particles' fields live in a
  * structure-of-arrays store in the owner's leaf order.
  *
- * Sync, before every neighbor walk: each locality publishes the union of its leaves' stored
- * inner and outer boxes, and each owner B exports to locality A every leaf l with
- *     inner(l) ∩ outer(A) ≠ ∅   or   outer(l) ∩ inner(A) ≠ ∅,
- * the walk's own opening test against A's union. A leaf pair (s on A, l on B) that the walk
- * would open has inner(s) ⊆ inner(A) and outer(s) ⊆ outer(A), so l is exported: the ghost
- * set is complete for that walk by construction, and the walk need only visit the local
- * root and the ghost leaves.
+ * Ghost leaves are the only distributed SPH path (M5): no remote node or gas is ever fetched.
+ *
+ * Sync, before every neighbor walk: each locality publishes the stored inner and outer boxes
+ * of a cut of at most 64 nodes through its tree (their union first, for a quick rejection),
+ * and each owner B exports to locality A every leaf l with
+ *     inner(l) ∩ outer(n) ≠ ∅   or   outer(l) ∩ inner(n) ≠ ∅   for a node n of A's cut,
+ * the walk's own opening test. Every leaf s of A lies under a node n of the cut with
+ * inner(s) ⊆ inner(n) and outer(s) ⊆ outer(n), so a leaf l that the walk would open for s is
+ * exported: the ghost set is complete for that walk by construction, and the walk need only
+ * visit the local root and the ghost leaves.
  *
  * Refresh, before every pass: each owner pushes the current fields of its exported particles,
- * converted exactly as the gas cache-line fetches convert them, so the readers see the same
- * values that the fetch path would read.
+ * tagged with the refresh generation; a read of fields older than the current refresh throws.
  *
  * Messages are pushes acknowledged inside one collective; no pass issues a request and waits
  * for a reply.
  */
 
-// Whether the ghost path serves remote leaves: enabled and more than one locality.
+// Whether there are remote leaves to mirror: more than one locality.
 bool sphGhostsActive();
-bool sphGhostsEnabled();
-// From rank 0: set compute.sphGhosts on every locality, selecting the ghost path (true) or
-// the remote fetch path (false), and drop every ghost.
-void sphGhostsSetEnabled(bool enabled);
 
 // Collective from rank 0: recompute every locality's exports from the current leaf boxes and
 // install the ghost leaf records. Drops any previous ghosts.
@@ -65,12 +63,13 @@ Vector<TreeId> const& sphGhostsLeafIds();
 // this locality.
 void sphGhostsBeginStaging();
 void sphGhostsEndStaging();
-// Whether a remote read is served by the ghost store: only while a pass stages, when the
-// pushed fields are current. Other remote reads (test oracles, diagnostics) use the fetch path.
-bool sphGhostsServe(ParticleGlobalRange const& range);
+// Throws unless a pass is staging on this locality: remote gas is readable only then, when the
+// pushed fields are current. Tests read remote state from its owner instead.
+void sphGhostsRequireStaging(ParticleGlobalRange const& range);
 
 // Local reads of a whole remote leaf range, with the conventions of the gas readers; each
-// throws if the range is not a ghost leaf. A null output pointer skips that field.
+// throws if the range is not a ghost leaf or its owner's fields predate the current refresh.
+// A null output pointer skips that field.
 void sphGhostsReadPositions(
     ParticleGlobalRange range, Position* x, Position* y, Position* z, ParticleInteger offset);
 void sphGhostsReadInternalEnergyAndSmoothingLength(ParticleGlobalRange range, float* internalEnergy,

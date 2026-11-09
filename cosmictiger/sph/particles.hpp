@@ -84,8 +84,6 @@ ParticleInteger sphParticlesSize();
 void sphParticlesResize(ParticleInteger particleCount, bool resizeGravityParticles = true);
 void sphParticlesFree();
 void sphParticlesRemove(ParticleInteger index);
-void sphParticlesClearHydroCaches();
-void sphParticlesClearCaches();
 void sphParticlesResolveWithParticles();
 void sphParticlesSwap(ParticleInteger i, ParticleInteger j);
 ParticleInteger sphParticlesSort(

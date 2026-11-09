@@ -36,7 +36,6 @@
 #endif
 #include <cosmictiger/sph/particles.hpp>
 
-#include "particle_cache.hpp"
 
 bool sphParticlesEntropyInitialized = false;
 double sphParticlesThermalScaleFactor = 1.0;
@@ -44,68 +43,6 @@ double sphParticlesThermalScaleFactor = 1.0;
 static ParticleInteger capacity = 0;
 static ParticleInteger size = 0;
 
-static ParticleVector<Position> const* sphParticlesCacheReadLine(detail::SphCacheLineId lineId);
-static Pair<float> const* sphParticlesReadThermodynamicCacheLine(detail::SphCacheLineId lineId);
-static char const* sphParticlesRungCacheReadLine(detail::SphCacheLineId lineId);
-static ParticleVector<float> const* sphParticlesReadVelocityCacheLine(
-    detail::SphCacheLineId lineId);
-struct SphDensityCacheEntry {
-    float density{};
-    float balsaraFactor{};
-    float bulkViscosityCoefficient{};
-    float gradHCorrection{};
-    template <typename Archive>
-    void serialize(Archive& archive, unsigned) {
-        archive & density & balsaraFactor & bulkViscosityCoefficient & gradHCorrection;
-    }
-};
-
-static SphDensityCacheEntry const* sphParticlesReadDensityCacheLine(detail::SphCacheLineId lineId);
-
-static Vector<ParticleVector<Position>> sphParticlesFetchCacheLine(ParticleInteger index);
-static Vector<char> sphParticlesFetchRungCacheLine(ParticleInteger index);
-static Vector<ParticleVector<float>> sphParticlesFetchVelocityCacheLine(ParticleInteger index);
-static Vector<SphDensityCacheEntry> sphParticlesFetchDensityCacheLine(ParticleInteger index);
-static Vector<Pair<float>> sphParticlesFetchThermodynamicCacheLine(ParticleInteger index);
-
-HPX_PLAIN_ACTION(sphParticlesFetchCacheLine, SphParticlesFetchCacheLineAction);
-HPX_PLAIN_ACTION(
-    sphParticlesFetchThermodynamicCacheLine, SphParticlesFetchThermodynamicCacheLineAction);
-HPX_PLAIN_ACTION(sphParticlesFetchRungCacheLine, SphParticlesFetchRungCacheLineAction);
-HPX_PLAIN_ACTION(sphParticlesFetchVelocityCacheLine, SphParticlesFetchVelocityCacheLineAction);
-HPX_PLAIN_ACTION(sphParticlesFetchDensityCacheLine, SphParticlesFetchDensityCacheLineAction);
-HPX_PLAIN_ACTION(sphParticlesClearHydroCaches, SphParticlesClearHydroCachesAction);
-HPX_PLAIN_ACTION(sphParticlesClearCaches, SphParticlesClearCachesAction);
-
-static Array<std::unordered_map<detail::SphCacheLineId,
-                 std::shared_ptr<hpx::shared_future<Vector<ParticleVector<Position>>>>,
-                 detail::SphCacheLineHashHi>,
-    kParticleCacheSize>
-    particleCache;
-static Array<
-    std::unordered_map<detail::SphCacheLineId,
-        std::shared_ptr<hpx::shared_future<Vector<Pair<float>>>>, detail::SphCacheLineHashHi>,
-    kParticleCacheSize>
-    thermodynamicParticleCache;
-static Array<std::unordered_map<detail::SphCacheLineId,
-                 std::shared_ptr<hpx::shared_future<Vector<char>>>, detail::SphCacheLineHashHi>,
-    kParticleCacheSize>
-    rungParticleCache;
-static Array<std::unordered_map<detail::SphCacheLineId,
-                 std::shared_ptr<hpx::shared_future<Vector<ParticleVector<float>>>>,
-                 detail::SphCacheLineHashHi>,
-    kParticleCacheSize>
-    particleVelocityCache;
-static Array<std::unordered_map<detail::SphCacheLineId,
-                 std::shared_ptr<hpx::shared_future<Vector<SphDensityCacheEntry>>>,
-                 detail::SphCacheLineHashHi>,
-    kParticleCacheSize>
-    densityParticleCache;
-static Array<SpinlockType, kParticleCacheSize> mutexes;
-static Array<SpinlockType, kParticleCacheSize> energyMutexes;
-static Array<SpinlockType, kParticleCacheSize> rungMutexes;
-static Array<SpinlockType, kParticleCacheSize> velocityMutexes;
-static Array<SpinlockType, kParticleCacheSize> densityMutexes;
 HPX_PLAIN_ACTION(sphParticlesPrepareThermodynamics, SphParticlesPrepareThermodynamicsAction);
 void sphParticlesPrepareThermodynamics(double scaleFactor, bool initializeEntropy) {
     ALWAYS_ASSERT(scaleFactor > 0.0);
@@ -301,335 +238,108 @@ void sphParticlesResolveWithParticles() {
     hpx::wait_all(futures.begin(), futures.end());
 }
 
+// Remote ranges are ghost leaves (docs/sph_parent_tree_plan.md, M5): every remote read
+// happens while a pass stages its sources, after the owners pushed the current fields.
 void sphParticlesGlobalReadPositions(
     ParticleGlobalRange range, Position* x, Position* y, Position* z, ParticleInteger offset) {
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    if (range.range.first != range.range.second) {
-        if (range.proc == hpxRank()) {
-            ParticleInteger const dif = offset - range.range.first;
-            ParticleInteger const particleCount = range.range.second - range.range.first;
-            for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
-                int const j = offset + i - range.range.first;
-                x[j] = sphParticlesPositionValue(kXi, i);
-                y[j] = sphParticlesPositionValue(kYi, i);
-                z[j] = sphParticlesPositionValue(kZi, i);
-            }
-        } else if (sphGhostsServe(range)) {
-            sphGhostsReadPositions(range, x, y, z, offset);
-        } else {
-            detail::SphCacheLineId lineId;
-            lineId.proc = range.proc;
-            ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
-            ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
-            ParticleInteger destIndex = offset;
-            for (ParticleInteger line = startLine; line <= stopLine; line += lineSize) {
-                lineId.index = line;
-                auto const* ptr = sphParticlesCacheReadLine(lineId);
-                auto const begin = std::max(lineId.index, range.range.first);
-                auto const end = std::min(lineId.index + lineSize, range.range.second);
-                for (ParticleInteger i = begin; i < end; i++) {
-                    ParticleInteger const srcIndex = i - lineId.index;
-                    x[destIndex] = ptr[srcIndex][kXi];
-                    y[destIndex] = kSpatialDimensions > 1 ? ptr[srcIndex][kYi] : Position(0.5);
-                    z[destIndex] = kSpatialDimensions > 2 ? ptr[srcIndex][kZi] : Position(0.5);
-                    destIndex++;
-                }
-            }
-        }
+    if (range.range.first == range.range.second) {
+        return;
     }
-}
-
-static ParticleVector<Position> const* sphParticlesCacheReadLine(detail::SphCacheLineId lineId) {
-    return detail::readSphCacheLine<SphParticlesFetchCacheLineAction>(
-        lineId, particleCache, mutexes);
-}
-
-static Vector<ParticleVector<Position>> sphParticlesFetchCacheLine(ParticleInteger index) {
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    Vector<ParticleVector<Position>> line(lineSize);
-    ParticleInteger const begin = (index / lineSize) * lineSize;
-    ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
-    for (ParticleInteger i = begin; i < end; i++) {
-        for (int dim = 0; dim < kSpatialDimensions; dim++) {
-            line[i - begin][dim] = sphParticlesPositionValue(dim, i);
-        }
+    if (range.proc != hpxRank()) {
+        sphGhostsRequireStaging(range);
+        sphGhostsReadPositions(range, x, y, z, offset);
+        return;
     }
-    return line;
+    for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
+        int const j = offset + i - range.range.first;
+        x[j] = sphParticlesPositionValue(kXi, i);
+        y[j] = sphParticlesPositionValue(kYi, i);
+        z[j] = sphParticlesPositionValue(kZi, i);
+    }
 }
 
 void sphParticlesGlobalReadInternalEnergyAndSmoothingLength(ParticleGlobalRange range,
     float* internalEnergy, float* smoothingLength, ParticleInteger offset) {
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    int const particleCount = offset + range.range.second - range.range.first;
-    if (range.range.first != range.range.second) {
-        if (range.proc == hpxRank()) {
-            ParticleInteger const dif = offset - range.range.first;
-            ParticleInteger const particleCount = range.range.second - range.range.first;
-            for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
-                int const j = offset + i - range.range.first;
-                if (internalEnergy) {
-                    internalEnergy[j] = sphParticlesInternalEnergy(i);
-                }
-                if (smoothingLength) {
-                    smoothingLength[j] = sphParticlesSmoothingLength(i);
-                }
-            }
-        } else if (sphGhostsServe(range)) {
-            sphGhostsReadInternalEnergyAndSmoothingLength(
-                range, internalEnergy, smoothingLength, offset);
-        } else {
-            detail::SphCacheLineId lineId;
-            lineId.proc = range.proc;
-            ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
-            ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
-            ParticleInteger destIndex = offset;
-            for (ParticleInteger line = startLine; line <= stopLine; line += lineSize) {
-                lineId.index = line;
-                auto const* ptr = sphParticlesReadThermodynamicCacheLine(lineId);
-                auto const begin = std::max(lineId.index, range.range.first);
-                auto const end = std::min(lineId.index + lineSize, range.range.second);
-                for (ParticleInteger i = begin; i < end; i++) {
-                    ParticleInteger const srcIndex = i - lineId.index;
-                    if (internalEnergy) {
-                        internalEnergy[destIndex] = ptr[srcIndex].first;
-                    }
-                    if (smoothingLength) {
-                        smoothingLength[destIndex] = ptr[srcIndex].second;
-                    }
-                    destIndex++;
-                }
-            }
+    if (range.range.first == range.range.second) {
+        return;
+    }
+    if (range.proc != hpxRank()) {
+        sphGhostsRequireStaging(range);
+        sphGhostsReadInternalEnergyAndSmoothingLength(
+            range, internalEnergy, smoothingLength, offset);
+        return;
+    }
+    for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
+        int const j = offset + i - range.range.first;
+        if (internalEnergy) {
+            internalEnergy[j] = sphParticlesInternalEnergy(i);
+        }
+        if (smoothingLength) {
+            smoothingLength[j] = sphParticlesSmoothingLength(i);
         }
     }
-}
-
-static Pair<float> const* sphParticlesReadThermodynamicCacheLine(detail::SphCacheLineId lineId) {
-    return detail::readSphCacheLine<SphParticlesFetchThermodynamicCacheLineAction>(
-        lineId, thermodynamicParticleCache, energyMutexes);
-}
-
-static Vector<Pair<float>> sphParticlesFetchThermodynamicCacheLine(ParticleInteger index) {
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    Vector<Pair<float>> line(lineSize);
-    ParticleInteger const begin = (index / lineSize) * lineSize;
-    ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
-    for (ParticleInteger i = begin; i < end; i++) {
-        line[i - begin].first = sphParticlesInternalEnergy(i);
-        line[i - begin].second = sphParticlesSmoothingLength(i);
-    }
-    return line;
 }
 
 void sphParticlesGlobalReadRungs(ParticleGlobalRange range, char* rungs, ParticleInteger offset) {
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    if (range.range.first != range.range.second) {
-        if (range.proc == hpxRank()) {
-            ParticleInteger const dif = offset - range.range.first;
-            ParticleInteger const particleCount = range.range.second - range.range.first;
-            for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
-                int const j = offset + i - range.range.first;
-                rungs[j] = sphParticlesRung(i);
-            }
-        } else if (sphGhostsServe(range)) {
-            sphGhostsReadRungs(range, rungs, offset);
-        } else {
-            detail::SphCacheLineId lineId;
-            lineId.proc = range.proc;
-            ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
-            ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
-            ParticleInteger destIndex = offset;
-            for (ParticleInteger line = startLine; line <= stopLine; line += lineSize) {
-                lineId.index = line;
-                auto const* ptr = sphParticlesRungCacheReadLine(lineId);
-                auto const begin = std::max(lineId.index, range.range.first);
-                auto const end = std::min(lineId.index + lineSize, range.range.second);
-                for (ParticleInteger i = begin; i < end; i++) {
-                    ParticleInteger const srcIndex = i - lineId.index;
-                    rungs[destIndex] = ptr[srcIndex];
-                    destIndex++;
-                }
-            }
-        }
+    if (range.range.first == range.range.second) {
+        return;
     }
-}
-
-static char const* sphParticlesRungCacheReadLine(detail::SphCacheLineId lineId) {
-    return detail::readSphCacheLine<SphParticlesFetchRungCacheLineAction>(
-        lineId, rungParticleCache, rungMutexes);
-}
-
-static Vector<char> sphParticlesFetchRungCacheLine(ParticleInteger index) {
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    Vector<char> line(lineSize);
-    ParticleInteger const begin = (index / lineSize) * lineSize;
-    ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
-    for (ParticleInteger i = begin; i < end; i++) {
-        line[i - begin] = sphParticlesRung(i);
+    if (range.proc != hpxRank()) {
+        sphGhostsRequireStaging(range);
+        sphGhostsReadRungs(range, rungs, offset);
+        return;
     }
-    return line;
+    for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
+        rungs[offset + i - range.range.first] = sphParticlesRung(i);
+    }
 }
 
 void sphParticlesGlobalReadVelocities(
     ParticleGlobalRange range, float* vx, float* vy, float* vz, ParticleInteger offset) {
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    if (range.range.first != range.range.second) {
-        if (range.proc == hpxRank()) {
-            ParticleInteger const dif = offset - range.range.first;
-            ParticleInteger const particleCount = range.range.second - range.range.first;
-            for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
-                int const j = offset + i - range.range.first;
-                vx[j] = sphParticlesVelocityValue(kXi, i);
-                vy[j] = sphParticlesVelocityValue(kYi, i);
-                vz[j] = sphParticlesVelocityValue(kZi, i);
-            }
-        } else if (sphGhostsServe(range)) {
-            sphGhostsReadVelocities(range, vx, vy, vz, offset);
-        } else {
-            detail::SphCacheLineId lineId;
-            lineId.proc = range.proc;
-            ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
-            ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
-            ParticleInteger destIndex = offset;
-            for (ParticleInteger line = startLine; line <= stopLine; line += lineSize) {
-                lineId.index = line;
-                auto const* ptr = sphParticlesReadVelocityCacheLine(lineId);
-                auto const begin = std::max(lineId.index, range.range.first);
-                auto const end = std::min(lineId.index + lineSize, range.range.second);
-                for (ParticleInteger i = begin; i < end; i++) {
-                    ParticleInteger const srcIndex = i - lineId.index;
-                    vx[destIndex] = ptr[srcIndex][kXi];
-                    vy[destIndex] = kSpatialDimensions > 1 ? ptr[srcIndex][kYi] : 0.0f;
-                    vz[destIndex] = kSpatialDimensions > 2 ? ptr[srcIndex][kZi] : 0.0f;
-                    destIndex++;
-                }
-            }
-        }
+    if (range.range.first == range.range.second) {
+        return;
     }
-}
-
-static ParticleVector<float> const* sphParticlesReadVelocityCacheLine(
-    detail::SphCacheLineId lineId) {
-    return detail::readSphCacheLine<SphParticlesFetchVelocityCacheLineAction>(
-        lineId, particleVelocityCache, velocityMutexes);
-}
-
-static Vector<ParticleVector<float>> sphParticlesFetchVelocityCacheLine(ParticleInteger index) {
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    Vector<ParticleVector<float>> line(lineSize);
-    ParticleInteger const begin = (index / lineSize) * lineSize;
-    ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
-    for (ParticleInteger i = begin; i < end; i++) {
-        for (int dimension = 0; dimension < kSpatialDimensions; ++dimension) {
-            line[i - begin][dimension] = sphParticlesVelocityValue(dimension, i);
-        }
+    if (range.proc != hpxRank()) {
+        sphGhostsRequireStaging(range);
+        sphGhostsReadVelocities(range, vx, vy, vz, offset);
+        return;
     }
-    return line;
+    for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
+        int const j = offset + i - range.range.first;
+        vx[j] = sphParticlesVelocityValue(kXi, i);
+        vy[j] = sphParticlesVelocityValue(kYi, i);
+        vz[j] = sphParticlesVelocityValue(kZi, i);
+    }
 }
 
 void sphParticlesGlobalReadDensity(ParticleGlobalRange range, float* rho, ParticleInteger offset,
     float* balsaraFactor, float* bulkViscosityCoefficient, float* gradHCorrection) {
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    if (range.range.first != range.range.second) {
-        if (range.proc == hpxRank()) {
-            ParticleInteger const dif = offset - range.range.first;
-            ParticleInteger const particleCount = range.range.second - range.range.first;
-            for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
-                int const j = offset + i - range.range.first;
-                if (rho) {
-                    rho[j] = sphParticlesDensity(i);
-                }
-                if (balsaraFactor) {
-                    balsaraFactor[j] = sphParticlesBalsaraFactors ?
-                        balsara::decodeFactor(sphParticlesBalsaraFactors[i]) :
-                        1.0f;
-                }
-                if (bulkViscosityCoefficient) {
-                    bulkViscosityCoefficient[j] = sphParticlesBulkViscosityCoefficients[i];
-                }
-                if (gradHCorrection) {
-                    gradHCorrection[j] = sphParticlesGradHCorrections[i];
-                }
-            }
-        } else if (sphGhostsServe(range)) {
-            sphGhostsReadDensity(
-                range, rho, offset, balsaraFactor, bulkViscosityCoefficient, gradHCorrection);
-        } else {
-            detail::SphCacheLineId lineId;
-            lineId.proc = range.proc;
-            ParticleInteger const startLine = (range.range.first / lineSize) * lineSize;
-            ParticleInteger const stopLine = ((range.range.second - 1) / lineSize) * lineSize;
-            ParticleInteger destIndex = offset;
-            for (ParticleInteger line = startLine; line <= stopLine; line += lineSize) {
-                lineId.index = line;
-                auto const* ptr = sphParticlesReadDensityCacheLine(lineId);
-                auto const begin = std::max(lineId.index, range.range.first);
-                auto const end = std::min(lineId.index + lineSize, range.range.second);
-                for (ParticleInteger i = begin; i < end; i++) {
-                    ParticleInteger const srcIndex = i - lineId.index;
-                    if (rho) {
-                        rho[destIndex] = ptr[srcIndex].density;
-                    }
-                    if (balsaraFactor) {
-                        balsaraFactor[destIndex] = ptr[srcIndex].balsaraFactor;
-                    }
-                    if (bulkViscosityCoefficient) {
-                        bulkViscosityCoefficient[destIndex] =
-                            ptr[srcIndex].bulkViscosityCoefficient;
-                    }
-                    if (gradHCorrection) {
-                        gradHCorrection[destIndex] = ptr[srcIndex].gradHCorrection;
-                    }
-                    destIndex++;
-                }
-            }
+    if (range.range.first == range.range.second) {
+        return;
+    }
+    if (range.proc != hpxRank()) {
+        sphGhostsRequireStaging(range);
+        sphGhostsReadDensity(
+            range, rho, offset, balsaraFactor, bulkViscosityCoefficient, gradHCorrection);
+        return;
+    }
+    for (ParticleInteger i = range.range.first; i < range.range.second; i++) {
+        int const j = offset + i - range.range.first;
+        if (rho) {
+            rho[j] = sphParticlesDensity(i);
+        }
+        if (balsaraFactor) {
+            balsaraFactor[j] = sphParticlesBalsaraFactors ?
+                balsara::decodeFactor(sphParticlesBalsaraFactors[i]) :
+                1.0f;
+        }
+        if (bulkViscosityCoefficient) {
+            bulkViscosityCoefficient[j] = sphParticlesBulkViscosityCoefficients[i];
+        }
+        if (gradHCorrection) {
+            gradHCorrection[j] = sphParticlesGradHCorrections[i];
         }
     }
-}
-
-static SphDensityCacheEntry const* sphParticlesReadDensityCacheLine(detail::SphCacheLineId lineId) {
-    return detail::readSphCacheLine<SphParticlesFetchDensityCacheLineAction>(
-        lineId, densityParticleCache, densityMutexes);
-}
-
-static Vector<SphDensityCacheEntry> sphParticlesFetchDensityCacheLine(ParticleInteger index) {
-    ParticleInteger const lineSize = getOptions().compute.particleCacheLineSize;
-    Vector<SphDensityCacheEntry> line(lineSize);
-    ParticleInteger const begin = (index / lineSize) * lineSize;
-    ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
-    for (ParticleInteger i = begin; i < end; i++) {
-        auto& entry = line[i - begin];
-        entry.density = sphParticlesDensity(i);
-        entry.balsaraFactor = sphParticlesBalsaraFactors ?
-            balsara::decodeFactor(sphParticlesBalsaraFactors[i]) :
-            1.0f;
-        entry.bulkViscosityCoefficient = float(sphParticlesBulkViscosityCoefficients[i]);
-        entry.gradHCorrection = sphParticlesGradHCorrections[i];
-    }
-    return line;
-}
-
-void sphParticlesClearHydroCaches() {
-    Vector<hpx::future<void>> futures;
-    for (auto const& c : sphCollectiveChildren()) {
-        futures.push_back(hpx::async<SphParticlesClearHydroCachesAction>(c));
-    }
-    thermodynamicParticleCache = decltype(thermodynamicParticleCache)();
-    particleVelocityCache = decltype(particleVelocityCache)();
-    densityParticleCache = decltype(densityParticleCache)();
-    hpx::wait_all(futures.begin(), futures.end());
-}
-
-void sphParticlesClearCaches() {
-    Vector<hpx::future<void>> futures;
-    for (auto const& c : sphCollectiveChildren()) {
-        futures.push_back(hpx::async<SphParticlesClearCachesAction>(c));
-    }
-    particleCache = decltype(particleCache)();
-    thermodynamicParticleCache = decltype(thermodynamicParticleCache)();
-    rungParticleCache = decltype(rungParticleCache)();
-    particleVelocityCache = decltype(particleVelocityCache)();
-    densityParticleCache = decltype(densityParticleCache)();
-    hpx::wait_all(futures.begin(), futures.end());
 }
 
 namespace detail {

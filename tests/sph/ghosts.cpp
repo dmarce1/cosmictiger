@@ -25,9 +25,10 @@
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/tree.hpp>
 
-// Gate of docs/sph_parent_tree_plan.md milestone 2: with ghost leaves, every locality walks
-// only its own tree and its ghosts, and the neighbor leaf lists equal those of the global
-// walk with remote fetches, for every search direction, with no remote node read.
+// Gate of docs/sph_parent_tree_plan.md milestones 2 and 5: every locality walks only its own
+// tree and its ghost leaves, and the neighbor leaf lists equal a brute-force test of every
+// leaf against every leaf of every locality, for every search direction. A remote node that
+// is not a ghost cannot be read at all.
 
 namespace detail {
 
@@ -120,21 +121,11 @@ std::vector<GhostLeafBoxes> localLeafBoxes() {
     return leaves;
 }
 
-std::int64_t localRemoteNodeReads() {
-    return sphTreeRemoteNodeReads();
-}
-
-void resetLocalRemoteNodeReads() {
-    sphTreeResetRemoteNodeReads();
-}
-
 }    // namespace detail
 
 HPX_PLAIN_ACTION(detail::initializeGhostParticles, InitializeGhostParticlesAction);
 HPX_PLAIN_ACTION(detail::localNeighborTable, GhostLocalNeighborTableAction);
 HPX_PLAIN_ACTION(detail::localLeafBoxes, GhostLocalLeafBoxesAction);
-HPX_PLAIN_ACTION(detail::localRemoteNodeReads, GhostLocalRemoteNodeReadsAction);
-HPX_PLAIN_ACTION(detail::resetLocalRemoteNodeReads, GhostResetRemoteNodeReadsAction);
 
 namespace detail {
 
@@ -211,28 +202,6 @@ std::int64_t compareNeighborTables(std::vector<NeighborTable> const& expected,
     return remoteLeafPairs;
 }
 
-std::int64_t remoteNodeReads() {
-    std::int64_t reads = 0;
-    std::vector<hpx::future<std::int64_t>> futures;
-    for (auto const& locality : hpxLocalities()) {
-        futures.push_back(hpx::async<GhostLocalRemoteNodeReadsAction>(locality));
-    }
-    for (auto& future : futures) {
-        reads += future.get();
-    }
-    return reads;
-}
-
-void resetRemoteNodeReads() {
-    std::vector<hpx::future<void>> futures;
-    for (auto const& locality : hpxLocalities()) {
-        futures.push_back(hpx::async<GhostResetRemoteNodeReadsAction>(locality));
-    }
-    for (auto& future : futures) {
-        future.get();
-    }
-}
-
 void findNeighbors(TreeId root, SphInteractionDirection direction) {
     SphTreeNeighborParameters parameters{};
     parameters.operation = SphNeighborOperation::FindNeighbors;
@@ -293,44 +262,47 @@ void sphGhostsTest() {
     };
     for (auto const& testCase : cases) {
         detail::refreshBounds(built.id, testCase.outer);
-        sphGhostsSetEnabled(false);
         detail::findNeighbors(built.id, testCase.direction);
-        auto const fetched = detail::gatherNeighborTables();
-        sphGhostsSetEnabled(true);
-        detail::resetRemoteNodeReads();
-        detail::findNeighbors(built.id, testCase.direction);
-        auto const ghosted = detail::gatherNeighborTables();
-        auto const reads = detail::remoteNodeReads();
-        detail::compareNeighborTables(
-            detail::bruteForceNeighborTables(testCase.direction), ghosted, testCase.name);
-        if (hpxSize() > 1) {
-            detail::requireGhosts(reads == 0,
-                std::format("{}: the ghost walk read {} remote nodes", testCase.name, reads));
-        }
-        detail::requireGhosts(fetched.size() == ghosted.size(), "locality count changed");
-        for (size_t rank = 0; rank < fetched.size(); ++rank) {
-            detail::requireGhosts(fetched[rank].size() == ghosted[rank].size(),
-                std::format("{}: rank {} has a different leaf count", testCase.name, rank));
-            for (size_t leaf = 0; leaf < fetched[rank].size(); ++leaf) {
-                auto const& [id, expected] = fetched[rank][leaf];
-                auto const& [ghostId, actual] = ghosted[rank][leaf];
-                detail::requireGhosts(id == ghostId, "leaf identities differ");
-                detail::requireGhosts(expected == actual,
-                    std::format("{}: leaf ({}, {}) has {} neighbors with fetches and {} with "
-                                "ghosts",
-                        testCase.name, id.proc, id.index, expected.size(), actual.size()));
-                for (auto const& neighbor : expected) {
-                    remoteLeafPairs += neighbor.proc != id.proc;
-                }
-                comparisons++;
-            }
+        auto const walked = detail::gatherNeighborTables();
+        remoteLeafPairs += detail::compareNeighborTables(
+            detail::bruteForceNeighborTables(testCase.direction), walked, testCase.name);
+        for (auto const& table : walked) {
+            comparisons += table.size();
         }
     }
     if (hpxSize() > 1) {
         detail::requireGhosts(remoteLeafPairs > 0, "the fixture has no cross-locality leaf pair");
+        // There is no fetch path: a remote node that is not a ghost leaf, and remote gas read
+        // outside the staging of a pass, must both throw.
+        TreeId missing;
+        missing.proc = 1;
+        missing.index = 0;
+        while (sphGhostsFindNode(missing) != nullptr) {
+            missing.index++;
+        }
+        bool nodeThrew = false;
+        try {
+            sphTreeGetNode(missing);
+        } catch (std::exception const&) {
+            nodeThrew = true;
+        }
+        detail::requireGhosts(nodeThrew, "a remote node that is not a ghost was readable");
+        ParticleGlobalRange remote;
+        remote.proc = 1;
+        remote.range = Pair<ParticleInteger>(0, 1);
+        Position x;
+        Position y;
+        Position z;
+        bool gasThrew = false;
+        try {
+            sphParticlesGlobalReadPositions(remote, &x, &y, &z, 0);
+        } catch (std::exception const&) {
+            gasThrew = true;
+        }
+        detail::requireGhosts(gasThrew, "remote gas was readable outside staging");
     }
     auto const statistics = sphGhostsStatistics();
-    std::cout << std::format("SPH ghost walk equals the fetch walk: ranks={} leaf lists={} "
+    std::cout << std::format("SPH ghost walk equals brute force: ranks={} leaf lists={} "
                              "remote pairs={} ghost leaves={} ghost particles={}\n",
                      hpxSize(), comparisons, remoteLeafPairs, statistics.leaves,
                      statistics.particles)

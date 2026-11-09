@@ -301,7 +301,6 @@ double sphChemistryClose(
     double const heating =
         sphCoolingPrepare(minimumRung, scaleFactor, baseTimestep, explicitTimestep);
     sphCoolingCommit();
-    sphParticlesClearHydroCaches();
     return heating;
 }
 std::array<double, 6> sphChemistryCheckpointParameters() {

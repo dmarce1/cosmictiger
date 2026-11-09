@@ -73,10 +73,8 @@ int sphCommitBalancedRungs() {
 
 void sphPrepareRungCandidates(bool initialize);
 SphRungBalanceReturn sphFinishRungCandidates(bool publish);
-Vector<char> sphFetchRungCandidates(Pair<ParticleInteger> range);
 HPX_PLAIN_ACTION(sphPrepareRungCandidates, SphPrepareRungCandidatesAction);
 HPX_PLAIN_ACTION(sphFinishRungCandidates, SphFinishRungCandidatesAction);
-HPX_PLAIN_ACTION(sphFetchRungCandidates, SphFetchRungCandidatesAction);
 
 bool sphRungBalanceActive() {
     return detail::rungBalanceActive;
@@ -132,13 +130,10 @@ void sphReadRungCandidates(ParticleGlobalRange range, char* rungs, ParticleInteg
         ALWAYS_ASSERT(detail::rungBalanceActive);
         std::copy(detail::rungSnapshot.begin() + range.range.first,
             detail::rungSnapshot.begin() + range.range.second, rungs + offset);
-    } else if (sphGhostsServe(range)) {
-        sphGhostsReadRungCandidates(range, rungs, offset);
     } else {
-        auto const values =
-            hpx::async<SphFetchRungCandidatesAction>(hpxLocalities()[range.proc], range.range)
-                .get();
-        std::copy(values.begin(), values.end(), rungs + offset);
+        // Remote candidates arrive with the ghost fields (docs/sph_parent_tree_plan.md, M5).
+        sphGhostsRequireStaging(range);
+        sphGhostsReadRungCandidates(range, rungs, offset);
     }
 }
 

@@ -57,6 +57,7 @@ int sphCommitBalancedRungs();
 bool sphRungBalanceActive();
 char* sphRungCandidatesData();
 void sphReadRungCandidates(ParticleGlobalRange range, char* rungs, ParticleInteger offset);
-// This locality's rung candidates of local gas range, valid while the rung balance runs.
+// This locality's rung candidates of local gas range, valid while the rung balance runs;
+// the ghost refresh pushes them to the importers.
 Vector<char> sphFetchRungCandidates(Pair<ParticleInteger> range);
 bool sphRungCandidatesActive();

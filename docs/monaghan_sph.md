@@ -80,7 +80,7 @@ implement support-radius solving, density, forces/heating, and neighbor timestep
 propagation using the same kernel selections and length conventions. CPU workers
 process separate tree leaves, with eight-lane SIMD packs over their neighbors.
 All source fields are staged before a phase updates local sinks, including sources
-fetched from other MPI ranks.
+on other localities, which their owners push as ghost leaves before the pass.
 
 Particle drift independently uses the CPU when `drift.cuda=false`. Each available
 initialization or analysis backend has its own CUDA selector. All selectors default

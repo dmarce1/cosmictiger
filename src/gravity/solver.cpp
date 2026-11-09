@@ -215,11 +215,6 @@ void solve(SolveRequest request) {
     {
         profile::ScopedPhase phase(
             request.applyKick ? "pmmmKick.prepare" : "pmmmSolve.prepare", coordinator);
-#if COSMICTIGER_WITH_SPH
-        if (getOptions().hydro.enabled) {
-            sphParticlesClearCaches();
-        }
-#endif
         allLocalities<PmmmPrepareAction>(request);
     }
     std::exception_ptr failure;

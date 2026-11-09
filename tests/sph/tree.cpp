@@ -1690,7 +1690,6 @@ void distributedSphOctreeTest() {
         crossed += future.get();
     }
     detail::requireSphTree(crossed == 2, "active particles did not cross both rank boundaries");
-    sphParticlesClearCaches();
     auto const refreshed = sphTreeRefresh(parameters);
     detail::verifySphTreeVolumeRatios(refreshed);
     detail::requireSphTree(refreshed.id == built.id && refreshed.nodeCount == built.nodeCount &&

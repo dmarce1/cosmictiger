@@ -35,7 +35,6 @@
 
 constexpr bool kVerbose = true;
 
-static Vector<SphTreeNode> sphTreeFetchCacheLine(int);
 static void sphTreeAllocateNodes();
 static SphTreeCreateReturn sphTreeRefreshNode(
     TreeId id, SphTreeCreateParameters params, double driftFactor);
@@ -43,34 +42,14 @@ static SphTreeCreateReturn sphTreeBuild(SphTreeCreateParameters params, size_t k
     Pair<int, int> processRange, Pair<ParticleInteger> particleRange, Range<double> box, int depth,
     bool localRoot);
 
-namespace detail {
-
-// A distributed build's reduction: the merged tree summary and every locality's local root.
-struct SphTreeLocalRoots {
-    SphTreeCreateReturn tree;
-    Vector<TreeId> roots;
-
-    template <class Archive>
-    void serialize(Archive&& archive, unsigned) {
-        archive & tree;
-        archive & roots;
-    }
-};
-
-}    // namespace detail
-
-static detail::SphTreeLocalRoots sphTreeCreateLocalRoots(SphTreeCreateParameters params);
-static void sphTreeSetLocalRoots(Vector<TreeId> roots);
+static SphTreeCreateReturn sphTreeCreateLocalRoots(SphTreeCreateParameters params);
 static SphTreeCreateReturn sphTreeRefreshLocalRoots(
     SphTreeCreateParameters params, double driftFactor);
 
 HPX_PLAIN_ACTION(sphTreeAllocateNodes, SphTreeAllocateNodesAction);
 HPX_PLAIN_ACTION(sphTreeCreateLocalRoots, SphTreeCreateLocalRootsAction);
-HPX_PLAIN_ACTION(sphTreeSetLocalRoots, SphTreeSetLocalRootsAction);
 HPX_PLAIN_ACTION(sphTreeRefreshLocalRoots, SphTreeRefreshLocalRootsAction);
 HPX_PLAIN_ACTION(sphTreeDestroy, SphTreeDestroyAction);
-HPX_PLAIN_ACTION(sphTreeCacheClear, SphTreeCacheClearAction);
-HPX_PLAIN_ACTION(sphTreeFetchCacheLine, SphTreeFetchCacheLineAction);
 HPX_PLAIN_ACTION(sphTreeFreeNeighborList, SphTreeFreeNeighborListAction);
 HPX_PLAIN_ACTION(sphTreeAllValid, SphTreeAllValidAction);
 
@@ -96,11 +75,6 @@ static thread_local SphTreeAllocator allocator;
 static Vector<SphTreeNode> nodes;
 static std::atomic<int> treeThreadCount(0);
 static std::atomic<int> nextId;
-static Array<std::unordered_map<TreeId, std::shared_ptr<hpx::shared_future<Vector<SphTreeNode>>>,
-                 TreeIdHashHi>,
-    kSphTreeCacheSize>
-    treeCache;
-static Array<SpinlockType, kSphTreeCacheSize> mutex;
 static std::atomic<int> allocatorMtx(0);
 static Vector<Pair<ParticleInteger>> leafParticleRanges;
 static MutexType leafParticleRangeMutex;
@@ -111,9 +85,6 @@ static MutexType neighborListMutex;
 static std::atomic<bool> treeValid(false);
 static TreeId retainedRoot{-1, -1};
 static TreeId localRootId{-1, -1};
-// Every locality's local root, in rank order, after a build. The fetch path's walks start
-// from them; there are no rank-routing nodes above the local roots.
-static Vector<TreeId> allLocalRoots;
 static ParticleInteger retainedParticleCount = -1;
 static int retainedMinimumRung = kMaxRung;
 
@@ -326,62 +297,6 @@ long long sphTreeNodesSize() {
     return nodes.size();
 }
 
-struct LastCacheEntryT;
-
-static std::unordered_set<LastCacheEntryT*> lastCacheEntries;
-static std::atomic<int> lastCacheEntryMtx(0);
-
-struct LastCacheEntryT {
-    TreeId line;
-    SphTreeNode const* ptr;
-    void reset() {
-        line.proc = line.index = -1;
-        ptr = nullptr;
-    }
-    LastCacheEntryT() {
-        line.proc = line.index = -1;
-        ptr = nullptr;
-        while (lastCacheEntryMtx++ != 0) {
-            lastCacheEntryMtx--;
-        }
-        lastCacheEntries.insert(this);
-        lastCacheEntryMtx--;
-    }
-    ~LastCacheEntryT() {
-        while (lastCacheEntryMtx++ != 0) {
-            lastCacheEntryMtx--;
-        }
-        lastCacheEntries.erase(this);
-        lastCacheEntryMtx--;
-    }
-};
-
-static thread_local LastCacheEntryT lastCacheEntry;
-
-static void resetLastCacheEntries() {
-    while (lastCacheEntryMtx++ != 0) {
-        lastCacheEntryMtx--;
-    }
-    for (auto* entry : lastCacheEntries) {
-        entry->reset();
-    }
-    lastCacheEntryMtx--;
-}
-
-void sphTreeCacheClear() {
-    Vector<hpx::future<void>> futures;
-    for (auto const& child : sphCollectiveChildren()) {
-        futures.push_back(hpx::async<SphTreeCacheClearAction>(child));
-    }
-    treeCache = decltype(treeCache)();
-    resetLastCacheEntries();
-    for (auto& future : futures) {
-        future.get();
-    }
-}
-
-static SphTreeNode const* treeCacheRead(TreeId id);
-
 void SphTreeAllocator::reset() {
     int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
     next_ = (nextId += treeCacheLineSize);
@@ -522,19 +437,19 @@ void mergeSphTreeReturn(SphTreeCreateReturn& total, SphTreeCreateReturn const& p
 }    // namespace detail
 
 // Collective: every locality builds its own octree at depth 0 over the whole periodic box, in
-// parallel, and the summaries and local roots are reduced in rank order.
-static detail::SphTreeLocalRoots sphTreeCreateLocalRoots(SphTreeCreateParameters params) {
-    Vector<hpx::future<detail::SphTreeLocalRoots>> children;
+// parallel, and the summaries are reduced. No locality needs another's root: remote leaves
+// arrive as ghosts.
+static SphTreeCreateReturn sphTreeCreateLocalRoots(SphTreeCreateParameters params) {
+    Vector<hpx::future<SphTreeCreateReturn>> children;
     for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphTreeCreateLocalRootsAction>(child, params));
     }
-    detail::SphTreeLocalRoots result;
+    SphTreeCreateReturn result;
     std::exception_ptr failure;
     try {
-        result.tree = sphTreeBuild(params, sphDomainLeafKey(hpxRank(), hpxSize()),
+        result = sphTreeBuild(params, sphDomainLeafKey(hpxRank(), hpxSize()),
             Pair<int>(hpxRank(), hpxRank() + 1), Pair<ParticleInteger>(-1, -1), unitBox<double>(),
             0, true);
-        result.roots.push_back(result.tree.id);
     } catch (...) {
         failure = std::current_exception();
     }
@@ -542,8 +457,7 @@ static detail::SphTreeLocalRoots sphTreeCreateLocalRoots(SphTreeCreateParameters
         try {
             auto const part = child.get();
             if (!failure) {
-                detail::mergeSphTreeReturn(result.tree, part.tree, false);
-                result.roots.insert(result.roots.end(), part.roots.begin(), part.roots.end());
+                detail::mergeSphTreeReturn(result, part, false);
             }
         } catch (...) {
             if (!failure) {
@@ -557,33 +471,6 @@ static detail::SphTreeLocalRoots sphTreeCreateLocalRoots(SphTreeCreateParameters
     return result;
 }
 
-static void sphTreeSetLocalRoots(Vector<TreeId> roots) {
-    Vector<hpx::future<void>> children;
-    children.reserve(sphCollectiveChildren().size());
-    for (auto const& child : sphCollectiveChildren()) {
-        children.push_back(hpx::async<SphTreeSetLocalRootsAction>(child, roots));
-    }
-    std::sort(roots.begin(), roots.end(), [](TreeId a, TreeId b) { return a.proc < b.proc; });
-    allLocalRoots = std::move(roots);
-    std::exception_ptr failure;
-    for (auto& child : children) {
-        try {
-            child.get();
-        } catch (...) {
-            if (!failure) {
-                failure = std::current_exception();
-            }
-        }
-    }
-    if (failure) {
-        std::rethrow_exception(failure);
-    }
-}
-
-Vector<TreeId> const& sphTreeLocalRoots() {
-    return allLocalRoots;
-}
-
 SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     Pair<int, int> processRange, Pair<ParticleInteger> particleRange, Range<double> box, int depth,
     bool localRoot) {
@@ -595,9 +482,8 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         ALWAYS_ASSERT(hpxRank() == 0);
         sphTreeAllocateNodes();
         auto result = sphTreeCreateLocalRoots(params);
-        sphTreeSetLocalRoots(result.roots);
-        retainedRoot = result.tree.id;
-        return result.tree;
+        retainedRoot = result.id;
+        return result;
     }
     if (processRange.second - processRange.first != 1 || processRange.first != hpxRank()) {
         throw std::invalid_argument("An SPH subtree build covers this locality alone");
@@ -1063,11 +949,7 @@ SphTreeCreateReturn sphTreeRefresh(SphTreeCreateParameters params, double driftF
     if (!sphTreeAllValid() || retainedRoot.index < 0) {
         throw std::runtime_error("Cannot refresh an invalid SPH tree; rebuild it first");
     }
-    sphTreeCacheClear();
-    auto result = sphTreeRefreshLocalRoots(params, driftFactor);
-    // Refresh changes remotely cached node contents and every leaf's neighbor list.
-    sphTreeCacheClear();
-    return result;
+    return sphTreeRefreshLocalRoots(params, driftFactor);
 }
 
 void sphTreeDestroy(bool freeSphTree) {
@@ -1080,11 +962,6 @@ void sphTreeDestroy(bool freeSphTree) {
     if (freeSphTree) {
         nodes = decltype(nodes)();
     }
-    // Normal teardown retains the arena without traversing its unused slots.
-    // Cached remote lines and thread-local pointers still belong to the old
-    // tree and must be invalidated on every locality before the next rebuild.
-    treeCache = decltype(treeCache)();
-    resetLastCacheEntries();
     hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -1100,16 +977,6 @@ TreeId sphTreeLocalRoot() {
     return localRootId;
 }
 
-static std::atomic<std::int64_t> remoteNodeReads{0};
-
-std::int64_t sphTreeRemoteNodeReads() {
-    return remoteNodeReads.load();
-}
-
-void sphTreeResetRemoteNodeReads() {
-    remoteNodeReads = 0;
-}
-
 SphTreeNode const* sphTreeGetNode(TreeId id) {
     if (id.proc == hpxRank()) {
         ASSERT(id.index >= 0);
@@ -1119,16 +986,13 @@ SphTreeNode const* sphTreeGetNode(TreeId id) {
         }
 #endif
         return &nodes[id.index];
-    } else {
-        // Ghost leaves serve remote leaves; rank-routing nodes still come from the cache.
-        if (sphGhostsActive()) {
-            if (auto const* ghost = sphGhostsFindNode(id)) {
-                return ghost;
-            }
-        }
-        remoteNodeReads++;
-        return treeCacheRead(id);
     }
+    // A remote node is always a ghost leaf: there are no rank-routing nodes and no node cache.
+    if (auto const* ghost = sphGhostsFindNode(id)) {
+        return ghost;
+    }
+    THROW_ERROR("SPH tree: rank %i reads node (%i, %i), which is not a ghost leaf here\n",
+        hpxRank(), id.proc, id.index);
 }
 
 void sphTreeSetBoxes(TreeId id, Fixed32Range const& ibox, Fixed32Range const& obox) {
@@ -1136,68 +1000,3 @@ void sphTreeSetBoxes(TreeId id, Fixed32Range const& ibox, Fixed32Range const& ob
     nodes[id.index].innerBox = ibox;
 }
 
-static SphTreeNode const* treeCacheRead(TreeId id) {
-    int const lineSize = getOptions().compute.treeCacheLineSize;
-    TreeId lineId;
-    lineId.proc = id.proc;
-    ASSERT(lineId.proc >= 0 && lineId.proc < hpxSize());
-    lineId.index = (id.index / lineSize) * lineSize;
-    SphTreeNode const* ptr;
-    if (lineId != lastCacheEntry.line) {
-        size_t const bin = TreeIdHashLo()(lineId);
-        std::shared_ptr<hpx::shared_future<Vector<SphTreeNode>>> future;
-        {
-            std::lock_guard<SpinlockType> lock(mutex[bin]);
-            auto const entry = treeCache[bin].find(lineId);
-            if (entry != treeCache[bin].end()) {
-                future = entry->second;
-            }
-        }
-        if (!future) {
-            auto promise = std::make_shared<hpx::promise<Vector<SphTreeNode>>>();
-            auto candidate = std::make_shared<hpx::shared_future<Vector<SphTreeNode>>>(
-                promise->get_future().share());
-            bool inserted;
-            {
-                std::lock_guard<SpinlockType> lock(mutex[bin]);
-                auto const entry = treeCache[bin].emplace(lineId, candidate);
-                inserted = entry.second;
-                future = entry.first->second;
-            }
-            if (inserted) {
-                try {
-                    hpx::post(hpx::annotated_function(
-                        [promise, lineId]() {
-                            try {
-                                auto remote = hpx::async<SphTreeFetchCacheLineAction>(
-                                    hpxLocalities()[lineId.proc], lineId.index);
-                                promise->set_value(remote.get());
-                            } catch (...) {
-                                promise->set_exception(std::current_exception());
-                            }
-                        },
-                        "sph.tree.fetchCacheLine"));
-                } catch (...) {
-                    promise->set_exception(std::current_exception());
-                }
-            }
-        }
-        ptr = future->get().data();
-    } else {
-        ptr = lastCacheEntry.ptr;
-    }
-    lastCacheEntry.ptr = ptr;
-    lastCacheEntry.line = lineId;
-    return ptr + id.index - lineId.index;
-}
-
-static Vector<SphTreeNode> sphTreeFetchCacheLine(int index) {
-    int const lineSize = getOptions().compute.treeCacheLineSize;
-    Vector<SphTreeNode> line(lineSize);
-    int const begin = (index / lineSize) * lineSize;
-    int const end = std::min(begin + lineSize, int(nodes.size()));
-    for (int i = begin; i < end; i++) {
-        line[i - begin] = nodes[i];
-    }
-    return line;
-}

@@ -381,13 +381,10 @@ StarFormationUpdate starFormationClose(
     }
     starFormationCommit();
     if (result.converted != 0) {
-        // Gas slots have compacted: position/rung cache keys and every retained
-        // leaf range are stale, including cached copies on gas-empty localities.
+        // Gas slots have compacted: every retained leaf range is stale. The next neighbor
+        // walk rebuilds the tree and resyncs the ghost leaves; the gravity cache is freed.
         sphTreeDestroy(false);
         particlesCacheFree();
-        sphParticlesClearCaches();
-    } else {
-        sphParticlesClearHydroCaches();
     }
     return result;
 }

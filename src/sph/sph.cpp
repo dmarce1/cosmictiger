@@ -100,12 +100,14 @@ struct SphRunWorkspace {
     }
     SphRunData data();
     void addWork(TreeId selfId);
-    // stage() gathers every source, including remote cache lines; compute() runs the
+    // stage() gathers every source, remote ones from the ghost store; compute() runs the
     // kernels, which update sink arrays that remote localities may still be staging.
     void stage();
     void deliverPairUpdates();
     SphRunReturn compute(bool useCuda);
+    // Unstaged single-locality pass: every source is local, so no ghost is read.
     SphRunReturn run(bool useCuda) {
+        ALWAYS_ASSERT(hpxSize() == 1);
         stage();
         return compute(useCuda);
     }
@@ -198,10 +200,9 @@ void sphClearNeighborState() {
 SphTreeNeighborReturn sphTreeNeighborLocalWalks(SphTreeNeighborParameters params);
 HPX_PLAIN_ACTION(sphTreeNeighborLocalWalks, SphTreeNeighborLocalWalksAction);
 
-// Collective: every locality walks its own local root (docs/sph_parent_tree_plan.md, M4). A
-// neighbor search checks it against the local leaves and the ghost leaves it holds (no remote
-// node is visited) or, on the fetch path, against every locality's root; a bounds refresh
-// recomputes the local tree's boxes.
+// Collective: every locality walks its own local root (docs/sph_parent_tree_plan.md, M4, M5).
+// A neighbor search checks it against the local leaves and the ghost leaves it holds, so no
+// remote node is ever visited; a bounds refresh recomputes the local tree's boxes.
 SphTreeNeighborReturn sphTreeNeighborLocalWalks(SphTreeNeighborParameters params) {
     Vector<hpx::future<SphTreeNeighborReturn>> children;
     children.reserve(sphCollectiveChildren().size());
@@ -217,16 +218,11 @@ SphTreeNeighborReturn sphTreeNeighborLocalWalks(SphTreeNeighborParameters params
         if (root.index >= 0) {
             Vector<TreeId> checklist;
             if (params.operation == SphNeighborOperation::FindNeighbors) {
-                if (sphGhostsActive()) {
-                    // Local leaves through the local root, remote ones as ghost leaves.
-                    checklist.push_back(root);
-                    auto const& ghosts = sphGhostsLeafIds();
-                    checklist.insert(checklist.end(), ghosts.begin(), ghosts.end());
-                } else {
-                    // Fetch path: every locality's root, remote ones read through the cache.
-                    auto const& roots = sphTreeLocalRoots();
-                    checklist.insert(checklist.end(), roots.begin(), roots.end());
-                }
+                // Local leaves through the local root, remote ones as ghost leaves (none on
+                // a single locality).
+                checklist.push_back(root);
+                auto const& ghosts = sphGhostsLeafIds();
+                checklist.insert(checklist.end(), ghosts.begin(), ghosts.end());
             }
             result += sphTreeNeighbor(params, root, std::move(checklist), 1).get();
         }
@@ -262,9 +258,6 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
         // Coordinator entry: there are no rank-routing nodes, so every walk starts at each
         // locality's own root and `self` only names the tree.
         ALWAYS_ASSERT(hpxRank() == 0);
-        if (hpxSize() > 1) {
-            sphTreeCacheClear();
-        }
         if (findNeighbors) {
             sphClearNeighborState();
             if (checklist.size() == 0) {
@@ -771,7 +764,6 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     }
     // Each phase consumes gas fields updated by the preceding phase on every locality.
     if (hpxRank() == 0 && (hpxSize() > 1 || params.midpointHydro)) {
-        sphParticlesClearCaches();
         if (sphGhostsActive()) {
             // Owners push the fields this pass reads before anyone stages.
             sphGhostsRefresh();
@@ -968,8 +960,8 @@ void SphRunWorkspace::stage() {
                         sphParticlesGlobalReadInternalEnergyAndSmoothingLength(
                             node.globalParticleRange(), hostInternalEnergy.data(),
                             hostSmoothingLength.data(), offset);
-                        // The correction shares the density's cache line, so a remote
-                        // source's ζ is from the same density pass as its ρ.
+                        // The correction travels with the density in the same ghost
+                        // refresh, so a remote source's ζ is from the same pass as its ρ.
                         sphParticlesGlobalReadDensity(node.globalParticleRange(),
                             hostDensity.data(), offset, hostBalsaraFactor.data(),
                             hostViscosityAlpha.data(), hostGradHCorrection.data());

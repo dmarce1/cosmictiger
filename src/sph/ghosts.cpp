@@ -73,6 +73,7 @@ struct SphGhostInterest {
 // The fields of an owner's exported particles, in the order of its exported leaves.
 struct SphGhostFields {
     int owner = -1;
+    std::int64_t generation = 0;    // The refresh that packed these fields.
     Vector<Position> x;
     Vector<Position> y;
     Vector<Position> z;
@@ -91,6 +92,7 @@ struct SphGhostFields {
     template <class Archive>
     void serialize(Archive&& archive, unsigned) {
         archive & owner;
+        archive & generation;
         archive & x;
         archive & y;
         archive & z;
@@ -124,6 +126,11 @@ struct SphGhostStore {
     std::unordered_map<std::uint64_t, int> nodeById;
     std::unordered_map<std::uint64_t, int> nodeByRangeStart;
     std::unordered_map<int, ParticleInteger> ownerOffsets;
+    // Per owner, the refresh whose fields the store holds and whether it carried rung
+    // candidates. A read requires the current refresh, so a stage after a sync without a
+    // refresh fails instead of reading the zeros the sync left.
+    std::unordered_map<int, std::int64_t> ownerGenerations;
+    std::unordered_map<int, bool> ownerCandidates;
     Vector<TreeId> leafIds;
     ParticleInteger size = 0;
     SphGhostFields fields;
@@ -135,13 +142,16 @@ static SphGhostStore store;
 static std::unordered_map<int, std::vector<int>> exports;
 static SphGhostStatistics counters;
 static std::atomic<int> stagingDepth{0};
+// The current refresh on this locality, set when its part of the refresh collective starts.
+static std::atomic<std::int64_t> refreshGeneration{0};
 
 std::uint64_t ghostKey(int rank, std::int64_t index) {
     return (std::uint64_t(std::uint32_t(rank)) << 32) | std::uint64_t(std::uint32_t(index));
 }
 
-// The ghost leaf holding a whole remote range, and that range's first slot in the store.
-ParticleInteger ghostOffset(ParticleGlobalRange const& range) {
+// The ghost leaf holding a whole remote range, and that range's first slot in the store. The
+// owner's fields must come from the current refresh, with rung candidates when asked for.
+ParticleInteger ghostOffset(ParticleGlobalRange const& range, bool candidates = false) {
     auto const found = store.nodeByRangeStart.find(ghostKey(range.proc, range.range.first));
     if (found == store.nodeByRangeStart.end()) {
         THROW_ERROR("SPH ghosts: rank %i holds no ghost leaf for rank %i gas range [%lli, %lli)\n",
@@ -150,6 +160,17 @@ ParticleInteger ghostOffset(ParticleGlobalRange const& range) {
     auto const& node = store.nodes[found->second];
     if (range.range.second > node.particleRange.second) {
         THROW_ERROR("SPH ghosts: remote range outruns its ghost leaf\n");
+    }
+    auto const generation = store.ownerGenerations.find(range.proc);
+    if (generation == store.ownerGenerations.end() || generation->second != refreshGeneration) {
+        THROW_ERROR("SPH ghosts: rank %i reads rank %i fields not refreshed since the last sync\n",
+            hpxRank(), range.proc);
+    }
+    // Staging threads read concurrently; find() never inserts.
+    if (auto const pushed = store.ownerCandidates.find(range.proc);
+        candidates && (pushed == store.ownerCandidates.end() || !pushed->second)) {
+        THROW_ERROR("SPH ghosts: rank %i reads rank %i rung candidates that were not pushed\n",
+            hpxRank(), range.proc);
     }
     return store.nodeOffsets[found->second];
 }
@@ -233,7 +254,8 @@ SphGhostInterest localInterest() {
     return interest;
 }
 
-// Pack the fields of local gas range [begin, end), converted as the cache-line fetches do.
+// Pack the fields of local gas range [begin, end) as the readers stage them; unused axes of a
+// reduced-dimension build carry 0.5 for positions and zero for velocities.
 void packRange(
     SphGhostFields& fields, ParticleInteger begin, ParticleInteger end, bool includeCandidates) {
     for (ParticleInteger i = begin; i < end; i++) {
@@ -304,6 +326,8 @@ void receiveGhostFields(SphGhostFields fields) {
                 hpxRank(), fields.owner);
         }
         offset = found->second;
+        store.ownerGenerations[fields.owner] = fields.generation;
+        store.ownerCandidates[fields.owner] = !fields.rungCandidate.empty();
     }
     ALWAYS_ASSERT(offset + ParticleInteger(fields.x.size()) <= store.size);
     auto& f = store.fields;
@@ -330,7 +354,7 @@ void receiveGhostFields(SphGhostFields fields) {
 void sphGhostsClear();
 Vector<detail::SphGhostInterest> sphGhostsPublish();
 void sphGhostsExport(Vector<detail::SphGhostInterest> interests);
-void sphGhostsRefreshLocal();
+void sphGhostsRefreshLocal(std::int64_t generation);
 SphGhostStatistics sphGhostsStatistics();
 void sphGhostsResetStatistics();
 HPX_PLAIN_ACTION(sphGhostsClear, SphGhostsClearAction);
@@ -369,20 +393,8 @@ void joinGhostFutures(Vector<hpx::future<T>>& futures) {
 
 }    // namespace detail
 
-bool sphGhostsEnabled() {
-    return getOptions().compute.sphGhosts;
-}
-
 bool sphGhostsActive() {
-    return getOptions().compute.sphGhosts && hpxSize() > 1;
-}
-
-void sphGhostsSetEnabled(bool enabled) {
-    ALWAYS_ASSERT(hpxRank() == 0);
-    auto options = getOptions();
-    options.compute.sphGhosts = enabled;
-    setOptions(options);
-    sphGhostsClear();
+    return hpxSize() > 1;
 }
 
 void sphGhostsClear() {
@@ -480,11 +492,12 @@ void sphGhostsSync() {
 }
 
 // Collective: push the current fields of every exported particle to its importer.
-void sphGhostsRefreshLocal() {
+void sphGhostsRefreshLocal(std::int64_t generation) {
     Vector<hpx::future<void>> children;
     for (auto const& child : sphCollectiveChildren()) {
-        children.push_back(hpx::async<SphGhostsRefreshLocalAction>(child));
+        children.push_back(hpx::async<SphGhostsRefreshLocalAction>(child, generation));
     }
+    detail::refreshGeneration = generation;
     bool const includeCandidates = sphRungCandidatesActive();
     std::unordered_map<int, std::vector<int>> localExports;
     {
@@ -496,6 +509,7 @@ void sphGhostsRefreshLocal() {
     for (auto const& [importer, leaves] : localExports) {
         detail::SphGhostFields fields;
         fields.owner = hpxRank();
+        fields.generation = generation;
         for (int const index : leaves) {
             TreeId id;
             id.proc = hpxRank();
@@ -522,7 +536,8 @@ void sphGhostsRefreshLocal() {
 
 void sphGhostsRefresh() {
     ALWAYS_ASSERT(hpxRank() == 0);
-    sphGhostsRefreshLocal();
+    static std::int64_t generation = 0;
+    sphGhostsRefreshLocal(++generation);
 }
 
 void sphGhostsBeginStaging() {
@@ -533,10 +548,13 @@ void sphGhostsEndStaging() {
     detail::stagingDepth--;
 }
 
-bool sphGhostsServe(ParticleGlobalRange const&) {
-    // Ghost fields are pushed for, and current during, the staging of a pass; the read throws
-    // if the range is not a ghost leaf. Other remote reads see the owner's live data.
-    return sphGhostsActive() && detail::stagingDepth > 0;
+void sphGhostsRequireStaging(ParticleGlobalRange const& range) {
+    // Ghost fields are pushed for, and current during, the staging of a pass. No other code
+    // may read remote gas: there is no fetch path to serve it.
+    if (detail::stagingDepth <= 0) {
+        THROW_ERROR("SPH ghosts: rank %i reads rank %i gas outside the staging of a pass\n",
+            hpxRank(), range.proc);
+    }
 }
 
 SphTreeNode const* sphGhostsFindNode(TreeId id) {
@@ -634,7 +652,7 @@ void sphGhostsReadRungCandidates(ParticleGlobalRange range, char* rungs, Particl
     if (range.range.first == range.range.second) {
         return;
     }
-    ParticleInteger const source = detail::ghostOffset(range);
+    ParticleInteger const source = detail::ghostOffset(range, true);
     ParticleInteger const count = range.range.second - range.range.first;
     auto const& f = detail::store.fields;
     std::copy(

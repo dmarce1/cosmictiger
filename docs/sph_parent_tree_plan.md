@@ -6,10 +6,11 @@
 |---|---|
 | Step 0 | Done: bounded target reverted, half-box error (`efa174cab`). |
 | M1 parent tree | Done (`b6676d685`): `SphParentNode` components, topology and 1 to 4 locality tests. Its topology drives the collectives since M4. |
-| M2 ghosts | Done (`b6676d685`), default on (`compute.sphGhosts`). Differs from 3.3 to 3.5: the export set is recomputed at every neighbor walk from a cut of at most 64 local tree nodes, instead of plan epochs with margins, so checks A and B and the extension round (M3) are not needed for correctness. |
+| M2 ghosts | Done (`b6676d685`); the only distributed path since M5, which retired `compute.sphGhosts`. Differs from 3.3 to 3.5: the export set is recomputed at every neighbor walk from a cut of at most 64 local tree nodes, instead of plan epochs with margins, so checks A and B and the extension round (M3) are not needed for correctness. |
 | M3 | Subsumed by the per-walk sync. Margins could later skip syncs that would export nothing new. |
-| M4 collectives | Done: every SPH collective forwards along `sphCollectiveChildren()` (the parent-tree fan-out, each rank reached once). The routing nodes are gone: each locality builds and refreshes its own octree at depth 0 in parallel, the roots are broadcast (`sphTreeLocalRoots()`), and a level-0 walk runs one walk per locality whose checklist is the local root plus ghost leaves, or every root on the fetch path. The returned tree id is rank 0's local root. |
-| M5, M6 | Open: remove the fetch path; changed-set pushes. |
+| M4 collectives | Done: every SPH collective forwards along `sphCollectiveChildren()` (the parent-tree fan-out, each rank reached once). The routing nodes are gone: each locality builds and refreshes its own octree at depth 0 in parallel, and a level-0 walk runs one walk per locality whose checklist is the local root plus the ghost leaves. The returned tree id is rank 0's local root. |
+| M5 fetch path | Done: the remote node cache, the gas cache lines, the remote rung-candidate fetch and the roots broadcast are deleted. A remote node that is not a ghost leaf, remote gas read outside staging, and ghost fields older than the current refresh all throw. References: brute-force leaf lists (`sph_ghosts*`), owner-gathered records (`sph_octree_application_mpi`), and distributed runs against one locality (`sph_ghosts_application_mpi`), which exposed the stale gas map fixed in `529d66326`. `compute.particleCacheLineSize` stays: gravity and group finding use it. |
+| M6 | Open: changed-set pushes. |
 | M7 gravity | Done on the hierarchical (HOLD) integrator only, at the user's direction; traditional and global reject SPH with gravity. Gate: `sph_jeans_wave`, `pmmm_evolution_sph_hierarchical_{cpu,mpi}`. |
 | M8 | Partly done: CUDA staging with ghosts passes the CUDA tree's 124 SPH tests (traditional integrator; no hierarchical CUDA tree yet). Open: restart inside an outer interval with gas. |
 
@@ -39,7 +40,10 @@ linearly with the particles or mesh cells of a locality.
 7. The tree can then tell when a parent leaf needs particles outside its original ghost
    zone.
 
-## 2. What the code has today
+## 2. What the code had when this plan was written
+
+This section and section 4 describe the code of November 8, 2026, before M1; the status
+table at the top records what has changed since.
 
 | Fact | Where |
 |---|---|
@@ -219,7 +223,7 @@ neighbor target was reverted, `hydro.minSmoothingLength` and `hydro.maxSmoothing
 are options as before, and a support that reaches half the periodic box and still lacks
 neighbors stops the run (decision 1 in section 6).
 
-## 4. Communication compared with today
+## 4. Communication compared with the code of November 8
 
 | | Today | This plan |
 |---|---|---|
@@ -273,9 +277,9 @@ depth 0. Gates: topology unit tests for 1, 2, 3, 7, 8, 9, 12 and 64 ranks agains
 `domainsRange`; every M2 and M3 gate again; identical results to M3 on 2 localities.
 
 **M5. Remove the fetch path.** Delete the remote node cache, the gas cache lines and the
-remote branches of the readers; make ghosts the only distributed path; retire
-`compute.particleCacheLineSize` for gas through the removed-options list in
-`tests/run_options.py`.
+remote branches of the readers; make ghosts the only distributed path; stop reading
+`compute.particleCacheLineSize` in `src/sph` (gravity and group finding keep it) and retire
+`compute.sphGhosts` through the removed-options list in `tests/run_options.py`.
 
 **M6. Fewer bytes.** First, changed-set pushes: an owner resends a field only for
 particles a pass wrote. Then one of two ways to stop resending every position at every

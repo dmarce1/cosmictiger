@@ -227,8 +227,8 @@ gas in \(ds=d\tau/a\): the stored \(\sum_im_i(w_i^2/2+E_i)\) is conserved by the
   `sphParticlesResetConverged`, which starts each density preparation. It is neither
   checkpointed nor migrated.
 - **Staging**: the force pass stages \(\zeta\) with the density through
-  `sphParticlesGlobalReadDensity`; remote sources share the density cache line, which
-  every `sphRun` clears. Source snapshots stay immutable during each pass.
+  `sphParticlesGlobalReadDensity`; remote sources take both from the ghost refresh that
+  precedes every `sphRun`. Source snapshots stay immutable during each pass.
 - **Pressure force and work**: `src/sph/hydro_cpu.cpp` and
   `src/sph/hydro.cu` call `variational::directedCoefficient` with the staged
   \(\zeta\), then `variational::pairForceFactor` and `variational::pairWork` with

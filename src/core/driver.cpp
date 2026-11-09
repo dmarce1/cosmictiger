@@ -495,11 +495,8 @@ static SphRunReturn sphMidpointEvaluate(int minrung, int maximumHydroRung, doubl
     };
     prepareDensities();
     auto const clearMidpointSources = []() {
-        sphParticlesClearHydroCaches();
-        sphTreeCacheClear();
         sphTreeFreeNeighborList();
         sphTreeClearNeighborRanges();
-        sphParticlesClearCaches();
         sphParticlesResetSemiactive();
     };
     if (hydroTimestep < 0.0) {

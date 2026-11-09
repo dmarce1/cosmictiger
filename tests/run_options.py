@@ -254,7 +254,8 @@ def main():
                        "hydro.dualEnergyUpdateSwitch", "hydro.treeRebuildActiveFraction",
                        "hydro.viscosityAlpha", "hydro.viscosityEvolution",
                        "hydro.minEffectiveRadius", "hydro.maxEffectiveRadius"}
-    removed_options.update({"initial.gadget4Restart", "initial.useGlass", "initial.twoLpt", "initial.plummerRadius"})
+    removed_options.update({"initial.gadget4Restart", "initial.useGlass", "initial.twoLpt", "initial.plummerRadius",
+                            "compute.sphGhosts"})
     removed_options.update("compute.cuda" + key[0].upper() + key[1:] for key in cuda_tunings)
     if removed_options & option_names:
         raise RuntimeError(f"removed options remain in help: {sorted(removed_options & option_names)}")

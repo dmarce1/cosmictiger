@@ -76,7 +76,6 @@ namespace detail {
         }
         sphTreeFreeNeighborList();
         sphTreeDestroy();
-        sphParticlesClearCaches();
     }
 
 }    // namespace detail

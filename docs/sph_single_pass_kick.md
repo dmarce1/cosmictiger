@@ -81,7 +81,7 @@ Pass 2 gives three things:
    neighbour sets.
 
 The cost is one extra full pair-force pass per active step: neighbor staging,
-remote cache-line fetches, the pair loop, and on CUDA a second launch and
+the ghost refresh of remote sources, the pair loop, and on CUDA a second launch and
 staging round. The density iterations and pass 1 are unchanged. So the hydro
 force cost per step roughly doubles.
 
