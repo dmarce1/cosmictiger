@@ -1901,8 +1901,13 @@ void driver() {
                 outputDue && errorInterval > 0 && outputStep % errorInterval == 0 ? outputStep : -1;
 #if COSMICTIGER_WITH_SPH
             if (midpointHydro && tau == 0.0) {
-                auto const estimate = sphMidpointStep(-1, tau, 0.0, t0, a, a * adot, energies,
-                    global, global ? t0 : std::ldexp(t0, -getOptions().run.minRung));
+                // With the PMMM outer interval the first interval is chosen by the boundary
+                // pass of the first force step, after this estimate. Every interval is at most
+                // the coarse interval, so rungs proposed against it are never too coarse.
+                double const estimateBase = meshInterval && !(t0 > 0.0) ? coarseInterval : t0;
+                auto const estimate = sphMidpointStep(-1, tau, 0.0, estimateBase, a, a * adot,
+                    energies, global,
+                    global ? estimateBase : std::ldexp(estimateBase, -getOptions().run.minRung));
                 params.globalHydroTimestep = estimate.minimumTimestep;
             }
 #endif

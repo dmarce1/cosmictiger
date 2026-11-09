@@ -614,6 +614,20 @@ localities; the measured frequency is within a few percent of ω_J at 20 particl
 wavelength, comparable to the SPH sound-speed error at that resolution, and the
 localities agree to roundoff.
 
+Gas also runs with the outer interval in the cosmology and Plummer driver. A hydro rung
+proposal is a rung number against the base step it was computed with, Δτ ≥ H 2^−r. The
+first interval is chosen by the boundary pass of the first force step, after the initial
+SPH timestep estimate, so that estimate takes the coarse interval as its base step;
+every interval is at most that long, so those first rungs are never too coarse. At every
+later boundary the proposals were made against the closing interval H_old, so a longer
+opening interval H_new adds ceil(log₂(H_new/H_old)) rungs to them
+(`hydroRungIntervalShift`).
+`tests/run_sph_pmmm_interval.py` (`ctest -R sph_pmmm_interval_restart`) runs a small
+cosmology with gas and dark matter on 1 and 2 localities, restarts from a checkpoint
+inside the first interval and requires the state after the next boundary to match the
+uninterrupted run. The fixed-time scenarios (for example `jeansWave`) step without the
+outer-interval schedule and reject `gravity.pmmmOuterInterval` at startup.
+
 ## Restart and regression checks
 
 `tests/gravity/run_pmmm_interval.py` (`ctest -R pmmm_interval_cpu`) runs

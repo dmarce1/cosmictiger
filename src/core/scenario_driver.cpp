@@ -91,6 +91,15 @@ void writeScenarioDiagnostics(DriverParameters const& state) {
 
 void runFixedScenario() {
     profile::checkForInterrupt();
+#if COSMICTIGER_WITH_GRAVITY
+    // The outer-interval schedule (boundary passes, interval clock, checkpointed interval
+    // state) lives in the cosmology and Plummer driver; fixed-time scenarios step without it.
+    if (getOptions().gravity.enabled && usesOuterInterval(getOptions().gravity)) {
+        THROW_ERROR("gravity.pmmmOuterInterval is not implemented for the fixed-time scenario "
+                    "%s; use run.scenario=cosmology or plummer\n",
+            getOptions().run.scenario.c_str());
+    }
+#endif
     auto const& definition = scenarios::definition(getOptions().run.scenario);
     profile::profileBegin("initialize");
     auto plan = definition.initialize();

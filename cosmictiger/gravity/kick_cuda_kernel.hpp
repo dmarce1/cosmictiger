@@ -233,8 +233,9 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
                             nextRung = max(
                                 (int) ceilf(log2f(params.t0 / dt)), max(rung - 1, params.minRung));
                         }
-                        nextRung = max(
-                            nextRung, data.sphHydroFlags[data.catIndex[sinkIndex]].proposedRung());
+                        nextRung = max(nextRung,
+                            data.sphHydroFlags[data.catIndex[sinkIndex]].proposedRung() +
+                                hydroRungIntervalShift(params));
                     }
                 }
 #endif

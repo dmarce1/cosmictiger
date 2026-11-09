@@ -215,7 +215,9 @@ KickReturn particleMeshApplyField(ParticleInteger index, Vector3<float> const& a
                         ALWAYS_ASSERT(parameters.top);
                         nextRung = std::max({proposedRung, int(rung) - 1, parameters.minRung});
                     }
-                    nextRung = std::max(nextRung, sphParticlesHydroRung(particlesCatIndex(index)));
+                    nextRung = std::max(nextRung,
+                        sphParticlesHydroRung(particlesCatIndex(index)) +
+                            hydroRungIntervalShift(parameters));
                 }
             }
 #endif

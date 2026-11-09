@@ -227,6 +227,17 @@ void gravityDiscardDeferredGasOpening();
 bool gravityGasOpeningDeferred();
 Vector3<float>* gravityDeferredGasOpeningData();
 
+// Rungs to add to a stored hydro rung proposal at an outer boundary. The proposal r₀ was
+// quantized against the closing interval H_old, Δτ ≥ H_old 2^−r₀; under the opening
+// interval H_new it needs r ≥ r₀ + log₂(H_new/H_old) (derived). A shorter new interval
+// keeps the proposal, which is then finer than needed.
+CUDA_EXPORT inline int hydroRungIntervalShift(KickParameters const& params) {
+    if (params.closingBaseTimestep > 0.0f && params.t0 > params.closingBaseTimestep) {
+        return int(ceilf(log2f(params.t0 / params.closingBaseTimestep)));
+    }
+    return 0;
+}
+
 struct KickWorkitem {
     FmmGeometry geometry{};
     ParticleInteger outputOffset = 0;

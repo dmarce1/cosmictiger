@@ -110,6 +110,7 @@ Homogeneous recombination is built only when a gravity algorithm is enabled.
 sph/                                      # Under both cosmictiger/ and src/
 ├── sph.*, cpu.*, cuda.*
 ├── particles.*, tree.*
+├── parent_tree.*, ghosts.*                # Collectives over locality domains; ghost leaves
 ├── prehydro_cpu.cpp, prehydro.cu
 ├── hydro_cpu.cpp, hydro.cu
 ├── rungs_cpu.cpp, rungs.cu
@@ -137,8 +138,12 @@ neighbor engine.
 
 `tree.*` builds eight-way spatial subdivisions for each rank's SPH particles.
 Octant bit `d` selects the upper half of dimension `d`; empty octants have invalid
-child IDs and are skipped by both construction and neighbor traversal. The
-existing binary domain-key hierarchy remains the routing layer between ranks.
+child IDs and are skipped by both construction and neighbor traversal. Each
+locality builds its own octree at depth 0; there are no rank-routing nodes.
+`parent_tree.*` holds the parent tree over the locality domains, whose topology
+drives every SPH collective, and `ghosts.*` mirrors the remote leaves a walk can
+reach, so walks and passes read only local and ghost data
+([parent tree plan](sph_parent_tree_plan.md)).
 Depths 0 through 15 are allowed. A node that still needs subdivision at depth 15
 throws `std::out_of_range` because its children would require depth 16; this also
 rejects unresolved coincident-particle buckets. Child tasks finish before a

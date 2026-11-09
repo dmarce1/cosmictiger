@@ -550,8 +550,9 @@ KickReturn kickWalk(KickParameters params, ExpansionBuffer l, Vector3<Position> 
                                     nextRung = std::max(int(ceilf(log2f(params.t0 / dt))),
                                         std::max(int(rung) - 1, params.minRung));
                                 }
-                                nextRung =
-                                    std::max(nextRung, sphParticlesHydroRung(particlesCatIndex(i)));
+                                nextRung = std::max(nextRung,
+                                    sphParticlesHydroRung(particlesCatIndex(i)) +
+                                        hydroRungIntervalShift(params));
                             }
                         }
 #endif

@@ -2534,8 +2534,15 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 set_tests_properties(sph_jeans_wave PROPERTIES
                     TIMEOUT 1500 PROCESSORS ${jeans_wave_processors}
                     LABELS "integration;sph;gravity;hierarchical;mpi")
+                # Restart inside a PMMM outer interval with gas (M8), on 1 and 2 localities.
+                add_test(NAME sph_pmmm_interval_restart COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/run_sph_pmmm_interval.py $<TARGET_FILE:cosmictiger>
+                    ${PROJECT_BINARY_DIR}/tests/sph_pmmm_interval_restart ${jeans_wave_mpi_args})
+                set_tests_properties(sph_pmmm_interval_restart PROPERTIES
+                    TIMEOUT 2400 PROCESSORS 4
+                    LABELS "integration;sph;gravity;hierarchical;checkpoint;mpi")
             endif()
-            # Ghost leaves against remote fetches in evolution on 2, 3 and 4 localities (M2).
+            # Distributed SPH evolution on ghost leaves against one locality.
             if(cosmictiger_mpi_tests AND (COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL OR
                     COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL))
                 add_test(NAME sph_ghosts_application_mpi COMMAND ${Python3_EXECUTABLE}
