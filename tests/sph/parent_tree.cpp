@@ -96,6 +96,32 @@ void checkParentTopology() {
         requireParentTree(walk.maximumDepth <= fullLevels + kSpatialDimensions,
             std::format("{} ranks reach depth {}", rankCount, walk.maximumDepth));
     }
+    // A collective started on rank 0 and forwarded along sphParentLocalityChildren reaches
+    // every rank exactly once.
+    for (int rankCount = 1; rankCount <= 130; rankCount++) {
+        std::vector<int> visits(rankCount, 0);
+        std::vector<int> pending{0};
+        int hops = 0;
+        while (!pending.empty()) {
+            std::vector<int> next;
+            for (int const rank : pending) {
+                visits[rank]++;
+                for (int const child : sphParentLocalityChildren(rank, rankCount)) {
+                    requireParentTree(child > rank && child < rankCount,
+                        "a collective child is not a later rank");
+                    next.push_back(child);
+                }
+            }
+            pending = std::move(next);
+            hops++;
+        }
+        for (int rank = 0; rank < rankCount; rank++) {
+            requireParentTree(visits[rank] == 1,
+                std::format("rank {} of {} is reached {} times", rank, rankCount, visits[rank]));
+        }
+        requireParentTree(hops <= TopologyWalk{}.maximumDepth + 2 * kSpatialDimensions + 8,
+            std::format("{} ranks need {} collective hops", rankCount, hops));
+    }
     if constexpr (kSpatialDimensions == 3) {
         // 64 ranks are two full 8-way levels; 8 ranks one; 7 ranks three binary levels.
         TopologyWalk eight;

@@ -28,6 +28,7 @@
 #include <cosmictiger/sph/cpu.hpp>
 #include <cosmictiger/sph/flops.hpp>
 #include <cosmictiger/sph/ghosts.hpp>
+#include <cosmictiger/sph/parent_tree.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/time_integration.hpp>
 #include <cosmictiger/sph/tree.hpp>
@@ -40,7 +41,6 @@
 #include <cosmictiger/stars/star_formation.hpp>
 #endif
 
-HPX_PLAIN_ACTION(sphTreeNeighbor, SphTreeNeighborAction);
 
 struct SphTreeIdHash {
     inline size_t operator()(TreeId id) const {
@@ -119,7 +119,6 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighborFork(SphTreeNeighborParameters
     static std::atomic<int> numberOfThreads(0);
     hpx::future<SphTreeNeighborReturn> rc;
     SphTreeNode const* selfPtr = sphTreeGetNode(self);
-    bool remote = false;
     bool allLocal = true;
     for (auto const& i : checklist) {
         if (i.proc != hpxRank()) {
@@ -127,15 +126,13 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighborFork(SphTreeNeighborParameters
             break;
         }
     }
-    if (self.proc != hpxRank()) {
-        threadme = true;
-        remote = true;
-    } else if (threadme) {
+    // Walks start at local roots, so every target-side node is local.
+    ALWAYS_ASSERT(self.proc == hpxRank());
+    if (threadme) {
         threadme =
             selfPtr->particleRange.second - selfPtr->particleRange.first > kMinKickThreadParts;
         if (threadme) {
-            if (numberOfThreads++ < kKickOversubscription * hpx::thread::hardware_concurrency() ||
-                !selfPtr->isLocal()) {
+            if (numberOfThreads++ < kKickOversubscription * hpx::thread::hardware_concurrency()) {
                 threadme = true;
             } else {
                 threadme = false;
@@ -148,9 +145,6 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighborFork(SphTreeNeighborParameters
             hpxYield();
         }
         rc = sphTreeNeighbor(params, self, std::move(checklist), level + 1);
-    } else if (remote) {
-        rc = hpx::async<SphTreeNeighborAction>(hpxLocalities()[selfPtr->processRange.first], params,
-            self, std::move(checklist), level + 1);
     } else {
         rc = hpx::async(hpx::annotated_function(
                             [self, level, params](Vector<TreeId> checklist) {
@@ -193,7 +187,7 @@ void sphClearNeighborState();
 HPX_PLAIN_ACTION(sphClearNeighborState, SphClearNeighborStateAction);
 void sphClearNeighborState() {
     Vector<hpx::future<void>> futures;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         futures.push_back(hpx::async<SphClearNeighborStateAction>(child));
     }
     sphTreeFreeNeighborList();
@@ -204,52 +198,91 @@ void sphClearNeighborState() {
 SphTreeNeighborReturn sphTreeNeighborLocalWalks(SphTreeNeighborParameters params);
 HPX_PLAIN_ACTION(sphTreeNeighborLocalWalks, SphTreeNeighborLocalWalksAction);
 
-// Collective: every locality walks its own local root against its local leaves and the ghost
-// leaves it holds (docs/sph_parent_tree_plan.md, 3.4). No remote node is visited.
+// Collective: every locality walks its own local root (docs/sph_parent_tree_plan.md, M4). A
+// neighbor search checks it against the local leaves and the ghost leaves it holds (no remote
+// node is visited) or, on the fetch path, against every locality's root; a bounds refresh
+// recomputes the local tree's boxes.
 SphTreeNeighborReturn sphTreeNeighborLocalWalks(SphTreeNeighborParameters params) {
     Vector<hpx::future<SphTreeNeighborReturn>> children;
-    children.reserve(hpxChildren().size());
-    for (auto const& child : hpxChildren()) {
+    children.reserve(sphCollectiveChildren().size());
+    for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphTreeNeighborLocalWalksAction>(child, params));
     }
     SphTreeNeighborReturn result;
-    TreeId const root = sphTreeLocalRoot();
-    if (root.index >= 0) {
-        Vector<TreeId> checklist{root};
-        auto const& ghosts = sphGhostsLeafIds();
-        checklist.insert(checklist.end(), ghosts.begin(), ghosts.end());
-        result += sphTreeNeighbor(params, root, std::move(checklist), 1).get();
+    // Every child walk is joined before a failure leaves, so no remote walk still writes
+    // neighbor state while the caller unwinds into cleanup.
+    std::exception_ptr failure;
+    try {
+        TreeId const root = sphTreeLocalRoot();
+        if (root.index >= 0) {
+            Vector<TreeId> checklist;
+            if (params.operation == SphNeighborOperation::FindNeighbors) {
+                if (sphGhostsActive()) {
+                    // Local leaves through the local root, remote ones as ghost leaves.
+                    checklist.push_back(root);
+                    auto const& ghosts = sphGhostsLeafIds();
+                    checklist.insert(checklist.end(), ghosts.begin(), ghosts.end());
+                } else {
+                    // Fetch path: every locality's root, remote ones read through the cache.
+                    auto const& roots = sphTreeLocalRoots();
+                    checklist.insert(checklist.end(), roots.begin(), roots.end());
+                }
+            }
+            result += sphTreeNeighbor(params, root, std::move(checklist), 1).get();
+        }
+    } catch (...) {
+        failure = std::current_exception();
     }
     for (auto& child : children) {
-        result += child.get();
+        try {
+            auto const part = child.get();
+            if (!failure) {
+                result += part;
+            }
+        } catch (...) {
+            if (!failure) {
+                failure = std::current_exception();
+            }
+        }
+    }
+    if (failure) {
+        std::rethrow_exception(failure);
     }
     return result;
 }
 
 hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     SphTreeNeighborParameters params, TreeId self, Vector<TreeId> checklist, int level) {
-    if (level == 0 && hpxRank() == 0 && hpxSize() > 1) {
-        sphTreeCacheClear();
-    }
     SphTreeNeighborReturn kr;
     sph_flops::Counter flops;
     flops.doublePrecision +=
         4 * kDimensions;    // Sentinel bound conversions in the return constructor.
-    SphTreeNode const* selfPtr = sphTreeGetNode(self);
-    if (params.operation == SphNeighborOperation::FindNeighbors && level == 0) {
-        sphClearNeighborState();
-    }
-    if (params.operation == SphNeighborOperation::FindNeighbors && checklist.size() == 0) {
-        addCpuFlops(flops.counts());
-        return hpx::make_ready_future(kr);
-    }
-    if (params.operation == SphNeighborOperation::FindNeighbors && level == 0 &&
-        sphGhostsActive()) {
-        // Export every leaf this walk can reach, then walk each locality locally.
+    bool const findNeighbors = params.operation == SphNeighborOperation::FindNeighbors;
+    if (level == 0) {
+        // Coordinator entry: there are no rank-routing nodes, so every walk starts at each
+        // locality's own root and `self` only names the tree.
         ALWAYS_ASSERT(hpxRank() == 0);
-        sphGhostsSync();
+        if (hpxSize() > 1) {
+            sphTreeCacheClear();
+        }
+        if (findNeighbors) {
+            sphClearNeighborState();
+            if (checklist.size() == 0) {
+                addCpuFlops(flops.counts());
+                return hpx::make_ready_future(kr);
+            }
+            if (sphGhostsActive()) {
+                // Export every leaf this walk can reach before the local walks.
+                sphGhostsSync();
+            }
+        }
         addCpuFlops(flops.counts());
         return hpx::make_ready_future(sphTreeNeighborLocalWalks(params));
+    }
+    SphTreeNode const* selfPtr = sphTreeGetNode(self);
+    if (findNeighbors && checklist.size() == 0) {
+        addCpuFlops(flops.counts());
+        return hpx::make_ready_future(kr);
     }
     ASSERT(self.proc == hpxRank());
     Vector<TreeId> nextlist;
@@ -530,7 +563,7 @@ void sphPrepareStageRates(bool initialize);
 HPX_PLAIN_ACTION(sphPrepareStageRates, SphPrepareStageRatesAction);
 void sphPrepareStageRates(bool initialize) {
     Vector<hpx::future<void>> children;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphPrepareStageRatesAction>(child, initialize));
     }
     if (initialize) {
@@ -561,7 +594,7 @@ HPX_PLAIN_ACTION(sphFinishPairStages, SphFinishPairStagesAction);
 
 void sphFinishPairStages(bool restore) {
     Vector<hpx::future<void>> children;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphFinishPairStagesAction>(child, restore));
     }
     if (restore) {
@@ -586,7 +619,7 @@ void sphFinishPairStages(bool restore) {
 void sphCommitPairUpdates(int stage) {
     sph_flops::Counter flops;
     Vector<hpx::future<void>> children;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphCommitPairUpdatesAction>(child, stage));
     }
     if (stage == 1) {
@@ -682,9 +715,9 @@ HPX_PLAIN_ACTION(sphRunCompute, SphRunComputeAction);
 void sphRunStage(SphRunParameters params, bool cuda) {
     params = detail::prepareSphRunParameters(params, cuda);
     Vector<hpx::future<void>> children;
-    children.reserve(hpxChildren().size());
+    children.reserve(sphCollectiveChildren().size());
     detail::SphRunFutureDrain drain(children);
-    for (auto& c : hpxChildren()) {
+    for (auto& c : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphRunStageAction>(c, params, cuda));
     }
     auto workspacePtr = detail::collectSphRunWork(params);
@@ -711,9 +744,9 @@ SphRunReturn sphRunCompute(bool cuda) {
         cuda = false;
     }
     Vector<hpx::future<SphRunReturn>> children;
-    children.reserve(hpxChildren().size());
+    children.reserve(sphCollectiveChildren().size());
     detail::SphRunFutureDrain drain(children);
-    for (auto& c : hpxChildren()) {
+    for (auto& c : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphRunComputeAction>(c, cuda));
     }
     SphRunReturn rc;
@@ -752,9 +785,9 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     }
     params = detail::prepareSphRunParameters(params, cuda);
     Vector<hpx::future<SphRunReturn>> futs;
-    futs.reserve(hpxChildren().size());
+    futs.reserve(sphCollectiveChildren().size());
     detail::SphRunFutureDrain drain(futs);
-    for (auto& c : hpxChildren()) {
+    for (auto& c : sphCollectiveChildren()) {
         futs.push_back(hpx::async<SphRunAction>(c, params, cuda));
     }
     SphRunReturn rc;

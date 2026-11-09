@@ -49,6 +49,12 @@ std::vector<SphParentChild> sphParentChildren(std::uint64_t key, Pair<int> rankR
 // domain decomposition (src/gravity/fmm/cell_tree.cpp, treeCreateCell).
 std::uint64_t sphDomainLeafKey(int rank, int rankCount);
 
+// The ranks `rank` forwards a collective to along the parent tree: the first ranks of the
+// remote children of every node that lives on `rank`. Started on rank 0, a collective that
+// forwards to these ranks reaches every rank exactly once, with depth ⌈log_{2^D} P⌉ plus at
+// most D − 1 binary levels.
+std::vector<int> sphParentLocalityChildren(int rank, int rankCount);
+
 // Census of a subtree, reduced from the leaves to the node that asked.
 struct SphParentTreeCensus {
     int leafCount = 0;
@@ -103,6 +109,10 @@ SphParentNodeRecord const* sphParentTreeLocalLeaf();
 #ifndef __CUDACC__
 
 #include <cosmictiger/core/hpx.hpp>
+
+// sphParentLocalityChildren(hpxRank(), hpxSize()) as locality ids: the fan-out of every SPH
+// collective (docs/sph_parent_tree_plan.md, M4).
+Vector<hpx::id_type> const& sphCollectiveChildren();
 
 // One node of the parent tree, an HPX component that lives on the first rank of its range.
 // It owns managed ids of its children; nothing refers back to a parent, so releasing the

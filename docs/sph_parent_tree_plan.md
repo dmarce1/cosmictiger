@@ -5,10 +5,11 @@
 | Milestone | State |
 |---|---|
 | Step 0 | Done: bounded target reverted, half-box error (`efa174cab`). |
-| M1 parent tree | Done (`b6676d685`): `SphParentNode` components, topology and 1 to 4 locality tests. Not yet used for collectives. |
+| M1 parent tree | Done (`b6676d685`): `SphParentNode` components, topology and 1 to 4 locality tests. Its topology drives the collectives since M4. |
 | M2 ghosts | Done (`b6676d685`), default on (`compute.sphGhosts`). Differs from 3.3 to 3.5: the export set is recomputed at every neighbor walk from a cut of at most 64 local tree nodes, instead of plan epochs with margins, so checks A and B and the extension round (M3) are not needed for correctness. |
 | M3 | Subsumed by the per-walk sync. Margins could later skip syncs that would export nothing new. |
-| M4 to M6 | Open: route the `hpxChildren()` collectives through the parent tree and drop the routing nodes; remove the fetch path; changed-set pushes. |
+| M4 collectives | Done: every SPH collective forwards along `sphCollectiveChildren()` (the parent-tree fan-out, each rank reached once). The routing nodes are gone: each locality builds and refreshes its own octree at depth 0 in parallel, the roots are broadcast (`sphTreeLocalRoots()`), and a level-0 walk runs one walk per locality whose checklist is the local root plus ghost leaves, or every root on the fetch path. The returned tree id is rank 0's local root. |
+| M5, M6 | Open: remove the fetch path; changed-set pushes. |
 | M7 gravity | Done on the hierarchical (HOLD) integrator only, at the user's direction; traditional and global reject SPH with gravity. Gate: `sph_jeans_wave`, `pmmm_evolution_sph_hierarchical_{cpu,mpi}`. |
 | M8 | Partly done: CUDA staging with ghosts passes the CUDA tree's 124 SPH tests (traditional integrator; no hierarchical CUDA tree yet). Open: restart inside an outer interval with gas. |
 

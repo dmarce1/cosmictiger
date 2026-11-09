@@ -18,6 +18,7 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/sph/ghosts.hpp>
+#include <cosmictiger/sph/parent_tree.hpp>
 #include <cosmictiger/sph/particles.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/time_integration.hpp>
@@ -386,7 +387,7 @@ void sphGhostsSetEnabled(bool enabled) {
 
 void sphGhostsClear() {
     Vector<hpx::future<void>> children;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphGhostsClearAction>(child));
     }
     detail::clearLocalGhosts();
@@ -396,7 +397,7 @@ void sphGhostsClear() {
 // Collective: drop this locality's ghosts and gather every locality's interest.
 Vector<detail::SphGhostInterest> sphGhostsPublish() {
     Vector<hpx::future<Vector<detail::SphGhostInterest>>> children;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphGhostsPublishAction>(child));
     }
     detail::clearLocalGhosts();
@@ -421,7 +422,7 @@ Vector<detail::SphGhostInterest> sphGhostsPublish() {
 // Collective: select this locality's exports against every interest and push the records.
 void sphGhostsExport(Vector<detail::SphGhostInterest> interests) {
     Vector<hpx::future<void>> children;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphGhostsExportAction>(child, interests));
     }
     Vector<hpx::future<void>> pushes;
@@ -481,7 +482,7 @@ void sphGhostsSync() {
 // Collective: push the current fields of every exported particle to its importer.
 void sphGhostsRefreshLocal() {
     Vector<hpx::future<void>> children;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphGhostsRefreshLocalAction>(child));
     }
     bool const includeCandidates = sphRungCandidatesActive();
@@ -653,7 +654,7 @@ SphGhostStatistics& SphGhostStatistics::operator+=(SphGhostStatistics const& oth
 
 SphGhostStatistics sphGhostsStatistics() {
     Vector<hpx::future<SphGhostStatistics>> children;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphGhostsStatisticsAction>(child));
     }
     SphGhostStatistics result;
@@ -681,7 +682,7 @@ SphGhostStatistics sphGhostsStatistics() {
 
 void sphGhostsResetStatistics() {
     Vector<hpx::future<void>> children;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphGhostsResetStatisticsAction>(child));
     }
     {

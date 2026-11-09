@@ -16,6 +16,7 @@
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/sph/flops.hpp>
 #include <cosmictiger/sph/ghosts.hpp>
+#include <cosmictiger/sph/parent_tree.hpp>
 #include <cosmictiger/sph/particles.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/time_integration.hpp>
@@ -40,7 +41,7 @@ HPX_PLAIN_ACTION(sphCommitBalancedRungs, SphCommitBalancedRungsAction);
 void sphSeedRungProposals() {
     ALWAYS_ASSERT(!detail::rungBalanceActive);
     Vector<hpx::future<void>> children;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphSeedRungProposalsAction>(child));
     }
     for (ParticleInteger gas = 0; gas < sphParticlesSize(); ++gas) {
@@ -54,7 +55,7 @@ void sphSeedRungProposals() {
 int sphCommitBalancedRungs() {
     ALWAYS_ASSERT(!detail::rungBalanceActive);
     Vector<hpx::future<int>> children;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphCommitBalancedRungsAction>(child));
     }
     int maximumRung = 0;
@@ -87,7 +88,7 @@ char* sphRungCandidatesData() {
 
 void sphPrepareRungCandidates(bool initialize) {
     Vector<hpx::future<void>> children;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphPrepareRungCandidatesAction>(child, initialize));
     }
     if (initialize) {
@@ -143,7 +144,7 @@ void sphReadRungCandidates(ParticleGlobalRange range, char* rungs, ParticleInteg
 
 SphRungBalanceReturn sphFinishRungCandidates(bool publish) {
     Vector<hpx::future<SphRungBalanceReturn>> children;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphFinishRungCandidatesAction>(child, publish));
     }
     SphRungBalanceReturn result;
@@ -221,7 +222,7 @@ bool sphMidpointEventActive() {
 
 void sphMidpointSetEventActive(bool active) {
     Vector<hpx::future<void>> children;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphMidpointSetEventActiveAction>(child, active));
     }
     detail::midpointEventActive = active;
@@ -242,7 +243,7 @@ void sphMidpointEndEvent() {
 
 size_t sphMidpointTargetCount(int exactRung) {
     Vector<hpx::future<size_t>> children;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphMidpointTargetCountAction>(child, exactRung));
     }
     size_t count = 0;
@@ -259,7 +260,7 @@ size_t sphMidpointTargetCount(int exactRung) {
 int sphParticlesSelectMidpointRungs(int minimumRung) {
     ALWAYS_ASSERT(sphMidpointEnabled() && minimumRung >= 0);
     Vector<hpx::future<int>> children;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphParticlesSelectMidpointRungsAction>(child, minimumRung));
     }
     int maximumRung = 0;

@@ -27,6 +27,7 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/sph/ghosts.hpp>
+#include <cosmictiger/sph/parent_tree.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/tree.hpp>
 #include <cosmictiger/sph/viscosity/balsara.hpp>
@@ -109,7 +110,7 @@ HPX_PLAIN_ACTION(sphParticlesPrepareThermodynamics, SphParticlesPrepareThermodyn
 void sphParticlesPrepareThermodynamics(double scaleFactor, bool initializeEntropy) {
     ALWAYS_ASSERT(scaleFactor > 0.0);
     Vector<hpx::future<void>> children;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         children.push_back(hpx::async<SphParticlesPrepareThermodynamicsAction>(
             child, scaleFactor, initializeEntropy));
     }
@@ -609,7 +610,7 @@ static Vector<SphDensityCacheEntry> sphParticlesFetchDensityCacheLine(ParticleIn
 
 void sphParticlesClearHydroCaches() {
     Vector<hpx::future<void>> futures;
-    for (auto const& c : hpxChildren()) {
+    for (auto const& c : sphCollectiveChildren()) {
         futures.push_back(hpx::async<SphParticlesClearHydroCachesAction>(c));
     }
     thermodynamicParticleCache = decltype(thermodynamicParticleCache)();
@@ -620,7 +621,7 @@ void sphParticlesClearHydroCaches() {
 
 void sphParticlesClearCaches() {
     Vector<hpx::future<void>> futures;
-    for (auto const& c : hpxChildren()) {
+    for (auto const& c : sphCollectiveChildren()) {
         futures.push_back(hpx::async<SphParticlesClearCachesAction>(c));
     }
     particleCache = decltype(particleCache)();
@@ -899,7 +900,7 @@ HPX_PLAIN_ACTION(sphParticlesResetConverged, SphParticlesResetConvergedAction);
 void sphParticlesResetConverged() {
     int const numberOfThreads = hpxHardwareConcurrency();
     std::vector<hpx::future<void>> futures;
-    for (auto& c : hpxChildren()) {
+    for (auto& c : sphCollectiveChildren()) {
         futures.push_back(hpx::async<SphParticlesResetConvergedAction>(c));
     }
     for (int proc = 0; proc < numberOfThreads; proc++) {
@@ -927,7 +928,7 @@ HPX_PLAIN_ACTION(
 
 void sphParticlesSetBulkViscosityCoefficients(float bulkViscosityCoefficient) {
     std::vector<hpx::future<void>> futures;
-    for (auto& c : hpxChildren()) {
+    for (auto& c : sphCollectiveChildren()) {
         futures.push_back(hpx::async<SphParticlesSetBulkViscosityCoefficientsAction>(
             c, bulkViscosityCoefficient));
     }
@@ -942,7 +943,7 @@ HPX_PLAIN_ACTION(sphParticlesResetSemiactive, SphParticlesResetSemiactiveAction)
 void sphParticlesResetSemiactive() {
     int const numberOfThreads = hpxHardwareConcurrency();
     std::vector<hpx::future<void>> futures;
-    for (auto& c : hpxChildren()) {
+    for (auto& c : sphCollectiveChildren()) {
         futures.push_back(hpx::async<SphParticlesResetSemiactiveAction>(c));
     }
     for (int proc = 0; proc < numberOfThreads; proc++) {

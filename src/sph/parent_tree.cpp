@@ -114,6 +114,43 @@ std::uint64_t sphDomainLeafKey(int rank, int rankCount) {
     return key;
 }
 
+namespace detail {
+
+// Collect the remote children of every node that lives on `rank`, below `key`/`rankRange`.
+void collectLocalityChildren(
+    std::uint64_t key, Pair<int> rankRange, int rank, std::vector<int>& children) {
+    for (auto const& child : sphParentChildren(key, rankRange)) {
+        if (rank < child.rankRange.first || rank >= child.rankRange.second) {
+            // A sibling subtree: forwarded to if this node lives on `rank`.
+            if (rankRange.first == rank) {
+                children.push_back(child.rankRange.first);
+            }
+            continue;
+        }
+        collectLocalityChildren(child.key, child.rankRange, rank, children);
+    }
+}
+
+}    // namespace detail
+
+std::vector<int> sphParentLocalityChildren(int rank, int rankCount) {
+    std::vector<int> children;
+    detail::collectLocalityChildren(1, Pair<int>(0, rankCount), rank, children);
+    return children;
+}
+
+Vector<hpx::id_type> const& sphCollectiveChildren() {
+    // The topology depends only on the rank count, fixed for a run.
+    static Vector<hpx::id_type> const children = [] {
+        Vector<hpx::id_type> result;
+        for (int const child : sphParentLocalityChildren(hpxRank(), hpxSize())) {
+            result.push_back(hpxLocalities()[child]);
+        }
+        return result;
+    }();
+    return children;
+}
+
 SphParentTreeCensus& SphParentTreeCensus::operator+=(SphParentTreeCensus const& other) {
     leafCount += other.leafCount;
     nodeCount += other.nodeCount;

@@ -28,6 +28,7 @@
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/sph/flops.hpp>
 #include <cosmictiger/sph/ghosts.hpp>
+#include <cosmictiger/sph/parent_tree.hpp>
 #include <cosmictiger/sph/particles.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/tree.hpp>
@@ -38,15 +39,40 @@ static Vector<SphTreeNode> sphTreeFetchCacheLine(int);
 static void sphTreeAllocateNodes();
 static SphTreeCreateReturn sphTreeRefreshNode(
     TreeId id, SphTreeCreateParameters params, double driftFactor);
+static SphTreeCreateReturn sphTreeBuild(SphTreeCreateParameters params, size_t key,
+    Pair<int, int> processRange, Pair<ParticleInteger> particleRange, Range<double> box, int depth,
+    bool localRoot);
+
+namespace detail {
+
+// A distributed build's reduction: the merged tree summary and every locality's local root.
+struct SphTreeLocalRoots {
+    SphTreeCreateReturn tree;
+    Vector<TreeId> roots;
+
+    template <class Archive>
+    void serialize(Archive&& archive, unsigned) {
+        archive & tree;
+        archive & roots;
+    }
+};
+
+}    // namespace detail
+
+static detail::SphTreeLocalRoots sphTreeCreateLocalRoots(SphTreeCreateParameters params);
+static void sphTreeSetLocalRoots(Vector<TreeId> roots);
+static SphTreeCreateReturn sphTreeRefreshLocalRoots(
+    SphTreeCreateParameters params, double driftFactor);
 
 HPX_PLAIN_ACTION(sphTreeAllocateNodes, SphTreeAllocateNodesAction);
-HPX_PLAIN_ACTION(sphTreeCreate, SphTreeCreateAction);
+HPX_PLAIN_ACTION(sphTreeCreateLocalRoots, SphTreeCreateLocalRootsAction);
+HPX_PLAIN_ACTION(sphTreeSetLocalRoots, SphTreeSetLocalRootsAction);
+HPX_PLAIN_ACTION(sphTreeRefreshLocalRoots, SphTreeRefreshLocalRootsAction);
 HPX_PLAIN_ACTION(sphTreeDestroy, SphTreeDestroyAction);
 HPX_PLAIN_ACTION(sphTreeCacheClear, SphTreeCacheClearAction);
 HPX_PLAIN_ACTION(sphTreeFetchCacheLine, SphTreeFetchCacheLineAction);
 HPX_PLAIN_ACTION(sphTreeFreeNeighborList, SphTreeFreeNeighborListAction);
 HPX_PLAIN_ACTION(sphTreeAllValid, SphTreeAllValidAction);
-HPX_PLAIN_ACTION(sphTreeRefreshNode, SphTreeRefreshNodeAction);
 
 class SphTreeAllocator {
     int next_;
@@ -85,6 +111,9 @@ static MutexType neighborListMutex;
 static std::atomic<bool> treeValid(false);
 static TreeId retainedRoot{-1, -1};
 static TreeId localRootId{-1, -1};
+// Every locality's local root, in rank order, after a build. The fetch path's walks start
+// from them; there are no rank-routing nodes above the local roots.
+static Vector<TreeId> allLocalRoots;
 static ParticleInteger retainedParticleCount = -1;
 static int retainedMinimumRung = kMaxRung;
 
@@ -98,7 +127,7 @@ bool sphTreeIsValid() {
 
 bool sphTreeAllValid() {
     std::vector<hpx::future<bool>> futures;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         futures.push_back(hpx::async<SphTreeAllValidAction>(child));
     }
     bool valid = sphTreeIsValid();
@@ -341,7 +370,7 @@ static void resetLastCacheEntries() {
 
 void sphTreeCacheClear() {
     Vector<hpx::future<void>> futures;
-    for (auto const& child : hpxChildren()) {
+    for (auto const& child : sphCollectiveChildren()) {
         futures.push_back(hpx::async<SphTreeCacheClearAction>(child));
     }
     treeCache = decltype(treeCache)();
@@ -398,11 +427,9 @@ hpx::future<SphTreeCreateReturn> sphTreeCreateFork(SphTreeCreateParameters param
     Range<double> const& box, int const depth, bool const localRoot, bool threadme) {
     static std::atomic<int> numberOfThreads(0);
     hpx::future<SphTreeCreateReturn> rc;
-    bool remote = false;
-    if (processRange.first != hpxRank()) {
-        threadme = true;
-        remote = true;
-    } else if (threadme) {
+    // Every node below a local root lives on that root's locality.
+    ALWAYS_ASSERT(processRange.first == hpxRank());
+    if (threadme) {
         threadme = particleRange.second - particleRange.first > kMinSortThreadParts;
         if (threadme) {
             if (numberOfThreads++ < kSortOversubscription * hpx::thread::hardware_concurrency() ||
@@ -417,18 +444,15 @@ hpx::future<SphTreeCreateReturn> sphTreeCreateFork(SphTreeCreateParameters param
     if (!threadme) {
         try {
             rc = hpx::make_ready_future(
-                sphTreeCreate(params, key, processRange, particleRange, box, depth, localRoot));
+                sphTreeBuild(params, key, processRange, particleRange, box, depth, localRoot));
         } catch (...) {
             rc = hpx::make_exceptional_future<SphTreeCreateReturn>(std::current_exception());
         }
-    } else if (remote) {
-        rc = hpx::async<SphTreeCreateAction>(hpxLocalities()[processRange.first], params, key,
-            processRange, particleRange, box, depth, localRoot);
     } else {
         rc = hpx::async(hpx::annotated_function(
             [params, processRange, key, particleRange, depth, localRoot, box]() {
                 try {
-                    auto rc = sphTreeCreate(
+                    auto rc = sphTreeBuild(
                         params, key, processRange, particleRange, box, depth, localRoot);
                     numberOfThreads--;
                     return rc;
@@ -447,7 +471,7 @@ static void sphTreeAllocateNodes() {
     int const treeCacheLineSize = getOptions().compute.treeCacheLineSize;
     int const bucketSize = getOptions().compute.sphBucketSize;
     Vector<hpx::future<void>> futs;
-    for (auto const& c : hpxChildren()) {
+    for (auto const& c : sphCollectiveChildren()) {
         futs.push_back(hpx::async<SphTreeAllocateNodesAction>(c));
     }
     size_t const requiredNodes =
@@ -473,7 +497,118 @@ static void sphTreeAllocateNodes() {
     }
 }
 
+namespace detail {
+
+// Merge one locality's tree summary into a running total (first: copy).
+void mergeSphTreeReturn(SphTreeCreateReturn& total, SphTreeCreateReturn const& part, bool first) {
+    if (first) {
+        total = part;
+        return;
+    }
+    mergeSphBounds(total.innerBox, part.innerBox);
+    mergeSphBounds(total.outerBox, part.outerBox);
+    mergeSphBounds(total.driftBox, part.driftBox);
+    total.numberOfActiveParticles += part.numberOfActiveParticles;
+    total.activeNodes += part.activeNodes;
+    total.nodeCount += part.nodeCount;
+    total.activeLeafNodes += part.activeLeafNodes;
+    total.leafNodes += part.leafNodes;
+    total.minDepth = std::min(total.minDepth, part.minDepth);
+    total.maxDepth = std::max(total.maxDepth, part.maxDepth);
+    total.floatingPointOperations += part.floatingPointOperations;
+    mergeSphVolumeRatios(total, part.minVolumeRatio, part.maxVolumeRatio);
+}
+
+}    // namespace detail
+
+// Collective: every locality builds its own octree at depth 0 over the whole periodic box, in
+// parallel, and the summaries and local roots are reduced in rank order.
+static detail::SphTreeLocalRoots sphTreeCreateLocalRoots(SphTreeCreateParameters params) {
+    Vector<hpx::future<detail::SphTreeLocalRoots>> children;
+    for (auto const& child : sphCollectiveChildren()) {
+        children.push_back(hpx::async<SphTreeCreateLocalRootsAction>(child, params));
+    }
+    detail::SphTreeLocalRoots result;
+    std::exception_ptr failure;
+    try {
+        result.tree = sphTreeBuild(params, sphDomainLeafKey(hpxRank(), hpxSize()),
+            Pair<int>(hpxRank(), hpxRank() + 1), Pair<ParticleInteger>(-1, -1), unitBox<double>(),
+            0, true);
+        result.roots.push_back(result.tree.id);
+    } catch (...) {
+        failure = std::current_exception();
+    }
+    for (auto& child : children) {
+        try {
+            auto const part = child.get();
+            if (!failure) {
+                detail::mergeSphTreeReturn(result.tree, part.tree, false);
+                result.roots.insert(result.roots.end(), part.roots.begin(), part.roots.end());
+            }
+        } catch (...) {
+            if (!failure) {
+                failure = std::current_exception();
+            }
+        }
+    }
+    if (failure) {
+        std::rethrow_exception(failure);
+    }
+    return result;
+}
+
+static void sphTreeSetLocalRoots(Vector<TreeId> roots) {
+    Vector<hpx::future<void>> children;
+    children.reserve(sphCollectiveChildren().size());
+    for (auto const& child : sphCollectiveChildren()) {
+        children.push_back(hpx::async<SphTreeSetLocalRootsAction>(child, roots));
+    }
+    std::sort(roots.begin(), roots.end(), [](TreeId a, TreeId b) { return a.proc < b.proc; });
+    allLocalRoots = std::move(roots);
+    std::exception_ptr failure;
+    for (auto& child : children) {
+        try {
+            child.get();
+        } catch (...) {
+            if (!failure) {
+                failure = std::current_exception();
+            }
+        }
+    }
+    if (failure) {
+        std::rethrow_exception(failure);
+    }
+}
+
+Vector<TreeId> const& sphTreeLocalRoots() {
+    return allLocalRoots;
+}
+
 SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
+    Pair<int, int> processRange, Pair<ParticleInteger> particleRange, Range<double> box, int depth,
+    bool localRoot) {
+    if (depth < 0 || depth > SphTreeNode::kMaximumDepth) {
+        throw std::out_of_range("SPH tree depth must be between 0 and 15");
+    }
+    if (depth == 0 && processRange.first == 0 && processRange.second == hpxSize()) {
+        // The whole tree: one octree per locality, built in parallel; no rank-routing nodes.
+        ALWAYS_ASSERT(hpxRank() == 0);
+        sphTreeAllocateNodes();
+        auto result = sphTreeCreateLocalRoots(params);
+        sphTreeSetLocalRoots(result.roots);
+        retainedRoot = result.tree.id;
+        return result.tree;
+    }
+    if (processRange.second - processRange.first != 1 || processRange.first != hpxRank()) {
+        throw std::invalid_argument("An SPH subtree build covers this locality alone");
+    }
+    if (depth == 0) {
+        sphTreeAllocateNodes();
+    }
+    return sphTreeBuild(params, key, processRange, particleRange, box, depth, localRoot);
+}
+
+static SphTreeCreateReturn sphTreeBuild(SphTreeCreateParameters params, size_t key,
     Pair<int, int> processRange, Pair<ParticleInteger> particleRange, Range<double> box, int depth,
     bool localRoot) {
     int const bucketSize = getOptions().compute.sphBucketSize;
@@ -481,17 +616,14 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     if (depth < 0 || depth > SphTreeNode::kMaximumDepth) {
         throw std::out_of_range("SPH tree depth must be between 0 and 15");
     }
-    if (depth == 0) {
-        sphTreeAllocateNodes();
-    }
+    ALWAYS_ASSERT(processRange.second - processRange.first == 1 && processRange.first == hpxRank());
     if (localRoot) {
         leaflist.resize(0);
         particleRange.first = 0;
         particleRange.second = sphParticlesSize();
         // A retained hierarchical owner can hold inactive gas outside its rank
-        // domain. Rank-routing nodes still follow the binary domain keys, but
-        // each local octree partitions the full periodic box so a later rebuild
-        // can subdivide those particles rather than chasing a domain boundary.
+        // domain, so each local octree partitions the full periodic box and a later
+        // rebuild can subdivide those particles rather than chasing a domain boundary.
         box = unitBox<double>();
     }
     Array<TreeId, kSphChildCount> children;
@@ -519,26 +651,12 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     Fixed32Range innerBox;
     Fixed32Range outerBox;
     Fixed32Range driftBox;
-    if (processRange.second - processRange.first > 1 ||
-        particleRange.second - particleRange.first > bucketSize) {
+    if (particleRange.second - particleRange.first > bucketSize) {
         if (depth == SphTreeNode::kMaximumDepth) {
             throw std::out_of_range("SPH octree subdivision would require depth 16");
         }
         std::array<hpx::future<SphTreeCreateReturn>, kSphChildCount> childFutures;
-        if (processRange.second - processRange.first > 1) {
-            // Rank ownership still follows the domain decomposition's binary keys.
-            // Only the spatial particle trees below these routing nodes are hybrid trees.
-            int const middleRank = (processRange.first + processRange.second) / 2;
-            for (int childIndex = 0; childIndex < 2; ++childIndex) {
-                size_t const childKey = (key << 1) + childIndex;
-                Pair<int> const childRanks = childIndex == 0 ?
-                    Pair<int>(processRange.first, middleRank) :
-                    Pair<int>(middleRank, processRange.second);
-                childFutures[childIndex] = sphTreeCreateFork(params, childKey, childRanks,
-                    particleRange, domainsRange(childKey), depth + 1,
-                    childRanks.second - childRanks.first == 1, true);
-            }
-        } else {
+        {
             // Reduce fanout only near the bucket threshold. Widen before
             // multiplying so large configured bucket sizes cannot overflow int.
             auto const particleCount = std::uint64_t(particleRange.second - particleRange.first);
@@ -851,10 +969,8 @@ static SphTreeCreateReturn sphTreeRefreshNode(
             if (child.index < 0) {
                 continue;
             }
-            if (child.proc != hpxRank()) {
-                futures[childIndex] = hpx::async<SphTreeRefreshNodeAction>(
-                    hpxLocalities()[child.proc], child, params, driftFactor);
-            } else if (node.numberOfParticles() >= kMinSortThreadParts || !node.isLocal()) {
+            ALWAYS_ASSERT(child.proc == hpxRank());
+            if (node.numberOfParticles() >= kMinSortThreadParts) {
                 futures[childIndex] = hpx::async(hpx::annotated_function(
                     [child, params, driftFactor]() {
                         return sphTreeRefreshNode(child, params, driftFactor);
@@ -910,12 +1026,45 @@ static SphTreeCreateReturn sphTreeRefreshNode(
     return result;
 }
 
+// Collective: every locality refreshes its own octree in parallel.
+static SphTreeCreateReturn sphTreeRefreshLocalRoots(
+    SphTreeCreateParameters params, double driftFactor) {
+    Vector<hpx::future<SphTreeCreateReturn>> children;
+    for (auto const& child : sphCollectiveChildren()) {
+        children.push_back(hpx::async<SphTreeRefreshLocalRootsAction>(child, params, driftFactor));
+    }
+    SphTreeCreateReturn result;
+    std::exception_ptr failure;
+    try {
+        result = sphTreeRefreshNode(localRootId, params, driftFactor);
+        result.id = localRootId;
+    } catch (...) {
+        failure = std::current_exception();
+    }
+    for (auto& child : children) {
+        try {
+            auto const part = child.get();
+            if (!failure) {
+                detail::mergeSphTreeReturn(result, part, false);
+            }
+        } catch (...) {
+            if (!failure) {
+                failure = std::current_exception();
+            }
+        }
+    }
+    if (failure) {
+        std::rethrow_exception(failure);
+    }
+    return result;
+}
+
 SphTreeCreateReturn sphTreeRefresh(SphTreeCreateParameters params, double driftFactor) {
     if (!sphTreeAllValid() || retainedRoot.index < 0) {
         throw std::runtime_error("Cannot refresh an invalid SPH tree; rebuild it first");
     }
     sphTreeCacheClear();
-    auto result = sphTreeRefreshNode(retainedRoot, params, driftFactor);
+    auto result = sphTreeRefreshLocalRoots(params, driftFactor);
     // Refresh changes remotely cached node contents and every leaf's neighbor list.
     sphTreeCacheClear();
     return result;
@@ -924,7 +1073,7 @@ SphTreeCreateReturn sphTreeRefresh(SphTreeCreateParameters params, double driftF
 void sphTreeDestroy(bool freeSphTree) {
     sphTreeInvalidate();
     Vector<hpx::future<void>> futs;
-    auto const children = hpxChildren();
+    auto const children = sphCollectiveChildren();
     for (auto const& c : children) {
         futs.push_back(hpx::async<SphTreeDestroyAction>(c, freeSphTree));
     }

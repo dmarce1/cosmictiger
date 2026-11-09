@@ -25,7 +25,7 @@
 
 // Child bit d selects the upper half of spatial dimension d. Hybrid spatial
 // nodes bisect the longest one, two or three axes; unselected bits stay zero.
-// Unoccupied slots use {-1, -1}; rank-routing nodes use only slots 0 and 1.
+// Unoccupied slots use {-1, -1}.
 inline constexpr int kSphChildCount = 1 << kDimensions;
 
 struct SphTreeNode {
@@ -243,6 +243,9 @@ void sphTreeDriftBounds(double driftFactor, int rung = -1);
 void sphTreeCacheClear();
 // This locality's local root, {-1, -1} when no tree is built here.
 TreeId sphTreeLocalRoot();
+// Every locality's local root after the last build, in rank order. Each locality builds and
+// refreshes its own octree; there are no rank-routing nodes above the local roots.
+Vector<TreeId> const& sphTreeLocalRoots();
 // Remote nodes read through the tree-node cache on this locality since the last reset.
 std::int64_t sphTreeRemoteNodeReads();
 void sphTreeResetRemoteNodeReads();

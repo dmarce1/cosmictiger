@@ -180,9 +180,19 @@ int expectedSphSplitMask(SphTreeNode const& node) {
     return mask;
 }
 
+// Roots to traverse for a tree id: every locality's octree when `id` is a root of the
+// distributed tree (no node routes between localities), otherwise `id` alone.
+std::vector<TreeId> sphTreeTraversalRoots(TreeId id) {
+    auto const& roots = sphTreeLocalRoots();
+    if (std::find(roots.begin(), roots.end(), id) != roots.end()) {
+        return std::vector<TreeId>(roots.begin(), roots.end());
+    }
+    return std::vector<TreeId>{id};
+}
+
 void verifySphTreeVolumeRatios(SphTreeCreateReturn const& tree) {
     std::vector<double> ratios;
-    std::vector<TreeId> pending{tree.id};
+    std::vector<TreeId> pending = sphTreeTraversalRoots(tree.id);
     while (!pending.empty()) {
         auto const id = pending.back();
         pending.pop_back();
@@ -1598,7 +1608,7 @@ void distributedSphOctreeTest() {
     detail::requireSphTree(built.numberOfActiveParticles == 2 && !sphTreeShouldRebuild(2, 16),
         "distributed fixture is not below the rebuild threshold");
     Vector<TreeId> leaves;
-    Vector<TreeId> pending{built.id};
+    auto pending = detail::sphTreeTraversalRoots(built.id);
     while (!pending.empty()) {
         auto const id = pending.back();
         pending.pop_back();
