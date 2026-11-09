@@ -26,6 +26,7 @@
 #define SPH_PARTICLES_CPP
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/math/vector3.hpp>
+#include <cosmictiger/sph/ghosts.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/tree.hpp>
 #include <cosmictiger/sph/viscosity/balsara.hpp>
@@ -312,6 +313,8 @@ void sphParticlesGlobalReadPositions(
                 y[j] = sphParticlesPositionValue(kYi, i);
                 z[j] = sphParticlesPositionValue(kZi, i);
             }
+        } else if (sphGhostsServe(range)) {
+            sphGhostsReadPositions(range, x, y, z, offset);
         } else {
             detail::SphCacheLineId lineId;
             lineId.proc = range.proc;
@@ -370,6 +373,9 @@ void sphParticlesGlobalReadInternalEnergyAndSmoothingLength(ParticleGlobalRange 
                     smoothingLength[j] = sphParticlesSmoothingLength(i);
                 }
             }
+        } else if (sphGhostsServe(range)) {
+            sphGhostsReadInternalEnergyAndSmoothingLength(
+                range, internalEnergy, smoothingLength, offset);
         } else {
             detail::SphCacheLineId lineId;
             lineId.proc = range.proc;
@@ -423,6 +429,8 @@ void sphParticlesGlobalReadRungs(ParticleGlobalRange range, char* rungs, Particl
                 int const j = offset + i - range.range.first;
                 rungs[j] = sphParticlesRung(i);
             }
+        } else if (sphGhostsServe(range)) {
+            sphGhostsReadRungs(range, rungs, offset);
         } else {
             detail::SphCacheLineId lineId;
             lineId.proc = range.proc;
@@ -473,6 +481,8 @@ void sphParticlesGlobalReadVelocities(
                 vy[j] = sphParticlesVelocityValue(kYi, i);
                 vz[j] = sphParticlesVelocityValue(kZi, i);
             }
+        } else if (sphGhostsServe(range)) {
+            sphGhostsReadVelocities(range, vx, vy, vz, offset);
         } else {
             detail::SphCacheLineId lineId;
             lineId.proc = range.proc;
@@ -539,6 +549,9 @@ void sphParticlesGlobalReadDensity(ParticleGlobalRange range, float* rho, Partic
                     gradHCorrection[j] = sphParticlesGradHCorrections[i];
                 }
             }
+        } else if (sphGhostsServe(range)) {
+            sphGhostsReadDensity(
+                range, rho, offset, balsaraFactor, bulkViscosityCoefficient, gradHCorrection);
         } else {
             detail::SphCacheLineId lineId;
             lineId.proc = range.proc;

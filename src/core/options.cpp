@@ -475,6 +475,7 @@ std::vector<OptionsMetadataEntry> getOptionsMetadata(Options const& options) {
         {"compute.bucketSize", options.compute.bucketSize},
         {"compute.sphBucketSize", options.compute.sphBucketSize},
         {"compute.sphTreeRebuildFraction", options.compute.sphTreeRebuildFraction},
+        {"compute.sphGhosts", options.compute.sphGhosts},
         {"gravity.cuda.kickResidency", options.gravity.cudaKickResidency},
         {"gravity.cuda.kickSinkTile", options.gravity.cudaKickSinkTile},
         {"gravity.cuda.kickParticleTile", options.gravity.cudaKickParticleTile},
@@ -704,7 +705,10 @@ bool processOptions(int argc, char* argv[]) {
         "compute.sphTreeRebuildFraction",
         po::value<double>(&opts.compute.sphTreeRebuildFraction)->default_value(1.0 / 3.0),
         "rebuild the SPH octree when at least this fraction of all particles is active; "
-        "0 rebuilds every event, 1 requires all particles active; invalidation always rebuilds");
+        "0 rebuilds every event, 1 requires all particles active; invalidation always rebuilds")(
+        "compute.sphGhosts", po::value<bool>(&opts.compute.sphGhosts)->default_value(true),
+        "between localities, serve remote SPH leaves from ghost copies pushed by their owners "
+        "instead of fetching remote tree nodes and gas cache lines");
 
     po::options_description driftOpts("Particle drift");
     driftOpts.add_options()("drift.cuda", po::value<bool>(&opts.drift.cuda)->default_value(false),

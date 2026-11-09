@@ -336,6 +336,8 @@ set(cosmictiger_header_files
     cosmictiger/sph/particle_flags.hpp
     cosmictiger/sph/tree.hpp
     cosmictiger/scenarios/sphere.hpp
+    cosmictiger/sph/parent_tree.hpp
+    cosmictiger/sph/ghosts.hpp
     cosmictiger/core/tree_id.hpp
     cosmictiger/gravity/fmm_geometry.hpp
     cosmictiger/gravity/kick_context.hpp
@@ -2452,6 +2454,75 @@ if(BUILD_TESTING AND COSMICTIGER_DIMENSION_COUNT EQUAL 3)
                 WORKING_DIRECTORY "${sph_tree_workdir}" RUN_SERIAL TRUE TIMEOUT 120 PROCESSORS 6)
         endif()
         foreach(kernel_case IN ITEMS wendland_spline ferrers_wendland)
+        if(COSMICTIGER_WITH_SPH)
+            # SPH parent tree of HPX components (docs/sph_parent_tree_plan.md, M1): topology
+            # for every rank count, then the distributed tree on 1, 2, 3 and 4 localities.
+            set(sph_parent_tree_workdir "${PROJECT_BINARY_DIR}/tests/sph_parent_tree")
+            file(MAKE_DIRECTORY "${sph_parent_tree_workdir}")
+            add_test(NAME sph_parent_tree COMMAND cosmictiger --run.test=sphParentTree
+                --run.darkMatterParticleCount=512 --run.gasParticleCount=512 ${cosmictiger_test_hydro_args}
+                --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
+                --hpx:threads=2 --hpx:bind=none ${cosmictiger_test_integrator_args})
+            set_tests_properties(sph_parent_tree PROPERTIES
+                WORKING_DIRECTORY "${sph_parent_tree_workdir}" TIMEOUT 120 PROCESSORS 2
+                LABELS "sph;cpu;hpx")
+            if(cosmictiger_mpi_tests)
+                foreach(parent_tree_ranks IN ITEMS 2 3 4)
+                    set(parent_tree_name sph_parent_tree_mpi${parent_tree_ranks})
+                    set(parent_tree_workdir "${PROJECT_BINARY_DIR}/tests/${parent_tree_name}")
+                    file(MAKE_DIRECTORY "${parent_tree_workdir}")
+                    add_test(NAME ${parent_tree_name} COMMAND ${MPIEXEC_EXECUTABLE}
+                        ${MPIEXEC_NUMPROC_FLAG} ${parent_tree_ranks} ${MPIEXEC_PREFLAGS}
+                        $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS} --run.test=sphParentTree
+                        --run.darkMatterParticleCount=512 --run.gasParticleCount=512
+                        ${cosmictiger_test_hydro_args} --gravity.cuda=false --hydro.cuda=false
+                        --drift.cuda=false --hpx:threads=1 --hpx:bind=none
+                        --hpx:localities=${parent_tree_ranks} ${cosmictiger_mpi_transport_args}
+                        ${cosmictiger_test_integrator_args})
+                    set_tests_properties(${parent_tree_name} PROPERTIES
+                        WORKING_DIRECTORY "${parent_tree_workdir}" TIMEOUT 180
+                        PROCESSORS ${parent_tree_ranks} LABELS "sph;cpu;hpx;mpi")
+                endforeach()
+            endif()
+            # Ghost leaves against remote fetches in evolution on 2, 3 and 4 localities (M2).
+            if(cosmictiger_mpi_tests AND (COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL OR
+                    COSMICTIGER_ENABLE_INTEGRATOR_GLOBAL))
+                add_test(NAME sph_ghosts_application_mpi COMMAND ${Python3_EXECUTABLE}
+                    ${PROJECT_SOURCE_DIR}/tests/run_sph_ghosts.py $<TARGET_FILE:cosmictiger>
+                    ${PROJECT_BINARY_DIR}/tests/sph_ghosts_application_mpi
+                    ${cosmictiger_python_mpi_args})
+                set_tests_properties(sph_ghosts_application_mpi PROPERTIES
+                    TIMEOUT 1500 PROCESSORS 4 LABELS "integration;sph;octree;mpi")
+            endif()
+            # Ghost leaves (M2): the local ghost walk equals the global fetch walk.
+            set(sph_ghosts_workdir "${PROJECT_BINARY_DIR}/tests/sph_ghosts")
+            file(MAKE_DIRECTORY "${sph_ghosts_workdir}")
+            add_test(NAME sph_ghosts COMMAND cosmictiger --run.test=sphGhosts
+                --run.darkMatterParticleCount=512 --run.gasParticleCount=512 ${cosmictiger_test_hydro_args}
+                --gravity.cuda=false --hydro.cuda=false --drift.cuda=false
+                --hpx:threads=2 --hpx:bind=none ${cosmictiger_test_integrator_args})
+            set_tests_properties(sph_ghosts PROPERTIES
+                WORKING_DIRECTORY "${sph_ghosts_workdir}" TIMEOUT 120 PROCESSORS 2
+                LABELS "sph;cpu;hpx")
+            if(cosmictiger_mpi_tests)
+                foreach(ghost_ranks IN ITEMS 2 3 4)
+                    set(ghost_name sph_ghosts_mpi${ghost_ranks})
+                    set(ghost_workdir "${PROJECT_BINARY_DIR}/tests/${ghost_name}")
+                    file(MAKE_DIRECTORY "${ghost_workdir}")
+                    add_test(NAME ${ghost_name} COMMAND ${MPIEXEC_EXECUTABLE}
+                        ${MPIEXEC_NUMPROC_FLAG} ${ghost_ranks} ${MPIEXEC_PREFLAGS}
+                        $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS} --run.test=sphGhosts
+                        --run.darkMatterParticleCount=512 --run.gasParticleCount=512
+                        ${cosmictiger_test_hydro_args} --gravity.cuda=false --hydro.cuda=false
+                        --drift.cuda=false --hpx:threads=1 --hpx:bind=none
+                        --hpx:localities=${ghost_ranks} ${cosmictiger_mpi_transport_args}
+                        ${cosmictiger_test_integrator_args})
+                    set_tests_properties(${ghost_name} PROPERTIES
+                        WORKING_DIRECTORY "${ghost_workdir}" TIMEOUT 180
+                        PROCESSORS ${ghost_ranks} LABELS "sph;cpu;hpx;mpi")
+                endforeach()
+            endif()
+        endif()
             if(NOT COSMICTIGER_WITH_SPH OR NOT COSMICTIGER_WITH_CUDA OR
                     NOT COSMICTIGER_ENABLE_INTEGRATOR_TRADITIONAL)
                 continue()

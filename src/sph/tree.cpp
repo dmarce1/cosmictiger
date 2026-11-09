@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <exception>
 #include <memory>
@@ -26,6 +27,7 @@
 #include <cosmictiger/particles/domain.hpp>
 #include <cosmictiger/particles/particles.hpp>
 #include <cosmictiger/sph/flops.hpp>
+#include <cosmictiger/sph/ghosts.hpp>
 #include <cosmictiger/sph/particles.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/tree.hpp>
@@ -945,6 +947,20 @@ void sphTreeSetConverged(TreeId id, bool c) {
     nodes[id.index].converged = c;
 }
 
+TreeId sphTreeLocalRoot() {
+    return localRootId;
+}
+
+static std::atomic<std::int64_t> remoteNodeReads{0};
+
+std::int64_t sphTreeRemoteNodeReads() {
+    return remoteNodeReads.load();
+}
+
+void sphTreeResetRemoteNodeReads() {
+    remoteNodeReads = 0;
+}
+
 SphTreeNode const* sphTreeGetNode(TreeId id) {
     if (id.proc == hpxRank()) {
         ASSERT(id.index >= 0);
@@ -955,6 +971,13 @@ SphTreeNode const* sphTreeGetNode(TreeId id) {
 #endif
         return &nodes[id.index];
     } else {
+        // Ghost leaves serve remote leaves; rank-routing nodes still come from the cache.
+        if (sphGhostsActive()) {
+            if (auto const* ghost = sphGhostsFindNode(id)) {
+                return ghost;
+            }
+        }
+        remoteNodeReads++;
         return treeCacheRead(id);
     }
 }

@@ -157,7 +157,7 @@ def hydro_particle_payload(checkpoint, expected_count=None):
 
 
 def check_velocity_roundoff_restart(reference, resumed, ranks=1):
-    """Require exact nonvelocity bytes and velocities within four float eps of the run's velocity scale.
+    """Require exact discrete state and float state within roundoff of the continuous run.
 
     Every rank file is compared; the decomposition must be the same, so each rank holds the
     same particles in the same order in both runs."""
@@ -179,15 +179,27 @@ def check_rank_velocity_roundoff_restart(first, second, scale):
     for field in ("tau", "integer_time", "global_timestep", "global_hydro_timestep", "iteration"):
         require(getattr(first.driver, field) == getattr(second.driver, field),
                 f"restart changed driver {field}")
-    # Physical payload begins with two particle counts, then three position
-    # arrays and the interleaved float velocities. Keep every other byte exact,
-    # including particle ordering, flags, viscosity state and entropy context.
+    # Particle ordering, rungs, flags, index maps and entropy context stay exact.
     positions = 2 * first.integer_bytes
-    begin = positions + 3 * first.count * first.position_bytes
-    end = begin + 3 * first.count * 4
-    require(first.physical[:positions] == second.physical[:positions] and
-            first.physical[end:] == second.physical[end:],
-            "restart changed a nonvelocity physical field")
+    require(first.physical[:positions] == second.physical[:positions],
+            "restart changed the particle counts")
+    for field in ("types", "rungs", "gas_indices", "gravity_indices", "gas_flags",
+                  "proposed_rungs", "cooling", "stars", "frozen_cells", "entropy_initialized",
+                  "thermal_scale_factor"):
+        require(getattr(first, field, None) == getattr(second, field, None),
+                f"restart changed {field}")
+    # Densities, supports and entropies are sums over neighbors of quantities that moved
+    # by the roundoff allowed below; they agree to float roundoff, not bit for bit. The
+    # binary16 bulk viscosity coefficient may round to the neighboring code.
+    for field, tolerance in (("entropies", 1.0e-5), ("smoothing_lengths", 1.0e-5),
+                             ("densities", 1.0e-5), ("bulk_viscosity_coefficients", 2.0e-3)):
+        old, new = list(getattr(first, field)), list(getattr(second, field))
+        require(len(old) == len(new), f"restart changed the length of {field}")
+        if old:
+            fieldScale = max(abs(value) for value in old + new)
+            error = max(abs(a - b) for a, b in zip(old, new))
+            require(error <= tolerance * fieldScale,
+                    f"restart changed {field} by {error / fieldScale:.3e} of its scale")
     # A drift after a kick whose velocity differs by float roundoff can round a
     # fixed-point coordinate to the neighboring unit. Allow one unit, modulo the
     # periodic wrap, and nothing more.

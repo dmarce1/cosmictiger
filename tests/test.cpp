@@ -265,6 +265,8 @@ void starFormationParticlesTest();
 #endif
 void sphChemistryTimestepsTest();
 void sphTreeTest();
+void sphParentTreeTest();
+void sphGhostsTest();
 void sphOnlyDiagnosticsTest();
 void unitsOutputTest();
 void distributedOutputTest();
@@ -325,6 +327,8 @@ ApplicationTest const applicationTests[] = {
     {"checkpointState", checkpointStateTest},
 #if COSMICTIGER_WITH_SPH
     {"sphTree", sphTreeTest},
+    {"sphParentTree", sphParentTreeTest},
+    {"sphGhosts", sphGhostsTest},
 #endif
     {"domain", domainTest},
 #if COSMICTIGER_WITH_GRAVITY

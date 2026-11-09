@@ -241,6 +241,11 @@ bool sphTreeAllValid();
 // particle; otherwise only that exact rung moves. Refresh before global queries.
 void sphTreeDriftBounds(double driftFactor, int rung = -1);
 void sphTreeCacheClear();
+// This locality's local root, {-1, -1} when no tree is built here.
+TreeId sphTreeLocalRoot();
+// Remote nodes read through the tree-node cache on this locality since the last reset.
+std::int64_t sphTreeRemoteNodeReads();
+void sphTreeResetRemoteNodeReads();
 // Call after all tree consumers finish. Normal teardown invalidates caches but
 // retains the constructed arena for rebuilding; true explicitly releases it.
 void sphTreeDestroy(bool freeSphTree = false);

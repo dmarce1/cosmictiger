@@ -27,8 +27,10 @@
 #include <cosmictiger/math/vector3.hpp>
 #include <cosmictiger/sph/cpu.hpp>
 #include <cosmictiger/sph/flops.hpp>
+#include <cosmictiger/sph/ghosts.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/time_integration.hpp>
+#include <cosmictiger/sph/tree.hpp>
 #ifdef USE_CUDA
 #include <cosmictiger/sph/cuda.hpp>
 #endif
@@ -199,6 +201,31 @@ void sphClearNeighborState() {
     hpx::wait_all(futures.begin(), futures.end());
 }
 
+SphTreeNeighborReturn sphTreeNeighborLocalWalks(SphTreeNeighborParameters params);
+HPX_PLAIN_ACTION(sphTreeNeighborLocalWalks, SphTreeNeighborLocalWalksAction);
+
+// Collective: every locality walks its own local root against its local leaves and the ghost
+// leaves it holds (docs/sph_parent_tree_plan.md, 3.4). No remote node is visited.
+SphTreeNeighborReturn sphTreeNeighborLocalWalks(SphTreeNeighborParameters params) {
+    Vector<hpx::future<SphTreeNeighborReturn>> children;
+    children.reserve(hpxChildren().size());
+    for (auto const& child : hpxChildren()) {
+        children.push_back(hpx::async<SphTreeNeighborLocalWalksAction>(child, params));
+    }
+    SphTreeNeighborReturn result;
+    TreeId const root = sphTreeLocalRoot();
+    if (root.index >= 0) {
+        Vector<TreeId> checklist{root};
+        auto const& ghosts = sphGhostsLeafIds();
+        checklist.insert(checklist.end(), ghosts.begin(), ghosts.end());
+        result += sphTreeNeighbor(params, root, std::move(checklist), 1).get();
+    }
+    for (auto& child : children) {
+        result += child.get();
+    }
+    return result;
+}
+
 hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     SphTreeNeighborParameters params, TreeId self, Vector<TreeId> checklist, int level) {
     if (level == 0 && hpxRank() == 0 && hpxSize() > 1) {
@@ -215,6 +242,14 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     if (params.operation == SphNeighborOperation::FindNeighbors && checklist.size() == 0) {
         addCpuFlops(flops.counts());
         return hpx::make_ready_future(kr);
+    }
+    if (params.operation == SphNeighborOperation::FindNeighbors && level == 0 &&
+        sphGhostsActive()) {
+        // Export every leaf this walk can reach, then walk each locality locally.
+        ALWAYS_ASSERT(hpxRank() == 0);
+        sphGhostsSync();
+        addCpuFlops(flops.counts());
+        return hpx::make_ready_future(sphTreeNeighborLocalWalks(params));
     }
     ASSERT(self.proc == hpxRank());
     Vector<TreeId> nextlist;
@@ -654,6 +689,15 @@ void sphRunStage(SphRunParameters params, bool cuda) {
     }
     auto workspacePtr = detail::collectSphRunWork(params);
     if (!workspacePtr->hostTargetNodeIndices.empty()) {
+        // Every remote source must come from a ghost leaf while staging.
+        struct StagingScope {
+            StagingScope() {
+                sphGhostsBeginStaging();
+            }
+            ~StagingScope() {
+                sphGhostsEndStaging();
+            }
+        } staging;
         workspacePtr->stage();
     }
     detail::stagedSphRun = std::move(workspacePtr);
@@ -695,6 +739,10 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     // Each phase consumes gas fields updated by the preceding phase on every locality.
     if (hpxRank() == 0 && (hpxSize() > 1 || params.midpointHydro)) {
         sphParticlesClearCaches();
+        if (sphGhostsActive()) {
+            // Owners push the fields this pass reads before anyone stages.
+            sphGhostsRefresh();
+        }
         sphRunStage(params, cuda);
         auto result = sphRunCompute(cuda);
         if (params.midpointHydro && params.runType == kSphRunHydro && !params.deferPairCommit) {

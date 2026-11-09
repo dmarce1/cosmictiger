@@ -47,6 +47,8 @@ struct Compute {
     int sphBucketSize{};
     // Rebuild the SPH octree when this fraction of all particles is active.
     double sphTreeRebuildFraction{1.0 / 3.0};
+    // Serve remote SPH leaves from pushed ghost copies instead of remote fetches.
+    bool sphGhosts{true};
     int treeCacheLineSize{};
     int treeAllocLineSize{};
     int particleCacheLineSize{};
@@ -500,6 +502,7 @@ struct Options {
         arc & initial.darkMatterLatticeSide;
         arc & initial.gasLatticeSide;
         arc & scenario.kelvinHelmholz.packing;
+        arc & compute.sphGhosts;
     }
 };
 

@@ -15,6 +15,7 @@
 #include <cosmictiger/core/hpx.hpp>
 #include <cosmictiger/core/options.hpp>
 #include <cosmictiger/sph/flops.hpp>
+#include <cosmictiger/sph/ghosts.hpp>
 #include <cosmictiger/sph/particles.hpp>
 #include <cosmictiger/sph/sph.hpp>
 #include <cosmictiger/sph/time_integration.hpp>
@@ -111,6 +112,10 @@ void sphPrepareRungCandidates(bool initialize) {
     }
 }
 
+bool sphRungCandidatesActive() {
+    return detail::rungBalanceActive;
+}
+
 Vector<char> sphFetchRungCandidates(Pair<ParticleInteger> range) {
     ALWAYS_ASSERT(detail::rungBalanceActive && range.first >= 0 &&
         range.second <= detail::rungSnapshot.size());
@@ -126,6 +131,8 @@ void sphReadRungCandidates(ParticleGlobalRange range, char* rungs, ParticleInteg
         ALWAYS_ASSERT(detail::rungBalanceActive);
         std::copy(detail::rungSnapshot.begin() + range.range.first,
             detail::rungSnapshot.begin() + range.range.second, rungs + offset);
+    } else if (sphGhostsServe(range)) {
+        sphGhostsReadRungCandidates(range, rungs, offset);
     } else {
         auto const values =
             hpx::async<SphFetchRungCandidatesAction>(hpxLocalities()[range.proc], range.range)

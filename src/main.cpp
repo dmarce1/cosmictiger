@@ -53,6 +53,9 @@
 #include <cosmictiger/gravity/tree.hpp>
 #endif
 #include <cosmictiger/io/checkpoint.hpp>
+#if COSMICTIGER_WITH_SPH
+#include <cosmictiger/sph/ghosts.hpp>
+#endif
 #include <cosmictiger/io/output.hpp>
 #include <cosmictiger/math/fp16.hpp>
 #include <cosmictiger/math/position.hpp>
@@ -133,6 +136,20 @@ int hpx_main(int argc, char* argv[]) {
             } else {
 #endif
                 driver();
+#if COSMICTIGER_WITH_SPH
+                if (getOptions().hydro.enabled && sphGhostsActive()) {
+                    // Evidence that remote sources came from pushed ghost leaves.
+                    auto const ghosts = sphGhostsStatistics();
+                    std::cout << std::format("SPH ghosts: syncs={} refreshes={} leaves={} "
+                                             "particles={} exported leaves={} record bytes={} "
+                                             "field bytes={}\n",
+                                     ghosts.syncs, ghosts.refreshes, ghosts.leaves,
+                                     ghosts.particles, ghosts.exportedLeaves, ghosts.recordBytes,
+                                     ghosts.fieldBytes)
+                              << std::flush;
+                    sphGhostsClear();
+                }
+#endif
                 detail::writeProfile();
 #ifdef COSMICTIGER_BUILD_TESTING
             }

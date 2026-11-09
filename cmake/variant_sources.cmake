@@ -124,6 +124,8 @@ function(cosmictiger_feature_sources output)
             src/sph/rungs_cpu.cpp
             src/sph/tree.cpp
             src/sph/time_integration.cpp
+            src/sph/parent_tree.cpp
+            src/sph/ghosts.cpp
             src/scenarios/sphere.cpp
             src/scenarios/sphere.cu
         )
@@ -164,7 +166,8 @@ function(cosmictiger_feature_sources output)
         endif()
         if(COSMICTIGER_WITH_SPH)
             list(APPEND cosmictiger_source_files
-                tests/sph/tree.cpp tests/units_output.cpp tests/distributed_output.cpp)
+                tests/sph/tree.cpp tests/sph/parent_tree.cpp tests/sph/ghosts.cpp tests/units_output.cpp
+                tests/distributed_output.cpp)
             if(COSMICTIGER_ENABLE_CHEMISTRY)
                 list(APPEND cosmictiger_source_files tests/sph/chemistry.cpp)
             endif()
