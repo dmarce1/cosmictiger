@@ -198,7 +198,7 @@ preserving numerical results.
 
 `sph_flops_test`, `softening_flops_test` and `fmm_flops_test` use an independent
 arithmetic-intercepting number type to check the actual helper expressions,
-selected polynomial spans, centered/uncentered FMM kernels, potential branches,
+selected polynomial spans, source-dipole FMM kernels, potential branches,
 Ewald image cutoffs and scalar acceptance branches. `sph_cpu_test` checks that
 each production phase submits exactly its returned count. CUDA SPH fixtures
 check the same property against the global device total and independently count

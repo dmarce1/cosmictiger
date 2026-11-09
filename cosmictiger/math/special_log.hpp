@@ -78,25 +78,25 @@ namespace detail {
 #endif
     CUDA_EXPORT inline Real logPositiveNormal(Real value) {
         auto const reduced = reduceLog(value);
-        Real const t = (reduced.mantissa - simdBroadcast<Real>(1.0f)) /
-            (reduced.mantissa + simdBroadcast<Real>(1.0f));
+        Real const t = (reduced.mantissa - math::broadcast<Real>(1.0f)) /
+            (reduced.mantissa + math::broadcast<Real>(1.0f));
         Real const squared = t * t;
         constexpr float kScale = baseTwo ? 2.8853900817779268f : 2.0f;
         Real const pair0 =
-            simdFma(simdBroadcast<Real>(kScale / 3.0f), squared, simdBroadcast<Real>(kScale));
-        Real const pair1 = simdFma(
-            simdBroadcast<Real>(kScale / 7.0f), squared, simdBroadcast<Real>(kScale / 5.0f));
-        Real const pair2 = simdFma(
-            simdBroadcast<Real>(kScale / 11.0f), squared, simdBroadcast<Real>(kScale / 9.0f));
+            math::fma(math::broadcast<Real>(kScale / 3.0f), squared, math::broadcast<Real>(kScale));
+        Real const pair1 = math::fma(
+            math::broadcast<Real>(kScale / 7.0f), squared, math::broadcast<Real>(kScale / 5.0f));
+        Real const pair2 = math::fma(
+            math::broadcast<Real>(kScale / 11.0f), squared, math::broadcast<Real>(kScale / 9.0f));
         Real const fourth = squared * squared;
-        Real const polynomial = simdFma(simdFma(pair2, fourth, pair1), fourth, pair0);
+        Real const polynomial = math::fma(math::fma(pair2, fourth, pair1), fourth, pair0);
         if constexpr (baseTwo) {
-            return simdFma(t, polynomial, reduced.exponent);
+            return math::fma(t, polynomial, reduced.exponent);
         } else {
             Real const mantissaLog = t * polynomial;
             Real const low =
-                simdFma(reduced.exponent, simdBroadcast<Real>(-1.904654323148236e-9f), mantissaLog);
-            return simdFma(reduced.exponent, simdBroadcast<Real>(0.6931471824645996f), low);
+                math::fma(reduced.exponent, math::broadcast<Real>(-1.904654323148236e-9f), mantissaLog);
+            return math::fma(reduced.exponent, math::broadcast<Real>(0.6931471824645996f), low);
         }
     }
 
@@ -170,7 +170,7 @@ inline SimdFloat log(SimdFloat const& value) {
     using Unsigned = SimdVector<uint32_t, SimdFloat::size()>;
     Unsigned const bits = simdBitCast<Unsigned>(value);
     auto const normal = (bits >= Unsigned(0x00800000U)) && (bits < Unsigned(0x7f800000U));
-    if (!simdAllOf(normal)) {
+    if (!math::allOf(normal)) {
         for (size_t lane = 0; lane < SimdFloat::size(); ++lane) {
             if (!normal[lane]) {
                 simdSetLane(result, lane, ::logf(float(value[lane])));
@@ -185,7 +185,7 @@ inline SimdFloat log2(SimdFloat const& value) {
     using Unsigned = SimdVector<uint32_t, SimdFloat::size()>;
     Unsigned const bits = simdBitCast<Unsigned>(value);
     auto const normal = (bits >= Unsigned(0x00800000U)) && (bits < Unsigned(0x7f800000U));
-    if (!simdAllOf(normal)) {
+    if (!math::allOf(normal)) {
         for (size_t lane = 0; lane < SimdFloat::size(); ++lane) {
             if (!normal[lane]) {
                 simdSetLane(result, lane, ::log2f(float(value[lane])));

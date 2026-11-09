@@ -9,8 +9,8 @@ lane groups reduce one output each, followed by broadcasts of completed
 coefficients. All rank selection, trace reduction and factorial algebra happen
 here; CUDA executes a fixed schedule with no tensor-index traversal.
 
-One invocation emits one fully specialized ``L2LWarp<L, true>`` for the
-requested local degree L in 2..11. The schedule table, the per-phase target
+One invocation emits order-specific ``L2LWarp`` and ``L2LWarpInto`` functions
+for the requested local degree. The schedule table, the per-phase target
 table, the number of basis registers, the phase code and every lane-group width
 are compile-time constants of that degree; the emitted CUDA contains no runtime
 loop over degrees and no dynamically sized array.
@@ -36,11 +36,10 @@ def generateWarpL2l(order, algebra):
     if order < kMinDegree or order > kMaxDegree:
         raise ValueError(f'The CUDA warp L2L schedule supports local degrees {kMinDegree} '
                          f'through {kMaxDegree}; degree {order} was requested')
-    traceIndex = (order + 1)**2
-    coefficientCount = traceIndex + 1
+    coefficientCount = (order + 1)**2
     indexLimit = 1 << kIndexBits
     assert coefficientCount <= indexLimit, 'Coefficient indices must fit the packed entry'
-    basisWords = (traceIndex + kLanes - 1) // kLanes
+    basisWords = (coefficientCount + kLanes - 1) // kLanes
     outputs = []
     for rank in range(order):
         for alpha in algebra.indices(rank):
@@ -139,55 +138,26 @@ def generateWarpL2l(order, algebra):
              '// lanes hold zero and are excluded by the generated active-lane bounds.',
              f'static __device__ unsigned char const {targetsName}[{len(targets)}][{kLanes}] = {{']
     code += ['    {' + ', '.join(f'{value}u' for value in row) + '},' for row in targets]
-    code += ['};', '', 'template <int order, bool withTrace> class L2LWarp;',
-             f'template <> class L2LWarp<{order}, true> {{', 'public:']
+    code += ['};', '']
     reductions = sum(max(output[2] for _, output in groups).bit_length() - 1 for groups in phases)
-    fullFlops = sum(g.counts(fullLive).values()) * 32 + len(schedule) * 32 * 5 + reductions * 32 + len(outputs) + 6
-    baseFlops = sum(g.counts(baseLive).values()) * 32 + len(schedule) * 32 * 5 + reductions * 32 + len(outputs) + 2
+    fullFlops = sum(g.counts(fullLive).values()) * 32 + len(schedule) * 32 * 5 + reductions * 32 + len(outputs) + 2
+    baseFlops = sum(g.counts(baseLive).values()) * 32 + len(schedule) * 32 * 5 + reductions * 32 + len(outputs)
     # Keep the original raw basis DAG: unlike scalar accumulation outputs,
     # basis values are communicated between lanes and the top rank is conditional.
     # Existing contraction FMAs remain explicit and get both cost conventions.
-    fullWeightedFlops = fullFlops - len(schedule) * 32 - 2
-    baseWeightedFlops = baseFlops - len(schedule) * 32 - 1
-    code += ['    // Whole-warp emitted floating arithmetic; a fused operation counts twice.',
-             '    // Includes replicated basis work and padded rows, excludes index/shuffle work.',
-             f'    static constexpr int kFlops_ = {fullFlops};',
-             f'    static constexpr int kFlopsNoPotential_ = {baseFlops};',
-             f'    static constexpr int kWeightedFlops_ = {fullWeightedFlops};',
-             f'    static constexpr int kWeightedFlopsNoPotential_ = {baseWeightedFlops};',
-             f'    static constexpr int kDegree_ = {order};',
-             f'    static constexpr int kTraceIndex_ = {traceIndex};',
-             f'    static constexpr int kCoefficients_ = {coefficientCount};',
-             f'    static constexpr int kBasisWords_ = {basisWords};',
-             f'    static constexpr int kScheduleRows_ = {len(schedule)};',
-             f'    static constexpr int kPhases_ = {len(phases)};',
-             '    template <typename Real, typename Expansion, typename Source>',
-             '    __device__ static void translate(Expansion& target, Source const& source,',
-             '        Real const dx, Real const dy, Real const dz, bool doPhi) {',
-             '        // Contract: all 32 lanes enter with identical source/geometry; target',
-             '        // is private per lane. Every lane receives the complete expansion.',
-             '        execute<true>(target, source, dx, dy, dz, doPhi);',
-             '    }',
-             '    template <typename Real, typename Source>',
-             '    __device__ static void translateInto(Real* target, Source const& source,',
-             '        Real const dx, Real const dy, Real const dz, bool doPhi) {',
-             f'        // Contract: all 32 lanes enter with identical source/geometry; target',
-             f'        // addresses {coefficientCount} values that never alias source. Group leaders store',
-             '        // their coefficient once; strided lanes copy the unchanged ones. Every',
-             '        // source read and target write is complete when this returns.',
-             '        execute<false>(target, source, dx, dy, dz, doPhi);',
-             '    }',
-             '',
-             'private:',
-             '    template <bool kReplicate, typename Real, typename Target, typename Source>',
-             '    __device__ static void execute(Target& target, Source const& source,',
+    fullWeightedFlops = fullFlops - len(schedule) * 32
+    baseWeightedFlops = baseFlops - len(schedule) * 32
+    code += [f'template <> inline constexpr int kL2LWarpFlops<{order}> = {fullFlops};',
+             f'template <> inline constexpr int kL2LWarpNoPotentialFlops<{order}> = {baseFlops};',
+             'template <bool kReplicate, class Real, class Target>',
+             f'__device__ void executeL2LWarp(Target& target, Expansion<Real, {order+1}> const& source,',
              '        Real const dx, Real const dy, Real const dz, bool doPhi) {',
              '        int const lane = threadIdx.x & 31;',
              '        constexpr unsigned int kMask = 0xffffffffu;',
              f'        // {basisWords} register(s) per lane hold the complete distributed Taylor basis:',
              '        // basis index i lives in word i >> 5 on lane i & 31. Shuffles avoid a',
              '        // large register-selection tree for dynamic indexing.']
-    code += [f'        Real basis{word} = simdBroadcast<Real>(0);' for word in range(basisWords)]
+    code += [f'        Real basis{word} = math::broadcast<Real>(0);' for word in range(basisWords)]
     code += g.emitConstants(fullLive, '        ')
     code += g.emit(baseLive, indent='        ')
     for alpha, root in basis.items():
@@ -222,7 +192,7 @@ def generateWarpL2l(order, algebra):
         code += ['        {', f'            // Fixed contraction phase {phase}: {steps} rows, {len(groups)} outputs.',
                  f'            int const groupWidth = {widthExpression};',
                  f'            int const targetIndex = __ldg(&{targetsName}[{phase}][lane]);',
-                 '            Real partial = simdBroadcast<Real>(0);',
+                 '            Real partial = math::broadcast<Real>(0);',
                  '            #pragma unroll',
                  f'            for (int row = {begin}; row < {begin + steps}; ++row) {{',
                  f'                unsigned int entry = __ldg(&{scheduleName}[row][lane]);']
@@ -236,27 +206,19 @@ def generateWarpL2l(order, algebra):
                  f'                int const secondaryIndex = (entry >> {2 * kIndexBits}) & {indexLimit - 1}u;',
                  f'                int const kind = (entry >> {3 * kIndexBits}) & {(1 << kKindBits) - 1}u;',
                  '                Real const sourceValue = source[primaryIndex] +',
-                 '                    simdBroadcast<Real>(kind == 2) * source[secondaryIndex];']
+                 '                    math::broadcast<Real>(kind == 2) * source[secondaryIndex];']
         code += [f'                Real const basisValue{word} = __shfl_sync(kMask, basis{word}, basisIndex & 31);'
                  for word in range(basisWords)]
         code += [f'                Real const basisValue = {basisSelect};',
-                 '                Real const weight = simdBroadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;',
-                 '                partial = simdFma(weight, sourceValue, partial);', '            }']
+                 '                Real const weight = math::broadcast<Real>(kind == 0 ? 0 : (kind == 2 ? -1 : 1)) * basisValue;',
+                 '                partial = math::fma(weight, sourceValue, partial);', '            }']
         largestWidth = max(output[2] for _, output in groups)
         for shift in (1 << bit for bit in reversed(range(largestWidth.bit_length() - 1))):
             code += [f'            Real const shuffled{shift} = __shfl_down_sync(kMask, partial, {shift});',
-                     f'            partial += (lane & (groupWidth - 1)) + {shift} < groupWidth ? shuffled{shift} : simdBroadcast<Real>(0);']
+                     f'            partial += (lane & (groupWidth - 1)) + {shift} < groupWidth ? shuffled{shift} : math::broadcast<Real>(0);']
         code += [f'            bool const leader = (lane & (groupWidth - 1)) == 0 && lane < {activeLanes};',
                  '            if (leader) {',
                  '                partial += source[targetIndex];', '            }']
-        for firstLane, (target, alpha, width, terms) in groups:
-            if target == 0:
-                code += [f'            if (doPhi && lane == {firstLane}) {{',
-                         f'                partial = simdFma(simdBroadcast<Real>(0.5) * dz * dz, source[{traceIndex}], partial);',
-                         '            }']
-            elif alpha == (0, 0, 1):
-                code += [f'            if (lane == {firstLane}) {{',
-                         f'                partial = simdFma(dz, source[{traceIndex}], partial);', '            }']
         code.append('            if constexpr (kReplicate) {')
         for firstLane, (target, alpha, width, terms) in groups:
             code.append(f'                target[{target}] = __shfl_sync(kMask, partial, {firstLane});')
@@ -267,16 +229,16 @@ def generateWarpL2l(order, algebra):
                  '            }',
                  '        }']
     topIndices = [algebra.index(alpha) for alpha in algebra.indices(order)]
-    assert topIndices == list(range(order**2, traceIndex)), 'Top-rank coefficients must be contiguous'
+    assert topIndices == list(range(order**2, coefficientCount)), 'Top-rank coefficients must be contiguous'
     code.append('        if constexpr (kReplicate) {')
-    for index in topIndices + [traceIndex]:
+    for index in topIndices:
         code.append(f'            target[{index}] = source[{index}];')
     code += ['            if (!doPhi) {',
              '                target[0] = source[0];',
              '            }',
              '        } else {',
-             '            // Top-rank coefficients and the trace copy through unchanged.',
-             f'            for (int index = {order**2} + lane; index <= {traceIndex}; index += 32) {{',
+             '            // Top-rank coefficients copy through unchanged.',
+             f'            for (int index = {order**2} + lane; index < {coefficientCount}; index += 32) {{',
              '                target[index] = source[index];',
              '            }',
              '            // Lane zero led the potential group, so this restore is same-thread.',
@@ -287,9 +249,18 @@ def generateWarpL2l(order, algebra):
              '        // The caller may overwrite shared source storage from lane zero on',
              '        // return. Finish EVERY lane source read (and every target write)',
              '        // before permitting that write.',
-             '        __syncwarp(kMask);', '    }', '};', '#endif', '']
-    statistics = {'operator': 'CUDA_L2L_WARP', 'order': order, 'with_trace': True,
-                  'coefficients': coefficientCount,
+             '        __syncwarp(kMask);', '    }',
+             'template <class Real>',
+             f'__device__ void L2LWarp(Expansion<Real, {order+1}>& target,',
+             f'    Expansion<Real, {order+1}> const& source, Vector3<Real> const& distance, bool doPhi) {{',
+             '    executeL2LWarp<true>(target, source, distance[0], distance[1], distance[2], doPhi);',
+             '}',
+             'template <class Real>',
+             f'__device__ void L2LWarpInto(Real* target,',
+             f'    Expansion<Real, {order+1}> const& source, Vector3<Real> const& distance, bool doPhi) {{',
+             '    executeL2LWarp<false>(target, source, distance[0], distance[1], distance[2], doPhi);',
+             '}', '#endif', '']
+    statistics = {'operator': 'CUDA_L2L_WARP', 'order': order, 'coefficients': coefficientCount,
                   'schedule_rows': len(schedule), 'phases': len(phases),
                   'basis_words_per_lane': basisWords,
                   'shuffle_instructions_per_lane': reductions + len(outputs) + basisWords * len(schedule),

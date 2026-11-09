@@ -464,8 +464,16 @@ set_source_files_properties(src/particles/domain.cpp tests/mesh_domains.cpp PROP
 set(COSMICTIGER_GENERATED_FMM_DIR ${PROJECT_SOURCE_DIR}/cosmictiger/gravity/kernels)
 set(COSMICTIGER_GENERATED_FMM_FILES
     ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree_config.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree_m2l.hpp
-    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree_kernels.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree_types.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/geometry.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/p2m.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/p2l.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/m2m.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/m2l.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/m2p.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/l2l.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/l2p.hpp
+    ${COSMICTIGER_GENERATED_FMM_DIR}/cartesian_tracefree/l2l_warp.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical_kernels.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/spherical_ewald_kernels.hpp
     ${COSMICTIGER_GENERATED_FMM_DIR}/operation_counts.json)

@@ -211,7 +211,7 @@ template <typename Coefficients>
 void clear(Coefficients& values, double initial = 0) {
     using Real = std::remove_reference_t<decltype(values[0])>;
     for (int i = 0; i < values.kCount_; ++i) {
-        values[i] = simdBroadcast<Real>(initial);
+        values[i] = math::broadcast<Real>(initial);
     }
 }
 
@@ -266,7 +266,7 @@ void testSelected(spherical::Multipole<Real, degree + 1> const& source,
     clear(shifted, 0.125);
     spherical::detail::L2L<degree>::template add<Real>(shifted, local, x, y, z);
     std::array<Real, 4> field;
-    field.fill(simdBroadcast<Real>(0.125));
+    field.fill(math::broadcast<Real>(0.125));
     spherical::detail::L2P<degree>::template add<Real>(field, local, x, y, z);
     for (int laneIndex = 0; laneIndex < laneCount<Real>(); ++laneIndex) {
         compare(shifted, translateLocal(localOracle[laneIndex], shifts[laneIndex], degree, degree),
@@ -279,7 +279,7 @@ void testSelected(spherical::Multipole<Real, degree + 1> const& source,
         setLane(z, laneIndex, shifts[laneIndex][2] + 1.75);
     }
     clear(shifted, 0.125);
-    field.fill(simdBroadcast<Real>(0.125));
+    field.fill(math::broadcast<Real>(0.125));
     spherical::detail::M2L<degree>::template add<Real>(shifted, source, x, y, z);
     spherical::detail::M2P<degree>::template add<Real>(field, source, x, y, z);
     for (int laneIndex = 0; laneIndex < laneCount<Real>(); ++laneIndex) {

@@ -68,13 +68,8 @@ CUDA_EXPORT constexpr int fmmLocalHarmonicCoefficientCount(int order) {
     return fmmHarmonicCoefficientCount(fmmLocalDegree(order));
 }
 
-// The index of the constant Laplacian stored after the harmonic coefficients.
-CUDA_EXPORT constexpr int fmmLocalTraceIndex(int order) {
-    return fmmLocalHarmonicCoefficientCount(order);
-}
-
 CUDA_EXPORT constexpr int fmmLocalCoefficientCount(int order) {
-    return fmmLocalHarmonicCoefficientCount(order) + 1;
+    return fmmLocalHarmonicCoefficientCount(order);
 }
 
 // A positioned multipole stores NDIM Position positions followed by the coefficients.
@@ -129,8 +124,8 @@ static_assert(kPositionBits != 64 ||
     (fmmPositionedMultipoleStride(3) == 48 && fmmPositionedMultipoleStride(4) == 64 &&
         fmmPositionedMultipoleStride(7) == 176 && fmmPositionedMultipoleStride(8) == 224 &&
         fmmPositionedMultipoleStride(9) == 288));
-static_assert(fmmLocalExpansionBytes(3) == 40 && fmmLocalExpansionBytes(7) == 200 &&
-        fmmLocalExpansionBytes(9) == 328,
+static_assert(fmmLocalExpansionBytes(3) == 36 && fmmLocalExpansionBytes(7) == 196 &&
+        fmmLocalExpansionBytes(9) == 324,
     "Local expansion byte sizes");
 
 // Compile-time view of one order.
@@ -142,7 +137,6 @@ struct FmmOrder {
     static constexpr int kLocalDegree_ = fmmLocalDegree(order);
     static constexpr int kMultipoleCoefficients_ = fmmMultipoleCoefficientCount(order);
     static constexpr int kLocalHarmonicCoefficients_ = fmmLocalHarmonicCoefficientCount(order);
-    static constexpr int kLocalTraceIndex_ = fmmLocalTraceIndex(order);
     static constexpr int kLocalCoefficients_ = fmmLocalCoefficientCount(order);
     static constexpr int kPositionedMultipoleBytes_ = fmmPositionedMultipoleBytes(order);
     static constexpr int kPositionedMultipoleStride_ = fmmPositionedMultipoleStride(order);

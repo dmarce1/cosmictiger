@@ -50,7 +50,7 @@ void checkSoftening(radial_kernel::KernelTable<double> const& kernel, double rad
     // Execute the actual scalar-selected arithmetic routines with CountingReal.
     // This avoids specializing std::is_arithmetic for the instrumentation type.
     CountingReal::reset();
-    Real const q = simdSqrt(radiusSquared * unit);
+    Real const q = math::sqrt(radiusSquared * unit);
     if (selected < kernel.pieceCount) {
         force = radial_kernel::detail::forceOnPiece(kernel, selected, q) * unit;
         if (doPhi) {

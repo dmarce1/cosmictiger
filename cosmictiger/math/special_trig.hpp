@@ -26,12 +26,12 @@ CUDA_EXPORT inline void sincos(Real x, Real* sine, Real* cosine) {
         static_assert(std::is_same_v<typename Real::value_type, float>);
     }
 
-    Real const bound = simdBroadcast<Real>(16.0f);
+    Real const bound = math::broadcast<Real>(16.0f);
     bool outside;
     if constexpr (std::is_arithmetic_v<Real>) {
         outside = x > bound || x < -bound;
     } else {
-        outside = simdAnyOf((x > bound) | (x < -bound));
+        outside = math::anyOf((x > bound) | (x < -bound));
     }
     if (outside) {
         if constexpr (std::is_same_v<Real, float>) {
@@ -47,10 +47,10 @@ CUDA_EXPORT inline void sincos(Real x, Real* sine, Real* cosine) {
     }
 
     // Split pi/2 so cancellation near multiples of pi retains float accuracy.
-    Real const turns = detail::roundEven(x * simdBroadcast<Real>(0x1.45f306p-1f));
-    Real reduced = simdFma(-turns, simdBroadcast<Real>(0x1.921fb6p+0f), x);
-    reduced = simdFma(-turns, simdBroadcast<Real>(-0x1.777a5cp-25f), reduced);
-    reduced = simdFma(-turns, simdBroadcast<Real>(-0x1.ee59dap-50f), reduced);
+    Real const turns = detail::roundEven(x * math::broadcast<Real>(0x1.45f306p-1f));
+    Real reduced = math::fma(-turns, math::broadcast<Real>(0x1.921fb6p+0f), x);
+    reduced = math::fma(-turns, math::broadcast<Real>(-0x1.777a5cp-25f), reduced);
+    reduced = math::fma(-turns, math::broadcast<Real>(-0x1.ee59dap-50f), reduced);
 
     Real const squared = reduced * reduced;
     Real const fourth = squared * squared;
@@ -58,30 +58,30 @@ CUDA_EXPORT inline void sincos(Real x, Real* sine, Real* cosine) {
 
     // Estrin form exposes independent polynomial chains for sin and cos.
     Real const sineLow =
-        simdFma(simdBroadcast<Real>(1.0f / 120.0f), squared, simdBroadcast<Real>(-1.0f / 6.0f));
-    Real const sineHigh = simdFma(
-        simdBroadcast<Real>(1.0f / 362880.0f), squared, simdBroadcast<Real>(-1.0f / 5040.0f));
-    Real const sinePoly = simdFma(sineHigh, fourth, sineLow);
+        math::fma(math::broadcast<Real>(1.0f / 120.0f), squared, math::broadcast<Real>(-1.0f / 6.0f));
+    Real const sineHigh = math::fma(
+        math::broadcast<Real>(1.0f / 362880.0f), squared, math::broadcast<Real>(-1.0f / 5040.0f));
+    Real const sinePoly = math::fma(sineHigh, fourth, sineLow);
     Real const cosineLow =
-        simdFma(simdBroadcast<Real>(1.0f / 24.0f), squared, simdBroadcast<Real>(-1.0f / 2.0f));
+        math::fma(math::broadcast<Real>(1.0f / 24.0f), squared, math::broadcast<Real>(-1.0f / 2.0f));
     Real const cosineHigh =
-        simdFma(simdBroadcast<Real>(1.0f / 40320.0f), squared, simdBroadcast<Real>(-1.0f / 720.0f));
-    Real const cosinePoly = simdFma(
-        simdBroadcast<Real>(-1.0f / 3628800.0f), eighth, simdFma(cosineHigh, fourth, cosineLow));
-    Real const sineReduced = simdFma(reduced * squared, sinePoly, reduced);
-    Real const cosineReduced = simdFma(squared, cosinePoly, simdBroadcast<Real>(1.0f));
+        math::fma(math::broadcast<Real>(1.0f / 40320.0f), squared, math::broadcast<Real>(-1.0f / 720.0f));
+    Real const cosinePoly = math::fma(
+        math::broadcast<Real>(-1.0f / 3628800.0f), eighth, math::fma(cosineHigh, fourth, cosineLow));
+    Real const sineReduced = math::fma(reduced * squared, sinePoly, reduced);
+    Real const cosineReduced = math::fma(squared, cosinePoly, math::broadcast<Real>(1.0f));
 
     // turns is an exact integer in [-10, 10], so this remainder is exact.
-    Real const quadrant = simdFma(
-        detail::floor(turns * simdBroadcast<Real>(0.25f)), simdBroadcast<Real>(-4.0f), turns);
-    auto const zero = quadrant == simdBroadcast<Real>(0.0f);
-    auto const one = quadrant == simdBroadcast<Real>(1.0f);
-    auto const two = quadrant == simdBroadcast<Real>(2.0f);
-    Real const rotatedSine = simdSelect(zero, sineReduced,
-        simdSelect(one, cosineReduced, simdSelect(two, -sineReduced, -cosineReduced)));
-    *sine = simdSelect(x == simdBroadcast<Real>(0.0f), x, rotatedSine);
-    *cosine = simdSelect(zero, cosineReduced,
-        simdSelect(one, -sineReduced, simdSelect(two, -cosineReduced, sineReduced)));
+    Real const quadrant = math::fma(
+        detail::floor(turns * math::broadcast<Real>(0.25f)), math::broadcast<Real>(-4.0f), turns);
+    auto const zero = quadrant == math::broadcast<Real>(0.0f);
+    auto const one = quadrant == math::broadcast<Real>(1.0f);
+    auto const two = quadrant == math::broadcast<Real>(2.0f);
+    Real const rotatedSine = math::select(zero, sineReduced,
+        math::select(one, cosineReduced, math::select(two, -sineReduced, -cosineReduced)));
+    *sine = math::select(x == math::broadcast<Real>(0.0f), x, rotatedSine);
+    *cosine = math::select(zero, cosineReduced,
+        math::select(one, -sineReduced, math::select(two, -cosineReduced, sineReduced)));
 }
 
 template <class Real>

@@ -88,8 +88,8 @@ namespace detail {
 #endif
     CUDA_EXPORT inline Real refineRsqrt(Real value, Real estimate) {
         Real const product = value * estimate;
-        Real const residual = simdFma(-product, estimate, simdBroadcast<Real>(1.0f));
-        return simdFma(estimate * simdBroadcast<Real>(0.5f), residual, estimate);
+        Real const residual = math::fma(-product, estimate, math::broadcast<Real>(1.0f));
+        return math::fma(estimate * math::broadcast<Real>(0.5f), residual, estimate);
     }
 
 #if defined(__SSE__) && !defined(__CUDACC__)
@@ -140,7 +140,7 @@ CUDA_EXPORT inline double rsqrt(double value) {
 
 #ifndef __CUDACC__
 inline SimdFloat fma(SimdFloat const& first, SimdFloat const& second, SimdFloat const& third) {
-    return simdFma(first, second, third);
+    return math::fma(first, second, third);
 }
 
 inline SimdFloat sqrt(SimdFloat const& value) {
@@ -157,7 +157,7 @@ inline SimdFloat sqrt(SimdFloat const& value) {
 #endif
     return SimdFloat([&](auto lane) { return lanes[lane]; });
 #else
-    return simdSqrt(value);
+    return math::sqrt(value);
 #endif
 }
 
@@ -166,7 +166,7 @@ inline SimdFloat rsqrt(SimdFloat const& value) {
     using Unsigned = SimdVector<uint32_t, SimdFloat::size()>;
     Unsigned const bits = simdBitCast<Unsigned>(value);
     auto const normal = (bits >= Unsigned(0x00800000U)) && (bits < Unsigned(0x7f800000U));
-    if (simdAllOf(normal)) {
+    if (math::allOf(normal)) {
         return detail::refineRsqrt(value, detail::rootEstimate(value));
     }
     return SimdFloat([&](auto lane) { return special_functions::rsqrt(float(value[lane])); });

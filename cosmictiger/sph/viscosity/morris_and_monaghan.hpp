@@ -37,12 +37,12 @@ namespace morris_and_monaghan {
 template <typename Real>
 CUDA_EXPORT inline Real evolvedBulkViscosityCoefficient(
     Real αⁿ𞁑, Real αₘᵢₙ, Real αₘₐₓ, Real iτ𞁑, Real div_v_a, Real Δt) {
-    Real const S𞁑 = simdMax(-div_v_a, Real(0));
+    Real const S𞁑 = math::max(-div_v_a, Real(0));
     Real const Δt_over_τ𞁑 = Δt * iτ𞁑;
     // Shift by the floor so its preservation does not depend on cancellation.
     Real const αⁿ_plus_1𞁑 =
         αₘᵢₙ + (αⁿ𞁑 - αₘᵢₙ + Δt * S𞁑 * (αₘₐₓ - αₘᵢₙ)) / (Real(1) + Δt_over_τ𞁑 + Δt * S𞁑);
-    return simdSelect(Δt == Real(0), αⁿ𞁑, αⁿ_plus_1𞁑);
+    return math::select(Δt == Real(0), αⁿ𞁑, αⁿ_plus_1𞁑);
 }
 
 }    // namespace morris_and_monaghan

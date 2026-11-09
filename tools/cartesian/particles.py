@@ -20,57 +20,52 @@ def finish(A,g,outputs,signature,name,order,extra=None):
     live=g.live(root for root,sign in signed)
     plan=A.EmissionPlan(g,signed)
     stats=plan.statistics(live,range(len(signed)))
-    signature,unused=signature.rsplit('\n',1)
     code=[signature]
     code+=g.emitConstants(live)
-    code.append(unused)
     code+=plan.emit(live)
     for output,target in enumerate(outputs):
         code+=plan.accumulate(target,output)
-    code+=['\t}','};','']
+    code+=['}','']
     stats.update({'operator':name,'order':order})
-    code[0] = code[0].replace('public:',
-        f"public:\n\tstatic constexpr int kFlops_ = {stats['conventional_flops']};"
-        f"\n\tstatic constexpr int kWeightedFlops_ = {stats['weighted_flops']};",1)
     if extra: stats.update(extra)
     return '\n'.join(code),stats
 
 
 def p2l(A,P):
     g=A.Dag()
-    u=[g.symbol(x) for x in ('ux','uy','uz')]
-    invr=g.symbol('inverseRadius'); ratio=g.symbol('targetRatio')
+    invr=g.symbol('iR')
+    u=[g.mul(g.symbol(x), invr) for x in ('dx','dy','dz')]
     weight=g.scale(g.mul(invr,g.symbol('mass')),-1)
     squared=[g.mul(x,x) for x in u]
     outputs={}
     for k in range(P+1):
-        if k: weight=g.mul(weight,ratio)
+        if k: weight=g.mul(weight,invr)
         for a in A.indices(k):
             coefficient=weight
             for axis in range(A.NDIM):
                 if a[axis]%2: coefficient=g.mul(coefficient,u[axis])
             polynomial={tuple(v//2 for v in power):g.const(c)
                         for power,c in A.radialPolynomial(0,a).items()}
-            outputs[f'local[{A.index(a)}]']=g.mul(coefficient,A.horner(g,polynomial,squared))
-    signature=f'''template <> class P2L<{P}> {{
-public:
-\ttemplate <typename Real, typename Expansion>
-\tCUDA_EXPORT static void add(Expansion& local, Real mass,
-\t\tReal ux, Real uy, Real uz, Real inverseRadius, Real targetRatio) {{
-\t\t(void) ux; (void) uy; (void) uz; (void) targetRatio;'''
+            outputs[f'L[{A.index(a)}]']=g.mul(coefficient,A.horner(g,polynomial,squared))
+    signature=f'''template <class Real> CUDA_EXPORT void P2L(
+    Expansion<Real, {P+1}>& L, Real mass, Vector3<Real> const& distance) {{
+    Real const iR = inverseRadius(distance);
+    Real const dx = distance[0];
+    Real const dy = distance[1];
+    Real const dz = distance[2];
+'''
     return finish(A,g,outputs,signature,'P2L',P)
 
 
-def m2p(A,P,centered):
+def m2p(A,P):
     g=A.Dag()
-    u=[g.symbol(x) for x in ('ux','uy','uz')]
-    invr=g.symbol('inverseRadius'); eta=g.symbol('sourceRatio')
+    invr=g.symbol('iR')
+    u=[g.mul(g.symbol(x), invr) for x in ('dx','dy','dz')]
     B=A.dualBasis(g,u,P)
     weight=g.one; scalar=[]; radial=[]; vector=[[] for _ in range(A.NDIM)]
     for n in range(P+1):
-        if n: weight=g.scale(g.mul(weight,eta),2*n-1)
-        if centered and n==1: continue
-        M={a:g.symbol(f'source[{A.index(a)}]') for a in A.indices(n)}
+        if n: weight=g.scale(g.mul(weight,invr),2*n-1)
+        M={a:g.symbol(f'M[{A.index(a)}]') for a in A.indices(n)}
         if n==0:
             value=M[(0,0,0)]
         else:
@@ -89,13 +84,15 @@ def m2p(A,P,centered):
     outputs={'field[0]':potential}
     for axis in range(A.NDIM):
         outputs[f'field[{axis+1}]']=g.mul(r2inv,g.sub(g.add(*vector[axis]),g.mul(u[axis],radial)))
-    signature=f'''template <> class M2P<{P}, {str(centered).lower()}> {{
-public:
-\ttemplate <typename Real, typename Field, typename Source>
-\tCUDA_EXPORT static void add(Field& field, Source const& source,
-\t\tReal ux, Real uy, Real uz, Real inverseRadius, Real sourceRatio) {{
-\t\t(void) sourceRatio;'''
-    return finish(A,g,outputs,signature,'M2P',P,{'centered':centered})
+    signature=f'''template <class Real> CUDA_EXPORT void M2P(
+    gravity::Field<Real>& field, Multipole<Real, {P+2}> const& M,
+    Vector3<Real> const& distance) {{
+    Real const iR = inverseRadius(distance);
+    Real const dx = distance[0];
+    Real const dy = distance[1];
+    Real const dz = distance[2];
+'''
+    return finish(A,g,outputs,signature,'M2P',P)
 
 
 def p2m(A, order):
@@ -108,54 +105,49 @@ def p2m(A, order):
         for alpha in A.indices(degree):
             polynomial = {power: g.const(coefficient)
                           for power, coefficient in cartesianMonomial(alpha)}
-            outputs[f'target[{A.index(alpha)}]'] = g.mul(
+            outputs[f'M[{A.index(alpha)}]'] = g.mul(
                 mass, A.horner(g, polynomial, displacement))
-    signature = f'''template <> class P2M<{order}> {{
-public:
-\ttemplate <typename Real, typename Multipole>
-\tCUDA_EXPORT static void add(Multipole& target, Real mass,
-\t\tReal dx, Real dy, Real dz) {{
-\t\t(void) dx; (void) dy; (void) dz;'''
+    signature = f'''template <class Real> CUDA_EXPORT void P2M(
+    Multipole<Real, {order+2}>& M, Real mass, Vector3<Real> const& distance) {{
+    Real const dx = distance[0];
+    Real const dy = distance[1];
+    Real const dz = distance[2];
+'''
     return finish(A, g, outputs, signature, 'P2M', order)
 
 
-def l2p(A, order, withTrace):
+def l2p(A, order):
     """Evaluate a local Taylor polynomial and its negative gradient."""
     g = A.Dag()
     displacement = [g.symbol(name) for name in ('dx', 'dy', 'dz')]
     inverseScale = g.symbol('inverseScale')
     basis = A.dualBasis(g, displacement, order)
-    source = {alpha: g.symbol(f'source[{A.index(alpha)}]')
+    source = {alpha: g.symbol(f'L[{A.index(alpha)}]')
               for degree in range(order + 1) for alpha in A.indices(degree)}
     get = A.accessor(g, source)
     outputs = {}
-    trace = g.symbol(f'source[{(order + 1)**2}]') if withTrace else g.zero
     for component in range(A.NDIM + 1):
         alpha = tuple(int(component == axis + 1) for axis in range(A.NDIM))
         terms = [g.mul(get(A.plus(alpha, beta)), basis[beta])
                  for degree in range(order - sum(alpha) + 1)
                  for beta in A.indices(degree)]
-        if withTrace and component == 0:
-            terms.append(g.scale(g.mul(trace, g.mul(displacement[2], displacement[2])), Q(1, 2)))
-        elif withTrace and component == 3:
-            terms.append(g.mul(trace, displacement[2]))
         value = g.add(*terms)
         outputs[f'field[{component}]'] = value if component == 0 else g.scale(g.mul(inverseScale, value), -1)
-    signature = f'''template <> class L2P<{order}, {str(withTrace).lower()}> {{
-public:
-\ttemplate <typename Real, typename Field, typename Source>
-\tCUDA_EXPORT static void add(Field& field, Source const& source,
-\t\tReal dx, Real dy, Real dz, Real inverseScale) {{
-\t\t(void) dx; (void) dy; (void) dz; (void) inverseScale;'''
-    return finish(A, g, outputs, signature, 'L2P', order, {'with_trace': withTrace})
+    signature = f'''template <class Real> CUDA_EXPORT void L2P(
+    gravity::Field<Real>& field, Expansion<Real, {order+1}> const& L,
+    Vector3<Real> const& distance, Real inverseScale) {{
+    Real const dx = distance[0];
+    Real const dy = distance[1];
+    Real const dz = distance[2];
+'''
+    return finish(A, g, outputs, signature, 'L2P', order)
 
 
 def generateParticles(minOrder,maxOrder,algebra):
     code=[]
     stats=[]
     for operation, args in [(p2m, (minOrder,)), (p2l, (maxOrder,)),
-                            (m2p, (minOrder, True)), (m2p, (minOrder, False)),
-                            (l2p, (maxOrder, False)), (l2p, (maxOrder, True))]:
+                            (m2p, (minOrder,)), (l2p, (maxOrder,))]:
         text, counts = operation(algebra, *args)
         code.append(text)
         stats.append(counts)

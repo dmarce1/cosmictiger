@@ -110,7 +110,7 @@ def m2mDirect(order, algebra):
     g = algebra.Dag()
     displacement = [g.symbol(name) for name in ('dx', 'dy', 'dz')]
     ratio = coordinatePowers(g, g.symbol('scaleRatio'), order)
-    scaled = {a: g.mul(ratio[n], g.symbol(f'source[{algebra.index(a)}]'))
+    scaled = {a: g.mul(ratio[n], g.symbol(f'M[{algebra.index(a)}]'))
               for n in range(order+1) for a in algebra.indices(n)}
     result = {}
     for n in range(order+1):
@@ -155,7 +155,7 @@ def m2mCompact(order, algebra):
     displacement = [g.symbol(name) for name in ('dx', 'dy', 'dz')]
     ratio = coordinatePowers(g, g.symbol('scaleRatio'), order)
     basis = algebra.dualBasis(g, displacement, order)
-    scaled = {a: g.mul(ratio[n], g.symbol(f'source[{algebra.index(a)}]'))
+    scaled = {a: g.mul(ratio[n], g.symbol(f'M[{algebra.index(a)}]'))
               for n in range(order+1) for a in algebra.indices(n)}
     equivalent = {}
     for n in range(order):
@@ -194,17 +194,15 @@ def m2m(order, algebra):
     return min(candidates, key=cost)
 
 
-def l2l(order, withTrace, algebra):
+def l2l(order, algebra):
     g = algebra.Dag()
     displacement = [g.symbol(name) for name in ('dx', 'dy', 'dz')]
-    ratio = coordinatePowers(g, g.symbol('scaleRatio'), max(order, 2 if withTrace else 0))
+    ratio = coordinatePowers(g, g.symbol('scaleRatio'), order)
     basis = algebra.dualBasis(g, displacement, order)
-    source = {a: g.symbol(f'source[{algebra.index(a)}]')
+    source = {a: g.symbol(f'L[{algebra.index(a)}]')
               for n in range(order+1) for a in algebra.indices(n)}
     get = algebra.accessor(g, source)
     result = {}
-    traceIndex = (order+1)**2
-    trace = g.symbol(f'source[{traceIndex}]') if withTrace else g.zero
     for n in range(order+1):
         for alpha in algebra.indices(n):
             terms = []
@@ -212,67 +210,56 @@ def l2l(order, withTrace, algebra):
                 for beta in algebra.indices(j):
                     index = tuple(a+b for a, b in zip(alpha, beta))
                     terms.append(g.mul(get(index), basis[beta]))
-            # The compact coefficients represent a harmonic polynomial plus
-            # lambda*z^2/2. Only these two stored derivatives see that term.
-            if withTrace and alpha == (0, 0, 0):
-                terms.append(g.scale(g.mul(trace, g.mul(displacement[2], displacement[2])), Q(1, 2)))
-            elif withTrace and alpha == (0, 0, 1):
-                terms.append(g.mul(trace, displacement[2]))
             result[algebra.index(alpha)] = g.mul(ratio[n], g.add(*terms))
-    if withTrace:
-        result[traceIndex] = g.mul(ratio[2], trace)
     return g, result
 
 
-def emit(operator, order, withTrace, algebra):
+def emit(operator, order, algebra):
     if operator == 'M2M':
         g, result = m2m(order, algebra)
-        specialization = f'M2M<{order}>'
-        targetType = 'Multipole'
+        destination = 'targetM'
+        source = 'M'
+        data_type = 'Multipole'
+        fmm_order = order + 2
     else:
-        g, result = l2l(order, withTrace, algebra)
-        specialization = f'L2L<{order}, {str(withTrace).lower()}>'
-        targetType = 'Expansion'
+        g, result = l2l(order, algebra)
+        destination = 'targetL'
+        source = 'L'
+        data_type = 'Expansion'
+        fmm_order = order + 1
     g, signed = algebra.normalizeSigns(g, list(result.values()))
     result = dict(zip(result, signed))
     live = g.live(root for root, _ in result.values())
     plan = algebra.EmissionPlan(g, signed)
     statistics = plan.statistics(live, range(len(signed)))
-    lines = [f'template <> class {specialization} {{',
-             'public:',
-             f'\ttemplate <typename Real, typename {targetType}, typename Source>',
-             f'\tCUDA_EXPORT static void add({targetType}& target, Source const& source,',
-             '\t\tReal const dx, Real const dy, Real const dz, Real const scaleRatio) {']
+    lines = [f'template <class Real> CUDA_EXPORT void {operator}(',
+             f'    {data_type}<Real, {fmm_order}>& {destination},',
+             f'    {data_type}<Real, {fmm_order}> const& {source},',
+             '    Vector3<Real> const& distance, Real scaleRatio) {',
+             '    Real const dx = distance[0];',
+             '    Real const dy = distance[1];',
+             '    Real const dz = distance[2];']
     lines.extend(g.emitConstants(live))
-    lines.append('\t\t(void) dx; (void) dy; (void) dz; (void) scaleRatio;')
     lines.extend(plan.emit(live))
     for output, index in enumerate(result):
-        lines.extend(plan.accumulate(f'target[{index}]', output))
-    lines.extend(['\t}', '};', ''])
+        lines.extend(plan.accumulate(f'{destination}[{index}]', output))
+    lines.extend(['}', ''])
     statistics.update({'operator': operator, 'order': order})
-    lines.insert(2, f"\tstatic constexpr int kFlops_ = {statistics['conventional_flops']};")
-    lines.insert(3, f"\tstatic constexpr int kWeightedFlops_ = {statistics['weighted_flops']};")
-    if operator == 'L2L':
-        statistics['with_trace'] = withTrace
     return '\n'.join(lines), statistics
 
 
 def generateTranslations(minOrder, maxOrder, algebra):
     """Return C++ definitions and operation counts for the inclusive range.
 
-    The caller emits these definitions inside the cartesian namespace. Traceful
-    L2L requires at least quadratic order; ordinary translations also support
-    orders zero and one. No fixed maximum order is imposed by this module.
+    The caller emits these definitions inside the Cartesian namespace.
+    No fixed maximum order is imposed by this module.
     """
     if minOrder < 0 or maxOrder < minOrder:
         raise ValueError('Translation orders must form a nonnegative inclusive range')
-    definitions = ['template <int order> class M2M;',
-                   'template <int order, bool withTrace> class L2L;', '']
+    definitions = []
     statistics = []
-    for operator, order, withTrace in [('M2M', minOrder, False),
-                                       ('L2L', maxOrder, False),
-                                       ('L2L', maxOrder, True)]:
-        code, counts = emit(operator, order, withTrace, algebra)
+    for operator, order in [('M2M', minOrder), ('L2L', maxOrder)]:
+        code, counts = emit(operator, order, algebra)
         definitions.append(code)
         statistics.append(counts)
     return definitions, statistics

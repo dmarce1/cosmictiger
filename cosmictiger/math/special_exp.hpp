@@ -20,12 +20,12 @@ namespace detail {
     CUDA_EXPORT inline Real expPolynomial(Real r) {
         Real const r2 = r * r;
         Real const r4 = r2 * r2;
-        Real const p01 = simdFma(r, simdBroadcast<Real>(1), simdBroadcast<Real>(1));
-        Real const p23 = simdFma(r, simdBroadcast<Real>(1.0 / 6), simdBroadcast<Real>(0.5));
-        Real const p45 = simdFma(r, simdBroadcast<Real>(1.0 / 120), simdBroadcast<Real>(1.0 / 24));
+        Real const p01 = math::fma(r, math::broadcast<Real>(1), math::broadcast<Real>(1));
+        Real const p23 = math::fma(r, math::broadcast<Real>(1.0 / 6), math::broadcast<Real>(0.5));
+        Real const p45 = math::fma(r, math::broadcast<Real>(1.0 / 120), math::broadcast<Real>(1.0 / 24));
         Real const p67 =
-            simdFma(r, simdBroadcast<Real>(1.0 / 5040), simdBroadcast<Real>(1.0 / 720));
-        return simdFma(r4, simdFma(r2, p67, p45), simdFma(r2, p23, p01));
+            math::fma(r, math::broadcast<Real>(1.0 / 5040), math::broadcast<Real>(1.0 / 720));
+        return math::fma(r4, math::fma(r2, p67, p45), math::fma(r2, p23, p01));
     }
 
     // x + tail is the argument. The caller supplies finite x in [-87, 88] and
@@ -36,9 +36,9 @@ namespace detail {
     [[gnu::always_inline]]
 #endif
     CUDA_EXPORT inline Real expWithTail(Real x, Real tail) {
-        Real const n = detail::roundEven(x * simdBroadcast<Real>(0x1.715476p+0f));
-        Real r = simdFma(-n, simdBroadcast<Real>(0x1.62e430p-1f), x);
-        r = simdFma(n, simdBroadcast<Real>(0x1.05c610p-29f), r);
+        Real const n = detail::roundEven(x * math::broadcast<Real>(0x1.715476p+0f));
+        Real r = math::fma(-n, math::broadcast<Real>(0x1.62e430p-1f), x);
+        r = math::fma(n, math::broadcast<Real>(0x1.05c610p-29f), r);
         r += tail;
         return expPolynomial(r) * detail::powerOfTwo(n);
     }
@@ -50,7 +50,7 @@ namespace detail {
     CUDA_EXPORT inline Real exp2Normal(Real x) {
         Real const n = detail::roundEven(x);
         Real const fraction = x - n;
-        Real const r = fraction * simdBroadcast<Real>(0x1.62e430p-1f);
+        Real const r = fraction * math::broadcast<Real>(0x1.62e430p-1f);
         return detail::expPolynomial(r) * detail::powerOfTwo(n);
     }
 
@@ -68,16 +68,16 @@ CUDA_EXPORT inline Real exp(Real x) {
     } else {
         static_assert(std::is_same_v<typename Real::value_type, float>);
     }
-    auto const inRange = (x >= simdBroadcast<Real>(-87)) && (x <= simdBroadcast<Real>(88));
-    if (simdAllOf(inRange)) {
-        return detail::expWithTail(x, simdBroadcast<Real>(0));
+    auto const inRange = (x >= math::broadcast<Real>(-87)) && (x <= math::broadcast<Real>(88));
+    if (math::allOf(inRange)) {
+        return detail::expWithTail(x, math::broadcast<Real>(0));
     }
     if constexpr (std::is_arithmetic_v<Real>) {
         return ::expf(x);
     } else {
 #ifndef __CUDACC__
-        Real const safe = simdSelect(inRange, x, simdBroadcast<Real>(0));
-        Real result = detail::expWithTail(safe, simdBroadcast<Real>(0));
+        Real const safe = math::select(inRange, x, math::broadcast<Real>(0));
+        Real result = detail::expWithTail(safe, math::broadcast<Real>(0));
         for (size_t lane = 0; lane < Real::size(); ++lane) {
             if (!inRange[lane]) {
                 simdSetLane(result, lane, std::exp(float(x[lane])));
@@ -98,15 +98,15 @@ CUDA_EXPORT inline Real exp2(Real x) {
     } else {
         static_assert(std::is_same_v<typename Real::value_type, float>);
     }
-    auto const inRange = (x >= simdBroadcast<Real>(-126)) && (x <= simdBroadcast<Real>(127));
-    if (simdAllOf(inRange)) {
+    auto const inRange = (x >= math::broadcast<Real>(-126)) && (x <= math::broadcast<Real>(127));
+    if (math::allOf(inRange)) {
         return detail::exp2Normal(x);
     }
     if constexpr (std::is_arithmetic_v<Real>) {
         return ::exp2f(x);
     } else {
 #ifndef __CUDACC__
-        Real const safe = simdSelect(inRange, x, simdBroadcast<Real>(0));
+        Real const safe = math::select(inRange, x, math::broadcast<Real>(0));
         Real result = detail::exp2Normal(safe);
         for (size_t lane = 0; lane < Real::size(); ++lane) {
             if (!inRange[lane]) {

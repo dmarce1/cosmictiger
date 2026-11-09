@@ -49,7 +49,7 @@ void testArithmetic() {
     auto const less = left < Pack(Value(0));
     auto const equal = left == Pack(Value(0));
     auto const greaterEqual = left >= Pack(Value(0));
-    auto const selected = simdSelect(less, Pack(Value(-1)), Pack(Value(2)));
+    auto const selected = math::select(less, Pack(Value(-1)), Pack(Value(2)));
     for (int lane = 0; lane < laneCount; ++lane) {
         Value const expected = Value((lane - 3) * (lane + 1));
         require(product[lane] == expected, "SIMD multiplication must update every lane");
@@ -59,9 +59,9 @@ void testArithmetic() {
         require(greaterEqual[lane] == (lane >= 3), "SIMD comparison complement is wrong");
         require(selected[lane] == Value(lane < 3 ? -1 : 2), "SIMD masks must select lanes");
     }
-    require(simdAllOf(less | greaterEqual), "Complementary SIMD masks must cover every lane");
-    require(!simdAnyOf(less & greaterEqual), "Complementary SIMD masks must not overlap");
-    require(simdAnyOf(equal) == (laneCount > 3), "SIMD any-of must inspect every lane");
+    require(math::allOf(less | greaterEqual), "Complementary SIMD masks must cover every lane");
+    require(!math::anyOf(less & greaterEqual), "Complementary SIMD masks must not overlap");
+    require(math::anyOf(equal) == (laneCount > 3), "SIMD any-of must inspect every lane");
     require(simdSum(left) == expectedSum, "SIMD sum must include all lanes");
     require(simdMaximum(left) == Value(laneCount - 4), "SIMD maximum must include all lanes");
 }
@@ -115,13 +115,13 @@ void testPrimitives() {
                 "Setting a SIMD lane must preserve every other lane");
         }
     }
-    auto const roots = simdSqrt(lanes * lanes);
+    auto const roots = math::sqrt(lanes * lanes);
     auto const inverseRoots = simdRsqrt(lanes * lanes);
     Value const epsilon = std::numeric_limits<Value>::epsilon();
     Pack const first([&](auto lane) { return Value(1) + Value(int(lane) + 1) * epsilon; });
     Pack const second([&](auto lane) { return Value(1) - Value(int(lane) + 1) * epsilon; });
     Pack const third(Value(-1));
-    auto const fused = simdFma(first, second, third);
+    auto const fused = math::fma(first, second, third);
     for (int lane = 0; lane < laneCount; ++lane) {
         Value const offset = Value(lane + 1) * epsilon;
         // (1 + offset) * (1 - offset) - 1 is exactly -offset squared;
@@ -165,8 +165,8 @@ void testPeriodicSubtraction() {
                 "Periodic displacement conversion must preserve the wrapped sign");
         }
     }
-    auto const upperBits = simdBroadcast<IntPack>(uint32_t(0xffffffffU));
-    auto const signBit = simdBroadcast<IntPack>(uint32_t(0x80000000U));
+    auto const upperBits = math::broadcast<IntPack>(uint32_t(0xffffffffU));
+    auto const signBit = math::broadcast<IntPack>(uint32_t(0x80000000U));
     IntPack const laneValues([](auto lane) { return int(lane) + 2; });
     auto const squared = laneValues * laneValues;
     for (int lane = 0; lane < laneCount; ++lane) {
@@ -195,7 +195,7 @@ void testPartialPackets() {
             return index < count ? float(index + 1) * 0.125f : 123.0f;
         });
         auto const active = indices < Pack(float(count));
-        accumulated += simdSelect(active, values * values, Pack(0.0f));
+        accumulated += math::select(active, values * values, Pack(0.0f));
     }
     require(
         simdSum(accumulated) == expected, "Inactive lanes must not contribute to a partial packet");

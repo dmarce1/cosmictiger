@@ -123,11 +123,11 @@ void testPeriodicBoxSphere() {
     Vector3<Position> point;
     for (int dim = 0; dim < kDimensions; dim++) {
         point[dim] = dim == kXi ? 0.01 : 0.25;
-        simdPoints[dim] = simdBroadcast<SimdPosition>(point[dim].raw());
+        simdPoints[dim] = math::broadcast<SimdPosition>(point[dim].raw());
     }
     require(boxIntersectsSphere(box, point, 0.03f),
         "Box-sphere test must account for the periodic boundary");
-    require(simdAllOf(boxIntersectsSphere(simdBox, simdPoints, SimdFloat(0.03f))),
+    require(math::allOf(boxIntersectsSphere(simdBox, simdPoints, SimdFloat(0.03f))),
         "SIMD box-sphere test must account for the periodic boundary");
 
     for (int dim = 0; dim < kDimensions; dim++) {
@@ -142,7 +142,7 @@ void testPeriodicBoxSphere() {
     constexpr PositionInteger kBoundaryTicks = kPositionBits == 64 ? 8 : 1;
     point[kXi].raw() += kBoundaryTicks;
     for (int dim = 0; dim < kDimensions; dim++) {
-        simdPoints[dim] = simdBroadcast<SimdPosition>(point[dim].raw());
+        simdPoints[dim] = math::broadcast<SimdPosition>(point[dim].raw());
     }
     double const boundaryDistance = kBoundaryTicks * Position::kToFloatFactor_;
     float const boundaryDistanceSquared = float(boundaryDistance * boundaryDistance);
@@ -156,7 +156,7 @@ void testPeriodicBoxSphere() {
         simdBox.begin[kXi] = 0.0;
         simdBox.end[kXi] = 0.125;
         point[kXi].setInteger(PositionInteger(0) - kBoundaryTicks);
-        simdPoints[kXi] = simdBroadcast<SimdPosition>(point[kXi].raw());
+        simdPoints[kXi] = math::broadcast<SimdPosition>(point[kXi].raw());
         require(boxDistanceSquared(box, point) == boundaryDistanceSquared,
             "Q0.64 box distance retains low bits across the periodic boundary");
         require(boxDistanceSquared(simdBox, simdPoints)[0] == boundaryDistanceSquared,

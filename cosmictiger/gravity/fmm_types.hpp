@@ -159,12 +159,16 @@ struct ExpansionBuffer {
     }
     template <class A>
     void serialize(A&& arc, unsigned) {
-        int const count = fmmLocalCoefficientCount(fmmOrder());
-        for (int i = 0; i < count; i++) {
-            arc& coefficients[i];
-        }
+        fmmDispatch([&](auto orderTag) {
+            constexpr int order = decltype(orderTag)::value;
+            for (int i = 0; i < fmmLocalCoefficientCount(order); i++) {
+                arc& coefficients[i];
+            }
+        });
     }
 };
+
+static_assert(sizeof(ExpansionBuffer) == sizeof(float) * kFmmMaxLocalCoefficients);
 
 struct MultipoleBuffer {
     Array<float, kFmmMaxMultipoleCoefficients> coefficients;
@@ -202,9 +206,11 @@ struct MultipoleBuffer {
     }
     template <class A>
     void serialize(A&& arc, unsigned) {
-        int const count = fmmMultipoleCoefficientCount(fmmOrder());
-        for (int i = 0; i < count; i++) {
-            arc& coefficients[i];
-        }
+        fmmDispatch([&](auto orderTag) {
+            constexpr int order = decltype(orderTag)::value;
+            for (int i = 0; i < fmmMultipoleCoefficientCount(order); i++) {
+                arc& coefficients[i];
+            }
+        });
     }
 };

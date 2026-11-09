@@ -93,9 +93,9 @@ bool solveSphCpuSmoothingLength(SphRunParameters const& parameters, SphRunData c
         for (size_t first = 0; first < neighbors.size(); first += SimdFloat::size()) {
             auto const q𞁑𞁓 = abs_r𞁑𞁓[first / SimdFloat::size()] * ih𞁑Pack;
             auto const contributes = sphCpuValidLanes(neighbors, first) && q𞁑𞁓 < SimdFloat(1.0f);
-            ΣWPack += simdSelect(contributes, kernelW(q𞁑𞁓), SimdFloat(0.0f));
+            ΣWPack += math::select(contributes, kernelW(q𞁑𞁓), SimdFloat(0.0f));
             dΣW_dh𞁑Pack -=
-                simdSelect(contributes, q𞁑𞁓 * dkernelWDq(q𞁑𞁓) * ih𞁑Pack, SimdFloat(0.0f));
+                math::select(contributes, q𞁑𞁓 * dkernelWDq(q𞁑𞁓) * ih𞁑Pack, SimdFloat(0.0f));
             // q, two accumulations and the two derivative products, in every lane.
             flops += 5 * SimdFloat::size() +
                 sph_flops::densityKernelOperations(selectedHydroKernel(), q𞁑𞁓) +
@@ -214,10 +214,10 @@ bool sphCpuHasActiveNeighbor(SphRunParameters const& parameters, SphRunData cons
         });
         auto const active = (neighborRung >= SimdFloat(float(parameters.minimumRung))) &&
             (neighborRung <= SimdFloat(float(parameters.maximumRung)));
-        auto const intersects = r2𞁑𞁓 < simdMax(h2𞁑, sqr(h𞁓));
+        auto const intersects = r2𞁑𞁓 < math::max(h2𞁑, sqr(h𞁓));
         // Fixed scales, dot operations, support square.
         flops += (sph_flops::kVectorOperation + sph_flops::kDotProduct + 1) * SimdFloat::size();
-        if (simdAnyOf(sphCpuValidLanes(neighbors, first) && active && intersects)) {
+        if (math::anyOf(sphCpuValidLanes(neighbors, first) && active && intersects)) {
             return true;
         }
     }
@@ -361,14 +361,14 @@ SphRunReturn sphCpuDensityAndGradients(
             SimdFloat const abs_r𞁑𞁓 = r𞁑𞁓.norm();
             SimdFloat const q𞁑𞁓 = abs_r𞁑𞁓 * SimdFloat(ih𞁑);
             SimdFloat const w_q𞁑𞁓 = kernelW(q𞁑𞁓);
-            ρ𞁑Pack += simdSelect(
+            ρ𞁑Pack += math::select(
                 detail::sphCpuValidLanes(neighbors, first), m𞁓_over_hᴰ𞁑 * w_q𞁑𞁓, SimdFloat(0.0f));
             // Fixed scales, norm, q𞁑𞁓, density product and sum.
             flops += (sph_flops::kVectorOperation + sph_flops::kNorm + 3) * SimdFloat::size() +
                 sph_flops::densityKernelOperations(selectedHydroKernel(), q𞁑𞁓);
             auto const inside = detail::sphCpuValidLanes(neighbors, first) && q𞁑𞁓 < SimdFloat(1.0f);
-            ΣWPack += simdSelect(inside, w_q𞁑𞁓, SimdFloat(0.0f));
-            ΣqwʹPack += simdSelect(inside, q𞁑𞁓 * dkernelWDq(q𞁑𞁓), SimdFloat(0.0f));
+            ΣWPack += math::select(inside, w_q𞁑𞁓, SimdFloat(0.0f));
+            ΣqwʹPack += math::select(inside, q𞁑𞁓 * dkernelWDq(q𞁑𞁓), SimdFloat(0.0f));
             flops += 3 * SimdFloat::size() +
                 sph_flops::densityKernelOperations(selectedHydroKernel(), q𞁑𞁓, true);
             // clang-format off
@@ -384,15 +384,15 @@ SphRunReturn sphCpuDensityAndGradients(
             // clang-format on
             auto const contributes = detail::sphCpuValidLanes(neighbors, first) &&
                 abs_r𞁑𞁓 > SimdFloat(0.0f) && q𞁑𞁓 < SimdFloat(1.0f);
-            SimdFloat const m𞁓F𞁑 = simdSelect(contributes,
+            SimdFloat const m𞁓F𞁑 = math::select(contributes,
                 m𞁓ih_D_plus_1𞁑 * dkernelWDq(q𞁑𞁓) /
-                    simdSelect(contributes, abs_r𞁑𞁓, SimdFloat(1.0f)),
+                    math::select(contributes, abs_r𞁑𞁓, SimdFloat(1.0f)),
                 SimdFloat(0.0f));
             SpatialVector<SimdFloat> const v𞁑(data.sourceVelocity(particleIndex));
             SpatialVector<SimdFloat> const v𞁓 = detail::sphCpuLoad3(data.sourceVelocityX,
                 data.sourceVelocityY, data.sourceVelocityZ, neighbors, first, 0.0f);
             SpatialVector<SimdFloat> const v𞁑𞁓 =
-                simdSelect(contributes, v𞁑 - v𞁓, SpatialVector<SimdFloat>(SimdFloat(0)));
+                math::select(contributes, v𞁑 - v𞁓, SpatialVector<SimdFloat>(SimdFloat(0)));
             // Kernel-gradient coefficient (2) and relative velocity.
             flops += (2 + sph_flops::kVectorOperation) * SimdFloat::size() +
                 sph_flops::densityKernelOperations(selectedHydroKernel(), q𞁑𞁓, true);

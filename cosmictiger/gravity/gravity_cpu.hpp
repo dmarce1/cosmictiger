@@ -90,10 +90,10 @@ void cpuGravityCc(cosmictiger::gravity::cartesian::tracefree::Expansion<float, o
         detail::gatherSourceMultipoles<order>(treePtrs, mValue, yValue);
         Vector3<SimdPosition> position{};
         for (int dim = 0; dim < kDimensions; dim++) {
-            position[dim] = simdBroadcast<SimdPosition>(selfPtr->mpos->pos[dim].raw());
+            position[dim] = math::broadcast<SimdPosition>(selfPtr->mpos->pos[dim].raw());
         }
         cosmictiger::gravity::cartesian::tracefree::Expansion<SimdFloat, order> l0;
-        l0 = simdBroadcast<SimdFloat>(0.0f);
+        l0 = math::broadcast<SimdFloat>(0.0f);
         int directFlops = 0;
         for (int j = 0; j < numberOfSources; j++) {
             Vector3<SimdFloat> dx{};
@@ -161,10 +161,10 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::tracefree::Expansion<float, o
             Vector3<SimdPosition> position{};
             Vector3<SimdPosition> yValue{};
             for (int dim = 0; dim < kDimensions; dim++) {
-                position[dim] = simdBroadcast<SimdPosition>(selfPtr->mpos->pos[dim].raw());
+                position[dim] = math::broadcast<SimdPosition>(selfPtr->mpos->pos[dim].raw());
             }
             cosmictiger::gravity::cartesian::tracefree::Expansion<SimdFloat, order> l0;
-            l0 = simdBroadcast<SimdFloat>(0.0f);
+            l0 = math::broadcast<SimdFloat>(0.0f);
             int greenFlops = 0;
             for (int j = 0; j < numberOfSources; j += kSimdFloatSize) {
                 SimdFloat mass{};
@@ -180,9 +180,9 @@ void cpuGravityCp(cosmictiger::gravity::cartesian::tracefree::Expansion<float, o
                         position[dim], yValue[dim], dim, geometry, &geometryFlops);
                 }
                 cosmictiger::gravity::cartesian::tracefree::Expansion<SimdFloat, order> d;
-                d = simdBroadcast<SimdFloat>(0);
+                d = math::broadcast<SimdFloat>(0);
                 greenFlops = cosmictiger::gravity::cartesian::tracefree::P2L(
-                    d, simdBroadcast<SimdFloat>(1), fmmScaleDisplacement(dx));
+                    d, math::broadcast<SimdFloat>(1), fmmScaleDisplacement(dx));
                 for (int l = 0; l < kLocalCoefficients; l++) {
                     l0[l] += mass * d[l];
                 }
@@ -222,10 +222,10 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
         for (ParticleInteger i = range.first; i < range.second; i++) {
             cosmictiger::gravity::Field<SimdFloat> lValue2{};
             for (int component = 0; component < kDimensions + 1; component++) {
-                lValue2[component] = simdBroadcast<SimdFloat>(0.0f);
+                lValue2[component] = math::broadcast<SimdFloat>(0.0f);
             }
             for (int dim = 0; dim < kDimensions; dim++) {
-                position[dim] = simdBroadcast<SimdPosition>(particlesPos(dim, i).raw());
+                position[dim] = math::broadcast<SimdPosition>(particlesPos(dim, i).raw());
             }
             for (int j = 0; j < numberOfSources; j++) {
                 Vector3<SimdFloat> dx{};

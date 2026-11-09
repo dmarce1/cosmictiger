@@ -4,14 +4,26 @@
  Distributed under the Boost Software License, Version 1.0.
  */
 
+// Symbol directory (typed Cartesian FMM operators):
+// R: source-target separation radius; iR: 1/R.
+// M: source or destination multipole; L: source or destination local expansion.
+// u: separation divided by R; G: derivatives of the negative Newtonian Green function.
+// Particle and center displacements use the same coordinates as M and L.
+
 #pragma once
 
 #include <cosmictiger/core/containers.hpp>
 #include <cosmictiger/gravity/fmm_order.hpp>
 #include <cosmictiger/gravity/fmm_types.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree/l2l.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree/l2l_warp.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree/l2p.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree/m2l.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree/m2m.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree/m2p.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree/p2l.hpp>
+#include <cosmictiger/gravity/kernels/cartesian_tracefree/p2m.hpp>
 #include <cosmictiger/gravity/kernels/cartesian_tracefree_config.hpp>
-#include <cosmictiger/gravity/kernels/cartesian_tracefree_kernels.hpp>
-#include <cosmictiger/gravity/kernels/cartesian_tracefree_m2l.hpp>
 #include <cosmictiger/math/simd_math.hpp>
 #include <cosmictiger/math/vector3.hpp>
 
@@ -24,123 +36,109 @@ static_assert(
 // uses the same coordinates as its moments and expansions.
 template <class Real>
 CUDA_EXPORT Vector3<Real> fmmScaleDisplacement(Vector3<Real> value) {
+    using namespace math;
     for (int dim = 0; dim < kDimensions; dim++) {
-        value[dim] *= simdBroadcast<Real>(kScaleFactor);
+        value[dim] *= broadcast<Real>(kScaleFactor);
     }
     return value;
 }
 
 namespace cosmictiger::gravity::cartesian::tracefree {
-namespace detail {
-    template <class Real>
-    CUDA_EXPORT Real inverseRadius(Vector3<Real> const& position) {
-        Real const radius = simdSqrt(simdFma(position[0], position[0],
-            simdFma(position[1], position[1], position[2] * position[2])));
-        return simdSelect(radius > simdBroadcast<Real>(0), simdBroadcast<Real>(1),
-                   simdBroadcast<Real>(0)) /
-            simdMax(radius, simdBroadcast<Real>(1.0e-20));
-    }
-}    // namespace detail
-
 template <class Real, int order>
 CUDA_EXPORT int P2M(
     Multipole<Real, order>& target, Real mass, Vector3<Real> const& particleOffset) {
-    detail::P2M<order - 2>::add(
-        target, mass, particleOffset[0], particleOffset[1], particleOffset[2]);
-    return detail::P2M<order - 2>::kFlops_;
+    using namespace math;
+    detail::P2M(target, mass, particleOffset);
+    return detail::kP2MFlops<order - 2>;
 }
 
 template <class Real, int order>
 CUDA_EXPORT int P2L(Expansion<Real, order>& target, Real mass, Vector3<Real> const& displacement,
     bool doPotential = true) {
-    Real const inverse = detail::inverseRadius(displacement);
+    using namespace math;
     Real const oldPotential = target[0];
-    detail::P2L<order - 1>::add(target, mass, displacement[0] * inverse, displacement[1] * inverse,
-        displacement[2] * inverse, inverse, inverse);
+    detail::P2L(target, mass, displacement);
     if (!doPotential) {
         target[0] = oldPotential;
     }
-    return detail::P2L<order - 1>::kFlops_ + 10;
+    return detail::kP2LFlops<order - 1> + 7;
 }
 
 template <class Real, int order>
 CUDA_EXPORT int M2M(Multipole<Real, order>& target, Multipole<Real, order> const& source,
     Vector3<Real> const& displacement) {
+    using namespace math;
     ASSERT(&target != &source);
-    detail::M2M<order - 2>::add(
-        target, source, displacement[0], displacement[1], displacement[2], simdBroadcast<Real>(1));
-    return detail::M2M<order - 2>::kFlops_;
+    detail::M2M(target, source, displacement, broadcast<Real>(1));
+    return detail::kM2MFlops<order - 2>;
 }
 
-template <bool centered = false, class Real, int order>
+template <class Real, int order>
 CUDA_EXPORT int M2L(Expansion<Real, order>& target, Multipole<Real, order> const& source,
     Vector3<Real> const& displacement, bool doPotential = true) {
-    Real const inverse = detail::inverseRadius(displacement);
+    using namespace math;
     Real const oldPotential = target[0];
-    detail::M2L<order - 1, centered>::template add<Real, Expansion<Real, order>,
-        Multipole<Real, order>, order - 2>(target, source, displacement[0] * inverse,
-        displacement[1] * inverse, displacement[2] * inverse, inverse, inverse, inverse);
+    detail::M2L(target, source, displacement);
     if (!doPotential) {
         target[0] = oldPotential;
     }
-    return detail::M2L<order - 1, centered>::kFlops_ + 10;
+    return detail::kM2LFlops<order - 1> + 7;
 }
 
 template <class Real, int order>
 CUDA_EXPORT void evaluateGreen(Green<Real, order>& target, Vector3<Real> const& displacement) {
-    Real const inverse = detail::inverseRadius(displacement);
-    target = simdBroadcast<Real>(0);
-    detail::P2L<order - 1>::add(target, simdBroadcast<Real>(1), displacement[0] * inverse,
-        displacement[1] * inverse, displacement[2] * inverse, inverse, inverse);
+    using namespace math;
+    target = broadcast<Real>(0);
+    detail::P2L(target, broadcast<Real>(1), displacement);
 }
 
-template <bool centered = false, class Real, int order>
+template <class Real, int order>
 CUDA_EXPORT int M2L(Expansion<Real, order>& target, Multipole<Real, order> const& source,
     Green<Real, order> const& green, bool doPotential = true) {
+    using namespace math;
     Real const oldPotential = target[0];
-    detail::M2LDerivatives<order - 1, centered>::template add<Real>(target, source, green);
+    detail::M2L(target, source, green);
     if (!doPotential) {
         target[0] = oldPotential;
     }
-    return detail::M2LDerivatives<order - 1, centered>::kFlops_;
+    return detail::kM2LDerivativeFlops<order - 1>;
 }
 
-template <bool centered = false, class Real, int order>
+template <class Real, int order>
 CUDA_EXPORT int M2P(gravity::Field<Real>& target, Multipole<Real, order> const& source,
     Vector3<Real> const& displacement, bool doPotential = true) {
-    Real const inverse = detail::inverseRadius(displacement);
+    using namespace math;
     Real const oldPotential = target[0];
-    detail::M2P<order - 2, centered>::add(target, source, displacement[0] * inverse,
-        displacement[1] * inverse, displacement[2] * inverse, inverse, inverse);
+    detail::M2P(target, source, displacement);
     if (!doPotential) {
         target[0] = oldPotential;
     }
-    return detail::M2P<order - 2, centered>::kFlops_ + 10;
+    return detail::kM2PFlops<order - 2> + 7;
 }
 
 template <class Real, int order>
 CUDA_EXPORT int L2L(Expansion<Real, order>& target, Expansion<Real, order> const& source,
     Vector3<Real> const& displacement, bool doPotential = true) {
+    using namespace math;
     ASSERT(&target != &source);
     Real const oldPotential = target[0];
-    detail::L2L<order - 1, true>::add(
-        target, source, displacement[0], displacement[1], displacement[2], simdBroadcast<Real>(1));
+    detail::L2L(target, source, displacement, broadcast<Real>(1));
     if (!doPotential) {
         target[0] = oldPotential;
     }
-    return detail::L2L<order - 1, true>::kFlops_;
+    return detail::kL2LFlops<order - 1>;
 }
 
 template <class Real, int order>
 CUDA_EXPORT int L2P(gravity::Field<Real>& target, Expansion<Real, order> const& source,
     Vector3<Real> const& displacement, bool doPotential = true) {
+    using namespace math;
     Real const oldPotential = target[0];
-    detail::L2P<order - 1, true>::add(
-        target, source, displacement[0], displacement[1], displacement[2], simdBroadcast<Real>(1));
+    detail::L2P(target, source, displacement, broadcast<Real>(1));
     if (!doPotential) {
         target[0] = oldPotential;
     }
-    return detail::L2P<order - 1, true>::kFlops_;
+    return detail::kL2PFlops<order - 1>;
 }
 
 #ifdef __CUDACC__
@@ -148,8 +146,7 @@ CUDA_EXPORT int L2P(gravity::Field<Real>& target, Expansion<Real, order> const& 
 template <class Real, int order>
 __device__ void L2LWarpInto(Real* target, Expansion<Real, order> const& source,
     Vector3<Real> const& displacement, bool doPotential) {
-    detail::detail::L2LWarp<order - 1, true>::translateInto(
-        target, source, displacement[0], displacement[1], displacement[2], doPotential);
+    detail::L2LWarpInto(target, source, displacement, doPotential);
 }
 #endif
 
@@ -162,19 +159,16 @@ struct FmmHybridCost {
     static constexpr int kMultipoleDegree_ = FmmOrder<order>::kMultipoleDegree_;
     static constexpr int kLocalDegree_ = FmmOrder<order>::kLocalDegree_;
     static constexpr float kParticleCellPerParticle_ =
-        float(cosmictiger::gravity::cartesian::tracefree::detail::M2P<kMultipoleDegree_,
-            false>::kFlops_) +
-        18.0f + 7.0f;
+        float(cosmictiger::gravity::cartesian::tracefree::detail::kM2PFlops<kMultipoleDegree_>) +
+        15.0f + 7.0f;
     static constexpr float kCellParticlePerParticle_ =
-        float(cosmictiger::gravity::cartesian::tracefree::detail::P2L<kLocalDegree_>::kFlops_) +
-        14.0f + 3.0f + float(FmmOrder<order>::kLocalCoefficients_);
+        float(cosmictiger::gravity::cartesian::tracefree::detail::kP2LFlops<kLocalDegree_>) +
+        11.0f + 3.0f + float(FmmOrder<order>::kLocalCoefficients_);
     static constexpr float kHybridPerParticle_ =
         0.5f * (kParticleCellPerParticle_ + kCellParticlePerParticle_);
     static constexpr float kParticlePair_ = 38.0f;
     // M2L arithmetic and displacement scaling, excluding SIMD padding and
     // reductions shared by a list. This is a work estimate, not a timing model.
     static constexpr float kCellCell_ =
-        float(cosmictiger::gravity::cartesian::tracefree::detail::M2L<kLocalDegree_,
-            false>::kFlops_) +
-        13.0f;
+        float(cosmictiger::gravity::cartesian::tracefree::detail::kM2LFlops<kLocalDegree_>) + 10.0f;
 };

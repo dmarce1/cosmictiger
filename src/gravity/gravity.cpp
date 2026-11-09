@@ -31,8 +31,8 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
     tm.start();
     constexpr int kChunkSize = 32;
     if (list.size()) {
-        SimdFloat const sinkHsoft = simdBroadcast<SimdFloat>(hfloat);
-        SimdFloat const hinvI = simdBroadcast<SimdFloat>(1.f) / sinkHsoft;
+        SimdFloat const sinkHsoft = math::broadcast<SimdFloat>(hfloat);
+        SimdFloat const hinvI = math::broadcast<SimdFloat>(1.f) / sinkHsoft;
         SimdFloat const h2invI = sqr(hinvI);
         SimdFloat const h3invI = hinvI * h2invI;
         SimdFloat const h2 = sqr(sinkHsoft);
@@ -40,8 +40,8 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
         FlopCount softenedPackets = 0;
         FlopCounts const softeningFlops =
             detail::gravitySofteningOperations(selectedGravityKernel(), SimdFloat{}, doPhi);
-        SimdFloat const one = simdBroadcast<SimdFloat>(1.0);
-        SimdFloat const tiny = simdBroadcast<SimdFloat>(1.0e-20);
+        SimdFloat const one = math::broadcast<SimdFloat>(1.0);
+        SimdFloat const tiny = math::broadcast<SimdFloat>(1.0e-20);
         TreeNode const* selfPtr = treeGetNode(self);
         int const numberOfSinks = selfPtr->numberOfParticles();
         auto const range = selfPtr->particleRange;
@@ -82,12 +82,12 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
             //			feenableexcept (FE_INVALID);
             //			feenableexcept (FE_OVERFLOW);
             for (ParticleInteger i = range.first; i < range.second; i++) {
-                SimdFloat gx = simdBroadcast<SimdFloat>(0.0);
-                SimdFloat gy = simdBroadcast<SimdFloat>(0.0);
-                SimdFloat gz = simdBroadcast<SimdFloat>(0.0);
-                SimdFloat phi = simdBroadcast<SimdFloat>(0.0);
+                SimdFloat gx = math::broadcast<SimdFloat>(0.0);
+                SimdFloat gy = math::broadcast<SimdFloat>(0.0);
+                SimdFloat gz = math::broadcast<SimdFloat>(0.0);
+                SimdFloat phi = math::broadcast<SimdFloat>(0.0);
                 for (int dim = 0; dim < kDimensions; dim++) {
-                    position[dim] = simdBroadcast<SimdPosition>(particlesPos(dim, i).raw());
+                    position[dim] = math::broadcast<SimdPosition>(particlesPos(dim, i).raw());
                 }
                 //					simd_float self_flags(0);
                 for (int j = 0; j < numberOfSources; j += kSimdFloatSize) {
@@ -105,29 +105,29 @@ void cpuGravityPp(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                     }
                     SimdFloat const r2 = sqr(dx[kXi], dx[kYi], dx[kZi]);
                     SimdFloat const rinv1Far =
-                        simdBroadcast<SimdFloat>(1) / simdSqrt(simdMax(r2, tiny));
+                        math::broadcast<SimdFloat>(1) / math::sqrt(math::max(r2, tiny));
                     SimdFloat const rinv3Far = rinv1Far * sqr(rinv1Far);
                     auto const swFar = r2 > h2;
                     SimdFloat rinv3 = rinv3Far;
-                    SimdFloat rinv1 = simdBroadcast<SimdFloat>(0.0f);
+                    SimdFloat rinv1 = math::broadcast<SimdFloat>(0.0f);
                     if (doPhi) {
                         rinv1 = rinv1Far;
                     }
-                    if (!simdAllOf(swFar)) {
+                    if (!math::allOf(swFar)) {
                         SimdFloat rinv3Near, rinv1Near;
                         gravitySofteningKernel(
                             rinv3Near, rinv1Near, r2, hinvI, h2invI, h3invI, doPhi);
                         ++softenedPackets;
-                        rinv3 = simdSelect(swFar, rinv3Far, rinv3Near);
+                        rinv3 = math::select(swFar, rinv3Far, rinv3Near);
                         if (doPhi) {
-                            rinv1 = simdSelect(swFar, rinv1Far, rinv1Near);
+                            rinv1 = math::select(swFar, rinv1Far, rinv1Near);
                         }
                     }
                     rinv3 *= sourceWeight;
                     rinv1 *= sourceWeight;
-                    gx = simdFma(rinv3, dx[kXi], gx);
-                    gy = simdFma(rinv3, dx[kYi], gy);
-                    gz = simdFma(rinv3, dx[kZi], gz);
+                    gx = math::fma(rinv3, dx[kXi], gx);
+                    gy = math::fma(rinv3, dx[kYi], gy);
+                    gz = math::fma(rinv3, dx[kZi], gz);
                     phi -= rinv1;
                 }
                 int const j = i - range.first;

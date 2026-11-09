@@ -116,10 +116,10 @@ namespace detail {
 
     template <typename Real, class TableReal>
     CUDA_EXPORT inline Real clamp(Real value, TableReal lower, TableReal upper) {
-        Real const lowerBound = simdBroadcast<Real>(lower);
-        Real const upperBound = simdBroadcast<Real>(upper);
-        return simdSelect(
-            value < lowerBound, lowerBound, simdSelect(value > upperBound, upperBound, value));
+        Real const lowerBound = math::broadcast<Real>(lower);
+        Real const upperBound = math::broadcast<Real>(upper);
+        return math::select(
+            value < lowerBound, lowerBound, math::select(value > upperBound, upperBound, value));
     }
 
     template <typename Real, class TableReal>
@@ -127,7 +127,7 @@ namespace detail {
         TableReal const* coefficients, int degree, Real leftWeight, Real rightWeight) {
         Real work[kMaximumDegree + 4];
         for (int i = 0; i <= degree; ++i) {
-            work[i] = simdBroadcast<Real>(coefficients[i]);
+            work[i] = math::broadcast<Real>(coefficients[i]);
         }
         for (int remaining = degree; remaining > 0; --remaining) {
             for (int i = 0; i < remaining; ++i) {
@@ -139,7 +139,7 @@ namespace detail {
 
     template <typename Real, class TableReal>
     CUDA_EXPORT inline Real evaluate(TableReal const* coefficients, int degree, Real t) {
-        return evaluate(coefficients, degree, simdBroadcast<Real>(1) - t, t);
+        return evaluate(coefficients, degree, math::broadcast<Real>(1) - t, t);
     }
 
     // Compute both Bernstein weights directly: forming 1-t loses relative
@@ -148,9 +148,9 @@ namespace detail {
     CUDA_EXPORT inline Real evaluateDensitySpan(
         TableReal const* coefficients, int degree, Real q, TableReal a, TableReal b) {
         Real const radius = clamp(q, a, b);
-        Real const width = simdBroadcast<Real>(b - a);
-        return evaluate(coefficients, degree, (simdBroadcast<Real>(b) - radius) / width,
-            (radius - simdBroadcast<Real>(a)) / width);
+        Real const width = math::broadcast<Real>(b - a);
+        return evaluate(coefficients, degree, (math::broadcast<Real>(b) - radius) / width,
+            (radius - math::broadcast<Real>(a)) / width);
     }
 
     template <typename Real, class TableReal>
@@ -158,16 +158,16 @@ namespace detail {
         KernelTable<TableReal> const& table, int piece, Real q) {
         TableReal const a = table.changePoints[piece];
         TableReal const b = table.changePoints[piece + 1];
-        return (clamp(q, a, b) - simdBroadcast<Real>(a)) / simdBroadcast<Real>(b - a);
+        return (clamp(q, a, b) - math::broadcast<Real>(a)) / math::broadcast<Real>(b - a);
     }
 
     template <typename Real, class TableReal>
     CUDA_EXPORT inline auto pieceMask(KernelTable<TableReal> const& table, int piece, Real q) {
-        auto const upper = q < simdBroadcast<Real>(table.changePoints[piece + 1]);
+        auto const upper = q < math::broadcast<Real>(table.changePoints[piece + 1]);
         if (piece == 0) {
             return upper;
         }
-        return upper && (q >= simdBroadcast<Real>(table.changePoints[piece]));
+        return upper && (q >= math::broadcast<Real>(table.changePoints[piece]));
     }
 
 }    // namespace detail
@@ -318,15 +318,15 @@ constexpr KernelTable<Real> makeKernelTable(KernelSpec spec) {
 
 template <typename Real, class TableReal>
 CUDA_EXPORT inline Real value(KernelTable<TableReal> const& table, Real q) {
-    Real result = simdBroadcast<Real>(0);
+    Real result = math::broadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
-            if (q < simdBroadcast<Real>(table.changePoints[piece + 1])) {
+            if (q < math::broadcast<Real>(table.changePoints[piece + 1])) {
                 return detail::evaluateDensitySpan(table.coefficients[piece], table.degree, q,
                     table.changePoints[piece], table.changePoints[piece + 1]);
             }
         } else {
-            result = simdSelect(detail::pieceMask(table, piece, q),
+            result = math::select(detail::pieceMask(table, piece, q),
                 detail::evaluateDensitySpan(table.coefficients[piece], table.degree, q,
                     table.changePoints[piece], table.changePoints[piece + 1]),
                 result);
@@ -337,15 +337,15 @@ CUDA_EXPORT inline Real value(KernelTable<TableReal> const& table, Real q) {
 
 template <typename Real, class TableReal>
 CUDA_EXPORT inline Real derivative(KernelTable<TableReal> const& table, Real q) {
-    Real result = simdBroadcast<Real>(0);
+    Real result = math::broadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
-            if (q < simdBroadcast<Real>(table.changePoints[piece + 1])) {
+            if (q < math::broadcast<Real>(table.changePoints[piece + 1])) {
                 return detail::evaluateDensitySpan(table.derivativeCoefficients[piece],
                     table.degree - 1, q, table.changePoints[piece], table.changePoints[piece + 1]);
             }
         } else {
-            result = simdSelect(detail::pieceMask(table, piece, q),
+            result = math::select(detail::pieceMask(table, piece, q),
                 detail::evaluateDensitySpan(table.derivativeCoefficients[piece], table.degree - 1,
                     q, table.changePoints[piece], table.changePoints[piece + 1]),
                 result);
@@ -362,7 +362,7 @@ namespace detail {
         if (piece == 0) {
             return evaluate(table.centralForceCoefficients, table.degree, t);
         }
-        Real const inverseRadius = simdBroadcast<Real>(1) /
+        Real const inverseRadius = math::broadcast<Real>(1) /
             clamp(q, table.changePoints[piece], table.changePoints[piece + 1]);
         return evaluate(table.massCoefficients[piece], table.degree + 3, t) * inverseRadius *
             inverseRadius * inverseRadius;
@@ -374,10 +374,10 @@ namespace detail {
         Real const t = localCoordinate(table, piece, q);
         if (piece == 0) {
             Real const radius = clamp(q, TableReal(0), table.changePoints[1]);
-            return simdBroadcast<Real>(table.centralPotential) -
+            return math::broadcast<Real>(table.centralPotential) -
                 radius * radius * evaluate(table.centralPotentialDropCoefficients, table.degree, t);
         }
-        Real const inverseRadius = simdBroadcast<Real>(1) /
+        Real const inverseRadius = math::broadcast<Real>(1) /
             clamp(q, table.changePoints[piece], table.changePoints[piece + 1]);
         return evaluate(table.massCoefficients[piece], table.degree + 3, t) * inverseRadius +
             evaluate(table.shellCoefficients[piece], table.degree + 2, t);
@@ -389,25 +389,25 @@ namespace detail {
 // value is 4 pi W(0)/3; the actual central acceleration is zero.
 template <typename Real, class TableReal>
 CUDA_EXPORT inline Real forceFactor(KernelTable<TableReal> const& table, Real q) {
-    Real result = simdBroadcast<Real>(0);
+    Real result = math::broadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
-            if (q < simdBroadcast<Real>(table.changePoints[piece + 1])) {
+            if (q < math::broadcast<Real>(table.changePoints[piece + 1])) {
                 return detail::forceOnPiece(table, piece, q);
             }
         } else {
-            result = simdSelect(
+            result = math::select(
                 detail::pieceMask(table, piece, q), detail::forceOnPiece(table, piece, q), result);
         }
     }
     if constexpr (std::is_arithmetic_v<Real>) {
-        Real const inverseRadius = simdBroadcast<Real>(1) / q;
+        Real const inverseRadius = math::broadcast<Real>(1) / q;
         return inverseRadius * inverseRadius * inverseRadius;
     } else {
-        auto const outside = q >= simdBroadcast<Real>(1);
+        auto const outside = q >= math::broadcast<Real>(1);
         Real const inverseRadius =
-            simdBroadcast<Real>(1) / simdSelect(outside, q, simdBroadcast<Real>(1));
-        return simdSelect(outside, inverseRadius * inverseRadius * inverseRadius, result);
+            math::broadcast<Real>(1) / math::select(outside, q, math::broadcast<Real>(1));
+        return math::select(outside, inverseRadius * inverseRadius * inverseRadius, result);
     }
 }
 
@@ -415,24 +415,24 @@ CUDA_EXPORT inline Real forceFactor(KernelTable<TableReal> const& table, Real q)
 // times this value, with zero at infinity and exactly 1/q outside support.
 template <typename Real, class TableReal>
 CUDA_EXPORT inline Real potential(KernelTable<TableReal> const& table, Real q) {
-    Real result = simdBroadcast<Real>(0);
+    Real result = math::broadcast<Real>(0);
     for (int piece = 0; piece < table.pieceCount; ++piece) {
         if constexpr (std::is_arithmetic_v<Real>) {
-            if (q < simdBroadcast<Real>(table.changePoints[piece + 1])) {
+            if (q < math::broadcast<Real>(table.changePoints[piece + 1])) {
                 return detail::potentialOnPiece(table, piece, q);
             }
         } else {
-            result = simdSelect(detail::pieceMask(table, piece, q),
+            result = math::select(detail::pieceMask(table, piece, q),
                 detail::potentialOnPiece(table, piece, q), result);
         }
     }
     if constexpr (std::is_arithmetic_v<Real>) {
-        return simdBroadcast<Real>(1) / q;
+        return math::broadcast<Real>(1) / q;
     } else {
-        auto const outside = q >= simdBroadcast<Real>(1);
+        auto const outside = q >= math::broadcast<Real>(1);
         Real const inverseRadius =
-            simdBroadcast<Real>(1) / simdSelect(outside, q, simdBroadcast<Real>(1));
-        return simdSelect(outside, inverseRadius, result);
+            math::broadcast<Real>(1) / math::select(outside, q, math::broadcast<Real>(1));
+        return math::select(outside, inverseRadius, result);
     }
 }
 

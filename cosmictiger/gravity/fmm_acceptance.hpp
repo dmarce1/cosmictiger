@@ -56,8 +56,8 @@ CUDA_EXPORT inline FmmAcceptance<T> computeFmmAcceptance(T const& centerDistance
         centerSupportSeparated || sourceSupportSeparated || sinkSupportSeparated;
 
     T const cellCellDistance = radiusSum * inverseTheta;
-    T const particleCellDistance = simdFma(inverseTheta, sourceRadius, sinkRadius);
-    T const cellParticleDistance = simdFma(inverseTheta, sinkRadius, sourceRadius);
+    T const particleCellDistance = math::fma(inverseTheta, sourceRadius, sinkRadius);
+    T const cellParticleDistance = math::fma(inverseTheta, sinkRadius, sourceRadius);
     T const sourceOpeningRadius = sourceRadius * inverseTheta;
     T const sinkOpeningRadius = sinkRadius * inverseTheta;
     auto const particleCellNear =

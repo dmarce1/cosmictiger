@@ -571,7 +571,7 @@ CUDA_EXPORT auto frobeniusNorm(A const& a) {
         }
         return result;
     } else {
-        return simdSqrt(squaredNorm(a));
+        return math::sqrt(squaredNorm(a));
     }
 }
 

@@ -6,7 +6,7 @@
  */
 
 // Validate the production cooperative L2L entry points at every configured FMM order.
-// Independent Taylor references cover all lanes, trace terms, potential modes,
+// Independent Taylor references cover all lanes, potential modes,
 // repeated translations, and one or several warps per block.
 
 #include <algorithm>
@@ -83,18 +83,12 @@ double component(Canonical<order> const& source, int x, int y, int z) {
     if (z <= 1) {
         return source[canonicalIndex(x, y, z)];
     }
-    double value =
-        -component<order>(source, x + 2, y, z - 2) - component<order>(source, x, y + 2, z - 2);
-    if (x == 0 && y == 0 && z == 2) {
-        value += source[FmmOrder<order>::kLocalTraceIndex_];
-    }
-    return value;
+    return -component<order>(source, x + 2, y, z - 2) - component<order>(source, x, y + 2, z - 2);
 }
 
 template <int order>
 Canonical<order> canonical(LocalExpansion<order> const& source) {
     constexpr int kDegree = FmmOrder<order>::kLocalDegree_;
-    constexpr int kTraceIndex = FmmOrder<order>::kLocalTraceIndex_;
     Canonical<order> result{};
     for (int rank = 0; rank <= kDegree; ++rank) {
         for (int z = 0; z <= 1 && z <= rank; ++z) {
@@ -104,14 +98,12 @@ Canonical<order> canonical(LocalExpansion<order> const& source) {
             }
         }
     }
-    result[kTraceIndex] = source[kTraceIndex];
     return result;
 }
 
 template <int order>
 LocalExpansion<order> stored(Canonical<order> const& source) {
     constexpr int kDegree = FmmOrder<order>::kLocalDegree_;
-    constexpr int kTraceIndex = FmmOrder<order>::kLocalTraceIndex_;
     LocalExpansion<order> result{};
     for (int rank = 0; rank <= kDegree; ++rank) {
         for (int z = 0; z <= 1 && z <= rank; ++z) {
@@ -121,28 +113,19 @@ LocalExpansion<order> stored(Canonical<order> const& source) {
             }
         }
     }
-    result[kTraceIndex] = float(source[kTraceIndex]);
     return result;
 }
 
 template <int order>
 Fixture<order> fixture(int sample) {
-    constexpr int kHarmonicCoefficients = FmmOrder<order>::kLocalHarmonicCoefficients_;
-    constexpr int kTraceIndex = FmmOrder<order>::kLocalTraceIndex_;
+    constexpr int kCoefficients = FmmOrder<order>::kLocalCoefficients_;
     Fixture<order> result{};
     Canonical<order> source{};
     int const kind = sample % 4;
     if (kind < 2) {
-        for (int i = 0; i < kHarmonicCoefficients; ++i) {
+        for (int i = 0; i < kCoefficients; ++i) {
             source[i] = float(.025 * std::sin(.31 * (i + 1) * (sample + 2)));
         }
-        source[kTraceIndex] = kind == 1 ? -.7 : 0.;
-    } else if (kind == 3) {
-        // A uniform-density root polynomial, including its nonzero gradient
-        // when the expansion center is away from the density's reference point.
-        source[kTraceIndex] = -.83;
-        source[canonicalIndex(2, 0, 0)] = source[kTraceIndex] / 3;
-        source[canonicalIndex(0, 2, 0)] = source[kTraceIndex] / 3;
     }
     source[0] = .75;
     source[canonicalIndex(1, 0, 0)] = .12;
@@ -160,7 +143,6 @@ template <int order>
 Canonical<order> translateReference(
     Canonical<order> const& source, Position const& displacement, bool doPhi) {
     constexpr int kDegree = FmmOrder<order>::kLocalDegree_;
-    constexpr int kTraceIndex = FmmOrder<order>::kLocalTraceIndex_;
     // Full Cartesian finite Taylor translation, independent of the generated
     // arithmetic and cooperative CUDA schedule.
     double powers[3][kDegree + 1]{};
@@ -188,7 +170,6 @@ Canonical<order> translateReference(
             }
         }
     }
-    result[kTraceIndex] = source[kTraceIndex];
     if (!doPhi) {
         result[0] = source[0];
     }
@@ -200,8 +181,7 @@ __device__ LocalExpansion<order> warpTranslate(
     LocalExpansion<order> const& source, Vector3<float> position, bool doPhi) {
     LocalExpansion<order> result{};
     auto const scaled = fmmScaleDisplacement(position);
-    cosmictiger::gravity::cartesian::tracefree::detail::detail::L2LWarp<order - 1, true>::translate(
-        result, source, scaled[0], scaled[1], scaled[2], doPhi);
+    cosmictiger::gravity::cartesian::tracefree::detail::L2LWarp(result, source, scaled, doPhi);
     return result;
 }
 
@@ -435,7 +415,7 @@ void validate(Fixture<order> const* deviceInput, std::vector<Fixture<order>> con
         throw std::runtime_error("CUDA L2L reference checks failed");
     }
     std::fprintf(stderr,
-        "Cartesian %s: Cartesian, own scalar, every lane, synchronized visibility, trace, "
+        "Cartesian %s: Cartesian, own scalar, every lane, synchronized visibility, "
         "linear field and doPhi checks passed at local degree %d.\n",
         variantName(variant), kDegree);
 }

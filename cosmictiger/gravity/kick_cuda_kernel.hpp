@@ -114,8 +114,8 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
             allGx[outputIndex] = gx;
             allGy[outputIndex] = gy;
             allGz[outputIndex] = gz;
-            flops += cosmictiger::gravity::cartesian::tracefree::detail::L2P<fmmLocalDegree(order),
-                         true>::kFlops_ +
+            flops += cosmictiger::gravity::cartesian::tracefree::detail::kL2PFlops<fmmLocalDegree(
+                         order)> +
                 14;
             continue;
         }
@@ -349,8 +349,8 @@ __device__ FlopCounts doKick(KickReturn& result, KickParameters params, CudaKick
         dkinTot += kin1 - kin0;
         // Displacement, L2P coordinate scaling and force accumulation/scaling.
         // Energy and momentum diagnostics, including their reductions, are excluded.
-        flops += cosmictiger::gravity::cartesian::tracefree::detail::L2P<fmmLocalDegree(order),
-                     true>::kFlops_ +
+        flops +=
+            cosmictiger::gravity::cartesian::tracefree::detail::kL2PFlops<fmmLocalDegree(order)> +
             18;
     }
     sharedReduceAdd(phiTot);
@@ -556,10 +556,10 @@ __global__ void cudaKickKernel(KickReturn* rc, KickParameters globalParams, Cuda
                     __syncwarp();
                     if (tid == 0) {
                         flops += globalParams.doPhi ?
-                            cosmictiger::gravity::cartesian::tracefree::detail::detail::L2LWarp<
-                                fmmLocalDegree(order), true>::kFlops_ :
-                            cosmictiger::gravity::cartesian::tracefree::detail::detail::L2LWarp<
-                                fmmLocalDegree(order), true>::kFlopsNoPotential_;
+                            cosmictiger::gravity::cartesian::tracefree::detail::kL2LWarpFlops<
+                                fmmLocalDegree(order)> :
+                            cosmictiger::gravity::cartesian::tracefree::detail::
+                                kL2LWarpNoPotentialFlops<fmmLocalDegree(order)>;
                     }
                 }
                 ParticleInteger const numberOfSinks =

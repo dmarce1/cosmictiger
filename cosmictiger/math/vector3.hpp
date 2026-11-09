@@ -35,8 +35,10 @@ public:
 
 // Keep this exact overload: the scalar/SIMD helper also accepts arbitrary Real
 // types, so relying only on deduction through the math::Vector base is insufficient.
+namespace math {
 template <class Mask, class T>
-CUDA_EXPORT inline Vector3<T> simdSelect(
+CUDA_EXPORT inline Vector3<T> select(
     Mask const& mask, Vector3<T> const& yes, Vector3<T> const& no) {
     return math::detail::selectVector<Vector3<T>>(mask, yes, no, std::make_index_sequence<3>{});
 }
+}    // namespace math

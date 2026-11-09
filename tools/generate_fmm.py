@@ -10,8 +10,8 @@
 
 Independent implementation of the harmonic-polynomial/partial-contraction
 construction used by PKDGRAV3. No PKDGRAV source is copied. Source rank n and
-local rank k satisfy n+k<=expansionOrder. The source cap can equal the local
-cap, or be one less (the omitted highest source rank affects only potential).
+local rank k satisfy n+k<=expansionOrder. The source cap is one less than
+the local cap; the omitted highest source rank affects only potential.
 
 Generation uses Python's standard library and clang-format. A rational expression DAG performs
 constant folding, exact-expression CSE and dead-code elimination before C++
@@ -162,12 +162,12 @@ class Dag:
         if node[0]=='symbol': return node[1]
         if node[0]=='constant':
             if hasattr(self, 'constantNames') and a in self.constantNames:
-                return f'simdBroadcast<Real>({self.constantNames[a]})'
+                return f'math::broadcast<Real>({self.constantNames[a]})'
             q=node[1]
             if q.denominator==1:
                 suffix='.0' if abs(q.numerator)>2**63-1 else ''
-                return f'simdBroadcast<Real>({q.numerator}{suffix})'
-            return f'simdBroadcast<Real>({q.numerator}.0 / {q.denominator}.0)'
+                return f'math::broadcast<Real>({q.numerator}{suffix})'
+            return f'math::broadcast<Real>({q.numerator}.0 / {q.denominator}.0)'
         return f't{a}'
 
     def emitConstants(self,live,indent='\t\t'):
@@ -181,7 +181,7 @@ class Dag:
         for a in sorted(live):
             if self.nodes[a][0]!='constant':
                 continue
-            expression=self.expr(a)[len('simdBroadcast<Real>('):-1]
+            expression=self.expr(a)[len('math::broadcast<Real>('):-1]
             name=f'kCoefficient{a}'
             self.constantNames[a]=name
             out.append(f'{indent}[[maybe_unused]] constexpr auto {name} = {expression};')
@@ -204,17 +204,16 @@ class EmissionPlan:
     """Fuse single-use products after exact DAG construction and sign folding.
 
     A product shared by two consumers stays materialized. Products consumed
-    only by an add/subtract become explicit simdFma calls; products consumed
-    only by one output accumulate directly with simdFma. No reassociation is
+    only by an add/subtract become explicit math::fma calls; products consumed
+    only by one output accumulate directly with math::fma. No reassociation is
     performed. This changes the intended rounding from two operations to one
     fused operation, without duplicating a shared multiplication.
 
     All signed roots, including conditional outputs, must be supplied together.
-    The plan does not mutate the DAG, so its original liveness sets still split
-    common and conditional emission correctly. In particular, a value needed
-    by both a base output and a conditional output cannot disappear into either
-    accumulation. Cooperative CUDA basis emission intentionally uses the raw
-    DAG emitter because its outputs belong to distinct lanes and branches.
+    The plan does not mutate the DAG. Inputs and outputs must not alias when
+    output products are fused directly into destination accumulations.
+    Cooperative CUDA basis emission uses the raw DAG emitter because its
+    outputs belong to distinct lanes and branches.
     """
     def __init__(self, graph, signedRoots):
         self.graph = graph
@@ -253,14 +252,6 @@ class EmissionPlan:
         graph = self.graph
         lines = []
         for node in sorted(live - already):
-            if node in self.outputCopies:
-                output = self.outputCopies[node]
-                left, right = graph.nodes[node][1:]
-                # Preserve the unfused DAG's operand reads before outputs
-                # mutate; copies also retain the original conditional scope.
-                lines.append(f'{indent}Real const fmaOutput{output}First = {graph.expr(left)};')
-                lines.append(f'{indent}Real const fmaOutput{output}Second = {graph.expr(right)};')
-                continue
             if node in self.suppressed:
                 continue
             operation, *arguments = graph.nodes[node]
@@ -273,7 +264,7 @@ class EmissionPlan:
                 other = arguments[1-position]
                 productSign = -1 if operation == '-' and position == 1 else 1
                 otherSign = -1 if operation == '-' and position == 0 else 1
-                expression = ('simdFma(' + self.signed(graph.expr(left), productSign) + ', ' +
+                expression = ('math::fma(' + self.signed(graph.expr(left), productSign) + ', ' +
                               graph.expr(right) + ', ' + self.signed(graph.expr(other), otherSign) + ')')
             else:
                 expression = f'{graph.expr(arguments[0])} {operation} {graph.expr(arguments[1])}'
@@ -286,8 +277,9 @@ class EmissionPlan:
         if root == graph.zero:
             return []
         if output in self.fusedOutputs:
-            return [f'{indent}{target} = simdFma({self.signed(f"fmaOutput{output}First", sign)}, '
-                    f'fmaOutput{output}Second, {target});']
+            left, right = graph.nodes[root][1:]
+            return [f'{indent}{target} = math::fma({self.signed(graph.expr(left), sign)}, '
+                    f'{graph.expr(right)}, {target});']
         operation = '+=' if sign > 0 else '-='
         return [f'{indent}{target} {operation} {graph.expr(root)};']
 
@@ -394,35 +386,32 @@ def horner(g,p,u,used=None):
     return root
 
 
-def buildKernel(E,centered):
-    g=Dag(); u=[g.symbol('ux'),g.symbol('uy'),g.symbol('uz')]
-    eta=g.symbol('sourceRatio'); v=g.symbol('targetRatio'); invr=g.symbol('inverseRadius')
+def buildKernel(E,independentM2lRatios=False):
+    g=Dag(); u=[g.mul(g.symbol(name), g.symbol('iR')) for name in ('dx','dy','dz')]
+    invr=g.symbol('iR')
+    eta=g.symbol('sourceRatio') if independentM2lRatios else invr
+    v=g.symbol('targetRatio') if independentM2lRatios else invr
     B=dualBasis(g,u,E)
     weights=[g.one]
     for n in range(1,E+1): weights.append(g.scale(g.mul(weights[-1],eta),2*n-1))
     localWeights=[g.scale(invr,-1)]
     for k in range(1,E+1): localWeights.append(g.mul(localWeights[-1],v))
     contractions={}
-    top=g.zero
-    for n in range(E+1):
-        if centered and n==1: continue
+    for n in range(E):
         K=E-n; J=min(n,K)
-        M={a:g.symbol(f'source[{index(a)}]') for a in indices(n)}
+        M={a:g.symbol(f'M[{index(a)}]') for a in indices(n)}
         get=accessor(g,M)
         C={J:{a:g.mul(weights[n],g.add(*(g.mul(get(plus(a,b)),B[b]) for b in indices(n-J)))) for a in indices(J)}}
         for j in range(J-1,-1,-1):
             get=accessor(g,C[j+1])
             C[j]={a:g.scale(g.add(*(g.mul(u[i],get(plus(a,tuple(int(i==d) for d in range(NDIM)))))
                                       for i in range(NDIM))),Q(1,n-j)) for a in indices(j)}
-        if n==E and E>0:
-            top=g.mul(localWeights[0],C[0][(0,0,0)])
-        else:
-            contractions[n]=C
+        contractions[n]=C
     result={}
     for k in range(E+1):
         for a in indices(k):
             angular={}
-            monopoleOnly = k == E or (centered and k == E-1)
+            monopoleOnly = k == E
             for n,C in contractions.items():
                 if n+k>E: continue
                 for j,components in C.items():
@@ -438,14 +427,14 @@ def buildKernel(E,centered):
                 # Pull the mass into the shared radial weight. Derivatives of
                 # 1/r have fixed coordinate parity, so factor odd powers out
                 # and evaluate the remainder in squared coordinates.
-                coefficient=g.mul(localWeights[k],g.symbol('source[0]'))
+                coefficient=g.mul(localWeights[k],g.symbol('M[0]'))
                 for dim in range(NDIM):
                     if a[dim]%2: coefficient=g.mul(coefficient,u[dim])
                 polynomial={tuple(v//2 for v in power):c for power,c in polynomial.items()}
                 result[a]=g.mul(coefficient,horner(g,polynomial,[g.mul(x,x) for x in u]))
             else:
                 result[a]=g.mul(localWeights[k],horner(g,polynomial,u))
-    return g,result,top
+    return g,result
 
 
 def normalizeSigns(old,roots):
@@ -484,59 +473,57 @@ def normalizeSigns(old,roots):
     return new,result
 
 
-def emitKernel(E,centered):
-    g,result,top=buildKernel(E,centered)
-    g,signed=normalizeSigns(g,list(result.values())+[top])
-    result=dict(zip(result,signed[:-1])); top,topSign=signed[-1]
-    baseLive=g.live(root for root,sign in result.values()); topLive=g.live([top])
+def emitKernel(E,independentM2lRatios=False):
+    g,result=buildKernel(E,independentM2lRatios)
+    g,signed=normalizeSigns(g,list(result.values()))
+    result=dict(zip(result,signed))
+    live=g.live(root for root,sign in result.values())
     plan=EmissionPlan(g,signed)
-    baseStats=plan.statistics(baseLive,range(len(result)))
-    fullStats=plan.statistics(baseLive|topLive,range(len(signed)))
-    out=[f'template <> class M2L<{E}, {str(centered).lower()}> {{',
-         'public:',
-         f"\tstatic constexpr int kFlops_ = {baseStats['conventional_flops']};",
-         f"\tstatic constexpr int kWeightedFlops_ = {baseStats['weighted_flops']};",
-         f"\tstatic constexpr int kFlopsFull_ = {fullStats['conventional_flops']};",
-         f"\tstatic constexpr int kWeightedFlopsFull_ = {fullStats['weighted_flops']};",
-         '\ttemplate <typename Real, typename Expansion, typename Source, int sourceOrder>',
-         '\tCUDA_EXPORT static void add(Expansion& local, Source const& source,',
-         '\t\tReal ux, Real uy, Real uz, Real inverseRadius, Real sourceRatio, Real targetRatio) {']
-    out+=g.emitConstants(baseLive|topLive)
-    out.append('\t\t(void) ux; (void) uy; (void) uz; (void) sourceRatio; (void) targetRatio;')
-    out+=plan.emit(baseLive)
+    stats=plan.statistics(live,range(len(result)))
+    extra=', Real sourceRatio, Real targetRatio' if independentM2lRatios else ''
+    out=[f'template <class Real> CUDA_EXPORT void M2L(',
+         f'    Expansion<Real, {E+1}>& L, Multipole<Real, {E+1}> const& M,',
+         f'    Vector3<Real> const& distance{extra}) {{',
+         '    Real const dx = distance[0];',
+         '    Real const dy = distance[1];',
+         '    Real const dz = distance[2];',
+         '    Real const R = math::sqrt(math::fma(dx, dx, math::fma(dy, dy, dz * dz)));',
+         '    Real const iR = select(R > broadcast<Real>(0), broadcast<Real>(1), broadcast<Real>(0)) /',
+         '        max(R, broadcast<Real>(1.0e-20));',
+         ]
+    out+=g.emitConstants(live)
+    out+=plan.emit(live)
     for output,a in enumerate(result):
-        out+=plan.accumulate(f'local[{index(a)}]',output)
-    if E>0 and top!=g.zero:
-        out.append(f'\t\tif constexpr (sourceOrder == {E}) {{')
-        out+=plan.emit(topLive,baseLive,'\t\t\t')
-        out+=plan.accumulate('local[0]',len(result),'\t\t\t')
-        out.append('\t\t}')
-    out.extend(['\t}','};',''])
-    stats={'expansion_order':E,'centered':centered,'base_source_order':max(0,E-1),
-           'arithmetic_base':baseStats['arithmetic'],'arithmetic_full':fullStats['arithmetic'],
-           'trace_extra_arithmetic':{},
-           'base_accumulations':baseStats['accumulations'],
-           'full_extra_accumulations':fullStats['accumulations']-baseStats['accumulations'],
-           'base_fused_accumulations':baseStats['fused_accumulations'],
-           'full_extra_fused_accumulations':fullStats['fused_accumulations']-baseStats['fused_accumulations'],
-           'weighted_flops_base':baseStats['weighted_flops'],
-           'weighted_flops_full':fullStats['weighted_flops'],
-           'conventional_flops_base':baseStats['conventional_flops'],
-           'conventional_flops_full':fullStats['conventional_flops'],
-           'trace_accumulations':0}
+        out+=plan.accumulate(f'L[{index(a)}]',output)
+    out.append('}')
+    if independentM2lRatios:
+        out.extend([f'template <class Real> CUDA_EXPORT void M2L(',
+                    f'    Expansion<Real, {E+1}>& L, Multipole<Real, {E+1}> const& M,',
+                    '    Vector3<Real> const& distance) {',
+                    '    Real const dx = distance[0];',
+                    '    Real const dy = distance[1];',
+                    '    Real const dz = distance[2];',
+                    '    Real const R = math::sqrt(math::fma(dx, dx, math::fma(dy, dy, dz * dz)));',
+                    '    Real const iR = math::select(R > math::broadcast<Real>(0),',
+                    '        math::broadcast<Real>(1), math::broadcast<Real>(0)) /',
+                    '        math::max(R, math::broadcast<Real>(1.0e-20));',
+                    '    M2L(L, M, distance, iR, iR);',
+                    '}'])
+    out.append('')
+    stats.update({'expansion_order':E,'source_order':E-1})
     return '\n'.join(out),stats
 
 
-def emitEwaldKernel(sourceOrder, expansionOrder, centered):
+def emitEwaldKernel(sourceOrder, expansionOrder):
     """Contract raw Cartesian moments with externally computed harmonic derivatives.
 
-    A constant Laplacian belongs to the root local expansion and is not a
-    source moment. Only harmonic derivative components enter this operator.
+    The periodic background is handled outside this harmonic contraction.
+    Only harmonic derivative components enter this operator.
     """
     g = Dag()
-    source = {alpha: g.symbol(f'source[{index(alpha)}]')
+    source = {alpha: g.symbol(f'M[{index(alpha)}]')
               for degree in range(sourceOrder + 1) for alpha in indices(degree)}
-    derivatives = {alpha: g.symbol(f'derivatives[{index(alpha)}]')
+    derivatives = {alpha: g.symbol(f'D[{index(alpha)}]')
                    for degree in range(expansionOrder + 1) for alpha in indices(degree)}
     getSource = accessor(g, source)
     getDerivative = accessor(g, derivatives)
@@ -545,8 +532,6 @@ def emitEwaldKernel(sourceOrder, expansionOrder, centered):
         for alpha in indices(degree):
             terms = []
             for rank in range(min(sourceOrder, expansionOrder - degree) + 1):
-                if centered and rank == 1:
-                    continue
                 for nx in range(rank + 1):
                     for ny in range(rank - nx + 1):
                         beta = (nx, ny, rank - nx - ny)
@@ -557,106 +542,165 @@ def emitEwaldKernel(sourceOrder, expansionOrder, centered):
     live = g.live(root for root, sign in signed)
     plan = EmissionPlan(g, signed)
     statistics = plan.statistics(live, range(len(signed)))
-    code = [f'template <> class M2LDerivatives<{expansionOrder}, {str(centered).lower()}> {{',
-            'public:',
-            f"\tstatic constexpr int kFlops_ = {statistics['conventional_flops']};",
-            f"\tstatic constexpr int kWeightedFlops_ = {statistics['weighted_flops']};",
-            '\ttemplate <typename Real, typename Expansion, typename Source, typename Derivatives>',
-            '\tCUDA_EXPORT static void add(Expansion& local, Source const& source,',
-            '\t\tDerivatives const& derivatives) {']
+    code = [f'template <class Real> CUDA_EXPORT void M2L(',
+            f'    Expansion<Real, {expansionOrder+1}>& L,',
+            f'    Multipole<Real, {expansionOrder+1}> const& M,',
+            f'    Derivatives<Real, {expansionOrder+1}> const& D) {{',
+            ]
     code += g.emitConstants(live)
     code += plan.emit(live)
     for output, alpha in enumerate(result):
-        code += plan.accumulate(f'local[{index(alpha)}]', output)
-    code += ['\t}', '};', '']
+        code += plan.accumulate(f'L[{index(alpha)}]', output)
+    code += ['}', '']
     statistics.update({'operator': 'EwaldM2L', 'source_order': sourceOrder,
-                       'order': expansionOrder, 'centered': centered})
+                       'order': expansionOrder})
     return '\n'.join(code), statistics
 
 
-def generateCartesianTracefree(minLocalDegree=2, maxLocalDegree=8):
-    """Emit every (source degree p, local degree p + 1) pair in the inclusive range.
+def replaceCartesianFields(cpp, sourceDegree, localDegree):
+    from cartesian.types import component_name
+    def field(number, degree):
+        return component_name(next(a for rank in range(degree + 1)
+                                   for a in indices(rank) if index(a) == number))
+    # Emitted straight-line arithmetic names each coefficient directly.
+    for variable, degree in (('targetM', sourceDegree), ('M', sourceDegree),
+                             ('targetL', localDegree), ('L', localDegree),
+                             ('D', localDegree)):
+        def replacement(match):
+            number = int(match.group(1))
+            name = field(number, degree)
+            return variable + '.' + name
+        cpp = re.sub(r'\b' + variable + r'\[(\d+)\]', replacement, cpp)
+    return cpp
 
-    Each degree becomes its own fully specialized kernel class, so all FMM orders
-    coexist in one header set and the application selects an order at run time.
-    """
-    parts=['// Generated by tools/generate_fmm.py. Do not edit.',
-           '// Distributed under the Boost Software License, Version 1.0.',
-           '#pragma once', '', '#include <cosmictiger/cuda/cuda_export.hpp>',
-           '#include <cosmictiger/math/simd_math.hpp>', '',
-           'namespace cosmictiger::gravity::cartesian::tracefree::detail {',
-           'template <int expansionOrder, bool centered> class M2L;',
-           'template <int expansionOrder, bool centered> class M2LDerivatives;', '']
-    stats=[]
+
+def generateCartesianTracefree(minLocalDegree=2, maxLocalDegree=8, independentM2lRatios=False):
+    """Generate typed free functions in one header per Cartesian operator."""
     from cartesian.particles import generateParticles
     from cartesian.translations import generateTranslations
     from cartesian.cuda import generateWarpL2l
-    operators=['// Generated by tools/generate_fmm.py. Do not edit.',
-        '// Distributed under the Boost Software License, Version 1.0.',
-        '#pragma once', '', '#include <cosmictiger/cuda/cuda_export.hpp>',
-        '#include <cosmictiger/math/simd_math.hpp>', '',
-        'namespace cosmictiger::gravity::cartesian::tracefree::detail {',
-        'template <int order> class M2M;',
-        'template <int order, bool withTrace> class L2L;',
-        'template <int order> class P2L;',
-        'template <int order> class P2M;',
-        'template <int order, bool withTrace> class L2P;',
-        'template <int order, bool centered> class M2P;', '']
-    operatorStats=[]
-    for maxOrder in range(minLocalDegree, maxLocalDegree + 1):
-        minOrder = maxOrder - 1
-        orderGuard = (f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {maxOrder + 1}) && '
-                      f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {maxOrder + 1})')
-        parts.append(orderGuard)
-        parts.append(f'// FMM order {maxOrder + 1}: source degree {minOrder}, local degree {maxOrder}.')
-        for centered in (True,False):
-            code,counts=emitKernel(maxOrder,centered); parts.append(code); stats.append(counts)
-            code,counts=emitEwaldKernel(minOrder,maxOrder,centered); parts.append(code); stats.append(counts)
-        parts.append('#endif')
-        particleParts,particleStats=generateParticles(minOrder,maxOrder,sys.modules[__name__])
-        translationParts,translationStats=generateTranslations(minOrder,maxOrder,sys.modules[__name__])
-        warpCode,warpStats=generateWarpL2l(maxOrder,sys.modules[__name__])
-        operators.append(orderGuard)
-        operators.append(f'// FMM order {maxOrder + 1}: source degree {minOrder}, local degree {maxOrder}.')
-        operators+=translationParts+particleParts+['namespace detail {', warpCode, '} // namespace detail']
-        operators.append('#endif')
-        operatorStats+=translationStats+particleStats+[warpStats]
-    parts.append('} // namespace cosmictiger::gravity::cartesian::tracefree::detail\n')
-    operators.append('} // namespace cosmictiger::gravity::cartesian::tracefree::detail\n')
-    config=f'''// Generated by tools/generate_fmm.py. Do not edit.
+    from cartesian.types import generate_types
+    operators = ('m2l', 'm2m', 'l2l', 'p2m', 'p2l', 'm2p', 'l2p')
+    parts = {operator: [] for operator in operators}
+    parts['l2l_warp'] = []
+    statistics = []
+    operatorStats = []
+    flopNames = {'m2l':'kM2LFlops', 'm2l_derivatives':'kM2LDerivativeFlops',
+                 'm2m':'kM2MFlops', 'l2l':'kL2LFlops', 'p2m':'kP2MFlops',
+                 'p2l':'kP2LFlops', 'm2p':'kM2PFlops', 'l2p':'kL2PFlops'}
+    for localDegree in range(minLocalDegree, maxLocalDegree + 1):
+        sourceDegree = localDegree - 1
+        guard = (f'#if (!defined(FMM_MIN_ORDER) || FMM_MIN_ORDER <= {localDegree + 1}) && '
+                 f'(!defined(FMM_MAX_ORDER) || FMM_MAX_ORDER >= {localDegree + 1})')
+        direct, directStats = emitKernel(localDegree, independentM2lRatios)
+        derivatives, derivativeStats = emitEwaldKernel(sourceDegree, localDegree)
+        statistics += [directStats, derivativeStats]
+        translations, translationStats = generateTranslations(sourceDegree, localDegree, sys.modules[__name__])
+        particles, particleStats = generateParticles(sourceDegree, localDegree, sys.modules[__name__])
+        particles[1] += particles[1].replace(
+            f'Expansion<Real, {localDegree+1}>& L',
+            f'Derivatives<Real, {localDegree+1}>& L')
+        warp, warpStats = generateWarpL2l(localDegree, sys.modules[__name__])
+        warp = re.sub(r'\bsource\b', 'L', warp)
+        warp = re.sub(r'\btarget\b', 'targetL', warp)
+        operatorStats += translationStats + particleStats + [warpStats]
+        code = {'m2l': [(direct, directStats, 'm2l'),
+                        (derivatives, derivativeStats, 'm2l_derivatives')],
+                'm2m': [(translations[0], translationStats[0], 'm2m')],
+                'l2l': [(translations[1], translationStats[1], 'l2l')],
+                'p2m': [(particles[0], particleStats[0], 'p2m')],
+                'p2l': [(particles[1], particleStats[1], 'p2l')],
+                'm2p': [(particles[2], particleStats[2], 'm2p')],
+                'l2p': [(particles[3], particleStats[3], 'l2p')]}
+        for operator, variants in code.items():
+            parts[operator].append(guard)
+            parts[operator].append(f'// FMM order {localDegree + 1}.')
+            for body, counts, variant in variants:
+                parts[operator].append(replaceCartesianFields(body, sourceDegree, localDegree))
+                parts[operator].append(f'template <> inline constexpr int '
+                                       f'{flopNames[variant]}<{localDegree if operator in ("m2l", "l2l", "p2l", "l2p") else sourceDegree}> = '
+                                       f'{counts["conventional_flops"]};')
+            parts[operator].append('#endif')
+        parts['l2l_warp'] += [guard, warp, '#endif']
+    outputs = {}
+    for operator, definitions in parts.items():
+        root = f'cartesian_tracefree/{operator}.hpp'
+        if operator == 'l2l_warp':
+            include = ('#include <cosmictiger/gravity/kernels/cartesian_tracefree_types.hpp>\n'
+                       '#include <cosmictiger/math/vector3.hpp>')
+            namespace = 'cosmictiger::gravity::cartesian::tracefree::detail'
+            prelude = ('#ifdef __CUDACC__\n'
+                       'template <int degree> inline constexpr int kL2LWarpFlops = 0;\n'
+                       'template <int degree> inline constexpr int kL2LWarpNoPotentialFlops = 0;\n'
+                       '#endif')
+        else:
+            include = ('#include <cosmictiger/gravity/fmm_types.hpp>\n'
+                       '#include <cosmictiger/gravity/kernels/cartesian_tracefree/geometry.hpp>')
+            namespace = 'cosmictiger::gravity::cartesian::tracefree::detail'
+            names = [flopNames[operator]]
+            if operator == 'm2l': names.append(flopNames['m2l_derivatives'])
+            prelude = '\n'.join(f'template <int degree> inline constexpr int {name} = 0;'
+                                for name in names)
+        outputs[root] = '\n'.join([
+            '// Generated by tools/generate_fmm.py. Do not edit.',
+            '#pragma once', '',
+            '#include <cosmictiger/cuda/cuda_export.hpp>',
+            '#include <cosmictiger/math/simd_math.hpp>', '',
+            include, '',
+            f'namespace {namespace} {{', prelude, *definitions,
+            f'}} // namespace {namespace}', ''])
+    outputs['cartesian_tracefree/geometry.hpp'] = '''// Generated by tools/generate_fmm.py. Do not edit.
 #pragma once
-// Inclusive local-degree range; each local degree L pairs with source degree L - 1
-// and FMM order L + 1.
+
+#include <cosmictiger/math/simd_math.hpp>
+#include <cosmictiger/math/vector3.hpp>
+
+namespace cosmictiger::gravity::cartesian::tracefree::detail {
+// R is the separation radius; iR is its inverse, zero at coincident centers.
+template <class Real> CUDA_EXPORT Real inverseRadius(Vector3<Real> const& distance) {
+    Real const dx = distance[0];
+    Real const dy = distance[1];
+    Real const dz = distance[2];
+    Real const R = math::sqrt(math::fma(dx, dx, math::fma(dy, dy, dz * dz)));
+    return math::select(R > math::broadcast<Real>(0), math::broadcast<Real>(1),
+        math::broadcast<Real>(0)) / math::max(R, math::broadcast<Real>(1.0e-20));
+}
+} // namespace cosmictiger::gravity::cartesian::tracefree::detail
+'''
+    outputs['cartesian_tracefree_types.hpp'] = generate_types(maxLocalDegree)
+    outputs['cartesian_tracefree_config.hpp'] = f'''// Generated by tools/generate_fmm.py. Do not edit.
+#pragma once
 namespace cosmictiger::gravity::cartesian::tracefree {{
 inline constexpr int kMinLocalDegree = {minLocalDegree};
 inline constexpr int kMaxLocalDegree = {maxLocalDegree};
 inline constexpr int kMinMultipoleDegree = {minLocalDegree - 1};
 inline constexpr int kMaxMultipoleDegree = {maxLocalDegree - 1};
-}} // namespace cosmictiger::gravity::cartesian::tracefree
+inline constexpr bool kIndependentM2lRatios = {str(independentM2lRatios).lower()};
+}}
 '''
-    report={'min_local_degree':minLocalDegree,'max_local_degree':maxLocalDegree,
-            'description':'Static emitted arithmetic counts. +, - and * each count one. Explicit FMAs are listed separately: '
-            'kFlops_ uses conventional FMA=2; kWeightedFlops_ uses FMA=1. Fused output accumulations are included in arithmetic, '
-            'so only add the remaining listed standalone accumulations. Constant rational evaluation is compile time; '
-            'geometry normalization/public validation and sqrt/division are excluded. No hardware-timing claim.',
-            'kernels':stats,'operators':operatorStats}
-    return {'cartesian_tracefree_m2l.hpp':'\n'.join(parts),
-            'cartesian_tracefree_kernels.hpp':'\n'.join(operators),
-            'cartesian_tracefree_config.hpp':config,
-            'operation_counts.json':json.dumps(report,indent=2)+'\n'}
+    report = {'min_local_degree':minLocalDegree, 'max_local_degree':maxLocalDegree,
+              'independent_m2l_ratios':independentM2lRatios,
+              'description':'Static emitted arithmetic counts. Conventional FMA=2; weighted FMA=1. '
+                            'Distance geometry is evaluated inside direct kernels and excluded from DAG counts.',
+              'kernels':statistics, 'operators':operatorStats}
+    outputs['operation_counts.json'] = json.dumps(report, indent=2) + '\n'
+    return outputs
 
 
 def m2lComparison(cartesianKernels, sphericalSelections):
     """Compare direct M2L at equal degrees, including displacement geometry.
 
-    Cartesian normalization costs one multiply, two FMAs, one sqrt, one
-    division, and three coordinate multiplies: 14 with FMA=1 and sqrt=7.
+    The direct M2L DAG includes three coordinate multiplies. Remaining radius
+    work costs one multiply, two FMAs, one sqrt and one division: 11 with
+    FMA=1 and sqrt=7.
     Application unit conversion is outside both representation APIs.
     """
-    geometryFlops = 14
+    # The DAG now includes the three coordinate normalizations; the remaining
+    # radius work is one multiply, two FMAs, sqrt and reciprocal.
+    geometryFlops = 11
     cartesian = {
-        (kernel['expansion_order'], kernel['centered']):
-            sum(kernel['arithmetic_base'].values()) + kernel['base_accumulations']
+        kernel['expansion_order']:
+            sum(kernel['arithmetic'].values()) + kernel['accumulations']
         for kernel in cartesianKernels if 'expansion_order' in kernel
     }
     rows = []
@@ -668,18 +712,16 @@ def m2lComparison(cartesianKernels, sphericalSelections):
             'fmm_order': degree + 1,
             'source_degree': degree - 1,
             'local_degree': degree,
-            'cartesian_kernel_flops': cartesian[degree, False],
+            'cartesian_kernel_flops': cartesian[degree],
             'cartesian_geometry_flops': geometryFlops,
-            'cartesian_weighted_flops': cartesian[degree, False] + geometryFlops,
-            'cartesian_centered_weighted_flops': cartesian[degree, True] + geometryFlops,
+            'cartesian_weighted_flops': cartesian[degree] + geometryFlops,
             'spherical_weighted_flops': selection['weighted_flops'],
             'spherical_variant': ('none', 'azimuth', 'full')[selection['selected_variant']],
         })
     return {
         'description': 'Free-space M2L, including displacement geometry and additive output; '
             'source degree = FMM order - 2, local degree = FMM order - 1. '
-            'Generic source dipoles are retained. The separate centered Cartesian column '
-            'is valid only for zero source dipole. Application coordinate-unit conversion '
+            'Generic source dipoles are retained. Application coordinate-unit conversion '
             'is excluded from both families. +, -, *, / and explicit FMA cost 1; sqrt costs 7. '
             'Both families emit explicit FMAs; no additional compiler contraction is assumed. '
             'These are emitted arithmetic counts, not measured instruction counts or timings.',
@@ -687,7 +729,7 @@ def m2lComparison(cartesianKernels, sphericalSelections):
     }
 
 
-def generate(minLocalDegree=2, maxLocalDegree=8):
+def generate(minLocalDegree=2, maxLocalDegree=8, independentM2lRatios=False):
     """Generate all representations at exactly the same requested order range.
 
     The near field's runtime representation is Cartesian tracefree; the spherical
@@ -698,7 +740,7 @@ def generate(minLocalDegree=2, maxLocalDegree=8):
     from fmm.spherical import generate as generateSpherical
     from fmm.spherical_ewald import generate as generateSphericalEwald
 
-    outputs = generateCartesianTracefree(minLocalDegree, maxLocalDegree)
+    outputs = generateCartesianTracefree(minLocalDegree, maxLocalDegree, independentM2lRatios)
     report = json.loads(outputs.pop('operation_counts.json'))
     report['representations'] = {}
     for name, generator in (
@@ -721,6 +763,112 @@ def generate(minLocalDegree=2, maxLocalDegree=8):
     return outputs
 
 
+def unnameUnusedGeneratedParameters(cpp):
+    start=0
+    while (start := cpp.find('CUDA_EXPORT static void add(', start)) != -1:
+        opening=cpp.find('{',start)
+        if opening<0: raise RuntimeError('Generated add function has no body')
+        depth=1; closing=opening+1
+        while depth:
+            depth+=(cpp[closing]=='{')-(cpp[closing]=='}')
+            closing+=1
+        signature=cpp[start:opening]
+        body=cpp[opening:closing]
+        body=re.sub(r'\(void\)\s*[A-Za-z][A-Za-z0-9_]*\s*;\s*','',body)
+        candidates=set(re.findall(r'\bReal(?:\s+const)?\s+([A-Za-z][A-Za-z0-9_]*)\b',signature))
+        for name in candidates:
+            if not re.search(r'\b'+re.escape(name)+r'\b',body):
+                signature,count=re.subn(r'\bReal(\s+const)?\s+'+re.escape(name)+r'\b',
+                                         lambda match:'Real'+(match.group(1) or ''),signature)
+                if count!=1: raise RuntimeError(f'Cannot unname {name} in generated function')
+        cpp=cpp[:start]+signature+body+cpp[closing:]
+        start=start+len(signature)+len(body)
+    return cpp
+
+
+SYMBOL_DIRECTORIES = {
+    'cartesian_tracefree_types.hpp': """// Symbol directory (Cartesian trace-free coefficients):
+// m: rank-zero coefficient; x, xy, xyz, etc.: stored tensor components.
+// z-pair components are derived from trace-free symmetry.
+""",
+    'cartesian_tracefree/geometry.hpp': """// Symbol directory (Cartesian distance geometry):
+// dx, dy, dz: target-minus-source displacement; R: its radius; iR: inverse radius.
+""",
+    'cartesian_tracefree/l2l_warp.hpp': """// Symbol directory (cooperative Cartesian L2L):
+// L: source local expansion; targetL: translated local expansion.
+// dx, dy, dz: center displacement; basis: distributed Taylor polynomial values.
+""",
+    'cartesian_tracefree/m2l.hpp': """// Symbol directory (Cartesian M2L):
+// M: source multipole; L: destination local expansion; D: Green derivatives.
+// dx, dy, dz: target-minus-source center displacement; R: its radius; iR: 1/R.
+// Stored tensor fields are named by Cartesian indices; zz and other z-pairs follow from trace-free symmetry.
+""",
+    'cartesian_tracefree/m2m.hpp': """// Symbol directory (Cartesian M2M):
+// M: source multipole; targetM: translated multipole; dx, dy, dz: center displacement.
+// scaleRatio: source scale divided by target scale.
+""",
+    'cartesian_tracefree/l2l.hpp': """// Symbol directory (Cartesian L2L):
+// L: source local expansion; targetL: translated local expansion; dx, dy, dz: center displacement.
+// scaleRatio: target scale divided by source scale.
+""",
+    'cartesian_tracefree/p2m.hpp': """// Symbol directory (Cartesian P2M):
+// M: destination multipole; mass: particle mass; dx, dy, dz: particle-center displacement.
+""",
+    'cartesian_tracefree/p2l.hpp': """// Symbol directory (Cartesian P2L):
+// L: destination local expansion; dx, dy, dz: source-target displacement.
+// R: source-target radius; iR: 1/R; mass: particle mass.
+""",
+    'cartesian_tracefree/m2p.hpp': """// Symbol directory (Cartesian M2P):
+// M: source multipole; dx, dy, dz: source-target displacement.
+// R: source-target radius; iR: 1/R; field: potential and negative gradient.
+""",
+    'cartesian_tracefree/l2p.hpp': """// Symbol directory (Cartesian L2P):
+// L: source local expansion; dx, dy, dz: particle-center displacement.
+// field: potential and negative gradient.
+// inverseScale: inverse expansion length scale.
+""",
+    'spherical_kernels.hpp': """// Symbol directory (real spherical FMM operators):
+// M: regular-harmonic source multipole; L: singular-harmonic local expansion.
+// G: signed singular Green harmonics of -1/R; R: source-target distance.
+// x, y, z: operator displacement; source degree is local degree minus one in M2L.
+// Index (n,m) denotes harmonic degree n and signed storage order m.
+""",
+    'spherical_ewald_kernels.hpp': """// Symbol directory (periodic spherical Ewald operators):
+// M: source multipole; L: target local expansion; G: periodic Green harmonics.
+// x, y, z: minimum-image target-minus-source displacement in unit-box coordinates.
+// sourceTrace, localTrace, greenTrace: independent radial/background terms.
+// The primary free-space singularity is handled separately from the periodic correction.
+""",
+}
+
+
+def useUnqualifiedMathInGeneratedFunctions(cpp):
+    """Keep math helper imports local to each emitted function body."""
+    signature = re.compile(r'(?:CUDA_EXPORT|__device__)[^;{}]*\([^;{}]*\)[^;{}]*\{')
+    position = 0
+    output = []
+    while match := signature.search(cpp, position):
+        opening = match.end() - 1
+        depth = 1
+        closing = opening + 1
+        while depth:
+            if cpp[closing] == '{':
+                depth += 1
+            elif cpp[closing] == '}':
+                depth -= 1
+            closing += 1
+        output.append(cpp[position:opening + 1])
+        body = cpp[opening + 1:closing - 1]
+        imports = '\n\tusing namespace math;'
+        if 'math::fma(' in body:
+            imports += '\n\tFma const fma{};'
+        output.append(imports + body.replace('math::', ''))
+        output.append('}')
+        position = closing
+    output.append(cpp[position:])
+    return ''.join(output)
+
+
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--check',action='store_true',help='fail if the files in --output-dir differ')
@@ -731,6 +879,8 @@ def main():
     ap.add_argument('--output-dir',dest='outputDir',type=Path,default=outputDirectory,
                     help='directory receiving the generated headers and operation counts '
                          '(default: cosmictiger/gravity/kernels in the source tree)')
+    ap.add_argument('--independent-m2l-ratios',dest='independentM2lRatios',
+                    action='store_true',help='emit independent Cartesian M2L source/target scale ratios')
     ap.add_argument('--no-format',dest='noFormat',action='store_true',
                     help='skip clang-format for temporary output; source headers use formatting')
     args=ap.parse_args()
@@ -738,13 +888,18 @@ def main():
         ap.error('local degrees must form an inclusive range starting at 2 or more')
     if args.maxLocalDegree > 8:
         ap.error('local degree must be at most 8 (FMM order 9), the supported production range')
-    outputs=generate(args.minLocalDegree,args.maxLocalDegree)
+    outputs=generate(args.minLocalDegree,args.maxLocalDegree,args.independentM2lRatios)
     notice = (projectRoot / 'tools/cartesian/generated_notice.txt').read_text()
     for name, cpp in list(outputs.items()):
         if not name.endswith('.hpp'):
             continue
-        cpp = re.sub(r'\bstruct (\w+(?:<[^{}]*>)?)\s*\{', r'class \1 {\npublic:', cpp)
-        cpp = re.sub(r'\bstruct (\w+);', r'class \1;', cpp)
+        cpp = unnameUnusedGeneratedParameters(cpp)
+        cpp = useUnqualifiedMathInGeneratedFunctions(cpp)
+        directory = SYMBOL_DIRECTORIES.get(name, '')
+        cpp = directory + ('\n' if directory else '') + cpp
+        if name != 'cartesian_tracefree_types.hpp':
+            cpp = re.sub(r'\bstruct (\w+(?:<[^{}]*>)?)\s*\{', r'class \1 {\npublic:', cpp)
+            cpp = re.sub(r'\bstruct (\w+);', r'class \1;', cpp)
         if not args.noFormat:
             cpp = subprocess.run(['clang-format', '--style=file', '--assume-filename=' + str(outputDirectory / name)],
                                  input=cpp, text=True, capture_output=True, check=True).stdout

@@ -196,32 +196,32 @@ SphRunReturn sphCpuHydro(
             SimdFloat const h𞁓ₚᵣₑ =
                 detail::sphCpuLoad(data.sourceSmoothingLength, neighbors, first, 1.0f);
             auto const supportsIntersect = detail::sphCpuValidLanes(neighbors, first) &
-                (r2𞁑𞁓ₚᵣₑ < simdMax(SimdFloat(h𞁑 * h𞁑), sqr(h𞁓ₚᵣₑ)));
+                (r2𞁑𞁓ₚᵣₑ < math::max(SimdFloat(h𞁑 * h𞁑), sqr(h𞁓ₚᵣₑ)));
             if (parameters.midpointHydro && parameters.phase == 1) {
                 SimdFloat const neighborRungs([&](auto lane) {
                     size_t const index = first + size_t(lane);
                     return index < neighbors.size() ? float(data.sourceRungs[neighbors[index]]) :
                                                       0.0f;
                 });
-                maximumNeighborRungPack = simdMax(
-                    maximumNeighborRungPack, simdSelect(supportsIntersect, neighborRungs, zero));
+                maximumNeighborRungPack = math::max(
+                    maximumNeighborRungPack, math::select(supportsIntersect, neighborRungs, zero));
             }
             auto const interacts = supportsIntersect & (r2𞁑𞁓ₚᵣₑ > zero);
             // Fixed scales, dot operations and h𞁓² per lane; h𞁑² is scalar.
             flops +=
                 (sph_flops::kVectorOperation + sph_flops::kDotProduct + 1) * SimdFloat::size() + 1;
-            if (!simdAnyOf(interacts)) {
+            if (!math::anyOf(interacts)) {
                 continue;
             }
-            SimdFloat const h𞁓 = simdSelect(interacts, h𞁓ₚᵣₑ, one);
-            SimdFloat const ρ𞁓 = simdSelect(
+            SimdFloat const h𞁓 = math::select(interacts, h𞁓ₚᵣₑ, one);
+            SimdFloat const ρ𞁓 = math::select(
                 interacts, detail::sphCpuLoad(data.sourceDensity, neighbors, first, 1.0f), one);
-            SimdFloat const u𞁓 = simdSelect(interacts,
+            SimdFloat const u𞁓 = math::select(interacts,
                 detail::sphCpuLoad(data.sourceInternalEnergy, neighbors, first, 1.0f), one);
             SimdFloat const P𞁓 = γ_minus_1Pack * ρ𞁓 * u𞁓;
-            SimdFloat const c𞁓 = simdSqrt(γPack * γ_minus_1Pack * u𞁓);
-            SimdFloat const r2𞁑𞁓 = simdSelect(interacts, r2𞁑𞁓ₚᵣₑ, one);    // |r𞁑𞁓|²
-            SimdFloat const abs_r𞁑𞁓 = simdSqrt(r2𞁑𞁓);                      // |r𞁑𞁓|
+            SimdFloat const c𞁓 = math::sqrt(γPack * γ_minus_1Pack * u𞁓);
+            SimdFloat const r2𞁑𞁓 = math::select(interacts, r2𞁑𞁓ₚᵣₑ, one);    // |r𞁑𞁓|²
+            SimdFloat const abs_r𞁑𞁓 = math::sqrt(r2𞁑𞁓);                      // |r𞁑𞁓|
             // clang-format off
             /*
              * Symmetric kernel of Monaghan (1992), p. 554: ∇𞁑 W̃𞁑𞁓 = ½[∇𞁑 W(r𞁑𞁓, h𞁑) +
@@ -240,25 +240,25 @@ SphRunReturn sphCpuHydro(
             SimdFloat const F𞁓 = dkernelWDq(q𞁓) * sph_geometry::inverseGradientScale(ih𞁓) / abs_r𞁑𞁓;
             flops += sph_flops::densityKernelOperations(selectedHydroKernel(), q𞁑, true) +
                 sph_flops::densityKernelOperations(selectedHydroKernel(), q𞁓, true);
-            SimdFloat const F𞁑𞁓 = simdSelect(interacts, half * (F𞁑 + F𞁓), zero);
+            SimdFloat const F𞁑𞁓 = math::select(interacts, half * (F𞁑 + F𞁓), zero);
             // v𞁑𞁓 = v𞁑 − v𞁓 from the stored peculiar velocities. The physical relative
             // velocity adds the Hubble flow (a da/dt) r𞁑𞁓 and enters only the viscosity.
             SpatialVector<SimdFloat> const v𞁓 = detail::sphCpuLoad3(data.sourceVelocityX,
                 data.sourceVelocityY, data.sourceVelocityZ, neighbors, first, 0.0f);
             SpatialVector<SimdFloat> const v𞁑𞁓 =
-                simdSelect(interacts, v𞁑Pack - v𞁓, SpatialVector<SimdFloat>(zero));
+                math::select(interacts, v𞁑Pack - v𞁓, SpatialVector<SimdFloat>(zero));
             SimdFloat const v𞁑𞁓_dot_r𞁑𞁓 = v𞁑𞁓.dot(r𞁑𞁓);
             SimdFloat const a_vₚₕ𞁟ₛ𞁑𞁓_dot_r𞁑𞁓 =
-                v𞁑𞁓_dot_r𞁑𞁓 + SimdFloat(aȧ) * simdSelect(interacts, r2𞁑𞁓, zero);
+                v𞁑𞁓_dot_r𞁑𞁓 + SimdFloat(aȧ) * math::select(interacts, r2𞁑𞁓, zero);
             SimdFloat const h̄_M𞁑𞁓 = monaghan::pairLength(SimdFloat(h𞁑), h𞁓, h_M_over_h);
             SimdFloat const μ𞁑𞁓 =
                 monaghan::viscosityMu(r2𞁑𞁓, a_vₚₕ𞁟ₛ𞁑𞁓_dot_r𞁑𞁓, h̄_M𞁑𞁓, SimdFloat(ε));
-            SimdFloat const α𞁓 = simdSelect(interacts,
+            SimdFloat const α𞁓 = math::select(interacts,
                 detail::sphCpuLoad(data.sourceBulkViscosityCoefficient, neighbors, first, α𞁑),
                 SimdFloat(α𞁑));
             SimdFloat const α𞁑𞁓 = half * SimdFloat(α𞁑) + half * α𞁓;
             SimdFloat const β𞁑𞁓 = SimdFloat(parameters.vonNeumannRichtmyerCoefficient) * α𞁑𞁓;
-            αPack = simdMax(αPack, simdSelect(interacts, α𞁑𞁓, SimdFloat(α𞁑)));
+            αPack = math::max(αPack, math::select(interacts, α𞁑𞁓, SimdFloat(α𞁑)));
             // Symmetric Balsara multiplier.
             SimdFloat const fᴬⱽ𞁑𞁓 = half *
                 (SimdFloat(data.sourceBalsaraFactor[particleIndex]) +
@@ -281,12 +281,12 @@ SphRunReturn sphCpuHydro(
              *   maskedF_a, maskedF_b → F𞁑, F𞁓 with excluded SIMD lanes zeroed
              */
             // clang-format on
-            SimdFloat const ζ𞁓 = simdSelect(interacts,
+            SimdFloat const ζ𞁓 = math::select(interacts,
                 detail::sphCpuLoad(data.sourceGradHCorrection, neighbors, first, 0.0f), zero);
             SimdFloat const Q𞁓𞁑_over_m𞁑 = variational::directedCoefficient(
                 variational::pressureVolumeFactor(P𞁓, one, ρ𞁓), SimdFloat(m𞁓), ζ𞁓);
-            SimdFloat const maskedF_a = simdSelect(interacts, F𞁑, zero);
-            SimdFloat const maskedF_b = simdSelect(interacts, F𞁓, zero);
+            SimdFloat const maskedF_a = math::select(interacts, F𞁑, zero);
+            SimdFloat const maskedF_b = math::select(interacts, F𞁓, zero);
             SimdFloat const f_P𞁑𞁓 = SimdFloat(ia) *
                 variational::pairForceFactor(
                     SimdFloat(Q𞁑𞁓_over_m𞁑), Q𞁓𞁑_over_m𞁑, maskedF_a, maskedF_b);
@@ -342,7 +342,7 @@ SphRunReturn sphCpuHydro(
             flops += (38 + sph_flops::kInverseGradientScale + 3 * sph_flops::kVectorOperation +
                          sph_flops::kDotProduct) *
                 SimdFloat::size();
-            max𞁓μ𞁑𞁓Pack = simdMax(max𞁓μ𞁑𞁓Pack, -μ𞁑𞁓);
+            max𞁓μ𞁑𞁓Pack = math::max(max𞁓μ𞁑𞁓Pack, -μ𞁑𞁓);
         }
         SpatialVector<float> dv𞁑_dτ = detail::sphCpuSum(dv𞁑_dτPack);
         float du𞁑_dτ = simdSum(du𞁑_dτPack);

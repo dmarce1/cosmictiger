@@ -230,11 +230,11 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
             }
             Vector3<SimdPosition> xc{};
             for (int dim = 0; dim < kDimensions; dim++) {
-                xc[dim] = simdBroadcast<SimdPosition>(Position(xc1[dim]).raw());
+                xc[dim] = math::broadcast<SimdPosition>(Position(xc1[dim]).raw());
                 flops += detail::treePositionConversionExtraFlops(xc1[dim]);
             }
             flops += 9;
-            SimdFloat r2Max = simdBroadcast<SimdFloat>(0.0);
+            SimdFloat r2Max = math::broadcast<SimdFloat>(0.0);
             for (ParticleInteger i = particleRange.first; i < particleRange.second;
                 i += kSimdFloatSize) {
                 SimdPosition position{};
@@ -252,7 +252,7 @@ TreeCreateReturn treeBuild(TreeBuildRequest request, TreeBuildPolicy const& poli
                         toFloatFactor;
                 }
                 auto const r2 = sqr(dx[kXi], dx[kYi], dx[kZi]);
-                r2Max = simdMax(r2Max, r2);
+                r2Max = math::max(r2Max, r2);
             }
             float r2 = 0.0f;
             for (int i = 0; i < kSimdFloatSize; i++) {
