@@ -7,12 +7,12 @@
 
 """Restart SPH with PMMM gravity inside an outer interval (docs/sph_parent_tree_plan.md, M8).
 
-A small cosmology with gas and dark matter runs on the hierarchical integrator with
-gravity.pmmmOuterInterval, on one locality and, with MPI, on two. A restart from a
-checkpoint strictly inside an outer interval must finish that interval and cross the next
-boundary exactly as the uninterrupted run does: the frozen keys, the long accelerations
-and the interval clock come from the checkpoint. Fixed-time scenarios, which have no
-outer-interval schedule, must reject the option at startup.
+Two runs use the hierarchical integrator with gravity.pmmmOuterInterval, on one locality
+and, with MPI, on two: a small cosmology with gas and dark matter (cosmology driver) and
+the linear Jeans wave (fixed-time scenario driver). A restart from a checkpoint strictly
+inside an outer interval must finish that interval and cross the next boundary exactly as
+the uninterrupted run does: the frozen keys, the long accelerations and the interval clock
+come from the checkpoint.
 """
 
 import argparse
@@ -52,7 +52,7 @@ def load(directory, iteration, ranks):
     return rows, driver
 
 
-def compare(label, reference, resumed):
+def compare(label, reference, resumed, position_units, tolerances):
     """Pair particles by species and position; a restart may reorder them."""
     require(len(reference) == len(resumed), f"{label}: particle counts differ")
     period = reference[0]["period"]
@@ -89,12 +89,11 @@ def compare(label, reference, resumed):
             for field in ("entropy", "smoothing_length", "density"):
                 worst[field] = max(worst[field],
                                    abs(row[field] - other[field]) / max(abs(row[field]), 1e-30))
-    # Pair sums run in a scheduling order, so velocities agree to float roundoff and a drift
-    # may round a coordinate to a neighboring fixed-point unit (tests/run_checkpoint.py).
-    require(worst["position_units"] <= 2, f"{label}: restart moved a position by "
+    require(worst["position_units"] <= position_units, f"{label}: restart moved a position by "
             f"{worst['position_units']} fixed-point units")
     for field in ("velocity", "entropy", "smoothing_length", "density"):
-        require(worst[field] <= 1.0e-5, f"{label}: restart changed {field} by {worst[field]:.3e}")
+        require(worst[field] <= tolerances.get(field, 1.0e-5),
+                f"{label}: restart changed {field} by {worst[field]:.3e}")
     return worst
 
 
@@ -113,16 +112,26 @@ def main():
     root = args.workdir.resolve()
     root.mkdir(parents=True, exist_ok=True)
     configurations = Path(__file__).resolve().parents[1] / "configurations"
-    iterations = 40
-    common = {"configuration": configurations / "cosmology.ini",
-              "run.timeIntegrator": "hierarchical", "gravity.method.near": "pp",
-              "gravity.pmmmOuterInterval": "true", "gravity.meshSize": 16,
-              "run.darkMatterParticleCount": 4096, "run.gasParticleCount": 4096,
-              "chemistry.enabled": "false", "starFormation.enabled": "false",
-              "output.silo": "false", "output.directory": ".", "checkpoint.intervalSeconds": 0,
-              "run.verbose": "true",
-              "analysis.views": "false", "analysis.power": "false", "analysis.groups": "false",
-              "hpx:bind": "none", **cpu_backend_options()}
+    base = {"run.timeIntegrator": "hierarchical", "gravity.method.near": "pp",
+            "gravity.pmmmOuterInterval": "true", "gravity.meshSize": 16,
+            "chemistry.enabled": "false", "starFormation.enabled": "false",
+            "output.silo": "false", "output.directory": ".", "checkpoint.intervalSeconds": 0,
+            "run.verbose": "true", "analysis.views": "false", "analysis.power": "false",
+            "analysis.groups": "false", "hpx:bind": "none", **cpu_backend_options()}
+    # (name, options, iterations, whether dark matter takes part, position units, tolerances).
+    # Pair sums run in a scheduling order. The cosmology restart was bit-identical in every
+    # run; a drift may still round a coordinate to a neighboring fixed-point unit
+    # (tests/run_checkpoint.py). The Jeans wave's velocities are some 1e-8 of its sound
+    # speed, so that roundoff is large against them: two uninterrupted runs differed by 228
+    # position units and 3.4e-5 of the velocity scale (November 9, 2026). A lost frozen key or
+    # long acceleration changes the velocities by order one, since gravity supplies half the
+    # restoring force.
+    cases = [("cosmology", dict(base, **{"configuration": configurations / "cosmology.ini",
+                                         "run.darkMatterParticleCount": 4096,
+                                         "run.gasParticleCount": 4096}), 40, True, 2, {}),
+             ("jeans", dict(base, **{"configuration": configurations / "jeans_wave.ini",
+                                     "run.gasParticleCount": 4096}), 30, False, 2048,
+              {"velocity": 3.0e-4})]
 
     def run(directory, options, ranks, success=True):
         command = [str(executable), *args.hpx_argument,
@@ -136,50 +145,45 @@ def main():
         return runSimulation(command, directory, "run.log", timeout=1500, expectSuccess=success)
 
     evidence = {}
-    for ranks in [1] + ([2] if args.mpi_exec else []):
-        label = f"ranks_{ranks}"
-        reference = prepareCase(root, label)
-        output = run(reference, dict(common, **{"run.maxIterations": iterations}), ranks)
-        boundaries = [float(value) for value in BOUNDARY.findall(output)]
-        require(len(boundaries) >= 2, f"{label}: the run crossed fewer than two outer boundaries")
-        # The last checkpoint strictly inside the first interval, by the exact interval
-        # clock (a nonzero integer time in interval 0; the checkpoint at the boundary has
-        # integer time 0): the restart finishes that interval and crosses the next boundary.
-        inside = None
-        for iteration in range(1, iterations):
-            _, driver = load(reference, iteration, ranks)
-            if driver.outer_index == 0 and driver.integer_time != 0 and driver.outer_interval > 0.0:
-                inside = (iteration, driver.tau)
-        require(inside is not None, f"{label}: no checkpoint lies inside the first interval")
-        restart, restart_tau = inside
-        resumed = prepareCase(root, label + "_restart", reference / f"checkpoint.{restart}")
-        output = run(resumed, dict(common, **{"run.maxIterations": iterations - restart,
-                                              "checkpoint.readIndex": restart}), ranks)
-        require("Done reading checkpoint" in output, f"{label}: the checkpoint was not read")
-        final_reference, driver = load(reference, iterations, ranks)
-        final_resumed, resumed_driver = load(resumed, iterations, ranks)
-        require(resumed_driver.outer_index >= 1 and BOUNDARY.search(output),
-                f"{label}: the resumed run crossed no outer boundary")
-        for field in ("tau", "outer_start", "outer_interval", "outer_index"):
-            require(getattr(driver, field) == getattr(resumed_driver, field),
-                    f"{label}: restart changed the driver {field}")
-        worst = compare(label, final_reference, final_resumed)
-        gas = sum(row["type"] == 1 for row in final_reference)
-        require(gas > 0 and gas < len(final_reference), f"{label}: the run lacks gas or dark matter")
-        evidence[label] = dict(worst, restart=restart, boundaries=len(boundaries))
-        print(f"{label}: restart at iteration {restart} (tau={restart_tau:.6g}) inside the first "
-              f"interval; " + ", ".join(f"{key}={value:.3e}" if isinstance(value, float) else
-                                        f"{key}={value}" for key, value in worst.items()),
-              flush=True)
+    for name, options, iterations, dark_matter, position_units, tolerances in cases:
+        for ranks in [1] + ([2] if args.mpi_exec else []):
+            label = f"{name}_{ranks}"
+            reference = prepareCase(root, label)
+            output = run(reference, dict(options, **{"run.maxIterations": iterations}), ranks)
+            boundaries = BOUNDARY.findall(output)
+            require(len(boundaries) >= 2, f"{label}: the run crossed fewer than two outer boundaries")
+            # The last checkpoint strictly inside an interval (nonzero integer time; a boundary
+            # checkpoint has integer time 0) whose interval closes before the final iteration,
+            # so the resumed run also performs the next boundary pass.
+            clocks = [load(reference, iteration, ranks)[1] for iteration in range(1, iterations + 1)]
+            inside = None
+            for index, driver in enumerate(clocks[:-1]):
+                closed = any(later.integer_time == 0 for later in clocks[index + 1:-1])
+                if driver.integer_time != 0 and driver.outer_interval > 0.0 and closed:
+                    inside = (index + 1, driver.tau, driver.outer_index)
+            require(inside is not None, f"{label}: no checkpoint lies inside a closed interval")
+            restart, restart_tau, restart_interval = inside
+            resumed = prepareCase(root, label + "_restart", reference / f"checkpoint.{restart}")
+            output = run(resumed, dict(options, **{"run.maxIterations": iterations - restart,
+                                                   "checkpoint.readIndex": restart}), ranks)
+            require("Done reading checkpoint" in output, f"{label}: the checkpoint was not read")
+            final_reference, driver = load(reference, iterations, ranks)
+            final_resumed, resumed_driver = load(resumed, iterations, ranks)
+            require(resumed_driver.outer_index > restart_interval and BOUNDARY.search(output),
+                    f"{label}: the resumed run crossed no outer boundary")
+            for field in ("tau", "outer_start", "outer_interval", "outer_index", "integer_time"):
+                require(getattr(driver, field) == getattr(resumed_driver, field),
+                        f"{label}: restart changed the driver {field}")
+            worst = compare(label, final_reference, final_resumed, position_units, tolerances)
+            gas = sum(row["type"] == 1 for row in final_reference)
+            require(gas > 0 and (gas < len(final_reference)) == dark_matter,
+                    f"{label}: the run does not have the expected species")
+            evidence[label] = dict(worst, restart=restart, boundaries=len(boundaries))
+            print(f"{label}: restart at iteration {restart} (tau={restart_tau:.6g}) inside outer "
+                  f"interval {restart_interval}; " + ", ".join(
+                      f"{key}={value:.3e}" if isinstance(value, float) else f"{key}={value}"
+                      for key, value in worst.items()), flush=True)
 
-    rejected = prepareCase(root, "jeans_rejected")
-    output = run(rejected, {"configuration": configurations / "jeans_wave.ini",
-                            "run.timeIntegrator": "hierarchical", "gravity.method.near": "pp",
-                            "gravity.pmmmOuterInterval": "true", "run.maxIterations": 1,
-                            "output.directory": ".", "hpx:bind": "none", **cpu_backend_options()},
-                 1, success=False)
-    require("gravity.pmmmOuterInterval is not implemented for the fixed-time scenario" in output,
-            "a fixed-time scenario did not reject the outer interval")
     (root / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
     print("SPH with PMMM gravity restarts inside an outer interval", flush=True)
 

@@ -317,6 +317,10 @@ Vector<ParticleMeshCell> particleMeshSort(int meshSize, Pair<ParticleInteger> ra
 }
 
 Vector<ParticleMeshCell> particleMeshSortByKey(Pair<ParticleInteger> range) {
+    if (range.first == range.second) {
+        // A locality may own no particle; its key array is then never allocated.
+        return {};
+    }
     if (!particlesHasFrozenCell(getOptions()) || particlesFrozenCells == nullptr) {
         throw std::logic_error("Frozen mesh keys are not allocated for this run");
     }

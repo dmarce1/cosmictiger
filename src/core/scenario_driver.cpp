@@ -20,6 +20,9 @@
 #include <cosmictiger/core/timer.hpp>
 #if COSMICTIGER_WITH_GRAVITY
 #include <cosmictiger/gravity/kick.hpp>
+#if COSMICTIGER_WITH_GRAVITY
+#include <cosmictiger/gravity/solver.hpp>
+#endif
 #include <cosmictiger/gravity/kick_workspace.hpp>
 #endif
 #include <cosmictiger/io/checkpoint.hpp>
@@ -91,15 +94,6 @@ void writeScenarioDiagnostics(DriverParameters const& state) {
 
 void runFixedScenario() {
     profile::checkForInterrupt();
-#if COSMICTIGER_WITH_GRAVITY
-    // The outer-interval schedule (boundary passes, interval clock, checkpointed interval
-    // state) lives in the cosmology and Plummer driver; fixed-time scenarios step without it.
-    if (getOptions().gravity.enabled && usesOuterInterval(getOptions().gravity)) {
-        THROW_ERROR("gravity.pmmmOuterInterval is not implemented for the fixed-time scenario "
-                    "%s; use run.scenario=cosmology or plummer\n",
-            getOptions().run.scenario.c_str());
-    }
-#endif
     auto const& definition = scenarios::definition(getOptions().run.scenario);
     profile::profileBegin("initialize");
     auto plan = definition.initialize();
@@ -161,6 +155,29 @@ void runFixedScenario() {
         std::max(state.minrung0, baseOptions.run.minRung);
     bool const hierarchical = baseOptions.run.hierarchicalGravity;
     bool const global = usesGlobalIntegration(baseOptions.run);
+    // PMMM outer interval (docs/pmmm.md), as in the cosmology driver: the integer rung clock
+    // subdivides the outer interval instead of the coarse interval, a boundary pass at each
+    // clock rollover closes the frozen membership and selects the next interval, and the
+    // interval clock is checkpointed in the driver state.
+#if COSMICTIGER_WITH_GRAVITY
+    bool const meshInterval = baseOptions.gravity.enabled && usesOuterInterval(baseOptions.gravity);
+#else
+    bool const meshInterval = false;
+#endif
+    if (meshInterval && restarting) {
+        double const coarse = duration / baseOptions.run.numberOfSteps;
+        long double const phase = std::ldexp(static_cast<long double>(state.itime), -64);
+        long double const expected = static_cast<long double>(state.outerStart) +
+            static_cast<long double>(state.outerInterval) * (state.itime == 0 ? 1.0L : phase);
+        long double const tolerance =
+            1.0e-9L * std::max(static_cast<long double>(coarse), std::abs(expected));
+        if ((state.iter > 0 && !(state.outerInterval > 0.0)) ||
+            state.outerInterval > coarse * (1.0 + 1.0e-9) ||
+            (state.iter > 0 && std::abs(expected - state.tau) > tolerance)) {
+            THROW_ERROR("Checkpoint outer PM interval, phase and conformal time are "
+                        "inconsistent; retain the original mesh and timestep settings\n");
+        }
+    }
     // A restart keeps the decomposition read from the checkpoint: each rank's file holds
     // the particles of its saved domain, and recomputing the boxes here would change
     // which rank owns which particle, and with it the order of every distributed sum.
@@ -215,6 +232,11 @@ void runFixedScenario() {
             duration * (double(stageEndStep) / baseOptions.run.numberOfSteps);
         double const tolerance = 1.0e-12 * duration;
         if (state.tau >= (global ? stageEnd : stageEnd - tolerance)) {
+            // A run stopped at a stage end (iteration limit) saved the clock before the snap
+            // below; snap it here so its restart follows the uninterrupted run exactly.
+            if (!global && state.itime == 0 && std::abs(state.tau - stageEnd) <= tolerance) {
+                state.tau = stageEnd;
+            }
             continue;
         }
         auto stageOptions = baseOptions;
@@ -247,7 +269,13 @@ void runFixedScenario() {
             int const minimumRung = global ? 0 : minRung(state.itime);
             bool const fullEvaluation = minimumRung == 0;
             int const outputStep = driverOutputStep(state.tau, baseTimestep);
-            bool const outputDue = fullEvaluation && (!global || outputStep > lastOutputStep);
+            // Mesh intervals end on coarse boundaries, so an output is due only at the first
+            // interval of a coarse step.
+            bool const outputDue =
+                fullEvaluation && (!(global || meshInterval) || outputStep > lastOutputStep);
+            // The rung clock's base step: the outer interval, or the coarse interval. At a
+            // boundary it is the closing interval until the force step selects the next one.
+            double t0 = meshInterval ? state.outerInterval : baseTimestep;
 #if COSMICTIGER_WITH_SPH
             if (midpointHydro) {
                 if (state.iter == 0) {
@@ -287,22 +315,33 @@ void runFixedScenario() {
             deferHydroOpening = midpointHydro && baseOptions.gravity.enabled &&
                 coincidentHydroRung >= 0 && sphMidpointTargetCount(coincidentHydroRung) != 0;
 #endif
+            MeshKickSchedule schedule;
+            schedule.endTime = stageEnd;
+            PmmmBoundaryRequest pmmmBoundary;
+            if (meshInterval && state.itime == 0) {
+                // PMMM outer boundary: the force step closes the frozen membership, migrates,
+                // solves the far field once and selects the next interval.
+                pmmmBoundary.time = state.tau;
+                pmmmBoundary.coarseInterval = coarseInterval;
+                pmmmBoundary.endTime = duration;
+                schedule.pmmmBoundary = &pmmmBoundary;
+                schedule.closingBaseTimestep = state.outerInterval;
+                schedule.longCloseTimestep = state.outerInterval;
+            }
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
             if (hierarchical) {
                 int activeRung = std::max(minimumRung, state.minrung0);
-                MeshKickSchedule schedule;
-                schedule.endTime = stageEnd;
-                result = kickStepHierarchical(activeRung, state.maxRung, 1.0, 0.0, state.tau,
-                    baseTimestep, baseOptions.gravity.openingAngle, &state.energies, state.minrung0,
+                result = kickStepHierarchical(activeRung, state.maxRung, 1.0, 0.0, state.tau, t0,
+                    baseOptions.gravity.openingAngle, &state.energies, state.minrung0,
                     fullEvaluation, nullptr, true, 0.0, gravityErrorStep, false, schedule,
                     deferHydroOpening);
             } else
 #endif
             {
-                result = advanceForces(minimumRung, 1.0, 0.0, state.tau, baseTimestep,
+                result = advanceForces(minimumRung, 1.0, 0.0, state.tau, t0,
                     baseOptions.gravity.openingAngle, state.iter == 0, fullEvaluation,
-                    state.energies, gravityErrorStep, false, state.globalTimestep, forceStepCap, {},
-                    deferHydroOpening);
+                    state.energies, gravityErrorStep, false, state.globalTimestep, forceStepCap,
+                    schedule, deferHydroOpening);
             }
 #if COSMICTIGER_WITH_SPH
             if (midpointHydro && !global) {
@@ -310,8 +349,8 @@ void runFixedScenario() {
                 if (hydroRung >= 0) {
                     // Keep the coincident coarse hydro between finer gravity
                     // closing and opening half-kicks in the driver sequence.
-                    sphMidpointStep(hydroRung, state.tau, std::ldexp(baseTimestep, -hydroRung),
-                        baseTimestep, 1.0, 0.0, state.energies);
+                    sphMidpointStep(hydroRung, state.tau, std::ldexp(t0, -hydroRung), t0, 1.0, 0.0,
+                        state.energies);
 #if COSMICTIGER_WITH_GRAVITY
                     if (deferHydroOpening) {
                         gravityFinishDeferredGasOpening();
@@ -321,6 +360,14 @@ void runFixedScenario() {
                 }
             }
 #endif
+            if (meshInterval && state.itime == 0) {
+                if (!(pmmmBoundary.nextInterval > 0.0)) {
+                    THROW_ERROR("The PMMM outer interval must be positive before the end time\n");
+                }
+                state.outerInterval = pmmmBoundary.nextInterval;
+                state.outerStart = state.tau;
+                t0 = state.outerInterval;
+            }
             state.maxRung =
                 global ? 0 : std::max({int(result.maxRung), baseOptions.run.minRung, minimumRung});
             int const displayedMinimumRung = minimumRung;
@@ -334,7 +381,7 @@ void runFixedScenario() {
             }
             double const timestep = global ?
                 std::min(result.minimumTimestep, stageEnd - state.tau) :
-                std::ldexp(baseTimestep, -state.maxRung);
+                std::ldexp(t0, -state.maxRung);
             if (!std::isfinite(timestep) || !(timestep > 0.0) ||
                 state.tau + timestep == state.tau) {
                 THROW_ERROR("Scenario timestep cannot advance time\n");
@@ -347,8 +394,7 @@ void runFixedScenario() {
                     drift(1.0, 0.5 * timestep, state.tau, midpointTime, duration);
                 }
                 auto const hydro = sphMidpointStep(global ? -1 : state.maxRung, midpointTime,
-                    timestep, baseTimestep, 1.0, 0.0, state.energies, global,
-                    global ? baseTimestep : 0.0);
+                    timestep, t0, 1.0, 0.0, state.energies, global, global ? baseTimestep : 0.0);
                 if (global) {
                     state.globalHydroTimestep = hydro.minimumTimestep;
                 }
@@ -358,7 +404,7 @@ void runFixedScenario() {
                 }
                 int const closingRung = global ? 0 : minRung(inc(state.itime, state.maxRung));
                 auto const sourceEstimate =
-                    sphCompleteSources(closingRung, state.tau + timestep, baseTimestep, 1.0, 0.0,
+                    sphCompleteSources(closingRung, state.tau + timestep, t0, 1.0, 0.0,
                         state.energies, global ? timestep : -1.0, global ? baseTimestep : 0.0);
                 if (global) {
                     state.globalHydroTimestep = sourceEstimate.minimumTimestep;
@@ -373,8 +419,19 @@ void runFixedScenario() {
             }
             auto const flopRates = flopRatesPerSecond();
             double const flops = flopRates.total();
-            state.tau += timestep;
-            state.itime = global ? 0 : inc(state.itime, state.maxRung);
+            TimeType const nextIntegerTime = global ? 0 : inc(state.itime, state.maxRung);
+            if (meshInterval) {
+                // The exact interval clock, as the checkpoint reader verifies it.
+                double const integerPhase =
+                    nextIntegerTime == 0 ? 1.0 : std::ldexp(double(nextIntegerTime), -64);
+                state.tau = state.outerStart + t0 * integerPhase;
+            } else {
+                state.tau += timestep;
+            }
+            state.itime = nextIntegerTime;
+            if (meshInterval && state.itime == 0) {
+                ++state.outerIndex;
+            }
             if (global) {
                 state.globalTimestep = timestep;
             }
@@ -481,26 +538,52 @@ void runFixedScenario() {
     if (completed && !interrupted && iterations > 0) {
         // Only terminal diagnostics consume the outstanding gravity closing
         // half-step. They reuse the density already refreshed for final views.
+        MeshKickSchedule terminalSchedule;
+        terminalSchedule.endTime = duration;
+        PmmmBoundaryRequest terminalBoundary;
+        double terminalBase = coarseInterval;
+        if (meshInterval) {
+            // The terminal boundary closes the frozen membership and the last interval's long
+            // half-kick on a fresh far solve; nothing opens.
+            terminalBoundary.time = state.tau;
+            terminalBoundary.coarseInterval = coarseInterval;
+            terminalBoundary.endTime = duration;
+            terminalSchedule.pmmmBoundary = &terminalBoundary;
+            terminalSchedule.closingBaseTimestep = state.outerInterval;
+            terminalSchedule.longCloseTimestep = state.outerInterval;
+            terminalSchedule.longOpenTimestep = 0.0;
+            terminalBase = state.outerInterval;
+        }
 #if COSMICTIGER_WITH_GRAVITY && COSMICTIGER_ENABLE_INTEGRATOR_HIERARCHICAL
         if (hierarchical) {
             int minimumRung = state.minrung0;
-            MeshKickSchedule schedule;
-            schedule.endTime = duration;
-            kickStepHierarchical(minimumRung, state.maxRung, 1.0, 0.0, state.tau, coarseInterval,
+            kickStepHierarchical(minimumRung, state.maxRung, 1.0, 0.0, state.tau, terminalBase,
                 baseOptions.gravity.openingAngle, &state.energies, state.minrung0, true, nullptr,
-                true, 0.0, -1, true, schedule);
+                true, 0.0, -1, true, terminalSchedule);
         } else
 #endif
         {
-            advanceForces(0, 1.0, 0.0, state.tau, coarseInterval, baseOptions.gravity.openingAngle,
+            advanceForces(0, 1.0, 0.0, state.tau, terminalBase, baseOptions.gravity.openingAngle,
                 false, true, state.energies, -1, true, state.globalTimestep,
-                global ? coarseInterval : 0.0);
+                global ? coarseInterval : 0.0, terminalSchedule);
         }
         {
             profile::ScopedPhase phase("diagnostics");
             detail::writeScenarioDiagnostics(state);
         }
     }
+#if COSMICTIGER_WITH_GRAVITY
+    if (meshInterval && hpxRank() == 0) {
+        // One mesh transform per outer boundary (plus the terminal pass); inner passes
+        // evaluate the near field on the frozen membership only.
+        std::cout << std::format("  PMMM outer intervals completed: {:d}; mesh transforms this "
+                                 "run: {:d}; force passes this run: {:d}\n",
+                         static_cast<unsigned long long>(state.outerIndex),
+                         static_cast<unsigned long long>(pmmmDiagnostics().transformCount),
+                         iterations)
+                  << std::flush;
+    }
+#endif
     setOptions(baseOptions);
     // Scenario diagnostics require the synchronized terminal closing pass.
     if (completed && !interrupted && iterations > 0 && plan.finish != nullptr) {

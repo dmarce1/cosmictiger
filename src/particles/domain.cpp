@@ -669,14 +669,15 @@ static void beginSphMigration(int rung) {
     auto const activeRange = particlesCurrentRange();
     // Ordinary stepping migrates all out-of-domain particles. Hierarchical
     // stepping preserves the saved rung-prefix offsets: only this closing rung
-    // in the current suffix may leave, just as in collisionless migration.
+    // in the current suffix may leave, just as in collisionless migration. A
+    // negative rung (PMMM outer-interval boundary) migrates every particle.
     for (ParticleInteger i = 0; i < particlesSize(); i++) {
         Vector3<double> position;
         for (int dim = 0; dim < kDimensions; dim++) {
             position[dim] = positionDomainCoordinate(particlesPositionValue(dim, i));
         }
         auto record = packSphParticle(i);
-        bool const eligible = !getOptions().run.hierarchicalGravity ||
+        bool const eligible = rung < 0 || !getOptions().run.hierarchicalGravity ||
             (i >= activeRange.first && particlesRung(i) == rung);
         if (!eligible || box.contains(position)) {
             retainedSphParticles.push_back(std::move(record));

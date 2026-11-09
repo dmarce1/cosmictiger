@@ -614,7 +614,11 @@ localities; the measured frequency is within a few percent of ω_J at 20 particl
 wavelength, comparable to the SPH sound-speed error at that resolution, and the
 localities agree to roundoff.
 
-Gas also runs with the outer interval in the cosmology and Plummer driver. A hydro rung
+Gas also runs with the outer interval, in the cosmology and Plummer driver and in the
+fixed-time scenario driver (`src/core/scenario_driver.cpp`), which follows the same
+schedule: a boundary pass at every clock rollover, the outer interval as the rung base,
+the exact interval clock and a terminal boundary. A boundary migrates every particle,
+gas included (`domainsBegin(-1)`). A hydro rung
 proposal is a rung number against the base step it was computed with, Δτ ≥ H 2^−r. The
 first interval is chosen by the boundary pass of the first force step, after the initial
 SPH timestep estimate, so that estimate takes the coarse interval as its base step;
@@ -623,10 +627,11 @@ later boundary the proposals were made against the closing interval H_old, so a 
 opening interval H_new adds ceil(log₂(H_new/H_old)) rungs to them
 (`hydroRungIntervalShift`).
 `tests/run_sph_pmmm_interval.py` (`ctest -R sph_pmmm_interval_restart`) runs a small
-cosmology with gas and dark matter on 1 and 2 localities, restarts from a checkpoint
-inside the first interval and requires the state after the next boundary to match the
-uninterrupted run. The fixed-time scenarios (for example `jeansWave`) step without the
-outer-interval schedule and reject `gravity.pmmmOuterInterval` at startup.
+cosmology with gas and dark matter and the Jeans wave, each on 1 and 2 localities,
+restarts from a checkpoint inside an interval and requires the state after the next
+boundary to match the uninterrupted run: bit for bit for the cosmology, within the
+run-to-run roundoff for the Jeans wave, whose velocities are tiny. The Jeans frequency
+with the interval agrees with the run without it to 0.03% of its error.
 
 ## Restart and regression checks
 
