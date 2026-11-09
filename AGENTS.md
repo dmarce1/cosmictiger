@@ -16,7 +16,7 @@ User standing rule, November 2, 2026:
 
 # War Thunder resource limit
 
-User report, November 8, 2026, about 08:13 America/Chicago:
+User report, November 8, 2026, about 08:13 America/Chicago, repeated at 20:40:
 **current reported status: ON** ("war thunder on"). This supersedes the
 November 7 21:03 OFF report. All conversations combined share 6 CPU cores and
 one quarter of the GPU.
