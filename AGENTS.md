@@ -16,10 +16,10 @@ User standing rule, November 2, 2026:
 
 # War Thunder resource limit
 
-User report, November 9, 2026, about 10:40 America/Chicago:
-**current reported status: ON** ("war thunder on"). This supersedes the
-November 8 21:15 OFF report. All conversations combined share 6 CPU cores and
-one quarter of the GPU.
+User report, November 9, 2026, about 12:04 America/Chicago:
+**current reported status: OFF** ("War Thunder OFF"). This supersedes the
+November 9 10:40 ON report. The usual aggregate local limit of 12 CPU cores
+applies.
 
 - While OFF, the usual aggregate local limit of 12 CPU cores applies. The
   War Thunder-specific GPU ceiling is lifted; continue coordinating shared use.
